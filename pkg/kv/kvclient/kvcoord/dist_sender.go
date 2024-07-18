@@ -16,7 +16,6 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -24,11 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -44,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -452,7 +452,7 @@ type DistSenderRangeFeedMetrics struct {
 	Errors                 rangeFeedErrorCounters
 }
 
-func MakeDistSenderMetrics() DistSenderMetrics {
+func MakeDistSenderMetrics(locality roachpb.Locality) DistSenderMetrics {
 	m := DistSenderMetrics{
 		BatchCount:                         metric.NewCounter(metaDistSenderBatchCount),
 		PartialBatchCount:                  metric.NewCounter(metaDistSenderPartialBatchCount),
@@ -662,7 +662,7 @@ type DistSender struct {
 	clock *hlc.Clock
 	// nodeDescs provides information on the KV nodes that DistSender may
 	// consider routing requests to.
-	nodeDescs NodeDescStore
+	nodeDescs kvclient.NodeDescStore
 	// nodeIDGetter provides access to the local KV node ID if it's available
 	// (0 otherwise). The default implementation uses the Gossip network if it's
 	// available, but custom implementation can be provided via
@@ -721,7 +721,7 @@ type DistSender struct {
 	dontConsiderConnHealth bool
 
 	// Currently executing range feeds.
-	activeRangeFeeds sync.Map // // map[*rangeFeedRegistry]nil
+	activeRangeFeeds syncutil.Set[*rangeFeedRegistry]
 }
 
 var _ kv.Sender = &DistSender{}
@@ -734,7 +734,7 @@ type DistSenderConfig struct {
 	Settings  *cluster.Settings
 	Stopper   *stop.Stopper
 	Clock     *hlc.Clock
-	NodeDescs NodeDescStore
+	NodeDescs kvclient.NodeDescStore
 	// NodeIDGetter, if set, provides non-gossip based implementation for
 	// obtaining the local KV node ID. The DistSender uses the node ID to
 	// preferentially route requests to a local replica (if one exists).
@@ -797,7 +797,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		clock:         cfg.Clock,
 		nodeDescs:     cfg.NodeDescs,
 		nodeIDGetter:  nodeIDGetter,
-		metrics:       MakeDistSenderMetrics(),
+		metrics:       MakeDistSenderMetrics(cfg.Locality),
 		kvInterceptor: cfg.KVInterceptor,
 		locality:      cfg.Locality,
 		healthFunc:    cfg.HealthFunc,
@@ -2448,13 +2448,13 @@ func maybeSetResumeSpan(
 	}
 }
 
-// noMoreReplicasErr produces the error to be returned from sendToReplicas when
+// selectBestError produces the error to be returned from sendToReplicas when
 // the transport is exhausted.
 //
 // ambiguousErr, if not nil, is the error we got from the first attempt when the
 // success of the request cannot be ruled out by the error. lastAttemptErr is
 // the error that the last attempt to execute the request returned.
-func noMoreReplicasErr(ambiguousErr, replicaUnavailableErr, lastAttemptErr error) error {
+func selectBestError(ambiguousErr, replicaUnavailableErr, lastAttemptErr error) error {
 	if ambiguousErr != nil {
 		return kvpb.NewAmbiguousResultErrorf("error=%v [exhausted] (last error: %v)",
 			ambiguousErr, lastAttemptErr)
@@ -2463,17 +2463,7 @@ func noMoreReplicasErr(ambiguousErr, replicaUnavailableErr, lastAttemptErr error
 		return replicaUnavailableErr
 	}
 
-	// Authentication and authorization errors should be propagated up rather than
-	// wrapped in a sendError and retried as they are likely to be fatal if they
-	// are returned from multiple servers.
-	if grpcutil.IsAuthError(lastAttemptErr) {
-		return lastAttemptErr
-	}
-	// TODO(bdarnell): The error from the last attempt is not necessarily the best
-	// one to return; we may want to remember the "best" error we've seen (for
-	// example, a NotLeaseHolderError conveys more information than a
-	// RangeNotFound).
-	return newSendError(errors.Wrap(lastAttemptErr, "sending to all replicas failed; last error"))
+	return lastAttemptErr
 }
 
 // slowDistSenderRangeThreshold is a latency threshold for logging slow
@@ -2879,17 +2869,7 @@ func (ds *DistSender) sendToReplicas(
 				}
 
 				if ds.kvInterceptor != nil {
-					var reqInfo tenantcostmodel.RequestInfo
-					var respInfo tenantcostmodel.ResponseInfo
-					if ba.IsWrite() {
-						networkCost := ds.computeNetworkCost(ctx, desc, &curReplica, true /* isWrite */)
-						reqInfo = tenantcostmodel.MakeRequestInfo(ba, len(desc.Replicas().Descriptors()), networkCost)
-					}
-					if !reqInfo.IsWrite() {
-						networkCost := ds.computeNetworkCost(ctx, desc, &curReplica, false /* isWrite */)
-						respInfo = tenantcostmodel.MakeResponseInfo(br, true, networkCost)
-					}
-					if err := ds.kvInterceptor.OnResponseWait(ctx, reqInfo, respInfo); err != nil {
+					if err := ds.kvInterceptor.OnResponseWait(ctx, ba, br, desc, &curReplica); err != nil {
 						return nil, err
 					}
 				}
@@ -3052,12 +3032,17 @@ func (ds *DistSender) sendToReplicas(
 							// regress. As such, advancing through each replica on the
 							// transport until it's exhausted is unlikely to achieve much.
 							//
-							// We bail early by returning a sendError. The expectation is
-							// for the client to retry with a fresher eviction token.
+							// We bail early by returning the best error we have
+							// seen so far. The expectation is for the client to
+							// retry with a fresher eviction token if possible.
 							log.VEventf(
 								ctx, 2, "transport incompatible with updated routing; bailing early",
 							)
-							return nil, newSendError(errors.Wrap(tErr, "leaseholder not found in transport; last error"))
+							return nil, selectBestError(
+								ambiguousError,
+								replicaUnavailableError,
+								newSendError(errors.Wrap(tErr, "leaseholder not found in transport; last error")),
+							)
 						}
 					}
 					// Check whether the request was intentionally sent to a follower
@@ -3155,96 +3140,6 @@ func (ds *DistSender) getLocalityComparison(
 	return comparisonResult
 }
 
-// getCostControllerConfig returns the config for the tenant cost model. This
-// returns nil if no KV interceptors are associated with the DistSender, or the
-// KV interceptor is not a multitenant.TenantSideCostController.
-func (ds *DistSender) getCostControllerConfig(
-	ctx context.Context,
-) *tenantcostmodel.RequestUnitModel {
-	if ds.kvInterceptor == nil {
-		return nil
-	}
-	costController, ok := ds.kvInterceptor.(multitenant.TenantSideCostController)
-	if !ok {
-		log.VErrEvent(ctx, 2, "kvInterceptor is not a TenantSideCostController")
-		return nil
-	}
-	cfg := costController.GetRequestUnitModel()
-	if cfg == nil {
-		log.VErrEvent(ctx, 2, "cost controller does not have a cost config")
-	}
-	return cfg
-}
-
-// computeNetworkCost calculates the network cost multiplier for a read or
-// write operation. The network cost accounts for the logical byte traffic
-// between the client region and the replica regions.
-func (ds *DistSender) computeNetworkCost(
-	ctx context.Context,
-	desc *roachpb.RangeDescriptor,
-	targetReplica *roachpb.ReplicaDescriptor,
-	isWrite bool,
-) tenantcostmodel.NetworkCost {
-	// It is unfortunate that we hardcode a particular locality tier name here.
-	// Ideally, we would have a cluster setting that specifies the name or some
-	// other way to configure it.
-	clientRegion, _ := ds.locality.Find("region")
-	if clientRegion == "" {
-		// If we do not have the source, there is no way to find the multiplier.
-		log.VErrEventf(ctx, 2, "missing region tier in current node: locality=%s",
-			ds.locality.String())
-		return tenantcostmodel.NetworkCost(0)
-	}
-
-	costCfg := ds.getCostControllerConfig(ctx)
-	if costCfg == nil {
-		// This case is unlikely to happen since this method will only be
-		// called through tenant processes, which has a KV interceptor.
-		return tenantcostmodel.NetworkCost(0)
-	}
-
-	cost := tenantcostmodel.NetworkCost(0)
-	if isWrite {
-		for i := range desc.Replicas().Descriptors() {
-			if replicaRegion, ok := ds.getReplicaRegion(ctx, &desc.Replicas().Descriptors()[i]); ok {
-				cost += costCfg.NetworkCost(tenantcostmodel.NetworkPath{
-					ToRegion:   replicaRegion,
-					FromRegion: clientRegion,
-				})
-			}
-		}
-	} else {
-		if replicaRegion, ok := ds.getReplicaRegion(ctx, targetReplica); ok {
-			cost = costCfg.NetworkCost(tenantcostmodel.NetworkPath{
-				ToRegion:   clientRegion,
-				FromRegion: replicaRegion,
-			})
-		}
-	}
-
-	return cost
-}
-
-func (ds *DistSender) getReplicaRegion(
-	ctx context.Context, replica *roachpb.ReplicaDescriptor,
-) (region string, ok bool) {
-	nodeDesc, err := ds.nodeDescs.GetNodeDescriptor(replica.NodeID)
-	if err != nil {
-		log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", replica.NodeID, err)
-		// If we don't know where a node is, we can't determine the network cost
-		// for the operation.
-		return "", false
-	}
-
-	region, ok = nodeDesc.Locality.Find("region")
-	if !ok {
-		log.VErrEventf(ctx, 2, "missing region locality for n %d", nodeDesc.NodeID)
-		return "", false
-	}
-
-	return region, true
-}
-
 func (ds *DistSender) maybeIncrementErrCounters(br *kvpb.BatchResponse, err error) {
 	if err == nil && br.Error == nil {
 		return
@@ -3328,15 +3223,21 @@ func skipStaleReplicas(
 	// RangeKeyMismatchError if there's even a replica. We'll bubble up an
 	// error and try with a new descriptor.
 	if !routing.Valid() {
-		return noMoreReplicasErr(
+		return selectBestError(
 			ambiguousError,
 			nil, // ignore the replicaUnavailableError, retry with new routing info
-			errors.Wrap(lastErr, "routing information detected to be stale"))
+			newSendError(errors.Wrap(lastErr, "routing information detected to be stale")))
 	}
 
 	for {
 		if transport.IsExhausted() {
-			return noMoreReplicasErr(ambiguousError, replicaUnavailableError, lastErr)
+			// Authentication and authorization errors should be propagated up rather than
+			// wrapped in a sendError and retried as they are likely to be fatal if they
+			// are returned from multiple servers.
+			if !grpcutil.IsAuthError(lastErr) {
+				lastErr = newSendError(errors.Wrap(lastErr, "sending to all replicas failed; last error"))
+			}
+			return selectBestError(ambiguousError, replicaUnavailableError, lastErr)
 		}
 
 		if _, ok := routing.Desc().GetReplicaDescriptorByID(transport.NextReplica().ReplicaID); ok {

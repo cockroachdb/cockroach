@@ -675,6 +675,8 @@ message Lease {
   // The expiration is a timestamp at which the lease expires. This means that a
   // new lease can be granted for a later timestamp. This field is only set for
   // expiration-based leases.
+  //
+  // This is an exclusive value, i.e. the lease is valid in [start, expiration).
   util.hlc.Timestamp expiration = 2;
 
   // The address of the would-be lease holder.
@@ -702,8 +704,13 @@ message Lease {
     (gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 
-  // The epoch of the lease holder's node liveness entry. If this value is
-  // non-zero, the expiration field is ignored.
+  // The epoch of the lease holder's node liveness record. The lease inherits
+  // the expiration of the node liveness record for as long as the node liveness
+  // record retains this epoch. The lease is invalid if the node liveness record
+  // is updated with a different epoch.
+  //
+  // This field is only set for epoch-based leases. If this value is non-zero,
+  // the expiration field and the term field must not be set.
   int64 epoch = 6;
 
   // A zero-indexed sequence number which is incremented during the acquisition
@@ -720,6 +727,25 @@ message Lease {
   // The type of acquisition event that result in this lease (transfer or
   // request).
   LeaseAcquisitionType acquisition_type = 8;
+
+  // The minimum expiration at which the lease expires, independent of any other
+  // expiry condition. This field can be used to place a floor on the expiration
+  // for epoch-based leases and leader leases to prevent expiration regressions
+  // when upgrading from an expiration-based lease. It is not supported for
+  // expiration-based leases.
+  //
+  // Like expiration above, this is an exclusive value, i.e. the lease is valid
+  // in [start, max(min_expiration, <expiration from epoch or term>)).
+  util.hlc.Timestamp min_expiration = 9 [(gogoproto.nullable) = false];
+
+  // The term of the raft leader that a leader lease is associated with. The
+  // lease is valid for as long as the raft leader has a guarantee from store
+  // liveness that it remains the leader under this term. The lease is invalid
+  // if the raft leader loses leadership (i.e. changes its term).
+  //
+  // This field is only set for leader leases. If non-zero, the expiration field
+  // and the epoch field must not be set.
+  uint64 term = 10;
 }
 
 // AbortSpanEntry contains information about a transaction which has

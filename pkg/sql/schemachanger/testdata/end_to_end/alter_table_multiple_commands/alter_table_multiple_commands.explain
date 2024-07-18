@@ -14,7 +14,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 8 (t_pkey+)}
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 104 (t), ColumnID: 4 (p+)}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "p", ColumnID: 4 (p+)}
- │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (p+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (p+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 4 (p+), Expr: 30:::INT8}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 4 (p+), IndexID: 8 (t_pkey+)}
  │         ├── 17 elements transitioning toward TRANSIENT_ABSENT
@@ -41,7 +41,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         └── 25 Mutation operations
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":4,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":4,"Name":"p","TableID":104}
- │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":4,"IsNullable":true,"TableID":104}}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":4,"IsNullable":true,"TableID":104}}
  │              ├── AddColumnDefaultExpression {"Default":{"ColumnID":4,"TableID":104}}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":4,"IndexID":4,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":5}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"TableID":104}
@@ -73,7 +73,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 8 (t_pkey+)}
  │    │    │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 104 (t), ColumnID: 4 (p+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 104 (t), Name: "p", ColumnID: 4 (p+)}
- │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (p+)}
+ │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (p+), TypeName: "INT8"}
  │    │    │    ├── PUBLIC        → ABSENT ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 4 (p+), Expr: 30:::INT8}
  │    │    │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 4 (p+), IndexID: 8 (t_pkey+)}
  │    │    ├── 17 elements transitioning toward TRANSIENT_ABSENT
@@ -107,7 +107,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 8 (t_pkey+)}
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 104 (t), ColumnID: 4 (p+)}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "p", ColumnID: 4 (p+)}
- │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (p+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (p+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 4 (p+), Expr: 30:::INT8}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 4 (p+), IndexID: 8 (t_pkey+)}
  │         ├── 17 elements transitioning toward TRANSIENT_ABSENT
@@ -134,7 +134,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         └── 31 Mutation operations
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":4,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":4,"Name":"p","TableID":104}
- │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":4,"IsNullable":true,"TableID":104}}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":4,"IsNullable":true,"TableID":104}}
  │              ├── AddColumnDefaultExpression {"Default":{"ColumnID":4,"TableID":104}}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":4,"IndexID":4,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":5}}
  │              ├── MaybeAddSplitForIndex {"IndexID":4,"TableID":104}
@@ -521,7 +521,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
            │    └── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104 (t), IndexID: 3}
            ├── 4 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY           → ABSENT           Column:{DescID: 104 (t), ColumnID: 3 (k-)}
-           │    ├── PUBLIC                → ABSENT           ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (k-)}
+           │    ├── PUBLIC                → ABSENT           ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (k-), TypeName: "INT8"}
            │    ├── DELETE_ONLY           → ABSENT           PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
            │    └── PUBLIC                → ABSENT           IndexData:{DescID: 104 (t), IndexID: 1 (t_pkey-)}
            └── 13 Mutation operations

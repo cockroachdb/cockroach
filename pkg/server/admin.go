@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -75,6 +76,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingui"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	gwutil "github.com/grpc-ecosystem/grpc-gateway/utilities"
 	"google.golang.org/grpc"
@@ -3195,7 +3197,7 @@ func (s *systemAdminServer) EnqueueRange(
 
 	if err := timeutil.RunWithTimeout(ctx, "enqueue range", time.Minute, func(ctx context.Context) error {
 		return iterateNodes(
-			ctx, s.serverIterator, s.server.stopper, fmt.Sprintf("enqueue r%d in queue %s", req.RangeID, req.Queue),
+			ctx, s.serverIterator, s.server.stopper, redact.Sprintf("enqueue r%d in queue %s", req.RangeID, req.Queue),
 			noTimeout,
 			dialFn, nodeFn, responseFn, errorFn,
 		)
@@ -3319,7 +3321,7 @@ func (s *systemAdminServer) SendKVBatch(
 		},
 		BatchRequest: string(baJSON),
 	}
-	log.StructuredEvent(ctx, event)
+	log.StructuredEvent(ctx, severity.INFO, event)
 
 	ctx, sp := s.server.node.setupSpanForIncomingRPC(ctx, roachpb.SystemTenantID, ba)
 	// Wipe the tracing information from the request. We've used this info in the

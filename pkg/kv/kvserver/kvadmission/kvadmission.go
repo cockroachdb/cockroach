@@ -358,7 +358,7 @@ func (n *controllerImpl) AdmitKVWork(
 		// If flow control is disabled or if work bypasses flow control, we still
 		// subject it above-raft, leaseholder-only IO admission control.
 		if !attemptFlowControl || !admitted {
-			storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
+			storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(ba.Replica.StoreID)
 			if storeAdmissionQ != nil {
 				//  NB: Even though we would know here we're bypassing admission (via
 				//  `bypassAdmission`), we still have to explicitly invoke `.Admit()`.
@@ -453,10 +453,12 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
 		cpuTime := grunning.Time() - ah.cpuStart
 		if cpuTime < 0 {
-			// See https://github.com/cockroachdb/cockroach/issues/95529. Count 1
-			// nanosecond, arbitrarily.
-			//
-			// TODO(sumeer): remove this hack when that bug is fixed.
+			// We sometimes see cpuTime to be negative. We use 1ns here, arbitrarily.
+			// This issue is tracked by
+			// https://github.com/cockroachdb/cockroach/issues/126681.
+			if buildutil.CrdbTestBuild {
+				log.Warningf(context.Background(), "grunning.Time() should be non-decreasing, cpuTime=%s", cpuTime)
+			}
 			cpuTime = 1
 		}
 		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID, cpuTime)
@@ -525,7 +527,7 @@ func (n *controllerImpl) SetTenantWeightProvider(
 				n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.SetTenantWeights(weights.Node)
 
 				for _, storeWeights := range weights.Stores {
-					q := n.storeGrantCoords.TryGetQueueForStore(int32(storeWeights.StoreID))
+					q := n.storeGrantCoords.TryGetQueueForStore(storeWeights.StoreID)
 					if q != nil {
 						if kvStoresDisabled {
 							storeWeights.Weights = nil
@@ -546,7 +548,7 @@ func (n *controllerImpl) SetTenantWeightProvider(
 func (n *controllerImpl) SnapshotIngestedOrWritten(
 	storeID roachpb.StoreID, ingestStats pebble.IngestOperationStats, writeBytes uint64,
 ) {
-	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
+	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(storeID)
 	if storeAdmissionQ == nil {
 		return
 	}
@@ -560,7 +562,7 @@ func (n *controllerImpl) FollowerStoreWriteBytes(
 	if followerWriteBytes.WriteBytes == 0 && followerWriteBytes.IngestedBytes == 0 {
 		return
 	}
-	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
+	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(storeID)
 	if storeAdmissionQ == nil {
 		return
 	}
@@ -605,7 +607,7 @@ func (n *controllerImpl) AdmitRaftEntry(
 		)
 	}
 
-	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
+	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(storeID)
 	if storeAdmissionQ == nil {
 		log.Errorf(ctx, "unable to find queue for store: %s", storeID)
 		return // nothing to do

@@ -241,13 +241,14 @@ func getLicense(st *cluster.Settings) (*licenseccl.License, error) {
 	}
 	cacheKey := licenseCacheKey(str)
 	if cachedLicense, ok := st.Cache.Load(cacheKey); ok {
-		return cachedLicense.(*licenseccl.License), nil
+		return (*cachedLicense).(*licenseccl.License), nil
 	}
 	license, err := decode(str)
 	if err != nil {
 		return nil, err
 	}
-	st.Cache.Store(cacheKey, license)
+	licenseBox := any(license)
+	st.Cache.Store(cacheKey, &licenseBox)
 	return license, nil
 }
 

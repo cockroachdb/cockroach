@@ -642,12 +642,12 @@ func newInitServerConfig(
 	latestVersion := cfg.Settings.Version.LatestVersion()
 	minSupportedVersion := cfg.Settings.Version.MinSupportedVersion()
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
-		if overrideVersion := knobs.(*TestingKnobs).BinaryVersionOverride; overrideVersion != (roachpb.Version{}) {
+		if overrideVersion := knobs.(*TestingKnobs).ClusterVersionOverride; overrideVersion != (roachpb.Version{}) {
 			// We are customizing the cluster version. We can only bootstrap a fresh
 			// cluster at specific versions (specifically, the current version and
-			// previously released versions down to the minimum supported).
-			// We choose the closest version that's not newer than the target version.;
-			// later on, we will upgrade to `BinaryVersionOverride` (this happens
+			// previously released versions down to the minimum supported). We choose
+			// the closest version that's not newer than the target version.; later
+			// on, we will upgrade to `ClusterVersionOverride` (this happens
 			// separately when we Activate the server).
 			var bootstrapVersion roachpb.Version
 			for _, v := range bootstrap.VersionsWithInitialValues() {
@@ -657,10 +657,7 @@ func newInitServerConfig(
 				}
 			}
 			if bootstrapVersion == (roachpb.Version{}) {
-				// As a special case, we tolerate initializing clusters at versions
-				// older than the min supported for some specific tests (we will just
-				// use the minimum supported version for the initial values).
-				bootstrapVersion = overrideVersion
+				panic(fmt.Sprintf("ClusterVersionOverride version %s too low", overrideVersion))
 			}
 			latestVersion = bootstrapVersion
 		}

@@ -26,8 +26,36 @@ changefeed.protect_timestamp_interval	duration	10m0s	controls how often the chan
 changefeed.schema_feed.read_with_priority_after	duration	1m0s	retry with high priority if we were not able to read descriptors for too long; 0 disables	application
 changefeed.sink_io_workers	integer	0	the number of workers used by changefeeds when sending requests to the sink (currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value	application
 cloudstorage.azure.concurrent_upload_buffers	integer	1	controls the number of concurrent buffers that will be used by the Azure client when uploading chunks.Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload	application
+cloudstorage.azure.read.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.azure.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.azure.write.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.azure.write.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.gs.read.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.gs.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.gs.write.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.gs.write.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
 cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage	application
+cloudstorage.http.read.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.http.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.http.write.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.http.write.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nodelocal.read.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nodelocal.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nodelocal.write.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nodelocal.write.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nullsink.read.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nullsink.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nullsink.write.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nullsink.write.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.s3.read.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.s3.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.s3.write.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.s3.write.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
 cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operations	application
+cloudstorage.userfile.read.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.userfile.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.userfile.write.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.userfile.write.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
 cluster.auto_upgrade.enabled	boolean	true	disable automatic cluster version upgrade until reset	application
 cluster.organization	string		organization name	system-visible
 cluster.preserve_downgrade_option	string		disable (automatic or manual) cluster version upgrade from the specified version until reset	application
@@ -89,6 +117,9 @@ server.hot_ranges_request.node.timeout	duration	5m0s	the duration allowed for a 
 server.hsts.enabled	boolean	false	if true, HSTS headers will be sent along with all HTTP requests. The headers will contain a max-age setting of one year. Browsers honoring the header will always use HTTPS to access the DB Console. Ensure that TLS is correctly configured prior to enabling.	application
 server.http.base_path	string	/	path to redirect the user to upon succcessful login	application
 server.identity_map.configuration	string		system-identity to database-username mappings	application
+server.ldap_authentication.client.tls_certificate	string		sets the client certificate PEM for establishing mTLS connection with LDAP server	application
+server.ldap_authentication.client.tls_key	string		sets the client key PEM for establishing mTLS connection with LDAP server	application
+server.ldap_authentication.domain.custom_ca	string		sets the PEM encoded custom root CA for verifying domain certificates when establishing connection with LDAP server	application
 server.log_gc.max_deletions_per_cycle	integer	1000	the maximum number of entries to delete on each purge of log-like system tables	application
 server.log_gc.period	duration	1h0m0s	the period at which log-like system tables are checked for old entries	application
 server.max_connections_per_gateway	integer	-1	the maximum number of SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.	application
@@ -96,6 +127,7 @@ server.max_open_transactions_per_gateway	integer	-1	the maximum number of open S
 server.oidc_authentication.autologin.enabled (alias: server.oidc_authentication.autologin)	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint	application
 server.oidc_authentication.button_text	string	Log in with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)	application
 server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)	application
+server.oidc_authentication.client.timeout	duration	30s	sets the client timeout for external calls made during OIDC authentication (e.g. authorization code flow, etc.)	application
 server.oidc_authentication.client_id	string		sets OIDC client id	application
 server.oidc_authentication.client_secret	string		sets OIDC client secret	application
 server.oidc_authentication.enabled	boolean	false	enables or disabled OIDC login for the DB Console	application
@@ -123,6 +155,7 @@ server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled	boolean	true	
 server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged	application
 server.web_session.timeout (alias: server.web_session_timeout)	duration	168h0m0s	the duration that a newly created web session will be valid	application
 sql.auth.change_own_password.enabled	boolean	false	controls whether a user is allowed to change their own password, even if they have no other privileges	application
+sql.auth.grant_option_for_owner.enabled	boolean	true	determines whether the GRANT OPTION for privileges is implicitly given to the owner of an object	application
 sql.auth.grant_option_inheritance.enabled	boolean	true	determines whether the GRANT OPTION for privileges is inherited through role membership	application
 sql.auth.public_schema_create_privilege.enabled	boolean	true	determines whether to grant all users the CREATE privileges on the public schema when it is created	application
 sql.auth.resolve_membership_single_scan.enabled	boolean	true	determines whether to populate the role membership cache with a single scan	application
@@ -339,9 +372,9 @@ sql.txn.read_committed_isolation.enabled	boolean	true	set to true to allow trans
 sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored	application
 storage.max_sync_duration	duration	20s	maximum duration for disk operations; any operations that take longer than this setting trigger a warning log entry or process crash	system-visible
 storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process when a disk operation exceeds storage.max_sync_duration	application
-storage.sstable.compression_algorithm	enumeration	snappy	"determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store; supported values: ""snappy"", ""zstd"" [snappy = 1, zstd = 2]"	system-visible
-storage.sstable.compression_algorithm_backup_storage	enumeration	snappy	"determines the compression algorithm to use when compressing sstable data blocks for backup row data storage; supported values: ""snappy"", ""zstd"" [snappy = 1, zstd = 2]"	system-visible
-storage.sstable.compression_algorithm_backup_transport	enumeration	snappy	"determines the compression algorithm to use when compressing sstable data blocks for backup transport; supported values: ""snappy"", ""zstd"" [snappy = 1, zstd = 2]"	system-visible
+storage.sstable.compression_algorithm	enumeration	snappy	determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store; [snappy = 1, zstd = 2, none = 3]	system-visible
+storage.sstable.compression_algorithm_backup_storage	enumeration	snappy	determines the compression algorithm to use when compressing sstable data blocks for backup row data storage; [snappy = 1, zstd = 2, none = 3]	system-visible
+storage.sstable.compression_algorithm_backup_transport	enumeration	snappy	determines the compression algorithm to use when compressing sstable data blocks for backup transport; [snappy = 1, zstd = 2, none = 3]	system-visible
 timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.	system-visible
 timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.	system-visible
 trace.debug_http_endpoint.enabled (alias: trace.debug.enable)	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests	application
@@ -350,4 +383,4 @@ trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace 
 trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez	application
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui [etc/utc = 0, america/new_york = 1]	application
-version	version	1000024.1-upgrading-to-1000024.2-step-008	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000024.1-upgrading-to-1000024.2-step-012	set the active cluster version in the format '<major>.<minor>'	application

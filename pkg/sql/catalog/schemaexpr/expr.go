@@ -316,7 +316,7 @@ func deserializeExprForFormatting(
 	}
 
 	// In pg_catalog, we need to make sure we always display constants instead of
-	// expressions, when possible (e.g., turn Array expr into a DArrray). This is
+	// expressions, when possible (e.g., turn Array expr into a DArray). This is
 	// best-effort, so if there is any error, it is safe to fallback to the
 	// typedExpr.
 	if fmtFlags == tree.FmtPGCatalog {
@@ -492,7 +492,7 @@ func ValidateTTLExpressionDoesNotDependOnColumn(
 // ValidateComputedColumnExpressionDoesNotDependOnColumn verifies that the
 // expression of a computed column does not depend on the given column.
 func ValidateComputedColumnExpressionDoesNotDependOnColumn(
-	tableDesc catalog.TableDescriptor, dependentCol catalog.Column,
+	tableDesc catalog.TableDescriptor, dependentCol catalog.Column, objType, op string,
 ) error {
 	for _, col := range tableDesc.AllColumns() {
 		if dependentCol.GetID() == col.GetID() {
@@ -502,7 +502,7 @@ func ValidateComputedColumnExpressionDoesNotDependOnColumn(
 			if hasRef, err := validateExpressionDoesNotDependOnColumn(tableDesc, col.GetComputeExpr(), dependentCol.GetID()); err != nil {
 				return err
 			} else if hasRef {
-				return sqlerrors.NewDependentBlocksOpError("alter", "column",
+				return sqlerrors.NewDependentBlocksOpError(op, objType,
 					string(dependentCol.ColName()), "computed column", string(col.ColName()))
 			}
 		}

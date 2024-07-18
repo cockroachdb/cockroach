@@ -75,6 +75,14 @@ var prometheusPort = sharedFlags.Int(
 	"Port to expose prometheus metrics if the workload has a prometheus gatherer set.",
 )
 
+// individualOperationReceiverAddr is an address to send latency
+// measurements to. By default it will not send anything.
+var individualOperationReceiverAddr = sharedFlags.String(
+	"operation-receiver",
+	"",
+	"Optional ip address:port to send latency operation metrics.",
+)
+
 var histograms = runFlags.String(
 	"histograms", "",
 	"File to write per-op incremental and cumulative histogram data.")
@@ -129,6 +137,7 @@ func init() {
 			Use:   `run`,
 			Short: `run a workload's operations against a cluster`,
 		})
+
 		for _, meta := range workload.Registered() {
 			gen := meta.New()
 			if _, ok := gen.(workload.Opser); !ok {
@@ -400,6 +409,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		}
 	}
 
+	// Adding --duration to the generator flags for checking long duration workload in tpcc
+	gen.(workload.Flagser).Flags().AddFlag(runFlags.Lookup("duration"))
 	var limiter *rate.Limiter
 	if *maxRate > 0 {
 		// Create a limiter using maxRate specified on the command line and
@@ -412,9 +423,15 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	if !ok {
 		return errors.Errorf(`no operations defined for %s`, gen.Meta().Name)
 	}
-	reg := histogram.NewRegistry(
+
+	var publisher histogram.Publisher
+	if *individualOperationReceiverAddr != "" {
+		publisher = histogram.CreateUdpPublisher(*individualOperationReceiverAddr)
+	}
+	reg := histogram.NewRegistryWithPublisher(
 		*histogramsMaxLatency,
 		gen.Meta().Name,
+		publisher,
 	)
 	reg.Registerer().MustRegister(collectors.NewGoCollector())
 	// Expose the prometheus gatherer.

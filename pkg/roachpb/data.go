@@ -1611,7 +1611,7 @@ func confChangeImpl(
 	for _, rDesc := range removed {
 		sl = append(sl, raftpb.ConfChangeSingle{
 			Type:   raftpb.ConfChangeRemoveNode,
-			NodeID: uint64(rDesc.ReplicaID),
+			NodeID: raftpb.PeerID(rDesc.ReplicaID),
 		})
 
 		switch rDesc.Type {
@@ -1630,7 +1630,7 @@ func confChangeImpl(
 			// It's being re-added as a learner, not only removed.
 			sl = append(sl, raftpb.ConfChangeSingle{
 				Type:   raftpb.ConfChangeAddLearnerNode,
-				NodeID: uint64(rDesc.ReplicaID),
+				NodeID: raftpb.PeerID(rDesc.ReplicaID),
 			})
 		case LEARNER:
 			// A learner could in theory show up in the descriptor if the removal was
@@ -1690,7 +1690,7 @@ func confChangeImpl(
 		}
 		sl = append(sl, raftpb.ConfChangeSingle{
 			Type:   changeType,
-			NodeID: uint64(rDesc.ReplicaID),
+			NodeID: raftpb.PeerID(rDesc.ReplicaID),
 		})
 	}
 
@@ -1853,10 +1853,15 @@ func (l Lease) SafeFormat(w redact.SafePrinter, _ rune) {
 		return
 	}
 	w.Printf("repl=%s seq=%d start=%s", l.Replica, l.Sequence, l.Start)
-	if l.Type() == LeaseExpiration {
+	switch l.Type() {
+	case LeaseExpiration:
 		w.Printf(" exp=%s", l.Expiration)
-	} else {
-		w.Printf(" epo=%d", l.Epoch)
+	case LeaseEpoch:
+		w.Printf(" epo=%d min-exp=%s", l.Epoch, l.MinExpiration)
+	case LeaseLeader:
+		w.Printf(" term=%d min-exp=%s", l.Term, l.MinExpiration)
+	default:
+		panic("unexpected lease type")
 	}
 	w.Printf(" pro=%s", l.ProposedTS)
 }
@@ -1883,14 +1888,23 @@ const (
 	// LeaseEpoch allows range operations while the node liveness epoch
 	// is equal to the lease epoch.
 	LeaseEpoch
+	// LeaseLeader allows range operations while the replica is guaranteed
+	// to be the range's raft leader.
+	LeaseLeader
 )
 
 // Type returns the lease type.
 func (l Lease) Type() LeaseType {
-	if l.Epoch == 0 {
-		return LeaseExpiration
+	if l.Epoch != 0 && l.Term != 0 {
+		panic("lease cannot have both epoch and term")
 	}
-	return LeaseEpoch
+	if l.Epoch != 0 {
+		return LeaseEpoch
+	}
+	if l.Term != 0 {
+		return LeaseLeader
+	}
+	return LeaseExpiration
 }
 
 // Speculative returns true if this lease instance doesn't correspond to a
@@ -1902,8 +1916,10 @@ func (l Lease) Speculative() bool {
 	return l.Sequence == 0
 }
 
-// Equivalent determines whether ol is considered the same lease
-// for the purposes of matching leases when executing a command.
+// Equivalent determines whether the old lease (l) is considered the same as
+// the new lease (newL) for the purposes of matching leases when executing a
+// command.
+//
 // For expiration-based leases, extensions are allowed.
 // Ignore proposed timestamps for lease verification; for epoch-
 // based leases, the start time of the lease is sufficient to
@@ -1912,7 +1928,9 @@ func (l Lease) Speculative() bool {
 // expToEpochEquiv indicates whether an expiration-based lease
 // can be considered equivalent to an epoch-based lease during
 // a promotion from expiration-based to epoch-based. It is used
-// for mixed-version compatibility.
+// for mixed-version compatibility. No such flag is needed for
+// expiration-based to leader lease promotion, because there is
+// no need for mixed-version compatibility.
 //
 // NB: Lease.Equivalent is NOT symmetric. For expiration-based
 // leases, a lease is equivalent to another with an equal or
@@ -1921,12 +1939,32 @@ func (l Lease) Speculative() bool {
 // lease with the same replica and start time (representing a
 // promotion from expiration-based to epoch-based), but the
 // reverse is not true.
+//
+// One of the uses of Equivalent is in deciding what Sequence to assign to
+// newL, so this method must not use the value of Sequence for equivalency.
+//
+// The Start time of the two leases is compared, and a necessary condition
+// for equivalency is that they must be equal. So in the case where the
+// caller is someone who is constructing a new lease proposal, it is the
+// caller's responsibility to realize that the two leases *could* be
+// equivalent, and adjust the start time to be the same. Even if the start
+// times are the same, the leases could turn out to be non-equivalent -- in
+// that case they will share a start time but not the sequence.
+//
+// NB: we do not allow transitions from epoch-based or leader leases to
+// expiration-based leases to be equivalent. This was because both of the
+// former lease types don't have an expiration in the lease, while the
+// latter does. We can introduce safety violations by shortening the lease
+// expiration if we allow this transition, since the new lease may not apply
+// at the leaseholder until much after it applies at some other replica, so
+// the leaseholder may continue acting as one based on an old lease, while
+// the other replica has stepped up as leaseholder.
 func (l Lease) Equivalent(newL Lease, expToEpochEquiv bool) bool {
 	// Ignore proposed timestamp & deprecated start stasis.
 	l.ProposedTS, newL.ProposedTS = hlc.ClockTimestamp{}, hlc.ClockTimestamp{}
 	l.DeprecatedStartStasis, newL.DeprecatedStartStasis = nil, nil
-	// Ignore sequence numbers, they are simply a reflection of
-	// the equivalency of other fields.
+	// Ignore sequence numbers, they are simply a reflection of the equivalency of
+	// other fields. Also, newL may not have an initialized sequence number.
 	l.Sequence, newL.Sequence = 0, 0
 	// Ignore the acquisition type, as leases will always be extended via
 	// RequestLease requests regardless of how a leaseholder first acquired its
@@ -1949,6 +1987,23 @@ func (l Lease) Equivalent(newL Lease, expToEpochEquiv bool) bool {
 		if l.Epoch == newL.Epoch {
 			l.Epoch, newL.Epoch = 0, 0
 		}
+
+		// For epoch-based leases, extensions to the minimum expiration are
+		// considered equivalent.
+		if l.MinExpiration.LessEq(newL.MinExpiration) {
+			l.MinExpiration, newL.MinExpiration = hlc.Timestamp{}, hlc.Timestamp{}
+		}
+
+	case LeaseLeader:
+		if l.Term == newL.Term {
+			l.Term, newL.Term = 0, 0
+		}
+		// For leader leases, extensions to the minimum expiration are considered
+		// equivalent.
+		if l.MinExpiration.LessEq(newL.MinExpiration) {
+			l.MinExpiration, newL.MinExpiration = hlc.Timestamp{}, hlc.Timestamp{}
+		}
+
 	case LeaseExpiration:
 		switch newL.Type() {
 		case LeaseEpoch:
@@ -1963,12 +2018,34 @@ func (l Lease) Equivalent(newL Lease, expToEpochEquiv bool) bool {
 			// case where Equivalent is not commutative, as the reverse transition
 			// (from epoch-based to expiration-based) requires a sequence increment.
 			//
-			// Ignore epoch and expiration. The remaining fields which are compared
-			// are Replica and Start.
+			// Ignore expiration, epoch, and min expiration. The remaining fields
+			// which are compared are Replica and Start.
 			if expToEpochEquiv {
-				l.Epoch, newL.Epoch = 0, 0
-				l.Expiration, newL.Expiration = nil, nil
+				l.Expiration = nil
+				newL.Epoch = 0
+				newL.MinExpiration = hlc.Timestamp{}
 			}
+
+		case LeaseLeader:
+			// An expiration-based lease being promoted to a leader lease. This
+			// transition occurs after a successful lease transfer if the setting
+			// kv.transfer_expiration_leases_first.enabled is enabled and leader
+			// leases are in use.
+			//
+			// Expiration-based leases carry a local expiration timestamp. Leader
+			// leases extend their expiration indirectly through the leadership
+			// fortification protocol and associated Store Liveness heartbeats. We
+			// assume that this promotion is only proposed if the leader support
+			// expiration (and associated min expiration) is equal to or later than
+			// previous expiration carried by the expiration-based lease. This is a
+			// case where Equivalent is not commutative, as the reverse transition
+			// (from leader lease to expiration-based) requires a sequence increment.
+			//
+			// Ignore expiration, term, and min expiration. The remaining fields
+			// which are compared are Replica and Start.
+			l.Expiration = nil
+			newL.Term = 0
+			newL.MinExpiration = hlc.Timestamp{}
 
 		case LeaseExpiration:
 			// See the comment above, though this field's nullability wasn't
@@ -2053,6 +2130,15 @@ func (l *Lease) Equal(that interface{}) bool {
 		return false
 	}
 	if l.Sequence != that1.Sequence {
+		return false
+	}
+	if l.AcquisitionType != that1.AcquisitionType {
+		return false
+	}
+	if !l.MinExpiration.Equal(&that1.MinExpiration) {
+		return false
+	}
+	if l.Term != that1.Term {
 		return false
 	}
 	return true

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -193,10 +194,6 @@ func newSampleAggregator(
 	return s, nil
 }
 
-func (s *sampleAggregator) pushTrailingMeta(ctx context.Context, output execinfra.RowReceiver) {
-	execinfra.SendTraceData(ctx, s.FlowCtx, output)
-}
-
 // Run is part of the Processor interface.
 func (s *sampleAggregator) Run(ctx context.Context, output execinfra.RowReceiver) {
 	ctx = s.StartInternal(ctx, sampleAggregatorProcName)
@@ -204,13 +201,19 @@ func (s *sampleAggregator) Run(ctx context.Context, output execinfra.RowReceiver
 
 	earlyExit, err := s.mainLoop(ctx, output)
 	if err != nil {
-		execinfra.DrainAndClose(ctx, output, err, s.pushTrailingMeta, s.input)
+		execinfra.DrainAndClose(ctx, s.FlowCtx, s.input, output, err)
 	} else if !earlyExit {
-		s.pushTrailingMeta(ctx, output)
+		execinfra.SendTraceData(ctx, s.FlowCtx, output)
 		s.input.ConsumerClosed()
 		output.ProducerDone()
 	}
 	s.MoveToDraining(nil /* err */)
+}
+
+// Close is part of the execinfra.Processor interface.
+func (s *sampleAggregator) Close(context.Context) {
+	s.input.ConsumerClosed()
+	s.close()
 }
 
 func (s *sampleAggregator) close() {
@@ -284,7 +287,7 @@ func (s *sampleAggregator) mainLoop(
 						sr.Disable()
 					}
 				}
-			} else if !emitHelper(ctx, output, &s.OutputHelper, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+			} else if !emitHelper(ctx, s.FlowCtx, s.input, output, &s.OutputHelper, nil /* row */, meta) {
 				// No cleanup required; emitHelper() took care of it.
 				return true, nil
 			}
@@ -435,7 +438,7 @@ func (s *sampleAggregator) sampleRow(
 func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// Turn off tracing so these writes don't affect the results of EXPLAIN
 	// ANALYZE.
-	if span := tracing.SpanFromContext(ctx); span != nil && span.IsVerbose() {
+	if span := tracing.SpanFromContext(ctx); span != nil && span.RecordingType() != tracingpb.RecordingOff {
 		// TODO(rytaft): this also hides writes in this function from SQL session
 		// traces.
 		ctx = tracing.ContextWithSpan(ctx, nil)

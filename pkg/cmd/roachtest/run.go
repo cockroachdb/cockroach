@@ -95,19 +95,48 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		}
 	}
 
+	specs, err := testsToRun(r, filter, roachtestflags.RunSkipped, roachtestflags.SelectProbability, true)
+	if err != nil {
+		return err
+	}
+
+	n := len(specs)
+	if n*roachtestflags.Count < parallelism {
+		// Don't spin up more workers than necessary. This has particular
+		// implications for the common case of running a single test once: if
+		// parallelism is set to 1, we'll use teeToStdout below to get logs to
+		// stdout/stderr.
+		parallelism = n * roachtestflags.Count
+	}
+
+	artifactsDir := roachtestflags.ArtifactsDir
+	literalArtifactsDir := roachtestflags.LiteralArtifactsDir
+	if literalArtifactsDir == "" {
+		literalArtifactsDir = artifactsDir
+	}
+	setLogConfig(artifactsDir)
+	runnerDir := filepath.Join(artifactsDir, runnerLogsDir)
+	runnerLogPath := filepath.Join(
+		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
+	l, tee := testRunnerLogger(context.Background(), parallelism, runnerLogPath)
+	roachprod.ClearClusterCache = roachtestflags.ClearClusterCache
+
 	if runtime.GOOS == "darwin" {
 		// This will suppress the annoying "Allow incoming network connections" popup from
 		// OSX when running a roachtest
 		bindTo = "localhost"
 	}
 
+	sideEyeToken := runner.maybeInitSideEyeClient(context.Background(), l)
+
 	opt := clustersOpt{
 		typ:         clusterType,
 		clusterName: roachtestflags.ClusterNames,
 		// Precedence for resolving the user: cli arg, env.ROACHPROD_USER, current user.
-		user:      getUser(roachtestflags.Username),
-		cpuQuota:  roachtestflags.CPUQuota,
-		clusterID: roachtestflags.ClusterID,
+		user:         getUser(roachtestflags.Username),
+		cpuQuota:     roachtestflags.CPUQuota,
+		clusterID:    roachtestflags.ClusterID,
+		sideEyeToken: sideEyeToken,
 	}
 	switch {
 	case roachtestflags.DebugAlways:
@@ -122,36 +151,10 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		return err
 	}
 
-	specs, err := testsToRun(r, filter, roachtestflags.RunSkipped, roachtestflags.SelectProbability, true)
-	if err != nil {
-		return err
-	}
-
-	n := len(specs)
-	if n*roachtestflags.Count < parallelism {
-		// Don't spin up more workers than necessary. This has particular
-		// implications for the common case of running a single test once: if
-		// parallelism is set to 1, we'll use teeToStdout below to get logs to
-		// stdout/stderr.
-		parallelism = n * roachtestflags.Count
-	}
 	if opt.debugMode == DebugKeepAlways && n > 1 {
 		return errors.Newf("--debug-always is only allowed when running a single test")
 	}
 
-	artifactsDir := roachtestflags.ArtifactsDir
-	literalArtifactsDir := roachtestflags.LiteralArtifactsDir
-	if literalArtifactsDir == "" {
-		literalArtifactsDir = artifactsDir
-	}
-
-	roachprod.ClearClusterCache = roachtestflags.ClearClusterCache
-
-	setLogConfig(artifactsDir)
-	runnerDir := filepath.Join(artifactsDir, runnerLogsDir)
-	runnerLogPath := filepath.Join(
-		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
-	l, tee := testRunnerLogger(context.Background(), parallelism, runnerLogPath)
 	lopt := loggingOpt{
 		l:                   l,
 		tee:                 tee,

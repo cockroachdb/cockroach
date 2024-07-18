@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/revertccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -62,12 +63,8 @@ func startDistIngestion(
 	}
 
 	// Start from the last checkpoint if it exists.
-	var heartbeatTimestamp hlc.Timestamp
-	if !replicatedTime.IsEmpty() {
-		heartbeatTimestamp = replicatedTime
-	} else {
-		heartbeatTimestamp = initialScanTimestamp
-	}
+	heartbeatTimestamp := replicationutils.ResolveHeartbeatTime(
+		replicatedTime, details.ReplicationStartTime, streamProgress.CutoverTime, details.ReplicationTTLSeconds)
 	msg := redact.Sprintf("resuming stream (producer job %d) from %s", streamID, heartbeatTimestamp)
 
 	if streamProgress.InitialRevertRequired {
@@ -146,7 +143,7 @@ func startDistIngestion(
 		ingestionJob.ID())
 
 	replanOracle := sql.ReplanOnCustomFunc(
-		measurePlanChange,
+		getNodes,
 		func() float64 {
 			return crosscluster.ReplanThreshold.Get(execCtx.ExecCfg().SV())
 		},
@@ -534,7 +531,6 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 
 		streamIngestionSpecs, streamIngestionFrontierSpec, err := constructStreamIngestionPlanSpecs(
 			ctx,
-			crosscluster.StreamAddress(details.StreamAddress),
 			topology,
 			destNodeLocalities,
 			initialScanTimestamp,
@@ -589,49 +585,27 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 	}
 }
 
-// measurePlanChange computes the number of node changes (addition or removal)
-// in the source and destination clusters as a fraction of the total number of
-// nodes in both clusters in the previous plan.
-func measurePlanChange(before, after *sql.PhysicalPlan) float64 {
-
-	getNodes := func(plan *sql.PhysicalPlan) (src, dst map[string]struct{}, nodeCount int) {
-		dst = make(map[string]struct{})
-		src = make(map[string]struct{})
-		count := 0
-		for _, proc := range plan.Processors {
-			if proc.Spec.Core.StreamIngestionData == nil {
-				// Skip other processors in the plan (like the Frontier processor).
-				continue
-			}
+func getNodes(plan *sql.PhysicalPlan) (src, dst map[string]struct{}, nodeCount int) {
+	dst = make(map[string]struct{})
+	src = make(map[string]struct{})
+	count := 0
+	for _, proc := range plan.Processors {
+		if proc.Spec.Core.StreamIngestionData == nil {
+			// Skip other processors in the plan (like the Frontier processor).
+			continue
+		}
+		if _, ok := dst[proc.SQLInstanceID.String()]; !ok {
 			dst[proc.SQLInstanceID.String()] = struct{}{}
 			count += 1
-			for id := range proc.Spec.Core.StreamIngestionData.PartitionSpecs {
+		}
+		for id := range proc.Spec.Core.StreamIngestionData.PartitionSpecs {
+			if _, ok := src[id]; !ok {
 				src[id] = struct{}{}
 				count += 1
 			}
 		}
-		return src, dst, count
 	}
-
-	countMissingElements := func(set1, set2 map[string]struct{}) int {
-		diff := 0
-		for id := range set1 {
-			if _, ok := set2[id]; !ok {
-				diff++
-			}
-		}
-		return diff
-	}
-
-	oldSrc, oldDst, oldCount := getNodes(before)
-	newSrc, newDst, _ := getNodes(after)
-	diff := 0
-	// To check for both introduced nodes and removed nodes, swap input order.
-	diff += countMissingElements(oldSrc, newSrc)
-	diff += countMissingElements(newSrc, oldSrc)
-	diff += countMissingElements(oldDst, newDst)
-	diff += countMissingElements(newDst, oldDst)
-	return float64(diff) / float64(oldCount)
+	return src, dst, count
 }
 
 type PartitionWithCandidates struct {
@@ -757,7 +731,6 @@ func GetDestNodeLocalities(
 
 func constructStreamIngestionPlanSpecs(
 	ctx context.Context,
-	streamAddress crosscluster.StreamAddress,
 	topology streamclient.Topology,
 	destSQLInstances []sql.InstanceLocality,
 	initialScanTimestamp hlc.Timestamp,
@@ -780,7 +753,6 @@ func constructStreamIngestionPlanSpecs(
 		PreviousReplicatedTimestamp: previousReplicatedTimestamp,
 		InitialScanTimestamp:        initialScanTimestamp,
 		Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
-		StreamAddress:               string(streamAddress),
 		PartitionSpecs:              make(map[string]execinfrapb.StreamIngestionPartitionSpec),
 		TenantRekey: execinfrapb.TenantRekey{
 			OldID: sourceTenantID,

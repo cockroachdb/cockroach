@@ -243,6 +243,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 				return mgr.StreamPartition(
+					ctx,
 					streampb.StreamID(tree.MustBeDInt(args[0])),
 					[]byte(tree.MustBeDBytes(args[1])),
 				)
@@ -543,6 +544,50 @@ var replicationBuiltins = map[string]builtinDefinition{
 				return tree.NewDBytes(tree.DBytes(rawSpec)), err
 			},
 			Info:       "TODO(ssd)",
+			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.logical_replication_inject_failures": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryClusterReplication,
+			Undocumented:     true,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "stream", Typ: types.Int},
+				{Name: "proc", Typ: types.Int},
+				{Name: "percent", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
+				if err != nil {
+					return nil, err
+				}
+				stream := streampb.StreamID(int(tree.MustBeDInt(args[0])))
+				proc := int32(int(tree.MustBeDInt(args[1])))
+				percent := streampb.StreamID(int(tree.MustBeDInt(args[2])))
+
+				if percent > 100 {
+					return nil, errors.New("invalid percent")
+				}
+
+				found := false
+				for _, i := range mgr.DebugGetLogicalConsumerStatuses(ctx) {
+					if stream == 0 || stream == i.StreamID {
+						if proc == 0 || proc == i.ProcessorID {
+							found = true
+							i.SetInjectedFailurePercent(uint32(percent))
+						}
+					}
+				}
+				if !found {
+					return nil, errors.New("no matching processors found")
+				}
+				return tree.DVoidDatum, nil
+			},
+			Info:       "Debugging tool to force failures during application of LDR events",
 			Volatility: volatility.Volatile,
 		},
 	),

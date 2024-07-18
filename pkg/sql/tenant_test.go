@@ -50,7 +50,7 @@ func TestDropTenantSynchronous(t *testing.T) {
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						DisableAutomaticVersionUpgrade: make(chan struct{}),
-						BinaryVersionOverride:          clusterversion.MinSupported.Version(),
+						ClusterVersionOverride:         clusterversion.MinSupported.Version(),
 					},
 				},
 			},

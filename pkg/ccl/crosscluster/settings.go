@@ -17,7 +17,7 @@ import (
 // StreamReplicationStreamLivenessTrackFrequency controls frequency to check
 // the liveness of a streaming replication producer job.
 var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSetting(
-	settings.SystemOnly,
+	settings.ApplicationLevel,
 	"stream_replication.stream_liveness_track_frequency",
 	"controls how frequent we check for the liveness of a replication stream producer job",
 	time.Minute,
@@ -27,7 +27,7 @@ var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSet
 // StreamReplicationMinCheckpointFrequency controls the minimum frequency the stream replication
 // source cluster sends checkpoints to destination cluster.
 var StreamReplicationMinCheckpointFrequency = settings.RegisterDurationSetting(
-	settings.SystemOnly,
+	settings.ApplicationLevel,
 	"stream_replication.min_checkpoint_frequency",
 	"controls minimum frequency the stream replication source cluster sends checkpoints "+
 		"to the destination cluster",
@@ -116,4 +116,21 @@ var ReplicateSpanConfigsEnabled = settings.RegisterBoolSetting(
 	"controls whether we replicate span configurations from the source system tenant to the "+
 		"destination system tenant",
 	true,
+)
+
+var LogicalReplanThreshold = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"logical_replication.replan_flow_threshold",
+	"fraction of nodes in the producer or consumer job that would need to change to refresh the"+
+		" physical execution plan. If set to 0, the physical plan will not automatically refresh.",
+	0.1,
+	settings.NonNegativeFloatWithMaximum(1),
+)
+
+var LogicalReplanFrequency = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"logical_replication.replan_flow_frequency",
+	"frequency at which the consumer job checks to refresh its physical execution plan",
+	10*time.Minute,
+	settings.PositiveDuration,
 )

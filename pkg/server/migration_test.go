@@ -42,42 +42,53 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	v := func(major, minor int32) roachpb.Version {
-		return roachpb.Version{Major: major, Minor: minor}
-	}
-	cv := func(major, minor int32) clusterversion.ClusterVersion {
-		return clusterversion.ClusterVersion{Version: v(major, minor)}
-	}
-
 	var tests = []struct {
-		binaryVersion             roachpb.Version
-		binaryMinSupportedVersion roachpb.Version
-		targetClusterVersion      clusterversion.ClusterVersion
-		expErrMatch               string // empty if expecting a nil error
+		latestVersion        roachpb.Version
+		minSupportedVersion  roachpb.Version
+		targetClusterVersion roachpb.Version
+		expErrMatch          string // empty if expecting a nil error
 	}{
 		{
-			binaryVersion:             v(20, 2),
-			binaryMinSupportedVersion: v(20, 1),
-			targetClusterVersion:      cv(20, 1),
-			expErrMatch:               "",
+			latestVersion:        clusterversion.PreviousRelease.Version(),
+			minSupportedVersion:  clusterversion.MinSupported.Version(),
+			targetClusterVersion: clusterversion.MinSupported.Version(),
+			expErrMatch:          "",
 		},
 		{
-			binaryVersion:             v(20, 2),
-			binaryMinSupportedVersion: v(20, 1),
-			targetClusterVersion:      cv(20, 2),
-			expErrMatch:               "",
+			latestVersion:        clusterversion.PreviousRelease.Version(),
+			minSupportedVersion:  clusterversion.MinSupported.Version(),
+			targetClusterVersion: clusterversion.PreviousRelease.Version(),
+			expErrMatch:          "",
 		},
 		{
-			binaryVersion:             v(20, 2),
-			binaryMinSupportedVersion: v(20, 1),
-			targetClusterVersion:      cv(21, 1),
-			expErrMatch:               "binary version.*less than target cluster version",
+			latestVersion:        clusterversion.Latest.Version(),
+			minSupportedVersion:  clusterversion.MinSupported.Version(),
+			targetClusterVersion: clusterversion.Latest.Version(),
+			expErrMatch:          "",
 		},
 		{
-			binaryVersion:             v(20, 2),
-			binaryMinSupportedVersion: v(20, 1),
-			targetClusterVersion:      cv(19, 2),
-			expErrMatch:               "target cluster version.*less than binary's min supported version",
+			latestVersion:        clusterversion.Latest.Version(),
+			minSupportedVersion:  clusterversion.MinSupported.Version(),
+			targetClusterVersion: clusterversion.PreviousRelease.Version(),
+			expErrMatch:          "",
+		},
+		{
+			latestVersion:        clusterversion.Latest.Version(),
+			minSupportedVersion:  clusterversion.PreviousRelease.Version(),
+			targetClusterVersion: clusterversion.Latest.Version(),
+			expErrMatch:          "",
+		},
+		{
+			latestVersion:        clusterversion.PreviousRelease.Version(),
+			minSupportedVersion:  clusterversion.MinSupported.Version(),
+			targetClusterVersion: clusterversion.Latest.Version(),
+			expErrMatch:          "binary version.*less than target cluster version",
+		},
+		{
+			latestVersion:        clusterversion.Latest.Version(),
+			minSupportedVersion:  clusterversion.Latest.Version(),
+			targetClusterVersion: clusterversion.PreviousRelease.Version(),
+			expErrMatch:          "target cluster version.*less than binary's min supported version",
 		},
 	}
 
@@ -85,8 +96,8 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 
 	for i, test := range tests {
 		st := cluster.MakeTestingClusterSettingsWithVersions(
-			test.binaryVersion,
-			test.binaryMinSupportedVersion,
+			test.latestVersion,
+			test.minSupportedVersion,
 			false, /* initializeVersion */
 		)
 
@@ -94,14 +105,16 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 			Settings: st,
 			Knobs: base.TestingKnobs{
 				Server: &TestingKnobs{
-					BinaryVersionOverride: test.binaryVersion,
+					ClusterVersionOverride: test.latestVersion,
 				},
 			},
 		})
 
 		migrationServer := s.MigrationServer().(*migrationServer)
 		req := &serverpb.ValidateTargetClusterVersionRequest{
-			ClusterVersion: &test.targetClusterVersion,
+			ClusterVersion: &clusterversion.ClusterVersion{
+				Version: test.targetClusterVersion,
+			},
 		}
 		_, err := migrationServer.ValidateTargetClusterVersion(context.Background(), req)
 		if !testutils.IsError(err, test.expErrMatch) {
@@ -121,15 +134,15 @@ func TestSyncAllEngines(t *testing.T) {
 	storeSpec.StickyVFSID = "sync-all-engines"
 	testServerArgs := base.TestServerArgs{
 		Settings: cluster.MakeTestingClusterSettingsWithVersions(
-			roachpb.Version{Major: 24, Minor: 1},
-			roachpb.Version{Major: 23, Minor: 1},
+			clusterversion.PreviousRelease.Version(),
+			clusterversion.MinSupported.Version(),
 			false, /* initializeVersion */
 		),
 		StoreSpecs: []base.StoreSpec{storeSpec},
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
-				BinaryVersionOverride: roachpb.Version{Major: 24, Minor: 1},
-				StickyVFSRegistry:     vfsRegistry,
+				ClusterVersionOverride: clusterversion.PreviousRelease.Version(),
+				StickyVFSRegistry:      vfsRegistry,
 			},
 		},
 	}
@@ -190,36 +203,41 @@ func TestBumpClusterVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	v := func(major, minor int32) roachpb.Version {
-		return roachpb.Version{Major: major, Minor: minor}
-	}
-	cv := func(major, minor int32) clusterversion.ClusterVersion {
-		return clusterversion.ClusterVersion{Version: v(major, minor)}
-	}
-
 	var tests = []struct {
 		binaryVersion        roachpb.Version
-		activeClusterVersion clusterversion.ClusterVersion // akin to min supported binary version
-		bumpClusterVersion   clusterversion.ClusterVersion
-		expClusterVersion    clusterversion.ClusterVersion
+		activeClusterVersion roachpb.Version // akin to min supported binary version
+		bumpClusterVersion   roachpb.Version
+		expClusterVersion    roachpb.Version
 	}{
 		{
-			binaryVersion:        v(21, 1),
-			activeClusterVersion: cv(20, 2),
-			bumpClusterVersion:   cv(20, 2),
-			expClusterVersion:    cv(20, 2),
+			binaryVersion:        clusterversion.Latest.Version(),
+			activeClusterVersion: clusterversion.PreviousRelease.Version(),
+			bumpClusterVersion:   clusterversion.PreviousRelease.Version(),
+			expClusterVersion:    clusterversion.PreviousRelease.Version(),
 		},
 		{
-			binaryVersion:        v(21, 1),
-			activeClusterVersion: cv(20, 2),
-			bumpClusterVersion:   cv(21, 1),
-			expClusterVersion:    cv(21, 1),
+			binaryVersion:        clusterversion.Latest.Version(),
+			activeClusterVersion: clusterversion.MinSupported.Version(),
+			bumpClusterVersion:   clusterversion.Latest.Version(),
+			expClusterVersion:    clusterversion.Latest.Version(),
 		},
 		{
-			binaryVersion:        v(21, 1),
-			activeClusterVersion: cv(21, 1),
-			bumpClusterVersion:   cv(20, 2),
-			expClusterVersion:    cv(21, 1),
+			binaryVersion:        clusterversion.Latest.Version(),
+			activeClusterVersion: clusterversion.MinSupported.Version(),
+			bumpClusterVersion:   clusterversion.PreviousRelease.Version(),
+			expClusterVersion:    clusterversion.PreviousRelease.Version(),
+		},
+		{
+			binaryVersion:        clusterversion.Latest.Version(),
+			activeClusterVersion: clusterversion.Latest.Version(),
+			bumpClusterVersion:   clusterversion.PreviousRelease.Version(),
+			expClusterVersion:    clusterversion.Latest.Version(),
+		},
+		{
+			binaryVersion:        clusterversion.Latest.Version(),
+			activeClusterVersion: clusterversion.PreviousRelease.Version(),
+			bumpClusterVersion:   clusterversion.MinSupported.Version(),
+			expClusterVersion:    clusterversion.PreviousRelease.Version(),
 		},
 	}
 
@@ -228,7 +246,7 @@ func TestBumpClusterVersion(t *testing.T) {
 		t.Run(fmt.Sprintf("config=%d", i), func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettingsWithVersions(
 				test.binaryVersion,
-				test.activeClusterVersion.Version,
+				test.activeClusterVersion,
 				false, /* initializeVersion */
 			)
 
@@ -240,7 +258,7 @@ func TestBumpClusterVersion(t *testing.T) {
 						// cluster version, so we can actually bump the cluster
 						// version to the binary version. Think a cluster with
 						// active cluster version v20.1, but running v20.2 binaries.
-						BinaryVersionOverride: test.activeClusterVersion.Version,
+						ClusterVersionOverride: test.activeClusterVersion,
 						// We're bumping cluster versions manually ourselves. We
 						// want avoid racing with the auto-upgrade process.
 						DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -250,13 +268,13 @@ func TestBumpClusterVersion(t *testing.T) {
 			defer s.Stopper().Stop(context.Background())
 
 			// Check to see our pre-bump active cluster version is what we expect.
-			if got := s.ClusterSettings().Version.ActiveVersion(ctx); got != test.activeClusterVersion {
-				t.Fatalf("expected active cluster version %s, got %s", test.activeClusterVersion, got)
+			if got := s.ClusterSettings().Version.ActiveVersion(ctx); got.Version != test.activeClusterVersion {
+				t.Fatalf("expected active cluster version %s, got %s", test.activeClusterVersion, got.Version)
 			}
 
 			migrationServer := s.MigrationServer().(*migrationServer)
 			req := &serverpb.BumpClusterVersionRequest{
-				ClusterVersion: &test.bumpClusterVersion,
+				ClusterVersion: &clusterversion.ClusterVersion{Version: test.bumpClusterVersion},
 			}
 			if _, err := migrationServer.BumpClusterVersion(ctx, req); err != nil {
 				t.Fatal(err)
@@ -264,19 +282,19 @@ func TestBumpClusterVersion(t *testing.T) {
 
 			// Check to see if our post-bump active cluster version is what we
 			// expect.
-			if got := s.ClusterSettings().Version.ActiveVersion(ctx); got != test.expClusterVersion {
-				t.Fatalf("expected active cluster version %s, got %s", test.expClusterVersion, got)
+			if got := s.ClusterSettings().Version.ActiveVersion(ctx); got.Version != test.expClusterVersion {
+				t.Fatalf("expected active cluster version %s, got %s", test.expClusterVersion, got.Version)
 			}
 
 			// Check to see that our bumped cluster version was persisted to disk.
 			synthesizedCV, err := kvstorage.SynthesizeClusterVersionFromEngines(
 				ctx, s.Engines(), test.binaryVersion,
-				test.activeClusterVersion.Version,
+				test.activeClusterVersion,
 			)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if synthesizedCV != test.expClusterVersion {
+			if synthesizedCV.Version != test.expClusterVersion {
 				t.Fatalf("expected synthesized cluster version %s, got %s", test.expClusterVersion, synthesizedCV)
 			}
 		})
@@ -340,7 +358,7 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
 				DisableAutomaticVersionUpgrade: automaticUpgrade,
-				BinaryVersionOverride:          clusterversion.MinSupported.Version(),
+				ClusterVersionOverride:         clusterversion.MinSupported.Version(),
 			},
 			UpgradeManager: &upgradebase.TestingKnobs{
 				AfterRunPermanentUpgrades: func() {

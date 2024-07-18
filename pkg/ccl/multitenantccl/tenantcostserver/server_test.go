@@ -163,6 +163,7 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 			ExternalIOIngressBytes uint64  `yaml:"external_io_ingress_bytes"`
 			ExternalIOEgressBytes  uint64  `yaml:"external_io_egress_bytes"`
 			CrossRegionNetworkRU   float64 `yaml:"cross_region_network_ru"`
+			EstimatedCPUSeconds    float64 `yaml:"estimated_cpu_seconds"`
 		}
 		ConsumptionPeriod string  `yaml:"consumption_period"`
 		Tokens            float64 `yaml:"tokens"`
@@ -208,6 +209,7 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 			ExternalIOIngressBytes: args.Consumption.ExternalIOIngressBytes,
 			ExternalIOEgressBytes:  args.Consumption.ExternalIOEgressBytes,
 			CrossRegionNetworkRU:   args.Consumption.CrossRegionNetworkRU,
+			EstimatedCPUSeconds:    args.Consumption.EstimatedCPUSeconds,
 		},
 		ConsumptionPeriod:   consumptionPeriod,
 		RequestedTokens:     args.Tokens,
@@ -422,7 +424,7 @@ func TestPreMigration(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          (clusterversion.V24_2_TenantRates - 1).Version(),
+				ClusterVersionOverride:         (clusterversion.V24_2_TenantRates - 1).Version(),
 			},
 		},
 	})

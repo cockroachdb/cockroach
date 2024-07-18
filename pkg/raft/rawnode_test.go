@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,7 +41,7 @@ type rawNodeAdapter struct {
 var _ Node = (*rawNodeAdapter)(nil)
 
 // TransferLeadership is to test when node specifies lead, which is pointless, can just be filled in.
-func (a *rawNodeAdapter) TransferLeadership(_ context.Context, _, transferee uint64) {
+func (a *rawNodeAdapter) TransferLeadership(_ context.Context, _, transferee pb.PeerID) {
 	a.RawNode.TransferLeader(transferee)
 }
 
@@ -80,7 +81,7 @@ func TestRawNodeStep(t *testing.T) {
 			s.Append([]pb.Entry{{Term: 1, Index: 1}})
 			require.NoError(t, s.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{
 				ConfState: pb.ConfState{
-					Voters: []uint64{1},
+					Voters: []pb.PeerID{1},
 				},
 				Index: 1,
 				Term:  1,
@@ -115,7 +116,7 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 		// V1 config change.
 		{
 			pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: 2},
-			pb.ConfState{Voters: []uint64{1, 2}},
+			pb.ConfState{Voters: []pb.PeerID{1, 2}},
 			nil,
 		},
 		// Proposing the same as a V2 change works just the same, without entering
@@ -125,7 +126,7 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 				{Type: pb.ConfChangeAddNode, NodeID: 2},
 			},
 			},
-			pb.ConfState{Voters: []uint64{1, 2}},
+			pb.ConfState{Voters: []pb.PeerID{1, 2}},
 			nil,
 		},
 		// Ditto if we add it as a learner instead.
@@ -134,7 +135,7 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 				{Type: pb.ConfChangeAddLearnerNode, NodeID: 2},
 			},
 			},
-			pb.ConfState{Voters: []uint64{1}, Learners: []uint64{2}},
+			pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}},
 			nil,
 		},
 		// We can ask explicitly for joint consensus if we want it.
@@ -144,8 +145,8 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 			},
 				Transition: pb.ConfChangeTransitionJointExplicit,
 			},
-			pb.ConfState{Voters: []uint64{1}, VotersOutgoing: []uint64{1}, Learners: []uint64{2}},
-			&pb.ConfState{Voters: []uint64{1}, Learners: []uint64{2}},
+			pb.ConfState{Voters: []pb.PeerID{1}, VotersOutgoing: []pb.PeerID{1}, Learners: []pb.PeerID{2}},
+			&pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}},
 		},
 		// Ditto, but with implicit transition (the harness checks this).
 		{
@@ -155,10 +156,10 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 				Transition: pb.ConfChangeTransitionJointImplicit,
 			},
 			pb.ConfState{
-				Voters: []uint64{1}, VotersOutgoing: []uint64{1}, Learners: []uint64{2},
+				Voters: []pb.PeerID{1}, VotersOutgoing: []pb.PeerID{1}, Learners: []pb.PeerID{2},
 				AutoLeave: true,
 			},
-			&pb.ConfState{Voters: []uint64{1}, Learners: []uint64{2}},
+			&pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}},
 		},
 		// Add a new node and demote n1. This exercises the interesting case in
 		// which we really need joint config changes and also need LearnersNext.
@@ -170,13 +171,13 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 			},
 			},
 			pb.ConfState{
-				Voters:         []uint64{2},
-				VotersOutgoing: []uint64{1},
-				Learners:       []uint64{3},
-				LearnersNext:   []uint64{1},
+				Voters:         []pb.PeerID{2},
+				VotersOutgoing: []pb.PeerID{1},
+				Learners:       []pb.PeerID{3},
+				LearnersNext:   []pb.PeerID{1},
 				AutoLeave:      true,
 			},
-			&pb.ConfState{Voters: []uint64{2}, Learners: []uint64{1, 3}},
+			&pb.ConfState{Voters: []pb.PeerID{2}, Learners: []pb.PeerID{1, 3}},
 		},
 		// Ditto explicit.
 		{
@@ -188,12 +189,12 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 				Transition: pb.ConfChangeTransitionJointExplicit,
 			},
 			pb.ConfState{
-				Voters:         []uint64{2},
-				VotersOutgoing: []uint64{1},
-				Learners:       []uint64{3},
-				LearnersNext:   []uint64{1},
+				Voters:         []pb.PeerID{2},
+				VotersOutgoing: []pb.PeerID{1},
+				Learners:       []pb.PeerID{3},
+				LearnersNext:   []pb.PeerID{1},
 			},
-			&pb.ConfState{Voters: []uint64{2}, Learners: []uint64{1, 3}},
+			&pb.ConfState{Voters: []pb.PeerID{2}, Learners: []pb.PeerID{1, 3}},
 		},
 		// Ditto implicit.
 		{
@@ -206,13 +207,13 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 				Transition: pb.ConfChangeTransitionJointImplicit,
 			},
 			pb.ConfState{
-				Voters:         []uint64{2},
-				VotersOutgoing: []uint64{1},
-				Learners:       []uint64{3},
-				LearnersNext:   []uint64{1},
+				Voters:         []pb.PeerID{2},
+				VotersOutgoing: []pb.PeerID{1},
+				Learners:       []pb.PeerID{3},
+				LearnersNext:   []pb.PeerID{1},
 				AutoLeave:      true,
 			},
-			&pb.ConfState{Voters: []uint64{2}, Learners: []uint64{1, 3}},
+			&pb.ConfState{Voters: []pb.PeerID{2}, Learners: []pb.PeerID{1, 3}},
 		},
 	}
 
@@ -251,7 +252,7 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 				}
 				rawNode.Advance(rd)
 				// Once we are the leader, propose a command and a ConfChange.
-				if !proposed && rd.SoftState.Lead == rawNode.raft.id {
+				if !proposed && rd.HardState.Lead == rawNode.raft.id {
 					require.NoError(t, rawNode.Propose([]byte("somedata")))
 					if ccv1, ok := tc.cc.AsV1(); ok {
 						ccdata, err = ccv1.Marshal()
@@ -344,10 +345,10 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 		Transition: pb.ConfChangeTransitionJointImplicit,
 	}
 	expCs := pb.ConfState{
-		Voters: []uint64{1}, VotersOutgoing: []uint64{1}, Learners: []uint64{2},
+		Voters: []pb.PeerID{1}, VotersOutgoing: []pb.PeerID{1}, Learners: []pb.PeerID{2},
 		AutoLeave: true,
 	}
-	exp2Cs := pb.ConfState{Voters: []uint64{1}, Learners: []uint64{2}}
+	exp2Cs := pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}}
 
 	s := newTestMemoryStorage(withPeers(1))
 	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
@@ -380,7 +381,7 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 		}
 		rawNode.Advance(rd)
 		// Once we are the leader, propose a command and a ConfChange.
-		if !proposed && rd.SoftState.Lead == rawNode.raft.id {
+		if !proposed && rd.HardState.Lead == rawNode.raft.id {
 			require.NoError(t, rawNode.Propose([]byte("somedata")))
 			ccdata, err = testCc.Marshal()
 			require.NoError(t, err)
@@ -456,7 +457,7 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 	for {
 		rd = rawNode.Ready()
 		s.Append(rd.Entries)
-		if rd.SoftState.Lead == rawNode.raft.id {
+		if rd.HardState.Lead == rawNode.raft.id {
 			rawNode.Advance(rd)
 			break
 		}
@@ -520,8 +521,8 @@ func TestRawNodeStart(t *testing.T) {
 		{Term: 1, Index: 3, Data: []byte("foo")}, // non-empty entry
 	}
 	want := Ready{
-		SoftState:        &SoftState{Lead: 1, RaftState: StateLeader},
-		HardState:        pb.HardState{Term: 1, Commit: 3, Vote: 1},
+		SoftState:        &SoftState{RaftState: StateLeader},
+		HardState:        pb.HardState{Term: 1, Commit: 3, Vote: 1, Lead: 1},
 		Entries:          nil, // emitted & checked in intermediate Ready cycle
 		CommittedEntries: entries,
 		MustSync:         false, // since we're only applying, not appending
@@ -575,7 +576,7 @@ func TestRawNodeStart(t *testing.T) {
 		return storage.ApplySnapshot(snap)
 	}
 
-	require.NoError(t, bootstrap(storage, pb.ConfState{Voters: []uint64{1}}))
+	require.NoError(t, bootstrap(storage, pb.ConfState{Voters: []pb.PeerID{1}}))
 
 	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, storage))
 	require.NoError(t, err)
@@ -610,10 +611,10 @@ func TestRawNodeRestart(t *testing.T) {
 		{Term: 1, Index: 1},
 		{Term: 1, Index: 2, Data: []byte("foo")},
 	}
-	st := pb.HardState{Term: 1, Commit: 1}
+	st := pb.HardState{Term: 1, Commit: 1, Lead: 1, LeadEpoch: 1}
 
 	want := Ready{
-		HardState: emptyState,
+		HardState: emptyState, // no HardState is emitted because there was no change
 		// commit up to commit index in st
 		CommittedEntries: entries[:st.Commit],
 		MustSync:         false,
@@ -628,12 +629,25 @@ func TestRawNodeRestart(t *testing.T) {
 	assert.Equal(t, want, rd)
 	rawNode.Advance(rd)
 	assert.False(t, rawNode.HasReady())
+	// Ensure that the HardState was correctly loaded post restart.
+	assert.Equal(t, uint64(1), rawNode.raft.Term)
+	assert.Equal(t, uint64(1), rawNode.raft.raftLog.committed)
+	assert.Equal(t, pb.PeerID(1), rawNode.raft.lead)
+	assert.True(t, rawNode.raft.state == StateFollower)
+	assert.Equal(t, raftstoreliveness.Epoch(1), rawNode.raft.leadEpoch)
+
+	// Ensure we campaign after the election timeout has elapsed.
+	for i := 0; i < rawNode.raft.randomizedElectionTimeout; i++ {
+		rawNode.raft.tick()
+	}
+	assert.Equal(t, StateCandidate, rawNode.raft.state)
+	assert.Equal(t, uint64(2), rawNode.raft.Term) // this should in-turn bump the term
 }
 
 func TestRawNodeRestartFromSnapshot(t *testing.T) {
 	snap := pb.Snapshot{
 		Metadata: pb.SnapshotMetadata{
-			ConfState: pb.ConfState{Voters: []uint64{1, 2}},
+			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}},
 			Index:     2,
 			Term:      1,
 		},
@@ -676,7 +690,7 @@ func TestRawNodeStatus(t *testing.T) {
 	s.Append(rd.Entries)
 	rn.Advance(rd)
 	status := rn.Status()
-	require.Equal(t, uint64(1), status.Lead)
+	require.Equal(t, pb.PeerID(1), status.Lead)
 	require.Equal(t, StateLeader, status.RaftState)
 	require.Equal(t, *rn.raft.trk.Progress[1], status.Progress[1])
 
@@ -878,9 +892,9 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 
 func BenchmarkStatus(b *testing.B) {
 	setup := func(members int) *RawNode {
-		peers := make([]uint64, members)
+		peers := make([]pb.PeerID, members)
 		for i := range peers {
-			peers[i] = uint64(i + 1)
+			peers[i] = pb.PeerID(i + 1)
 		}
 		cfg := newTestConfig(1, 3, 1, newTestMemoryStorage(withPeers(peers...)))
 		cfg.Logger = discardLogger
@@ -923,7 +937,7 @@ func BenchmarkStatus(b *testing.B) {
 
 			b.Run("WithProgress", func(b *testing.B) {
 				b.ReportAllocs()
-				visit := func(uint64, ProgressType, tracker.Progress) {}
+				visit := func(pb.PeerID, ProgressType, tracker.Progress) {}
 
 				for i := 0; i < b.N; i++ {
 					rn.WithProgress(visit)
@@ -933,7 +947,7 @@ func BenchmarkStatus(b *testing.B) {
 				b.ReportAllocs()
 				for i := 0; i < b.N; i++ {
 					var n uint64
-					visit := func(_ uint64, _ ProgressType, pr tracker.Progress) {
+					visit := func(_ pb.PeerID, _ ProgressType, pr tracker.Progress) {
 						n += pr.Match
 					}
 					rn.WithProgress(visit)
@@ -977,15 +991,15 @@ func TestRawNodeConsumeReady(t *testing.T) {
 func BenchmarkRawNode(b *testing.B) {
 	cases := []struct {
 		name  string
-		peers []uint64
+		peers []pb.PeerID
 	}{
 		{
 			name:  "single-voter",
-			peers: []uint64{1},
+			peers: []pb.PeerID{1},
 		},
 		{
 			name:  "two-voters",
-			peers: []uint64{1, 2},
+			peers: []pb.PeerID{1, 2},
 		},
 		// You can easily add more cases here.
 	}
@@ -997,7 +1011,7 @@ func BenchmarkRawNode(b *testing.B) {
 	}
 }
 
-func benchmarkRawNodeImpl(b *testing.B, peers ...uint64) {
+func benchmarkRawNodeImpl(b *testing.B, peers ...pb.PeerID) {
 
 	const debug = false
 

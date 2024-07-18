@@ -688,6 +688,11 @@ func TestSchemaChangeComparator_generator_probe_ranges(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/generator_probe_ranges"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_generic_license(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/generic_license"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_geospatial(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/geospatial"
@@ -1648,6 +1653,11 @@ func TestSchemaChangeComparator_sqllite(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/sqllite"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_sqlliveness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/sqlliveness"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_sqlsmith(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/sqlsmith"
@@ -2086,6 +2096,11 @@ func TestSchemaChangeComparator_vectorize_unsupported(t *testing.T) {
 func TestSchemaChangeComparator_vectorize_window(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/vectorize_window"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
+func TestSchemaChangeComparator_vectoross(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/vectoross"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_views(t *testing.T) {

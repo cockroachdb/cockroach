@@ -37,9 +37,7 @@ func (rn *RawNode) Bootstrap(peers []Peer) error {
 	lastIndex, err := rn.raft.raftLog.storage.LastIndex()
 	if err != nil {
 		return err
-	}
-
-	if lastIndex != 0 {
+	} else if lastIndex != 0 {
 		return errors.New("can't bootstrap a nonempty Storage")
 	}
 
@@ -51,17 +49,22 @@ func (rn *RawNode) Bootstrap(peers []Peer) error {
 	// TODO(tbg): remove StartNode and give the application the right tools to
 	// bootstrap the initial membership in a cleaner way.
 	rn.raft.becomeFollower(1, None)
-	ents := make([]pb.Entry, len(peers))
+	app := logSlice{term: 1, entries: make([]pb.Entry, 0, len(peers))}
 	for i, peer := range peers {
 		cc := pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: peer.ID, Context: peer.Context}
 		data, err := cc.Marshal()
 		if err != nil {
 			return err
 		}
-
-		ents[i] = pb.Entry{Type: pb.EntryConfChange, Term: 1, Index: uint64(i + 1), Data: data}
+		app.entries = append(app.entries, pb.Entry{
+			Type: pb.EntryConfChange, Term: 1, Index: uint64(i + 1), Data: data,
+		})
 	}
-	rn.raft.raftLog.append(ents...)
+	if err := app.valid(); err != nil {
+		return err
+	} else if !rn.raft.raftLog.append(app) {
+		return errors.New("could not append to the log")
+	}
 
 	// Now apply them, mainly so that the application can call Campaign
 	// immediately after StartNode in tests. Note that these nodes will
@@ -75,7 +78,7 @@ func (rn *RawNode) Bootstrap(peers []Peer) error {
 	//
 	// TODO(bdarnell): These entries are still unstable; do we need to preserve
 	// the invariant that committed < unstable?
-	rn.raft.raftLog.committed = uint64(len(ents))
+	rn.raft.raftLog.committed = app.lastIndex()
 	for _, peer := range peers {
 		rn.raft.applyConfChange(pb.ConfChange{NodeID: peer.ID, Type: pb.ConfChangeAddNode}.AsV2())
 	}

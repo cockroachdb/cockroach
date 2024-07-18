@@ -31,7 +31,7 @@ type tpccMultiDB struct {
 	// dbListFile contains the list of databases that tpcc schema will be
 	// created on and have the workload executed on.
 	dbListFile string
-	dbList     []string
+	dbList     []*tree.ObjectNamePrefix
 
 	// nextDatabase selects the next database in a round robin manner.
 	nextDatabase atomic.Uint64
@@ -50,9 +50,13 @@ var tpccMultiDBMeta = workload.Meta{
 	New: func() workload.Generator {
 		g := tpccMultiDB{}
 		g.tpcc = tpccMeta.New().(*tpcc)
+		g.tpcc.workloadName = "tpccmultidb"
 		g.flags.Meta["txn-preamble-file"] = workload.FlagMeta{RuntimeOnly: true}
 		// Support accessing multiple databases via the client driver.
 		g.flags.StringVar(&g.dbListFile, "db-list-file", "", "a file containing a list of databases.")
+		// Because this workload can create a large number of objects, the import
+		// concurrent may need to be limited.
+		g.flags.Int(workload.ImportDataLoaderConcurrencyFlag, 32, workload.ImportDataLoaderConcurrencyFlagDescription)
 		return &g
 	},
 }
@@ -64,7 +68,10 @@ func (t *tpccMultiDB) runBeforeEachTxn(ctx context.Context, tx pgx.Tx) error {
 	// in a roundrobin manner.
 	if t.dbList != nil {
 		databaseIdx := int(t.nextDatabase.Add(1) % uint64(len(t.dbList)))
-		if _, err := tx.Exec(ctx, "USE $1", t.dbList[databaseIdx]); err != nil {
+		if _, err := tx.Exec(ctx, "USE $1", t.dbList[databaseIdx].Catalog()); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, fmt.Sprintf("SET search_path = %s", t.dbList[databaseIdx].Schema())); err != nil {
 			return err
 		}
 	}
@@ -93,12 +100,7 @@ func (t *tpccMultiDB) Tables() []workload.Table {
 	tablesPerDb := make([]workload.Table, 0, len(existingTables)*len(t.dbList))
 	for _, db := range t.dbList {
 		for _, tbl := range existingTables {
-			tbl.ObjectPrefix = &tree.ObjectNamePrefix{
-				CatalogName:     tree.Name(db),
-				ExplicitCatalog: true,
-				SchemaName:      "public",
-				ExplicitSchema:  true,
-			}
+			tbl.ObjectPrefix = db
 			tablesPerDb = append(tablesPerDb, tbl)
 		}
 	}
@@ -115,13 +117,28 @@ func (t *tpccMultiDB) runInit() error {
 			if err != nil {
 				return
 			}
-			t.dbList = strings.Split(string(file), "\n")
-		}
-		if v := len(t.dbList); v > 0 && len(t.dbList[v-1]) == 0 {
-			t.dbList = t.dbList[:v-1]
+			strDbList := strings.Split(string(file), "\n")
+			if v := len(strDbList); v > 0 && len(strDbList[v-1]) == 0 {
+				strDbList = strDbList[:v-1]
+			}
+
+			for _, dbAndSchema := range strDbList {
+				parts := strings.Split(dbAndSchema, ".")
+				prefix := &tree.ObjectNamePrefix{
+					CatalogName:     tree.Name(parts[0]),
+					ExplicitCatalog: true,
+					SchemaName:      "public",
+					ExplicitSchema:  true,
+				}
+				if len(parts) > 1 {
+					prefix.SchemaName = tree.Name(parts[1])
+				}
+				t.dbList = append(t.dbList, prefix)
+			}
 		}
 		// Execute extra logic at the start of each txn.
 		t.onTxnStartFns = append(t.onTxnStartFns, t.runBeforeEachTxn)
+
 	})
 	return err
 }
@@ -133,12 +150,31 @@ func (t *tpccMultiDB) Hooks() workload.Hooks {
 		if err := t.runInit(); err != nil {
 			return err
 		}
+		ctx := context.Background()
+		// First create all require databases in a single txn, on multi-region
+		// this will reduce round trips and speed things up.
+		tx, err := db.BeginTx(ctx, &gosql.TxOptions{})
+		if err != nil {
+			return err
+		}
 		// Create all of the databases that was specified in the list.
 		for _, dbName := range t.dbList {
-			if _, err := db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName)); err != nil {
+			if _, err := tx.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName.Catalog())); err != nil {
 				return err
 			}
-			if _, err := db.Exec("USE $1", dbName); err != nil {
+			if _, err := tx.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s.%s", dbName.Catalog(), dbName.Schema())); err != nil {
+				return err
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		// Next configure all the databases as multi-region.
+		for _, dbName := range t.dbList {
+			if _, err := db.Exec("USE $1", dbName.Catalog()); err != nil {
+				return err
+			}
+			if _, err := db.Exec(fmt.Sprintf("SET search_path = %s", dbName.Schema())); err != nil {
 				return err
 			}
 			// Run the usual TPCC pre-create logic after.
@@ -149,6 +185,9 @@ func (t *tpccMultiDB) Hooks() workload.Hooks {
 				return err
 			}
 		}
+		if _, err := db.Exec("RESET search_path"); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -156,7 +195,10 @@ func (t *tpccMultiDB) Hooks() workload.Hooks {
 	// Execute the original post load logic across all the databases.
 	hooks.PostLoad = func(ctx context.Context, db *gosql.DB) error {
 		for _, dbName := range t.dbList {
-			if _, err := db.Exec("USE $1", dbName); err != nil {
+			if _, err := db.Exec("USE $1", dbName.Catalog()); err != nil {
+				return err
+			}
+			if _, err := db.Exec(fmt.Sprintf("SET search_path = %s", dbName.Schema())); err != nil {
 				return err
 			}
 			if err := oldPostLoad(ctx, db); err != nil {

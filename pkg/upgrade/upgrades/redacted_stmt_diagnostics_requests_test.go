@@ -41,7 +41,7 @@ func TestStmtDiagRedactedMigration(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          (clusterversion.V24_2_StmtDiagRedacted - 1).Version(),
+					ClusterVersionOverride:         (clusterversion.V24_2_StmtDiagRedacted - 1).Version(),
 				},
 			},
 		},

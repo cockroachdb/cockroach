@@ -245,6 +245,7 @@ ElementState:
         arrayTypeOid: 100105
       visibleType: 0
       width: 0
+    typeName: public.greeting
   Status: PUBLIC
 - ColumnType:
     closedTypeIds:
@@ -290,6 +291,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: public.greeting[]
   Status: PUBLIC
 - ColumnType:
     closedTypeIds:
@@ -327,6 +329,7 @@ ElementState:
         arrayTypeOid: 100107
       visibleType: 0
       width: 0
+    typeName: public.salutation
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -354,6 +357,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 64
+    typeName: INT8
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -381,6 +385,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: OID
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -408,6 +413,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: DECIMAL
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -435,6 +441,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: STRING
   Status: PUBLIC
 - ConstraintWithoutIndexName:
     constraintId: 2
@@ -662,6 +669,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 64
+    typeName: INT8
   Status: PUBLIC
 - CompositeTypeAttrType:
     closedTypeIds: []
@@ -682,6 +690,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: STRING
   Status: PUBLIC
 - Namespace:
     databaseId: 100
@@ -961,6 +970,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: public.comp[]
   Status: PUBLIC
 - ColumnType:
     closedTypeIds:
@@ -1022,6 +1032,7 @@ ElementState:
         arrayTypeOid: 100110
       visibleType: 0
       width: 0
+    typeName: public.comp
   Status: PUBLIC
 - ColumnType:
     closedTypeIds:
@@ -1088,6 +1099,7 @@ ElementState:
         arrayTypeOid: 100110
       visibleType: 0
       width: 0
+    typeName: public.comp
   Status: PUBLIC
 - ColumnType:
     closedTypeIds:
@@ -1154,6 +1166,7 @@ ElementState:
         arrayTypeOid: 100110
       visibleType: 0
       width: 0
+    typeName: public.comp
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -1181,6 +1194,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 64
+    typeName: INT8
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -1208,6 +1222,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: OID
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -1235,6 +1250,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: DECIMAL
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -1262,6 +1278,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: STRING
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -1295,6 +1312,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 64
+    typeName: INT8
   Status: PUBLIC
 - ConstraintWithoutIndexName:
     constraintId: 2

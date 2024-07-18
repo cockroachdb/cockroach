@@ -152,6 +152,7 @@ type Memo struct {
 	reorderJoinsLimit                          int
 	zigzagJoinEnabled                          bool
 	useForecasts                               bool
+	useMergedPartialStatistics                 bool
 	useHistograms                              bool
 	useMultiColStats                           bool
 	useNotVisibleIndex                         bool
@@ -237,6 +238,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		reorderJoinsLimit:                          int(evalCtx.SessionData().ReorderJoinsLimit),
 		zigzagJoinEnabled:                          evalCtx.SessionData().ZigzagJoinEnabled,
 		useForecasts:                               evalCtx.SessionData().OptimizerUseForecasts,
+		useMergedPartialStatistics:                 evalCtx.SessionData().OptimizerUseMergedPartialStatistics,
 		useHistograms:                              evalCtx.SessionData().OptimizerUseHistograms,
 		useMultiColStats:                           evalCtx.SessionData().OptimizerUseMultiColStats,
 		useNotVisibleIndex:                         evalCtx.SessionData().OptimizerUseNotVisibleIndexes,
@@ -400,6 +402,7 @@ func (m *Memo) IsStale(
 	if m.reorderJoinsLimit != int(evalCtx.SessionData().ReorderJoinsLimit) ||
 		m.zigzagJoinEnabled != evalCtx.SessionData().ZigzagJoinEnabled ||
 		m.useForecasts != evalCtx.SessionData().OptimizerUseForecasts ||
+		m.useMergedPartialStatistics != evalCtx.SessionData().OptimizerUseMergedPartialStatistics ||
 		m.useHistograms != evalCtx.SessionData().OptimizerUseHistograms ||
 		m.useMultiColStats != evalCtx.SessionData().OptimizerUseMultiColStats ||
 		m.useNotVisibleIndex != evalCtx.SessionData().OptimizerUseNotVisibleIndexes ||
@@ -515,6 +518,17 @@ func (m *Memo) IsOptimized() bool {
 	// assigned.
 	rel, ok := m.rootExpr.(RelExpr)
 	return ok && rel.RequiredPhysical() != nil
+}
+
+// OptimizationCost returns a rough estimate of the cost of optimization of the
+// memo. It is dependent on the number of tables in the metadata, based on the
+// reasoning that queries with more tables likely have more joins, which tend
+// to be the biggest contributors to optimization overhead.
+func (m *Memo) OptimizationCost() Cost {
+	// This cpuCostFactor is the same as cpuCostFactor in the coster.
+	// TODO(mgartner): Package these constants up in a shared location.
+	const cpuCostFactor = 0.01
+	return Cost(m.Metadata().NumTables()) * 1000 * cpuCostFactor
 }
 
 // NextRank returns a new rank that can be assigned to a scalar expression.

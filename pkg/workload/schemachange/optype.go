@@ -117,14 +117,15 @@ const (
 
 	// CREATE ...
 
-	createTypeEnum // CREATE TYPE <type> ENUM AS <def>
-	createIndex    // CREATE INDEX <index> ON <table> <def>
-	createSchema   // CREATE SCHEMA <schema>
-	createSequence // CREATE SEQUENCE <sequence> <def>
-	createTable    // CREATE TABLE <table> <def>
-	createTableAs  // CREATE TABLE <table> AS <def>
-	createView     // CREATE VIEW <view> AS <def>
-	createFunction // CREATE FUNCTION <function> ...
+	createTypeEnum      // CREATE TYPE <type> ENUM AS <def>
+	createTypeComposite // CREATE TYPE <type> AS <def>
+	createIndex         // CREATE INDEX <index> ON <table> <def>
+	createSchema        // CREATE SCHEMA <schema>
+	createSequence      // CREATE SEQUENCE <sequence> <def>
+	createTable         // CREATE TABLE <table> <def>
+	createTableAs       // CREATE TABLE <table> AS <def>
+	createView          // CREATE VIEW <view> AS <def>
+	createFunction      // CREATE FUNCTION <function> ...
 
 	// COMMENT ON ...
 
@@ -237,6 +238,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	createTable:                       (*operationGenerator).createTable,
 	createTableAs:                     (*operationGenerator).createTableAs,
 	createTypeEnum:                    (*operationGenerator).createEnum,
+	createTypeComposite:               (*operationGenerator).createCompositeType,
 	createView:                        (*operationGenerator).createView,
 	dropFunction:                      (*operationGenerator).dropFunction,
 	dropIndex:                         (*operationGenerator).dropIndex,
@@ -287,6 +289,7 @@ var opWeights = []int{
 	createTable:                       1,
 	createTableAs:                     1,
 	createTypeEnum:                    1,
+	createTypeComposite:               1,
 	createView:                        1,
 	dropFunction:                      1,
 	dropIndex:                         1,

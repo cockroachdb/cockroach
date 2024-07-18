@@ -227,8 +227,8 @@ type MakeAbsentColumnDeleteOnly struct {
 	Column scpb.Column
 }
 
-// SetAddedColumnType sets the type of a new column.
-type SetAddedColumnType struct {
+// UpsertColumnType sets the type of a new column.
+type UpsertColumnType struct {
 	immediateMutationOp
 	ColumnType scpb.ColumnType
 }
@@ -891,5 +891,11 @@ type AddDatabaseZoneConfig struct {
 	immediateMutationOp
 	DatabaseID descpb.ID
 	ZoneConfig *zonepb.ZoneConfig
-	SeqNum     uint32
+}
+
+// AddTableZoneConfig adds a zone config to a table.
+type AddTableZoneConfig struct {
+	immediateMutationOp
+	TableID    descpb.ID
+	ZoneConfig *zonepb.ZoneConfig
 }

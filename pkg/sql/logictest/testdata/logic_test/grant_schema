@@ -214,9 +214,37 @@ SELECT description FROM [SHOW JOBS] WHERE description LIKE  '%updating privilege
 ----
 
 query TTTTTTB colnames,rowsort
-SHOW GRANTS FOR roach
+WITH roach_grants AS (
+  SHOW GRANTS FOR roach
+)
+SELECT database_name,
+  IF(schema_name LIKE 'pg_temp%', 'pg_temp', schema_name) AS schema_name,
+  object_name,
+  object_type,
+  grantee,
+  privilege_type,
+  is_grantable
+FROM roach_grants
 ----
-database_name  schema_name   object_name  object_type  grantee  privilege_type  is_grantable
-test           roachhouse    NULL         schema       roach    ALL             false
-test           roachlayer    NULL         schema       roach    ALL             false
-test           roachstation  NULL         schema       roach    ALL             false
+database_name  schema_name                    object_name  object_type  grantee  privilege_type  is_grantable
+test           pg_temp                        NULL         schema       public   CREATE          false
+test           pg_temp                        NULL         schema       public   USAGE           false
+test           public                         NULL         schema       public   CREATE          false
+test           public                         NULL         schema       public   USAGE           false
+test           roachhouse                     NULL         schema       roach    ALL             false
+test           roachlayer                     NULL         schema       roach    ALL             false
+test           roachstation                   NULL         schema       roach    ALL             false
+
+subtest has_*_privilege_works_for_public
+
+statement ok
+CREATE SCHEMA roachema;
+GRANT USAGE ON SCHEMA roachema TO public;
+
+query B colnames
+SELECT has_schema_privilege('public', 'roachema', 'USAGE');
+----
+has_schema_privilege
+true
+
+subtest end

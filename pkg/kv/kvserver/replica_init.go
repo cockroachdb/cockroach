@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -146,7 +147,6 @@ func newUninitializedReplicaWithoutRaftGroup(
 	r.mu.proposals = map[kvserverbase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]*replicaChecksum{}
 	r.mu.proposalBuf.Init((*replicaProposer)(r), tracker.NewLockfreeTracker(), r.Clock(), r.ClusterSettings())
-	r.mu.proposalBuf.testing.allowLeaseProposalWhenNotLeader = store.cfg.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader
 	r.mu.proposalBuf.testing.dontCloseTimestamps = store.cfg.TestingKnobs.DontCloseTimestamps
 	if filter := store.cfg.TestingKnobs.TestingProposalSubmitFilter; filter != nil {
 		r.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (bool, error) {
@@ -293,11 +293,12 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 	ctx := r.AnnotateCtx(context.Background())
 	rg, err := raft.NewRawNode(newRaftConfig(
 		ctx,
-		raft.Storage((*replicaRaftStorage)(r)),
-		uint64(r.replicaID),
+		(*replicaRaftStorage)(r),
+		raftpb.PeerID(r.replicaID),
 		r.mu.state.RaftAppliedIndex,
 		r.store.cfg,
 		&raftLogger{ctx: ctx},
+		(*replicaRLockedStoreLiveness)(r),
 	))
 	if err != nil {
 		return err

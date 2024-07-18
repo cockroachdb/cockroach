@@ -11,6 +11,7 @@
 package tenantcostmodel
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -143,28 +144,44 @@ func TestEstimatedCPUSetting(t *testing.T) {
 			err:     "unexpected end of JSON input",
 		},
 		{
-			name:    "valid JSON",
-			jsonStr: `{"ReadBatchCost": 1}`,
+			name: "valid JSON",
+			jsonStr: func() string {
+				bytes, err := json.Marshal(&DefaultEstimatedCPUModel)
+				require.NoError(t, err)
+				return string(bytes)
+			}(),
 		},
 		{
 			name:    "mismatched ReadBytesCost field lengths",
 			jsonStr: `{"ReadBytesCost": {"PayloadSize": [1], "CPUPerByte": [1, 2]}}`,
-			err:     "failed to validate estimated_cpu model",
+			err:     "estimated_cpu model lookup arrays cannot have different lengths",
 		},
 		{
 			name:    "mismatched WriteBatchCost field lengths",
 			jsonStr: `{"WriteBatchCost": {"RatePerNode": [1, 2], "CPUPerBatch": [1]}}`,
-			err:     "failed to validate estimated_cpu model",
+			err:     "estimated_cpu model lookup arrays cannot have different lengths",
 		},
 		{
 			name:    "mismatched WriteRequestCost field lengths",
 			jsonStr: `{"WriteRequestCost": {"BatchSize": [], "CPUPerRequest": [1]}}`,
-			err:     "failed to validate estimated_cpu model",
+			err:     "estimated_cpu model lookup arrays cannot have different lengths",
 		},
 		{
 			name:    "mismatched WriteBytesCost field lengths",
 			jsonStr: `{"WriteBytesCost": {"PayloadSize": [1], "CPUPerByte": []}}`,
-			err:     "failed to validate estimated_cpu model",
+			err:     "estimated_cpu model lookup arrays cannot have different lengths",
+		},
+		{
+			name: "Background CPU Amortization cannot be zero",
+			jsonStr: `{"WriteBytesCost": {"PayloadSize": [1], "CPUPerByte": [2]},
+						"BackgroundCPU": {"Amount": 0.5, "Amortization": 0}}`,
+			err: "estimated_cpu model cannot use zero or negative CPU amortization",
+		},
+		{
+			name: "Background CPU Amortization cannot be negative",
+			jsonStr: `{"WriteBytesCost": {"PayloadSize": [1], "CPUPerByte": [2]},
+						"BackgroundCPU": {"Amount": 0.5, "Amortization": -5}}`,
+			err: "estimated_cpu model cannot use zero or negative CPU amortization",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

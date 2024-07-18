@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -1453,7 +1454,7 @@ type ExecutorConfig struct {
 	EventsExporter obs.EventsExporterInterface
 
 	// NodeDescs stores {Store,Node}Descriptors in an in-memory cache.
-	NodeDescs kvcoord.NodeDescStore
+	NodeDescs kvclient.NodeDescStore
 
 	TenantCapabilitiesReader SystemTenantOnly[tenantcapabilities.Reader]
 
@@ -2051,6 +2052,7 @@ func checkResultType(typ *types.T, fmtCode pgwirebase.FormatCode) error {
 	case types.INetFamily:
 	case types.OidFamily:
 	case types.PGLSNFamily:
+	case types.PGVectorFamily:
 	case types.RefCursorFamily:
 	case types.TupleFamily:
 	case types.EnumFamily:
@@ -3294,6 +3296,10 @@ func (m *sessionDataMutator) SetOptimizerUseForecasts(val bool) {
 	m.data.OptimizerUseForecasts = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseMergedPartialStatistics(val bool) {
+	m.data.OptimizerUseMergedPartialStatistics = val
+}
+
 func (m *sessionDataMutator) SetOptimizerUseHistograms(val bool) {
 	m.data.OptimizerUseHistograms = val
 }
@@ -3700,6 +3706,10 @@ func (m *sessionDataMutator) SetOptimizerUseImprovedComputedColumnFiltersDerivat
 
 func (m *sessionDataMutator) SetEnableCreateStatsUsingExtremes(val bool) {
 	m.data.EnableCreateStatsUsingExtremes = val
+}
+
+func (m *sessionDataMutator) SetEnableCreateStatsUsingExtremesBoolEnum(val bool) {
+	m.data.EnableCreateStatsUsingExtremesBoolEnum = val
 }
 
 func (m *sessionDataMutator) SetAllowRoleMembershipsToChangeDuringTransaction(val bool) {

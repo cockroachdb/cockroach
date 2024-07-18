@@ -88,15 +88,25 @@ func ConstructUsingExtremesSpans(
 func GetUsingExtremesBounds(
 	ctx context.Context, evalCtx *eval.Context, histogram []cat.HistogramBucket,
 ) (lowerBound tree.Datum, upperBound tree.Datum, _ error) {
+	// Full stats collections sometimes add buckets with column type max/min upper
+	// bounds above and below the observed max and min values to account for extra
+	// distinct count (see addOuterBuckets()) and should be ignored.
+	isOuterBucket := func(bucket *cat.HistogramBucket) bool {
+		return (bucket.UpperBound.IsMin(ctx, evalCtx) || bucket.UpperBound.IsMax(ctx, evalCtx)) && bucket.NumEq == 0
+	}
 
 	upperBound = histogram[len(histogram)-1].UpperBound
-	// Pick the earliest lowerBound that is not null,
+	if len(histogram) > 1 && isOuterBucket(&histogram[len(histogram)-1]) {
+		upperBound = histogram[len(histogram)-2].UpperBound
+	}
+
+	// Pick the earliest lowerBound that is not null and isn't an outer bucket,
 	// but if none exist, return error
 	for i := range histogram {
 		hist := &histogram[i]
 		if cmp, err := hist.UpperBound.Compare(ctx, evalCtx, tree.DNull); err != nil {
 			return lowerBound, nil, err
-		} else if cmp != 0 {
+		} else if cmp != 0 && !isOuterBucket(hist) {
 			lowerBound = hist.UpperBound
 			break
 		}
@@ -105,7 +115,7 @@ func GetUsingExtremesBounds(
 		return lowerBound, nil,
 			pgerror.Newf(
 				pgcode.ObjectNotInPrerequisiteState,
-				"only NULL values exist in the index, so partial stats cannot be collected")
+				"only outer or NULL bounded buckets exist in the index, so partial stats cannot be collected")
 	}
 	return lowerBound, upperBound, nil
 }

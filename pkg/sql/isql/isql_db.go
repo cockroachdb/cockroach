@@ -125,6 +125,17 @@ type Executor interface {
 		qargs ...interface{},
 	) (tree.Datums, error)
 
+	// QueryRowExParsed is like QueryRowEx, but allows the caller to provide an
+	// already parsed statement.
+	QueryRowExParsed(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		session sessiondata.InternalExecutorOverride,
+		parsedStmt statements.Statement[tree.Statement],
+		qargs ...interface{},
+	) (tree.Datums, error)
+
 	// QueryRowExWithCols is like QueryRowEx, additionally returning the
 	// computed ResultColumns of the input query.
 	QueryRowExWithCols(

@@ -33,7 +33,7 @@ DROP TYPE defaultdb.typ
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 105, privileges: "2", userName: root, withGrantOption: "2"}
 - [[AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT], PUBLIC]
-  {closedTypeIds: [104, 105], type: {arrayContents: {family: EnumFamily, oid: 100104, udtMetadata: {arrayTypeOid: 100105}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100105}, typeId: 105}
+  {closedTypeIds: [104, 105], type: {arrayContents: {family: EnumFamily, oid: 100104, udtMetadata: {arrayTypeOid: 100105}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100105}, typeId: 105, typeName: 'public.typ[]'}
 - [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 105, schemaId: 101}
 
@@ -55,7 +55,7 @@ DROP TYPE defaultdb.ctyp
 - [[CompositeTypeAttrName:{DescID: 106, Name: a}, ABSENT], PUBLIC]
   {compositeTypeId: 106, name: a}
 - [[CompositeTypeAttrType:{DescID: 106}, ABSENT], PUBLIC]
-  {compositeTypeId: 106, type: {family: IntFamily, oid: 20, width: 64}}
+  {compositeTypeId: 106, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
 - [[CompositeTypeAttrName:{DescID: 106, Name: b}, ABSENT], PUBLIC]
   {compositeTypeId: 106, name: b}
 - [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC]
@@ -71,6 +71,6 @@ DROP TYPE defaultdb.ctyp
 - [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}
 - [[AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT], PUBLIC]
-  {closedTypeIds: [106, 107], type: {arrayContents: {family: TupleFamily, oid: 100106, tupleContents: [{family: IntFamily, oid: 20, width: 64}, {family: IntFamily, oid: 20, width: 64}], tupleLabels: [a, b], udtMetadata: {arrayTypeOid: 100107}}, arrayElemType: TupleFamily, family: ArrayFamily, oid: 100107}, typeId: 107}
+  {closedTypeIds: [106, 107], type: {arrayContents: {family: TupleFamily, oid: 100106, tupleContents: [{family: IntFamily, oid: 20, width: 64}, {family: IntFamily, oid: 20, width: 64}], tupleLabels: [a, b], udtMetadata: {arrayTypeOid: 100107}}, arrayElemType: TupleFamily, family: ArrayFamily, oid: 100107}, typeId: 107, typeName: 'public.ctyp[]'}
 - [[SchemaChild:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 107, schemaId: 101}

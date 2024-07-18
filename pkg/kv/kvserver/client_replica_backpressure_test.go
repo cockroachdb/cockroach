@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
@@ -72,15 +73,15 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		var allowSplits atomic.Value
 		allowSplits.Store(true)
 		unblockCh := make(chan struct{}, 1)
-		var rangesBlocked sync.Map
+		var rangesBlocked syncutil.Set[roachpb.RangeID]
 		args = base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 							if ba.Header.Txn != nil && ba.Header.Txn.Name == "split" && !allowSplits.Load().(bool) {
-								rangesBlocked.Store(ba.Header.RangeID, true)
-								defer rangesBlocked.Delete(ba.Header.RangeID)
+								rangesBlocked.Add(ba.Header.RangeID)
+								defer rangesBlocked.Remove(ba.Header.RangeID)
 								select {
 								case <-unblockCh:
 									return kvpb.NewError(errors.Errorf("splits disabled"))
@@ -129,7 +130,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		}
 		waitForBlockedRange = func(id roachpb.RangeID) {
 			testutils.SucceedsSoon(t, func() error {
-				if _, ok := rangesBlocked.Load(id); !ok {
+				if !rangesBlocked.Contains(id) {
 					return errors.Errorf("waiting for %v to be blocked", id)
 				}
 				return nil

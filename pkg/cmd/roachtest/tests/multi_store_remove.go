@@ -33,7 +33,6 @@ const (
 func registerMultiStoreRemove(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:              "multi-store-remove",
-		Skip:              "#123989",
 		Owner:             registry.OwnerStorage,
 		Cluster:           r.MakeClusterSpec(multiStoreNodes, spec.SSD(multiStoreStoresPerNode)),
 		CompatibleClouds:  registry.OnlyGCE,
@@ -144,7 +143,7 @@ func runMultiStoreRemove(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if err := conn.QueryRowContext(ctx,
 			`SELECT
 			    (SELECT count(1) FROM crdB_internal.ranges) AS ranges
-			  , (SELECT count(range_count) FROM crdb_internal.kv_store_status) AS replicas`,
+			  , (SELECT sum(range_count) FROM crdb_internal.kv_store_status) AS replicas`,
 		).Scan(&ranges, &replicas); err != nil {
 			t.Fatalf("replication status: %s", err)
 		}

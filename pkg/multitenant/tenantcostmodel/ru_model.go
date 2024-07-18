@@ -125,76 +125,15 @@ func (c *RequestUnitModel) NetworkCost(path NetworkPath) NetworkCost {
 	return c.NetworkCostTable.Matrix[path]
 }
 
-// RequestCost returns the cost, in RUs, of the given request. If it is a
-// write, that includes the per-batch, per-request, and per-byte costs,
-// multiplied by the number of replicas plus the cost of the cross region
-// networking. If it is a read, then the cost is zero, since reads can only be
-// costed by examining the ResponseInfo.
-func (c *RequestUnitModel) RequestCost(bri RequestInfo) (kv RU, network RU) {
-	if !bri.IsWrite() {
-		return 0, 0
-	}
-	// writeCost measures how expensive each replica is for crdb to write. This
-	// covers things like the cost of serving the RPC, raft consensus, and pebble
-	// write amplification.
-	writeCost := c.KVWriteBatch
-	writeCost += RU(bri.writeCount) * c.KVWriteRequest
-	writeCost += RU(bri.writeBytes) * c.KVWriteByte
-
-	// networkCost is intended to cover the cost of cross region networking. The
-	// network cost per byte is calculated by distsender and already includes the
-	// overhead of each replica.
-	networkCost := RU(bri.networkCost) * RU(bri.writeBytes)
-
-	return writeCost * RU(bri.writeReplicas), networkCost
-}
-
-// ResponseCost returns the cost, in RUs, of the given response. If it is a
-// read, that includes the per-batch, per-request, and per-byte costs, and the
-// cross region networking cost. If it is a write, then the cost is zero, since
-// writes can only be costed by examining the RequestInfo.
-func (c *RequestUnitModel) ResponseCost(bri ResponseInfo) (kv RU, network RU) {
-	if !bri.IsRead() {
-		return 0, 0
-	}
-	kv = c.KVReadBatch
-	kv += RU(bri.readCount) * c.KVReadRequest
-	kv += RU(bri.readBytes) * c.KVReadByte
-	network = RU(bri.readBytes) * RU(bri.networkCost)
-	return kv, network
-}
-
-// RequestInfo captures the BatchRequest information that is used (together
-// with the cost model) to determine the portion of the cost that can be
-// calculated up-front. Specifically: how many writes were batched together,
-// their total size, the number of target replicas (if the request is a write
-// batch), and the cross region network cost.
-type RequestInfo struct {
-	// writeReplicas is the number of range replicas to which this write was sent
-	// (i.e. the replication factor). This is 0 if it is a read-only batch.
-	writeReplicas int64
-	// writeCount is the number of writes that were batched together. This is 0
-	// if it is a read-only batch.
-	writeCount int64
-	// writeBytes is the total size of all batched writes in the request, in
-	// bytes, or 0 if it is a read-only batch.
-	writeBytes int64
-	// networkCost is the per byte cost of the cross region network cost. This is
-	// calculated ahead of time by distsender and accounts for the network cost
-	// of each replica written.
-	networkCost NetworkCost
-}
-
-// MakeRequestInfo extracts the relevant information from a BatchRequest.
-func MakeRequestInfo(ba *kvpb.BatchRequest, replicas int, networkCost NetworkCost) RequestInfo {
-	// The cost of read-only batches is captured by MakeResponseInfo.
-	if !ba.IsWrite() {
-		return RequestInfo{}
-	}
-
+// MakeBatchInfo returns the count and size of KV read and write operations that
+// are part of the given batch. Only a subset of operations are counted - those
+// that represent user-initiated requests.
+func (c *RequestUnitModel) MakeBatchInfo(
+	request *kvpb.BatchRequest, response *kvpb.BatchResponse,
+) (info BatchInfo) {
 	var writeCount, writeBytes int64
-	for i := range ba.Requests {
-		req := ba.Requests[i].GetInner()
+	for i := range request.Requests {
+		req := request.Requests[i].GetInner()
 
 		// Only count non-admin requests in the batch that write user data. Other
 		// requests are considered part of the "base" cost of a batch.
@@ -208,80 +147,10 @@ func MakeRequestInfo(ba *kvpb.BatchRequest, replicas int, networkCost NetworkCos
 			}
 		}
 	}
-	return RequestInfo{
-		writeReplicas: int64(replicas),
-		writeCount:    writeCount,
-		writeBytes:    writeBytes,
-		networkCost:   networkCost,
-	}
-}
-
-// IsWrite is true if this was a write batch rather than a read-only batch.
-func (bri RequestInfo) IsWrite() bool {
-	return bri.writeCount != 0
-}
-
-// WriteReplicas is the number of range replicas to which the write was sent.
-// This is 0 if it is a read-only batch.
-func (bri RequestInfo) WriteReplicas() int64 {
-	return bri.writeReplicas
-}
-
-// WriteCount is the number of writes that were batched together. This is 0 if
-// it is a read-only batch.
-func (bri RequestInfo) WriteCount() int64 {
-	return bri.writeCount
-}
-
-// WriteBytes is the total size of all batched writes in the request, in bytes,
-// or 0 if it is a read-only batch.
-func (bri RequestInfo) WriteBytes() int64 {
-	return bri.writeBytes
-}
-
-// TestingRequestInfo creates a RequestInfo for testing purposes.
-func TestingRequestInfo(
-	writeReplicas, writeCount, writeBytes int64, networkCost NetworkCost,
-) RequestInfo {
-	return RequestInfo{
-		writeReplicas: writeReplicas,
-		writeCount:    writeCount,
-		writeBytes:    writeBytes,
-		networkCost:   networkCost,
-	}
-}
-
-// ResponseInfo captures the BatchResponse information that is used (together
-// with the cost model) to determine the portion of the cost that can only be
-// calculated after-the-fact. Specifically: how many reads were batched
-// together their total size (if the request is a read-only batch), and the
-// network cost for the read.
-type ResponseInfo struct {
-	// isRead is true if this batch contained only read requests, or false if it
-	// was a write batch.
-	isRead bool
-	// readCount is the number of reads that were batched together. This is 0 if
-	// it is a write batch.
-	readCount int64
-	// readBytes is the total size of all batched reads in the response, in
-	// bytes, or 0 if it is a write batch.
-	readBytes int64
-	// networkCost is RU/byte cost for this read request.
-	networkCost NetworkCost
-}
-
-// MakeResponseInfo extracts the relevant information from a BatchResponse.
-func MakeResponseInfo(
-	br *kvpb.BatchResponse, isReadOnly bool, networkCost NetworkCost,
-) ResponseInfo {
-	// The cost of non read-only batches is captured by MakeRequestInfo.
-	if !isReadOnly {
-		return ResponseInfo{}
-	}
 
 	var readCount, readBytes int64
-	for i := range br.Responses {
-		resp := br.Responses[i].GetInner()
+	for i := range response.Responses {
+		resp := response.Responses[i].GetInner()
 
 		// Only count requests in the batch that read user data. Other requests
 		// are considered part of the "base" cost of a batch.
@@ -292,39 +161,42 @@ func MakeResponseInfo(
 			readBytes += resp.Header().NumBytes
 		}
 	}
-	return ResponseInfo{
-		isRead:      true,
-		readCount:   readCount,
-		readBytes:   readBytes,
-		networkCost: networkCost,
+
+	return BatchInfo{
+		ReadCount:  readCount,
+		ReadBytes:  readBytes,
+		WriteCount: writeCount,
+		WriteBytes: writeBytes,
 	}
 }
 
-// IsRead is true if this was a read-only batch rather than a write batch.
-func (bri ResponseInfo) IsRead() bool {
-	return bri.isRead
-}
+// BatchCost returns the cost of the given batch in request units, including the
+// cost of KV CPU and the cost of any cross-region networking.
+func (c *RequestUnitModel) BatchCost(
+	bi BatchInfo, networkCost NetworkCost, replicas int64,
+) (kv RU, network RU) {
+	// NOTE: the RU model assumes that a batch is either a write batch or a read
+	// batch and cannot be both at once. If there is at least one write request
+	// in the batch, it is treated as a write batch.
+	if bi.WriteCount > 0 {
+		// writeCost measures how expensive each replica is for crdb to write. This
+		// covers things like the cost of serving the RPC, raft consensus, and pebble
+		// write amplification.
+		kv = c.KVWriteBatch
+		kv += RU(bi.WriteCount) * c.KVWriteRequest
+		kv += RU(bi.WriteBytes) * c.KVWriteByte
+		kv *= RU(replicas)
 
-// ReadCount is the number of reads that were batched together. This is 0 if it
-// is a write batch.
-func (bri ResponseInfo) ReadCount() int64 {
-	return bri.readCount
-}
-
-// ReadBytes is the total size of all batched reads in the response, in bytes,
-// or 0 if it is a write batch.
-func (bri ResponseInfo) ReadBytes() int64 {
-	return bri.readBytes
-}
-
-// TestingResponseInfo creates a ResponseInfo for testing purposes.
-func TestingResponseInfo(
-	isRead bool, readCount, readBytes int64, networkCost NetworkCost,
-) ResponseInfo {
-	return ResponseInfo{
-		isRead:      isRead,
-		readCount:   readCount,
-		readBytes:   readBytes,
-		networkCost: networkCost,
+		// Network cost is intended to cover the cost of cross region networking. The
+		// network cost per byte is calculated by the caller and already includes the
+		// overhead of each replica.
+		network += RU(bi.WriteBytes) * RU(networkCost)
+	} else if bi.ReadCount > 0 {
+		kv = c.KVReadBatch
+		kv += RU(bi.ReadCount) * c.KVReadRequest
+		kv += RU(bi.ReadBytes) * c.KVReadByte
+		network += RU(bi.ReadBytes) * RU(networkCost)
 	}
+
+	return kv, network
 }

@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"slices"
-	"sync"
 	"time"
 	"unsafe"
 
@@ -64,11 +63,12 @@ var catchupStartupRate = settings.RegisterIntSetting(
 type ForEachRangeFn func(fn ActiveRangeFeedIterFn) error
 
 type rangeFeedConfig struct {
-	overSystemTable bool
-	withDiff        bool
-	withFiltering   bool
-	withMetadata    bool
-	rangeObserver   func(ForEachRangeFn)
+	overSystemTable       bool
+	withDiff              bool
+	withFiltering         bool
+	withMetadata          bool
+	withMatchingOriginIDs []uint32
+	rangeObserver         func(ForEachRangeFn)
 
 	knobs struct {
 		// onRangefeedEvent invoked on each rangefeed event.
@@ -115,6 +115,14 @@ func WithDiff() RangeFeedOption {
 func WithFiltering() RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.withFiltering = true
+	})
+}
+
+// WithMatchingOriginIDs opts the rangefeed into emitting events originally written by
+// clusters with the assoicated origin IDs during logical data replication.
+func WithMatchingOriginIDs(originIDs ...uint32) RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.withMatchingOriginIDs = originIDs
 	})
 }
 
@@ -217,8 +225,8 @@ func (ds *DistSender) RangeFeedSpans(
 	defer sp.Finish()
 
 	rr := newRangeFeedRegistry(ctx, cfg.withDiff)
-	ds.activeRangeFeeds.Store(rr, nil)
-	defer ds.activeRangeFeeds.Delete(rr)
+	ds.activeRangeFeeds.Add(rr)
+	defer ds.activeRangeFeeds.Remove(rr)
 	if cfg.rangeObserver != nil {
 		cfg.rangeObserver(rr.ForEachPartialRangefeed)
 	}
@@ -299,8 +307,7 @@ const stopIter = false
 // iterutil.StopIteration can be returned by `fn` to stop iteration, and doing
 // so will not return this error.
 func (ds *DistSender) ForEachActiveRangeFeed(fn ActiveRangeFeedIterFn) (iterErr error) {
-	ds.activeRangeFeeds.Range(func(k, v interface{}) bool {
-		r := k.(*rangeFeedRegistry)
+	ds.activeRangeFeeds.Range(func(r *rangeFeedRegistry) bool {
 		iterErr = r.ForEachPartialRangefeed(fn)
 		return iterErr == nil
 	})
@@ -316,8 +323,7 @@ func (r *rangeFeedRegistry) ForEachPartialRangefeed(fn ActiveRangeFeedIterFn) (i
 		defer active.Unlock()
 		return active.PartialRangeFeed
 	}
-	r.ranges.Range(func(k, v interface{}) bool {
-		active := k.(*activeRangeFeed)
+	r.ranges.Range(func(active *activeRangeFeed) bool {
 		if err := fn(r.RangeFeedContext, partialRangeFeed(active)); err != nil {
 			iterErr = err
 			return stopIter
@@ -399,7 +405,7 @@ func (a *activeRangeFeed) setLastError(err error) {
 // range feeds.
 type rangeFeedRegistry struct {
 	RangeFeedContext
-	ranges sync.Map // map[*activeRangeFeed]nil
+	ranges syncutil.Set[*activeRangeFeed]
 }
 
 func newRangeFeedRegistry(ctx context.Context, withDiff bool) *rangeFeedRegistry {
@@ -504,14 +510,14 @@ func newActiveRangeFeed(
 
 	active.release = func() {
 		active.releaseCatchupScan()
-		rr.ranges.Delete(active)
+		rr.ranges.Remove(active)
 		metrics.RangefeedRanges.Dec(1)
 		if active.localConnection {
 			metrics.RangefeedLocalRanges.Dec(1)
 		}
 	}
 
-	rr.ranges.Store(active, nil)
+	rr.ranges.Add(active)
 	metrics.RangefeedRanges.Inc(1)
 
 	return active
@@ -656,6 +662,7 @@ func makeRangeFeedRequest(
 	startAfter hlc.Timestamp,
 	withDiff bool,
 	withFiltering bool,
+	withMatchingOriginIDs []uint32,
 ) kvpb.RangeFeedRequest {
 	admissionPri := admissionpb.BulkNormalPri
 	if isSystemRange {
@@ -667,8 +674,9 @@ func makeRangeFeedRequest(
 			Timestamp: startAfter,
 			RangeID:   rangeID,
 		},
-		WithDiff:      withDiff,
-		WithFiltering: withFiltering,
+		WithDiff:              withDiff,
+		WithFiltering:         withFiltering,
+		WithMatchingOriginIDs: withMatchingOriginIDs,
 		AdmissionHeader: kvpb.AdmissionHeader{
 			// NB: AdmissionHeader is used only at the start of the range feed
 			// stream since the initial catch-up scan is expensive.

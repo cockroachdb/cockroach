@@ -1631,7 +1631,9 @@ statement ok
 CREATE STATISTICS s FROM all_null
 
 query T
-SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
   FROM (
 SELECT json_array_elements(statistics) - 'created_at' AS stat
 FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
@@ -1654,6 +1656,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
         ],
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "s",
         "null_count": 0,
         "row_count": 1
@@ -1666,6 +1669,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
         "distinct_count": 1,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "s",
         "null_count": 1,
         "row_count": 1
@@ -1689,7 +1693,9 @@ statement ok
 CREATE STATISTICS s FROM greeting_stats
 
 query T
-SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
   FROM (
 SELECT json_array_elements(statistics) - 'created_at' AS stat
 FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
@@ -1712,6 +1718,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
         ],
         "histo_col_type": "test.public.greeting",
         "histo_version": 3,
+        "id": 0,
         "name": "s",
         "null_count": 0,
         "row_count": 1
@@ -1877,7 +1884,9 @@ SHOW HISTOGRAM $hist_id_1
 upper_bound  range_rows  distinct_range_rows  equal_rows
 
 query T
-SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
   FROM (SELECT json_array_elements(statistics) - 'created_at' AS stat
         FROM [SHOW STATISTICS USING JSON FOR TABLE tabula])
 ----
@@ -1890,6 +1899,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1902,6 +1912,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1914,6 +1925,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "distinct_count": 0,
         "histo_col_type": "",
+        "id": 0,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1926,6 +1938,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1973,7 +1986,9 @@ SHOW HISTOGRAM $hist_id_1
 upper_bound  range_rows  distinct_range_rows  equal_rows
 
 query T
-SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
   FROM (SELECT json_array_elements(statistics) - 'created_at' - 'avg_size' AS stat
         FROM [SHOW STATISTICS USING JSON FOR TABLE tabula])
 ----
@@ -1993,6 +2008,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "locke",
         "null_count": 0,
         "row_count": 1
@@ -2012,6 +2028,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "locke",
         "null_count": 0,
         "row_count": 1
@@ -2023,6 +2040,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "distinct_count": 1,
         "histo_col_type": "",
+        "id": 0,
         "name": "locke",
         "null_count": 0,
         "row_count": 1
@@ -2034,6 +2052,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         "distinct_count": 1,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "locke",
         "null_count": 1,
         "row_count": 1
@@ -2081,7 +2100,9 @@ NULL             {rowid}       0          0               0           true
 t1_ab            {a,b}         0          0               0           false
 
 query T
-SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
   FROM (
 SELECT json_array_elements(statistics) - 'created_at' AS stat
 FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
@@ -2096,6 +2117,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "null_count": 0,
         "row_count": 0
     },
@@ -2107,6 +2129,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "null_count": 0,
         "row_count": 0
     },
@@ -2118,6 +2141,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "null_count": 0,
         "row_count": 0
     },
@@ -2129,6 +2153,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         ],
         "distinct_count": 0,
         "histo_col_type": "",
+        "id": 0,
         "name": "t1_ab",
         "null_count": 0,
         "row_count": 0
@@ -2363,6 +2388,18 @@ statistics_name  partial_predicate                                  row_count  n
 xy_x_partial     (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
 xy_x_partial_2   (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
 
+query T
+SELECT jsonb_pretty(stat->'name')
+FROM (
+  SELECT jsonb_array_elements(statistics) AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE xy]
+)
+WHERE stat->>'full_statistic_id' = '$statistics_id'
+ORDER BY stat->>'name';
+----
+"xy_x_partial"
+"xy_x_partial_2"
+
 # Test null values.
 statement ok
 CREATE TABLE a_null (a INT, INDEX (a));
@@ -2577,7 +2614,7 @@ SHOW STATISTICS USING JSON FOR TABLE only_null;
 statement ok
 ALTER TABLE only_null INJECT STATISTICS '$only_null_stat';
 
-statement error pq: only NULL values exist in the index, so partial stats cannot be collected
+statement error pq: only outer or NULL bounded buckets exist in the index, so partial stats cannot be collected
 CREATE STATISTICS only_null_partial ON a FROM only_null USING EXTREMES;
 
 statement ok
@@ -2907,6 +2944,216 @@ SHOW HISTOGRAM $hist_crdb_internal_idx_expr
 ----
 upper_bound            range_rows  distinct_range_rows  equal_rows
 '{"bar": {"baz": 5}}'  0           0                    1
+
+# Verify that the correct partial predicate is used for partial stats using
+# extremes when outer buckets exist (int column type).
+statement ok
+CREATE TABLE int_outer_buckets (a PRIMARY KEY) AS SELECT generate_series(0, 9999);
+
+statement ok
+CREATE STATISTICS int_outer_buckets_full ON a FROM int_outer_buckets;
+
+let $hist_id_int_outer_buckets_full
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE int_outer_buckets] WHERE statistics_name = 'int_outer_buckets_full'
+
+# The full stats collection should have added 2 outer buckets for a total of 202
+# with upper bounds of MaxInt64 and MinInt64.
+query I
+SELECT count(*) FROM [SHOW HISTOGRAM $hist_id_int_outer_buckets_full]
+----
+202
+
+statement ok
+INSERT INTO int_outer_buckets SELECT generate_series(-10, -1) UNION ALL SELECT generate_series(10000, 10009);
+
+statement ok
+CREATE STATISTICS int_outer_buckets_partial ON a FROM int_outer_buckets USING EXTREMES;
+
+# The partial stat predicate should not include MaxInt64 and MinInt64 from the
+# outer buckets and should count 20 rows beyond the extremes.
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE int_outer_buckets]
+WHERE statistics_name = 'int_outer_buckets_partial'
+----
+statistics_name            partial_predicate                                     row_count  null_count
+int_outer_buckets_partial  (a IS NULL) OR ((a < 0:::INT8) OR (a > 9999:::INT8))  20         0
+
+# Verify that we don't ignore buckets with actual max and min values when
+# creating partial stats using extremes.
+statement ok
+INSERT INTO int_outer_buckets VALUES (-9223372036854775808), (9223372036854775807);
+
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.count = 10050;
+
+statement ok
+CREATE STATISTICS int_outer_buckets_full ON a FROM int_outer_buckets;
+
+statement ok
+CREATE STATISTICS int_outer_buckets_partial ON a FROM int_outer_buckets USING EXTREMES;
+
+# The partial stat predicate should include MaxInt64 and MinInt64 and should
+# count no rows beyond the extremes.
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE int_outer_buckets]
+WHERE statistics_name = 'int_outer_buckets_partial'
+----
+statistics_name            partial_predicate                                                                         row_count  null_count
+int_outer_buckets_partial  (a IS NULL) OR ((a < (-9223372036854775808):::INT8) OR (a > 9223372036854775807:::INT8))  0          0
+
+# Verify that the correct partial predicate is used for partial stats using
+# extremes when outer buckets exist (timestamp column type).
+statement ok
+CREATE TABLE timestamp_outer_buckets (a TIMESTAMP PRIMARY KEY);
+
+statement ok
+INSERT INTO timestamp_outer_buckets VALUES
+  ('2024-06-26 01:00:00'),
+  ('2024-06-26 02:00:00'),
+  ('2024-06-27 01:30:00'),
+  ('2024-06-27 02:30:00');
+
+statement ok
+CREATE STATISTICS timestamp_outer_buckets_full ON a FROM timestamp_outer_buckets;
+
+let $hist_id_timestamp_outer_buckets_full
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE timestamp_outer_buckets] WHERE statistics_name = 'timestamp_outer_buckets_full'
+
+# The full stats collection should not have added outer buckets.
+query I
+SELECT count(*) FROM [SHOW HISTOGRAM $hist_id_timestamp_outer_buckets_full]
+----
+4
+
+statement ok
+INSERT INTO timestamp_outer_buckets VALUES
+  ('2024-06-26 00:00:00'),
+  ('2024-06-27 03:30:00');
+
+statement ok
+CREATE STATISTICS timestamp_outer_buckets_partial ON a FROM timestamp_outer_buckets USING EXTREMES;
+
+# The partial stat should not ignore any buckets and have the correct predicate.
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE timestamp_outer_buckets]
+WHERE statistics_name = 'timestamp_outer_buckets_partial'
+----
+statistics_name                  partial_predicate                                                                                    row_count  null_count
+timestamp_outer_buckets_partial  (a IS NULL) OR ((a < '2024-06-26 01:00:00':::TIMESTAMP) OR (a > '2024-06-27 02:30:00':::TIMESTAMP))  2          0
+
+# Inject a full statistic with outer buckets, overriding the previous stats.
+statement ok
+ALTER TABLE timestamp_outer_buckets INJECT STATISTICS '[
+    {
+        "avg_size": 7,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2024-06-27 19:00:16.450303",
+        "distinct_count": 4,
+        "histo_buckets": [
+            {
+                "distinct_range": 0.000001,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "4714-11-24 00:00:00 BC"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2024-06-26 01:00:00"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2024-06-26 02:00:00"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2024-06-27 01:30:00"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "2024-06-27 02:30:00"
+            },
+            {
+                "distinct_range": 0.000001,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "294276-12-31 23:59:59.999999"
+            }
+        ],
+        "histo_col_type": "TIMESTAMP",
+        "histo_version": 3,
+        "name": "timestamp_outer_buckets_full",
+        "null_count": 0,
+        "row_count": 4
+    }
+]'
+
+statement ok
+INSERT INTO timestamp_outer_buckets VALUES ('2024-06-28 01:00:00');
+
+statement ok
+CREATE STATISTICS timestamp_outer_buckets_partial ON a FROM timestamp_outer_buckets USING EXTREMES;
+
+# The partial stat predicate should not include MaxSupportedTime and
+# MinSupportedTime from the outer buckets and should count 3 rows beyond the
+# extremes.
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count"
+FROM [SHOW STATISTICS FOR TABLE timestamp_outer_buckets]
+WHERE statistics_name = 'timestamp_outer_buckets_partial'
+----
+statistics_name                  partial_predicate                                                                                    row_count  null_count
+timestamp_outer_buckets_partial  (a IS NULL) OR ((a < '2024-06-26 01:00:00':::TIMESTAMP) OR (a > '2024-06-27 02:30:00':::TIMESTAMP))  3          0
+
+# Verify that we can't create partial stats using extremes on bool/enums columns
+# by default.
+statement ok
+CREATE TABLE bool_table (a bool PRIMARY KEY)
+
+statement ok
+INSERT INTO bool_table VALUES (true), (false)
+
+statement ok
+CREATE STATISTICS bool_table_full ON a FROM bool_table
+
+statement error pgcode 0A000 creating partial statistics at extremes on bool and enum columns is disabled
+CREATE STATISTICS bool_table_partial ON a FROM bool_table USING EXTREMES;
+
+statement ok
+CREATE TABLE enum_table (a e PRIMARY KEY)
+
+statement ok
+INSERT INTO enum_table VALUES ('hello'), ('howdy'), ('hi')
+
+statement ok
+CREATE STATISTICS enum_table_full ON a FROM enum_table
+
+statement error pgcode 0A000 creating partial statistics at extremes on bool and enum columns is disabled
+CREATE STATISTICS enum_table_full ON a FROM enum_table USING EXTREMES
+
+statement ok
+SET enable_create_stats_using_extremes_bool_enum = on
+
+statement ok
+CREATE STATISTICS bool_table_full ON a FROM bool_table USING EXTREMES
+
+statement ok
+CREATE STATISTICS enum_table_partial ON a FROM bool_table USING EXTREMES
+
+statement ok
+RESET enable_create_stats_using_extremes_bool_enum
 
 statement ok
 RESET enable_create_stats_using_extremes

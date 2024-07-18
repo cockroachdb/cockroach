@@ -16,10 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -29,7 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLWWInsertQueryQuoting(t *testing.T) {
+func TestLWWInsertQueryGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -57,46 +58,65 @@ func TestLWWInsertQueryQuoting(t *testing.T) {
 			schemaTmpl: `CREATE TABLE %s (pk int, payload string, CONSTRAINT "primary-idx" PRIMARY KEY (pk ASC))`,
 			row:        []interface{}{1, "hello"},
 		},
+		{
+			name:       "multi-column primary key",
+			schemaTmpl: `CREATE TABLE %s (pk1 int, pk2 int, payload string, CONSTRAINT "primary-idx" PRIMARY KEY (pk1 ASC, pk2 ASC))`,
+			row:        []interface{}{1, 1, "hello"},
+		},
 	}
 
 	tableNumber := 0
-	createTable := func(stmt string) string {
+	createTable := func(t *testing.T, stmt string) string {
 		tableName := fmt.Sprintf("tab%d", tableNumber)
 		runner.Exec(t, fmt.Sprintf(stmt, tableName))
 		runner.Exec(t, fmt.Sprintf(
-			"ALTER TABLE %s ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL",
+			"ALTER TABLE %s "+lwwColumnAdd,
 			tableName))
 		tableNumber++
 		return tableName
 	}
 
+	setup := func(t *testing.T, schemaTmpl string) (*sqlRowProcessor, func(...interface{}) roachpb.KeyValue) {
+		tableNameSrc := createTable(t, schemaTmpl)
+		tableNameDst := createTable(t, schemaTmpl)
+		srcDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameSrc)
+		dstDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameDst)
+		rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[descpb.ID]catalog.TableDescriptor{
+			dstDesc.GetID(): srcDesc,
+		}, s.InternalExecutor().(isql.Executor))
+		require.NoError(t, err)
+		return rp, func(datums ...interface{}) roachpb.KeyValue {
+			kv := replicationtestutils.EncodeKV(t, s.Codec(), srcDesc, datums...)
+			kv.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			return kv
+		}
+	}
+
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s/insert", tc.name), func(t *testing.T) {
-			tableName := createTable(tc.schemaTmpl)
-			desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableName)
-			rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
-				int32(desc.GetID()): *desc.TableDesc(),
-			}, s.InternalExecutor().(isql.Executor))
-			require.NoError(t, err)
-
-			keyValue := replicationtestutils.EncodeKV(t, s.Codec(), desc, tc.row...)
-			keyValue.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			runner.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled=true")
+			defer runner.Exec(t, "RESET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled")
+			rp, encoder := setup(t, tc.schemaTmpl)
+			keyValue := encoder(tc.row...)
+			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				_, err := rp.ProcessRow(ctx, txn, keyValue, roachpb.Value{})
+				return err
+			}))
+		})
+		t.Run(fmt.Sprintf("%s/insert-without-optimistic-insert", tc.name), func(t *testing.T) {
+			runner.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled=false")
+			defer runner.Exec(t, "RESET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled")
+			rp, encoder := setup(t, tc.schemaTmpl)
+			keyValue := encoder(tc.row...)
 			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				_, err := rp.ProcessRow(ctx, txn, keyValue, roachpb.Value{})
 				return err
 			}))
 		})
 		t.Run(fmt.Sprintf("%s/delete", tc.name), func(t *testing.T) {
-			tableName := createTable(tc.schemaTmpl)
-			desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableName)
-			rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
-				int32(desc.GetID()): *desc.TableDesc(),
-			}, s.InternalExecutor().(isql.Executor))
-			require.NoError(t, err)
-
-			keyValue := replicationtestutils.EncodeKV(t, s.Codec(), desc, tc.row...)
+			rp, encoder := setup(t, tc.schemaTmpl)
+			keyValue := encoder(tc.row...)
 			keyValue.Value.RawBytes = nil
-			keyValue.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				_, err := rp.ProcessRow(ctx, txn, keyValue, roachpb.Value{})
 				return err
@@ -123,19 +143,13 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	tableName := "tab"
 	runner.Exec(b, "CREATE TABLE tab (pk INT PRIMARY KEY, payload STRING)")
-	runner.Exec(b, "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL")
+	runner.Exec(b, "ALTER TABLE tab "+lwwColumnAdd)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
-	// Simulate the setup of the main code path where we have access to the
-	// session data defaults.
-	var sd *sessiondata.SessionData
-	err := s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		sd = txn.SessionData().Clone()
-		return nil
-	})
-	require.NoError(b, err)
-	rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
-		int32(desc.GetID()): *desc.TableDesc(),
+	// Simulate how we set up the row processor on the main code path.
+	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
+	rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[descpb.ID]catalog.TableDescriptor{
+		desc.GetID(): desc,
 	}, s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd)))
 	require.NoError(b, err)
 

@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/jackc/pgx/v4"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -303,7 +304,7 @@ func (e *externalConnectionFeedFactory) Feed(
 	}
 	createStmt.SinkURI = tree.NewStrVal(`external://` + randomExternalConnectionName)
 
-	return e.TestFeedFactory.Feed(createStmt.String(), args...)
+	return e.TestFeedFactory.Feed(tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...)
 }
 
 func setURI(
@@ -880,7 +881,7 @@ func (f *tableFeedFactory) Feed(
 		return nil, err
 	}
 
-	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := f.startFeedJob(c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -908,8 +909,8 @@ func (c *tableFeed) Partitions() []string {
 	return []string{`0`, `1`, `2`}
 }
 
-func timeoutOp(op string, id jobspb.JobID) string {
-	return fmt.Sprintf("%s-%d", op, id)
+func timeoutOp(op string, id jobspb.JobID) redact.RedactableString {
+	return redact.Sprintf("%s-%d", op, id)
 }
 
 // Next implements the TestFeed interface.
@@ -1123,7 +1124,7 @@ func (f *cloudFeedFactory) Feed(
 		dir:            feedDir,
 		isBare:         createStmt.Select != nil && !explicitEnvelope,
 	}
-	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := f.startFeedJob(c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -1821,7 +1822,7 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 		registry:       registry,
 	}
 
-	if err := k.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := k.startFeedJob(c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...); err != nil {
 		return nil, errors.CombineErrors(err, c.Close())
 	}
 	return c, nil
@@ -2051,7 +2052,7 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 		isBare:         createStmt.Select != nil && !explicitEnvelope,
 		mockSink:       sinkDest,
 	}
-	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := f.startFeedJob(c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...); err != nil {
 		sinkDest.Close()
 		return nil, err
 	}
@@ -2447,7 +2448,7 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		deprecatedClient: deprecatedClient,
 	}
 
-	if err := p.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := p.startFeedJob(c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...); err != nil {
 		_ = mockServer.Close()
 		return nil, err
 	}
@@ -2722,7 +2723,7 @@ func (p *pulsarFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		pulsarServer:   mockServer,
 	}
 
-	if err := p.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := p.startFeedJob(c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...); err != nil {
 		return nil, err
 	}
 	return c, nil

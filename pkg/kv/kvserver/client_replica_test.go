@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -1610,7 +1611,7 @@ func (l *leaseTransferTest) ensureLeaderAndRaftState(
 
 	testutils.SucceedsSoon(t, func() error {
 		status := leader.RaftStatus()
-		progress, ok := status.Progress[uint64(follower.ReplicaID)]
+		progress, ok := status.Progress[raftpb.PeerID(follower.ReplicaID)]
 		if !ok {
 			return errors.Errorf(
 				"replica %v progress not found in progress map: %v",
@@ -1850,7 +1851,7 @@ func TestLeaseExpirationBasedDrainTransferWithProscribed(t *testing.T) {
 				target := filterArgs.Req.Requests[0].GetTransferLease().Lease.Replica
 				if target == l.replica0Desc {
 					failedOnce.Do(func() { close(failedCh) })
-					return kvpb.NewError(kvserver.NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
+					return kvpb.NewError(leases.NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
 						target, raftutil.ReplicaStateProbe))
 				}
 			}
@@ -2137,9 +2138,10 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 		}
 
 		// Update replication gauges for all stores and verify we have 1 each of
-		// expiration and epoch leases.
+		// expiration and epoch leases. Also verify that we have no leader leases.
 		var expirationLeases int64
 		var epochLeases int64
+		var leaderLeases int64
 		for i := range tc.Servers {
 			if err := tc.GetFirstStoreFromServer(t, i).ComputeMetrics(context.Background()); err != nil {
 				return err
@@ -2147,12 +2149,16 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 			metrics = tc.GetFirstStoreFromServer(t, i).Metrics()
 			expirationLeases += metrics.LeaseExpirationCount.Value()
 			epochLeases += metrics.LeaseEpochCount.Value()
+			leaderLeases += metrics.LeaseLeaderCount.Value()
 		}
 		if a, e := expirationLeases, int64(1); a != e {
 			return errors.Errorf("expected %d expiration lease count; got %d", e, a)
 		}
 		if a, e := epochLeases, int64(1); a < e {
 			return errors.Errorf("expected greater than %d epoch lease count; got %d", e, a)
+		}
+		if a, e := leaderLeases, int64(0); a != e {
+			return errors.Errorf("expected exactly %d leader lease count; got %d", e, a)
 		}
 		return nil
 	})
@@ -4110,7 +4116,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 		testCache = true
 		args.ServerArgs.Knobs.Server = &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          (clusterversion.V24_1_MigrateOldStylePTSRecords - 1).Version(),
+			ClusterVersionOverride:         (clusterversion.V24_1_MigrateOldStylePTSRecords - 1).Version(),
 		}
 	}
 
@@ -4924,7 +4930,7 @@ func TestRangeMigration(t *testing.T) {
 			Settings: cluster.MakeTestingClusterSettingsWithVersions(endV, startV, false),
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          startV,
+					ClusterVersionOverride:         startV,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 			},

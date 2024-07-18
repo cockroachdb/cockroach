@@ -394,9 +394,6 @@ func (bo replicateBulkOps) sourceRunCmd(tenantName string, nodes option.NodeList
 func (bo replicateBulkOps) runDriver(
 	workloadCtx context.Context, c cluster.Cluster, t test.Test, setup *c2cSetup,
 ) error {
-	if c.Cloud() != spec.GCE && !c.IsLocal() {
-		t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
-	}
 	runBackupMVCCRangeTombstones(workloadCtx, t, c, mvccRangeTombstoneConfig{
 		skipBackupRestore: true,
 		skipClusterSetup:  true,
@@ -1083,9 +1080,6 @@ func c2cRegisterWrapper(
 }
 
 func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
-	if !c.IsLocal() {
-		t.Skip("c2c/acceptance is only meant to run on a local cluster")
-	}
 	sp := replicationSpec{
 		srcNodes: 1,
 		dstNodes: 1,
@@ -1095,7 +1089,6 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 		additionalDuration:        0 * time.Minute,
 		cutover:                   30 * time.Second,
 		skipNodeDistributionCheck: true,
-		clouds:                    registry.OnlyGCE,
 		suites:                    registry.Suites(registry.Nightly),
 	}
 	rd := makeReplicationDriver(t, c, sp)
@@ -1175,7 +1168,7 @@ func registerClusterToCluster(r registry.Registry) {
 			srcNodes:  10,
 			dstNodes:  10,
 			cpus:      8,
-			pdSize:    1100,
+			pdSize:    2000,
 			// Write ~7TB data to disk via Import -- takes a little over 1 hour.
 			workload: replicateImportKV{
 				replicateSplits: true,
@@ -1345,7 +1338,6 @@ func registerClusterToCluster(r registry.Registry) {
 			skip:                      "used for debugging when the full test fails",
 		},
 	} {
-		sp := sp
 		c2cRegisterWrapper(r, sp,
 			func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rd := makeReplicationDriver(t, c, sp)
@@ -1800,13 +1792,12 @@ func getStreamIngestionJobInfo(db *gosql.DB, jobID int) (jobInfo, error) {
 func srcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
 	db.ExecMultiple(t,
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true;`,
-		`SET CLUSTER SETTING kv.lease.reject_on_leader_unknown.enabled = true;`)
+	)
 }
 
 func destClusterSettings(t test.Test, db *sqlutils.SQLRunner, additionalDuration time.Duration) {
 	db.ExecMultiple(t,
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true;`,
-		`SET CLUSTER SETTING kv.lease.reject_on_leader_unknown.enabled = true;`,
 		`SET CLUSTER SETTING stream_replication.replan_flow_threshold = 0.1;`,
 	)
 

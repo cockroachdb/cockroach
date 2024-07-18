@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -126,7 +127,7 @@ type calcReplicaMetricsInput struct {
 	vitalityMap              livenesspb.NodeVitalityMap
 	clusterNodes             int
 	desc                     *roachpb.RangeDescriptor
-	raftStatus               *raftSparseStatus
+	raftStatus               *raft.SparseStatus
 	leaseStatus              kvserverpb.LeaseStatus
 	storeID                  roachpb.StoreID
 	storeAttrs, nodeAttrs    roachpb.Attributes
@@ -303,13 +304,13 @@ func calcLiveReplicas(
 // calcBehindCount returns a total count of log entries that follower replicas
 // are behind. This can only be computed on the raft leader.
 func calcBehindCount(
-	raftStatus *raftSparseStatus,
+	raftStatus *raft.SparseStatus,
 	desc *roachpb.RangeDescriptor,
 	vitalityMap livenesspb.NodeVitalityMap,
 ) int64 {
 	var behindCount int64
 	for _, rd := range desc.Replicas().Descriptors() {
-		if progress, ok := raftStatus.Progress[uint64(rd.ReplicaID)]; ok {
+		if progress, ok := raftStatus.Progress[raftpb.PeerID(rd.ReplicaID)]; ok {
 			if progress.Match > 0 &&
 				progress.Match < raftStatus.Commit {
 				behindCount += int64(raftStatus.Commit) - int64(progress.Match)

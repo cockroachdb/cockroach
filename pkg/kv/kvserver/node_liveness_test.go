@@ -17,7 +17,6 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -1028,7 +1027,7 @@ func TestNodeLivenessRetryAmbiguousResultOnCreateError(t *testing.T) {
 		t.Run(tc.err.Error(), func(t *testing.T) {
 
 			// Keeps track of node IDs that have errored.
-			var errored sync.Map
+			var errored syncutil.Set[roachpb.NodeID]
 
 			testingEvalFilter := func(args kvserverbase.FilterArgs) *kvpb.Error {
 				if req, ok := args.Req.(*kvpb.ConditionalPutRequest); ok {
@@ -1037,7 +1036,7 @@ func TestNodeLivenessRetryAmbiguousResultOnCreateError(t *testing.T) {
 					}
 					var liveness livenesspb.Liveness
 					assert.NoError(t, req.Value.GetProto(&liveness))
-					if _, ok := errored.LoadOrStore(liveness.NodeID, true); !ok {
+					if errored.Add(liveness.NodeID) {
 						if liveness.NodeID != 1 {
 							// We expect this to come from the create code path on all nodes
 							// except the first. Make sure that is actually true.
@@ -1072,7 +1071,7 @@ func TestNodeLivenessRetryAmbiguousResultOnCreateError(t *testing.T) {
 				})
 				_, ok := s.NodeLiveness().(*liveness.NodeLiveness).Self()
 				require.True(t, ok)
-				_, ok = errored.Load(s.NodeID())
+				ok = errored.Contains(s.NodeID())
 				require.True(t, ok)
 			}
 		})

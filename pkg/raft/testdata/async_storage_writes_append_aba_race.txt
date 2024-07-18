@@ -85,8 +85,8 @@ INFO 3 [logterm: 1, index: 11] sent MsgVote request to 7 at term 2
 process-ready 3
 ----
 Ready MustSync=true:
-Lead:0 State:StateCandidate
-HardState Term:2 Vote:3 Commit:11
+State:StateCandidate
+HardState Term:2 Vote:3 Commit:11 Lead:0
 Messages:
 3->1 MsgVote Term:2 Log:1/11
 3->2 MsgVote Term:2 Log:1/11
@@ -117,24 +117,21 @@ process-ready 4 5 6
 ----
 > 4 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateFollower
-  HardState Term:2 Vote:3 Commit:11
+  HardState Term:2 Vote:3 Commit:11 Lead:0
   Messages:
   4->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
     4->3 MsgVoteResp Term:2 Log:0/0
   ]
 > 5 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateFollower
-  HardState Term:2 Vote:3 Commit:11
+  HardState Term:2 Vote:3 Commit:11 Lead:0
   Messages:
   5->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
     5->3 MsgVoteResp Term:2 Log:0/0
   ]
 > 6 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateFollower
-  HardState Term:2 Vote:3 Commit:11
+  HardState Term:2 Vote:3 Commit:11 Lead:0
   Messages:
   6->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
     6->3 MsgVoteResp Term:2 Log:0/0
@@ -187,7 +184,8 @@ INFO 3 became leader at term 2
 process-ready 3
 ----
 Ready MustSync=true:
-Lead:3 State:StateLeader
+State:StateLeader
+HardState Term:2 Vote:3 Commit:11 Lead:3
 Entries:
 2/12 EntryNormal ""
 Messages:
@@ -197,7 +195,7 @@ Messages:
 3->5 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 3->6 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 3->7 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
-3->AppendThread MsgStorageAppend Term:0 Log:0/0 Entries:[2/12 EntryNormal ""] Responses:[
+3->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Entries:[2/12 EntryNormal ""] Responses:[
   3->3 MsgAppResp Term:2 Log:0/12
   AppendThread->3 MsgStorageAppendResp Term:2 Log:2/12
 ]
@@ -222,8 +220,7 @@ dropped: 3->7 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 process-ready 1
 ----
 Ready MustSync=true:
-Lead:3 State:StateFollower
-HardState Term:2 Commit:11
+HardState Term:2 Commit:11 Lead:3
 Entries:
 2/12 EntryNormal ""
 Messages:
@@ -249,8 +246,8 @@ INFO 4 [logterm: 1, index: 11] sent MsgVote request to 7 at term 3
 process-ready 4
 ----
 Ready MustSync=true:
-Lead:0 State:StateCandidate
-HardState Term:3 Vote:4 Commit:11
+State:StateCandidate
+HardState Term:3 Vote:4 Commit:11 Lead:0
 Messages:
 4->1 MsgVote Term:3 Log:1/11
 4->2 MsgVote Term:3 Log:1/11
@@ -281,22 +278,21 @@ process-ready 5 6 7
 ----
 > 5 handling Ready
   Ready MustSync=true:
-  HardState Term:3 Vote:4 Commit:11
+  HardState Term:3 Vote:4 Commit:11 Lead:0
   Messages:
   5->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
     5->4 MsgVoteResp Term:3 Log:0/0
   ]
 > 6 handling Ready
   Ready MustSync=true:
-  HardState Term:3 Vote:4 Commit:11
+  HardState Term:3 Vote:4 Commit:11 Lead:0
   Messages:
   6->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
     6->4 MsgVoteResp Term:3 Log:0/0
   ]
 > 7 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateFollower
-  HardState Term:3 Vote:4 Commit:11
+  HardState Term:3 Vote:4 Commit:11 Lead:0
   Messages:
   7->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
     7->4 MsgVoteResp Term:3 Log:0/0
@@ -344,7 +340,8 @@ INFO 4 became leader at term 3
 process-ready 4
 ----
 Ready MustSync=true:
-Lead:4 State:StateLeader
+State:StateLeader
+HardState Term:3 Vote:4 Commit:11 Lead:4
 Entries:
 3/12 EntryNormal ""
 Messages:
@@ -354,7 +351,7 @@ Messages:
 4->5 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->6 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->7 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
-4->AppendThread MsgStorageAppend Term:0 Log:0/0 Entries:[3/12 EntryNormal ""] Responses:[
+4->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Entries:[3/12 EntryNormal ""] Responses:[
   4->4 MsgAppResp Term:3 Log:0/12
   AppendThread->4 MsgStorageAppendResp Term:3 Log:3/12
 ]
@@ -394,8 +391,7 @@ INFO 1 became follower at term 3
 process-ready 1
 ----
 Ready MustSync=true:
-Lead:4 State:StateFollower
-HardState Term:3 Commit:11
+HardState Term:3 Commit:11 Lead:4
 Messages:
 1->4 MsgHeartbeatResp Term:3 Log:0/0
 1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Responses:[

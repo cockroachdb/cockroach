@@ -6111,6 +6111,7 @@ disallow_full_table_scans                                  off
 distsql_plan_gateway_bias                                  2
 enable_auto_rehoming                                       off
 enable_create_stats_using_extremes                         off
+enable_create_stats_using_extremes_bool_enum               off
 enable_durable_locking_for_serializable                    off
 enable_experimental_alter_column_type_general              off
 enable_implicit_fk_locking_for_serializable                off
@@ -6183,6 +6184,7 @@ optimizer_use_improved_trigram_similarity_selectivity      on
 optimizer_use_improved_zigzag_join_costing                 on
 optimizer_use_limit_ordering_for_streaming_group_by        on
 optimizer_use_lock_op_for_serializable                     off
+optimizer_use_merged_partial_statistics                    off
 optimizer_use_multicol_stats                               on
 optimizer_use_not_visible_indexes                          off
 optimizer_use_polymorphic_parameter_fix                    on

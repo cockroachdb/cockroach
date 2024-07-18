@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
+	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -222,6 +223,7 @@ func (ie *InternalExecutor) runWithEx(
 	syncCallback func([]*streamingCommandResult),
 	errCallback func(error),
 	attributeToUser bool,
+	growStackSize bool,
 ) error {
 	ex, err := ie.initConnEx(ctx, txn, w, mode, sd, stmtBuf, syncCallback, attributeToUser)
 	if err != nil {
@@ -244,6 +246,11 @@ func (ie *InternalExecutor) runWithEx(
 		},
 		func(ctx context.Context) {
 			defer cleanup()
+			// TODO(yuzefovich): benchmark whether we should be growing the
+			// stack size unconditionally.
+			if growStackSize {
+				growstack.Grow()
+			}
 			if err := ex.run(
 				ctx,
 				ie.mon,
@@ -677,7 +684,7 @@ func (ie *InternalExecutor) QueryBufferedEx(
 	stmt string,
 	qargs ...interface{},
 ) ([]tree.Datums, error) {
-	datums, _, err := ie.queryInternalBuffered(ctx, opName, txn, session, stmt, 0 /* limit */, qargs...)
+	datums, _, err := ie.queryInternalBuffered(ctx, opName, txn, session, ieStmt{stmt: stmt}, 0 /* limit */, qargs...)
 	return datums, err
 }
 
@@ -691,7 +698,7 @@ func (ie *InternalExecutor) QueryBufferedExWithCols(
 	stmt string,
 	qargs ...interface{},
 ) ([]tree.Datums, colinfo.ResultColumns, error) {
-	datums, cols, err := ie.queryInternalBuffered(ctx, opName, txn, session, stmt, 0 /* limit */, qargs...)
+	datums, cols, err := ie.queryInternalBuffered(ctx, opName, txn, session, ieStmt{stmt: stmt}, 0 /* limit */, qargs...)
 	return datums, cols, err
 }
 
@@ -700,7 +707,7 @@ func (ie *InternalExecutor) queryInternalBuffered(
 	opName string,
 	txn *kv.Txn,
 	sessionDataOverride sessiondata.InternalExecutorOverride,
-	stmt string,
+	stmt ieStmt,
 	// Non-zero limit specifies the limit on the number of rows returned.
 	limit int,
 	qargs ...interface{},
@@ -708,7 +715,7 @@ func (ie *InternalExecutor) queryInternalBuffered(
 	// We will run the query to completion, so we can use an async result
 	// channel.
 	rw := newAsyncIEResultChannel()
-	it, err := ie.execInternal(ctx, opName, rw, defaultIEExecutionMode, txn, sessionDataOverride, ieStmt{stmt: stmt}, qargs...)
+	it, err := ie.execInternal(ctx, opName, rw, defaultIEExecutionMode, txn, sessionDataOverride, stmt, qargs...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -756,6 +763,19 @@ func (ie *InternalExecutor) QueryRowEx(
 	return rows, err
 }
 
+// QueryRowExParsed is like QueryRowEx, but takes a parsed statement.
+func (ie *InternalExecutor) QueryRowExParsed(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	parsedStmt statements.Statement[tree.Statement],
+	qargs ...interface{},
+) (tree.Datums, error) {
+	rows, _, err := ie.queryRowExWithCols(ctx, opName, txn, session, ieStmt{parsed: parsedStmt}, qargs...)
+	return rows, err
+}
+
 // QueryRowExWithCols is like QueryRowEx, additionally returning the computed
 // ResultColumns of the input query.
 func (ie *InternalExecutor) QueryRowExWithCols(
@@ -764,6 +784,19 @@ func (ie *InternalExecutor) QueryRowExWithCols(
 	txn *kv.Txn,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
+	qargs ...interface{},
+) (tree.Datums, colinfo.ResultColumns, error) {
+	return ie.queryRowExWithCols(ctx, opName, txn, session, ieStmt{stmt: stmt}, qargs...)
+}
+
+// QueryRowExWithCols is like QueryRowEx, additionally returning the computed
+// ResultColumns of the input query.
+func (ie *InternalExecutor) queryRowExWithCols(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt ieStmt,
 	qargs ...interface{},
 ) (tree.Datums, colinfo.ResultColumns, error) {
 	rows, cols, err := ie.queryInternalBuffered(ctx, opName, txn, session, stmt, 2 /* limit */, qargs...)
@@ -776,7 +809,7 @@ func (ie *InternalExecutor) QueryRowExWithCols(
 	case 1:
 		return rows[0], cols, nil
 	default:
-		return nil, nil, &tree.MultipleResultsError{SQL: stmt}
+		return nil, nil, &tree.MultipleResultsError{SQL: stmt.SQL()}
 	}
 }
 
@@ -827,6 +860,13 @@ type ieStmt struct {
 	// Only one should be set.
 	stmt   string
 	parsed statements.Statement[tree.Statement]
+}
+
+func (s *ieStmt) SQL() string {
+	if s.stmt != "" {
+		return s.stmt
+	}
+	return s.parsed.SQL
 }
 
 // execIEStmt extracts the shared logic between ExecEx and ExecParsed.
@@ -929,8 +969,14 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.OptimizerUseHistograms {
 		sd.OptimizerUseHistograms = true
 	}
-	if o.DisableChangefeedReplication {
-		sd.DisableChangefeedReplication = true
+	if o.OriginIDForLogicalDataReplication != 0 {
+		sd.OriginIDForLogicalDataReplication = o.OriginIDForLogicalDataReplication
+	}
+	if o.PlanCacheMode != nil {
+		sd.PlanCacheMode = *o.PlanCacheMode
+	}
+	if o.DisablePlanGists {
+		sd.DisablePlanGists = true
 	}
 
 	if o.MultiOverride != "" {
@@ -1145,13 +1191,11 @@ func (ie *InternalExecutor) execInternal(
 			sessionDataOverride.MultiOverride = globalOverride
 		}
 	}
-	if txn != nil && sessionDataOverride.DisableChangefeedReplication {
-		return nil, errors.AssertionFailedf("DisableChangefeedReplication session override cannot apply with non-nil txn")
-	}
 
 	applyInternalExecutorSessionExceptions(sd)
 	applyOverrides(sessionDataOverride, sd)
 	attributeToUser := sessionDataOverride.AttributeToUser && attributeToUserEnabled.Get(&ie.s.cfg.Settings.SV)
+	growStackSize := sessionDataOverride.GrowStackSize
 	if !rw.async() && (txn != nil && txn.Type() == kv.RootTxn) {
 		// If the "outer" query uses the RootTxn and the sync result channel is
 		// requested, then we must disable both DistSQL and Streamer to ensure
@@ -1263,7 +1307,7 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	err = ie.runWithEx(ctx, opName, txn, rw, mode, sd, stmtBuf, &wg, syncCallback, errCallback, attributeToUser)
+	err = ie.runWithEx(ctx, opName, txn, rw, mode, sd, stmtBuf, &wg, syncCallback, errCallback, attributeToUser, growStackSize)
 	if err != nil {
 		return nil, err
 	}

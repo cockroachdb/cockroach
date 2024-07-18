@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatskvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -298,7 +299,7 @@ type sqlServerArgs struct {
 	rpcContext *rpc.Context
 
 	// Used by DistSQLPlanner.
-	nodeDescs kvcoord.NodeDescStore
+	nodeDescs kvclient.NodeDescStore
 
 	// Used by the executor config.
 	systemConfigWatcher *systemconfigwatcher.Cache
@@ -1025,6 +1026,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.stopper,
 			isAvailable,
 			cfg.kvNodeDialer.ConnHealthTryDial, // only used by system tenant
+			cfg.sqlInstanceDialer.ConnHealthTryDialInstance,
 			cfg.sqlInstanceDialer,
 			codec,
 			cfg.sqlInstanceReader,
@@ -1229,6 +1231,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 		// Job internal operations use the node principal.
 		sd.UserProto = username.NodeUserName().EncodeProto()
+
+		// The following should not apply to SQL operations performed by the jobs
+		// subsystem.
+		sd.StmtTimeout = 0
 	})
 	jobRegistry.SetInternalDB(jobsInternalDB)
 

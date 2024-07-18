@@ -150,8 +150,14 @@ func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols colOrd
 		b.flags.Set(exec.PlanFlagContainsMutation)
 		// Raise error if mutation op is part of a read-only transaction.
 		if b.evalCtx.TxnReadOnly {
-			return execPlan{}, colOrdMap{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
-				"cannot execute %s in a read-only transaction", b.statementTag(e))
+			switch tag := b.statementTag(e); tag {
+			// DISCARD can drop temp tables but is still allowed in read-only
+			// transactions for PG compatibility.
+			case "DISCARD ALL", "DISCARD":
+			default:
+				return execPlan{}, colOrdMap{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+					"cannot execute %s in a read-only transaction", tag)
+			}
 		}
 	}
 
@@ -3103,7 +3109,9 @@ func (b *Builder) buildZigzagJoin(
 	return b.applySimpleProject(res, outputCols, join, join.Cols, join.ProvidedPhysical().Ordering)
 }
 
-func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Locking, error) {
+func (b *Builder) buildLockingImpl(
+	toLock opt.TableID, locking opt.Locking, allowPredicateLocks bool,
+) (opt.Locking, error) {
 	if b.forceForUpdateLocking.Contains(int(toLock)) {
 		locking = locking.Max(forUpdateLocking)
 	}
@@ -3114,9 +3122,14 @@ func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Loc
 				"cannot execute SELECT %s in a read-only transaction", locking.Strength.String(),
 			)
 		}
-		if locking.Form == tree.LockPredicate {
+		if !allowPredicateLocks && locking.Form == tree.LockPredicate {
 			return opt.Locking{}, unimplemented.NewWithIssuef(
 				110873, "explicit unique checks are not yet supported under read committed isolation",
+			)
+		}
+		if locking.Form == tree.LockPredicate && locking.WaitPolicy != tree.LockWaitBlock {
+			return opt.Locking{}, unimplemented.NewWithIssuef(
+				126592, "non-blocking predicate locks are not yet supported",
 			)
 		}
 		// Check if we can actually use shared locks here, or we need to use
@@ -3134,6 +3147,11 @@ func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Loc
 		b.flags.Set(exec.PlanFlagContainsLocking)
 	}
 	return locking, nil
+}
+
+// TODO (#126592): Delete this function once predicate locks are universally supported.
+func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Locking, error) {
+	return b.buildLockingImpl(toLock, locking, false /* allowPredicateLocks */)
 }
 
 func (b *Builder) buildMax1Row(
@@ -3642,7 +3660,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (_ execPlan, outputCols colOrd
 			OrderBy:    orderingExprs,
 			Frame:      frame,
 		}
-		wrappedFn, err := b.wrapFunction(name)
+		wrappedFn, err := b.wrapBuiltinFunction(name)
 		if err != nil {
 			return execPlan{}, colOrdMap{}, err
 		}

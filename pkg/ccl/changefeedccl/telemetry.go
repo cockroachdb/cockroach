@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/rcrowley/go-metrics"
 )
@@ -115,7 +116,7 @@ func (ptl *periodicTelemetryLogger) maybeFlushLogs() {
 		EmittedMessages:              ptl.resetEmittedMessages(),
 		LoggingInterval:              loggingInterval,
 	}
-	log.StructuredEvent(ptl.ctx, continuousTelemetryEvent)
+	log.StructuredEvent(ptl.ctx, severity.INFO, continuousTelemetryEvent)
 }
 
 func (ptl *periodicTelemetryLogger) close() {
@@ -132,7 +133,7 @@ func (ptl *periodicTelemetryLogger) close() {
 		LoggingInterval:              loggingInterval,
 		Closing:                      true,
 	}
-	log.StructuredEvent(ptl.ctx, continuousTelemetryEvent)
+	log.StructuredEvent(ptl.ctx, severity.INFO, continuousTelemetryEvent)
 }
 
 func wrapMetricsRecorderWithTelemetry(

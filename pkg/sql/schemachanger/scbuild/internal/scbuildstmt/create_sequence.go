@@ -167,7 +167,7 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 	b.Add(&scpb.ColumnType{
 		TableID:                 sequenceID,
 		ColumnID:                tabledesc.SequenceColumnID,
-		TypeT:                   scpb.TypeT{Type: types.Int},
+		TypeT:                   newTypeT(types.Int),
 		ElementCreationMetadata: &scpb.ElementCreationMetadata{In_23_1OrLater: true},
 	})
 	b.Add(&scpb.ColumnNotNull{

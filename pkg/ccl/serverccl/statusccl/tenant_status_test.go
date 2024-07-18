@@ -1102,8 +1102,16 @@ func selectClusterSessionIDs(t *testing.T, conn *sqlutils.SQLRunner) []string {
 
 func testTenantStatusCancelSession(t *testing.T, helper serverccl.TenantTestHelper) {
 	// Open a SQL session on tenant SQL pod 0.
-	sqlPod0 := helper.TestCluster().TenantConn(0)
-	sqlPod0.Exec(t, "SELECT 1")
+	ctx := context.Background()
+	// Open two different SQL sessions on tenant SQL pod 0.
+	sqlPod0 := helper.TestCluster().TenantDB(0)
+	sqlPod0SessionToCancel, err := sqlPod0.Conn(ctx)
+	require.NoError(t, err)
+	sqlPod0SessionForIntrospection, err := sqlPod0.Conn(ctx)
+	require.NoError(t, err)
+	_, err = sqlPod0SessionToCancel.ExecContext(ctx, "SELECT 1")
+	require.NoError(t, err)
+	introspectionRunner := sqlutils.MakeSQLRunner(sqlPod0SessionForIntrospection)
 
 	// See the session over HTTP on tenant SQL pod 1.
 	httpPod1 := helper.TestCluster().TenantAdminHTTPClient(t, 1)
@@ -1122,7 +1130,7 @@ func testTenantStatusCancelSession(t *testing.T, helper serverccl.TenantTestHelp
 	// See the session over SQL on tenant SQL pod 0.
 	sessionID := hex.EncodeToString(session.ID)
 	require.Eventually(t, func() bool {
-		return strings.Contains(strings.Join(selectClusterSessionIDs(t, sqlPod0), ","), sessionID)
+		return strings.Contains(strings.Join(selectClusterSessionIDs(t, introspectionRunner), ","), sessionID)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Cancel the session over HTTP from tenant SQL pod 1.
@@ -1134,7 +1142,7 @@ func testTenantStatusCancelSession(t *testing.T, helper serverccl.TenantTestHelp
 	// No longer see the session over SQL from tenant SQL pod 0.
 	// (The SQL client maintains an internal connection pool and automatically reconnects.)
 	require.Eventually(t, func() bool {
-		return !strings.Contains(strings.Join(selectClusterSessionIDs(t, sqlPod0), ","), sessionID)
+		return !strings.Contains(strings.Join(selectClusterSessionIDs(t, introspectionRunner), ","), sessionID)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Attempt to cancel the session again over HTTP from tenant SQL pod 1, so that we can see the error message.

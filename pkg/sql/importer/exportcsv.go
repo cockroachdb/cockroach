@@ -302,15 +302,16 @@ func (sp *csvWriter) Run(ctx context.Context, output execinfra.RowReceiver) {
 		return nil
 	}()
 
-	// TODO(dt): pick up tracing info in trailing meta
-	execinfra.DrainAndClose(
-		ctx, output, err, func(context.Context, execinfra.RowReceiver) {} /* pushTrailingMeta */, sp.input)
+	execinfra.DrainAndClose(ctx, sp.flowCtx, sp.input, output, err)
 }
 
 // Resume is part of the execinfra.Processor interface.
 func (sp *csvWriter) Resume(output execinfra.RowReceiver) {
 	panic("not implemented")
 }
+
+// Close is part of the execinfra.Processor interface.
+func (*csvWriter) Close(context.Context) {}
 
 func init() {
 	rowexec.NewCSVWriterProcessor = newCSVWriterProcessor

@@ -959,11 +959,16 @@ type ProjectsVal struct {
 // https://cloud.google.com/compute/docs/regions-zones#available
 //
 // Note that the default zone (the first zone returned by this
-// function) is always in the us-east1 region, but we randomize the
-// specific zone. This is to avoid "zone exhausted" errors in one
-// particular zone, especially during nightly roachtest runs.
-func defaultZones() []string {
+// function) is always in the us-east1 region (or us-central1 for
+// ARM64 builds), but we randomize the specific zone. This is to avoid
+// "zone exhausted" errors in one particular zone, especially during
+// nightly roachtest runs.
+func defaultZones(arch string) []string {
 	zones := []string{"us-east1-b", "us-east1-c", "us-east1-d"}
+	if vm.ParseArch(arch) == vm.ArchARM64 {
+		// T2A instances are only available in us-central1 in NA.
+		zones = []string{"us-central1-a", "us-central1-b", "us-central1-f"}
+	}
 	rand.Shuffle(len(zones), func(i, j int) { zones[i], zones[j] = zones[j], zones[i] })
 
 	return []string{
@@ -1058,7 +1063,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		fmt.Sprintf("Zones for cluster. If zones are formatted as AZ:N where N is an integer, the zone\n"+
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
-			strings.Join(defaultZones(), ",")))
+			strings.Join(defaultZones(string(vm.ArchAMD64)), ",")))
 	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false,
 		"use preemptible GCE instances (lifetime cannot exceed 24h)")
 	flags.BoolVar(&o.UseSpot, ProviderName+"-use-spot", false,
@@ -1144,6 +1149,10 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 // useArmAMI returns true if the machine type is an arm64 machine type.
 func (o *ProviderOpts) useArmAMI() bool {
 	return strings.HasPrefix(strings.ToLower(o.MachineType), "t2a-")
+}
+
+// ConfigureClusterCleanupFlags is part of ProviderOpts. This implementation is a no-op.
+func (o *ProviderOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
 }
 
 // CleanSSH TODO(peter): document
@@ -1263,9 +1272,9 @@ func computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, err
 	}
 	if len(zones) == 0 {
 		if opts.GeoDistributed {
-			zones = defaultZones()
+			zones = defaultZones(opts.Arch)
 		} else {
-			zones = []string{defaultZones()[0]}
+			zones = []string{defaultZones(opts.Arch)[0]}
 		}
 	}
 	if providerOpts.useArmAMI() {
@@ -1293,6 +1302,10 @@ func (p *Provider) computeInstanceArgs(
 	// Fixed args.
 	image := providerOpts.Image
 	imageProject := defaultImageProject
+
+	if opts.Arch == string(vm.ArchARM64) && !providerOpts.useArmAMI() {
+		return nil, cleanUpFn, errors.Errorf("Requested arch is arm64, but machine type is %s. Do specify a t2a VM", providerOpts.MachineType)
+	}
 
 	if providerOpts.useArmAMI() && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
 		return nil, cleanUpFn, errors.Errorf("machine type %s is arm64, but requested arch is %s", providerOpts.MachineType, opts.Arch)
@@ -1819,8 +1832,35 @@ func listHealthChecks(project string) ([]jsonHealthCheck, error) {
 // load balancers can be associated with a single cluster, so we need to delete
 // all of them. Health checks associated with the cluster are also deleted.
 func deleteLoadBalancerResources(project, clusterName, portFilter string) error {
-	// Convenience function to determine if a load balancer resource should be
-	// excluded from deletion.
+	// List all the components of the load balancer resources tied to the project.
+	var g errgroup.Group
+	var services []jsonBackendService
+	var proxies []jsonTargetTCPProxy
+	var rules []jsonForwardingRule
+	var healthChecks []jsonHealthCheck
+	g.Go(func() (err error) {
+		services, err = listBackendServices(project)
+		return
+	})
+	g.Go(func() (err error) {
+		proxies, err = listTargetTCPProxies(project)
+		return
+	})
+	g.Go(func() (err error) {
+		rules, err = listForwardingRules(project)
+		return
+	})
+	g.Go(func() (err error) {
+		healthChecks, err = listHealthChecks(project)
+		return
+	})
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	// Determine if a load balancer resource should be excluded from deletion. The
+	// gcloud commands support a filter flag, but since it does client side only
+	// filtering it makes more sense for us to filter the resources ourselves.
 	shouldExclude := func(name string, expectedResourceType string) bool {
 		cluster, resourceType, port, ok := loadBalancerNameParts(name)
 		if !ok || cluster != clusterName || resourceType != expectedResourceType {
@@ -1831,55 +1871,26 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 		}
 		return false
 	}
-	// List all the components of the load balancer resources tied to the cluster.
-	services, err := listBackendServices(project)
-	if err != nil {
-		return err
-	}
 	filteredServices := make([]jsonBackendService, 0)
-	// Find all backend services tied to the managed instance group.
 	for _, service := range services {
 		if shouldExclude(service.Name, "load-balancer") {
 			continue
 		}
-		for _, backend := range service.Backends {
-			if strings.HasSuffix(backend.Group, fmt.Sprintf("instanceGroups/%s", instanceGroupName(clusterName))) {
-				filteredServices = append(filteredServices, service)
-				break
-			}
-		}
-	}
-	proxies, err := listTargetTCPProxies(project)
-	if err != nil {
-		return err
+		filteredServices = append(filteredServices, service)
 	}
 	filteredProxies := make([]jsonTargetTCPProxy, 0)
 	for _, proxy := range proxies {
 		if shouldExclude(proxy.Name, "proxy") {
 			continue
 		}
-		for _, service := range filteredServices {
-			if proxy.Service == service.SelfLink {
-				filteredProxies = append(filteredProxies, proxy)
-				break
-			}
-		}
-	}
-	rules, err := listForwardingRules(project)
-	if err != nil {
-		return err
+		filteredProxies = append(filteredProxies, proxy)
 	}
 	filteredForwardingRules := make([]jsonForwardingRule, 0)
 	for _, rule := range rules {
-		for _, proxy := range filteredProxies {
-			if rule.Target == proxy.SelfLink {
-				filteredForwardingRules = append(filteredForwardingRules, rule)
-			}
+		if shouldExclude(rule.Name, "forwarding-rule") {
+			continue
 		}
-	}
-	healthChecks, err := listHealthChecks(project)
-	if err != nil {
-		return err
+		filteredForwardingRules = append(filteredForwardingRules, rule)
 	}
 	filteredHealthChecks := make([]jsonHealthCheck, 0)
 	for _, healthCheck := range healthChecks {
@@ -1889,8 +1900,9 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 		filteredHealthChecks = append(filteredHealthChecks, healthCheck)
 	}
 
-	// Delete all the components of the load balancer.
-	var g errgroup.Group
+	// Delete all the components of the load balancer. Resources must be deleted
+	// in the correct order to avoid dependency errors.
+	g = errgroup.Group{}
 	for _, rule := range filteredForwardingRules {
 		args := []string{"compute", "forwarding-rules", "delete",
 			rule.Name,
@@ -1907,7 +1919,7 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 			return nil
 		})
 	}
-	if err = g.Wait(); err != nil {
+	if err := g.Wait(); err != nil {
 		return err
 	}
 	g = errgroup.Group{}
@@ -1926,7 +1938,7 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 			return nil
 		})
 	}
-	if err = g.Wait(); err != nil {
+	if err := g.Wait(); err != nil {
 		return err
 	}
 	g = errgroup.Group{}
@@ -1946,7 +1958,7 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 			return nil
 		})
 	}
-	if err = g.Wait(); err != nil {
+	if err := g.Wait(); err != nil {
 		return err
 	}
 	g = errgroup.Group{}
@@ -2027,7 +2039,7 @@ func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) e
 	var args []string
 	healthCheckName := loadBalancerResourceName(clusterName, port, "health-check")
 	output, err := func() ([]byte, error) {
-		defer ui.NewDefaultSpinner(l, "created health check").Start()()
+		defer ui.NewDefaultSpinner(l, "create health check").Start()()
 		args = []string{"compute", "health-checks", "create", "tcp",
 			healthCheckName,
 			"--project", project,

@@ -1587,11 +1587,45 @@ func insertJSONStatistic(
 		fullStatisticIDValue = s.FullStatisticID
 	}
 
-	_ /* rows */, err := txn.Exec(
-		ctx,
-		"insert-stats",
-		txn.KV(),
-		`INSERT INTO system.table_statistics (
+	if s.ID != 0 {
+		_ /* rows */, err := txn.Exec(
+			ctx,
+			"insert-stats",
+			txn.KV(),
+			`INSERT INTO system.table_statistics (
+					"statisticID",
+					"tableID",
+					"name",
+					"columnIDs",
+					"createdAt",
+					"rowCount",
+					"distinctCount",
+					"nullCount",
+					"avgSize",
+					histogram,
+					"partialPredicate",
+					"fullStatisticID"
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			s.ID,
+			tableID,
+			name,
+			columnIDs,
+			s.CreatedAt,
+			s.RowCount,
+			s.DistinctCount,
+			s.NullCount,
+			s.AvgSize,
+			histogram,
+			predicateValue,
+			fullStatisticIDValue,
+		)
+		return err
+	} else {
+		_ /* rows */, err := txn.Exec(
+			ctx,
+			"insert-stats",
+			txn.KV(),
+			`INSERT INTO system.table_statistics (
 					"tableID",
 					"name",
 					"columnIDs",
@@ -1604,19 +1638,20 @@ func insertJSONStatistic(
 					"partialPredicate",
 					"fullStatisticID"
 				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		tableID,
-		name,
-		columnIDs,
-		s.CreatedAt,
-		s.RowCount,
-		s.DistinctCount,
-		s.NullCount,
-		s.AvgSize,
-		histogram,
-		predicateValue,
-		fullStatisticIDValue,
-	)
-	return err
+			tableID,
+			name,
+			columnIDs,
+			s.CreatedAt,
+			s.RowCount,
+			s.DistinctCount,
+			s.NullCount,
+			s.AvgSize,
+			histogram,
+			predicateValue,
+			fullStatisticIDValue,
+		)
+		return err
+	}
 }
 
 // validateConstraintNameIsNotUsed checks that the name of the constraint we're
@@ -1905,7 +1940,8 @@ func dropColumnImpl(
 
 			if colIDs.Contains(colToDrop.GetID()) {
 				containsThisColumn = true
-				return nil, sqlerrors.NewColumnReferencedByPartialIndex(string(colToDrop.ColName()), idx.GetName())
+				return nil, sqlerrors.ColumnReferencedByPartialIndex(
+					"drop", "column", string(colToDrop.ColName()), idx.GetName())
 			}
 		}
 		// Perform the DROP.
@@ -1948,7 +1984,8 @@ func dropColumnImpl(
 			}
 
 			if colIDs.Contains(colToDrop.GetID()) {
-				return nil, sqlerrors.NewColumnReferencedByPartialUniqueWithoutIndexConstraint(string(colToDrop.ColName()), uwoi.GetName())
+				return nil, sqlerrors.ColumnReferencedByPartialUniqueWithoutIndexConstraint(
+					"drop", "column", string(colToDrop.ColName()), uwoi.GetName())
 			}
 		}
 		if uwoi.Dropped() || !uwoi.CollectKeyColumnIDs().Contains(colToDrop.GetID()) {

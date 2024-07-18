@@ -388,7 +388,7 @@ func (g *ycsb) Tables() []workload.Table {
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
 					rowOffset := rowIdx - rowBegin
 
-					key.Set(rowOffset, []byte(w.buildKeyName(uint64(rowIdx))))
+					key.Set(rowOffset, []byte(w.buildKeyName(uint64(g.insertStart+rowIdx))))
 
 					for i := range fields {
 						randStringLetters(rng, tmpbuf[:])
@@ -551,6 +551,7 @@ func (g *ycsb) Ops(
 		w := &ycsbWorker{
 			config:                  g,
 			hists:                   reg.GetHandle(),
+			pool:                    pool,
 			conn:                    conn,
 			readStmt:                readStmt,
 			readFieldForUpdateStmts: readFieldForUpdateStmts,
@@ -580,6 +581,7 @@ type stmtKey = string
 type ycsbWorker struct {
 	config *ycsb
 	hists  *histogram.Histograms
+	pool   *workload.MultiConnPool
 	conn   *pgxpool.Conn
 	// Statement to read all the fields of a row. Used for read requests.
 	readStmt stmtKey
@@ -606,9 +608,19 @@ type ycsbWorker struct {
 }
 
 func (yw *ycsbWorker) run(ctx context.Context) error {
-	op := yw.chooseOp()
-	var err error
+	// If we enter this function without a connection, that implies that our
+	// connection was dropped due to a connection error the last time we were
+	// in here. Grab a new connection for future operations.
+	if yw.conn == nil {
+		conn, err := yw.pool.Get().Acquire(ctx)
+		if err != nil {
+			return err
+		}
+		yw.conn = conn
+	}
 
+	var err error
+	op := yw.chooseOp()
 	start := timeutil.Now()
 	switch op {
 	case updateOp:
@@ -624,7 +636,21 @@ func (yw *ycsbWorker) run(ctx context.Context) error {
 	default:
 		return errors.Errorf(`unknown operation: %s`, op)
 	}
+
+	// If we get an error, check to see if the connection has been closed
+	// underneath us. If that's the case, we need to release the connection
+	// back to the pool since we obtained this connection using Acquire() and
+	// as a result, the connection will not be automatically reestablished for
+	// us. Once the connection is returned to the pool, we can reestablish it
+	// the next time we come through this function. We don't reestablish the
+	// connection here, as we're already dealing with an error which we don't
+	// want to overwrite (and reacquiring the connection could result in a new
+	// error).
 	if err != nil {
+		if yw.conn.Conn().IsClosed() {
+			yw.conn.Release()
+			yw.conn = nil
+		}
 		return err
 	}
 
@@ -757,8 +783,19 @@ func (yw *ycsbWorker) insertRow(ctx context.Context) error {
 		args[i] = yw.randString(fieldLength)
 	}
 	if _, err := yw.conn.Exec(ctx, yw.insertStmt, args[:]...); err != nil {
-		yw.nextInsertIndex = new(uint64)
-		*yw.nextInsertIndex = keyIndex
+		var pgErr *pgconn.PgError
+		// In cases where we've received a unique violation error, we don't want
+		// to preserve the key index. Doing so will retry the same insert the
+		// next iteration, which will hit the same unique violation error. This
+		// situation can be hit in cases where an insert is sent to the cluster
+		// and the connection is terminated after the insert was received and
+		// processed, but before it was acknowledged. In this case, we should
+		// just move on to the next key for inserting.
+		if !errors.As(err, &pgErr) ||
+			pgcode.MakeCode(pgErr.Code) != pgcode.UniqueViolation {
+			yw.nextInsertIndex = new(uint64)
+			*yw.nextInsertIndex = keyIndex
+		}
 		return err
 	}
 

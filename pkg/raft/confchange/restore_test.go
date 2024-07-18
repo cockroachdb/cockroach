@@ -32,12 +32,12 @@ type rndConfChange pb.ConfState
 
 // Generate creates a random (valid) ConfState for use with quickcheck.
 func (rndConfChange) Generate(rand *rand.Rand, _ int) reflect.Value {
-	conv := func(sl []int) []uint64 {
+	conv := func(sl []int) []pb.PeerID {
 		// We want IDs but the incoming slice is zero-indexed, so add one to
 		// each.
-		out := make([]uint64, len(sl))
+		out := make([]pb.PeerID, len(sl))
 		for i := range sl {
-			out[i] = uint64(sl[i] + 1)
+			out[i] = pb.PeerID(sl[i] + 1)
 		}
 		return out
 	}
@@ -69,7 +69,7 @@ func (rndConfChange) Generate(rand *rand.Rand, _ int) reflect.Value {
 	// NB: this code avoids creating non-nil empty slices (here and below).
 	nOutgoingRetainedVoters := rand.Intn(nVoters + 1)
 	if nOutgoingRetainedVoters > 0 || nRemovedVoters > 0 {
-		cs.VotersOutgoing = append([]uint64(nil), cs.Voters[:nOutgoingRetainedVoters]...)
+		cs.VotersOutgoing = append([]pb.PeerID(nil), cs.Voters[:nOutgoingRetainedVoters]...)
 		cs.VotersOutgoing = append(cs.VotersOutgoing, ids[:nRemovedVoters]...)
 	}
 	// Only outgoing voters that are not also incoming voters can be in
@@ -100,7 +100,7 @@ func TestRestore(t *testing.T) {
 		chg.Tracker.Config = cfg
 		chg.Tracker.Progress = trk
 
-		for _, sl := range [][]uint64{
+		for _, sl := range [][]pb.PeerID{
 			cs.Voters,
 			cs.Learners,
 			cs.VotersOutgoing,
@@ -121,7 +121,7 @@ after:  %+#v`, cs, cs2)
 		return false
 	}
 
-	ids := func(sl ...uint64) []uint64 {
+	ids := func(sl ...pb.PeerID) []pb.PeerID {
 		return sl
 	}
 

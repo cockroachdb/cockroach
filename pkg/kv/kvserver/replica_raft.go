@@ -605,7 +605,7 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 		if r.mu.quiescent {
 			st := r.raftBasicStatusRLocked()
 			hasLeader := st.RaftState == raft.StateFollower && st.Lead != 0
-			fromLeader := uint64(req.FromReplica.ReplicaID) == st.Lead
+			fromLeader := raftpb.PeerID(req.FromReplica.ReplicaID) == st.Lead
 			wakeLeader := hasLeader && !fromLeader
 			r.maybeUnquiesceLocked(wakeLeader, false /* mayCampaign */)
 		}
@@ -801,7 +801,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 
 	var hasReady bool
-	var softState *raft.SoftState
 	var outboundMsgs []raftpb.Message
 	var msgStorageAppend, msgStorageApply raftpb.Message
 	r.mu.Lock()
@@ -836,7 +835,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 			logRaftReady(ctx, syncRd)
 			asyncRd := makeAsyncReady(syncRd)
-			softState = asyncRd.SoftState
 			outboundMsgs, msgStorageAppend, msgStorageApply = splitLocalStorageMsgs(asyncRd.Messages)
 		}
 		// We unquiesce if we have a Ready (= there's work to do). We also have
@@ -874,24 +872,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// some quota back to the pool.
 		r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 		return stats, nil
-	}
-
-	refreshReason := noReason
-	if softState != nil && leaderID != roachpb.ReplicaID(softState.Lead) {
-		// Refresh pending commands if the Raft leader has changed. This is usually
-		// the first indication we have of a new leader on a restarted node.
-		//
-		// TODO(peter): Re-proposing commands when SoftState.Lead changes can lead
-		// to wasteful multiple-reproposals when we later see an empty Raft command
-		// indicating a newly elected leader or a conf change. Replay protection
-		// prevents any corruption, so the waste is only a performance issue.
-		if log.V(3) {
-			log.Infof(ctx, "raft leader changed: %d -> %d", leaderID, softState.Lead)
-		}
-		if !r.store.TestingKnobs().DisableRefreshReasonNewLeader {
-			refreshReason = reasonNewLeader
-		}
-		leaderID = roachpb.ReplicaID(softState.Lead)
 	}
 
 	r.traceMessageSends(outboundMsgs, "sending messages")
@@ -941,7 +921,28 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 
+	refreshReason := noReason
 	if hasMsg(msgStorageAppend) {
+		// Leadership changes, if any, are communicated through MsgStorageAppends.
+		// Check if that's the case here.
+		if msgStorageAppend.Lead != raft.None && leaderID != roachpb.ReplicaID(msgStorageAppend.Lead) {
+			// Refresh pending commands if the Raft leader has changed. This is
+			// usually the first indication we have of a new leader on a restarted
+			// node.
+			//
+			// TODO(peter): Re-proposing commands when SoftState.Lead changes can lead
+			// to wasteful multiple-reproposals when we later see an empty Raft command
+			// indicating a newly elected leader or a conf change. Replay protection
+			// prevents any corruption, so the waste is only a performance issue.
+			if log.V(3) {
+				log.Infof(ctx, "raft leader changed: %d -> %d", leaderID, msgStorageAppend.Lead)
+			}
+			if !r.store.TestingKnobs().DisableRefreshReasonNewLeader {
+				refreshReason = reasonNewLeader
+			}
+			leaderID = roachpb.ReplicaID(msgStorageAppend.Lead)
+		}
+
 		if msgStorageAppend.Snapshot != nil {
 			if inSnap.Desc == nil {
 				// If we didn't expect Raft to have a snapshot but it has one
@@ -966,9 +967,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 			snap := *msgStorageAppend.Snapshot
 			hs := raftpb.HardState{
-				Term:   msgStorageAppend.Term,
-				Vote:   msgStorageAppend.Vote,
-				Commit: msgStorageAppend.Commit,
+				Term:      msgStorageAppend.Term,
+				Vote:      msgStorageAppend.Vote,
+				Commit:    msgStorageAppend.Commit,
+				Lead:      msgStorageAppend.Lead,
+				LeadEpoch: msgStorageAppend.LeadEpoch,
 			}
 			if len(msgStorageAppend.Entries) != 0 {
 				log.Fatalf(ctx, "found Entries in MsgStorageAppend with non-empty Snapshot")
@@ -989,7 +992,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			for _, msg := range msgStorageAppend.Responses {
 				// The caller would like to see the MsgAppResp that usually results from
 				// applying the snapshot synchronously, so fish it out.
-				if msg.To == uint64(inSnap.FromReplica.ReplicaID) &&
+				if msg.To == raftpb.PeerID(inSnap.FromReplica.ReplicaID) &&
 					msg.Type == raftpb.MsgAppResp &&
 					!msg.Reject &&
 					msg.Index == snap.Metadata.Index {
@@ -1204,11 +1207,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 // All fields in asyncReady are read-only.
 // TODO(nvanbenschoten): move this into go.etcd.io/raft.
 type asyncReady struct {
-	// The current volatile state of a Node.
-	// SoftState will be nil if there is no update.
-	// It is not required to consume or store SoftState.
-	*raft.SoftState
-
 	// Messages specifies outbound messages to other peers and to local storage
 	// threads. These messages can be sent in any order.
 	//
@@ -1220,8 +1218,7 @@ type asyncReady struct {
 // makeAsyncReady constructs an asyncReady from the provided Ready.
 func makeAsyncReady(rd raft.Ready) asyncReady {
 	return asyncReady{
-		SoftState: rd.SoftState,
-		Messages:  rd.Messages,
+		Messages: rd.Messages,
 	}
 }
 
@@ -1297,7 +1294,7 @@ func (r *Replica) tick(
 	r.unreachablesMu.remotes = nil
 	r.unreachablesMu.Unlock()
 	for remoteReplica := range remotes {
-		r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
+		r.mu.internalRaftGroup.ReportUnreachable(raftpb.PeerID(remoteReplica))
 	}
 
 	r.updatePausedFollowersLocked(ctx, ioThresholdMap)
@@ -1649,7 +1646,7 @@ func (r *Replica) sendRaftMessages(
 			// Instead, we handle messages to LocalAppendThread inline on the raft
 			// scheduler goroutine, so this code path is unused.
 			panic("unsupported, currently processed inline on raft scheduler goroutine")
-		case uint64(r.ReplicaID()):
+		case raftpb.PeerID(r.ReplicaID()):
 			// To local raft state machine, from local storage append and apply work.
 			// NOTE: For async Raft log appends, these messages come from calls to
 			// replicaSyncCallback.OnLogSync. For other local storage work (log
@@ -1736,7 +1733,7 @@ func (r *Replica) sendRaftMessages(
 
 // sendLocalRaftMsg sends a message to the local raft state machine.
 func (r *Replica) sendLocalRaftMsg(msg raftpb.Message, willDeliverLocal bool) {
-	if msg.To != uint64(r.ReplicaID()) {
+	if msg.To != raftpb.PeerID(r.ReplicaID()) {
 		panic("incorrect message target")
 	}
 	r.localMsgs.Lock()
@@ -1807,7 +1804,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		// below for more context:
 		_ = maybeDropMsgApp
 		// NB: this code is allocation free.
-		r.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, pr tracker.Progress) {
+		r.mu.internalRaftGroup.WithProgress(func(id raftpb.PeerID, _ raft.ProgressType, pr tracker.Progress) {
 			if id == msg.To && pr.State == tracker.StateProbe {
 				// It is moderately expensive to attach a full key to the message, but note that
 				// a probing follower will only be appended to once per heartbeat interval (i.e.
@@ -1900,7 +1897,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 	// which typically moves the follower to StateReplicate when (if) received
 	// by the leader, which as of #106793 we do synchronously.
 	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
-		raftGroup.ReportSnapshot(uint64(to), snapStatus)
+		raftGroup.ReportSnapshot(raftpb.PeerID(to), snapStatus)
 		return true, nil
 	}); err != nil && !errors.Is(err, errRemoved) {
 		log.Fatalf(ctx, "%v", err)
@@ -2023,7 +2020,7 @@ func (r *Replica) hasOutstandingSnapshotInFlightToStore(
 
 // HasRaftLeader returns true if the raft group has a raft leader currently.
 func HasRaftLeader(raftStatus *raft.Status) bool {
-	return raftStatus != nil && raftStatus.SoftState.Lead != 0
+	return raftStatus != nil && raftStatus.HardState.Lead != 0
 }
 
 // pendingCmdSlice sorts by increasing MaxLeaseIndex.
@@ -2357,7 +2354,7 @@ func (r *Replica) campaignLocked(ctx context.Context) {
 // simply partitioned away from it and/or liveness.
 func (r *Replica) forceCampaignLocked(ctx context.Context) {
 	log.VEventf(ctx, 3, "force campaigning")
-	msg := raftpb.Message{To: uint64(r.replicaID), Type: raftpb.MsgTimeoutNow}
+	msg := raftpb.Message{To: raftpb.PeerID(r.replicaID), Type: raftpb.MsgTimeoutNow}
 	if err := r.mu.internalRaftGroup.Step(msg); err != nil {
 		log.VEventf(ctx, 1, "failed to campaign: %s", err)
 	}
@@ -2395,7 +2392,7 @@ func (r *Replica) forceCampaignLocked(ctx context.Context) {
 // lead to persistent unavailability.
 func (r *Replica) forgetLeaderLocked(ctx context.Context) {
 	log.VEventf(ctx, 3, "forgetting leader")
-	msg := raftpb.Message{To: uint64(r.replicaID), Type: raftpb.MsgForgetLeader}
+	msg := raftpb.Message{To: raftpb.PeerID(r.replicaID), Type: raftpb.MsgForgetLeader}
 	if err := r.mu.internalRaftGroup.Step(msg); err != nil {
 		log.VEventf(ctx, 1, "failed to forget leader: %s", err)
 	}
@@ -2422,10 +2419,10 @@ func (m lastUpdateTimesMap) update(replicaID roachpb.ReplicaID, now time.Time) {
 // a suitable pattern of quiesce and unquiesce operations (and this in turn
 // can interfere with Raft log truncations).
 func (m lastUpdateTimesMap) updateOnUnquiesce(
-	descs []roachpb.ReplicaDescriptor, prs map[uint64]tracker.Progress, now time.Time,
+	descs []roachpb.ReplicaDescriptor, prs map[raftpb.PeerID]tracker.Progress, now time.Time,
 ) {
 	for _, desc := range descs {
-		if prs[uint64(desc.ReplicaID)].State == tracker.StateReplicate {
+		if prs[raftpb.PeerID(desc.ReplicaID)].State == tracker.StateReplicate {
 			m.update(desc.ReplicaID, now)
 		}
 	}

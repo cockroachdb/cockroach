@@ -16,6 +16,7 @@ go_library(
         "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvpb",

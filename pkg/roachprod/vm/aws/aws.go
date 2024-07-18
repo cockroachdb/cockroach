@@ -261,6 +261,9 @@ type Provider struct {
 	// IAMProfile designates the name of the instance profile to use for created
 	// EC2 instances if non-empty.
 	IAMProfile string
+
+	// aws accounts to perform action in, used by gcCmd only as it clean ups multiple aws accounts
+	AccountIDs []string
 }
 
 func (p *Provider) SupportsSpotVMs() bool {
@@ -451,6 +454,12 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.Multiple
 	providerInstance.Config = &configFlagVal.awsConfig
 	flags.Var(&configFlagVal, ProviderName+"-config",
 		"Path to json for aws configuration, defaults to predefined configuration")
+}
+
+// ConfigureClusterCleanupFlags implements ProviderOpts.
+func (o *ProviderOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
+	flags.StringSliceVar(&providerInstance.AccountIDs, ProviderName+"-account-ids", []string{},
+		"AWS account ids as a comma-separated string")
 }
 
 // CleanSSH is part of vm.Provider.  This implementation is a no-op,
@@ -727,9 +736,26 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	return g.Wait()
 }
 
-// Reset is part of vm.Provider. It is a no-op.
+// Reset is part of vm.Provider.
 func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
-	return nil // unimplemented
+	byRegion, err := regionMap(vms)
+	if err != nil {
+		return err
+	}
+	g := errgroup.Group{}
+	for region, list := range byRegion {
+		args := []string{
+			"ec2", "reboot-instances",
+			"--region", region,
+			"--instance-ids",
+		}
+		args = append(args, list.ProviderIDs()...)
+		g.Go(func() error {
+			_, e := p.runCommand(l, args)
+			return e
+		})
+	}
+	return g.Wait()
 }
 
 // Extend is part of the vm.Provider interface.

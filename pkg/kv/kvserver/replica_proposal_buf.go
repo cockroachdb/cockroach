@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -117,32 +117,9 @@ type propBuf struct {
 		// process of replication. Dropped proposals are still eligible to be
 		// reproposed due to ticks.
 		submitProposalFilter func(*ProposalData) (drop bool, err error)
-		// allowLeaseProposalWhenNotLeader, if set, makes the proposal buffer allow
-		// lease request proposals even when the replica inserting that proposal is
-		// not the Raft leader. This can be used in tests to allow a replica to
-		// acquire a lease without first moving the Raft leadership to it (e.g. it
-		// allows tests to expire leases by stopping the old leaseholder's liveness
-		// heartbeats and then expect other replicas to take the lease without
-		// worrying about Raft).
-		allowLeaseProposalWhenNotLeader bool
 		// dontCloseTimestamps inhibits the closing of timestamps.
 		dontCloseTimestamps bool
 	}
-}
-
-type rangeLeaderInfo struct {
-	// leader is the Raft group's leader. Equals 0 [roachpb.ReplicaID(raft.None)]
-	// if the leader is not known/set, in which case other fields are unset too.
-	leader roachpb.ReplicaID
-	// iAmTheLeader is set if the local replica is the leader.
-	iAmTheLeader bool
-	// leaderEligibleForLease is set if the leader is known and its type of
-	// replica allows it to acquire a lease.
-	leaderEligibleForLease bool
-}
-
-func (r rangeLeaderInfo) leaderKnown() bool {
-	return r.leader != roachpb.ReplicaID(raft.None)
 }
 
 type admitEntHandle struct {
@@ -164,42 +141,26 @@ type proposer interface {
 	// The following require the proposer to hold (at least) a shared lock.
 	singleBatchProposer
 	destroyed() destroyStatus
-	firstIndex() kvpb.RaftIndex
 	leaseAppliedIndex() kvpb.LeaseAppliedIndex
 	enqueueUpdateCheck()
 	closedTimestampTarget() hlc.Timestamp
-	leaderStatus(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo
-	ownsValidLease(ctx context.Context, now hlc.ClockTimestamp) bool
 	shouldCampaignOnRedirect(raftGroup proposerRaft) bool
 
 	// The following require the proposer to hold an exclusive lock.
 	withGroupLocked(func(proposerRaft) error) error
 	registerProposalLocked(*ProposalData)
 	campaignLocked(ctx context.Context)
-	// rejectProposalWithRedirectLocked rejects a proposal and redirects the
-	// proposer to try it on another node. This is used to sometimes reject lease
-	// acquisitions when another replica is the leader; the intended consequence
-	// of the rejection is that the request that caused the lease acquisition
-	// attempt is tried on the leader, at which point it should result in a lease
-	// acquisition attempt by that node (or, perhaps by then the leader will have
-	// already gotten a lease and the request can be serviced directly).
-	rejectProposalWithRedirectLocked(
+	rejectProposalWithErrLocked(ctx context.Context, prop *ProposalData, err error)
+
+	// verifyLeaseRequestSafetyRLocked checks whether a lease acquisition or
+	// transfer is safe to be proposed. Returns an error if the proposal should
+	// be rejected.
+	verifyLeaseRequestSafetyRLocked(
 		ctx context.Context,
-		prop *ProposalData,
-		redirectTo roachpb.ReplicaID,
-	)
-	// rejectProposalWithLeaseTransferRejectedLocked rejects a proposal for a
-	// lease transfer when the transfer is deemed to be unsafe. The intended
-	// consequence of the rejection is that the lease transfer attempt will be
-	// rejected. Higher levels that decide whether or not to attempt a lease
-	// transfer have weaker versions of the same check, so we don't expect to see
-	// repeated lease transfer rejections.
-	rejectProposalWithLeaseTransferRejectedLocked(
-		ctx context.Context,
-		prop *ProposalData,
-		lease *roachpb.Lease,
-		reason raftutil.ReplicaNeedsSnapshotStatus,
-	)
+		raftGroup proposerRaft,
+		prevLease, nextLease roachpb.Lease,
+		bypassSafetyChecks bool,
+	) error
 
 	// leaseDebugRLocked returns info on the current lease.
 	leaseDebugRLocked() string
@@ -677,178 +638,45 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 		// that they have fully been taken care of.
 		return true
 	}
-	switch {
-	case p.Request.IsSingleRequestLeaseRequest():
-		// Handle an edge case about lease acquisitions: we don't want to forward
-		// lease acquisitions to another node (which is what happens when we're not
-		// the leader) because:
-		// a) if there is a different leader, that leader should acquire the lease
-		// itself and thus avoid a change of leadership caused by the leaseholder
-		// and leader being different (Raft leadership follows the lease), and
-		// b) being a follower, it's possible that this replica is behind in
-		// applying the log. Thus, there might be another lease in place that this
-		// follower doesn't know about, in which case the lease we're proposing here
-		// would be rejected. Not only would proposing such a lease be wasted work,
-		// but we're trying to protect against pathological cases where it takes a
-		// long time for this follower to catch up (for example because it's waiting
-		// for a snapshot, and the snapshot is queued behind many other snapshots).
-		// In such a case, we don't want all requests arriving at this node to be
-		// blocked on this lease acquisition (which is very likely to eventually
-		// fail anyway).
-		//
-		// Thus, we do one of two things:
-		// - if the leader is known, we reject this proposal and make sure the
-		// request that needed the lease is redirected to the leaseholder;
-		// - if the leader is not known [^1], we don't do anything special here to
-		// terminate the proposal, but we know that Raft will reject it with a
-		// ErrProposalDropped. We'll eventually re-propose it once a leader is
-		// known, at which point it will either go through or be rejected based on
-		// whether it is this replica that became the leader.
-		//
-		// [^1]: however, if the leader is not known and RejectLeaseOnLeaderUnknown
-		// cluster setting is true, we reject the proposal.
-		// TODO(pav-kv): make this behaviour default. Right now, it is hidden behind
-		// the experimental cluster setting. See #120073 and #118435.
-		//
-		// A special case is when the leader is known, but is ineligible to get the
-		// lease. In that case, we have no choice but to continue with the proposal.
-		//
-		// Lease extensions for a currently held lease always go through, to
-		// keep the lease alive until the normal lease transfer mechanism can
-		// colocate it with the leader.
-		li := b.leaderStatusRLocked(ctx, raftGroup)
-		if li.iAmTheLeader {
-			return false
+	if p.Request.IsSingleRequestLeaseRequest() || p.Request.IsSingleTransferLeaseRequest() {
+		var prevLease roachpb.Lease
+		var bypassSafetyChecks bool
+		req := p.Request.Requests[0].GetInner()
+		switch t := req.(type) {
+		case *kvpb.RequestLeaseRequest:
+			prevLease = t.PrevLease
+			// Bypass safety checks for lease requests that are not for the proposer.
+			// These are only proposed by tests that want to mock out a remote lease
+			// acquisition.
+			bypassSafetyChecks = t.Lease.Replica.ReplicaID != b.p.getReplicaID()
+		case *kvpb.TransferLeaseRequest:
+			prevLease = t.PrevLease
+			bypassSafetyChecks = t.BypassSafetyChecks
+		default:
+			panic("unexpected")
 		}
-		if b.p.ownsValidLease(ctx, b.clock.NowAsClockTimestamp()) {
-			log.VEventf(ctx, 2, "proposing lease extension even though we're not the leader; we hold the current lease")
-			return false
-		}
+		nextLease := *p.command.ReplicatedEvalResult.State.Lease
 
-		reject := false
-		if !li.leaderKnown() && RejectLeaseOnLeaderUnknown.Get(&b.settings.SV) {
-			log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; the leader is unknown")
-			reject = true
-		}
-		// TODO(pav-kv): the testing knob logic below doesn't exactly correspond to
-		// its name. Clean it up, potentially replace by the cluster setting above.
-		if li.leaderEligibleForLease && !b.testing.allowLeaseProposalWhenNotLeader {
-			log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; replica %d is",
-				li.leader)
-			reject = true
-		}
-		if reject {
-			// NB: li.leader can be None.
-			b.p.rejectProposalWithRedirectLocked(ctx, p, li.leader)
-			if b.p.shouldCampaignOnRedirect(raftGroup) {
+		err := b.p.verifyLeaseRequestSafetyRLocked(ctx, raftGroup, prevLease, nextLease, bypassSafetyChecks)
+		if err != nil {
+			b.p.rejectProposalWithErrLocked(ctx, p, err)
+
+			// TODO(nvanbenschoten): move this to replica_range_lease.go when we
+			// support build-time verification for lease acquisition. See #118435.
+			if p.Request.IsSingleRequestLeaseRequest() && b.p.shouldCampaignOnRedirect(raftGroup) {
 				const format = "campaigning because Raft leader (id=%d) not live in node liveness map"
+				lead := raftGroup.BasicStatus().Lead
 				if logCampaignOnRejectLease.ShouldLog() {
-					log.Infof(ctx, format, li.leader)
+					log.Infof(ctx, format, lead)
 				} else {
-					log.VEventf(ctx, 2, format, li.leader)
+					log.VEventf(ctx, 2, format, lead)
 				}
 				b.p.campaignLocked(ctx)
 			}
 			return true
 		}
-		// If the leader is not known, or if it is known but is ineligible for the
-		// lease, continue with the proposal as explained above.
-		if !li.leaderKnown() {
-			log.VEventf(ctx, 2, "proposing lease acquisition even though we're not the leader; the leader is unknown")
-		} else {
-			log.VEventf(ctx, 2, "proposing lease acquisition even though we're not the leader; the leader is ineligible")
-		}
-		return false
-
-	case p.Request.IsSingleTransferLeaseRequest():
-		// When performing a lease transfer, the outgoing leaseholder revokes its
-		// lease before proposing the lease transfer request, meaning that it
-		// promises to stop using the previous lease to serve reads or writes. The
-		// lease transfer request is then proposed and committed to the Raft log, at
-		// which point the new lease officially becomes active. However, this new
-		// lease is not usable until the incoming leaseholder applies the Raft entry
-		// that contains the lease transfer and notices that it is now the
-		// leaseholder for the range.
-		//
-		// The effect of this handoff is that there exists a "power vacuum" time
-		// period when the outgoing leaseholder has revoked its previous lease but
-		// the incoming leaseholder has not yet applied its new lease. During this
-		// time period, a range is effectively unavailable for strong reads and
-		// writes, because no replica will act as the leaseholder. Instead, requests
-		// that require the lease will be redirected back and forth between the
-		// outgoing leaseholder and the incoming leaseholder (the client backs off).
-		// To minimize the disruption caused by lease transfers, we need to minimize
-		// this time period.
-		//
-		// We assume that if a lease transfer target is sufficiently caught up on
-		// its log such that it will be able to apply the lease transfer through log
-		// entry application then this unavailability window will be acceptable.
-		// This may be a faulty assumption in cases with severe replication lag, but
-		// we must balance any heuristics here that attempts to determine "too much
-		// lag" with the possibility of starvation of lease transfers under
-		// sustained write load and a resulting sustained replication lag. See
-		// #38065 and #42379, which removed such a heuristic. For now, we don't try
-		// to make such a determination.
-		//
-		// However, we draw a distinction between lease transfer targets that will
-		// be able to apply the lease transfer through log entry application and
-		// those that will require a Raft snapshot to catch up and apply the lease
-		// transfer. Raft snapshots are more expensive than Raft entry replication.
-		// They are also significantly more likely to be delayed due to queueing
-		// behind other snapshot traffic in the system. This potential for delay
-		// makes transferring a lease to a replica that needs a snapshot very risky,
-		// as doing so has the effect of inducing range unavailability until the
-		// snapshot completes, which could take seconds, minutes, or hours.
-		//
-		// In the future, we will likely get better at prioritizing snapshots to
-		// improve the responsiveness of snapshots that are needed to recover
-		// availability. However, even in this world, it is not worth inducing
-		// unavailability that can only be recovered through a Raft snapshot. It is
-		// better to catch the desired lease target up on the log first and then
-		// initiate the lease transfer once its log is connected to the leader's.
-		//
-		// For this reason, unless we can guarantee that the lease transfer target
-		// does not need a Raft snapshot, we don't let it through. This same check
-		// lives at higher levels in the stack as well (i.e. in the allocator). The
-		// higher level checks avoid wasted work and respond more gracefully to
-		// invalid targets (e.g. they pick the next best target). However, this is
-		// the only place where the protection is airtight against race conditions
-		// because the check is performed:
-		// 1. by the current Raft leader, else the proposal will fail
-		// 2. while holding latches that prevent interleaving log truncation
-		//
-		// If an error is thrown here, the outgoing leaseholder still won't be able
-		// to use its revoked lease. However, it will be able to immediately request
-		// a new lease. This may be disruptive, which is why we try to avoid hitting
-		// this airtight protection as much as possible by detecting the failure
-		// scenario before revoking the outgoing lease.
-		status := raftGroup.Status()
-		firstIndex := b.p.firstIndex()
-		newLease := p.command.ReplicatedEvalResult.State.Lease
-		newLeaseTarget := newLease.Replica.ReplicaID
-		snapStatus := raftutil.ReplicaMayNeedSnapshot(&status, firstIndex, newLeaseTarget)
-		if snapStatus != raftutil.NoSnapshotNeeded && !p.Request.Requests[0].GetTransferLease().BypassSafetyChecks {
-			b.p.rejectProposalWithLeaseTransferRejectedLocked(ctx, p, newLease, snapStatus)
-			return true
-		}
-		return false
-
-	default:
-		return false
 	}
-}
-
-// leaderStatusRLocked returns the rangeLeaderInfo for the provided raft group,
-// or an empty rangeLeaderInfo if the raftGroup is nil.
-func (b *propBuf) leaderStatusRLocked(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo {
-	leaderInfo := b.p.leaderStatus(ctx, raftGroup)
-	// Sanity check.
-	if leaderInfo.leader == b.p.getReplicaID() && !leaderInfo.iAmTheLeader {
-		log.Fatalf(ctx,
-			"inconsistent Raft state: state %s while the current replica is also the lead: %d",
-			raftGroup.BasicStatus().RaftState, leaderInfo.leader)
-	}
-	return leaderInfo
+	return false
 }
 
 // allocateLAIAndClosedTimestampLocked computes a LAI and closed timestamp to be
@@ -1037,7 +865,7 @@ func proposeBatch(
 	replID := p.getReplicaID()
 	err := raftGroup.Step(raftpb.Message{
 		Type:    raftpb.MsgProp,
-		From:    uint64(replID),
+		From:    raftpb.PeerID(replID),
 		Entries: ents,
 	})
 	if err != nil && errors.Is(err, raft.ErrProposalDropped) {
@@ -1340,10 +1168,6 @@ func (rp *replicaProposer) destroyed() destroyStatus {
 	return rp.mu.destroyStatus
 }
 
-func (rp *replicaProposer) firstIndex() kvpb.RaftIndex {
-	return (*Replica)(rp).raftFirstIndexRLocked()
-}
-
 func (rp *replicaProposer) leaseAppliedIndex() kvpb.LeaseAppliedIndex {
 	return rp.mu.state.LeaseAppliedIndex
 }
@@ -1397,52 +1221,6 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	rp.mu.proposals[p.idKey] = p
 }
 
-func (rp *replicaProposer) leaderStatus(
-	ctx context.Context, raftGroup proposerRaft,
-) rangeLeaderInfo {
-	r := (*Replica)(rp)
-
-	status := raftGroup.BasicStatus()
-	iAmTheLeader := status.RaftState == raft.StateLeader
-	leader := status.Lead
-	leaderKnown := leader != raft.None
-	var leaderEligibleForLease bool
-	rangeDesc := r.descRLocked()
-	if leaderKnown {
-		// Figure out if the leader is eligible for getting a lease.
-		leaderRep, ok := rangeDesc.GetReplicaDescriptorByID(roachpb.ReplicaID(leader))
-		if !ok {
-			// There is a leader, but it's not part of our descriptor. The descriptor
-			// must be stale, so we are behind in applying the log. We don't want the
-			// lease ourselves (as we're behind), so let's assume that the leader is
-			// eligible. If it proves that it isn't, we might be asked to get the
-			// lease again, and by then hopefully we will have caught up.
-			leaderEligibleForLease = true
-		} else {
-			// If the current leader is a VOTER_DEMOTING and it was the last one to
-			// hold the lease (according to our possibly stale applied lease state),
-			// CheckCanReceiveLease considers it eligible to continue holding the
-			// lease, so we don't allow our proposal through. Otherwise, if it was not
-			// the last one to hold the lease, it will never be allowed to acquire it
-			// again, so we don't consider it eligible.
-			lastLease, _ := r.getLeaseRLocked()
-			wasLastLeaseholder := leaderRep.ReplicaID == lastLease.Replica.ReplicaID
-			err := roachpb.CheckCanReceiveLease(
-				leaderRep, rangeDesc.Replicas(), wasLastLeaseholder)
-			leaderEligibleForLease = err == nil
-		}
-	}
-	return rangeLeaderInfo{
-		iAmTheLeader:           iAmTheLeader,
-		leader:                 roachpb.ReplicaID(leader),
-		leaderEligibleForLease: leaderEligibleForLease,
-	}
-}
-
-func (rp *replicaProposer) ownsValidLease(ctx context.Context, now hlc.ClockTimestamp) bool {
-	return (*Replica)(rp).ownsValidLeaseRLocked(ctx, now)
-}
-
 func (rp *replicaProposer) shouldCampaignOnRedirect(raftGroup proposerRaft) bool {
 	r := (*Replica)(rp)
 	livenessMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
@@ -1467,49 +1245,51 @@ func (rp *replicaProposer) flowControlHandle(ctx context.Context) kvflowcontrol.
 	return handle
 }
 
-// rejectProposalWithRedirectLocked is part of the proposer interface.
-func (rp *replicaProposer) rejectProposalWithRedirectLocked(
-	ctx context.Context, prop *ProposalData, redirectTo roachpb.ReplicaID,
-) {
-	r := (*Replica)(rp)
-	rangeDesc := r.descRLocked()
-	storeID := r.store.StoreID()
-	r.store.metrics.LeaseRequestErrorCount.Inc(1)
-	if redirectTo == roachpb.ReplicaID(raft.None) {
-		// We don't know the leader, so pass Lease{} to give no hint.
-		rp.rejectProposalWithErrLocked(ctx, prop, kvpb.NewError(
-			kvpb.NewNotLeaseHolderError(roachpb.Lease{}, storeID, rangeDesc,
-				"refusing to acquire lease on follower")))
-		return
-	}
-
-	redirectRep, _ /* ok */ := rangeDesc.GetReplicaDescriptorByID(redirectTo)
-	log.VEventf(ctx, 2, "redirecting proposal to node %s; request: %s", redirectRep.NodeID, prop.Request)
-	rp.rejectProposalWithErrLocked(ctx, prop, kvpb.NewError(
-		kvpb.NewNotLeaseHolderErrorWithSpeculativeLease(
-			redirectRep,
-			storeID,
-			rangeDesc,
-			"refusing to acquire lease on follower"),
-	))
-}
-
-func (rp *replicaProposer) rejectProposalWithLeaseTransferRejectedLocked(
+func (rp *replicaProposer) verifyLeaseRequestSafetyRLocked(
 	ctx context.Context,
-	prop *ProposalData,
-	lease *roachpb.Lease,
-	reason raftutil.ReplicaNeedsSnapshotStatus,
-) {
-	rp.store.metrics.LeaseTransferErrorCount.Inc(1)
-	log.VEventf(ctx, 2, "not proposing lease transfer because the target %s may "+
-		"need a snapshot: %s", lease.Replica, reason)
-	err := NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(lease.Replica, reason)
-	rp.rejectProposalWithErrLocked(ctx, prop, kvpb.NewError(err))
+	raftGroup proposerRaft,
+	prevLease, nextLease roachpb.Lease,
+	bypassSafetyChecks bool,
+) error {
+	r := (*Replica)(rp)
+	st := r.leaseSettings(ctx)
+	raftStatus := raftGroup.Status()
+	in := leases.VerifyInput{
+		LocalStoreID:       r.StoreID(),
+		LocalReplicaID:     r.ReplicaID(),
+		Desc:               r.descRLocked(),
+		RaftStatus:         &raftStatus,
+		RaftFirstIndex:     r.raftFirstIndexRLocked(),
+		PrevLease:          prevLease,
+		PrevLeaseExpired:   !r.ownsValidLeaseRLocked(ctx, r.Clock().NowAsClockTimestamp()),
+		NextLeaseHolder:    nextLease.Replica,
+		BypassSafetyChecks: bypassSafetyChecks,
+	}
+	if err := leases.Verify(ctx, st, in); err != nil {
+		if in.Transfer() {
+			// The lease transfer is deemed to be unsafe. The intended consequence of
+			// the rejection is that the lease transfer attempt will be rejected.
+			// Higher levels that decide whether or not to attempt a lease transfer
+			// have weaker versions of the same check, so we don't expect to see
+			// repeated lease transfer rejections.
+			r.store.metrics.LeaseTransferErrorCount.Inc(1)
+		} else {
+			// The lease acquisition is deemed to be unsafe. the intended consequence
+			// of the rejection is that the request that caused the lease acquisition
+			// attempt is redirected and tried on the leader, at which point it should
+			// result in a lease acquisition attempt by that node (or, perhaps by then
+			// the leader will have already gotten a lease and the request can be
+			// serviced directly).
+			r.store.metrics.LeaseRequestErrorCount.Inc(1)
+		}
+		return err
+	}
+	return nil
 }
 
 func (rp *replicaProposer) rejectProposalWithErrLocked(
-	ctx context.Context, prop *ProposalData, pErr *kvpb.Error,
+	ctx context.Context, prop *ProposalData, err error,
 ) {
 	(*Replica)(rp).cleanupFailedProposalLocked(prop)
-	prop.finishApplication(ctx, makeProposalResultPErr(pErr))
+	prop.finishApplication(ctx, makeProposalResultPErr(kvpb.NewError(err)))
 }

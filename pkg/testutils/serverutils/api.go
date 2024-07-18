@@ -128,10 +128,6 @@ type TestServerController interface {
 	// ready. This is only effective when called before Start().
 	SetReadyFn(fn func(bool))
 
-	// BinaryVersionOverride returns the value of an override if set using
-	// TestingKnobs.
-	BinaryVersionOverride() roachpb.Version
-
 	// RunInitialSQL is used by 'cockroach demo' to initialize
 	// an admin user.
 	// TODO(knz): Migrate this logic to a demo-specific init task
@@ -449,7 +445,7 @@ type ApplicationLayerInterface interface {
 	PrivilegeChecker() interface{}
 
 	// NodeDescStoreI returns the node descriptor lookup interface.
-	// The concrete return type is compatible with interface kvcoord.NodeDescStore.
+	// The concrete return type is compatible with interface kvclient.NodeDescStore.
 	NodeDescStoreI() interface{}
 
 	// Locality returns the locality used by the server.

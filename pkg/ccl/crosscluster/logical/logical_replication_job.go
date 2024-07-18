@@ -11,7 +11,6 @@ package logical
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -21,17 +20,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
-	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -70,37 +70,6 @@ type logicalReplicationResumer struct {
 }
 
 var _ jobs.Resumer = (*logicalReplicationResumer)(nil)
-
-func init() {
-	repstream.CreateRemoteProduceJobForLogicalReplicationHook = createRemoteProduceJobForLogicalReplication
-}
-
-func createRemoteProduceJobForLogicalReplication(
-	ctx context.Context, srcAddr string, tableNames []string,
-) (*streampb.ReplicationProducerSpec, error) {
-	// TODO(ssd): Copy over our GetFirstActiveClient logic
-	// so that we can connect to any node that we've seen
-	// in a previous Topology.
-	streamAddr, err := url.Parse(srcAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := streamclient.NewPartitionedStreamClient(ctx, streamAddr)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = client.Close(ctx) }()
-
-	spec, err := client.CreateForTables(ctx, &streampb.ReplicationProducerRequest{
-		TableNames: tableNames,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return spec, err
-}
 
 // Resume is part of the jobs.Resumer interface.
 func (r *logicalReplicationResumer) Resume(ctx context.Context, execCtx interface{}) error {
@@ -150,12 +119,13 @@ func (r *logicalReplicationResumer) ingest(
 		replicatedTimeAtStart = progress.ReplicatedTime
 	)
 
-	streamAddr, err := url.Parse(payload.TargetClusterConnStr)
-	if err != nil {
-		return err
-	}
+	client, err := streamclient.NewStreamClient(ctx,
+		crosscluster.StreamAddress(payload.TargetClusterConnStr),
+		jobExecCtx.ExecCfg().InternalDB,
+		streamclient.WithStreamID(streampb.StreamID(streamID)),
+		streamclient.WithLogical(),
+	)
 
-	client, err := streamclient.NewPartitionedStreamClient(ctx, streamAddr, streamclient.WithStreamID(streampb.StreamID(streamID)))
 	if err != nil {
 		return err
 	}
@@ -172,46 +142,250 @@ func (r *logicalReplicationResumer) ingest(
 		req.TableIDs = append(req.TableIDs, pair.SrcDescriptorID)
 	}
 
-	plan, err := client.PlanLogicalReplication(ctx, req)
+	planner := makeLogicalReplicationPlanner(
+		req,
+		jobExecCtx,
+		client,
+		progress,
+		payload,
+		jobID,
+		replicatedTimeAtStart)
+
+	initialPlan, initialPlanCtx, frontier, err := planner.generatePlanWithFrontier(ctx, distSQLPlanner)
 	if err != nil {
 		return err
 	}
 
-	dstToSrcDescMap := make(map[int32]descpb.TableDescriptor)
-	for _, pair := range payload.ReplicationPairs {
-		dstToSrcDescMap[pair.DstDescriptorID] = plan.DescriptorMap[pair.SrcDescriptorID]
+	replanOracle := sql.ReplanOnCustomFunc(
+		getNodes,
+		func() float64 {
+			return crosscluster.LogicalReplanThreshold.Get(jobExecCtx.ExecCfg().SV())
+		},
+	)
+
+	replanner, stopReplanner := sql.PhysicalPlanChangeChecker(ctx,
+		initialPlan,
+		planner.generatePlan,
+		jobExecCtx,
+		replanOracle,
+		func() time.Duration { return crosscluster.LogicalReplanFrequency.Get(jobExecCtx.ExecCfg().SV()) },
+	)
+	metrics := execCfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
+
+	// Store only the original plan diagram
+	jobsprofiler.StorePlanDiagram(ctx,
+		execCfg.DistSQLSrv.Stopper,
+		initialPlan,
+		execCfg.InternalDB,
+		jobID)
+
+	heartbeatSender := streamclient.NewHeartbeatSender(ctx, client, streampb.StreamID(streamID),
+		func() time.Duration {
+			return heartbeatFrequency.Get(&execCfg.Settings.SV)
+		})
+	defer func() {
+		_ = heartbeatSender.Stop()
+		stopReplanner()
+	}()
+
+	execPlan := func(ctx context.Context) error {
+
+		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
+			log.Warningf(ctx, "received unexpected producer meta: %v", meta)
+			return nil
+		}
+		rh := rowHandler{
+			replicatedTimeAtStart: replicatedTimeAtStart,
+			frontier:              frontier,
+			metrics:               metrics,
+			settings:              &execCfg.Settings.SV,
+			job:                   r.job,
+			frontierUpdates:       heartbeatSender.FrontierUpdates,
+		}
+		rowResultWriter := sql.NewCallbackResultWriter(rh.handleRow)
+		distSQLReceiver := sql.MakeDistSQLReceiver(
+			ctx,
+			sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
+			tree.Rows,
+			execCfg.RangeDescriptorCache,
+			nil, /* txn */
+			nil, /* clockUpdater */
+			evalCtx.Tracing,
+		)
+		defer distSQLReceiver.Release()
+		// Copy the evalCtx, as dsp.Run() might change it.
+		evalCtxCopy := *evalCtx
+		distSQLPlanner.Run(
+			ctx,
+			initialPlanCtx,
+			nil, /* txn */
+			initialPlan,
+			distSQLReceiver,
+			&evalCtxCopy,
+			nil, /* finishedSetupFn */
+		)
+
+		return rowResultWriter.Err()
 	}
 
-	frontier, err := span.MakeFrontierAt(replicatedTimeAtStart, plan.SourceSpans...)
-	if err != nil {
+	startHeartbeat := func(ctx context.Context) error {
+		heartbeatSender.Start(ctx, timeutil.DefaultTimeSource{})
+		err := heartbeatSender.Wait()
 		return err
 	}
-	for _, resolvedSpan := range progress.Checkpoint.ResolvedSpans {
-		if _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
-			return err
+
+	err = ctxgroup.GoAndWait(ctx, execPlan, replanner, startHeartbeat)
+	if errors.Is(err, sql.ErrPlanChanged) {
+		metrics.ReplanCount.Inc(1)
+	}
+	return err
+}
+
+func getNodes(plan *sql.PhysicalPlan) (src, dst map[string]struct{}, nodeCount int) {
+	dst = make(map[string]struct{})
+	src = make(map[string]struct{})
+	count := 0
+	for _, proc := range plan.Processors {
+		if proc.Spec.Core.LogicalReplicationWriter == nil {
+			// Skip other processors in the plan (like the Frontier processor).
+			continue
+		}
+		if _, ok := dst[proc.SQLInstanceID.String()]; !ok {
+			dst[proc.SQLInstanceID.String()] = struct{}{}
+			count += 1
+		}
+		if _, ok := src[proc.Spec.Core.LogicalReplicationWriter.PartitionSpec.SrcInstanceID.String()]; !ok {
+			src[proc.Spec.Core.LogicalReplicationWriter.PartitionSpec.SrcInstanceID.String()] = struct{}{}
+			count += 1
 		}
 	}
-	planCtx, nodes, err := distSQLPlanner.SetupAllNodesPlanning(ctx, evalCtx, execCfg)
-	if err != nil {
-		return err
+	return src, dst, count
+}
+
+// logicalReplicationPlanner generates a physical plan for logical replication.
+// An initial plan is generated during job startup and the replanner will
+// periodically call generatePlan to recalculate the best plan. If the newly
+// generated plan differs significantly from the initial plan, the entire
+// distSQL flow is shut down and a new initial plan will be created.
+type logicalReplicationPlanner struct {
+	req                   streampb.LogicalReplicationPlanRequest
+	jobExecCtx            sql.JobExecContext
+	client                streamclient.Client
+	progress              *jobspb.LogicalReplicationProgress
+	payload               jobspb.LogicalReplicationDetails
+	jobID                 jobspb.JobID
+	replicatedTimeAtStart hlc.Timestamp
+}
+
+func makeLogicalReplicationPlanner(
+	req streampb.LogicalReplicationPlanRequest,
+	jobExecCtx sql.JobExecContext,
+	client streamclient.Client,
+	progress *jobspb.LogicalReplicationProgress,
+	payload jobspb.LogicalReplicationDetails,
+	jobID jobspb.JobID,
+	replicatedTimeAtStart hlc.Timestamp,
+) logicalReplicationPlanner {
+
+	return logicalReplicationPlanner{
+		req:                   req,
+		jobExecCtx:            jobExecCtx,
+		client:                client,
+		progress:              progress,
+		payload:               payload,
+		jobID:                 jobID,
+		replicatedTimeAtStart: replicatedTimeAtStart,
 	}
-	destNodeLocalities, err := physical.GetDestNodeLocalities(ctx, distSQLPlanner, nodes)
+}
+
+// The initial plan setup requires a frontier, which we return
+func (p *logicalReplicationPlanner) generatePlanWithFrontier(
+	ctx context.Context, dsp *sql.DistSQLPlanner,
+) (*sql.PhysicalPlan, *sql.PlanningCtx, span.Frontier, error) {
+	var (
+		execCfg = p.jobExecCtx.ExecCfg()
+		evalCtx = p.jobExecCtx.ExtendedEvalContext()
+	)
+
+	plan, err := p.client.PlanLogicalReplication(ctx, p.req)
 	if err != nil {
-		return err
+		return nil, nil, nil, err
+	}
+
+	tableIDToName := make(map[int32]fullyQualifiedTableName)
+	tablesMd := make(map[int32]execinfrapb.TableReplicationMetadata)
+	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
+		for _, pair := range p.payload.ReplicationPairs {
+			srcTableDesc := plan.DescriptorMap[pair.SrcDescriptorID]
+
+			// Look up fully qualified destination table name
+			dstTableDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, descpb.ID(pair.DstDescriptorID))
+			if err != nil {
+				return errors.Wrapf(err, "failed to look up table descriptor %d", pair.DstDescriptorID)
+			}
+			dbDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, dstTableDesc.GetParentID())
+			if err != nil {
+				return errors.Wrapf(err, "failed to look up database descriptor for table %d", pair.DstDescriptorID)
+			}
+			scDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Schema(ctx, dstTableDesc.GetParentSchemaID())
+			if err != nil {
+				return errors.Wrapf(err, "failed to look up schema descriptor for table %d", pair.DstDescriptorID)
+			}
+
+			tablesMd[pair.DstDescriptorID] = execinfrapb.TableReplicationMetadata{
+				SourceDescriptor:              srcTableDesc,
+				DestinationParentDatabaseName: dbDesc.GetName(),
+				DestinationParentSchemaName:   scDesc.GetName(),
+				DestinationTableName:          dstTableDesc.GetName(),
+			}
+			tableIDToName[pair.DstDescriptorID] = fullyQualifiedTableName{
+				database: dbDesc.GetName(),
+				schema:   scDesc.GetName(),
+				table:    dstTableDesc.GetName(),
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, nil, nil, err
+	}
+
+	dlqClient := InitDeadLetterQueueClient(p.jobExecCtx.ExecCfg().InternalDB.Executor(), tableIDToName)
+	if err := dlqClient.Create(ctx); err != nil {
+		return nil, nil, nil, errors.Wrap(err, "failed to create dead letter queue")
+	}
+
+	frontier, err := span.MakeFrontierAt(p.replicatedTimeAtStart, plan.SourceSpans...)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	for _, resolvedSpan := range p.progress.Checkpoint.ResolvedSpans {
+		if _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCfg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	destNodeLocalities, err := physical.GetDestNodeLocalities(ctx, dsp, nodes)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	specs, err := constructLogicalReplicationWriterSpecs(ctx,
-		crosscluster.StreamAddress(payload.TargetClusterConnStr),
+		crosscluster.StreamAddress(p.payload.TargetClusterConnStr),
 		plan.Topology,
 		destNodeLocalities,
-		payload.ReplicationStartTime,
-		progress.ReplicatedTime,
-		progress.Checkpoint,
-		dstToSrcDescMap,
-		jobID,
-		streampb.StreamID(streamID))
+		p.payload.ReplicationStartTime,
+		p.progress.ReplicatedTime,
+		p.progress.Checkpoint,
+		tablesMd,
+		p.jobID,
+		streampb.StreamID(p.payload.StreamID))
 	if err != nil {
-		return err
+		return nil, nil, nil, err
 	}
 
 	// Setup a one-stage plan with one proc per input spec.
@@ -247,55 +421,14 @@ func (r *logicalReplicationResumer) ingest(
 	physicalPlan.PlanToStreamColMap = []int{0}
 	sql.FinalizePlan(ctx, planCtx, physicalPlan)
 
-	jobsprofiler.StorePlanDiagram(ctx,
-		execCfg.DistSQLSrv.Stopper,
-		physicalPlan,
-		execCfg.InternalDB,
-		jobID)
+	return physicalPlan, planCtx, frontier, nil
+}
 
-	metrics := execCfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
-	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
-		log.Warningf(ctx, "received unexpected producer meta: %v", meta)
-		return nil
-	}
-	// TODO(ssd): Replan
-	heartbeatSender := streamclient.NewHeartbeatSender(ctx, client, streampb.StreamID(streamID),
-		func() time.Duration {
-			return heartbeatFrequency.Get(&execCfg.Settings.SV)
-		})
-	defer func() { _ = heartbeatSender.Stop() }()
-	rh := rowHandler{
-		replicatedTimeAtStart: replicatedTimeAtStart,
-		frontier:              frontier,
-		metrics:               metrics,
-		settings:              &execCfg.Settings.SV,
-		job:                   r.job,
-		frontierUpdates:       heartbeatSender.FrontierUpdates,
-	}
-	rowResultWriter := sql.NewCallbackResultWriter(rh.handleRow)
-	distSQLReceiver := sql.MakeDistSQLReceiver(
-		ctx,
-		sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
-		tree.Rows,
-		execCfg.RangeDescriptorCache,
-		nil, /* txn */
-		nil, /* clockUpdater */
-		evalCtx.Tracing,
-	)
-	defer distSQLReceiver.Release()
-	// Copy the evalCtx, as dsp.Run() might change it.
-	evalCtxCopy := *evalCtx
-	distSQLPlanner.Run(
-		ctx,
-		planCtx,
-		nil, /* txn */
-		physicalPlan,
-		distSQLReceiver,
-		&evalCtxCopy,
-		nil, /* finishedSetupFn */
-	)
-
-	return rowResultWriter.Err()
+func (p *logicalReplicationPlanner) generatePlan(
+	ctx context.Context, dsp *sql.DistSQLPlanner,
+) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
+	plan, planCtx, _, err := p.generatePlanWithFrontier(ctx, dsp)
+	return plan, planCtx, err
 }
 
 // rowHandler is responsible for handling checkpoints sent by logical
@@ -322,17 +455,10 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 			`unmarshalling resolved timestamp: %x`, raw)
 	}
 
-	advanced := false
 	for _, sp := range resolvedSpans.ResolvedSpans {
-		adv, err := rh.frontier.Forward(sp.Span, sp.Timestamp)
-		if err != nil {
+		if _, err := rh.frontier.Forward(sp.Span, sp.Timestamp); err != nil {
 			return err
 		}
-		advanced = advanced || adv
-	}
-
-	if !advanced {
-		return nil
 	}
 
 	updateFreq := jobCheckpointFrequency.Get(rh.settings)

@@ -25,7 +25,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
@@ -126,17 +125,17 @@ func leaseExpiry(repl *Replica) time.Time {
 
 // Create a Raft status that shows everyone fully up to date.
 func upToDateRaftStatus(repls []roachpb.ReplicaDescriptor) *raft.Status {
-	prs := make(map[uint64]tracker.Progress)
+	prs := make(map[raftpb.PeerID]tracker.Progress)
 	for _, repl := range repls {
-		prs[uint64(repl.ReplicaID)] = tracker.Progress{
+		prs[raftpb.PeerID(repl.ReplicaID)] = tracker.Progress{
 			State: tracker.StateReplicate,
 			Match: 100,
 		}
 	}
 	return &raft.Status{
 		BasicStatus: raft.BasicStatus{
-			HardState: raftpb.HardState{Commit: 100},
-			SoftState: raft.SoftState{Lead: 1, RaftState: raft.StateLeader},
+			HardState: raftpb.HardState{Commit: 100, Lead: 1},
+			SoftState: raft.SoftState{RaftState: raft.StateLeader},
 		},
 		Progress: prs,
 	}
@@ -8900,15 +8899,15 @@ func TestReplicaMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	progress := func(vals ...uint64) map[uint64]tracker.Progress {
-		m := make(map[uint64]tracker.Progress)
+	progress := func(vals ...uint64) map[raftpb.PeerID]tracker.Progress {
+		m := make(map[raftpb.PeerID]tracker.Progress)
 		for i, v := range vals {
-			m[uint64(i+1)] = tracker.Progress{Match: v}
+			m[raftpb.PeerID(i+1)] = tracker.Progress{Match: v}
 		}
 		return m
 	}
-	status := func(lead uint64, progress map[uint64]tracker.Progress) *raftSparseStatus {
-		status := &raftSparseStatus{
+	status := func(lead raftpb.PeerID, progress map[raftpb.PeerID]tracker.Progress) *raft.SparseStatus {
+		status := &raft.SparseStatus{
 			Progress: progress,
 		}
 		// The commit index is set so that a progress.Match value of 1 is behind
@@ -8919,7 +8918,7 @@ func TestReplicaMetrics(t *testing.T) {
 		} else {
 			status.SoftState.RaftState = raft.StateFollower
 		}
-		status.SoftState.Lead = lead
+		status.HardState.Lead = lead
 		return status
 	}
 	desc := func(ids ...int) roachpb.RangeDescriptor {
@@ -8948,7 +8947,7 @@ func TestReplicaMetrics(t *testing.T) {
 		replicas    int32
 		storeID     roachpb.StoreID
 		desc        roachpb.RangeDescriptor
-		raftStatus  *raftSparseStatus
+		raftStatus  *raft.SparseStatus
 		liveness    livenesspb.NodeVitalityInterface
 		raftLogSize int64
 		expected    ReplicaMetrics
@@ -9780,7 +9779,7 @@ type testQuiescer struct {
 	numProposals           int
 	pendingQuota           bool
 	ticksSinceLastProposal int
-	status                 *raftSparseStatus
+	status                 *raft.SparseStatus
 	lastIndex              kvpb.RaftIndex
 	raftReady              bool
 	leaseStatus            kvserverpb.LeaseStatus
@@ -9808,7 +9807,7 @@ func (q *testQuiescer) isRaftLeaderRLocked() bool {
 	return q.status != nil && q.status.RaftState == raft.StateLeader
 }
 
-func (q *testQuiescer) raftSparseStatusRLocked() *raftSparseStatus {
+func (q *testQuiescer) raftSparseStatusRLocked() *raft.SparseStatus {
 	return q.status
 }
 
@@ -9868,7 +9867,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 						{NodeID: 3, ReplicaID: 3},
 					},
 				},
-				status: &raftSparseStatus{
+				status: &raft.SparseStatus{
 					BasicStatus: raft.BasicStatus{
 						ID: 1,
 						HardState: raftpb.HardState{
@@ -9880,7 +9879,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 						Applied:        logIndex,
 						LeadTransferee: 0,
 					},
-					Progress: map[uint64]tracker.Progress{
+					Progress: map[raftpb.PeerID]tracker.Progress{
 						1: {Match: logIndex, State: tracker.StateReplicate},
 						2: {Match: logIndex, State: tracker.StateReplicate},
 						3: {Match: logIndex, State: tracker.StateReplicate},
@@ -9991,7 +9990,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 		q.lastIndex = invalidIndex
 		return q
 	})
-	for _, i := range []uint64{1, 2, 3} {
+	for _, i := range []raftpb.PeerID{1, 2, 3} {
 		test(false, func(q *testQuiescer) *testQuiescer {
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
 			return q
@@ -10046,7 +10045,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	})
 	// Verify quiesce even when replica progress doesn't match, if
 	// the replica is on a non-live node.
-	for _, i := range []uint64{1, 2, 3} {
+	for _, i := range []raftpb.PeerID{1, 2, 3} {
 		test(true, func(q *testQuiescer) *testQuiescer {
 			nodeID := roachpb.NodeID(i)
 			q.livenessMap[nodeID] = livenesspb.IsLiveMapEntry{
@@ -10059,7 +10058,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	}
 	// Verify no quiescence when replica progress doesn't match, if
 	// given a nil liveness map.
-	for _, i := range []uint64{1, 2, 3} {
+	for _, i := range []raftpb.PeerID{1, 2, 3} {
 		test(false, func(q *testQuiescer) *testQuiescer {
 			q.livenessMap = nil
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
@@ -10068,7 +10067,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	}
 	// Verify no quiescence when replica progress doesn't match, if
 	// liveness map does not contain the lagging replica.
-	for _, i := range []uint64{1, 2, 3} {
+	for _, i := range []raftpb.PeerID{1, 2, 3} {
 		test(false, func(q *testQuiescer) *testQuiescer {
 			delete(q.livenessMap, roachpb.NodeID(i))
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
@@ -10112,15 +10111,13 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 	) {
 		t.Run("", func(t *testing.T) {
 			q := &testQuiescer{
-				status: &raftSparseStatus{
+				status: &raft.SparseStatus{
 					BasicStatus: raft.BasicStatus{
 						ID: 2,
 						HardState: raftpb.HardState{
 							Term:   5,
 							Commit: 10,
-						},
-						SoftState: raft.SoftState{
-							Lead: 1,
+							Lead:   1,
 						},
 					},
 				},
@@ -11482,7 +11479,9 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 		raftStatus: raft.BasicStatus{
 			SoftState: raft.SoftState{
 				RaftState: raft.StateFollower,
-				Lead:      2,
+			},
+			HardState: raftpb.HardState{
+				Lead: 2,
 			},
 		},
 		livenessMap: livenesspb.IsLiveMap{
@@ -11600,7 +11599,9 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 		raftStatus: raft.BasicStatus{
 			SoftState: raft.SoftState{
 				RaftState: raft.StateFollower,
-				Lead:      2,
+			},
+			HardState: raftpb.HardState{
+				Lead: 2,
 			},
 		},
 		livenessMap: livenesspb.IsLiveMap{
@@ -11711,7 +11712,9 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 		raftStatus: raft.BasicStatus{
 			SoftState: raft.SoftState{
 				RaftState: raft.StateFollower,
-				Lead:      2,
+			},
+			HardState: raftpb.HardState{
+				Lead: 2,
 			},
 		},
 		livenessMap: livenesspb.IsLiveMap{
@@ -13901,8 +13904,8 @@ func TestRangeInfoReturned(t *testing.T) {
 
 func tenantsWithMetrics(m *StoreMetrics) map[roachpb.TenantID]struct{} {
 	metricsTenants := map[roachpb.TenantID]struct{}{}
-	m.tenants.Range(func(tenID int64, _ unsafe.Pointer) bool {
-		metricsTenants[roachpb.MustMakeTenantID(uint64(tenID))] = struct{}{}
+	m.tenants.Range(func(tenID roachpb.TenantID, _ *tenantStorageMetrics) bool {
+		metricsTenants[tenID] = struct{}{}
 		return true // more
 	})
 	return metricsTenants

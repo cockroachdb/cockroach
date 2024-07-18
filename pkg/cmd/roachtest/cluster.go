@@ -34,6 +34,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/DataExMachina-dev/side-eye-go/sideeyeclient"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -671,6 +672,15 @@ type clusterImpl struct {
 	// tagged grafana annotations. If empty, grafana is not available.
 	grafanaTags               []string
 	disableGrafanaAnnotations atomic.Bool
+
+	// State that can be accessed concurrently (in particular, read from the UI
+	// HTML generator).
+	mu struct {
+		syncutil.Mutex
+		// sideEyeEnvName is the name of the environment used by the Side-Eye agents
+		// running on this cluster. Empty if the Side-Eye integration is not active.
+		sideEyeEnvName string
+	}
 }
 
 // Name returns the cluster name, i.e. something like `teamcity-....`
@@ -696,6 +706,20 @@ func (c *clusterImpl) workerStatus(args ...interface{}) {
 	if impl, ok := c.t.(*testImpl); ok {
 		impl.WorkerStatus(args...)
 	}
+}
+
+// sideEyeEnvName is the name of the environment used by the Side-Eye agents
+// running on this cluster. Empty if the Side-Eye integration is not active.
+func (c *clusterImpl) sideEyeEnvName() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mu.sideEyeEnvName
+}
+
+func (c *clusterImpl) setSideEyeEnvName(newEnv string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.sideEyeEnvName = newEnv
 }
 
 func (c *clusterImpl) String() string {
@@ -751,6 +775,14 @@ type clusterConfig struct {
 	arch vm.CPUArch
 	// Specifies the OS which may require a custom AMI and cockroach binary.
 	os string
+	// sideEyeToken, if not empty, is the token used to authenticate with the
+	// Side-Eye. If set, each node in the cluster will run the Side-Eye agent.
+	// These agents are configured to allow monitoring of cockroach processes.
+	// app.side-eye.io will list all currently-running clusters. The test runner's
+	// Side-Eye client can be used to programmatically take snapshots of this
+	// cluster using the cluster's name; snapshots are taken when the test times
+	// out.
+	sideEyeToken string
 }
 
 // clusterFactory is a creator of clusters.
@@ -884,10 +916,11 @@ func (f *clusterFactory) newCluster(
 	defer setStatus("idle")
 
 	providerOptsContainer := vm.CreateProviderOptionsContainer()
+	workloadProviderOptsContainer := vm.CreateProviderOptionsContainer()
 
-	cloud := roachtestflags.Cloud
+	clusterCloud := roachtestflags.Cloud
 	params := spec.RoachprodClusterConfig{
-		Cloud:                  cloud,
+		Cloud:                  clusterCloud,
 		UseIOBarrierOnLocalSSD: cfg.useIOBarrier,
 		PreferredArch:          cfg.arch,
 	}
@@ -898,12 +931,13 @@ func (f *clusterFactory) newCluster(
 	// The ClusterName is set below in the retry loop to ensure
 	// that each create attempt gets a unique cluster name.
 	// N.B. selectedArch may not be the same as PreferredArch, depending on (spec.CPU, spec.Mem)
-	createVMOpts, providerOpts, selectedArch, err := cfg.spec.RoachprodOpts(params)
+	createVMOpts, providerOpts, workloadProviderOpts, selectedArch, err := cfg.spec.RoachprodOpts(params)
 	if err != nil {
 		return nil, nil, err
 	}
-	if cloud != spec.Local {
-		providerOptsContainer.SetProviderOpts(cloud, providerOpts)
+	if clusterCloud != spec.Local {
+		providerOptsContainer.SetProviderOpts(clusterCloud, providerOpts)
+		workloadProviderOptsContainer.SetProviderOpts(clusterCloud, workloadProviderOpts)
 	}
 
 	createFlagsOverride(&createVMOpts)
@@ -939,7 +973,7 @@ func (f *clusterFactory) newCluster(
 		}
 
 		c := &clusterImpl{
-			cloud:      cloud,
+			cloud:      clusterCloud,
 			name:       genName,
 			spec:       cfg.spec,
 			expiration: cfg.spec.Expiration(),
@@ -955,8 +989,22 @@ func (f *clusterFactory) newCluster(
 
 		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
 		createVMOpts.ClusterName = c.name
-		err = create(ctx, l, cfg.username, cfg.spec.NodeCount, createVMOpts, providerOptsContainer)
+		opts := []*cloud.ClusterCreateOpts{{Nodes: cfg.spec.NodeCount, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer}}
+		if cfg.spec.WorkloadNode {
+			opts = []*cloud.ClusterCreateOpts{
+				{Nodes: cfg.spec.NodeCount - 1, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer},
+				{Nodes: 1, CreateOpts: createVMOpts, ProviderOptsContainer: workloadProviderOptsContainer},
+			}
+		}
+		err = create(ctx, l, cfg.username, opts...)
 		if err == nil {
+			// Start the Side-Eye agents on all the nodes if we are configured to do so. Side-Eye
+			// doesn't currently support ARM64, so skip those clusters.
+			if cfg.sideEyeToken != "" && !cfg.localCluster && c.arch != vm.ArchARM64 {
+				if err := c.StartSideEyeAgents(ctx, l, cfg.sideEyeToken); err != nil {
+					l.Errorf("failed to start Side-Eye agents. Continuing without them.\nError: %s", err)
+				}
+			}
 			if err := f.r.registerCluster(c); err != nil {
 				return nil, nil, err
 			}
@@ -1135,11 +1183,15 @@ func (c *clusterImpl) lister() option.NodeLister {
 	if c.f != nil { // accommodates poorly set up tests
 		fatalf = c.f.Fatalf
 	}
-	return option.NodeLister{NodeCount: c.spec.NodeCount, Fatalf: fatalf}
+	return option.NodeLister{NodeCount: c.spec.NodeCount, WorkloadNodeProvisioned: c.spec.WorkloadNode, Fatalf: fatalf}
 }
 
 func (c *clusterImpl) All() option.NodeListOption {
 	return c.lister().All()
+}
+
+func (c *clusterImpl) CRDBNodes() option.NodeListOption {
+	return c.lister().CRDBNodes()
 }
 
 func (c *clusterImpl) Range(begin, end int) option.NodeListOption {
@@ -1152,6 +1204,10 @@ func (c *clusterImpl) Nodes(ns ...int) option.NodeListOption {
 
 func (c *clusterImpl) Node(i int) option.NodeListOption {
 	return c.lister().Node(i)
+}
+
+func (c *clusterImpl) WorkloadNode() option.NodeListOption {
+	return c.lister().WorkloadNode()
 }
 
 // FetchLogs downloads the logs from the cluster using `roachprod get`.
@@ -3030,6 +3086,66 @@ func (c *clusterImpl) MaybeExtendCluster(
 	return nil
 }
 
+// StartSideEyeAgents starts the Side-Eye agent on all the nodes in the cluster.
+// These agents are configured to allow monitoring of cockroach processes.
+// app.side-eye.io will list all currently-running clusters. The test runner's
+// Side-Eye client can be used to programmatically take snapshots of this
+// cluster using the cluster's name; snapshots are taken when the test times
+// out.
+func (c *clusterImpl) StartSideEyeAgents(
+	ctx context.Context, l *logger.Logger, apiToken string,
+) error {
+	envName := c.Name()
+	err := roachprod.StartSideEyeAgents(ctx, l, c.Name(), envName, apiToken)
+	if err != nil {
+		return err
+	}
+	c.setSideEyeEnvName(envName)
+	return nil
+}
+
+// UpdateSideEyeEnvironmentName updates the environment name used by the
+// Side-Eye agents running on this cluster.
+func (c *clusterImpl) UpdateSideEyeEnvironmentName(
+	ctx context.Context, l *logger.Logger, newEnvName string,
+) error {
+	err := roachprod.UpdateSideEyeEnvironmentName(ctx, l, c.Name(), newEnvName)
+	if err != nil {
+		return err
+	}
+	c.setSideEyeEnvName(newEnvName)
+	return nil
+}
+
+// CaptureSideEyeSnapshot asks the Side-Eye service to take a snapshot of the
+// cockroach processes running on this cluster. All errors are logged and
+// swallowed.
+func (c *clusterImpl) CaptureSideEyeSnapshot(
+	ctx context.Context, l *logger.Logger, client *sideeyeclient.SideEyeClient,
+) {
+	l.PrintfCtx(ctx, "capturing snapshot of the cluster with Side-Eye...")
+
+	if c.arch == vm.ArchARM64 {
+		l.Printf("Side-Eye does not support ARM64 machines; skipping snapshot")
+		return
+	}
+
+	envName := c.sideEyeEnvName()
+	if envName == "" {
+		l.PrintfCtx(ctx, "cluster does not have Side-Eye agents set up; skipping snapshot")
+		return
+	}
+
+	snapURL, ok := roachprod.CaptureSideEyeSnapshot(ctx, l, envName, client)
+	if ok {
+		l.PrintfCtx(ctx, "captured Side-eye Snapshot: %s", snapURL)
+		annotation := fmt.Sprintf("Captured Side-Eye snaphost: %s", snapURL)
+		if err := c.AddGrafanaAnnotation(ctx, l, grafana.AddAnnotationRequest{Text: annotation}); err != nil {
+			l.PrintfCtx(ctx, "error adding Grafana annotation for snapshot: %s", err)
+		}
+	}
+}
+
 // archForTest determines the CPU architecture to use for a test. If the test
 // doesn't specify it, one is chosen randomly depending on flags.
 func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSpec) vm.CPUArch {
@@ -3053,9 +3169,11 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 		arch = vm.ArchAMD64
 	}
 	if roachtestflags.Cloud == spec.GCE && arch == vm.ArchARM64 {
-		// N.B. T2A support is rather limited, both in terms of supported regions and no local SSDs. Thus, we must
-		// fall back to AMD64 in those cases. See #122035.
-		if !gce.IsSupportedT2AZone(strings.Split(testSpec.Cluster.GCE.Zones, ",")) {
+		// N.B. T2A support is rather limited, both in terms of supported
+		// regions and no local SSDs. Thus, we must fall back to AMD64 in
+		// those cases. See #122035.
+		if testSpec.Cluster.GCE.Zones != "" &&
+			!gce.IsSupportedT2AZone(strings.Split(testSpec.Cluster.GCE.Zones, ",")) {
 			l.PrintfCtx(ctx, "%q specified one or more GCE regions unsupported by T2A, falling back to AMD64; see #122035", testSpec.Name)
 			return vm.ArchAMD64
 		}

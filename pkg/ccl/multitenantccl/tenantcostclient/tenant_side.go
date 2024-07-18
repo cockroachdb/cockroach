@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -125,9 +126,11 @@ func newTenantSideCostController(
 	st *cluster.Settings,
 	tenantID roachpb.TenantID,
 	provider kvtenant.TokenBucketProvider,
+	nodeDescs kvclient.NodeDescStore,
+	locality roachpb.Locality,
 	timeSource timeutil.TimeSource,
 	testInstr TestInstrumentation,
-) (multitenant.TenantSideCostController, error) {
+) (*tenantSideCostController, error) {
 	if tenantID == roachpb.SystemTenantID {
 		return nil, errors.AssertionFailedf("cost controller can't be used for system tenant")
 	}
@@ -137,12 +140,14 @@ func newTenantSideCostController(
 		settings:            st,
 		tenantID:            tenantID,
 		provider:            provider,
+		nodeDescs:           nodeDescs,
+		locality:            locality,
 		responseChan:        make(chan *kvpb.TokenBucketResponse, 1),
 		lowTokensNotifyChan: make(chan struct{}, 1),
 	}
 
 	// Initialize metrics.
-	c.metrics.Init()
+	c.metrics.Init(locality)
 
 	// Start with filled burst buffer.
 	c.limiter.Init(&c.metrics, timeSource, c.lowTokensNotifyChan)
@@ -151,20 +156,21 @@ func newTenantSideCostController(
 		NotifyThreshold: bufferTokens,
 	})
 
-	// If any of the cost settings change, reload both models.
-	tenantcostmodel.SetOnChange(&st.SV, func(ctx context.Context) {
+	storeModels := func() {
 		ruModel := tenantcostmodel.RequestUnitModelFromSettings(&st.SV)
 		c.ruModel.Store(&ruModel)
 
 		cpuModel := tenantcostmodel.EstimatedCPUModelFromSettings(&st.SV)
 		c.cpuModel.Store(&cpuModel)
+	}
+
+	// If any of the cost settings change, reload both models.
+	tenantcostmodel.SetOnChange(&st.SV, func(ctx context.Context) {
+		storeModels()
 	})
 
-	ruModel := tenantcostmodel.RequestUnitModelFromSettings(&st.SV)
-	c.ruModel.CompareAndSwap(nil, &ruModel)
-
-	cpuModel := tenantcostmodel.EstimatedCPUModelFromSettings(&st.SV)
-	c.cpuModel.CompareAndSwap(nil, &cpuModel)
+	// Set initial models.
+	storeModels()
 
 	return c, nil
 }
@@ -172,10 +178,14 @@ func newTenantSideCostController(
 // NewTenantSideCostController creates an object which implements the
 // server.TenantSideCostController interface.
 func NewTenantSideCostController(
-	st *cluster.Settings, tenantID roachpb.TenantID, provider kvtenant.TokenBucketProvider,
+	st *cluster.Settings,
+	tenantID roachpb.TenantID,
+	provider kvtenant.TokenBucketProvider,
+	nodeDescs kvclient.NodeDescStore,
+	locality roachpb.Locality,
 ) (multitenant.TenantSideCostController, error) {
 	return newTenantSideCostController(
-		st, tenantID, provider,
+		st, tenantID, provider, nodeDescs, locality,
 		timeutil.DefaultTimeSource{},
 		nil, /* testInstr */
 	)
@@ -187,10 +197,12 @@ func TestingTenantSideCostController(
 	st *cluster.Settings,
 	tenantID roachpb.TenantID,
 	provider kvtenant.TokenBucketProvider,
+	nodeDescs kvclient.NodeDescStore,
+	locality roachpb.Locality,
 	timeSource timeutil.TimeSource,
 	testInstr TestInstrumentation,
 ) (multitenant.TenantSideCostController, error) {
-	return newTenantSideCostController(st, tenantID, provider, timeSource, testInstr)
+	return newTenantSideCostController(st, tenantID, provider, nodeDescs, locality, timeSource, testInstr)
 }
 
 // TestingTokenBucketString returns a string representation of the tenant's
@@ -227,6 +239,8 @@ type tenantSideCostController struct {
 	cpuModel             atomic.Pointer[tenantcostmodel.EstimatedCPUModel]
 	tenantID             roachpb.TenantID
 	provider             kvtenant.TokenBucketProvider
+	nodeDescs            kvclient.NodeDescStore
+	locality             roachpb.Locality
 	limiter              limiter
 	stopper              *stop.Stopper
 	instanceID           base.SQLInstanceID
@@ -240,11 +254,11 @@ type tenantSideCostController struct {
 	// atomic. It is a Uint64-encoded float64 value.
 	avgSQLCPUPerSec atomic.Uint64
 
-	// writeQPS is the recent global rate of write batches per second for this
+	// globalWriteQPS is the recent global rate of write batches per second for this
 	// tenant, measured across all SQL pods. It is only written in the main loop,
 	// but can be read by multiple goroutines so is an atomic. It is a
 	// Uint64-encoded float64 value.
-	writeQPS atomic.Uint64
+	globalWriteQPS atomic.Uint64
 
 	// lowTokensNotifyChan is used when the number of available tokens is running
 	// low and we need to send an early token bucket request.
@@ -266,6 +280,9 @@ type tenantSideCostController struct {
 		tickTokens float64
 		// tickBatches stores the total batches consumed as of the last tick.
 		tickBatches int64
+		// tickEstimatedCPUSecs stores the total estimated CPU consumed as of the
+		// last tick.
+		tickEstimatedCPUSecs float64
 		// targetPeriod stores the value of the TargetPeriodSetting setting at the
 		// last update.
 		targetPeriod time.Duration
@@ -295,6 +312,9 @@ type tenantSideCostController struct {
 		lastReportedConsumption kvpb.TenantConsumption
 		// lastRate is the token bucket fill rate that was last configured.
 		lastRate float64
+		// globalEstimatedCPURate is the global rate of estimated CPU usage, in
+		// CPU-seconds, as last reported by the token bucket server.
+		globalEstimatedCPURate float64
 
 		// When we obtain tokens that are throttled over a period of time, we
 		// will request more only when we get close to the end of that trickle.
@@ -372,35 +392,35 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 	newExternalUsage := c.externalUsageFn(ctx)
 
 	// Update CPU consumption.
-	deltaCPU := newExternalUsage.CPUSecs - c.run.externalUsage.CPUSecs
+	deltaCPUSecs := newExternalUsage.CPUSecs - c.run.externalUsage.CPUSecs
 	var totalBatches = c.metrics.TotalReadBatches.Count() + c.metrics.TotalWriteBatches.Count()
 
 	deltaTime := newTime.Sub(c.run.lastTick)
 	if deltaTime > 0 {
 		// Subtract any allowance that we consider free background usage.
 		allowance := CPUUsageAllowance.Get(&c.settings.SV).Seconds() * deltaTime.Seconds()
-		deltaCPU -= allowance
+		deltaCPUSecs -= allowance
 
 		// If total CPU usage is small (less than 3% of a single CPU by default)
 		// and there have been no recent read/write operations, then ignore the
 		// recent usage altogether. This is intended to minimize reported usage
 		// when the cluster is idle.
-		if deltaCPU < allowance*2 {
+		if deltaCPUSecs < allowance*2 {
 			if totalBatches == c.run.tickBatches {
 				// There have been no batches since the last tick.
-				deltaCPU = 0
+				deltaCPUSecs = 0
 			}
 		}
 
 		// Keep track of an exponential moving average of CPU usage.
-		avgCPU := deltaCPU / deltaTime.Seconds()
+		avgCPU := deltaCPUSecs / deltaTime.Seconds()
 		avgCPUPerSec := math.Float64frombits(c.avgSQLCPUPerSec.Load())
 		avgCPUPerSec *= 1 - movingAvgCPUPerSecFactor
 		avgCPUPerSec += avgCPU * movingAvgCPUPerSecFactor
 		c.avgSQLCPUPerSec.Store(math.Float64bits(avgCPUPerSec))
 	}
-	if deltaCPU < 0 {
-		deltaCPU = 0
+	if deltaCPUSecs < 0 {
+		deltaCPUSecs = 0
 	}
 
 	var deltaPGWireEgressBytes int64
@@ -411,21 +431,37 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 
 	// KV RUs and estimated KV CPU are not included here, since the CPU metric
 	// corresponds only to the SQL layer.
-	c.metrics.TotalSQLPodsCPUSeconds.Inc(deltaCPU)
+	c.metrics.TotalSQLPodsCPUSeconds.Inc(deltaCPUSecs)
 
 	var newTokens, totalTokens float64
 	if c.useRequestUnitModel() {
 		// Compute consumed RU.
 		ruModel := c.ruModel.Load()
-		newTokens = float64(ruModel.PodCPUCost(deltaCPU))
+		newTokens = float64(ruModel.PodCPUCost(deltaCPUSecs))
 		newTokens += float64(ruModel.PGWireEgressCost(deltaPGWireEgressBytes))
 		c.metrics.TotalRU.Inc(newTokens)
 		totalTokens = c.metrics.TotalRU.Count()
 	} else {
-		// Compute estimated CPU and convert CPU into tokens in order to adjust
-		// the token bucket.
-		c.metrics.TotalEstimatedCPUSeconds.Inc(deltaCPU)
-		newTokens = deltaCPU * tokensPerCPUSecond
+		// Account for background CPU usage.
+		cpuModel := c.cpuModel.Load()
+
+		// Determine how much eCPU was consumed by this SQL node during the
+		// last tick.
+		totalEstimatedCPUSecs := c.metrics.TotalEstimatedCPUSeconds.Count() + deltaCPUSecs
+		deltaEstimatedCPUSecs := totalEstimatedCPUSecs - c.run.tickEstimatedCPUSecs
+		if deltaEstimatedCPUSecs > 0 && cpuModel.BackgroundCPU.Amortization > 0 {
+			deltaCPUSecs += calculateBackgroundCPUSecs(
+				cpuModel, c.run.globalEstimatedCPURate, deltaTime, deltaEstimatedCPUSecs)
+		}
+
+		// Remember estimated CPU for next time. Include background CPU so that it
+		// won't be included in the background CPU calculation for the next tick
+		// (i.e. we don't want background CPU to be recursively calculated on itself).
+		c.run.tickEstimatedCPUSecs = totalEstimatedCPUSecs + deltaCPUSecs
+
+		// Convert CPU into tokens in order to adjust the token bucket.
+		c.metrics.TotalEstimatedCPUSeconds.Inc(deltaCPUSecs)
+		newTokens = deltaCPUSecs * tokensPerCPUSecond
 		totalTokens = c.metrics.TotalEstimatedCPUSeconds.Count() * tokensPerCPUSecond
 	}
 
@@ -525,6 +561,7 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 		NextLiveInstanceID:          uint32(c.nextLiveInstanceIDFn(ctx)),
 		SeqNum:                      c.run.requestSeqNum,
 		ConsumptionSinceLastRequest: deltaConsumption,
+		ConsumptionPeriod:           now.Sub(c.run.lastRequestTime),
 		RequestedTokens:             requested,
 		TargetRequestPeriod:         c.run.targetPeriod,
 	}
@@ -647,8 +684,11 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 		cfg.MaxTokens = bufferTokens + granted
 	}
 
-	// Store global write QPS for the tenant.
-	c.writeQPS.Store(math.Float64bits(resp.ConsumptionRates.WriteBatchRate))
+	if !c.useRequestUnitModel() {
+		// Store global write QPS for the tenant.
+		c.globalWriteQPS.Store(math.Float64bits(resp.ConsumptionRates.WriteBatchRate))
+		c.run.globalEstimatedCPURate = resp.ConsumptionRates.EstimatedCPURate
+	}
 
 	c.limiter.Reconfigure(now, cfg)
 	c.run.lastRate = cfg.NewRate
@@ -763,26 +803,34 @@ func (c *tenantSideCostController) OnRequestWait(ctx context.Context) error {
 // OnResponseWait is part of the multitenant.TenantSideBatchInterceptor
 // interface.
 func (c *tenantSideCostController) OnResponseWait(
-	ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
+	ctx context.Context,
+	request *kvpb.BatchRequest,
+	response *kvpb.BatchResponse,
+	targetRange *roachpb.RangeDescriptor,
+	targetReplica *roachpb.ReplicaDescriptor,
 ) error {
 	if multitenant.HasTenantCostControlExemption(ctx) {
 		return nil
 	}
 
 	// Account for the cost of write requests and read responses.
+	var batchInfo tenantcostmodel.BatchInfo
 	var tokens float64
+	replicas := int64(len(targetRange.Replicas().Descriptors()))
 	nodeCount := EstimatedNodesSetting.Get(&c.settings.SV)
 	if nodeCount == 0 {
 		// Calculate RU consumption for the operation.
 		ruModel := c.ruModel.Load()
-		writeKVRU, writeNetworkRU := ruModel.RequestCost(req)
-		readKVRU, readNetworkRU := ruModel.ResponseCost(resp)
-		totalRU := writeKVRU + readKVRU + writeNetworkRU + readNetworkRU
+		batchInfo = ruModel.MakeBatchInfo(request, response)
+
+		networkCost := c.computeNetworkCost(ctx, targetRange, targetReplica, batchInfo.WriteCount > 0)
+		kvRU, networkRU := ruModel.BatchCost(batchInfo, networkCost, replicas)
+		totalRU := kvRU + networkRU
 		tokens = float64(totalRU)
 
-		c.metrics.TotalKVRU.Inc(float64(writeKVRU + readKVRU))
+		c.metrics.TotalKVRU.Inc(float64(kvRU))
 		c.metrics.TotalRU.Inc(float64(totalRU))
-		c.metrics.TotalCrossRegionNetworkRU.Inc(float64(writeNetworkRU + readNetworkRU))
+		c.metrics.TotalCrossRegionNetworkRU.Inc(float64(networkRU))
 
 		// Record the number of RUs consumed by the IO request.
 		if execinfra.IncludeRUEstimateInExplainAnalyze.Get(&c.settings.SV) {
@@ -796,23 +844,30 @@ func (c *tenantSideCostController) OnResponseWait(
 	} else {
 		// Estimate CPU usage for the operation.
 		cpuModel := c.cpuModel.Load()
-		writeQPS := math.Float64frombits(c.writeQPS.Load())
-		estimatedCPU := cpuModel.RequestCost(req, writeQPS/nodeCount)
-		estimatedCPU += cpuModel.ResponseCost(resp)
+		batchInfo = cpuModel.MakeBatchInfo(request, response)
+		writeQPS := math.Float64frombits(c.globalWriteQPS.Load())
+		estimatedCPU := cpuModel.BatchCost(batchInfo, writeQPS/nodeCount, replicas)
 		tokens = float64(estimatedCPU) * tokensPerCPUSecond
 
 		c.metrics.TotalEstimatedKVCPUSeconds.Inc(float64(estimatedCPU))
 		c.metrics.TotalEstimatedCPUSeconds.Inc(float64(estimatedCPU))
+
+		if batchInfo.WriteBytes > 0 {
+			// Increment metrics that track estimated number of bytes that will
+			// be replicated from the leaseholder to other replicas in the range.
+			c.UpdateEstimatedWriteReplicationBytes(ctx, targetRange, targetReplica, batchInfo.WriteBytes)
+		}
 	}
 
-	if req.IsWrite() {
-		c.metrics.TotalWriteBatches.Inc(req.WriteReplicas())
-		c.metrics.TotalWriteRequests.Inc(req.WriteReplicas() * req.WriteCount())
-		c.metrics.TotalWriteBytes.Inc(req.WriteReplicas() * req.WriteBytes())
-	} else if resp.IsRead() {
+	if batchInfo.ReadCount > 0 {
 		c.metrics.TotalReadBatches.Inc(1)
-		c.metrics.TotalReadRequests.Inc(resp.ReadCount())
-		c.metrics.TotalReadBytes.Inc(resp.ReadBytes())
+		c.metrics.TotalReadRequests.Inc(batchInfo.ReadCount)
+		c.metrics.TotalReadBytes.Inc(batchInfo.ReadBytes)
+	}
+	if batchInfo.WriteCount > 0 {
+		c.metrics.TotalWriteBatches.Inc(replicas)
+		c.metrics.TotalWriteRequests.Inc(replicas * batchInfo.WriteCount)
+		c.metrics.TotalWriteBytes.Inc(replicas * batchInfo.WriteBytes)
 	}
 
 	// TODO(andyk): Consider breaking up huge acquisition requests into chunks
@@ -894,4 +949,141 @@ func (c *tenantSideCostController) GetEstimatedCPUModel() *tenantcostmodel.Estim
 // Metrics returns a metric.Struct which holds metrics for the controller.
 func (c *tenantSideCostController) Metrics() metric.Struct {
 	return &c.metrics
+}
+
+// computeNetworkCost calculates the network cost multiplier for a read or
+// write operation. The network cost accounts for the logical byte traffic
+// between the client region and the replica regions.
+func (c *tenantSideCostController) computeNetworkCost(
+	ctx context.Context,
+	targetRange *roachpb.RangeDescriptor,
+	targetReplica *roachpb.ReplicaDescriptor,
+	isWrite bool,
+) tenantcostmodel.NetworkCost {
+	// It is unfortunate that we hardcode a particular locality tier name here.
+	// Ideally, we would have a cluster setting that specifies the name or some
+	// other way to configure it.
+	clientRegion, _ := c.locality.Find("region")
+	if clientRegion == "" {
+		// If we do not have the source, there is no way to find the multiplier.
+		log.VErrEventf(ctx, 2, "missing region tier in current node: locality=%s",
+			c.locality.String())
+		return tenantcostmodel.NetworkCost(0)
+	}
+
+	ruModel := c.ruModel.Load()
+	if ruModel == nil {
+		// This case is unlikely to happen since this method will only be
+		// called through tenant processes, which has a KV interceptor.
+		return tenantcostmodel.NetworkCost(0)
+	}
+
+	cost := tenantcostmodel.NetworkCost(0)
+	if isWrite {
+		for i := range targetRange.Replicas().Descriptors() {
+			if replicaRegion, ok := c.getReplicaRegion(ctx, &targetRange.Replicas().Descriptors()[i]); ok {
+				cost += ruModel.NetworkCost(tenantcostmodel.NetworkPath{
+					ToRegion:   replicaRegion,
+					FromRegion: clientRegion,
+				})
+			}
+		}
+	} else {
+		if replicaRegion, ok := c.getReplicaRegion(ctx, targetReplica); ok {
+			cost = ruModel.NetworkCost(tenantcostmodel.NetworkPath{
+				ToRegion:   clientRegion,
+				FromRegion: replicaRegion,
+			})
+		}
+	}
+
+	return cost
+}
+
+func (c *tenantSideCostController) getReplicaRegion(
+	ctx context.Context, replica *roachpb.ReplicaDescriptor,
+) (region string, ok bool) {
+	nodeDesc, err := c.nodeDescs.GetNodeDescriptor(replica.NodeID)
+	if err != nil {
+		log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", replica.NodeID, err)
+		// If we don't know where a node is, we can't determine the network cost
+		// for the operation.
+		return "", false
+	}
+
+	region, ok = nodeDesc.Locality.Find("region")
+	if !ok {
+		log.VErrEventf(ctx, 2, "missing region locality for n %d", nodeDesc.NodeID)
+		return "", false
+	}
+
+	return region, true
+}
+
+// UpdateEstimatedWriteReplicationBytes computes all the network paths taken by
+// the leaseholder when it replicates writes to the other replicas for the given
+// range, and then increments the corresponding metrics by the given writeBytes
+// amount.
+func (c *tenantSideCostController) UpdateEstimatedWriteReplicationBytes(
+	ctx context.Context,
+	targetRange *roachpb.RangeDescriptor,
+	targetReplica *roachpb.ReplicaDescriptor,
+	writeBytes int64,
+) {
+	fromNode, err := c.nodeDescs.GetNodeDescriptor(targetReplica.NodeID)
+	if err != nil {
+		// If we don't know where a node is, we can't determine the network
+		// path for the operation.
+		log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", targetReplica.NodeID, err)
+		return
+	}
+	for _, replica := range targetRange.Replicas().Descriptors() {
+		if replica.ReplicaID == targetReplica.ReplicaID {
+			continue
+		}
+		toNode, err := c.nodeDescs.GetNodeDescriptor(replica.NodeID)
+		if err != nil {
+			// If we don't know where a node is, we can't determine the network
+			// path for the operation.
+			log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", replica.NodeID, err)
+			continue
+		}
+
+		c.metrics.EstimatedReplicationBytesForPath(
+			targetReplica.NodeID, fromNode.Locality,
+			replica.NodeID, toNode.Locality,
+		).Inc(writeBytes)
+	}
+}
+
+// calculateBackgroundCPUSecs returns the number of CPU seconds estimated to
+// have been consumed by background work triggered by this node during the given
+// interval. This is proportional to the amount of estimated CPU consumed by
+// this node during that interval, and is capped to a maximum fixed amount, as
+// specified in the model.
+func calculateBackgroundCPUSecs(
+	cpuModel *tenantcostmodel.EstimatedCPUModel,
+	globalEstimatedCPURate float64,
+	deltaTime time.Duration,
+	localEstimatedCPUSecs float64,
+) float64 {
+	// Determine how much eCPU was consumed by all SQL nodes during the time
+	// interval. The global eCPU rate can be unavailable or stale, so use the
+	// local rate if it's larger.
+	elapsedSeconds := float64(deltaTime) / float64(time.Second)
+	globalEstimatedCPUSecs :=
+		math.Max(globalEstimatedCPURate*elapsedSeconds, localEstimatedCPUSecs)
+	globalEstimatedCPURate = globalEstimatedCPUSecs / elapsedSeconds
+
+	// Determine how much CPU was consumed by overhead during the last tick.
+	// If there was less than "Amortization" eCPUs of usage, then only add
+	// a portion of the overhead.
+	backgroundCPUSecs := float64(cpuModel.BackgroundCPU.Amount) * elapsedSeconds
+	if globalEstimatedCPURate < cpuModel.BackgroundCPU.Amortization {
+		backgroundCPUSecs *= globalEstimatedCPURate / cpuModel.BackgroundCPU.Amortization
+	}
+
+	// This node is responsible for its percentage share of background usage.
+	backgroundCPUSecs *= localEstimatedCPUSecs / globalEstimatedCPUSecs
+	return backgroundCPUSecs
 }

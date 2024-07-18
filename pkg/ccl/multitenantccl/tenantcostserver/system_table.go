@@ -573,7 +573,7 @@ func InspectTenantMetadata(
 		tenant.Bucket.TokenCurrent,
 		tenant.Bucket.TokenCurrentAvg,
 	)
-	fmt.Fprintf(&buf, "Consumption: ru=%.12g kvru=%.12g  reads=%d in %d batches (%d bytes)  writes=%d in %d batches (%d bytes)  pod-cpu-usage: %g secs  pgwire-egress=%d bytes  external-egress=%d bytes  external-ingress=%d bytes\n",
+	fmt.Fprintf(&buf, "Consumption: ru=%.12g kvru=%.12g  reads=%d in %d batches (%d bytes)  writes=%d in %d batches (%d bytes)  pod-cpu-usage: %g secs  pgwire-egress=%d bytes  external-egress=%d bytes  external-ingress=%d bytes  estimated-cpu: %g secs\n",
 		tenant.Consumption.RU,
 		tenant.Consumption.KVRU,
 		tenant.Consumption.ReadRequests,
@@ -586,8 +586,11 @@ func InspectTenantMetadata(
 		tenant.Consumption.PGWireEgressBytes,
 		tenant.Consumption.ExternalIOEgressBytes,
 		tenant.Consumption.ExternalIOIngressBytes,
+		tenant.Consumption.EstimatedCPUSeconds,
 	)
-	fmt.Fprintf(&buf, "Rates: write-batches=%.12g,%.12g\n", tenant.Rates.current.WriteBatchRate, tenant.Rates.next.WriteBatchRate)
+	fmt.Fprintf(&buf, "Rates: write-batches=%.12g,%.12g  estimated-cpu=%.12g,%.12g\n",
+		tenant.Rates.current.WriteBatchRate, tenant.Rates.next.WriteBatchRate,
+		tenant.Rates.current.EstimatedCPURate, tenant.Rates.next.EstimatedCPURate)
 	fmt.Fprintf(&buf, "Last update: %s\n", tenant.LastUpdate.Time.Format(timeFormat))
 	fmt.Fprintf(&buf, "First active instance: %d\n", tenant.FirstInstance)
 

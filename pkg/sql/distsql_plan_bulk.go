@@ -107,6 +107,8 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningTenant(
 	if err != nil {
 		return nil, nil, err
 	}
+	pods, _ = dsp.filterUnhealthyInstances(pods, planCtx.nodeStatuses)
+
 	sqlInstanceIDs := make([]base.SQLInstanceID, 0, len(pods))
 	for _, pod := range pods {
 		if ok, _ := pod.Locality.Matches(localityFilter); ok {
@@ -176,29 +178,54 @@ func ReplanOnChangedFraction(thresholdFn func() float64) PlanChangeDecision {
 	}
 }
 
-// PlanDeltaFn describes a function that measures the difference of two physical
-// plans as a scalar.
-type PlanDeltaFn func(*PhysicalPlan, *PhysicalPlan) float64
+// countNodesFn counts the source and dest nodes in a Physical Plan
+type countNodesFn func(plan *PhysicalPlan) (src, dst map[string]struct{}, nodeCount int)
 
 // ReplanOnCustomFunc returns a PlanChangeDecision that returns true when a new
 // plan is sufficiently different than the previous plan. This occurs if the
 // measureChangeFn returns a scalar higher than the thresholdFn.
 //
 // If the thresholdFn returns 0.0, a new plan is never chosen.
-func ReplanOnCustomFunc(
-	measureChangeFn PlanDeltaFn, thresholdFn func() float64,
-) PlanChangeDecision {
+func ReplanOnCustomFunc(getNodes countNodesFn, thresholdFn func() float64) PlanChangeDecision {
 	return func(ctx context.Context, oldPlan, newPlan *PhysicalPlan) bool {
 		threshold := thresholdFn()
 		if threshold == 0.0 {
 			return false
 		}
-		change := measureChangeFn(oldPlan, newPlan)
+		change := MeasurePlanChange(oldPlan, newPlan, getNodes)
 		replan := change > threshold
 		log.VEventf(ctx, 1, "Replanning change: %.2f; threshold: %.2f; choosing new plan %v", change,
 			threshold, replan)
 		return replan
 	}
+}
+
+// measurePlanChange computes the number of node changes (addition or removal)
+// in the source and destination clusters as a fraction of the total number of
+// nodes in both clusters in the previous plan.
+func MeasurePlanChange(
+	before, after *PhysicalPlan,
+	getNodes func(plan *PhysicalPlan) (src, dst map[string]struct{}, nodeCount int),
+) float64 {
+	countMissingElements := func(set1, set2 map[string]struct{}) int {
+		diff := 0
+		for id := range set1 {
+			if _, ok := set2[id]; !ok {
+				diff++
+			}
+		}
+		return diff
+	}
+
+	oldSrc, oldDst, oldCount := getNodes(before)
+	newSrc, newDst, _ := getNodes(after)
+	diff := 0
+	// To check for both introduced nodes and removed nodes, swap input order.
+	diff += countMissingElements(oldSrc, newSrc)
+	diff += countMissingElements(newSrc, oldSrc)
+	diff += countMissingElements(oldDst, newDst)
+	diff += countMissingElements(newDst, oldDst)
+	return float64(diff) / float64(oldCount)
 }
 
 // ErrPlanChanged is a sentinel marker error for use to signal a plan changed.

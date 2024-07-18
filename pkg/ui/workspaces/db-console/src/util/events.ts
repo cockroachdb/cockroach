@@ -179,7 +179,11 @@ export function getEventDescription(e: clusterUiApi.EventColumns): string {
     case eventTypes.DROP_ROLE:
       return `Role Dropped: User ${info.User} dropped role ${info.RoleName}`;
     case eventTypes.ALTER_ROLE:
-      return `Role Altered: User ${info.User} altered role ${info.RoleName} with options ${info.Options}`;
+      if (info.Options && info.Options.length > 0) {
+        return `Role Altered: User ${info.User} altered role ${info.RoleName} with options ${info.Options}`;
+      } else {
+        return `Role Altered: User ${info.User} altered role ${info.RoleName}`;
+      }
     case eventTypes.IMPORT:
       return `Import Job: User ${info.User} has a job ${info.JobID} running with status ${info.Status}`;
     case eventTypes.RESTORE:
@@ -201,6 +205,10 @@ export function getEventDescription(e: clusterUiApi.EventColumns): string {
       return `Unsafe: User ${info.User} executed crdb_internal.${
         e.eventType
       }, Info: ${JSON.stringify(info, null, 2)}`;
+    case eventTypes.DISK_SLOWNESS_DETECTED:
+      return `Disk Slowness Detected: Node ${info.NodeID} Store ${info.StoreID} is experiencing a slow disk`;
+    case eventTypes.DISK_SLOWNESS_CLEARED:
+      return `Disk Slowness Cleared: Node ${info.NodeID} Store ${info.StoreID} is no longer experiencing a slow disk`;
     default:
       return `Event: ${e.eventType}, content: ${JSON.stringify(info, null, 2)}`;
   }
@@ -262,6 +270,7 @@ export interface EventInfo {
   ForceNotice?: string;
   PreviousDescriptor?: string;
   NewDescriptor?: string;
+  StoreID?: string;
 }
 
 export function getDroppedObjectsText(eventInfo: EventInfo): string {

@@ -250,7 +250,7 @@
 /pkg/ccl/storageccl/         @cockroachdb/disaster-recovery
 /pkg/ccl/cloudccl/           @cockroachdb/disaster-recovery
 /pkg/cloud/                  @cockroachdb/disaster-recovery
-/pkg/sql/distsql_plan_csv.go @cockroachdb/disaster-recovery
+/pkg/sql/distsql_plan_bulk*  @cockroachdb/disaster-recovery
 
 /pkg/geo/                    @cockroachdb/spatial
 
@@ -264,9 +264,9 @@
 /pkg/kv/bulk/                           @cockroachdb/disaster-recovery
 /pkg/kv/kvbase/                         @cockroachdb/kv-prs
 /pkg/kv/kvclient/                       @cockroachdb/kv-prs
-/pkg/kv/kvclient/kvcoord/*rangefeed*    @cockroachdb/repl-prs
+/pkg/kv/kvclient/kvcoord/*rangefeed*    @cockroachdb/kv-prs
 /pkg/kv/kvclient/kvstreamer             @cockroachdb/sql-queries-prs
-/pkg/kv/kvclient/rangefeed/             @cockroachdb/repl-prs
+/pkg/kv/kvclient/rangefeed/             @cockroachdb/kv-prs
 /pkg/kv/kvnemesis/                      @cockroachdb/kv-prs
 /pkg/kv/kvpb/                           @cockroachdb/kv-prs
 /pkg/kv/kvpb/.gitattributes             @cockroachdb/dev-inf
@@ -284,24 +284,24 @@
 /pkg/kv/kvprober/                       @cockroachdb/kv-prs
 # Same subdirectory rule as above for `/pkg/kv`
 /pkg/kv/kvserver/*.*                    @cockroachdb/kv-prs
-/pkg/kv/kvserver/*circuit*.go           @cockroachdb/repl-prs
-/pkg/kv/kvserver/*closed*ts*.go         @cockroachdb/repl-prs
-/pkg/kv/kvserver/*_app*.go              @cockroachdb/repl-prs
-/pkg/kv/kvserver/*closed_timestamp*.go  @cockroachdb/repl-prs
-/pkg/kv/kvserver/*consistency*.go       @cockroachdb/repl-prs
-/pkg/kv/kvserver/*probe*.go             @cockroachdb/repl-prs
-/pkg/kv/kvserver/*proposal*.go          @cockroachdb/repl-prs
-/pkg/kv/kvserver/*raft*.go              @cockroachdb/repl-prs
-/pkg/kv/kvserver/*raft*/                @cockroachdb/repl-prs
-/pkg/kv/kvserver/*rangefeed*.go         @cockroachdb/repl-prs
-/pkg/kv/kvserver/*sideload*.go          @cockroachdb/repl-prs
+/pkg/kv/kvserver/*circuit*.go           @cockroachdb/kv-prs
+/pkg/kv/kvserver/*closed*ts*.go         @cockroachdb/kv-prs
+/pkg/kv/kvserver/*_app*.go              @cockroachdb/kv-prs
+/pkg/kv/kvserver/*closed_timestamp*.go  @cockroachdb/kv-prs
+/pkg/kv/kvserver/*consistency*.go       @cockroachdb/kv-prs
+/pkg/kv/kvserver/*probe*.go             @cockroachdb/kv-prs
+/pkg/kv/kvserver/*proposal*.go          @cockroachdb/kv-prs
+/pkg/kv/kvserver/*raft*.go              @cockroachdb/kv-prs
+/pkg/kv/kvserver/*raft*/                @cockroachdb/kv-prs
+/pkg/kv/kvserver/*rangefeed*.go         @cockroachdb/kv-prs
+/pkg/kv/kvserver/*sideload*.go          @cockroachdb/kv-prs
 /pkg/kv/kvserver/abortspan/             @cockroachdb/kv-prs
 /pkg/kv/kvserver/allocator/             @cockroachdb/kv-prs
-/pkg/kv/kvserver/apply/                 @cockroachdb/repl-prs
+/pkg/kv/kvserver/apply/                 @cockroachdb/kv-prs
 /pkg/kv/kvserver/asim/                  @cockroachdb/kv-prs
 /pkg/kv/kvserver/batcheval/             @cockroachdb/kv-prs
 /pkg/kv/kvserver/benignerror/           @cockroachdb/kv-prs
-/pkg/kv/kvserver/closedts/              @cockroachdb/repl-prs
+/pkg/kv/kvserver/closedts/              @cockroachdb/kv-prs
 /pkg/kv/kvserver/concurrency/           @cockroachdb/kv-prs
 /pkg/kv/kvserver/constraint/            @cockroachdb/kv-prs
 /pkg/kv/kvserver/diskmap/               @cockroachdb/kv-prs
@@ -312,18 +312,18 @@
 /pkg/kv/kvserver/kvflowcontrol/         @cockroachdb/admission-control
 /pkg/kv/kvserver/kvserverbase/          @cockroachdb/kv-prs
 /pkg/kv/kvserver/kvserverpb/            @cockroachdb/kv-prs
-/pkg/kv/kvserver/kvstorage/             @cockroachdb/repl-prs
+/pkg/kv/kvserver/kvstorage/             @cockroachdb/kv-prs
 /pkg/kv/kvserver/leases/                @cockroachdb/kv-prs
 /pkg/kv/kvserver/liveness/              @cockroachdb/kv-prs
 /pkg/kv/kvserver/load/                  @cockroachdb/kv-prs
 /pkg/kv/kvserver/lockspanset/           @cockroachdb/kv-prs
-/pkg/kv/kvserver/logstore/              @cockroachdb/repl-prs
-/pkg/kv/kvserver/loqrecovery/           @cockroachdb/repl-prs
+/pkg/kv/kvserver/logstore/              @cockroachdb/kv-prs
+/pkg/kv/kvserver/loqrecovery/           @cockroachdb/kv-prs
 /pkg/kv/kvserver/multiqueue/            @cockroachdb/kv-prs
 /pkg/kv/kvserver/protectedts/           @cockroachdb/kv-prs
-/pkg/kv/kvserver/rangefeed/             @cockroachdb/repl-prs
+/pkg/kv/kvserver/rangefeed/             @cockroachdb/kv-prs
 /pkg/kv/kvserver/rangelog/              @cockroachdb/kv-prs
-/pkg/kv/kvserver/rditer/                @cockroachdb/repl-prs
+/pkg/kv/kvserver/rditer/                @cockroachdb/kv-prs
 /pkg/kv/kvserver/readsummary/           @cockroachdb/kv-prs
 /pkg/kv/kvserver/replicastats/          @cockroachdb/kv-prs
 /pkg/kv/kvserver/reports/               @cockroachdb/kv-prs
@@ -331,6 +331,7 @@
 /pkg/kv/kvserver/spanset/               @cockroachdb/kv-prs
 /pkg/kv/kvserver/split/                 @cockroachdb/kv-prs
 /pkg/kv/kvserver/stateloader/           @cockroachdb/kv-prs
+/pkg/kv/kvserver/storeliveness/         @cockroachdb/kv-prs
 /pkg/kv/kvserver/tenantrate/            @cockroachdb/kv-prs
 #!/pkg/kv/kvserver/testdata/            @cockroachdb/kv-prs-noreview
 /pkg/kv/kvserver/tscache/               @cockroachdb/kv-prs
@@ -338,9 +339,9 @@
 /pkg/kv/kvserver/txnwait/               @cockroachdb/kv-prs
 /pkg/kv/kvserver/uncertainty/           @cockroachdb/kv-prs
 
-# KV/replication team owns integration with raft.
+# The KV team owns integration with raft.
 #
-/pkg/raft/ @cockroachdb/repl-prs
+/pkg/raft/ @cockroachdb/kv-prs
 
 /pkg/ccl/spanconfigccl/                            @cockroachdb/kv-prs @cockroachdb/sql-foundations
 /pkg/ccl/spanconfigccl/spanconfigkvaccessorccl/    @cockroachdb/kv-prs
@@ -376,10 +377,12 @@
 #!/pkg/ccl/cliccl/           @cockroachdb/unowned
 /pkg/ccl/cmdccl/stub-schema-registry/ @cockroachdb/cdc-prs
 /pkg/ccl/cmdccl/clusterrepl/ @cockroachdb/disaster-recovery
+/pkg/ccl/gqpccl/             @cockroachdb/sql-queries-prs
 #!/pkg/ccl/gssapiccl/        @cockroachdb/unowned
 /pkg/ccl/jwtauthccl/         @cockroachdb/cloud-identity
 #!/pkg/ccl/kvccl/              @cockroachdb/kv-noreview
 /pkg/ccl/kvccl/kvtenantccl/  @cockroachdb/server-prs
+/pkg/ccl/ldapccl/            @cockroachdb/prodsec
 #!/pkg/ccl/upgradeccl/       @cockroachdb/release-eng-prs @cockroachdb/upgrade-prs
 #!/pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
 #!/pkg/ccl/sqlitelogictestccl/ @cockroachdb/sql-queries-noreview
@@ -459,7 +462,6 @@
 /pkg/cmd/roachprod-microbench/ @cockroachdb/test-eng
 /pkg/cmd/roachprod-stress/   @cockroachdb/test-eng
 /pkg/cmd/roachtest/          @cockroachdb/test-eng
-/pkg/cmd/roachtest-selector/              @cockroachdb/test-eng
 /pkg/cmd/roachtest/tests/activerecord.go  @cockroachdb/test-eng @cockroachdb/docs-infra-prs
 /pkg/cmd/roachtest/tests/asyncpg.go       @cockroachdb/test-eng @cockroachdb/docs-infra-prs
 /pkg/cmd/roachtest/tests/django.go        @cockroachdb/test-eng @cockroachdb/docs-infra-prs

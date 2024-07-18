@@ -14,7 +14,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -70,7 +72,7 @@ func (ti ColTypeInfo) Type(idx int) *types.T {
 
 // ValidateColumnDefType returns an error if the type of a column definition is
 // not valid. It is checked when a column is created or altered.
-func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t *types.T) error {
+func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T) error {
 	switch t.Family() {
 	case types.StringFamily, types.CollatedStringFamily:
 		if t.Family() == types.CollatedStringFamily {
@@ -102,7 +104,7 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 		if err := types.CheckArrayElementType(t.ArrayContents()); err != nil {
 			return err
 		}
-		return ValidateColumnDefType(ctx, version, t.ArrayContents())
+		return ValidateColumnDefType(ctx, st, t.ArrayContents())
 
 	case types.BitFamily, types.IntFamily, types.FloatFamily, types.BoolFamily, types.BytesFamily, types.DateFamily,
 		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
@@ -117,6 +119,17 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 		}
 		if t.TypeMeta.ImplicitRecordType {
 			return unimplemented.NewWithIssue(70099, "cannot use table record type as table column")
+		}
+
+	case types.PGVectorFamily:
+		if !st.Version.IsActive(ctx, clusterversion.V24_2) {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"pg_vector not supported until version 24.2",
+			)
+		}
+		if err := base.CheckEnterpriseEnabled(st, "vector datatype"); err != nil {
+			return err
 		}
 
 	default:
@@ -191,6 +204,8 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 	case types.TupleFamily, types.GeographyFamily, types.GeometryFamily:
 		return true
 	case types.TSVectorFamily, types.TSQueryFamily:
+		return true
+	case types.PGVectorFamily:
 		return true
 	}
 	return false

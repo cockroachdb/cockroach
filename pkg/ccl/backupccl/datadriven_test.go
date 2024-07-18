@@ -178,7 +178,7 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 			t.Fatalf("clusterVersion %s does not exist in data driven global map", cfg.beforeVersion)
 		}
 		params.ServerArgs.Knobs.Server = &server.TestingKnobs{
-			BinaryVersionOverride:          beforeKey.Version(),
+			ClusterVersionOverride:         beforeKey.Version(),
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
 		}
 	}

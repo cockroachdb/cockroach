@@ -99,6 +99,11 @@ func (s *TestState) Statements() []string {
 	return s.statements
 }
 
+// SemaCtx implements the scbuild.Dependencies interface.
+func (s *TestState) SemaCtx() *tree.SemaContext {
+	return s.semaCtx
+}
+
 // IncrementSchemaChangeAlterCounter implements the scbuild.Dependencies
 // interface.
 func (s *TestState) IncrementSchemaChangeAlterCounter(counterType string, extra ...string) {
@@ -650,6 +655,12 @@ func (s *TestState) GetAllSchemasInDatabase(
 // MustReadDescriptor implements the scbuild.CatalogReader interface.
 func (s *TestState) MustReadDescriptor(ctx context.Context, id descpb.ID) catalog.Descriptor {
 	desc, err := s.mustReadImmutableDescriptor(id)
+	if err != nil {
+		panic(err)
+	}
+	// Ensure that any types in the descriptor we read are hydrated. This is
+	// required to correctly print out TypeName in the ColumnType element.
+	err = typedesc.HydrateTypesInDescriptor(ctx, desc, s)
 	if err != nil {
 		panic(err)
 	}

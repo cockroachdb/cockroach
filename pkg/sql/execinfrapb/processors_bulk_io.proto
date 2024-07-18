@@ -242,8 +242,8 @@ message StreamIngestionDataSpec {
   // ingesting data from the PreviousReplicatedTimestamp described above.
   optional util.hlc.Timestamp initial_scan_timestamp = 11 [(gogoproto.nullable) = false];
 
-  // StreamAddress locate the stream so that a stream client can be initialized.
-  optional string stream_address = 3 [(gogoproto.nullable) = false];
+  reserved 3; // this was `string stream_address` in case we want to resurrect it.
+
   // JobID is the job ID of the stream ingestion job.
   optional int64 job_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
 
@@ -480,6 +480,13 @@ message CloudStorageTestSpec {
   // NEXT ID: 3;
 }
 
+message TableReplicationMetadata {
+  optional cockroach.sql.sqlbase.TableDescriptor source_descriptor = 1 [(gogoproto.nullable) = false];
+  optional string destination_parent_database_name = 2 [(gogoproto.nullable) = false];
+  optional string destination_parent_schema_name = 3 [(gogoproto.nullable) = false];
+  optional string destination_table_name = 4 [(gogoproto.nullable) = false];
+}
+
 message LogicalReplicationWriterSpec {
     // JobID of the job that ran the replicationWriterProcessor.
     optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
@@ -511,6 +518,7 @@ message LogicalReplicationWriterSpec {
     // Checkpoint stores a set of resolved spans denoting completed progress.
     optional jobs.jobspb.StreamIngestionCheckpoint checkpoint = 7 [(gogoproto.nullable) = false];
 
-    // TableDescriptors is a map between from destination table IDs to the source table descriptor.
-    map<int32, cockroach.sql.sqlbase.TableDescriptor> table_descriptors = 8 [(gogoproto.nullable) = false];
+    // TableReplicationMetadata is a map from destination table IDs to metadata
+    // containing source table descriptors and fully qualified destination table names.
+    map<int32, TableReplicationMetadata> table_metadata = 8 [(gogoproto.nullable) = false];
 }

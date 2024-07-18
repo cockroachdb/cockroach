@@ -25,8 +25,9 @@ go_test(
     ],
     embed = [":httputil"],
     deps = [
+        "//pkg/util/assetbundle",
         "//pkg/util/leaktest",
-        "//pkg/util/targz",
+        "@com_github_klauspost_compress//zstd",
         "@com_github_stretchr_testify//require",
     ],
 )

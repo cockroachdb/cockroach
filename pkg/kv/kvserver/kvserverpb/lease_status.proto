@@ -79,7 +79,10 @@ enum LeaseState {
 
 // LeaseStatus holds the lease state, the current clock time at which the
 // state is accurate, the request time at which the status is accurate, the
-// lease iself, and optionally the liveness if the lease is epoch-based.
+// lease itself, and optionally the liveness if the lease is epoch-based.
+//
+// LeaseStatus is not persisted anywhere. However, it is part of the
+// serverpb.RangeInfo proto.
 message LeaseStatus {
   // Lease which this status describes.
   roachpb.Lease lease = 1 [(gogoproto.nullable) = false];

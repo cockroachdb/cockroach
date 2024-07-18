@@ -19,6 +19,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -46,7 +47,7 @@ var (
 
 // Config is used to construct an OracleFactory.
 type Config struct {
-	NodeDescs   kvcoord.NodeDescStore
+	NodeDescs   kvclient.NodeDescStore
 	NodeID      roachpb.NodeID   // current node's ID. 0 for secondary tenants.
 	Locality    roachpb.Locality // current node's locality.
 	Settings    *cluster.Settings
@@ -144,7 +145,7 @@ func MakeQueryState() QueryState {
 // randomOracle is a Oracle that chooses the lease holder randomly
 // among the replicas in a range descriptor.
 type randomOracle struct {
-	nodeDescs kvcoord.NodeDescStore
+	nodeDescs kvclient.NodeDescStore
 }
 
 func newRandomOracle(cfg Config) Oracle {
@@ -168,7 +169,7 @@ func (o *randomOracle) ChoosePreferredReplica(
 
 type closestOracle struct {
 	st        *cluster.Settings
-	nodeDescs kvcoord.NodeDescStore
+	nodeDescs kvclient.NodeDescStore
 	// nodeID and locality of the current node. Used to give preference to the
 	// current node and others "close" to it.
 	//
@@ -236,7 +237,7 @@ const maxPreferredRangesPerLeaseHolder = 10
 type binPackingOracle struct {
 	st                               *cluster.Settings
 	maxPreferredRangesPerLeaseHolder int
-	nodeDescs                        kvcoord.NodeDescStore
+	nodeDescs                        kvclient.NodeDescStore
 	// nodeID and locality of the current node. Used to give preference to the
 	// current node and others "close" to it.
 	//
@@ -305,7 +306,7 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 // RangeUnavailableError is returned.
 func replicaSliceOrErr(
 	ctx context.Context,
-	nodeDescs kvcoord.NodeDescStore,
+	nodeDescs kvclient.NodeDescStore,
 	desc *roachpb.RangeDescriptor,
 	filter kvcoord.ReplicaSliceFilter,
 ) (kvcoord.ReplicaSlice, error) {
@@ -326,7 +327,7 @@ func latencyFunc(rpcCtx *rpc.Context) kvcoord.LatencyFunc {
 }
 
 type preferFollowerOracle struct {
-	nodeDescs kvcoord.NodeDescStore
+	nodeDescs kvclient.NodeDescStore
 }
 
 func newPreferFollowerOracle(cfg Config) Oracle {

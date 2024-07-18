@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,11 +29,12 @@ import (
 
 // Stream is a object capable of transmitting RangeFeedEvents.
 type Stream interface {
-	// Context returns the context for this stream.
-	Context() context.Context
-	// Send blocks until it sends m, the stream is done, or the stream breaks.
-	// Send must be safe to call on the same stream in different goroutines.
-	Send(*kvpb.RangeFeedEvent) error
+	kvpb.RangeFeedEventSink
+	// Disconnect disconnects the stream with the provided error. Note that this
+	// function can be called by the processor worker while holding raftMu, so it
+	// is important that this function doesn't block IO or try acquiring locks
+	// that could lead to deadlocks.
+	Disconnect(err *kvpb.Error)
 }
 
 // Shared event is an entry stored in registration channel. Each entry is
@@ -80,11 +80,11 @@ type registration struct {
 	catchUpTimestamp hlc.Timestamp // exclusive
 	withDiff         bool
 	withFiltering    bool
+	withOmitRemote   bool
 	metrics          *Metrics
 
 	// Output.
 	stream Stream
-	done   *future.ErrorFuture
 	unreg  func()
 	// Internal.
 	id            int64
@@ -119,21 +119,21 @@ func newRegistration(
 	catchUpIter *CatchUpIterator,
 	withDiff bool,
 	withFiltering bool,
+	withOmitRemote bool,
 	bufferSz int,
 	blockWhenFull bool,
 	metrics *Metrics,
 	stream Stream,
 	unregisterFn func(),
-	done *future.ErrorFuture,
 ) registration {
 	r := registration{
 		span:             span,
 		catchUpTimestamp: startTS,
 		withDiff:         withDiff,
 		withFiltering:    withFiltering,
+		withOmitRemote:   withOmitRemote,
 		metrics:          metrics,
 		stream:           stream,
-		done:             done,
 		unreg:            unregisterFn,
 		buf:              make(chan *sharedEvent, bufferSz),
 		blockWhenFull:    blockWhenFull,
@@ -300,7 +300,7 @@ func (r *registration) disconnect(pErr *kvpb.Error) {
 			r.mu.outputLoopCancelFn()
 		}
 		r.mu.disconnected = true
-		r.done.Set(pErr.GoError())
+		r.stream.Disconnect(pErr)
 	}
 }
 
@@ -405,7 +405,7 @@ func (r *registration) maybeRunCatchUpScan(ctx context.Context) error {
 		r.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	return catchUpIter.CatchUpScan(ctx, r.stream.Send, r.withDiff, r.withFiltering)
+	return catchUpIter.CatchUpScan(ctx, r.stream.Send, r.withDiff, r.withFiltering, r.withOmitRemote)
 }
 
 // ID implements interval.Interface.
@@ -469,7 +469,7 @@ func (reg *registry) PublishToOverlapping(
 	ctx context.Context,
 	span roachpb.Span,
 	event *kvpb.RangeFeedEvent,
-	omitInRangefeeds bool,
+	valueMetadata logicalOpMetadata,
 	alloc *SharedBudgetAllocation,
 ) {
 	// Determine the earliest starting timestamp that a registration
@@ -496,8 +496,9 @@ func (reg *registry) PublishToOverlapping(
 	reg.forOverlappingRegs(ctx, span, func(r *registration) (bool, *kvpb.Error) {
 		// Don't publish events if they:
 		// 1. are equal to or less than the registration's starting timestamp, or
-		// 2. have OmitInRangefeeds = true and this registration has opted into filtering.
-		if r.catchUpTimestamp.Less(minTS) && !(r.withFiltering && omitInRangefeeds) {
+		// 2. have OmitInRangefeeds = true and this registration has opted into filtering, or
+		// 3. have OmitRemote = true and this value is from a remote cluster.
+		if r.catchUpTimestamp.Less(minTS) && !(r.withFiltering && valueMetadata.omitInRangefeeds) && (!r.withOmitRemote || valueMetadata.originID == 0) {
 			r.publish(ctx, event, alloc)
 		}
 		return false, nil

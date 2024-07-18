@@ -22,6 +22,7 @@ CREATE TABLE g (b INT PRIMARY KEY)
 statement ok
 ALTER TABLE g INJECT STATISTICS '[
   {
+    "id": 1,
     "avg_size": 1,
     "columns": [
       "b"
@@ -52,10 +53,10 @@ ALTER TABLE g INJECT STATISTICS '[
     "histo_version": 2,
     "name": "__auto__",
     "null_count": 0,
-    "row_count": 3,
-    "statistics_id": 1
+    "row_count": 3
   },
   {
+    "id": 2,
     "avg_size": 1,
     "columns": [
       "b"
@@ -125,6 +126,7 @@ ALTER TABLE g INJECT STATISTICS '[
     "row_count": 9
   },
     {
+      "id": 3,
       "avg_size": 2,
       "columns": [
         "b"
@@ -156,34 +158,21 @@ ALTER TABLE g INJECT STATISTICS '[
       "name": "partial",
       "null_count": 0,
       "partial_predicate": "(b < 0:::INT8) OR ((b > 8:::INT8) OR (b IS NULL))",
-      "row_count": 3
+      "row_count": 3,
+      "full_statistic_id": 2
     }
 ]'
 
-# Here and below, we retrieve the id of the statistic (which is the
-# histogram_id) to ensure that we can mark our partial injected statistic(s) as
-# being collected from the injected full table statistics, for the purposes of
-# testing. This is because our merge function verifies that a partial statistic
-# is merging with the full statistic it has been collected from. Since the
-# statistic id is generated when a statistic is added to
-# system.table_statistics, and since we don't store it in the JSON statistic
-# object, we need to set it manually here.
-
-let $stat_id_simple
-SELECT "histogram_id" FROM [SHOW STATISTICS FOR TABLE g] WHERE created = '1988-08-07 00:00:00.000000'
-
-statement ok
-UPDATE system.table_statistics SET "fullStatisticID" = '$stat_id_simple' WHERE name = 'partial'
-
-query TTTIIII
-SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
+query IITTTIIII colnames
+SELECT histogram_id, full_histogram_id, statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
 FROM [SHOW STATISTICS FOR TABLE g WITH MERGE]
 ORDER BY created
 ----
-__auto__    {b}  1988-08-05 00:00:00 +0000 UTC  3   3   0  1
-__auto__    {b}  1988-08-07 00:00:00 +0000 UTC  9   9   0  1
-partial     {b}  1988-08-08 00:00:00 +0000 UTC  3   3   0  2
-__merged__  {b}  1988-08-08 00:00:00 +0000 UTC  12  12  0  1
+histogram_id  full_histogram_id  statistics_name  column_names  created                        row_count  distinct_count  null_count  avg_size
+1             NULL               __auto__         {b}           1988-08-05 00:00:00 +0000 UTC  3          3               0           1
+2             NULL               __auto__         {b}           1988-08-07 00:00:00 +0000 UTC  9          9               0           1
+3             2                  partial          {b}           1988-08-08 00:00:00 +0000 UTC  3          3               0           2
+0             NULL               __merged__       {b}           1988-08-08 00:00:00 +0000 UTC  12         12              0           1
 
 query T
 SELECT jsonb_pretty(stat)
@@ -453,6 +442,7 @@ statement ok
 ALTER TABLE h INJECT STATISTICS '
  [
       {
+          "id": 1,
           "avg_size": 1,
           "columns": [
               "h"
@@ -503,15 +493,10 @@ ALTER TABLE h INJECT STATISTICS '
            "name": "partial",
            "null_count": 0,
            "partial_predicate": "(h < 10:::INT8) OR ((h > 40:::INT8) OR (h IS NULL))",
-           "row_count": 0
+           "row_count": 0,
+           "full_statistic_id": 1
        }
  ]'
-
-let $stat_id_empty
-SELECT "histogram_id" FROM [SHOW STATISTICS FOR TABLE h] WHERE statistics_name = 'full'
-
-statement ok
-UPDATE system.table_statistics SET "fullStatisticID" = '$stat_id_empty' WHERE name = 'partial'
 
 query TTTIIII
 SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
@@ -564,6 +549,7 @@ WHERE stat->>'name' = '__merged__';
     ],
     "histo_col_type": "INT8",
     "histo_version": 2,
+    "id": 1,
     "name": "__merged__",
     "null_count": 0,
     "row_count": 4
@@ -578,6 +564,7 @@ CREATE TABLE i (i INT PRIMARY KEY)
 statement ok
 ALTER TABLE i INJECT STATISTICS '[
   {
+    "id": 1,
     "avg_size": 1,
     "columns": [
       "i"
@@ -660,15 +647,10 @@ ALTER TABLE i INJECT STATISTICS '[
     "name": "sp",
     "null_count": 0,
     "partial_predicate": "(i < 0:::INT8) OR ((i > 3:::INT8) OR (i IS NULL))",
-    "row_count": 6
+    "row_count": 6,
+    "full_statistic_id": 1
   }
 ]'
-
-let $stat_id_start_and_end
-SELECT "histogram_id" FROM [SHOW STATISTICS FOR TABLE i] WHERE statistics_name = 'full_0'
-
-statement ok
-UPDATE system.table_statistics SET "fullStatisticID" = '$stat_id_start_and_end' WHERE name = 'sp'
 
 query TTTIIII
 SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
@@ -756,6 +738,8 @@ WHERE stat->>'name' = '__merged__';
     "row_count": 9
 }
 
+statement ok
+SET optimizer_use_merged_partial_statistics = on
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM i WHERE i = 6 OR i <= -1
@@ -785,6 +769,7 @@ statement ok
 ALTER TABLE ab INJECT STATISTICS
 '[
     {
+       "id":1,
        "avg_size":3,
        "columns":[
           "b"
@@ -897,9 +882,11 @@ ALTER TABLE ab INJECT STATISTICS
        "name":"partial_b",
        "null_count":5,
        "row_count":36,
-       "partial_predicate": "(b < 15:::INT8) OR ((b > 35:::INT8) OR (b IS NULL))"
+       "partial_predicate": "(b < 15:::INT8) OR ((b > 35:::INT8) OR (b IS NULL))",
+       "full_statistic_id": 1
     },
     {
+       "id":2,
        "avg_size":3,
        "columns":[
           "a"
@@ -1006,21 +993,10 @@ ALTER TABLE ab INJECT STATISTICS
        "name":"partial_a",
        "null_count":5,
        "row_count":36,
-       "partial_predicate": "(b < 15:::INT8) OR ((b > 35:::INT8) OR (b IS NULL))"
+       "partial_predicate": "(b < 15:::INT8) OR ((b > 35:::INT8) OR (b IS NULL))",
+       "full_statistic_id": 2
     }
  ]'
-
-let $stat_id_full_a
-SELECT "histogram_id" FROM [SHOW STATISTICS FOR TABLE ab] WHERE statistics_name = 'full_a'
-
-statement ok
-UPDATE system.table_statistics SET "fullStatisticID" = '$stat_id_full_a' WHERE name = 'partial_a'
-
-let $stat_id_full_b
-SELECT "histogram_id" FROM [SHOW STATISTICS FOR TABLE ab] WHERE statistics_name = 'full_b'
-
-statement ok
-UPDATE system.table_statistics SET "fullStatisticID" = '$stat_id_full_b' WHERE name = 'partial_b'
 
 query TTTIIII colnames
 SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
@@ -1261,3 +1237,174 @@ __merged__       {b}           2022-12-13 15:22:21.988179 +0000 UTC  61         
 # Finally, restore forecasts setting to its previous value.
 statement ok
 SET CLUSTER SETTING sql.stats.forecasts.enabled = $forecastsEnabledPrev
+
+# Verify that we can merge partial stats with full stats that have outer
+# buckets.
+statement ok
+SET enable_create_stats_using_extremes = on
+
+statement ok
+CREATE TABLE ka (k INT PRIMARY KEY, a INT, INDEX(a))
+
+statement ok
+INSERT INTO ka select x, x from generate_series(0, 9998) as g(x)
+
+statement ok
+INSERT INTO ka VALUES (9999, NULL)
+
+statement ok
+CREATE STATISTICS ka_fullstat ON a FROM ka
+
+let $hist_id_ka_outer_buckets_full
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE ka] WHERE statistics_name = 'ka_fullstat'
+
+# The full stats collection should have added 2 outer buckets for a total of 202
+# with upper bounds of MaxInt64 and MinInt64.
+query I
+SELECT count(*) FROM [SHOW HISTOGRAM $hist_id_ka_outer_buckets_full]
+----
+202
+
+statement ok
+INSERT INTO ka VALUES (10000, 9999), (10001, 10000)
+
+statement ok
+CREATE STATISTICS ka_partialstat ON a FROM ka USING EXTREMES
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE ka WITH MERGE]
+ORDER BY statistics_name
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__merged__       {a}           10002      9922            1
+ka_fullstat      {a}           10000      9920            1
+ka_partialstat   {a}           3          3               1
+
+# Verify that the merged histogram correctly appends the partial stat buckets
+query T
+SELECT jsonb_pretty(bucket)
+FROM (
+SELECT jsonb_array_elements(stat->'histo_buckets') AS bucket
+FROM (
+SELECT jsonb_array_elements(statistics) AS stat FROM [SHOW STATISTICS USING JSON FOR TABLE ka WITH MERGE]
+)
+WHERE stat->>'name' = '__merged__'
+)
+ORDER BY (bucket->>'upper_bound')::INT DESC
+LIMIT 3
+----
+{
+    "distinct_range": 0,
+    "num_eq": 1,
+    "num_range": 0,
+    "upper_bound": "10000"
+}
+{
+    "distinct_range": 0,
+    "num_eq": 1,
+    "num_range": 0,
+    "upper_bound": "9999"
+}
+{
+    "distinct_range": 49.59173044047086,
+    "num_eq": 1,
+    "num_range": 50,
+    "upper_bound": "9998"
+}
+
+# Verify that distinct counts and null counts are merged correctly.
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.count = 10005
+
+statement ok
+INSERT INTO ka VALUES (10002, 10001)
+
+statement ok
+CREATE STATISTICS ka_fullstat ON a FROM ka
+
+statement ok
+INSERT INTO ka VALUES (10003, 10002), (10004, NULL)
+
+statement ok
+CREATE STATISTICS ka_partialstat ON a FROM ka USING EXTREMES
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE ka WITH MERGE]
+ORDER BY statistics_name
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__merged__       {a}           10005      9924            2
+ka_fullstat      {a}           10003      9923            1
+ka_partialstat   {a}           3          2               2
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_samples.count
+
+# Verify that optimizer_use_merged_partial_statistics can be used to enable and
+# disable merged stat usage in the optimizer.
+statement ok
+RESET optimizer_use_merged_partial_statistics
+
+statement ok
+DELETE FROM ka
+
+statement ok
+INSERT INTO ka SELECT x, x FROM generate_series(0, 9) as g(x)
+
+statement ok
+CREATE STATISTICS ka_fullstat ON a FROM ka
+
+statement ok
+INSERT INTO ka VALUES (10, 10)
+
+statement ok
+CREATE STATISTICS ka_partialstat ON a FROM ka USING EXTREMES
+
+query T
+EXPLAIN SELECT * FROM ka WHERE a > 5
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 4 (36% of the table; stats collected <hidden> ago)
+  table: ka@ka_a_idx
+  spans: [/6 - ]
+
+query T
+EXPLAIN SELECT * FROM ka WHERE a = 10
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+  table: ka@ka_a_idx
+  spans: [/10 - /10]
+
+statement ok
+SET optimizer_use_merged_partial_statistics = on
+
+query T
+EXPLAIN SELECT * FROM ka WHERE a > 5
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 5 (45% of the table; stats collected <hidden> ago)
+  table: ka@ka_a_idx
+  spans: [/6 - ]
+
+query T
+EXPLAIN SELECT * FROM ka WHERE a = 10
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 1 (9.1% of the table; stats collected <hidden> ago)
+  table: ka@ka_a_idx
+  spans: [/10 - /10]

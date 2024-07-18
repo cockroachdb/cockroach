@@ -24,6 +24,7 @@ import (
 	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -39,9 +40,21 @@ import (
 
 var RandomSeed = workload.NewUint64RandomSeed()
 
+const (
+	// A threshold that defines which duration is considered a long workload which is not meant for a benchmark result
+	longDurationWorkloadThreshold = 4 * 24 * time.Hour
+
+	// The reset time period in case we are running a long duration workload.
+	warehouseWytdResetPeriod = 24 * time.Hour
+
+	// Max rows that can be updated in a single txn, used while resetting the w_ytd values
+	maxRowsToUpdateTxn = 10_000
+)
+
 type tpcc struct {
-	flags     workload.Flags
-	connFlags *workload.ConnFlags
+	flags        workload.Flags
+	connFlags    *workload.ConnFlags
+	workloadName string
 
 	warehouses       int
 	activeWarehouses int
@@ -114,6 +127,14 @@ type tpcc struct {
 		values [][]int
 	}
 	localsPool *sync.Pool
+
+	// Set to true if duration >= longDurationWorkloadThreshold.
+	// In that case, we reset w_ytd & d_ytd periodically and skip 3.3.2.1 and 3.3.2.8 consistency checks.
+	isLongDurationWorkload bool
+
+	// context group for any background reset table operation to avoid goroutine leaks during long duration workloads
+	resetTableGrp      ctxgroup.Group
+	resetTableCancelFn context.CancelFunc
 }
 
 type waitSetter struct {
@@ -217,7 +238,9 @@ var tpccMeta = workload.Meta{
 	Version:    `2.2.0`,
 	RandomSeed: RandomSeed,
 	New: func() workload.Generator {
-		g := &tpcc{}
+		g := &tpcc{
+			workloadName: "tpcc",
+		}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`mix`:                      {RuntimeOnly: true},
@@ -284,7 +307,6 @@ var tpccMeta = workload.Meta{
 		g.flags.StringVar(&g.txnPreambleFile, "txn-preamble-file", "", "queries that will be injected before each txn")
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
-
 		// Hardcode this since it doesn't seem like anyone will want to change
 		// it and it's really noisy in the generated fixture paths.
 		g.nowString = []byte(`2006-01-02 15:04:05`)
@@ -457,14 +479,14 @@ func (w *tpcc) Hooks() workload.Hooks {
 			var stmts []string
 			for i, region := range w.multiRegionCfg.regions {
 				var stmt string
+				// Region additions should be idempotent.
+				if _, ok := regions[region]; ok {
+					continue
+				}
 				// The first region is the PRIMARY region.
 				if i == 0 {
 					stmt = fmt.Sprintf(`alter database %s set primary region %q`, dbName, region)
 				} else {
-					// Region additions should be idempotent.
-					if _, ok := regions[region]; ok {
-						continue
-					}
 					stmt = fmt.Sprintf(`alter database %s add region %q`, dbName, region)
 				}
 				stmts = append(stmts, stmt)
@@ -581,6 +603,11 @@ func (w *tpcc) Hooks() workload.Hooks {
 					// TODO(nvanbenschoten): support load-only checks.
 					continue
 				}
+
+				if w.isLongDurationWorkload && check.SkipForLongDuration {
+					continue
+				}
+
 				start := timeutil.Now()
 				err := check.Fn(db, "" /* asOfSystemTime */)
 				log.Infof(ctx, `check %s took %s`, check.Name, timeutil.Since(start))
@@ -809,11 +836,28 @@ func (w *tpcc) Ops(
 		}
 	}
 
+	var resetTableCtx context.Context
+	resetTableCtx, w.resetTableCancelFn = context.WithCancel(ctx)
+	w.resetTableGrp = ctxgroup.WithContext(resetTableCtx)
+
+	if duration, err := w.flags.GetDuration("duration"); err == nil {
+		if duration == 0 || duration >= longDurationWorkloadThreshold {
+			log.Warningf(ctx,
+				"Warning: this workload is being used with a long or indefinite duration."+
+					" This could cause it to deviate from the TPCC spec in subtle ways and is not meant for benchmarking. "+
+					"Consistency checks might be disabled",
+			)
+			w.isLongDurationWorkload = true
+		}
+	} else {
+		log.Warningf(ctx, "Couldn't get duration of the tpcc workload run for disabling consistency checks %v", err)
+	}
+
 	// Need idempotency - Ops might be invoked multiple times with the same
 	// Registry.
 	if w.reg == nil {
 		w.reg = reg
-		w.txCounters = setupTPCCMetrics(reg.Registerer())
+		w.txCounters = setupTPCCMetrics(w.workloadName, reg.Registerer())
 	}
 
 	// We can't use a single MultiConnPool because we want to implement partition
@@ -990,7 +1034,7 @@ func (w *tpcc) Ops(
 	}
 
 	// Close idle connections.
-	ql.Close = func(context context.Context) error {
+	ql.Close = func(_ context.Context) error {
 		for _, conn := range conns {
 			if err := conn.Close(ctx); err != nil {
 				log.Warningf(ctx, "%v", err)
@@ -1001,6 +1045,11 @@ func (w *tpcc) Ops(
 				log.Warningf(ctx, "%v", err)
 			}
 		}
+
+		w.resetTableCancelFn()
+		if err := w.resetTableGrp.Wait(); err != nil && !errors.Is(err, context.Canceled) {
+			log.Warningf(ctx, "%v", err)
+		}
 		return nil
 	}
 	return ql, nil
@@ -1009,37 +1058,41 @@ func (w *tpcc) Ops(
 // executeTx runs fn inside a transaction with retries, if enabled. On
 // non-retryable failures, the transaction is aborted and rolled back; on
 // success, the transaction is committed.
-func (w *tpcc) executeTx(ctx context.Context, conn crdbpgx.Conn, fn func(pgx.Tx) error) error {
+func (w *tpcc) executeTx(
+	ctx context.Context, conn crdbpgx.Conn, fn func(pgx.Tx) error,
+) (onTxnStartDuration time.Duration, err error) {
 	txOpts := pgx.TxOptions{}
-	txnFuncWithPreamble := func(tx pgx.Tx) (err error) {
+	txnFuncWithStartFuncs := func(tx pgx.Tx) (err error) {
 		defer func() {
 			if err != nil && !w.txnRetries {
 				_ = tx.Rollback(ctx)
 			}
 		}()
 		if w.onTxnStartFns != nil {
+			startTime := timeutil.Now()
 			for _, onTxnStart := range w.onTxnStartFns {
 				if err = onTxnStart(ctx, tx); err != nil {
 					return err
 				}
 			}
+			onTxnStartDuration += timeutil.Since(startTime)
 		}
 		return fn(tx)
 	}
 
 	if w.txnRetries {
-		return crdbpgx.ExecuteTx(ctx, conn, txOpts, txnFuncWithPreamble)
+		return onTxnStartDuration, crdbpgx.ExecuteTx(ctx, conn, txOpts, txnFuncWithStartFuncs)
 	}
 
 	tx, err := conn.BeginTx(ctx, txOpts)
 	if err != nil {
-		return err
+		return onTxnStartDuration, err
 	}
-	err = txnFuncWithPreamble(tx)
+	err = txnFuncWithStartFuncs(tx)
 	if err != nil {
-		return err
+		return onTxnStartDuration, err
 	}
-	return tx.Commit(ctx)
+	return onTxnStartDuration, tx.Commit(ctx)
 }
 
 func (w *tpcc) partitionAndScatter(urls []string) error {

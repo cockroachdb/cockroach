@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -324,7 +325,7 @@ func (r *Replica) RaftUnlock() {
 
 func (r *Replica) RaftReportUnreachable(id roachpb.ReplicaID) error {
 	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
-		raftGroup.ReportUnreachable(uint64(id))
+		raftGroup.ReportUnreachable(raftpb.PeerID(id))
 		return false /* unquiesceAndWakeLeader */, nil
 	})
 }
@@ -656,8 +657,9 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 		default:
 		}
 
-		store.mu.replicasByRangeID.Range(func(repl *Replica) {
-			m[repl.RangeID] = struct{}{}
+		store.mu.replicasByRangeID.Range(func(rangeID roachpb.RangeID, _ *Replica) bool {
+			m[rangeID] = struct{}{}
+			return true
 		})
 
 		for k := range m {

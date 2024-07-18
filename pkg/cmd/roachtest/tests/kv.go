@@ -64,6 +64,9 @@ func registerKV(r registry.Registry) {
 		weekly                   bool
 		owner                    registry.Owner // defaults to KV
 		sharedProcessMT          bool
+		// Set to true to make jemalloc release memory more aggressively to the
+		// OS, to reduce resident size.
+		jemallocReleaseFaster bool
 	}
 	computeConcurrency := func(opts kvOptions) int {
 		// Scale the workload concurrency with the number of nodes in the cluster to
@@ -85,7 +88,6 @@ func registerKV(r registry.Registry) {
 	}
 	runKV := func(ctx context.Context, t test.Test, c cluster.Cluster, opts kvOptions) {
 		nodes := c.Spec().NodeCount - 1
-		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 
 		// Don't start a scheduled backup on this perf sensitive roachtest that reports to roachperf.
 		startOpts := option.NewStartOpts(option.NoBackupSchedule)
@@ -97,7 +99,11 @@ func registerKV(r registry.Registry) {
 		if opts.globalMVCCRangeTombstone {
 			settings.Env = append(settings.Env, "COCKROACH_GLOBAL_MVCC_RANGE_TOMBSTONE=true")
 		}
-		c.Start(ctx, t.L(), startOpts, settings, c.Range(1, nodes))
+		if opts.jemallocReleaseFaster {
+			settings.Env = append(settings.Env,
+				"MALLOC_CONF=background_thread:true,dirty_decay_ms:2000,muzzy_decay_ms:0")
+		}
+		c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
@@ -124,7 +130,7 @@ func registerKV(r registry.Registry) {
 		}
 
 		t.Status("running workload")
-		m := c.NewMonitor(ctx, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(computeConcurrency(opts)))
 			splits := ""
@@ -174,11 +180,11 @@ func registerKV(r registry.Registry) {
 				url = fmt.Sprintf(" {pgurl:1-%d:%s}", nodes, appTenantName)
 			}
 			cmd := fmt.Sprintf(
-				"./workload run kv --tolerate-errors --init --user=%s --password=%s", install.DefaultUser, install.DefaultPassword,
+				"./cockroach workload run kv --tolerate-errors --init --user=%s --password=%s", install.DefaultUser, install.DefaultPassword,
 			) +
 				histograms + concurrency + splits + duration + readPercent +
 				batchSize + blockSize + sequential + envFlags + url
-			c.Run(ctx, option.WithNodes(c.Node(nodes+1)), cmd)
+			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 			return nil
 		})
 		m.Wait()
@@ -191,7 +197,15 @@ func registerKV(r registry.Registry) {
 		// CPU overload test, to stress admission control.
 		{nodes: 1, cpus: 8, readPercent: 50, concMultiplier: 8192},
 		// IO write overload test, to stress admission control.
-		{nodes: 1, cpus: 8, readPercent: 0, concMultiplier: 4096, blockSize: 1 << 16 /* 64 KB */},
+		//
+		// jemallocReleaseFaster is set to true due to OOMs observed in
+		// https://github.com/cockroachdb/cockroach/issues/125769. There is
+		// unavoidable 20% internal fragmentation in the Pebble block cache, since
+		// a 64KB value size causes a 64+KB sstable block, which allocates
+		// from the 80KB size class in jemalloc. So the allocated bytes from jemalloc
+		// by the block cache are 20% higher than configured. By setting this flag to true,
+		// we reduce the (resident-allocated) size in jemalloc.
+		{nodes: 1, cpus: 8, readPercent: 0, concMultiplier: 4096, blockSize: 1 << 16 /* 64 KB */, jemallocReleaseFaster: true},
 		{nodes: 1, cpus: 8, readPercent: 95},
 		{nodes: 1, cpus: 8, readPercent: 95, sharedProcessMT: true},
 		{nodes: 1, cpus: 32, readPercent: 0},
@@ -316,7 +330,13 @@ func registerKV(r registry.Registry) {
 		if opts.encryption {
 			encryption = registry.EncryptionAlwaysEnabled
 		}
-		cSpec := r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds), spec.RAID0(opts.raid0))
+		// Save some money and CPU quota by using a smaller workload CPU. Only
+		// do this for cluster of size 3 or smaller to avoid regressions.
+		workloadNodeCPUs := 4
+		if opts.nodes > 3 {
+			workloadNodeCPUs = opts.cpus
+		}
+		cSpec := r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(workloadNodeCPUs), spec.SSD(opts.ssds), spec.RAID0(opts.raid0))
 
 		var clouds registry.CloudSet
 		tags := make(map[string]struct{})
@@ -514,6 +534,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNode())
 
 			t.Status("starting cluster")
 			// If the test ever fails, the person who investigates the

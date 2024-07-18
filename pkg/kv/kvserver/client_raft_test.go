@@ -1308,8 +1308,17 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 			t.Logf("got %s, retrying", nlhe)
 			continue
 		}
-		require.False(t, nlhe.Lease.Empty(), "expected NotLeaseholderError with a lease, got: %s", pErr)
-		require.NotNil(t, nlhe.Lease.Replica, "expected NotLeaseholderError with a known leaseholder, got: %s", pErr)
+		// When the old leader is partitioned, it will step down due to CheckQuorum.
+		// Immediately after the partition is healed, the replica will not know who
+		// the new leader is, so it will return a NotLeaseholderError with an empty
+		// lease. This is expected and better than blocking. Still, we have the test
+		// retry to make sure that the new leader is eventually discovered and that
+		// after that point, the NotLeaseholderErrors start including a lease which
+		// points to the new leader.
+		if nlhe.Lease.Empty() {
+			t.Logf("got %s, retrying", nlhe)
+			continue
+		}
 		require.Equal(t, leaderReplicaID, nlhe.Lease.Replica.ReplicaID)
 		break
 	}
@@ -3387,7 +3396,7 @@ func TestReplicaGCRace(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		status := repl.RaftStatus()
 		progressByID := status.Progress
-		progress, ok := progressByID[uint64(toReplicaDesc.ReplicaID)]
+		progress, ok := progressByID[raftpb.PeerID(toReplicaDesc.ReplicaID)]
 		if !ok {
 			return errors.Errorf("%+v does not yet contain %s", progressByID, toReplicaDesc)
 		}
@@ -3837,8 +3846,8 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		ToReplica:   replica1,
 		FromReplica: replica0,
 		Message: raftpb.Message{
-			From: uint64(replica0.ReplicaID),
-			To:   uint64(replica1.ReplicaID),
+			From: raftpb.PeerID(replica0.ReplicaID),
+			To:   raftpb.PeerID(replica1.ReplicaID),
 			Type: raftpb.MsgVote,
 			Term: term + 1,
 		},
@@ -4173,7 +4182,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 
 	status := repl0.RaftStatus()
 	require.NotNil(t, status)
-	require.Equal(t, uint64(rd0.ReplicaID), status.Lead)
+	require.Equal(t, raftpb.PeerID(rd0.ReplicaID), status.Lead)
 
 	origCount0 := store0.Metrics().RangeRaftLeaderTransfers.Count()
 	// Transfer the lease. We'll then check that the leadership follows
@@ -4186,7 +4195,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		if status := repl0.RaftStatus(); status == nil {
 			return errors.New("raft status is nil")
-		} else if a, e := status.Lead, uint64(rd1.ReplicaID); a != e {
+		} else if a, e := status.Lead, raftpb.PeerID(rd1.ReplicaID); a != e {
 			return errors.Errorf("expected raft leader be %d; got %d", e, a)
 		}
 		return nil

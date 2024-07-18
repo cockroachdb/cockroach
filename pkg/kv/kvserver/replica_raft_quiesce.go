@@ -208,7 +208,7 @@ type quiescer interface {
 	StoreID() roachpb.StoreID
 	descRLocked() *roachpb.RangeDescriptor
 	isRaftLeaderRLocked() bool
-	raftSparseStatusRLocked() *raftSparseStatus
+	raftSparseStatusRLocked() *raft.SparseStatus
 	raftBasicStatusRLocked() raft.BasicStatus
 	raftLastIndexRLocked() kvpb.RaftIndex
 	hasRaftReadyRLocked() bool
@@ -291,7 +291,7 @@ func shouldReplicaQuiesce(
 	leaseStatus kvserverpb.LeaseStatus,
 	livenessMap livenesspb.IsLiveMap,
 	pausedFollowers map[roachpb.ReplicaID]struct{},
-) (*raftSparseStatus, laggingReplicaSet, bool) {
+) (*raft.SparseStatus, laggingReplicaSet, bool) {
 	if !q.isRaftLeaderRLocked() { // fast path
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leader")
@@ -410,10 +410,10 @@ func shouldReplicaQuiesce(
 	var foundSelf bool
 	var lagging laggingReplicaSet
 	for _, rep := range q.descRLocked().Replicas().Descriptors() {
-		if uint64(rep.ReplicaID) == status.ID {
+		if raftpb.PeerID(rep.ReplicaID) == status.ID {
 			foundSelf = true
 		}
-		if progress, ok := status.Progress[uint64(rep.ReplicaID)]; !ok {
+		if progress, ok := status.Progress[raftpb.PeerID(rep.ReplicaID)]; !ok {
 			if log.V(4) {
 				log.Infof(ctx, "not quiescing: could not locate replica %d in progress: %+v",
 					rep.ReplicaID, progress)
@@ -449,7 +449,7 @@ func shouldReplicaQuiesce(
 }
 
 func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
-	ctx context.Context, status *raftSparseStatus, lagging laggingReplicaSet,
+	ctx context.Context, status *raft.SparseStatus, lagging laggingReplicaSet,
 ) bool {
 	lastToReplica, lastFromReplica := r.getLastReplicaDescriptors()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(r.replicaID, lastToReplica)
@@ -493,7 +493,7 @@ func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 			curLagging = nil
 		}
 		msg := raftpb.Message{
-			From:   uint64(r.replicaID),
+			From:   raftpb.PeerID(r.replicaID),
 			To:     id,
 			Type:   raftpb.MsgHeartbeat,
 			Term:   status.Term,

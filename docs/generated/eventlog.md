@@ -53,6 +53,43 @@ reloaded/rotated from disk.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
+### `disk_slowness_cleared`
+
+An event of type `disk_slowness_cleared` is recorded when disk slowness in a store has cleared.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `NodeID` | The node ID where the event was originated. | no |
+| `StoreID` |  | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
+### `disk_slowness_detected`
+
+An event of type `disk_slowness_detected` is recorded when a store observes disk slowness
+events.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `NodeID` | The node ID where the event was originated. | no |
+| `StoreID` |  | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ### `node_decommissioned`
 
 An event of type `node_decommissioned` is recorded when a node is marked as
@@ -333,6 +370,30 @@ successful revert.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorIDs` | The object descriptors affected by the job. Set to zero for operations that don't affect descriptors. | yes |
 | `Status` | The status of the job that triggered the event. This allows the job to indicate which phase execution it is in when the event is triggered. | no |
+
+### `status_change`
+
+An event of type `status_change` is recorded when a job changes statuses.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `JobID` | The ID of the job that is changing statuses. | no |
+| `JobType` | The type of the job that is changing statuses. | no |
+| `Description` | A human parsable description of the status change | partially |
+| `PreviousStatus` | The status that the job is transitioning out of | no |
+| `NewStatus` | The status that the job has transitioned into | no |
+| `RunNum` | The run number of the job. | no |
+| `Error` | An error that may have occurred while the job was running. | yes |
+| `FinalResumeErr` | An error that occurred that requires the job to be reverted. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
 
 ## Miscellaneous SQL events
 

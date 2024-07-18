@@ -264,14 +264,17 @@ func (mw *metricRates) Update(
 
 	// Calculate rates per second.
 	writeBatchRate := float64(consumption.WriteBatches) * float64(time.Second) / float64(consumptionPeriod)
+	estimatedCPURate := consumption.EstimatedCPUSeconds * float64(time.Second) / float64(consumptionPeriod)
 
 	// Add rates to the next and current reports, based on the length of the
 	// consumption period.
 	start := now.Add(-consumptionPeriod)
 	if start.Before(nextStart) {
 		mw.next.WriteBatchRate += writeBatchRate
+		mw.next.EstimatedCPURate += estimatedCPURate
 	}
 	if start.Before(currentStart) {
 		mw.current.WriteBatchRate += writeBatchRate
+		mw.current.EstimatedCPURate += estimatedCPURate
 	}
 }

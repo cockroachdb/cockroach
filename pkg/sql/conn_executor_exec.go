@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -688,6 +689,9 @@ func (ex *connExecutor) execStmtInOpenState(
 			timerDuration,
 			func() {
 				cancelQuery()
+				// Also cancel the transactions context, so that there is no danger
+				// getting stuck rolling back.
+				ex.state.txnCancelFn()
 				queryTimedOut = true
 				queryDoneAfterFunc <- struct{}{}
 			})
@@ -850,6 +854,10 @@ func (ex *connExecutor) execStmtInOpenState(
 				resToPushErr.SetError(errToPush)
 				retPayload = eventNonRetriableErrPayload{err: errToPush}
 				resErr = errToPush
+				// Cancel the txn if we are inside an implicit txn too.
+				if ex.implicitTxn() && ex.state.txnCancelFn != nil {
+					ex.state.txnCancelFn()
+				}
 			}
 		})
 
@@ -2225,7 +2233,7 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 					CommonTxnRowsLimitDetails: commonTxnRowsLimitDetails,
 				}
 			}
-			log.StructuredEvent(ctx, event)
+			log.StructuredEvent(ctx, severity.INFO, event)
 			logCounter.Inc(1)
 		}
 	}
@@ -3145,10 +3153,13 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 			}
 		}
 
-		ex.statsCollector.EndTransaction(
+		discardedStats := ex.statsCollector.EndTransaction(
 			ctx,
 			transactionFingerprintID,
 		)
+		if discardedStats > 0 {
+			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(discardedStats)
+		}
 
 		if ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded != nil {
 			ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded(

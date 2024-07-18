@@ -409,27 +409,23 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(statementSQL) > setupFlowRequestStmtMaxLength {
 		statementSQL = statementSQL[:setupFlowRequestStmtMaxLength]
 	}
-	getJobTag := func(ctx context.Context) string {
-		tags := logtags.FromContext(ctx)
-		if tags != nil {
-			for _, tag := range tags.Get() {
-				if tag.Key() == "job" {
-					return tag.ValueStr()
-				}
-			}
-		}
-		return ""
-	}
 	setupReq := execinfrapb.SetupFlowRequest{
-		// TODO(yuzefovich): avoid populating some fields of the SetupFlowRequest
-		// for local plans.
 		LeafTxnInputState: leafInputState,
 		Version:           execinfra.Version,
-		EvalContext:       execinfrapb.MakeEvalContext(&evalCtx.Context),
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,
-		JobTag:            getJobTag(ctx),
+	}
+	if localState.IsLocal {
+		// VectorizeMode is the only field that the setup code expects to be set
+		// in the local flows.
+		setupReq.EvalContext.SessionData.VectorizeMode = evalCtx.SessionData().VectorizeMode
+	} else {
+		// In distributed plans populate some extra state.
+		setupReq.EvalContext = execinfrapb.MakeEvalContext(&evalCtx.Context)
+		if jobTag, ok := logtags.FromContext(ctx).GetTag("job"); ok {
+			setupReq.JobTag = jobTag.ValueStr()
+		}
 	}
 
 	var isVectorized bool
@@ -1882,7 +1878,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 				// a single value against a tuple.
 				toAppend = row[0]
 			} else {
-				toAppend = &tree.DTuple{D: row}
+				toAppend = planner.datumAlloc.NewDTuple(tree.DTuple{D: row})
 			}
 			// Perform memory accounting for this datum. We do this in an
 			// incremental fashion since we might be materializing a lot of data

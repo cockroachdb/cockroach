@@ -251,6 +251,23 @@ func LookupCast(src, tgt *types.T) (Cast, bool) {
 		}, true
 	}
 
+	if srcFamily == types.ArrayFamily && tgtFamily == types.PGVectorFamily {
+		return Cast{
+			MaxContext: ContextAssignment,
+			Volatility: volatility.Stable,
+		}, true
+	}
+	if srcFamily == types.PGVectorFamily && tgtFamily == types.ArrayFamily &&
+		tgt.ArrayContents().Family() == types.FloatFamily {
+		// Note that postgres only allows casts to FLOAT4[], but given that
+		// under the hood FLOAT8 and FLOAT4 represented exactly the same way in
+		// CRDB we'll allow both.
+		return Cast{
+			MaxContext: ContextAssignment,
+			Volatility: volatility.Stable,
+		}, true
+	}
+
 	// Casts from array and tuple types to string types are immutable and
 	// allowed in assignment contexts.
 	// TODO(mgartner): Tuple to string casts should be stable. They are

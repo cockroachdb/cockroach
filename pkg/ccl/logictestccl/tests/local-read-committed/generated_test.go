@@ -301,6 +301,13 @@ func TestReadCommittedLogicCCL_unique_read_committed(
 	runCCLLogicTest(t, "unique_read_committed")
 }
 
+func TestReadCommittedLogicCCL_vector(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "vector")
+}
+
 func TestReadCommittedExecBuild_explain_analyze_read_committed(
 	t *testing.T,
 ) {

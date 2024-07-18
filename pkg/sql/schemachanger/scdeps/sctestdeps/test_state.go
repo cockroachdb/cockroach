@@ -61,6 +61,7 @@ type TestState struct {
 	phase                   scop.Phase
 	sessionData             sessiondata.SessionData
 	statements              []string
+	semaCtx                 *tree.SemaContext
 	testingKnobs            *scexec.TestingKnobs
 	jobs                    []jobs.Record
 	createdJobsInCurrentTxn []jobspb.JobID

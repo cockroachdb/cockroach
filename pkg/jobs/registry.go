@@ -177,7 +177,7 @@ type Registry struct {
 	withSessionEvery log.EveryN
 
 	// test only overrides for resumer creation.
-	creationKnobs sync.Map
+	creationKnobs syncutil.Map[jobspb.Type, func(Resumer) Resumer]
 }
 
 // UpdateJobWithTxn calls the Update method on an existing job with
@@ -1558,10 +1558,9 @@ func (r *Registry) resumerConstructorForPayload(payload *jobspb.Payload) (Constr
 	if fn == nil {
 		return nil, errors.Errorf("no resumer is available for %s", payload.Type())
 	}
-	if v, ok := r.creationKnobs.Load(payload.Type()); ok {
-		wrapper := v.(func(Resumer) Resumer)
+	if wrapper, ok := r.creationKnobs.Load(payload.Type()); ok {
 		return func(job *Job, settings *cluster.Settings) Resumer {
-			return wrapper(fn(job, settings))
+			return (*wrapper)(fn(job, settings))
 		}, nil
 	}
 	return fn, nil

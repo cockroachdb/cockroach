@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/DataExMachina-dev/side-eye-go/sideeyeclient"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -156,6 +157,10 @@ type testRunner struct {
 
 	// Counts cluster creation errors across all workers.
 	numClusterErrs int32
+
+	// sideEyeClient, if set, is the client used to communicate with the Side-Eye
+	// debugging service.
+	sideEyeClient *sideeyeclient.SideEyeClient
 }
 
 // newTestRunner constructs a testRunner.
@@ -205,6 +210,9 @@ type clustersOpt struct {
 
 	// Controls whether the cluster is cleaned up at the end of the test.
 	debugMode debugMode
+	// sideEyeToken, if not empty, is the token used to authenticate with the
+	// Side-Eye. If set, each node in the cluster will run the Side-Eye agent.
+	sideEyeToken string
 
 	// preAllocateClusterFn is a function called right before allocating a
 	// cluster. It allows the caller to e.g. inject errors for testing.
@@ -338,7 +346,8 @@ func (r *testRunner) Run(
 			if roachtestflags.Cloud == spec.GCE &&
 				tests[i].Benchmark &&
 				!tests[i].Suites.Contains(registry.Weekly) &&
-				rand.Float64() <= 0.5 {
+				!tests[i].IsLastFailurePreempt() &&
+				rand.Float64() <= 0.8 {
 				lopt.l.PrintfCtx(ctx, "using spot VMs to run test %s", tests[i].Name)
 				tests[i].Cluster.UseSpotVMs = true
 			}
@@ -526,6 +535,7 @@ func (r *testRunner) allocateCluster(
 		username:     clustersOpt.user,
 		localCluster: clustersOpt.typ == localCluster,
 		arch:         arch,
+		sideEyeToken: clustersOpt.sideEyeToken,
 	}
 	return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee)
 }
@@ -749,11 +759,26 @@ func (r *testRunner) runWorker(
 		// If DebugKeepAlways is set, mark it as a saved cluster, so it isn't
 		// cleaned up. Do it now instead of at the end as the test may be interrupted
 		// with ctrl c before we get there.
-		if clustersOpt.debugMode == DebugKeepAlways {
+		if c != nil && clustersOpt.debugMode == DebugKeepAlways {
 			c.Save(ctx, "cluster saved since --debug-always set", l)
 		}
 
 		wStatus.SetCluster(c)
+
+		// If the Side-Eye integration is active, update the cluster's Side-Eye
+		// environment name to match the current test; this makes it easier to
+		// identify this cluster on app.side-eye.io.
+		if c != nil && r.sideEyeClient != nil {
+			testSuffix := ""
+			if testToRun.runCount > 1 {
+				testSuffix = fmt.Sprintf("#%d", testToRun.runNum)
+			}
+			envName := fmt.Sprintf("%s-%s%s", runID, testToRun.spec.Name, testSuffix)
+			err := c.UpdateSideEyeEnvironmentName(ctx, l, envName)
+			if err != nil {
+				l.ErrorfCtx(ctx, "failed to update Side-Eye environment name: %s", err)
+			}
+		}
 
 		// Prepare the test's logger. Always set this up with real files, using a
 		// temp dir if necessary. This simplifies testing.
@@ -876,7 +901,6 @@ func (r *testRunner) runWorker(
 				}
 
 				c.goCoverDir = t.GoCoverArtifactsDir()
-
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
 
@@ -1473,6 +1497,14 @@ func (r *testRunner) teardownTest(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
 ) error {
 	if timedOut || t.Failed() {
+		if timedOut {
+			// If the Side-Eye integration was configured, capture a snapshot of the
+			// cluster to help with debugging.
+			if r.sideEyeClient != nil {
+				c.CaptureSideEyeSnapshot(ctx, t.L(), r.sideEyeClient)
+			}
+		}
+
 		err := r.collectArtifacts(ctx, t, c, timedOut, time.Hour)
 		if err != nil {
 			t.L().Printf("error collecting artifacts: %v", err)
@@ -1734,12 +1766,19 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 				clusterReused = "no"
 			}
 		}
-		var clusterName, clusterAdminUIAddr string
+		var clusterBuilder strings.Builder
 		if w.Cluster() != nil {
-			clusterName = w.Cluster().name
+			clusterName := w.Cluster().name
 			adminUIAddrs, err := w.Cluster().ExternalAdminUIAddr(req.Context(), w.Cluster().l, w.Cluster().Node(1))
 			if err == nil {
-				clusterAdminUIAddr = adminUIAddrs[0]
+				clusterAdminUIAddr := adminUIAddrs[0]
+				clusterBuilder.WriteString(fmt.Sprintf("<a href='//%s'>%s</a>", clusterAdminUIAddr, clusterName))
+			} else {
+				clusterBuilder.WriteString(clusterName)
+			}
+			sideEyeEnv := w.Cluster().sideEyeEnvName()
+			if sideEyeEnv != "" {
+				clusterBuilder.WriteString(fmt.Sprintf(" (<a href='%s'>Side-Eye</a>)", sideeyeclient.SnapshotsURL(sideEyeEnv)))
 			}
 		}
 		t := w.Test()
@@ -1747,8 +1786,9 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 		if t != nil {
 			testStatus = t.GetStatus()
 		}
-		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><td>%s</td><td><a href='//%s'>%s</a></td><td>%s</td><td>%s</td></tr>\n",
-			w.name, w.Status(), testName, clusterAdminUIAddr, clusterName, clusterReused, testStatus)
+
+		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n",
+			w.name, w.Status(), testName, clusterBuilder.String(), clusterReused, testStatus)
 	}
 	fmt.Fprintf(wr, "</table>")
 
@@ -1811,6 +1851,30 @@ func (r *testRunner) getCompletedTests() []completedTestInfo {
 	res := make([]completedTestInfo, len(r.completedTestsMu.completed))
 	copy(res, r.completedTestsMu.completed)
 	return res
+}
+
+// maybeInitSideEyeClient initializes the test runner's Side-Eye client if
+// configured to do so. The API token to use for communicating with Side-Eye is
+// returned. Returns "" if the Side-Eye integration is not configured. All
+// errors are logged and swallowed.
+func (r *testRunner) maybeInitSideEyeClient(ctx context.Context, l *logger.Logger) string {
+	token := roachtestflags.SideEyeApiToken
+	if token == "" {
+		return ""
+	}
+	if roachtestflags.Local {
+		l.Printf("--side-eye-token is ignored in --local mode. The Side-Eye agents will not be started; " +
+			"you can run the agent manually.")
+		return ""
+	}
+
+	client, err := sideeyeclient.NewSideEyeClient(sideeyeclient.WithApiToken(token))
+	if err != nil {
+		l.Errorf("failed to create Side-Eye client: %s", err)
+	} else {
+		r.sideEyeClient = client
+	}
+	return token
 }
 
 // completedTestInfo represents information on a completed test run.

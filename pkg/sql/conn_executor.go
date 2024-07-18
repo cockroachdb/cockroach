@@ -1080,7 +1080,10 @@ func (s *Server) newConnExecutor(
 			execTestingKnobs: s.GetExecutorConfig().TestingKnobs,
 		},
 		memMetrics: memMetrics,
-		planner:    planner{execCfg: s.cfg},
+		planner: planner{
+			execCfg:    s.cfg,
+			datumAlloc: &tree.DatumAlloc{},
+		},
 
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
@@ -1238,6 +1241,8 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 	ex.close(closeCtx, normalClose)
 }
 
+var connExecutorNormalCloseErr = pgerror.Newf(pgcode.AdminShutdown, "connExecutor closing")
+
 func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.sessionEventf(ctx, "finishing connExecutor")
 
@@ -1265,7 +1270,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
 		// This event is guaranteed to be accepted in every state.
 		ev := eventNonRetriableErr{IsCommit: fsm.True}
-		payloadErr = pgerror.Newf(pgcode.AdminShutdown, "connExecutor closing")
+		payloadErr = connExecutorNormalCloseErr
 		payload := eventNonRetriableErrPayload{err: payloadErr}
 		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
 			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)

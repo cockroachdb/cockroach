@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -34,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -450,11 +450,23 @@ type dummyStream struct {
 	name string
 	ctx  context.Context
 	recv chan *kvpb.RangeFeedEvent
+	done chan *kvpb.Error
+}
+
+func newDummyStream(ctx context.Context, name string) *dummyStream {
+	return &dummyStream{
+		ctx:  ctx,
+		name: name,
+		recv: make(chan *kvpb.RangeFeedEvent),
+		done: make(chan *kvpb.Error, 1),
+	}
 }
 
 func (s *dummyStream) Context() context.Context {
 	return s.ctx
 }
+
+func (s *dummyStream) SendIsThreadSafe() {}
 
 func (s *dummyStream) Send(ev *kvpb.RangeFeedEvent) error {
 	if ev.Val == nil && ev.Error == nil {
@@ -469,21 +481,34 @@ func (s *dummyStream) Send(ev *kvpb.RangeFeedEvent) error {
 	}
 }
 
+// Disconnect implements the Stream interface. It mocks the disconnect behavior
+// by sending the error to the done channel.
+func (s *dummyStream) Disconnect(err *kvpb.Error) {
+	s.done <- err
+}
+
 func waitReplicaRangeFeed(
-	ctx context.Context,
-	r *kvserver.Replica,
-	req *kvpb.RangeFeedRequest,
-	stream kvpb.RangeFeedEventSink,
+	ctx context.Context, r *kvserver.Replica, req *kvpb.RangeFeedRequest, stream *dummyStream,
 ) error {
-	rfErr, ctxErr := future.Wait(ctx, r.RangeFeed(req, stream, nil /* pacer */))
-	if ctxErr != nil {
-		return ctxErr
+	sendErrToStream := func(err *kvpb.Error) error {
+		var event kvpb.RangeFeedEvent
+		event.SetValue(&kvpb.RangeFeedError{
+			Error: *err,
+		})
+		return stream.Send(&event)
 	}
-	var event kvpb.RangeFeedEvent
-	event.SetValue(&kvpb.RangeFeedError{
-		Error: *kvpb.NewError(rfErr),
-	})
-	return stream.Send(&event)
+
+	err := r.RangeFeed(req, stream, nil /* pacer */)
+	if err != nil {
+		return sendErrToStream(kvpb.NewError(err))
+	}
+
+	select {
+	case err := <-stream.done:
+		return sendErrToStream(err)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // This test verifies that RangeFeed bypasses the circuit breaker. When the
@@ -505,7 +530,7 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stream1 := &dummyStream{ctx: ctx, name: "rangefeed1", recv: make(chan *kvpb.RangeFeedEvent)}
+	stream1 := newDummyStream(ctx, "rangefeed1")
 	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "stream1", func(ctx context.Context) {
 		err := waitReplicaRangeFeed(ctx, tc.repls[0].Replica, args, stream1)
 		if ctx.Err() != nil {
@@ -559,7 +584,7 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 
 	// Start another stream during the "outage" to make sure it isn't rejected by
 	// the breaker.
-	stream2 := &dummyStream{ctx: ctx, name: "rangefeed2", recv: make(chan *kvpb.RangeFeedEvent)}
+	stream2 := newDummyStream(ctx, "rangefeed2")
 	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "stream2", func(ctx context.Context) {
 		err := waitReplicaRangeFeed(ctx, tc.repls[0].Replica, args, stream2)
 		if ctx.Err() != nil {
@@ -864,7 +889,7 @@ func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
 	// initially go to n3, the previous leaseholder, but it will return NLHE. The
 	// DistSender will retry the other replicas, which eventually acquire a new
 	// lease and serve the write.
-	var leader uint64
+	var leader raftpb.PeerID
 	require.Eventually(t, func() bool {
 		for _, repl := range repls {
 			if l := repl.RaftStatus().Lead; l == 3 {

@@ -104,6 +104,8 @@ const (
 
 	// Expr corresponds to the string representation of a SQL expression for an element.
 	Expr
+	// SQL string name of the type.
+	TypeName
 
 	// AttrMax is the largest possible Attr value.
 	// Note: add any new enum values before TargetStatus, leave these at the end.
@@ -262,6 +264,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(ColumnFamilyID, "FamilyID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
 		rel.EntityAttr(ReferencedTypeIDs, "ClosedTypeIDs"),
+		rel.EntityAttr(TypeName, "TypeName"),
 	),
 	rel.EntityMapping(t((*scpb.SequenceOption)(nil)),
 		rel.EntityAttr(DescID, "SequenceID"),
@@ -385,6 +388,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	),
 	rel.EntityMapping(t((*scpb.TableZoneConfig)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(SeqNum, "SeqNum"),
 	),
 	rel.EntityMapping(t((*scpb.IndexZoneConfig)(nil)),
 		rel.EntityAttr(DescID, "TableID"),

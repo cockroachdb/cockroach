@@ -404,11 +404,6 @@ func (md *Metadata) CheckDependencies(
 		}
 	}
 
-	// Ensure that all required privileges for the data sources are still valid.
-	if err := md.checkDataSourcePrivileges(ctx, optCatalog); err != nil {
-		return false, err
-	}
-
 	// Check that no referenced user defined types have changed.
 	for _, typ := range md.AllUserDefinedTypes() {
 		id := cat.StableID(catid.UserDefinedOIDToID(typ.Oid()))
@@ -488,14 +483,6 @@ func (md *Metadata) CheckDependencies(
 		}
 	}
 
-	// Check that the role still has execution privilege on the user defined
-	// functions.
-	for _, dep := range md.udfDeps {
-		if err := optCatalog.CheckExecutionPrivilege(ctx, dep.overload.Oid); err != nil {
-			return false, err
-		}
-	}
-
 	// Check that any references to builtin functions do not now resolve to a UDF
 	// with the same signature (e.g. after changes to the search path).
 	for name := range md.builtinRefsByName {
@@ -509,6 +496,21 @@ func (md *Metadata) CheckDependencies(
 			if definition.Overloads[i].Type == tree.UDFRoutine {
 				return false, nil
 			}
+		}
+	}
+
+	// Check that the role still has the required privileges for the data sources
+	// and routines.
+	//
+	// NOTE: this check has to happen after the object resolution checks, or else
+	// we may end up returning a privilege error when the memo should have just
+	// been invalidated.
+	if err := md.checkDataSourcePrivileges(ctx, optCatalog); err != nil {
+		return false, err
+	}
+	for _, dep := range md.udfDeps {
+		if err := optCatalog.CheckExecutionPrivilege(ctx, dep.overload.Oid); err != nil {
+			return false, err
 		}
 	}
 
@@ -795,6 +797,11 @@ func (md *Metadata) Table(tabID TableID) cat.Table {
 // modified.
 func (md *Metadata) AllTables() []TableMeta {
 	return md.tables
+}
+
+// NumTables returns the number of tables in the metadata.
+func (md *Metadata) NumTables() int {
+	return len(md.tables)
 }
 
 // AddColumn assigns a new unique id to a column within the query and records

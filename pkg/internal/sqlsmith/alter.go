@@ -420,7 +420,12 @@ func makeRenameIndex(s *Smither) (tree.Statement, bool) {
 
 func makeCreateType(s *Smither) (tree.Statement, bool) {
 	name := s.name("typ")
-	return randgen.RandCreateType(s.rnd, string(name), letters), true
+
+	if s.coin() {
+		return randgen.RandCreateEnumType(s.rnd, string(name), letters), true
+	}
+
+	return randgen.RandCreateCompositeType(s.rnd, string(name), letters), true
 }
 
 func makeDropType(s *Smither) (tree.Statement, bool) {

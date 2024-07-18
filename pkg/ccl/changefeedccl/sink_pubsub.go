@@ -304,8 +304,8 @@ func (p *deprecatedPubsubSink) Topics() []string {
 }
 
 func (p *deprecatedGcpPubsubClient) cacheTopicLocked(name string, topic *pubsub.Topic) {
-	//TODO (zinger): Investigate whether changing topics to a sync.Map would be
-	//faster here, I think it would.
+	// TODO(zinger): Investigate whether changing topics to a syncutil.Map would
+	// be faster here, I think it would.
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.mu.topics[name] = topic
@@ -499,16 +499,16 @@ func (p *deprecatedGcpPubsubClient) openTopic(topicName string) (*pubsub.Topic, 
 }
 
 func (p *deprecatedGcpPubsubClient) close() error {
+	if p.client == nil {
+		return nil
+	}
 	_ = p.forEachTopic(func(_ string, t *pubsub.Topic) error {
 		t.Stop()
 		return nil
 	})
-	if p.client != nil {
-		// Close the client to release resources held by the client to avoid memory
-		// leaks.
-		return p.client.Close()
-	}
-	return nil
+	// Close the client to release resources held by the client to avoid memory
+	// leaks.
+	return p.client.Close()
 }
 
 // sendMessage sends a message to the topic

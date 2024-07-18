@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/gpq"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -824,6 +825,23 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseForecasts), nil
 		},
 		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
+	`optimizer_use_merged_partial_statistics`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_merged_partial_statistics`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_merged_partial_statistics", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseMergedPartialStatistics(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseMergedPartialStatistics), nil
+		},
+		GlobalDefault: globalFalse,
 	},
 
 	// CockroachDB extension.
@@ -2839,6 +2857,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`enable_create_stats_using_extremes_bool_enum`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_create_stats_using_extremes_bool_enum`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_create_stats_using_extremes_bool_enum", s)
+			if err != nil {
+				return err
+			}
+			m.SetEnableCreateStatsUsingExtremesBoolEnum(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableCreateStatsUsingExtremesBoolEnum), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`allow_role_memberships_to_change_during_transaction`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`allow_role_memberships_to_change_during_transaction`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
@@ -3389,6 +3424,12 @@ var varGen = map[string]sessionVar{
 					sessiondatapb.PlanCacheModeForceGeneric.String(),
 					sessiondatapb.PlanCacheModeAuto.String(),
 				)
+			}
+			if mode == sessiondatapb.PlanCacheModeForceGeneric ||
+				mode == sessiondatapb.PlanCacheModeAuto {
+				if err := gpq.CheckClusterSupportsGenericQueryPlans(m.settings); err != nil {
+					return err
+				}
 			}
 			m.SetPlanCacheMode(mode)
 			return nil

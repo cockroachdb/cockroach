@@ -14,10 +14,8 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
-	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -163,6 +161,12 @@ var (
 	metaLeaseEpochCount = metric.Metadata{
 		Name:        "leases.epoch",
 		Help:        "Number of replica leaseholders using epoch-based leases",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLeaseLeaderCount = metric.Metadata{
+		Name:        "leases.leader",
+		Help:        "Number of replica leaseholders using leader leases",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -962,6 +966,32 @@ bytes preserved during flushes and compactions over the lifetime of the process.
 			"open iterator may be reading them.",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
+	}
+	metaSSTableCompressionSnappy = metric.Metadata{
+		Name: "storage.sstable.compression.snappy.count",
+		Help: "Count of SSTables that have been compressed with the snappy " +
+			"compression algorithm.",
+		Measurement: "SSTables",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaSSTableCompressionZstd = metric.Metadata{
+		Name: "storage.sstable.compression.zstd.count",
+		Help: "Count of SSTables that have been compressed with the zstd " +
+			"compression algorithm.",
+		Measurement: "SSTables",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaSSTableCompressionUnknown = metric.Metadata{
+		Name:        "storage.sstable.compression.unknown.count",
+		Help:        "Count of SSTables that have an unknown compression algorithm.",
+		Measurement: "SSTables",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaSSTableCompressionNone = metric.Metadata{
+		Name:        "storage.sstable.compression.none.count",
+		Help:        "Count of SSTables that are uncompressed.",
+		Measurement: "SSTables",
+		Unit:        metric.Unit_COUNT,
 	}
 )
 
@@ -2535,6 +2565,7 @@ type StoreMetrics struct {
 	LeaseTransferErrorCount        *metric.Counter
 	LeaseExpirationCount           *metric.Gauge
 	LeaseEpochCount                *metric.Gauge
+	LeaseLeaderCount               *metric.Gauge
 	LeaseLivenessCount             *metric.Gauge
 	LeaseViolatingPreferencesCount *metric.Gauge
 	LeaseLessPreferredCount        *metric.Gauge
@@ -2645,6 +2676,10 @@ type StoreMetrics struct {
 	BatchCommitWALRotWaitDuration     *metric.Counter
 	BatchCommitCommitWaitDuration     *metric.Counter
 	SSTableZombieBytes                *metric.Gauge
+	SSTableCompressionSnappy          *metric.Gauge
+	SSTableCompressionZstd            *metric.Gauge
+	SSTableCompressionUnknown         *metric.Gauge
+	SSTableCompressionNone            *metric.Gauge
 	categoryIterMetrics               pebbleCategoryIterMetricsContainer
 	categoryDiskWriteMetrics          pebbleCategoryDiskWriteMetricsContainer
 	WALBytesWritten                   *metric.Counter
@@ -2893,14 +2928,14 @@ type StoreMetrics struct {
 	FsyncLatency     *metric.ManualWindowHistogram
 
 	// Disk metrics
-	DiskReadBytes              *metric.Gauge
-	DiskReadCount              *metric.Gauge
-	DiskReadTime               *metric.Gauge
-	DiskWriteBytes             *metric.Gauge
-	DiskWriteCount             *metric.Gauge
-	DiskWriteTime              *metric.Gauge
-	DiskIOTime                 *metric.Gauge
-	DiskWeightedIOTime         *metric.Gauge
+	DiskReadBytes              *metric.Counter
+	DiskReadCount              *metric.Counter
+	DiskReadTime               *metric.Counter
+	DiskWriteBytes             *metric.Counter
+	DiskWriteCount             *metric.Counter
+	DiskWriteTime              *metric.Counter
+	DiskIOTime                 *metric.Counter
+	DiskWeightedIOTime         *metric.Counter
 	DiskIopsInProgress         *metric.Gauge
 	DiskReadMaxBytesPerSecond  *metric.Gauge
 	DiskWriteMaxBytesPerSecond *metric.Gauge
@@ -2964,7 +2999,7 @@ type TenantsStorageMetrics struct {
 	// everything will work with tenantsIDs in excess of math.MaxInt64
 	// except that should one ever look at this map through a debugger
 	// the int64->uint64 conversion has to be done manually.
-	tenants syncutil.IntMap // map[int64(roachpb.TenantID)]*tenantStorageMetrics
+	tenants syncutil.Map[roachpb.TenantID, tenantStorageMetrics]
 }
 
 // tenantsStorageMetricsSet returns the set of all metric names contained
@@ -3015,10 +3050,8 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 		m.mu.refCount++
 		return false
 	}
-	key := int64(tenantID.ToUint64())
 	for {
-		if mPtr, ok := sm.tenants.Load(key); ok {
-			m := (*tenantStorageMetrics)(mPtr)
+		if m, ok := sm.tenants.Load(tenantID); ok {
 			if alreadyDestroyed := incRef(m); !alreadyDestroyed {
 				return &tenantMetricsRef{
 					_tenantID: tenantID,
@@ -3030,7 +3063,7 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 		} else {
 			m := &tenantStorageMetrics{}
 			m.mu.Lock()
-			_, loaded := sm.tenants.LoadOrStore(key, unsafe.Pointer(m))
+			_, loaded := sm.tenants.LoadOrStore(tenantID, m)
 			if loaded {
 				// Lost the race with another goroutine to add the instance, go back
 				// around.
@@ -3118,7 +3151,7 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantM
 		(*gptr).Unlink()
 		*gptr = nil
 	}
-	sm.tenants.Delete(int64(ref._tenantID.ToUint64()))
+	sm.tenants.Delete(ref._tenantID)
 }
 
 // getTenant is a helper method used to retrieve the metrics for a tenant. The
@@ -3127,12 +3160,11 @@ func (sm *TenantsStorageMetrics) getTenant(
 	ctx context.Context, ref *tenantMetricsRef,
 ) *tenantStorageMetrics {
 	ref.assert(ctx)
-	key := int64(ref._tenantID.ToUint64())
-	mPtr, ok := sm.tenants.Load(key)
+	m, ok := sm.tenants.Load(ref._tenantID)
 	if !ok {
 		log.Fatalf(ctx, "no metrics exist for tenant %v", ref._tenantID)
 	}
-	return (*tenantStorageMetrics)(mPtr)
+	return m
 }
 
 type tenantStorageMetrics struct {
@@ -3233,6 +3265,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		LeaseTransferErrorCount:        metric.NewCounter(metaLeaseTransferErrorCount),
 		LeaseExpirationCount:           metric.NewGauge(metaLeaseExpirationCount),
 		LeaseEpochCount:                metric.NewGauge(metaLeaseEpochCount),
+		LeaseLeaderCount:               metric.NewGauge(metaLeaseLeaderCount),
 		LeaseLivenessCount:             metric.NewGauge(metaLeaseLivenessCount),
 		LeaseViolatingPreferencesCount: metric.NewGauge(metaLeaseViolatingPreferencesCount),
 		LeaseLessPreferredCount:        metric.NewGauge(metaLeaseLessPreferredCount),
@@ -3357,6 +3390,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		BatchCommitWALRotWaitDuration:     metric.NewCounter(metaBatchCommitWALRotDuration),
 		BatchCommitCommitWaitDuration:     metric.NewCounter(metaBatchCommitCommitWaitDuration),
 		SSTableZombieBytes:                metric.NewGauge(metaSSTableZombieBytes),
+		SSTableCompressionSnappy:          metric.NewGauge(metaSSTableCompressionSnappy),
+		SSTableCompressionZstd:            metric.NewGauge(metaSSTableCompressionZstd),
+		SSTableCompressionUnknown:         metric.NewGauge(metaSSTableCompressionUnknown),
+		SSTableCompressionNone:            metric.NewGauge(metaSSTableCompressionNone),
 		categoryIterMetrics: pebbleCategoryIterMetricsContainer{
 			registry: storeRegistry,
 		},
@@ -3661,14 +3698,14 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaReadBatchDroppedLatchesBeforeEval: metric.NewCounter(metaReplicaReadBatchDroppedLatchesBeforeEval),
 		ReplicaReadBatchWithoutInterleavingIter:  metric.NewCounter(metaReplicaReadBatchWithoutInterleavingIter),
 
-		DiskReadBytes:              metric.NewGauge(metaDiskReadBytes),
-		DiskReadCount:              metric.NewGauge(metaDiskReadCount),
-		DiskReadTime:               metric.NewGauge(metaDiskReadTime),
-		DiskWriteBytes:             metric.NewGauge(metaDiskWriteBytes),
-		DiskWriteCount:             metric.NewGauge(metaDiskWriteCount),
-		DiskWriteTime:              metric.NewGauge(metaDiskWriteTime),
-		DiskIOTime:                 metric.NewGauge(metaDiskIOTime),
-		DiskWeightedIOTime:         metric.NewGauge(metaDiskWeightedIOTime),
+		DiskReadBytes:              metric.NewCounter(metaDiskReadBytes),
+		DiskReadCount:              metric.NewCounter(metaDiskReadCount),
+		DiskReadTime:               metric.NewCounter(metaDiskReadTime),
+		DiskWriteBytes:             metric.NewCounter(metaDiskWriteBytes),
+		DiskWriteCount:             metric.NewCounter(metaDiskWriteCount),
+		DiskWriteTime:              metric.NewCounter(metaDiskWriteTime),
+		DiskIOTime:                 metric.NewCounter(metaDiskIOTime),
+		DiskWeightedIOTime:         metric.NewCounter(metaDiskWeightedIOTime),
 		DiskIopsInProgress:         metric.NewGauge(metaDiskIopsInProgress),
 		DiskReadMaxBytesPerSecond:  metric.NewGauge(metaDiskReadMaxBytesPerSecond),
 		DiskWriteMaxBytesPerSecond: metric.NewGauge(metaDiskWriteMaxBytesPerSecond),
@@ -3803,6 +3840,10 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.BatchCommitWALRotWaitDuration.Update(int64(m.BatchCommitStats.WALRotationDuration))
 	sm.BatchCommitCommitWaitDuration.Update(int64(m.BatchCommitStats.CommitWaitDuration))
 	sm.SSTableZombieBytes.Update(int64(m.Table.ZombieSize))
+	sm.SSTableCompressionSnappy.Update(m.Table.CompressedCountSnappy)
+	sm.SSTableCompressionZstd.Update(m.Table.CompressedCountZstd)
+	sm.SSTableCompressionUnknown.Update(m.Table.CompressedCountUnknown)
+	sm.SSTableCompressionNone.Update(m.Table.CompressedCountNone)
 	sm.categoryIterMetrics.update(m.CategoryStats)
 	sm.categoryDiskWriteMetrics.update(m.DiskWriteStats)
 
@@ -3999,9 +4040,9 @@ func (sm *StoreMetrics) getCounterForRangeLogEventType(
 }
 
 type pebbleCategoryIterMetrics struct {
-	IterBlockBytes          *metric.Gauge
-	IterBlockBytesInCache   *metric.Gauge
-	IterBlockReadLatencySum *metric.Gauge
+	IterBlockBytes          *metric.Counter
+	IterBlockBytesInCache   *metric.Counter
+	IterBlockReadLatencySum *metric.Counter
 }
 
 func makePebbleCategorizedIterMetrics(category sstable.Category) *pebbleCategoryIterMetrics {
@@ -4024,9 +4065,9 @@ func makePebbleCategorizedIterMetrics(category sstable.Category) *pebbleCategory
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	return &pebbleCategoryIterMetrics{
-		IterBlockBytes:          metric.NewGauge(metaBlockBytes),
-		IterBlockBytesInCache:   metric.NewGauge(metaBlockBytesInCache),
-		IterBlockReadLatencySum: metric.NewGauge(metaBlockReadLatencySum),
+		IterBlockBytes:          metric.NewCounter(metaBlockBytes),
+		IterBlockBytesInCache:   metric.NewCounter(metaBlockBytesInCache),
+		IterBlockReadLatencySum: metric.NewCounter(metaBlockReadLatencySum),
 	}
 }
 
@@ -4040,21 +4081,19 @@ func (m *pebbleCategoryIterMetrics) update(stats sstable.CategoryStats) {
 }
 
 type pebbleCategoryIterMetricsContainer struct {
-	registry *metric.Registry
-	// sstable.Category => *pebbleCategoryIterMetrics
-	metricsMap sync.Map
+	registry   *metric.Registry
+	metricsMap syncutil.Map[sstable.Category, pebbleCategoryIterMetrics]
 }
 
 func (m *pebbleCategoryIterMetricsContainer) update(stats []sstable.CategoryStatsAggregate) {
 	for _, s := range stats {
-		val, ok := m.metricsMap.Load(s.Category)
+		cm, ok := m.metricsMap.Load(s.Category)
 		if !ok {
-			val, ok = m.metricsMap.LoadOrStore(s.Category, makePebbleCategorizedIterMetrics(s.Category))
+			cm, ok = m.metricsMap.LoadOrStore(s.Category, makePebbleCategorizedIterMetrics(s.Category))
 			if !ok {
-				m.registry.AddMetricStruct(val)
+				m.registry.AddMetricStruct(cm)
 			}
 		}
-		cm := val.(*pebbleCategoryIterMetrics)
 		cm.update(s.CategoryStats)
 	}
 }
@@ -4083,21 +4122,19 @@ func (m *pebbleCategoryDiskWriteMetrics) update(stats vfs.DiskWriteStatsAggregat
 }
 
 type pebbleCategoryDiskWriteMetricsContainer struct {
-	registry *metric.Registry
-	// vfs.DiskWriteCategory => *pebbleCategoryDiskWriteMetrics
-	metricsMap sync.Map
+	registry   *metric.Registry
+	metricsMap syncutil.Map[vfs.DiskWriteCategory, pebbleCategoryDiskWriteMetrics]
 }
 
 func (m *pebbleCategoryDiskWriteMetricsContainer) update(stats []vfs.DiskWriteStatsAggregate) {
 	for _, s := range stats {
-		val, ok := m.metricsMap.Load(s.Category)
+		cm, ok := m.metricsMap.Load(s.Category)
 		if !ok {
-			val, ok = m.metricsMap.LoadOrStore(s.Category, makePebbleCategorizedWriteMetrics(s.Category))
+			cm, ok = m.metricsMap.LoadOrStore(s.Category, makePebbleCategorizedWriteMetrics(s.Category))
 			if !ok {
-				m.registry.AddMetricStruct(val)
+				m.registry.AddMetricStruct(cm)
 			}
 		}
-		cm := val.(*pebbleCategoryDiskWriteMetrics)
 		cm.update(s)
 	}
 }

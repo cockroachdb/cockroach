@@ -306,14 +306,16 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 // encodeURICmd creates a PG URI for the given parameters.
 var encodeURICmd = func() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "encode-uri USERNAME[:PASSWORD]@HOST",
+		Use:   "encode-uri [postgres://][USERNAME[:PASSWORD]@]HOST",
 		Short: "encode a CRDB connection URL",
 		Args:  cobra.ExactArgs(1),
 		RunE:  clierrorplus.MaybeDecorateError(encodeURI),
 	}
 	f := cmd.PersistentFlags()
 	f.BoolVar(&encodeURIOpts.sslInline, "inline", false, "whether to inline certificates (supported by CRDB's Physical Replication feature)")
+	f.StringVar(&encodeURIOpts.user, "user", "", "username (overrides any username in the passed URL)")
 	f.StringVar(&encodeURIOpts.cluster, "cluster", "system", "virtual cluster to connect to")
+	f.StringVar(&encodeURIOpts.certsDir, "certs-dir", "", "certs directory in which to find certs automatically")
 	f.StringVar(&encodeURIOpts.caCertPath, "ca-cert", "", "path to CA certificate")
 	f.StringVar(&encodeURIOpts.certPath, "cert", "", "path to certificate for client-cert authentication")
 	f.StringVar(&encodeURIOpts.keyPath, "key", "", "path to key for client-cert authentication")
@@ -323,7 +325,9 @@ var encodeURICmd = func() *cobra.Command {
 
 var encodeURIOpts = struct {
 	sslInline  bool
+	user       string
 	cluster    string
+	certsDir   string
 	caCertPath string
 	certPath   string
 	keyPath    string
@@ -331,11 +335,59 @@ var encodeURIOpts = struct {
 }{}
 
 func encodeURI(cmd *cobra.Command, args []string) error {
-	usernameAndHost := args[0]
-
-	pgURL, err := url.Parse(fmt.Sprintf("postgresql://%s/%s", usernameAndHost, encodeURIOpts.database))
+	pgURL, err := url.Parse(args[0])
 	if err != nil {
 		return err
+	}
+
+	if pgURL.Scheme == "" {
+		pgURL.Scheme = "postgresql://"
+	}
+
+	if encodeURIOpts.database != "" {
+		pgURL.Path = encodeURIOpts.database
+	}
+
+	userName := encodeURIOpts.user
+	if userName == "" && pgURL.User != nil {
+		userName = pgURL.User.Username()
+	}
+
+	user := username.RootUserName()
+	if userName != "" {
+		u, err := username.MakeSQLUsernameFromPreNormalizedStringChecked(userName)
+		if err != nil {
+			return err
+		}
+		user = u
+	}
+
+	// Now that we've established the username, update it in the URL.
+	if pgURL.User == nil {
+		pgURL.User = url.User(user.Normalized())
+	} else {
+		if pass, hasPass := pgURL.User.Password(); hasPass {
+			pgURL.User = url.UserPassword(user.Normalized(), pass)
+		} else {
+			pgURL.User = url.User(user.Normalized())
+		}
+	}
+
+	if encodeURIOpts.certsDir != "" {
+		cm, err := security.NewCertificateManager(encodeURIOpts.certsDir, security.CommandTLSSettings{})
+		if err != nil {
+			return errors.Wrap(err, "cannot load certificates")
+		}
+		if encodeURIOpts.caCertPath == "" {
+			encodeURIOpts.caCertPath = cm.CACertPath()
+		}
+
+		if encodeURIOpts.certPath == "" {
+			encodeURIOpts.certPath = cm.ClientCertPath(user)
+		}
+		if encodeURIOpts.keyPath == "" {
+			encodeURIOpts.keyPath = cm.ClientKeyPath(user)
+		}
 	}
 
 	options := pgURL.Query()

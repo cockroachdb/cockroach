@@ -74,14 +74,14 @@ type eventStream struct {
 }
 
 var quantize = settings.RegisterDurationSettingWithExplicitUnit(
-	settings.SystemOnly,
+	settings.ApplicationLevel,
 	"physical_replication.producer.timestamp_granularity",
 	"the granularity at which replicated times are quantized to make tracking more efficient",
 	5*time.Second,
 )
 
 var emitMetadata = settings.RegisterBoolSetting(
-	settings.SystemOnly,
+	settings.ApplicationLevel,
 	"physical_replication.producer.emit_metadata.enabled",
 	"whether to emit metadata events",
 	true,
@@ -148,12 +148,17 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		rangefeed.WithOnDeleteRange(s.onDeleteRange),
 		rangefeed.WithFrontierQuantized(quantize.Get(&s.execCfg.Settings.SV)),
 		rangefeed.WithOnValues(s.onValues),
-		rangefeed.WithFiltering(s.spec.WithFiltering),
 		rangefeed.WithDiff(s.spec.WithDiff),
 		rangefeed.WithInvoker(func(fn func() error) error { return fn() }),
 	}
 	if emitMetadata.Get(&s.execCfg.Settings.SV) {
 		opts = append(opts, rangefeed.WithOnMetadata(s.onMetadata))
+	}
+	if s.spec.Type == streampb.ReplicationType_LOGICAL {
+		// To prevent data looping during Logical Replication, only emit events that
+		// were written by the foreground workload, not from the LDR replication
+		// stream.
+		opts = append(opts, rangefeed.WithOriginIDsMatching(0))
 	}
 
 	initialTimestamp := s.spec.InitialScanTimestamp
@@ -532,9 +537,6 @@ func streamPartition(
 	var spec streampb.StreamPartitionSpec
 	if err := protoutil.Unmarshal(opaqueSpec, &spec); err != nil {
 		return nil, errors.Wrapf(err, "invalid partition spec for stream %d", streamID)
-	}
-	if !evalCtx.SessionData().AvoidBuffering {
-		return nil, errors.New("partition streaming requires 'SET avoid_buffering = true' option")
 	}
 	if len(spec.Spans) == 0 {
 		return nil, errors.AssertionFailedf("expected at least one span, got none")

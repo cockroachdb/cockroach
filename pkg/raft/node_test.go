@@ -150,7 +150,7 @@ func TestNodePropose(t *testing.T) {
 		rd := <-n.Ready()
 		s.Append(rd.Entries)
 		// change the step function to appendStep until this raft becomes leader
-		if rd.SoftState.Lead == r.id {
+		if rd.HardState.Lead == r.id {
 			r.step = appendStep
 			n.Advance()
 			break
@@ -215,7 +215,7 @@ func TestNodeProposeConfig(t *testing.T) {
 		rd := <-n.Ready()
 		s.Append(rd.Entries)
 		// change the step function to appendStep until this raft becomes leader
-		if rd.SoftState.Lead == r.id {
+		if rd.HardState.Lead == r.id {
 			r.step = appendStep
 			n.Advance()
 			break
@@ -366,7 +366,7 @@ func TestNodeProposeWaitDropped(t *testing.T) {
 		rd := <-n.Ready()
 		s.Append(rd.Entries)
 		// change the step function to dropStep until this raft becomes leader
-		if rd.SoftState.Lead == r.id {
+		if rd.HardState.Lead == r.id {
 			r.step = dropStep
 			n.Advance()
 			break
@@ -442,7 +442,7 @@ func TestNodeStart(t *testing.T) {
 	require.NoError(t, err)
 	wants := []Ready{
 		{
-			HardState: raftpb.HardState{Term: 1, Commit: 1, Vote: 0},
+			HardState: raftpb.HardState{Term: 1, Commit: 1, Vote: 0, Lead: 0},
 			Entries: []raftpb.Entry{
 				{Type: raftpb.EntryConfChange, Term: 1, Index: 1, Data: ccdata},
 			},
@@ -452,13 +452,13 @@ func TestNodeStart(t *testing.T) {
 			MustSync: true,
 		},
 		{
-			HardState:        raftpb.HardState{Term: 2, Commit: 2, Vote: 1},
+			HardState:        raftpb.HardState{Term: 2, Commit: 2, Vote: 1, Lead: 1},
 			Entries:          []raftpb.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
 			CommittedEntries: []raftpb.Entry{{Term: 2, Index: 2, Data: nil}},
 			MustSync:         true,
 		},
 		{
-			HardState:        raftpb.HardState{Term: 2, Commit: 3, Vote: 1},
+			HardState:        raftpb.HardState{Term: 2, Commit: 3, Vote: 1, Lead: 1},
 			Entries:          nil,
 			CommittedEntries: []raftpb.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
 			MustSync:         false,
@@ -561,7 +561,7 @@ func TestNodeRestart(t *testing.T) {
 func TestNodeRestartFromSnapshot(t *testing.T) {
 	snap := raftpb.Snapshot{
 		Metadata: raftpb.SnapshotMetadata{
-			ConfState: raftpb.ConfState{Voters: []uint64{1, 2}},
+			ConfState: raftpb.ConfState{Voters: []raftpb.PeerID{1, 2}},
 			Index:     2,
 			Term:      1,
 		},
@@ -647,7 +647,6 @@ func TestSoftStateEqual(t *testing.T) {
 		we bool
 	}{
 		{&SoftState{}, true},
-		{&SoftState{Lead: 1}, false},
 		{&SoftState{RaftState: StateLeader}, false},
 	}
 	for i, tt := range tests {
@@ -664,6 +663,7 @@ func TestIsHardStateEqual(t *testing.T) {
 		{raftpb.HardState{Vote: 1}, false},
 		{raftpb.HardState{Commit: 1}, false},
 		{raftpb.HardState{Term: 1}, false},
+		{raftpb.HardState{Lead: 1}, false},
 	}
 
 	for i, tt := range tests {

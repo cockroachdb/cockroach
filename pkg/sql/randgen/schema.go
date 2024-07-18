@@ -49,15 +49,15 @@ func MakeSchemaName(ifNotExists bool, schema string, authRole tree.RoleSpec) *tr
 	}
 }
 
-// RandCreateType creates a random CREATE TYPE statement. The resulting
-// type's name will be name, and if the type is an enum, the members will
+// RandCreateEnumType creates a random CREATE TYPE <type_name> AS ENUM statement.
+// The resulting type's name will be name, the enum members will
 // be random strings generated from alphabet.
-func RandCreateType(rng *rand.Rand, name, alphabet string) tree.Statement {
+func RandCreateEnumType(rng *rand.Rand, name, alphabet string) tree.Statement {
 	numLabels := rng.Intn(6) + 1
 	labels := make(tree.EnumValueList, numLabels)
 	labelsMap := make(map[string]struct{})
-	i := 0
-	for i < numLabels {
+
+	for i := 0; i < numLabels; {
 		s := util.RandString(rng, rng.Intn(6)+1, alphabet)
 		if _, ok := labelsMap[s]; !ok {
 			labels[i] = tree.EnumValue(s)
@@ -65,6 +65,7 @@ func RandCreateType(rng *rand.Rand, name, alphabet string) tree.Statement {
 			i++
 		}
 	}
+
 	un, err := tree.NewUnresolvedObjectName(1, [3]string{name}, 0)
 	if err != nil {
 		panic(err)
@@ -73,6 +74,35 @@ func RandCreateType(rng *rand.Rand, name, alphabet string) tree.Statement {
 		TypeName:   un,
 		Variety:    tree.Enum,
 		EnumLabels: labels,
+	}
+}
+
+// RandCreateCompositeType creates a random composite type statement.
+func RandCreateCompositeType(rng *rand.Rand, name, alphabet string) tree.Statement {
+	var compositeTypeList []tree.CompositeTypeElem
+
+	numTypes := rng.Intn(6) + 1
+	uniqueNames := make(map[string]struct{})
+
+	for i := 0; i < numTypes; {
+		randomName := util.RandString(rng, rng.Intn(6)+1, alphabet)
+		randomType := RandTypeFromSlice(rng, types.Scalar)
+
+		if _, ok := uniqueNames[randomName]; !ok {
+			compositeTypeList = append(compositeTypeList, tree.CompositeTypeElem{Label: tree.Name(randomName), Type: randomType})
+			uniqueNames[randomName] = struct{}{}
+			i++
+		}
+	}
+
+	un, err := tree.NewUnresolvedObjectName(1, [3]string{name}, 0)
+	if err != nil {
+		panic(err)
+	}
+	return &tree.CreateType{
+		TypeName:          un,
+		Variety:           tree.Composite,
+		CompositeTypeList: compositeTypeList,
 	}
 }
 
@@ -153,6 +183,7 @@ func RandCreateTableWithName(
 }
 
 type tableGenerationOptions struct {
+	primaryIndexRequired      bool
 	skipColumnFamilyMutations bool
 }
 
@@ -160,6 +191,10 @@ type TableGenerationOption func(*tableGenerationOptions)
 
 func SkipColumnFamilyMutation() TableGenerationOption {
 	return func(o *tableGenerationOptions) { o.skipColumnFamilyMutations = true }
+}
+
+func RequirePrimaryIndex() TableGenerationOption {
+	return func(o *tableGenerationOptions) { o.primaryIndexRequired = true }
 }
 
 func randCreateTableWithColumnIndexNumberGeneratorAndName(
@@ -211,26 +246,30 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 
 	// Make a random primary key with high likelihood.
 	var pk *tree.IndexTableDef
-	if rng.Intn(8) != 0 {
-		indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, true /* isPrimaryIndex */, isMultiRegion)
-		if ok {
-			pk = &indexDef
-		}
-		if ok && !indexDef.Inverted {
-			defs = append(defs, &tree.UniqueConstraintTableDef{
-				PrimaryKey:    true,
-				IndexTableDef: indexDef,
-			})
-		}
-		// Although not necessary for Cockroach to function correctly,
-		// but for ease of use for any code that introspects on the
-		// AST data structure (instead of the descriptor which doesn't
-		// exist yet), explicitly set all PK cols as NOT NULL.
-		for _, col := range columnDefs {
-			for _, elem := range indexDef.Columns {
-				if col.Name == elem.Column {
-					col.Nullable.Nullability = tree.NotNull
+	if options.primaryIndexRequired || (rng.Intn(8) != 0) {
+		for {
+			indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, true /* isPrimaryIndex */, isMultiRegion)
+			canUseIndex := ok && !indexDef.Inverted
+			if canUseIndex {
+				// Although not necessary for Cockroach to function correctly,
+				// but for ease of use for any code that introspects on the
+				// AST data structure (instead of the descriptor which doesn't
+				// exist yet), explicitly set all PK cols as NOT NULL.
+				for _, col := range columnDefs {
+					for _, elem := range indexDef.Columns {
+						if col.Name == elem.Column {
+							col.Nullable.Nullability = tree.NotNull
+						}
+					}
 				}
+				pk = &indexDef
+				defs = append(defs, &tree.UniqueConstraintTableDef{
+					PrimaryKey:    true,
+					IndexTableDef: indexDef,
+				})
+			}
+			if canUseIndex || !options.primaryIndexRequired {
+				break
 			}
 		}
 	}

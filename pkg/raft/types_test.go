@@ -86,11 +86,85 @@ func TestLogSlice(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			s := logSlice{term: tt.term, prev: tt.prev, entries: tt.entries}
 			require.Equal(t, tt.notOk, s.valid() != nil)
-			if !tt.notOk {
-				last := s.lastEntryID()
-				require.Equal(t, tt.last, last)
-				require.Equal(t, last.index, s.lastIndex())
+			if tt.notOk {
+				return
 			}
+			last := s.lastEntryID()
+			require.Equal(t, tt.last, last)
+			require.Equal(t, last.index, s.lastIndex())
+			require.Equal(t, logMark{term: tt.term, index: last.index}, s.mark())
+
+			require.Equal(t, tt.prev.term, s.termAt(tt.prev.index))
+			for _, e := range tt.entries {
+				require.Equal(t, e.Term, s.termAt(e.Index))
+			}
+		})
+	}
+}
+
+func TestLogSliceForward(t *testing.T) {
+	id := func(index, term uint64) entryID {
+		return entryID{term: term, index: index}
+	}
+	ls := func(prev entryID, terms ...uint64) logSlice {
+		empty := make([]pb.Entry, 0) // hack to canonicalize empty slices
+		return logSlice{
+			term:    8,
+			prev:    prev,
+			entries: append(empty, index(prev.index+1).terms(terms...)...),
+		}
+	}
+	for _, tt := range []struct {
+		ls   logSlice
+		to   uint64
+		want logSlice
+	}{
+		{ls: logSlice{}, to: 0, want: logSlice{}},
+		{ls: ls(id(5, 1)), to: 5, want: ls(id(5, 1))},
+		{ls: ls(id(10, 3), 3, 4, 5), to: 10, want: ls(id(10, 3), 3, 4, 5)},
+		{ls: ls(id(10, 3), 3, 4, 5), to: 11, want: ls(id(11, 3), 4, 5)},
+		{ls: ls(id(10, 3), 3, 4, 5), to: 12, want: ls(id(12, 4), 5)},
+		{ls: ls(id(10, 3), 3, 4, 5), to: 13, want: ls(id(13, 5))},
+	} {
+		t.Run("", func(t *testing.T) {
+			require.NoError(t, tt.ls.valid())
+			require.Equal(t, tt.want, tt.ls.forward(tt.to))
+		})
+	}
+}
+
+func TestSnapshot(t *testing.T) {
+	id := func(index, term uint64) entryID {
+		return entryID{term: term, index: index}
+	}
+	snap := func(index, term uint64) pb.Snapshot {
+		return pb.Snapshot{Metadata: pb.SnapshotMetadata{
+			Term: term, Index: index,
+		}}
+	}
+	for _, tt := range []struct {
+		term  uint64
+		snap  pb.Snapshot
+		notOk bool
+		last  entryID
+	}{
+		// Empty "dummy" snapshot, at (0, 0) origin of the log.
+		{last: id(0, 0)},
+		// Valid only if term >= Metadata.Term.
+		{term: 10, snap: snap(123, 9), last: id(123, 9)},
+		{term: 10, snap: snap(123, 10), last: id(123, 10)},
+		{term: 10, snap: snap(123, 11), notOk: true},
+	} {
+		t.Run("", func(t *testing.T) {
+			s := snapshot{term: tt.term, snap: tt.snap}
+			require.Equal(t, tt.notOk, s.valid() != nil)
+			if tt.notOk {
+				return
+			}
+			last := s.lastEntryID()
+			require.Equal(t, tt.last, last)
+			require.Equal(t, last.index, s.lastIndex())
+			require.Equal(t, logMark{term: tt.term, index: last.index}, s.mark())
 		})
 	}
 }

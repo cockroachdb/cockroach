@@ -1723,11 +1723,6 @@ func SendEmptySnapshot(
 	// explicitly for snapshots going out to followers.
 	state.DeprecatedUsingAppliedStateKey = true
 
-	hs, err := sl.LoadHardState(ctx, eng)
-	if err != nil {
-		return err
-	}
-
 	snapUUID := uuid.NewV4()
 
 	// The snapshot must use a Pebble snapshot, since it requires consistent
@@ -1765,9 +1760,9 @@ func SendEmptySnapshot(
 		ToReplica:   to,
 		Message: raftpb.Message{
 			Type:     raftpb.MsgSnap,
-			To:       uint64(to.ReplicaID),
-			From:     uint64(from.ReplicaID),
-			Term:     hs.Term,
+			To:       raftpb.PeerID(to.ReplicaID),
+			From:     raftpb.PeerID(from.ReplicaID),
+			Term:     outgoingSnap.RaftSnap.Metadata.Term,
 			Snapshot: &outgoingSnap.RaftSnap,
 		},
 	}

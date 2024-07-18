@@ -47,6 +47,7 @@ the system with minimal total hops. The algorithm is as follows:
 package gossip
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -55,7 +56,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -269,8 +269,8 @@ type Gossip struct {
 	addressIdx     int
 	addresses      []util.UnresolvedAddr
 	addressesTried map[int]struct{} // Set of attempted address indexes
-	nodeDescs      syncutil.IntMap  // map[roachpb.NodeID]*roachpb.NodeDescriptor
-	storeDescs     syncutil.IntMap  // map[roachpb.StoreID]*roachpb.StoreDescriptor
+	nodeDescs      syncutil.Map[roachpb.NodeID, roachpb.NodeDescriptor]
+	storeDescs     syncutil.Map[roachpb.StoreID, roachpb.StoreDescriptor]
 
 	// Membership sets for bootstrap addresses. bootstrapAddrs also tracks which
 	// address is associated with which node ID to enable faster node lookup by
@@ -518,7 +518,7 @@ func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescript
 // GetNodeDescriptorCount gets the number of node descriptors.
 func (g *Gossip) GetNodeDescriptorCount() int {
 	count := 0
-	g.nodeDescs.Range(func(key int64, value unsafe.Pointer) bool {
+	g.nodeDescs.Range(func(_ roachpb.NodeID, _ *roachpb.NodeDescriptor) bool {
 		count++
 		return true
 	})
@@ -527,8 +527,7 @@ func (g *Gossip) GetNodeDescriptorCount() int {
 
 // GetStoreDescriptor looks up the descriptor of the node by ID.
 func (g *Gossip) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
-	if value, ok := g.storeDescs.Load(int64(storeID)); ok {
-		desc := (*roachpb.StoreDescriptor)(value)
+	if desc, ok := g.storeDescs.Load(storeID); ok {
 		return desc, nil
 	}
 	return nil, kvpb.NewStoreNotFoundError(storeID)
@@ -541,7 +540,7 @@ func (g *Gossip) LogStatus() {
 		var inc int
 		g.mu.RLock()
 		defer g.mu.RUnlock()
-		g.nodeDescs.Range(func(_ int64, _ unsafe.Pointer) bool {
+		g.nodeDescs.Range(func(_ roachpb.NodeID, _ *roachpb.NodeDescriptor) bool {
 			inc++
 			return true
 		})
@@ -751,10 +750,9 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 		return
 	}
 
-	if value, ok := g.nodeDescs.Load(int64(desc.NodeID)); ok {
-		existingDesc := (*roachpb.NodeDescriptor)(value)
+	if existingDesc, ok := g.nodeDescs.Load(desc.NodeID); ok {
 		if !existingDesc.Equal(&desc) {
-			g.nodeDescs.Store(int64(desc.NodeID), unsafe.Pointer(&desc))
+			g.nodeDescs.Store(desc.NodeID, &desc)
 		}
 		// Skip all remaining logic if the address hasn't changed, since that's all
 		// the logic cares about.
@@ -762,7 +760,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 			return
 		}
 	} else {
-		g.nodeDescs.Store(int64(desc.NodeID), unsafe.Pointer(&desc))
+		g.nodeDescs.Store(desc.NodeID, &desc)
 	}
 	g.recomputeMaxPeersLocked()
 
@@ -787,7 +785,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 }
 
 func (g *Gossip) removeNodeDescriptorLocked(nodeID roachpb.NodeID) {
-	g.nodeDescs.Delete(int64(nodeID))
+	g.nodeDescs.Delete(nodeID)
 	g.recomputeMaxPeersLocked()
 }
 
@@ -802,9 +800,7 @@ func (g *Gossip) updateStoreMap(key string, content roachpb.Value) {
 
 	log.VInfof(ctx, 1, "updateStoreMap called on %q with desc %+v", key, desc)
 
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.storeDescs.Store(int64(desc.StoreID), unsafe.Pointer(&desc))
+	g.storeDescs.Store(desc.StoreID, &desc)
 }
 
 // recomputeMaxPeersLocked recomputes max peers based on size of
@@ -818,7 +814,7 @@ func (g *Gossip) updateStoreMap(key string, content roachpb.Value) {
 // networks and I'm not sure what all the consequences of that might be.
 func (g *Gossip) recomputeMaxPeersLocked() {
 	var n int
-	g.nodeDescs.Range(func(_ int64, _ unsafe.Pointer) bool {
+	g.nodeDescs.Range(func(_ roachpb.NodeID, _ *roachpb.NodeDescriptor) bool {
 		n++
 		return true
 	})
@@ -834,8 +830,7 @@ func (g *Gossip) recomputeMaxPeersLocked() {
 func (g *Gossip) getNodeDescriptor(
 	nodeID roachpb.NodeID, locked bool,
 ) (*roachpb.NodeDescriptor, error) {
-	if value, ok := g.nodeDescs.Load(int64(nodeID)); ok {
-		desc := (*roachpb.NodeDescriptor)(value)
+	if desc, ok := g.nodeDescs.Load(nodeID); ok {
 		if desc.Address.IsEmpty() {
 			log.Fatalf(g.AnnotateCtx(context.Background()), "n%d has an empty address", nodeID)
 		}
@@ -913,6 +908,60 @@ func (g *Gossip) AddInfoProto(key string, msg protoutil.Message, ttl time.Durati
 		return err
 	}
 	return g.AddInfo(key, bytes, ttl)
+}
+
+// AddInfoIfNotRedundant adds or updates an info object if it isn't already
+// present in the local infoStore with exactly the same value and with this
+// node as the source. Motivated by the node liveness range's desire to only
+// gossip changed entries.
+//
+// Assumes the values have a TTL of 0 (always adding the gossip anew if the
+// stored value wasn't added with a TTL of 0), because if a value had a non-0
+// TTL then we'd have to make some sort of value judgment about whether it's
+// worth re-gossiping yet given how old the existing matching info was.
+func (g *Gossip) AddInfoIfNotRedundant(key string, val []byte) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	return g.addInfoIfNotRedundantLocked(key, val)
+}
+
+// addInfoIfNotRedundantLocked implements AddInfoIfNotRedundant.
+func (g *Gossip) addInfoIfNotRedundantLocked(key string, val []byte) error {
+	info := g.mu.is.getInfo(key)
+
+	if info != nil {
+		infoBytes, err := info.Value.GetBytes()
+		if err == nil && bytes.Equal(infoBytes, val) && g.infoOriginatedHere(info) && info.TTLStamp == math.MaxInt64 {
+			// Nothing has changed, so no need to re-gossip.
+			return nil
+		}
+	}
+
+	// Something is different, so we do need to add the provided key/value.
+	return g.addInfoLocked(key, val, 0 /* ttl */)
+}
+
+// InfoToAdd contains a single Gossip info to be added to the network.
+type InfoToAdd struct {
+	Key string
+	Val []byte
+}
+
+// BulkAddInfoIfNotRedundant matches the semantics of AddInfoIfNotRedundant
+// except for a batch of gossip infos rather than for a single info. The
+// benefit of batching is not needing to repeatedly lock and unlock the gossip
+// mutex for each info.
+func (g *Gossip) BulkAddInfoIfNotRedundant(toAdd []InfoToAdd) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	for i := range toAdd {
+		if err := g.addInfoIfNotRedundantLocked(toAdd[i].Key, toAdd[i].Val); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // AddClusterID is a convenience method for gossipping the cluster ID. There's
@@ -1007,6 +1056,12 @@ func (g *Gossip) InfoOriginatedHere(key string) bool {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	info := g.mu.is.getInfo(key)
+	return g.infoOriginatedHere(info)
+}
+
+// infoOriginatedHere is a simple reusable helper for InfoOriginatedHere that
+// doesn't involve taking the mutex.
+func (g *Gossip) infoOriginatedHere(info *Info) bool {
 	return info != nil && info.NodeID == g.NodeID.Get()
 }
 

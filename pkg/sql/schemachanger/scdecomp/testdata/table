@@ -110,6 +110,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 64
+    typeName: INT8
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -137,6 +138,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: OID
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -164,6 +166,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: DECIMAL
   Status: PUBLIC
 - IndexColumn:
     columnId: 1
@@ -402,6 +405,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 64
+    typeName: INT8
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -429,6 +433,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: STRING
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -456,6 +461,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 2
+    typeName: DECIMAL(8,2)
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -483,6 +489,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: OID
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -510,6 +517,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: DECIMAL
   Status: PUBLIC
 - ConstraintComment:
     comment: must have a parent
@@ -728,7 +736,24 @@ ElementState:
     tableId: 105
   Status: PUBLIC
 - TableZoneConfig:
+    seqNum: 0
     tableId: 105
+    zoneConfig:
+      constraints: []
+      gc:
+        ttlSeconds: 10
+      globalReads: null
+      inheritedConstraints: true
+      inheritedLeasePreferences: true
+      leasePreferences: []
+      nullVoterConstraintsIsEmpty: false
+      numReplicas: null
+      numVoters: null
+      rangeMaxBytes: null
+      rangeMinBytes: null
+      subzoneSpans: []
+      subzones: []
+      voterConstraints: []
   Status: PUBLIC
 - UniqueWithoutIndexConstraint:
     columnIds:
@@ -869,6 +894,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 64
+    typeName: INT8
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -896,6 +922,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 64
+    typeName: INT8
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -923,6 +950,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: OID
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -950,6 +978,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: DECIMAL
   Status: PUBLIC
 - IndexColumn:
     columnId: 1
@@ -1152,6 +1181,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: STRING
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -1179,6 +1209,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 64
+    typeName: INT8
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -1206,6 +1237,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: OID
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -1233,6 +1265,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: DECIMAL
   Status: PUBLIC
 - IndexColumn:
     columnId: 1

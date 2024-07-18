@@ -1919,6 +1919,13 @@ func TestLogic_sqllite(
 	runLogicTest(t, "sqllite")
 }
 
+func TestLogic_sqlliveness(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "sqlliveness")
+}
+
 func TestLogic_sqlsmith(
 	t *testing.T,
 ) {
@@ -2456,6 +2463,13 @@ func TestLogic_vectorize_window(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "vectorize_window")
+}
+
+func TestLogic_vectoross(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vectoross")
 }
 
 func TestLogic_views(

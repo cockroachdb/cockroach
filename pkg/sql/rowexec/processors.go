@@ -22,13 +22,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// emitHelper is a utility wrapper on top of ProcOutputHelper.EmitRow().
-// It takes a row to emit and, if anything happens other than the normal
-// situation where the emitting succeeds and the consumer still needs rows, both
-// the (potentially many) inputs and the output are properly closed after
-// potentially draining the inputs. It's allowed to not pass any inputs, in
-// which case nothing will be drained (this can happen when the caller has
-// already fully consumed the inputs).
+// emitHelper is a utility wrapper on top of ProcOutputHelper.EmitRow(). It
+// takes a row to emit and, if anything happens other than the normal situation
+// where the emitting succeeds and the consumer still needs rows, both the input
+// and the output are properly closed after potentially draining the input.
 //
 // As opposed to EmitRow(), this also supports metadata rows which bypass the
 // ProcOutputHelper and are routed directly to its output.
@@ -36,23 +33,17 @@ import (
 // If the consumer signals the producer to drain, the message is relayed and all
 // the draining metadata is consumed and forwarded.
 //
-// inputs are optional.
-//
-// pushTrailingMeta is called after draining the sources and before calling
-// dst.ProducerDone(). It gives the caller the opportunity to push some trailing
-// metadata (e.g. tracing information and txn updates, if applicable).
-//
 // Returns true if more rows are needed, false otherwise. If false is returned
 // both the inputs and the output have been properly closed, or there is an
 // error encountered.
 func emitHelper(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	input execinfra.RowSource,
 	output execinfra.RowReceiver,
 	procOutputHelper *execinfra.ProcOutputHelper,
 	row rowenc.EncDatumRow,
 	meta *execinfrapb.ProducerMetadata,
-	pushTrailingMeta func(context.Context, execinfra.RowReceiver),
-	inputs ...execinfra.RowSource,
 ) bool {
 	if output == nil {
 		panic("output RowReceiver is not set for emitting")
@@ -87,13 +78,11 @@ func emitHelper(
 		return false
 	case execinfra.DrainRequested:
 		log.VEventf(ctx, 1, "no more rows required. drain requested.")
-		execinfra.DrainAndClose(ctx, output, nil /* cause */, pushTrailingMeta, inputs...)
+		execinfra.DrainAndClose(ctx, flowCtx, input, output, nil /* cause */)
 		return false
 	case execinfra.ConsumerClosed:
 		log.VEventf(ctx, 1, "no more rows required. Consumer shut down.")
-		for _, input := range inputs {
-			input.ConsumerClosed()
-		}
+		input.ConsumerClosed()
 		output.ProducerDone()
 		return false
 	default:

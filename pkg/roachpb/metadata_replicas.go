@@ -330,7 +330,7 @@ func (d ReplicaSet) ConfState() raftpb.ConfState {
 	// config is not joint. If it is joint, slot the voters into the right
 	// category.
 	for _, rep := range d.wrapped {
-		id := uint64(rep.ReplicaID)
+		id := raftpb.PeerID(rep.ReplicaID)
 		switch rep.Type {
 		case VOTER_FULL:
 			cs.Voters = append(cs.Voters, id)

@@ -60,42 +60,27 @@ type TestingKnobs struct {
 	// server fails to start.
 	RPCListener net.Listener
 
-	// BinaryVersionOverride overrides the binary version that the CRDB server
-	// will end up running. This value could also influence what version the
-	// cluster is bootstrapped at.
+	// ClusterVersionOverride can be used to override the version of the cluster
+	// (assuming that one has to be created).
 	//
-	// This value, when set, influences test cluster/server creation in two
-	// different ways:
+	// Normally (when this knob isn't used), the cluster is initialized at
+	// cluster.Settings.Version.LatestVersion().
 	//
-	// Case 1:
-	// ------
-	// If the test has not overridden the
-	// `cluster.Settings.Version.MinSupportedVersion`, then the cluster will be
-	// bootstrapped at `minSupportedVersion`  (if this server is the one
-	// bootstrapping the cluster). After all the servers in the test cluster have
-	// been started, `SET CLUSTER SETTING version = BinaryVersionOverride` will be
-	// run to step through the upgrades until the specified override.
+	// When ClusterVersionOverride is set, the cluster will be at this version
+	// once initialization is complete. Note that we cannot bootstrap clusters at
+	// arbitrary versions - we can only bootstrap clusters at the Latest version
+	// and at final versions of previous supported releases. The cluster will be
+	// bootstrapped at the most recent bootstrappable version that is at most
+	// ClusterVersionOverride; after all the servers in the test cluster have been
+	// started, `SET CLUSTER SETTING version = ClusterVersionOverride` will be run
+	// to step through the upgrades until the specified version.
 	//
-	// Case 2:
-	// ------
-	// If the test has overridden the
-	// `cluster.Settings.Version.MinSupportedVersion` then it is not safe for us
-	// to bootstrap at `minSupportedVersion` as it might be less than the
-	// overridden minimum supported version. Furthermore, we do not have the
-	// initial cluster data (system tables etc.) to bootstrap at the overridden
-	// minimum supported version. In this case we bootstrap at
-	// `BinaryVersionOverride` and populate the cluster with initial data
-	// corresponding to the `binaryVersion`. In other words no upgrades are
-	// *really* run and the server only thinks that it is running at
-	// `BinaryVersionOverride`. Tests that fall in this category should be audited
-	// for correctness.
-	//
-	// The version that we bootstrap at is also used when advertising this
-	// server's binary version when sending out join requests.
+	// ClusterVersionOverride is also used when advertising this server's binary
+	// version when sending out join requests.
 	//
 	// NB: When setting this, you probably also want to set
 	// DisableAutomaticVersionUpgrade.
-	BinaryVersionOverride roachpb.Version
+	ClusterVersionOverride roachpb.Version
 	// An (additional) callback invoked whenever a
 	// node is permanently removed from the cluster.
 	OnDecommissionedCallback func(id roachpb.NodeID)

@@ -22,7 +22,9 @@ go_library(
         "//pkg/raft/confchange",
         "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
+        "//pkg/raft/raftstoreliveness",
         "//pkg/raft/tracker",
+        "//pkg/util/hlc",
     ],
 )
 
@@ -51,10 +53,12 @@ go_test(
     deps = [
         "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
+        "//pkg/raft/raftstoreliveness",
         "//pkg/raft/rafttest",
         "//pkg/raft/tracker",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//constraints",
     ],
 )

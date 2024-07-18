@@ -11,12 +11,14 @@
 package leases
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -25,10 +27,39 @@ import (
 // Settings is the set of settings for the leasing subsystem, used when building
 // a new lease object.
 type Settings struct {
-	UseExpirationLeases      bool
+	// UseExpirationLeases controls whether this range should be using an
+	// expiration-based lease.
+	UseExpirationLeases bool
+	// TransferExpirationLeases controls whether we transfer expiration-based
+	// leases that are later upgraded to epoch-based ones or whether we transfer
+	// epoch-based leases directly.
 	TransferExpirationLeases bool
-	ExpToEpochEquiv          bool
-	RangeLeaseDuration       time.Duration
+	// RejectLeaseOnLeaderUnknown controls whether a replica that does not know
+	// the current raft leader rejects a lease request.
+	RejectLeaseOnLeaderUnknown bool
+	// DisableAboveRaftLeaseTransferSafetyChecks, if set, disables the above-raft
+	// lease transfer safety checks (that verify that we don't transfer leases to
+	// followers that need a snapshot, etc). The proposal-time checks are not
+	// affected by this knob.
+	DisableAboveRaftLeaseTransferSafetyChecks bool
+	// AllowLeaseProposalWhenNotLeader, if set, allows lease request proposals
+	// even when the replica inserting that proposal is not the Raft leader. This
+	// can be used in tests to allow a replica to acquire a lease without first
+	// moving the Raft leadership to it (e.g. it allows tests to expire leases by
+	// stopping the old leaseholder's liveness heartbeats and then expect other
+	// replicas to take the lease without worrying about Raft).
+	AllowLeaseProposalWhenNotLeader bool
+	// ExpToEpochEquiv indicates whether an expiration-based lease can be
+	// considered equivalent to an epoch-based lease during a promotion from
+	// expiration-based to epoch-based. It is used for mixed-version
+	// compatibility.
+	ExpToEpochEquiv bool
+	// MinExpirationSupported indicates whether the cluster version supports the
+	// minimum expiration field in the lease object. It is used for mixed-version
+	// compatibility.
+	MinExpirationSupported bool
+	// RangeLeaseDuration specifies the range lease duration.
+	RangeLeaseDuration time.Duration
 }
 
 // NodeLiveness is a read-only interface to the node liveness subsystem.
@@ -59,8 +90,14 @@ type NodeLivenessManipulation struct {
 type BuildInput struct {
 	// Information about the local replica.
 	LocalStoreID       roachpb.StoreID
+	LocalReplicaID     roachpb.ReplicaID
+	Desc               *roachpb.RangeDescriptor
 	Now                hlc.ClockTimestamp
 	MinLeaseProposedTS hlc.ClockTimestamp
+
+	// Information about raft.
+	RaftStatus     *raft.Status
+	RaftFirstIndex kvpb.RaftIndex
 
 	// Information about the previous lease.
 	PrevLease roachpb.Lease
@@ -71,6 +108,15 @@ type BuildInput struct {
 
 	// Information about the (requested) next lease.
 	NextLeaseHolder roachpb.ReplicaDescriptor
+
+	// When set to true, BypassSafetyChecks configures lease transfers to skip
+	// safety checks that ensure that the transfer target is known to be
+	// (according to the outgoing leaseholder) alive and sufficiently caught up on
+	// its log. This option should be used sparingly — typically only by outgoing
+	// leaseholders who both have some other reason to believe that the target is
+	// alive and caught up on its log (e.g. they just sent it a snapshot) and also
+	// can't tolerate rejected lease transfers.
+	BypassSafetyChecks bool
 }
 
 // PrevLocal returns whether the previous lease was held by the local store.
@@ -93,12 +139,6 @@ func (i BuildInput) Remote() bool { return !i.PrevLocal() && !i.NextLocal() }
 
 // PrevLeaseExpiration returns the expiration time of the previous lease.
 func (i BuildInput) PrevLeaseExpiration() hlc.Timestamp {
-	if i.PrevLease.Type() == roachpb.LeaseEpoch && i.PrevLeaseNodeLiveness.Epoch != i.PrevLease.Epoch {
-		// For epoch-based leases, we only consider the liveness expiration if it
-		// matches the lease epoch. If the liveness epoch is greater than the lease
-		// epoch, we consider the lease expired.
-		return hlc.Timestamp{}
-	}
 	return kvserverpb.LeaseStatus{
 		Lease:    i.PrevLease,
 		Liveness: i.PrevLeaseNodeLiveness,
@@ -147,6 +187,9 @@ func (i BuildInput) validate() error {
 		return errors.AssertionFailedf("cannot acquire lease from another node "+
 			"before it has expired: %v", i.PrevLease)
 	}
+	if !i.Transfer() && i.BypassSafetyChecks {
+		return errors.AssertionFailedf("cannot bypass safety checks for lease acquisition/extension")
+	}
 	return nil
 }
 
@@ -170,6 +213,24 @@ func (i BuildInput) validatePrevLeaseExpired() error {
 	return nil
 }
 
+// toVerifyInput converts the BuildInput to a VerifyInput, which is used to
+// verify the safety of lease requests. This is a non-lossy conversion, so the
+// resulting VerifyInput should be fully populated, which is verified in
+// TestInputToVerifyInput.
+func (i BuildInput) toVerifyInput() VerifyInput {
+	return VerifyInput{
+		LocalStoreID:       i.LocalStoreID,
+		LocalReplicaID:     i.LocalReplicaID,
+		Desc:               i.Desc,
+		RaftStatus:         i.RaftStatus,
+		RaftFirstIndex:     i.RaftFirstIndex,
+		PrevLease:          i.PrevLease,
+		PrevLeaseExpired:   i.PrevLeaseExpired,
+		NextLeaseHolder:    i.NextLeaseHolder,
+		BypassSafetyChecks: i.BypassSafetyChecks,
+	}
+}
+
 // Output is the set of outputs for the lease acquisition process.
 type Output struct {
 	NextLease                roachpb.Lease
@@ -185,16 +246,31 @@ func (o Output) validate(i BuildInput) error {
 	return nil
 }
 
-// Build constructs a new lease based on the input settings and parameters. The
-// resulting output will contain the lease to be proposed and any necessary node
-// liveness manipulations that must be performed before the lease can be
-// requested.
-func Build(st Settings, nl NodeLiveness, i BuildInput) (Output, error) {
-	// Validate the input.
+// VerifyAndBuild checks the safety of a lease acquisition or transfer request.
+// If the safety checks fail, it returns an error.
+//
+// If the safety checks pass, it constructs a new lease based on the input
+// settings and parameters. The resulting output will contain the lease to be
+// proposed and any necessary node liveness manipulations that must be performed
+// before the lease can be requested.
+func VerifyAndBuild(
+	ctx context.Context, st Settings, nl NodeLiveness, i BuildInput,
+) (Output, error) {
 	if err := i.validate(); err != nil {
 		return Output{}, err
 	}
+	if i.Transfer() && !st.DisableAboveRaftLeaseTransferSafetyChecks {
+		// TODO(nvanbenschoten): support build-time verification for lease
+		// acquisition, not just lease transfers. This currently breaks various
+		// tests. See #118435.
+		if err := Verify(ctx, st, i.toVerifyInput()); err != nil {
+			return Output{}, err
+		}
+	}
+	return build(st, nl, i)
+}
 
+func build(st Settings, nl NodeLiveness, i BuildInput) (Output, error) {
 	// Construct the next lease.
 	nextLease := roachpb.Lease{
 		Replica:         leaseReplica(i),
@@ -220,6 +296,8 @@ func Build(st Settings, nl NodeLiveness, i BuildInput) (Output, error) {
 		}
 		nextLease.Epoch = l.Epoch
 		nextLeaseLiveness = &l.Liveness
+
+		nextLease.MinExpiration = leaseMinTimestamp(st, i, nextLeaseType)
 	default:
 		panic("unexpected")
 	}
@@ -235,7 +313,7 @@ func Build(st Settings, nl NodeLiveness, i BuildInput) (Output, error) {
 	// Construct the output and determine whether any node liveness manipulation
 	// is necessary before the lease can be requested.
 	o := Output{NextLease: nextLease}
-	o.NodeLivenessManipulation = nodeLivenessManipulation(i, nextLease, nextLeaseLiveness)
+	o.NodeLivenessManipulation = nodeLivenessManipulation(st, i, nextLease, nextLeaseLiveness)
 
 	// Validate the output.
 	if err := o.validate(i); err != nil {
@@ -345,6 +423,25 @@ func leaseEpoch(
 	return l, nil
 }
 
+func leaseMinTimestamp(st Settings, i BuildInput, nextType roachpb.LeaseType) hlc.Timestamp {
+	if nextType != roachpb.LeaseEpoch {
+		panic("leaseMinTimestamp called for non-epoch lease")
+	}
+	if !st.MinExpirationSupported {
+		return hlc.Timestamp{}
+	}
+	// If we are promoting an expiration-based lease to an epoch-based lease, we
+	// must make sure the expiration does not regress. Do so by assigning a
+	// minimum expiration time to the new lease, which sets a lower bound for the
+	// lease's expiration, independent of the expiration stored indirectly in the
+	// liveness record.
+	expPromo := i.Extension() && i.PrevLease.Type() == roachpb.LeaseExpiration
+	if expPromo {
+		return *i.PrevLease.Expiration
+	}
+	return hlc.Timestamp{}
+}
+
 func leaseDeprecatedStartStasis(i BuildInput, nextExpiration *hlc.Timestamp) *hlc.Timestamp {
 	if i.Transfer() {
 		// We don't set StartStasis for lease transfers. It's not clear why this was
@@ -381,7 +478,7 @@ func leaseSequence(st Settings, i BuildInput, nextLease roachpb.Lease) roachpb.L
 }
 
 func nodeLivenessManipulation(
-	i BuildInput, nextLease roachpb.Lease, nextLeaseLiveness *livenesspb.Liveness,
+	st Settings, i BuildInput, nextLease roachpb.Lease, nextLeaseLiveness *livenesspb.Liveness,
 ) NodeLivenessManipulation {
 	// If we are promoting an expiration-based lease to an epoch-based lease, we
 	// must make sure the expiration does not regress. We do this here because the
@@ -390,12 +487,21 @@ func nodeLivenessManipulation(
 	// manually heartbeat our liveness record if necessary. This is expected to
 	// work because the liveness record interval and the expiration-based lease
 	// interval are the same.
-	expToEpochPromo := i.Extension() &&
-		i.PrevLease.Type() == roachpb.LeaseExpiration && nextLease.Type() == roachpb.LeaseEpoch
-	if expToEpochPromo && nextLeaseLiveness.Expiration.ToTimestamp().Less(i.PrevLeaseExpiration()) {
-		return NodeLivenessManipulation{
-			Heartbeat:              nextLeaseLiveness,
-			HeartbeatMinExpiration: i.PrevLeaseExpiration(),
+	//
+	// We only need to perform this check if the minimum expiration field is not
+	// supported by the current cluster version. Otherwise, that field will be
+	// used to enforce the minimum expiration time.
+	//
+	// TODO(nvanbenschoten): remove this logic when we no longer support clusters
+	// that do not support the minimum expiration field.
+	if !st.MinExpirationSupported {
+		expToEpochPromo := i.Extension() &&
+			i.PrevLease.Type() == roachpb.LeaseExpiration && nextLease.Type() == roachpb.LeaseEpoch
+		if expToEpochPromo && nextLeaseLiveness.Expiration.ToTimestamp().Less(i.PrevLeaseExpiration()) {
+			return NodeLivenessManipulation{
+				Heartbeat:              nextLeaseLiveness,
+				HeartbeatMinExpiration: i.PrevLeaseExpiration(),
+			}
 		}
 	}
 

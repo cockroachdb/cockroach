@@ -111,12 +111,6 @@ type Client interface {
 	PriorReplicationDetails(
 		ctx context.Context, tenant roachpb.TenantName,
 	) (id string, replicatedFrom string, activated hlc.Timestamp, _ error)
-}
-
-// LogicalReplicationClient is a Client with additional methods
-// specific to logical replication.
-type LogicalReplicationClient interface {
-	Client
 
 	PlanLogicalReplication(ctx context.Context, req streampb.LogicalReplicationPlanRequest) (LogicalReplicationPlan, error)
 	CreateForTables(ctx context.Context, req *streampb.ReplicationProducerRequest) (*streampb.ReplicationProducerSpec, error)
@@ -311,6 +305,7 @@ func getFirstDialer(
 type options struct {
 	streamID   streampb.StreamID
 	compressed bool
+	logical    bool
 }
 
 func (o *options) appName() string {
@@ -337,6 +332,12 @@ func WithStreamID(id streampb.StreamID) Option {
 func WithCompression(enabled bool) Option {
 	return func(o *options) {
 		o.compressed = enabled
+	}
+}
+
+func WithLogical() Option {
+	return func(o *options) {
+		o.logical = true
 	}
 }
 

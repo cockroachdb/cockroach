@@ -52,6 +52,8 @@ func TestReplicaCollection(t *testing.T) {
 
 	ctx := context.Background()
 
+	skip.UnderDeadlock(t, "occasionally flakes")
+
 	// This test stops cluster servers. Use "reusable" listeners, otherwise the
 	// ports can be reused by other test clusters, and we may accidentally connect
 	// to a wrong node.
@@ -87,7 +89,8 @@ func TestReplicaCollection(t *testing.T) {
 		var replicas loqrecoverypb.ClusterReplicaInfo
 		var stats loqrecovery.CollectionStats
 
-		replicas, stats, err := loqrecovery.CollectRemoteReplicaInfo(ctx, adm, -1 /* maxConcurrency */)
+		replicas, stats, err := loqrecovery.CollectRemoteReplicaInfo(ctx, adm,
+			-1 /* maxConcurrency */, nil /* logOutput */)
 		require.NoError(t, err, "failed to retrieve replica info")
 
 		// Check counters on retrieved replica info.
@@ -159,7 +162,8 @@ func TestStreamRestart(t *testing.T) {
 		var replicas loqrecoverypb.ClusterReplicaInfo
 		var stats loqrecovery.CollectionStats
 
-		replicas, stats, err := loqrecovery.CollectRemoteReplicaInfo(ctx, adm, -1 /* maxConcurrency */)
+		replicas, stats, err := loqrecovery.CollectRemoteReplicaInfo(ctx, adm,
+			-1 /* maxConcurrency */, nil /* logOutput */)
 		require.NoError(t, err, "failed to retrieve replica info")
 
 		// Check counters on retrieved replica info.
@@ -611,7 +615,8 @@ func TestRetrieveApplyStatus(t *testing.T) {
 	var replicas loqrecoverypb.ClusterReplicaInfo
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		replicas, _, err = loqrecovery.CollectRemoteReplicaInfo(ctx, adm, -1 /* maxConcurrency */)
+		replicas, _, err = loqrecovery.CollectRemoteReplicaInfo(ctx, adm,
+			-1 /* maxConcurrency */, nil /* logOutput */)
 		return err
 	})
 	plan, planDetails, err := loqrecovery.PlanReplicas(ctx, replicas, nil, nil, uuid.DefaultGenerator)
@@ -693,7 +698,8 @@ func TestRejectBadVersionApplication(t *testing.T) {
 	var replicas loqrecoverypb.ClusterReplicaInfo
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		replicas, _, err = loqrecovery.CollectRemoteReplicaInfo(ctx, adm, -1 /* maxConcurrency */)
+		replicas, _, err = loqrecovery.CollectRemoteReplicaInfo(ctx, adm,
+			-1 /* maxConcurrency */, nil /* logOutput */)
 		return err
 	})
 	plan, _, err := loqrecovery.PlanReplicas(ctx, replicas, nil, nil, uuid.DefaultGenerator)

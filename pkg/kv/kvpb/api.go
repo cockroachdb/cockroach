@@ -2389,6 +2389,7 @@ func (c *TenantConsumption) Add(other *TenantConsumption) {
 	c.ExternalIOIngressBytes += other.ExternalIOIngressBytes
 	c.ExternalIOEgressBytes += other.ExternalIOEgressBytes
 	c.CrossRegionNetworkRU += other.CrossRegionNetworkRU
+	c.EstimatedCPUSeconds += other.EstimatedCPUSeconds
 }
 
 // Sub subtracts consumption, making sure no fields become negative.
@@ -2470,6 +2471,12 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 	} else {
 		c.CrossRegionNetworkRU -= other.CrossRegionNetworkRU
 	}
+
+	if c.EstimatedCPUSeconds < other.EstimatedCPUSeconds {
+		c.EstimatedCPUSeconds = 0
+	} else {
+		c.EstimatedCPUSeconds -= other.EstimatedCPUSeconds
+	}
 }
 
 func humanizeCount(n uint64) redact.SafeString {
@@ -2518,8 +2525,15 @@ func (s *ScanStats) String() string {
 
 // RangeFeedEventSink is an interface for sending a single rangefeed event.
 type RangeFeedEventSink interface {
+	// Context returns the context for this stream.
 	Context() context.Context
+	// Send blocks until it sends the RangeFeedEvent, the stream is done, or the
+	// stream breaks. Send must be safe to call on the same stream in different
+	// goroutines.
 	Send(*RangeFeedEvent) error
+	// SendIsThreadSafe is a no-op declaration method. It is a contract that the
+	// interface has a thread-safe Send method.
+	SendIsThreadSafe()
 }
 
 // RangeFeedEventProducer is an adapter for receiving rangefeed events with either
@@ -2532,3 +2546,10 @@ type RangeFeedEventProducer interface {
 
 // SafeValue implements the redact.SafeValue interface.
 func (PushTxnType) SafeValue() {}
+
+func (writeOptions *WriteOptions) GetOriginID() uint32 {
+	if writeOptions == nil {
+		return 0
+	}
+	return writeOptions.OriginID
+}

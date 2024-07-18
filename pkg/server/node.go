@@ -17,7 +17,6 @@ import (
 	"net"
 	"sort"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -64,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -78,6 +80,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -191,18 +194,6 @@ This metric is thus not an indicator of KV health.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
-	metaActiveRangeFeed = metric.Metadata{
-		Name:        "rpc.streams.rangefeed.active",
-		Help:        `Number of currently running RangeFeed streams`,
-		Measurement: "Streams",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalRangeFeed = metric.Metadata{
-		Name:        "rpc.streams.rangefeed.recv",
-		Help:        `Total number of RangeFeed streams`,
-		Measurement: "Streams",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaActiveMuxRangeFeed = metric.Metadata{
 		Name:        "rpc.streams.mux_rangefeed.active",
 		Help:        `Number of currently running MuxRangeFeed streams`,
@@ -270,14 +261,14 @@ type nodeMetrics struct {
 	CrossRegionBatchResponseBytes *metric.Counter
 	CrossZoneBatchRequestBytes    *metric.Counter
 	CrossZoneBatchResponseBytes   *metric.Counter
-	NumRangeFeed                  *metric.Counter
-	ActiveRangeFeed               *metric.Gauge
 	NumMuxRangeFeed               *metric.Counter
 	ActiveMuxRangeFeed            *metric.Gauge
 }
 
-func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
-	nm := nodeMetrics{
+var _ rangefeed.RangefeedMetricsRecorder = &nodeMetrics{}
+
+func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeMetrics {
+	nm := &nodeMetrics{
 		Latency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaExecLatency,
@@ -293,8 +284,6 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 		CrossRegionBatchResponseBytes: metric.NewCounter(metaCrossRegionBatchResponse),
 		CrossZoneBatchRequestBytes:    metric.NewCounter(metaCrossZoneBatchRequest),
 		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
-		ActiveRangeFeed:               metric.NewGauge(metaActiveRangeFeed),
-		NumRangeFeed:                  metric.NewCounter(metaTotalRangeFeed),
 		ActiveMuxRangeFeed:            metric.NewGauge(metaActiveMuxRangeFeed),
 		NumMuxRangeFeed:               metric.NewCounter(metaTotalMuxRangeFeed),
 	}
@@ -314,7 +303,7 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 // callComplete records very high-level metrics about the number of completed
 // calls and their latency. Currently, this only records statistics at the batch
 // level; stats on specific lower-level kv operations are not recorded.
-func (nm nodeMetrics) callComplete(d time.Duration, pErr *kvpb.Error) {
+func (nm *nodeMetrics) callComplete(d time.Duration, pErr *kvpb.Error) {
 	if pErr != nil && pErr.TransactionRestart() == kvpb.TransactionRestart_NONE {
 		nm.Err.Inc(1)
 	} else {
@@ -330,7 +319,7 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *kvpb.Error) {
 // activities across different zones within the same region or in cases where
 // region tiers are not configured. These metrics may include batches that were
 // not successfully sent but were terminated at an early stage.
-func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchRequest(
+func (nm *nodeMetrics) updateCrossLocalityMetricsOnBatchRequest(
 	comparisonResult roachpb.LocalityComparisonType, inc int64,
 ) {
 	nm.BatchRequestsBytes.Inc(inc)
@@ -347,7 +336,7 @@ func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchRequest(
 // parameter determined during the initial batch requests check. The underlying
 // assumption is that the response should match the cross-region or cross-zone
 // nature of the requests.
-func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
+func (nm *nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
 	comparisonResult roachpb.LocalityComparisonType, inc int64,
 ) {
 	nm.BatchResponsesBytes.Inc(inc)
@@ -357,6 +346,19 @@ func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
 	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
 		nm.CrossZoneBatchResponseBytes.Inc(inc)
 	}
+}
+
+// UpdateOnRangefeedConnect increments rangefeed metrics when a new server
+// rangefeed is added.
+func (nm *nodeMetrics) UpdateMetricsOnRangefeedConnect() {
+	nm.NumMuxRangeFeed.Inc(1)
+	nm.ActiveMuxRangeFeed.Inc(1)
+}
+
+// UpdateOnRangefeedDisconnect decrements rangefeed metrics when a server
+// rangefeed is disconnected.
+func (nm *nodeMetrics) UpdateMetricsOnRangefeedDisconnect() {
+	nm.ActiveMuxRangeFeed.Dec(1)
 }
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -375,7 +377,7 @@ type Node struct {
 	storeCfg     kvserver.StoreConfig     // Config to use and pass to stores
 	execCfg      *sql.ExecutorConfig      // For event logging
 	stores       *kvserver.Stores         // Access to node-local stores
-	metrics      nodeMetrics
+	metrics      *nodeMetrics
 	recorder     *status.MetricsRecorder
 	startedAt    int64
 	lastUp       int64
@@ -415,6 +417,14 @@ type Node struct {
 		updateCh       chan struct{}
 	}
 	proxySender kv.Sender
+
+	diskSlowCoalescerMu struct {
+		syncutil.Mutex
+		lastDiskSlow map[roachpb.StoreID]time.Time
+	}
+
+	// Event handler called in logStructuredEvent. Used in tests only.
+	onStructuredEvent func(ctx context.Context, event logpb.EventPayload)
 }
 
 var _ kvpb.InternalServer = &Node{}
@@ -587,6 +597,7 @@ func NewNode(
 		spanStatsCollector:    spanstatscollector.New(cfg.Settings),
 		proxySender:           proxySender,
 	}
+	n.diskSlowCoalescerMu.lastDiskSlow = make(map[roachpb.StoreID]time.Time)
 	n.versionUpdateMu.updateCh = make(chan struct{})
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
@@ -858,8 +869,86 @@ func (n *Node) addStore(ctx context.Context, store *kvserver.Store) {
 		// initialization process.
 		log.Fatal(ctx, "attempting to add a store without a version")
 	}
+	store.TODOEngine().RegisterDiskSlowCallback(func(info pebble.DiskSlowInfo) {
+		n.onStoreDiskSlow(ctx, store.StoreID(), info)
+	})
 	n.stores.AddStore(store)
 	n.recorder.AddStore(store)
+}
+
+func (n *Node) onStoreDiskSlow(
+	ctx context.Context, storeID roachpb.StoreID, info pebble.DiskSlowInfo,
+) {
+	// Emit a disk slow event for each slow store that reports a disk slow event.
+	// After diskSlowClearInterval since the last disk slow event, we emit a disk
+	// slowness cleared event. Any other disk slow events for the same store in
+	// between are ignored as duplicates.
+	//
+	// We reuse the maxSyncInterval, as it's unlikely for slow events to last longer
+	// than this without significant corrective action (eg. crashes).
+	//
+	// TODO(bilal): Store stats on events observed and coalesced events.
+	diskSlowClearInterval := fs.MaxSyncDuration.Get(&n.storeCfg.Settings.SV)
+	if storeID == 0 {
+		// Uninitialized store; cannot coalesce events for an unknown store.
+		return
+	}
+	n.diskSlowCoalescerMu.Lock()
+	last, ok := n.diskSlowCoalescerMu.lastDiskSlow[storeID]
+	n.diskSlowCoalescerMu.lastDiskSlow[storeID] = timeutil.Now()
+	n.diskSlowCoalescerMu.Unlock()
+	// NB: A zero / nonexistent value for last means that we are not currently running
+	// the below async task, and this is a new disk slowness event that needs a
+	// start/clear pair emitted for it.
+	if ok && last != (time.Time{}) {
+		// This is a duplicate event for this store.
+		return
+	}
+
+	_ = n.stopper.RunAsyncTask(ctx, "clear-disk-slow", func(ctx context.Context) {
+		ev := &eventpb.DiskSlownessDetected{}
+		ev.StoreID = int32(storeID)
+		ev.NodeID = int32(n.Descriptor.NodeID)
+		ev.CommonDetails().Timestamp = timeutil.Now().UnixNano()
+
+		// logStructuredEvent does an async write to system.eventlog, however it could
+		// do a synchronous log write to the node logger, so we call it within this async
+		// task as opposed to outside it.
+		n.logStructuredEvent(ctx, logpb.EventPayload(ev))
+
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				clearing := false
+				n.diskSlowCoalescerMu.Lock()
+				last := n.diskSlowCoalescerMu.lastDiskSlow[storeID]
+				if timeutil.Since(last) > diskSlowClearInterval {
+					clearing = true
+					delete(n.diskSlowCoalescerMu.lastDiskSlow, storeID)
+				}
+				n.diskSlowCoalescerMu.Unlock()
+
+				if !clearing {
+					continue
+				}
+
+				// Clear the event and break out of the loop.
+				ev := &eventpb.DiskSlownessCleared{}
+				ev.StoreID = int32(storeID)
+				ev.NodeID = int32(n.Descriptor.NodeID)
+				ev.CommonDetails().Timestamp = timeutil.Now().UnixNano()
+
+				n.logStructuredEvent(ctx, logpb.EventPayload(ev))
+
+				return
+			case <-n.stopper.ShouldQuiesce():
+				return
+			}
+		}
+	})
+
 }
 
 // validateStores iterates over all stores, verifying they agree on node ID.
@@ -1356,7 +1445,7 @@ func (n *Node) recordJoinEvent(ctx context.Context) {
 func (n *Node) logStructuredEvent(ctx context.Context, event logpb.EventPayload) {
 	// Ensure that the event goes to log files even if LogRangeAndNodeEvents is
 	// disabled (which means skip the system.eventlog _table_).
-	log.StructuredEvent(ctx, event)
+	log.StructuredEvent(ctx, severity.INFO, event)
 
 	if !n.storeCfg.LogRangeAndNodeEvents {
 		return
@@ -1367,6 +1456,10 @@ func (n *Node) logStructuredEvent(ctx context.Context, event logpb.EventPayload)
 		sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* not LogExternally: we already call log.StructuredEvent above */
 		event,
 	)
+
+	if n.onStructuredEvent != nil {
+		n.onStructuredEvent(ctx, event)
+	}
 }
 
 // If we receive a (proto-marshaled) kvpb.BatchRequest whose Requests contain
@@ -1832,23 +1925,28 @@ func (n *Node) RangeLookup(
 	return resp, nil
 }
 
-// setRangeIDEventSink annotates each response with range and stream IDs.
-// This is used by MuxRangeFeed.
-// TODO: This code can be removed in 22.2 once MuxRangeFeed is the default, and
-// the old style RangeFeed deprecated.
-type setRangeIDEventSink struct {
+// perRangeEventSink is an implementation of rangefeed.Stream which annotates
+// each response with rangeID and streamID. It is used by MuxRangeFeed.
+type perRangeEventSink struct {
 	ctx      context.Context
-	cancel   context.CancelFunc
 	rangeID  roachpb.RangeID
 	streamID int64
-	wrapped  *lockedMuxStream
+	wrapped  *rangefeed.StreamMuxer
 }
 
-func (s *setRangeIDEventSink) Context() context.Context {
+var _ kvpb.RangeFeedEventSink = (*perRangeEventSink)(nil)
+var _ rangefeed.Stream = (*perRangeEventSink)(nil)
+
+func (s *perRangeEventSink) Context() context.Context {
 	return s.ctx
 }
 
-func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
+// SendIsThreadSafe is a no-op declaration method. It is a contract that the
+// Send method is thread-safe. Note that Send wraps rangefeed.StreamMuxer which
+// declares its Send method to be thread-safe.
+func (s *perRangeEventSink) SendIsThreadSafe() {}
+
+func (s *perRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	response := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
 		RangeID:        s.rangeID,
@@ -1857,86 +1955,28 @@ func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	return s.wrapped.Send(response)
 }
 
-var _ kvpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
+// Disconnect implements the rangefeed.Stream interface. It requests the
+// StreamMuxer to detach the stream. The StreamMuxer is then responsible for
+// handling the actual disconnection and additional cleanup. Note that Caller
+// should not rely on immediate disconnection as cleanup takes place async.
+func (s *perRangeEventSink) Disconnect(err *kvpb.Error) {
+	s.wrapped.DisconnectStreamWithError(s.streamID, s.rangeID, err)
+}
 
-// lockedMuxStream provides support for concurrent calls to Send.
-// The underlying MuxRangeFeedServer is not safe for concurrent calls to Send.
+// lockedMuxStream provides support for concurrent calls to Send. The underlying
+// MuxRangeFeedServer (default grpc.Stream) is not safe for concurrent calls to
+// Send.
 type lockedMuxStream struct {
 	wrapped kvpb.Internal_MuxRangeFeedServer
 	sendMu  syncutil.Mutex
 }
 
+func (s *lockedMuxStream) SendIsThreadSafe() {}
+
 func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
 	return s.wrapped.Send(e)
-}
-
-// newMuxRangeFeedCompletionWatcher returns 2 functions: one to forward mux
-// rangefeed completion events to the sender, and a cleanup function. Mux
-// rangefeed completion events can be triggered at any point, and we would like
-// to avoid blocking on IO (sender.Send) during potentially critical areas.
-// Thus, the forwarding should happen on a dedicated goroutine.
-func newMuxRangeFeedCompletionWatcher(
-	ctx context.Context, stopper *stop.Stopper, send func(e *kvpb.MuxRangeFeedEvent) error,
-) (doneFn func(event *kvpb.MuxRangeFeedEvent), cleanup func(), _ error) {
-	// structure to help coordination of event forwarding and shutdown.
-	var fin = struct {
-		syncutil.Mutex
-		completed []*kvpb.MuxRangeFeedEvent
-		signalC   chan struct{}
-	}{
-		// NB: a buffer of 1 ensures we can always send a signal when rangefeed completes.
-		signalC: make(chan struct{}, 1),
-	}
-
-	// forwardCompletion listens to completion notifications and forwards
-	// them to the sender.
-	forwardCompletion := func(ctx context.Context) {
-		for {
-			select {
-			case <-fin.signalC:
-				var toSend []*kvpb.MuxRangeFeedEvent
-				fin.Lock()
-				toSend, fin.completed = fin.completed, nil
-				fin.Unlock()
-				for _, e := range toSend {
-					if err := send(e); err != nil {
-						// If we failed to send, there is nothing else we can do.
-						// The stream is broken anyway.
-						return
-					}
-				}
-			case <-ctx.Done():
-				return
-			case <-stopper.ShouldQuiesce():
-				// There is nothing we can do here; stream cancellation is usually
-				// triggered by the client.  We don't have access to stream cancellation
-				// function; so, just let things proceed until the server shuts down.
-				return
-			}
-		}
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	if err := stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
-		defer wg.Done()
-		forwardCompletion(ctx)
-	}); err != nil {
-		return nil, nil, err
-	}
-
-	addCompleted := func(event *kvpb.MuxRangeFeedEvent) {
-		fin.Lock()
-		fin.completed = append(fin.completed, event)
-		fin.Unlock()
-		select {
-		case fin.signalC <- struct{}{}:
-		default:
-		}
-	}
-	return addCompleted, wg.Wait, nil
 }
 
 // MuxRangeFeed implements the roachpb.InternalServer interface.
@@ -1947,95 +1987,57 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	// cancelled once MuxRangeFeed exits.
 	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
 	defer cancel()
-
-	rangefeedCompleted, cleanup, err := newMuxRangeFeedCompletionWatcher(ctx, n.stopper, muxStream.Send)
-	if err != nil {
+	streamMuxer := rangefeed.NewStreamMuxer(muxStream, n.metrics)
+	if err := streamMuxer.Start(ctx, n.stopper); err != nil {
 		return err
 	}
-	defer cleanup()
-
-	n.metrics.NumMuxRangeFeed.Inc(1)
-	n.metrics.ActiveMuxRangeFeed.Inc(1)
-	defer n.metrics.ActiveMuxRangeFeed.Inc(-1)
-
-	var activeStreams sync.Map
+	defer streamMuxer.Stop()
 
 	for {
-		req, err := stream.Recv()
-		if err != nil {
+		select {
+		case err := <-streamMuxer.Error():
 			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-n.stopper.ShouldQuiesce():
+			return stop.ErrUnavailable
+		default:
+			req, err := stream.Recv()
+			if err != nil {
+				return err
+			}
+
+			if req.CloseStream {
+				// Note that we will call DisconnectStreamWithError again when
+				// registration.disconnect happens, but DisconnectStreamWithError will
+				// ignore subsequent errors.
+				streamMuxer.DisconnectStreamWithError(req.StreamID, req.RangeID,
+					kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)))
+				continue
+			}
+
+			streamCtx, cancel := context.WithCancel(ctx)
+			streamCtx = logtags.AddTag(streamCtx, "r", req.RangeID)
+			streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
+			streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
+
+			streamSink := &perRangeEventSink{
+				ctx:      streamCtx,
+				rangeID:  req.RangeID,
+				streamID: req.StreamID,
+				wrapped:  streamMuxer,
+			}
+			streamMuxer.AddStream(req.StreamID, cancel)
+
+			// Rangefeed attempts to register rangefeed a request over the specified
+			// span. If registration fails, it returns an error. Otherwise, it returns
+			// nil without blocking on rangefeed completion. Events are then sent to
+			// the provided streamSink. If the rangefeed disconnects after being
+			// successfully registered, it calls streamSink.Disconnect with the error.
+			if err := n.stores.RangeFeed(req, streamSink); err != nil {
+				streamMuxer.DisconnectStreamWithError(req.StreamID, req.RangeID, kvpb.NewError(err))
+			}
 		}
-
-		if req.CloseStream {
-			// Client issued a request to close previously established stream.
-			if v, loaded := activeStreams.LoadAndDelete(req.StreamID); loaded {
-				s := v.(*setRangeIDEventSink)
-				s.cancel()
-			} else {
-				// This is a bit strange, but it could happen if this stream completes
-				// just before we receive close request. So, just print out a warning.
-				if log.V(1) {
-					log.Infof(ctx, "closing unknown rangefeed stream ID %d", req.StreamID)
-				}
-			}
-			continue
-		}
-
-		streamCtx, cancel := context.WithCancel(ctx)
-		streamCtx = logtags.AddTag(streamCtx, "r", req.RangeID)
-		streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
-		streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
-
-		streamSink := &setRangeIDEventSink{
-			ctx:      streamCtx,
-			cancel:   cancel,
-			rangeID:  req.RangeID,
-			streamID: req.StreamID,
-			wrapped:  muxStream,
-		}
-		activeStreams.Store(req.StreamID, streamSink)
-
-		n.metrics.NumMuxRangeFeed.Inc(1)
-		n.metrics.ActiveMuxRangeFeed.Inc(1)
-		f := n.stores.RangeFeed(req, streamSink)
-		f.WhenReady(func(err error) {
-			n.metrics.ActiveMuxRangeFeed.Inc(-1)
-
-			_, loaded := activeStreams.LoadAndDelete(req.StreamID)
-			streamClosedByClient := !loaded
-			streamSink.cancel()
-
-			if streamClosedByClient && streamSink.ctx.Err() != nil {
-				// If the stream was explicitly closed by the client, we expect to see
-				// context.Canceled error.  In this case, return
-				// kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED to the client.
-				err = kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)
-			}
-
-			if err == nil {
-				cause := kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED
-				err = kvpb.NewRangeFeedRetryError(cause)
-			}
-
-			e := &kvpb.MuxRangeFeedEvent{
-				RangeID:  req.RangeID,
-				StreamID: req.StreamID,
-			}
-
-			e.SetValue(&kvpb.RangeFeedError{
-				Error: *kvpb.NewError(err),
-			})
-
-			// When rangefeed completes, we must notify the client about that.
-			//
-			// NB: even though calling sink.Send() to send notification might seem
-			// correct, it is also unsafe.  This future may be completed at any point,
-			// including during critical section when some important lock (such as
-			// raftMu in processor) may be held. Issuing potentially blocking IO
-			// during that time is not a good idea. Thus, we shunt the notification to
-			// a dedicated goroutine.
-			rangefeedCompleted(e)
-		})
 	}
 }
 
@@ -2426,8 +2428,20 @@ func (n *Node) TenantSettings(
 			// All-tenant overrides have changed, send them again.
 			// TODO(multitenant): We can optimize this by only sending the delta since the last
 			// update, with Incremental set to true.
+
+			// Inject the current storage logical version as an override to
+			// work around the situation where the `system.tenant_settings`
+			// has a wrong version data (see #125702).
+			//
+			// TODO(multitenant): remove this override when the minimum
+			// supported version is 24.1+.
+			verSetting, versionUpdateCh = n.getVersionSettingWithUpdateCh(ctx)
 			allOverrides, allCh = settingsWatcher.GetAllTenantOverrides(ctx)
-			if err := sendSettings(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides, false /* incremental */); err != nil {
+			actualOverrides := append(
+				append([]kvpb.TenantSetting{}, allOverrides...),
+				verSetting,
+			)
+			if err := sendSettings(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, actualOverrides, false /* incremental */); err != nil {
 				return err
 			}
 

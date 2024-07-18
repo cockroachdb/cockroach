@@ -1936,6 +1936,13 @@ func TestTenantLogic_sqllite(
 	runLogicTest(t, "sqllite")
 }
 
+func TestTenantLogic_sqlliveness(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "sqlliveness")
+}
+
 func TestTenantLogic_sqlsmith(
 	t *testing.T,
 ) {
@@ -2823,6 +2830,13 @@ func TestTenantLogicCCL_unique_read_committed(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "unique_read_committed")
+}
+
+func TestTenantLogicCCL_vector(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "vector")
 }
 
 func TestTenantLogicCCL_zone_config_secondary_tenants(

@@ -115,6 +115,8 @@ func initFlags() {
 	rootCmd.PersistentFlags().IntVarP(&config.MaxConcurrency, "max-concurrency", "", 32,
 		"maximum number of operations to execute on nodes concurrently, set to zero for infinite",
 	)
+	rootCmd.PersistentFlags().BoolVarP(&config.FastDNS, "fast-dns", "",
+		term.IsTerminal(int(os.Stdout.Fd())), "enable fast DNS resolution via the standard Go net package")
 	rootCmd.PersistentFlags().StringVarP(&config.EmailDomain, "email-domain", "",
 		config.DefaultEmailDomain, "email domain for users")
 
@@ -163,6 +165,9 @@ func initFlags() {
 			// createCmd only accepts a single GCE project, as opposed to all the other
 			// commands.
 			providerOptsContainer[providerName].ConfigureClusterFlags(createCmd.Flags(), vm.SingleProject)
+
+			// set up cluster cleanup flag for gcCmd
+			providerOptsContainer[providerName].ConfigureClusterCleanupFlags(gcCmd.Flags())
 		}
 	}
 
@@ -345,6 +350,9 @@ func initFlags() {
 
 	jaegerStartCmd.Flags().StringVar(&jaegerConfigNodes, "configure-nodes", "",
 		"the nodes on which to set the relevant CRDB cluster settings")
+
+	sideEyeRootCmd.AddCommand(sideEyeInstallCmd)
+	sideEyeRootCmd.AddCommand(sideEyeSnapCmd)
 
 	initCmd.Flags().IntVar(&startOpts.InitTarget,
 		"init-target", startOpts.InitTarget, "node on which to run initialization")

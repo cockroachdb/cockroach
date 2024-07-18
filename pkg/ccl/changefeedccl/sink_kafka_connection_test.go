@@ -33,6 +33,10 @@ import (
 // Connections route to the correct sink.
 type externalConnectionKafkaSink struct {
 	sink Sink
+	// ignoreDialError causes this wrapper to ignore errors calling its inner
+	// sink's Dial() method. This can happen for a few reasons, such as giving
+	// it a bad address for testing purposes.
+	ignoreDialError bool
 }
 
 func (e *externalConnectionKafkaSink) getConcreteType() sinkType {
@@ -41,7 +45,16 @@ func (e *externalConnectionKafkaSink) getConcreteType() sinkType {
 
 // Dial implements the Sink interface.
 func (e *externalConnectionKafkaSink) Dial() error {
-	if _, ok := e.sink.(*kafkaSink); !ok {
+	switch sink := e.sink.(type) {
+	case *kafkaSink:
+		if err := sink.Dial(); err != nil && !e.ignoreDialError {
+			return err
+		}
+	case *batchingSink:
+		if err := sink.Dial(); err != nil && !e.ignoreDialError {
+			return err
+		}
+	default:
 		return errors.Newf("unexpected sink type %T; expected a kafka sink", e.sink)
 	}
 	return nil
@@ -49,7 +62,7 @@ func (e *externalConnectionKafkaSink) Dial() error {
 
 // Close implements the Sink interface.
 func (e *externalConnectionKafkaSink) Close() error {
-	return nil
+	return e.sink.Close()
 }
 
 // EmitRow implements the Sink interface.
@@ -90,7 +103,7 @@ func TestChangefeedExternalConnections(t *testing.T) {
 		if _, ok := s.(*externalConnectionKafkaSink); ok {
 			return s
 		}
-		return &externalConnectionKafkaSink{sink: s}
+		return &externalConnectionKafkaSink{sink: s, ignoreDialError: true}
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -212,9 +225,24 @@ func TestChangefeedExternalConnections(t *testing.T) {
 			expectedError: "sasl_enabled must be enabled to configure SASL mechanism",
 		},
 		{
-			name:          "param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or PLAIN",
+			name:          "param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, PLAIN or AWS_MSK_IAM",
 			uri:           "kafka://nope/?sasl_enabled=true&sasl_mechanism=unsuppported",
-			expectedError: "param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or PLAIN",
+			expectedError: "param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, PLAIN or AWS_MSK_IAM",
+		},
+		{
+			name:          "sasl_aws_iam_session_name must be provided when AWS IAM role authentication is enabled",
+			uri:           "kafka://nope/?sasl_enabled=true&sasl_mechanism=AWS_MSK_IAM&sasl_aws_region=us-west-1&sasl_aws_iam_role_arn=foo",
+			expectedError: "sasl_aws_iam_session_name must be provided when SASL is enabled using mechanism AWS_MSK_IAM",
+		},
+		{
+			name:          "sasl_aws_iam_role_arn must be provided when AWS IAM role authentication is enabled",
+			uri:           "kafka://nope/?sasl_enabled=true&sasl_mechanism=AWS_MSK_IAM&sasl_aws_region=us-west-1&sasl_aws_iam_session_name=foo",
+			expectedError: "sasl_aws_iam_role_arn must be provided when SASL is enabled using mechanism AWS_MSK_IAM",
+		},
+		{
+			name:          "sasl_aws_region must be provided when AWS IAM role authentication is enabled",
+			uri:           "kafka://nope/?sasl_enabled=true&sasl_mechanism=AWS_MSK_IAM&sasl_aws_iam_session_name=foo&sasl_aws_iam_session_name=foo",
+			expectedError: "sasl_aws_region must be provided when SASL is enabled using mechanism AWS_MSK_IAM",
 		},
 		// confluent-cloud scheme tests
 		{
@@ -308,6 +336,7 @@ func TestChangefeedExternalConnections(t *testing.T) {
 		// kafka scheme external connections
 		sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION nope AS 'kafka://nope'`)
 		sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION "nope-with-params" AS 'kafka://nope/?tls_enabled=true&insecure_tls_skip_verify=true&topic_name=foo'`)
+		sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION "nope-with-aws-iam-auth" AS 'kafka://nope/?sasl_enabled=true&sasl_mechanism=AWS_MSK_IAM&sasl_aws_region=us-west-1&sasl_aws_iam_role_arn=foo&sasl_aws_iam_session_name=bar'`)
 		// confluent-cloud external connections
 		sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION confluent1 AS 'confluent-cloud://nope?api_key=fee&api_secret=bar'`)
 		sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION confluent2 AS 'confluent-cloud://nope?api_key=fee&api_secret=bar&`+

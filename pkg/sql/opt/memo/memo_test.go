@@ -220,6 +220,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseForecasts = false
 	notStale()
 
+	// Stale optimizer merged partial statistics usage enable.
+	evalCtx.SessionData().OptimizerUseMergedPartialStatistics = true
+	stale()
+	evalCtx.SessionData().OptimizerUseMergedPartialStatistics = false
+	notStale()
+
 	// Stale optimizer histogram usage enable.
 	evalCtx.SessionData().OptimizerUseHistograms = true
 	stale()

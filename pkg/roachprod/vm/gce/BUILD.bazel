@@ -4,6 +4,7 @@ go_library(
     name = "gce",
     srcs = [
         "dns.go",
+        "fast_dns.go",
         "gcloud.go",
         "utils.go",
     ],
@@ -16,6 +17,8 @@ go_library(
         "//pkg/roachprod/ui",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/flagstub",
+        "//pkg/util/randutil",
+        "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

@@ -24,18 +24,20 @@ import (
 )
 
 var (
-	testingSnap = pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{
-			Index:     11, // magic number
-			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []uint64{1, 2}},
-		},
+	testingSnap = snapshot{
+		term: 11,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
+			Index:     11,
+			Term:      11,
+			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}},
+		}},
 	}
 )
 
 func TestSendingSnapshotSetPendingSnapshot(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1))
 	sm := newTestRaft(1, 10, 1, storage)
+	sm.becomeFollower(testingSnap.term, None)
 	sm.restore(testingSnap)
 
 	sm.becomeCandidate()
@@ -54,6 +56,7 @@ func TestSendingSnapshotSetPendingSnapshot(t *testing.T) {
 func TestPendingSnapshotPauseReplication(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
+	sm.becomeFollower(testingSnap.term, None)
 	sm.restore(testingSnap)
 
 	sm.becomeCandidate()
@@ -71,6 +74,7 @@ func TestPendingSnapshotPauseReplication(t *testing.T) {
 func TestSnapshotFailure(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
+	sm.becomeFollower(testingSnap.term, None)
 	sm.restore(testingSnap)
 
 	sm.becomeCandidate()
@@ -94,6 +98,7 @@ func TestSnapshotFailure(t *testing.T) {
 func TestSnapshotSucceed(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
+	sm.becomeFollower(testingSnap.term, None)
 	sm.restore(testingSnap)
 
 	sm.becomeCandidate()
@@ -117,6 +122,7 @@ func TestSnapshotSucceed(t *testing.T) {
 func TestSnapshotAbort(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
+	sm.becomeFollower(testingSnap.term, None)
 	sm.restore(testingSnap)
 
 	sm.becomeCandidate()

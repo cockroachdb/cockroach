@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -159,6 +160,16 @@ type instrumentationHelper struct {
 	distribution     physicalplan.PlanDistribution
 	vectorized       bool
 	containsMutation bool
+	// generic is true if the plan can be fully-optimized once and re-used
+	// without re-optimization. Plans without placeholders and fold-able stable
+	// expressions, and plans utilizing the placeholder fast-path are always
+	// considered "generic". Plans that are fully optimized with placeholders
+	// present via the force_generic_plan or auto settings for plan_cache_mode
+	// are also considered "generic".
+	generic bool
+	// optimized is true if the plan was optimized or re-optimized during the
+	// current execution.
+	optimized bool
 
 	traceMetadata execNodeTraceMetadata
 
@@ -638,7 +649,7 @@ func (ih *instrumentationHelper) Finish(
 			ob := ih.emitExplainAnalyzePlanToOutputBuilder(ctx, ih.explainFlags, phaseTimes, queryLevelStats)
 			warnings = ob.GetWarnings()
 			var payloadErr error
-			if pwe, ok := retPayload.(payloadWithError); ok {
+			if pwe, ok2 := retPayload.(payloadWithError); ok2 {
 				payloadErr = pwe.errorCause()
 			}
 			bundleCtx := ctx
@@ -671,7 +682,42 @@ func (ih *instrumentationHelper) Finish(
 			if ih.planGistMatchingBundle {
 				// We don't have the plan string available since the stmt bundle
 				// collection was enabled _after_ the optimizer was done.
-				planString = "-- plan elided due to gist matching"
+				// Instead, we do have the gist available, so we'll decode it
+				// and use that as the plan string.
+				var sb strings.Builder
+				sb.WriteString("-- plan is incomplete due to gist matching: ")
+				sb.WriteString(ih.planGist.String())
+				// Perform best-effort decoding ignoring all errors.
+				if it, err := ie.QueryIterator(
+					bundleCtx, "plan-gist-decoding" /* opName */, nil, /* txn */
+					fmt.Sprintf("SELECT * FROM crdb_internal.decode_plan_gist('%s')", ih.planGist.String()),
+				); err == nil {
+					defer func() {
+						_ = it.Close()
+					}()
+					sb.WriteString("\n")
+					// Ignore the errors returned on Next call.
+					for ok, _ = it.Next(bundleCtx); ok; ok, _ = it.Next(bundleCtx) {
+						row := it.Cur()
+						var line string
+						// Be conservative in case the output format changes.
+						if len(row) == 1 {
+							var ds tree.DString
+							ds, ok = tree.AsDString(row[0])
+							line = string(ds)
+						} else {
+							ok = false
+						}
+						if !ok && buildutil.CrdbTestBuild {
+							return errors.AssertionFailedf("unexpected output format for decoding plan gist %s", ih.planGist.String())
+						}
+						if ok {
+							sb.WriteString("\n")
+							sb.WriteString(line)
+						}
+					}
+				}
+				planString = sb.String()
 			}
 			bundle = buildStatementBundle(
 				bundleCtx, ih.explainFlags, cfg.DB, p, ie.(*InternalExecutor),
@@ -765,11 +811,13 @@ func (ih *instrumentationHelper) RecordExplainPlan(explainPlan *explain.Plan) {
 
 // RecordPlanInfo records top-level information about the plan.
 func (ih *instrumentationHelper) RecordPlanInfo(
-	distribution physicalplan.PlanDistribution, vectorized, containsMutation bool,
+	distribution physicalplan.PlanDistribution, vectorized, containsMutation, generic, optimized bool,
 ) {
 	ih.distribution = distribution
 	ih.vectorized = vectorized
 	ih.containsMutation = containsMutation
+	ih.generic = generic
+	ih.optimized = optimized
 }
 
 // PlanForStats returns the plan as an ExplainTreePlanNode tree, if it was
@@ -785,6 +833,7 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *appstatspb.E
 	})
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
+	ob.AddPlanType(ih.generic, ih.optimized)
 	if err := emitExplain(ctx, ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
 		log.Warningf(ctx, "unable to emit explain plan tree: %v", err)
 		return nil
@@ -810,6 +859,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	ob.AddExecutionTime(phaseTimes.GetRunLatency())
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
+	ob.AddPlanType(ih.generic, ih.optimized)
 
 	if queryStats != nil {
 		if queryStats.KVRowsRead != 0 {

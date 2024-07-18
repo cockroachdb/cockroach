@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/update"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -145,7 +146,8 @@ Local Clusters
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
 		createVMOpts.ClusterName = args[0]
-		return roachprod.Create(context.Background(), config.Logger, username, numNodes, createVMOpts, providerOptsContainer)
+		opts := cloud.ClusterCreateOpts{Nodes: numNodes, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer}
+		return roachprod.Create(context.Background(), config.Logger, username, &opts)
 	}),
 }
 
@@ -154,12 +156,12 @@ var growCmd = &cobra.Command{
 	Short: `grow a cluster by adding nodes`,
 	Long: `grow a cluster by adding the specified number of nodes to it.
 
-The cluster has to be a managed cluster (i.e., a cluster created with the
-gce-managed flag). Only Google Cloud clusters currently support adding nodes.
-The new nodes will use the instance template that was used to create the cluster
-originally (Nodes will be created in the same zone as the existing nodes, or if
-the cluster is geographically distributed, the nodes will be fairly distributed
-across the zones of the cluster).
+Only Google Cloud and local clusters currently support adding nodes. The Google
+Cloud cluster has to be a managed cluster (i.e., a cluster created with the
+gce-managed flag). The new nodes will use the instance template that was used to
+create the cluster originally (Nodes will be created in the same zone as the
+existing nodes, or if the cluster is geographically distributed, the nodes will
+be fairly distributed across the zones of the cluster).
 `,
 	Args: cobra.ExactArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
@@ -176,10 +178,10 @@ var shrinkCmd = &cobra.Command{
 	Short: `shrink a cluster by removing nodes`,
 	Long: `shrink a cluster by removing the specified number of nodes.
 
-The cluster has to be a managed cluster (i.e., a cluster created with the
-gce-managed flag). Only Google Cloud clusters currently support removing nodes.
-Nodes are removed from the tail end of the cluster. Removing nodes from the
-middle of the cluster is not supported yet.
+Only Google Cloud and local clusters currently support removing nodes. The
+Google Cloud cluster has to be a managed cluster (i.e., a cluster created with
+the gce-managed flag). Nodes are removed from the tail end of the cluster.
+Removing nodes from the middle of the cluster is not supported yet.
 `,
 	Args: cobra.ExactArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
@@ -990,9 +992,8 @@ var runCmd = &cobra.Command{
 var resetCmd = &cobra.Command{
 	Use:   "reset <cluster>",
 	Short: "reset *all* VMs in a cluster",
-	Long: `Reset a cloud VM. This may not be implemented for all
-environments and will fall back to a no-op.`,
-	Args: cobra.ExactArgs(1),
+	Long:  `Reset a cloud VM.`,
+	Args:  cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
 		return roachprod.Reset(config.Logger, args[0])
 	}),
@@ -1627,6 +1628,61 @@ var storageSnapshotCmd = &cobra.Command{
 	}),
 }
 
+var sideEyeRootCmd = &cobra.Command{
+	Use:   "side-eye",
+	Short: "interact with side-eye.io functionality",
+	Long: `Interact with side-eye.io functionality
+
+Side-Eye (app.side-eye.io) is a distributed debugger that can be used to capture
+snapshots of a CockroachDB cluster.
+`,
+	Args: cobra.MinimumNArgs(1),
+}
+
+var sideEyeInstallCmd = &cobra.Command{
+	Use:   "install <cluster>",
+	Short: "install and start the Side-Eye agents on all nodes in the cluster",
+	Long: `Install and start the Side-Eye agents on all nodes in the cluster
+
+` + "`roachprod side-eye snapshot <cluster>`" + ` can then be used to capture cluster snapshots.
+`,
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		cluster := args[0]
+
+		ctx := context.Background()
+		l := config.Logger
+		sideEyeToken, ok := roachprod.GetSideEyeTokenFromEnv()
+		if !ok {
+			return errors.New("Side-Eye token is not configured via SIDE_EYE_API_TOKEN or gcloud secret")
+		}
+
+		return roachprod.StartSideEyeAgents(ctx, l, cluster, cluster /* envName */, sideEyeToken)
+	}),
+}
+
+var sideEyeSnapCmd = &cobra.Command{
+	Use:     "snapshot <cluster/Side-Eye environment>",
+	Aliases: []string{"snap"},
+	Short:   "capture a cluster snapshot",
+	Long: `Capture a cluster snapshot using Side-Eye
+
+The command will print an app.side-eye.io URL where the snapshot can be viewed.
+`,
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		cluster := args[0]
+		ctx := context.Background()
+		l := config.Logger
+		l.PrintfCtx(ctx, "capturing snapshot of the cluster with Side-Eye...")
+		snapURL, ok := roachprod.CaptureSideEyeSnapshot(context.Background(), config.Logger, cluster, nil /* client */)
+		if ok {
+			l.PrintfCtx(ctx, "captured Side-Eye snapshot: %s", snapURL)
+		}
+		return nil
+	}),
+}
+
 // Before executing any command, validate and canonicalize args.
 func validateAndConfigure(cmd *cobra.Command, args []string) {
 	// Skip validation for commands that are self-sufficient.
@@ -1938,6 +1994,7 @@ func main() {
 		jaegerStartCmd,
 		jaegerStopCmd,
 		jaegerURLCmd,
+		sideEyeRootCmd,
 		fluentBitStartCmd,
 		fluentBitStopCmd,
 		opentelemetryStartCmd,

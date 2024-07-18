@@ -75,6 +75,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -260,6 +261,7 @@ type (
 		maxUpgrades                    int
 		minimumSupportedVersion        *clusterupgrade.Version
 		predecessorFunc                predecessorFunc
+		skipVersionProbability         float64
 		settings                       []install.ClusterSettingOption
 		enabledDeploymentModes         []DeploymentMode
 		overriddenMutatorProbabilities map[string]float64
@@ -267,7 +269,7 @@ type (
 
 	CustomOption func(*testOptions)
 
-	predecessorFunc func(*rand.Rand, *clusterupgrade.Version, int) ([]*clusterupgrade.Version, error)
+	predecessorFunc func(*rand.Rand, *clusterupgrade.Version) (*clusterupgrade.Version, error)
 
 	// Test is the main struct callers of this package interact with.
 	Test struct {
@@ -295,8 +297,8 @@ type (
 		// hook in `Test.hooks.background`.
 		bgChans []shouldStop
 
-		// predecessorFunc computes the predecessor versions to be used in
-		// a test run. By default, random predecessors are used, but tests
+		// predecessorFunc computes the predecessor of a particular
+		// release. By default, random predecessors are used, but tests
 		// may choose to always use the latest predecessor as well.
 		predecessorFunc predecessorFunc
 
@@ -408,7 +410,7 @@ func EnabledDeploymentModes(modes ...DeploymentMode) CustomOption {
 // avoided, but it might be necessary in certain cases to reduce noise
 // in case the test is more susceptible to fail due to known bugs.
 func AlwaysUseLatestPredecessors(opts *testOptions) {
-	opts.predecessorFunc = latestPredecessorHistory
+	opts.predecessorFunc = latestPredecessor
 }
 
 // WithMutatorProbability allows tests to override the default
@@ -428,6 +430,11 @@ func DisableMutators(names ...string) CustomOption {
 	}
 }
 
+// minSupportedSkipVersionUpgrade is the minimum version after which
+// "skip version" upgrades are supported (i.e., upgrading two major
+// releases in a single upgrade).
+var minSupportedSkipVersionUpgrade = clusterupgrade.MustParseVersion("v24.1.0")
+
 func defaultTestOptions() testOptions {
 	return testOptions{
 		// We use fixtures more often than not as they are more likely to
@@ -437,9 +444,27 @@ func defaultTestOptions() testOptions {
 		minUpgrades:                    1,
 		maxUpgrades:                    4,
 		minimumSupportedVersion:        OldestSupportedVersion,
-		predecessorFunc:                randomPredecessorHistory,
+		predecessorFunc:                randomPredecessor,
 		enabledDeploymentModes:         []DeploymentMode{SystemOnlyDeployment},
+		skipVersionProbability:         0.5,
 		overriddenMutatorProbabilities: make(map[string]float64),
+	}
+}
+
+// DisableSkipVersionUpgrades can be used by callers to disable the
+// experimental "skip version" upgrade testing. Useful if a test is
+// verifying something specific to an upgrade path from the previous
+// release to the current one.
+func DisableSkipVersionUpgrades(opts *testOptions) {
+	withSkipVersionProbability(0)(opts)
+}
+
+// withSkipVersionProbability allows callers to set the specific
+// probability under which skip-version upgrades will happen in a test
+// run. Only used for testing at the moment.
+func withSkipVersionProbability(p float64) CustomOption {
+	return func(opts *testOptions) {
+		opts.skipVersionProbability = p
 	}
 }
 
@@ -678,33 +703,104 @@ func (t *Test) runCommandFunc(nodes option.NodeListOption, cmd string) stepFunc 
 }
 
 // choosePreviousReleases returns a list of predecessor releases
-// relative to the current build version. It uses the
-// `predecessorFunc` field to compute the actual list of
-// predecessors. Special care is taken to avoid using releases that
-// are not available under a certain cluster architecture.
-// Specifically, ARM64 builds are only available on v22.2.0+.
+// relative to the current build version. It uses the `predecessorFunc`
+// field to compute the actual list of predecessors. This function
+// may also choose to skip releases when supported. Special care is
+// taken to avoid using releases that are not available under a
+// certain cluster architecture. Specifically, ARM64 builds are
+// only available on v22.2.0+.
 func (t *Test) choosePreviousReleases() ([]*clusterupgrade.Version, error) {
-	releases, err := t.predecessorFunc(t.prng, clusterupgrade.CurrentVersion(), t.numUpgrades())
-	if err != nil {
-		return nil, err
-	}
-
-	if t.clusterArch() != vm.ArchARM64 {
-		return releases, nil
-	}
-
-	var armReleases []*clusterupgrade.Version
-	for _, r := range releases {
-		if r.AtLeast(minSupportedARM64Version) {
-			armReleases = append(armReleases, r)
+	skipVersions := t.prng.Float64() < t.options.skipVersionProbability
+	isAvailable := func(v *clusterupgrade.Version) bool {
+		if t.clusterArch() != vm.ArchARM64 {
+			return true
 		}
+
+		return v.AtLeast(minSupportedARM64Version)
 	}
 
-	if len(armReleases) != len(releases) {
+	var numSkips int
+	// possiblePredecessorsFor returns a list of possible predecessors
+	// for the given release `v`. If skip-version is enabled and
+	// supported, this function will return both the immediate
+	// predecessor along with the predecessor's predecessor. This is the
+	// function to change in case the rules around what upgrades are
+	// possible in CRDB change.
+	possiblePredecessorsFor := func(v *clusterupgrade.Version) ([]*clusterupgrade.Version, error) {
+		pred, err := t.predecessorFunc(t.prng, v)
+		if err != nil {
+			return nil, err
+		}
+
+		if !isAvailable(pred) {
+			return nil, nil
+		}
+
+		// If skip-version upgrades are not enabled, the only possible
+		// predecessor is the immediate predecessor release. If the
+		// predecessor doesn't support skip versions, then its predecessor
+		// won't either. Don't attempt to find it.
+		if !skipVersions || !pred.AtLeast(minSupportedSkipVersionUpgrade) {
+			return []*clusterupgrade.Version{pred}, nil
+		}
+
+		predPred, err := t.predecessorFunc(t.prng, pred)
+		if err != nil {
+			return nil, err
+		}
+
+		if predPred.AtLeast(minSupportedSkipVersionUpgrade) {
+			// If the predecessor's predecessor supports skip-version
+			// upgrades and we haven't performed a skip-version upgrade yet,
+			// do it. This logic makes sure that, when skip-version upgrades
+			// are enabled, it happens when upgrading to the current
+			// release, which is the most important upgrade to be tested on
+			// any release branch.
+			if numSkips == 0 {
+				numSkips++
+				return []*clusterupgrade.Version{predPred}, nil
+			}
+
+			// If we already performed a skip-version upgrade on this test
+			// plan, we can choose to do another one or not.
+			return []*clusterupgrade.Version{pred, predPred}, nil
+		}
+
+		// If the predecessor is too old and does not support skip-version
+		// upgrades, it's the only possible predecessor.
+		return []*clusterupgrade.Version{pred}, nil
+	}
+
+	currentVersion := clusterupgrade.CurrentVersion()
+	var upgradePath []*clusterupgrade.Version
+	numUpgrades := t.numUpgrades()
+
+	for j := 0; j < numUpgrades; j++ {
+		predecessors, err := possiblePredecessorsFor(currentVersion)
+		if err != nil {
+			return nil, err
+		}
+
+		// If there are no valid predecessors, it means some release is
+		// not available for the cluster architecture. We log a warning
+		// below in case we have a shorter upgrade path than requested
+		// because of this.
+		if len(predecessors) == 0 {
+			break
+		}
+
+		chosenPredecessor := predecessors[t.prng.Intn(len(predecessors))]
+		upgradePath = append(upgradePath, chosenPredecessor)
+		currentVersion = chosenPredecessor
+	}
+
+	if len(upgradePath) < numUpgrades {
 		t.logger.Printf("WARNING: skipping upgrades as ARM64 is only supported on %s+", minSupportedARM64Version)
 	}
 
-	return armReleases, nil
+	// The upgrade path to be returned is from oldest to newest release.
+	slices.Reverse(upgradePath)
+	return upgradePath, nil
 }
 
 // numUpgrades returns the number of upgrades that will be performed
@@ -716,41 +812,26 @@ func (t *Test) numUpgrades() int {
 	) + t.options.minUpgrades
 }
 
-// latestPredecessorHistory is an implementation of `predecessorFunc`
-// that always picks the latest predecessors.
-func latestPredecessorHistory(
-	_ *rand.Rand, v *clusterupgrade.Version, n int,
-) ([]*clusterupgrade.Version, error) {
-	history, err := release.LatestPredecessorHistory(&v.Version, n)
+// latestPredecessor is an implementation of `predecessorFunc` that
+// always picks the latest predecessor for the given release version.
+func latestPredecessor(_ *rand.Rand, v *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+	predecessor, err := release.LatestPredecessor(&v.Version)
 	if err != nil {
 		return nil, err
 	}
 
-	return parseVersions(history), nil
+	return clusterupgrade.MustParseVersion(predecessor), nil
 }
 
-// randomPredecessorHistory is an implementation of `predecessorFunc`
-// that picks a random predecessor for each release series.
-func randomPredecessorHistory(
-	rng *rand.Rand, v *clusterupgrade.Version, n int,
-) ([]*clusterupgrade.Version, error) {
-	history, err := release.RandomPredecessorHistory(rng, &v.Version, n)
+// randomPredecessor is an implementation of `predecessorFunc` that
+// picks a random predecessor for the given release version.
+func randomPredecessor(rng *rand.Rand, v *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+	predecessor, err := release.RandomPredecessor(rng, &v.Version)
 	if err != nil {
 		return nil, err
 	}
 
-	return parseVersions(history), nil
-}
-
-// parseVersions maps a list of valid version strings to a
-// corresponding list of parsed version objects.
-func parseVersions(vs []string) []*clusterupgrade.Version {
-	result := make([]*clusterupgrade.Version, 0, len(vs))
-	for _, v := range vs {
-		result = append(result, clusterupgrade.MustParseVersion(v))
-	}
-
-	return result
+	return clusterupgrade.MustParseVersion(predecessor), nil
 }
 
 // sequentialRunStep is a "meta-step" that indicates that a sequence

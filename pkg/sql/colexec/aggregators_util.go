@@ -274,7 +274,7 @@ func newDistinctAggregatorHelperBase(
 	b := &distinctAggregatorHelperBase{
 		aggregatorHelperBase: newAggregatorHelperBase(args.Spec, maxBatchSize),
 		inputTypes:           args.InputTypes,
-		arena:                stringarena.Make(args.MemAccount),
+		arena:                stringarena.Make(args.Allocator.Acc()),
 		datumAlloc:           datumAlloc,
 	}
 	var vecIdxsToConvert []int

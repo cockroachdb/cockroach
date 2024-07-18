@@ -18,19 +18,19 @@ import (
 
 type CreateLogicalReplicationStream struct {
 	PGURL   Expr
-	On      LogicalReplicationResources
+	From    LogicalReplicationResources
 	Into    LogicalReplicationResources
 	Options LogicalReplicationOptions
 }
 
 type LogicalReplicationResources struct {
-	Tables   TablePatterns
+	Tables   []*UnresolvedName
 	Database Name
 }
 
 type LogicalReplicationOptions struct {
 	// Mapping of table name to UDF name
-	UserFunctions   map[TablePattern]Expr
+	UserFunctions   map[*UnresolvedName]RoutineName
 	Cursor          Expr
 	Mode            Expr
 	DefaultFunction Expr
@@ -42,15 +42,16 @@ var _ NodeFormatter = &LogicalReplicationOptions{}
 // Format implements the NodeFormatter interface.
 func (node *CreateLogicalReplicationStream) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE LOGICAL REPLICATION STREAM FROM ")
-	ctx.FormatNode(node.PGURL)
+	ctx.FormatNode(&node.From)
 	ctx.WriteString(" ON ")
-	ctx.FormatNode(&node.On)
+	ctx.FormatNode(node.PGURL)
 	ctx.WriteString(" INTO ")
 	ctx.FormatNode(&node.Into)
 
 	if !node.Options.IsDefault() {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }
 
@@ -68,7 +69,7 @@ func (lrr *LogicalReplicationResources) Format(ctx *FmtCtx) {
 		}
 		ctx.WriteString(")")
 	} else {
-		ctx.WriteString("Table ")
+		ctx.WriteString("TABLE ")
 		ctx.FormatNode(lrr.Tables[0])
 	}
 }
@@ -106,7 +107,7 @@ func (lro *LogicalReplicationOptions) Format(ctx *FmtCtx) {
 
 		// In order to make tests deterministic, the ordering of map keys
 		// needs to be the same each time.
-		keys := make([]TablePattern, 0, len(lro.UserFunctions))
+		keys := make([]*UnresolvedName, 0, len(lro.UserFunctions))
 		for k := range lro.UserFunctions {
 			keys = append(keys, k)
 		}
@@ -117,7 +118,8 @@ func (lro *LogicalReplicationOptions) Format(ctx *FmtCtx) {
 		for _, k := range keys {
 			maybeAddSep()
 			ctx.WriteString("FUNCTION ")
-			ctx.FormatNode(lro.UserFunctions[k])
+			r := lro.UserFunctions[k]
+			ctx.FormatNode(&r)
 			ctx.WriteString(" FOR TABLE ")
 			ctx.FormatNode(k)
 		}
@@ -155,7 +157,7 @@ func (o *LogicalReplicationOptions) CombineWith(other *LogicalReplicationOptions
 				return errors.Newf("multiple user functions specified for table %q", tbl)
 			}
 			if o.UserFunctions == nil {
-				o.UserFunctions = make(map[TablePattern]Expr)
+				o.UserFunctions = make(map[*UnresolvedName]RoutineName)
 			}
 			o.UserFunctions[tbl] = other.UserFunctions[tbl]
 		}

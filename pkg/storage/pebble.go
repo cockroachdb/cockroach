@@ -192,6 +192,7 @@ type compressionAlgorithm int64
 const (
 	compressionAlgorithmSnappy compressionAlgorithm = 1
 	compressionAlgorithmZstd   compressionAlgorithm = 2
+	compressionAlgorithmNone   compressionAlgorithm = 3
 )
 
 // String implements fmt.Stringer for CompressionAlgorithm.
@@ -201,6 +202,8 @@ func (c compressionAlgorithm) String() string {
 		return "snappy"
 	case compressionAlgorithmZstd:
 		return "zstd"
+	case compressionAlgorithmNone:
+		return "none"
 	default:
 		panic(errors.Errorf("unknown compression type: %d", c))
 	}
@@ -214,7 +217,8 @@ func RegisterCompressionAlgorithmClusterSetting(
 	return settings.RegisterEnumSetting(
 		// NB: We can't use settings.SystemOnly today because we may need to read the
 		// value from within a tenant building an sstable for AddSSTable.
-		settings.SystemVisible, name, desc,
+		settings.SystemVisible, name,
+		desc,
 		// TODO(jackson): Consider using a metamorphic constant here, but many tests
 		// will need to override it because they depend on a deterministic sstable
 		// size.
@@ -222,6 +226,7 @@ func RegisterCompressionAlgorithmClusterSetting(
 		map[compressionAlgorithm]string{
 			compressionAlgorithmSnappy: compressionAlgorithmSnappy.String(),
 			compressionAlgorithmZstd:   compressionAlgorithmZstd.String(),
+			compressionAlgorithmNone:   compressionAlgorithmNone.String(),
 		},
 		settings.WithPublic,
 	)
@@ -234,8 +239,7 @@ func RegisterCompressionAlgorithmClusterSetting(
 // than calling Get directly.
 var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm",
-	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store;`+
-		` supported values: "snappy", "zstd"`,
+	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store;`,
 	compressionAlgorithmSnappy, // Default.
 )
 
@@ -245,8 +249,7 @@ var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
 // rather than calling Get directly.
 var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm_backup_storage",
-	`determines the compression algorithm to use when compressing sstable data blocks for backup row data storage;`+
-		` supported values: "snappy", "zstd"`,
+	`determines the compression algorithm to use when compressing sstable data blocks for backup row data storage;`,
 	compressionAlgorithmSnappy, // Default.
 )
 
@@ -259,8 +262,7 @@ var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetti
 // setting, rather than calling Get directly.
 var CompressionAlgorithmBackupTransport = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm_backup_transport",
-	`determines the compression algorithm to use when compressing sstable data blocks for backup transport;`+
-		` supported values: "snappy", "zstd"`,
+	`determines the compression algorithm to use when compressing sstable data blocks for backup transport;`,
 	compressionAlgorithmSnappy, // Default.
 )
 
@@ -281,6 +283,8 @@ func getCompressionAlgorithm(
 			return pebble.ZstdCompression
 		}
 		return pebble.DefaultCompression
+	case compressionAlgorithmNone:
+		return pebble.NoCompression
 	default:
 		return pebble.DefaultCompression
 	}
@@ -959,33 +963,6 @@ func shortAttributeExtractorForValues(
 	return 0, nil
 }
 
-type pebbleLogger struct {
-	ctx   context.Context
-	depth int
-}
-
-var _ pebble.LoggerAndTracer = pebbleLogger{}
-
-func (l pebbleLogger) Infof(format string, args ...interface{}) {
-	log.Storage.InfofDepth(l.ctx, l.depth, format, args...)
-}
-
-func (l pebbleLogger) Fatalf(format string, args ...interface{}) {
-	log.Storage.FatalfDepth(l.ctx, l.depth, format, args...)
-}
-
-func (l pebbleLogger) Eventf(ctx context.Context, format string, args ...interface{}) {
-	log.Eventf(ctx, format, args...)
-}
-
-func (l pebbleLogger) IsTracingEnabled(ctx context.Context) bool {
-	return log.HasSpan(ctx)
-}
-
-func (l pebbleLogger) Errorf(format string, args ...interface{}) {
-	log.Storage.ErrorfDepth(l.ctx, l.depth, format, args...)
-}
-
 // engineConfig holds all configuration parameters and knobs used in setting up
 // a new storage engine.
 type engineConfig struct {
@@ -1098,6 +1075,7 @@ type Pebble struct {
 
 	storeIDPebbleLog *base.StoreIDContainer
 	replayer         *replay.WorkloadCollector
+	diskSlowFunc     atomic.Pointer[func(vfs.DiskSlowInfo)]
 
 	singleDelLogEvery log.EveryN
 }
@@ -1120,6 +1098,13 @@ var WorkloadCollectorEnabled = envutil.EnvOrDefaultBool("COCKROACH_STORAGE_WORKL
 func (p *Pebble) SetCompactionConcurrency(n uint64) uint64 {
 	prevConcurrency := atomic.SwapUint64(&p.atomic.compactionConcurrency, n)
 	return prevConcurrency
+}
+
+// RegisterDiskSlowCallback registers a callback that will be run when a write
+// operation on the disk has been seen to be slow. Only one handler can be
+// registered per Pebble instance.
+func (p *Pebble) RegisterDiskSlowCallback(f func(vfs.DiskSlowInfo)) {
+	p.diskSlowFunc.Store(&f)
 }
 
 // AdjustCompactionConcurrency adjusts the compaction concurrency up or down by
@@ -1629,6 +1614,10 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 				return
 			}
 			atomic.AddInt64(&p.diskSlowCount, 1)
+			// Call any custom handlers registered for disk slowness.
+			if fn := p.diskSlowFunc.Load(); fn != nil {
+				(*fn)(info)
+			}
 		},
 		FlushEnd: func(info pebble.FlushInfo) {
 			if info.Err != nil {

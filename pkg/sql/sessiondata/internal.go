@@ -69,6 +69,19 @@ type InternalExecutorOverride struct {
 	// being emitted for changes to data made in a session. It is illegal to set
 	// this option when using the internal executor with an outer txn.
 	DisableChangefeedReplication bool
+	// OriginIDForLogicalDataReplication is an identifier for the cluster that
+	// originally wrote the data that are being written in this session. An
+	// originID of 0 (the default) identifies a local write, 1 identifies a remote
+	// write of unspecified origin, and 2+ are reserved to identify remote writes
+	// from specific clusters.
+	OriginIDForLogicalDataReplication uint32
+	// PlanCacheMode, if set, overrides the plan_cache_mode session variable.
+	PlanCacheMode *sessiondatapb.PlanCacheMode
+	// GrowStackSize, if true, indicates that the connExecutor goroutine stack
+	// should be grown to 32KiB right away.
+	GrowStackSize bool
+	// DisablePlanGists, if true, overrides the disable_plan_gists session var.
+	DisablePlanGists bool
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not

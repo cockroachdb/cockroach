@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 type replicationStreamManagerImpl struct {
@@ -60,6 +63,12 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		return streampb.ReplicationProducerSpec{}, err
 	}
 
+	execConfig := r.evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
+
+	if execConfig.Codec.IsSystem() && !kvserver.RangefeedEnabled.Get(&execConfig.Settings.SV) {
+		return streampb.ReplicationProducerSpec{}, errors.Errorf("kv.rangefeed.enabled must be enabled on the source cluster for logical replication")
+	}
+
 	var replicationStartTime hlc.Timestamp
 	if !req.ReplicationStartTime.IsEmpty() {
 		replicationStartTime = req.ReplicationStartTime
@@ -73,8 +82,7 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	spans := make([]roachpb.Span, 0, len(req.TableNames))
 	tableDescs := make(map[string]descpb.TableDescriptor, len(req.TableNames))
 	for _, name := range req.TableNames {
-		un := tree.MakeUnresolvedName(name)
-		uon, err := un.ToUnresolvedObjectName(tree.NoAnnotation)
+		uon, err := parser.ParseTableName(name)
 		if err != nil {
 			return streampb.ReplicationProducerSpec{}, err
 		}
@@ -87,7 +95,6 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		tableDescs[name] = td.TableDescriptor
 	}
 
-	execConfig := r.evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	registry := execConfig.JobRegistry
 	ptsID := uuid.MakeV4()
 	jr := makeProducerJobRecordForLogicalReplication(
@@ -115,7 +122,6 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, r.txn); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
-
 	return streampb.ReplicationProducerSpec{
 		StreamID:             streampb.StreamID(jr.JobID),
 		SourceClusterID:      r.evalCtx.ClusterID,
@@ -163,9 +169,28 @@ func (r *replicationStreamManagerImpl) HeartbeatReplicationStream(
 
 // StreamPartition implements streaming.ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) StreamPartition(
-	streamID streampb.StreamID, opaqueSpec []byte,
+	ctx context.Context, streamID streampb.StreamID, opaqueSpec []byte,
 ) (eval.ValueGenerator, error) {
 	if err := r.checkLicense(); err != nil {
+		return nil, err
+	}
+
+	if !r.evalCtx.SessionData().AvoidBuffering {
+		return nil, errors.New("partition streaming requires 'SET avoid_buffering = true' option")
+	}
+
+	if !r.evalCtx.TxnIsSingleStmt {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+			"crdb_internal.stream_partition not allowed in explicit or multi-statement transaction")
+	}
+
+	// We release the descriptor collection state because stream_partitions
+	// runs forever.
+	r.txn.Descriptors().ReleaseAll(ctx)
+
+	// We also commit the planner's transaction. Nothing should be using it after
+	// this point and the stream itself is non-transactional.
+	if err := r.txn.KV().Commit(ctx); err != nil {
 		return nil, err
 	}
 	return streamPartition(r.evalCtx, streamID, opaqueSpec)

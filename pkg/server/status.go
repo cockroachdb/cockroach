@@ -1674,7 +1674,7 @@ func (s *statusServer) fetchProfileFromAllNodes(
 	}
 	senderServerVersion := resp.Desc.ServerVersion
 
-	opName := fmt.Sprintf("fetch cluster-wide %s profile", req.Type)
+	opName := redact.Sprintf("fetch cluster-wide %s profile", req.Type)
 	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, nodeID roachpb.NodeID) (*profData, error) {
 		var pd *profData
 		err := timeutil.RunWithTimeout(ctx, opName, 1*time.Minute, func(ctx context.Context) error {
@@ -2411,7 +2411,7 @@ func (s *systemStatusServer) rangesHelper(
 		}
 
 		state := serverpb.RaftState{
-			ReplicaID:      raftStatus.ID,
+			ReplicaID:      uint64(raftStatus.ID),
 			HardState:      raftStatus.HardState,
 			Applied:        raftStatus.Applied,
 			Lead:           raftStatus.Lead,
@@ -2421,7 +2421,7 @@ func (s *systemStatusServer) rangesHelper(
 		}
 
 		for id, progress := range raftStatus.Progress {
-			state.Progress[id] = serverpb.RaftState_Progress{
+			state.Progress[uint64(id)] = serverpb.RaftState_Progress{
 				Match:           progress.Match,
 				Next:            progress.Next,
 				Paused:          progress.IsPaused(),
@@ -2843,7 +2843,7 @@ func (s *systemStatusServer) HotRangesV2(
 		}
 	}
 
-	tableMetaCache := sync.Map{}
+	var tableMetaCache syncutil.Map[roachpb.RangeID, tableMeta]
 
 	response := &serverpb.HotRangesResponseV2{
 		ErrorsByNodeID: make(map[roachpb.NodeID]string),
@@ -2864,7 +2864,7 @@ func (s *systemStatusServer) HotRangesV2(
 						dbName, tableName, indexName, schemaName string
 						replicaNodeIDs                           []roachpb.NodeID
 					)
-					rangeID := uint32(r.Desc.RangeID)
+					rangeID := r.Desc.RangeID
 					for _, repl := range r.Desc.Replicas().Descriptors() {
 						replicaNodeIDs = append(replicaNodeIDs, repl.NodeID)
 					}
@@ -2872,10 +2872,10 @@ func (s *systemStatusServer) HotRangesV2(
 						dbName = "system"
 						tableName = r.Desc.StartKey.String()
 					} else if meta, ok := tableMetaCache.Load(rangeID); ok {
-						dbName = meta.(tableMeta).dbName
-						tableName = meta.(tableMeta).tableName
-						schemaName = meta.(tableMeta).schemaName
-						indexName = meta.(tableMeta).indexName
+						dbName = meta.dbName
+						tableName = meta.tableName
+						schemaName = meta.schemaName
+						indexName = meta.indexName
 					} else {
 						if err = s.sqlServer.distSQLServer.DB.DescsTxn(
 							ctx, func(ctx context.Context, txn descs.Txn) error {
@@ -2915,7 +2915,7 @@ func (s *systemStatusServer) HotRangesV2(
 							continue
 						}
 
-						tableMetaCache.Store(rangeID, tableMeta{
+						tableMetaCache.Store(rangeID, &tableMeta{
 							dbName:     dbName,
 							tableName:  tableName,
 							schemaName: schemaName,
@@ -3129,7 +3129,7 @@ func (s *statusServer) Range(
 	}
 
 	if err := iterateNodes(
-		ctx, s.serverIterator, s.stopper, fmt.Sprintf("details about range %d", req.RangeId), noTimeout,
+		ctx, s.serverIterator, s.stopper, redact.Sprintf("details about range %d", req.RangeId), noTimeout,
 		s.dialNode, nodeFn, responseFn, errorFn,
 	); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
@@ -3160,7 +3160,7 @@ func iterateNodes[Client, Result any](
 	ctx context.Context,
 	iter ServerIterator,
 	stopper *stop.Stopper,
-	errorCtx string,
+	errorCtx redact.RedactableString,
 	nodeFnTimeout time.Duration,
 	dialFn func(ctx context.Context, nodeID roachpb.NodeID) (Client, error),
 	nodeFn func(ctx context.Context, client Client, nodeID roachpb.NodeID) (Result, error),
@@ -3260,7 +3260,7 @@ func iterateNodes[Client, Result any](
 func paginatedIterateNodes[Result any](
 	ctx context.Context,
 	s *statusServer,
-	errorCtx string,
+	errorCtx redact.RedactableString,
 	limit int,
 	pagState paginationState,
 	requestedNodes []roachpb.NodeID,

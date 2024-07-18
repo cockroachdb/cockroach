@@ -64,7 +64,7 @@ func IsResponseMsg(msgt pb.MessageType) bool {
 	return isMsgInArray(msgt, isResponseMsg[:])
 }
 
-func IsLocalMsgTarget(id uint64) bool {
+func IsLocalMsgTarget(id pb.PeerID) bool {
 	return id == LocalAppendThread || id == LocalApplyThread
 }
 
@@ -87,11 +87,12 @@ func DescribeHardState(hs pb.HardState) string {
 		fmt.Fprintf(&buf, " Vote:%d", hs.Vote)
 	}
 	fmt.Fprintf(&buf, " Commit:%d", hs.Commit)
+	fmt.Fprintf(&buf, " Lead:%d", hs.Lead)
 	return buf.String()
 }
 
 func DescribeSoftState(ss SoftState) string {
-	return fmt.Sprintf("Lead:%d State:%s", ss.Lead, ss.RaftState)
+	return fmt.Sprintf("State:%s", ss.RaftState)
 }
 
 func DescribeConfState(state pb.ConfState) string {
@@ -187,7 +188,7 @@ func describeMessageWithIndent(indent string, m pb.Message, f EntryFormatter) st
 	return buf.String()
 }
 
-func describeTarget(id uint64) string {
+func describeTarget(id pb.PeerID) string {
 	switch id {
 	case None:
 		return "None"

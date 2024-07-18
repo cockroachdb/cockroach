@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -438,7 +439,7 @@ func TestTransferLeaseDuringJointConfigWithDeadIncomingVoter(t *testing.T) {
 		require.Equal(t, raft.StateLeader, s.RaftState)
 		p := s.Progress
 		require.Len(t, p, 4)
-		require.Contains(t, p, uint64(4))
+		require.Contains(t, p, raftpb.PeerID(4))
 		if p[4].State != tracker.StateProbe {
 			return errors.Errorf("dead replica not state probe")
 		}
@@ -1667,10 +1668,8 @@ func TestLeaseRequestBumpsEpoch(t *testing.T) {
 
 // TestLeaseRequestFromExpirationToEpochDoesNotRegressExpiration tests that a
 // promotion from an expiration-based lease to an epoch-based lease does not
-// permit the expiration time of the lease to regress. This is enforced by
-// detecting cases where the leaseholder's liveness record's expiration trails
-// its expiration-based lease's expiration and synchronously heartbeating the
-// leaseholder's liveness record before promoting the lease.
+// permit the expiration time of the lease to regress. This is enforced using
+// the min_expiration field on the epoch-based lease.
 func TestLeaseRequestFromExpirationToEpochDoesNotRegressExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1735,13 +1734,14 @@ func TestLeaseRequestFromExpirationToEpochDoesNotRegressExpiration(t *testing.T)
 	})
 
 	// Once the lease has been promoted to an epoch-based lease, the effective
-	// expiration (maintained indirectly in the liveness record) must be greater
-	// than that in the preceding expiration-based lease. If this were to regress,
-	// a non-cooperative lease failover to a third lease held by a different node
+	// expiration (maintained indirectly in the liveness record and directly in
+	// the lease through its min_expiration field) must be greater than or equal
+	// to that in the preceding expiration-based lease. If this were to regress, a
+	// non-cooperative lease failover to a third lease held by a different node
 	// could overlap in MVCC time with the first lease (i.e. its start time could
 	// precede expLease.Expiration), violating the lease disjointness property.
 	//
-	// If we disable the `expToEpochPromo` branch in replica_range_lease.go, this
-	// assertion fails.
-	require.True(t, expLease.Expiration().Less(epochLease.Expiration()))
+	// If we disable the `expPromo` and branch in leases/build.go, this assertion
+	// fails.
+	require.True(t, expLease.Expiration().LessEq(epochLease.Expiration()))
 }

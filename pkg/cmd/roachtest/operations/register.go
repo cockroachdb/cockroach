@@ -20,4 +20,6 @@ func RegisterOperations(r registry.Registry) {
 	registerDiskStall(r)
 	registerNodeKill(r)
 	registerClusterSettings(r)
+	registerBackupRestore(r)
+	registerManualCompaction(r)
 }

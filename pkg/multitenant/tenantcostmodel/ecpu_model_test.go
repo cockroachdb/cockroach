@@ -14,10 +14,130 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
 )
 
-func TestEstimatedCPUModel(t *testing.T) {
+func TestEstimatedCPUBatchInfo(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		request  kvpb.BatchRequest
+		response kvpb.BatchResponse
+		expected BatchInfo
+	}{
+		{
+			name: "empty batch",
+		},
+		{
+			name: "read-only batch",
+			request: kvpb.BatchRequest{
+				Requests: []kvpb.RequestUnion{
+					{Value: &kvpb.RequestUnion_Get{
+						Get: &kvpb.GetRequest{
+							RequestHeader: kvpb.RequestHeader{Key: make([]byte, 10)},
+						}}},
+					{Value: &kvpb.RequestUnion_Get{
+						Get: &kvpb.GetRequest{
+							RequestHeader: kvpb.RequestHeader{Key: make([]byte, 20)},
+						}}},
+					{Value: &kvpb.RequestUnion_QueryIntent{
+						QueryIntent: &kvpb.QueryIntentRequest{
+							RequestHeader: kvpb.RequestHeader{Key: make([]byte, 30)},
+						}}},
+				},
+			},
+			response: kvpb.BatchResponse{
+				Responses: []kvpb.ResponseUnion{
+					{Value: &kvpb.ResponseUnion_Get{
+						Get: &kvpb.GetResponse{
+							ResponseHeader: kvpb.ResponseHeader{NumBytes: 100},
+						}}},
+					{Value: &kvpb.ResponseUnion_Get{
+						Get: &kvpb.GetResponse{
+							ResponseHeader: kvpb.ResponseHeader{NumBytes: 200},
+						}}},
+					{Value: &kvpb.ResponseUnion_QueryIntent{
+						QueryIntent: &kvpb.QueryIntentResponse{}}},
+				},
+			},
+			expected: BatchInfo{
+				ReadCount: 3,
+				ReadBytes: 300,
+			},
+		},
+		{
+			name: "write-only batch",
+			request: kvpb.BatchRequest{
+				Requests: []kvpb.RequestUnion{
+					{Value: &kvpb.RequestUnion_Put{
+						Put: &kvpb.PutRequest{
+							RequestHeader: kvpb.RequestHeader{Key: make([]byte, 10)},
+							Value:         roachpb.Value{RawBytes: make([]byte, 100)}},
+					}},
+					{Value: &kvpb.RequestUnion_Put{
+						Put: &kvpb.PutRequest{
+							RequestHeader: kvpb.RequestHeader{Key: make([]byte, 20)},
+							Value:         roachpb.Value{RawBytes: make([]byte, 200)}},
+					}},
+					{Value: &kvpb.RequestUnion_EndTxn{
+						EndTxn: &kvpb.EndTxnRequest{
+							RequestHeader: kvpb.RequestHeader{Key: make([]byte, 30)}},
+					}},
+				},
+			},
+			response: kvpb.BatchResponse{
+				Responses: []kvpb.ResponseUnion{
+					{Value: &kvpb.ResponseUnion_Put{Put: &kvpb.PutResponse{}}},
+					{Value: &kvpb.ResponseUnion_Put{Put: &kvpb.PutResponse{}}},
+					{Value: &kvpb.ResponseUnion_EndTxn{EndTxn: &kvpb.EndTxnResponse{}}},
+				},
+			},
+			expected: BatchInfo{
+				WriteCount: 3,
+				WriteBytes: 339,
+			},
+		},
+		{
+			name: "read-write batch",
+			request: kvpb.BatchRequest{
+				Requests: []kvpb.RequestUnion{
+					{Value: &kvpb.RequestUnion_Put{
+						Put: &kvpb.PutRequest{
+							RequestHeader: kvpb.RequestHeader{Key: make([]byte, 10)},
+							Value:         roachpb.Value{RawBytes: make([]byte, 100)}},
+					}},
+					{Value: &kvpb.RequestUnion_Get{
+						Get: &kvpb.GetRequest{
+							RequestHeader: kvpb.RequestHeader{Key: make([]byte, 20)},
+						}}},
+				},
+			},
+			response: kvpb.BatchResponse{
+				Responses: []kvpb.ResponseUnion{
+					{Value: &kvpb.ResponseUnion_Put{Put: &kvpb.PutResponse{}}},
+					{Value: &kvpb.ResponseUnion_Get{
+						Get: &kvpb.GetResponse{
+							ResponseHeader: kvpb.ResponseHeader{NumBytes: 200},
+						}}},
+				},
+			},
+			expected: BatchInfo{
+				ReadCount:  1,
+				ReadBytes:  200,
+				WriteCount: 1,
+				WriteBytes: 114,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := DefaultEstimatedCPUModel.MakeBatchInfo(&tc.request, &tc.response)
+			require.Equal(t, tc.expected, actual)
+		})
+	}
+}
+
+func TestEstimatedCPUBatchCost(t *testing.T) {
 	model := EstimatedCPUModel{
 		ReadBatchCost:   1,
 		ReadRequestCost: 2,
@@ -50,6 +170,13 @@ func TestEstimatedCPUModel(t *testing.T) {
 			PayloadSize: []float64{256, 1024, 4096},
 			CPUPerByte:  []EstimatedCPU{2, 4, 8},
 		},
+		BackgroundCPU: struct {
+			Amount       EstimatedCPU
+			Amortization float64
+		}{
+			Amount:       0.5,
+			Amortization: 5,
+		},
 	}
 
 	t.Run("roundtrip model through JSON", func(t *testing.T) {
@@ -61,83 +188,100 @@ func TestEstimatedCPUModel(t *testing.T) {
 		require.Equal(t, model, model2)
 	})
 
-	t.Run("metrics are smaller than min lookup values", func(t *testing.T) {
-		reqInfo := RequestInfo{
-			writeReplicas: 3,
-			writeCount:    1,
-			writeBytes:    1,
-		}
-		require.Equal(t, EstimatedCPU(13.5), model.RequestCost(reqInfo, 50))
-
-		respInfo := ResponseInfo{
-			isRead:    true,
-			readCount: 10,
-			readBytes: 100,
-		}
-		require.Equal(t, EstimatedCPU(121), model.ResponseCost(respInfo))
-	})
-
-	t.Run("metrics are equal to min lookup values", func(t *testing.T) {
-		reqInfo := RequestInfo{
-			writeReplicas: 3,
-			writeCount:    3,
-			writeBytes:    256,
-		}
-		require.Equal(t, EstimatedCPU(1555.5), model.RequestCost(reqInfo, 100))
-
-		respInfo := ResponseInfo{
-			isRead:    true,
-			readCount: 10,
-			readBytes: 256,
-		}
-		require.Equal(t, EstimatedCPU(277), model.ResponseCost(respInfo))
-	})
-
-	t.Run("metrics between lookup values", func(t *testing.T) {
-		reqInfo := RequestInfo{
-			writeReplicas: 5,
-			writeCount:    9,
-			writeBytes:    640,
-		}
-		require.Equal(t, EstimatedCPU(9761.25), model.RequestCost(reqInfo, 150))
-
-		respInfo := ResponseInfo{
-			isRead:    true,
-			readCount: 50,
-			readBytes: 2560,
-		}
-		require.Equal(t, EstimatedCPU(6501), model.ResponseCost(respInfo))
-	})
-
-	t.Run("metrics are equal to max lookup values", func(t *testing.T) {
-		reqInfo := RequestInfo{
-			writeReplicas: 3,
-			writeCount:    25,
-			writeBytes:    4096,
-		}
-		require.Equal(t, EstimatedCPU(98_685), model.RequestCost(reqInfo, 800))
-
-		respInfo := ResponseInfo{
-			isRead:    true,
-			readCount: 100,
-			readBytes: 4096,
-		}
-		require.Equal(t, EstimatedCPU(12_489), model.ResponseCost(respInfo))
-	})
-
-	t.Run("metrics are larger than max lookup values", func(t *testing.T) {
-		reqInfo := RequestInfo{
-			writeReplicas: 5,
-			writeCount:    100,
-			writeBytes:    10000,
-		}
-		require.Equal(t, EstimatedCPU(402_510), model.RequestCost(reqInfo, 1000))
-
-		respInfo := ResponseInfo{
-			isRead:    true,
-			readCount: 1000,
-			readBytes: 10000,
-		}
-		require.Equal(t, EstimatedCPU(32_001), model.ResponseCost(respInfo))
-	})
+	for _, tc := range []struct {
+		name        string
+		info        BatchInfo
+		ratePerNode float64
+		replicas    int64
+		cost        EstimatedCPU
+	}{
+		{
+			name: "read/write counts are 0",
+			info: BatchInfo{
+				ReadCount:  0,
+				ReadBytes:  100,
+				WriteCount: 0,
+				WriteBytes: 1,
+			},
+			ratePerNode: 50,
+			replicas:    3,
+			cost:        0,
+		},
+		{
+			name: "read/write counts are 1",
+			info: BatchInfo{
+				ReadCount:  1,
+				ReadBytes:  100,
+				WriteCount: 1,
+				WriteBytes: 1,
+			},
+			ratePerNode: 50,
+			replicas:    3,
+			cost:        101 + 7.5,
+		},
+		{
+			name: "metrics are smaller than min lookup values",
+			info: BatchInfo{
+				ReadCount:  10,
+				ReadBytes:  100,
+				WriteCount: 2,
+				WriteBytes: 1,
+			},
+			ratePerNode: 50,
+			replicas:    3,
+			cost:        119 + 13.5,
+		},
+		{
+			name: "metrics are equal to min lookup values",
+			info: BatchInfo{
+				ReadCount:  10,
+				ReadBytes:  256,
+				WriteCount: 3,
+				WriteBytes: 256,
+			},
+			ratePerNode: 100,
+			replicas:    3,
+			cost:        275 + 1549.5,
+		},
+		{
+			name: "metrics between lookup values",
+			info: BatchInfo{
+				ReadCount:  50,
+				ReadBytes:  2560,
+				WriteCount: 9,
+				WriteBytes: 640,
+			},
+			ratePerNode: 150,
+			replicas:    5,
+			cost:        6499 + 9743.75,
+		},
+		{
+			name: "metrics are equal to max lookup values",
+			info: BatchInfo{
+				ReadCount:  100,
+				ReadBytes:  4096,
+				WriteCount: 25,
+				WriteBytes: 4096,
+			},
+			ratePerNode: 800,
+			replicas:    3,
+			cost:        12_487 + 98_670,
+		},
+		{
+			name: "metrics are larger than max lookup values",
+			info: BatchInfo{
+				ReadCount:  1000,
+				ReadBytes:  10000,
+				WriteCount: 100,
+				WriteBytes: 10000,
+			},
+			ratePerNode: 1000,
+			replicas:    5,
+			cost:        31_999 + 402_485,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.cost, model.BatchCost(tc.info, tc.ratePerNode, tc.replicas))
+		})
+	}
 }

@@ -531,8 +531,8 @@ import (
 
 var (
 	resultsRE   = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
-	noticeRE    = regexp.MustCompile(`^statement\s+notice\s+(.*)$`)
-	errorRE     = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
+	noticeRE    = regexp.MustCompile(`^statement\s+(?:async\s+[[:alnum:]]+\s+)?notice\s+(.*)$`)
+	errorRE     = regexp.MustCompile(`^(?:statement|query)\s+(?:async\s+[[:alnum:]]+\s+)?error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
 	varRE       = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
 	orderRE     = regexp.MustCompile(`(?i)ORDER\s+BY`)
 	explainRE   = regexp.MustCompile(`(?i)EXPLAIN\W+`)
@@ -1496,7 +1496,7 @@ func (t *logicTest) newCluster(
 		if params.ServerArgs.Knobs.Server == nil {
 			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
 		}
-		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BinaryVersionOverride = cfg.BootstrapVersion.Version()
+		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).ClusterVersionOverride = cfg.BootstrapVersion.Version()
 	}
 	if cfg.DisableUpgrade {
 		if params.ServerArgs.Knobs.Server == nil {

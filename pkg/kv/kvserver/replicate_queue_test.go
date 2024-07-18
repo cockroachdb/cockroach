@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -2021,7 +2022,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	})
 	testutils.SucceedsSoon(t, func() error {
 		status := leaseHolderRepl.RaftStatus()
-		progress := status.Progress[uint64(remoteRepl.ReplicaID())]
+		progress := status.Progress[raftpb.PeerID(remoteRepl.ReplicaID())]
 		if progress.Match > 0 {
 			return nil
 		}
@@ -2034,7 +2035,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	for {
 		// Ensure that the replica on the remote node is lagging.
 		status := leaseHolderRepl.RaftStatus()
-		progress := status.Progress[uint64(remoteRepl.ReplicaID())]
+		progress := status.Progress[raftpb.PeerID(remoteRepl.ReplicaID())]
 		if progress.State == tracker.StateReplicate &&
 			(status.Commit-progress.Match) > 0 {
 			break
@@ -2166,6 +2167,7 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	setConstraintFn("RANGE system", 7, 7, "")
 	setConstraintFn("RANGE liveness", 7, 7, "")
 	setConstraintFn("RANGE meta", 7, 7, "")
+	setConstraintFn("RANGE timeseries", 7, 7, "")
 	setConstraintFn("RANGE default", 7, 7, "")
 	testutils.SucceedsSoon(t, func() error {
 		if err := forceScanOnAllReplicationQueues(tc); err != nil {
@@ -2353,12 +2355,13 @@ func TestReplicateQueueExpirationLeasesOnly(t *testing.T) {
 		require.NoError(t, db.AdminSplit(ctx, splitKey, hlc.MaxTimestamp))
 	}
 
-	countLeases := func() (epoch int64, expiration int64) {
+	countLeases := func() (epoch, leader, expiration int64) {
 		for i := 0; i < tc.NumServers(); i++ {
 			require.NoError(t, tc.Server(i).GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 				require.NoError(t, s.ComputeMetrics(ctx))
-				expiration += s.Metrics().LeaseExpirationCount.Value()
 				epoch += s.Metrics().LeaseEpochCount.Value()
+				leader += s.Metrics().LeaseLeaderCount.Value()
+				expiration += s.Metrics().LeaseExpirationCount.Value()
 				return nil
 			}))
 		}
@@ -2369,19 +2372,20 @@ func TestReplicateQueueExpirationLeasesOnly(t *testing.T) {
 	// meta and liveness ranges require expiration leases. However, it's possible
 	// that there are a few other stray expiration leases too, since lease
 	// transfers use expiration leases as well.
-	epochLeases, expLeases := countLeases()
+	epochLeases, leaderLeases, expLeases := countLeases()
 	require.NotZero(t, epochLeases)
+	require.Zero(t, leaderLeases)
 	require.NotZero(t, expLeases)
 	initialExpLeases := expLeases
-	t.Logf("initial: epochLeases=%d expLeases=%d", epochLeases, expLeases)
+	t.Logf("initial: epochLeases=%d leaderLeases=%d expLeases=%d", epochLeases, leaderLeases, expLeases)
 
 	// Switch to expiration leases and wait for them to change.
 	_, err := sqlDB.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = true`)
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		epochLeases, expLeases = countLeases()
-		t.Logf("enabling: epochLeases=%d expLeases=%d", epochLeases, expLeases)
-		return epochLeases == 0 && expLeases > 0
+		epochLeases, leaderLeases, expLeases = countLeases()
+		t.Logf("enabling: epochLeases=%d leaderLeases=%d expLeases=%d", epochLeases, leaderLeases, expLeases)
+		return epochLeases == 0 && leaderLeases == 0 && expLeases > 0
 	}, 30*time.Second, 500*time.Millisecond) // accomodate stress/deadlock builds
 
 	// Run a scan across the ranges, just to make sure they work.
@@ -2398,9 +2402,9 @@ func TestReplicateQueueExpirationLeasesOnly(t *testing.T) {
 	_, err = sqlDB.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = false`)
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		epochLeases, expLeases = countLeases()
-		t.Logf("disabling: epochLeases=%d expLeases=%d", epochLeases, expLeases)
-		return epochLeases > 0 && expLeases > 0 && expLeases <= initialExpLeases
+		epochLeases, leaderLeases, expLeases = countLeases()
+		t.Logf("disabling: epochLeases=%d leaderLeases=%d expLeases=%d", epochLeases, leaderLeases, expLeases)
+		return epochLeases > 0 && leaderLeases == 0 && expLeases > 0 && expLeases <= initialExpLeases
 	}, 30*time.Second, 500*time.Millisecond)
 }
 

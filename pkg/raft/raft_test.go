@@ -424,7 +424,7 @@ func testLeaderCycle(t *testing.T, preVote bool) {
 		cfg = preVoteConfig
 	}
 	n := newNetworkWithConfig(cfg, nil, nil, nil)
-	for campaignerID := uint64(1); campaignerID <= 3; campaignerID++ {
+	for campaignerID := pb.PeerID(1); campaignerID <= 3; campaignerID++ {
 		n.send(pb.Message{From: campaignerID, To: campaignerID, Type: pb.MsgHup})
 
 		for _, peer := range n.peers {
@@ -550,7 +550,7 @@ func testVoteFromAnyState(t *testing.T, vt pb.MessageType) {
 		if vt == pb.MsgVote {
 			assert.Equal(t, StateFollower, r.state, "%s,%s", vt, st)
 			assert.Equal(t, newTerm, r.Term, "%s,%s", vt, st)
-			assert.Equal(t, uint64(2), r.Vote, "%s,%s", vt, st)
+			assert.Equal(t, pb.PeerID(2), r.Vote, "%s,%s", vt, st)
 		} else {
 			// In a prevote, nothing changes.
 			assert.Equal(t, st, r.state, "%s,%s", vt, st)
@@ -1027,7 +1027,7 @@ func TestCommit(t *testing.T) {
 
 		sm := newTestRaft(1, 10, 2, storage)
 		for j := 0; j < len(tt.matches); j++ {
-			id := uint64(j) + 1
+			id := pb.PeerID(j + 1)
 			if id > 1 {
 				sm.applyConfChange(pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: id}.AsV2())
 			}
@@ -1099,19 +1099,19 @@ func TestHandleMsgApp(t *testing.T) {
 		wReject bool
 	}{
 		// Ensure 1
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 3, Index: 2, Commit: 3}, 2, 0, true}, // previous log mismatch
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 3, Index: 3, Commit: 3}, 2, 0, true}, // previous log non-exist
+		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 3, Index: 2, Commit: 3}, 2, 0, true}, // previous log mismatch
+		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 3, Index: 3, Commit: 3}, 2, 0, true}, // previous log non-exist
 
 		// Ensure 2
 		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 1}, 2, 1, false},
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 0, Index: 0, Commit: 1, Entries: []pb.Entry{{Index: 1, Term: 2}}}, 1, 1, false},
+		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 0, Index: 0, Commit: 1, Entries: []pb.Entry{{Index: 1, Term: 3}}}, 1, 1, false},
 		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 3, Entries: []pb.Entry{{Index: 3, Term: 2}, {Index: 4, Term: 2}}}, 4, 3, false},
 		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 4, Entries: []pb.Entry{{Index: 3, Term: 2}}}, 3, 3, false},
 		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 4, Entries: []pb.Entry{{Index: 2, Term: 2}}}, 2, 2, false},
 
 		// Ensure 3
 		{pb.Message{Type: pb.MsgApp, Term: 1, LogTerm: 1, Index: 1, Commit: 3}, 2, 1, false},                                           // match entry 1, commit up to last new entry 1
-		{pb.Message{Type: pb.MsgApp, Term: 1, LogTerm: 1, Index: 1, Commit: 3, Entries: []pb.Entry{{Index: 2, Term: 2}}}, 2, 2, false}, // match entry 1, commit up to last new entry 2
+		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 3, Entries: []pb.Entry{{Index: 2, Term: 2}}}, 2, 2, false}, // match entry 1, commit up to last new entry 2
 		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 3}, 2, 2, false},                                           // match entry 2, commit up to last new entry 2
 		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 4}, 2, 2, false},                                           // commit up to log.last()
 	}
@@ -1152,10 +1152,11 @@ func TestHandleHeartbeat(t *testing.T) {
 
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2))
-		require.NoError(t, storage.Append([]pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1}, {Index: 3, Term: tt.accTerm}}))
+		init := entryID{}.append(1, 1, tt.accTerm)
+		require.NoError(t, storage.Append(init.entries))
 		sm := newTestRaft(1, 5, 1, storage)
-		sm.becomeFollower(2, 2)
-		sm.raftLog.commitTo(commit)
+		sm.becomeFollower(init.term, 2)
+		sm.raftLog.commitTo(logMark{term: init.term, index: commit})
 		sm.handleHeartbeat(tt.m)
 		assert.Equal(t, tt.wCommit, sm.raftLog.committed, "#%d", i)
 		m := sm.readMessages()
@@ -1167,11 +1168,12 @@ func TestHandleHeartbeat(t *testing.T) {
 // TestHandleHeartbeatResp ensures that we re-send log entries when we get a heartbeat response.
 func TestHandleHeartbeatResp(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
+	require.NoError(t, storage.SetHardState(pb.HardState{Term: 3}))
 	require.NoError(t, storage.Append(index(1).terms(1, 2, 3)))
 	sm := newTestRaft(1, 5, 1, storage)
 	sm.becomeCandidate()
 	sm.becomeLeader()
-	sm.raftLog.commitTo(sm.raftLog.lastIndex())
+	sm.raftLog.commitTo(logMark{term: 3, index: sm.raftLog.lastIndex()})
 
 	// A heartbeat response from a node that is behind; re-send MsgApp
 	sm.Step(pb.Message{From: 2, Type: pb.MsgHeartbeatResp})
@@ -1234,7 +1236,7 @@ func TestMsgAppRespWaitReset(t *testing.T) {
 	msgs := sm.readMessages()
 	require.Len(t, msgs, 1)
 	assert.Equal(t, pb.MsgApp, msgs[0].Type)
-	assert.Equal(t, uint64(2), msgs[0].To)
+	assert.Equal(t, pb.PeerID(2), msgs[0].To)
 	assert.Len(t, msgs[0].Entries, 1)
 	assert.Equal(t, uint64(2), msgs[0].Entries[0].Index)
 
@@ -1247,7 +1249,7 @@ func TestMsgAppRespWaitReset(t *testing.T) {
 	msgs = sm.readMessages()
 	require.Len(t, msgs, 1)
 	assert.Equal(t, pb.MsgApp, msgs[0].Type)
-	assert.Equal(t, uint64(3), msgs[0].To)
+	assert.Equal(t, pb.PeerID(3), msgs[0].To)
 	assert.Len(t, msgs[0].Entries, 1)
 	assert.Equal(t, uint64(2), msgs[0].Entries[0].Index)
 }
@@ -1264,7 +1266,7 @@ func testRecvMsgVote(t *testing.T, msgType pb.MessageType) {
 	tests := []struct {
 		state          StateType
 		index, logTerm uint64
-		voteFor        uint64
+		voteFor        pb.PeerID
 		wreject        bool
 	}{
 		{StateFollower, 0, 0, None, true},
@@ -1334,7 +1336,7 @@ func TestStateTransition(t *testing.T) {
 		to     StateType
 		wallow bool
 		wterm  uint64
-		wlead  uint64
+		wlead  pb.PeerID
 	}{
 		{StateFollower, StateFollower, true, 1, None},
 		{StateFollower, StatePreCandidate, true, 0, None},
@@ -1424,7 +1426,7 @@ func TestAllServerStepdown(t *testing.T) {
 			assert.Equal(t, tt.windex, sm.raftLog.lastIndex(), "#%d.%d", i, j)
 			assert.Len(t, sm.raftLog.allEntries(), int(tt.windex), "#%d.%d", i, j)
 
-			wlead := uint64(2)
+			wlead := pb.PeerID(2)
 			if msgType == pb.MsgVote {
 				wlead = None
 			}
@@ -1748,7 +1750,7 @@ func TestNonPromotableVoterWithCheckQuorum(t *testing.T) {
 
 	assert.Equal(t, StateLeader, a.state)
 	assert.Equal(t, StateFollower, b.state)
-	assert.Equal(t, uint64(1), b.lead)
+	assert.Equal(t, pb.PeerID(1), b.lead)
 }
 
 // TestDisruptiveFollower tests isolated follower,
@@ -1949,7 +1951,7 @@ func TestBcastBeat(t *testing.T) {
 		Metadata: pb.SnapshotMetadata{
 			Index:     offset,
 			Term:      1,
-			ConfState: pb.ConfState{Voters: []uint64{1, 2, 3}},
+			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2, 3}},
 		},
 	}
 	storage := NewMemoryStorage()
@@ -1973,7 +1975,7 @@ func TestBcastBeat(t *testing.T) {
 	msgs := sm.readMessages()
 	require.Len(t, msgs, 2)
 
-	wantCommitMap := map[uint64]uint64{
+	wantCommitMap := map[pb.PeerID]uint64{
 		2: min(sm.raftLog.committed, sm.trk.Progress[2].Match),
 		3: min(sm.raftLog.committed, sm.trk.Progress[3].Match),
 	}
@@ -2027,7 +2029,7 @@ func TestRecvMsgBeat(t *testing.T) {
 }
 
 func TestLeaderIncreaseNext(t *testing.T) {
-	previousEnts := index(1).terms(1, 2, 3)
+	init := entryID{}.append(1, 2, 3)
 	tests := []struct {
 		// progress
 		state tracker.StateType
@@ -2037,14 +2039,15 @@ func TestLeaderIncreaseNext(t *testing.T) {
 	}{
 		// state replicate, optimistically increase next
 		// previous entries + noop entry + propose + 1
-		{tracker.StateReplicate, 2, uint64(len(previousEnts) + 1 + 1 + 1)},
+		{tracker.StateReplicate, 2, uint64(len(init.entries) + 1 + 1 + 1)},
 		// state probe, not optimistically increase next
 		{tracker.StateProbe, 2, 2},
 	}
 
 	for i, tt := range tests {
 		sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
-		sm.raftLog.append(previousEnts...)
+		sm.becomeFollower(init.term, None)
+		require.True(t, sm.raftLog.append(init))
 		sm.becomeCandidate()
 		sm.becomeLeader()
 		sm.trk.Progress[2].State = tt.state
@@ -2136,6 +2139,7 @@ func TestSendAppendForProgressSnapshot(t *testing.T) {
 func TestRecvMsgUnreachable(t *testing.T) {
 	previousEnts := index(1).terms(1, 2, 3)
 	s := newTestMemoryStorage(withPeers(1, 2))
+	s.SetHardState(pb.HardState{Term: 3})
 	s.Append(previousEnts)
 	r := newTestRaft(1, 10, 1, s)
 	r.becomeCandidate()
@@ -2154,21 +2158,21 @@ func TestRecvMsgUnreachable(t *testing.T) {
 }
 
 func TestRestore(t *testing.T) {
-	s := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{
+	s := snapshot{
+		term: 11,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []uint64{1, 2, 3}},
-		},
+			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2, 3}},
+		}},
 	}
 
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
 	require.True(t, sm.restore(s))
 
-	assert.Equal(t, s.Metadata.Index, sm.raftLog.lastIndex())
-	assert.Equal(t, s.Metadata.Term, mustTerm(sm.raftLog.term(s.Metadata.Index)))
-	assert.Equal(t, s.Metadata.ConfState.Voters, sm.trk.VoterNodes())
+	assert.Equal(t, s.lastEntryID(), sm.raftLog.lastEntryID())
+	assert.Equal(t, s.snap.Metadata.ConfState.Voters, sm.trk.VoterNodes())
 
 	require.False(t, sm.restore(s))
 	for i := 0; i < sm.randomizedElectionTimeout; i++ {
@@ -2179,31 +2183,31 @@ func TestRestore(t *testing.T) {
 
 // TestRestoreWithLearner restores a snapshot which contains learners.
 func TestRestoreWithLearner(t *testing.T) {
-	s := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{
+	s := snapshot{
+		term: 11,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []uint64{1, 2}, Learners: []uint64{3}},
-		},
+			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}, Learners: []pb.PeerID{3}},
+		}},
 	}
 
 	storage := newTestMemoryStorage(withPeers(1, 2), withLearners(3))
 	sm := newTestLearnerRaft(3, 8, 2, storage)
 	assert.True(t, sm.restore(s))
 
-	assert.Equal(t, s.Metadata.Index, sm.raftLog.lastIndex())
-	assert.Equal(t, s.Metadata.Term, mustTerm(sm.raftLog.term(s.Metadata.Index)))
+	assert.Equal(t, s.lastEntryID(), sm.raftLog.lastEntryID())
 
 	sg := sm.trk.VoterNodes()
-	assert.Len(t, sg, len(s.Metadata.ConfState.Voters))
+	assert.Len(t, sg, len(s.snap.Metadata.ConfState.Voters))
 
 	lns := sm.trk.LearnerNodes()
-	assert.Len(t, lns, len(s.Metadata.ConfState.Learners))
+	assert.Len(t, lns, len(s.snap.Metadata.ConfState.Learners))
 
-	for _, n := range s.Metadata.ConfState.Voters {
+	for _, n := range s.snap.Metadata.ConfState.Voters {
 		assert.False(t, sm.trk.Progress[n].IsLearner)
 	}
-	for _, n := range s.Metadata.ConfState.Learners {
+	for _, n := range s.snap.Metadata.ConfState.Learners {
 		assert.True(t, sm.trk.Progress[n].IsLearner)
 	}
 
@@ -2212,23 +2216,23 @@ func TestRestoreWithLearner(t *testing.T) {
 
 // TestRestoreWithVotersOutgoing tests if outgoing voter can receive and apply snapshot correctly.
 func TestRestoreWithVotersOutgoing(t *testing.T) {
-	s := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{
+	s := snapshot{
+		term: 11,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []uint64{2, 3, 4}, VotersOutgoing: []uint64{1, 2, 3}},
-		},
+			ConfState: pb.ConfState{Voters: []pb.PeerID{2, 3, 4}, VotersOutgoing: []pb.PeerID{1, 2, 3}},
+		}},
 	}
 
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
 	require.True(t, sm.restore(s))
 
-	assert.Equal(t, s.Metadata.Index, sm.raftLog.lastIndex())
-	assert.Equal(t, mustTerm(sm.raftLog.term(s.Metadata.Index)), s.Metadata.Term)
+	assert.Equal(t, s.lastEntryID(), sm.raftLog.lastEntryID())
 
 	sg := sm.trk.VoterNodes()
-	assert.Equal(t, []uint64{1, 2, 3, 4}, sg)
+	assert.Equal(t, []pb.PeerID{1, 2, 3, 4}, sg)
 
 	require.False(t, sm.restore(s))
 
@@ -2248,12 +2252,13 @@ func TestRestoreWithVotersOutgoing(t *testing.T) {
 // a learner. In fact, the node has to accept that snapshot, or it is
 // permanently cut off from the Raft log.
 func TestRestoreVoterToLearner(t *testing.T) {
-	s := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{
+	s := snapshot{
+		term: 11,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []uint64{1, 2}, Learners: []uint64{3}},
-		},
+			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}, Learners: []pb.PeerID{3}},
+		}},
 	}
 
 	storage := newTestMemoryStorage(withPeers(1, 2, 3))
@@ -2266,12 +2271,13 @@ func TestRestoreVoterToLearner(t *testing.T) {
 // TestRestoreLearnerPromotion checks that a learner can become to a follower after
 // restoring snapshot.
 func TestRestoreLearnerPromotion(t *testing.T) {
-	s := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{
+	s := snapshot{
+		term: 11,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []uint64{1, 2, 3}},
-		},
+			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2, 3}},
+		}},
 	}
 
 	storage := newTestMemoryStorage(withPeers(1, 2), withLearners(3))
@@ -2285,15 +2291,17 @@ func TestRestoreLearnerPromotion(t *testing.T) {
 // TestLearnerReceiveSnapshot tests that a learner can receive a snpahost from leader
 func TestLearnerReceiveSnapshot(t *testing.T) {
 	// restore the state machine from a snapshot so it has a compacted log and a snapshot
-	s := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{
+	s := snapshot{
+		term: 11,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []uint64{1}, Learners: []uint64{2}},
-		},
+			ConfState: pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}},
+		}},
 	}
 
 	store := newTestMemoryStorage(withPeers(1), withLearners(2))
+	store.SetHardState(pb.HardState{Term: 11})
 	n1 := newTestLearnerRaft(1, 10, 1, store)
 	n2 := newTestLearnerRaft(2, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)))
 
@@ -2315,19 +2323,20 @@ func TestLearnerReceiveSnapshot(t *testing.T) {
 }
 
 func TestRestoreIgnoreSnapshot(t *testing.T) {
-	previousEnts := index(1).terms(1, 1, 1)
+	init := entryID{}.append(1, 1, 1)
 	commit := uint64(1)
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
-	sm.raftLog.append(previousEnts...)
-	sm.raftLog.commitTo(commit)
+	require.True(t, sm.raftLog.append(init))
+	sm.raftLog.commitTo(logMark{term: init.term, index: commit})
 
-	s := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{
+	s := snapshot{
+		term: 1,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
 			Index:     commit,
 			Term:      1,
-			ConfState: pb.ConfState{Voters: []uint64{1, 2}},
-		},
+			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}},
+		}},
 	}
 
 	// ignore snapshot
@@ -2335,22 +2344,24 @@ func TestRestoreIgnoreSnapshot(t *testing.T) {
 	assert.Equal(t, sm.raftLog.committed, commit)
 
 	// ignore snapshot and fast forward commit
-	s.Metadata.Index = commit + 1
+	s.snap.Metadata.Index = commit + 1
 	assert.False(t, sm.restore(s))
 	assert.Equal(t, sm.raftLog.committed, commit+1)
 }
 
 func TestProvideSnap(t *testing.T) {
 	// restore the state machine from a snapshot so it has a compacted log and a snapshot
-	s := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{
+	s := snapshot{
+		term: 11,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []uint64{1, 2}},
-		},
+			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}},
+		}},
 	}
 	storage := newTestMemoryStorage(withPeers(1))
 	sm := newTestRaft(1, 10, 1, storage)
+	sm.becomeFollower(s.term, None)
 	sm.restore(s)
 
 	sm.becomeCandidate()
@@ -2368,15 +2379,17 @@ func TestProvideSnap(t *testing.T) {
 
 func TestIgnoreProvidingSnap(t *testing.T) {
 	// restore the state machine from a snapshot so it has a compacted log and a snapshot
-	s := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{
+	s := snapshot{
+		term: 11,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []uint64{1, 2}},
-		},
+			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}},
+		}},
 	}
 	storage := newTestMemoryStorage(withPeers(1))
 	sm := newTestRaft(1, 10, 1, storage)
+	sm.becomeFollower(s.term, None)
 	sm.restore(s)
 
 	sm.becomeCandidate()
@@ -2394,19 +2407,20 @@ func TestIgnoreProvidingSnap(t *testing.T) {
 }
 
 func TestRestoreFromSnapMsg(t *testing.T) {
-	s := &pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{
+	s := snapshot{
+		term: 11,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []uint64{1, 2}},
-		},
+			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}},
+		}},
 	}
-	m := pb.Message{Type: pb.MsgSnap, From: 1, Term: 2, Snapshot: s}
+	m := pb.Message{Type: pb.MsgSnap, From: 1, Term: 2, Snapshot: &s.snap}
 
 	sm := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
 	sm.Step(m)
 
-	assert.Equal(t, uint64(1), sm.lead)
+	assert.Equal(t, pb.PeerID(1), sm.lead)
 	// TODO(bdarnell): what should this test?
 }
 
@@ -2501,7 +2515,7 @@ func TestAddNode(t *testing.T) {
 	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)))
 	r.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeAddNode}.AsV2())
 	nodes := r.trk.VoterNodes()
-	assert.Equal(t, []uint64{1, 2}, nodes)
+	assert.Equal(t, []pb.PeerID{1, 2}, nodes)
 }
 
 // TestAddLearner tests that addLearner could update nodes correctly.
@@ -2511,7 +2525,7 @@ func TestAddLearner(t *testing.T) {
 	r.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeAddLearnerNode}.AsV2())
 	require.False(t, r.isLearner)
 	nodes := r.trk.LearnerNodes()
-	assert.Equal(t, []uint64{2}, nodes)
+	assert.Equal(t, []pb.PeerID{2}, nodes)
 	require.True(t, r.trk.Progress[2].IsLearner)
 
 	// Promote peer to voter.
@@ -2564,7 +2578,7 @@ func TestAddNodeCheckQuorum(t *testing.T) {
 func TestRemoveNode(t *testing.T) {
 	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
 	r.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeRemoveNode}.AsV2())
-	w := []uint64{1}
+	w := []pb.PeerID{1}
 	assert.Equal(t, w, r.trk.VoterNodes())
 
 	// Removing the remaining voter will panic.
@@ -2579,7 +2593,7 @@ func TestRemoveNode(t *testing.T) {
 func TestRemoveLearner(t *testing.T) {
 	r := newTestLearnerRaft(1, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)))
 	r.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeRemoveNode}.AsV2())
-	w := []uint64{1}
+	w := []pb.PeerID{1}
 	assert.Equal(t, w, r.trk.VoterNodes())
 
 	w = nil
@@ -2593,15 +2607,15 @@ func TestRemoveLearner(t *testing.T) {
 }
 
 func TestPromotable(t *testing.T) {
-	id := uint64(1)
+	id := pb.PeerID(1)
 	tests := []struct {
-		peers []uint64
+		peers []pb.PeerID
 		wp    bool
 	}{
-		{[]uint64{1}, true},
-		{[]uint64{1, 2, 3}, true},
-		{[]uint64{}, false},
-		{[]uint64{2, 3}, false},
+		{[]pb.PeerID{1}, true},
+		{[]pb.PeerID{1, 2, 3}, true},
+		{[]pb.PeerID{}, false},
+		{[]pb.PeerID{2, 3}, false},
 	}
 	for i, tt := range tests {
 		r := newTestRaft(id, 5, 1, newTestMemoryStorage(withPeers(tt.peers...)))
@@ -2611,16 +2625,16 @@ func TestPromotable(t *testing.T) {
 
 func TestRaftNodes(t *testing.T) {
 	tests := []struct {
-		ids  []uint64
-		wids []uint64
+		ids  []pb.PeerID
+		wids []pb.PeerID
 	}{
 		{
-			[]uint64{1, 2, 3},
-			[]uint64{1, 2, 3},
+			[]pb.PeerID{1, 2, 3},
+			[]pb.PeerID{1, 2, 3},
 		},
 		{
-			[]uint64{3, 2, 1},
-			[]uint64{1, 2, 3},
+			[]pb.PeerID{3, 2, 1},
+			[]pb.PeerID{1, 2, 3},
 		},
 	}
 	for i, tt := range tests {
@@ -2719,7 +2733,7 @@ func TestLeaderTransferToUpToDateNode(t *testing.T) {
 
 	lead := nt.peers[1].(*raft)
 
-	require.Equal(t, uint64(1), lead.lead)
+	require.Equal(t, pb.PeerID(1), lead.lead)
 
 	// Transfer leadership to 2.
 	nt.send(pb.Message{From: 2, To: 1, Type: pb.MsgTransferLeader})
@@ -2745,7 +2759,7 @@ func TestLeaderTransferToUpToDateNodeFromFollower(t *testing.T) {
 
 	lead := nt.peers[1].(*raft)
 
-	require.Equal(t, uint64(1), lead.lead)
+	require.Equal(t, pb.PeerID(1), lead.lead)
 
 	// Transfer leadership to 2.
 	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgTransferLeader})
@@ -2765,7 +2779,7 @@ func TestLeaderTransferToUpToDateNodeFromFollower(t *testing.T) {
 func TestLeaderTransferWithCheckQuorum(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
 	for i := 1; i < 4; i++ {
-		r := nt.peers[uint64(i)].(*raft)
+		r := nt.peers[pb.PeerID(i)].(*raft)
 		r.checkQuorum = true
 		setRandomizedElectionTimeout(r, r.electionTimeout+i)
 	}
@@ -2884,12 +2898,12 @@ func TestLeaderTransferTimeout(t *testing.T) {
 
 	// Transfer leadership to isolated node, wait for timeout.
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
-	require.Equal(t, uint64(3), lead.leadTransferee)
+	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
 	for i := 0; i < lead.heartbeatTimeout; i++ {
 		lead.tick()
 	}
-	require.Equal(t, uint64(3), lead.leadTransferee)
+	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
 	for i := 0; i < lead.electionTimeout-lead.heartbeatTimeout; i++ {
 		lead.tick()
@@ -2912,7 +2926,7 @@ func TestLeaderTransferIgnoreProposal(t *testing.T) {
 
 	// Transfer leadership to isolated node to let transfer pending, then send proposal.
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
-	require.Equal(t, uint64(3), lead.leadTransferee)
+	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 	err := lead.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
@@ -2931,7 +2945,7 @@ func TestLeaderTransferReceiveHigherTermVote(t *testing.T) {
 
 	// Transfer leadership to isolated node to let transfer pending.
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
-	require.Equal(t, uint64(3), lead.leadTransferee)
+	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
 	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup, Index: 1, Term: 2})
 
@@ -2948,7 +2962,7 @@ func TestLeaderTransferRemoveNode(t *testing.T) {
 
 	// The leadTransferee is removed when leadship transferring.
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
-	require.Equal(t, uint64(3), lead.leadTransferee)
+	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
 	lead.applyConfChange(pb.ConfChange{NodeID: 3, Type: pb.ConfChangeRemoveNode}.AsV2())
 
@@ -2965,7 +2979,7 @@ func TestLeaderTransferDemoteNode(t *testing.T) {
 
 	// The leadTransferee is demoted when leadship transferring.
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
-	require.Equal(t, uint64(3), lead.leadTransferee)
+	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
 	lead.applyConfChange(pb.ConfChangeV2{
 		Changes: []pb.ConfChangeSingle{
@@ -2995,7 +3009,7 @@ func TestLeaderTransferBack(t *testing.T) {
 	lead := nt.peers[1].(*raft)
 
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
-	require.Equal(t, uint64(3), lead.leadTransferee)
+	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
 	// Transfer leadership back to self.
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgTransferLeader})
@@ -3014,7 +3028,7 @@ func TestLeaderTransferSecondTransferToAnotherNode(t *testing.T) {
 	lead := nt.peers[1].(*raft)
 
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
-	require.Equal(t, uint64(3), lead.leadTransferee)
+	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
 	// Transfer leadership to another node.
 	nt.send(pb.Message{From: 2, To: 1, Type: pb.MsgTransferLeader})
@@ -3033,7 +3047,7 @@ func TestLeaderTransferSecondTransferToSameNode(t *testing.T) {
 	lead := nt.peers[1].(*raft)
 
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
-	require.Equal(t, uint64(3), lead.leadTransferee)
+	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
 	for i := 0; i < lead.heartbeatTimeout; i++ {
 		lead.tick()
@@ -3048,7 +3062,7 @@ func TestLeaderTransferSecondTransferToSameNode(t *testing.T) {
 	checkLeaderTransferState(t, lead, StateLeader, 1)
 }
 
-func checkLeaderTransferState(t *testing.T, r *raft, state StateType, lead uint64) {
+func checkLeaderTransferState(t *testing.T, r *raft, state StateType, lead pb.PeerID) {
 	require.Equal(t, state, r.state)
 	require.Equal(t, lead, r.lead)
 	require.Equal(t, None, r.leadTransferee)
@@ -3554,7 +3568,7 @@ func TestFastLogRejection(t *testing.T) {
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			s1 := NewMemoryStorage()
-			s1.snapshot.Metadata.ConfState = pb.ConfState{Voters: []uint64{1, 2, 3}}
+			s1.snapshot.Metadata.ConfState = pb.ConfState{Voters: []pb.PeerID{1, 2, 3}}
 			s1.Append(test.leaderLog)
 			last := test.leaderLog[len(test.leaderLog)-1]
 			s1.SetHardState(pb.HardState{
@@ -3566,7 +3580,7 @@ func TestFastLogRejection(t *testing.T) {
 			n1.becomeLeader()
 
 			s2 := NewMemoryStorage()
-			s2.snapshot.Metadata.ConfState = pb.ConfState{Voters: []uint64{1, 2, 3}}
+			s2.snapshot.Metadata.ConfState = pb.ConfState{Voters: []pb.PeerID{1, 2, 3}}
 			s2.Append(test.followerLog)
 			s2.SetHardState(pb.HardState{
 				Term:   last.Term,
@@ -3624,7 +3638,7 @@ func entsWithConfig(configFunc func(*Config), terms ...uint64) *raft {
 // votedWithConfig creates a raft state machine with Vote and Term set
 // to the given value but no log entries (indicating that it voted in
 // the given term but has not received any logs).
-func votedWithConfig(configFunc func(*Config), vote, term uint64) *raft {
+func votedWithConfig(configFunc func(*Config), vote pb.PeerID, term uint64) *raft {
 	storage := NewMemoryStorage()
 	storage.SetHardState(pb.HardState{Vote: vote, Term: term})
 	cfg := newTestConfig(1, 5, 1, storage)
@@ -3691,8 +3705,8 @@ func expectOneMessage(t *testing.T, r *raft) pb.Message {
 type network struct {
 	t *testing.T // optional
 
-	peers   map[uint64]stateMachine
-	storage map[uint64]*MemoryStorage
+	peers   map[pb.PeerID]stateMachine
+	storage map[pb.PeerID]*MemoryStorage
 	dropm   map[connem]float64
 	ignorem map[pb.MessageType]bool
 
@@ -3715,8 +3729,8 @@ func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *netw
 	size := len(peers)
 	peerAddrs := idsBySize(size)
 
-	npeers := make(map[uint64]stateMachine, size)
-	nstorage := make(map[uint64]*MemoryStorage, size)
+	npeers := make(map[pb.PeerID]stateMachine, size)
+	nstorage := make(map[pb.PeerID]*MemoryStorage, size)
 
 	for j, p := range peers {
 		id := peerAddrs[j]
@@ -3731,14 +3745,14 @@ func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *netw
 			npeers[id] = sm
 		case *raft:
 			// TODO(tbg): this is all pretty confused. Clean this up.
-			learners := make(map[uint64]bool, len(v.trk.Learners))
+			learners := make(map[pb.PeerID]bool, len(v.trk.Learners))
 			for i := range v.trk.Learners {
 				learners[i] = true
 			}
 			v.id = id
 			v.trk = tracker.MakeProgressTracker(v.trk.MaxInflight, v.trk.MaxInflightBytes)
 			if len(learners) > 0 {
-				v.trk.Learners = map[uint64]struct{}{}
+				v.trk.Learners = map[pb.PeerID]struct{}{}
 			}
 			for i := 0; i < size; i++ {
 				pr := &tracker.Progress{}
@@ -3783,18 +3797,18 @@ func (nw *network) send(msgs ...pb.Message) {
 	}
 }
 
-func (nw *network) drop(from, to uint64, perc float64) {
+func (nw *network) drop(from, to pb.PeerID, perc float64) {
 	nw.dropm[connem{from, to}] = perc
 }
 
-func (nw *network) cut(one, other uint64) {
+func (nw *network) cut(one, other pb.PeerID) {
 	nw.drop(one, other, 2.0) // always drop
 	nw.drop(other, one, 2.0) // always drop
 }
 
-func (nw *network) isolate(id uint64) {
+func (nw *network) isolate(id pb.PeerID) {
 	for i := 0; i < len(nw.peers); i++ {
-		nid := uint64(i) + 1
+		nid := pb.PeerID(i + 1)
 		if nid != id {
 			nw.drop(id, nid, 1.0) // always drop
 			nw.drop(nid, id, 1.0) // always drop
@@ -3838,7 +3852,7 @@ func (nw *network) filter(msgs []pb.Message) []pb.Message {
 }
 
 type connem struct {
-	from, to uint64
+	from, to pb.PeerID
 }
 
 type blackHole struct{}
@@ -3849,10 +3863,10 @@ func (blackHole) advanceMessagesAfterAppend() {}
 
 var nopStepper = &blackHole{}
 
-func idsBySize(size int) []uint64 {
-	ids := make([]uint64, size)
+func idsBySize(size int) []pb.PeerID {
+	ids := make([]pb.PeerID, size)
 	for i := 0; i < size; i++ {
-		ids[i] = 1 + uint64(i)
+		ids[i] = pb.PeerID(1 + i)
 	}
 	return ids
 }
@@ -3870,7 +3884,7 @@ func SetRandomizedElectionTimeout(r *RawNode, v int) {
 	setRandomizedElectionTimeout(r.raft, v)
 }
 
-func newTestConfig(id uint64, election, heartbeat int, storage Storage) *Config {
+func newTestConfig(id pb.PeerID, election, heartbeat int, storage Storage) *Config {
 	return &Config{
 		ID:              id,
 		ElectionTick:    election,
@@ -3883,13 +3897,13 @@ func newTestConfig(id uint64, election, heartbeat int, storage Storage) *Config 
 
 type testMemoryStorageOptions func(*MemoryStorage)
 
-func withPeers(peers ...uint64) testMemoryStorageOptions {
+func withPeers(peers ...pb.PeerID) testMemoryStorageOptions {
 	return func(ms *MemoryStorage) {
 		ms.snapshot.Metadata.ConfState.Voters = peers
 	}
 }
 
-func withLearners(learners ...uint64) testMemoryStorageOptions {
+func withLearners(learners ...pb.PeerID) testMemoryStorageOptions {
 	return func(ms *MemoryStorage) {
 		ms.snapshot.Metadata.ConfState.Learners = learners
 	}
@@ -3903,18 +3917,18 @@ func newTestMemoryStorage(opts ...testMemoryStorageOptions) *MemoryStorage {
 	return ms
 }
 
-func newTestRaft(id uint64, election, heartbeat int, storage Storage) *raft {
+func newTestRaft(id pb.PeerID, election, heartbeat int, storage Storage) *raft {
 	return newRaft(newTestConfig(id, election, heartbeat, storage))
 }
 
-func newTestLearnerRaft(id uint64, election, heartbeat int, storage Storage) *raft {
+func newTestLearnerRaft(id pb.PeerID, election, heartbeat int, storage Storage) *raft {
 	cfg := newTestConfig(id, election, heartbeat, storage)
 	return newRaft(cfg)
 }
 
 // newTestRawNode sets up a RawNode with the given peers. The configuration will
 // not be reflected in the Storage.
-func newTestRawNode(id uint64, election, heartbeat int, storage Storage) *RawNode {
+func newTestRawNode(id pb.PeerID, election, heartbeat int, storage Storage) *RawNode {
 	cfg := newTestConfig(id, election, heartbeat, storage)
 	rn, err := NewRawNode(cfg)
 	if err != nil {

@@ -42,11 +42,16 @@ const (
 	minLatency = 100 * time.Microsecond
 )
 
+type Publisher interface {
+	Observe(duration time.Duration, operation string)
+}
+
 // NamedHistogram is a named histogram for use in Operations. It is threadsafe
 // but intended to be thread-local.
 type NamedHistogram struct {
 	name                string
 	prometheusHistogram prometheus.Histogram
+	publisher           Publisher
 	mu                  struct {
 		syncutil.Mutex
 		current *hdrhistogram.Histogram
@@ -65,6 +70,7 @@ func (w *Registry) newNamedHistogramLocked(name string) *NamedHistogram {
 	hist := &NamedHistogram{
 		name:                name,
 		prometheusHistogram: w.getPrometheusHistogramLocked(name),
+		publisher:           w.publisher,
 	}
 	hist.mu.current = w.newHistogram()
 	return hist
@@ -72,6 +78,9 @@ func (w *Registry) newNamedHistogramLocked(name string) *NamedHistogram {
 
 // Record saves a new datapoint and should be called once per logical operation.
 func (w *NamedHistogram) Record(elapsed time.Duration) {
+	if w.publisher != nil {
+		w.publisher.Observe(elapsed, w.name)
+	}
 	w.prometheusHistogram.Observe(float64(elapsed.Nanoseconds()) / float64(time.Second))
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -132,21 +141,23 @@ type Registry struct {
 	cumulative    map[string]*hdrhistogram.Histogram
 	prevTick      map[string]time.Time
 	histogramPool *sync.Pool
+	publisher     Publisher
 }
 
-// NewRegistry returns an initialized Registry.
+// NewRegistryWithSender returns an initialized Registry.
 // maxLat is the maximum time that queries are expected to take to execute
 // which is needed to initialize the pool of histograms.
-// newPrometheusHistogramFunc specifies how to generate a new
-// prometheus.Histogram with a given name. Use MockNewPrometheusHistogram
-// if prometheus logging is undesired.
-func NewRegistry(maxLat time.Duration, workloadName string) *Registry {
+// sender can be specified to enable sending histograms to a remote endpoint.
+func NewRegistryWithPublisher(
+	maxLat time.Duration, workloadName string, publisher Publisher,
+) *Registry {
 	r := &Registry{
 		workloadName: workloadName,
 		start:        timeutil.Now(),
 		cumulative:   make(map[string]*hdrhistogram.Histogram),
 		prevTick:     make(map[string]time.Time),
 		promReg:      prometheus.NewRegistry(),
+		publisher:    publisher,
 		histogramPool: &sync.Pool{
 			New: func() interface{} {
 				return hdrhistogram.New(minLatency.Nanoseconds(), maxLat.Nanoseconds(), sigFigs)
@@ -156,6 +167,10 @@ func NewRegistry(maxLat time.Duration, workloadName string) *Registry {
 	r.mu.registered = make(map[string][]*NamedHistogram)
 	r.mu.prometheusHistograms = make(map[string]prometheus.Histogram)
 	return r
+}
+
+func NewRegistry(maxLat time.Duration, workloadName string) *Registry {
+	return NewRegistryWithPublisher(maxLat, workloadName, nil)
 }
 
 // Registerer returns a prometheus.Registerer.
@@ -217,30 +232,11 @@ func (w *Registry) GetHandle() *Histograms {
 // be called periodically from one goroutine. The closure must not leak references
 // to the histograms contained in the Tick as their backing memory is pooled.
 func (w *Registry) Tick(fn func(Tick)) {
-	merged := make(map[string]*hdrhistogram.Histogram)
+	merged := w.swapAll()
 	var names []string
-	var wg sync.WaitGroup
-
-	w.mu.Lock()
-	for name, nameRegistered := range w.mu.registered {
-		wg.Add(1)
-		registered := append([]*NamedHistogram(nil), nameRegistered...)
-		merged[name] = w.newHistogram()
+	for name := range merged {
 		names = append(names, name)
-		go func(registered []*NamedHistogram, merged *hdrhistogram.Histogram) {
-			for _, hist := range registered {
-				hist.tick(w.newHistogram(), func(h *hdrhistogram.Histogram) {
-					merged.Merge(h)
-					h.Reset()
-					w.histogramPool.Put(h)
-				})
-			}
-			wg.Done()
-		}(registered, merged[name])
 	}
-	w.mu.Unlock()
-
-	wg.Wait()
 
 	now := timeutil.Now()
 	sort.Strings(names)
@@ -266,6 +262,32 @@ func (w *Registry) Tick(fn func(Tick)) {
 		mergedHist.Reset()
 		w.histogramPool.Put(mergedHist)
 	}
+}
+
+// swapAll concurrently swaps all registered histograms, and returns the previous values.
+func (w *Registry) swapAll() map[string]*hdrhistogram.Histogram {
+	merged := make(map[string]*hdrhistogram.Histogram)
+	var wg sync.WaitGroup
+
+	w.mu.Lock()
+	for name, nameRegistered := range w.mu.registered {
+		wg.Add(1)
+		registered := append([]*NamedHistogram(nil), nameRegistered...)
+		merged[name] = w.newHistogram()
+		go func(registered []*NamedHistogram, merged *hdrhistogram.Histogram) {
+			for _, hist := range registered {
+				hist.tick(w.newHistogram(), func(h *hdrhistogram.Histogram) {
+					merged.Merge(h)
+					h.Reset()
+					w.histogramPool.Put(h)
+				})
+			}
+			wg.Done()
+		}(registered, merged[name])
+	}
+	w.mu.Unlock()
+	wg.Wait()
+	return merged
 }
 
 // Histograms is a thread-local handle for creating and registering

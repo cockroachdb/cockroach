@@ -29,6 +29,18 @@ var LibGEOS = []string{"libgeos", "libgeos_c"}
 // endpoint should use.
 var PrometheusNameSpace = "roachtest"
 
+// testStats is internally populated based on its previous runs and used for
+// deciding on the current execution approach. This includes decisions like
+// executing the test on spot VM vs ondemand VM.
+// The stats are populated if selective-tests is enabled.
+type testStats struct {
+	// AvgDurationInMillis is the average duration that the test takes to run
+	AvgDurationInMillis int64
+	// LastFailureIsPreempt indicates that the last run of the test failed
+	// due to VM preemption
+	LastFailureIsPreempt bool
+}
+
 // TestSpec is a spec for a roachtest.
 type TestSpec struct {
 	Skip string // if non-empty, test will be skipped
@@ -146,6 +158,22 @@ type TestSpec struct {
 	// Note that this flag needs to be set with a specific reason in the comment
 	// explaining why the test has been chosen for opting out of test selection.
 	TestSelectionOptOutSuites SuiteSet
+
+	// stats are populated by test selector based on previous execution data
+	stats *testStats
+}
+
+// SetStats sets the stats for the test
+func (ts *TestSpec) SetStats(avgDurationInMillis int64, lastFailureIsPreempt bool) {
+	ts.stats = &testStats{
+		AvgDurationInMillis:  avgDurationInMillis,
+		LastFailureIsPreempt: lastFailureIsPreempt,
+	}
+}
+
+// IsLastFailurePreempt returns true is the last failure of the test was due to VM preemption.
+func (ts *TestSpec) IsLastFailurePreempt() bool {
+	return ts.stats != nil && ts.stats.LastFailureIsPreempt
 }
 
 // PostValidation is a type of post-validation that runs after a test completes.
@@ -262,10 +290,9 @@ func (cs CloudSet) NoAzure() CloudSet {
 }
 
 // Remove removes all clouds passed in and returns the new set.
-func (cs CloudSet) Remove(clouds ...string) CloudSet {
-	assertValidValues(allClouds, clouds...)
+func (cs CloudSet) Remove(clouds CloudSet) CloudSet {
 	copyCs := CloudSet{m: cs.m}
-	for _, c := range clouds {
+	for c := range clouds.m {
 		copyCs.m = removeFromSet(copyCs.m, c)
 	}
 
@@ -286,9 +313,13 @@ func (cs CloudSet) String() string {
 
 // AssertInitialized panics if the CloudSet is the zero value.
 func (cs CloudSet) AssertInitialized() {
-	if cs.m == nil {
+	if !cs.IsInitialized() {
 		panic("CloudSet not initialized")
 	}
+}
+
+func (cs CloudSet) IsInitialized() bool {
+	return cs.m != nil
 }
 
 // Suite names.
@@ -351,7 +382,7 @@ func (ss SuiteSet) String() string {
 
 // AssertInitialized panics if the SuiteSet is the zero value.
 func (ss SuiteSet) AssertInitialized() {
-	if ss.m == nil {
+	if !ss.IsInitialized() {
 		panic("SuiteSet not initialized")
 	}
 }

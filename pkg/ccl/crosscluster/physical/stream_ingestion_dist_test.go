@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -127,9 +126,15 @@ func TestMeasurePlanChange(t *testing.T) {
 			after:  makePlan(makeProc(1, []int{2}), makeProc(2, []int{1})),
 			frac:   0,
 		},
+		{
+			name:   "lots of processors",
+			before: makePlan(makeProc(1, []int{1}), makeProc(1, []int{1}), makeProc(1, []int{1})),
+			after:  makePlan(makeProc(1, []int{1}), makeProc(1, []int{1}), makeProc(1, []int{1}), makeProc(2, []int{1})),
+			frac:   0.5,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			frac := measurePlanChange(&tc.before, &tc.after)
+			frac := sql.MeasurePlanChange(&tc.before, &tc.after, getNodes)
 			require.Equal(t, tc.frac, frac)
 		})
 	}
@@ -318,10 +323,8 @@ func TestSourceDestMatching(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			fakeStreamAddress := crosscluster.StreamAddress("")
 			sipSpecs, _, err := constructStreamIngestionPlanSpecs(
 				ctx,
-				fakeStreamAddress,
 				fakeTopology(tc.srcNodes, keys.MakeTenantSpan(roachpb.TenantID{InternalValue: 2})),
 				tc.dstNodes,
 				hlc.Timestamp{},

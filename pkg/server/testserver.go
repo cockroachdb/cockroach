@@ -806,11 +806,13 @@ func (ts *testServer) Activate(ctx context.Context) error {
 	}
 
 	maybeRunVersionUpgrade := func(layer serverutils.ApplicationLayerInterface) error {
-		if v := ts.BinaryVersionOverride(); v != (roachpb.Version{}) {
-			ie := layer.InternalExecutor().(isql.Executor)
-			if _, err := ie.Exec(context.Background(), "set-cluster-version", nil, /* txn */
-				`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
-				return err
+		if knobs := ts.TestingKnobs().Server; knobs != nil {
+			if v := knobs.(*TestingKnobs).ClusterVersionOverride; v != (roachpb.Version{}) {
+				ie := layer.InternalExecutor().(isql.Executor)
+				if _, err := ie.Exec(context.Background(), "set-cluster-version", nil, /* txn */
+					`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -2294,15 +2296,6 @@ func (ts *testServer) Codec() keys.SQLCodec {
 // RangeDescIteratorFactory is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) RangeDescIteratorFactory() interface{} {
 	return ts.sqlServer.execCfg.RangeDescIteratorFactory
-}
-
-// BinaryVersionOverride is part of the serverutils.TestServerInterface.
-func (ts *testServer) BinaryVersionOverride() roachpb.Version {
-	knobs := ts.TestingKnobs().Server
-	if knobs == nil {
-		return roachpb.Version{}
-	}
-	return knobs.(*TestingKnobs).BinaryVersionOverride
 }
 
 // KvProber is part of the serverutils.StorageLayerInterface.

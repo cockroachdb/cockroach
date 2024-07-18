@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -617,7 +616,7 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 		}, 10*time.Second)
 	}
 
-	var observedStreams sync.Map
+	var observedStreams syncutil.Set[int64]
 	var capturedSender atomic.Value
 
 	ignoreValues := func(event kvcoord.RangeFeedMessage) {}
@@ -634,7 +633,7 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 			func(ctx context.Context, s roachpb.Span, streamID int64, event *kvpb.RangeFeedEvent) (skip bool, _ error) {
 				switch t := event.GetValue().(type) {
 				case *kvpb.RangeFeedCheckpoint:
-					observedStreams.Store(streamID, nil)
+					observedStreams.Add(streamID)
 					_, err := frontier.Forward(t.Span, t.ResolvedTS)
 					if err != nil {
 						return true, err
@@ -672,13 +671,12 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 		// we know the rangefeed is started, all ranges are running.
 		expectFrontierAdvance()
 
-		// Pick some number of streams to close. Since sync.Map iteration order is non-deterministic,
-		// we'll pick few random streams.
+		// Pick some number of streams to close. Since syncutil.Map iteration order
+		// is non-deterministic, we'll pick few random streams.
 		initialClosed := numRestartStreams.Load()
 		numToCancel := 1 + rand.Int31n(3)
 		var numCancelled int32 = 0
-		observedStreams.Range(func(key any, _ any) bool {
-			streamID := key.(int64)
+		observedStreams.Range(func(streamID int64) bool {
 			if _, wasCancelled := cancelledStreams[streamID]; wasCancelled {
 				return true // try another stream.
 			}
