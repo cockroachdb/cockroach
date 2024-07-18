@@ -1111,7 +1111,8 @@ func (rc *RangeControllerImpl) HandleRaftEvent(ctx context.Context, e RaftEvent)
 			// Leader replica.
 			if n := len(entries); n > 0 && entries[n-1].Index+1 != info.Next {
 				// Leader is operating in push mode, so Next should have advanced.
-				log.Warningf(ctx, "%v", errors.AssertionFailedf("last entry index %d + 1 != %d Next at leader [info=%v %v]",
+				log.Warningf(ctx, "%v", errors.AssertionFailedf(
+					"last entry index %d + 1 != %d Next at leader [info=%v %v]",
 					entries[n-1].Index, info.Next, info, rs).Error())
 			}
 		}
@@ -1698,10 +1699,10 @@ func (rss *replicaSendStream) String() string {
 
 func (rss *replicaSendStream) stringLocked() string {
 	rss.mu.AssertHeld()
-	return fmt.Sprintf("[%v,%v) conn=%v closed=%v handle_id=%d size=%v pri=%v force=%v tracker=%v",
+	return fmt.Sprintf("[%v,%v) conn=%v closed=%v handle_id=%d size=%v pri=%v force=%v stream=%v",
 		rss.sendQueue.indexToSend, rss.sendQueue.nextRaftIndex, rss.connectedState, rss.closed,
 		rss.sendQueue.watcherHandleID, rss.queueSizeLocked(), rss.queuePriorityLocked(),
-		rss.sendQueue.forceFlushScheduled, rss.tracker.String())
+		rss.sendQueue.forceFlushScheduled, rss.tracker.stream)
 }
 
 // Initial state provided to constructor of replicaSendStream.
