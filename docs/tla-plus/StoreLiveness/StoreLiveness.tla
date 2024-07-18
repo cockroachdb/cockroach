@@ -2,7 +2,7 @@
 EXTENDS TLC, Integers, FiniteSets, Sequences
 
 CONSTANTS Nodes, MaxClock, MaxRestarts, HeartbeatIntervals
-CONSTANTS MsgHeartbeat, MsgHeartbeatResp, AllowMsgReordering
+CONSTANTS MsgHeartbeat, MsgHeartbeatResp, AllowMsgReordering, AllowClockRegressionOnRestart
 ASSUME Cardinality(Nodes) > 0
 ASSUME Cardinality(HeartbeatIntervals) > 0
 ASSUME \A i \in HeartbeatIntervals: i < MaxClock
@@ -22,9 +22,11 @@ ASSUME \A i \in HeartbeatIntervals: i < MaxClock
 
 (*--algorithm StoreLiveness
 variables
-  current_epoch = [i \in Nodes |-> 1];
-  for_self_by   = [i \in Nodes |-> [j \in Nodes \ {i} |-> [epoch |-> 1, end_time |-> 0]]];
-  by_self_for   = [i \in Nodes |-> [j \in Nodes \ {i} |-> [epoch |-> 0, end_time |-> 0]]];
+  max_epoch     = [i \in Nodes |-> 1];
+  max_requested = [i \in Nodes |-> 0];
+  max_withdrawn = [i \in Nodes |-> 0];
+  support_from  = [i \in Nodes |-> [j \in Nodes \ {i} |-> [epoch |-> 1, expiration |-> 0]]];
+  support_for   = [i \in Nodes |-> [j \in Nodes \ {i} |-> [epoch |-> 0, expiration |-> 0]]];
   clocks        = [i \in Nodes |-> 1];
   network       = [i \in Nodes |-> EmptyNetwork];
 
@@ -36,24 +38,24 @@ define
   \* represent it as a sequence.
   EmptyNetwork == IF AllowMsgReordering THEN {} ELSE <<>>
 
-  EpochValid(map, i, j) == map[i][j].end_time /= 0
+  EpochValid(map, i, j) == map[i][j].expiration /= 0
   \* Has i ever received support from j for the current epoch?
-  ForSelfByEpochValid(i, j) == EpochValid(for_self_by, i, j)
+  SupportFromEpochValid(i, j) == EpochValid(support_from, i, j)
   \* Has i ever supported j for the current epoch?
-  BySelfForEpochValid(i, j) == EpochValid(by_self_for, i, j)
+  SupportForEpochValid(i, j) == EpochValid(support_for, i, j)
 
-  EpochSupportExpired(map, i, j, supporter_time) == map[i][j].end_time < supporter_time
-  \* Is i's support from j (according to i's for_self_by map) expired (according to j's clock)?
-  ForSelfByEpochSupportExpired(i, j) == EpochSupportExpired(for_self_by, i, j, clocks[j])
-  \* Is i's support for j (according to i's by_self_for map) expired (according to i's clock)?
-  BySelfForEpochSupportExpired(i, j) == EpochSupportExpired(by_self_for, i, j, clocks[i])
+  EpochSupportExpired(map, i, j, supporter_time) == map[i][j].expiration < supporter_time
+  \* Is i's support from j (according to i's support_from map) expired (according to j's clock)?
+  SupportFromExpired(i, j) == EpochSupportExpired(support_from, i, j, clocks[j])
+  \* Is i's support for j (according to i's support_for map) expired (according to i's clock)?
+  SupportForExpired(i, j) == EpochSupportExpired(support_for, i, j, clocks[i])
 
   \* Is support for i from j upheld?
-  SupportUpheld(i, j) == for_self_by[i][j].epoch = by_self_for[j][i].epoch
+  SupportUpheld(i, j) == support_from[i][j].epoch = support_for[j][i].epoch
 
   \* Can i withdraw support for j?
-  CanInvalidateBySelfFor(i, j) == BySelfForEpochValid(i, j) /\ BySelfForEpochSupportExpired(i, j)
-  CanInvalidateBySelfForSet(i) == {j \in Nodes \ {i}: CanInvalidateBySelfFor(i, j)}
+  CanInvalidateSupportFor(i, j) == SupportForEpochValid(i, j) /\ SupportForExpired(i, j)
+  CanInvalidateSupportForSet(i) == {j \in Nodes \ {i}: CanInvalidateSupportFor(i, j)}
 
   \* If we ever had support for the current i=>j epoch, then either support
   \* is still upheld or the support we have received had expired according to
@@ -63,8 +65,8 @@ define
   DurableSupportInvariant ==
     \A i \in Nodes:
       \A j \in Nodes \ {i}:
-        ForSelfByEpochValid(i, j) =>
-          (SupportUpheld(i, j) \/ ForSelfByEpochSupportExpired(i, j))
+        SupportFromEpochValid(i, j) =>
+          (SupportUpheld(i, j) \/ SupportFromExpired(i, j))
 
   \* If support for i from j is provided in en epoch, the end time of support
   \* known to the supporter (j) must be greater than or equal to the end time
@@ -75,7 +77,7 @@ define
     \A i \in Nodes:
       \A j \in Nodes \ {i}:
         SupportUpheld(i, j) =>
-          for_self_by[i][j].end_time <= by_self_for[j][i].end_time
+          support_from[i][j].expiration <= support_for[j][i].expiration
 
   \* A node's current epoch leads its supported epoch by all other nodes.
   \*
@@ -83,19 +85,32 @@ define
   CurrentEpochLeadsSupportedEpochsInvariant ==
     \A i \in Nodes:
       \A j \in Nodes \ {i}:
-        current_epoch[i] >= for_self_by[i][j].epoch
+        max_epoch[i] >= support_from[i][j].epoch
 
   \* The minimum epoch assigned to store liveness support after support has
-  \* been withdrawn from a prior epoch leads the supportee's for_self_by epoch
+  \* been withdrawn from a prior epoch leads the supportee's support_from epoch
   \* by exactly 1.
   \*
   \* This is a structural invariant in the algorithm used to provide safety.
   WithdrawnSupportMinimumEpochInvariant ==
     \A i \in Nodes:
       \A j \in Nodes \ {i}:
-        (by_self_for[i][j].epoch > for_self_by[j][i].epoch /\ by_self_for[i][j].end_time = 0) =>
-          by_self_for[i][j].epoch = for_self_by[j][i].epoch + 1
+        (support_for[i][j].epoch > support_from[j][i].epoch /\ support_for[i][j].expiration = 0) =>
+          support_for[i][j].epoch = support_from[j][i].epoch + 1
+    
+  \* The Support Disjointness invariant states that, for any requester and supporter,
+  \* no two support intervals overlap in time; i.e. a node does not receive support 
+  \* for a new epoch while support for the previous epoch is still valid.
+  \* We check this invariant as two assertions in the spec below because it is not
+  \* possible to state the invariant here with the minimal algorithm state we keep.
 end define;
+
+macro forward(clock, time)
+begin
+  if clock < time then 
+    clock := time;
+  end if;  
+end macro
 
 macro send_msg(to, msg)
 begin
@@ -110,22 +125,24 @@ macro send_heartbeat(to)
 begin
   with interval \in HeartbeatIntervals do
     send_msg(to, [
-      type     |-> MsgHeartbeat,
-      from     |-> self,
-      epoch    |-> for_self_by[self][to].epoch,
-      end_time |-> clocks[self] + interval
+      type       |-> MsgHeartbeat,
+      from       |-> self,
+      epoch      |-> support_from[self][to].epoch,
+      expiration |-> clocks[self] + interval,
+      now        |-> clocks[self]
     ]);
+    forward(max_requested[self], clocks[self] + interval);
   end with;
 end macro
 
-macro send_heartbeat_resp(to, ack)
+macro send_heartbeat_resp(to)
 begin
   send_msg(to, [
-    type     |-> MsgHeartbeatResp,
-    from     |-> self,
-    epoch    |-> by_self_for[self][to].epoch,
-    end_time |-> by_self_for[self][to].end_time,
-    ack      |-> ack
+    type       |-> MsgHeartbeatResp,
+    from       |-> self,
+    epoch      |-> support_for[self][to].epoch,
+    expiration |-> support_for[self][to].expiration,
+    now        |-> clocks[self]
   ]);
 end macro
 
@@ -140,22 +157,44 @@ begin
     msg := Head(network[self]);
     network[self] := Tail(network[self]);
   end if;
+  \* Clock propagation is necessary for the Support Disjointness Invariant.
+  forward(clocks[self], msg.now);
+end macro
+
+macro set_clock_to_max(a, b, c)
+begin
+  if a >= b /\ a >= c then
+    clocks[self] := a;
+  elsif b >= a /\ b >= c then 
+    clocks[self] := b;
+  else 
+    clocks[self] := c;
+  end if; 
 end macro
 
 macro restart()
 begin
-  current_epoch[self] := current_epoch[self] + 1;
-  for_self_by[self]   := [j \in Nodes \ {self} |-> [epoch |-> current_epoch[self], end_time |-> 0]];
+  if AllowClockRegressionOnRestart then
+    set_clock_to_max(max_withdrawn[self], max_requested[self], clocks[self] - 1);
+  else
+    set_clock_to_max(max_withdrawn[self], max_requested[self], clocks[self]);
+  end if;
+  max_epoch[self]    := max_epoch[self] + 1;
+  support_from[self] := [j \in Nodes \ {self} |-> [epoch |-> max_epoch[self], expiration |-> 0]];
 end macro
 
 process node \in Nodes
 variables
   restarts = 0;
   msg      = [type |-> FALSE];
-  ack      = FALSE;
 begin Loop:
   while TRUE do
     either
+      await clocks[self] < MaxClock;
+      TickClock:
+        clocks[self] := clocks[self] + 1;
+
+    or 
       await clocks[self] < MaxClock;
       TickClockAndSendHeartbeats:
         clocks[self] := clocks[self] + 1;
@@ -168,11 +207,12 @@ begin Loop:
         restart();
         restarts := restarts + 1;
     or
-      await CanInvalidateBySelfForSet(self) /= {};
+      await CanInvalidateSupportForSet(self) /= {};
       WithdrawSupport:
-        with expired \in CanInvalidateBySelfForSet(self) do
-          by_self_for[self][expired].epoch    := by_self_for[self][expired].epoch + 1 ||
-          by_self_for[self][expired].end_time := 0;
+        with expired \in CanInvalidateSupportForSet(self) do
+          support_for[self][expired].epoch      := support_for[self][expired].epoch + 1 ||
+          support_for[self][expired].expiration := 0;
+          forward(max_withdrawn[self], clocks[self]);
         end with;
     or
       await network[self] /= EmptyNetwork;
@@ -180,49 +220,43 @@ begin Loop:
 
       if msg.type = MsgHeartbeat then
         ReceiveHeartbeat:
-          if by_self_for[self][msg.from].epoch < msg.epoch then
-            \* Note that we can not make the following assertion, because the
-            \* sender of heartbeats may reduce heartbeat intervals at any time.
-            \* We allow end_time regressions across epoch. This is safe because
-            \* the sender will always be aware that its previous epoch will no
-            \* longer provide support at the time it sends a heartbeat for the
-            \* next epoch.
-            \*  assert by_self_for[self][msg.from].end_time < msg.end_time;
-            by_self_for[self][msg.from].epoch    := msg.epoch ||
-            by_self_for[self][msg.from].end_time := msg.end_time;
-            ack := TRUE;
-          elsif by_self_for[self][msg.from].epoch = msg.epoch then
-            \* Forward the end_time to prevent regressions due to out-of-order
+          if support_for[self][msg.from].epoch = msg.epoch then
+            \* Forward the expiration to prevent regressions due to out-of-order
             \* delivery of heartbeats.
-            if by_self_for[self][msg.from].end_time < msg.end_time then
-              by_self_for[self][msg.from].end_time := msg.end_time;
-            end if;
-            ack := TRUE;
-          else
-            ack := FALSE;
+            forward(support_for[self][msg.from].expiration, msg.expiration);
+          elsif support_for[self][msg.from].epoch < msg.epoch then
+            assert support_for[self][msg.from].expiration < msg.expiration;
+            \* This assertion is part of the Support Disjointness invariant.
+            \* We assert that the requestor of support with this new epoch has
+            \* a clock that exceeds the expiration of the previous epoch.
+            assert support_for[self][msg.from].expiration < clocks[self];
+            support_for[self][msg.from].epoch      := msg.epoch ||
+            support_for[self][msg.from].expiration := msg.expiration;
           end if;
 
-          send_heartbeat_resp(msg.from, ack);
+          send_heartbeat_resp(msg.from);
 
       elsif msg.type = MsgHeartbeatResp then
         ReceiveHeartbeatResp:
-          if msg.ack then
-            assert for_self_by[self][msg.from].epoch >= msg.epoch;
-            if for_self_by[self][msg.from].epoch = msg.epoch then
-              if for_self_by[self][msg.from].end_time < msg.end_time then
-                for_self_by[self][msg.from].end_time := msg.end_time;
-              end if;
+            if max_epoch[self] < msg.epoch then
+              max_epoch[self] := msg.epoch;
             end if;
-          else
-            if current_epoch[self] < msg.epoch then
-              current_epoch[self] := msg.epoch;
+            if support_from[self][msg.from].epoch = msg.epoch then
+              \* Forward the expiration to prevent regressions due to out-of-order
+              \* delivery of heartbeat responses.
+              forward(support_from[self][msg.from].expiration, msg.expiration);
+            elsif support_from[self][msg.from].epoch < msg.epoch then
+              assert support_from[self][msg.from].epoch = msg.epoch - 1;
+              assert msg.expiration = 0;
+              \* This assertion is part of the Support Disjointness invariant.
+              \* We assert that support for the previous epoch has expired before 
+              \* increasing the epoch and forgetting the previous epoch's expiration.
+              \* We check the expiration wrt clocks[self] because, by the propagation
+              \* of clocks via messages, we know that clocks[self] <= clock[msg.from].
+              assert support_from[self][msg.from].expiration < clocks[self];
+              support_from[self][msg.from].epoch      := msg.epoch ||
+              support_from[self][msg.from].expiration := msg.expiration;
             end if;
-            if for_self_by[self][msg.from].epoch < msg.epoch then
-              for_self_by[self][msg.from].epoch := current_epoch[self] ||
-              for_self_by[self][msg.from].end_time := 0;
-            end if
-          end if;
-
       else
         assert FALSE;
       end if;
@@ -230,8 +264,9 @@ begin Loop:
   end while;    
 end process;
 end algorithm; *)
-\* BEGIN TRANSLATION (chksum(pcal) = "64ee5c0a" /\ chksum(tla) = "2d74b87c")
-VARIABLES current_epoch, for_self_by, by_self_for, clocks, network, pc
+\* BEGIN TRANSLATION (chksum(pcal) = "c7e4c9b5" /\ chksum(tla) = "449ef868")
+VARIABLES max_epoch, max_requested, max_withdrawn, support_from, support_for, 
+          clocks, network, pc
 
 (* define statement *)
 Symmetry == Permutations(Nodes)
@@ -240,24 +275,24 @@ Symmetry == Permutations(Nodes)
 
 EmptyNetwork == IF AllowMsgReordering THEN {} ELSE <<>>
 
-EpochValid(map, i, j) == map[i][j].end_time /= 0
+EpochValid(map, i, j) == map[i][j].expiration /= 0
 
-ForSelfByEpochValid(i, j) == EpochValid(for_self_by, i, j)
+SupportFromEpochValid(i, j) == EpochValid(support_from, i, j)
 
-BySelfForEpochValid(i, j) == EpochValid(by_self_for, i, j)
+SupportForEpochValid(i, j) == EpochValid(support_for, i, j)
 
-EpochSupportExpired(map, i, j, supporter_time) == map[i][j].end_time < supporter_time
+EpochSupportExpired(map, i, j, supporter_time) == map[i][j].expiration < supporter_time
 
-ForSelfByEpochSupportExpired(i, j) == EpochSupportExpired(for_self_by, i, j, clocks[j])
+SupportFromExpired(i, j) == EpochSupportExpired(support_from, i, j, clocks[j])
 
-BySelfForEpochSupportExpired(i, j) == EpochSupportExpired(by_self_for, i, j, clocks[i])
-
-
-SupportUpheld(i, j) == for_self_by[i][j].epoch = by_self_for[j][i].epoch
+SupportForExpired(i, j) == EpochSupportExpired(support_for, i, j, clocks[i])
 
 
-CanInvalidateBySelfFor(i, j) == BySelfForEpochValid(i, j) /\ BySelfForEpochSupportExpired(i, j)
-CanInvalidateBySelfForSet(i) == {j \in Nodes \ {i}: CanInvalidateBySelfFor(i, j)}
+SupportUpheld(i, j) == support_from[i][j].epoch = support_for[j][i].epoch
+
+
+CanInvalidateSupportFor(i, j) == SupportForEpochValid(i, j) /\ SupportForExpired(i, j)
+CanInvalidateSupportForSet(i) == {j \in Nodes \ {i}: CanInvalidateSupportFor(i, j)}
 
 
 
@@ -267,8 +302,8 @@ CanInvalidateBySelfForSet(i) == {j \in Nodes \ {i}: CanInvalidateBySelfFor(i, j)
 DurableSupportInvariant ==
   \A i \in Nodes:
     \A j \in Nodes \ {i}:
-      ForSelfByEpochValid(i, j) =>
-        (SupportUpheld(i, j) \/ ForSelfByEpochSupportExpired(i, j))
+      SupportFromEpochValid(i, j) =>
+        (SupportUpheld(i, j) \/ SupportFromExpired(i, j))
 
 
 
@@ -279,7 +314,7 @@ SupportProvidedLeadsSupportAssumedInvariant ==
   \A i \in Nodes:
     \A j \in Nodes \ {i}:
       SupportUpheld(i, j) =>
-        for_self_by[i][j].end_time <= by_self_for[j][i].end_time
+        support_from[i][j].expiration <= support_for[j][i].expiration
 
 
 
@@ -287,7 +322,7 @@ SupportProvidedLeadsSupportAssumedInvariant ==
 CurrentEpochLeadsSupportedEpochsInvariant ==
   \A i \in Nodes:
     \A j \in Nodes \ {i}:
-      current_epoch[i] >= for_self_by[i][j].epoch
+      max_epoch[i] >= support_from[i][j].epoch
 
 
 
@@ -297,38 +332,42 @@ CurrentEpochLeadsSupportedEpochsInvariant ==
 WithdrawnSupportMinimumEpochInvariant ==
   \A i \in Nodes:
     \A j \in Nodes \ {i}:
-      (by_self_for[i][j].epoch > for_self_by[j][i].epoch /\ by_self_for[i][j].end_time = 0) =>
-        by_self_for[i][j].epoch = for_self_by[j][i].epoch + 1
+      (support_for[i][j].epoch > support_from[j][i].epoch /\ support_for[i][j].expiration = 0) =>
+        support_for[i][j].epoch = support_from[j][i].epoch + 1
 
-VARIABLES restarts, msg, ack
+VARIABLES restarts, msg
 
-vars == << current_epoch, for_self_by, by_self_for, clocks, network, pc, 
-           restarts, msg, ack >>
+vars == << max_epoch, max_requested, max_withdrawn, support_from, support_for, 
+           clocks, network, pc, restarts, msg >>
 
 ProcSet == (Nodes)
 
 Init == (* Global variables *)
-        /\ current_epoch = [i \in Nodes |-> 1]
-        /\ for_self_by = [i \in Nodes |-> [j \in Nodes \ {i} |-> [epoch |-> 1, end_time |-> 0]]]
-        /\ by_self_for = [i \in Nodes |-> [j \in Nodes \ {i} |-> [epoch |-> 0, end_time |-> 0]]]
+        /\ max_epoch = [i \in Nodes |-> 1]
+        /\ max_requested = [i \in Nodes |-> 0]
+        /\ max_withdrawn = [i \in Nodes |-> 0]
+        /\ support_from = [i \in Nodes |-> [j \in Nodes \ {i} |-> [epoch |-> 1, expiration |-> 0]]]
+        /\ support_for = [i \in Nodes |-> [j \in Nodes \ {i} |-> [epoch |-> 0, expiration |-> 0]]]
         /\ clocks = [i \in Nodes |-> 1]
         /\ network = [i \in Nodes |-> EmptyNetwork]
         (* Process node *)
         /\ restarts = [self \in Nodes |-> 0]
         /\ msg = [self \in Nodes |-> [type |-> FALSE]]
-        /\ ack = [self \in Nodes |-> FALSE]
         /\ pc = [self \in ProcSet |-> "Loop"]
 
 Loop(self) == /\ pc[self] = "Loop"
               /\ \/ /\ clocks[self] < MaxClock
+                    /\ pc' = [pc EXCEPT ![self] = "TickClock"]
+                    /\ UNCHANGED <<clocks, network, msg>>
+                 \/ /\ clocks[self] < MaxClock
                     /\ pc' = [pc EXCEPT ![self] = "TickClockAndSendHeartbeats"]
-                    /\ UNCHANGED <<network, msg>>
+                    /\ UNCHANGED <<clocks, network, msg>>
                  \/ /\ restarts[self] < MaxRestarts
                     /\ pc' = [pc EXCEPT ![self] = "Restart"]
-                    /\ UNCHANGED <<network, msg>>
-                 \/ /\ CanInvalidateBySelfForSet(self) /= {}
+                    /\ UNCHANGED <<clocks, network, msg>>
+                 \/ /\ CanInvalidateSupportForSet(self) /= {}
                     /\ pc' = [pc EXCEPT ![self] = "WithdrawSupport"]
-                    /\ UNCHANGED <<network, msg>>
+                    /\ UNCHANGED <<clocks, network, msg>>
                  \/ /\ network[self] /= EmptyNetwork
                     /\ IF AllowMsgReordering
                           THEN /\ \E recv \in network[self]:
@@ -336,113 +375,152 @@ Loop(self) == /\ pc[self] = "Loop"
                                     /\ msg' = [msg EXCEPT ![self] = recv]
                           ELSE /\ msg' = [msg EXCEPT ![self] = Head(network[self])]
                                /\ network' = [network EXCEPT ![self] = Tail(network[self])]
+                    /\ IF (clocks[self]) < (msg'[self].now)
+                          THEN /\ clocks' = [clocks EXCEPT ![self] = msg'[self].now]
+                          ELSE /\ TRUE
+                               /\ UNCHANGED clocks
                     /\ IF msg'[self].type = MsgHeartbeat
                           THEN /\ pc' = [pc EXCEPT ![self] = "ReceiveHeartbeat"]
                           ELSE /\ IF msg'[self].type = MsgHeartbeatResp
                                      THEN /\ pc' = [pc EXCEPT ![self] = "ReceiveHeartbeatResp"]
                                      ELSE /\ Assert(FALSE, 
-                                                    "Failure of assertion at line 227, column 9.")
+                                                    "Failure of assertion at line 261, column 9.")
                                           /\ pc' = [pc EXCEPT ![self] = "Loop"]
-              /\ UNCHANGED << current_epoch, for_self_by, by_self_for, clocks, 
-                              restarts, ack >>
+              /\ UNCHANGED << max_epoch, max_requested, max_withdrawn, 
+                              support_from, support_for, restarts >>
+
+TickClock(self) == /\ pc[self] = "TickClock"
+                   /\ clocks' = [clocks EXCEPT ![self] = clocks[self] + 1]
+                   /\ pc' = [pc EXCEPT ![self] = "Loop"]
+                   /\ UNCHANGED << max_epoch, max_requested, max_withdrawn, 
+                                   support_from, support_for, network, 
+                                   restarts, msg >>
 
 TickClockAndSendHeartbeats(self) == /\ pc[self] = "TickClockAndSendHeartbeats"
                                     /\ clocks' = [clocks EXCEPT ![self] = clocks[self] + 1]
                                     /\ \E i \in Nodes \ {self}:
                                          \E interval \in HeartbeatIntervals:
-                                           IF AllowMsgReordering
-                                              THEN /\ network' = [network EXCEPT ![i] = network[i] \union {(             [
-                                                                                          type     |-> MsgHeartbeat,
-                                                                                          from     |-> self,
-                                                                                          epoch    |-> for_self_by[self][i].epoch,
-                                                                                          end_time |-> clocks'[self] + interval
-                                                                                        ])}]
-                                              ELSE /\ network' = [network EXCEPT ![i] = Append(network[i], (             [
-                                                                                          type     |-> MsgHeartbeat,
-                                                                                          from     |-> self,
-                                                                                          epoch    |-> for_self_by[self][i].epoch,
-                                                                                          end_time |-> clocks'[self] + interval
-                                                                                        ]))]
+                                           /\ IF AllowMsgReordering
+                                                 THEN /\ network' = [network EXCEPT ![i] = network[i] \union {(             [
+                                                                                             type       |-> MsgHeartbeat,
+                                                                                             from       |-> self,
+                                                                                             epoch      |-> support_from[self][i].epoch,
+                                                                                             expiration |-> clocks'[self] + interval,
+                                                                                             now        |-> clocks'[self]
+                                                                                           ])}]
+                                                 ELSE /\ network' = [network EXCEPT ![i] = Append(network[i], (             [
+                                                                                             type       |-> MsgHeartbeat,
+                                                                                             from       |-> self,
+                                                                                             epoch      |-> support_from[self][i].epoch,
+                                                                                             expiration |-> clocks'[self] + interval,
+                                                                                             now        |-> clocks'[self]
+                                                                                           ]))]
+                                           /\ IF (max_requested[self]) < (clocks'[self] + interval)
+                                                 THEN /\ max_requested' = [max_requested EXCEPT ![self] = clocks'[self] + interval]
+                                                 ELSE /\ TRUE
+                                                      /\ UNCHANGED max_requested
                                     /\ pc' = [pc EXCEPT ![self] = "Loop"]
-                                    /\ UNCHANGED << current_epoch, for_self_by, 
-                                                    by_self_for, restarts, msg, 
-                                                    ack >>
+                                    /\ UNCHANGED << max_epoch, max_withdrawn, 
+                                                    support_from, support_for, 
+                                                    restarts, msg >>
 
 Restart(self) == /\ pc[self] = "Restart"
-                 /\ current_epoch' = [current_epoch EXCEPT ![self] = current_epoch[self] + 1]
-                 /\ for_self_by' = [for_self_by EXCEPT ![self] = [j \in Nodes \ {self} |-> [epoch |-> current_epoch'[self], end_time |-> 0]]]
+                 /\ IF AllowClockRegressionOnRestart
+                       THEN /\ IF (max_withdrawn[self]) >= (max_requested[self]) /\ (max_withdrawn[self]) >= (clocks[self] - 1)
+                                  THEN /\ clocks' = [clocks EXCEPT ![self] = max_withdrawn[self]]
+                                  ELSE /\ IF (max_requested[self]) >= (max_withdrawn[self]) /\ (max_requested[self]) >= (clocks[self] - 1)
+                                             THEN /\ clocks' = [clocks EXCEPT ![self] = max_requested[self]]
+                                             ELSE /\ clocks' = [clocks EXCEPT ![self] = clocks[self] - 1]
+                       ELSE /\ IF (max_withdrawn[self]) >= (max_requested[self]) /\ (max_withdrawn[self]) >= (clocks[self])
+                                  THEN /\ clocks' = [clocks EXCEPT ![self] = max_withdrawn[self]]
+                                  ELSE /\ IF (max_requested[self]) >= (max_withdrawn[self]) /\ (max_requested[self]) >= (clocks[self])
+                                             THEN /\ clocks' = [clocks EXCEPT ![self] = max_requested[self]]
+                                             ELSE /\ clocks' = [clocks EXCEPT ![self] = clocks[self]]
+                 /\ max_epoch' = [max_epoch EXCEPT ![self] = max_epoch[self] + 1]
+                 /\ support_from' = [support_from EXCEPT ![self] = [j \in Nodes \ {self} |-> [epoch |-> max_epoch'[self], expiration |-> 0]]]
                  /\ restarts' = [restarts EXCEPT ![self] = restarts[self] + 1]
                  /\ pc' = [pc EXCEPT ![self] = "Loop"]
-                 /\ UNCHANGED << by_self_for, clocks, network, msg, ack >>
+                 /\ UNCHANGED << max_requested, max_withdrawn, support_for, 
+                                 network, msg >>
 
 WithdrawSupport(self) == /\ pc[self] = "WithdrawSupport"
-                         /\ \E expired \in CanInvalidateBySelfForSet(self):
-                              by_self_for' = [by_self_for EXCEPT ![self][expired].epoch = by_self_for[self][expired].epoch + 1,
-                                                                 ![self][expired].end_time = 0]
+                         /\ \E expired \in CanInvalidateSupportForSet(self):
+                              /\ support_for' = [support_for EXCEPT ![self][expired].epoch = support_for[self][expired].epoch + 1,
+                                                                    ![self][expired].expiration = 0]
+                              /\ IF (max_withdrawn[self]) < (clocks[self])
+                                    THEN /\ max_withdrawn' = [max_withdrawn EXCEPT ![self] = clocks[self]]
+                                    ELSE /\ TRUE
+                                         /\ UNCHANGED max_withdrawn
                          /\ pc' = [pc EXCEPT ![self] = "Loop"]
-                         /\ UNCHANGED << current_epoch, for_self_by, clocks, 
-                                         network, restarts, msg, ack >>
+                         /\ UNCHANGED << max_epoch, max_requested, 
+                                         support_from, clocks, network, 
+                                         restarts, msg >>
 
 ReceiveHeartbeat(self) == /\ pc[self] = "ReceiveHeartbeat"
-                          /\ IF by_self_for[self][msg[self].from].epoch < msg[self].epoch
-                                THEN /\ by_self_for' = [by_self_for EXCEPT ![self][msg[self].from].epoch = msg[self].epoch,
-                                                                           ![self][msg[self].from].end_time = msg[self].end_time]
-                                     /\ ack' = [ack EXCEPT ![self] = TRUE]
-                                ELSE /\ IF by_self_for[self][msg[self].from].epoch = msg[self].epoch
-                                           THEN /\ IF by_self_for[self][msg[self].from].end_time < msg[self].end_time
-                                                      THEN /\ by_self_for' = [by_self_for EXCEPT ![self][msg[self].from].end_time = msg[self].end_time]
-                                                      ELSE /\ TRUE
-                                                           /\ UNCHANGED by_self_for
-                                                /\ ack' = [ack EXCEPT ![self] = TRUE]
-                                           ELSE /\ ack' = [ack EXCEPT ![self] = FALSE]
-                                                /\ UNCHANGED by_self_for
+                          /\ IF support_for[self][msg[self].from].epoch = msg[self].epoch
+                                THEN /\ IF (support_for[self][msg[self].from].expiration) < (msg[self].expiration)
+                                           THEN /\ support_for' = [support_for EXCEPT ![self][msg[self].from].expiration = msg[self].expiration]
+                                           ELSE /\ TRUE
+                                                /\ UNCHANGED support_for
+                                ELSE /\ IF support_for[self][msg[self].from].epoch < msg[self].epoch
+                                           THEN /\ Assert(support_for[self][msg[self].from].expiration < msg[self].expiration, 
+                                                          "Failure of assertion at line 228, column 13.")
+                                                /\ Assert(support_for[self][msg[self].from].expiration < clocks[self], 
+                                                          "Failure of assertion at line 232, column 13.")
+                                                /\ support_for' = [support_for EXCEPT ![self][msg[self].from].epoch = msg[self].epoch,
+                                                                                      ![self][msg[self].from].expiration = msg[self].expiration]
+                                           ELSE /\ TRUE
+                                                /\ UNCHANGED support_for
                           /\ IF AllowMsgReordering
                                 THEN /\ network' = [network EXCEPT ![(msg[self].from)] = network[(msg[self].from)] \union {(             [
-                                                                                           type     |-> MsgHeartbeatResp,
-                                                                                           from     |-> self,
-                                                                                           epoch    |-> by_self_for'[self][(msg[self].from)].epoch,
-                                                                                           end_time |-> by_self_for'[self][(msg[self].from)].end_time,
-                                                                                           ack      |-> ack'[self]
+                                                                                           type       |-> MsgHeartbeatResp,
+                                                                                           from       |-> self,
+                                                                                           epoch      |-> support_for'[self][(msg[self].from)].epoch,
+                                                                                           expiration |-> support_for'[self][(msg[self].from)].expiration,
+                                                                                           now        |-> clocks[self]
                                                                                          ])}]
                                 ELSE /\ network' = [network EXCEPT ![(msg[self].from)] = Append(network[(msg[self].from)], (             [
-                                                                                           type     |-> MsgHeartbeatResp,
-                                                                                           from     |-> self,
-                                                                                           epoch    |-> by_self_for'[self][(msg[self].from)].epoch,
-                                                                                           end_time |-> by_self_for'[self][(msg[self].from)].end_time,
-                                                                                           ack      |-> ack'[self]
+                                                                                           type       |-> MsgHeartbeatResp,
+                                                                                           from       |-> self,
+                                                                                           epoch      |-> support_for'[self][(msg[self].from)].epoch,
+                                                                                           expiration |-> support_for'[self][(msg[self].from)].expiration,
+                                                                                           now        |-> clocks[self]
                                                                                          ]))]
                           /\ pc' = [pc EXCEPT ![self] = "Loop"]
-                          /\ UNCHANGED << current_epoch, for_self_by, clocks, 
+                          /\ UNCHANGED << max_epoch, max_requested, 
+                                          max_withdrawn, support_from, clocks, 
                                           restarts, msg >>
 
 ReceiveHeartbeatResp(self) == /\ pc[self] = "ReceiveHeartbeatResp"
-                              /\ IF msg[self].ack
-                                    THEN /\ Assert(for_self_by[self][msg[self].from].epoch >= msg[self].epoch, 
-                                                   "Failure of assertion at line 210, column 13.")
-                                         /\ IF for_self_by[self][msg[self].from].epoch = msg[self].epoch
-                                               THEN /\ IF for_self_by[self][msg[self].from].end_time < msg[self].end_time
-                                                          THEN /\ for_self_by' = [for_self_by EXCEPT ![self][msg[self].from].end_time = msg[self].end_time]
-                                                          ELSE /\ TRUE
-                                                               /\ UNCHANGED for_self_by
+                              /\ IF max_epoch[self] < msg[self].epoch
+                                    THEN /\ max_epoch' = [max_epoch EXCEPT ![self] = msg[self].epoch]
+                                    ELSE /\ TRUE
+                                         /\ UNCHANGED max_epoch
+                              /\ IF support_from[self][msg[self].from].epoch = msg[self].epoch
+                                    THEN /\ IF (support_from[self][msg[self].from].expiration) < (msg[self].expiration)
+                                               THEN /\ support_from' = [support_from EXCEPT ![self][msg[self].from].expiration = msg[self].expiration]
                                                ELSE /\ TRUE
-                                                    /\ UNCHANGED for_self_by
-                                         /\ UNCHANGED current_epoch
-                                    ELSE /\ IF current_epoch[self] < msg[self].epoch
-                                               THEN /\ current_epoch' = [current_epoch EXCEPT ![self] = msg[self].epoch]
+                                                    /\ UNCHANGED support_from
+                                    ELSE /\ IF support_from[self][msg[self].from].epoch < msg[self].epoch
+                                               THEN /\ Assert(support_from[self][msg[self].from].epoch = msg[self].epoch - 1, 
+                                                              "Failure of assertion at line 249, column 15.")
+                                                    /\ Assert(msg[self].expiration = 0, 
+                                                              "Failure of assertion at line 250, column 15.")
+                                                    /\ Assert(support_from[self][msg[self].from].expiration < clocks[self], 
+                                                              "Failure of assertion at line 256, column 15.")
+                                                    /\ support_from' = [support_from EXCEPT ![self][msg[self].from].epoch = msg[self].epoch,
+                                                                                            ![self][msg[self].from].expiration = msg[self].expiration]
                                                ELSE /\ TRUE
-                                                    /\ UNCHANGED current_epoch
-                                         /\ IF for_self_by[self][msg[self].from].epoch < msg[self].epoch
-                                               THEN /\ for_self_by' = [for_self_by EXCEPT ![self][msg[self].from].epoch = current_epoch'[self],
-                                                                                          ![self][msg[self].from].end_time = 0]
-                                               ELSE /\ TRUE
-                                                    /\ UNCHANGED for_self_by
+                                                    /\ UNCHANGED support_from
                               /\ pc' = [pc EXCEPT ![self] = "Loop"]
-                              /\ UNCHANGED << by_self_for, clocks, network, 
-                                              restarts, msg, ack >>
+                              /\ UNCHANGED << max_requested, max_withdrawn, 
+                                              support_for, clocks, network, 
+                                              restarts, msg >>
 
-node(self) == Loop(self) \/ TickClockAndSendHeartbeats(self)
-                 \/ Restart(self) \/ WithdrawSupport(self)
-                 \/ ReceiveHeartbeat(self) \/ ReceiveHeartbeatResp(self)
+node(self) == Loop(self) \/ TickClock(self)
+                 \/ TickClockAndSendHeartbeats(self) \/ Restart(self)
+                 \/ WithdrawSupport(self) \/ ReceiveHeartbeat(self)
+                 \/ ReceiveHeartbeatResp(self)
 
 Next == (\E self \in Nodes: node(self))
 
