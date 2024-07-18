@@ -1042,6 +1042,8 @@ func (r *raft) Step(m pb.Message) error {
 	switch {
 	case m.Term == 0:
 		// local message
+	case m.Type == pb.MsgStorageAppendResp:
+		// local message
 	case m.Term > r.Term:
 		if m.Type == pb.MsgVote || m.Type == pb.MsgPreVote {
 			force := bytes.Equal(m.Context, []byte(campaignTransfer))
@@ -1108,19 +1110,6 @@ func (r *raft) Step(m pb.Message) error {
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
 				r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term)
 			r.send(pb.Message{To: m.From, Term: r.Term, Type: pb.MsgPreVoteResp, Reject: true})
-		} else if m.Type == pb.MsgStorageAppendResp {
-			if m.Snapshot != nil {
-				// Even if the snapshot applied under a different term, its application
-				// is still valid. Snapshots carry committed (term-independent) state.
-				r.appliedSnap(m.Snapshot)
-			}
-			if m.Index != 0 {
-				// Don't consider the appended log entries to be stable because they may
-				// have been overwritten in the unstable log during a later term. See
-				// the comment in newStorageAppendResp for more about this race.
-				r.logger.Infof("%x [term: %d] ignored entry appends from a %s message with lower term [term: %d]",
-					r.id, r.Term, m.Type, m.Term)
-			}
 		} else {
 			// ignore other cases
 			r.logger.Infof("%x [term: %d] ignored a %s message with lower term from %x [term: %d]",
@@ -1144,7 +1133,7 @@ func (r *raft) Step(m pb.Message) error {
 			r.appliedSnap(m.Snapshot)
 		}
 		if m.Index != 0 {
-			r.raftLog.stableTo(entryID{term: m.LogTerm, index: m.Index})
+			r.raftLog.stableTo(logMark{term: m.LogTerm, index: m.Index})
 		}
 
 	case pb.MsgStorageApplyResp:

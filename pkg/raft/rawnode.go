@@ -195,12 +195,10 @@ func needStorageAppendMsg(r *raft, rd Ready) bool {
 		len(r.msgsAfterAppend) > 0
 }
 
-func needStorageAppendRespMsg(r *raft, rd Ready) bool {
+func needStorageAppendRespMsg(rd Ready) bool {
 	// Return true if raft needs to hear about stabilized entries or an applied
-	// snapshot. See the comment in newStorageAppendRespMsg, which explains why
-	// we check hasNextOrInProgressUnstableEnts instead of len(rd.Entries) > 0.
-	return r.raftLog.hasNextOrInProgressUnstableEnts() ||
-		!IsEmptySnap(rd.Snapshot)
+	// snapshot.
+	return !IsEmptySnap(rd.Snapshot) || len(rd.Entries) != 0
 }
 
 // newStorageAppendMsg creates the message that should be sent to the local
@@ -241,7 +239,7 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 	// handling to use a fast-path in r.raftLog.term() before the newly appended
 	// entries are removed from the unstable log.
 	m.Responses = r.msgsAfterAppend
-	if needStorageAppendRespMsg(r, rd) {
+	if needStorageAppendRespMsg(rd) {
 		m.Responses = append(m.Responses, newStorageAppendRespMsg(r, rd))
 	}
 	return m
@@ -259,17 +257,18 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 		// Dropped after term change, see below.
 		Term: r.Term,
 	}
-	if r.raftLog.hasNextOrInProgressUnstableEnts() {
-		// If the raft log has unstable entries, attach the last index and term of the
-		// append to the response message. This (index, term) tuple will be handed back
-		// and consulted when the stability of those log entries is signaled to the
-		// unstable. If the (index, term) match the unstable log by the time the
-		// response is received (unstable.stableTo), the unstable log can be truncated.
+	if ln := len(rd.Entries); ln != 0 {
+		// If sending unstable entries to storage, attach the last index and last
+		// accepted term to the response message. This (index, term) tuple will be
+		// handed back and consulted when the stability of those log entries is
+		// signaled to the unstable. If the term matches the last accepted term by
+		// the time the response is received (unstable.stableTo), the unstable log
+		// can be truncated up to the given index.
 		//
-		// However, with just this logic, there would be an ABA problem[^1] that could
-		// lead to the unstable log and the stable log getting out of sync temporarily
-		// and leading to an inconsistent view. Consider the following example with 5
-		// nodes, A B C D E:
+		// The last accepted term logic prevents an ABA problem[^1] that could lead
+		// to the unstable log and the stable log getting out of sync temporarily
+		// and leading to an inconsistent view. Consider the following example with
+		// 5 nodes, A B C D E:
 		//
 		//  1. A is the leader.
 		//  2. A proposes some log entries but only B receives these entries.
@@ -298,51 +297,19 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 		//     that no in-progress appends might overwrite them before removing entries
 		//     from the unstable log.
 		//
-		// To prevent these kinds of problems, we also attach the current term to the
-		// MsgStorageAppendResp (above). If the term has changed by the time the
-		// MsgStorageAppendResp if returned, the response is ignored and the unstable
-		// log is not truncated. The unstable log is only truncated when the term has
-		// remained unchanged from the time that the MsgStorageAppend was sent to the
-		// time that the MsgStorageAppendResp is received, indicating that no-one else
-		// is in the process of truncating the stable log.
+		// If accTerm has changed by the time the MsgStorageAppendResp is returned,
+		// the response is ignored and the unstable log is not truncated. The
+		// unstable log is only truncated when the term has remained unchanged from
+		// the time that the MsgStorageAppend was sent to the time that the response
+		// is received, indicating that no new leader has overwritten the log.
 		//
-		// However, this replaces a correctness problem with a liveness problem. If we
-		// only attempted to truncate the unstable log when appending new entries but
-		// also occasionally dropped these responses, then quiescence of new log entries
-		// could lead to the unstable log never being truncated.
-		//
-		// To combat this, we attempt to truncate the log on all MsgStorageAppendResp
-		// messages where the unstable log is not empty, not just those associated with
-		// entry appends. This includes MsgStorageAppendResp messages associated with an
-		// updated HardState, which occur after a term change.
-		//
-		// In other words, we set Index and LogTerm in a block that looks like:
-		//
-		//  if r.raftLog.hasNextOrInProgressUnstableEnts() { ... }
-		//
-		// not like:
-		//
-		//  if len(rd.Entries) > 0 { ... }
-		//
-		// To do so, we attach r.raftLog.lastIndex() and r.raftLog.lastTerm(), not the
-		// (index, term) of the last entry in rd.Entries. If rd.Entries is not empty,
-		// these will be the same. However, if rd.Entries is empty, we still want to
-		// attest that this (index, term) is correct at the current term, in case the
-		// MsgStorageAppend that contained the last entry in the unstable slice carried
-		// an earlier term and was dropped.
-		//
-		// A MsgStorageAppend with a new term is emitted on each term change. This is
-		// the same condition that causes MsgStorageAppendResp messages with earlier
-		// terms to be ignored. As a result, we are guaranteed that, assuming a bounded
-		// number of term changes, there will eventually be a MsgStorageAppendResp
-		// message that is not ignored. This means that entries in the unstable log
-		// which have been appended to stable storage will eventually be truncated and
-		// dropped from memory.
+		// TODO(pav-kv): unstable entries can be partially released even if the last
+		// accepted term changed, if we track the (term, index) points at which the
+		// log was truncated.
 		//
 		// [^1]: https://en.wikipedia.org/wiki/ABA_problem
-		last := r.raftLog.lastEntryID()
-		m.Index = last.index
-		m.LogTerm = last.term
+		m.Index = rd.Entries[ln-1].Index
+		m.LogTerm = r.raftLog.accTerm()
 	}
 	if !IsEmptySnap(rd.Snapshot) {
 		snap := rd.Snapshot
@@ -404,7 +371,7 @@ func (rn *RawNode) acceptReady(rd Ready) {
 				rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
 			}
 		}
-		if needStorageAppendRespMsg(rn.raft, rd) {
+		if needStorageAppendRespMsg(rd) {
 			m := newStorageAppendRespMsg(rn.raft, rd)
 			rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
 		}
