@@ -335,7 +335,7 @@ func (op *hashBasedPartitioner) Init(ctx context.Context) {
 	op.cancelChecker.Init(op.Ctx)
 	op.partitionsToProcessUsingMain = make(map[int]*hbpPartitionInfo)
 	// If we are initializing the hash-based partitioner, it means that we had
-	// to fallback from the in-memory one since the inputs had more tuples that
+	// to fall back from the in-memory one since the inputs had more tuples that
 	// could fit into the memory, and, therefore, it makes sense to instantiate
 	// the batches with maximum capacity.
 	op.scratch.batches = append(op.scratch.batches, op.unlimitedAllocator.NewMemBatchWithFixedCapacity(op.inputTypes[0], coldata.BatchSize()))
