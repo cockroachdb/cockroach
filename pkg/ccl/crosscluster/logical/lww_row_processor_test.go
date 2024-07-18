@@ -82,8 +82,7 @@ func TestLWWInsertQueryGeneration(t *testing.T) {
 		dstDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameDst)
 		rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[descpb.ID]sqlProcessorTableConfig{
 			dstDesc.GetID(): {
-				srcDesc:   srcDesc,
-				dstDBName: "defaultdb",
+				srcDesc: srcDesc,
 			},
 		}, s.InternalExecutor().(isql.Executor))
 		require.NoError(t, err)
@@ -152,8 +151,7 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
 	rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[descpb.ID]sqlProcessorTableConfig{
 		desc.GetID(): {
-			srcDesc:   desc,
-			dstDBName: "defaultdb",
+			srcDesc: desc,
 		},
 	}, s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd)))
 	require.NoError(b, err)
