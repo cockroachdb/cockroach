@@ -238,11 +238,13 @@ func changefeedPlanHook(
 					}
 				}
 
-				if err = changefeedbase.AsTerminalError(ctx, p.ExecCfg().LeaseManager, err); err != nil {
+				if err := changefeedbase.AsTerminalError(ctx, p.ExecCfg().LeaseManager, err); err != nil {
+					log.Infof(ctx, "core changefeed failed due to error: %s", err)
 					break
 				}
 
 				// All other errors retry.
+				log.Infof(ctx, "core changefeed retrying due to transient error: %s", err)
 				progress = p.ExtendedEvalContext().ChangefeedState.(*coreChangefeedProgress).progress
 			}
 			// TODO(yevgeniy): This seems wrong -- core changefeeds always terminate
