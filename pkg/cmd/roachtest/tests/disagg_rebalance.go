@@ -35,7 +35,7 @@ func registerDisaggRebalance(r registry.Registry) {
 		Cluster:           disaggRebalanceSpec,
 		RequiresLicense:   true,
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
-		Timeout:           1 * time.Hour,
+		Timeout:           4 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			s3dir := fmt.Sprintf("s3://%s/disagg-rebalance/%s?AUTH=implicit", testutils.BackupTestingBucketLongTTL(), c.Name())
 			startOpts := option.NewStartOpts(option.NoBackupSchedule)
@@ -43,7 +43,7 @@ func registerDisaggRebalance(r registry.Registry) {
 			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, 3))
 
 			initialWaitDuration := 2 * time.Minute
-			warehouses := 20
+			warehouses := 1000
 
 			t.Status("workload initialization")
 			cmd := fmt.Sprintf(
