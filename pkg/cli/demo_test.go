@@ -34,6 +34,7 @@ func TestDemo(t *testing.T) {
 	// asset loader that is set by default in tests will not be able to
 	// find the certs that demo sets up.
 	securityassets.ResetLoader()
+	defer ResetTest()
 
 	// Using datadriven allows TESTFLAGS=-rewrite.
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "demo", "test_demo"), func(t *testing.T, td *datadriven.TestData) string {
