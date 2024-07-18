@@ -787,6 +787,8 @@ func runFailoverNonSystem(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
+	// Prevent the logger from crashing the node due to a disk stall.
+	settings.Env = append(settings.Env, "COCKROACH_LOG_MAX_SYNC_DURATION=10m")
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
@@ -894,6 +896,8 @@ func runFailoverLiveness(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
+	// Prevent the logger from crashing the node due to a disk stall.
+	settings.Env = append(settings.Env, "COCKROACH_LOG_MAX_SYNC_DURATION=10m")
 
 	m := c.NewMonitor(ctx, c.Range(1, 4))
 
@@ -1007,6 +1011,8 @@ func runFailoverSystemNonLiveness(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
+	// Prevent the logger from crashing the node due to a disk stall.
+	settings.Env = append(settings.Env, "COCKROACH_LOG_MAX_SYNC_DURATION=10m")
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
