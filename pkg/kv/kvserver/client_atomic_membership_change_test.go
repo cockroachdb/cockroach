@@ -89,9 +89,11 @@ func TestAtomicReplicationChange(t *testing.T) {
 				// a hair earlier.
 				cfg := quorum.MakeEmptyConfig()
 				cfg, _, err = confchange.Restore(confchange.Changer{
-					Tracker:   tracker.MakeProgressTracker(&cfg, 1, 0),
-					Config:    cfg,
-					LastIndex: 1,
+					ProgressMap:      tracker.MakeProgressTracker(&cfg).Progress,
+					Config:           cfg,
+					MaxInflight:      1,
+					MaxInflightBytes: 0,
+					LastIndex:        1,
 				}, desc.Replicas().ConfState())
 				require.NoError(t, err)
 				act := r.RaftStatus().Config.Voters
