@@ -249,6 +249,8 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 	}
 
 	r.Add(registry.TestSpec{
+		Skip:             `https://github.com/cockroachdb/cockroach/issues/127206#issuecomment-2234146075`,
+		SkipDetails:      `a test dependency was pulled from the upstream package repository`,
 		Name:             opt.testName,
 		Owner:            registry.OwnerSQLFoundations,
 		Cluster:          r.MakeClusterSpec(1),
