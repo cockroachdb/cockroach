@@ -30,6 +30,7 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 11   TABLE system.public.lease
 16   RANGE meta
 17   RANGE system
+18   RANGE timeseries
 22   RANGE liveness
 25   TABLE system.public.replication_constraint_stats
 27   TABLE system.public.replication_stats
