@@ -44,6 +44,8 @@ type ParallelIO struct {
 	quota     *quotapool.IntPool
 	requestCh chan AdmittedIORequest
 	resultCh  chan IOResult
+
+	knobs *TestingKnobs
 }
 
 // IORequest represents an abstract unit of IO that has a set of keys upon which
@@ -84,6 +86,7 @@ func NewParallelIO(
 	handler IOHandler,
 	metrics metricsRecorder,
 	settings *cluster.Settings,
+	knobs *TestingKnobs,
 ) *ParallelIO {
 	quota := uint64(requestQuota.Get(&settings.SV))
 	wg := ctxgroup.WithContext(ctx)
@@ -98,6 +101,7 @@ func NewParallelIO(
 		requestCh: make(chan AdmittedIORequest, quota),
 		resultCh:  make(chan IOResult, quota),
 		doneCh:    make(chan struct{}),
+		knobs:     knobs,
 	}
 
 	wg.GoCtx(func(ctx context.Context) error {
@@ -377,6 +381,10 @@ func (p *ParallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 	}
 
 	for {
+		if p.knobs != nil && p.knobs.ParallelIOTickBlocker != nil {
+			p.knobs.ParallelIOTickBlocker <- struct{}{}
+		}
+
 		// Handle any results that arrived during any submitIO attempts
 		unhandled := pendingResults
 		pendingResults = nil

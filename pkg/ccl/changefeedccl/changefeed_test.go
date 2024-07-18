@@ -9182,14 +9182,182 @@ func TestBatchSizeMetric(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
+// type trackingMetricsRecorder struct {
+// 	mu          syncutil.Mutex
+// 	calls       map[string]int
+// 	callWaiters map[string][]chan struct{}
+// }
+
+// func (mr *trackingMetricsRecorder) getBackfillCallback() func() func() {
+// 	panic("unimplemented")
+// }
+// func (mr *trackingMetricsRecorder) getBackfillRangeCallback() func(int64) (func(), func()) {
+// 	panic("unimplemented")
+// }
+// func (mr *trackingMetricsRecorder) getKafkaThrottlingMetrics(*cluster.Settings) metrics.Histogram {
+// 	panic("unimplemented")
+// }
+// func (mr *trackingMetricsRecorder) makeCloudstorageFileAllocCallback() func(delta int64) {
+// 	panic("unimplemented")
+// }
+// func (mr *trackingMetricsRecorder) newParallelIOMetricsRecorder() parallelIOMetricsRecorder {
+// 	return mr
+// }
+// func (mr *trackingMetricsRecorder) recordEmittedBatch(startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int) {
+// 	panic("unimplemented")
+// }
+// func (mr *trackingMetricsRecorder) recordFlushRequestCallback() func() {
+// 	panic("unimplemented")
+// }
+// func (mr *trackingMetricsRecorder) recordInternalRetry(int64, bool) {
+// 	panic("unimplemented")
+// }
+// func (mr *trackingMetricsRecorder) recordMessageSize(int64) {
+// 	panic("unimplemented")
+// }
+// func (mr *trackingMetricsRecorder) recordOneMessage() recordOneMessageCallback {
+// 	panic("unimplemented")
+// }
+// func (mr *trackingMetricsRecorder) recordResolvedCallback() func() {
+// 	panic("unimplemented")
+// }
+// func (mr *trackingMetricsRecorder) recordSinkIOInflightChange(int64) {
+// 	panic("unimplemented")
+// }
+// func (mr *trackingMetricsRecorder) recordSizeBasedFlush() {
+// 	panic("unimplemented")
+// }
+
+// var _ metricsRecorder = &trackingMetricsRecorder{}
+
+// func (mr *trackingMetricsRecorder) recordPendingQueuePop(numKeys int64, latency time.Duration) {
+// 	mr.handleCall("recordPendingQueuePop")
+// }
+// func (mr *trackingMetricsRecorder) recordPendingQueuePush(numKeys int64) {
+// 	mr.handleCall("recordPendingQueuePush")
+// }
+// func (mr *trackingMetricsRecorder) recordResultQueueLatency(latency time.Duration) {
+// 	mr.handleCall("recordResultQueueLatency")
+// }
+// func (mr *trackingMetricsRecorder) setInFlightKeys(n int64) {
+// 	mr.handleCall("setInFlightKeys")
+// }
+
+// func (mr *trackingMetricsRecorder) handleCall(call string) {
+// 	mr.mu.Lock()
+// 	defer mr.mu.Unlock()
+// 	mr.calls[call]++
+// 	for _, ch := range mr.callWaiters[call] {
+// 		close(ch)
+// 	}
+// 	mr.callWaiters[call] = nil
+// }
+// func (mr *trackingMetricsRecorder) waitForCall(t *testing.T, call string) {
+// 	mr.mu.Lock()
+// 	w := make(chan struct{})
+// 	mr.callWaiters[call] = append(mr.callWaiters[call], w)
+// 	mr.mu.Unlock()
+
+// 	select {
+// 	case <-w:
+// 	case <-time.After(10 * time.Second):
+// 		t.Fatalf("timed out waiting for call %s", call)
+// 	}
+// }
+
+// var _ parallelIOMetricsRecorder = &trackingMetricsRecorder{}
+
 // TestParallelIOMetrics tests parallel io metrics.
+
+type testHistogram struct {
+	mu  syncutil.Mutex
+	val int64
+
+	condition func(val int64) bool
+	waiter    chan struct{}
+}
+
+func (h *testHistogram) RecordValue(v int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.val = v
+
+	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
+		close(h.waiter)
+	}
+}
+
+func (h *testHistogram) setWaiter(condition func(val int64) bool) chan struct{} {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.condition = condition
+	h.waiter = make(chan struct{})
+	return h.waiter
+}
+
+var _ histogram = &testHistogram{}
+
+type testGauge struct {
+	mu  syncutil.Mutex
+	val int64
+
+	condition func(val int64) bool
+	waiter    chan struct{}
+}
+
+func (h *testGauge) Update(v int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.val = v
+	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
+		close(h.waiter)
+	}
+}
+
+func (h *testGauge) Dec(n int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.val -= n
+	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
+		close(h.waiter)
+	}
+}
+
+func (h *testGauge) Inc(n int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.val += n
+	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
+		close(h.waiter)
+	}
+}
+
+func (h *testGauge) setWaiter(condition func(val int64) bool) chan struct{} {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.condition = condition
+	h.waiter = make(chan struct{})
+	return h.waiter
+}
+
+var _ gauge = &testGauge{}
+
 func TestParallelIOMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		registry := s.Server.JobRegistry().(*jobs.Registry)
-		metrics := registry.MetricsStruct().Changefeed.(*Metrics).AggMetrics
+		pmr := &parallelIOMetricsRecorderImpl{
+			pendingQueueNanos: &testHistogram{},
+			pendingRows:       nil,
+			resultQueueNanos:  &testHistogram{},
+			inFlight:          nil,
+		}
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		knobs.OverrideParallelIOMetricsRecorder = pmr
 
 		// Add delay so queuing occurs, which results in the below metrics being
 		// nonzero.
@@ -9228,36 +9396,30 @@ func TestParallelIOMetrics(t *testing.T) {
 			"'{\"Flush\": {\"Frequency\": \"100ms\"}}'")
 		require.NoError(t, err)
 
-		testutils.SucceedsSoon(t, func() error {
-			numSamples, sum := metrics.ParallelIOPendingQueueNanos.WindowedSnapshot().Total()
-			if numSamples <= 0 && sum <= 0.0 {
-				return errors.Newf("waiting for queue nanos: %d %f", numSamples, sum)
-			}
-			return nil
-		})
-		testutils.SucceedsSoon(t, func() error {
-			pendingKeys := metrics.ParallelIOPendingRows.Value()
-			if pendingKeys <= 0 {
-				return errors.Newf("waiting for pending keys: %d", pendingKeys)
-			}
-			return nil
-		})
-		testutils.SucceedsSoon(t, func() error {
-			for i := 0; i < 50; i++ {
-				inFlightKeys := metrics.ParallelIOInFlightKeys.Value()
-				if inFlightKeys > 0 {
-					return nil
-				}
-			}
-			return errors.New("waiting for in-flight keys")
-		})
-		testutils.SucceedsSoon(t, func() error {
-			numSamples, sum := metrics.ParallelIOResultQueueNanos.WindowedSnapshot().Total()
-			if numSamples <= 0 && sum <= 0.0 {
-				return errors.Newf("waiting for result queue nanos: %d %f", numSamples, sum)
-			}
-			return nil
-		})
+		select {
+		case <-pmr.pendingQueueNanos.(*testHistogram).setWaiter(func(val int64) bool { return val > 0 }):
+		case <-time.After(10 * time.Second):
+			t.Fatal("timed out waiting for pending queue nanos")
+		}
+
+		select {
+		case <-pmr.pendingRows.(*testGauge).setWaiter(func(val int64) bool { return val > 0 }):
+		case <-time.After(10 * time.Second):
+			t.Fatal("timed out waiting for pending queue nanos")
+		}
+
+		select {
+		case <-pmr.inFlight.(*testGauge).setWaiter(func(val int64) bool { return val == 0 }):
+		case <-time.After(10 * time.Second):
+			t.Fatal("timed out waiting for in flight")
+		}
+
+		select {
+		case <-pmr.resultQueueNanos.(*testHistogram).setWaiter(func(val int64) bool { return val > 0 }):
+		case <-time.After(10 * time.Second):
+			t.Fatal("timed out waiting for result queue nanos")
+		}
+
 		close(done)
 		require.NoError(t, g.Wait())
 		require.NoError(t, foo.Close())

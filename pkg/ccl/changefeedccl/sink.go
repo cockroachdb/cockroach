@@ -251,6 +251,10 @@ func getSink(
 			return makePulsarSink(ctx, sinkURL{URL: u}, encodingOpts, AllTargets(feedCfg), opts.GetKafkaConfigJSON(),
 				serverCfg.Settings, metricsBuilder, testingKnobs)
 		case isWebhookSink(u):
+			var testingKnobs *TestingKnobs
+			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+				testingKnobs = knobs
+			}
 			webhookOpts, err := opts.GetWebhookSinkOptions()
 			if err != nil {
 				return nil, err
@@ -259,7 +263,7 @@ func getSink(
 				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
 					return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
 						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
-						metricsBuilder, serverCfg.Settings)
+						metricsBuilder, serverCfg.Settings, testingKnobs)
 				})
 			} else {
 				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
