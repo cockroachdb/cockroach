@@ -451,6 +451,12 @@ type Planner interface {
 	InsertTemporarySchema(
 		tempSchemaName string, databaseID descpb.ID, schemaID descpb.ID,
 	)
+
+	// ClearQueryPlanCache removes all entries from the node's query plan cache.
+	ClearQueryPlanCache()
+
+	// ClearTableStatsCache removes all entries from the node's table stats cache.
+	ClearTableStatsCache()
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

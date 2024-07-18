@@ -992,6 +992,20 @@ func (p *planner) AutoCommit() bool {
 	return p.autoCommit
 }
 
+// ClearQueryPlanCache is part of the eval.Planner interface.
+func (p *planner) ClearQueryPlanCache() {
+	if p.execCfg.QueryCache != nil {
+		p.execCfg.QueryCache.Clear()
+	}
+}
+
+// ClearTableStatsCache is part of the eval.Planner interface.
+func (p *planner) ClearTableStatsCache() {
+	if p.execCfg.TableStatsCache != nil {
+		p.execCfg.TableStatsCache.Clear()
+	}
+}
+
 // mustUseLeafTxn returns true if inner plans must use a leaf transaction.
 func (p *planner) mustUseLeafTxn() bool {
 	return atomic.LoadInt32(&p.atomic.innerPlansMustUseLeafTxn) >= 1

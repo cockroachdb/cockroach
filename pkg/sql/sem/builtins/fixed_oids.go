@@ -2602,6 +2602,8 @@ var builtinOidsArray = []string{
 	2634: `vector_dims(vector: vector) -> int`,
 	2635: `vector_norm(vector: vector) -> float`,
 	2636: `crdb_internal.log(msg: string) -> void`,
+	2637: `crdb_internal.clear_query_plan_cache() -> void`,
+	2638: `crdb_internal.clear_table_stats_cache() -> void`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

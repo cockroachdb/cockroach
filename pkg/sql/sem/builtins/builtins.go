@@ -8792,6 +8792,38 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Volatility: volatility.Volatile,
 		},
 	),
+	"crdb_internal.clear_query_plan_cache": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategorySystemRepair,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				evalCtx.Planner.ClearQueryPlanCache()
+				return tree.DVoidDatum, nil
+			},
+			Info:       `This function is used to clear the query plan cache`,
+			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.clear_table_stats_cache": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategorySystemRepair,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				evalCtx.Planner.ClearTableStatsCache()
+				return tree.DVoidDatum, nil
+			},
+			Info:       `This function is used to clear the table statistics cache`,
+			Volatility: volatility.Volatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
