@@ -127,6 +127,12 @@ func TestMeasurePlanChange(t *testing.T) {
 			after:  makePlan(makeProc(1, []int{2}), makeProc(2, []int{1})),
 			frac:   0,
 		},
+		{
+			name:   "lots of processors",
+			before: makePlan(makeProc(1, []int{1}), makeProc(1, []int{1}), makeProc(1, []int{1})),
+			after:  makePlan(makeProc(1, []int{1}), makeProc(1, []int{1}), makeProc(1, []int{1}), makeProc(2, []int{1})),
+			frac:   0.5,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			frac := measurePlanChange(&tc.before, &tc.after)
