@@ -126,8 +126,15 @@ func newLogicalReplicationWriterProcessor(
 	}
 
 	tableDescs := make(map[descpb.ID]catalog.TableDescriptor)
-	for dstTableDescID, desc := range spec.TableDescriptors {
-		tableDescs[descpb.ID(dstTableDescID)] = tabledesc.NewBuilder(&desc).BuildImmutableTable()
+	tableIDToName := make(map[int32]fullyQualifiedTableName)
+	for tableID, md := range spec.TableMetadata {
+		desc := md.SourceDescriptor
+		tableDescs[descpb.ID(tableID)] = tabledesc.NewBuilder(&desc).BuildImmutableTable()
+		tableIDToName[tableID] = fullyQualifiedTableName{
+			database: md.DestinationParentDatabaseName,
+			schema:   md.DestinationParentSchemaName,
+			table:    md.DestinationTableName,
+		}
 	}
 	bhPool := make([]BatchHandler, maxWriterWorkers)
 	for i := range bhPool {
@@ -193,7 +200,7 @@ func newLogicalReplicationWriterProcessor(
 			StreamID:    streampb.StreamID(spec.StreamID),
 			ProcessorID: processorID,
 		},
-		dlqClient: InitDeadLetterQueueClient(dlqDbExec),
+		dlqClient: InitDeadLetterQueueClient(dlqDbExec, tableIDToName),
 		metrics:   flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
 	}
 	lrw.purgatory = purgatory{

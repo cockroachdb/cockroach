@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -311,15 +312,45 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 		return nil, nil, nil, err
 	}
 
-	dstToSrcDescMap := make(map[int32]descpb.TableDescriptor)
-	tableIDs := make([]int32, len(p.payload.ReplicationPairs))
-	for i, pair := range p.payload.ReplicationPairs {
-		dstToSrcDescMap[pair.DstDescriptorID] = plan.DescriptorMap[pair.SrcDescriptorID]
-		tableIDs[i] = pair.DstDescriptorID
+	tableIDToName := make(map[int32]fullyQualifiedTableName)
+	tablesMd := make(map[int32]execinfrapb.TableReplicationMetadata)
+	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
+		for _, pair := range p.payload.ReplicationPairs {
+			srcTableDesc := plan.DescriptorMap[pair.SrcDescriptorID]
+
+			// Look up fully qualified destination table name
+			dstTableDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, descpb.ID(pair.DstDescriptorID))
+			if err != nil {
+				return errors.Wrapf(err, "failed to look up table descriptor %d", pair.DstDescriptorID)
+			}
+			dbDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, dstTableDesc.GetParentID())
+			if err != nil {
+				return errors.Wrapf(err, "failed to look up database descriptor for table %d", pair.DstDescriptorID)
+			}
+			scDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Schema(ctx, dstTableDesc.GetParentSchemaID())
+			if err != nil {
+				return errors.Wrapf(err, "failed to look up schema descriptor for table %d", pair.DstDescriptorID)
+			}
+
+			tablesMd[pair.DstDescriptorID] = execinfrapb.TableReplicationMetadata{
+				SourceDescriptor:              srcTableDesc,
+				DestinationParentDatabaseName: dbDesc.GetName(),
+				DestinationParentSchemaName:   scDesc.GetName(),
+				DestinationTableName:          dstTableDesc.GetName(),
+			}
+			tableIDToName[pair.DstDescriptorID] = fullyQualifiedTableName{
+				database: dbDesc.GetName(),
+				schema:   scDesc.GetName(),
+				table:    dstTableDesc.GetName(),
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, nil, nil, err
 	}
 
-	dlqClient := InitDeadLetterQueueClient(p.jobExecCtx.ExecCfg().InternalDB.Executor())
-	if err := dlqClient.Create(ctx, tableIDs); err != nil {
+	dlqClient := InitDeadLetterQueueClient(p.jobExecCtx.ExecCfg().InternalDB.Executor(), tableIDToName)
+	if err := dlqClient.Create(ctx); err != nil {
 		return nil, nil, nil, errors.Wrap(err, "failed to create dead letter queue")
 	}
 
@@ -350,7 +381,7 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 		p.payload.ReplicationStartTime,
 		p.progress.ReplicatedTime,
 		p.progress.Checkpoint,
-		dstToSrcDescMap,
+		tablesMd,
 		p.jobID,
 		streampb.StreamID(p.payload.StreamID))
 	if err != nil {
