@@ -337,11 +337,10 @@ func TestReplicaDescriptorsCanMakeProgressRandom(t *testing.T) {
 		})
 
 		raftCanMakeProgress, skip := func() (res bool, skip bool) {
-			emptyCfg := quorum.MakeEmptyConfig()
 			cfg, _, err := confchange.Restore(
 				confchange.Changer{
-					Config:           emptyCfg,
-					ProgressMap:      tracker.MakeProgressTracker(&emptyCfg).Progress,
+					Config:           quorum.MakeEmptyConfig(),
+					ProgressMap:      tracker.MakeEmptyProgressMap(),
 					MaxInflight:      1,
 					MaxInflightBytes: 0,
 				},

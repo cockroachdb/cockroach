@@ -93,10 +93,9 @@ func TestConfChangeQuick(t *testing.T) {
 
 	wrapper := func(invoke testFunc) func(setup initialChanges, ccs confChanges) (*Changer, error) {
 		return func(setup initialChanges, ccs confChanges) (*Changer, error) {
-			cfg := quorum.MakeEmptyConfig()
 			c := &Changer{
-				Config:           cfg,
-				ProgressMap:      tracker.MakeProgressTracker(&cfg).Progress,
+				Config:           quorum.MakeEmptyConfig(),
+				ProgressMap:      tracker.MakeEmptyProgressMap(),
 				MaxInflight:      10,
 				MaxInflightBytes: 0,
 				LastIndex:        10,

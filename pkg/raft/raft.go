@@ -436,11 +436,9 @@ func newRaft(c *Config) *raft {
 	}
 	lastID := r.raftLog.lastEntryID()
 
-	r.trk = tracker.MakeProgressTracker(&r.config)
-
-	cfg, trk, err := confchange.Restore(confchange.Changer{
+	cfg, progressMap, err := confchange.Restore(confchange.Changer{
 		Config:           r.config,
-		ProgressMap:      r.trk.Progress,
+		ProgressMap:      tracker.MakeEmptyProgressMap(),
 		MaxInflight:      r.maxInflight,
 		MaxInflightBytes: r.maxInflightBytes,
 		LastIndex:        lastID.index,
@@ -448,7 +446,7 @@ func newRaft(c *Config) *raft {
 	if err != nil {
 		panic(err)
 	}
-	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, trk))
+	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, progressMap))
 
 	if !IsEmptyHardState(hs) {
 		r.loadState(hs)
@@ -1911,10 +1909,9 @@ func (r *raft) restore(s snapshot) bool {
 
 	// Reset the configuration and add the (potentially updated) peers in anew.
 	r.config = quorum.MakeEmptyConfig()
-	r.trk = tracker.MakeProgressTracker(&r.config)
-	cfg, trk, err := confchange.Restore(confchange.Changer{
+	cfg, progressMap, err := confchange.Restore(confchange.Changer{
 		Config:           r.config,
-		ProgressMap:      r.trk.Progress,
+		ProgressMap:      tracker.MakeEmptyProgressMap(), // empty ProgressMap to go with our empty config
 		MaxInflight:      r.maxInflight,
 		MaxInflightBytes: r.maxInflightBytes,
 		LastIndex:        r.raftLog.lastIndex(),
@@ -1926,7 +1923,7 @@ func (r *raft) restore(s snapshot) bool {
 		panic(fmt.Sprintf("unable to restore config %+v: %s", cs, err))
 	}
 
-	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, trk))
+	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, progressMap))
 
 	last := r.raftLog.lastEntryID()
 	r.logger.Infof("%x [commit: %d, lastindex: %d, lastterm: %d] restored snapshot [index: %d, term: %d]",
@@ -1942,7 +1939,7 @@ func (r *raft) promotable() bool {
 }
 
 func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
-	cfg, trk, err := func() (quorum.Config, tracker.ProgressMap, error) {
+	cfg, progressMap, err := func() (quorum.Config, tracker.ProgressMap, error) {
 		changer := confchange.Changer{
 			Config:           r.config,
 			ProgressMap:      r.trk.Progress,
@@ -1963,7 +1960,7 @@ func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
 		panic(err)
 	}
 
-	return r.switchToConfig(cfg, trk)
+	return r.switchToConfig(cfg, progressMap)
 }
 
 // switchToConfig reconfigures this node to use the provided configuration. It
@@ -1972,9 +1969,9 @@ func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
 // requirements.
 //
 // The inputs usually result from restoring a ConfState or applying a ConfChange.
-func (r *raft) switchToConfig(cfg quorum.Config, trk tracker.ProgressMap) pb.ConfState {
+func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap) pb.ConfState {
 	r.config = cfg
-	r.trk.Progress = trk
+	r.trk = tracker.MakeProgressTracker(&r.config, progressMap)
 
 	r.logger.Infof("%x switched to configuration %s", r.id, r.config)
 	cs := r.config.ConfState()
