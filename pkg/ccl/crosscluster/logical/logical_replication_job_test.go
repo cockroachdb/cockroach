@@ -392,6 +392,15 @@ func TestLogicalStreamIngestionErrors(t *testing.T) {
 	}
 
 	dbB.Exec(t, createQ, urlA)
+
+	createBasicTable(t, dbA, "foo1")
+	createBasicTable(t, dbA, "foo2")
+	createBasicTable(t, dbA, "foo3")
+	createBasicTable(t, dbB, "foo1")
+
+	dbB.ExpectErr(t, "cross-database replication job is not allowed",
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLES (foo1, foo2) ON $1 INTO TABLES (b.foo1, a.foo3)", urlA)
+
 }
 
 func TestLogicalStreamIngestionJobWithColumnFamilies(t *testing.T) {

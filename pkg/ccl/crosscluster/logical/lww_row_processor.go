@@ -206,42 +206,12 @@ type sqlProcessorTableConfig struct {
 	dstFnName string
 }
 
-// validateTableConfigs validates assumptions made in the current
-// implementation. Most of these can be lifted in the future but are
-// disallowed for now to reduce churn in this first cut.
-func validateTableConfigs(configs map[descpb.ID]sqlProcessorTableConfig) error {
-	var (
-		first       = true
-		dbName      string
-		hasFunction bool
-	)
-	for _, conf := range configs {
-		if first {
-			dbName = conf.dstDBName
-			hasFunction = conf.dstFnName != ""
-			first = false
-		}
-		if dbName != conf.dstDBName {
-			return errors.Errorf("cross-database replication job is not allowed")
-		}
-		if hasFunction != (conf.dstFnName != "") {
-			return errors.Errorf("function must be specified for all tables")
-		}
-
-	}
-	return nil
-}
-
 func makeSQLProcessor(
 	ctx context.Context,
 	settings *cluster.Settings,
 	tableConfigs map[descpb.ID]sqlProcessorTableConfig,
 	ie isql.Executor,
 ) (*sqlRowProcessor, error) {
-	if err := validateTableConfigs(tableConfigs); err != nil {
-		return nil, err
-	}
-
 	switch defaultSQLProcessor {
 	case lwwProcessor:
 		return makeSQLLastWriteWinsHandler(ctx, settings, tableConfigs, ie)
@@ -423,14 +393,16 @@ func makeSQLLastWriteWinsHandler(
 	tableConfigs map[descpb.ID]sqlProcessorTableConfig,
 	ie isql.Executor,
 ) (*sqlRowProcessor, error) {
-	var hasFunction bool
+
+	needFallback := false
+	shouldUseFallback := make(map[catid.DescID]bool, len(tableConfigs))
 	for _, tc := range tableConfigs {
-		hasFunction = tc.dstFnName != ""
-		break
+		shouldUseFallback[tc.srcDesc.GetID()] = tc.dstFnName != ""
+		needFallback = needFallback || tc.dstFnName != ""
 	}
 
 	var fallbackQuerier querier
-	if hasFunction {
+	if needFallback {
 		var err error
 		fallbackQuerier, err = makeApplierQuerier(ctx, settings, tableConfigs, ie)
 		if err != nil {
@@ -444,9 +416,10 @@ func makeSQLLastWriteWinsHandler(
 	}
 	return makeSQLProcessorFromQuerier(ctx, settings, tableConfigs, ie,
 		&lwwQuerier{
-			settings:        settings,
-			queryBuffer:     qb,
-			fallbackQuerier: fallbackQuerier,
+			settings:          settings,
+			queryBuffer:       qb,
+			shouldUseFallback: shouldUseFallback,
+			fallbackQuerier:   fallbackQuerier,
 		})
 }
 
@@ -467,9 +440,11 @@ func makeSQLLastWriteWinsHandler(
 //
 // See the design document for possible solutions to both of these problems.
 type lwwQuerier struct {
-	settings        *cluster.Settings
-	queryBuffer     queryBuffer
-	fallbackQuerier querier
+	settings    *cluster.Settings
+	queryBuffer queryBuffer
+
+	shouldUseFallback map[catid.DescID]bool
+	fallbackQuerier   querier
 }
 
 func (lww *lwwQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) error {
@@ -484,12 +459,19 @@ func (lww *lwwQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) 
 		return err
 	}
 
-	if lww.fallbackQuerier != nil {
+	if lww.shouldUseFallbackQuerier(td.GetID()) {
 		if err := lww.fallbackQuerier.AddTable(targetDescID, tc); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (lww *lwwQuerier) shouldUseFallbackQuerier(id catid.DescID) bool {
+	if lww.fallbackQuerier == nil {
+		return false
+	}
+	return lww.shouldUseFallback[id]
 }
 
 func (lww *lwwQuerier) RequiresParsedBeforeRow() bool {
@@ -519,7 +501,7 @@ func (lww *lwwQuerier) InsertRow(
 		return batchStats{}, err
 	}
 
-	fallbackSpecified := lww.fallbackQuerier != nil
+	fallbackSpecified := lww.shouldUseFallbackQuerier(row.TableID)
 	shouldTryOptimisticInsert := likelyInsert && tryOptimisticInsertEnabled.Get(&lww.settings.SV)
 	shouldTryOptimisticInsert = shouldTryOptimisticInsert || fallbackSpecified
 	var optimisticInsertConflicts int64

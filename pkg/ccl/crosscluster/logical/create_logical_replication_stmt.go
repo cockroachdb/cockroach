@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -99,10 +100,12 @@ func createLogicalReplicationStreamPlanHook(
 			return pgerror.New(pgcode.InvalidParameterValue, "the same number of source and destination tables must be specified")
 		}
 
-		var targetsDescription string
-		srcTableNames := make([]string, len(stmt.From.Tables))
-
-		repPairs := make([]jobspb.LogicalReplicationDetails_ReplicationPair, len(stmt.Into.Tables))
+		var (
+			targetDatabase     catid.DescID
+			targetsDescription string
+			srcTableNames      = make([]string, len(stmt.From.Tables))
+			repPairs           = make([]jobspb.LogicalReplicationDetails_ReplicationPair, len(stmt.Into.Tables))
+		)
 		for i := range stmt.From.Tables {
 
 			dstObjName, err := stmt.Into.Tables[i].ToUnresolvedObjectName(tree.NoAnnotation)
@@ -114,7 +117,11 @@ func createLogicalReplicationStreamPlanHook(
 			if err != nil {
 				return err
 			}
-
+			if targetDatabase == 0 {
+				targetDatabase = td.ParentID
+			} else if targetDatabase != td.ParentID {
+				return errors.Errorf("cross-database replication job is not allowed")
+			}
 			repPairs[i].DstDescriptorID = int32(td.GetID())
 
 			// TODO(dt): remove when we support this via KV metadata.
