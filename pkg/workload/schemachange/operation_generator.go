@@ -2691,7 +2691,6 @@ func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt
 		onType = `UNION ALL
 	SELECT 'TYPE ' || quote_ident(schema) || '.' || quote_ident(name) FROM [SHOW TYPES]`
 	}
-
 	q := With([]CTE{
 		{"descriptors", descJSONQuery},
 		{"tables", tableDescQuery},
