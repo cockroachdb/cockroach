@@ -193,6 +193,8 @@ func registerPgjdbc(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
+		Skip:             `https://github.com/cockroachdb/cockroach/issues/127209#issuecomment-2233446488`,
+		SkipDetails:      `a test dependency was pulled from the upstream package repository`,
 		Name:             "pgjdbc",
 		Owner:            registry.OwnerSQLFoundations,
 		Cluster:          r.MakeClusterSpec(1),
