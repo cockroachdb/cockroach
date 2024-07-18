@@ -238,7 +238,8 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 		if scanPrivate.HardLimit > memo.ScanLimit(localScan.Relational().Cardinality.Max) {
 			return
 		}
-	} else {
+	} else if localScan.Relational().Cardinality.Max < grp.Relational().Cardinality.Max &&
+		!tabMeta.IgnoreUniqueWithoutIndexKeys {
 		// When the max cardinality of the original scan is greater than the max
 		// cardinality of the local scan, a remote scan will always be required.
 		// IgnoreUniqueWithoutIndexKeys is true when we're performing a scan
@@ -246,10 +247,7 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 		// uniqueness constraint. This could cause the check below to return, but
 		// by design we want to use locality-optimized search for these duplicate
 		// checks. So avoid returning if that flag is set.
-		if localScan.Relational().Cardinality.Max <
-			grp.Relational().Cardinality.Max && !tabMeta.IgnoreUniqueWithoutIndexKeys {
-			return
-		}
+		return
 	}
 
 	// Create the remote scan.
