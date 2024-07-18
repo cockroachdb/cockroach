@@ -1104,8 +1104,12 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 		clock := timeutil.NewManualTime(timeutil.Unix(0, start.Add(nodeCtxs[i].offset).UnixNano()))
 		nodeCtxs[i].errChan = make(chan error, 1)
 		nodeCtxs[i].ctx = newTestContext(clusterID, clock, maxOffset, stopper)
-		nodeCtxs[i].ctx.RPCHeartbeatInterval = maxOffset
-		nodeCtxs[i].ctx.RPCHeartbeatTimeout = maxOffset
+		// Make the test faster.
+		nodeCtxs[i].ctx.RPCHeartbeatInterval = 10 * time.Millisecond
+		// Disable RPC heartbeat timeouts to avoid flakiness in the test. If a
+		// heartbeat were to time out, its RPC connection would be closed and its
+		// clock offset information would be lost.
+		nodeCtxs[i].ctx.RPCHeartbeatTimeout = 0
 		nodeCtxs[i].ctx.NodeID.Set(context.Background(), roachpb.NodeID(i+1))
 
 		s := newTestServer(t, nodeCtxs[i].ctx)
