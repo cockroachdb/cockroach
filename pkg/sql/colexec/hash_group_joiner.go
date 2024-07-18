@@ -19,8 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/errors"
 )
 
 // hashGroupJoiner currently is the naive implementation of hash group-join
@@ -106,19 +104,11 @@ func (h *hashGroupJoiner) Next() coldata.Batch {
 // being able to spill the intermediate aggregation state). Thus, we currently
 // always instantiate a copyingOperator around the left input which allows us to
 // perform the export.
-func (h *hashGroupJoiner) ExportBuffered(
-	input colexecop.Operator, reuseMode colexecop.BufferingOpReuseMode,
-) coldata.Batch {
-	if buildutil.CrdbTestBuild && reuseMode != colexecop.BufferingOpNoReuse {
-		colexecerror.InternalError(errors.AssertionFailedf(
-			"hash group joiner is not expected to be reused after spilling to disk",
-		))
-	}
-	h.ha.maybeReleaseInMemoryResources()
+func (h *hashGroupJoiner) ExportBuffered(input colexecop.Operator) coldata.Batch {
 	if h.InputTwo == input {
 		// When exporting from the right input, simply delegate to the hash
 		// joiner.
-		return h.hj.ExportBuffered(input, reuseMode)
+		return h.hj.ExportBuffered(input)
 	}
 	if h.hjLeftSource.sq == nil {
 		// All tuples have been exported.
@@ -132,15 +122,31 @@ func (h *hashGroupJoiner) ExportBuffered(
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
-	if b.Length() == 0 {
-		// We reached the end of the queue, so we won't need it anymore and can
-		// release its resources.
-		if err = h.hjLeftSource.sq.Close(h.Ctx); err != nil {
-			colexecerror.InternalError(err)
-		}
-		h.hjLeftSource.sq = nil
-	}
 	return b
+}
+
+// ReleaseBeforeExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (h *hashGroupJoiner) ReleaseBeforeExport() {
+	h.ha.ReleaseBeforeExport()
+}
+
+// ReleaseAfterExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (h *hashGroupJoiner) ReleaseAfterExport(input colexecop.Operator) {
+	if h.InputTwo == input {
+		// The right input handling is delegated to the hash joiner.
+		h.hj.ReleaseAfterExport(input)
+		return
+	}
+	if h.hjLeftSource.sq == nil {
+		// Resources have already been released.
+		return
+	}
+	if err := h.hjLeftSource.sq.Close(h.Ctx); err != nil {
+		colexecerror.InternalError(err)
+	}
+	h.hjLeftSource.sq = nil
 }
 
 // Close implements the colexecop.Closer interface.

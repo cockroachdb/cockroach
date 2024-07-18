@@ -26,9 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
-	"github.com/cockroachdb/errors"
 )
 
 // hashAggregatorState represents the state of the hash aggregator operator.
@@ -459,10 +457,27 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 	}
 }
 
-// maybeReleaseInMemoryResources on the first call releases the in-memory
-// resources that won't be needed to perform the spilling to disk (i.e. those
-// that aren't needed in ExportBuffered calls).
-func (op *hashAggregator) maybeReleaseInMemoryResources() {
+func (op *hashAggregator) ExportBuffered(colexecop.Operator) coldata.Batch {
+	if op.inputTrackingState.tuples == nil {
+		// All tuples have been exported.
+		return coldata.ZeroBatch
+	}
+	if !op.inputTrackingState.zeroBatchEnqueued {
+		// Per the contract of the spilling queue, we need to append a
+		// zero-length batch.
+		op.inputTrackingState.tuples.Enqueue(op.Ctx, coldata.ZeroBatch)
+		op.inputTrackingState.zeroBatchEnqueued = true
+	}
+	batch, err := op.inputTrackingState.tuples.Dequeue(op.Ctx)
+	if err != nil {
+		colexecerror.InternalError(err)
+	}
+	return batch
+}
+
+// ReleaseBeforeExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (op *hashAggregator) ReleaseBeforeExport() {
 	if op.ht == nil {
 		// Resources have already been released.
 		return
@@ -481,38 +496,17 @@ func (op *hashAggregator) maybeReleaseInMemoryResources() {
 	}
 }
 
-func (op *hashAggregator) ExportBuffered(
-	_ colexecop.Operator, reuseMode colexecop.BufferingOpReuseMode,
-) coldata.Batch {
-	if buildutil.CrdbTestBuild && reuseMode != colexecop.BufferingOpNoReuse {
-		colexecerror.InternalError(errors.AssertionFailedf(
-			"hash aggregator is not expected to be reused after spilling to disk",
-		))
-	}
-	op.maybeReleaseInMemoryResources()
+// ReleaseAfterExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (op *hashAggregator) ReleaseAfterExport(colexecop.Operator) {
 	if op.inputTrackingState.tuples == nil {
-		// All tuples have been exported.
-		return coldata.ZeroBatch
+		// Resources have already been released.
+		return
 	}
-	if !op.inputTrackingState.zeroBatchEnqueued {
-		// Per the contract of the spilling queue, we need to append a
-		// zero-length batch.
-		op.inputTrackingState.tuples.Enqueue(op.Ctx, coldata.ZeroBatch)
-		op.inputTrackingState.zeroBatchEnqueued = true
-	}
-	batch, err := op.inputTrackingState.tuples.Dequeue(op.Ctx)
-	if err != nil {
+	if err := op.inputTrackingState.tuples.Close(op.Ctx); err != nil {
 		colexecerror.InternalError(err)
 	}
-	if batch.Length() == 0 {
-		// We reached the end of the queue, so we won't need it anymore and can
-		// release its resources.
-		if err = op.inputTrackingState.tuples.Close(op.Ctx); err != nil {
-			colexecerror.InternalError(err)
-		}
-		op.inputTrackingState.tuples = nil
-	}
-	return batch
+	op.inputTrackingState.tuples = nil
 }
 
 func (op *hashAggregator) Reset(ctx context.Context) {
