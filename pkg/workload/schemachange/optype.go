@@ -252,7 +252,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 
 var opWeights = []int{
 	// Non-DDL
-	insertRow:  10,
+	insertRow:  0, // Disabled and tracked with #127263
 	selectStmt: 10,
 	validate:   2, // validate twice more often
 
@@ -269,9 +269,9 @@ var opWeights = []int{
 	alterTableAddConstraintUnique:     0,
 	alterTableAlterColumnType:         0, // Disabled and tracked with #66662.
 	alterTableAlterPrimaryKey:         1,
-	alterTableDropColumn:              1,
+	alterTableDropColumn:              0, // Disabled and tracked with #127286.
 	alterTableDropColumnDefault:       1,
-	alterTableDropConstraint:          1,
+	alterTableDropConstraint:          0, // Disabled and tracked with #127273.
 	alterTableDropNotNull:             1,
 	alterTableDropStored:              1,
 	alterTableLocality:                1,
@@ -279,9 +279,9 @@ var opWeights = []int{
 	alterTableSetColumnDefault:        1,
 	alterTableSetColumnNotNull:        1,
 	alterTypeDropValue:                1,
-	commentOn:                         1,
+	commentOn:                         0, // Disabled and tracked with #128095.
 	createFunction:                    1,
-	createIndex:                       1,
+	createIndex:                       0, // Disabled and tracked with #127280.
 	createSchema:                      1,
 	createSequence:                    1,
 	createTable:                       10,
@@ -290,13 +290,13 @@ var opWeights = []int{
 	createView:                        1,
 	dropFunction:                      1,
 	dropIndex:                         1,
-	dropSchema:                        1,
+	dropSchema:                        0, // Disabled and tracked with #127977.
 	dropSequence:                      1,
 	dropTable:                         1,
 	dropView:                          1,
 	renameIndex:                       1,
 	renameSequence:                    1,
-	renameTable:                       1,
+	renameTable:                       0, // Disabled and tracked with #127980.
 	renameView:                        1,
 }
 
