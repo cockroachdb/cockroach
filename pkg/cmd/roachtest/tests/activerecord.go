@@ -247,6 +247,8 @@ func registerActiveRecord(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
+		Skip:             "https://github.com/cockroachdb/activerecord-cockroachdb-adapter/pull/333",
+		SkipDetails:      "upstream test suite is flaky",
 		Name:             "activerecord",
 		Owner:            registry.OwnerSQLFoundations,
 		Timeout:          5 * time.Hour,
