@@ -1175,6 +1175,75 @@ CREATE TABLE system.mvcc_statistics (
 			created
 		)
 	);`
+
+	replicationSizeBytesExpr = `COALESCE((span_stats->'approximate_disk_bytes':::STRING)::INT8, 0:::INT8)`
+	totalRangesExpr          = `COALESCE((span_stats->'range_count':::STRING)::INT8, 0:::INT8)`
+	totalLiveDataBytesExpr   = `COALESCE(((span_stats->'total_stats':::STRING)->'live_bytes':::STRING)::INT8, 0:::INT8)`
+	totalDataBytesExpr       = `COALESCE(((((span_stats->'total_stats':::STRING)->'key_bytes':::STRING)::INT8 + ((span_stats->'total_stats':::STRING)->'val_bytes':::STRING)::INT8) + ((span_stats->'total_stats':::STRING)->'range_key_bytes':::STRING)::INT8) + ((span_stats->'total_stats':::STRING)->'range_val_bytes':::STRING)::INT8, 0:::INT8)`
+	percentDataLiveBytesExpr = "IF(" + totalDataBytesExpr + " = 0:::INT8, 0::FLOAT8, (" + totalLiveDataBytesExpr + " / " + totalDataBytesExpr + ")::FLOAT8)"
+	qualifiedTableNameExpr   = `(schema_name || '.':::STRING) || table_name`
+)
+
+var (
+	replicationSizeBytesStr = replicationSizeBytesExpr
+	totalRangesStr          = totalRangesExpr
+	totalLiveDataBytesStr   = totalLiveDataBytesExpr
+	totalDataBytesStr       = totalDataBytesExpr
+	percentDataLiveBytesStr = percentDataLiveBytesExpr
+	qualifiedTableNameStr   = qualifiedTableNameExpr
+)
+
+const (
+	crdbInternalTableIdLastUpdatedShard = "mod(fnv32(md5(crdb_internal.datums_to_bytes(table_id, last_updated))), 16:::INT8)"
+	TableMetadataTableSchema            = ` CREATE TABLE system.table_metadata (
+	  db_id INT8 NOT NULL,
+    table_id INT8 NOT NULL,
+	  db_name STRING NOT NULL,
+		schema_name STRING NOT NULL,
+    table_name STRING NOT NULL,
+		span_stats JSONB NOT NULL,
+    total_columns INT8 NOT NULL,
+    total_indexes INT8 NOT NULL,
+    store_ids INT[] NOT NULL,
+    last_update_error string,
+    last_updated TIMESTAMPTZ NOT NULL DEFAULT now(),
+		qualified_table_name STRING NOT NULL AS (` + qualifiedTableNameExpr + `) STORED,
+    replication_size_bytes INT NOT NULL AS (` + replicationSizeBytesExpr + `) STORED,
+    total_ranges INT NOT NULL AS (` + totalRangesExpr + `) STORED,
+    total_live_data_bytes INT NOT NULL AS (` + totalLiveDataBytesExpr + `) STORED,
+    total_data_bytes INT NOT NULL AS (` + totalDataBytesExpr + `) STORED,
+    perc_live_data FLOAT NOT NULL AS (` + percentDataLiveBytesExpr + `) STORED,
+		crdb_internal_last_updated_table_id_shard_16 INT4 NOT VISIBLE NOT NULL AS (` + crdbInternalTableIdLastUpdatedShard + `) VIRTUAL,
+    CONSTRAINT "primary" PRIMARY KEY (db_id, table_id),
+		INDEX "replication_size_bytes_table_id_idx" (replication_size_bytes desc, table_id),
+		INDEX "total_ranges_table_id_idx" (total_ranges desc, table_id),
+		INDEX "total_columns_table_id_idx" (total_columns desc, table_id),
+		INDEX "total_indexes_table_id_idx" (total_indexes desc, table_id),
+		INDEX "perc_live_data_id_idx" (perc_live_data desc, table_id),
+		INDEX "last_updated_idx" (last_updated desc, table_id) USING HASH,
+		INVERTED INDEX db_name_gin (db_name gin_trgm_ops),
+		INVERTED INDEX qualified_table_name_gin (qualified_table_name gin_trgm_ops),
+		INVERTED INDEX store_ids_gin (store_ids),
+    FAMILY "primary" (
+      db_id,
+			table_id,
+			db_name,
+			schema_name,
+			table_name,
+			span_stats,
+			total_columns,
+			total_indexes,
+			store_ids,
+			last_update_error,
+			last_updated,
+			qualified_table_name,
+			replication_size_bytes,
+			total_ranges,
+			total_live_data_bytes,
+			total_data_bytes,
+			perc_live_data
+    )
+	);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1227,7 +1296,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V24_3_Start.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V24_3_TableMetadata.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1418,6 +1487,7 @@ func MakeSystemTables() []SystemTable {
 		SystemMVCCStatisticsTable,
 		StatementExecInsightsTable,
 		TransactionExecInsightsTable,
+		TableMetadata,
 	}
 }
 
@@ -4731,6 +4801,214 @@ var (
 				Name:                  "check_crdb_internal_end_time_start_time_shard_16",
 				Validity:              descpb.ConstraintValidity_Validated,
 				ColumnIDs:             []descpb.ColumnID{29},
+				IsNonNullConstraint:   false,
+				FromHashShardedColumn: true,
+				ConstraintID:          tbl.NextConstraintID,
+			}}
+			tbl.NextConstraintID++
+		},
+	)
+
+	crdbInternalTableIdLastUpdatedShardStr = crdbInternalTableIdLastUpdatedShard
+
+	TableMetadata = makeSystemTable(
+		TableMetadataTableSchema,
+		systemTable(catconstants.TableMetadata,
+			descpb.InvalidID, // dynamically assigned table ID
+			[]descpb.ColumnDescriptor{
+				{Name: "db_id", ID: 1, Type: types.Int, Nullable: false},
+				{Name: "table_id", ID: 2, Type: types.Int, Nullable: false},
+				{Name: "db_name", ID: 3, Type: types.String, Nullable: false},
+				{Name: "schema_name", ID: 4, Type: types.String, Nullable: false},
+				{Name: "table_name", ID: 5, Type: types.String, Nullable: false},
+				{Name: "span_stats", ID: 6, Type: types.Jsonb, Nullable: false},
+				{Name: "total_columns", ID: 7, Type: types.Int, Nullable: false},
+				{Name: "total_indexes", ID: 8, Type: types.Int, Nullable: false},
+				{Name: "store_ids", ID: 9, Type: types.IntArray, Nullable: false},
+				{Name: "last_update_error", ID: 10, Type: types.String, Nullable: true},
+				{Name: "last_updated", ID: 11, Type: types.TimestampTZ, Nullable: false, DefaultExpr: &nowTZString},
+				{Name: "qualified_table_name", ID: 12, Type: types.String, Nullable: false, ComputeExpr: &qualifiedTableNameStr},
+				{Name: "replication_size_bytes", ID: 13, Type: types.Int, Nullable: false, ComputeExpr: &replicationSizeBytesStr},
+				{Name: "total_ranges", ID: 14, Type: types.Int, Nullable: false, ComputeExpr: &totalRangesStr},
+				{Name: "total_live_data_bytes", ID: 15, Type: types.Int, Nullable: false, ComputeExpr: &totalLiveDataBytesStr},
+				{Name: "total_data_bytes", ID: 16, Type: types.Int, Nullable: false, ComputeExpr: &totalDataBytesStr},
+				{Name: "perc_live_data", ID: 17, Type: types.Float, Nullable: false, ComputeExpr: &percentDataLiveBytesStr},
+				{
+					Name:        "crdb_internal_last_updated_table_id_shard_16",
+					ID:          18,
+					Type:        types.Int4,
+					Nullable:    false,
+					ComputeExpr: &crdbInternalTableIdLastUpdatedShardStr,
+					Hidden:      true,
+					Virtual:     true,
+				},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "primary",
+					ID:   0,
+					ColumnNames: []string{
+						"db_id",
+						"table_id",
+						"db_name",
+						"schema_name",
+						"table_name",
+						"span_stats",
+						"total_columns",
+						"total_indexes",
+						"store_ids",
+						"last_update_error",
+						"last_updated",
+						"qualified_table_name",
+						"replication_size_bytes",
+						"total_ranges",
+						"total_live_data_bytes",
+						"total_data_bytes",
+						"perc_live_data",
+					},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
+				ID:             1,
+				Unique:         true,
+				Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames: []string{"db_id", "table_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2},
+			},
+			descpb.IndexDescriptor{
+				Name:           "replication_size_bytes_table_id_idx",
+				ID:             2,
+				Unique:         false,
+				Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames: []string{"replication_size_bytes", "table_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_DESC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{13, 2},
+				KeySuffixColumnIDs: []descpb.ColumnID{1},
+			},
+			descpb.IndexDescriptor{
+				Name:           "total_ranges_table_id_idx",
+				ID:             3,
+				Unique:         false,
+				Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames: []string{"total_ranges", "table_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_DESC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{14, 2},
+				KeySuffixColumnIDs: []descpb.ColumnID{1},
+			},
+			descpb.IndexDescriptor{
+				Name:           "total_columns_table_id_idx",
+				ID:             4,
+				Unique:         false,
+				Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames: []string{"total_columns", "table_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_DESC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{7, 2},
+				KeySuffixColumnIDs: []descpb.ColumnID{1},
+			},
+			descpb.IndexDescriptor{
+				Name:           "total_indexes_table_id_idx",
+				ID:             5,
+				Unique:         false,
+				Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames: []string{"total_indexes", "table_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_DESC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{8, 2},
+				KeySuffixColumnIDs: []descpb.ColumnID{1},
+			},
+			descpb.IndexDescriptor{
+				Name:           "perc_live_data_id_idx",
+				ID:             6,
+				Unique:         false,
+				Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames: []string{"perc_live_data", "table_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_DESC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{17, 2},
+				KeySuffixColumnIDs: []descpb.ColumnID{1},
+				CompositeColumnIDs: []descpb.ColumnID{17},
+			},
+			descpb.IndexDescriptor{
+				Name:           "last_updated_idx",
+				ID:             7,
+				Unique:         false,
+				Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames: []string{"crdb_internal_last_updated_table_id_shard_16", "last_updated", "table_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_DESC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{18, 11, 2},
+				KeySuffixColumnIDs: []descpb.ColumnID{1},
+				Sharded: catpb.ShardedDescriptor{
+					IsSharded:    true,
+					Name:         "crdb_internal_last_updated_table_id_shard_16",
+					ShardBuckets: 16, // Cluster setting default.
+					ColumnNames:  []string{"last_updated", "table_id"},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "db_name_gin",
+				Type:                descpb.IndexDescriptor_INVERTED,
+				ID:                  8,
+				Unique:              false,
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames:      []string{"db_name"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				InvertedColumnKinds: []catpb.InvertedIndexColumnKind{catpb.InvertedIndexColumnKind_TRIGRAM},
+				KeyColumnIDs:        []descpb.ColumnID{3},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
+			},
+			descpb.IndexDescriptor{
+				Name:                "qualified_table_name_gin",
+				Type:                descpb.IndexDescriptor_INVERTED,
+				ID:                  9,
+				Unique:              false,
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames:      []string{"qualified_table_name"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				InvertedColumnKinds: []catpb.InvertedIndexColumnKind{catpb.InvertedIndexColumnKind_TRIGRAM},
+				KeyColumnIDs:        []descpb.ColumnID{12},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
+			},
+			descpb.IndexDescriptor{
+				Name:                "store_ids_gin",
+				Type:                descpb.IndexDescriptor_INVERTED,
+				ID:                  10,
+				Unique:              false,
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames:      []string{"store_ids"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				InvertedColumnKinds: []catpb.InvertedIndexColumnKind{catpb.InvertedIndexColumnKind_DEFAULT},
+				KeyColumnIDs:        []descpb.ColumnID{9},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
+			},
+		), func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
+				Expr:                  "crdb_internal_last_updated_table_id_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)",
+				Name:                  "check_crdb_internal_last_updated_table_id_shard_16",
+				Validity:              descpb.ConstraintValidity_Validated,
+				ColumnIDs:             []descpb.ColumnID{18},
 				IsNonNullConstraint:   false,
 				FromHashShardedColumn: true,
 				ConstraintID:          tbl.NextConstraintID,

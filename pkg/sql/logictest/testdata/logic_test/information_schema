@@ -1148,6 +1148,7 @@ table_columns
 
 # Check that the metadata is reported properly.
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTT colnames
 SELECT table_catalog, table_schema, table_name, table_type, is_insertable_into
 FROM system.information_schema.tables ORDER BY table_name, table_schema
@@ -1485,6 +1486,7 @@ system         crdb_internal       table_columns                                
 system         information_schema  table_constraints                            SYSTEM VIEW  NO
 system         information_schema  table_constraints_extensions                 SYSTEM VIEW  NO
 system         crdb_internal       table_indexes                                SYSTEM VIEW  NO
+system         public              table_metadata                               BASE TABLE   YES
 system         information_schema  table_privileges                             SYSTEM VIEW  NO
 system         crdb_internal       table_row_statistics                         SYSTEM VIEW  NO
 system         crdb_internal       table_spans                                  SYSTEM VIEW  NO
@@ -1583,6 +1585,7 @@ SET DATABASE = test
 ## information_schema.constraint_column_usage
 
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTTTTTT colnames
 SELECT *
 FROM system.information_schema.table_constraints
@@ -1825,6 +1828,25 @@ system              public             29_42_8_not_null                         
 system              public             29_42_9_not_null                                                                                                system         public        statement_statistics             CHECK            NO             NO
 system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8  system         public        statement_statistics             CHECK            NO             NO
 system              public             primary                                                                                                         system         public        statement_statistics             PRIMARY KEY      NO             NO
+system              public             29_67_11_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_12_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_13_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_14_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_15_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_16_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_17_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_18_not_null                                                                                               system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_1_not_null                                                                                                system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_2_not_null                                                                                                system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_3_not_null                                                                                                system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_4_not_null                                                                                                system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_5_not_null                                                                                                system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_6_not_null                                                                                                system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_7_not_null                                                                                                system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_8_not_null                                                                                                system         public        table_metadata                   CHECK            NO             NO
+system              public             29_67_9_not_null                                                                                                system         public        table_metadata                   CHECK            NO             NO
+system              public             check_crdb_internal_last_updated_table_id_shard_16                                                              system         public        table_metadata                   CHECK            NO             NO
+system              public             primary                                                                                                         system         public        table_metadata                   PRIMARY KEY      NO             NO
 system              public             29_20_10_not_null                                                                                               system         public        table_statistics                 CHECK            NO             NO
 system              public             29_20_1_not_null                                                                                                system         public        table_statistics                 CHECK            NO             NO
 system              public             29_20_2_not_null                                                                                                system         public        table_statistics                 CHECK            NO             NO
@@ -1930,6 +1952,7 @@ NULL                   NULL                  UTF8                UCS            
 
 
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -2179,6 +2202,22 @@ system              public             29_66_2_not_null                         
 system              public             29_66_3_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
 system              public             29_66_4_not_null                                                                                                statement_id IS NOT NULL
 system              public             29_66_5_not_null                                                                                                statement_fingerprint_id IS NOT NULL
+system              public             29_67_11_not_null                                                                                               last_updated IS NOT NULL
+system              public             29_67_12_not_null                                                                                               qualified_table_name IS NOT NULL
+system              public             29_67_13_not_null                                                                                               replication_size_bytes IS NOT NULL
+system              public             29_67_14_not_null                                                                                               total_ranges IS NOT NULL
+system              public             29_67_15_not_null                                                                                               total_live_data_bytes IS NOT NULL
+system              public             29_67_16_not_null                                                                                               total_data_bytes IS NOT NULL
+system              public             29_67_17_not_null                                                                                               perc_live_data IS NOT NULL
+system              public             29_67_1_not_null                                                                                                db_id IS NOT NULL
+system              public             29_67_2_not_null                                                                                                table_id IS NOT NULL
+system              public             29_67_3_not_null                                                                                                db_name IS NOT NULL
+system              public             29_67_4_not_null                                                                                                schema_name IS NOT NULL
+system              public             29_67_5_not_null                                                                                                table_name IS NOT NULL
+system              public             29_67_6_not_null                                                                                                span_stats IS NOT NULL
+system              public             29_67_7_not_null                                                                                                total_columns IS NOT NULL
+system              public             29_67_8_not_null                                                                                                total_indexes IS NOT NULL
+system              public             29_67_9_not_null                                                                                                store_ids IS NOT NULL
 system              public             29_6_1_not_null                                                                                                 name IS NOT NULL
 system              public             29_6_2_not_null                                                                                                 value IS NOT NULL
 system              public             29_6_3_not_null                                                                                                 lastUpdated IS NOT NULL
@@ -2191,11 +2230,13 @@ system              public             check_crdb_internal_aggregated_ts_app_nam
 system              public             check_crdb_internal_created_at_database_id_index_id_table_id_shard_16                                           ((crdb_internal_created_at_database_id_index_id_table_id_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
 system              public             check_crdb_internal_end_time_start_time_shard_16                                                                ((crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
 system              public             check_crdb_internal_end_time_start_time_shard_16                                                                ((crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
+system              public             check_crdb_internal_last_updated_table_id_shard_16                                                              ((crdb_internal_last_updated_table_id_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
 system              public             check_sampling_probability                                                                                      ((sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8))
 system              public             check_singleton                                                                                                 ((singleton))
 system              public             single_row                                                                                                      ((singleton))
 
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTTTT colnames
 SELECT *
 FROM system.information_schema.constraint_column_usage
@@ -2304,6 +2345,9 @@ system         public        statement_statistics             fingerprint_id    
 system         public        statement_statistics             node_id                                                                                                   system              public             primary
 system         public        statement_statistics             plan_hash                                                                                                 system              public             primary
 system         public        statement_statistics             transaction_fingerprint_id                                                                                system              public             primary
+system         public        table_metadata                   crdb_internal_last_updated_table_id_shard_16                                                              system              public             check_crdb_internal_last_updated_table_id_shard_16
+system         public        table_metadata                   db_id                                                                                                     system              public             primary
+system         public        table_metadata                   table_id                                                                                                  system              public             primary
 system         public        table_statistics                 statisticID                                                                                               system              public             primary
 system         public        table_statistics                 tableID                                                                                                   system              public             primary
 system         public        task_payloads                    id                                                                                                        system              public             primary
@@ -2335,6 +2379,7 @@ system         public        web_sessions                     id                
 system         public        zones                            id                                                                                                        system              public             primary
 
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTTTT colnames
 SELECT *
 FROM system.information_schema.constraint_column_usage
@@ -2443,6 +2488,9 @@ system         public        statement_statistics             fingerprint_id    
 system         public        statement_statistics             node_id                                                                                                   system              public             primary
 system         public        statement_statistics             plan_hash                                                                                                 system              public             primary
 system         public        statement_statistics             transaction_fingerprint_id                                                                                system              public             primary
+system         public        table_metadata                   crdb_internal_last_updated_table_id_shard_16                                                              system              public             check_crdb_internal_last_updated_table_id_shard_16
+system         public        table_metadata                   db_id                                                                                                     system              public             primary
+system         public        table_metadata                   table_id                                                                                                  system              public             primary
 system         public        table_statistics                 statisticID                                                                                               system              public             primary
 system         public        table_statistics                 tableID                                                                                                   system              public             primary
 system         public        task_payloads                    id                                                                                                        system              public             primary
@@ -2723,6 +2771,22 @@ system              public             29_66_2_not_null                         
 system              public             29_66_3_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
 system              public             29_66_4_not_null                                                                                                statement_id IS NOT NULL
 system              public             29_66_5_not_null                                                                                                statement_fingerprint_id IS NOT NULL
+system              public             29_67_11_not_null                                                                                               last_updated IS NOT NULL
+system              public             29_67_12_not_null                                                                                               qualified_table_name IS NOT NULL
+system              public             29_67_13_not_null                                                                                               replication_size_bytes IS NOT NULL
+system              public             29_67_14_not_null                                                                                               total_ranges IS NOT NULL
+system              public             29_67_15_not_null                                                                                               total_live_data_bytes IS NOT NULL
+system              public             29_67_16_not_null                                                                                               total_data_bytes IS NOT NULL
+system              public             29_67_17_not_null                                                                                               perc_live_data IS NOT NULL
+system              public             29_67_1_not_null                                                                                                db_id IS NOT NULL
+system              public             29_67_2_not_null                                                                                                table_id IS NOT NULL
+system              public             29_67_3_not_null                                                                                                db_name IS NOT NULL
+system              public             29_67_4_not_null                                                                                                schema_name IS NOT NULL
+system              public             29_67_5_not_null                                                                                                table_name IS NOT NULL
+system              public             29_67_6_not_null                                                                                                span_stats IS NOT NULL
+system              public             29_67_7_not_null                                                                                                total_columns IS NOT NULL
+system              public             29_67_8_not_null                                                                                                total_indexes IS NOT NULL
+system              public             29_67_9_not_null                                                                                                store_ids IS NOT NULL
 system              public             29_6_1_not_null                                                                                                 name IS NOT NULL
 system              public             29_6_2_not_null                                                                                                 value IS NOT NULL
 system              public             29_6_3_not_null                                                                                                 lastUpdated IS NOT NULL
@@ -2735,6 +2799,7 @@ system              public             check_crdb_internal_aggregated_ts_app_nam
 system              public             check_crdb_internal_created_at_database_id_index_id_table_id_shard_16                                           ((crdb_internal_created_at_database_id_index_id_table_id_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
 system              public             check_crdb_internal_end_time_start_time_shard_16                                                                ((crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
 system              public             check_crdb_internal_end_time_start_time_shard_16                                                                ((crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
+system              public             check_crdb_internal_last_updated_table_id_shard_16                                                              ((crdb_internal_last_updated_table_id_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
 system              public             check_sampling_probability                                                                                      ((sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8))
 system              public             check_singleton                                                                                                 ((singleton))
 system              public             single_row                                                                                                      ((singleton))
@@ -2830,6 +2895,7 @@ data_type  column_default
 smallint   0
 
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTI colnames
 SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
 FROM system.information_schema.columns
@@ -3105,6 +3171,24 @@ system         public        statement_statistics             service_latency   
 system         public        statement_statistics             statistics                                                                                                9
 system         public        statement_statistics             total_estimated_execution_time                                                                            18
 system         public        statement_statistics             transaction_fingerprint_id                                                                                3
+system         public        table_metadata                   crdb_internal_last_updated_table_id_shard_16                                                              18
+system         public        table_metadata                   db_id                                                                                                     1
+system         public        table_metadata                   db_name                                                                                                   3
+system         public        table_metadata                   last_update_error                                                                                         10
+system         public        table_metadata                   last_updated                                                                                              11
+system         public        table_metadata                   perc_live_data                                                                                            17
+system         public        table_metadata                   qualified_table_name                                                                                      12
+system         public        table_metadata                   replication_size_bytes                                                                                    13
+system         public        table_metadata                   schema_name                                                                                               4
+system         public        table_metadata                   span_stats                                                                                                6
+system         public        table_metadata                   store_ids                                                                                                 9
+system         public        table_metadata                   table_id                                                                                                  2
+system         public        table_metadata                   table_name                                                                                                5
+system         public        table_metadata                   total_columns                                                                                             7
+system         public        table_metadata                   total_data_bytes                                                                                          16
+system         public        table_metadata                   total_indexes                                                                                             8
+system         public        table_metadata                   total_live_data_bytes                                                                                     15
+system         public        table_metadata                   total_ranges                                                                                              14
 system         public        table_statistics                 avgSize                                                                                                   10
 system         public        table_statistics                 columnIDs                                                                                                 4
 system         public        table_statistics                 createdAt                                                                                                 5
@@ -3828,6 +3912,7 @@ root      other_db       public              ALL             YES
 ## information_schema.table_privileges and information_schema.role_table_grants
 
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 # root can see everything
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.table_privileges ORDER BY table_schema, table_name, table_schema, grantee, privilege_type
@@ -4448,6 +4533,14 @@ NULL     root     system         public              statement_execution_insight
 NULL     root     system         public              statement_execution_insights                 UPDATE          YES           NO
 NULL     admin    system         public              statement_statistics                         SELECT          YES           YES
 NULL     root     system         public              statement_statistics                         SELECT          YES           YES
+NULL     admin    system         public              table_metadata                               DELETE          YES           NO
+NULL     admin    system         public              table_metadata                               INSERT          YES           NO
+NULL     admin    system         public              table_metadata                               SELECT          YES           YES
+NULL     admin    system         public              table_metadata                               UPDATE          YES           NO
+NULL     root     system         public              table_metadata                               DELETE          YES           NO
+NULL     root     system         public              table_metadata                               INSERT          YES           NO
+NULL     root     system         public              table_metadata                               SELECT          YES           YES
+NULL     root     system         public              table_metadata                               UPDATE          YES           NO
 NULL     admin    system         public              table_statistics                             DELETE          YES           NO
 NULL     admin    system         public              table_statistics                             INSERT          YES           NO
 NULL     admin    system         public              table_statistics                             SELECT          YES           YES
@@ -4538,6 +4631,7 @@ NULL     root     system         public              zones                      
 NULL     root     system         public              zones                                        UPDATE          YES           NO
 
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.role_table_grants
 ----
@@ -5245,6 +5339,14 @@ NULL     root     system         public              statement_execution_insight
 NULL     root     system         public              statement_execution_insights                 INSERT          YES           NO
 NULL     root     system         public              statement_execution_insights                 SELECT          YES           YES
 NULL     root     system         public              statement_execution_insights                 UPDATE          YES           NO
+NULL     admin    system         public              table_metadata                               DELETE          YES           NO
+NULL     admin    system         public              table_metadata                               INSERT          YES           NO
+NULL     admin    system         public              table_metadata                               SELECT          YES           YES
+NULL     admin    system         public              table_metadata                               UPDATE          YES           NO
+NULL     root     system         public              table_metadata                               DELETE          YES           NO
+NULL     root     system         public              table_metadata                               INSERT          YES           NO
+NULL     root     system         public              table_metadata                               SELECT          YES           YES
+NULL     root     system         public              table_metadata                               UPDATE          YES           NO
 
 statement ok
 USE other_db;
