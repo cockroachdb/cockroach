@@ -201,7 +201,11 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// transaction (one that's acquired a claim but not the lock).
 				delay := time.Duration(math.MaxInt64)
 				if deadlockOrLivenessPush {
-					delay = LockTableDeadlockOrLivenessDetectionPushDelay.Get(&w.st.SV)
+					if req.DeadlockTimeout == 0 {
+						delay = LockTableDeadlockOrLivenessDetectionPushDelay.Get(&w.st.SV)
+					} else {
+						delay = req.DeadlockTimeout
+					}
 				}
 				if timeoutPush {
 					// Only reset the lock timeout deadline if this is the first time

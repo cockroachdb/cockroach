@@ -895,6 +895,9 @@ func (ba *BatchRequest) SafeFormat(s redact.SafePrinter, verb rune) {
 	if ba.LockTimeout != 0 {
 		s.Printf(", [lock-timeout: %s]", ba.LockTimeout)
 	}
+	if ba.DeadlockTimeout != 0 {
+		s.Printf(", [deadlock-timeout: %s]", ba.DeadlockTimeout)
+	}
 	if ba.AmbiguousReplayProtection {
 		s.Printf(", [protect-ambiguous-replay]")
 	}
