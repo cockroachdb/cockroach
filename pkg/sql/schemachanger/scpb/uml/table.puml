@@ -269,6 +269,7 @@ object RowLevelTTL
 
 RowLevelTTL :  TableID
 RowLevelTTL :  RowLevelTTL
+RowLevelTTL :  TTLExpr
 
 object Schema
 
