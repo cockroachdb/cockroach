@@ -349,6 +349,7 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 		return nil, nil, nil, err
 	}
 
+	// TODO(azhu): add a flag to avoid recreating dlq tables during replanning
 	dlqClient := InitDeadLetterQueueClient(p.jobExecCtx.ExecCfg().InternalDB.Executor(), tableIDToName)
 	if err := dlqClient.Create(ctx); err != nil {
 		return nil, nil, nil, errors.Wrap(err, "failed to create dead letter queue")
