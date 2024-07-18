@@ -254,8 +254,6 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 		Type: pb.MsgStorageAppendResp,
 		To:   r.id,
 		From: LocalAppendThread,
-		// Dropped after term change, see below.
-		Term: r.Term,
 	}
 	if ln := len(rd.Entries); ln != 0 {
 		// If sending unstable entries to storage, attach the last index and last
