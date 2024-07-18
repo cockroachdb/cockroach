@@ -845,5 +845,31 @@ DROP FUNCTION F1;
 statement ok
 DROP TABLE T_FOR_FUNCTION;
 
-subtest end
+subtest ttl
 
+statement ok
+CREATE TABLE t_ttl_w_expire_at (c1 int, expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'expire_at');
+
+statement error pq: cannot alter type of column "expire_at" referenced by row-level TTL expiration expression "expire_at"\nHINT: use ALTER TABLE.*
+ALTER TABLE t_ttl_w_expire_at ALTER COLUMN expire_at set data type timestamptz;
+
+statement ok
+ALTER TABLE t_ttl_w_expire_at ADD COLUMN new_expire_at TIMESTAMPTZ;
+
+statement ok
+ALTER TABLE t_ttl_w_expire_at SET (ttl_expiration_expression = new_expire_at);
+
+statement ok
+ALTER TABLE t_ttl_w_expire_at ALTER COLUMN expire_at set data type timestamptz;
+
+statement ok
+CREATE TABLE T_TTL_W_DEFAULT (C1 INT PRIMARY KEY) WITH (ttl_expire_after='10 minutes');
+
+statement error pq: cannot alter.* column crdb_internal_expiration while ttl_expire_after is set\nHINT: use ALTER TABLE .* RESET \(ttl\) instead
+ALTER TABLE T_TTL_W_DEFAULT ALTER COLUMN crdb_internal_expiration SET DATA TYPE TIMESTAMPTZ;
+
+statement ok
+DROP TABLE T_TTL_W_EXPIRE_AT;
+DROP TABLE T_TTL_W_DEFAULT;
+
+subtest end
