@@ -2010,7 +2010,7 @@ func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opS
 	if err != nil {
 		return nil, err
 	}
-	columnIsDependedOn, err := og.columnIsDependedOn(ctx, tx, tableName, srcColumnName)
+	columnIsDependedOnByView, err := og.columnIsDependedOnByView(ctx, tx, tableName, srcColumnName)
 	if err != nil {
 		return nil, err
 	}
@@ -2019,7 +2019,7 @@ func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opS
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedColumn, !srcColumnExists},
 		{pgcode.DuplicateColumn, destColumnExists && srcColumnName != destColumnName},
-		{pgcode.DependentObjectsStillExist, columnIsDependedOn},
+		{pgcode.DependentObjectsStillExist, columnIsDependedOnByView},
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN %s TO %s`,
