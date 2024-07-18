@@ -61,27 +61,6 @@ const (
 		) VALUES ($1, $2, $3, $4, $5)`
 )
 
-type ReplicationMutationType int
-
-const (
-	Insert ReplicationMutationType = iota
-	Delete
-	Update
-)
-
-func (t ReplicationMutationType) String() string {
-	switch t {
-	case Insert:
-		return "insert"
-	case Delete:
-		return "delete"
-	case Update:
-		return "update"
-	default:
-		return fmt.Sprintf("Unrecognized ReplicationMutationType(%d)", int(t))
-	}
-}
-
 type fullyQualifiedTableName struct {
 	database string
 	schema   string
@@ -119,11 +98,11 @@ func (dlq *loggingDeadLetterQueueClient) Log(
 	}
 
 	tableID := cdcEventRow.TableID
-	var mutationType ReplicationMutationType
+	var mutationType replicationMutationType
 	if cdcEventRow.IsDeleted() {
-		mutationType = Delete
+		mutationType = deleteMutation
 	} else {
-		mutationType = Insert
+		mutationType = insertMutation
 	}
 
 	bytes, err := protoutil.Marshal(&kv)
@@ -192,11 +171,11 @@ func (dlq *deadLetterQueueClient) Log(
 	}
 
 	// TODO(azhu): include update type
-	var mutationType ReplicationMutationType
+	var mutationType replicationMutationType
 	if cdcEventRow.IsDeleted() {
-		mutationType = Delete
+		mutationType = deleteMutation
 	} else {
-		mutationType = Insert
+		mutationType = insertMutation
 	}
 
 	jsonRow, err := cdcEventRow.ToJSON()
