@@ -89,10 +89,9 @@ func TestRestore(t *testing.T) {
 	cfg := quick.Config{MaxCount: 1000}
 
 	f := func(cs pb.ConfState) bool {
-		cfg := quorum.MakeEmptyConfig()
 		chg := Changer{
-			Config:      cfg,
-			ProgressMap: tracker.MakeProgressTracker(&cfg).Progress,
+			Config:      quorum.MakeEmptyConfig(),
+			ProgressMap: tracker.MakeEmptyProgressMap(),
 			LastIndex:   10,
 		}
 		cfg, progressMap, err := Restore(chg, cs)

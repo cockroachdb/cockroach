@@ -356,6 +356,11 @@ func (pr *Progress) String() string {
 // ProgressMap is a map of *Progress.
 type ProgressMap map[pb.PeerID]*Progress
 
+// MakeEmptyProgressMap constructs and returns an empty ProgressMap.
+func MakeEmptyProgressMap() ProgressMap {
+	return make(ProgressMap)
+}
+
 // String prints the ProgressMap in sorted key order, one Progress per line.
 func (m ProgressMap) String() string {
 	ids := make([]pb.PeerID, 0, len(m))
