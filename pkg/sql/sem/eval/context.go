@@ -892,6 +892,7 @@ type ReplicationStreamManager interface {
 	// by opaqueSpec which contains serialized streampb.StreamPartitionSpec protocol message and
 	// returns a value generator which yields events for the specified partition.
 	StreamPartition(
+		ctx context.Context,
 		streamID streampb.StreamID,
 		opaqueSpec []byte,
 	) (ValueGenerator, error)

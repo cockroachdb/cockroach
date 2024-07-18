@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -81,8 +82,7 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	spans := make([]roachpb.Span, 0, len(req.TableNames))
 	tableDescs := make(map[string]descpb.TableDescriptor, len(req.TableNames))
 	for _, name := range req.TableNames {
-		un := tree.MakeUnresolvedName(name)
-		uon, err := un.ToUnresolvedObjectName(tree.NoAnnotation)
+		uon, err := parser.ParseTableName(name)
 		if err != nil {
 			return streampb.ReplicationProducerSpec{}, err
 		}
@@ -122,7 +122,6 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, r.txn); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
-
 	return streampb.ReplicationProducerSpec{
 		StreamID:             streampb.StreamID(jr.JobID),
 		SourceClusterID:      r.evalCtx.ClusterID,
@@ -170,9 +169,28 @@ func (r *replicationStreamManagerImpl) HeartbeatReplicationStream(
 
 // StreamPartition implements streaming.ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) StreamPartition(
-	streamID streampb.StreamID, opaqueSpec []byte,
+	ctx context.Context, streamID streampb.StreamID, opaqueSpec []byte,
 ) (eval.ValueGenerator, error) {
 	if err := r.checkLicense(); err != nil {
+		return nil, err
+	}
+
+	if !r.evalCtx.SessionData().AvoidBuffering {
+		return nil, errors.New("partition streaming requires 'SET avoid_buffering = true' option")
+	}
+
+	if !r.evalCtx.TxnIsSingleStmt {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+			"crdb_internal.stream_partition not allowed in explicit or multi-statement transaction")
+	}
+
+	// We release the descriptor collection state because stream_partitions
+	// runs forever.
+	r.txn.Descriptors().ReleaseAll(ctx)
+
+	// We also commit the planner's transaction. Nothing should be using it after
+	// this point and the stream itself is non-transactional.
+	if err := r.txn.KV().Commit(ctx); err != nil {
 		return nil, err
 	}
 	return streamPartition(r.evalCtx, streamID, opaqueSpec)
