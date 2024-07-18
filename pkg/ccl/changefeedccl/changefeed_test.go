@@ -9268,80 +9268,6 @@ func TestBatchSizeMetric(t *testing.T) {
 // var _ parallelIOMetricsRecorder = &trackingMetricsRecorder{}
 
 // TestParallelIOMetrics tests parallel io metrics.
-
-type testHistogram struct {
-	mu  syncutil.Mutex
-	val int64
-
-	condition func(val int64) bool
-	waiter    chan struct{}
-}
-
-func (h *testHistogram) RecordValue(v int64) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.val = v
-
-	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
-		close(h.waiter)
-	}
-}
-
-func (h *testHistogram) setWaiter(condition func(val int64) bool) chan struct{} {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.condition = condition
-	h.waiter = make(chan struct{})
-	return h.waiter
-}
-
-var _ histogram = &testHistogram{}
-
-type testGauge struct {
-	mu  syncutil.Mutex
-	val int64
-
-	condition func(val int64) bool
-	waiter    chan struct{}
-}
-
-func (h *testGauge) Update(v int64) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.val = v
-	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
-		close(h.waiter)
-	}
-}
-
-func (h *testGauge) Dec(n int64) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.val -= n
-	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
-		close(h.waiter)
-	}
-}
-
-func (h *testGauge) Inc(n int64) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.val += n
-	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
-		close(h.waiter)
-	}
-}
-
-func (h *testGauge) setWaiter(condition func(val int64) bool) chan struct{} {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.condition = condition
-	h.waiter = make(chan struct{})
-	return h.waiter
-}
-
-var _ gauge = &testGauge{}
-
 func TestParallelIOMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -9349,9 +9275,9 @@ func TestParallelIOMetrics(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		pmr := &parallelIOMetricsRecorderImpl{
 			pendingQueueNanos: &testHistogram{},
-			pendingRows:       nil,
+			pendingRows:       &testGauge{},
 			resultQueueNanos:  &testHistogram{},
-			inFlight:          nil,
+			inFlight:          &testGauge{},
 		}
 
 		knobs := s.TestingKnobs.
