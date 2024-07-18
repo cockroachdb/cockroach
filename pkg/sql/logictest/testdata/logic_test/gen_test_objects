@@ -179,17 +179,18 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
-protected_ts_meta
-ran gelog
-replicati̾on_stats
-s&qlliveness
-sche"duled_j"obs
-statement_diagnostics_requests
-statement_statistic%vs
+database_role_settings
+eventLog
+j ob\\x97s
+locations
+mvcc&_statistics
+protected_ts_records
+repor
+ts_met😐a
+span_stats_buckets
+sqlliveness
+statement_diagnosti cs
 sta😣tement_statistics
-table_statistiCs
-tenant_id_seq
-transaction_statistics
 
 # Again, the column names are randomized.
 query TTT
@@ -198,26 +199,27 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-protected_ts_meta      "num_records"           bigint
-protected_ts_meta      num_spans                bigint
-protected_ts_meta      rowid                    bigint
-protected_ts_meta      "singleton*"             boolean
-protected_ts_meta      "t'o tal_b,yt😫es"        bigint
-protected_ts_meta      "version"               bigint
-"ran gelog"            "%rangeID"               bigint
-"ran gelog"            "eventType"              text
-"ran gelog"            i̅nfo                    text
-"ran gelog"            "otherRangeID"           bigint
-"ran gelog"            rowid                    bigint
-"ran gelog"            "storeID"                bigint
-"ran gelog"            "timestamp"              timestamp without time zone
-"ran gelog"            "unique%qID"             bigint
-"replicati̾on_stats"  over_replic̣ated_ranges  bigint
-"replicati̾on_stats"  report_id                bigint
-"replicati̾on_stats"  rowid                    bigint
-"replicati̾on_stats"  "s%pubzone_id"           bigint
-"replicati̾on_stats"  total_ranges             bigint
-"replicati̾on_stats"  unavailable_ranges       bigint
+database_role_settings  database_id             oid
+database_role_settings  "ro'le_id"              oid
+database_role_settings  role_name               text
+database_role_settings  rowid                   bigint
+database_role_settings  settings                ARRAY
+"eventLog"              "\\xa7t̻%pimest̏am  p"  timestamp without time zone
+"eventLog"              "eventType"             text
+"eventLog"              info                    text
+"eventLog"              "reportingID"           bigint
+"eventLog"              rowid                   bigint
+"eventLog"              "targ%ve}tID"           bigint
+"eventLog"              "uniqueID"              bytea
+"j ob\\x97s"            "claim_instAnce_id"     bigint
+"j ob\\x97s"            "claim_session?_ id"    bytea
+"j ob\\x97s"            "create                 timestamp without time zone
+                        d"
+"j ob\\x97s"            created_by_id           bigint
+"j ob\\x97s"            created_by_type         text
+"j ob\\x97s"            "id.\\U000FA67C"        bigint
+"j ob\\x97s"            "j%qob_type "           text
+"j ob\\x97s"            l😲ast_ru😻n              timestamp without time zone
 
 subtest templates/different_templates_in_each_db
 
@@ -235,15 +237,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt_1"  public  external_connections
-"d%qbt_1"  public  "r%56ol                     e_mem bers"
-"d%qbt_1"  public  task_payloads
-"d%qbt_2"  public  locations
-"d%qbt_2"  public  "scheduled_joBs"
-"d%qbt_2"  public  span_stat😪s_sam͇ples
-dbt_3      public  "span_st%pats_unique_keys"
-dbt_3      public  "tenant_sETtings"
-dbt_3      public  t😔enants
+"d%qbt_1"  public  statement_activity
+"d%qbt_1"  public  ten😘ant_id_seq
+"d%qbt_1"  public  tra😗nsaction_execution_insights
+"d%qbt_2"  public  "mvc%pc_statistics"
+"d%qbt_2"  public  "span_co""nfigurations"
+"d%qbt_2"  public  state😟ment_diagnostics_requests
+dbt_3      public  statement_diagnostics
+dbt_3      public  task_payloads
+dbt_3      public  "tenant_id                       _seq"
 
 
 statement ok

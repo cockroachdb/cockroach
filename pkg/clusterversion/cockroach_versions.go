@@ -268,6 +268,10 @@ const (
 	// minimum timestamp field.
 	V24_2_LeaseMinTimestamp
 
+	// V24_3_TableMetadata is the migration to add the table_metadata table
+	// to the system tenant.
+	V24_3_TableMetadata
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -332,6 +336,9 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_2_TenantRates:                 {Major: 24, Minor: 1, Internal: 8},
 	V24_2_DeleteTenantSettingsVersion: {Major: 24, Minor: 1, Internal: 10},
 	V24_2_LeaseMinTimestamp:           {Major: 24, Minor: 1, Internal: 12},
+
+	// TODO update minor version once v24_3 cluster version has been released
+	V24_3_TableMetadata: {Major: 24, Minor: 1, Internal: 14},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

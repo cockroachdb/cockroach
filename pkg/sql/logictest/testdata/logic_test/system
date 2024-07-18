@@ -55,6 +55,7 @@ public  statement_diagnostics            table     node  NULL
 public  statement_diagnostics_requests   table     node  NULL
 public  statement_execution_insights     table     node  NULL
 public  statement_statistics             table     node  NULL
+public  table_metadata                   table     node  NULL
 public  table_statistics                 table     node  NULL
 public  task_payloads                    table     node  NULL
 public  tenant_id_seq                    sequence  node  NULL
@@ -116,6 +117,7 @@ public  statement_diagnostics            table     node  NULL
 public  statement_diagnostics_requests   table     node  NULL
 public  statement_execution_insights     table     node  NULL
 public  statement_statistics             table     node  NULL
+public  table_metadata                   table     node  NULL
 public  table_statistics                 table     node  NULL
 public  task_payloads                    table     node  NULL
 public  tenant_id_seq                    sequence  node  NULL
@@ -196,6 +198,7 @@ SELECT id FROM system.descriptor ORDER BY 1
 64
 65
 66
+67
 100
 101
 102
@@ -264,6 +267,7 @@ SELECT id FROM system.descriptor ORDER BY 1
 64
 65
 66
+67
 100
 101
 102
@@ -700,6 +704,14 @@ system  public  statement_execution_insights     root    SELECT  true
 system  public  statement_execution_insights     root    UPDATE  true
 system  public  statement_statistics             admin   SELECT  true
 system  public  statement_statistics             root    SELECT  true
+system  public  table_metadata                   admin   DELETE  true
+system  public  table_metadata                   admin   INSERT  true
+system  public  table_metadata                   admin   SELECT  true
+system  public  table_metadata                   admin   UPDATE  true
+system  public  table_metadata                   root    DELETE  true
+system  public  table_metadata                   root    INSERT  true
+system  public  table_metadata                   root    SELECT  true
+system  public  table_metadata                   root    UPDATE  true
 system  public  table_statistics                 admin   DELETE  true
 system  public  table_statistics                 admin   INSERT  true
 system  public  table_statistics                 admin   SELECT  true
@@ -1086,6 +1098,14 @@ system  public  statement_execution_insights     root    SELECT  true
 system  public  statement_execution_insights     root    UPDATE  true
 system  public  statement_statistics             admin   SELECT  true
 system  public  statement_statistics             root    SELECT  true
+system  public  table_metadata                   admin   DELETE  true
+system  public  table_metadata                   admin   INSERT  true
+system  public  table_metadata                   admin   SELECT  true
+system  public  table_metadata                   admin   UPDATE  true
+system  public  table_metadata                   root    DELETE  true
+system  public  table_metadata                   root    INSERT  true
+system  public  table_metadata                   root    SELECT  true
+system  public  table_metadata                   root    UPDATE  true
 system  public  table_statistics                 admin   DELETE  true
 system  public  table_statistics                 admin   INSERT  true
 system  public  table_statistics                 admin   SELECT  true

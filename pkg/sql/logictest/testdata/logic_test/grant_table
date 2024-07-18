@@ -1007,6 +1007,10 @@ system         public        statement_execution_insights     table        admin
 system         public        statement_execution_insights     table        admin    INSERT          true
 system         public        statement_execution_insights     table        admin    SELECT          true
 system         public        statement_execution_insights     table        admin    UPDATE          true
+system         public        table_metadata                   table        admin    DELETE          true
+system         public        table_metadata                   table        admin    INSERT          true
+system         public        table_metadata                   table        admin    SELECT          true
+system         public        table_metadata                   table        admin    UPDATE          true
 a              public        NULL                             schema       admin    ALL             true
 defaultdb      public        NULL                             schema       admin    ALL             true
 postgres       public        NULL                             schema       admin    ALL             true
@@ -1218,6 +1222,10 @@ system         public        statement_execution_insights     table        root 
 system         public        statement_execution_insights     table        root     INSERT          true
 system         public        statement_execution_insights     table        root     SELECT          true
 system         public        statement_execution_insights     table        root     UPDATE          true
+system         public        table_metadata                   table        root     DELETE          true
+system         public        table_metadata                   table        root     INSERT          true
+system         public        table_metadata                   table        root     SELECT          true
+system         public        table_metadata                   table        root     UPDATE          true
 a              pg_extension  NULL                             schema       public   USAGE           false
 a              public        NULL                             schema       public   CREATE          false
 a              public        NULL                             schema       public   USAGE           false
@@ -2264,6 +2272,14 @@ system         public       statement_execution_insights     table        root  
 system         public       statement_execution_insights     table        root     UPDATE          true
 system         public       statement_statistics             table        admin    SELECT          true
 system         public       statement_statistics             table        root     SELECT          true
+system         public       table_metadata                   table        admin    DELETE          true
+system         public       table_metadata                   table        admin    INSERT          true
+system         public       table_metadata                   table        admin    SELECT          true
+system         public       table_metadata                   table        admin    UPDATE          true
+system         public       table_metadata                   table        root     DELETE          true
+system         public       table_metadata                   table        root     INSERT          true
+system         public       table_metadata                   table        root     SELECT          true
+system         public       table_metadata                   table        root     UPDATE          true
 system         public       table_statistics                 table        admin    DELETE          true
 system         public       table_statistics                 table        admin    INSERT          true
 system         public       table_statistics                 table        admin    SELECT          true

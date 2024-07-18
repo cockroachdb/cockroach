@@ -1614,4 +1614,3 @@ statement ok
 ALTER DATABASE drop_region_126549 DROP REGION "us-east-1";
 
 subtest end
-

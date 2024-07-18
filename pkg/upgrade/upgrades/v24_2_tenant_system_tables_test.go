@@ -36,7 +36,7 @@ func TestCreateTenantSystemTables(t *testing.T) {
 
 	// Set up the storage cluster at v1.
 	v1 := clusterversion.MinSupported.Version()
-	v2 := clusterversion.Latest.Version()
+	v2 := clusterversion.V24_2_TenantSystemTables.Version()
 
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
 		v2,
