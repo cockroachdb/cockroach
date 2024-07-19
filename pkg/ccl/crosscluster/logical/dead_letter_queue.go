@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -22,8 +23,8 @@ import (
 
 const (
 	dlqSchemaName = "crdb_replication"
-	// dlqBaseTableName is defined with the following naming convention: "db.dlqSchema.schema_table"
-	dlqBaseTableName   = "%s.%s.%s_%s"
+	// dlqBaseTableName is defined as: "<dbName>.<dlqSchemaName>.dlq_<tableID>_<schemaName>_<tableName>"
+	dlqBaseTableName   = "%s.%s.%s"
 	createEnumBaseStmt = `CREATE TYPE IF NOT EXISTS %s.%s.mutation_type AS ENUM (
 			'insert', 'update', 'delete'
 	)`
@@ -65,6 +66,17 @@ type fullyQualifiedTableName struct {
 	database string
 	schema   string
 	table    string
+}
+
+func (f fullyQualifiedTableName) getDatabase() string {
+	return lexbase.EscapeSQLIdent(f.database)
+}
+
+func (f fullyQualifiedTableName) toDLQTableName(tableID int32) string {
+	return fmt.Sprintf(dlqBaseTableName,
+		f.getDatabase(),
+		dlqSchemaName,
+		lexbase.EscapeSQLIdent(fmt.Sprintf("dlq_%d_%s_%s", tableID, f.schema, f.table)))
 }
 
 type DeadLetterQueueClient interface {
@@ -128,18 +140,18 @@ type deadLetterQueueClient struct {
 func (dlq *deadLetterQueueClient) Create(ctx context.Context) error {
 	// Create a dlq table for each table to be replicated.
 	for tableID, name := range dlq.tableIDToName {
-		dlqTableName := fmt.Sprintf(dlqBaseTableName, name.database, dlqSchemaName, name.schema, name.table)
-		createSchemaStmt := fmt.Sprintf(createSchemaBaseStmt, name.database, dlqSchemaName)
+		dlqTableName := name.toDLQTableName(tableID)
+		createSchemaStmt := fmt.Sprintf(createSchemaBaseStmt, name.getDatabase(), dlqSchemaName)
 		if _, err := dlq.ie.Exec(ctx, "create-dlq-schema", nil, createSchemaStmt); err != nil {
-			return errors.Wrapf(err, "failed to create crdb_replication schema in database %s", name.database)
+			return errors.Wrapf(err, "failed to create crdb_replication schema in database %s", name.getDatabase())
 		}
 
-		createEnumStmt := fmt.Sprintf(createEnumBaseStmt, name.database, dlqSchemaName)
+		createEnumStmt := fmt.Sprintf(createEnumBaseStmt, name.getDatabase(), dlqSchemaName)
 		if _, err := dlq.ie.Exec(ctx, "create-dlq-enum", nil, createEnumStmt); err != nil {
-			return errors.Wrapf(err, "failed to create mutation_type enum in database %s", name.database)
+			return errors.Wrapf(err, "failed to create mutation_type enum in database %s", name.getDatabase())
 		}
 
-		createTableStmt := fmt.Sprintf(createTableBaseStmt, dlqTableName, name.database, dlqSchemaName)
+		createTableStmt := fmt.Sprintf(createTableBaseStmt, dlqTableName, name.getDatabase(), dlqSchemaName)
 		if _, err := dlq.ie.Exec(ctx, "create-dlq-table", nil, createTableStmt); err != nil {
 			return errors.Wrapf(err, "failed to create dlq for table %d", tableID)
 		}
@@ -163,7 +175,7 @@ func (dlq *deadLetterQueueClient) Log(
 	if !ok {
 		return errors.Newf("failed to look up fully qualified name for table %d", tableID)
 	}
-	dlqTableName := fmt.Sprintf(dlqBaseTableName, qualifiedName.database, dlqSchemaName, qualifiedName.schema, qualifiedName.table)
+	dlqTableName := qualifiedName.toDLQTableName(tableID)
 
 	bytes, err := protoutil.Marshal(&kv)
 	if err != nil {
