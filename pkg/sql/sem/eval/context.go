@@ -711,6 +711,9 @@ func TimestampToInexactDTimestamp(ts hlc.Timestamp) *tree.DTimestamp {
 
 // GetRelativeParseTime implements ParseContext.
 func (ec *Context) GetRelativeParseTime() time.Time {
+	if ec == nil {
+		return timeutil.Now()
+	}
 	ret := ec.TxnTimestamp
 	if ret.IsZero() {
 		ret = timeutil.Now()

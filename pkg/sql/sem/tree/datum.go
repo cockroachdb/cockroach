@@ -115,7 +115,8 @@ type Datum interface {
 	AmbiguousFormat() bool
 
 	// Compare returns -1 if the receiver is less than other, 0 if receiver is
-	// equal to other and +1 if receiver is greater than 'other'.
+	// equal to other and +1 if receiver is greater than 'other'. Compare is safe
+	// to use with a nil eval.Context.
 	Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error)
 
 	// Prev returns the previous datum and true, if one exists, or nil and false.
