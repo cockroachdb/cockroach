@@ -1644,19 +1644,19 @@ type sinkKnobs struct {
 	kafkaInterceptor func(m *sarama.ProducerMessage, client kafkaClient) error
 }
 
-// fakeKafkaSink is a sink that arranges for fake kafka client and producer
+// deprecatedFakeKafkaSink is a sink that arranges for fake kafka client and producer
 // to be used.
-type fakeKafkaSink struct {
+type deprecatedFakeKafkaSink struct {
 	Sink
 	tg     *teeGroup
 	feedCh chan *sarama.ProducerMessage
 	knobs  *sinkKnobs
 }
 
-var _ Sink = (*fakeKafkaSink)(nil)
+var _ Sink = (*deprecatedFakeKafkaSink)(nil)
 
 // Dial implements Sink interface
-func (s *fakeKafkaSink) Dial() error {
+func (s *deprecatedFakeKafkaSink) Dial() error {
 	kafka := s.Sink.(*kafkaSink)
 	kafka.knobs.OverrideClientInit = func(config *sarama.Config) (kafkaClient, error) {
 		client := &fakeKafkaClient{config}
@@ -1710,7 +1710,7 @@ func (s *fakeKafkaSink) Dial() error {
 	return kafka.Dial()
 }
 
-func (s *fakeKafkaSink) Topics() []string {
+func (s *deprecatedFakeKafkaSink) Topics() []string {
 	if sink, ok := s.Sink.(*kafkaSink); ok {
 		return sink.Topics()
 	}
@@ -1805,13 +1805,22 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 	// Fixed sized buffer is probably okay at this point, but we should probably
 	// have  a proper fix.
 	feedCh := make(chan *sarama.ProducerMessage, 1024)
+	ss := &sinkSynchronizer{}
 	wrapSink := func(s Sink) Sink {
-		return &fakeKafkaSink{
-			Sink:   s,
-			tg:     tg,
-			feedCh: feedCh,
-			knobs:  k.knobs,
+		if batchingSink, ok := s.(*batchingSink); ok {
+			if sinkClient, ok := batchingSink.client.(*kafkaSinkClient); ok {
+				sinkClient.client = &fakeKafkaClient{}
+			}
+			return &notifyFlushSink{Sink: s, sync: ss}
+		} else if _, ok := s.(*deprecatedPubsubSink); ok {
+			return &deprecatedFakeKafkaSink{
+				Sink:   s,
+				tg:     tg,
+				feedCh: feedCh,
+				knobs:  k.knobs,
+			}
 		}
+		return s
 	}
 
 	c := &kafkaFeed{
