@@ -1070,7 +1070,7 @@ SELECT * FROM t69327
 f  f
 
 # Regression test for #72881. Computed columns can't have a DEFAULT expr.
-statement error pgcode 42P16 computed column "v" cannot also have a DEFAULT expression
+statement error pgcode 42601 computed column "v" cannot also have a DEFAULT expression
 ALTER TABLE t69327 ALTER COLUMN v SET DEFAULT 'foo'
 
 # Regression test for #69665.Computed columns should be evaluated after
@@ -1117,3 +1117,26 @@ FROM t88128
 ----
 b1    expected_b1  b2    expected_b2
 true  true         true  true
+
+# Regression test for #127522 where we do not properly block adding a default
+# value to a computed column.
+subtest computed_column_with_default
+
+statement ok
+CREATE TABLE foooooo (
+    id INT PRIMARY KEY,
+    x INT NOT NULL,
+    y INT NOT NULL,
+    gen INT AS (x + y) STORED
+);
+
+statement error pgcode 42601 computed column "gen" cannot also have a DEFAULT expression
+ALTER TABLE foooooo ALTER COLUMN gen SET DEFAULT 1;
+
+statement error pgcode 42601 computed column "gen" cannot also have a DEFAULT expression
+ALTER TABLE foooooo ALTER COLUMN gen SET DEFAULT NULL;
+
+statement error pgcode 42601 column "gen" of relation "foooooo" is a computed column
+ALTER TABLE foooooo ALTER COLUMN gen DROP DEFAULT;
+
+subtest end
