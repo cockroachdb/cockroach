@@ -3,10 +3,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "tracker",
     srcs = [
+        "electiontracker.go",
         "inflights.go",
         "progress.go",
+        "progresstracker.go",
         "state.go",
-        "tracker.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/raft/tracker",
     visibility = ["//visibility:public"],
