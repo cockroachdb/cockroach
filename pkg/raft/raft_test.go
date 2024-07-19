@@ -98,7 +98,7 @@ func TestProgressLeader(t *testing.T) {
 	r := newTestRaft(1, 5, 1, s)
 	r.becomeCandidate()
 	r.becomeLeader()
-	r.trk.Progress[2].BecomeReplicate()
+	r.trk.Progress()[2].BecomeReplicate()
 
 	// Send proposals to r1. The first 5 entries should be queued in the unstable log.
 	propMsg := pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("foo")}}}
@@ -106,7 +106,7 @@ func TestProgressLeader(t *testing.T) {
 		require.NoError(t, r.Step(propMsg), "#%d", i)
 	}
 
-	require.Zero(t, r.trk.Progress[1].Match)
+	require.Zero(t, r.trk.Progress()[1].Match)
 
 	ents := r.raftLog.nextUnstableEnts()
 	require.Len(t, ents, 6)
@@ -115,8 +115,8 @@ func TestProgressLeader(t *testing.T) {
 
 	r.advanceMessagesAfterAppend()
 
-	require.Equal(t, uint64(6), r.trk.Progress[1].Match)
-	require.Equal(t, uint64(7), r.trk.Progress[1].Next)
+	require.Equal(t, uint64(6), r.trk.Progress()[1].Match)
+	require.Equal(t, uint64(7), r.trk.Progress()[1].Next)
 }
 
 // TestProgressResumeByHeartbeatResp ensures raft.heartbeat reset progress.paused by heartbeat response.
@@ -125,16 +125,16 @@ func TestProgressResumeByHeartbeatResp(t *testing.T) {
 	r.becomeCandidate()
 	r.becomeLeader()
 
-	r.trk.Progress[2].MsgAppProbesPaused = true
+	r.trk.Progress()[2].MsgAppProbesPaused = true
 
 	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
-	assert.True(t, r.trk.Progress[2].MsgAppProbesPaused)
+	assert.True(t, r.trk.Progress()[2].MsgAppProbesPaused)
 
-	r.trk.Progress[2].BecomeReplicate()
-	assert.False(t, r.trk.Progress[2].MsgAppProbesPaused)
-	r.trk.Progress[2].MsgAppProbesPaused = true
+	r.trk.Progress()[2].BecomeReplicate()
+	assert.False(t, r.trk.Progress()[2].MsgAppProbesPaused)
+	r.trk.Progress()[2].MsgAppProbesPaused = true
 	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
-	assert.True(t, r.trk.Progress[2].MsgAppProbesPaused)
+	assert.True(t, r.trk.Progress()[2].MsgAppProbesPaused)
 }
 
 func TestProgressPaused(t *testing.T) {
@@ -162,7 +162,7 @@ func TestProgressFlowControl(t *testing.T) {
 	r.readMessages()
 
 	// While node 2 is in probe state, propose a bunch of entries.
-	r.trk.Progress[2].BecomeProbe()
+	r.trk.Progress()[2].BecomeProbe()
 	blob := []byte(strings.Repeat("a", 1000))
 	large := []byte(strings.Repeat("b", 5000))
 	for i := 0; i < 22; i++ {
@@ -238,8 +238,8 @@ func TestUncommittedEntryLimit(t *testing.T) {
 
 	// Set the two followers to the replicate state. Commit to tail of log.
 	const numFollowers = 2
-	r.trk.Progress[2].BecomeReplicate()
-	r.trk.Progress[3].BecomeReplicate()
+	r.trk.Progress()[2].BecomeReplicate()
+	r.trk.Progress()[3].BecomeReplicate()
 	r.uncommittedSize = 0
 
 	// Send proposals to r1. The first 5 entries should be appended to the log.
@@ -649,7 +649,7 @@ func TestLearnerLogReplication(t *testing.T) {
 	assert.Equal(t, nextCommitted, n1.raftLog.committed)
 	assert.Equal(t, n1.raftLog.committed, n2.raftLog.committed)
 
-	match := n1.trk.Progress[2].Match
+	match := n1.trk.Progress()[2].Match
 	assert.Equal(t, n2.raftLog.committed, match)
 }
 
@@ -1031,7 +1031,7 @@ func TestCommit(t *testing.T) {
 			if id > 1 {
 				sm.applyConfChange(pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: id}.AsV2())
 			}
-			pr := sm.trk.Progress[id]
+			pr := sm.trk.Progress()[id]
 			pr.Match, pr.Next = tt.matches[j], tt.matches[j]+1
 		}
 		sm.maybeCommit()
@@ -1927,7 +1927,7 @@ func TestLeaderAppResp(t *testing.T) {
 				},
 			))
 
-			p := sm.trk.Progress[2]
+			p := sm.trk.Progress()[2]
 			require.Equal(t, tt.wmatch, p.Match)
 			require.Equal(t, tt.wnext, p.Next)
 
@@ -1967,17 +1967,17 @@ func TestBcastBeat(t *testing.T) {
 	sm.advanceMessagesAfterAppend()
 
 	// slow follower
-	sm.trk.Progress[2].Match, sm.trk.Progress[2].Next = 5, 6
+	sm.trk.Progress()[2].Match, sm.trk.Progress()[2].Next = 5, 6
 	// normal follower
-	sm.trk.Progress[3].Match, sm.trk.Progress[3].Next = sm.raftLog.lastIndex(), sm.raftLog.lastIndex()+1
+	sm.trk.Progress()[3].Match, sm.trk.Progress()[3].Next = sm.raftLog.lastIndex(), sm.raftLog.lastIndex()+1
 
 	sm.Step(pb.Message{Type: pb.MsgBeat})
 	msgs := sm.readMessages()
 	require.Len(t, msgs, 2)
 
 	wantCommitMap := map[pb.PeerID]uint64{
-		2: min(sm.raftLog.committed, sm.trk.Progress[2].Match),
-		3: min(sm.raftLog.committed, sm.trk.Progress[3].Match),
+		2: min(sm.raftLog.committed, sm.trk.Progress()[2].Match),
+		3: min(sm.raftLog.committed, sm.trk.Progress()[3].Match),
 	}
 	for i, m := range msgs {
 		require.Equal(t, pb.MsgHeartbeat, m.Type, "#%d", i)
@@ -2050,11 +2050,11 @@ func TestLeaderIncreaseNext(t *testing.T) {
 		require.True(t, sm.raftLog.append(init))
 		sm.becomeCandidate()
 		sm.becomeLeader()
-		sm.trk.Progress[2].State = tt.state
-		sm.trk.Progress[2].Next = tt.next
+		sm.trk.Progress()[2].State = tt.state
+		sm.trk.Progress()[2].Next = tt.next
 		sm.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
 
-		p := sm.trk.Progress[2]
+		p := sm.trk.Progress()[2]
 		assert.Equal(t, tt.wnext, p.Next, "#%d", i)
 	}
 }
@@ -2064,7 +2064,7 @@ func TestSendAppendForProgressProbe(t *testing.T) {
 	r.becomeCandidate()
 	r.becomeLeader()
 	r.readMessages()
-	r.trk.Progress[2].BecomeProbe()
+	r.trk.Progress()[2].BecomeProbe()
 
 	// each round is a heartbeat
 	for i := 0; i < 3; i++ {
@@ -2079,7 +2079,7 @@ func TestSendAppendForProgressProbe(t *testing.T) {
 			assert.Zero(t, msg[0].Index)
 		}
 
-		assert.True(t, r.trk.Progress[2].MsgAppProbesPaused)
+		assert.True(t, r.trk.Progress()[2].MsgAppProbesPaused)
 		for j := 0; j < 10; j++ {
 			mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
 			r.maybeSendAppend(2)
@@ -2090,7 +2090,7 @@ func TestSendAppendForProgressProbe(t *testing.T) {
 		for j := 0; j < r.heartbeatTimeout; j++ {
 			r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
 		}
-		assert.True(t, r.trk.Progress[2].MsgAppProbesPaused)
+		assert.True(t, r.trk.Progress()[2].MsgAppProbesPaused)
 
 		// consume the heartbeat
 		msg := r.readMessages()
@@ -2103,7 +2103,7 @@ func TestSendAppendForProgressProbe(t *testing.T) {
 	msg := r.readMessages()
 	assert.Len(t, msg, 1)
 	assert.Zero(t, msg[0].Index)
-	assert.True(t, r.trk.Progress[2].MsgAppProbesPaused)
+	assert.True(t, r.trk.Progress()[2].MsgAppProbesPaused)
 }
 
 func TestSendAppendForProgressReplicate(t *testing.T) {
@@ -2111,7 +2111,7 @@ func TestSendAppendForProgressReplicate(t *testing.T) {
 	r.becomeCandidate()
 	r.becomeLeader()
 	r.readMessages()
-	r.trk.Progress[2].BecomeReplicate()
+	r.trk.Progress()[2].BecomeReplicate()
 
 	for i := 0; i < 10; i++ {
 		mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
@@ -2126,7 +2126,7 @@ func TestSendAppendForProgressSnapshot(t *testing.T) {
 	r.becomeCandidate()
 	r.becomeLeader()
 	r.readMessages()
-	r.trk.Progress[2].BecomeSnapshot(10)
+	r.trk.Progress()[2].BecomeSnapshot(10)
 
 	for i := 0; i < 10; i++ {
 		mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
@@ -2146,15 +2146,15 @@ func TestRecvMsgUnreachable(t *testing.T) {
 	r.becomeLeader()
 	r.readMessages()
 	// set node 2 to state replicate
-	r.trk.Progress[2].Match = 3
-	r.trk.Progress[2].BecomeReplicate()
-	r.trk.Progress[2].Next = 6
+	r.trk.Progress()[2].Match = 3
+	r.trk.Progress()[2].BecomeReplicate()
+	r.trk.Progress()[2].Next = 6
 
 	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgUnreachable})
 
-	assert.Equal(t, tracker.StateProbe, r.trk.Progress[2].State)
-	wnext := r.trk.Progress[2].Match + 1
-	assert.Equal(t, wnext, r.trk.Progress[2].Next)
+	assert.Equal(t, tracker.StateProbe, r.trk.Progress()[2].State)
+	wnext := r.trk.Progress()[2].Match + 1
+	assert.Equal(t, wnext, r.trk.Progress()[2].Next)
 }
 
 func TestRestore(t *testing.T) {
@@ -2205,10 +2205,10 @@ func TestRestoreWithLearner(t *testing.T) {
 	assert.Len(t, lns, len(s.snap.Metadata.ConfState.Learners))
 
 	for _, n := range s.snap.Metadata.ConfState.Voters {
-		assert.False(t, sm.trk.Progress[n].IsLearner)
+		assert.False(t, sm.trk.Progress()[n].IsLearner)
 	}
 	for _, n := range s.snap.Metadata.ConfState.Learners {
-		assert.True(t, sm.trk.Progress[n].IsLearner)
+		assert.True(t, sm.trk.Progress()[n].IsLearner)
 	}
 
 	assert.False(t, sm.restore(s))
@@ -2368,8 +2368,8 @@ func TestProvideSnap(t *testing.T) {
 	sm.becomeLeader()
 
 	// force set the next of node 2, so that node 2 needs a snapshot
-	sm.trk.Progress[2].Next = sm.raftLog.firstIndex()
-	sm.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: sm.trk.Progress[2].Next - 1, Reject: true})
+	sm.trk.Progress()[2].Next = sm.raftLog.firstIndex()
+	sm.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: sm.trk.Progress()[2].Next - 1, Reject: true})
 
 	msgs := sm.readMessages()
 	require.Len(t, msgs, 1)
@@ -2397,8 +2397,8 @@ func TestIgnoreProvidingSnap(t *testing.T) {
 
 	// force set the next of node 2, so that node 2 needs a snapshot
 	// change node 2 to be inactive, expect node 1 ignore sending snapshot to 2
-	sm.trk.Progress[2].Next = sm.raftLog.firstIndex() - 1
-	sm.trk.Progress[2].RecentActive = false
+	sm.trk.Progress()[2].Next = sm.raftLog.firstIndex() - 1
+	sm.trk.Progress()[2].RecentActive = false
 
 	sm.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
 
@@ -2442,7 +2442,7 @@ func TestSlowNodeRestore(t *testing.T) {
 	// node 3 will only be considered as active when node 1 receives a reply from it.
 	for {
 		nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
-		if lead.trk.Progress[3].RecentActive {
+		if lead.trk.Progress()[3].RecentActive {
 			break
 		}
 	}
@@ -2526,20 +2526,20 @@ func TestAddLearner(t *testing.T) {
 	require.False(t, r.isLearner)
 	nodes := r.trk.LearnerNodes()
 	assert.Equal(t, []pb.PeerID{2}, nodes)
-	require.True(t, r.trk.Progress[2].IsLearner)
+	require.True(t, r.trk.Progress()[2].IsLearner)
 
 	// Promote peer to voter.
 	r.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeAddNode}.AsV2())
-	require.False(t, r.trk.Progress[2].IsLearner)
+	require.False(t, r.trk.Progress()[2].IsLearner)
 
 	// Demote r.
 	r.applyConfChange(pb.ConfChange{NodeID: 1, Type: pb.ConfChangeAddLearnerNode}.AsV2())
-	require.True(t, r.trk.Progress[1].IsLearner)
+	require.True(t, r.trk.Progress()[1].IsLearner)
 	require.True(t, r.isLearner)
 
 	// Promote r again.
 	r.applyConfChange(pb.ConfChange{NodeID: 1, Type: pb.ConfChangeAddNode}.AsV2())
-	require.False(t, r.trk.Progress[1].IsLearner)
+	require.False(t, r.trk.Progress()[1].IsLearner)
 	require.False(t, r.isLearner)
 }
 
@@ -2819,7 +2819,7 @@ func TestLeaderTransferToSlowFollower(t *testing.T) {
 
 	nt.recover()
 	lead := nt.peers[1].(*raft)
-	require.Equal(t, uint64(1), lead.trk.Progress[3].Match)
+	require.Equal(t, uint64(1), lead.trk.Progress()[3].Match)
 
 	// Transfer leadership to 3 when node 3 is lack of log.
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
@@ -2840,7 +2840,7 @@ func TestLeaderTransferAfterSnapshot(t *testing.T) {
 	nt.storage[1].Compact(lead.raftLog.applied)
 
 	nt.recover()
-	require.Equal(t, uint64(1), lead.trk.Progress[3].Match)
+	require.Equal(t, uint64(1), lead.trk.Progress()[3].Match)
 
 	filtered := pb.Message{}
 	// Snapshot needs to be applied before sending MsgAppResp
@@ -2932,7 +2932,7 @@ func TestLeaderTransferIgnoreProposal(t *testing.T) {
 	err := lead.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 	require.Equal(t, ErrProposalDropped, err)
 
-	require.Equal(t, uint64(1), lead.trk.Progress[1].Match)
+	require.Equal(t, uint64(1), lead.trk.Progress()[1].Match)
 }
 
 func TestLeaderTransferReceiveHigherTermVote(t *testing.T) {
@@ -3655,7 +3655,7 @@ func TestLogReplicationWithReorderedMessage(t *testing.T) {
 	r1.becomeCandidate()
 	r1.becomeLeader()
 	r1.readMessages()
-	r1.trk.Progress[2].BecomeReplicate()
+	r1.trk.Progress()[2].BecomeReplicate()
 
 	r2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
 
@@ -3683,17 +3683,17 @@ func TestLogReplicationWithReorderedMessage(t *testing.T) {
 	require.Equal(t, uint64(2), m.Index)
 	r1.Step(m)
 	m = expectOneMessage(t, r1)
-	require.Equal(t, uint64(2), r1.trk.Progress[2].Match)
+	require.Equal(t, uint64(2), r1.trk.Progress()[2].Match)
 
 	// r1 observes a transient network issue to r2, hence transits to probe state.
 	r1.Step(pb.Message{From: 2, To: 1, Type: pb.MsgUnreachable})
-	require.Equal(t, tracker.StateProbe, r1.trk.Progress[2].State)
+	require.Equal(t, tracker.StateProbe, r1.trk.Progress()[2].State)
 
 	// now r1 receives the delayed resp2.
 	r1.Step(resp2)
 	m = expectOneMessage(t, r1)
 	// r1 shall re-send MsgApp from match index even if resp2's reject hint is less than matching index.
-	require.Equal(t, r1.trk.Progress[2].Match, m.Index)
+	require.Equal(t, r1.trk.Progress()[2].Match, m.Index)
 }
 
 func expectOneMessage(t *testing.T, r *raft) pb.Message {
@@ -3762,7 +3762,7 @@ func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *netw
 				} else {
 					v.config.Voters[0][peerAddrs[i]] = struct{}{}
 				}
-				v.trk.Progress[peerAddrs[i]] = pr
+				v.trk.Progress()[peerAddrs[i]] = pr
 			}
 			v.reset(v.Term)
 			npeers[id] = v

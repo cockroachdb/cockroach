@@ -31,7 +31,7 @@ import (
 type ProgressTracker struct {
 	Config *quorum.Config
 
-	Progress ProgressMap
+	progress ProgressMap
 
 	Votes map[pb.PeerID]bool
 }
@@ -41,9 +41,13 @@ func MakeProgressTracker(config *quorum.Config, progressMap ProgressMap) Progres
 	p := ProgressTracker{
 		Config:   config,
 		Votes:    map[pb.PeerID]bool{},
-		Progress: progressMap,
+		progress: progressMap,
 	}
 	return p
+}
+
+func (p *ProgressTracker) Progress() ProgressMap {
+	return p.progress
 }
 
 type matchAckIndexer map[pb.PeerID]*Progress
@@ -62,12 +66,12 @@ func (l matchAckIndexer) AckedIndex(id pb.PeerID) (quorum.Index, bool) {
 // Committed returns the largest log index known to be committed based on what
 // the voting members of the group have acknowledged.
 func (p *ProgressTracker) Committed() uint64 {
-	return uint64(p.Config.Voters.CommittedIndex(matchAckIndexer(p.Progress)))
+	return uint64(p.Config.Voters.CommittedIndex(matchAckIndexer(p.Progress())))
 }
 
 // Visit invokes the supplied closure for all tracked progresses in stable order.
 func (p *ProgressTracker) Visit(f func(id pb.PeerID, pr *Progress)) {
-	n := len(p.Progress)
+	n := len(p.progress)
 	// We need to sort the IDs and don't want to allocate since this is hot code.
 	// The optimization here mirrors that in `(MajorityConfig).CommittedIndex`,
 	// see there for details.
@@ -78,13 +82,13 @@ func (p *ProgressTracker) Visit(f func(id pb.PeerID, pr *Progress)) {
 	} else {
 		ids = make([]pb.PeerID, n)
 	}
-	for id := range p.Progress {
+	for id := range p.progress {
 		n--
 		ids[n] = id
 	}
 	slices.Sort(ids)
 	for _, id := range ids {
-		f(id, p.Progress[id])
+		f(id, p.progress[id])
 	}
 }
 
@@ -147,7 +151,7 @@ func (p *ProgressTracker) TallyVotes() (granted int, rejected int, _ quorum.Vote
 	// contains members no longer part of the configuration. This doesn't really
 	// matter in the way the numbers are used (they're informational), but might
 	// as well get it right.
-	for id, pr := range p.Progress {
+	for id, pr := range p.progress {
 		if pr.IsLearner {
 			continue
 		}
