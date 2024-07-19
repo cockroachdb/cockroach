@@ -1244,16 +1244,18 @@ func getFlowControlState(ctx context.Context, entry raftpb.Entry) entryFlowContr
 }
 
 func (rc *RangeControllerImpl) HandleControllerSchedulerEvent(ctx context.Context) error {
+	nextScheduled := map[roachpb.ReplicaID]struct{}{}
 	for r := range rc.scheduledReplicas {
 		rs, ok := rc.replicaMap[r]
 		scheduleAgain := false
 		if ok && rs.replicaSendStream != nil {
 			scheduleAgain = rs.replicaSendStream.scheduled(ctx)
 		}
-		if !scheduleAgain {
-			delete(rc.scheduledReplicas, r)
+		if scheduleAgain {
+			nextScheduled[r] = struct{}{}
 		}
 	}
+	rc.scheduledReplicas = nextScheduled
 	if len(rc.scheduledReplicas) > 0 {
 		rc.opts.Scheduler.ScheduleControllerEvent(rc.opts.RangeID)
 	}
