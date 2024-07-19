@@ -674,8 +674,6 @@ func (yw *ycsbWorker) run(ctx context.Context) error {
 	return nil
 }
 
-var readOnly atomic.Int32
-
 type operation string
 
 const (
@@ -970,19 +968,19 @@ func (yw *ycsbWorker) chooseOp() operation {
 	// the distributions sum to 1.0 and the pseudo-random float range is
 	// exclusive of the value 1.0.
 	p := yw.rng.Float32()
-	if readOnly.Load() == 0 && p <= yw.config.updateFreq {
+	if p <= yw.config.updateFreq {
 		return updateOp
 	}
 	p -= yw.config.updateFreq
-	if readOnly.Load() == 0 && p <= yw.config.insertFreq {
+	if p <= yw.config.insertFreq {
 		return insertOp
 	}
 	p -= yw.config.insertFreq
-	if readOnly.Load() == 0 && p <= yw.config.deleteFreq {
+	if p <= yw.config.deleteFreq {
 		return deleteOp
 	}
 	p -= yw.config.deleteFreq
-	if readOnly.Load() == 0 && p <= yw.config.readModifyWriteFreq {
+	if p <= yw.config.readModifyWriteFreq {
 		return readModifyWriteOp
 	}
 	p -= yw.config.readModifyWriteFreq
