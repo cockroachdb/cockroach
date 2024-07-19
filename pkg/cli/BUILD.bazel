@@ -354,7 +354,10 @@ go_test(
     embed = [":cli"],
     exec_properties = select({
         "//build/toolchains:is_heavy": {"test.Pool": "large"},
-        "//conditions:default": {"test.Pool": "default"},
+        # For the benefit of TestDebugCheckStore. That test is skipped under
+        # race/deadlock, so the "default" configuration is higher than the
+        # "is_heavy" configuration.
+        "//conditions:default": {"test.Pool": "heavy"},
     }),
     shard_count = 16,
     deps = [
