@@ -694,7 +694,7 @@ type JWTVerifier interface {
 		_ username.SQLUsername,
 		_ []byte,
 		_ *identmap.Conf,
-	) (detailedErrorMsg string, authError error)
+	) (detailedErrorMsg redact.RedactableString, authError error)
 
 	// RetrieveIdentity retrieves the user identity from the JWT.
 	//
@@ -716,7 +716,7 @@ type noJWTConfigured struct{}
 
 func (c *noJWTConfigured) ValidateJWTLogin(
 	_ context.Context, _ *cluster.Settings, _ username.SQLUsername, _ []byte, _ *identmap.Conf,
-) (detailedErrorMsg string, authError error) {
+) (detailedErrorMsg redact.RedactableString, authError error) {
 	return "", errors.New("JWT token authentication requires CCL features")
 }
 
