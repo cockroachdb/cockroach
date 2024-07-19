@@ -61,6 +61,7 @@ func newTxnKVFetcher(
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockDurability descpb.ScanLockingDurability,
 	lockTimeout time.Duration,
+	deadlockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
@@ -106,6 +107,7 @@ func newTxnKVFetcher(
 		lockWaitPolicy:             lockWaitPolicy,
 		lockDurability:             lockDurability,
 		lockTimeout:                lockTimeout,
+		deadlockTimeout:            deadlockTimeout,
 		acc:                        acc,
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
 		kvPairsRead:                new(int64),
@@ -136,13 +138,14 @@ func NewDirectKVBatchFetcher(
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockDurability descpb.ScanLockingDurability,
 	lockTimeout time.Duration,
+	deadlockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 ) KVBatchFetcher {
 	f := newTxnKVFetcher(
 		txn, bsHeader, reverse, lockStrength, lockWaitPolicy, lockDurability,
-		lockTimeout, acc, forceProductionKVBatchSize, ext,
+		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext,
 	)
 	f.scanFormat = kvpb.COL_BATCH_RESPONSE
 	f.indexFetchSpec = spec
@@ -163,13 +166,14 @@ func NewKVFetcher(
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockDurability descpb.ScanLockingDurability,
 	lockTimeout time.Duration,
+	deadlockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 ) *KVFetcher {
 	return newKVFetcher(newTxnKVFetcher(
 		txn, bsHeader, reverse, lockStrength, lockWaitPolicy, lockDurability,
-		lockTimeout, acc, forceProductionKVBatchSize, ext,
+		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext,
 	))
 }
 
