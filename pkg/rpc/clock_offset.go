@@ -391,6 +391,9 @@ func (r RemoteOffset) isHealthy(ctx context.Context, toleratedOffset time.Durati
 }
 
 func (r RemoteOffset) isStale(ttl time.Duration, now time.Time) bool {
+	if ttl == 0 {
+		return false // ttl disabled
+	}
 	return r.measuredAt().Add(ttl).Before(now)
 }
 

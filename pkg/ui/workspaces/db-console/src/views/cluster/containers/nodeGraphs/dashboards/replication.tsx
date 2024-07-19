@@ -108,6 +108,33 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Lease Types"
+      sources={storeSources}
+      tenantSource={tenantSource}
+      tooltip={`Details about the types of leases in use by ranges in the
+                system. A cluster is expected to have a mix of lease types.
+                In the node view, shows details about leases the node is
+                responsible for. In the cluster view, shows details about
+                leases all across the cluster.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="leases">
+        <Metric
+          name="cr.store.leases.expiration"
+          title="Expiration Leases"
+        />
+        <Metric
+          name="cr.store.leases.epoch"
+          title="Epoch Leases"
+        />
+        <Metric
+          name="cr.store.leases.leader"
+          title="Leader Leases"
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Lease Preferences"
       sources={storeSources}
       tenantSource={tenantSource}
