@@ -24,6 +24,7 @@ import (
 	"testing"
 	"testing/quick"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 )
@@ -89,16 +90,17 @@ func TestRestore(t *testing.T) {
 
 	f := func(cs pb.ConfState) bool {
 		chg := Changer{
-			Tracker:   tracker.MakeProgressTracker(20, 0),
-			LastIndex: 10,
+			Config:      quorum.MakeEmptyConfig(),
+			ProgressMap: tracker.MakeEmptyProgressMap(),
+			LastIndex:   10,
 		}
-		cfg, trk, err := Restore(chg, cs)
+		cfg, progressMap, err := Restore(chg, cs)
 		if err != nil {
 			t.Error(err)
 			return false
 		}
-		chg.Tracker.Config = cfg
-		chg.Tracker.Progress = trk
+		chg.Config = cfg
+		chg.ProgressMap = progressMap
 
 		for _, sl := range [][]pb.PeerID{
 			cs.Voters,
@@ -109,7 +111,7 @@ func TestRestore(t *testing.T) {
 			sort.Slice(sl, func(i, j int) bool { return sl[i] < sl[j] })
 		}
 
-		cs2 := chg.Tracker.ConfState()
+		cs2 := chg.Config.ConfState()
 		// NB: cs.Equivalent does the same "sorting" dance internally, but let's
 		// test it a bit here instead of relying on it.
 		if reflect.DeepEqual(cs, cs2) && cs.Equivalent(cs2) == nil && cs2.Equivalent(cs) == nil {

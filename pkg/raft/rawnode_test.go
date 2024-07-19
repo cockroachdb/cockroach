@@ -694,7 +694,7 @@ func TestRawNodeStatus(t *testing.T) {
 	require.Equal(t, StateLeader, status.RaftState)
 	require.Equal(t, *rn.raft.trk.Progress[1], status.Progress[1])
 
-	expCfg := tracker.Config{Voters: quorum.JointConfig{
+	expCfg := quorum.Config{Voters: quorum.JointConfig{
 		quorum.MajorityConfig{1: {}},
 		nil,
 	}}
