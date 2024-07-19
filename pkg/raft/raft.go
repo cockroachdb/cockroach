@@ -580,7 +580,7 @@ func (r *raft) send(m pb.Message) {
 // if the follower log and commit index are up-to-date, the flow is paused (for
 // reasons like in-flight limits), or the message could not be constructed.
 func (r *raft) maybeSendAppend(to pb.PeerID) bool {
-	pr := r.trk.Progress[to]
+	pr := r.trk.Progress(to)
 
 	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
 	if !pr.ShouldSendMsgApp(last, commit) {
@@ -649,7 +649,7 @@ func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
 
 // sendHeartbeat sends a heartbeat RPC to the given peer.
 func (r *raft) sendHeartbeat(to pb.PeerID) {
-	pr := r.trk.Progress[to]
+	pr := r.trk.Progress(to)
 	// Attach the commit as min(to.matched, r.committed).
 	// When the leader sends out heartbeat message,
 	// the receiver(follower) might not be matched with the leader
@@ -802,7 +802,7 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 	// On appending entries, the leader is effectively "sending" a MsgApp to its
 	// local "acceptor". Since we don't actually send this self-MsgApp, update the
 	// progress here as if it was sent.
-	r.trk.Progress[r.id].Next = app.lastIndex() + 1
+	r.trk.SetNext(r.id, app.lastIndex()+1)
 	// The leader needs to self-ack the entries just appended once they have
 	// been durably persisted (since it doesn't send an MsgApp to itself). This
 	// response message will be added to msgsAfterAppend and delivered back to
@@ -920,7 +920,7 @@ func (r *raft) becomeLeader() {
 	// (perhaps after having received a snapshot as a result). The leader is
 	// trivially in this state. Note that r.reset() has initialized this
 	// progress with the last index already.
-	pr := r.trk.Progress[r.id]
+	pr := r.trk.Progress(r.id)
 	pr.BecomeReplicate()
 	// The leader always has RecentActive == true; MsgCheckQuorum makes sure to
 	// preserve this.
@@ -1268,7 +1268,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		if len(m.Entries) == 0 {
 			r.logger.Panicf("%x stepped empty MsgProp", r.id)
 		}
-		if r.trk.Progress[r.id] == nil {
+		if r.trk.Progress(r.id) == nil {
 			// If we are not currently a member of the range (i.e. this node
 			// was removed from the configuration while serving as leader),
 			// drop any new proposals.
@@ -1339,7 +1339,7 @@ func stepLeader(r *raft, m pb.Message) error {
 	}
 
 	// All other message types require a progress for m.From (pr).
-	pr := r.trk.Progress[m.From]
+	pr := r.trk.Progress(m.From)
 	if pr == nil {
 		r.logger.Debugf("%x no progress available for %x", r.id, m.From)
 		return nil
@@ -1931,7 +1931,7 @@ func (r *raft) restore(s snapshot) bool {
 // promotable indicates whether state machine can be promoted to leader,
 // which is true when its own id is in progress list.
 func (r *raft) promotable() bool {
-	pr := r.trk.Progress[r.id]
+	pr := r.trk.Progress(r.id)
 	return pr != nil && !pr.IsLearner && !r.raftLog.hasNextOrInProgressSnapshot()
 }
 
@@ -1939,7 +1939,7 @@ func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
 	cfg, progressMap, err := func() (quorum.Config, tracker.ProgressMap, error) {
 		changer := confchange.Changer{
 			Config:           r.config,
-			ProgressMap:      r.trk.Progress,
+			ProgressMap:      r.trk.MoveProgressMap(),
 			MaxInflight:      r.maxInflight,
 			MaxInflightBytes: r.maxInflightBytes,
 			LastIndex:        r.raftLog.lastIndex(),
@@ -1972,13 +1972,13 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 
 	r.logger.Infof("%x switched to configuration %s", r.id, r.config)
 	cs := r.config.ConfState()
-	pr, ok := r.trk.Progress[r.id]
+	pr := r.trk.Progress(r.id)
 
 	// Update whether the node itself is a learner, resetting to false when the
 	// node is removed.
-	r.isLearner = ok && pr.IsLearner
+	r.isLearner = pr != nil && pr.IsLearner
 
-	if (!ok || r.isLearner) && r.state == StateLeader {
+	if (pr == nil || r.isLearner) && r.state == StateLeader {
 		// This node is leader and was removed or demoted, step down if requested.
 		//
 		// We prevent demotions at the time writing but hypothetically we handle

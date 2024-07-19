@@ -31,7 +31,7 @@ import (
 type ProgressTracker struct {
 	Config *quorum.Config
 
-	Progress ProgressMap
+	progress ProgressMap
 
 	Votes map[pb.PeerID]bool
 }
@@ -40,10 +40,37 @@ type ProgressTracker struct {
 func MakeProgressTracker(config *quorum.Config, progressMap ProgressMap) ProgressTracker {
 	p := ProgressTracker{
 		Config:   config,
-		Progress: progressMap,
+		progress: progressMap,
 		Votes:    map[pb.PeerID]bool{},
 	}
 	return p
+}
+
+// Progress returns the progress associated with the supplied ID.
+func (p *ProgressTracker) Progress(id pb.PeerID) *Progress {
+	return p.progress[id]
+}
+
+// MoveProgressMap transfers ownership of the progress map to the caller. It
+// shouldn't be used by the progress tracker after this.
+func (p *ProgressTracker) MoveProgressMap() ProgressMap {
+	progress := p.progress
+	p.progress = nil
+	return progress
+}
+
+// SetNext updates the value of Next for the supplied ID.
+func (p *ProgressTracker) SetNext(id pb.PeerID, next uint64) {
+	p.progress[id].Next = next
+}
+
+// Len returns the length of the progress map.
+func (p *ProgressTracker) Len() int {
+	return len(p.progress)
+}
+
+func (p *ProgressTracker) TestingSetProgress(id pb.PeerID, progress *Progress) {
+	p.progress[id] = progress
 }
 
 type matchAckIndexer map[pb.PeerID]*Progress
@@ -62,12 +89,12 @@ func (l matchAckIndexer) AckedIndex(id pb.PeerID) (quorum.Index, bool) {
 // Committed returns the largest log index known to be committed based on what
 // the voting members of the group have acknowledged.
 func (p *ProgressTracker) Committed() uint64 {
-	return uint64(p.Config.Voters.CommittedIndex(matchAckIndexer(p.Progress)))
+	return uint64(p.Config.Voters.CommittedIndex(matchAckIndexer(p.progress)))
 }
 
 // Visit invokes the supplied closure for all tracked progresses in stable order.
 func (p *ProgressTracker) Visit(f func(id pb.PeerID, pr *Progress)) {
-	n := len(p.Progress)
+	n := len(p.progress)
 	// We need to sort the IDs and don't want to allocate since this is hot code.
 	// The optimization here mirrors that in `(MajorityConfig).CommittedIndex`,
 	// see there for details.
@@ -78,13 +105,13 @@ func (p *ProgressTracker) Visit(f func(id pb.PeerID, pr *Progress)) {
 	} else {
 		ids = make([]pb.PeerID, n)
 	}
-	for id := range p.Progress {
+	for id := range p.progress {
 		n--
 		ids[n] = id
 	}
 	slices.Sort(ids)
 	for _, id := range ids {
-		f(id, p.Progress[id])
+		f(id, p.progress[id])
 	}
 }
 
@@ -147,7 +174,7 @@ func (p *ProgressTracker) TallyVotes() (granted int, rejected int, _ quorum.Vote
 	// contains members no longer part of the configuration. This doesn't really
 	// matter in the way the numbers are used (they're informational), but might
 	// as well get it right.
-	for id, pr := range p.Progress {
+	for id, pr := range p.progress {
 		if pr.IsLearner {
 			continue
 		}
