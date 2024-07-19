@@ -566,7 +566,7 @@ func (rn *RawNode) GetAdmitted() tracker.AdmittedMarks {
 }
 
 func (rn *RawNode) SetAdmitted(marks tracker.AdmittedMarks) pb.Message {
-	if rn.raft.lead == None {
+	if rn.raft.lead == None || rn.raft.raftLog.accTerm() != rn.raft.Term {
 		return pb.Message{}
 	}
 	if !rn.raft.adm.Set(marks) {
