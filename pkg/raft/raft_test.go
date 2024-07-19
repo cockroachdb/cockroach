@@ -1520,7 +1520,7 @@ func testCandidateSelfVoteAfterLostElection(t *testing.T, preVote bool) {
 	assert.Equal(t, StateFollower, sm.state)
 
 	// Its self-vote does not make its way to its ProgressTracker.
-	granted, _, _ := sm.trk.TallyVotes()
+	granted, _, _ := sm.voteTracker.TallyVotes(sm.trk.Progress())
 	assert.Zero(t, granted)
 
 }
@@ -1549,7 +1549,7 @@ func TestCandidateDeliversPreCandidateSelfVoteAfterBecomingCandidate(t *testing.
 	steps = sm.takeMessagesAfterAppend()
 
 	// Its pre-vote self-vote does not make its way to its ProgressTracker.
-	granted, _, _ := sm.trk.TallyVotes()
+	granted, _, _ := sm.voteTracker.TallyVotes(sm.trk.Progress())
 	assert.Zero(t, granted)
 
 	// A single vote from n2 does not move n1 to the leader.

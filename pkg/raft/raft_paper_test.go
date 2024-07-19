@@ -159,7 +159,7 @@ func testNonleaderStartElection(t *testing.T, state StateType) {
 
 	assert.Equal(t, uint64(2), r.Term)
 	assert.Equal(t, StateCandidate, r.state)
-	assert.True(t, r.trk.Votes[r.id])
+	assert.True(t, r.voteTracker.TestingGetVotes()[r.id])
 
 	msgs := r.readMessages()
 	sort.Sort(messageSlice(msgs))

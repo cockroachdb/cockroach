@@ -5,8 +5,9 @@ go_library(
     srcs = [
         "inflights.go",
         "progress.go",
+        "progresstracker.go",
         "state.go",
-        "tracker.go",
+        "votetracker.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/raft/tracker",
     visibility = ["//visibility:public"],
