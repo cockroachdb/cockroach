@@ -769,8 +769,7 @@ func Start(
 	if err = c.Start(ctx, l, startOpts); err != nil {
 		return err
 	}
-	updatePrometheusTargets(ctx, l, c)
-	return nil
+	return UpdateTargets(ctx, l, clusterName, clusterSettingsOpts...)
 }
 
 // UpdateTargets updates prometheus target configurations for a cluster.
@@ -783,16 +782,27 @@ func UpdateTargets(
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	c, err := newCluster(l, clusterName, clusterSettingsOpts...)
-	if err != nil {
-		return err
-	}
-	updatePrometheusTargets(ctx, l, c)
-	return nil
+	return updatePrometheusTargets(ctx, l, clusterName, clusterSettingsOpts...)
 }
 
 // updatePrometheusTargets updates the prometheus instance cluster config. Any error is logged and ignored.
-func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.SyncedCluster) {
+func updatePrometheusTargets(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	clusterSettingsOpts ...install.ClusterSettingOption,
+) error {
+	// The cluster name should be used without the node suffix.
+	// This ensures that we update the target with details of all nodes.
+	// Also, no error checks are needed. The cluster name can be
+	// either <cluster_name> or <cluster_name>:<node_number>
+	// But, in both the cases, the value at index 0 after split is the cluster name.
+	cn := strings.Split(clusterName, ":")
+	c, err := newCluster(l, cn[0], clusterSettingsOpts...)
+	if err != nil {
+		return err
+	}
+
 	nodeIPPorts := make(map[int]*promhelperclient.NodeInfo)
 	nodeIPPortsMutex := syncutil.RWMutex{}
 	var wg sync.WaitGroup
@@ -823,6 +833,7 @@ func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.S
 			l.Errorf("creating cluster config failed for the ip:ports %v: %v", nodeIPPorts, err)
 		}
 	}
+	return nil
 }
 
 // regionRegEx is the regex to extract the region label from zone available as vm property
