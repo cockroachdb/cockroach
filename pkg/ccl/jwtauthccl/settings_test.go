@@ -15,41 +15,53 @@ import (
 func TestValidateAndParseJWTAuthIssuers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tests := []struct {
-		name            string
-		setting         string
-		wantErr         bool
-		expectedIssuers []string
+		name                  string
+		setting               string
+		wantErr               bool
+		expectedIssuers       []string
+		expectedIssuerJWKSMap map[string]string
 	}{
-		{"empty string",
-			"", false,
-			[]string{""}},
-		{"string constant",
-			"issuer1", false,
-			[]string{"issuer1"}},
-		{"odd string constant",
-			"issuer1{}`[]!@#%#^$&*", false,
-			[]string{"issuer1{}`[]!@#%#^$&*"}},
-		{"empty json",
-			"[]", false,
-			[]string{}},
-		{"single element json",
-			"[\"issuer 1\"]", false,
-			[]string{"issuer 1"}},
-		{"multiple element json",
-			"[\"issuer 1\", \"issuer 2\", \"issuer 3\", \"issuer 4\", \"issuer 5\"]", false,
-			[]string{"issuer 1", "issuer 2", "issuer 3", "issuer 4", "issuer 5"}},
-		{"json but invalid in this context",
-			"{\"redirect_urls\": {\"key\":\"http://example.com\"}}", true,
-			nil},
+		{name: "empty string",
+			expectedIssuers: []string{""}},
+		{name: "string constant",
+			setting:         "issuer1",
+			expectedIssuers: []string{"issuer1"}},
+		{name: "odd string constant",
+			setting:         "issuer1{}`[]!@#%#^$&*",
+			expectedIssuers: []string{"issuer1{}`[]!@#%#^$&*"}},
+		{name: "empty json",
+			setting:         "[]",
+			expectedIssuers: []string{}},
+		{name: "single element json",
+			setting:         "[\"issuer 1\"]",
+			expectedIssuers: []string{"issuer 1"}},
+		{name: "multiple element json",
+			setting:         "[\"issuer 1\", \"issuer 2\", \"issuer 3\", \"issuer 4\", \"issuer 5\"]",
+			expectedIssuers: []string{"issuer 1", "issuer 2", "issuer 3", "issuer 4", "issuer 5"}},
+		{name: "json but invalid in this context",
+			setting: "{\"redirect_urls\": {\"key\":\"http://example.com\"}}", wantErr: true},
+		{name: "json object valid in this context single mapping",
+			setting:               "{\"issuer_jwks_map\": {\"https://accounts.google.com\": \"https://www.googleapis.com/oauth2/v3/certs\"}}",
+			expectedIssuers:       []string{"https://accounts.google.com"},
+			expectedIssuerJWKSMap: map[string]string{"https://accounts.google.com": "https://www.googleapis.com/oauth2/v3/certs"}},
+		{name: "json object valid in this context multiple mapping",
+			setting: "{\"issuer_jwks_map\": {\"https://accounts.google.com\": \"https://www.googleapis.com/oauth2/v3/certs\"" +
+				",\"example.com/adfs\": \"https://example.com/adfs/discovery/keys\"}}",
+			expectedIssuers: []string{"https://accounts.google.com", "example.com/adfs"},
+			expectedIssuerJWKSMap: map[string]string{"https://accounts.google.com": "https://www.googleapis.com/oauth2/v3/certs",
+				"example.com/adfs": "https://example.com/adfs/discovery/keys"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := validateJWTAuthIssuers(nil, tt.setting); (err != nil) != tt.wantErr {
+			if err := validateJWTAuthIssuersConf(nil, tt.setting); (err != nil) != tt.wantErr {
 				t.Errorf("validateJWTAuthIssuers() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if !tt.wantErr {
-				parsedIssuers := mustParseValueOrArray(tt.setting)
-				require.Equal(t, parsedIssuers, tt.expectedIssuers)
+				parsedIssuersConf := mustParseJWTIssuersConf(tt.setting)
+				require.ElementsMatch(t, parsedIssuersConf.issuers, tt.expectedIssuers)
+				if parsedIssuersConf.ijMap != nil {
+					require.Equal(t, parsedIssuersConf.ijMap.Mappings, tt.expectedIssuerJWKSMap)
+				}
 			}
 		})
 	}
