@@ -58,8 +58,6 @@ const (
 	udfApplierProcessor processorType = "applier-udf"
 )
 
-// TODO(ssd): Thread through from job
-var udfName string
 var defaultSQLProcessor = lwwProcessor
 
 // A sqlRowProcessor is a RowProcessor that handles rows using the
@@ -78,7 +76,7 @@ type sqlRowProcessor struct {
 // A querier handles rows for any table that has previously been added
 // to the querier using the passed isql.Txn and internal executor.
 type querier interface {
-	AddTable(targetDescID int32, td catalog.TableDescriptor) error
+	AddTable(targetDescID int32, tc sqlProcessorTableConfig) error
 	InsertRow(ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevRow *cdcevent.Row, likelyInsert bool) (batchStats, error)
 	DeleteRow(ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevRow *cdcevent.Row) (batchStats, error)
 	RequiresParsedBeforeRow() bool
@@ -202,17 +200,22 @@ func (q *queryBuffer) ApplierQueryForRow(row cdcevent.Row) (queryBuilder, error)
 	return applierQueryBuilder, nil
 }
 
+type sqlProcessorTableConfig struct {
+	srcDesc catalog.TableDescriptor
+	dstOID  uint32
+}
+
 func makeSQLProcessor(
 	ctx context.Context,
 	settings *cluster.Settings,
-	tableDescs map[descpb.ID]catalog.TableDescriptor,
+	tableConfigs map[descpb.ID]sqlProcessorTableConfig,
 	ie isql.Executor,
 ) (*sqlRowProcessor, error) {
 	switch defaultSQLProcessor {
 	case lwwProcessor:
-		return makeSQLLastWriteWinsHandler(ctx, settings, tableDescs, ie)
+		return makeSQLLastWriteWinsHandler(ctx, settings, tableConfigs, ie)
 	case udfApplierProcessor:
-		return makeUDFApplierProcessor(ctx, settings, tableDescs, ie)
+		return makeUDFApplierProcessor(ctx, settings, tableConfigs, ie)
 	default:
 		return nil, errors.AssertionFailedf("unknown SQL processor: %s", defaultSQLProcessor)
 	}
@@ -221,16 +224,17 @@ func makeSQLProcessor(
 func makeSQLProcessorFromQuerier(
 	ctx context.Context,
 	settings *cluster.Settings,
-	tableDescs map[descpb.ID]catalog.TableDescriptor,
+	tableDescs map[descpb.ID]sqlProcessorTableConfig,
 	ie isql.Executor,
 	querier querier,
 ) (*sqlRowProcessor, error) {
 	cdcEventTargets := changefeedbase.Targets{}
 	tableDescsBySrcID := make(map[descpb.ID]catalog.TableDescriptor, len(tableDescs))
 
-	for descID, desc := range tableDescs {
+	for descID, tabConfig := range tableDescs {
+		desc := tabConfig.srcDesc
 		tableDescsBySrcID[desc.GetID()] = desc
-		if err := querier.AddTable(int32(descID), desc); err != nil {
+		if err := querier.AddTable(int32(descID), tabConfig); err != nil {
 			return nil, err
 		}
 		cdcEventTargets.Add(changefeedbase.Target{
@@ -385,27 +389,32 @@ const (
 func makeSQLLastWriteWinsHandler(
 	ctx context.Context,
 	settings *cluster.Settings,
-	tableDescs map[descpb.ID]catalog.TableDescriptor,
+	tableConfigs map[descpb.ID]sqlProcessorTableConfig,
 	ie isql.Executor,
 ) (*sqlRowProcessor, error) {
+
+	needFallback := false
+	shouldUseFallback := make(map[catid.DescID]bool, len(tableConfigs))
+	for _, tc := range tableConfigs {
+		shouldUseFallback[tc.srcDesc.GetID()] = tc.dstOID != 0
+		needFallback = needFallback || tc.dstOID != 0
+	}
+
 	var fallbackQuerier querier
-	if udfName != "" {
-		var err error
-		fallbackQuerier, err = makeApplierQuerier(ctx, settings, tableDescs, ie)
-		if err != nil {
-			return nil, err
-		}
+	if needFallback {
+		fallbackQuerier = makeApplierQuerier(ctx, settings, tableConfigs, ie)
 	}
 
 	qb := queryBuffer{
-		deleteQueries: make(map[catid.DescID]queryBuilder, len(tableDescs)),
-		insertQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableDescs)),
+		deleteQueries: make(map[catid.DescID]queryBuilder, len(tableConfigs)),
+		insertQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
 	}
-	return makeSQLProcessorFromQuerier(ctx, settings, tableDescs, ie,
+	return makeSQLProcessorFromQuerier(ctx, settings, tableConfigs, ie,
 		&lwwQuerier{
-			settings:        settings,
-			queryBuffer:     qb,
-			fallbackQuerier: fallbackQuerier,
+			settings:          settings,
+			queryBuffer:       qb,
+			shouldUseFallback: shouldUseFallback,
+			fallbackQuerier:   fallbackQuerier,
 		})
 }
 
@@ -426,12 +435,15 @@ func makeSQLLastWriteWinsHandler(
 //
 // See the design document for possible solutions to both of these problems.
 type lwwQuerier struct {
-	settings        *cluster.Settings
-	queryBuffer     queryBuffer
-	fallbackQuerier querier
+	settings    *cluster.Settings
+	queryBuffer queryBuffer
+
+	shouldUseFallback map[catid.DescID]bool
+	fallbackQuerier   querier
 }
 
-func (lww *lwwQuerier) AddTable(targetDescID int32, td catalog.TableDescriptor) error {
+func (lww *lwwQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) error {
+	td := tc.srcDesc
 	var err error
 	lww.queryBuffer.insertQueries[td.GetID()], err = makeLWWInsertQueries(targetDescID, td)
 	if err != nil {
@@ -442,12 +454,19 @@ func (lww *lwwQuerier) AddTable(targetDescID int32, td catalog.TableDescriptor) 
 		return err
 	}
 
-	if lww.fallbackQuerier != nil {
-		if err := lww.fallbackQuerier.AddTable(targetDescID, td); err != nil {
+	if lww.shouldUseFallbackQuerier(td.GetID()) {
+		if err := lww.fallbackQuerier.AddTable(targetDescID, tc); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (lww *lwwQuerier) shouldUseFallbackQuerier(id catid.DescID) bool {
+	if lww.fallbackQuerier == nil {
+		return false
+	}
+	return lww.shouldUseFallback[id]
 }
 
 func (lww *lwwQuerier) RequiresParsedBeforeRow() bool {
@@ -477,7 +496,7 @@ func (lww *lwwQuerier) InsertRow(
 		return batchStats{}, err
 	}
 
-	fallbackSpecified := lww.fallbackQuerier != nil
+	fallbackSpecified := lww.shouldUseFallbackQuerier(row.TableID)
 	shouldTryOptimisticInsert := likelyInsert && tryOptimisticInsertEnabled.Get(&lww.settings.SV)
 	shouldTryOptimisticInsert = shouldTryOptimisticInsert || fallbackSpecified
 	var optimisticInsertConflicts int64
