@@ -9232,34 +9232,61 @@ func TestParallelIOMetrics(t *testing.T) {
 				}
 			}
 		})
+
+		waitersSet := make(chan struct{}, 4)
+		g.Go(func() error {
+			w := pmr.pendingQueueNanos.(*testHistogram).setWaiter(func(val int64) bool { return val > 0 })
+			waitersSet <- struct{}{}
+			select {
+			case <-w:
+			case <-time.After(10 * time.Second):
+				t.Fatal("timed out waiting for pending queue nanos")
+			}
+			return nil
+		})
+		g.Go(func() error {
+			w := pmr.pendingRows.(*testGauge).setWaiter(func(val int64) bool { return val > 0 })
+			waitersSet <- struct{}{}
+			select {
+			case <-w:
+			case <-time.After(10 * time.Second):
+				t.Fatal("timed out waiting for pending queue nanos")
+			}
+			return nil
+		})
+		g.Go(func() error {
+			w := pmr.resultQueueNanos.(*testHistogram).setWaiter(func(val int64) bool { return val > 0 })
+			waitersSet <- struct{}{}
+			select {
+			case <-w:
+			case <-time.After(10 * time.Second):
+				t.Fatal("timed out waiting for in flight")
+			}
+			return nil
+		})
+		g.Go(func() error {
+			w := pmr.inFlight.(*testGauge).setWaiter(func(val int64) bool { return val > 0 })
+			waitersSet <- struct{}{}
+			select {
+			case <-w:
+			case <-time.After(10 * time.Second):
+				t.Fatal("timed out waiting for result queue nanos")
+			}
+			return nil
+		})
+
+		for i := 0; i < 4; i++ {
+			select {
+			case <-waitersSet:
+			case <-time.After(10 * time.Second):
+				t.Fatal("timed out waiting for waiters to be set")
+			}
+		}
+
 		// Set the frequency to 1s. The default frequency at the time of writing is
 		foo, err := f.Feed("CREATE CHANGEFEED FOR TABLE foo WITH pubsub_sink_config=" +
 			"'{\"Flush\": {\"Frequency\": \"100ms\"}}'")
 		require.NoError(t, err)
-
-		select {
-		case <-pmr.pendingQueueNanos.(*testHistogram).setWaiter(func(val int64) bool { return val > 0 }):
-		case <-time.After(10 * time.Second):
-			t.Fatal("timed out waiting for pending queue nanos")
-		}
-
-		select {
-		case <-pmr.pendingRows.(*testGauge).setWaiter(func(val int64) bool { return val > 0 }):
-		case <-time.After(10 * time.Second):
-			t.Fatal("timed out waiting for pending queue nanos")
-		}
-
-		select {
-		case <-pmr.inFlight.(*testGauge).setWaiter(func(val int64) bool { return val == 0 }):
-		case <-time.After(10 * time.Second):
-			t.Fatal("timed out waiting for in flight")
-		}
-
-		select {
-		case <-pmr.resultQueueNanos.(*testHistogram).setWaiter(func(val int64) bool { return val > 0 }):
-		case <-time.After(10 * time.Second):
-			t.Fatal("timed out waiting for result queue nanos")
-		}
 
 		close(done)
 		require.NoError(t, g.Wait())
