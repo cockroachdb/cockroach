@@ -29,7 +29,7 @@ import (
 // configuration. In particular, it tracks the match index for each peer, which
 // in-turn allows for reasoning about the committed index.
 type ProgressTracker struct {
-	Config *quorum.Config
+	config *quorum.Config
 
 	progress ProgressMap
 }
@@ -37,7 +37,7 @@ type ProgressTracker struct {
 // MakeProgressTracker initializes a ProgressTracker.
 func MakeProgressTracker(config *quorum.Config, progressMap ProgressMap) ProgressTracker {
 	p := ProgressTracker{
-		Config:   config,
+		config:   config,
 		progress: progressMap,
 	}
 	return p
@@ -63,7 +63,7 @@ func (l matchAckIndexer) AckedIndex(id pb.PeerID) (quorum.Index, bool) {
 // Committed returns the largest log index known to be committed based on what
 // the voting members of the group have acknowledged.
 func (p *ProgressTracker) Committed() uint64 {
-	return uint64(p.Config.Voters.CommittedIndex(matchAckIndexer(p.Progress())))
+	return uint64(p.config.Voters.CommittedIndex(matchAckIndexer(p.Progress())))
 }
 
 // Visit invokes the supplied closure for all tracked progresses in stable order.
@@ -100,12 +100,12 @@ func (p *ProgressTracker) QuorumActive() bool {
 		votes[id] = pr.RecentActive
 	})
 
-	return p.Config.Voters.VoteResult(votes) == quorum.VoteWon
+	return p.config.Voters.VoteResult(votes) == quorum.VoteWon
 }
 
 // VoterNodes returns a sorted slice of voters.
 func (p *ProgressTracker) VoterNodes() []pb.PeerID {
-	m := p.Config.Voters.IDs()
+	m := p.config.Voters.IDs()
 	nodes := make([]pb.PeerID, 0, len(m))
 	for id := range m {
 		nodes = append(nodes, id)
@@ -116,11 +116,11 @@ func (p *ProgressTracker) VoterNodes() []pb.PeerID {
 
 // LearnerNodes returns a sorted slice of learners.
 func (p *ProgressTracker) LearnerNodes() []pb.PeerID {
-	if len(p.Config.Learners) == 0 {
+	if len(p.config.Learners) == 0 {
 		return nil
 	}
-	nodes := make([]pb.PeerID, 0, len(p.Config.Learners))
-	for id := range p.Config.Learners {
+	nodes := make([]pb.PeerID, 0, len(p.config.Learners))
+	for id := range p.config.Learners {
 		nodes = append(nodes, id)
 	}
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i] < nodes[j] })
