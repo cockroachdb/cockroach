@@ -769,8 +769,7 @@ func Start(
 	if err = c.Start(ctx, l, startOpts); err != nil {
 		return err
 	}
-	updatePrometheusTargets(ctx, l, c)
-	return nil
+	return UpdateTargets(ctx, l, clusterName, clusterSettingsOpts...)
 }
 
 // UpdateTargets updates prometheus target configurations for a cluster.
@@ -783,7 +782,9 @@ func UpdateTargets(
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	c, err := newCluster(l, clusterName, clusterSettingsOpts...)
+	// use the custer name without the node suffix. This ensures that we update the target with details of all nodes
+	cn := strings.Split(clusterName, ":") // no error check. cluster name will either have : or not, we use index 0
+	c, err := newCluster(l, cn[0], clusterSettingsOpts...)
 	if err != nil {
 		return err
 	}
