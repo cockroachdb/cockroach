@@ -67,7 +67,7 @@ type jwtAuthenticator struct {
 type jwtAuthenticatorConf struct {
 	audience             []string
 	enabled              bool
-	issuers              []string
+	issuersConf          issuerURLConf
 	jwks                 jwk.Set
 	claim                string
 	jwksAutoFetchEnabled bool
@@ -87,7 +87,7 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 	conf := jwtAuthenticatorConf{
 		audience:             mustParseValueOrArray(JWTAuthAudience.Get(&st.SV)),
 		enabled:              JWTAuthEnabled.Get(&st.SV),
-		issuers:              mustParseValueOrArray(JWTAuthIssuers.Get(&st.SV)),
+		issuersConf:          mustParseJWTIssuersConf(JWTAuthIssuersConfig.Get(&st.SV)),
 		jwks:                 mustParseJWKS(JWTAuthJWKS.Get(&st.SV)),
 		claim:                JWTAuthClaim.Get(&st.SV),
 		jwksAutoFetchEnabled: JWKSAutoFetchEnabled.Get(&st.SV),
@@ -157,25 +157,15 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	}
 
 	// Check for issuer match against configured issuers.
-	issuerUrl := ""
-	issuerMatch := false
-	for _, issuer := range authenticator.mu.conf.issuers {
-		if issuer == unverifiedToken.Issuer() {
-			issuerMatch = true
-			issuerUrl = issuer
-			break
-		}
-	}
-	if !issuerMatch {
-		return "", errors.WithDetailf(
-			errors.Newf("JWT authentication: invalid issuer"),
-			"token issued by %s", unverifiedToken.Issuer())
+	tokenIssuer := unverifiedToken.Issuer()
+	if err = authenticator.mu.conf.issuersConf.checkIssuerConfigured(tokenIssuer); err != nil {
+		return "", errors.WithDetailf(err, "token issued by %s", tokenIssuer)
 	}
 
 	var jwkSet jwk.Set
-	// If auto-fetch is enabled, fetch the JWKS remotely from the issuer's well known jwks url.
+	// If auto-fetch is enabled, fetch the JWKS remotely from the issuer's well known jwks URI.
 	if authenticator.mu.conf.jwksAutoFetchEnabled {
-		jwkSet, err = authenticator.remoteFetchJWKS(ctx, issuerUrl)
+		jwkSet, err = authenticator.remoteFetchJWKS(ctx, tokenIssuer)
 		if err != nil {
 			return fmt.Sprintf("unable to fetch jwks: %v", err),
 				errors.Newf("JWT authentication: unable to validate token")
@@ -278,16 +268,27 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	return "", nil
 }
 
-// remoteFetchJWKS fetches the JWKS from the provided URI.
+// remoteFetchJWKS fetches the JWKS URI from the provided issuer URL.
 func (authenticator *jwtAuthenticator) remoteFetchJWKS(
-	ctx context.Context, issuerUrl string,
+	ctx context.Context, issuerURL string,
 ) (jwk.Set, error) {
-	jwksUrl, err := authenticator.getJWKSUrl(ctx, issuerUrl)
+	var jwksURI string
+	// if JWKS URI is configured in JWTAuthIssuersConfig use that instead of URL
+	// from issuer's well-known endpoint
+	err := authenticator.mu.conf.issuersConf.checkJWKSConfigured()
 	if err != nil {
-		return nil, err
+		jwksURI, err = authenticator.getJWKSURI(ctx, issuerURL)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		jwksURI, err = authenticator.mu.conf.issuersConf.getJWKSURI(issuerURL)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	body, err := getHttpResponse(ctx, jwksUrl, authenticator)
+	body, err := getHttpResponse(ctx, jwksURI, authenticator)
 	if err != nil {
 		return nil, err
 	}
@@ -298,8 +299,8 @@ func (authenticator *jwtAuthenticator) remoteFetchJWKS(
 	return jwkSet, nil
 }
 
-// getJWKSUrl returns the JWKS URI from the OpenID configuration endpoint.
-func (authenticator *jwtAuthenticator) getJWKSUrl(
+// getJWKSURI returns the JWKS URI from the OpenID configuration endpoint.
+func (authenticator *jwtAuthenticator) getJWKSURI(
 	ctx context.Context, issuerUrl string,
 ) (string, error) {
 	type OIDCConfigResponse struct {
@@ -361,7 +362,7 @@ var ConfigureJWTAuth = func(
 	JWTAuthEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
-	JWTAuthIssuers.SetOnChange(&st.SV, func(ctx context.Context) {
+	JWTAuthIssuersConfig.SetOnChange(&st.SV, func(ctx context.Context) {
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
 	JWTAuthJWKS.SetOnChange(&st.SV, func(ctx context.Context) {
