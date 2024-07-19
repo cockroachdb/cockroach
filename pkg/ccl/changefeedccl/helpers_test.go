@@ -1019,7 +1019,7 @@ func makeFeedFactoryWithOptions(
 		}
 		sink, cleanup := getInitialSinkForSinklessFactory(t, db, pgURLForUserSinkless)
 		root, cleanupRoot := pgURLForUserSinkless(username.RootUser)
-		f := makeSinklessFeedFactory(s, sink, root, pgURLForUserSinkless)
+		f := makeSinklessFeedFactory(t, s, sink, root, pgURLForUserSinkless)
 		return f, func() {
 			cleanup()
 			cleanupRoot()
