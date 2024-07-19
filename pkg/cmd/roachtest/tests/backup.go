@@ -371,7 +371,7 @@ func registerBackup(r registry.Registry) {
 
 	// Skip running on aws because the roachtest env does not have the proper
 	// credentials. See 127062
-	for _, cloudProvider := range []string{spec.GCE} {
+	for _, cloudProvider := range []spec.Cloud{spec.GCE} {
 		r.Add(registry.TestSpec{
 			Name:              fmt.Sprintf("backup/assume-role/%s", cloudProvider),
 			Owner:             registry.OwnerDisasterRecovery,
@@ -449,7 +449,7 @@ func registerBackup(r registry.Registry) {
 		})
 	}
 	KMSSpec := r.MakeClusterSpec(3)
-	for _, cloudProvider := range []string{spec.GCE, spec.AWS} {
+	for _, cloudProvider := range []spec.Cloud{spec.GCE, spec.AWS} {
 		r.Add(registry.TestSpec{
 			Name:              fmt.Sprintf("backup/KMS/%s/%s", cloudProvider, KMSSpec.String()),
 			Owner:             registry.OwnerDisasterRecovery,

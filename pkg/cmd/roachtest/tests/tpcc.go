@@ -395,7 +395,7 @@ func tpccMaxRate(warehouses int) int {
 }
 
 func maxSupportedTPCCWarehouses(
-	buildVersion version.Version, cloud string, nodes spec.ClusterSpec,
+	buildVersion version.Version, cloud spec.Cloud, nodes spec.ClusterSpec,
 ) int {
 	var v *version.Version
 	var warehouses int
@@ -1177,7 +1177,7 @@ func registerTPCC(r registry.Registry) {
 	})
 }
 
-func valueForCloud(cloud string, gce, aws, azure int) int {
+func valueForCloud(cloud spec.Cloud, gce, aws, azure int) int {
 	switch cloud {
 	case spec.AWS:
 		return aws
@@ -1283,11 +1283,11 @@ type tpccBenchSpec struct {
 	SharedProcessMT bool
 }
 
-func (s tpccBenchSpec) EstimatedMax(cloud string) int {
+func (s tpccBenchSpec) EstimatedMax(cloud spec.Cloud) int {
 	return valueForCloud(cloud, s.EstimatedMaxGCE, s.EstimatedMaxAWS, s.EstimatedMaxAzure)
 }
 
-func (s tpccBenchSpec) LoadWarehouses(cloud string) int {
+func (s tpccBenchSpec) LoadWarehouses(cloud spec.Cloud) int {
 	return valueForCloud(cloud, s.LoadWarehousesGCE, s.LoadWarehousesAWS, s.LoadWarehousesAzure)
 }
 

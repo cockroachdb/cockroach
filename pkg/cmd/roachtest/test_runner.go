@@ -453,7 +453,7 @@ func (r *testRunner) Run(
 // N.B. currently this value is hardcoded per cloud provider.
 func numConcurrentClusterCreations() int {
 	var res int
-	if roachtestflags.Cloud == "aws" {
+	if roachtestflags.Cloud == spec.AWS {
 		// AWS has ridiculous API calls limits, so we're going to create one cluster
 		// at a time. Internally, roachprod has throttling for the calls required to
 		// create a single cluster.

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -229,19 +230,16 @@ const (
 	MetamorphicLeases
 )
 
-var allClouds = []string{spec.Local, spec.GCE, spec.AWS, spec.Azure}
-
 // CloudSet represents a set of clouds.
 //
 // Instances of CloudSet are immutable. The uninitialized (zero) value is not
 // valid.
 type CloudSet struct {
-	// m contains only values from allClouds.
-	m map[string]struct{}
+	m map[spec.Cloud]struct{}
 }
 
 // AllClouds contains all clouds.
-var AllClouds = Clouds(allClouds...)
+var AllClouds = Clouds(spec.Local, spec.GCE, spec.AWS, spec.Azure)
 
 // AllExceptLocal contains all clouds except Local.
 var AllExceptLocal = AllClouds.NoLocal()
@@ -269,8 +267,7 @@ var CloudsWithServiceRegistration = Clouds(spec.Local, spec.GCE)
 
 // Clouds creates a CloudSet for the given clouds. Cloud names must be one of:
 // spec.Local, spec.GCE, spec.AWS, spec.Azure.
-func Clouds(clouds ...string) CloudSet {
-	assertValidValues(allClouds, clouds...)
+func Clouds(clouds ...spec.Cloud) CloudSet {
 	return CloudSet{m: addToSet(nil, clouds...)}
 }
 
@@ -300,7 +297,7 @@ func (cs CloudSet) Remove(clouds CloudSet) CloudSet {
 }
 
 // Contains returns true if the set contains the given cloud.
-func (cs CloudSet) Contains(cloud string) bool {
+func (cs CloudSet) Contains(cloud spec.Cloud) bool {
 	cs.AssertInitialized()
 	_, ok := cs.m[cloud]
 	return ok
@@ -308,7 +305,19 @@ func (cs CloudSet) Contains(cloud string) bool {
 
 func (cs CloudSet) String() string {
 	cs.AssertInitialized()
-	return setToString(allClouds, cs.m)
+	if len(cs.m) == 0 {
+		return "<none>"
+	}
+	res := make([]spec.Cloud, 0, len(cs.m))
+	for k := range cs.m {
+		res = append(res, k)
+	}
+	slices.Sort(res)
+	strs := make([]string, len(res))
+	for i := range res {
+		strs[i] = res[i].String()
+	}
+	return strings.Join(strs, ",")
 }
 
 // AssertInitialized panics if the CloudSet is the zero value.
@@ -409,8 +418,8 @@ func assertValidValues(validValues []string, values ...string) {
 }
 
 // addToSet returns a new set that is the initial set with the given values added.
-func addToSet(initial map[string]struct{}, values ...string) map[string]struct{} {
-	m := make(map[string]struct{})
+func addToSet[T comparable](initial map[T]struct{}, values ...T) map[T]struct{} {
+	m := make(map[T]struct{})
 	for k := range initial {
 		m[k] = struct{}{}
 	}
@@ -421,8 +430,8 @@ func addToSet(initial map[string]struct{}, values ...string) map[string]struct{}
 }
 
 // removeFromSet returns a new set that is the initial set with the given values removed.
-func removeFromSet(initial map[string]struct{}, values ...string) map[string]struct{} {
-	m := make(map[string]struct{})
+func removeFromSet[T comparable](initial map[T]struct{}, values ...T) map[T]struct{} {
+	m := make(map[T]struct{})
 	for k := range initial {
 		m[k] = struct{}{}
 	}
