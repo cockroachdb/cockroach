@@ -19,10 +19,11 @@
   - 23.1.0
   predecessor: "22.2"
 "23.2":
-  latest: 23.2.7
+  latest: 23.2.8
   predecessor: "23.1"
 "24.1":
   latest: 24.1.2
   predecessor: "23.2"
 "24.2":
+  latest: 24.2.0-beta.1
   predecessor: "24.1"
