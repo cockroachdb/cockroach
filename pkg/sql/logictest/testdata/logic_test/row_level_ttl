@@ -903,7 +903,7 @@ ALTER TABLE tbl_alter_table_ttl_expiration_expression DROP COLUMN expire_at
 statement ok
 SET use_declarative_schema_changer = 'off'
 
-statement error column "expire_at" is referenced by row-level TTL expiration expression "expire_at"
+statement error cannot drop column "expire_at" referenced by row-level TTL expiration expression "expire_at"\nHINT: use ALTER TABLE .*
 ALTER TABLE tbl_alter_table_ttl_expiration_expression DROP COLUMN expire_at
 
 statement ok
@@ -912,7 +912,7 @@ SET use_declarative_schema_changer = 'on'
 statement ok
 SET enable_experimental_alter_column_type_general = 'on'
 
-statement error column "expire_at" is referenced by row-level TTL expiration expression "expire_at"
+statement error cannot alter type of column "expire_at" referenced by row-level TTL expiration expression "expire_at"\nHINT: use ALTER TABLE .*
 ALTER TABLE tbl_alter_table_ttl_expiration_expression ALTER expire_at TYPE TIMESTAMP USING (expire_at AT TIME ZONE 'UTC')
 
 statement ok

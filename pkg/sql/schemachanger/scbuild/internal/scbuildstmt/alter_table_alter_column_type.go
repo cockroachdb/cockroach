@@ -28,7 +28,6 @@ import (
 func alterTableAlterColumnType(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAlterColumnType,
 ) {
-	alterColumnPreChecks(b, tn, tbl, t.Column)
 	colID := getColumnIDFromColumnName(b, tbl.TableID, t.Column, true /* required */)
 	col := mustRetrieveColumnElem(b, tbl.TableID, colID)
 	panicIfSystemColumn(col, t.Column.String())
@@ -39,16 +38,8 @@ func alterTableAlterColumnType(
 	newColType := *oldColType
 	newColType.TypeT = b.ResolveTypeRef(t.ToType)
 
-	// TODO(spilchen): We still need to add a TTL check like we do for the legacy
-	// schema changer (see ValidateTTLExpressionDoesNotDependOnColumn). It is fine
-	// to leave this out for now because we only support trivial data type changes.
-	// The TTL expiration must be a TIMESTAMPTZ, so the only trivial change we support
-	// is a no-op (TIMESTAMPTZ -> TIMESTAMPTZ). This will be fixed in issue #126143.
-
 	// Check for elements depending on the column we are altering.
-	op := "alter type of"
-	objType := "column"
-	walkColumnDependencies(b, col, op, objType, func(e scpb.Element) {
+	walkColumnDependencies(b, col, "alter type of", "column", func(e scpb.Element, op, objType string) {
 		switch e := e.(type) {
 		case *scpb.Column:
 			if e.TableID == col.TableID && e.ColumnID == col.ColumnID {
@@ -67,6 +58,15 @@ func alterTableAlterColumnType(
 		case *scpb.FunctionBody:
 			fnName := b.QueryByID(e.FunctionID).FilterFunctionName().MustGetOneElement()
 			panic(sqlerrors.NewDependentBlocksOpError(op, objType, t.Column.String(), "function", fnName.Name))
+		case *scpb.RowLevelTTL:
+			// If a duration expression is set, the column level dependency is on the
+			// internal ttl column, which we are attempting to alter.
+			if e.DurationExpr != "" {
+				panic(sqlerrors.NewAlterDependsOnDurationExprError(op, objType, t.Column.String(), tn.Object()))
+			}
+			// Otherwise, it is a dependency on the column used in the expiration
+			// expression.
+			panic(sqlerrors.NewAlterDependsOnExpirationExprError(op, objType, t.Column.String(), tn.Object(), string(e.ExpirationExpr)))
 		}
 	})
 

@@ -291,6 +291,38 @@ func NewColumnReferencedByPrimaryKeyError(colName string) error {
 		"column %q is referenced by the primary key", colName)
 }
 
+// NewAlterDependsOnDurationExprError creates an error for attempting to alter
+// the internal column created for the duration expression. These are tables
+// that define the ttl_expire_after setting.
+func NewAlterDependsOnDurationExprError(op, objType, colName, tabName string) error {
+	return errors.WithHintf(
+		pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			`cannot %s %s %s while ttl_expire_after is set`,
+			redact.SafeString(op), redact.SafeString(objType), colName,
+		),
+		"use ALTER TABLE %s RESET (ttl) instead",
+		tabName,
+	)
+}
+
+// NewAlterDependsOnExpirationExprError creates an error for attempting to alter
+// the column that is referenced in the expiration expression.
+func NewAlterDependsOnExpirationExprError(
+	op, objType, colName, tabName, expirationExpr string,
+) error {
+	return errors.WithHintf(
+		pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			`cannot %s %s %q referenced by row-level TTL expiration expression %q`,
+			redact.SafeString(op), redact.SafeString(objType), colName,
+			expirationExpr,
+		),
+		"use ALTER TABLE %s SET (ttl_expiration_expression = ...) to change the expression",
+		tabName,
+	)
+}
+
 // NewColumnReferencedByComputedColumnError is returned when dropping a column
 // and that column being dropped is referenced by a computed column. Note that
 // the cockroach behavior where this error is returned does not match the

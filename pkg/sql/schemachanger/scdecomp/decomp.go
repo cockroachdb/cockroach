@@ -391,9 +391,16 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 			w.walkIndex(tbl, idx)
 		}
 		if ttl := tbl.GetRowLevelTTL(); ttl != nil {
+			// We pull out the TTL expression so that we can build proper column
+			// dependencies with whatever column is used.
+			ttlExpr, err := w.newExpression(string(ttl.GetTTLExpr()))
+			if err != nil {
+				panic(err)
+			}
 			w.ev(scpb.Status_PUBLIC, &scpb.RowLevelTTL{
 				TableID:     tbl.GetID(),
 				RowLevelTTL: *ttl,
+				TTLExpr:     ttlExpr,
 			})
 		}
 	}

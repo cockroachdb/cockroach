@@ -471,7 +471,11 @@ func SanitizeVarFreeExpr(
 // ValidateTTLExpressionDoesNotDependOnColumn verifies that the
 // ttl_expiration_expression, if any, does not reference the given column.
 func ValidateTTLExpressionDoesNotDependOnColumn(
-	tableDesc catalog.TableDescriptor, rowLevelTTL *catpb.RowLevelTTL, col catalog.Column,
+	tableDesc catalog.TableDescriptor,
+	rowLevelTTL *catpb.RowLevelTTL,
+	col catalog.Column,
+	tn *tree.TableName,
+	op string,
 ) error {
 	if rowLevelTTL == nil || !rowLevelTTL.HasExpirationExpr() {
 		return nil
@@ -480,11 +484,7 @@ func ValidateTTLExpressionDoesNotDependOnColumn(
 	if hasRef, err := validateExpressionDoesNotDependOnColumn(tableDesc, string(expirationExpr), col.GetID()); err != nil {
 		return err
 	} else if hasRef {
-		return pgerror.Newf(
-			pgcode.InvalidColumnReference,
-			"column %q is referenced by row-level TTL expiration expression %q",
-			col.ColName(), expirationExpr,
-		)
+		return sqlerrors.NewAlterDependsOnExpirationExprError(op, "column", string(col.ColName()), tn.Object(), string(expirationExpr))
 	}
 	return nil
 }
