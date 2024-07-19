@@ -381,10 +381,6 @@ func (p *ParallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 	}
 
 	for {
-		if p.knobs != nil && p.knobs.ParallelIOTickBlocker != nil {
-			p.knobs.ParallelIOTickBlocker <- struct{}{}
-		}
-
 		// Handle any results that arrived during any submitIO attempts
 		unhandled := pendingResults
 		pendingResults = nil
