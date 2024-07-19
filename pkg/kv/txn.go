@@ -1087,7 +1087,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 					// TransactionRetryWithProtoRefreshError if the closure ran another
 					// transaction internally and let the error propagate upwards instead
 					// of handling it.
-					return errors.Wrapf(err, "retryable error from another txn")
+					return errors.Opaque(err)
 				}
 				if txn.isClientFinalized() {
 					// We've already committed or rolled back, so we can't retry. The
