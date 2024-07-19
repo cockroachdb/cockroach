@@ -838,14 +838,14 @@ type RangeControllerImpl struct {
 		// copy-on-write, so waiters make a shallow copy.
 		voterSets         []voterSet
 		voterSetRefreshCh chan struct{}
+
+		// Demultiplexer. When HandleControllerSchedulerEvent is called, this
+		// is used to call into the replicaSendStreams that have asked to be
+		// scheduled.
+		scheduledReplicas map[roachpb.ReplicaID]struct{}
 	}
 
 	replicaMap map[roachpb.ReplicaID]*replicaState
-
-	// Demultiplexer. When HandleControllerSchedulerEvent is called, this
-	// is used to call into the replicaSendStreams that have asked to be
-	// scheduled.
-	scheduledReplicas map[roachpb.ReplicaID]struct{}
 }
 
 type voterSet []voterStateForWaiters
@@ -869,12 +869,12 @@ func NewRangeControllerImpl(
 	nextRaftIndex uint64,
 ) *RangeControllerImpl {
 	rc := &RangeControllerImpl{
-		opts:              o,
-		replicaSet:        ReplicaSet{},
-		leaseholder:       init.Leaseholder,
-		replicaMap:        map[roachpb.ReplicaID]*replicaState{},
-		scheduledReplicas: make(map[roachpb.ReplicaID]struct{}),
+		opts:        o,
+		replicaSet:  ReplicaSet{},
+		leaseholder: init.Leaseholder,
+		replicaMap:  map[roachpb.ReplicaID]*replicaState{},
 	}
+	rc.mu.scheduledReplicas = make(map[roachpb.ReplicaID]struct{})
 	rc.mu.voterSetRefreshCh = make(chan struct{})
 	rc.updateReplicaSetAndMap(ctx, init.ReplicaSet, nextRaftIndex)
 	rc.updateVoterSets()
@@ -882,10 +882,12 @@ func NewRangeControllerImpl(
 }
 
 func (rc *RangeControllerImpl) String() string {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
 	var buf strings.Builder
 
 	fmt.Fprintf(&buf, "controller(%v): lh=%v scheduled=[", rc.opts.RangeID, rc.leaseholder)
-	for i, r := range rc.scheduledReplicas {
+	for i, r := range rc.mu.scheduledReplicas {
 		if i > 0 {
 			buf.WriteString(",")
 		}
@@ -1244,8 +1246,21 @@ func getFlowControlState(ctx context.Context, entry raftpb.Entry) entryFlowContr
 }
 
 func (rc *RangeControllerImpl) HandleControllerSchedulerEvent(ctx context.Context) error {
+	toBeScheduled := func() map[roachpb.ReplicaID]struct{} {
+		rc.mu.Lock()
+		defer rc.mu.Unlock()
+		scheduled := make(map[roachpb.ReplicaID]struct{})
+		for r := range rc.mu.scheduledReplicas {
+			if rs, ok := rc.replicaMap[r]; ok && rs.replicaSendStream != nil {
+				scheduled[r] = struct{}{}
+			}
+		}
+		rc.mu.scheduledReplicas = make(map[roachpb.ReplicaID]struct{})
+		return scheduled
+	}()
+
 	nextScheduled := map[roachpb.ReplicaID]struct{}{}
-	for r := range rc.scheduledReplicas {
+	for r := range toBeScheduled {
 		rs, ok := rc.replicaMap[r]
 		scheduleAgain := false
 		if ok && rs.replicaSendStream != nil {
@@ -1255,16 +1270,22 @@ func (rc *RangeControllerImpl) HandleControllerSchedulerEvent(ctx context.Contex
 			nextScheduled[r] = struct{}{}
 		}
 	}
-	rc.scheduledReplicas = nextScheduled
-	if len(rc.scheduledReplicas) > 0 {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+
+	rc.mu.scheduledReplicas = nextScheduled
+	if len(rc.mu.scheduledReplicas) > 0 {
 		rc.opts.Scheduler.ScheduleControllerEvent(rc.opts.RangeID)
 	}
 	return nil
 }
 
 func (rc *RangeControllerImpl) scheduleReplicaLocked(r roachpb.ReplicaID) {
-	rc.scheduledReplicas[r] = struct{}{}
-	if len(rc.scheduledReplicas) == 1 {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+
+	rc.mu.scheduledReplicas[r] = struct{}{}
+	if len(rc.mu.scheduledReplicas) == 1 {
 		rc.opts.Scheduler.ScheduleControllerEvent(rc.opts.RangeID)
 	}
 }
