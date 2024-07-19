@@ -323,6 +323,9 @@ func (p *ParallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 	var inflight intsets.Fast
 	var pending []*ioRequest
 	metricsRec := p.metrics.newParallelIOMetricsRecorder()
+	if p.knobs.OverrideParallelIOMetricsRecorder != nil {
+		metricsRec = p.knobs.OverrideParallelIOMetricsRecorder()
+	}
 
 	handleResult := func(res *ioRequest) error {
 		if res.err == nil {

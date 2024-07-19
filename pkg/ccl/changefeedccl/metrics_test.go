@@ -23,6 +23,8 @@ func (h *testHistogram) RecordValue(v int64) {
 
 	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
 		close(h.waiter)
+		h.waiter = nil
+		h.condition = nil
 	}
 }
 
@@ -53,6 +55,8 @@ func (h *testGauge) Update(v int64) {
 
 	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
 		close(h.waiter)
+		h.waiter = nil
+		h.condition = nil
 	}
 }
 
@@ -65,6 +69,8 @@ func (h *testGauge) Dec(n int64) {
 
 	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
 		close(h.waiter)
+		h.waiter = nil
+		h.condition = nil
 	}
 }
 
@@ -77,6 +83,8 @@ func (h *testGauge) Inc(n int64) {
 
 	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
 		close(h.waiter)
+		h.waiter = nil
+		h.condition = nil
 	}
 }
 

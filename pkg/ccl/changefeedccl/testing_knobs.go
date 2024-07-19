@@ -99,7 +99,7 @@ type TestingKnobs struct {
 
 	BatchingSinkOnAppend func(*rowEvent)
 
-	OverrideParallelIOMetricsRecorder parallelIOMetricsRecorder
+	OverrideParallelIOMetricsRecorder func() parallelIOMetricsRecorder
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

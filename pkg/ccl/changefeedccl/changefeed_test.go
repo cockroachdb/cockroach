@@ -9198,7 +9198,7 @@ func TestParallelIOMetrics(t *testing.T) {
 		knobs := s.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
-		knobs.OverrideParallelIOMetricsRecorder = pmr
+		knobs.OverrideParallelIOMetricsRecorder = func() parallelIOMetricsRecorder { return pmr }
 
 		// Add delay so queuing occurs, which results in the below metrics being
 		// nonzero.
