@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
+	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -583,51 +584,64 @@ func (fs *errorFS) Create(name string, category vfs.DiskWriteCategory) (vfs.File
 	return fs.FS.Create(name, category)
 }
 
-func TestPebbleMVCCTimeIntervalCollector(t *testing.T) {
+func TestPebbleMVCCIntervalMapper(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	m := pebbleIntervalMapper{}
 	aKey := roachpb.Key("a")
-	collector := &pebbleDataBlockMVCCTimeIntervalPointCollector{}
-	finishAndCheck := func(lower, upper uint64) {
-		l, u, err := collector.FinishDataBlock()
-		require.NoError(t, err)
-		require.Equal(t, lower, l)
-		require.Equal(t, upper, u)
-	}
-	// Nothing added.
-	finishAndCheck(0, 0)
 	uuid := uuid.Must(uuid.FromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
-	ek, _ := LockTableKey{aKey, lock.Intent, uuid}.ToEngineKey(nil)
-	require.NoError(t, collector.Add(pebble.InternalKey{UserKey: ek.Encode()}, []byte("foo")))
-	// The added key was not an MVCCKey.
-	finishAndCheck(0, 0)
-	require.NoError(t, collector.Add(pebble.InternalKey{
-		UserKey: EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}})},
-		[]byte("foo")))
-	// Added 1 MVCCKey which sets both the upper and lower bound.
-	finishAndCheck(2, 3)
-	require.NoError(t, collector.Add(pebble.InternalKey{
-		UserKey: EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 22, Logical: 1}})},
-		[]byte("foo")))
-	require.NoError(t, collector.Add(pebble.InternalKey{
-		UserKey: EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 25, Logical: 1}})},
-		[]byte("foo")))
-	// Added 2 MVCCKeys.
-	finishAndCheck(22, 26)
-	// Using the same suffix for all keys in a block results in an interval of
-	// width one (inclusive lower bound to exclusive upper bound).
-	suffix := EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})
-	require.NoError(t, collector.AddCollectedWithSuffixReplacement(0, 0, nil, suffix))
-	finishAndCheck(42, 43)
-	// An invalid key results in an error.
-	// Case 1: malformed sentinel.
+
+	for _, tc := range []struct {
+		userKey  []byte
+		expected sstable.BlockInterval
+	}{
+		{
+			userKey: func() []byte {
+				ek, _ := LockTableKey{aKey, lock.Intent, uuid}.ToEngineKey(nil)
+				return ek.Encode()
+			}(),
+			// Lock keys are not MVCC keys.
+			expected: sstable.BlockInterval{},
+		},
+		{
+			userKey:  EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}}),
+			expected: sstable.BlockInterval{Lower: 2, Upper: 3},
+		},
+		{
+			userKey:  EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 22, Logical: 1}}),
+			expected: sstable.BlockInterval{Lower: 22, Upper: 23},
+		},
+		{
+			userKey:  EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 25}}),
+			expected: sstable.BlockInterval{Lower: 25, Upper: 26},
+		},
+	} {
+		i, err := m.MapPointKey(sstable.InternalKey{UserKey: tc.userKey}, nil)
+		require.NoError(t, err)
+		require.Equal(t, tc.expected, i)
+	}
+	// An invalid key (malformed sentinel) results in an error.
 	key := EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}})
 	sentinelPos := len(key) - 1 - int(key[len(key)-1])
 	key[sentinelPos] = '\xff'
-	require.Error(t, collector.AddCollectedWithSuffixReplacement(0, 0, nil, key))
-	// Case 2: malformed bare suffix (too short).
+	_, err := m.MapPointKey(sstable.InternalKey{UserKey: key}, nil)
+	require.Error(t, err)
+}
+
+func TestPebbleMVCCBlockIntervalSuffixReplacer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	r := MVCCBlockIntervalSuffixReplacer{}
+	suffix := EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})
+	before := sstable.BlockInterval{Lower: 10, Upper: 15}
+	after, err := r.ApplySuffixReplacement(before, suffix)
+	require.NoError(t, err)
+	require.Equal(t, sstable.BlockInterval{Lower: 42, Upper: 43}, after)
+
+	// An invalid suffix (too short) results in an error.
 	suffix = EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})[1:]
-	require.Error(t, collector.AddCollectedWithSuffixReplacement(0, 0, nil, suffix))
+	_, err = r.ApplySuffixReplacement(sstable.BlockInterval{Lower: 1, Upper: 2}, suffix)
+	require.Error(t, err)
 }
 
 // TestPebbleMVCCTimeIntervalCollectorAndFilter tests that point and range key
