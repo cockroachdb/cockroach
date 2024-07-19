@@ -54,7 +54,7 @@ const (
 	applierQueryBase = `
 WITH data (%s)
 AS (VALUES (%s))
-SELECT [FUNCTION %d]('%s', data, existing, (%s), existing.crdb_internal_mvcc_timestamp, existing.crdb_replication_origin_timestamp, $%d, $%d) AS decision
+SELECT [FUNCTION %d]('%s', data, existing, ROW(%s), existing.crdb_internal_mvcc_timestamp, existing.crdb_replication_origin_timestamp, $%d, $%d) AS decision
 FROM data LEFT JOIN [%d as existing]
 %s`
 	applierUpsertQueryBase = `UPSERT INTO [%d as t] (%s) VALUES (%s)`
