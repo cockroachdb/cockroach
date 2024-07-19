@@ -325,8 +325,9 @@ type raft struct {
 	maxMsgSize         entryEncodingSize
 	maxUncommittedSize entryPayloadSize
 
-	config quorum.Config
-	trk    tracker.ProgressTracker
+	config          quorum.Config
+	trk             tracker.ProgressTracker
+	electionTracker tracker.ElectionTracker
 
 	state StateType
 
@@ -433,6 +434,8 @@ func newRaft(c *Config) *raft {
 		storeLiveness:               c.StoreLiveness,
 	}
 	lastID := r.raftLog.lastEntryID()
+
+	r.electionTracker = tracker.MakeVoteTracker(&r.config)
 
 	cfg, progressMap, err := confchange.Restore(confchange.Changer{
 		Config:           quorum.MakeEmptyConfig(),
@@ -760,7 +763,7 @@ func (r *raft) reset(term uint64) {
 
 	r.abortLeaderTransfer()
 
-	r.trk.ResetVotes()
+	r.electionTracker.ResetVotes()
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 		*pr = tracker.Progress{
 			Match:     0,
@@ -895,7 +898,7 @@ func (r *raft) becomePreCandidate() {
 	// but doesn't change anything else. In particular it does not increase
 	// r.Term or change r.Vote.
 	r.step = stepCandidate
-	r.trk.ResetVotes()
+	r.electionTracker.ResetVotes()
 	r.tick = r.tickElection
 	// TODO(arul): We're forgetting the raft leader here. From the perspective of
 	// leader leases, this is fine, because we wouldn't be here unless we'd
@@ -1055,8 +1058,8 @@ func (r *raft) poll(
 	} else {
 		r.logger.Infof("%x received %s rejection from %x at term %d", r.id, t, id, r.Term)
 	}
-	r.trk.RecordVote(id, v)
-	return r.trk.TallyVotes()
+	r.electionTracker.RecordVote(id, v)
+	return r.electionTracker.TallyVotes()
 }
 
 func (r *raft) Step(m pb.Message) error {
