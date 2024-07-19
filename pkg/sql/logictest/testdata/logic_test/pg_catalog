@@ -2825,6 +2825,7 @@ copy_write_pipelining_enabled                              off                 N
 cost_scans_with_default_col_size                           off                 NULL      NULL        NULL        string
 database                                                   test                NULL      NULL        NULL        string
 datestyle                                                  ISO, MDY            NULL      NULL        NULL        string
+deadlock_timeout                                           0                   NULL      NULL        NULL        string
 declare_cursor_statement_timeout_enabled                   on                  NULL      NULL        NULL        string
 default_int_size                                           8                   NULL      NULL        NULL        string
 default_table_access_method                                heap                NULL      NULL        NULL        string
@@ -3014,6 +3015,7 @@ copy_write_pipelining_enabled                              off                 N
 cost_scans_with_default_col_size                           off                 NULL  user     NULL      off                 off
 database                                                   test                NULL  user     NULL      ·                   test
 datestyle                                                  ISO, MDY            NULL  user     NULL      ISO, MDY            ISO, MDY
+deadlock_timeout                                           0                   NULL  user     NULL      0s                  0s
 declare_cursor_statement_timeout_enabled                   on                  NULL  user     NULL      on                  on
 default_int_size                                           8                   NULL  user     NULL      8                   8
 default_table_access_method                                heap                NULL  user     NULL      heap                heap
@@ -3198,6 +3200,7 @@ cost_scans_with_default_col_size                           NULL    NULL     NULL
 crdb_version                                               NULL    NULL     NULL     NULL        NULL
 database                                                   NULL    NULL     NULL     NULL        NULL
 datestyle                                                  NULL    NULL     NULL     NULL        NULL
+deadlock_timeout                                           NULL    NULL     NULL     NULL        NULL
 declare_cursor_statement_timeout_enabled                   NULL    NULL     NULL     NULL        NULL
 default_int_size                                           NULL    NULL     NULL     NULL        NULL
 default_table_access_method                                NULL    NULL     NULL     NULL        NULL

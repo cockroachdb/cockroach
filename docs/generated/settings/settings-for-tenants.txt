@@ -175,6 +175,9 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.defaults.datestyle	enumeration	iso, mdy	"default value for DateStyle session setting [iso, mdy = 0, iso, dmy = 1, iso, ymd = 2]
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
+sql.defaults.deadlock_timeout	duration	0s	"default value for the deadlock_timeout; default value for the deadlock_timeout session setting; controls the duration to wait on a lock before checking if there is a deadlock condition
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.default_hash_sharded_index_bucket_count	integer	16	"used as bucket count if bucket count is not specified in hash sharded index definition
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application

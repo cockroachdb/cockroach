@@ -351,6 +351,19 @@ var varGen = map[string]sessionVar{
 		"datestyle_enabled", true,
 	),
 
+	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-LOC-TIMEOUT
+	`deadlock_timeout`: {
+		GetStringVal: makeTimeoutVarGetter(`deadlock_timeout`),
+		Set:          deadlockTimeoutVarSet,
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			ms := evalCtx.SessionData().DeadlockTimeout.Nanoseconds() / int64(time.Millisecond)
+			return strconv.FormatInt(ms, 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return clusterDeadlockTimeout.String(sv)
+		},
+	},
+
 	// Controls the subsequent parsing of a "naked" INT type.
 	// TODO(bob): Remove or no-op this in v2.4: https://github.com/cockroachdb/cockroach/issues/32844
 	`default_int_size`: {

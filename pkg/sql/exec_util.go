@@ -475,6 +475,17 @@ var clusterLockTimeout = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 	settings.WithPublic)
 
+var clusterDeadlockTimeout = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"sql.defaults.deadlock_timeout",
+	"default value for the deadlock_timeout; "+
+		"default value for the deadlock_timeout session setting; controls the "+
+		"duration to wait on a lock before checking if there is a deadlock "+
+		"condition",
+	0,
+	settings.NonNegativeDuration,
+	settings.WithPublic)
+
 var clusterIdleInSessionTimeout = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"sql.defaults.idle_in_session_timeout",
@@ -3389,6 +3400,10 @@ func (m *sessionDataMutator) SetStmtTimeout(timeout time.Duration) {
 
 func (m *sessionDataMutator) SetLockTimeout(timeout time.Duration) {
 	m.data.LockTimeout = timeout
+}
+
+func (m *sessionDataMutator) SetDeadlockTimeout(timeout time.Duration) {
+	m.data.DeadlockTimeout = timeout
 }
 
 func (m *sessionDataMutator) SetIdleInSessionTimeout(timeout time.Duration) {

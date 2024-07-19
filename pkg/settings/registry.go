@@ -256,6 +256,7 @@ var sqlDefaultSettings = map[InternalKey]struct{}{
 	"sql.defaults.cost_scans_with_default_col_size.enabled":                     {},
 	"sql.defaults.datestyle":                                                    {},
 	"sql.defaults.datestyle.enabled":                                            {},
+	"sql.defaults.deadlock_timeout":                                             {},
 	"sql.defaults.default_hash_sharded_index_bucket_count":                      {},
 	"sql.defaults.default_int_size":                                             {},
 	"sql.defaults.disallow_full_table_scans.enabled":                            {},

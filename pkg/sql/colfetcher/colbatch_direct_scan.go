@@ -217,6 +217,7 @@ func NewColBatchDirectScan(
 		spec.LockingWaitPolicy,
 		spec.LockingDurability,
 		flowCtx.EvalCtx.SessionData().LockTimeout,
+		flowCtx.EvalCtx.SessionData().DeadlockTimeout,
 		kvFetcherMemAcc,
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 	)

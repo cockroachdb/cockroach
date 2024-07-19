@@ -144,6 +144,10 @@ message SessionData {
   int64 distsql_plan_gateway_bias = 31;
   // StreamerEnabled controls whether the Streamer API can be used.
   bool streamer_enabled = 32;
+  // DeadlockTimeout is the amount of time that a query will wait on a lock
+  // before attempting to check if there is a deadlock condition.
+  google.protobuf.Duration deadlock_timeout = 33 [(gogoproto.nullable) = false,
+    (gogoproto.stdduration) = true];
 }
 
 // DataConversionConfig contains the parameters that influence the output
