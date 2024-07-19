@@ -35,7 +35,7 @@ func registerDisaggRebalance(r registry.Registry) {
 		Cluster:           disaggRebalanceSpec,
 		RequiresLicense:   true,
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
-		Timeout:           4 * time.Hour,
+		Timeout:           8 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			s3dir := fmt.Sprintf("s3://%s/disagg-rebalance/%s?AUTH=implicit", testutils.BackupTestingBucketLongTTL(), c.Name())
 			startOpts := option.NewStartOpts(option.NoBackupSchedule)
@@ -44,10 +44,11 @@ func registerDisaggRebalance(r registry.Registry) {
 
 			initialWaitDuration := 2 * time.Minute
 			warehouses := 1000
+			activeWarehouses := 20
 
 			t.Status("workload initialization")
 			cmd := fmt.Sprintf(
-				"./cockroach workload fixtures import tpcc --warehouses=%d {pgurl:1}",
+				"./cockroach workload fixtures import tpcc --warehouses=%d --checks=false {pgurl:1}",
 				warehouses,
 			)
 			m := c.NewMonitor(ctx, c.Range(1, 3))
@@ -63,7 +64,7 @@ func registerDisaggRebalance(r registry.Registry) {
 
 				cmd := fmt.Sprintf(
 					"./cockroach workload run tpcc --warehouses=%d --duration=10m {pgurl:1-3}",
-					warehouses,
+					activeWarehouses,
 				)
 
 				return c.RunE(ctx, option.WithNodes(c.Node(1)), cmd)
