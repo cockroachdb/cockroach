@@ -823,7 +823,7 @@ func TestChangefeedTenants(t *testing.T) {
 		// kvServer is used here because we require a
 		// TestServerInterface implementor. It is only used as
 		// the return value for f.Server()
-		f := makeSinklessFeedFactory(kvServer, sink, nil)
+		f := makeSinklessFeedFactory(t, kvServer, sink, nil)
 		tenantSQL.Exec(t, `INSERT INTO foo_in_tenant VALUES (1)`)
 		feed := feed(t, f, `CREATE CHANGEFEED FOR foo_in_tenant`)
 		assertPayloads(t, feed, []string{
@@ -8566,7 +8566,7 @@ func TestChangefeedCreateTelemetryLogs(t *testing.T) {
 	t.Run(`core_sink_type`, func(t *testing.T) {
 		coreSink, cleanup := sqlutils.PGUrl(t, s.Server.SQLAddr(), t.Name(), url.User(username.RootUser))
 		defer cleanup()
-		coreFeedFactory := makeSinklessFeedFactory(s.Server, coreSink, nil)
+		coreFeedFactory := makeSinklessFeedFactory(t, s.Server, coreSink, nil)
 
 		beforeCreateSinkless := timeutil.Now()
 		coreFeed := feed(t, coreFeedFactory, `CREATE CHANGEFEED FOR foo`)
