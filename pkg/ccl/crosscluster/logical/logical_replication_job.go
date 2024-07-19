@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 )
 
 var (
@@ -312,6 +314,11 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 		return nil, nil, nil, err
 	}
 
+	var defaultFnOID oid.Oid
+	if defaultFnID := p.payload.DefaultConflictResolution.FunctionId; defaultFnID != 0 {
+		defaultFnOID = catid.FuncIDToOID(catid.DescID(defaultFnID))
+	}
+
 	tableIDToName := make(map[int32]fullyQualifiedTableName)
 	tablesMd := make(map[int32]execinfrapb.TableReplicationMetadata)
 	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
@@ -332,11 +339,19 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 				return errors.Wrapf(err, "failed to look up schema descriptor for table %d", pair.DstDescriptorID)
 			}
 
+			var fnOID oid.Oid
+			if pair.DstFunctionID != 0 {
+				fnOID = catid.FuncIDToOID(catid.DescID(pair.DstFunctionID))
+			} else if defaultFnOID != 0 {
+				fnOID = defaultFnOID
+			}
+
 			tablesMd[pair.DstDescriptorID] = execinfrapb.TableReplicationMetadata{
 				SourceDescriptor:              srcTableDesc,
 				DestinationParentDatabaseName: dbDesc.GetName(),
 				DestinationParentSchemaName:   scDesc.GetName(),
 				DestinationTableName:          dstTableDesc.GetName(),
+				DestinationFunctionOID:        uint32(fnOID),
 			}
 			tableIDToName[pair.DstDescriptorID] = fullyQualifiedTableName{
 				database: dbDesc.GetName(),

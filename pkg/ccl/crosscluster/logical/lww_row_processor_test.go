@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -81,8 +80,10 @@ func TestLWWInsertQueryGeneration(t *testing.T) {
 		tableNameDst := createTable(t, schemaTmpl)
 		srcDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameSrc)
 		dstDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameDst)
-		rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[descpb.ID]catalog.TableDescriptor{
-			dstDesc.GetID(): srcDesc,
+		rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[descpb.ID]sqlProcessorTableConfig{
+			dstDesc.GetID(): {
+				srcDesc: srcDesc,
+			},
 		}, s.InternalExecutor().(isql.Executor))
 		require.NoError(t, err)
 		return rp, func(datums ...interface{}) roachpb.KeyValue {
@@ -148,8 +149,10 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
 	// Simulate how we set up the row processor on the main code path.
 	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
-	rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[descpb.ID]catalog.TableDescriptor{
-		desc.GetID(): desc,
+	rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[descpb.ID]sqlProcessorTableConfig{
+		desc.GetID(): {
+			srcDesc: desc,
+		},
 	}, s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd)))
 	require.NoError(b, err)
 
