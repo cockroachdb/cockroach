@@ -954,6 +954,13 @@ func applyColumnMutation(
 			return err
 		}
 		if col.HasNullDefault() {
+			// If our column is computed, block mixing defaults in entirely.
+			if col.IsComputed() {
+				return pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					"computed column %q cannot also have a DEFAULT expression",
+					col.GetName())
+			}
 			// `SET DEFAULT NULL` means a nil default expression.
 			col.ColumnDesc().DefaultExpr = nil
 		}

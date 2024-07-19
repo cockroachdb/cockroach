@@ -32,6 +32,7 @@ func alterTableSetDefault(
 	colID := getColumnIDFromColumnName(b, tbl.TableID, t.Column, true /* required */)
 	col := mustRetrieveColumnElem(b, tbl.TableID, colID)
 	oldDefaultExpr := retrieveColumnDefaultExpressionElem(b, tbl.TableID, colID)
+	colType := mustRetrieveColumnTypeElem(b, tbl.TableID, colID)
 
 	// For DROP DEFAULT.
 	if t.Default == nil {
@@ -40,6 +41,9 @@ func alterTableSetDefault(
 		}
 		return
 	}
+
+	// Block setting default on computed columns.
+	panicIfComputedColumn(colType, t.Column.String())
 
 	// Block alters on system columns.
 	panicIfSystemColumn(col, t.Column.String())
@@ -141,4 +145,15 @@ func sanitizeColumnExpression(
 
 	s := tree.Serialize(typedExpr)
 	return typedExpr, s, nil
+}
+
+// panicIfComputedColumn blocks ALTER COLUMN ... SET DEFAULT on computed
+// columns.
+func panicIfComputedColumn(column *scpb.ColumnType, columnName string) {
+	if column.ComputeExpr != nil {
+		panic(pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"computed column %q cannot also have a DEFAULT expression",
+			columnName))
+	}
 }

@@ -3968,3 +3968,23 @@ statement error pgcode 42601 variable sub-expressions are not allowed in EXPRESS
 ALTER TABLE t_124546 ADD CONSTRAINT ident UNIQUE ( ( EXISTS ( TABLE error FOR READ ONLY ) ) DESC ) STORING ( ident , ident );
 
 subtest end
+
+# Regression test for #127522 where we do not properly block adding a default
+# value to a computed column.
+subtest computed_column_add_default
+
+statement ok
+CREATE TABLE foooooo (
+    id INT PRIMARY KEY,
+    x INT NOT NULL,
+    y INT NOT NULL,
+    gen INT AS (x + y) STORED
+);
+
+statement error pgcode 42P16 computed column "gen" cannot also have a DEFAULT expression
+ALTER TABLE foooooo ALTER COLUMN gen SET DEFAULT 1;
+
+statement error pgcode 42P16 computed column "gen" cannot also have a DEFAULT expression
+ALTER TABLE foooooo ALTER COLUMN gen SET DEFAULT NULL;
+
+subtest end
