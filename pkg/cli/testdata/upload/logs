@@ -1,0 +1,81 @@
+# Single-node
+upload-logs
+{
+  "nodes": {
+    "1": {
+      "logs": [
+        {
+          "name": "cockroach.hostname.username.2024-07-16T17_51_43Z.048498.log",
+          "lines": [
+            "I240716 17:51:44.661864 100 server/node.go:533 ⋮ [T1,n1] 24 initialized store s1",
+            "W240716 17:51:44.667017 100 server/env_sampler.go:125 ⋮ [T1,n1] 33 failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: ‹/proc/self/cgroup›: open ‹/proc/self/cgroup›: no such file or directory"
+          ]
+        }
+      ]
+    }
+  }
+}
+----
+Upload ID: 123
+[{"goroutine":100,"file":"server/node.go","line":533,"tags":"n1","counter":24,"tenant_id":"1","time":1721152304,"channel":"DEV","severity":"INFO","message":"initialized store s1","ddtags":"cluster:ABC,env:debug,node_id:1,service:CRDB-SH,upload_id:123"},
+debug zip upload debugDir --dd-api-key=dd-api-key --cluster=ABC --include=logs --log-format=crdb-v1
+{"goroutine":100,"file":"server/env_sampler.go","line":125,"tags":"n1","counter":33,"tenant_id":"1","time":1721152304,"channel":"DEV","severity":"WARNING","message":"failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: /proc/self/cgroup: open /proc/self/cgroup: no such file or directory","ddtags":"cluster:ABC,env:debug,node_id:1,service:CRDB-SH,upload_id:123"}]
+
+
+# single-node with wrong log format
+upload-logs log-format=crdb-v2
+{
+  "nodes": {
+    "1": {
+      "logs": [
+        {
+          "name": "cockroach.hostname.username.2024-07-16T17_51_43Z.048498.log",
+          "lines": [
+            "I240716 17:51:44.661864 100 server/node.go:533 ⋮ [T1,n1] 24 initialized store s1",
+            "W240716 17:51:44.667017 100 server/env_sampler.go:125 ⋮ [T1,n1] 33 failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: ‹/proc/self/cgroup›: open ‹/proc/self/cgroup›: no such file or directory"
+          ]
+        }
+      ]
+    }
+  }
+}
+----
+ERROR: decoding on line 2: malformed log entry
+debug zip upload debugDir --dd-api-key=dd-api-key --cluster=ABC --include=logs --log-format=crdb-v2
+
+
+# multi-node
+upload-logs
+{
+  "nodes": {
+    "1": {
+      "logs": [
+        {
+          "name": "cockroach.node1.username.2024-07-16T17_51_43Z.048498.log",
+          "lines": [
+            "I240716 17:51:44.661864 100 server/node.go:533 ⋮ [T1,n1] 24 initialized store s1",
+            "W240716 17:51:44.667017 100 server/env_sampler.go:125 ⋮ [T1,n1] 33 failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: ‹/proc/self/cgroup›: open ‹/proc/self/cgroup›: no such file or directory"
+          ]
+        }
+      ]
+    },
+    "2": {
+      "logs": [
+        {
+          "name": "cockroach.node2.username.2024-07-16T17_51_43Z.048498.log",
+          "lines": [
+            "I240716 17:51:44.797342 916 sql/sqlliveness/slstorage/slstorage.go:540 ⋮ [T1,n1] 43 inserted sqlliveness session 01018071445fbd54a44ee88e906efb311d7193",
+            "I240716 17:51:44.797530 916 sql/sqlliveness/slinstance/slinstance.go:258 ⋮ [T1,n1] 44 created new SQL liveness session 01018071445fbd54a44ee88e906efb311d7193"
+          ]
+        }
+      ]
+    }
+  }
+}
+----
+Upload ID: 123
+[{"goroutine":100,"file":"server/node.go","line":533,"tags":"n1","counter":24,"tenant_id":"1","time":1721152304,"channel":"DEV","severity":"INFO","message":"initialized store s1","ddtags":"cluster:ABC,env:debug,node_id:1,service:CRDB-SH,upload_id:123"},
+[{"goroutine":916,"file":"sql/sqlliveness/slstorage/slstorage.go","line":540,"tags":"n1","counter":43,"tenant_id":"1","time":1721152304,"channel":"DEV","severity":"INFO","message":"inserted sqlliveness session 01018071445fbd54a44ee88e906efb311d7193","ddtags":"cluster:ABC,env:debug,node_id:2,service:CRDB-SH,upload_id:123"},
+debug zip upload debugDir --dd-api-key=dd-api-key --cluster=ABC --include=logs --log-format=crdb-v1
+{"goroutine":100,"file":"server/env_sampler.go","line":125,"tags":"n1","counter":33,"tenant_id":"1","time":1721152304,"channel":"DEV","severity":"WARNING","message":"failed to start query profiler worker: failed to detect cgroup memory limit: failed to read memory cgroup from cgroups file: /proc/self/cgroup: open /proc/self/cgroup: no such file or directory","ddtags":"cluster:ABC,env:debug,node_id:1,service:CRDB-SH,upload_id:123"}]
+{"goroutine":916,"file":"sql/sqlliveness/slinstance/slinstance.go","line":258,"tags":"n1","counter":44,"tenant_id":"1","time":1721152304,"channel":"DEV","severity":"INFO","message":"created new SQL liveness session 01018071445fbd54a44ee88e906efb311d7193","ddtags":"cluster:ABC,env:debug,node_id:2,service:CRDB-SH,upload_id:123"}]
