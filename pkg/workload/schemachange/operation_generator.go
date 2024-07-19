@@ -1615,10 +1615,20 @@ func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) 
 	if err != nil {
 		return nil, err
 	}
-	stmt := makeOpStmt(OpStmtDDL)
-	if !columnExists {
-		stmt.expectedExecErrors.add(pgcode.UndefinedColumn)
+	colIsVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, tableName, columnName)
+	if err != nil {
+		return nil, err
 	}
+	colIsStoredComputed, err := og.columnIsStoredComputed(ctx, tx, tableName, columnName)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	stmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UndefinedColumn, condition: !columnExists},
+		{code: pgcode.Syntax, condition: colIsVirtualComputed || colIsStoredComputed},
+	})
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT`, tableName,
 		lexbase.EscapeSQLIdent(columnName))
 	return stmt, nil
@@ -2273,10 +2283,16 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 			return nil, err
 		}
 		if newTyp == nil {
+			errCode := pgcode.UndefinedColumn
+			// Setting default on generated column short-circuits and returns a syntax
+			// error.
+			if columnForDefault.generated {
+				errCode = pgcode.Syntax
+			}
 			return makeOpStmtForSingleError(OpStmtDDL,
 				fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT 'IrrelevantValue':::%s`,
 					tableName, lexbase.EscapeSQLIdent(columnForDefault.name), newTypeName.SQLString()),
-				pgcode.UndefinedColumn), nil
+				errCode), nil
 		}
 		datumTyp = newTyp
 	}
@@ -2286,10 +2302,9 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 	if (!datumTyp.Equivalent(columnForDefault.typ)) && defaultDatum != tree.DNull {
 		stmt.expectedExecErrors.add(pgcode.DatatypeMismatch)
 	}
-
 	// Generated columns cannot have default values.
 	if columnForDefault.generated {
-		stmt.expectedExecErrors.add(pgcode.InvalidTableDefinition)
+		stmt.expectedExecErrors.add(pgcode.Syntax)
 	}
 
 	strDefault := tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)
