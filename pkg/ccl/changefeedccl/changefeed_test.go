@@ -9189,10 +9189,10 @@ func TestParallelIOMetrics(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		pmr := &parallelIOMetricsRecorderImpl{
-			pendingQueueNanos: &testHistogram{},
-			pendingRows:       &testGauge{},
-			resultQueueNanos:  &testHistogram{},
-			inFlight:          &testGauge{},
+			pendingQueueNanos: &testMetric{},
+			pendingRows:       &testMetric{},
+			resultQueueNanos:  &testMetric{},
+			inFlight:          &testMetric{},
 		}
 
 		knobs := s.TestingKnobs.
@@ -9233,55 +9233,15 @@ func TestParallelIOMetrics(t *testing.T) {
 			}
 		})
 
-		waitersSet := make(chan struct{}, 4)
 		g.Go(func() error {
-			w := pmr.pendingQueueNanos.(*testHistogram).setWaiter(func(val int64) bool { return val > 0 })
-			waitersSet <- struct{}{}
-			select {
-			case <-w:
-			case <-time.After(10 * time.Second):
-				t.Fatal("timed out waiting for pending queue nanos")
-			}
-			return nil
+			return waitMultiple(
+				10*time.Second,
+				pmr.pendingQueueNanos.(*testMetric).SetWaiter(func(val int64) bool { return val > 0 }),
+				pmr.pendingRows.(*testMetric).SetWaiter(func(val int64) bool { return val > 0 }),
+				pmr.resultQueueNanos.(*testMetric).SetWaiter(func(val int64) bool { return val > 0 }),
+				pmr.inFlight.(*testMetric).SetWaiter(func(val int64) bool { return val > 0 }),
+			)
 		})
-		g.Go(func() error {
-			w := pmr.pendingRows.(*testGauge).setWaiter(func(val int64) bool { return val > 0 })
-			waitersSet <- struct{}{}
-			select {
-			case <-w:
-			case <-time.After(10 * time.Second):
-				t.Fatal("timed out waiting for pending queue nanos")
-			}
-			return nil
-		})
-		g.Go(func() error {
-			w := pmr.resultQueueNanos.(*testHistogram).setWaiter(func(val int64) bool { return val > 0 })
-			waitersSet <- struct{}{}
-			select {
-			case <-w:
-			case <-time.After(10 * time.Second):
-				t.Fatal("timed out waiting for in flight")
-			}
-			return nil
-		})
-		g.Go(func() error {
-			w := pmr.inFlight.(*testGauge).setWaiter(func(val int64) bool { return val > 0 })
-			waitersSet <- struct{}{}
-			select {
-			case <-w:
-			case <-time.After(10 * time.Second):
-				t.Fatal("timed out waiting for result queue nanos")
-			}
-			return nil
-		})
-
-		for i := 0; i < 4; i++ {
-			select {
-			case <-waitersSet:
-			case <-time.After(10 * time.Second):
-				t.Fatal("timed out waiting for waiters to be set")
-			}
-		}
 
 		// Set the frequency to 1s. The default frequency at the time of writing is
 		foo, err := f.Feed("CREATE CHANGEFEED FOR TABLE foo WITH pubsub_sink_config=" +

@@ -2,98 +2,98 @@ package changefeedccl
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-type testHistogram struct {
-	mu  syncutil.Mutex
-	val int64
-
+type condWaiter struct {
 	condition func(val int64) bool
-	waiter    chan struct{}
+	ch        chan struct{}
 }
 
-func (h *testHistogram) RecordValue(v int64) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.val = v
-
-	fmt.Printf("testHistogram.RecordValue: h.val=%d, waiter=%v\n", h.val, h.waiter)
-
-	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
-		close(h.waiter)
-		h.waiter = nil
-		h.condition = nil
+func newCondWaiter(condition func(val int64) bool) *condWaiter {
+	return &condWaiter{
+		condition: condition,
+		ch:        make(chan struct{}),
 	}
 }
 
-func (h *testHistogram) setWaiter(condition func(val int64) bool) chan struct{} {
+// Wait waits for the condition to be true or for the timeout to expire.
+func (w *condWaiter) Wait(timeout time.Duration) error {
+	select {
+	case <-w.ch:
+		return nil
+	case <-time.After(timeout):
+		return fmt.Errorf("timeout waiting for condition")
+	}
+}
+
+func (w *condWaiter) eval(val int64) (matched bool) {
+	if w == nil {
+		return false
+	}
+	if w.condition(val) {
+		close(w.ch)
+		return true
+	}
+	return false
+}
+
+// testMetric is a mock for metrics.Histogram/Gauge/Counter that lets you set a watch condition and wait for it to become true. It can function as a Gauge, Counter, or Histogram.
+type testMetric struct {
+	mu     syncutil.Mutex
+	val    int64
+	waiter *condWaiter
+}
+
+func (h *testMetric) RecordValue(v int64) {
+	h.applyAndEval(func() { h.val = v })
+}
+
+func (h *testMetric) Update(v int64) {
+	h.RecordValue(v)
+}
+
+func (h *testMetric) Dec(n int64) {
+	h.applyAndEval(func() { h.val -= n })
+}
+
+func (h *testMetric) Inc(n int64) {
+	h.applyAndEval(func() { h.val += n })
+}
+
+// applyAndEval is a little helper that applies a function to the metric value and evaluates the condition.
+func (h *testMetric) applyAndEval(fn func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.condition = condition
-	h.waiter = make(chan struct{})
+	fn()
+	if h.waiter.eval(h.val) {
+		h.waiter = nil
+	}
+}
+
+// SetWaiter sets a condition to wait for. Note that only one condition can be set at a time.
+func (h *testMetric) SetWaiter(condition func(val int64) bool) *condWaiter {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.waiter != nil {
+		panic("waiter already set")
+	}
+	h.waiter = newCondWaiter(condition)
 	return h.waiter
 }
 
-var _ histogram = &testHistogram{}
+var _ histogram = &testMetric{}
+var _ gauge = &testMetric{}
+var _ counter = &testMetric{}
 
-type testGauge struct {
-	mu  syncutil.Mutex
-	val int64
-
-	condition func(val int64) bool
-	waiter    chan struct{}
-}
-
-func (h *testGauge) Update(v int64) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.val = v
-
-	fmt.Printf("testGauge.Update: h.val=%d, waiter=%v\n", h.val, h.waiter)
-
-	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
-		close(h.waiter)
-		h.waiter = nil
-		h.condition = nil
+// waitMultiple waits for multiple conditions to become true or for the timeout to expire.
+func waitMultiple(timeout time.Duration, waiters ...*condWaiter) error {
+	for _, w := range waiters {
+		if err := w.Wait(timeout); err != nil {
+			return err
+		}
 	}
+	return nil
 }
-
-func (h *testGauge) Dec(n int64) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.val -= n
-
-	fmt.Printf("testGauge.Dec: h.val=%d, waiter=%v\n", h.val, h.waiter)
-
-	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
-		close(h.waiter)
-		h.waiter = nil
-		h.condition = nil
-	}
-}
-
-func (h *testGauge) Inc(n int64) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.val += n
-
-	fmt.Printf("testGauge.Inc: h.val=%d, waiter=%v\n", h.val, h.waiter)
-
-	if h.condition != nil && h.condition(h.val) && h.waiter != nil {
-		close(h.waiter)
-		h.waiter = nil
-		h.condition = nil
-	}
-}
-
-func (h *testGauge) setWaiter(condition func(val int64) bool) chan struct{} {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.condition = condition
-	h.waiter = make(chan struct{})
-	return h.waiter
-}
-
-var _ gauge = &testGauge{}

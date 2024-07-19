@@ -505,6 +505,11 @@ type gauge interface {
 	Dec(n int64)
 }
 
+// Not used currently, but for completeness.
+type counter interface {
+	Inc(n int64)
+}
+
 type parallelIOMetricsRecorderImpl struct {
 	pendingQueueNanos histogram
 	pendingRows       gauge
