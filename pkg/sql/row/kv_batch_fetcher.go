@@ -189,6 +189,9 @@ type txnKVFetcher struct {
 	// wait while attempting to acquire a lock on a key or while blocking on an
 	// existing lock in order to perform a non-locking read on a key.
 	lockTimeout time.Duration
+	// DeadlockTimeout specifies the amount of time before pushing the lock holder
+	// for deadlock detection.
+	deadlockTimeout time.Duration
 
 	// alreadyFetched indicates whether fetch() has already been executed at
 	// least once.
@@ -390,6 +393,7 @@ type newTxnKVFetcherArgs struct {
 	lockWaitPolicy             descpb.ScanLockingWaitPolicy
 	lockDurability             descpb.ScanLockingDurability
 	lockTimeout                time.Duration
+	deadlockTimeout            time.Duration
 	acc                        *mon.BoundAccount
 	forceProductionKVBatchSize bool
 	kvPairsRead                *int64
@@ -418,6 +422,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		lockWaitPolicy:             GetWaitPolicy(args.lockWaitPolicy),
 		lockDurability:             GetKeyLockingDurability(args.lockDurability),
 		lockTimeout:                args.lockTimeout,
+		deadlockTimeout:            args.deadlockTimeout,
 		acc:                        args.acc,
 		forceProductionKVBatchSize: args.forceProductionKVBatchSize,
 		requestAdmissionHeader:     args.admission.requestHeader,
@@ -640,6 +645,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba := &kvpb.BatchRequest{}
 	ba.Header.WaitPolicy = f.lockWaitPolicy
 	ba.Header.LockTimeout = f.lockTimeout
+	ba.Header.DeadlockTimeout = f.deadlockTimeout
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	if buildutil.CrdbTestBuild {

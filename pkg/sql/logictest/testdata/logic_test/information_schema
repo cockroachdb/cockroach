@@ -6092,6 +6092,7 @@ copy_write_pipelining_enabled                              off
 cost_scans_with_default_col_size                           off
 database                                                   test
 datestyle                                                  ISO, MDY
+deadlock_timeout                                           0
 declare_cursor_statement_timeout_enabled                   on
 default_int_size                                           8
 default_table_access_method                                heap
