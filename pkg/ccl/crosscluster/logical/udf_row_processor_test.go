@@ -58,13 +58,12 @@ func TestUDFWithRandomTables(t *testing.T) {
 	t.Logf(stmt)
 	runnerA.Exec(t, stmt)
 	runnerB.Exec(t, stmt)
-	runnerB.Exec(t, applierTypes)
 	runnerB.Exec(t, `
 		CREATE OR REPLACE FUNCTION repl_apply(action STRING, data rand_table, existing rand_table, prev rand_table, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
-		RETURNS crdb_replication_applier_decision
+		RETURNS string
 		AS $$
 		BEGIN
-		RETURN ('accept_proposed', NULL);
+		RETURN 'accept_proposed'
 		END;
 		$$ LANGUAGE plpgsql
 		`)
@@ -81,7 +80,7 @@ func TestUDFWithRandomTables(t *testing.T) {
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
 
-	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
+	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s WITH FUNCTION repl_apply FOR TABLE %[1]s", tableName)
 	var jobBID jobspb.JobID
 	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
@@ -91,54 +90,6 @@ func TestUDFWithRandomTables(t *testing.T) {
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
 
 	compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
-}
-
-func TestUDFApplieSpecified(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s, sqlA, sqlB, cleanup := setupTwoDBUDFTestCluster(t)
-	defer cleanup()
-
-	runnerA := sqlutils.MakeSQLRunner(sqlA)
-	runnerB := sqlutils.MakeSQLRunner(sqlB)
-
-	tableName := "tallies"
-	stmt := "CREATE TABLE tallies(pk INT PRIMARY KEY, v INT)"
-	runnerA.Exec(t, stmt)
-	runnerA.Exec(t, "INSERT INTO tallies VALUES (1, 10), (2, 22), (3, 33)")
-	runnerB.Exec(t, stmt)
-	runnerB.Exec(t, applierTypes)
-	runnerB.Exec(t, `
-		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies, prev tallies, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
-		RETURNS crdb_replication_applier_decision
-		AS $$
-		BEGIN
-		IF action = 'insert' OR action = 'update' THEN
-			RETURN ('upsert_specified', ((proposed).pk, (proposed).v + 1000));
-		END IF;
-		RETURN ('accept_proposed', NULL);
-		END
-		$$ LANGUAGE plpgsql
-		`)
-
-	addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
-	runnerA.Exec(t, addCol)
-	runnerB.Exec(t, addCol)
-
-	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
-	defer cleanup()
-
-	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
-	var jobBID jobspb.JobID
-	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
-
-	t.Logf("waiting for replication job %d", jobBID)
-	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
-	runnerB.CheckQueryResults(t, "SELECT * FROM tallies", [][]string{
-		{"1", "1010"},
-		{"2", "1022"},
-		{"3", "1033"},
-	})
 }
 
 func TestUDFInsertOnly(t *testing.T) {
@@ -154,16 +105,16 @@ func TestUDFInsertOnly(t *testing.T) {
 	runnerA.Exec(t, stmt)
 	runnerA.Exec(t, "INSERT INTO tallies VALUES (1, 10), (2, 22), (3, 33), (4, 44)")
 	runnerB.Exec(t, stmt)
-	runnerB.Exec(t, applierTypes)
+	runnerB.Exec(t, "CREATE SCHEMA funcs")
 	runnerB.Exec(t, `
-		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies, prev tallies, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
-		RETURNS crdb_replication_applier_decision
+		CREATE OR REPLACE FUNCTION funcs.repl_apply(action STRING, proposed tallies, existing tallies, prev tallies, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
+		RETURNS string
 		AS $$
 		BEGIN
 		IF action = 'insert' THEN
-			RETURN ('accept_proposed', NULL);
+			RETURN 'accept_proposed';
 		END IF;
-		RETURN ('ignore_proposed', NULL);
+		RETURN 'ignore_proposed';
 		END
 		$$ LANGUAGE plpgsql
 		`)
@@ -175,7 +126,7 @@ func TestUDFInsertOnly(t *testing.T) {
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
 
-	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
+	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s WITH DEFAULT FUNCTION = 'funcs.repl_apply'", tableName)
 	var jobBID jobspb.JobID
 	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
@@ -209,16 +160,15 @@ func TestUDFPreviousValue(t *testing.T) {
 	runnerA.Exec(t, "INSERT INTO tallies VALUES (1, 10)")
 	runnerB.Exec(t, stmt)
 	runnerB.Exec(t, "INSERT INTO tallies VALUES (1, 20)")
-	runnerB.Exec(t, applierTypes)
 	runnerB.Exec(t, `
 		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies, prev tallies, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
-		RETURNS crdb_replication_applier_decision
+		RETURNS string
 		AS $$
 		BEGIN
 		IF action = 'update' THEN
-			RETURN ('upsert_specified', ((proposed).pk, (existing).v + ((proposed).v-(prev).v)));
+                        UPDATE tallies SET v = v + ((proposed).v-(prev).v) WHERE pk = (proposed).pk;
 		END IF;
-		RETURN ('ignore_proposed', NULL);
+		RETURN 'ignore_proposed';
 		END
 		$$ LANGUAGE plpgsql
 		`)
@@ -230,7 +180,7 @@ func TestUDFPreviousValue(t *testing.T) {
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
 
-	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
+	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s WITH FUNCTION repl_apply FOR TABLE %[1]s", tableName)
 	var jobBID jobspb.JobID
 	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
@@ -275,10 +225,8 @@ func setupTwoDBUDFTestCluster(
 		require.NoError(t, err)
 	}
 	defaultSQLProcessor = udfApplierProcessor
-	udfName = "repl_apply"
 	return s, sqlA, sqlB, func() {
 		srv.Stopper().Stop(ctx)
-		udfName = ""
 		defaultSQLProcessor = lwwProcessor
 	}
 }

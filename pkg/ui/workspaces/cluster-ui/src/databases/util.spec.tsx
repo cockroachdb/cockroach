@@ -8,6 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import React from "react";
+import { render } from "@testing-library/react";
+
 import { INodeStatus } from "../util";
 
 import {
@@ -17,6 +20,7 @@ import {
   getNodeIdsFromStoreIds,
   normalizePrivileges,
   normalizeRoles,
+  LoadingCell,
   formatSQLTableName,
 } from "./util";
 
@@ -173,6 +177,77 @@ describe("Normalize roles", () => {
     const roles = ["public", "admin", "admin"];
     const result = normalizeRoles(roles);
     expect(result).toEqual(["admin", "public"]);
+  });
+});
+
+describe("LoadingCell", () => {
+  it("renders empty data", () => {
+    const { getByText } = render(
+      <LoadingCell requestError={null} loading={false} errorClassName={""}>
+        {null}
+      </LoadingCell>,
+    );
+
+    expect(getByText("No data")).not.toBeNull();
+  });
+  it("renders with undefined children", () => {
+    const { getByText } = render(
+      <LoadingCell
+        requestError={null}
+        loading={false}
+        errorClassName={""}
+      ></LoadingCell>,
+    );
+
+    expect(getByText("No data")).not.toBeNull();
+  });
+  it("renders skeleton heading when loading", () => {
+    const { getByRole } = render(
+      <LoadingCell requestError={null} loading={true} errorClassName={""}>
+        {null}
+      </LoadingCell>,
+    );
+
+    expect(getByRole("heading")).not.toBeNull();
+  });
+  it("renders error name and status icon", () => {
+    const { getByRole } = render(
+      <LoadingCell
+        requestError={{ name: "error name", message: "error message" }}
+        loading={false}
+        errorClassName={"error-class"}
+      >
+        {null}
+      </LoadingCell>,
+    );
+
+    // TODO(davidh): rendering of antd Tooltip component doesn't work
+    // here and hence can't be directly tested to contain the error
+    // name.
+    expect(getByRole("status")).not.toBeNull();
+  });
+  it("renders children with no error", () => {
+    const { getByText } = render(
+      <LoadingCell requestError={null} loading={false} errorClassName={""}>
+        <div>inner data</div>
+      </LoadingCell>,
+    );
+
+    expect(getByText("inner data")).not.toBeNull();
+  });
+  it("renders children with error together", () => {
+    const { getByText, getByRole } = render(
+      <LoadingCell
+        requestError={{ name: "error name", message: "error message" }}
+        loading={false}
+        errorClassName={""}
+      >
+        <div>inner data</div>
+      </LoadingCell>,
+    );
+
+    expect(getByRole("status")).not.toBeNull();
+    expect(getByText("inner data")).not.toBeNull();
   });
 });
 

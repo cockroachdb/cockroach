@@ -52,7 +52,7 @@ import {
   TableSchemaDetailsRow,
   TableSpanStatsRow,
 } from "../api";
-import { checkInfoAvailable } from "../databases";
+import { LoadingCell } from "../databases";
 
 import {
   ActionCell,
@@ -469,55 +469,82 @@ export class DatabaseTablePage extends React.Component<
                         <SummaryCard className={cx("summary-card")}>
                           <SummaryCardItem
                             label="Size"
-                            value={checkInfoAvailable(
-                              details.requestError,
-                              details.spanStats?.error,
-                              details.spanStats?.approximate_disk_bytes
-                                ? format.Bytes(
-                                    details.spanStats?.approximate_disk_bytes,
-                                  )
-                                : null,
-                            )}
+                            value={
+                              <LoadingCell
+                                requestError={details.requestError}
+                                queryError={details.spanStats?.error}
+                                loading={details.loading}
+                                errorClassName={cx("summary-card__error-cell")}
+                              >
+                                {details.spanStats?.approximate_disk_bytes
+                                  ? format.Bytes(
+                                      details.spanStats?.approximate_disk_bytes,
+                                    )
+                                  : null}
+                              </LoadingCell>
+                            }
                           />
                           <SummaryCardItem
                             label="Replicas"
-                            value={checkInfoAvailable(
-                              details.requestError,
-                              details.replicaData?.error,
-                              details.replicaData?.replicaCount,
-                            )}
+                            value={
+                              <LoadingCell
+                                requestError={details.requestError}
+                                queryError={details.replicaData?.error}
+                                loading={details.loading}
+                                errorClassName={cx("summary-card__error-cell")}
+                              >
+                                {details.replicaData?.replicaCount}
+                              </LoadingCell>
+                            }
                           />
                           <SummaryCardItem
                             label="Ranges"
-                            value={checkInfoAvailable(
-                              details.requestError,
-                              details.spanStats?.error,
-                              details.spanStats?.range_count,
-                            )}
+                            value={
+                              <LoadingCell
+                                requestError={details.requestError}
+                                queryError={details.spanStats?.error}
+                                loading={details.loading}
+                                errorClassName={cx("summary-card__error-cell")}
+                              >
+                                {details.spanStats?.range_count}
+                              </LoadingCell>
+                            }
                           />
                           <SummaryCardItem
                             label="% of Live Data"
-                            value={checkInfoAvailable(
-                              details.requestError,
-                              details.spanStats?.error,
-                              <FormatMVCCInfo details={details} />,
-                            )}
+                            value={
+                              <LoadingCell
+                                requestError={details.requestError}
+                                queryError={details.spanStats?.error}
+                                loading={details.loading}
+                                errorClassName={cx("summary-card__error-cell")}
+                              >
+                                <FormatMVCCInfo details={details} />
+                              </LoadingCell>
+                            }
                           />
                           {details.statsLastUpdated && (
                             <SummaryCardItem
                               label="Table Stats Last Updated"
-                              value={checkInfoAvailable(
-                                details.requestError,
-                                details.statsLastUpdated?.error,
-                                <Timestamp
-                                  time={
-                                    details.statsLastUpdated
-                                      ?.stats_last_created_at
-                                  }
-                                  format={DATE_FORMAT_24_TZ}
-                                  fallback={"No table statistics found"}
-                                />,
-                              )}
+                              value={
+                                <LoadingCell
+                                  requestError={details.requestError}
+                                  queryError={details.statsLastUpdated?.error}
+                                  loading={details.loading}
+                                  errorClassName={cx(
+                                    "summary-card__error-cell",
+                                  )}
+                                >
+                                  <Timestamp
+                                    time={
+                                      details.statsLastUpdated
+                                        ?.stats_last_created_at
+                                    }
+                                    format={DATE_FORMAT_24_TZ}
+                                    fallback={"No table statistics found"}
+                                  />
+                                </LoadingCell>
+                              }
                             />
                           )}
                           {this.props.automaticStatsCollectionEnabled !=
@@ -552,14 +579,21 @@ export class DatabaseTablePage extends React.Component<
                           {this.props.showNodeRegionsSection && (
                             <SummaryCardItem
                               label="Regions/Nodes"
-                              value={checkInfoAvailable(
-                                details.requestError,
-                                null,
-                                details.nodesByRegionString &&
+                              value={
+                                <LoadingCell
+                                  requestError={details.requestError}
+                                  queryError={null}
+                                  loading={details.loading}
+                                  errorClassName={cx(
+                                    "summary-card__error-cell",
+                                  )}
+                                >
+                                  {details.nodesByRegionString &&
                                   details.nodesByRegionString?.length
-                                  ? details.nodesByRegionString
-                                  : null,
-                              )}
+                                    ? details.nodesByRegionString
+                                    : null}
+                                </LoadingCell>
+                              }
                             />
                           )}
                           <SummaryCardItem
@@ -568,11 +602,16 @@ export class DatabaseTablePage extends React.Component<
                           />
                           <SummaryCardItem
                             label="Indexes"
-                            value={checkInfoAvailable(
-                              details.requestError,
-                              details.indexData?.error,
-                              details.indexData?.indexes?.join(", "),
-                            )}
+                            value={
+                              <LoadingCell
+                                requestError={details.requestError}
+                                queryError={details.indexData?.error}
+                                loading={details.loading}
+                                errorClassName={cx("summary-card__error-cell")}
+                              >
+                                {details.indexData?.indexes?.join(", ")}
+                              </LoadingCell>
+                            }
                             className={cx(
                               "database-table-page__indexes--value",
                             )}

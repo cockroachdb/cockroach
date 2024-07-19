@@ -40,9 +40,8 @@ const (
 	// or update will be upserted. A delete will be deleted.
 	acceptProposed applierDecision = "accept_proposed"
 	// upsertProposed indicates that an insert or update mutation should be applied.
-	upsertProposed  applierDecision = "upsert_proposed"
-	deleteProposed  applierDecision = "delete_proposed"
-	upsertSpecified applierDecision = "upsert_specified"
+	upsertProposed applierDecision = "upsert_proposed"
+	deleteProposed applierDecision = "delete_proposed"
 )
 
 const (
@@ -52,22 +51,12 @@ const (
 )
 
 const (
-	applierTypes = `
--- crdb_replication_applier_decision is the return type for any user-provided
--- function. The row field is the row to be insert when the decision is upsert_specified.
--- Note that users need to take special care that the columns returned in row are in canonical
--- order. It isn't particularly clear how the user is going to do this easily.
-CREATE TYPE IF NOT EXISTS crdb_replication_applier_decision AS (decision STRING, row RECORD)`
-
 	applierQueryBase = `
 WITH data (%s)
 AS (VALUES (%s))
-SELECT (res).decision, (res).row FROM
-(
-	SELECT %s('%s', data, existing, (%s), existing.crdb_internal_mvcc_timestamp, existing.crdb_replication_origin_timestamp, $%d, $%d) AS res
-	FROM data LEFT JOIN [%d as existing]
-	%s
-)`
+SELECT [FUNCTION %d]('%s', data, existing, (%s), existing.crdb_internal_mvcc_timestamp, existing.crdb_replication_origin_timestamp, $%d, $%d) AS decision
+FROM data LEFT JOIN [%d as existing]
+%s`
 	applierUpsertQueryBase = `UPSERT INTO [%d as t] (%s) VALUES (%s)`
 	applierDeleteQueryBase = `DELETE FROM [%d as t] WHERE %s`
 )
@@ -93,7 +82,6 @@ SELECT (res).decision, (res).row FROM
 //   - Compute columns will always be NULL in the proposed value
 //     passed to the UDF.
 type applierQuerier struct {
-	udfName     string
 	settings    *cluster.Settings
 	queryBuffer queryBuffer
 
@@ -107,65 +95,39 @@ type applierQuerier struct {
 func makeApplierQuerier(
 	ctx context.Context,
 	settings *cluster.Settings,
-	tableDescs map[descpb.ID]catalog.TableDescriptor,
+	tableConfigs map[descpb.ID]sqlProcessorTableConfig,
 	ie isql.Executor,
-) (*applierQuerier, error) {
-	qb := queryBuffer{
-		deleteQueries:  make(map[catid.DescID]queryBuilder, len(tableDescs)),
-		insertQueries:  make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableDescs)),
-		applierQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableDescs)),
-	}
-
-	// TODO(ssd): We should improve this once we are passing the function in for real.
-	getDatabaseNameQuery := `SELECT name FROM system.namespace WHERE id IN (SELECT "parentID" FROM system.namespace where id = $1)`
-	var tableID int32
-	for t := range tableDescs {
-		tableID = int32(t)
-		break
-	}
-
-	datums, err := ie.QueryRow(ctx, "replication-get-database", nil, getDatabaseNameQuery, tableID)
-	if err != nil {
-		return nil, err
-	}
-	databaseName, ok := datums[0].(*tree.DString)
-	if !ok {
-		return nil, errors.AssertionFailedf("unexpected type for database name: %T", datums[0])
-	}
-
-	insertOverride := getIEOverride(replicatedInsertOpName)
-	deleteOverride := getIEOverride(replicatedDeleteOpName)
-	applyUDFOverride := getIEOverride(replicatedApplyUDFOpName)
-	insertOverride.Database = string(*databaseName)
-	deleteOverride.Database = string(*databaseName)
-	applyUDFOverride.Database = string(*databaseName)
+) *applierQuerier {
 	return &applierQuerier{
-		queryBuffer: qb,
+		queryBuffer: queryBuffer{
+			deleteQueries:  make(map[catid.DescID]queryBuilder, len(tableConfigs)),
+			insertQueries:  make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
+			applierQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
+		},
 		settings:    settings,
-		ieoInsert:   insertOverride,
-		ieoDelete:   deleteOverride,
-		ieoApplyUDF: applyUDFOverride,
-		// TODO(ssd): Thread this name through from the SQL statement.
-		udfName: udfName,
-	}, nil
+		ieoInsert:   getIEOverride(replicatedInsertOpName),
+		ieoDelete:   getIEOverride(replicatedDeleteOpName),
+		ieoApplyUDF: getIEOverride(replicatedApplyUDFOpName),
+	}
 }
 
 func makeUDFApplierProcessor(
 	ctx context.Context,
 	settings *cluster.Settings,
-	tableDescs map[descpb.ID]catalog.TableDescriptor,
+	tableDescs map[descpb.ID]sqlProcessorTableConfig,
 	ie isql.Executor,
 ) (*sqlRowProcessor, error) {
-	aq, err := makeApplierQuerier(ctx, settings, tableDescs, ie)
-	if err != nil {
-		return nil, err
-	}
+	aq := makeApplierQuerier(ctx, settings, tableDescs, ie)
 	return makeSQLProcessorFromQuerier(ctx, settings, tableDescs, ie, aq)
 }
 
-func (aq *applierQuerier) AddTable(targetDescID int32, td catalog.TableDescriptor) error {
+func (aq *applierQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) error {
 	var err error
-	aq.queryBuffer.applierQueries[td.GetID()], err = makeApplierApplyQueries(targetDescID, td, aq.udfName)
+	td := tc.srcDesc
+	if tc.dstOID == 0 {
+		return errors.AssertionFailedf("empty function name")
+	}
+	aq.queryBuffer.applierQueries[td.GetID()], err = makeApplierApplyQueries(targetDescID, td, tc.dstOID)
 	if err != nil {
 		return err
 	}
@@ -212,11 +174,11 @@ func (aq *applierQuerier) processRow(
 	if txn != nil {
 		kvTxn = txn.KV()
 	}
-	decision, decisionRow, err := aq.applyUDF(ctx, kvTxn, ie, mutType, row, prevRow)
+	decision, err := aq.applyUDF(ctx, kvTxn, ie, mutType, row, prevRow)
 	if err != nil {
 		return batchStats{}, err
 	}
-	return aq.applyDecision(ctx, kvTxn, ie, row, decision, decisionRow)
+	return aq.applyDecision(ctx, kvTxn, ie, row, decision)
 }
 
 func (aq *applierQuerier) applyUDF(
@@ -226,16 +188,16 @@ func (aq *applierQuerier) applyUDF(
 	mutType replicationMutationType,
 	row cdcevent.Row,
 	prevRow *cdcevent.Row,
-) (applierDecision, tree.Datums, error) {
+) (applierDecision, error) {
 	applyQueryBuilder, err := aq.queryBuffer.ApplierQueryForRow(row)
 	if err != nil {
-		return noDecision, nil, err
+		return noDecision, err
 	}
 	if err := applyQueryBuilder.AddRowDefaultNull(&row); err != nil {
-		return noDecision, nil, err
+		return noDecision, err
 	}
 	if err := applyQueryBuilder.AddRowDefaultNull(prevRow); err != nil {
-		return noDecision, nil, err
+		return noDecision, err
 	}
 
 	var query int
@@ -250,7 +212,7 @@ func (aq *applierQuerier) applyUDF(
 
 	stmt, datums, err := applyQueryBuilder.Query(query)
 	if err != nil {
-		return noDecision, nil, err
+		return noDecision, err
 	}
 
 	aq.proposedMVCCTs.Decimal = eval.TimestampToDecimal(row.MvccTimestamp)
@@ -261,22 +223,15 @@ func (aq *applierQuerier) applyUDF(
 		append(datums, &aq.proposedMVCCTs, &aq.proposedPrevMVCCTs)...,
 	)
 	if err != nil {
-		return noDecision, nil, err
+		return noDecision, err
 	}
-	if len(decisionRow) < 2 {
-		return noDecision, nil, errors.Errorf("unexpected number of return values from custom UDF: %d", len(decisionRow))
+	if len(decisionRow) != 1 {
+		return noDecision, errors.Errorf("unexpected number of return values from custom UDF: %d", len(decisionRow))
 	}
 	decisionStr, ok := decisionRow[0].(*tree.DString)
 	if !ok {
-		return noDecision, nil, errors.Errorf("unexpected return type for first return value from custom UDF: %v", decisionRow[0])
+		return noDecision, errors.Errorf("unexpected return type for first return value from custom UDF: %v", decisionRow[0])
 	}
-
-	var mutatedDatums tree.Datums
-	mutatedDatumsTuple, ok := decisionRow[1].(*tree.DTuple)
-	if ok {
-		mutatedDatums = mutatedDatumsTuple.D
-	}
-
 	decision := applierDecision(*decisionStr)
 	if decision == acceptProposed {
 		switch mutType {
@@ -286,16 +241,11 @@ func (aq *applierQuerier) applyUDF(
 			decision = upsertProposed
 		}
 	}
-	return decision, mutatedDatums, nil
+	return decision, nil
 }
 
 func (aq *applierQuerier) applyDecision(
-	ctx context.Context,
-	txn *kv.Txn,
-	ie isql.Executor,
-	row cdcevent.Row,
-	decision applierDecision,
-	decisionRow tree.Datums,
+	ctx context.Context, txn *kv.Txn, ie isql.Executor, row cdcevent.Row, decision applierDecision,
 ) (batchStats, error) {
 	switch decision {
 	case ignoreProposed:
@@ -328,29 +278,6 @@ func (aq *applierQuerier) applyDecision(
 		if err != nil {
 			return batchStats{}, err
 		}
-		if err := aq.execParsed(ctx, replicatedInsertOpName, txn, ie, aq.ieoInsert, stmt, datums...); err != nil {
-			return batchStats{}, err
-		}
-		return batchStats{}, nil
-	case upsertSpecified:
-		q, err := aq.queryBuffer.InsertQueryForRow(row)
-		if err != nil {
-			return batchStats{}, err
-		}
-		stmt, _, err := q.Query(defaultQuery)
-		if err != nil {
-			return batchStats{}, err
-		}
-		datums := make([]interface{}, len(decisionRow)+1)
-		for i := range decisionRow {
-			datums[i] = decisionRow[i]
-		}
-		// TODO(ssd): Should we even record an
-		// crdb_replication_origin_timestamp here. Perhaps the UDF mode
-		// should leave this completely to the user and not use this
-		// extra column at all since in the case of upsertSpecfied, the
-		// origin is really the UDF itself, not the remote cluster.
-		datums[len(datums)-1] = &tree.DDecimal{Decimal: eval.TimestampToDecimal(row.MvccTimestamp)}
 		if err := aq.execParsed(ctx, replicatedInsertOpName, txn, ie, aq.ieoInsert, stmt, datums...); err != nil {
 			return batchStats{}, err
 		}
@@ -432,7 +359,7 @@ func escapedColumnNameList(names []string) string {
 }
 
 func makeApplierApplyQueries(
-	dstTableDescID int32, td catalog.TableDescriptor, udfName string,
+	dstTableDescID int32, td catalog.TableDescriptor, udfOID uint32,
 ) (map[catid.FamilyID]queryBuilder, error) {
 	if td.NumFamilies() > 1 {
 		return nil, errors.Errorf("multiple-column familes not supported by the custom-UDF applier")
@@ -469,7 +396,7 @@ func makeApplierApplyQueries(
 		q := fmt.Sprintf(applierQueryBase,
 			colNames,
 			valStr,
-			udfName,
+			udfOID,
 			mutType,
 			prevValStr,
 			remoteMVCCIdx,

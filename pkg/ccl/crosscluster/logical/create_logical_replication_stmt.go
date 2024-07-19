@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -98,10 +99,11 @@ func createLogicalReplicationStreamPlanHook(
 			return pgerror.New(pgcode.InvalidParameterValue, "the same number of source and destination tables must be specified")
 		}
 
-		var targetsDescription string
-		srcTableNames := make([]string, len(stmt.From.Tables))
-
-		repPairs := make([]jobspb.LogicalReplicationDetails_ReplicationPair, len(stmt.Into.Tables))
+		var (
+			targetsDescription string
+			srcTableNames      = make([]string, len(stmt.From.Tables))
+			repPairs           = make([]jobspb.LogicalReplicationDetails_ReplicationPair, len(stmt.Into.Tables))
+		)
 		for i := range stmt.From.Tables {
 
 			dstObjName, err := stmt.Into.Tables[i].ToUnresolvedObjectName(tree.NoAnnotation)
@@ -113,7 +115,6 @@ func createLogicalReplicationStreamPlanHook(
 			if err != nil {
 				return err
 			}
-
 			repPairs[i].DstDescriptorID = int32(td.GetID())
 
 			// TODO(dt): remove when we support this via KV metadata.
@@ -196,7 +197,7 @@ func createLogicalReplicationStreamPlanHook(
 
 		if uf, ok := options.GetUserFunctions(); ok {
 			for i, name := range srcTableNames {
-				repPairs[i].SrcFunctionID = uf[name]
+				repPairs[i].DstFunctionID = uf[name]
 			}
 		}
 		// Default conflict resolution if not set will be LWW
@@ -305,8 +306,12 @@ func evalLogicalReplicationOptions(
 		// This case will assume that a function name was passed in
 		// and we will try to resolve it.
 		default:
-			urn := tree.MakeUnresolvedName(defaultFnc)
-			descID, err := lookupFunctionID(ctx, p, urn)
+			urn, err := parser.ParseFunctionName(defaultFnc)
+			if err != nil {
+				return nil, err
+			}
+			un := urn.ToUnresolvedName()
+			descID, err := lookupFunctionID(ctx, p, *un)
 			if err != nil {
 				return nil, err
 			}
@@ -324,8 +329,8 @@ func evalLogicalReplicationOptions(
 				return nil, err
 			}
 
-			urn := tree.MakeUnresolvedName(fnc.String())
-			descID, err := lookupFunctionID(ctx, p, urn)
+			un := fnc.ToUnresolvedObjectName().ToUnresolvedName()
+			descID, err := lookupFunctionID(ctx, p, *un)
 			if err != nil {
 				return nil, err
 			}
@@ -343,14 +348,14 @@ func lookupFunctionID(
 		return 0, err
 	}
 	if len(rf.Overloads) > 1 {
-		return 0, errors.Newf("function '%s' has more than 1 overload", u.String())
+		return 0, errors.Newf("function %q has more than 1 overload", u.String())
 	}
 	fnOID := rf.Overloads[0].Oid
-	var descID int32
-	if descID := typedesc.UserDefinedTypeOIDToID(fnOID); descID == 0 {
-		return 0, errors.Newf("function '%s' is not a user defined type", u.String())
+	descID := typedesc.UserDefinedTypeOIDToID(fnOID)
+	if descID == 0 {
+		return 0, errors.Newf("function %q is not a user defined type", u.String())
 	}
-	return descID, nil
+	return int32(descID), nil
 }
 
 func (r *resolvedLogicalReplicationOptions) GetCursor() (hlc.Timestamp, bool) {

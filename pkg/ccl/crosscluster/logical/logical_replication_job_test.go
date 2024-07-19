@@ -887,43 +887,41 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlA, sqlB, cleanup := setupTwoDBUDFTestCluster(t)
-	defer cleanup()
+	ctx := context.Background()
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	})
+	defer server.Stopper().Stop(ctx)
 
-	// Set the default back to the lww resolver, but leave udfName set.
-	defaultSQLProcessor = lwwProcessor
-
-	dbA := sqlutils.MakeSQLRunner(sqlA)
-	dbB := sqlutils.MakeSQLRunner(sqlB)
-	createBasicTable(t, dbA, "tab")
-	createBasicTable(t, dbB, "tab")
 	lwwFunc := `CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tab, existing tab, prev tab, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL,proposed_mvcc_timestamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
-	RETURNS crdb_replication_applier_decision
+	RETURNS string
 	AS $$
 	BEGIN
 	IF existing_origin_timestamp IS NULL THEN
 	    IF existing_mvcc_timestamp < proposed_mvcc_timestamp THEN
 			SELECT crdb_internal.log('case 1');
-			RETURN ('accept_proposed', NULL);
+			RETURN 'accept_proposed';
 		ELSE
 			SELECT crdb_internal.log('case 2');
-			RETURN ('ignore_proposed', NULL);
+			RETURN 'ignore_proposed';
 		END IF;
 	ELSE
 		IF existing_origin_timestamp < proposed_mvcc_timestamp THEN
 			SELECT crdb_internal.log('case 3');
-			RETURN ('accept_proposed', NULL);
+			RETURN 'accept_proposed';
 		ELSE
 			SELECT crdb_internal.log('case 4');
-			RETURN ('ignore_proposed', NULL);
+			RETURN 'ignore_proposed';
 		END IF;
 	END IF;
 	END
 	$$ LANGUAGE plpgsql`
-	// TODO(ssd): We should make this type automatically for people or remove the `upsert_specified action so that we don't need it`
-	dbB.Exec(t, applierTypes)
 	dbB.Exec(t, lwwFunc)
-	dbA.Exec(t, applierTypes)
 	dbA.Exec(t, lwwFunc)
 
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
@@ -943,8 +941,8 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 		jobAID jobspb.JobID
 		jobBID jobspb.JobID
 	)
-	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
-	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH FUNCTION repl_apply FOR TABLE tab", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH FUNCTION repl_apply FOR TABLE tab", dbAURL.String()).Scan(&jobBID)
 
 	now := s.Clock().Now()
 	t.Logf("waiting for replication job %d", jobAID)
