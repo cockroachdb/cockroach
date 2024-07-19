@@ -837,7 +837,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	clientClock := &AdvancingClock{time: timeutil.Unix(0, 10)}
 	clientMaxOffset := time.Duration(0)
 	clientCtx := newTestContext(clusterID, clientClock, clientMaxOffset, stopper)
-	clientCtx.RemoteClocks.offsetTTL = 5 * clientClock.getAdvancementInterval()
+	clientCtx.RemoteClocks.offsetTTL = 1 * time.Nanosecond
 	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -1104,7 +1104,8 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 		clock := timeutil.NewManualTime(timeutil.Unix(0, start.Add(nodeCtxs[i].offset).UnixNano()))
 		nodeCtxs[i].errChan = make(chan error, 1)
 		nodeCtxs[i].ctx = newTestContext(clusterID, clock, maxOffset, stopper)
-		nodeCtxs[i].ctx.RPCHeartbeatInterval = maxOffset
+		// Make the test faster.
+		nodeCtxs[i].ctx.RPCHeartbeatInterval = 10 * time.Millisecond
 		// Disable RPC heartbeat timeouts to avoid flakiness in the test. If a
 		// heartbeat were to time out, its RPC connection would be closed and its
 		// clock offset information would be lost.
