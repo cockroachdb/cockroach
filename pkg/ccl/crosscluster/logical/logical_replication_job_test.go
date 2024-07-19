@@ -834,7 +834,7 @@ func (m mockBatchHandler) SetSyntheticFailurePercent(_ uint32) {}
 
 type mockDLQ int
 
-func (m *mockDLQ) Create(_ context.Context, _ []int32) error {
+func (m *mockDLQ) Create(_ context.Context) error {
 	return nil
 }
 
