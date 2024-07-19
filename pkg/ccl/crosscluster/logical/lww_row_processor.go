@@ -306,6 +306,7 @@ func (srp *sqlRowProcessor) ProcessRow(
 		srp.lastRow = cdcevent.Row{}
 		return batchStats{}, errors.Wrap(err, "decoding KeyValue")
 	}
+	row.OverrideIsDeletedForLDR(isDeleted)
 	srp.lastRow = row
 
 	var parsedBeforeRow *cdcevent.Row
@@ -321,7 +322,7 @@ func (srp *sqlRowProcessor) ProcessRow(
 	}
 
 	var stats batchStats
-	if isDeleted {
+	if row.IsDeleted() {
 		stats, err = srp.querier.DeleteRow(ctx, txn, srp.ie, row, parsedBeforeRow)
 	} else {
 		stats, err = srp.querier.InsertRow(ctx, txn, srp.ie, row, parsedBeforeRow, prevValue.RawBytes == nil)

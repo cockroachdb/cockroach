@@ -141,6 +141,10 @@ func (r Row) IsDeleted() bool {
 	return r.deleted
 }
 
+func (r *Row) OverrideIsDeletedForLDR(isDeleted bool) {
+	r.deleted = isDeleted
+}
+
 // IsInitialized returns true if event row is initialized.
 func (r Row) IsInitialized() bool {
 	return r.EventDescriptor != nil
