@@ -45,14 +45,6 @@ const (
 	upsertSpecified applierDecision = "upsert_specified"
 )
 
-type mutationType string
-
-const (
-	insertMutation mutationType = "insert"
-	updateMutation mutationType = "update"
-	deleteMutation mutationType = "delete"
-)
-
 const (
 	insertQuery = 0
 	updateQuery = 1
@@ -214,7 +206,7 @@ func (aq *applierQuerier) processRow(
 	ie isql.Executor,
 	row cdcevent.Row,
 	prevRow *cdcevent.Row,
-	mutType mutationType,
+	mutType replicationMutationType,
 ) (batchStats, error) {
 	var kvTxn *kv.Txn
 	if txn != nil {
@@ -231,7 +223,7 @@ func (aq *applierQuerier) applyUDF(
 	ctx context.Context,
 	txn *kv.Txn,
 	ie isql.Executor,
-	mutType mutationType,
+	mutType replicationMutationType,
 	row cdcevent.Row,
 	prevRow *cdcevent.Row,
 ) (applierDecision, tree.Datums, error) {
@@ -469,7 +461,7 @@ func makeApplierApplyQueries(
 	joinClause := makeApplierJoinClause(td.TableDesc().PrimaryIndex.KeyColumnNames)
 
 	statements := make([]statements.Statement[tree.Statement], 3)
-	for statementIdx, mutType := range map[int]mutationType{
+	for statementIdx, mutType := range map[int]replicationMutationType{
 		insertQuery: insertMutation,
 		updateQuery: updateMutation,
 		deleteQuery: deleteMutation,
