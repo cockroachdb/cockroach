@@ -1,0 +1,42 @@
+# Single-node
+upload-logs
+{
+  "nodes": {
+    "1": {
+      "logs": [
+        {
+          "name": "file1.log",
+          "lines": [
+            {
+              "time": 1720955400,
+              "severity": 1,
+              "goroutine": 128,
+              "file": "server/status/runtime_log.go",
+              "line": 47,
+              "message": "runtime stats: 591 MiB RSS, 439 goroutines (stacks: 5.3 MiB), 99 MiB/212 MiB Go alloc/total(stale) (heap fragmentation: 41 MiB, heap reserved: 48 MiB, heap released: 7.3 MiB), 140 MiB/310 MiB CGO alloc/total (1136.3 CGO/sec), 0.3/0.1 %(u/s)time, 0.0 %gc (50x), 438 KiB/78 KiB (r/w)net",
+              "tag": "dev-testing",
+              "counter": 11,
+              "channel": 2,
+              "tenant_id": "1"
+            },
+            {
+              "time": 1718774802,
+              "severity": 1,
+              "goroutine": 128,
+              "file": "server/status/runtime_log.go",
+              "line": 47,
+              "message": "runtime stats: 710 MiB RSS, 437 goroutines (stacks: 5.1 MiB), 118 MiB/271 MiB Go alloc/total(stale) (heap fragmentation: 42 MiB, heap reserved: 81 MiB, heap released: 21 MiB), 140 MiB/523 MiB CGO alloc/total (22.1 CGO/sec), 0.0/0.0 %(u/s)time, 0.0 %gc (192x), 26 MiB/33 MiB (r/w)net",
+              "tag": "dev-testing",
+              "counter": 29,
+              "channel": 2,
+              "tenant_id": "1"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+----
+Upload ID: 123
+debug zip upload debugDir --dd-api-key=dd-api-key --cluster=ABC --include=logs --log-format=crdb-v1

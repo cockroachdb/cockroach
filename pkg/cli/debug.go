@@ -1580,6 +1580,8 @@ func init() {
 	f = debugZipUploadCmd.Flags()
 	f.StringVar(&debugZipUploadOpts.ddAPIKey, "dd-api-key", "",
 		"Datadog API key to use to send debug.zip artifacts to datadog")
+	f.StringVar(&debugZipUploadOpts.ddSite, "dd-site", "us5",
+		"Datadog site to use to send debug.zip artifacts to datadog")
 	f.StringSliceVar(&debugZipUploadOpts.include, "include", nil,
 		"The debug zip artifacts to include. Possible values: "+strings.Join(zipArtifactTypes, ", "))
 	f.StringSliceVar(&debugZipUploadOpts.tags, "tags", nil,
@@ -1587,6 +1589,10 @@ func init() {
 			"\nExample: --tags \"env:prod,customer:xyz\"")
 	f.StringVar(&debugZipUploadOpts.clusterName, "cluster", "",
 		"Name of the cluster to associate with the debug zip artifacts. This can be used to identify data in the upstream observability tool.")
+	f.Var(&debugZipUploadOpts.from, "from", "oldest timestamp to include (inclusive)")
+	f.Var(&debugZipUploadOpts.to, "to", "newest timestamp to include (inclusive)")
+	f.StringVar(&debugZipUploadOpts.logFormat, "log-format", "",
+		"log format of the input files")
 
 	f = debugDecodeKeyCmd.Flags()
 	f.Var(&decodeKeyOptions.encoding, "encoding", "key argument encoding")

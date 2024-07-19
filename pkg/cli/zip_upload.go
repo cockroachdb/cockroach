@@ -12,6 +12,7 @@ package cli
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -22,11 +23,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/spf13/cobra"
@@ -44,39 +48,52 @@ type profileUploadEvent struct {
 type uploadZipArtifactFunc func(ctx context.Context, uuid string, debugDirPath string) error
 
 const (
-	datadogAPIKeyHeader  = "DD-API-KEY"
-	zippedProfilePattern = "nodes/*/*.pprof"
-	profileFamily        = "go"
-	profileFormat        = "pprof"
+	datadogAPIKeyHeader = "DD-API-KEY"
 
-	// this is not the pprof version, but the version of the profile upload format supported by datadog
+	// the path pattern to search for specific artifacts in the debug
+	// zip director
+	zippedProfilePattern = "nodes/*/*.pprof"
+	zippedLogsPattern    = "nodes/*/logs/*"
+
+	profileFamily = "go"
+	profileFormat = "pprof"
+
+	// this is not the pprof version, but the version of the profile
+	// upload format supported by datadog
 	profileVersion = "4"
 
 	// names of mandatory tag
 	nodeIDTag  = "node_id"
 	uuidTag    = "uuid"
 	clusterTag = "cluster"
+
+	// datadog URL templates
+	datadogProfileUploadURL = "https://intake.profile.%s/v1/input"
+	datadogLogUploadURL     = "https://http-intake.logs.%s/api/v2/logs"
+
+	logLinePerChunk = 100
 )
 
 var debugZipUploadOpts = struct {
-	include            []string
-	ddAPIKey           string
-	ddProfileUploadURL string
-	clusterName        string
-	tags               []string
-}{
-	ddProfileUploadURL: "https://intake.profile.datadoghq.com/v1/input",
-}
+	include     []string
+	ddAPIKey    string
+	ddSite      string
+	clusterName string
+	tags        []string
+	from, to    timestampValue
+	logFormat   string
+}{}
 
 // This is the list of all supported artifact types. The "possible values" part
 // in the help text is generated from this list. So, make sure to keep this updated
-var zipArtifactTypes = []string{"profiles"}
+var zipArtifactTypes = []string{"profiles", "logs"}
 
 // uploadZipArtifactFuncs is a registry of handler functions for each artifact type.
 // While adding/removing functions from here, make sure to update
 // the zipArtifactTypes list as well
 var uploadZipArtifactFuncs = map[string]uploadZipArtifactFunc{
 	"profiles": uploadZipProfiles,
+	"logs":     uploadZipLogs,
 }
 
 // default tags
@@ -87,7 +104,8 @@ func runDebugZipUpload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// a unique ID for this upload session. This should be used to tag all the artifacts uploaded in this session
+	// a unique ID for this upload session. This should be used to tag
+	// all the artifacts uploaded in this session
 	uploadID := newUploadID()
 
 	// override the list of artifacts to upload if the user has provided any
@@ -109,6 +127,18 @@ func runDebugZipUpload(cmd *cobra.Command, args []string) error {
 }
 
 func validateZipUploadReadiness() error {
+	var (
+		includeLookup     = map[string]bool{}
+		artifactsToUpload = zipArtifactTypes
+	)
+
+	if len(debugZipUploadOpts.include) > 0 {
+		artifactsToUpload = debugZipUploadOpts.include
+	}
+	for _, inc := range artifactsToUpload {
+		includeLookup[inc] = true
+	}
+
 	if debugZipUploadOpts.ddAPIKey == "" {
 		return fmt.Errorf("datadog API key is required for uploading profiles")
 	}
@@ -122,6 +152,16 @@ func validateZipUploadReadiness() error {
 		if _, ok := uploadZipArtifactFuncs[artType]; !ok {
 			return fmt.Errorf("unsupported artifact type '%s'", artType)
 		}
+	}
+
+	// validate the datadog site name
+	if _, ok := ddSiteToHostMap[debugZipUploadOpts.ddSite]; !ok {
+		return fmt.Errorf("unsupported datadog site '%s'", debugZipUploadOpts.ddSite)
+	}
+
+	// validate the log format if logs are to be uploaded
+	if _, ok := log.FormatParsers[debugZipUploadOpts.logFormat]; !ok && includeLookup["logs"] {
+		return fmt.Errorf("unsupported log format '%s'", debugZipUploadOpts.logFormat)
 	}
 
 	return nil
@@ -157,7 +197,7 @@ func uploadZipProfiles(ctx context.Context, uuid string, debugDirPath string) er
 			return err
 		}
 
-		resp, err := doUploadProfileReq(req)
+		resp, err := doUploadReq(req)
 		if err != nil {
 			return err
 		}
@@ -248,7 +288,7 @@ func newProfileUploadReq(
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, debugZipUploadOpts.ddProfileUploadURL, &body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, makeDDURL(datadogProfileUploadURL), &body)
 	if err != nil {
 		return nil, err
 	}
@@ -256,6 +296,166 @@ func newProfileUploadReq(
 	req.Header.Set(httputil.ContentTypeHeader, mw.FormDataContentType())
 	req.Header.Set(datadogAPIKeyHeader, debugZipUploadOpts.ddAPIKey)
 	return req, nil
+}
+
+func uploadZipLogs(ctx context.Context, uuid string, debugDirPath string) error {
+	paths, err := expandPatterns([]string{path.Join(debugDirPath, zippedLogsPattern)})
+	if err != nil {
+		return err
+	}
+
+	filePattern := regexp.MustCompile(logFilePattern)
+	files, err := findLogFiles(
+		paths, filePattern, nil, groupIndex(filePattern, "program"),
+	)
+	if err != nil {
+		return err
+	}
+
+	upload := func(logLines [][]byte) error {
+		req, err := newLogUploadReq(ctx, logLines)
+		if err != nil {
+			return err
+		}
+
+		resp, err := doUploadReq(req)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				fmt.Println("failed to close response body:", err)
+			}
+		}()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+
+		if resp.StatusCode != http.StatusAccepted {
+			return fmt.Errorf("failed to send logs, status code: %d, response: %s", resp.StatusCode, string(body))
+		}
+
+		return nil
+	}
+
+	for _, file := range files {
+		inputEditMode := log.SelectEditMode(false /* redactable */, false /* redactInput */)
+		stream, err := newFileLogStream(
+			file, time.Time(debugZipUploadOpts.from), time.Time(debugZipUploadOpts.to),
+			inputEditMode, debugZipUploadOpts.logFormat,
+		)
+		if err != nil {
+			return err
+		}
+
+		chunk := [][]byte{}
+		for e, ok := stream.peek(); ok; e, ok = stream.peek() {
+			rawLine, err := logEntryToJSON(e)
+			if err != nil {
+				return err
+			}
+
+			chunk = append(chunk, rawLine)
+			if len(chunk) == logLinePerChunk {
+				if err := upload(chunk); err != nil {
+					return err
+				}
+
+				// fmt.Println(string(bytes.Join(chunk, []byte(",\n"))))
+				chunk = nil
+			}
+
+			stream.pop()
+		}
+
+		// upload the remaining lines if any
+		if len(chunk) > 0 {
+			if err := upload(chunk); err != nil {
+				return err
+			}
+
+			// fmt.Println(string(bytes.Join(chunk, []byte(",\n"))))
+		}
+
+		if err := stream.error(); err != nil {
+			if err.Error() == "EOF" {
+				return nil
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
+func newLogUploadReq(ctx context.Context, logLines [][]byte) (*http.Request, error) {
+	var (
+		compressedLogs       bytes.Buffer
+		compressedLogsWriter = gzip.NewWriter(&compressedLogs)
+	)
+
+	if _, err := compressedLogsWriter.Write([]byte("[")); err != nil {
+		return nil, err
+	}
+
+	if _, err := compressedLogsWriter.Write(bytes.Join(logLines, []byte(",\n"))); err != nil {
+		return nil, err
+	}
+
+	if _, err := compressedLogsWriter.Write([]byte("]")); err != nil {
+		return nil, err
+	}
+
+	if err := compressedLogsWriter.Close(); err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(
+		ctx, http.MethodPost, makeDDURL(datadogLogUploadURL), &compressedLogs,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set(httputil.ContentTypeHeader, httputil.JSONContentType)
+	req.Header.Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
+	req.Header.Set(datadogAPIKeyHeader, debugZipUploadOpts.ddAPIKey)
+	return req, nil
+}
+
+// logEntryToJSON converts a logpb.Entry to a JSON byte slice and also
+// convert the 'time' field from nanoseconds to seconds
+func logEntryToJSON(e logpb.Entry) ([]byte, error) {
+	if strings.HasPrefix(e.Message, "{") {
+		// If the message is already a JSON object, we don't want to escape it
+		// by wrapping it in quotes. Instead, we want to include it as a nested
+		// object in the final JSON output. So, we can override the Message field
+		// with the json.RawMessage instead of string. This will prevent the
+		// message from being escaped.
+		return json.Marshal(struct {
+			Timestamp int64           `json:"time"`
+			Channel   string          `json:"channel"`
+			Message   json.RawMessage `json:"message,omitempty"`
+			logpb.Entry
+		}{
+			Timestamp: e.Time / 1e9,       // convert nanoseconds to seconds
+			Channel:   e.Channel.String(), // use the string representation of the channel
+			Message:   json.RawMessage(e.Message),
+			Entry:     e,
+		})
+	}
+
+	return json.Marshal(struct {
+		Timestamp int64  `json:"time"`
+		Channel   string `json:"channel"`
+		logpb.Entry
+	}{
+		Timestamp: e.Time / 1e9,       // convert nanoseconds to seconds
+		Channel:   e.Channel.String(), // use the string representation of the channel
+		Entry:     e,
+	})
 }
 
 // appendUserTags will make sure there are no duplicates in the final list of tags.
@@ -302,9 +502,9 @@ func makeDDTag(key, value string) string {
 	return fmt.Sprintf("%s:%s", key, value)
 }
 
-// doUploadProfileReq is a variable that holds the function that literally just sends the request.
+// doUploadReq is a variable that holds the function that literally just sends the request.
 // This is useful to mock the datadog API's response in tests.
-var doUploadProfileReq = func(req *http.Request) (*http.Response, error) {
+var doUploadReq = func(req *http.Request) (*http.Response, error) {
 	return http.DefaultClient.Do(req)
 }
 
@@ -318,4 +518,25 @@ var newUploadID = func() string {
 			fmt.Sprintf("%s-%s", debugZipUploadOpts.clusterName, uuid.NewV4().Short()), " ", "-",
 		),
 	)
+}
+
+var (
+	// each site in datadog has a different host name. ddSiteToHostMap
+	// holds the mapping of site name to the host name.
+	ddSiteToHostMap = map[string]string{
+		"us1":     "datadoghq.com",
+		"us3":     "us3.datadoghq.com",
+		"us5":     "us5.datadoghq.com",
+		"eu1":     "datadoghq.eu",
+		"ap1":     "ap1.datadoghq.com",
+		"us1-fed": "ddog-gov.com",
+	}
+)
+
+// makeDDURL constructe the final datadog URL by replacing the site
+// placeholder in the template. This is a simple convenience
+// function. It assumes that the site is valid. This assumption is
+// fine because we are validating the site early on in the flow.
+func makeDDURL(tmpl string) string {
+	return fmt.Sprintf(tmpl, ddSiteToHostMap[debugZipUploadOpts.ddSite])
 }

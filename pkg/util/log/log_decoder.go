@@ -78,7 +78,7 @@ func NewEntryDecoderWithFormat(
 		}
 		in = io.MultiReader(read, in)
 	}
-	f, ok := formatParsers[format]
+	f, ok := FormatParsers[format]
 	if !ok {
 		return nil, errors.Newf("unknown log file format: %s", format)
 	}

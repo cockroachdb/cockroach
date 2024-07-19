@@ -35,37 +35,71 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type zipUploadTestContents struct {
+	Nodes map[int]struct {
+		Profiles []uploadProfileReq `json:"profiles"`
+		Logs     []uploadLogsReq    `json:"logs"`
+	} `json:"nodes"`
+}
+
+type uploadLogsReq struct {
+	Name  string            `json:"name"`
+	Lines []json.RawMessage `json:"lines"`
+}
+
 type uploadProfileReq struct {
 	Type      string `json:"type"`
 	Timestamp int64  `json:"timestamp"`
 	Duration  int64  `json:"duration"`
 }
 
-func setupZipDirWithProfiles(t *testing.T, inputs map[int][]uploadProfileReq) (string, func()) {
+func setupZipDir(t *testing.T, inputs zipUploadTestContents) (string, func()) {
 	t.Helper()
 
 	// make sure that the debug directory name is unique. Or the tests will be flaky.
 	debugDir := path.Join(os.TempDir(), fmt.Sprintf("debug-%s/", uuid.MakeV4().String()))
 
-	for nodeID, nodeInputs := range inputs {
-		// create a subdirectory for each node
+	for nodeID, nodeInputs := range inputs.Nodes {
+		// setup profiles
 		profDir := path.Join(debugDir, fmt.Sprintf("nodes/%d/", nodeID))
 		require.NoError(t, os.MkdirAll(profDir, 0755))
 
-		for _, i := range nodeInputs {
+		for _, prof := range nodeInputs.Profiles {
 			p := &profile.Profile{
-				TimeNanos:     time.Unix(i.Timestamp, 0).UnixNano(),
-				DurationNanos: i.Duration,
+				TimeNanos:     time.Unix(prof.Timestamp, 0).UnixNano(),
+				DurationNanos: prof.Duration,
 				SampleType: []*profile.ValueType{
-					{Type: i.Type},
+					{Type: prof.Type},
 				},
 			}
 
 			file, err := os.Create(
-				path.Join(profDir, fmt.Sprintf("%s.pprof", i.Type)),
+				path.Join(profDir, fmt.Sprintf("%s.pprof", prof.Type)),
 			)
 			require.NoError(t, err)
 			require.NoError(t, p.Write(file))
+			require.NoError(t, file.Close())
+		}
+
+		// setup logs
+		logDir := path.Join(debugDir, fmt.Sprintf("nodes/%d/logs", nodeID))
+		require.NoError(t, os.MkdirAll(logDir, 0755))
+
+		for _, log := range nodeInputs.Logs {
+			var logBuilder bytes.Buffer
+			for _, line := range log.Lines {
+				logBuilder.Write(line)
+				logBuilder.WriteString("\n")
+			}
+
+			file, err := os.Create(
+				path.Join(logDir, log.Name),
+			)
+			require.NoError(t, err)
+
+			_, err = file.Write(logBuilder.Bytes())
+			require.NoError(t, err)
+			require.NoError(t, file.Close())
 		}
 	}
 
@@ -74,109 +108,83 @@ func setupZipDirWithProfiles(t *testing.T, inputs map[int][]uploadProfileReq) (s
 	}
 }
 
-func TestUploadZipProfiles(t *testing.T) {
+func TestUploadZipEndToEnd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer testutils.TestingHook(&newUploadID, func() string {
 		return "123"
 	})()
 
-	defer testutils.TestingHook(&doUploadProfileReq,
+	defer testutils.TestingHook(&doUploadReq,
 		func(req *http.Request) (*http.Response, error) {
 			defer req.Body.Close()
 
-			_, params, _ := mime.ParseMediaType(req.Header.Get("Content-Type"))
-			reader := multipart.NewReader(req.Body, params["boundary"])
-
-			// find the "event" part in the multipart request and copy it to the final output
-			for {
-				part, err := reader.NextPart()
-				if err == io.EOF {
-					break
-				}
-
-				if part.FormName() == "event" {
-					var event profileUploadEvent
-					require.NoError(t, json.NewDecoder(part).Decode(&event))
-
-					if strings.Contains(event.Tags, "ERR") {
-						// this is a test to simulate a client error
-						return &http.Response{
-							StatusCode: 400,
-							Body:       io.NopCloser(strings.NewReader("'runtime' is a required field")),
-						}, nil
-					}
-
-					// validate the timestamps outside the data-driven test framework
-					// to keep the test deterministic.
-					start, err := time.Parse(time.RFC3339Nano, event.Start)
-					require.NoError(t, err)
-
-					end, err := time.Parse(time.RFC3339Nano, event.End)
-					require.NoError(t, err)
-
-					require.Equal(t, time.Second*5, end.Sub(start))
-					event.Start = ""
-					event.End = ""
-
-					// require.NoError(t, json.NewEncoder(&finaloutput).Encode(event))
-					rawEvent, err := json.Marshal(event)
-					require.NoError(t, err)
-
-					// print the event so that it gets captured as a part of RunWithCapture
-					fmt.Println(string(rawEvent))
-				}
+			t.Log(req.URL.Path, "==================")
+			switch req.URL.Path {
+			case "/v1/input":
+				return uploadProfileHook(t, req)
+			case "/api/v2/logs":
+				return uploadLogsHook(t, req)
+			default:
+				return nil, fmt.Errorf(
+					"unexpected request is being made to datadog: %s", req.URL.Path,
+				)
 			}
-
-			return &http.Response{
-				StatusCode: 200,
-				Body:       io.NopCloser(strings.NewReader("200 OK")),
-			}, nil
 		},
 	)()
 
-	datadriven.RunTest(t, "testdata/upload/profiles", func(t *testing.T, d *datadriven.TestData) string {
-		c := NewCLITest(TestCLIParams{})
-		defer c.Cleanup()
+	datadriven.Walk(t, "testdata/upload", func(t *testing.T, path string) {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			c := NewCLITest(TestCLIParams{})
+			defer c.Cleanup()
 
-		var finaloutput bytes.Buffer
+			var finaloutput bytes.Buffer
 
-		var testInput map[int][]uploadProfileReq
-		require.NoError(t, json.Unmarshal([]byte(d.Input), &testInput))
+			var testInput zipUploadTestContents
+			require.NoError(t, json.Unmarshal([]byte(d.Input), &testInput))
 
-		var tags string
-		if d.HasArg("tags") {
-			d.ScanArgs(t, "tags", &tags)
-			tags = fmt.Sprintf("--tags=%s", tags)
-		} else {
-			debugZipUploadOpts.tags = nil
-		}
+			var tags string
+			if d.HasArg("tags") {
+				d.ScanArgs(t, "tags", &tags)
+				tags = fmt.Sprintf("--tags=%s", tags)
+			} else {
+				debugZipUploadOpts.tags = nil
+			}
 
-		clusterNameArg := "--cluster=ABC"
-		if d.HasArg("skip-cluster-name") {
-			debugZipUploadOpts.clusterName = ""
-			clusterNameArg = ""
-		}
+			clusterNameArg := "--cluster=ABC"
+			if d.HasArg("skip-cluster-name") {
+				debugZipUploadOpts.clusterName = ""
+				clusterNameArg = ""
+			}
 
-		debugDir, cleanup := setupZipDirWithProfiles(t, testInput)
-		defer cleanup()
+			var includeFlag string // no include flag by default
+			switch d.Cmd {
+			case "upload-profiles":
+				includeFlag = "--include=profiles"
+			case "upload-logs":
+				includeFlag = "--include=logs --log-format=crdb-v1"
+			}
 
-		stdout, err := c.RunWithCapture(
-			fmt.Sprintf("debug zip upload %s --dd-api-key=dd-api-key %s %s", debugDir, tags, clusterNameArg),
-		)
-		require.NoError(t, err)
+			debugDir, cleanup := setupZipDir(t, testInput)
+			defer cleanup()
 
-		// also write the STDOUT output to the finaloutput buffer. So, both the
-		// API request made to Datadog and the STDOUT output are validated.
-		_, err = finaloutput.WriteString(stdout)
-		require.NoError(t, err)
+			stdout, err := c.RunWithCapture(fmt.Sprintf(
+				"debug zip upload %s --dd-api-key=dd-api-key %s %s %s", debugDir, tags, clusterNameArg, includeFlag,
+			))
+			require.NoError(t, err)
 
-		// sort the lines to avoid flakiness in the test
-		lines := strings.Split(finaloutput.String(), "\n")
-		sort.Strings(lines)
+			// also write the STDOUT output to the finaloutput buffer. So, both the
+			// API request made to Datadog and the STDOUT output are validated.
+			_, err = finaloutput.WriteString(stdout)
+			require.NoError(t, err)
 
-		// replace the debugDir with a constant string to avoid flakiness in the test
-		return strings.ReplaceAll(strings.TrimSpace(strings.Join(lines, "\n")), debugDir, "debugDir")
+			// sort the lines to avoid flakiness in the test
+			lines := strings.Split(finaloutput.String(), "\n")
+			sort.Strings(lines)
+
+			// replace the debugDir with a constant string to avoid flakiness in the test
+			return strings.ReplaceAll(strings.TrimSpace(strings.Join(lines, "\n")), debugDir, "debugDir")
+		})
 	})
 }
 
@@ -236,4 +244,71 @@ func TestZipUploadArtifactTypes(t *testing.T) {
 			artifactType,
 		)
 	}
+}
+
+func uploadProfileHook(t *testing.T, req *http.Request) (*http.Response, error) {
+	t.Helper()
+
+	_, params, _ := mime.ParseMediaType(req.Header.Get("Content-Type"))
+	reader := multipart.NewReader(req.Body, params["boundary"])
+
+	// find the "event" part in the multipart request and copy it to the final output
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+
+		if part.FormName() == "event" {
+			var event profileUploadEvent
+			require.NoError(t, json.NewDecoder(part).Decode(&event))
+
+			if strings.Contains(event.Tags, "ERR") {
+				// this is a test to simulate a client error
+				return &http.Response{
+					StatusCode: 400,
+					Body:       io.NopCloser(strings.NewReader("'runtime' is a required field")),
+				}, nil
+			}
+
+			// validate the timestamps outside the data-driven test framework
+			// to keep the test deterministic.
+			start, err := time.Parse(time.RFC3339Nano, event.Start)
+			require.NoError(t, err)
+
+			end, err := time.Parse(time.RFC3339Nano, event.End)
+			require.NoError(t, err)
+
+			require.Equal(t, time.Second*5, end.Sub(start))
+			event.Start = ""
+			event.End = ""
+
+			// require.NoError(t, json.NewEncoder(&finaloutput).Encode(event))
+			rawEvent, err := json.Marshal(event)
+			require.NoError(t, err)
+
+			// print the event so that it gets captured as a part of RunWithCapture
+			fmt.Println(string(rawEvent))
+		}
+	}
+
+	return &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(strings.NewReader("200 OK")),
+	}, nil
+}
+
+func uploadLogsHook(t *testing.T, req *http.Request) (*http.Response, error) {
+	t.Helper()
+
+	t.Fatal("=============")
+
+	rawReq, err := json.MarshalIndent(req, "", "  ")
+	assert.NoError(t, err)
+
+	// print so that it gets captured as a part of RunWithCapture
+	fmt.Println(string(rawReq))
+	return &http.Response{
+		StatusCode: http.StatusAccepted,
+	}, nil
 }
