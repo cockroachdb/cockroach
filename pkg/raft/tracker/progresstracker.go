@@ -32,8 +32,6 @@ type ProgressTracker struct {
 	Config *quorum.Config
 
 	Progress ProgressMap
-
-	Votes map[pb.PeerID]bool
 }
 
 // MakeProgressTracker initializes a ProgressTracker.
@@ -41,7 +39,6 @@ func MakeProgressTracker(config *quorum.Config, progressMap ProgressMap) Progres
 	p := ProgressTracker{
 		Config:   config,
 		Progress: progressMap,
-		Votes:    map[pb.PeerID]bool{},
 	}
 	return p
 }
@@ -124,43 +121,4 @@ func (p *ProgressTracker) LearnerNodes() []pb.PeerID {
 	}
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i] < nodes[j] })
 	return nodes
-}
-
-// ResetVotes prepares for a new round of vote counting via recordVote.
-func (p *ProgressTracker) ResetVotes() {
-	p.Votes = map[pb.PeerID]bool{}
-}
-
-// RecordVote records that the node with the given id voted for this Raft
-// instance if v == true (and declined it otherwise).
-func (p *ProgressTracker) RecordVote(id pb.PeerID, v bool) {
-	_, ok := p.Votes[id]
-	if !ok {
-		p.Votes[id] = v
-	}
-}
-
-// TallyVotes returns the number of granted and rejected Votes, and whether the
-// election outcome is known.
-func (p *ProgressTracker) TallyVotes() (granted int, rejected int, _ quorum.VoteResult) {
-	// Make sure to populate granted/rejected correctly even if the Votes slice
-	// contains members no longer part of the configuration. This doesn't really
-	// matter in the way the numbers are used (they're informational), but might
-	// as well get it right.
-	for id, pr := range p.Progress {
-		if pr.IsLearner {
-			continue
-		}
-		v, voted := p.Votes[id]
-		if !voted {
-			continue
-		}
-		if v {
-			granted++
-		} else {
-			rejected++
-		}
-	}
-	result := p.Config.Voters.VoteResult(p.Votes)
-	return granted, rejected, result
 }
