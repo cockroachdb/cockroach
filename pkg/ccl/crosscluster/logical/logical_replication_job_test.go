@@ -503,6 +503,8 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 	type testCase struct {
 		name   string
 		schema string
+		useUDF bool
+		delete bool
 	}
 
 	testCases := []testCase{
@@ -514,6 +516,14 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 			name:   "comparison-invariant-to-different-covering-indexes",
 			schema: `CREATE TABLE rand_table (col1_0 DECIMAL, INDEX (col1_0) VISIBILITY 0.17, UNIQUE (col1_0 DESC), UNIQUE (col1_0 ASC), INDEX (col1_0 ASC), UNIQUE (col1_0 ASC))`,
 		},
+		{
+
+			// Single column tables previously had a bug
+			// with tuple parsing the UDF apply query.
+			name:   "single column table with udf",
+			schema: `CREATE TABLE rand_table (pk INT PRIMARY KEY)`,
+			useUDF: true,
+		},
 	}
 
 	baseTableName := "rand_table"
@@ -523,6 +533,13 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 	defer cleanup()
 	for i, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.useUDF {
+				defaultSQLProcessor = udfApplierProcessor
+				defer func() {
+					defaultSQLProcessor = lwwProcessor
+				}()
+			}
+
 			tableName := fmt.Sprintf("%s%d", baseTableName, i)
 			schemaStmt := strings.ReplaceAll(tc.schema, baseTableName, tableName)
 			addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
@@ -530,15 +547,30 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 			runnerB.Exec(t, schemaStmt)
 			runnerA.Exec(t, addCol)
 			runnerB.Exec(t, addCol)
+			if tc.useUDF {
+				runnerB.Exec(t, fmt.Sprintf(testingUDFAcceptProposedBase, tableName))
+			}
 			_, err := randgen.PopulateTableWithRandData(rng,
 				sqlA, tableName, numInserts, nil)
 			require.NoError(t, err)
-			streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
+
+			var streamStartStmt string
+			if tc.useUDF {
+				streamStartStmt = fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s WITH FUNCTION repl_apply FOR TABLE %[1]s", tableName)
+			} else {
+				streamStartStmt = fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
+			}
 			var jobBID jobspb.JobID
 			runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
 			t.Logf("waiting for replication job %d", jobBID)
 			WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
+
+			if tc.delete {
+				runnerA.Exec(t, fmt.Sprintf("DELETE FROM %s LIMIT 5", tableName))
+				WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
+			}
+
 			compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
 		})
 	}
