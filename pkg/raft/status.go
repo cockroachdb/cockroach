@@ -20,6 +20,7 @@ package raft
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -29,7 +30,7 @@ import (
 // The Progress is only populated on the leader.
 type Status struct {
 	BasicStatus
-	Config           tracker.Config
+	Config           quorum.Config
 	Progress         map[pb.PeerID]tracker.Progress
 	LeadSupportUntil hlc.Timestamp
 }
@@ -126,7 +127,7 @@ func getStatus(r *raft) Status {
 	if s.RaftState == StateLeader {
 		s.Progress = getProgressCopy(r)
 	}
-	s.Config = r.trk.Config.Clone()
+	s.Config = r.config.Clone()
 	// NOTE: we assign to LeadSupportUntil even if RaftState is not currently
 	// StateLeader. The replica may have been the leader and stepped down to a
 	// follower before its lead support ran out.

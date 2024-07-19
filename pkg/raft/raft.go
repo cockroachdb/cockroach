@@ -325,7 +325,8 @@ type raft struct {
 	maxMsgSize         entryEncodingSize
 	maxUncommittedSize entryPayloadSize
 
-	trk tracker.ProgressTracker
+	config quorum.Config
+	trk    tracker.ProgressTracker
 
 	state StateType
 
@@ -381,8 +382,10 @@ type raft struct {
 	// only leader keeps heartbeatElapsed.
 	heartbeatElapsed int
 
-	checkQuorum bool
-	preVote     bool
+	maxInflight      int
+	maxInflightBytes uint64
+	checkQuorum      bool
+	preVote          bool
 
 	heartbeatTimeout int
 	electionTimeout  int
@@ -417,10 +420,11 @@ func newRaft(c *Config) *raft {
 		raftLog:                     raftlog,
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
-		trk:                         tracker.MakeProgressTracker(c.MaxInflightMsgs, c.MaxInflightBytes),
 		electionTimeout:             c.ElectionTick,
 		heartbeatTimeout:            c.HeartbeatTick,
 		logger:                      c.Logger,
+		maxInflight:                 c.MaxInflightMsgs,
+		maxInflightBytes:            c.MaxInflightBytes,
 		checkQuorum:                 c.CheckQuorum,
 		preVote:                     c.PreVote,
 		disableProposalForwarding:   c.DisableProposalForwarding,
@@ -430,14 +434,17 @@ func newRaft(c *Config) *raft {
 	}
 	lastID := r.raftLog.lastEntryID()
 
-	cfg, trk, err := confchange.Restore(confchange.Changer{
-		Tracker:   r.trk,
-		LastIndex: lastID.index,
+	cfg, progressMap, err := confchange.Restore(confchange.Changer{
+		Config:           quorum.MakeEmptyConfig(),
+		ProgressMap:      tracker.MakeEmptyProgressMap(),
+		MaxInflight:      r.maxInflight,
+		MaxInflightBytes: r.maxInflightBytes,
+		LastIndex:        lastID.index,
 	}, cs)
 	if err != nil {
 		panic(err)
 	}
-	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, trk))
+	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, progressMap))
 
 	if !IsEmptyHardState(hs) {
 		r.loadState(hs)
@@ -685,7 +692,7 @@ func (r *raft) appliedTo(index uint64, size entryEncodingSize) {
 	newApplied := max(index, oldApplied)
 	r.raftLog.appliedTo(newApplied, size)
 
-	if r.trk.Config.AutoLeave && newApplied >= r.pendingConfIndex && r.state == StateLeader {
+	if r.config.AutoLeave && newApplied >= r.pendingConfIndex && r.state == StateLeader {
 		// If the current (and most recent, at least for this leader's term)
 		// configuration should be auto-left, initiate that now. We use a
 		// nil Data which unmarshals into an empty ConfChangeV2 and has the
@@ -702,9 +709,9 @@ func (r *raft) appliedTo(index uint64, size entryEncodingSize) {
 		// the joint configuration, or the leadership transfer will fail,
 		// and we will propose the config change on the next advance.
 		if err := r.Step(m); err != nil {
-			r.logger.Debugf("not initiating automatic transition out of joint configuration %s: %v", r.trk.Config, err)
+			r.logger.Debugf("not initiating automatic transition out of joint configuration %s: %v", r.config, err)
 		} else {
-			r.logger.Infof("initiating automatic transition out of joint configuration %s", r.trk.Config)
+			r.logger.Infof("initiating automatic transition out of joint configuration %s", r.config)
 		}
 	}
 }
@@ -758,7 +765,7 @@ func (r *raft) reset(term uint64) {
 		*pr = tracker.Progress{
 			Match:     0,
 			Next:      r.raftLog.lastIndex() + 1,
-			Inflights: tracker.NewInflights(r.trk.MaxInflight, r.trk.MaxInflightBytes),
+			Inflights: tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
 			IsLearner: pr.IsLearner,
 		}
 		if id == r.id {
@@ -1010,7 +1017,7 @@ func (r *raft) campaign(t CampaignType) {
 	}
 	var ids []pb.PeerID
 	{
-		idMap := r.trk.Voters.IDs()
+		idMap := r.config.Voters.IDs()
 		ids = make([]pb.PeerID, 0, len(idMap))
 		for id := range idMap {
 			ids = append(ids, id)
@@ -1296,7 +1303,7 @@ func stepLeader(r *raft, m pb.Message) error {
 				// [^1]: https://github.com/etcd-io/etcd/issues/7625#issuecomment-489232411
 				alreadyPending := r.pendingConfIndex > r.raftLog.applied
 
-				alreadyJoint := len(r.trk.Config.Voters[1]) > 0
+				alreadyJoint := len(r.config.Voters[1]) > 0
 				wantsLeaveJoint := len(cc.AsV2().Changes) == 0
 
 				var failedCheck string
@@ -1313,7 +1320,7 @@ func stepLeader(r *raft, m pb.Message) error {
 				//
 				// NB: !alreadyPending requirement is always respected, for safety.
 				if alreadyPending || (failedCheck != "" && !r.disableConfChangeValidation) {
-					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.trk.Config, failedCheck)
+					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.config, failedCheck)
 					m.Entries[i] = pb.Entry{Type: pb.EntryNormal}
 				} else {
 					r.pendingConfIndex = r.raftLog.lastIndex() + uint64(i) + 1
@@ -1898,11 +1905,13 @@ func (r *raft) restore(s snapshot) bool {
 		return false
 	}
 
-	// Reset the configuration and add the (potentially updated) peers in anew.
-	r.trk = tracker.MakeProgressTracker(r.trk.MaxInflight, r.trk.MaxInflightBytes)
-	cfg, trk, err := confchange.Restore(confchange.Changer{
-		Tracker:   r.trk,
-		LastIndex: r.raftLog.lastIndex(),
+	cfg, progressMap, err := confchange.Restore(confchange.Changer{
+		// Reset the configuration and add the (potentially updated) peers in anew.
+		Config:           quorum.MakeEmptyConfig(),
+		ProgressMap:      tracker.MakeEmptyProgressMap(), // empty ProgressMap to go with our empty config
+		MaxInflight:      r.maxInflight,
+		MaxInflightBytes: r.maxInflightBytes,
+		LastIndex:        r.raftLog.lastIndex(),
 	}, cs)
 
 	if err != nil {
@@ -1911,7 +1920,7 @@ func (r *raft) restore(s snapshot) bool {
 		panic(fmt.Sprintf("unable to restore config %+v: %s", cs, err))
 	}
 
-	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, trk))
+	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, progressMap))
 
 	last := r.raftLog.lastEntryID()
 	r.logger.Infof("%x [commit: %d, lastindex: %d, lastterm: %d] restored snapshot [index: %d, term: %d]",
@@ -1927,10 +1936,13 @@ func (r *raft) promotable() bool {
 }
 
 func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
-	cfg, trk, err := func() (tracker.Config, tracker.ProgressMap, error) {
+	cfg, progressMap, err := func() (quorum.Config, tracker.ProgressMap, error) {
 		changer := confchange.Changer{
-			Tracker:   r.trk,
-			LastIndex: r.raftLog.lastIndex(),
+			Config:           r.config,
+			ProgressMap:      r.trk.Progress,
+			MaxInflight:      r.maxInflight,
+			MaxInflightBytes: r.maxInflightBytes,
+			LastIndex:        r.raftLog.lastIndex(),
 		}
 		if cc.LeaveJoint() {
 			return changer.LeaveJoint()
@@ -1945,7 +1957,7 @@ func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
 		panic(err)
 	}
 
-	return r.switchToConfig(cfg, trk)
+	return r.switchToConfig(cfg, progressMap)
 }
 
 // switchToConfig reconfigures this node to use the provided configuration. It
@@ -1954,12 +1966,12 @@ func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
 // requirements.
 //
 // The inputs usually result from restoring a ConfState or applying a ConfChange.
-func (r *raft) switchToConfig(cfg tracker.Config, trk tracker.ProgressMap) pb.ConfState {
-	r.trk.Config = cfg
-	r.trk.Progress = trk
+func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap) pb.ConfState {
+	r.config = cfg
+	r.trk = tracker.MakeProgressTracker(&r.config, progressMap)
 
-	r.logger.Infof("%x switched to configuration %s", r.id, r.trk.Config)
-	cs := r.trk.ConfState()
+	r.logger.Infof("%x switched to configuration %s", r.id, r.config)
+	cs := r.config.ConfState()
 	pr, ok := r.trk.Progress[r.id]
 
 	// Update whether the node itself is a learner, resetting to false when the
@@ -1998,7 +2010,7 @@ func (r *raft) switchToConfig(cfg tracker.Config, trk tracker.ProgressMap) pb.Co
 	r.bcastAppend()
 
 	// If the leadTransferee was removed or demoted, abort the leadership transfer.
-	if _, tOK := r.trk.Config.Voters.IDs()[r.leadTransferee]; !tOK && r.leadTransferee != 0 {
+	if _, tOK := r.config.Voters.IDs()[r.leadTransferee]; !tOK && r.leadTransferee != 0 {
 		r.abortLeaderTransfer()
 	}
 
