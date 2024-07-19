@@ -159,7 +159,7 @@ func MakeClusterSpec(nodeCount int, opts ...Option) ClusterSpec {
 
 // ClustersCompatible returns true if the clusters are compatible, i.e. the test
 // asking for s2 can reuse s1.
-func ClustersCompatible(s1, s2 ClusterSpec, cloud string) bool {
+func ClustersCompatible(s1, s2 ClusterSpec, cloud Cloud) bool {
 	// only consider the specification of the cloud that we are running in
 	clearClusterSpecFields(&s1, cloud)
 	clearClusterSpecFields(&s2, cloud)
@@ -169,16 +169,14 @@ func ClustersCompatible(s1, s2 ClusterSpec, cloud string) bool {
 // clearClusterSpecFields clears the cloud specific specification from the cluster spec
 // if the cloud specification does not match the target cloud. This is done to ensure that
 // the specification for other clouds are not considered while comparing the cluster specifications.
-func clearClusterSpecFields(cs *ClusterSpec, targetCloud string) {
+func clearClusterSpecFields(cs *ClusterSpec, targetCloud Cloud) {
 	cs.Lifetime = 0
 	structType := reflect.TypeOf(*cs)
 	for i := 0; i < structType.NumField(); i++ {
-		// Get field
 		field := structType.Field(i)
-		// Check if the "cloud" tag exists
 		if tag, ok := field.Tag.Lookup("cloud"); ok {
-			// zero out struct if it is not the target cloud
-			if tag != targetCloud {
+			// Zero out struct if it is not the target cloud.
+			if !strings.EqualFold(tag, targetCloud.String()) {
 				fieldValue := reflect.ValueOf(cs).Elem().FieldByName(field.Name)
 				fieldValue.Set(reflect.Zero(fieldValue.Type()))
 			}
@@ -296,7 +294,7 @@ func getAzureOpts(machineType string, zones []string, volumeSize int) vm.Provide
 // does not depend on the test. It is used in conjunction with ClusterSpec to
 // determine the final configuration.
 type RoachprodClusterConfig struct {
-	Cloud string
+	Cloud Cloud
 
 	// UseIOBarrierOnLocalSSD is set if we don't want to mount local SSDs with the
 	// `-o nobarrier` flag.
@@ -353,11 +351,11 @@ func (s *ClusterSpec) RoachprodOpts(
 	cloud := params.Cloud
 	switch cloud {
 	case Local:
-		createVMOpts.VMProviders = []string{cloud}
+		createVMOpts.VMProviders = []string{cloud.String()}
 		// remaining opts are not applicable to local clusters
 		return createVMOpts, nil, nil, requestedArch, nil
 	case AWS, GCE, Azure:
-		createVMOpts.VMProviders = []string{cloud}
+		createVMOpts.VMProviders = []string{cloud.String()}
 	default:
 		return vm.CreateOpts{}, nil, nil, "", errors.Errorf("unsupported cloud %v", cloud)
 	}

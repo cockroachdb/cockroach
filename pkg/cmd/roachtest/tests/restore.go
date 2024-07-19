@@ -516,7 +516,9 @@ type hardwareSpecs struct {
 	zones []string
 }
 
-func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry, backupCloud string) spec.ClusterSpec {
+func (hw hardwareSpecs) makeClusterSpecs(
+	r registry.Registry, backupCloud spec.Cloud,
+) spec.ClusterSpec {
 	clusterOpts := make([]spec.Option, 0)
 	clusterOpts = append(clusterOpts, spec.CPU(hw.cpus))
 	if hw.volumeSize != 0 {
@@ -614,7 +616,7 @@ type backupSpecs struct {
 	version string
 
 	// cloud is the cloud storage provider the backup is stored on.
-	cloud string
+	cloud spec.Cloud
 
 	// allowLocal is true if the test should be allowed to run
 	// locally. We don't set this by default to avoid someone
@@ -645,7 +647,7 @@ type backupSpecs struct {
 	customFixtureDir string
 }
 
-func (bs backupSpecs) CloudIsCompatible(cloud string) error {
+func (bs backupSpecs) CloudIsCompatible(cloud spec.Cloud) error {
 	if cloud == spec.Local && bs.allowLocal {
 		return nil
 	}
@@ -705,7 +707,7 @@ func (sp *restoreSpecs) getAostCmd() string {
 }
 
 func makeBackupSpecs(override backupSpecs, specs backupSpecs) backupSpecs {
-	if override.cloud != "" {
+	if override.cloud.IsSet() {
 		specs.cloud = override.cloud
 	}
 	if override.version != "" {
@@ -945,7 +947,7 @@ func (sp *restoreSpecs) String() string {
 
 	var builder strings.Builder
 	builder.WriteString("/" + bs.workload.String())
-	builder.WriteString("/" + bs.cloud)
+	builder.WriteString("/" + bs.cloud.String())
 
 	// Annotate the name with the number of incremental layers we are restoring if
 	// it differs from the default.

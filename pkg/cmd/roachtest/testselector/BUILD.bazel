@@ -6,5 +6,8 @@ go_library(
     embedsrcs = ["snowflake_query.sql"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/testselector",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_snowflakedb_gosnowflake//:gosnowflake"],
+    deps = [
+        "//pkg/cmd/roachtest/spec",
+        "@com_github_snowflakedb_gosnowflake//:gosnowflake",
+    ],
 )
