@@ -834,10 +834,10 @@ func TestOffsetMeasurement(t *testing.T) {
 	remoteAddr := ln.Addr().String()
 
 	// Create a client clock that is behind the server clock.
-	clientClock := &AdvancingClock{time: timeutil.Unix(0, 10)}
+	clientClock := NewAdvancingClock(timeutil.Unix(0, 10))
 	clientMaxOffset := time.Duration(0)
 	clientCtx := newTestContext(clusterID, clientClock, clientMaxOffset, stopper)
-	clientCtx.RemoteClocks.offsetTTL = 5 * clientClock.getAdvancementInterval()
+	clientCtx.RemoteClocks.offsetTTL = 1 * time.Nanosecond
 	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -857,8 +857,7 @@ func TestOffsetMeasurement(t *testing.T) {
 
 	// Change the client such that it receives a heartbeat right after the
 	// maximum clock reading delay.
-	clientClock.setAdvancementInterval(
-		maximumPingDurationMult*clientMaxOffset + 1*time.Nanosecond)
+	clientClock.setAdvancementInterval(1 * time.Nanosecond)
 
 	testutils.SucceedsSoon(t, func() error {
 		clientCtx.RemoteClocks.mu.Lock()
@@ -977,7 +976,7 @@ func TestLatencyInfoCleanupOnClosedConnection(t *testing.T) {
 	remoteAddr := ln.Addr().String()
 
 	// Create a client clock that is behind the server clock.
-	clientClock := &AdvancingClock{time: timeutil.Unix(0, 10)}
+	clientClock := NewAdvancingClock(timeutil.Unix(0, 10))
 	clientMaxOffset := time.Duration(0)
 	clientCtx := newTestContext(clusterID, clientClock, clientMaxOffset, stopper)
 
@@ -1002,8 +1001,7 @@ func TestLatencyInfoCleanupOnClosedConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	clientClock.setAdvancementInterval(
-		maximumPingDurationMult*clientMaxOffset + 1*time.Nanosecond)
+	clientClock.setAdvancementInterval(1 * time.Nanosecond)
 
 	testutils.SucceedsSoon(t, func() error {
 		clientCtx.RemoteClocks.mu.Lock()
@@ -1043,32 +1041,32 @@ func TestLatencyInfoCleanupOnClosedConnection(t *testing.T) {
 	})
 }
 
+// AdvancingClock is a clock that advances by a fixed interval each time it is
+// read. The advancement interval starts at 0.
 type AdvancingClock struct {
-	syncutil.Mutex
-	time                time.Time
-	advancementInterval atomic.Value // time.Duration
+	clock               *timeutil.ManualTime
+	advancementInterval atomic.Int64 // time.Duration
 }
 
 var _ hlc.WallClock = &AdvancingClock{}
 
+func NewAdvancingClock(initialTime time.Time) *AdvancingClock {
+	return &AdvancingClock{
+		clock: timeutil.NewManualTime(initialTime),
+	}
+}
+
 func (ac *AdvancingClock) setAdvancementInterval(d time.Duration) {
-	ac.advancementInterval.Store(d)
+	ac.advancementInterval.Store(int64(d))
 }
 
 func (ac *AdvancingClock) getAdvancementInterval() time.Duration {
-	v := ac.advancementInterval.Load()
-	if v == nil {
-		return 0
-	}
-	return v.(time.Duration)
+	return time.Duration(ac.advancementInterval.Load())
 }
 
 func (ac *AdvancingClock) Now() time.Time {
-	ac.Lock()
-	now := ac.time
-	ac.time = now.Add(ac.getAdvancementInterval())
-	ac.Unlock()
-	return now
+	ac.clock.Advance(ac.getAdvancementInterval())
+	return ac.clock.Now()
 }
 
 func TestRemoteOffsetUnhealthy(t *testing.T) {
@@ -1104,7 +1102,8 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 		clock := timeutil.NewManualTime(timeutil.Unix(0, start.Add(nodeCtxs[i].offset).UnixNano()))
 		nodeCtxs[i].errChan = make(chan error, 1)
 		nodeCtxs[i].ctx = newTestContext(clusterID, clock, maxOffset, stopper)
-		nodeCtxs[i].ctx.RPCHeartbeatInterval = maxOffset
+		// Make the test faster.
+		nodeCtxs[i].ctx.RPCHeartbeatInterval = 10 * time.Millisecond
 		// Disable RPC heartbeat timeouts to avoid flakiness in the test. If a
 		// heartbeat were to time out, its RPC connection would be closed and its
 		// clock offset information would be lost.
