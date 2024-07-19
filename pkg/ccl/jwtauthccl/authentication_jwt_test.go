@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/redact"
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/lestrrat-go/jwx/jwt"
@@ -170,13 +171,13 @@ func TestJWTSingleKey(t *testing.T) {
 	jwkPublicKey := serializePublicKey(t, publicKey)
 
 	// Configure issuer as it gets checked even before the token validity check.
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer1)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer1)
 
 	// When JWKSAutoFetchEnabled JWKS fetch should be attempted and  fail for configured issuer.
 	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	detailedErrorMsg, err := verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: unable to validate token")
-	require.EqualValues(t, "unable to fetch jwks: Get \"issuer1/.well-known/openid-configuration\": unsupported protocol scheme \"\"", detailedErrorMsg)
+	require.EqualValues(t, redact.RedactableString(`unable to fetch jwks: ‹Get "issuer1/.well-known/openid-configuration"›: ‹unsupported protocol scheme ""›`), detailedErrorMsg)
 
 	// Set the JWKS cluster setting.
 	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, false)
@@ -210,7 +211,7 @@ func TestJWTSingleKeyWithoutKeyAlgorithm(t *testing.T) {
 	jwkPublicKey := serializePublicKey(t, publicKey)
 
 	// Configure issuer as it gets checked even before the token validity check.
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer1)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer1)
 
 	// When JWKSAutoFetchEnabled, JWKS fetch should be attempted and  fail for configured issuer.
 	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -240,7 +241,7 @@ func TestJWTMultiKey(t *testing.T) {
 	// Make sure jwt auth is enabled.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	// Configure issuer as it gets checked even before the token validity check.
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer1)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer1)
 	keySet, key, key2 := createJWKS(t)
 	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key2, jwa.ES384, "", "")
 	publicKey, err := key.PublicKey()
@@ -281,7 +282,7 @@ func TestExpiredToken(t *testing.T) {
 	// Make sure jwt auth is enabled and accepts valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	// Configure issuer as it gets checked even before the token validity check.
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer1)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer1)
 	keySet, key, _ := createJWKS(t)
 	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(-1*time.Second), key, jwa.RS256, "", "")
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
@@ -312,7 +313,7 @@ func TestKeyIdMismatch(t *testing.T) {
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
 	// Configure issuer as it gets checked even before the token validity check.
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer1)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer1)
 
 	// When JWKSAutoFetchEnabled the jwks fetch should be attempted and fail.
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
@@ -353,7 +354,7 @@ func TestIssuerCheck(t *testing.T) {
 	require.ErrorContains(t, err, "JWT authentication: invalid issuer")
 	require.EqualValues(t, "token issued by issuer1", errors.GetAllDetails(err)[0])
 
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer2)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 	// Validation fails with an issuer error when the issuer in the token is not in cluster's accepted issuers.
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token1, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid issuer")
@@ -365,7 +366,7 @@ func TestIssuerCheck(t *testing.T) {
 	require.EqualValues(t, "token issued for [test_user1] and login was for invalid_user", errors.GetAllDetails(err)[0])
 
 	// Set the cluster setting to accept issuer values of either "issuer" or "issuer2".
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, "[\""+issuer1+"\", \""+issuer2+"\"]")
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, "[\""+issuer1+"\", \""+issuer2+"\"]")
 
 	// Validation succeeds when the issuer in the token is an element of the cluster's accepted issuers.
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token1, identMap)
@@ -395,7 +396,7 @@ func TestSubjectCheck(t *testing.T) {
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer2)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 
 	// Validation fails with a subject error when a user tries to log in with a user named
 	// "invalid" but the token is for the user "test2".
@@ -427,7 +428,7 @@ func TestClaimMissing(t *testing.T) {
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer2)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 	JWTAuthClaim.Override(ctx, &s.ClusterSettings().SV, customClaimName)
 
 	// Validation fails with missing claim
@@ -454,7 +455,7 @@ func TestIntegerClaimValue(t *testing.T) {
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer2)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 	JWTAuthClaim.Override(ctx, &s.ClusterSettings().SV, customClaimName)
 
 	// the integer claim is implicitly cast to a string
@@ -480,7 +481,7 @@ func TestSingleClaim(t *testing.T) {
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer2)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 	JWTAuthClaim.Override(ctx, &s.ClusterSettings().SV, customClaimName)
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
 
@@ -521,7 +522,7 @@ func TestMultipleClaim(t *testing.T) {
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer2)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 	JWTAuthClaim.Override(ctx, &s.ClusterSettings().SV, customClaimName)
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
 
@@ -570,7 +571,7 @@ func TestSubjectMappingCheck(t *testing.T) {
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer2)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 
 	// Validation fails with a subject error when a user tries to log in when their user is mapped to username2
 	// but they try to log in with username1.
@@ -608,7 +609,7 @@ func TestSubjectReservedUser(t *testing.T) {
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, "[\""+issuer1+"\", \""+issuer2+"\"]")
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, "[\""+issuer1+"\", \""+issuer2+"\"]")
 
 	// You cannot log in as root or other reserved users using token based auth when mapped to root.
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString("root"), token, identMap)
@@ -636,7 +637,7 @@ func TestAudienceCheck(t *testing.T) {
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer2)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 
 	// Set audience field to audience2.
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience2)
@@ -691,7 +692,7 @@ func createJWKSFromFile(t *testing.T, fileName string) jwk.Set {
 	return jwkSet
 }
 
-// test that jwks url is used when JWKSAutoFetchEnabled is true.
+// test that jwks URI is used when JWKSAutoFetchEnabled is true.
 func Test_JWKSFetchWorksWhenEnabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Intercept the call to getHttpResponse and return the mockGetHttpResponse
@@ -709,7 +710,7 @@ func Test_JWKSFetchWorksWhenEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create key from a file. This key will be used to sign the token.
-	// Matching public key available in jwks url is used to verify token.
+	// Matching public key available in jwks URI is used to verify token.
 	keySet := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
 	key, _ := keySet.Get(0)
 	validIssuer := "https://accounts.idp1.com"
@@ -718,7 +719,7 @@ func Test_JWKSFetchWorksWhenEnabled(t *testing.T) {
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	//JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, validIssuer)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, validIssuer)
 
 	// Set audience field to audience2.
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience2)
@@ -745,7 +746,7 @@ func Test_JWKSFetchWorksWhenEnabled(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// test jwks url is used when JWKSAutoFetchEnabled and static jwks ignored.
+// test jwks URI is used when JWKSAutoFetchEnabled and static jwks ignored.
 func Test_JWKSFetchWorksWhenEnabledIgnoresTheStaticJWKS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Intercept the call to getHttpResponse and return the mockGetHttpResponse
@@ -763,7 +764,7 @@ func Test_JWKSFetchWorksWhenEnabledIgnoresTheStaticJWKS(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create key from a file. This key will be used to sign the token.
-	// Matching public key available in jwks url is used to verify token.
+	// Matching public key available in jwks URI is used to verify token.
 	keySetUsedForSigning := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
 	key, _ := keySetUsedForSigning.Get(0)
 	validIssuer := "https://accounts.idp1.com"
@@ -775,7 +776,7 @@ func Test_JWKSFetchWorksWhenEnabledIgnoresTheStaticJWKS(t *testing.T) {
 	// Configure cluster setting with a key that is not used for signing.
 	keySetNotUsedForSigning, _, _ := createJWKS(t)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySetNotUsedForSigning))
-	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, validIssuer)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, validIssuer)
 
 	// Set audience field to audience2.
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience2)
@@ -823,4 +824,111 @@ func TestJWTAuthCanUseHTTPProxy(t *testing.T) {
 	res, err := getHttpResponse(ctx, "http://my-server/.well-known/openid-configuration", &authenticator)
 	require.NoError(t, err)
 	require.EqualValues(t, "proxied-http://my-server/.well-known/openid-configuration", string(res))
+}
+
+func TestJWTAuthWithIssuerJWKSConfAutoFetchJWKS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Initiate a test OIDC/JWKS server locally over HTTP.
+	testServer := httptest.NewUnstartedServer(nil)
+	testServerURL := "http://" + testServer.Listener.Addr().String()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(
+		"/.well-known/openid-configuration",
+		func(w http.ResponseWriter, r *http.Request) {
+			// Serve the response locally mocking openid config.
+			dataBytes := map[string]string{"invalid-key": "invalid-value"}
+			updatedBytes, _ := json.Marshal(dataBytes)
+			_, err := w.Write(updatedBytes)
+			require.NoError(t, err)
+		},
+	)
+	mux.HandleFunc(
+		"/jwks",
+		func(w http.ResponseWriter, r *http.Request) {
+			// Serve the JWKS response locally from testdata.
+			dataBytes, err := os.ReadFile("testdata/www.idp1apis.com_oauth2_v3_certs")
+			require.NoError(t, err)
+			_, err = w.Write(dataBytes)
+			require.NoError(t, err)
+		},
+	)
+
+	testServer.Config = &http.Server{
+		Handler: mux,
+	}
+	testServer.Start()
+	defer testServer.Close()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Create a key to sign the token using testdata.
+	// The same will be fetched through the JWKS URI to verify the token.
+	keySet := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
+	key, _ := keySet.Get(0)
+	issuer := testServerURL
+	token := createJWT(
+		t, username1, audience1, issuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+
+	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
+
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	identMapString := ""
+	identMap, err := identmap.From(strings.NewReader(identMapString))
+	require.NoError(t, err)
+
+	for _, testCase := range []struct {
+		testName           string
+		issuerConfSetting  string
+		assertFn           func(t require.TestingT, err error, msgAndArgs ...interface{})
+		expectedErr        string
+		expectedErrDetails string
+		detailedErrMsg     string
+	}{
+		{
+			testName:           "fail if issuer not set",
+			issuerConfSetting:  "",
+			assertFn:           require.Error,
+			expectedErr:        "JWT authentication: invalid issuer",
+			expectedErrDetails: "token issued by " + testServerURL,
+		},
+		{
+			testName:          "fail if issuer provided without JWKS URI mapping",
+			issuerConfSetting: testServerURL,
+			assertFn:          require.Error,
+			expectedErr:       "JWT authentication: unable to validate token",
+			detailedErrMsg:    "unable to fetch jwks: no JWKS URI found in OpenID configuration",
+		},
+		{
+			testName:          "success if issuer to jwks URI provided",
+			issuerConfSetting: "{\"issuer_jwks_map\": {\"" + testServerURL + "\": \"" + testServerURL + "/jwks" + "\"}}",
+			assertFn:          require.NoError,
+		},
+	} {
+		t.Run(testCase.testName, func(t *testing.T) {
+			// set the issuer configuration cluster setting
+			JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, testCase.issuerConfSetting)
+			detailedErrMsg, err := verifier.ValidateJWTLogin(
+				ctx,
+				s.ClusterSettings(),
+				username.MakeSQLUsernameFromPreNormalizedString(username1),
+				token,
+				identMap,
+			)
+
+			testCase.assertFn(t, err)
+			if err != nil {
+				require.Equal(t, testCase.expectedErr, err.Error())
+				require.Equal(t, testCase.expectedErrDetails, errors.FlattenDetails(err))
+				require.Equal(t, redact.RedactableString(testCase.detailedErrMsg), detailedErrMsg)
+			}
+		})
+	}
 }

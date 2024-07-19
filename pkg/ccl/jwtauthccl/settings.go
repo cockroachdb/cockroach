@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
 	"github.com/lestrrat-go/jwx/jwk"
+	"golang.org/x/exp/maps"
 )
 
 // All cluster settings necessary for the JWT authentication feature.
@@ -61,40 +62,140 @@ var JWTAuthJWKS = settings.RegisterStringSetting(
 	settings.WithValidateString(validateJWTAuthJWKS),
 )
 
-// JWTAuthIssuers is the list of "issuer" values that are accepted for JWT logins over the SQL interface.
-var JWTAuthIssuers = settings.RegisterStringSetting(
+// JWTAuthIssuersConfig contains the configuration of all JWT issuers  whose
+// tokens are allowed for JWT logins over the SQL interface. This can be set to
+// one of the following values:
+// 1. Simple string that Go can parse as a valid issuer URL.
+// 2. String that can be parsed as valid JSON array of issuer URLs list.
+// 3. String that can be parsed as valid JSON and deserialized into a map of
+// issuer URLs to corresponding JWKS URIs.
+// In the third case we will be overriding the JWKS URI present in the issuer's
+// well-known endpoint.
+// Example valid values:
+//   - 'https://accounts.google.com'
+//   - ['example.com/adfs','https://accounts.google.com']
+//   - '{
+//     "issuer_jwks_map": {
+//     "https://accounts.google.com": "https://www.googleapis.com/oauth2/v3/certs",
+//     "example.com/adfs": "https://example.com/adfs/discovery/keys"
+//     }
+//     }'
+//
+// When issuer_jwks_map is set, we directly use the JWKS URI to get the key set.
+// In all other cases where JWKSAutoFetchEnabled is set we obtain the JWKS URI
+// first from issuer's well-known endpoint and the use this endpoint.
+var JWTAuthIssuersConfig = settings.RegisterStringSetting(
 	settings.ApplicationLevel,
 	JWTAuthIssuersSettingName,
-	"sets accepted issuer values for JWT logins over the SQL interface either as a string or as a JSON "+
-		"string with an array of issuer strings in it",
+	"sets accepted issuer values for JWT logins over the SQL interface which can "+
+		"be a single issuer URL string or a JSON string containing an array of "+
+		"issuer URLs or a JSON object containing map of issuer URLS to JWKS URIs",
 	"",
-	settings.WithValidateString(validateJWTAuthIssuers),
+	settings.WithValidateString(validateJWTAuthIssuersConf),
 )
 
 // JWKSAutoFetchEnabled enables or disables automatic fetching of JWKs from the issuer's well-known endpoint.
 var JWKSAutoFetchEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	JWKSAutoFetchEnabledSettingName,
-	"enables or disables automatic fetching of JWKs from the issuer's well-known endpoint. "+
-		"If this is enabled, the server.jwt_authentication.jwks will be ignored.",
+	"enables or disables automatic fetching of JWKS from the issuer's well-known "+
+		"endpoint or JWKS URI set in JWTAuthIssuersConfig. If this is enabled, the "+
+		"server.jwt_authentication.jwks will be ignored.",
 	false,
 	settings.WithReportable(true),
 )
 
-func validateJWTAuthIssuers(values *settings.Values, s string) error {
+// getJSONDecoder generates a new decoder from provided json string. This is
+// necessary as currently the offset for decoder can't be reset after Decode().
+func getJSONDecoder(s string) *json.Decoder {
+	decoder := json.NewDecoder(bytes.NewReader([]byte(s)))
+	decoder.DisallowUnknownFields()
+	return decoder
+}
+
+type issuerURLConf struct {
+	ijMap   *issuerJWKSMap
+	issuers []string
+}
+
+func (conf *issuerURLConf) checkIssuerConfigured(issuer string) error {
+	issuerMatch := false
+	for idx := range conf.issuers {
+		if issuer == conf.issuers[idx] {
+			issuerMatch = true
+			break
+		}
+	}
+	if !issuerMatch {
+		return errors.Newf("JWT authentication: invalid issuer")
+	}
+	return nil
+}
+
+func (conf *issuerURLConf) checkJWKSConfigured() error {
+	if conf.ijMap == nil || len(conf.ijMap.Mappings) == 0 {
+		return errors.Newf("JWT authentication: no jwks mappings configured")
+	}
+	return nil
+}
+
+func (conf *issuerURLConf) getJWKSURI(issuer string) (jwksURI string, err error) {
+	var ok bool
+	if jwksURI, ok = conf.ijMap.Mappings[issuer]; !ok {
+		return "", errors.Newf("JWT authentication: no jwks uri set for issuer")
+	}
+	return jwksURI, nil
+}
+
+// issuerJWKSMap is a struct that defines a valid JSON body for the
+// OIDCRedirectURL cluster setting in multi-region environments.
+type issuerJWKSMap struct {
+	Mappings map[string]string `json:"issuer_jwks_map"`
+}
+
+// mustParseJWTIssuersConf will read in a string that's from the
+// JWTAuthIssuersConfig setting. We know from the validation that runs on that
+// setting that any value that's not valid JSON that deserializes into the
+// issuerJWKSMap struct will be either a list of issuer URLs or a single issuer
+// URL which will populate and return issuerURLConf.
+func mustParseJWTIssuersConf(s string) issuerURLConf {
+	var ijMap = issuerJWKSMap{}
 	var issuers []string
+	decoder := getJSONDecoder(s)
+	err := decoder.Decode(&ijMap)
+	if err == nil {
+		issuers = append(issuers, maps.Keys(ijMap.Mappings)...)
+		return issuerURLConf{ijMap: &ijMap, issuers: issuers}
+	}
+
+	decoder = getJSONDecoder(s)
+	err = decoder.Decode(&issuers)
+	if err == nil {
+		return issuerURLConf{issuers: issuers}
+	}
+	return issuerURLConf{issuers: []string{s}}
+}
+
+func validateJWTAuthIssuersConf(values *settings.Values, s string) error {
+	var issuers []string
+	var ijMap = issuerJWKSMap{}
 
 	var jsonCheck json.RawMessage
 	if json.Unmarshal([]byte(s), &jsonCheck) != nil {
 		// If we know the string is *not* valid JSON, fall back to assuming basic
-		// string to use a single valid issuer
+		// string to use a single valid issuer.
 		return nil
 	}
 
-	decoder := json.NewDecoder(bytes.NewReader([]byte(s)))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&issuers); err != nil {
-		return errors.Wrap(err, "JWT authentication issuers JSON not valid")
+	decoder := getJSONDecoder(s)
+	issuerListErr := decoder.Decode(&issuers)
+	decoder = getJSONDecoder(s)
+	issuerJWKSMapErr := decoder.Decode(&ijMap)
+	if issuerListErr != nil && issuerJWKSMapErr != nil {
+		return errors.Wrap(
+			errors.Join(issuerListErr, issuerJWKSMapErr),
+			"JWT authentication: issuers JSON not valid",
+		)
 	}
 	return nil
 }
@@ -130,7 +231,7 @@ func mustParseValueOrArray(rawString string) []string {
 	var jsonCheck json.RawMessage
 	if json.Unmarshal([]byte(rawString), &jsonCheck) != nil {
 		// If we know the string is *not* valid JSON, fall back to assuming basic
-		// string to use a single valid.
+		// string to use a single valid issuer.
 		return []string{rawString}
 	}
 
