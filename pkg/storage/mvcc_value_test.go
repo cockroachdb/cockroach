@@ -180,7 +180,7 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 	var originTs = hlc.Timestamp{WallTime: 1, Logical: 1}
 
 	valHeader := enginepb.MVCCValueHeader{}
-	valHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: 9}
+	//valHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: 9}
 
 	valHeaderFull := valHeader
 	valHeaderFull.ImportEpoch = importEpoch
