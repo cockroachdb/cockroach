@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -25,10 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -561,4 +564,46 @@ func TestShowChangefeedJobsAuthorization(t *testing.T) {
 
 	// Only enterprise sinks create jobs.
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+// TestShowChangefeedJobsDefaultFilter verifies that "SHOW JOBS" AND "SHOW CHANGEFEED JOBS"
+// use the same age filter (12 hours).
+func TestShowChangefeedJobsDefaultFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		// s.TestingKnobs.SQLStatsKnobs.(*sqlstats.TestingKnobs).StubTimeNow = func() time.Time {
+		knobs := sqlstats.CreateTestingKnobs()
+		knobs.StubTimeNow = func() time.Time {
+			return timeutil.Now().Add(13 * time.Hour)
+		}
+		s.TestingKnobs.SQLStatsKnobs = knobs
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		countChangefeedJobs := func() (count int) {
+			query := `SHOW CHANGEFEED JOBS`
+			rowResults := sqlDB.Query(t, query)
+
+			count = 0
+			for rowResults.Next() {
+				count++
+			}
+			return count
+		}
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH format='json'`)
+		require.Equal(t, 1, countChangefeedJobs())
+
+		closeFeed(t, foo)
+		// The job should disappear from the "SHOW CHANGEFEED JOBS" query.
+		require.Equal(t, 0, countChangefeedJobs())
+	}
+
+	// TODO: Webhook disabled since the query parameters on the sinkURI are
+	// correct but out of order
+	cdcTest(t, testFn, feedTestOmitSinks("webhook", "sinkless"), feedTestNoExternalConnection)
 }
