@@ -598,6 +598,7 @@ create_ddl_stmt ::=
 	| create_sequence_stmt
 	| create_func_stmt
 	| create_proc_stmt
+	| create_trigger_stmt
 
 create_stats_stmt ::=
 	'CREATE' 'STATISTICS' statistics_name opt_stats_columns 'FROM' create_stats_target opt_create_stats_options
@@ -658,6 +659,7 @@ drop_ddl_stmt ::=
 	| drop_type_stmt
 	| drop_func_stmt
 	| drop_proc_stmt
+	| drop_trigger_stmt
 
 drop_role_stmt ::=
 	'DROP' role_or_group_or_user role_spec_list
@@ -1137,6 +1139,7 @@ unreserved_keyword ::=
 	| 'DOMAIN'
 	| 'DOUBLE'
 	| 'DROP'
+	| 'EACH'
 	| 'ENCODING'
 	| 'ENCRYPTED'
 	| 'ENCRYPTION_PASSPHRASE'
@@ -1213,6 +1216,7 @@ unreserved_keyword ::=
 	| 'INJECT'
 	| 'INPUT'
 	| 'INSERT'
+	| 'INSTEAD'
 	| 'INTO_DB'
 	| 'INVERTED'
 	| 'INVISIBLE'
@@ -1274,6 +1278,7 @@ unreserved_keyword ::=
 	| 'NAMES'
 	| 'NAN'
 	| 'NEVER'
+	| 'NEW'
 	| 'NEW_DB_NAME'
 	| 'NEW_KMS'
 	| 'NEXT'
@@ -1305,6 +1310,7 @@ unreserved_keyword ::=
 	| 'OF'
 	| 'OFF'
 	| 'OIDS'
+	| 'OLD'
 	| 'OLD_KMS'
 	| 'OPERATOR'
 	| 'OPT'
@@ -1356,6 +1362,7 @@ unreserved_keyword ::=
 	| 'RECURSIVE'
 	| 'REDACT'
 	| 'REF'
+	| 'REFERENCING'
 	| 'REFRESH'
 	| 'REGION'
 	| 'REGIONAL'
@@ -1434,6 +1441,7 @@ unreserved_keyword ::=
 	| 'STABLE'
 	| 'START'
 	| 'STATE'
+	| 'STATEMENT'
 	| 'STATEMENTS'
 	| 'STATISTICS'
 	| 'STDIN'
@@ -1810,6 +1818,9 @@ create_func_stmt ::=
 create_proc_stmt ::=
 	'CREATE' opt_or_replace 'PROCEDURE' routine_create_name '(' opt_routine_param_with_default_list ')' opt_create_routine_opt_list opt_routine_body
 
+create_trigger_stmt ::=
+	'CREATE' opt_or_replace 'TRIGGER' name trigger_action_time trigger_event_list 'ON' table_name opt_trigger_transition_list trigger_for_each trigger_when 'EXECUTE' function_or_procedure func_name '(' trigger_func_args ')'
+
 statistics_name ::=
 	name
 
@@ -1907,6 +1918,10 @@ drop_func_stmt ::=
 drop_proc_stmt ::=
 	'DROP' 'PROCEDURE' function_with_paramtypes_list opt_drop_behavior
 	| 'DROP' 'PROCEDURE' 'IF' 'EXISTS' function_with_paramtypes_list opt_drop_behavior
+
+drop_trigger_stmt ::=
+	'DROP' 'TRIGGER' name 'ON' table_name opt_drop_behavior
+	| 'DROP' 'TRIGGER' 'IF' 'EXISTS' name 'ON' table_name opt_drop_behavior
 
 explain_option_name ::=
 	non_reserved_word
@@ -2599,6 +2614,33 @@ opt_routine_body ::=
 	| 'BEGIN' 'ATOMIC' routine_body_stmt_list 'END'
 	| 
 
+trigger_action_time ::=
+	'BEFORE'
+	| 'AFTER'
+	| 'INSTEAD' 'OF'
+
+trigger_event_list ::=
+	( trigger_event ) ( ( 'OR' trigger_event ) )*
+
+opt_trigger_transition_list ::=
+	'REFERENCING' trigger_transition_list
+	| 
+
+trigger_for_each ::=
+	'FOR' trigger_for_opt_each trigger_for_type
+	| 
+
+trigger_when ::=
+	'WHEN' a_expr
+	| 
+
+function_or_procedure ::=
+	'FUNCTION'
+	| 'PROCEDURE'
+
+trigger_func_args ::=
+	( trigger_func_arg |  ) ( ( ',' trigger_func_arg ) )*
+
 create_stats_option_list ::=
 	( create_stats_option ) ( ( create_stats_option ) )*
 
@@ -3212,6 +3254,31 @@ routine_return_stmt ::=
 routine_body_stmt_list ::=
 	(  ) ( ( routine_body_stmt ';' ) )*
 
+trigger_event ::=
+	'INSERT'
+	| 'DELETE'
+	| 'UPDATE'
+	| 'UPDATE' 'OF' name_list
+	| 'TRUNCATE'
+	| 'UPSERT'
+
+trigger_transition_list ::=
+	( trigger_transition ) ( ( trigger_transition ) )*
+
+trigger_for_opt_each ::=
+	'EACH'
+	| 
+
+trigger_for_type ::=
+	'ROW'
+	| 'STATEMENT'
+
+trigger_func_arg ::=
+	'ICONST'
+	| 'FCONST'
+	| 'SCONST'
+	| unrestricted_name
+
 create_stats_option ::=
 	as_of_clause
 	| 'USING' 'EXTREMES'
@@ -3595,6 +3662,9 @@ routine_body_stmt ::=
 	stmt_without_legacy_transaction
 	| routine_return_stmt
 
+trigger_transition ::=
+	transition_is_new transition_is_row opt_as table_alias_name
+
 family_name ::=
 	name
 
@@ -3728,6 +3798,7 @@ bare_label_keywords ::=
 	| 'DOMAIN'
 	| 'DOUBLE'
 	| 'DROP'
+	| 'EACH'
 	| 'ELSE'
 	| 'ENCODING'
 	| 'ENCRYPTED'
@@ -3829,6 +3900,7 @@ bare_label_keywords ::=
 	| 'INPUT'
 	| 'INSENSITIVE'
 	| 'INSERT'
+	| 'INSTEAD'
 	| 'INT'
 	| 'INTEGER'
 	| 'INTERVAL'
@@ -3902,6 +3974,7 @@ bare_label_keywords ::=
 	| 'NAN'
 	| 'NATURAL'
 	| 'NEVER'
+	| 'NEW'
 	| 'NEW_DB_NAME'
 	| 'NEW_KMS'
 	| 'NEXT'
@@ -3937,6 +4010,7 @@ bare_label_keywords ::=
 	| 'OF'
 	| 'OFF'
 	| 'OIDS'
+	| 'OLD'
 	| 'OLD_KMS'
 	| 'ONLY'
 	| 'OPERATOR'
@@ -3999,6 +4073,7 @@ bare_label_keywords ::=
 	| 'REDACT'
 	| 'REF'
 	| 'REFERENCES'
+	| 'REFERENCING'
 	| 'REFRESH'
 	| 'REGION'
 	| 'REGIONAL'
@@ -4083,6 +4158,7 @@ bare_label_keywords ::=
 	| 'STABLE'
 	| 'START'
 	| 'STATE'
+	| 'STATEMENT'
 	| 'STATEMENTS'
 	| 'STATISTICS'
 	| 'STATUS'
@@ -4503,6 +4579,18 @@ routine_as ::=
 
 opt_link_sym ::=
 	',' 'SCONST'
+	| 
+
+transition_is_new ::=
+	'NEW'
+	| 'OLD'
+
+transition_is_row ::=
+	'ROW'
+	| 'TABLE'
+
+opt_as ::=
+	'AS'
 	| 
 
 col_def_list_no_types ::=

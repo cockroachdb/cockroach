@@ -9,6 +9,7 @@ go_library(
         "builder.go",
         "create_function.go",
         "create_table.go",
+        "create_trigger.go",
         "create_view.go",
         "delete.go",
         "distinct.go",

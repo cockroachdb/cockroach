@@ -896,6 +896,24 @@ func (u *sqlSymUnion) logicalReplicationResources() tree.LogicalReplicationResou
 func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOptions {
   return u.val.(*tree.LogicalReplicationOptions)
 }
+func (u *sqlSymUnion) triggerActionTime() tree.TriggerActionTime {
+  return u.val.(tree.TriggerActionTime)
+}
+func (u *sqlSymUnion) triggerEvent() *tree.TriggerEvent {
+  return u.val.(*tree.TriggerEvent)
+}
+func (u *sqlSymUnion) triggerEvents() []*tree.TriggerEvent {
+  return u.val.([]*tree.TriggerEvent)
+}
+func (u *sqlSymUnion) triggerTransition() *tree.TriggerTransition {
+  return u.val.(*tree.TriggerTransition)
+}
+func (u *sqlSymUnion) triggerTransitions() []*tree.TriggerTransition {
+  return u.val.([]*tree.TriggerTransition)
+}
+func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
+  return u.val.(tree.TriggerForEach)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -937,7 +955,7 @@ func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOption
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DEPENDS DESC DESTINATION DETACHED DETAILS
 %token <str> DISCARD DISTANCE DISTINCT DO DOMAIN DOUBLE DROP
 
-%token <str> ELSE ENCODING ENCRYPTED ENCRYPTION_INFO_DIR ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
+%token <str> EACH ELSE ENCODING ENCRYPTED ENCRYPTION_INFO_DIR ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
 %token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT EXPERIMENTAL_RELOCATE
@@ -961,7 +979,7 @@ func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOption
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
 %token <str> INDEX_BEFORE_PAREN INDEX_BEFORE_NAME_THEN_PAREN INDEX_AFTER_ORDER_BY_BEFORE_AT
-%token <str> INNER INOUT INPUT INSENSITIVE INSERT INT INTEGER
+%token <str> INNER INOUT INPUT INSENSITIVE INSERT INSTEAD INT INTEGER
 %token <str> INTERSECT INTERVAL INTO INTO_DB INVERTED INVOKER IS ISERROR ISNULL ISOLATION
 
 %token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
@@ -978,14 +996,14 @@ func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOption
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
 
-%token <str> NAN NAME NAMES NATURAL NEG_INNER_PRODUCT NEVER NEW_DB_NAME NEW_KMS NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
+%token <str> NAN NAME NAMES NATURAL NEG_INNER_PRODUCT NEVER NEW NEW_DB_NAME NEW_KMS NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
 %token <str> NOCONTROLJOB NOCREATEDB NOCREATELOGIN NOCREATEROLE NODE NOLOGIN NOMODIFYCLUSTERSETTING NOREPLICATION
 %token <str> NOSQLLOGIN NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NONVOTERS NORMAL NOT
 %token <str> NOTHING NOTHING_AFTER_RETURNING
 %token <str> NOTNULL
 %token <str> NOVIEWACTIVITY NOVIEWACTIVITYREDACTED NOVIEWCLUSTERSETTING NOWAIT NULL NULLIF NULLS NUMERIC
 
-%token <str> OF OFF OFFSET OID OIDS OIDVECTOR OLD_KMS ON ONLY OPT OPTION OPTIONS OR
+%token <str> OF OFF OFFSET OID OIDS OIDVECTOR OLD OLD_KMS ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
 %token <str> PARALLEL PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PER PHYSICAL PLACEMENT PLACING
@@ -995,7 +1013,7 @@ func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOption
 
 %token <str> QUERIES QUERY QUOTE
 
-%token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REDACT REF REFERENCES REFRESH
+%token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REDACT REF REFERENCES REFERENCING REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
 %token <str> RELATIVE RELOCATE REMOVE_PATH REMOVE_REGIONS RENAME REPEATABLE REPLACE REPLICATION
 %token <str> RELEASE RESET RESTART RESTORE RESTRICT RESTRICTED RESUME RETENTION RETURNING RETURN RETURNS RETRY REVISION_HISTORY
@@ -1007,7 +1025,7 @@ func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOption
 %token <str> SHARE SHARED SHOW SIMILAR SIMPLE SIZE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SKIP_MISSING_UDFS SMALLINT SMALLSERIAL
 %token <str> SNAPSHOT SOME SPLIT SQL SQLLOGIN
-%token <str> STABLE START STATE STATISTICS STATUS STDIN STDOUT STOP STRAIGHT STREAM STRICT STRING STORAGE STORE STORED STORING SUBJECT SUBSTRING SUPER
+%token <str> STABLE START STATE STATEMENT STATISTICS STATUS STDIN STDOUT STOP STRAIGHT STREAM STRICT STRING STORAGE STORE STORED STORING SUBJECT SUBSTRING SUPER
 %token <str> SUPPORT SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TENANT_NAME TENANTS TESTING_RELOCATE TEXT THEN
@@ -1215,6 +1233,7 @@ func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOption
 %type <tree.Statement> create_sequence_stmt
 %type <tree.Statement> create_func_stmt
 %type <tree.Statement> create_proc_stmt
+%type <tree.Statement> create_trigger_stmt
 
 %type <*tree.LikeTenantSpec> opt_like_virtual_cluster
 %type <tree.LogicalReplicationResources> logical_replication_resources, logical_replication_resources_list
@@ -1242,6 +1261,7 @@ func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOption
 %type <tree.Statement> drop_sequence_stmt
 %type <tree.Statement> drop_func_stmt
 %type <tree.Statement> drop_proc_stmt
+%type <tree.Statement> drop_trigger_stmt
 %type <tree.Statement> drop_virtual_cluster_stmt
 %type <bool>           opt_immediate
 
@@ -1717,6 +1737,18 @@ func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOption
 %type <tree.RoutineObj> function_with_paramtypes
 %type <tree.RoutineObjs> function_with_paramtypes_list
 %type <empty> opt_link_sym
+
+// Trigger relevant components.
+%type <tree.TriggerActionTime> trigger_action_time
+%type <*tree.TriggerEvent> trigger_event
+%type <[]*tree.TriggerEvent> trigger_event_list
+%type <*tree.TriggerTransition> trigger_transition
+%type <[]*tree.TriggerTransition> trigger_transition_list opt_trigger_transition_list
+%type <bool> transition_is_new transition_is_row
+%type <tree.TriggerForEach> trigger_for_each trigger_for_type
+%type <tree.Expr> trigger_when
+%type <str> trigger_func_arg opt_as function_or_procedure
+%type <[]string> trigger_func_args
 
 %type <*tree.LabelSpec> label_spec
 
@@ -5350,6 +5382,223 @@ opt_no:
     $$.val = false
   }
 
+// %Help: CREATE TRIGGER - define a new trigger
+// %Category: DDL
+// %Text:
+// CREATE [ OR REPLACE ] TRIGGER name { BEFORE | AFTER | INSTEAD OF }
+//  { INSERT | DELETE | UPDATE [ OF column_name [, ...] ] | TRUNCATE | UPSERT }
+//  ON table_name [ REFERENCING { NEW | OLD } TABLE [ AS ] table_alias_name [...] ]
+//  [ FOR { EACH ROW | EACH STATEMENT } ]
+//  [ WHEN a_expr ]
+//  EXECUTE FUNCTION func_name ( trigger_func_args )
+// %SeeAlso: WEBDOCS/create-trigger.html
+create_trigger_stmt:
+  CREATE opt_or_replace TRIGGER name trigger_action_time trigger_event_list
+  ON table_name opt_trigger_transition_list trigger_for_each trigger_when
+  EXECUTE function_or_procedure func_name '(' trigger_func_args ')'
+  {
+    $$.val = &tree.CreateTrigger{
+      Replace: $2.bool(),
+      Name: tree.Name($4),
+      ActionTime: $5.triggerActionTime(),
+      Events: $6.triggerEvents(),
+      TableName: $8.unresolvedObjectName(),
+      Transitions: $9.triggerTransitions(),
+      ForEach: $10.triggerForEach(),
+      When: $11.expr(),
+      FuncName: $14.resolvableFuncRefFromName(),
+      FuncArgs: $16.strs(),
+    }
+  }
+| CREATE opt_or_replace TRIGGER error // SHOW HELP: CREATE TRIGGER
+
+trigger_action_time:
+  BEFORE { $$.val = tree.TriggerActionTimeBefore }
+| AFTER { $$.val = tree.TriggerActionTimeAfter }
+| INSTEAD OF { $$.val = tree.TriggerActionTimeInsteadOf }
+
+trigger_event_list:
+  trigger_event
+  {
+    $$.val = []*tree.TriggerEvent{$1.triggerEvent()}
+  }
+| trigger_event_list OR trigger_event
+  {
+    events := append($1.triggerEvents(), $3.triggerEvent())
+
+    // Validate that the trigger events are unique.
+    var seenEvents tree.TriggerEventType
+    for i := range events {
+      if events[i].EventType&seenEvents != 0 {
+        return setErr(sqllex, errors.New("duplicate trigger events specified"))
+      }
+      seenEvents |= events[i].EventType
+    }
+    $$.val = events
+  }
+
+trigger_event:
+  INSERT
+  {
+    $$.val = &tree.TriggerEvent{EventType: tree.TriggerEventInsert}
+  }
+| DELETE
+  {
+    $$.val = &tree.TriggerEvent{EventType: tree.TriggerEventDelete}
+  }
+| UPDATE
+  {
+    $$.val = &tree.TriggerEvent{EventType: tree.TriggerEventUpdate}
+  }
+| UPDATE OF name_list
+  {
+    $$.val = &tree.TriggerEvent{EventType: tree.TriggerEventUpdate, Columns: $3.nameList()}
+  }
+| TRUNCATE
+  {
+    $$.val = &tree.TriggerEvent{EventType: tree.TriggerEventTruncate}
+  }
+| UPSERT
+  {
+    $$.val = &tree.TriggerEvent{EventType: tree.TriggerEventUpsert}
+  }
+
+opt_trigger_transition_list:
+  REFERENCING trigger_transition_list
+  {
+    $$.val = $2.triggerTransitions()
+  }
+| /* EMPTY */
+  {
+    $$.val = []*tree.TriggerTransition{}
+  }
+
+trigger_transition_list:
+  trigger_transition
+  {
+    $$.val = []*tree.TriggerTransition{$1.triggerTransition()}
+  }
+| trigger_transition_list trigger_transition
+  {
+    $$.val = append($1.triggerTransitions(), $2.triggerTransition())
+  }
+
+trigger_transition:
+  transition_is_new transition_is_row opt_as table_alias_name
+  {
+    $$.val = &tree.TriggerTransition{
+      Name: tree.Name($4),
+      IsNew: $1.bool(),
+      IsRow: $2.bool(),
+    }
+  }
+
+opt_as:
+  AS {}
+| /* EMPTY */ {}
+
+transition_is_new:
+  NEW { $$.val = true }
+| OLD { $$.val = false }
+
+transition_is_row:
+  ROW { $$.val = true }
+| TABLE { $$.val = false }
+
+trigger_for_each:
+  FOR trigger_for_opt_each trigger_for_type
+  {
+    $$.val = $3.triggerForEach()
+  }
+| /* EMPTY */
+  {
+    // FOR EACH STATEMENT is the default.
+    $$.val = tree.TriggerForEachStatement
+  }
+
+trigger_for_opt_each:
+  EACH {}
+| /* EMPTY */ {}
+
+trigger_for_type:
+  ROW { $$.val = tree.TriggerForEachRow }
+| STATEMENT { $$.val = tree.TriggerForEachStatement }
+
+trigger_when:
+  WHEN a_expr
+  {
+    $$.val = $2.expr()
+  }
+| /* EMPTY */
+  {
+    $$.val = nil
+  }
+
+function_or_procedure:
+  FUNCTION {}
+| PROCEDURE {}
+
+trigger_func_args:
+  trigger_func_arg
+  {
+    $$.val = []string{$1}
+  }
+| trigger_func_args ',' trigger_func_arg
+  {
+    $$.val = append($1.strs(), $3)
+  }
+| /* EMPTY */
+  {
+    $$.val = []string{}
+  }
+
+trigger_func_arg:
+  ICONST
+  {
+    // NOTE: Calling OrigString() ignores the sign for signed constants.
+    // However, this doesn't matter because postgres doesn't parse a signed
+    // numerical constant, and so neither do we. This applies to the FCONST
+    // case too.
+    $$ = $1.numVal().OrigString()
+  }
+| FCONST
+  {
+    $$ = $1.numVal().OrigString()
+  }
+| SCONST
+  {
+    $$ = $1
+  }
+| unrestricted_name
+  {
+    $$ = $1
+  }
+
+// %Help: DROP TRIGGER - remove a trigger
+// %Category: DDL
+// %Text:
+// DROP TRIGGER [ IF EXISTS ] name ON table_name [ CASCADE | RESTRICT ]
+// %SeeAlso: WEBDOCS/drop-trigger.html
+drop_trigger_stmt:
+  DROP TRIGGER name ON table_name opt_drop_behavior
+  {
+    $$.val = &tree.DropTrigger{
+      Trigger: tree.Name($3),
+      Table: $5.unresolvedObjectName(),
+      DropBehavior: $6.dropBehavior(),
+    }
+  }
+| DROP TRIGGER IF EXISTS name ON table_name opt_drop_behavior
+  {
+    $$.val = &tree.DropTrigger{
+      IfExists: true,
+      Trigger: tree.Name($5),
+      Table: $7.unresolvedObjectName(),
+      DropBehavior: $8.dropBehavior(),
+    }
+  }
+| DROP TRIGGER error // SHOW HELP: DROP TRIGGER
+
 create_unsupported:
   CREATE ACCESS METHOD error { return unimplemented(sqllex, "create access method") }
 | CREATE AGGREGATE error { return unimplementedWithIssueDetail(sqllex, 74775, "create aggregate") }
@@ -5367,7 +5616,6 @@ create_unsupported:
 | CREATE SUBSCRIPTION error { return unimplemented(sqllex, "create subscription") }
 | CREATE TABLESPACE error { return unimplementedWithIssueDetail(sqllex, 54113, "create tablespace") }
 | CREATE TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "create text") }
-| CREATE TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "create trigger") }
 
 opt_trusted:
   TRUSTED {}
@@ -5395,7 +5643,6 @@ drop_unsupported:
 | DROP SERVER error { return unimplemented(sqllex, "drop server") }
 | DROP SUBSCRIPTION error { return unimplemented(sqllex, "drop subscription") }
 | DROP TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "drop text") }
-| DROP TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "drop") }
 
 create_ddl_stmt:
   create_database_stmt // EXTEND WITH HELP: CREATE DATABASE
@@ -5410,6 +5657,7 @@ create_ddl_stmt:
 | create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
 | create_func_stmt     // EXTEND WITH HELP: CREATE FUNCTION
 | create_proc_stmt     // EXTEND WITH HELP: CREATE PROCEDURE
+| create_trigger_stmt  // EXTEND WITH HELP: CREATE TRIGGER
 
 // %Help: CREATE STATISTICS - create a new table statistic
 // %Category: Misc
@@ -5796,6 +6044,7 @@ drop_ddl_stmt:
 | drop_type_stmt     // EXTEND WITH HELP: DROP TYPE
 | drop_func_stmt     // EXTEND WITH HELP: DROP FUNCTION
 | drop_proc_stmt     // EXTEND WITH HELP: DROP FUNCTION
+| drop_trigger_stmt  // EXTEND WITH HELP: DROP TRIGGER
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
@@ -17288,6 +17537,7 @@ unreserved_keyword:
 | DOMAIN
 | DOUBLE
 | DROP
+| EACH
 | ENCODING
 | ENCRYPTED
 | ENCRYPTION_PASSPHRASE
@@ -17364,6 +17614,7 @@ unreserved_keyword:
 | INJECT
 | INPUT
 | INSERT
+| INSTEAD
 | INTO_DB
 | INVERTED
 | INVISIBLE
@@ -17425,6 +17676,7 @@ unreserved_keyword:
 | NAMES
 | NAN
 | NEVER
+| NEW
 | NEW_DB_NAME
 | NEW_KMS
 | NEXT
@@ -17456,6 +17708,7 @@ unreserved_keyword:
 | OF
 | OFF
 | OIDS
+| OLD
 | OLD_KMS
 | OPERATOR
 | OPT
@@ -17507,6 +17760,7 @@ unreserved_keyword:
 | RECURSIVE
 | REDACT
 | REF
+| REFERENCING
 | REFRESH
 | REGION
 | REGIONAL
@@ -17585,6 +17839,7 @@ unreserved_keyword:
 | STABLE
 | START
 | STATE
+| STATEMENT
 | STATEMENTS
 | STATISTICS
 | STDIN
@@ -17800,6 +18055,7 @@ bare_label_keywords:
 | DOMAIN
 | DOUBLE
 | DROP
+| EACH
 | ELSE
 | ENCODING
 | ENCRYPTED
@@ -17901,6 +18157,7 @@ bare_label_keywords:
 | INPUT
 | INSENSITIVE
 | INSERT
+| INSTEAD
 | INT
 | INTEGER
 | INTERVAL
@@ -17974,6 +18231,7 @@ bare_label_keywords:
 | NAN
 | NATURAL
 | NEVER
+| NEW
 | NEW_DB_NAME
 | NEW_KMS
 | NEXT
@@ -18009,6 +18267,7 @@ bare_label_keywords:
 | OF
 | OFF
 | OIDS
+| OLD
 | OLD_KMS
 | ONLY
 | OPERATOR
@@ -18071,6 +18330,7 @@ bare_label_keywords:
 | REDACT
 | REF
 | REFERENCES
+| REFERENCING
 | REFRESH
 | REGION
 | REGIONAL
@@ -18155,6 +18415,7 @@ bare_label_keywords:
 | STABLE
 | START
 | STATE
+| STATEMENT
 | STATEMENTS
 | STATISTICS
 | STATUS
