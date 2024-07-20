@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -177,6 +178,12 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 		}
 
 		details = append(details, spanStr.String())
+	}
+
+	if tr.MaxTimestampAgeNanos != 0 {
+		details = append(details, fmt.Sprintf(
+			"Inconsistent scan (max ts age %s)", time.Duration(tr.MaxTimestampAgeNanos),
+		))
 	}
 
 	return "TableReader", details
