@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -27,8 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -561,4 +564,81 @@ func TestShowChangefeedJobsAuthorization(t *testing.T) {
 
 	// Only enterprise sinks create jobs.
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+// TestShowChangefeedJobsDefaultFilter verifies that "SHOW JOBS" AND "SHOW CHANGEFEED JOBS"
+// use the same age filter (12 hours).
+func TestShowChangefeedJobsDefaultFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		// This is the first approach to update "TimeSource", it doesn't work.
+		{
+			tm := timeutil.Now().Add(-100 * time.Hour)
+			clock := timeutil.NewManualTime(tm)
+			timeSource := hlc.NewClockForTesting(clock)
+			knobs := jobs.TestingKnobs{}
+			knobs.TimeSource = timeSource
+			s.TestingKnobs.JobsTestingKnobs = &knobs
+		}
+
+		// This is the 2nd approach to update "TimeSource", it doesn't work.
+		{
+			tm := timeutil.Now().Add(-100 * time.Hour)
+			clock := timeutil.NewManualTime(tm)
+			knobs := s.TestingKnobs.
+				DistSQL.(*execinfra.TestingKnobs).
+				Changefeed.(*TestingKnobs)
+			knobs.TimeSource = clock
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		countChangefeedJobs := func() (count int) {
+			query := `SHOW CHANGEFEED JOBS`
+			rowResults := sqlDB.Query(t, query)
+
+			count = 0
+			for rowResults.Next() {
+				count++
+			}
+			return count
+		}
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		var foo cdctest.TestFeed
+		// Here are the 3 ways to create a changefeed, it seems they are the same for this test.
+		{
+			foo = feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		}
+		{
+			fakeEndTime := s.Server.Clock().Now().Add(int64(time.Hour), 0).AsOfSystemTime()
+			foo = feed(t, f, "CREATE CHANGEFEED FOR foo WITH end_time = $1", fakeEndTime)
+		}
+		{
+			foo = feed(t, f, "CREATE CHANGEFEED FOR foo WITH initial_scan_only")
+		}
+		require.Equal(t, 1, countChangefeedJobs())
+
+		closeFeed(t, foo)
+
+		// The job should disappear from the "SHOW CHANGEFEED JOBS" query.
+		require.Equal(t, 0, countChangefeedJobs())
+	}
+
+	// The 3rd way to update "TimeSource", it may works, but the test will hang forever.
+	updateKnobs := func(opts *feedTestOptions) {
+		opts.knobsFn = func(knobs *base.TestingKnobs) {
+			if jobsKnobs, ok := knobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
+				tm := timeutil.Now().Add(-100 * time.Hour)
+				clock := timeutil.NewManualTime(tm)
+				timeSource := hlc.NewClockForTesting(clock)
+				jobsKnobs.TimeSource = timeSource
+			}
+		}
+	}
+
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless"), updateKnobs)
 }
