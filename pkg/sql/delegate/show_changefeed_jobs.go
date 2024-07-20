@@ -73,8 +73,8 @@ FROM
 	if n.Jobs == nil {
 		// The query intends to present:
 		// - first all the running jobs sorted in order of start time,
-		// - then all completed jobs sorted in order of completion time.
-		//
+		// - then all completed jobs sorted in order of completion time (no more than 12 hours).
+		whereClause = fmt.Sprintf(`WHERE %s`, ageFilter)
 		// The "ORDER BY" clause below exploits the fact that all
 		// running jobs have finished = NULL.
 		orderbyClause = `ORDER BY COALESCE(finished, now()) DESC, started DESC`

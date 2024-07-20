@@ -466,7 +466,13 @@ func (u Updater) canceled(ctx context.Context) error {
 			return fmt.Errorf("job with status %s cannot be requested to be canceled", md.Status)
 		}
 		ju.UpdateStatus(StatusCanceled)
-		md.Payload.FinishedMicros = timeutil.ToUnixMicros(u.j.registry.clock.Now().GoTime())
+		var now time.Time
+		if u.j.registry.knobs.StubTimeNow != nil {
+			now = u.j.registry.knobs.StubTimeNow()
+		} else {
+			now = u.j.registry.clock.Now().GoTime()
+		}
+		md.Payload.FinishedMicros = timeutil.ToUnixMicros(now)
 		ju.UpdatePayload(md.Payload)
 		return nil
 	})
