@@ -10,6 +10,9 @@ package changefeedccl
 
 import (
 	"context"
+	"encoding/json"
+	"time"
+
 	"fmt"
 	"net/url"
 	"sort"
@@ -561,4 +564,79 @@ func TestShowChangefeedJobsAuthorization(t *testing.T) {
 
 	// Only enterprise sinks create jobs.
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+// TestShowChangefeedJobsDefaultFilter verifies that "SHOW JOBS" AND "SHOW CHANGEFEED JOBS"
+// use the same age filter (12 hours).
+func TestShowChangefeedJobsDefaultFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		countChangefeedJobs := func() (count int) {
+			query := `SHOW CHANGEFEED JOBS`
+			rowResults := sqlDB.Query(t, query)
+
+			count = 0
+			for rowResults.Next() {
+				count++
+			}
+			return count
+		}
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH format='json'`)
+		defer closeFeed(t, foo)
+
+		require.Equal(t, 1, countChangefeedJobs())
+
+		// Change the "StatementTime" of the job to be 13 hours ago.
+		{
+			query := `
+				SELECT
+					id,
+					crdb_internal.pb_to_json(
+						'cockroach.sql.jobs.jobspb.Payload',
+						payload, false, true
+					)->'changefeed' AS changefeed_details
+				FROM
+				crdb_internal.system_jobs
+				WHERE job_type = 'CHANGEFEED'
+				`
+			rowResults := sqlDB.Query(t, query)
+
+			require.True(t, rowResults.Next())
+
+			row := make([]interface{}, 2)
+			err := rowResults.Scan(&row[0], &row[1])
+			require.NoError(t, err)
+
+			id := row[0].(int64)
+			v := row[1].([]byte)
+
+			var details *jobspb.ChangefeedDetails
+			err = json.Unmarshal(v, &details)
+			require.NoError(t, err)
+
+			details.StatementTime.WallTime = details.StatementTime.WallTime - int64(13*24*time.Hour)
+
+			// Question: How to update the job?
+
+			newData, err := details.Marshal()
+			require.NoError(t, err)
+
+			query = `UPDATE crdb_internal.system_jobs SET payload = $1 WHERE id = $2`
+			sqlDB.Exec(t, query, newData, id)
+		}
+
+		// The job should disappear from the "SHOW CHANGEFEED JOBS" query.
+		require.Equal(t, 0, countChangefeedJobs())
+	}
+
+	// TODO: Webhook disabled since the query parameters on the sinkURI are
+	// correct but out of order
+	cdcTest(t, testFn, feedTestOmitSinks("webhook", "sinkless"), feedTestNoExternalConnection)
 }
