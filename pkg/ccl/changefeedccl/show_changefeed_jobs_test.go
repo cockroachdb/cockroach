@@ -10,12 +10,14 @@ package changefeedccl
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -27,8 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -561,4 +565,96 @@ func TestShowChangefeedJobsAuthorization(t *testing.T) {
 
 	// Only enterprise sinks create jobs.
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+// TestShowChangefeedJobsDefaultFilter verifies that "SHOW JOBS" AND "SHOW CHANGEFEED JOBS"
+// use the same age filter (12 hours).
+func TestShowChangefeedJobsDefaultFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		knobs := jobs.TestingKnobs{}
+		tm := timeutil.Now().Add(50 * time.Hour)
+		fmt.Printf("tm: %v, unit microsecond: %v\n", tm, tm.UnixNano()/1e3)
+		clock := timeutil.NewManualTime(tm)
+		timeSource := hlc.NewClockForTesting(clock)
+		knobs.TimeSource = timeSource
+		s.TestingKnobs.JobsTestingKnobs = &knobs
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		countChangefeedJobs := func() (count int) {
+			query := `SHOW CHANGEFEED JOBS`
+			rowResults := sqlDB.Query(t, query)
+
+			count = 0
+			for rowResults.Next() {
+				count++
+			}
+			return count
+		}
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH format='json'`)
+		require.Equal(t, 1, countChangefeedJobs())
+		closeFeed(t, foo)
+
+		{
+			query := `
+				SELECT
+					id,
+					crdb_internal.pb_to_json(
+						'cockroach.sql.jobs.jobspb.Payload',
+						payload, false, true
+					)->'changefeed' AS changefeed_details
+				FROM
+				crdb_internal.system_jobs
+				WHERE job_type = 'CHANGEFEED'
+				`
+			rowResults := sqlDB.Query(t, query)
+
+			require.True(t, rowResults.Next())
+
+			row := make([]interface{}, 2)
+			err := rowResults.Scan(&row[0], &row[1])
+			require.NoError(t, err)
+
+			// id := row[0].(int64)
+			v := row[1].([]byte)
+
+			var details *jobspb.ChangefeedDetails
+			err = json.Unmarshal(v, &details)
+			require.NoError(t, err)
+
+			fmt.Printf("details: %v\n", details)
+			fmt.Printf("details.StatementTime: %v\n", details.StatementTime)
+			tm := timeutil.FromUnixNanos(details.StatementTime.WallTime)
+			fmt.Printf("details.StatementTime: %v\n", tm)
+			fmt.Printf("------\n")
+
+			// Question: How to update the job?
+		}
+
+		// The job should disappear from the "SHOW CHANGEFEED JOBS" query.
+		require.Equal(t, 0, countChangefeedJobs())
+	}
+
+	foo := func(opts *feedTestOptions) {
+		opts.knobsFn = func(knobs *base.TestingKnobs) {
+			if jobsKnobs, ok := knobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
+				tm := timeutil.Now().Add(50 * time.Hour)
+				fmt.Printf("tm: %v, unit microsecond: %v\n", tm, tm.UnixNano()/1e3)
+				clock := timeutil.NewManualTime(tm)
+				timeSource := hlc.NewClockForTesting(clock)
+				jobsKnobs.TimeSource = timeSource
+			}
+		}
+	}
+
+	// TODO: Webhook disabled since the query parameters on the sinkURI are
+	// correct but out of order
+	cdcTest(t, testFn, feedTestOmitSinks("webhook", "sinkless"), foo)
+
 }

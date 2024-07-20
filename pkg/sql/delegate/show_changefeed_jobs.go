@@ -80,11 +80,12 @@ FROM
 		orderbyClause = `ORDER BY COALESCE(finished, now()) DESC, started DESC`
 	} else {
 		// Limit the jobs displayed to the select statement in n.Jobs.
-		whereClause = fmt.Sprintf(`WHERE job_id in (%s)`, n.Jobs.String())
+		whereClause = fmt.Sprintf(`WHERE job_id in (%s) AND %s`, n.Jobs.String(), ageFilter)
 		innerWhereClause = fmt.Sprintf(` AND id in (%s)`, n.Jobs.String())
 	}
 
 	selectClause := fmt.Sprintf(baseSelectClause, innerWhereClause)
+
 	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
 
 	return d.parse(sqlStmt)
