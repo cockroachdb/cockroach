@@ -382,6 +382,9 @@ func (b *Builder) buildStmt(
 	case *tree.CreateRoutine:
 		return b.buildCreateFunction(stmt, inScope)
 
+	case *tree.CreateTrigger:
+		return b.buildCreateTrigger(stmt, inScope)
+
 	case *tree.Call:
 		return b.buildProcedure(stmt, inScope)
 

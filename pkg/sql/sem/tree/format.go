@@ -480,6 +480,18 @@ func (ctx *FmtCtx) FormatNameP(s *string) {
 	ctx.FormatNode((*Name)(s))
 }
 
+// FormatStringConstant formats a constant string value, redacting it if
+// FmtHideConstants is set.
+func (ctx *FmtCtx) FormatStringConstant(s string) {
+	ctx.WriteString("'")
+	if ctx.HasFlags(FmtHideConstants) {
+		ctx.WriteString("_")
+	} else {
+		ctx.WriteString(s)
+	}
+	ctx.WriteString("'")
+}
+
 // FormatURIs formats a list of string literals or placeholders containing URIs.
 func (ctx *FmtCtx) FormatURIs(uris []Expr) {
 	if len(uris) > 1 {

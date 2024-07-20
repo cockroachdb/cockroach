@@ -51,13 +51,13 @@ func parseOne(t *testing.T, input string, plpgsql bool) (tree.NodeFormatter, err
 // VerifyParseFormat is used in the SQL and PL/pgSQL datadriven parser tests to
 // check that a successfully parsed expression round trips and correctly handles
 // formatting flags.
-func VerifyParseFormat(t *testing.T, input string, plpgsql bool) string {
+func VerifyParseFormat(t *testing.T, input, pos string, plpgsql bool) string {
 	t.Helper()
 
 	// Check parse.
 	stmts, err := parse(t, input, plpgsql)
 	if err != nil {
-		t.Fatalf("unexpected parse error: %v", err)
+		t.Fatalf("%s\nunexpected parse error: %v", pos, err)
 	}
 
 	// Check pretty-print roundtrip.
@@ -87,13 +87,13 @@ func VerifyParseFormat(t *testing.T, input string, plpgsql bool) string {
 	// We also want to check the re-parsing is fine.
 	reparsedStmts, err := parse(t, constantsHidden, plpgsql)
 	if err != nil {
-		t.Fatalf("unexpected error when reparsing without literals: %+v", err)
+		t.Fatalf("%s\nunexpected error when reparsing without literals: %+v", pos, err)
 	} else {
 		reparsedStmtsS := reparsedStmts.String()
 		if reparsedStmtsS != constantsHidden {
 			t.Fatalf(
-				"mismatched AST when reparsing without literals:\noriginal: %s\nexpected: %s\nactual:   %s",
-				input, constantsHidden, reparsedStmtsS,
+				"%s\nmismatched AST when reparsing without literals:\noriginal: %s\nexpected: %s\nactual:   %s",
+				pos, input, constantsHidden, reparsedStmtsS,
 			)
 		}
 	}
