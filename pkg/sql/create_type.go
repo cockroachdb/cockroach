@@ -418,8 +418,10 @@ func createCompositeTypeDesc(
 		if err != nil {
 			return nil, err
 		}
-		err = tree.CheckUnsupportedType(params.ctx, &params.p.semaCtx, typ)
-		if err != nil {
+		if typ.Identical(types.Trigger) {
+			return nil, tree.CannotAcceptTriggerErr
+		}
+		if err = tree.CheckUnsupportedType(params.ctx, &params.p.semaCtx, typ); err != nil {
 			return nil, err
 		}
 		if typ.UserDefined() {
