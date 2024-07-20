@@ -13,6 +13,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -177,7 +178,7 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 	intVal.SetInt(17)
 	var importEpoch uint32 = 3
 	var originID uint32 = 1
-	var originTs = hlc.Timestamp{WallTime: 1, Logical: 1}
+	var originTs = hlc.Timestamp{WallTime: math.MaxInt64, Logical: 1}
 
 	valHeader := enginepb.MVCCValueHeader{}
 	valHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: 9}
