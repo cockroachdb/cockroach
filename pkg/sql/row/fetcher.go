@@ -471,7 +471,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			batchRequestsIssued:        &batchRequestsIssued,
 		}
 		if args.Txn != nil {
-			fetcherArgs.sendFn = makeTxnKVFetcherDefaultSendFunc(args.Txn, &batchRequestsIssued)
+			fetcherArgs.sendFn = makeSendFunc(args.Txn, args.Spec.External, &batchRequestsIssued)
 			fetcherArgs.admission.requestHeader = args.Txn.AdmissionHeader()
 			fetcherArgs.admission.responseQ = args.Txn.DB().SQLKVResponseAdmissionQ
 			fetcherArgs.admission.pacerFactory = args.Txn.DB().AdmissionPacerFactory
@@ -497,7 +497,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 // Consider using GetBatchRequestsIssued if that information is needed.
 func (rf *Fetcher) SetTxn(txn *kv.Txn) error {
 	var batchRequestsIssued int64
-	sendFn := makeTxnKVFetcherDefaultSendFunc(txn, &batchRequestsIssued)
+	sendFn := makeSendFunc(txn, rf.args.Spec.External, &batchRequestsIssued)
 	return rf.setTxnAndSendFn(txn, sendFn)
 }
 
