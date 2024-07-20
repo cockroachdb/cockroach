@@ -655,92 +655,59 @@ var MVCCMerger = &pebble.Merger{
 	},
 }
 
-var _ sstable.BlockIntervalSyntheticReplacer = MVCCBlockIntervalSyntheticReplacer{}
+var _ sstable.BlockIntervalSuffixReplacer = MVCCBlockIntervalSuffixReplacer{}
 
-type MVCCBlockIntervalSyntheticReplacer struct{}
+type MVCCBlockIntervalSuffixReplacer struct{}
 
-func (mbsr MVCCBlockIntervalSyntheticReplacer) AdjustIntervalWithSyntheticSuffix(
-	lower uint64, upper uint64, suffix []byte,
-) (adjustedLower uint64, adjustedUpper uint64, err error) {
-	synthDecoded, err := DecodeMVCCTimestampSuffix(suffix)
+func (MVCCBlockIntervalSuffixReplacer) ApplySuffixReplacement(
+	interval sstable.BlockInterval, newSuffix []byte,
+) (sstable.BlockInterval, error) {
+	synthDecoded, err := DecodeMVCCTimestampSuffix(newSuffix)
 	if err != nil {
-		return 0, 0, errors.AssertionFailedf("could not decode synthetic suffix")
+		return sstable.BlockInterval{}, errors.AssertionFailedf("could not decode synthetic suffix")
 	}
 	synthDecodedWalltime := uint64(synthDecoded.WallTime)
-	if upper >= synthDecodedWalltime {
-		return 0, 0, errors.AssertionFailedf("the synthetic suffix %d is less than or equal to the original upper bound %d", synthDecoded, upper)
-	}
 	// The returned bound includes the synthetic suffix, regardless of its logical
 	// component.
-	return synthDecodedWalltime, synthDecodedWalltime + 1, nil
+	return sstable.BlockInterval{Lower: synthDecodedWalltime, Upper: synthDecodedWalltime + 1}, nil
 }
 
-// pebbleDataBlockMVCCTimeIntervalPointCollector implements
-// pebble.DataBlockIntervalCollector for point keys.
-type pebbleDataBlockMVCCTimeIntervalPointCollector struct {
-	pebbleDataBlockMVCCTimeIntervalCollector
-}
+type pebbleIntervalMapper struct{}
 
-var _ sstable.DataBlockIntervalCollector = (*pebbleDataBlockMVCCTimeIntervalPointCollector)(nil)
+var _ sstable.IntervalMapper = pebbleIntervalMapper{}
 
-func (tc *pebbleDataBlockMVCCTimeIntervalPointCollector) Add(
-	key pebble.InternalKey, _ []byte,
-) error {
-	return tc.add(key.UserKey)
-}
-
-// pebbleDataBlockMVCCTimeIntervalRangeCollector implements
-// pebble.DataBlockIntervalCollector for range keys.
-type pebbleDataBlockMVCCTimeIntervalRangeCollector struct {
-	pebbleDataBlockMVCCTimeIntervalCollector
-}
-
-var _ sstable.DataBlockIntervalCollector = (*pebbleDataBlockMVCCTimeIntervalRangeCollector)(nil)
-
-func (tc *pebbleDataBlockMVCCTimeIntervalRangeCollector) Add(
+// MapPointKey is part of the sstable.IntervalMapper interface.
+func (pebbleIntervalMapper) MapPointKey(
 	key pebble.InternalKey, value []byte,
-) error {
-	// TODO(erikgrinaker): should reuse a buffer for keysDst, but keyspan.Key is
-	// not exported by Pebble.
-	span, err := rangekey.Decode(key, value, nil)
-	if err != nil {
-		return errors.Wrapf(err, "decoding range key at %s", key)
-	}
+) (sstable.BlockInterval, error) {
+	return mapSuffixToInterval(key.UserKey)
+}
+
+// MapRangeKey is part of the sstable.IntervalMapper interface.
+func (pebbleIntervalMapper) MapRangeKeys(span sstable.Span) (sstable.BlockInterval, error) {
+	var res sstable.BlockInterval
 	for _, k := range span.Keys {
-		if err := tc.add(k.Suffix); err != nil {
-			return errors.Wrapf(err, "recording suffix %x for range key at %s", k.Suffix, key)
+		i, err := mapSuffixToInterval(k.Suffix)
+		if err != nil {
+			return sstable.BlockInterval{}, err
 		}
+		res.UnionWith(i)
 	}
-	return nil
+	return res, nil
 }
 
-// pebbleDataBlockMVCCTimeIntervalCollector is a helper for a
-// pebble.DataBlockIntervalCollector that is used to construct a
-// pebble.BlockPropertyCollector. This provides per-block filtering, which
-// also gets aggregated to the sstable-level and filters out sstables. It must
-// only be used for MVCCKeyIterKind iterators, since it will ignore
-// blocks/sstables that contain intents (and any other key that is not a real
-// MVCC key).
-//
-// This is wrapped by structs for point or range key collection, which actually
-// implement pebble.DataBlockIntervalCollector.
-type pebbleDataBlockMVCCTimeIntervalCollector struct {
-	// min, max are the encoded timestamps.
-	min, max []byte
-}
-
-// add collects the given slice in the collector. The slice may be an entire
-// encoded MVCC key, or the bare suffix of an encoded key.
-func (tc *pebbleDataBlockMVCCTimeIntervalCollector) add(b []byte) error {
+// mapSuffixToInterval maps the suffix of a key to a timestamp interval.
+// The buffer can be an entire key or just the suffix.
+func mapSuffixToInterval(b []byte) (sstable.BlockInterval, error) {
 	if len(b) == 0 {
-		return nil
+		return sstable.BlockInterval{}, nil
 	}
 	// Last byte is the version length + 1 when there is a version,
 	// else it is 0.
 	versionLen := int(b[len(b)-1])
 	if versionLen == 0 {
 		// This is not an MVCC key that we can collect.
-		return nil
+		return sstable.BlockInterval{}, nil
 	}
 	// prefixPartEnd points to the sentinel byte, unless this is a bare suffix, in
 	// which case the index is -1.
@@ -748,7 +715,7 @@ func (tc *pebbleDataBlockMVCCTimeIntervalCollector) add(b []byte) error {
 	// Sanity check: the index should be >= -1. Additionally, if the index is >=
 	// 0, it should point to the sentinel byte, as this is a full EngineKey.
 	if prefixPartEnd < -1 || (prefixPartEnd >= 0 && b[prefixPartEnd] != sentinel) {
-		return errors.Errorf("invalid key %s", roachpb.Key(b).String())
+		return sstable.BlockInterval{}, errors.Errorf("invalid key %s", roachpb.Key(b).String())
 	}
 	// We don't need the last byte (the version length).
 	versionLen--
@@ -758,67 +725,10 @@ func (tc *pebbleDataBlockMVCCTimeIntervalCollector) add(b []byte) error {
 		versionLen == engineKeyVersionWallLogicalAndSyntheticTimeLen {
 		// INVARIANT: -1 <= prefixPartEnd < len(b) - 1.
 		// Version consists of the bytes after the sentinel and before the length.
-		b = b[prefixPartEnd+1 : len(b)-1]
-		// Lexicographic comparison on the encoded timestamps is equivalent to the
-		// comparison on decoded timestamps, so delay decoding.
-		if len(tc.min) == 0 || bytes.Compare(b, tc.min) < 0 {
-			tc.min = append(tc.min[:0], b...)
-		}
-		if len(tc.max) == 0 || bytes.Compare(b, tc.max) > 0 {
-			tc.max = append(tc.max[:0], b...)
-		}
+		ts := binary.BigEndian.Uint64(b[prefixPartEnd+1:])
+		return sstable.BlockInterval{Lower: ts, Upper: ts + 1}, nil
 	}
-	return nil
-}
-
-func decodeWallTime(ts []byte) uint64 {
-	return binary.BigEndian.Uint64(ts[0:engineKeyVersionWallTimeLen])
-}
-
-// FinishDataBlock is part of the sstable.DataBlockIntervalCollector interface.
-func (tc *pebbleDataBlockMVCCTimeIntervalCollector) FinishDataBlock() (
-	lower uint64,
-	upper uint64,
-	err error,
-) {
-	if len(tc.min) == 0 {
-		// No calls to Add that contained a timestamped key.
-		return 0, 0, nil
-	}
-	// Construct a [lower, upper) walltime that will contain all the
-	// hlc.Timestamps in this block.
-	lower = decodeWallTime(tc.min)
-	// Remember that we have to reset tc.min and tc.max to get ready for the
-	// next data block, as specified in the DataBlockIntervalCollector interface
-	// help and help too.
-	tc.min = tc.min[:0]
-	// The actual value encoded into walltime is an int64, so +1 will not
-	// overflow.
-	//
-	// Note that the timestamp with a wall time tc.max+1 and no logical component is
-	// a valid exclusive upper bound for timestamps with wall time tc.max and any
-	// logical component.
-	upper = decodeWallTime(tc.max) + 1
-	tc.max = tc.max[:0]
-	if lower >= upper {
-		return 0, 0,
-			errors.Errorf("corrupt timestamps lower %d >= upper %d", lower, upper)
-	}
-	return lower, upper, nil
-}
-
-// AddCollectedWithSuffixReplacement is part of the
-// sstable.DataBlockIntervalCollector interface.
-func (tc *pebbleDataBlockMVCCTimeIntervalCollector) AddCollectedWithSuffixReplacement(
-	oldLower, oldUpper uint64, oldSuffix, newSuffix []byte,
-) error {
-	return tc.add(newSuffix)
-}
-
-// SupportsSuffixReplacement is part of the sstable.DataBlockIntervalCollector
-// interface.
-func (tc *pebbleDataBlockMVCCTimeIntervalCollector) SupportsSuffixReplacement() bool {
-	return true
+	return sstable.BlockInterval{}, nil
 }
 
 const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
@@ -850,8 +760,8 @@ var PebbleBlockPropertyCollectors = []func() pebble.BlockPropertyCollector{
 	func() pebble.BlockPropertyCollector {
 		return sstable.NewBlockIntervalCollector(
 			mvccWallTimeIntervalCollector,
-			&pebbleDataBlockMVCCTimeIntervalPointCollector{},
-			&pebbleDataBlockMVCCTimeIntervalRangeCollector{},
+			pebbleIntervalMapper{},
+			MVCCBlockIntervalSuffixReplacer{},
 		)
 	},
 }
