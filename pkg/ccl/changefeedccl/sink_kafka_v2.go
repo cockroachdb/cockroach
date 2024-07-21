@@ -542,10 +542,10 @@ var _ kgo.Logger = kgoLogAdapter{}
 // recommended sarama compat approach to pass thru record partitions when key is
 // nil, like the v1 implementation.
 func newKgoChangefeedPartitioner() kgo.Partitioner {
-	hasher := fnv.New32a()
 	return &kgoChangefeedPartitioner{
 		inner: kgo.StickyKeyPartitioner(kgo.SaramaCompatHasher(func(bs []byte) uint32 {
-			hasher.Reset()
+			// Make a new hasher each time, as the partitioner may be called concurrently.
+			hasher := fnv.New32a()
 			_, _ = hasher.Write(bs)
 			return hasher.Sum32()
 		})),
