@@ -23,9 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -43,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 )
 
 // A query can be issued using the "simple protocol" or the "prepare protocol".
@@ -754,25 +754,10 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 		evalCtx: eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
 
-	// Setup the default session settings.
-	h.evalCtx.SessionData().OptimizerUseMultiColStats = true
-	h.evalCtx.SessionData().ZigzagJoinEnabled = true
-	h.evalCtx.SessionData().OptimizerUseForecasts = true
-	h.evalCtx.SessionData().OptimizerUseHistograms = true
-	h.evalCtx.SessionData().LocalityOptimizedSearch = true
-	h.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
-	h.evalCtx.SessionData().InsertFastPath = true
-	h.evalCtx.SessionData().OptSplitScanLimit = tabledesc.MaxBucketAllowed
-	h.evalCtx.SessionData().VariableInequalityLookupJoinEnabled = true
-	h.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats = true
-	h.evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization = true
-	h.evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting = true
-	h.evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity = true
-	h.evalCtx.SessionData().TrigramSimilarityThreshold = 0.3
-	h.evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
-	h.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
-	h.evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = true
-	h.evalCtx.SessionData().OptimizerPushOffsetIntoIndexJoin = true
+	// Set session settings to their global defaults.
+	if err := sql.TestingResetSessionVariables(h.ctx, h.evalCtx); err != nil {
+		panic(errors.Wrap(err, "could not reset session variables"))
+	}
 
 	// Set up the test catalog.
 	h.testCat = testcat.New()
