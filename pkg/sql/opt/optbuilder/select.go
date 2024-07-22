@@ -168,7 +168,20 @@ func (b *Builder) buildDataSource(
 				}
 			}
 			if b.shouldBuildLockOp() {
-				locking = nil
+				// If we're implementing FOR UPDATE / FOR SHARE with a Lock operator on
+				// top of the plan, then this can be an unlocked scan. But if the
+				// locking uses SKIP LOCKED then we still need this scan to skip over
+				// locks even if it does not take any locks itself.
+				if locking.get().WaitPolicy == tree.LockWaitSkipLocked {
+					// Create a dummy lockingSpec to get just the skip locked behavior.
+					locking = lockingSpec{&lockingItem{
+						item: &tree.LockingItem{
+							WaitPolicy: tree.LockWaitSkipLocked,
+						},
+					}}
+				} else {
+					locking = nil
+				}
 			}
 			return b.buildScan(
 				tabMeta,
@@ -504,7 +517,20 @@ func (b *Builder) buildScanFromTableRef(
 		}
 	}
 	if b.shouldBuildLockOp() {
-		locking = nil
+		// If we're implementing FOR UPDATE / FOR SHARE with a Lock operator on top
+		// of the plan, then this can be an unlocked scan. But if the locking uses
+		// SKIP LOCKED then we still need this scan to skip over locks even if it
+		// does not take any locks itself.
+		if locking.get().WaitPolicy == tree.LockWaitSkipLocked {
+			// Create a dummy lockingSpec to get just the skip locked behavior.
+			locking = lockingSpec{&lockingItem{
+				item: &tree.LockingItem{
+					WaitPolicy: tree.LockWaitSkipLocked,
+				},
+			}}
+		} else {
+			locking = nil
+		}
 	}
 	return b.buildScan(
 		tabMeta, ordinals, indexFlags, locking, inScope, false, /* disableNotVisibleIndex */

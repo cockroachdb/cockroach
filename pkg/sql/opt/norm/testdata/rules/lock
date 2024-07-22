@@ -79,11 +79,15 @@ limit
  │    ├── limit hint: 1.00
  │    └── index-join abcde
  │         ├── columns: a:1!null b:2 c:3!null d:4 e:5
+ │         ├── locking: none,skip-locked
+ │         ├── volatile
  │         ├── key: (1)
  │         ├── fd: ()-->(4), (1)-->(2,3,5)
  │         ├── limit hint: 1.00
  │         └── scan abcde@abcde_c_idx,partial
  │              ├── columns: a:1!null c:3!null
+ │              ├── locking: none,skip-locked
+ │              ├── volatile
  │              ├── key: (1)
  │              ├── fd: (1)-->(3)
  │              └── limit hint: 1.00
@@ -105,10 +109,14 @@ offset
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
  │    └── index-join abcde
  │         ├── columns: a:1!null b:2 c:3!null d:4 e:5
+ │         ├── locking: none,skip-locked
+ │         ├── volatile
  │         ├── key: (1)
  │         ├── fd: ()-->(4), (1)-->(2,3,5)
  │         └── scan abcde@abcde_c_idx,partial
  │              ├── columns: a:1!null c:3!null
+ │              ├── locking: none,skip-locked
+ │              ├── volatile
  │              ├── key: (1)
  │              └── fd: (1)-->(3)
  └── 1
@@ -179,11 +187,15 @@ limit
  │    ├── limit hint: 1.00
  │    └── index-join abcde
  │         ├── columns: a:1!null b:2 c:3!null d:4 e:5
+ │         ├── locking: none,skip-locked,durability-guaranteed
+ │         ├── volatile
  │         ├── key: (1)
  │         ├── fd: ()-->(4), (1)-->(2,3,5)
  │         ├── limit hint: 1.00
  │         └── scan abcde@abcde_c_idx,partial
  │              ├── columns: a:1!null c:3!null
+ │              ├── locking: none,skip-locked,durability-guaranteed
+ │              ├── volatile
  │              ├── key: (1)
  │              ├── fd: (1)-->(3)
  │              └── limit hint: 1.00
@@ -205,10 +217,14 @@ offset
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
  │    └── index-join abcde
  │         ├── columns: a:1!null b:2 c:3!null d:4 e:5
+ │         ├── locking: none,skip-locked,durability-guaranteed
+ │         ├── volatile
  │         ├── key: (1)
  │         ├── fd: ()-->(4), (1)-->(2,3,5)
  │         └── scan abcde@abcde_c_idx,partial
  │              ├── columns: a:1!null c:3!null
+ │              ├── locking: none,skip-locked,durability-guaranteed
+ │              ├── volatile
  │              ├── key: (1)
  │              └── fd: (1)-->(3)
  └── 1

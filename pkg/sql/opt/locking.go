@@ -42,6 +42,8 @@ type Locking struct {
 	//   SKIP LOCKED
 	//   NOWAIT
 	//
+	// Note that SKIP LOCKED can be requested without a locking strength, which
+	// signifies skipping over locks without taking any additional locks.
 	WaitPolicy tree.LockingWaitPolicy
 
 	// The third property is the form of locking, either record locking or
@@ -84,4 +86,11 @@ func (l Locking) Max(l2 Locking) Locking {
 // locking mode.
 func (l Locking) IsLocking() bool {
 	return l.Strength != tree.ForNone
+}
+
+// UsesLockTable returns true if (a) the receiver is configured to use a
+// row-level locking mode or (b) the receiver is configured to skip over locks
+// even if not using a row-level locking mode.
+func (l Locking) UsesLockTable() bool {
+	return l.Strength != tree.ForNone || l.WaitPolicy == tree.LockWaitSkipLocked
 }
