@@ -166,7 +166,7 @@ func TestSQLErrorUponInvalidTenant(t *testing.T) {
 
 	ctx := context.Background()
 
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)
@@ -179,6 +179,19 @@ func TestSQLErrorUponInvalidTenant(t *testing.T) {
 	err = db.Ping()
 	require.NotNil(t, err)
 	require.Regexp(t, `service unavailable for target tenant \(nonexistent\)`, err.Error())
+
+	// Regression test for CRDB-40449; make sure pre-conn memory is freed.
+	testutils.SucceedsSoon(t, func() error {
+		var usedPreConnMemory int
+		err = sqlDB.QueryRow("select used from crdb_internal.node_memory_monitors where name='pre-conn'").Scan(&usedPreConnMemory)
+		if err != nil {
+			return err
+		}
+		if usedPreConnMemory != 0 {
+			return errors.Errorf("expected 0 bytes used, got %d", usedPreConnMemory)
+		}
+		return nil
+	})
 }
 
 func TestSharedProcessServerInheritsTempStorageLimit(t *testing.T) {
