@@ -1659,11 +1659,15 @@ limit
  │    ├── limit hint: 1.00
  │    └── index-join abcde
  │         ├── columns: a:1!null b:2 c:3!null d:4 e:5
+ │         ├── locking: none,skip-locked
+ │         ├── volatile
  │         ├── key: (1)
  │         ├── fd: ()-->(4), (1)-->(2,3,5)
  │         ├── limit hint: 1.00
  │         └── scan abcde@abcde_c_idx,partial
  │              ├── columns: a:1!null c:3!null
+ │              ├── locking: none,skip-locked
+ │              ├── volatile
  │              ├── key: (1)
  │              ├── fd: (1)-->(3)
  │              └── limit hint: 1.00
@@ -1683,13 +1687,17 @@ offset
  │    ├── key: (1)
  │    └── project
  │         ├── columns: a:1!null
+ │         ├── volatile
  │         ├── key: (1)
  │         └── project
  │              ├── columns: d:4 a:1!null
+ │              ├── volatile
  │              ├── key: (1)
  │              ├── fd: ()-->(4)
  │              ├── scan abcde@abcde_c_idx,partial
  │              │    ├── columns: a:1!null
+ │              │    ├── locking: none,skip-locked
+ │              │    ├── volatile
  │              │    └── key: (1)
  │              └── projections
  │                   └── CAST(NULL AS TIMESTAMP) [as=d:4]
@@ -1761,11 +1769,15 @@ limit
  │    ├── limit hint: 1.00
  │    └── index-join abcde
  │         ├── columns: a:1!null b:2 c:3!null d:4 e:5
+ │         ├── locking: none,skip-locked
+ │         ├── volatile
  │         ├── key: (1)
  │         ├── fd: ()-->(4), (1)-->(2,3,5)
  │         ├── limit hint: 1.00
  │         └── scan abcde@abcde_c_idx,partial
  │              ├── columns: a:1!null c:3!null
+ │              ├── locking: none,skip-locked
+ │              ├── volatile
  │              ├── key: (1)
  │              ├── fd: (1)-->(3)
  │              └── limit hint: 1.00
@@ -1787,10 +1799,14 @@ offset
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
  │    └── index-join abcde
  │         ├── columns: a:1!null b:2 c:3!null d:4 e:5
+ │         ├── locking: none,skip-locked
+ │         ├── volatile
  │         ├── key: (1)
  │         ├── fd: ()-->(4), (1)-->(2,3,5)
  │         └── scan abcde@abcde_c_idx,partial
  │              ├── columns: a:1!null c:3!null
+ │              ├── locking: none,skip-locked
+ │              ├── volatile
  │              ├── key: (1)
  │              └── fd: (1)-->(3)
  └── 1
