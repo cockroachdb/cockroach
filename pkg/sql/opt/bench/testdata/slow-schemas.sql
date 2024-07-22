@@ -869,21 +869,25 @@ CREATE TABLE seed64793 (
   _uuid UUID,
   _inet INET,
   _jsonb JSONB,
-  _enum greeting64793
+  _enum greeting64793,
+  INDEX (_int8, _float8, _date),
+  INVERTED INDEX (_jsonb)
 );
-
--- TODO(mgartner): Move this into the seed table definition.
-CREATE INDEX on seed64793 (_int8, _float8, _date);
-
--- TODO(mgartner): Move this into the seed table definition.
-CREATE INVERTED INDEX on seed64793 (_jsonb);
 
 -- Used in slow-query-2.
 CREATE TABLE table64793_2 (
-  col1_0 "char" NOT NULL, col1_1 OID NOT NULL, col1_2 BIT(38) NOT NULL,
-  col1_3 BIT(18) NOT NULL, col1_4 BYTES NOT NULL, col1_5 INT8 NOT NULL,
-  col1_6 INTERVAL NOT NULL, col1_7 BIT(33) NOT NULL, col1_8 INTERVAL NULL,
-  col1_9 GEOMETRY NOT NULL, col1_10 BOOL NOT NULL, col1_11 INT2,
+  col1_0 "char" NOT NULL,
+  col1_1 OID NOT NULL,
+  col1_2 BIT(38) NOT NULL,
+  col1_3 BIT(18) NOT NULL,
+  col1_4 BYTES NOT NULL,
+  col1_5 INT8 NOT NULL,
+  col1_6 INTERVAL NOT NULL,
+  col1_7 BIT(33) NOT NULL,
+  col1_8 INTERVAL NULL,
+  col1_9 GEOMETRY NOT NULL,
+  col1_10 BOOL NOT NULL,
+  col1_11 INT2,
   PRIMARY KEY (
     col1_4 ASC, col1_7 DESC, col1_1 ASC, col1_2 ASC, col1_10 ASC, col1_5,
     col1_0 ASC, col1_3, col1_6
@@ -896,37 +900,45 @@ CREATE TABLE table64793_2 (
 
 -- Used in slow-query-2.
 CREATE TABLE table64793_3 (
-  col2_0 NAME NOT NULL, col2_1 TIMETZ NOT NULL,
-  PRIMARY KEY (col2_0 ASC, col2_1),
+  col2_0 NAME NOT NULL,
+  col2_1 TIMETZ NOT NULL,
   col2_2 STRING NOT NULL AS (lower(col2_0)) VIRTUAL,
-  UNIQUE (col2_0 DESC, col2_2 DESC, col2_1)
-  WHERE (table64793_3.col2_2 > e'\U00002603':::STRING)
-  OR (table64793_3.col2_0 != '"':::STRING),
+  PRIMARY KEY (col2_0 ASC, col2_1),
+  UNIQUE (col2_0 DESC, col2_2 DESC, col2_1) WHERE (table64793_3.col2_2 > e'\U00002603':::STRING) OR (table64793_3.col2_0 != '"':::STRING),
   UNIQUE (col2_1 ASC, col2_2, col2_0),
-  UNIQUE (col2_0 DESC,col2_1, col2_2),
+  UNIQUE (col2_0 DESC, col2_1, col2_2),
   INDEX (col2_1 DESC),
-  UNIQUE (col2_2 DESC, col2_0 ASC)
-  WHERE table64793_3.col2_2 = '"':::STRING
+  UNIQUE (col2_2 DESC, col2_0 ASC) WHERE table64793_3.col2_2 = '"':::STRING
 );
 
 -- Used in slow-query-2.
 CREATE TABLE table64793_4 (
-  col2_0 NAME NOT NULL, col2_1 TIMETZ NOT NULL, col3_2 REGPROC NOT NULL,
-  col3_3 "char", col3_4 BOX2D, col3_5 INT8 NULL, col3_6 TIMESTAMP NOT NULL,
-  col3_7 FLOAT8, col3_8 INT4 NULL, col3_9 INET NULL, col3_10 UUID NOT NULL,
-  col3_11 UUID NULL, col3_12 INT2 NOT NULL, col3_13 BIT(34),
-  col3_14 REGPROCEDURE NULL, col3_15 FLOAT8 NULL,
+  col2_0 NAME NOT NULL,
+  col2_1 TIMETZ NOT NULL,
+  col3_2 REGPROC NOT NULL,
+  col3_3 "char",
+  col3_4 BOX2D,
+  col3_5 INT8 NULL,
+  col3_6 TIMESTAMP NOT NULL,
+  col3_7 FLOAT8,
+  col3_8 INT4 NULL,
+  col3_9 INET NULL,
+  col3_10 UUID NOT NULL,
+  col3_11 UUID NULL,
+  col3_12 INT2 NOT NULL,
+  col3_13 BIT(34),
+  col3_14 REGPROCEDURE NULL,
+  col3_15 FLOAT8 NULL,
   PRIMARY KEY (
     col2_0 ASC, col2_1, col3_11 DESC, col3_13, col3_6, col3_3 DESC,
     col3_15 ASC, col3_2 ASC, col3_4 ASC, col3_9 DESC, col3_12 ASC,
     col3_8 ASC, col3_5, col3_14 ASC
   ),
-  UNIQUE (col3_2, col3_8 ASC)
-  WHERE ((((table64793_4.col3_5 < 0:::INT8)
-  AND (table64793_4.col3_3 != '':::STRING))
-  AND (table64793_4.col2_1 < '00:00:00+15:59:00':::TIMETZ))
-  AND (table64793_4.col3_12 > 0:::INT8))
-  AND (table64793_4.col3_15 <= 1.7976931348623157e+308:::FLOAT8),
+  UNIQUE (col3_2, col3_8 ASC) WHERE ((((col3_5 < 0:::INT8)
+    AND (col3_3 != '':::STRING))
+    AND (col2_1 < '00:00:00+15:59:00':::TIMETZ))
+    AND (col3_12 > 0:::INT8))
+    AND (col3_15 <= 1.7976931348623157e+308:::FLOAT8),
   UNIQUE (col3_10 DESC, col3_3 ASC, col2_1 DESC, col3_9 ASC)
 );
 
