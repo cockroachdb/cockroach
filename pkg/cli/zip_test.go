@@ -168,46 +168,6 @@ func TestZip(t *testing.T) {
 	})
 }
 
-// This tests the operation of zip over secure clusters.
-func TestZipQueryFallback(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "test too slow under race")
-
-	existing := zipInternalTablesPerCluster["crdb_internal.transaction_contention_events"]
-	zipInternalTablesPerCluster["crdb_internal.transaction_contention_events"] = TableRegistryConfig{
-		nonSensitiveCols: existing.nonSensitiveCols,
-		// We want this to fail to trigger the fallback.
-		customQueryUnredacted:         "SELECT FAIL;",
-		customQueryUnredactedFallback: existing.customQueryUnredactedFallback,
-	}
-
-	dir, cleanupFn := testutils.TempDir(t)
-	defer cleanupFn()
-
-	c := NewCLITest(TestCLIParams{
-		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
-		}},
-	})
-	defer c.Cleanup()
-
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s " + os.DevNull)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Strip any non-deterministic messages.
-	out = eraseNonDeterministicZipOutput(out)
-
-	// We use datadriven simply to read the golden output file; we don't actually
-	// run any commands. Using datadriven allows TESTFLAGS=-rewrite.
-	datadriven.RunTest(t, datapathutils.TestDataPath(t, "zip", "testzip_fallback"), func(t *testing.T, td *datadriven.TestData) string {
-		return out
-	})
-}
-
 // This tests the operation of zip using --include-goroutine-stacks.
 func TestZipIncludeGoroutineStacks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -751,7 +711,7 @@ func TestZipRetries(t *testing.T) {
 			sqlConn,
 			"test",
 			`generate_series(1,15000) as t(x)`,
-			TableQuery{query: `select if(x<11000,x,crdb_internal.force_retry('1h')) from generate_series(1,15000) as t(x)`},
+			`select if(x<11000,x,crdb_internal.force_retry('1h')) from generate_series(1,15000) as t(x)`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -776,95 +736,6 @@ test/generate_series(1,15000) as t(x).3.txt
 test/generate_series(1,15000) as t(x).3.txt.err.txt
 test/generate_series(1,15000) as t(x).4.txt
 test/generate_series(1,15000) as t(x).4.txt.err.txt
-`
-	assert.Equal(t, expected, fileList.String())
-}
-
-// This checks that SQL retry errors are properly handled.
-func TestZipFallback(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
-	defer s.Stopper().Stop(context.Background())
-
-	dir, cleanupFn := testutils.TempDir(t)
-	defer cleanupFn()
-
-	zipName := filepath.Join(dir, "test.zip")
-
-	func() {
-		out, err := os.Create(zipName)
-		if err != nil {
-			t.Fatal(err)
-		}
-		z := newZipper(out)
-		defer func() {
-			if err := z.close(); err != nil {
-				t.Fatal(err)
-			}
-		}()
-
-		// Lower the buffer size so that an error is returned when running the
-		// generate_series query.
-		sqlURL := url.URL{
-			Scheme: "postgres",
-			User:   url.User(username.RootUser),
-			Host:   s.SQLAddr(),
-		}
-		sqlConn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, sqlURL.String())
-		defer func() {
-			if err := sqlConn.Close(); err != nil {
-				t.Fatal(err)
-			}
-		}()
-
-		zr := zipCtx.newZipReporter("test")
-		zr.prefix = "json"
-		zc := debugZipContext{
-			z:              z,
-			clusterPrinter: zr,
-			timeout:        3 * time.Second,
-		}
-		if err := zc.dumpTableDataForZip(
-			zr,
-			sqlConn,
-			"test",
-			`test_table_fail`,
-			TableQuery{
-				query: `SELECT blah`,
-			},
-		); err != nil {
-			t.Fatal(err)
-		}
-		if err := zc.dumpTableDataForZip(
-			zr,
-			sqlConn,
-			"test",
-			`test_table_succeed`,
-			TableQuery{
-				query:    `SELECT blah`,
-				fallback: `SELECT 1`,
-			},
-		); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	r, err := zip.OpenReader(zipName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = r.Close() }()
-	var fileList bytes.Buffer
-	for _, f := range r.File {
-		fmt.Fprintln(&fileList, f.Name)
-	}
-	const expected = `test/test_table_fail.txt
-test/test_table_fail.txt.err.txt
-test/test_table_succeed.txt
-test/test_table_succeed.txt.err.txt
-test/test_table_succeed.fallback.txt
 `
 	assert.Equal(t, expected, fileList.String())
 }
