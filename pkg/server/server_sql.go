@@ -1472,16 +1472,46 @@ func (s *SQLServer) preStart(
 	// NB: In the context of the system tenant, we may not have
 	// the version setting in SQL yet even though the in memory
 	// setting has been initialized in.
-	currentVersion := s.execCfg.Settings.Version.ActiveVersionOrEmpty(ctx).Version
-	if currentVersion.Equal(roachpb.Version{}) {
-		if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			v, err := s.settingsWatcher.GetClusterVersionFromStorage(ctx, txn)
-			if err != nil {
-				return err
+	initializeClusterVersion := func(ctx context.Context) error {
+		currentVersion := s.execCfg.Settings.Version.ActiveVersionOrEmpty(ctx).Version
+		if currentVersion.Equal(roachpb.Version{}) {
+			if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+				v, err := s.settingsWatcher.GetClusterVersionFromStorage(ctx, txn)
+				if err != nil {
+					return err
+				}
+				return clusterversion.Initialize(ctx, v.Version, &s.execCfg.Settings.SV)
+			}); err != nil {
+				return errors.Wrap(err, "initializing cluster version")
 			}
-			return clusterversion.Initialize(ctx, v.Version, &s.execCfg.Settings.SV)
-		}); err != nil {
-			return errors.Wrap(err, "initializing cluster version")
+		}
+
+		return nil
+	}
+
+	if s.execCfg.Codec.ForSystemTenant() {
+		if err := initializeClusterVersion(ctx); err != nil {
+			return err
+		}
+	} else {
+		// When initializing the cluster version for tenants, we retry on certain
+		// errors that could happen if the tenant has not transitioned to
+		// its actual service mode yet.
+		opts := retry.Options{MaxRetries: 5}
+		var nonRetryableErr error
+		err := opts.Do(ctx, func(ctx context.Context) error {
+			if err := initializeClusterVersion(ctx); err != nil {
+				if strings.Contains(err.Error(), `operation not allowed when in service mode "none"`) {
+					return err
+				}
+				nonRetryableErr = err
+			}
+
+			return nil
+		})
+
+		if err != nil || nonRetryableErr != nil {
+			return errors.CombineErrors(err, nonRetryableErr)
 		}
 	}
 
