@@ -149,7 +149,7 @@ func TestLogicalStreamIngestionJobNameResolution(t *testing.T) {
 		},
 	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
 	defer cleanupB()
@@ -240,7 +240,7 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 		},
 	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	retryQueueSizeLimit.Override(ctx, &s.ClusterSettings().SV, 0)
@@ -314,7 +314,7 @@ func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
@@ -392,7 +392,7 @@ func TestLogicalStreamIngestionAdvancePTS(t *testing.T) {
 		},
 	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
@@ -480,7 +480,7 @@ func TestLogicalStreamIngestionJobWithColumnFamilies(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, s, serverASQL, serverBSQL := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
+	tc, s, serverASQL, serverBSQL := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
 
 	createStmt := `CREATE TABLE tab_with_cf (
@@ -527,7 +527,7 @@ func TestRandomTables(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
+	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
 
 	sqlA := s.SQLConn(t, serverutils.DBName("a"))
@@ -604,7 +604,7 @@ func TestRandomStream(t *testing.T) {
 	clusterArgs.ServerArgs.Knobs.Streaming = streamingKnobs
 
 	ctx := context.Background()
-	tc, s, runnerA, _ := setupLogicalTestServer(t, ctx, clusterArgs)
+	tc, s, runnerA, _ := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab")
@@ -630,7 +630,7 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
+	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
 
 	sqlA := s.SQLConn(t, serverutils.DBName("a"))
@@ -757,7 +757,7 @@ func TestLogicalAutoReplan(t *testing.T) {
 		},
 	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	// Don't allow for replanning until the new nodes and scattered table have been created.
@@ -807,6 +807,68 @@ func TestLogicalAutoReplan(t *testing.T) {
 	require.Greater(t, len(clientAddresses), 1)
 }
 
+// TestLogicalJobResiliency will follow the following steps:
+// Create two tables and scatter them
+// Set up the initial logical replication job and verify the
+// multiple client addresses are stored in the job progress
+// Kill the node holding table A that's ingesting table B
+// See if another node picks up the stream
+func TestLogicalJobResiliency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 3)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	CreateScatteredTable(t, dbA, 2)
+	CreateScatteredTable(t, dbB, 2)
+
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+
+	now := server.Server(0).Clock().Now()
+	t.Logf("waiting for replication job %d", jobAID)
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	require.NotEmptyf(t, GetPersistedAddresses(t, dbA, jobAID), "The addresses weren't persisted in system.job_info")
+
+	// Stop the node that's coordinating the stream
+	t.Logf("Stopping node 1")
+	server.StopServer(0)
+	now = server.Server(1).Clock().Now()
+
+	// Need to get a new connection to node 2 since we killed Node 1
+	dbNew := sqlutils.MakeSQLRunner(server.Server(1).ApplicationLayer().SQLConn(t, serverutils.DBName("a")))
+
+	t.Logf("Waiting to see the replication job continue")
+	// If the job doesn't pause, this call should succeed
+	WaitUntilReplicatedTime(t, now, dbNew, jobAID)
+}
+
 func TestHeartbeatCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -836,7 +898,7 @@ func TestHeartbeatCancel(t *testing.T) {
 		},
 	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	serverutils.SetClusterSetting(t, server, "logical_replication.consumer.heartbeat_frequency", time.Second*1)
@@ -871,14 +933,14 @@ func TestHeartbeatCancel(t *testing.T) {
 }
 
 func setupLogicalTestServer(
-	t *testing.T, ctx context.Context, clusterArgs base.TestClusterArgs,
+	t *testing.T, ctx context.Context, clusterArgs base.TestClusterArgs, numNodes int,
 ) (
 	*testcluster.TestCluster,
 	serverutils.ApplicationLayerInterface,
 	*sqlutils.SQLRunner,
 	*sqlutils.SQLRunner,
 ) {
-	server := testcluster.StartTestCluster(t, 1, clusterArgs)
+	server := testcluster.StartTestCluster(t, numNodes, clusterArgs)
 	s := server.Server(0).ApplicationLayer()
 
 	_, err := server.Conns[0].Exec("SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'")
@@ -984,6 +1046,13 @@ func WaitUntilReplicatedTime(
 	})
 }
 
+func GetPersistedAddresses(
+	t *testing.T, db *sqlutils.SQLRunner, ingestionJobID jobspb.JobID,
+) []string {
+	progress := jobutils.GetJobProgress(t, db, ingestionJobID)
+	return progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.StreamAddresses
+}
+
 type mockBatchHandler bool
 
 var _ BatchHandler = mockBatchHandler(true)
@@ -1068,7 +1137,7 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
 		},
-	})
+	}, 1)
 	defer server.Stopper().Stop(ctx)
 
 	lwwFunc := `CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tab, existing tab, prev tab, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL,proposed_mvcc_timestamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
