@@ -121,13 +121,12 @@ func (r *logicalReplicationResumer) ingest(
 		replicatedTimeAtStart = progress.ReplicatedTime
 	)
 
-	client, err := streamclient.NewStreamClient(ctx,
-		crosscluster.StreamAddress(payload.SourceClusterConnStr),
+	client, err := streamclient.GetFirstActiveClient(ctx,
+		append([]string{payload.SourceClusterConnStr}, progress.StreamAddresses...),
 		jobExecCtx.ExecCfg().InternalDB,
 		streamclient.WithStreamID(streampb.StreamID(streamID)),
 		streamclient.WithLogical(),
 	)
-
 	if err != nil {
 		return err
 	}
@@ -153,8 +152,15 @@ func (r *logicalReplicationResumer) ingest(
 		jobID,
 		replicatedTimeAtStart)
 
-	initialPlan, initialPlanCtx, frontier, err := planner.generatePlanWithFrontier(ctx, distSQLPlanner)
+	initialPlan, initialPlanCtx, planInfo, err := planner.generateInitialPlanWithInfo(ctx, distSQLPlanner)
 	if err != nil {
+		return err
+	}
+	if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		ldrProg := md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+		ldrProg.StreamAddresses = planInfo.streamAddress
+		return nil
+	}); err != nil {
 		return err
 	}
 
@@ -198,7 +204,7 @@ func (r *logicalReplicationResumer) ingest(
 		}
 		rh := rowHandler{
 			replicatedTimeAtStart: replicatedTimeAtStart,
-			frontier:              frontier,
+			frontier:              planInfo.frontier,
 			metrics:               metrics,
 			settings:              &execCfg.Settings.SV,
 			job:                   r.job,
@@ -300,18 +306,25 @@ func makeLogicalReplicationPlanner(
 	}
 }
 
-// The initial plan setup requires a frontier, which we return
-func (p *logicalReplicationPlanner) generatePlanWithFrontier(
+type planInfo struct {
+	frontier      span.Frontier
+	streamAddress []string
+}
+
+// generateInitialPlan generates a plan along with the information required to
+// initialize the job.
+func (p *logicalReplicationPlanner) generateInitialPlanWithInfo(
 	ctx context.Context, dsp *sql.DistSQLPlanner,
-) (*sql.PhysicalPlan, *sql.PlanningCtx, span.Frontier, error) {
+) (*sql.PhysicalPlan, *sql.PlanningCtx, planInfo, error) {
 	var (
 		execCfg = p.jobExecCtx.ExecCfg()
 		evalCtx = p.jobExecCtx.ExtendedEvalContext()
+		info    = planInfo{}
 	)
 
 	plan, err := p.client.PlanLogicalReplication(ctx, p.req)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, info, err
 	}
 
 	var defaultFnOID oid.Oid
@@ -361,33 +374,35 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 		}
 		return nil
 	}); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, info, err
 	}
 
 	// TODO(azhu): add a flag to avoid recreating dlq tables during replanning
 	dlqClient := InitDeadLetterQueueClient(p.jobExecCtx.ExecCfg().InternalDB.Executor(), tableIDToName)
 	if err := dlqClient.Create(ctx); err != nil {
-		return nil, nil, nil, errors.Wrap(err, "failed to create dead letter queue")
+		return nil, nil, info, errors.Wrap(err, "failed to create dead letter queue")
 	}
 
 	frontier, err := span.MakeFrontierAt(p.replicatedTimeAtStart, plan.SourceSpans...)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, info, err
 	}
+	info.streamAddress = plan.Topology.StreamAddresses()
+	info.frontier = frontier
 
 	for _, resolvedSpan := range p.progress.Checkpoint.ResolvedSpans {
 		if _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, info, err
 		}
 	}
 
 	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCfg)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, info, err
 	}
 	destNodeLocalities, err := physical.GetDestNodeLocalities(ctx, dsp, nodes)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, info, err
 	}
 
 	specs, err := constructLogicalReplicationWriterSpecs(ctx,
@@ -401,7 +416,7 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 		p.jobID,
 		streampb.StreamID(p.payload.StreamID))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, info, err
 	}
 
 	// Setup a one-stage plan with one proc per input spec.
@@ -437,13 +452,13 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 	physicalPlan.PlanToStreamColMap = []int{0}
 	sql.FinalizePlan(ctx, planCtx, physicalPlan)
 
-	return physicalPlan, planCtx, frontier, nil
+	return physicalPlan, planCtx, info, nil
 }
 
 func (p *logicalReplicationPlanner) generatePlan(
 	ctx context.Context, dsp *sql.DistSQLPlanner,
 ) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
-	plan, planCtx, _, err := p.generatePlanWithFrontier(ctx, dsp)
+	plan, planCtx, _, err := p.generateInitialPlanWithInfo(ctx, dsp)
 	return plan, planCtx, err
 }
 
