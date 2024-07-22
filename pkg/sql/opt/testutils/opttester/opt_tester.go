@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -271,19 +270,17 @@ type Flags struct {
 
 // New constructs a new instance of the OptTester for the given SQL statement.
 // Metadata used by the SQL query is accessed via the catalog.
-func New(catalog cat.Catalog, sql string) *OptTester {
+func New(catalog cat.Catalog, sqlStr string) *OptTester {
 	ctx := context.Background()
 	ot := &OptTester{
 		catalog: catalog,
-		sql:     sql,
+		sql:     sqlStr,
 		ctx:     ctx,
 		semaCtx: tree.MakeSemaContext(catalog),
 		evalCtx: eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
 	ot.f = &norm.Factory{}
 	ot.f.Init(ot.ctx, &ot.evalCtx, ot.catalog)
-	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
-	ot.evalCtx.SessionData().OptimizerUseMultiColStats = true
 	ot.Flags.ctx = ot.ctx
 	ot.Flags.evalCtx = ot.evalCtx
 	ot.semaCtx.SearchPath = tree.EmptySearchPath
@@ -291,37 +288,16 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	// time. May 10, 2017 is a historic day: the release date of CockroachDB 1.0.
 	ot.evalCtx.TxnTimestamp = time.Date(2017, 05, 10, 13, 0, 0, 0, time.UTC)
 
-	// Set any OptTester-wide session flags here.
+	// Set session settings to their global defaults.
+	if err := sql.TestingResetSessionVariables(ctx, ot.evalCtx); err != nil {
+		panic(errors.Wrap(err, "could not reset session variables"))
+	}
 
+	// Set non-default session settings.
 	ot.evalCtx.SessionData().UserProto = username.MakeSQLUsernameFromPreNormalizedString("opttester").EncodeProto()
 	ot.evalCtx.SessionData().Database = "defaultdb"
 	ot.evalCtx.SessionData().ZigzagJoinEnabled = true
-	ot.evalCtx.SessionData().OptimizerUseForecasts = true
-	ot.evalCtx.SessionData().OptimizerUseHistograms = true
-	ot.evalCtx.SessionData().LocalityOptimizedSearch = true
-	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
-	ot.evalCtx.SessionData().InsertFastPath = true
-	ot.evalCtx.SessionData().OptSplitScanLimit = tabledesc.MaxBucketAllowed
-	ot.evalCtx.SessionData().VariableInequalityLookupJoinEnabled = true
-	ot.evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats = true
-	ot.evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy = true
-	ot.evalCtx.SessionData().OptimizerUseImprovedSplitDisjunctionForJoins = true
-	ot.evalCtx.SessionData().OptimizerAlwaysUseHistograms = true
-	ot.evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries = true
-	ot.evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation = true
-	ot.evalCtx.SessionData().OptimizerUseImprovedJoinElimination = true
-	ot.evalCtx.SessionData().OptimizerUseProvidedOrderingFix = true
-	ot.evalCtx.SessionData().OptimizerMergeJoinsEnabled = true
-	ot.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats = true
-	ot.evalCtx.SessionData().OptimizerUseTrigramSimilarityOptimization = true
-	ot.evalCtx.SessionData().OptimizerUseImprovedDistinctOnLimitHintCosting = true
-	ot.evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity = true
-	ot.evalCtx.SessionData().TrigramSimilarityThreshold = 0.3
-	ot.evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
-	ot.evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
-	ot.evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = true
-	ot.evalCtx.SessionData().OptimizerPushOffsetIntoIndexJoin = true
-	ot.evalCtx.SessionData().OptimizerUsePolymorphicParameterFix = true
+	ot.evalCtx.SessionData().ImplicitSelectForUpdate = false
 
 	return ot
 }
@@ -979,7 +955,7 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			if len(s) != 2 {
 				return errors.Errorf("Expected both session variable name and value for set flag")
 			}
-			err := sql.SetSessionVariable(f.ctx, f.evalCtx, s[0], s[1])
+			err := sql.TestingSetSessionVariable(f.ctx, f.evalCtx, s[0], s[1])
 			if err != nil {
 				return err
 			}
