@@ -953,11 +953,11 @@ func (h ConnectionHandler) GetQueryCancelKey() pgwirecancel.BackendKeyData {
 func (s *Server) ServeConn(
 	ctx context.Context, h ConnectionHandler, reserved *mon.BoundAccount, cancel context.CancelFunc,
 ) error {
-	// Make sure to close the reserved account even if closeWrapper below
+	// Make sure to clear the reserved account even if closeWrapper below
 	// panics: so we do it in a defer that is guaranteed to execute. We also
-	// cannot close it before closeWrapper since we need to close the internal
+	// cannot clear it before closeWrapper since we need to close the internal
 	// monitors of the connExecutor first.
-	defer reserved.Close(ctx)
+	defer reserved.Clear(ctx)
 	defer func(ctx context.Context, h ConnectionHandler) {
 		r := recover()
 		h.ex.closeWrapper(ctx, r)

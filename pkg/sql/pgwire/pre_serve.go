@@ -282,7 +282,7 @@ type PreServeStatus struct {
 
 	// Reserved is a memory account of the memory overhead for the
 	// connection. Defined only if State == PreServeReady.
-	Reserved mon.BoundAccount
+	Reserved *mon.BoundAccount
 
 	// clientParameters is the set of client-provided status parameters.
 	clientParameters tenantIndependentClientParameters
@@ -291,6 +291,14 @@ type PreServeStatus struct {
 // GetTenantName retrieves the selected tenant name.
 func (st PreServeStatus) GetTenantName() string {
 	return st.clientParameters.tenantName
+}
+
+// ReleaseMemory releases memory reserved for the "pre-serve" phase of a
+// connection.
+func (st PreServeStatus) ReleaseMemory(ctx context.Context) {
+	if st.State == PreServeReady {
+		st.Reserved.Clear(ctx)
+	}
 }
 
 // PreServe serves a single connection, up to and including the
@@ -394,7 +402,8 @@ func (s *PreServeConnHandler) PreServe(
 	// reduces pressure on the shared pool because the server monitor allocates in
 	// chunks from the shared pool and these chunks should be larger than
 	// baseSQLMemoryBudget.
-	st.Reserved = s.tenantIndependentConnMonitor.MakeBoundAccount()
+	connBoundAccount := s.tenantIndependentConnMonitor.MakeBoundAccount()
+	st.Reserved = &connBoundAccount
 	if err := st.Reserved.Grow(ctx, baseSQLMemoryBudget); err != nil {
 		return conn, st, errors.Wrapf(err, "unable to pre-allocate %d bytes for this connection",
 			baseSQLMemoryBudget)
@@ -404,7 +413,7 @@ func (s *PreServeConnHandler) PreServe(
 	st.clientParameters, err = parseClientProvidedSessionParameters(
 		ctx, &buf, conn.RemoteAddr(), s.trustClientProvidedRemoteAddr.Get(), s.acceptTenantName, s.acceptSystemIdentityOption.Get())
 	if err != nil {
-		st.Reserved.Close(ctx)
+		st.Reserved.Clear(ctx)
 		return conn, st, s.sendErr(ctx, s.st, conn, err)
 	}
 	st.clientParameters.IsSSL = st.ConnType == hba.ConnHostSSL
