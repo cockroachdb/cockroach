@@ -165,7 +165,7 @@ func (c *conn) processCommands(
 	defer func() {
 		// Release resources, if we still own them.
 		if reservedOwned {
-			reserved.Close(ctx)
+			reserved.Clear(ctx)
 		}
 		// Notify the connection's goroutine that we're terminating. The
 		// connection might know already, as it might have triggered this

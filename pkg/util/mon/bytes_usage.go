@@ -850,7 +850,7 @@ func (mm *BytesMonitor) TransferAccount(
 	if err = b.Grow(ctx, origAccount.used); err != nil {
 		return newAccount, err
 	}
-	origAccount.Close(ctx)
+	origAccount.Clear(ctx)
 	return b, nil
 }
 
