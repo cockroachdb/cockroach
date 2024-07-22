@@ -185,6 +185,14 @@ func (s *Store) getFallbackConfig() roachpb.SpanConfig {
 func (s *Store) Apply(
 	ctx context.Context, dryrun bool, updates ...spanconfig.Update,
 ) (deleted []spanconfig.Target, added []spanconfig.Record) {
+
+	// Log the potential span config changes.
+	if !dryrun {
+		for _, update := range updates {
+			s.LogUpdate(ctx, &update)
+		}
+	}
+
 	deleted, added, err := s.applyInternal(ctx, dryrun, updates...)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
@@ -314,4 +322,49 @@ func (s *Store) Iterate(f func(spanconfig.Record) error) error {
 			}
 			return f(record)
 		})
+}
+
+// LogUpdate logs the spanConfig changes to the distribution channel. It also
+// logs changes to the span boundaries. It doesn't log the changes to the
+// spanConfig initiated by background system process like PST updates.
+func (s *Store) LogUpdate(ctx context.Context, update *spanconfig.Update) {
+	nextSC := update.GetConfig()
+	targetSpan := update.GetTarget()
+
+	if !targetSpan.IsSpanTarget() {
+		return
+	}
+
+	rKey, err := keys.Addr(targetSpan.GetSpan().Key)
+	if err != nil {
+		return
+	}
+
+	// Get the current SpanConfig.
+	var curSpanConfig roachpb.SpanConfig
+	var curSpan roachpb.Span
+	var found bool
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		curSpanConfig, curSpan, found = s.mu.spanConfigStore.getSpanConfigForKey(ctx, rKey)
+	}()
+
+	// Log if there is a span boundary change.
+	if found &&
+		(!curSpan.Key.Equal(targetSpan.GetSpan().Key) ||
+			!curSpan.EndKey.Equal(targetSpan.GetSpan().EndKey)) {
+		log.KvDistribution.Infof(ctx,
+			"Changing the span boundaries for Span:%+v From:[%+v:%+v) To:[%+v:%+v) "+
+				"With config: %+v", targetSpan, curSpan.Key, curSpan.EndKey, targetSpan.GetSpan().Key,
+			targetSpan.GetSpan().EndKey, nextSC)
+	}
+
+	// Log if there is a SpanConfig change in any field other than
+	// ProtectedTimestamps to avoid logging PTS updates.
+	if found && curSpanConfig.HasConfigurationChange(nextSC) {
+		log.KvDistribution.Infof(ctx,
+			"Changing the SpanConfig for Span:%+v From:%+v To:%+v",
+			targetSpan, curSpanConfig, nextSC)
+	}
 }
