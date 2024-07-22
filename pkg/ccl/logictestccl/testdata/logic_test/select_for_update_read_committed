@@ -597,6 +597,17 @@ COMMIT;
 ----
 2  10  100
 
+# The unlocked reads in SKIP LOCKED should not block on locks, either, even
+# under serializable isolation.
+
+statement ok
+SET optimizer_use_lock_op_for_serializable = true
+
+query III
+SELECT * FROM xyz WHERE z = 100 ORDER BY x FOR UPDATE SKIP LOCKED
+----
+2  10  100
+
 user testuser
 
 statement ok
