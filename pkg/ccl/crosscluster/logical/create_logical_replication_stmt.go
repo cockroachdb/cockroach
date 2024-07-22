@@ -216,7 +216,7 @@ func createLogicalReplicationStreamPlanHook(
 				StreamID:                  uint64(spec.StreamID),
 				SourceClusterID:           spec.SourceClusterID,
 				ReplicationStartTime:      replicationStartTime,
-				TargetClusterConnStr:      string(streamAddress),
+				SourceClusterConnStr:      string(streamAddress),
 				ReplicationPairs:          repPairs,
 				TableNames:                srcTableNames,
 				DefaultConflictResolution: defaultConflictResolution,
