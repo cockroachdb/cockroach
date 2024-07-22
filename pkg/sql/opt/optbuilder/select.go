@@ -1203,10 +1203,6 @@ func (b *Builder) buildSelectStmtWithoutParens(
 		outScope = projectionsScope
 	}
 
-	if limit != nil {
-		b.buildLimit(limit, inScope, outScope)
-	}
-
 	// Remove locking items from scope, validate that they were found within the
 	// FROM clause, and build them.
 	for range lockingClause {
@@ -1216,6 +1212,10 @@ func (b *Builder) buildSelectStmtWithoutParens(
 			// TODO(michae2): Combine multiple buildLock calls for the same table.
 			b.buildLocking(item, outScope)
 		}
+	}
+
+	if limit != nil {
+		b.buildLimit(limit, inScope, outScope)
 	}
 
 	// TODO(rytaft): Support FILTER expression.

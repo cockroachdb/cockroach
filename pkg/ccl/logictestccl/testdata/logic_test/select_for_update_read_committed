@@ -75,7 +75,6 @@ COMMIT;
 ----
 20 200 2000
 
-
 # Shared reads block on exclusive locks but not on shared locks.
 
 query III async,rowsort q00
@@ -562,3 +561,45 @@ COMMIT
 user root
 
 awaitquery q18
+
+subtest skip_locked
+
+statement ok
+CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT, INDEX (y), FAMILY (x, y, z))
+
+statement ok
+GRANT ALL ON xyz TO testuser
+
+statement ok
+INSERT INTO xyz VALUES (1, 10, 100), (2, 10, 100)
+
+user testuser
+
+statement ok
+BEGIN ISOLATION LEVEL SERIALIZABLE
+
+# Lock the first row.
+
+query III
+SELECT * FROM xyz WHERE x = 1 FOR UPDATE
+----
+1  10  100
+
+user root
+
+# A limited SKIP LOCKED should be able to skip over the locked first row without
+# stopping early or blocking.
+
+query III
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT * FROM xyz@xyz_y_idx WHERE y = 10 ORDER BY y, x LIMIT 1 FOR UPDATE SKIP LOCKED;
+COMMIT;
+----
+2  10  100
+
+user testuser
+
+statement ok
+COMMIT
+
+user root
