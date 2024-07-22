@@ -79,31 +79,23 @@ func (srv *Service) testServices(ctx context.Context) error {
 
 // CreateSheet creates a new Google spreadsheet with the provided metric data.
 func (srv *Service) CreateSheet(
-	ctx context.Context, name string, metricMap model.MetricMap, oldID, newID string,
+	ctx context.Context,
+	name string,
+	comparisonResults []*model.ComparisonResult,
+	oldID, newID string,
 ) (string, error) {
 	var s sheets.Spreadsheet
 	s.Properties = &sheets.SpreadsheetProperties{Title: name}
 
-	// Sort sheets by name in reverse order. This ensures `sec/op` is the first
-	// sheet and metric in the summary.
-	sheetNames := make([]string, 0, len(metricMap))
-	for sheetName := range metricMap {
-		sheetNames = append(sheetNames, sheetName)
-	}
-	sort.Sort(sort.Reverse(sort.StringSlice(sheetNames)))
-
 	// Raw data sheets.
-	sheetInfos, idx := make([]rawSheetInfo, 0, len(metricMap)), 0
-	for _, sheetName := range sheetNames {
-		metric := metricMap[sheetName]
-		// Compute comparisons for each benchmark present in both runs.
+	sheetInfos, idx := make([]rawSheetInfo, 0, len(comparisonResults)), 0
+	for _, result := range comparisonResults {
+		metric := result.Metric
 		comparisons := make(map[string]*model.Comparison)
-		for name := range metric.BenchmarkEntries {
-			comparison := metric.ComputeComparison(name, oldID, newID)
-			if comparison != nil {
-				comparisons[name] = comparison
-			}
+		for _, detail := range result.Comparisons {
+			comparisons[detail.BenchmarkName] = detail.Comparison
 		}
+
 		// Only generate a sheet if there are comparisons to show.
 		if len(comparisons) != 0 {
 			sh, info := srv.createRawSheet(metric, comparisons, oldID, newID, idx)
