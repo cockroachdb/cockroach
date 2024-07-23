@@ -1390,9 +1390,6 @@ func (expr *FuncExpr) TypeCheck(
 			if len(s.typedExprs) > 0 && s.typedExprs[0].ResolvedType().Family() == types.RefCursorFamily {
 				return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %s(refcursor) does not exist", def.Name)
 			}
-		case "triggerin", "triggerrecv", "trigger":
-			// Built-in IO functions that output TRIGGER are not allowed.
-			return nil, CannotAcceptTriggerErr
 		}
 	}
 
