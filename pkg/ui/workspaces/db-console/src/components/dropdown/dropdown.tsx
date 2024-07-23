@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import cn from "classnames";
 import { CaretDownOutlined } from "@ant-design/icons";
+import cn from "classnames";
+import React from "react";
 
 import { Button } from "src/components/button";
 

@@ -60,10 +60,10 @@ stubComponentInModule(
 );
 
 // NOTE: All imports should go after `stubComponentInModule` functions calls.
+import { screen, render } from "@testing-library/react";
+import { createMemoryHistory, MemoryHistory } from "history";
 import React from "react";
 import { Action, Store } from "redux";
-import { createMemoryHistory, MemoryHistory } from "history";
-import { screen, render } from "@testing-library/react";
 
 import { App } from "src/app";
 import { AdminUIState, createAdminUIStore } from "src/redux/state";

@@ -9,9 +9,9 @@
 // licenses/APL.txt.
 
 import { Location } from "history";
+import compact from "lodash/compact";
 import isNull from "lodash/isNull";
 import isUndefined from "lodash/isUndefined";
-import compact from "lodash/compact";
 import map from "lodash/map";
 import { match as Match } from "react-router-dom";
 

@@ -8,22 +8,22 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { shallow, ShallowWrapper } from "enzyme";
-import React from "react";
-import uPlot from "uplot";
-import isEmpty from "lodash/isEmpty";
-import flatMap from "lodash/flatMap";
 import {
   calculateXAxisDomain,
   calculateYAxisDomain,
   util,
 } from "@cockroachlabs/cluster-ui";
+import { shallow, ShallowWrapper } from "enzyme";
+import flatMap from "lodash/flatMap";
+import isEmpty from "lodash/isEmpty";
 import Long from "long";
+import React from "react";
+import uPlot from "uplot";
 
-import * as timewindow from "src/redux/timeScale";
 import * as protos from "src/js/protos";
-import { Axis } from "src/views/shared/components/metricQuery";
+import * as timewindow from "src/redux/timeScale";
 import { configureUPlotLineChart } from "src/views/cluster/util/graphs";
+import { Axis } from "src/views/shared/components/metricQuery";
 
 
 import LineGraph, { fillGaps, InternalLineGraph, OwnProps } from "./index";

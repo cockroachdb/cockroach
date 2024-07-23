@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Location } from "history";
 import mapValues from "lodash/mapValues";
 import toString from "lodash/toString";
-import { Location } from "history";
 import Long from "long";
 
 import { propsToQueryString, queryByName } from "./query";

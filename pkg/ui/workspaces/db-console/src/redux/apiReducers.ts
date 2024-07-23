@@ -8,29 +8,28 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Action, combineReducers } from "redux";
-import { ThunkAction, ThunkDispatch } from "redux-thunk";
-import moment from "moment-timezone";
 import {
   api as clusterUiApi,
   util,
   StmtInsightEvent,
   TxnInsightEvent,
 } from "@cockroachlabs/cluster-ui";
-import Long from "long";
-import { createSelector, ParametricSelector } from "reselect";
-import { RouteComponentProps } from "react-router";
-import map from "lodash/map";
 import isEmpty from "lodash/isEmpty";
 import isNil from "lodash/isNil";
+import map from "lodash/map";
+import Long from "long";
+import moment from "moment-timezone";
+import { RouteComponentProps } from "react-router";
+import { Action, combineReducers } from "redux";
+import { ThunkAction, ThunkDispatch } from "redux-thunk";
+import { createSelector, ParametricSelector } from "reselect";
 
-import * as protos from "src/js/protos";
-import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
-import { versionCheck } from "src/util/cockroachlabsAPI";
 import { VersionList } from "src/interfaces/cockroachlabs";
+import * as protos from "src/js/protos";
 import * as api from "src/util/api";
+import { versionCheck } from "src/util/cockroachlabsAPI";
+import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
 
-import { AdminUIState } from "./state";
 import {
   CachedDataReducer,
   CachedDataReducerState,
@@ -39,6 +38,7 @@ import {
   PaginatedCachedDataReducer,
   PaginatedCachedDataReducerState,
 } from "./cachedDataReducer";
+import { AdminUIState } from "./state";
 
 const { generateStmtDetailsToID, HexStringToInt64String, generateTableID } =
   util;

@@ -13,6 +13,7 @@ import { channel } from "redux-saga";
 import { delay, call } from "redux-saga/effects";
 import { expectSaga, testSaga } from "redux-saga-test-plan";
 
+import { queryManagerReducer } from "./reducer";
 import {
   refresh,
   autoRefresh,
@@ -25,7 +26,6 @@ import {
   DEFAULT_REFRESH_INTERVAL,
   DEFAULT_RETRY_DELAY,
 } from "./saga";
-import { queryManagerReducer } from "./reducer";
 
 describe("Query Management Saga", function () {
   let queryCounterCalled = 0;

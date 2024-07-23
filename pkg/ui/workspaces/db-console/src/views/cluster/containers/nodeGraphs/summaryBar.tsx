@@ -8,14 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { util } from "@cockroachlabs/cluster-ui";
+import * as d3 from "d3";
 import React from "react";
 import { useSelector } from "react-redux";
 import { Link } from "react-router-dom";
-import * as d3 from "d3";
-import { util } from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
 
+import { Tooltip, Anchor } from "src/components";
 import { nodeStatusesSelector, nodeSumsSelector } from "src/redux/nodes";
+import { howAreCapacityMetricsCalculated } from "src/util/docs";
 import { EventBox } from "src/views/cluster/containers/events";
 import { Metric } from "src/views/shared/components/metricQuery";
 import {
@@ -27,8 +29,6 @@ import {
   SummaryStatMessage,
   SummaryMetricsAggregator,
 } from "src/views/shared/components/summaryBar";
-import { Tooltip, Anchor } from "src/components";
-import { howAreCapacityMetricsCalculated } from "src/util/docs";
 
 /**
  * ClusterNodeTotals displays a high-level breakdown of the nodes on the cluster

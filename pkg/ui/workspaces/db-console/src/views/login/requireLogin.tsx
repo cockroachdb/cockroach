@@ -9,11 +9,11 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import { AdminUIState } from "src/redux/state";
 import { selectLoginState, LoginState, getLoginPage } from "src/redux/login";
+import { AdminUIState } from "src/redux/state";
 
 interface RequireLoginProps {
   loginState: LoginState;

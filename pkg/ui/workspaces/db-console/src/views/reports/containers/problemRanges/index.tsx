@@ -8,24 +8,24 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Loading } from "@cockroachlabs/cluster-ui";
+import filter from "lodash/filter";
+import flatMap from "lodash/flatMap";
+import flow from "lodash/flow";
+import isEmpty from "lodash/isEmpty";
+import isEqual from "lodash/isEqual";
+import isNil from "lodash/isNil";
+import keys from "lodash/keys";
+import map from "lodash/map";
+import pickBy from "lodash/pickBy";
+import sortBy from "lodash/sortBy";
+import sortedUniq from "lodash/sortedUniq";
+import values from "lodash/values";
 import Long from "long";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
-import { Loading } from "@cockroachlabs/cluster-ui";
-import isNil from "lodash/isNil";
-import flow from "lodash/flow";
-import filter from "lodash/filter";
-import isEmpty from "lodash/isEmpty";
-import flatMap from "lodash/flatMap";
-import map from "lodash/map";
-import sortBy from "lodash/sortBy";
-import sortedUniq from "lodash/sortedUniq";
-import isEqual from "lodash/isEqual";
-import keys from "lodash/keys";
-import pickBy from "lodash/pickBy";
-import values from "lodash/values";
 
 import * as protos from "src/js/protos";
 import {
@@ -36,8 +36,8 @@ import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
-import ConnectionsTable from "src/views/reports/containers/problemRanges/connectionsTable";
 import { getMatchParamByName } from "src/util/query";
+import ConnectionsTable from "src/views/reports/containers/problemRanges/connectionsTable";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 
 type NodeProblems$Properties =

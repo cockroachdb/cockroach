@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import * as React from "react";
 import {
   default as AntSelect,
   SelectProps as AntSelectProps,
 } from "antd/es/select";
 import cn from "classnames";
+import * as React from "react";
 
 import "./select.styl";
 

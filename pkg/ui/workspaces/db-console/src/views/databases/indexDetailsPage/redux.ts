@@ -15,28 +15,28 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import { RouteComponentProps } from "react-router";
 
-import { AdminUIState } from "src/redux/state";
-import { getMatchParamByName } from "src/util/query";
-import {
-  databaseNameAttr,
-  tableNameAttr,
-  indexNameAttr,
-} from "src/util/constants";
+import { cockroach } from "src/js/protos";
 import {
   refreshIndexStats,
   refreshNodes,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
-import { longToInt } from "src/util/fixLong";
-import { cockroach } from "src/js/protos";
+import { nodeRegionsByIDSelector } from "src/redux/nodes";
+import { AdminUIState } from "src/redux/state";
+import { setGlobalTimeScaleAction } from "src/redux/statements";
+import { selectTimeScale } from "src/redux/timeScale";
 import {
   selectHasViewActivityRedactedRole,
   selectHasAdminRole,
 } from "src/redux/user";
-import { nodeRegionsByIDSelector } from "src/redux/nodes";
-import { setGlobalTimeScaleAction } from "src/redux/statements";
-import { selectTimeScale } from "src/redux/timeScale";
+import {
+  databaseNameAttr,
+  tableNameAttr,
+  indexNameAttr,
+} from "src/util/constants";
+import { longToInt } from "src/util/fixLong";
+import { getMatchParamByName } from "src/util/query";
 
 import TableIndexStatsRequest = cockroach.server.serverpb.TableIndexStatsRequest;
 const { RecommendationType } = cockroach.sql.IndexRecommendation;

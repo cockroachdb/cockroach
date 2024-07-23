@@ -8,11 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import isNil from "lodash/isNil";
-import React from "react";
-import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
-import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   Loading,
   ColumnDescriptor,
@@ -21,11 +16,16 @@ import {
   util,
   Timestamp,
 } from "@cockroachlabs/cluster-ui";
+import isNil from "lodash/isNil";
+import React from "react";
+import { Helmet } from "react-helmet";
+import { connect } from "react-redux";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import * as protos from "src/js/protos";
 import { refreshSettings } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { AdminUIState } from "src/redux/state";
 
 import { BackToAdvanceDebug } from "../util";
 

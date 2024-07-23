@@ -7,8 +7,8 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import * as d3 from "d3";
-import isEmpty from "lodash/isEmpty";
 import clone from "lodash/clone";
+import isEmpty from "lodash/isEmpty";
 import isNil from "lodash/isNil";
 
 import * as vector from "src/util/vector";

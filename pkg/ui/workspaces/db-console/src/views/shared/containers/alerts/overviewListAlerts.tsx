@@ -8,14 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { Dispatch, Action, bindActionCreators } from "redux";
-import { connect } from "react-redux";
 import map from "lodash/map";
+import React from "react";
+import { connect } from "react-redux";
+import { Dispatch, Action, bindActionCreators } from "redux";
 
-import { AlertBox } from "src/views/shared/components/alertBox";
-import { AdminUIState } from "src/redux/state";
 import { Alert, overviewListAlertsSelector } from "src/redux/alerts";
+import { AdminUIState } from "src/redux/state";
+import { AlertBox } from "src/views/shared/components/alertBox";
 
 interface AlertSectionProps {
   /**

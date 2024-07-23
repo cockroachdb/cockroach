@@ -8,10 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createMemoryHistory } from "history";
-import find from "lodash/find";
-import { RouteComponentProps } from "react-router-dom";
-import { bindActionCreators, Store } from "redux";
 import {
   DatabaseDetailsPageActions,
   DatabaseDetailsPageData,
@@ -20,7 +16,11 @@ import {
   ViewMode,
   api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
+import { createMemoryHistory } from "history";
+import find from "lodash/find";
 import moment from "moment-timezone";
+import { RouteComponentProps } from "react-router-dom";
+import { bindActionCreators, Store } from "redux";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { databaseNameAttr, indexUnusedDuration } from "src/util/constants";

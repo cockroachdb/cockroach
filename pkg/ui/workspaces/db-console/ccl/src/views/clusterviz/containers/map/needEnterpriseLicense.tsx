@@ -11,8 +11,8 @@ import React from "react";
 import step1Img from "assets/nodeMapSteps/1-getLicense.png";
 import step2Img from "assets/nodeMapSteps/2-setKey.svg";
 import step3Img from "assets/nodeMapSteps/3-seeMap.png";
-import { NodeCanvasContainerOwnProps } from "src/views/clusterviz/containers/map/nodeCanvasContainer";
 import * as docsURL from "src/util/docs";
+import { NodeCanvasContainerOwnProps } from "src/views/clusterviz/containers/map/nodeCanvasContainer";
 import "./needEnterpriseLicense.styl";
 
 // This takes the same props as the NodeCanvasContainer which it is swapped out with.

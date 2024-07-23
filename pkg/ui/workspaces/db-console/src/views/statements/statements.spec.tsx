@@ -8,25 +8,25 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { TimeScale, toRoundedDateRange, util } from "@cockroachlabs/cluster-ui";
+import * as H from "history";
+import merge from "lodash/merge";
 import Long from "long";
 import moment from "moment-timezone";
 import { RouteComponentProps } from "react-router-dom";
-import * as H from "history";
-import merge from "lodash/merge";
-import { TimeScale, toRoundedDateRange, util } from "@cockroachlabs/cluster-ui";
 
 import "src/protobufInit";
 import * as protos from "src/js/protos";
+import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import {
   appAttr,
   appNamesAttr,
   statementAttr,
   unset,
 } from "src/util/constants";
-import { AdminUIState, createAdminUIStore } from "src/redux/state";
 
-import { selectLastReset } from "./statementsPage";
 import { selectStatementDetails } from "./statementDetails";
+import { selectLastReset } from "./statementsPage";
 
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 
