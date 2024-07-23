@@ -487,6 +487,9 @@ func maybeEmitDatadogEvent(
 	details := fmt.Sprintf("cluster: %s\n", clusterName)
 	ev := statsd.NewEvent(fmt.Sprintf("op %s %s", opSpec.Name, status), details)
 
+	ev.Tags = append(ev.Tags, fmt.Sprintf("operation-name:%s", opSpec.Name))
+	ev.Tags = append(ev.Tags, fmt.Sprintf("operation-status:%s", status))
+
 	ev.AggregationKey = fmt.Sprintf("operation-%d", operationID)
 	switch eventType {
 	case eventOpStarted:
