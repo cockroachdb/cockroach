@@ -446,7 +446,7 @@ func initFlags() {
 		_ = cmd.Flags().MarkDeprecated("scp", "always true")
 	}
 
-	for _, cmd := range []*cobra.Command{startCmd, sqlCmd} {
+	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, sqlCmd} {
 		cmd.Flags().StringVarP(&config.Binary,
 			"binary", "b", config.Binary, "the remote cockroach binary to use")
 	}

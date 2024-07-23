@@ -151,6 +151,35 @@ func (s *StartOpts) IsVirtualCluster() bool {
 	return s.Target == StartSharedProcessForVirtualCluster || s.Target == StartServiceForVirtualCluster
 }
 
+// customPortsSpecified determines if custom ports were passed in
+// the start options (via command line or otherwise).
+func (s *StartOpts) customPortsSpecified() bool {
+	if s.SQLPort != 0 && s.SQLPort != config.DefaultSQLPort {
+		return true
+	}
+	if s.AdminUIPort != 0 && s.AdminUIPort != config.DefaultAdminUIPort {
+		return true
+	}
+	return false
+}
+
+// validate checks that the start options are valid to be used in a
+// cluster with the given properties. Returns an error describing the
+// problem if the options are invalid.
+func (s *StartOpts) validate(isLocal, supportsRegistration bool) error {
+	// Local clusters do not support specifying ports. An error is returned if we
+	// detect that they were set.
+	if isLocal && s.customPortsSpecified() {
+		return fmt.Errorf("local clusters do not support specifying ports")
+	}
+
+	if !supportsRegistration && s.customPortsSpecified() {
+		return fmt.Errorf("service registration is not supported for this cluster, but custom ports were specified")
+	}
+
+	return nil
+}
+
 // StartTarget identifies what flavor of cockroach we are starting.
 type StartTarget int
 
@@ -163,9 +192,6 @@ const (
 	// StartServiceForVirtualCluster starts a SQL/HTTP-only server
 	// process for a virtual cluster.
 	StartServiceForVirtualCluster
-	// StartRoutingProxy starts the SQL proxy process to route
-	// connections to multiple virtual clusters.
-	StartRoutingProxy
 )
 
 const (
@@ -182,9 +208,9 @@ const (
 
 func (st StartTarget) String() string {
 	return [...]string{
-		StartDefault:                  "default",
-		StartServiceForVirtualCluster: "SQL/HTTP instance for virtual cluster",
-		StartRoutingProxy:             "SQL proxy for multiple tenants",
+		StartDefault:                        "default",
+		StartSharedProcessForVirtualCluster: "shared-process virtual cluster instance",
+		StartServiceForVirtualCluster:       "SQL/HTTP instance for virtual cluster",
 	}[st]
 }
 
@@ -353,30 +379,12 @@ func (c *SyncedCluster) servicesWithOpenPortSelection(
 // `start-single-node` (this was written to provide a short hand to start a
 // single node cluster with a replication factor of one).
 func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts StartOpts) error {
-	if startOpts.Target == StartRoutingProxy {
-		return fmt.Errorf("start SQL proxy not implemented")
+	if err := startOpts.validate(c.IsLocal(), c.allowServiceRegistration()); err != nil {
+		return err
 	}
 
-	// Determine if custom ports were specified in the start options.
-	customPortsSpecified := func() bool {
-		if startOpts.SQLPort != 0 && startOpts.SQLPort != config.DefaultSQLPort {
-			return true
-		}
-		if startOpts.AdminUIPort != 0 && startOpts.AdminUIPort != config.DefaultAdminUIPort {
-			return true
-		}
-		return false
-	}
-
-	// Local clusters do not support specifying ports. An error is returned if we
-	// detect that they were set.
 	if c.IsLocal() {
-		if customPortsSpecified() {
-			return fmt.Errorf("local clusters do not support specifying ports")
-		}
-		// We don't need to return an error if the ports are the default values
-		// specified in DefaultStartOps, as these have not been specified explicitly
-		// by the user.
+		// We find open ports dynamically in local mode.
 		startOpts.SQLPort = 0
 		startOpts.AdminUIPort = 0
 	}
@@ -386,16 +394,13 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		// ports, or for local cluster port management to avoid collisions. The
 		// lookup logic will automatically fall back to the default ports if the
 		// service is not found (or has not been registered).
-		if customPortsSpecified() || c.IsLocal() || startOpts.Target != StartDefault {
+		if startOpts.customPortsSpecified() || c.IsLocal() || startOpts.Target != StartDefault {
 			err := c.maybeRegisterServices(ctx, l, startOpts, c.FindOpenPorts)
 			if err != nil {
 				return err
 			}
 		}
 	} else {
-		if customPortsSpecified() {
-			return fmt.Errorf("service registration is not supported for this cluster, but custom ports were specified")
-		}
 		l.Printf(strings.Join([]string{
 			"WARNING: Service registration and custom ports are not supported for this cluster.",
 			fmt.Sprintf("Setting ports to default SQL Port: %d, and Admin UI Port: %d.", config.DefaultSQLPort, config.DefaultAdminUIPort),
@@ -941,10 +946,6 @@ func (c *SyncedCluster) generateStartArgs(
 
 	case StartServiceForVirtualCluster:
 		args = []string{"mt", "start-sql"}
-
-	case StartRoutingProxy:
-		// args = []string{"mt", "start-proxy"}
-		panic("unimplemented")
 
 	default:
 		return nil, errors.Errorf("unsupported start target %v", startOpts.Target)
