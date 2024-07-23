@@ -11,13 +11,13 @@
 import React from "react";
 import { Link } from "react-router-dom";
 
-import { EmptyTable, EmptyTableProps } from "src/empty";
 import { Anchor } from "src/anchor";
-import { statementsTable, tabAttr, viewAttr } from "src/util";
 import { commonStyles } from "src/common";
+import { EmptyTable, EmptyTableProps } from "src/empty";
+import { statementsTable, tabAttr, viewAttr } from "src/util";
 
-import magnifyingGlassImg from "../assets/emptyState/magnifying-glass.svg";
 import emptyTableResultsImg from "../assets/emptyState/empty-table-results.svg";
+import magnifyingGlassImg from "../assets/emptyState/magnifying-glass.svg";
 
 import { StatementViewType } from "./statementPageTypes";
 

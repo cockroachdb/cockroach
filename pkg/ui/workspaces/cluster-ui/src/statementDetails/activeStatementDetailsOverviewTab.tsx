@@ -8,22 +8,22 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import classNames from "classnames/bind";
-import { Link } from "react-router-dom";
 import { Col, Row } from "antd";
+import classNames from "classnames/bind";
+import React from "react";
+import { Link } from "react-router-dom";
 
 import "antd/lib/col/style";
 import "antd/lib/row/style";
-import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import {
   ActiveStatement,
   ExecutionContentionDetails,
 } from "src/activeExecutions";
-import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
 import { StatusIcon } from "src/activeExecutions/statusIcon";
-import { DATE_FORMAT_24_TZ, Duration } from "src/util";
+import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
+import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
+import { DATE_FORMAT_24_TZ, Duration } from "src/util";
 
 import { Timestamp } from "../timestamp";
 

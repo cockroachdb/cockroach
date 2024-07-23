@@ -14,9 +14,6 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import ErrorCircle from "assets/error-circle.svg";
-import { doLogin, LoginAPIState } from "src/redux/login";
-import { AdminUIState, AppDispatch } from "src/redux/state";
-import * as docsURL from "src/util/docs";
 import {
   CockroachLabsLockupIcon,
   Button,
@@ -25,6 +22,9 @@ import {
   Text,
   TextTypes,
 } from "src/components";
+import { doLogin, LoginAPIState } from "src/redux/login";
+import { AdminUIState, AppDispatch } from "src/redux/state";
+import * as docsURL from "src/util/docs";
 import {
   OIDCGenerateJWTAuthTokenConnected,
   OIDCLoginConnected,

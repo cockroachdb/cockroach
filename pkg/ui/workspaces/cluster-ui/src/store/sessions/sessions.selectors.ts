@@ -8,14 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createSelector } from "reselect";
 import { RouteComponentProps } from "react-router-dom";
+import { createSelector } from "reselect";
 
+import { byteArrayToUuid } from "src/sessions/sessionsTable";
 import { AppState } from "src/store";
 import { SessionsState } from "src/store/sessions";
 import { sessionAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
-import { byteArrayToUuid } from "src/sessions/sessionsTable";
 
 export const selectSession = createSelector(
   (state: AppState) => state.adminUI?.sessions,

@@ -11,14 +11,6 @@
 import moment from "moment-timezone";
 
 import {
-  filterStatementInsights,
-  filterTransactionInsights,
-  getAppsFromStatementInsights,
-  getAppsFromTransactionInsights,
-  getInsightsFromProblemsAndCauses,
-  mergeTxnInsightDetails,
-} from "./utils";
-import {
   ContentionDetails,
   failedExecutionInsight,
   highContentionInsight,
@@ -34,6 +26,14 @@ import {
   TxnInsightDetails,
   TxnInsightEvent,
 } from "./types";
+import {
+  filterStatementInsights,
+  filterTransactionInsights,
+  getAppsFromStatementInsights,
+  getAppsFromTransactionInsights,
+  getInsightsFromProblemsAndCauses,
+  mergeTxnInsightDetails,
+} from "./utils";
 
 const INTERNAL_APP_PREFIX = "$ internal";
 

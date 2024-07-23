@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import moment, { Moment } from "moment-timezone";
 
 import { DOMAIN_NAME, noopReducer } from "../utils";

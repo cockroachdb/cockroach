@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import Select, { components, OptionsType, ActionMeta } from "react-select";
-import React from "react";
-import classNames from "classnames/bind";
 import { Gear } from "@cockroachlabs/icons";
+import classNames from "classnames/bind";
+import React from "react";
+import Select, { components, OptionsType, ActionMeta } from "react-select";
 
 import { Button } from "../button";
 import {

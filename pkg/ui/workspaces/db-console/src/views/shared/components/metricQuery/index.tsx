@@ -29,15 +29,15 @@
  * combine it with the result of a query to create some renderable output.
  */
 
-import React from "react";
-import Long from "long";
-import { History } from "history";
 import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client-ccl";
+import { History } from "history";
+import Long from "long";
+import React from "react";
 
-import { TimeWindow } from "src/redux/timeScale";
 import { PayloadAction } from "src/interfaces/action";
 import * as protos from "src/js/protos";
+import { TimeWindow } from "src/redux/timeScale";
 
 import TimeSeriesQueryDerivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative;
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;

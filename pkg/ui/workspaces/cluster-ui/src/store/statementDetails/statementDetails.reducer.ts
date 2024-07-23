@@ -18,8 +18,8 @@ import {
   StatementDetailsResponseWithKey,
 } from "src/api/statementsApi";
 
-import { DOMAIN_NAME } from "../utils";
 import { generateStmtDetailsToID } from "../../util";
+import { DOMAIN_NAME } from "../utils";
 
 export type SQLDetailsStatsState = {
   data: StatementDetailsResponse;

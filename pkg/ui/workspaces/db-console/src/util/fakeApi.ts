@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import * as $protobuf from "protobufjs";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
-import moment from "moment-timezone";
 import { SqlTxnResult } from "@cockroachlabs/cluster-ui/dist/types/api";
+import moment from "moment-timezone";
+import * as $protobuf from "protobufjs";
 
 import { cockroach } from "src/js/protos";
 import { API_PREFIX, STATUS_PREFIX } from "src/util/api";

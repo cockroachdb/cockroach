@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useMemo } from "react";
 import classNames from "classnames/bind";
+import React, { useMemo } from "react";
 
 import {
   ActiveStatement,
@@ -18,12 +18,12 @@ import {
 import ColumnsSelector, {
   SelectOption,
 } from "src/columnsSelector/columnsSelector";
+import { isSelectedColumn } from "src/columnsSelector/utils";
+import { calculateActiveFilters } from "src/queryFilter/filter";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { EmptyStatementsPlaceholder } from "src/statementsPage/emptyStatementsPlaceholder";
-import { TableStatistics } from "src/tableStatistics";
 import { StatementViewType } from "src/statementsPage/statementPageTypes";
-import { calculateActiveFilters } from "src/queryFilter/filter";
-import { isSelectedColumn } from "src/columnsSelector/utils";
+import { TableStatistics } from "src/tableStatistics";
 
 import {
   ISortedTablePagination,

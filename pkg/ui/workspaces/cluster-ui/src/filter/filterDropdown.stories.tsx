@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { storiesOf } from "@storybook/react";
 import noop from "lodash/noop";
+import React from "react";
 
-import { FilterDropdown } from "./filterDropdown";
 import { FilterCheckboxOption } from "./filterCheckboxOption";
+import { FilterDropdown } from "./filterDropdown";
 import { FilterSearchOption } from "./filterSearchOption";
 
 storiesOf("FilterDropdown", module)

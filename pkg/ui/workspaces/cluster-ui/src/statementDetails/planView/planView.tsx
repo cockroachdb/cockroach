@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { Fragment } from "react";
-import classNames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import values from "lodash/values";
+import classNames from "classnames/bind";
 import sortBy from "lodash/sortBy";
+import values from "lodash/values";
+import React, { Fragment } from "react";
 
 import {
   getAttributeTooltip,

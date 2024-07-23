@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import isError from "lodash/isError";
 import startsWith from "lodash/startsWith";
-import moment from "moment-timezone";
 import Long from "long";
-import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import moment from "moment-timezone";
 
 import {
   REMOTE_DEBUGGING_ERROR_TEXT,

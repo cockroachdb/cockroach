@@ -11,13 +11,13 @@
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { PayloadAction } from "@reduxjs/toolkit";
 import Long from "long";
+import { expectSaga } from "redux-saga-test-plan";
+import * as matchers from "redux-saga-test-plan/matchers";
 import {
   EffectProviders,
   StaticProvider,
   throwError,
 } from "redux-saga-test-plan/providers";
-import * as matchers from "redux-saga-test-plan/matchers";
-import { expectSaga } from "redux-saga-test-plan";
 
 import {
   getIndexStats,
@@ -27,16 +27,16 @@ import {
 import { generateTableID } from "../../util";
 
 import {
-  refreshIndexStatsSaga,
-  requestIndexStatsSaga,
-  resetIndexStatsSaga,
-} from "./indexStats.sagas";
-import {
   actions,
   IndexStatsReducerState,
   reducer,
   ResetIndexUsageStatsPayload,
 } from "./indexStats.reducer";
+import {
+  refreshIndexStatsSaga,
+  requestIndexStatsSaga,
+  resetIndexStatsSaga,
+} from "./indexStats.sagas";
 
 import RecommendationType = cockroach.sql.IndexRecommendation.RecommendationType;
 

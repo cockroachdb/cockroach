@@ -8,13 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import Long from "long";
-import { createSelector } from "@reduxjs/toolkit";
-import { RouteComponentProps } from "react-router-dom";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { createSelector } from "@reduxjs/toolkit";
+import Long from "long";
 import moment from "moment-timezone";
+import { RouteComponentProps } from "react-router-dom";
 
 import { AppState } from "../store";
+import { selectTimeScale } from "../store/utils/selectors";
+import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
 import {
   appNamesAttr,
   statementAttr,
@@ -22,8 +24,6 @@ import {
   queryByName,
   generateStmtDetailsToID,
 } from "../util";
-import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
-import { selectTimeScale } from "../store/utils/selectors";
 
 type StatementDetailsResponseMessage =
   cockroach.server.serverpb.StatementDetailsResponse;

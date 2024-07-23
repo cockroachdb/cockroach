@@ -8,30 +8,30 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { Link } from "react-router-dom";
+import { EllipsisVertical } from "@cockroachlabs/icons";
+import { Tooltip } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
 import noop from "lodash/noop";
-import { Tooltip } from "@cockroachlabs/ui-components";
-import { EllipsisVertical } from "@cockroachlabs/icons";
 import moment from "moment-timezone";
+import React from "react";
+import { Link } from "react-router-dom";
 
+import { withBasePath } from "src/api/basePath";
+import { StatementDiagnosticsReport } from "src/api/statementDiagnosticsApi";
+import { Button } from "src/button";
+import { Dropdown } from "src/dropdown";
+import { getHighlightedText } from "src/highlightedText";
 import {
   ActivateDiagnosticsModalRef,
   DiagnosticStatusBadge,
 } from "src/statementsDiagnostics";
-import { getHighlightedText } from "src/highlightedText";
 import { AggregateStatistics } from "src/statementsTable";
-import { Dropdown } from "src/dropdown";
-import { Button } from "src/button";
 import {
   propsToQueryString,
   computeOrUseStmtSummary,
   appNamesAttr,
   unset,
 } from "src/util";
-import { withBasePath } from "src/api/basePath";
-import { StatementDiagnosticsReport } from "src/api/statementDiagnosticsApi";
 
 import styles from "./statementsTableContent.module.scss";
 

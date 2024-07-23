@@ -18,8 +18,8 @@ import {
 } from "src/insights/types";
 import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
 
-import { FixFingerprintHexValue } from "../util";
 import { getInsightsFromProblemsAndCauses } from "../insights/utils";
+import { FixFingerprintHexValue } from "../util";
 
 import { getContentionDetailsApi } from "./contentionApi";
 import {

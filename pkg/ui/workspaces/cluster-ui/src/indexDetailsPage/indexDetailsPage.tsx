@@ -8,30 +8,61 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import classNames from "classnames/bind";
-import flatMap from "lodash/flatMap";
 import { Caution, Search as IndexIcon } from "@cockroachlabs/icons";
-import moment, { Moment } from "moment-timezone";
 import { Heading } from "@cockroachlabs/ui-components";
 import { Col, Row, Tooltip } from "antd";
+import classNames from "classnames/bind";
+import flatMap from "lodash/flatMap";
+import moment, { Moment } from "moment-timezone";
+import React from "react";
 
 import { Loading } from "src/loading";
-import { Timestamp } from "src/timestamp";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
 import {
   ISortedTablePagination,
   SortedTable,
   SortSetting,
 } from "src/sortedtable";
-import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import { SqlBox, SqlBoxSize } from "src/sql";
-import { PageConfig, PageConfigItem } from "src/pageConfig";
+import { Timestamp } from "src/timestamp";
+import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
 
-import { CaretRight } from "../icon/caretRight";
-import { BreadcrumbItem, Breadcrumbs } from "../breadcrumbs";
-import { SummaryCard } from "../summaryCard";
 import { Anchor } from "../anchor";
+import {
+  getStatementsUsingIndex,
+  StatementsListRequestFromDetails,
+  StatementsUsingIndexRequest,
+} from "../api/indexDetailsApi";
+import { BreadcrumbItem, Breadcrumbs } from "../breadcrumbs";
+import { commonStyles } from "../common";
+import { CaretRight } from "../icon/caretRight";
+import { Pagination } from "../pagination";
+import {
+  calculateActiveFilters,
+  defaultFilters,
+  Filter,
+  Filters,
+} from "../queryFilter";
+import { Search } from "../search";
+import LoadingError from "../sqlActivity/errorComponent";
+import { filterStatementsData } from "../sqlActivity/util";
+import { EmptyStatementsPlaceholder } from "../statementsPage/emptyStatementsPlaceholder";
+import { StatementViewType } from "../statementsPage/statementPageTypes";
+import statementsStyles from "../statementsPage/statementsPage.module.scss";
+import {
+  AggregateStatistics,
+  makeStatementsColumns,
+  populateRegionNodeForStatements,
+} from "../statementsTable";
+import { UIConfigState } from "../store";
+import { SummaryCard } from "../summaryCard";
+import { TableStatistics } from "../tableStatistics";
+import {
+  TimeScale,
+  timeScale1hMinOptions,
+  TimeScaleDropdown,
+} from "../timeScaleDropdown";
 import {
   calculateTotalWorkload,
   Count,
@@ -43,37 +74,6 @@ import {
   unique,
   unset,
 } from "../util";
-import {
-  getStatementsUsingIndex,
-  StatementsListRequestFromDetails,
-  StatementsUsingIndexRequest,
-} from "../api/indexDetailsApi";
-import {
-  AggregateStatistics,
-  makeStatementsColumns,
-  populateRegionNodeForStatements,
-} from "../statementsTable";
-import { UIConfigState } from "../store";
-import statementsStyles from "../statementsPage/statementsPage.module.scss";
-import { Pagination } from "../pagination";
-import { TableStatistics } from "../tableStatistics";
-import LoadingError from "../sqlActivity/errorComponent";
-import { filterStatementsData } from "../sqlActivity/util";
-import {
-  TimeScale,
-  timeScale1hMinOptions,
-  TimeScaleDropdown,
-} from "../timeScaleDropdown";
-import { Search } from "../search";
-import {
-  calculateActiveFilters,
-  defaultFilters,
-  Filter,
-  Filters,
-} from "../queryFilter";
-import { commonStyles } from "../common";
-import { EmptyStatementsPlaceholder } from "../statementsPage/emptyStatementsPlaceholder";
-import { StatementViewType } from "../statementsPage/statementPageTypes";
 
 import styles from "./indexDetailsPage.module.scss";
 

@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import isEqual from "lodash/isEqual";
+import moment from "moment-timezone";
 import React from "react";
 import { connect } from "react-redux";
-import moment from "moment-timezone";
-import isEqual from "lodash/isEqual";
 
 import { AdminUIState } from "src/redux/state";
 import * as timewindow from "src/redux/timeScale";

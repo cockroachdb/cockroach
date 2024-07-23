@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 import { connect } from "react-redux";
-import { Dispatch } from "redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import { Dispatch } from "redux";
 
 import { AppState, uiConfigActions } from "src/store";
 import {
@@ -18,10 +18,10 @@ import {
 } from "src/store/insights/statementInsights";
 import { selectHasAdminRole } from "src/store/uiConfig";
 
-import { TimeScale } from "../../timeScaleDropdown";
+import { actions as analyticsActions } from "../../store/analytics";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { selectTimeScale } from "../../store/utils/selectors";
-import { actions as analyticsActions } from "../../store/analytics";
+import { TimeScale } from "../../timeScaleDropdown";
 
 import {
   StatementInsightDetails,

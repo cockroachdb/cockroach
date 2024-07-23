@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { storiesOf } from "@storybook/react";
 import noop from "lodash/noop";
+import React from "react";
 
-import { styledWrapper } from "src/util/decorators";
 import { AlertLevel } from "src/redux/alerts";
+import { styledWrapper } from "src/util/decorators";
 
 import { AlertMessage } from "./alertMessage";
 

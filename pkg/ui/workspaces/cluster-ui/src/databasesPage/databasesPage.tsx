@@ -8,18 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { RouteComponentProps } from "react-router-dom";
+import { InlineAlert } from "@cockroachlabs/ui-components";
 import { Tooltip } from "antd";
 import classNames from "classnames/bind";
 import merge from "lodash/merge";
-import { InlineAlert } from "@cockroachlabs/ui-components";
+import React from "react";
+import { RouteComponentProps } from "react-router-dom";
 
 import { Anchor } from "src/anchor";
 import { StackIcon } from "src/icon/stackIcon";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { Pagination } from "src/pagination";
 import { BooleanSetting } from "src/settings/booleanSetting";
-import { PageConfig, PageConfigItem } from "src/pageConfig";
 import {
   ColumnDescriptor,
   handleSortSettingFromQueryString,
@@ -28,22 +28,10 @@ import {
   SortSetting,
 } from "src/sortedtable";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
+import { UIConfigState } from "src/store";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import { syncHistory, tableStatsClusterSetting, unique } from "src/util";
-import { UIConfigState } from "src/store";
 
-import booleanSettingStyles from "../settings/booleanSetting.module.scss";
-import LoadingError from "../sqlActivity/errorComponent";
-import { Loading } from "../loading";
-import { Search } from "../search";
-import {
-  calculateActiveFilters,
-  defaultFilters,
-  Filter,
-  Filters,
-  handleFiltersFromQueryString,
-} from "../queryFilter";
-import { TableStatistics } from "../tableStatistics";
 import {
   DatabaseSpanStatsRow,
   DatabaseTablesResponse,
@@ -52,13 +40,25 @@ import {
   SqlExecutionErrorMessage,
 } from "../api";
 import { LoadingCell } from "../databases";
+import { Loading } from "../loading";
+import {
+  calculateActiveFilters,
+  defaultFilters,
+  Filter,
+  Filters,
+  handleFiltersFromQueryString,
+} from "../queryFilter";
+import { Search } from "../search";
+import booleanSettingStyles from "../settings/booleanSetting.module.scss";
+import LoadingError from "../sqlActivity/errorComponent";
+import { TableStatistics } from "../tableStatistics";
 
+import styles from "./databasesPage.module.scss";
 import {
   DatabaseNameCell,
   IndexRecCell,
   DiskSizeCell,
 } from "./databaseTableCells";
-import styles from "./databasesPage.module.scss";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);

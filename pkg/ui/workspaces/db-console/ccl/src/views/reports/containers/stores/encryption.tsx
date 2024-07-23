@@ -6,15 +6,15 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import React from "react";
+import { util } from "@cockroachlabs/cluster-ui";
+import * as protosccl from "@cockroachlabs/crdb-protobuf-client-ccl";
+import isEmpty from "lodash/isEmpty";
 import Long from "long";
 import moment from "moment-timezone";
-import * as protosccl from "@cockroachlabs/crdb-protobuf-client-ccl";
-import { util } from "@cockroachlabs/cluster-ui";
-import isEmpty from "lodash/isEmpty";
+import React from "react";
 
-import * as protos from "src/js/protos";
 import { EncryptionStatusProps } from "oss/src/views/reports/containers/stores/encryption";
+import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 
 

@@ -8,27 +8,27 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useCallback, useState } from "react";
-import copy from "copy-to-clipboard";
-import { message } from "antd";
 import CopyOutlined from "@ant-design/icons/CopyOutlined";
 import { InlineAlert } from "@cockroachlabs/ui-components";
+import { message } from "antd";
 import classNames from "classnames/bind";
+import copy from "copy-to-clipboard";
+import React, { useCallback, useState } from "react";
 
-import { Modal } from "../modal";
-import { Text, TextTypes } from "../text";
-import { Button } from "../button";
+import { Anchor } from "../anchor";
 import {
   executeIndexRecAction,
   IndexActionResponse,
 } from "../api/indexActionsApi";
+import { Button } from "../button";
+import { Modal } from "../modal";
+import { Text, TextTypes } from "../text";
 import {
   alterIndex,
   createIndex,
   dropIndex,
   onlineSchemaChanges,
 } from "../util";
-import { Anchor } from "../anchor";
 
 import styles from "./indexActionBtn.module.scss";
 import { InsightType } from "./types";

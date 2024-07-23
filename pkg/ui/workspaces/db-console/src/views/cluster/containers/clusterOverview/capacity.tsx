@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import d3 from "d3";
 import { util } from "@cockroachlabs/cluster-ui";
+import d3 from "d3";
 
 const LOW_DISK_SPACE_RATIO = 0.15;
 

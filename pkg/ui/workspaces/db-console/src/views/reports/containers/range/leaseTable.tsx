@@ -11,8 +11,8 @@
 import head from "lodash/head";
 import isEmpty from "lodash/isEmpty";
 import isNil from "lodash/isNil";
-import reverse from "lodash/reverse";
 import map from "lodash/map";
+import reverse from "lodash/reverse";
 import React from "react";
 
 import * as protos from "src/js/protos";

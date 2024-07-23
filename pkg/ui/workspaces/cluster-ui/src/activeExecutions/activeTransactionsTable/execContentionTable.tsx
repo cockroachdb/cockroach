@@ -8,16 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Tooltip } from "@cockroachlabs/ui-components";
 import React from "react";
 import { Link } from "react-router-dom";
-import { Tooltip } from "@cockroachlabs/ui-components";
 
 import { ColumnDescriptor, SortedTable } from "../../sortedtable";
-import { ContendedExecution, ExecutionType } from "../types";
-import { StatusIcon } from "../statusIcon";
-import { executionsTableTitles } from "../execTableCommon";
-import { DATE_FORMAT_24_TZ, Duration, limitText } from "../../util";
 import { Timestamp } from "../../timestamp";
+import { DATE_FORMAT_24_TZ, Duration, limitText } from "../../util";
+import { executionsTableTitles } from "../execTableCommon";
+import { StatusIcon } from "../statusIcon";
+import { ContendedExecution, ExecutionType } from "../types";
 
 const getID = (item: ContendedExecution, execType: ExecutionType) =>
   execType === "transaction"

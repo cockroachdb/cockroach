@@ -8,14 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { Alert } from "antd";
 import {
   CheckCircleFilled,
   CloseCircleFilled,
   InfoCircleFilled,
   WarningFilled,
 } from "@ant-design/icons";
+import { Alert } from "antd";
+import React from "react";
 import { Link } from "react-router-dom";
 
 import { AlertInfo, AlertLevel } from "src/redux/alerts";

@@ -8,24 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Badge } from "@cockroachlabs/cluster-ui";
 import React from "react";
 import { Helmet } from "react-helmet";
-import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
-import { Badge } from "@cockroachlabs/cluster-ui";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import NavigationBar from "src/views/app/components/layoutSidebar";
-import ErrorBoundary from "src/views/app/components/errorMessage/errorBoundary";
-import TimeWindowManager from "src/views/app/containers/metricsTimeManager";
-import AlertBanner from "src/views/app/containers/alertBanner";
-import RequireLogin from "src/views/login/requireLogin";
-import {
-  clusterIdSelector,
-  clusterNameSelector,
-  clusterVersionLabelSelector,
-} from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
-import LoginIndicator from "src/views/app/components/loginIndicator";
 import {
   GlobalNavigation,
   CockroachLabsLockupIcon,
@@ -35,7 +23,19 @@ import {
   Text,
   TextTypes,
 } from "src/components";
+import {
+  clusterIdSelector,
+  clusterNameSelector,
+  clusterVersionLabelSelector,
+} from "src/redux/nodes";
+import { AdminUIState } from "src/redux/state";
 import { getDataFromServer } from "src/util/dataFromServer";
+import ErrorBoundary from "src/views/app/components/errorMessage/errorBoundary";
+import NavigationBar from "src/views/app/components/layoutSidebar";
+import LoginIndicator from "src/views/app/components/loginIndicator";
+import AlertBanner from "src/views/app/containers/alertBanner";
+import TimeWindowManager from "src/views/app/containers/metricsTimeManager";
+import RequireLogin from "src/views/login/requireLogin";
 
 import "./layout.styl";
 import "./layoutPanel.styl";

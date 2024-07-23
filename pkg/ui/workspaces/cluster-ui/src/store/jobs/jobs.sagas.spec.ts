@@ -8,15 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import moment from "moment-timezone";
 import { expectSaga } from "redux-saga-test-plan";
+import * as matchers from "redux-saga-test-plan/matchers";
 import {
   EffectProviders,
   StaticProvider,
   throwError,
 } from "redux-saga-test-plan/providers";
-import * as matchers from "redux-saga-test-plan/matchers";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import moment from "moment-timezone";
 
 import { getJobs } from "src/api/jobsApi";
 
@@ -25,8 +25,8 @@ import {
   earliestRetainedTime,
 } from "../../jobs/jobsPage/jobsPage.fixture";
 
-import { refreshJobsSaga, requestJobsSaga } from "./jobs.sagas";
 import { actions, reducer, JobsState } from "./jobs.reducer";
+import { refreshJobsSaga, requestJobsSaga } from "./jobs.sagas";
 
 describe("jobs sagas", () => {
   const lastUpdated = moment.utc(new Date("2023-02-21T12:00:00.000Z"));

@@ -8,11 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import * as protos from "src/js/protos";
 import { NodesSummary } from "src/redux/nodes";
 import { INodeStatus } from "src/util/proto";
-import { GetSources } from "src/views/reports/containers/customChart/index";
-import * as protos from "src/js/protos";
 import { CustomMetricState } from "src/views/reports/containers/customChart/customMetric";
+import { GetSources } from "src/views/reports/containers/customChart/index";
 
 import TimeSeriesQueryAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator;
 import TimeSeriesQueryDerivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative;

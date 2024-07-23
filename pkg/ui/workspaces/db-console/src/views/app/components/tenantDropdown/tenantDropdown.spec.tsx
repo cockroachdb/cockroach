@@ -7,9 +7,9 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import React from "react";
 import { shallow } from "enzyme";
 import fetchMock from "fetch-mock";
+import React from "react";
 
 import { getCookieValue } from "src/redux/cookies";
 

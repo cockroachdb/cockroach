@@ -8,17 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { StatementLinkTarget } from "@cockroachlabs/cluster-ui";
 import React from "react";
 import { Redirect, match as Match } from "react-router-dom";
-import { StatementLinkTarget } from "@cockroachlabs/cluster-ui";
 
-import { getMatchParamByName } from "src/util/query";
 import {
   appAttr,
   databaseAttr,
   implicitTxnAttr,
   statementAttr,
 } from "src/util/constants";
+import { getMatchParamByName } from "src/util/query";
 
 type Props = {
   match: Match;

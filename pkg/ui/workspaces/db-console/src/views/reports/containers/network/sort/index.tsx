@@ -12,9 +12,9 @@ import { Checkbox, Divider } from "antd";
 import React from "react";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { trackNetworkSort } from "src/util/analytics";
 import { getMatchParamByName } from "src/util/query";
+import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 
 import { NetworkFilter, NetworkSort } from "..";
 import { Filter } from "../filter";

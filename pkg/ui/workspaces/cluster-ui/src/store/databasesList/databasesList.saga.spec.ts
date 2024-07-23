@@ -8,21 +8,21 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { expectSaga } from "redux-saga-test-plan";
+import * as matchers from "redux-saga-test-plan/matchers";
 import {
   EffectProviders,
   StaticProvider,
   throwError,
 } from "redux-saga-test-plan/providers";
-import * as matchers from "redux-saga-test-plan/matchers";
-import { expectSaga } from "redux-saga-test-plan";
 
 import { DatabasesListResponse, getDatabasesList } from "../../api";
 
+import { actions, DatabasesListState, reducer } from "./databasesList.reducers";
 import {
   refreshDatabasesListSaga,
   requestDatabasesListSaga,
 } from "./databasesList.saga";
-import { actions, DatabasesListState, reducer } from "./databasesList.reducers";
 
 describe("DatabasesList sagas", () => {
   const databasesListResponse: DatabasesListResponse = {

@@ -8,14 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createSelector } from "reselect";
-import orderBy from "lodash/orderBy";
 import groupBy from "lodash/groupBy";
 import mapValues from "lodash/mapValues";
+import orderBy from "lodash/orderBy";
 import moment from "moment-timezone";
+import { createSelector } from "reselect";
 
-import { AppState } from "../reducers";
 import { StatementDiagnosticsReport } from "../../api";
+import { AppState } from "../reducers";
 
 export const statementDiagnostics = createSelector(
   (state: AppState) => state.adminUI,

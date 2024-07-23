@@ -10,10 +10,10 @@
 
 import { join } from "path";
 
-import React, { useCallback, useEffect } from "react";
-import { RouteComponentProps } from "react-router-dom";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import Long from "long";
+import React, { useCallback, useEffect } from "react";
+import { RouteComponentProps } from "react-router-dom";
 
 import {
   ListTracingSnapshotsResponse,
@@ -23,13 +23,13 @@ import {
   RecordingMode,
   GetTraceResponse,
 } from "src/api/tracezApi";
+import { Breadcrumbs } from "src/breadcrumbs";
 import { SortSetting } from "src/sortedtable";
 import { getMatchParamByName, syncHistory } from "src/util";
-import { Breadcrumbs } from "src/breadcrumbs";
 
+import { RawTraceComponent } from "./rawTraceComponent";
 import { SnapshotComponent } from "./snapshotComponent";
 import { SpanComponent } from "./spanComponent";
-import { RawTraceComponent } from "./rawTraceComponent";
 
 // This component does some manual route management and navigation.
 // This is because the data model doesn't match the ideal route form.

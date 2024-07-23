@@ -15,17 +15,17 @@
  * in the reducer by a unique ID.
  */
 
-import { Action } from "redux";
-import { delay, take, fork, call, all, put } from "redux-saga/effects";
+import { util } from "@cockroachlabs/cluster-ui";
 import clone from "lodash/clone";
+import flatMap from "lodash/flatMap";
 import groupBy from "lodash/groupBy";
 import map from "lodash/map";
-import flatMap from "lodash/flatMap";
-import { util } from "@cockroachlabs/cluster-ui";
+import { Action } from "redux";
+import { delay, take, fork, call, all, put } from "redux-saga/effects";
 
-import { queryTimeSeries } from "src/util/api";
 import { PayloadAction } from "src/interfaces/action";
 import * as protos from "src/js/protos";
+import { queryTimeSeries } from "src/util/api";
 
 type TSRequest = protos.cockroach.ts.tspb.TimeSeriesQueryRequest;
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;

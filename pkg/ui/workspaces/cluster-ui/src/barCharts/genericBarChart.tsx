@@ -8,16 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import classNames from "classnames/bind";
-import { scaleLinear } from "d3-scale";
-import { format as d3Format } from "d3-format";
 import { Tooltip } from "@cockroachlabs/ui-components";
+import classNames from "classnames/bind";
+import { format as d3Format } from "d3-format";
+import { scaleLinear } from "d3-scale";
+import React from "react";
 
 import { stdDevLong, longToInt, NumericStat } from "src/util";
 
-import { clamp, normalizeClosedDomain } from "./utils";
 import styles from "./barCharts.module.scss";
+import { clamp, normalizeClosedDomain } from "./utils";
 
 const cx = classNames.bind(styles);
 

@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { duration } from "moment-timezone";
 import classNames from "classnames/bind";
+import { duration } from "moment-timezone";
+import React from "react";
 
 import { SqlStatsSortOptions, SqlStatsSortType } from "src/api/statementsApi";
 import styles from "src/sqlActivity/sqlActivity.module.scss";

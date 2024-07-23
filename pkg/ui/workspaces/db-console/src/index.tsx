@@ -12,8 +12,8 @@ import * as ReactDOM from "react-dom";
 
 import "src/polyfills";
 import "src/protobufInit";
-import { alertDataSync } from "src/redux/alerts";
 import { App } from "src/app";
+import { alertDataSync } from "src/redux/alerts";
 import { history } from "src/redux/history";
 import { createAdminUIStore } from "src/redux/state";
 import "src/redux/analytics";

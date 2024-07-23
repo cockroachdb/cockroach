@@ -8,18 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import classNames from "classnames";
-import React from "react";
 import { Loading } from "@cockroachlabs/cluster-ui";
-import isNil from "lodash/isNil";
+import classNames from "classnames";
 import flow from "lodash/flow";
+import isEmpty from "lodash/isEmpty";
+import isNil from "lodash/isNil";
 import keys from "lodash/keys";
 import map from "lodash/map";
 import sortBy from "lodash/sortBy";
-import isEmpty from "lodash/isEmpty";
+import React from "react";
 
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import * as protos from "src/js/protos";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
 interface ConnectionsTableProps {
   range: CachedDataReducerState<protos.cockroach.server.serverpb.RangeResponse>;

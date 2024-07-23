@@ -9,14 +9,14 @@
 // licenses/APL.txt.
 
 import { render } from "@testing-library/react";
+import * as H from "history";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
-import * as H from "history";
 
 import { Schedule } from "src/api/schedulesApi";
 
-import { allSchedulesFixture } from "./schedulesPage.fixture";
 import { SchedulesPage, SchedulesPageProps } from "./schedulesPage";
+import { allSchedulesFixture } from "./schedulesPage.fixture";
 
 const getMockSchedulesPageProps = (
   schedules: Array<Schedule>,

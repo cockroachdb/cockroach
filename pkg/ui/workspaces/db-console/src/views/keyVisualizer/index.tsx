@@ -8,28 +8,28 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { connect } from "react-redux";
 import {
   TimeScale,
   TimeScaleDropdown,
   TimeScaleOptions,
   util,
 } from "@cockroachlabs/cluster-ui";
-import { RouteComponentProps } from "react-router-dom";
 import moment from "moment-timezone";
+import React from "react";
+import { connect } from "react-redux";
+import { RouteComponentProps } from "react-router-dom";
 
 import { cockroach } from "src/js/protos";
+import { refreshSettings } from "src/redux/apiReducers";
+import { selectClusterSettings } from "src/redux/clusterSettings";
+import { AdminUIState } from "src/redux/state";
+import { selectTimeScale, setTimeScale } from "src/redux/timeScale";
 import { getKeyVisualizerSamples } from "src/util/api";
-import KeyVisualizer from "src/views/keyVisualizer/keyVisualizer";
 import {
   KeyVisSample,
   KeyVisualizerProps,
 } from "src/views/keyVisualizer/interfaces";
-import { AdminUIState } from "src/redux/state";
-import { selectClusterSettings } from "src/redux/clusterSettings";
-import { selectTimeScale, setTimeScale } from "src/redux/timeScale";
-import { refreshSettings } from "src/redux/apiReducers";
+import KeyVisualizer from "src/views/keyVisualizer/keyVisualizer";
 
 
 import { BackToAdvanceDebug } from "../reports/containers/util";

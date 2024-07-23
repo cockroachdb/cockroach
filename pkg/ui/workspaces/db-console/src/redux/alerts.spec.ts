@@ -8,18 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Store } from "redux";
-import moment from "moment-timezone";
 import { createHashHistory } from "history";
 import Long from "long";
+import moment from "moment-timezone";
+import { Store } from "redux";
 
 import * as protos from "src/js/protos";
 import { cockroach } from "src/js/protos";
+import { versionsSelector } from "src/redux/nodes";
 import { API_PREFIX } from "src/util/api";
 import fetchMock from "src/util/fetch-mock";
-import { versionsSelector } from "src/redux/nodes";
 
-import { AdminUIState, AppDispatch, createAdminUIStore } from "./state";
 import {
   AlertLevel,
   alertDataSync,
@@ -35,12 +34,6 @@ import {
   clusterPreserveDowngradeOptionOvertimeSelector,
 } from "./alerts";
 import {
-  VERSION_DISMISSED_KEY,
-  INSTRUCTIONS_BOX_COLLAPSED_KEY,
-  setUIDataKey,
-  isInFlight,
-} from "./uiData";
-import {
   livenessReducerObj,
   versionReducerObj,
   nodesReducerObj,
@@ -49,6 +42,13 @@ import {
   settingsReducerObj,
 } from "./apiReducers";
 import { loginSuccess } from "./login";
+import { AdminUIState, AppDispatch, createAdminUIStore } from "./state";
+import {
+  VERSION_DISMISSED_KEY,
+  INSTRUCTIONS_BOX_COLLAPSED_KEY,
+  setUIDataKey,
+  isInFlight,
+} from "./uiData";
 
 import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
 

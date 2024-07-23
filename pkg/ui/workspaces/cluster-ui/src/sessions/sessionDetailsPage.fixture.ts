@@ -10,11 +10,11 @@
 
 import { createMemoryHistory } from "history";
 
-import { sessionAttr } from "src/util/constants";
 import {
   CancelSessionRequestMessage,
   CancelQueryRequestMessage,
 } from "src/api/terminateQueryApi";
+import { sessionAttr } from "src/util/constants";
 
 import { SessionDetailsProps } from "./sessionDetails";
 import {

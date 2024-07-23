@@ -8,24 +8,24 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Button, commonStyles } from "@cockroachlabs/cluster-ui";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { ArrowLeft } from "@cockroachlabs/icons";
+import flatMap from "lodash/flatMap";
+import flow from "lodash/flow";
+import head from "lodash/head";
+import isEmpty from "lodash/isEmpty";
+import isEqual from "lodash/isEqual";
+import isNil from "lodash/isNil";
+import orderBy from "lodash/orderBy";
+import some from "lodash/some";
+import sortBy from "lodash/sortBy";
+import sortedUniqBy from "lodash/sortedUniqBy";
 import Long from "long";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import {cockroach} from "@cockroachlabs/crdb-protobuf-client";
-import { Button, commonStyles } from "@cockroachlabs/cluster-ui";
-import { ArrowLeft } from "@cockroachlabs/icons";
-import isEqual from "lodash/isEqual";
-import isNil from "lodash/isNil";
-import isEmpty from "lodash/isEmpty";
-import some from "lodash/some";
-import orderBy from "lodash/orderBy";
-import flatMap from "lodash/flatMap";
-import sortedUniqBy from "lodash/sortedUniqBy";
-import flow from "lodash/flow";
-import head from "lodash/head";
-import sortBy from "lodash/sortBy";
 
 import * as protos from "src/js/protos";
 import {
@@ -40,13 +40,13 @@ import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { rangeIDAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
-import ConnectionsTable from "src/views/reports/containers/range/connectionsTable";
-import RangeTable from "src/views/reports/containers/range/rangeTable";
-import LogTable from "src/views/reports/containers/range/logTable";
-import AllocatorOutput from "src/views/reports/containers/range/allocator";
-import RangeInfo from "src/views/reports/containers/range/rangeInfo";
-import LeaseTable from "src/views/reports/containers/range/leaseTable";
 import { getMatchParamByName } from "src/util/query";
+import AllocatorOutput from "src/views/reports/containers/range/allocator";
+import ConnectionsTable from "src/views/reports/containers/range/connectionsTable";
+import LeaseTable from "src/views/reports/containers/range/leaseTable";
+import LogTable from "src/views/reports/containers/range/logTable";
+import RangeInfo from "src/views/reports/containers/range/rangeInfo";
+import RangeTable from "src/views/reports/containers/range/rangeTable";
 
 import IRangeInfo = cockroach.server.serverpb.IRangeInfo;
 
@@ -162,9 +162,7 @@ export class Range extends React.Component<RangeProps, {}> {
     }
 
     // Did we get any responses?
-    if (
-      !some(range.data.responses_by_node_id, resp => resp.infos.length > 0)
-    ) {
+    if (!some(range.data.responses_by_node_id, resp => resp.infos.length > 0)) {
       return (
         <ErrorPage
           rangeID={rangeID}
@@ -197,9 +195,10 @@ export class Range extends React.Component<RangeProps, {}> {
 
     // Gather all replica IDs.
     const replicas = flow(
-      (infos: IRangeInfo[]) => flatMap(infos, info => info.state.state.desc.internal_replicas),
+      (infos: IRangeInfo[]) =>
+        flatMap(infos, info => info.state.state.desc.internal_replicas),
       descriptors => sortBy(descriptors, d => d.replica_id),
-      descriptors => sortedUniqBy(descriptors, d => d.replica_id)
+      descriptors => sortedUniqBy(descriptors, d => d.replica_id),
     )(infos);
 
     return (
@@ -252,7 +251,12 @@ const mapDispatchToProps = {
 };
 
 export default withRouter(
-  connect<RangeStateProps, RangeDispatchProps, RouteComponentProps, AdminUIState>(
+  connect<
+    RangeStateProps,
+    RangeDispatchProps,
+    RouteComponentProps,
+    AdminUIState
+  >(
     mapStateToProps,
     mapDispatchToProps,
   )(Range),

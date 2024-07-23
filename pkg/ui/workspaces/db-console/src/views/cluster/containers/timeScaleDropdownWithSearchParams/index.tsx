@@ -8,9 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useEffect } from "react";
-import { useHistory } from "react-router-dom";
-import { connect } from "react-redux";
 import {
   defaultTimeScaleOptions,
   TimeScaleDropdown,
@@ -19,12 +16,15 @@ import {
   TimeWindow,
   findClosestTimeScale,
 } from "@cockroachlabs/cluster-ui";
-import { createSelector } from "reselect";
 import moment from "moment-timezone";
+import React, { useEffect } from "react";
+import { connect } from "react-redux";
+import { useHistory } from "react-router-dom";
+import { createSelector } from "reselect";
 
-import * as timewindow from "src/redux/timeScale";
-import { AdminUIState } from "src/redux/state";
 import { PayloadAction } from "src/interfaces/action";
+import { AdminUIState } from "src/redux/state";
+import * as timewindow from "src/redux/timeScale";
 
 // The time scale dropdown from cluster-ui that updates route params as
 // options are selected.

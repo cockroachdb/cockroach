@@ -8,6 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import {
+  connectRouter,
+  routerMiddleware,
+  RouterState,
+} from "connected-react-router";
+import { History } from "history";
 import identity from "lodash/identity";
 import {
   createStore,
@@ -19,27 +26,20 @@ import {
 } from "redux";
 import createSagaMiddleware from "redux-saga";
 import thunk, { ThunkDispatch } from "redux-thunk";
-import {
-  connectRouter,
-  routerMiddleware,
-  RouterState,
-} from "connected-react-router";
-import { History } from "history";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { createSelector } from "reselect";
 
 import { DataFromServer } from "src/util/dataFromServer";
 
+import { initializeAnalytics } from "./analytics";
 import { apiReducersReducer, APIReducersState } from "./apiReducers";
 import { hoverReducer, HoverState } from "./hover";
 import { localSettingsReducer, LocalSettingsState } from "./localsettings";
+import { loginReducer, LoginAPIState } from "./login";
 import { metricsReducer, MetricsState } from "./metrics";
 import { queryManagerReducer, QueryManagerState } from "./queryManager/reducer";
+import rootSaga from "./sagas";
 import { timeScaleReducer, TimeScaleState } from "./timeScale";
 import { uiDataReducer, UIDataState } from "./uiData";
-import { loginReducer, LoginAPIState } from "./login";
-import rootSaga from "./sagas";
-import { initializeAnalytics } from "./analytics";
 
 import FeatureFlags = cockroach.server.serverpb.FeatureFlags;
 

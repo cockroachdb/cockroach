@@ -10,11 +10,10 @@
 
 import { createSelector } from "reselect";
 
-import { AppState } from "src/store/reducers";
-import { selectID } from "src/selectors/common";
-import { selectTxnInsightDetailsCombiner } from "src/selectors/insightsCommon.selectors";
 import { TxnInsightEvent } from "src/insights";
-import { selectStmtInsights } from "src/store/insights/statementInsights";
+import { selectID, selectStmtInsights } from "src/selectors/common";
+import { selectTxnInsightDetailsCombiner } from "src/selectors/insightsCommon.selectors";
+import { AppState } from "src/store/reducers";
 
 const selectTxnContentionInsightsDetails = createSelector(
   (state: AppState) => state.adminUI?.txnInsightDetails.cachedData,

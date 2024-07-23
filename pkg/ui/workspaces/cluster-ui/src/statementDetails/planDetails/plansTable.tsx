@@ -8,14 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { ReactNode } from "react";
-import { Tooltip } from "@cockroachlabs/ui-components";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { Tooltip } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
+import React, { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { ColumnDescriptor, SortedTable } from "src/sortedtable";
 
+import { Anchor } from "../../anchor";
+import { Timestamp, Timezone } from "../../timestamp";
 import {
   Duration,
   formatNumberForDisplay,
@@ -30,8 +32,6 @@ import {
   EncodeDatabaseTableIndexUri,
   EncodeDatabaseTableUri,
 } from "../../util";
-import { Anchor } from "../../anchor";
-import { Timestamp, Timezone } from "../../timestamp";
 
 import styles from "./plansTable.module.scss";
 

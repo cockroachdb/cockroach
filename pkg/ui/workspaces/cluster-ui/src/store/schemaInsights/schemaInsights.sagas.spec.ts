@@ -8,27 +8,27 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment-timezone";
 import { expectSaga } from "redux-saga-test-plan";
+import * as matchers from "redux-saga-test-plan/matchers";
 import {
   EffectProviders,
   StaticProvider,
   throwError,
 } from "redux-saga-test-plan/providers";
-import * as matchers from "redux-saga-test-plan/matchers";
-import moment from "moment-timezone";
 
 import { getSchemaInsights, SqlApiResponse } from "../../api";
 import { InsightRecommendation } from "../../insights";
 
 import {
-  refreshSchemaInsightsSaga,
-  requestSchemaInsightsSaga,
-} from "./schemaInsights.sagas";
-import {
   actions,
   reducer,
   SchemaInsightsState,
 } from "./schemaInsights.reducer";
+import {
+  refreshSchemaInsightsSaga,
+  requestSchemaInsightsSaga,
+} from "./schemaInsights.sagas";
 
 const lastUpdated = moment();
 

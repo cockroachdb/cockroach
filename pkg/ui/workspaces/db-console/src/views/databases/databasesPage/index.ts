@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { connect } from "react-redux";
-import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   DatabasesPage,
   DatabasesPageData,
   DatabasesPageActions,
 } from "@cockroachlabs/cluster-ui";
+import { connect } from "react-redux";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { AdminUIState } from "src/redux/state";
 

@@ -8,44 +8,44 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useEffect, useState } from "react";
-import classNames from "classnames/bind";
-import { useHistory } from "react-router-dom";
 import { InlineAlert } from "@cockroachlabs/ui-components";
+import classNames from "classnames/bind";
 import moment, { Moment } from "moment-timezone";
+import React, { useEffect, useState } from "react";
+import { useHistory } from "react-router-dom";
 
-import {
-  ISortedTablePagination,
-  SortSetting,
-} from "src/sortedtable/sortedtable";
-import { Loading } from "src/loading/loading";
-import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
-import { Search } from "src/search/search";
 import {
   ActiveTransaction,
   ActiveStatementFilters,
   ActiveTransactionFilters,
   ExecutionStatus,
 } from "src/activeExecutions";
-import LoadingError from "src/sqlActivity/errorComponent";
 import { ActiveTransactionsSection } from "src/activeExecutions/activeTransactionsSection";
-import { Pagination } from "src/pagination";
-import { queryByName, syncHistory } from "src/util/query";
-import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
-import { getActiveTransactionFiltersFromURL } from "src/queryFilter/utils";
 import { RefreshControl } from "src/activeExecutions/refreshControl";
+import { Loading } from "src/loading/loading";
+import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
+import { Pagination } from "src/pagination";
+import { getActiveTransactionFiltersFromURL } from "src/queryFilter/utils";
+import { Search } from "src/search/search";
+import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
+import {
+  ISortedTablePagination,
+  SortSetting,
+} from "src/sortedtable/sortedtable";
+import LoadingError from "src/sqlActivity/errorComponent";
+import { queryByName, syncHistory } from "src/util/query";
 
 import {
   filterActiveTransactions,
   getAppsFromActiveExecutions,
 } from "../activeExecutions/activeStatementUtils";
-import styles from "../statementsPage/statementsPage.module.scss";
 import {
   calculateActiveFilters,
   Filter,
   getFullFiltersAsStringRecord,
   inactiveFiltersState,
 } from "../queryFilter";
+import styles from "../statementsPage/statementsPage.module.scss";
 
 const cx = classNames.bind(styles);
 

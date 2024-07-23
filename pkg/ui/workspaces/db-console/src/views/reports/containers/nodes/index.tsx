@@ -8,24 +8,24 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { util } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames";
+import flow from "lodash/flow";
+import get from "lodash/get";
+import has from "lodash/has";
+import isEmpty from "lodash/isEmpty";
+import isEqual from "lodash/isEqual";
+import isNil from "lodash/isNil";
+import join from "lodash/join";
+import map from "lodash/map";
+import orderBy from "lodash/orderBy";
+import uniq from "lodash/uniq";
 import Long from "long";
 import moment from "moment-timezone";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
-import { util } from "@cockroachlabs/cluster-ui";
-import get from "lodash/get";
-import join from "lodash/join";
-import has from "lodash/has";
-import map from "lodash/map";
-import isEmpty from "lodash/isEmpty";
-import isEqual from "lodash/isEqual";
-import isNil from "lodash/isNil";
-import flow from "lodash/flow";
-import uniq from "lodash/uniq";
-import orderBy from "lodash/orderBy";
 
 import { InlineAlert } from "src/components";
 import * as protos from "src/js/protos";
@@ -44,11 +44,11 @@ import {
   localityToString,
   NodeFilterList,
 } from "src/views/reports/components/nodeFilterList";
+import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import {
   PageConfig,
   PageConfigItem,
 } from "src/views/shared/components/pageconfig";
-import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 
 import { BackToAdvanceDebug } from "../util";
 
@@ -352,7 +352,8 @@ export class Nodes extends React.Component<NodesProps, LocalNodeState> {
     const inconsistent =
       !isNil(equality) &&
       flow(
-        (nodeIds: string[]) => map(nodeIds, nodeID => this.props.nodeStatusByID[nodeID]),
+        (nodeIds: string[]) =>
+          map(nodeIds, nodeID => this.props.nodeStatusByID[nodeID]),
         statuses => map(statuses, status => equality(status)),
         uniq,
       )(orderedNodeIDs).length > 1;
@@ -435,8 +436,9 @@ export class Nodes extends React.Component<NodesProps, LocalNodeState> {
     }
 
     // Sort the node IDs and then convert them back to string for lookups.
-    const orderedNodeIDs = orderBy(nodeIDsContext, nodeID => nodeID)
-      .map(nodeID => nodeID.toString());
+    const orderedNodeIDs = orderBy(nodeIDsContext, nodeID => nodeID).map(
+      nodeID => nodeID.toString(),
+    );
 
     const dropdownOptions: DropdownOption[] = [
       {

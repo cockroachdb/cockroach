@@ -8,17 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createMemoryHistory } from "history";
-import Long from "long";
-import { RouteComponentProps } from "react-router-dom";
-import { bindActionCreators, Store } from "redux";
 import {
   IndexDetailPageActions,
   IndexDetailsPageData,
   util,
   TimeScale,
 } from "@cockroachlabs/cluster-ui";
+import { createMemoryHistory } from "history";
+import Long from "long";
 import moment from "moment-timezone";
+import { RouteComponentProps } from "react-router-dom";
+import { bindActionCreators, Store } from "redux";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import {

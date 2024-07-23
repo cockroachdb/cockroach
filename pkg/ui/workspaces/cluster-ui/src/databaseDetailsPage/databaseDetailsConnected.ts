@@ -15,18 +15,16 @@ import { Dispatch } from "redux";
 import { databaseNameCCAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
 
+import { deriveTableDetailsMemoized } from "../databases";
+import { Filters } from "../queryFilter";
 import { AppState } from "../store";
+import { actions as analyticsActions } from "../store/analytics";
+import {
+  selectDropUnusedIndexDuration,
+  selectIndexRecommendationsEnabled,
+} from "../store/clusterSettings/clusterSettings.selectors";
 import { databaseDetailsReducer } from "../store/databaseDetails";
 const databaseDetailsActions = databaseDetailsReducer.actions;
-import {
-  actions as localStorageActions,
-  LocalStorageKeys,
-} from "../store/localStorage";
-import { actions as tableDetailsActions } from "../store/databaseTableDetails";
-import { actions as analyticsActions } from "../store/analytics";
-import { Filters } from "../queryFilter";
-import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectIsTenant } from "../store/uiConfig";
 import {
   selectDatabaseDetailsGrantsSortSetting,
   selectDatabaseDetailsTablesFiltersSetting,
@@ -34,19 +32,21 @@ import {
   selectDatabaseDetailsTablesSortSetting,
   selectDatabaseDetailsViewModeSetting,
 } from "../store/databaseDetails/databaseDetails.selectors";
-import { deriveTableDetailsMemoized } from "../databases";
+import { actions as tableDetailsActions } from "../store/databaseTableDetails";
 import {
-  selectDropUnusedIndexDuration,
-  selectIndexRecommendationsEnabled,
-} from "../store/clusterSettings/clusterSettings.selectors";
+  actions as localStorageActions,
+  LocalStorageKeys,
+} from "../store/localStorage";
+import { nodeRegionsByIDSelector } from "../store/nodes";
 import { actions as nodesActions } from "../store/nodes/nodes.reducer";
+import { selectIsTenant } from "../store/uiConfig";
 
-import { ViewMode } from "./types";
 import {
   DatabaseDetailsPage,
   DatabaseDetailsPageActions,
   DatabaseDetailsPageData,
 } from "./databaseDetailsPage";
+import { ViewMode } from "./types";
 
 const mapStateToProps = (
   state: AppState,

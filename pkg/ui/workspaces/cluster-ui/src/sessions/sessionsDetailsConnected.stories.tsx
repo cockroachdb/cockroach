@@ -8,16 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { storiesOf } from "@storybook/react";
-import { createMemoryHistory } from "history";
-import createSagaMiddleware from "redux-saga";
-import { Provider } from "react-redux";
 import {
   ConnectedRouter,
   connectRouter,
   routerMiddleware,
 } from "connected-react-router";
+import { createMemoryHistory } from "history";
+import React from "react";
+import { Provider } from "react-redux";
+import { Route } from "react-router-dom";
 import {
   applyMiddleware,
   combineReducers,
@@ -26,7 +26,7 @@ import {
   Store,
   StoreEnhancer,
 } from "redux";
-import { Route } from "react-router-dom";
+import createSagaMiddleware from "redux-saga";
 
 import { AppState, sagas, rootReducer } from "../store";
 

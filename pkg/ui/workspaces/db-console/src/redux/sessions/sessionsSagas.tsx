@@ -8,17 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, put, takeEvery } from "redux-saga/effects";
 import { Action } from "redux";
+import { all, call, put, takeEvery } from "redux-saga/effects";
 
 import { PayloadAction } from "src/interfaces/action";
-import { terminateQuery, terminateSession } from "src/util/api";
-import { invalidateSessions, refreshSessions } from "src/redux/apiReducers";
+import { cockroach } from "src/js/protos";
 import {
   terminateQueryAlertLocalSetting,
   terminateSessionAlertLocalSetting,
 } from "src/redux/alerts";
-import { cockroach } from "src/js/protos";
+import { invalidateSessions, refreshSessions } from "src/redux/apiReducers";
+import { terminateQuery, terminateSession } from "src/util/api";
 
 
 import ICancelSessionRequest = cockroach.server.serverpb.ICancelSessionRequest;

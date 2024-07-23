@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import classNames from "classnames/bind";
 import { Modal as AntModal, Space } from "antd";
+import classNames from "classnames/bind";
+import React from "react";
 
 import { Button } from "../button";
-import { Text, TextTypes } from "../text";
 import SpinIcon from "../icon/spin";
+import { Text, TextTypes } from "../text";
 
 import styles from "./modal.module.scss";
 

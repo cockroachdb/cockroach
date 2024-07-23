@@ -8,18 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { mount, shallow } from "enzyme";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import { mount, shallow } from "enzyme";
 import each from "lodash/each";
+import React from "react";
 
+import { refreshEvents } from "src/redux/apiReducers";
+import { allEvents } from "src/util/eventTypes";
 import {
   EventBoxUnconnected as EventBox,
   EventRow,
   getEventInfo,
 } from "src/views/cluster/containers/events";
-import { refreshEvents } from "src/redux/apiReducers";
-import { allEvents } from "src/util/eventTypes";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 function makeEventBox(

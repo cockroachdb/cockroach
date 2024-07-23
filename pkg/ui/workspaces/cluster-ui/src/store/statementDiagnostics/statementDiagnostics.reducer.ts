@@ -10,12 +10,12 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
-import { DOMAIN_NAME, noopReducer } from "../utils";
 import {
   CancelStmtDiagnosticRequest,
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsResponse,
 } from "../../api";
+import { DOMAIN_NAME, noopReducer } from "../utils";
 
 export type StatementDiagnosticsState = {
   data: StatementDiagnosticsResponse;

@@ -8,15 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import map from "lodash/map";
+import { Button, util, Timestamp } from "@cockroachlabs/cluster-ui";
+import { ArrowLeft } from "@cockroachlabs/icons";
 import find from "lodash/find";
+import map from "lodash/map";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
-import { Button, util, Timestamp } from "@cockroachlabs/cluster-ui";
-import { ArrowLeft } from "@cockroachlabs/icons";
 
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import {

@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { connect } from "react-redux";
-import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   WorkloadInsightEventFilters,
   SortSetting,
@@ -20,10 +18,15 @@ import {
   WorkloadInsightsRootControl,
   WorkloadInsightsViewProps,
 } from "@cockroachlabs/cluster-ui";
+import { connect } from "react-redux";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 import { bindActionCreators } from "redux";
 
 import { refreshStmtInsights, refreshTxnInsights } from "src/redux/apiReducers";
+import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
+import { setGlobalTimeScaleAction } from "src/redux/statements";
+import { selectTimeScale } from "src/redux/timeScale";
 import {
   filtersLocalSetting,
   selectStmtInsights,
@@ -35,9 +38,6 @@ import {
   selectStmtInsightsMaxApiReached,
   selectTxnInsightsMaxApiReached,
 } from "src/views/insights/insightsSelectors";
-import { LocalSetting } from "src/redux/localsettings";
-import { setGlobalTimeScaleAction } from "src/redux/statements";
-import { selectTimeScale } from "src/redux/timeScale";
 
 export const insightStatementColumnsLocalSetting = new LocalSetting<
   AdminUIState,

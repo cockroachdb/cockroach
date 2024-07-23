@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { Provider } from "react-redux";
+import { PartialStoryFn, StoryContext } from "@storybook/addons";
 import { ConnectedRouter, connectRouter } from "connected-react-router";
 import { createMemoryHistory } from "history";
+import React from "react";
+import { Provider } from "react-redux";
 import { createStore, combineReducers } from "redux";
-import { PartialStoryFn, StoryContext } from "@storybook/addons";
 
 const history = createMemoryHistory();
 const routerReducer = connectRouter(history);

@@ -14,9 +14,9 @@ import {
   SortSetting,
   api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
+import Long from "long";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import Long from "long";
 
 import {
   rawTraceKey,

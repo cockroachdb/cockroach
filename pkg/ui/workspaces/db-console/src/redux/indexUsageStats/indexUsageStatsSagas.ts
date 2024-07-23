@@ -11,15 +11,15 @@
 import { all, call, put, takeEvery, select } from "redux-saga/effects";
 import { createSelector } from "reselect";
 
+import { PayloadAction } from "src/interfaces/action";
 import { cockroach } from "src/js/protos";
 import {
   invalidateIndexStats,
   KeyedCachedDataReducerState,
   refreshIndexStats,
 } from "src/redux/apiReducers";
-import { IndexStatsResponseMessage, resetIndexUsageStats } from "src/util/api";
 import { AdminUIState } from "src/redux/state";
-import { PayloadAction } from "src/interfaces/action";
+import { IndexStatsResponseMessage, resetIndexUsageStats } from "src/util/api";
 
 import {
   RESET_INDEX_USAGE_STATS,

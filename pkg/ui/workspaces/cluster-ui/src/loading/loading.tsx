@@ -8,16 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import classNames from "classnames/bind";
 import {
   InlineAlert,
   InlineAlertProps,
   Spinner,
   InlineAlertIntent,
 } from "@cockroachlabs/ui-components";
+import classNames from "classnames/bind";
 import groupBy from "lodash/groupBy";
 import map from "lodash/map";
+import React from "react";
 
 import { adminUIAccess, getLogger, isForbiddenRequestError } from "src/util";
 

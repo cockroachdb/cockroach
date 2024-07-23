@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import classnames from "classnames";
 import React from "react";
 import { OptionComponentProps } from "react-select";
-import classnames from "classnames";
 
 import "./metricOption.styl";
 

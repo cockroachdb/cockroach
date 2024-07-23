@@ -16,15 +16,15 @@ import { queryByName } from "src/util/query";
 
 import { InsightExecEnum, InsightExecOptions } from "../types";
 
-import { DropDownSelect } from "./util";
-import {
-  TransactionInsightsView,
-  TransactionInsightsViewProps,
-} from "./transactionInsights";
 import {
   StatementInsightsView,
   StatementInsightsViewProps,
 } from "./statementInsights";
+import {
+  TransactionInsightsView,
+  TransactionInsightsViewProps,
+} from "./transactionInsights";
+import { DropDownSelect } from "./util";
 
 export type WorkloadInsightsViewProps = {
   transactionInsightsViewProps: TransactionInsightsViewProps;

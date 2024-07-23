@@ -8,15 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { Location } from "history";
-import isEmpty from "lodash/isEmpty";
 import forEach from "lodash/forEach";
-import map from "lodash/map";
-import join from "lodash/join";
+import isEmpty from "lodash/isEmpty";
 import isNil from "lodash/isNil";
-import split from "lodash/split";
+import join from "lodash/join";
+import map from "lodash/map";
 import sortBy from "lodash/sortBy";
+import split from "lodash/split";
+import React from "react";
 
 import * as protos from "src/js/protos";
 

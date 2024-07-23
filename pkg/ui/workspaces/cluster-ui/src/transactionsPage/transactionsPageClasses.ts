@@ -10,8 +10,8 @@
 
 import classNames from "classnames/bind";
 
-import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
 import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";
+import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
 
 import { commonStyles } from "../common";
 

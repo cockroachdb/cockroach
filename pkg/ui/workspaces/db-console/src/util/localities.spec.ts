@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 import * as protos from "src/js/protos";
-import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { cockroach } from "src/js/protos";
+import { LocalityTier, LocalityTree } from "src/redux/localities";
 
 import {
   generateLocalityRoute,

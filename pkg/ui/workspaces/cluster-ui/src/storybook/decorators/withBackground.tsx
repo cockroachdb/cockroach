@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { PartialStoryFn, StoryContext } from "@storybook/addons";
+import React from "react";
 
 export const withBackground = (
   storyFn: PartialStoryFn,

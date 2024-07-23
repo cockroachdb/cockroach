@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { Link } from "react-router-dom";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
+import React from "react";
+import { Link } from "react-router-dom";
 
 import { getHighlightedText } from "src/highlightedText";
 import { limitText } from "src/util";

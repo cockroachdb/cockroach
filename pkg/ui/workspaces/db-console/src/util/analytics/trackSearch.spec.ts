@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 import get from "lodash/get";
-import isString from "lodash/isString";
 import isNumber from "lodash/isNumber";
+import isString from "lodash/isString";
 
 import { track } from "./trackSearch";
 

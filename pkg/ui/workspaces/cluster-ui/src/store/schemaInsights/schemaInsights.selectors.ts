@@ -10,8 +10,8 @@
 
 import { createSelector } from "reselect";
 
-import { adminUISelector, localStorageSelector } from "../utils/selectors";
 import { insightType } from "../../insights";
+import { adminUISelector, localStorageSelector } from "../utils/selectors";
 
 const selectSchemaInsightState = createSelector(
   adminUISelector,

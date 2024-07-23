@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import classNames from "classnames/bind";
 import hljs from "highlight.js/lib/core";
 import sqlLangSyntax from "highlight.js/lib/languages/pgsql";
 import React from "react";
-import classNames from "classnames/bind";
 
-import styles from "./sqlhighlight.module.scss";
 import { SqlBoxProps } from "./box";
+import styles from "./sqlhighlight.module.scss";
 
 const cx = classNames.bind(styles);
 

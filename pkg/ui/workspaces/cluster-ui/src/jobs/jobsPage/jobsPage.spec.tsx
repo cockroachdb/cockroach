@@ -8,17 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment from "moment-timezone";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { render } from "@testing-library/react";
+import * as H from "history";
+import moment from "moment-timezone";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
-import * as H from "history";
 
 import { formatDuration } from "../util/duration";
 
-import { allJobsFixture, earliestRetainedTime } from "./jobsPage.fixture";
 import { JobsPage, JobsPageProps } from "./jobsPage";
+import { allJobsFixture, earliestRetainedTime } from "./jobsPage.fixture";
 
 import Job = cockroach.server.serverpb.IJobResponse;
 

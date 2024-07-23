@@ -11,13 +11,13 @@
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import classNames from "classnames/bind";
 
+import { AggregateStatistics } from "src/statementsTable/statementsTable";
 import { stdDevLong, longToInt } from "src/util";
 import { Duration, Bytes, PercentageCustom } from "src/util/format";
-import { AggregateStatistics } from "src/statementsTable/statementsTable";
 
+import { barChartFactory, BarChartOptions } from "./barChartFactory";
 import styles from "./barCharts.module.scss";
 import { bar, approximify } from "./utils";
-import { barChartFactory, BarChartOptions } from "./barChartFactory";
 
 type StatementStatistics =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;

@@ -8,26 +8,26 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useContext, useMemo } from "react";
-import moment from "moment-timezone";
 import classNames from "classnames/bind";
+import moment from "moment-timezone";
+import React, { useContext, useMemo } from "react";
 
 import { TimezoneContext } from "../contexts";
 import { FormatWithTimezone, getLogger } from "../util";
 
+import RangeSelect, {
+  RangeOption,
+  Selected as RangeSelectSelected,
+} from "./rangeSelect";
+import { TimeFrameControls } from "./timeFrameControls";
+import styles from "./timeScale.module.scss";
 import {
   ArrowDirection,
   TimeScale,
   TimeScaleOptions,
   TimeWindow,
 } from "./timeScaleTypes";
-import { TimeFrameControls } from "./timeFrameControls";
-import RangeSelect, {
-  RangeOption,
-  Selected as RangeSelectSelected,
-} from "./rangeSelect";
 import { defaultTimeScaleOptions, findClosestTimeScale } from "./utils";
-import styles from "./timeScale.module.scss";
 
 const cx = classNames.bind(styles);
 

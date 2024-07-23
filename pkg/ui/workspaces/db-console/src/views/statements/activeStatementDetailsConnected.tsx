@@ -16,13 +16,13 @@ import {
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import { AdminUIState } from "src/redux/state";
 import { refreshLiveWorkload } from "src/redux/apiReducers";
+import { AdminUIState } from "src/redux/state";
+import { selectHasAdminRole } from "src/redux/user";
 import {
   selectActiveStatement,
   selectContentionDetailsForStatement,
 } from "src/selectors";
-import { selectHasAdminRole } from "src/redux/user";
 
 export default withRouter(
   connect<

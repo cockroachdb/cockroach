@@ -8,18 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { Col, Row } from "antd";
-import "antd/lib/row/style";
-import "antd/lib/col/style";
 import { Heading } from "@cockroachlabs/ui-components";
+import { Col, Row } from "antd";
 import classNames from "classnames/bind";
+import "antd/lib/col/style";
+import React from "react";
 
-import { SummaryCard, SummaryCardItem } from "../../summaryCard";
 // TODO (xinhaoz) we should organize these common page details styles into its own file.
 import styles from "../../statementDetails/statementDetails.module.scss";
-import { TransactionDetailsLink } from "../workloadInsights/util";
+import { SummaryCard, SummaryCardItem } from "../../summaryCard";
 import { ContentionDetails } from "../types";
+import { TransactionDetailsLink } from "../workloadInsights/util";
+import "antd/lib/row/style";
 
 const cx = classNames.bind(styles);
 

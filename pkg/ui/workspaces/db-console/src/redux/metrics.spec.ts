@@ -9,15 +9,15 @@
 // licenses/APL.txt.
 
 import {keys} from "d3";
-import map from "lodash/map";
 import flatMap from "lodash/flatMap";
+import map from "lodash/map";
 import Long from "long";
+import { call, put, delay } from "redux-saga/effects";
 import { expectSaga, testSaga } from "redux-saga-test-plan";
 import * as matchers from "redux-saga-test-plan/matchers";
-import { call, put, delay } from "redux-saga/effects";
 
-import { queryTimeSeries, TimeSeriesQueryRequestMessage } from "src/util/api";
 import * as protos from "src/js/protos";
+import { queryTimeSeries, TimeSeriesQueryRequestMessage } from "src/util/api";
 
 import * as metrics from "./metrics";
 

@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import * as protobuf from "protobufjs/minimal";
 import Long from "long";
+import * as protobuf from "protobufjs/minimal";
 
 protobuf.util.Long = Long as any;
 protobuf.configure();

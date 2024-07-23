@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { localStorageSelector } from "../utils/selectors";
 import { LocalStorageKeys } from "../localStorage";
 import { AppState } from "../reducers";
+import { localStorageSelector } from "../utils/selectors";
 
 export const selectDatabaseDetailsViewModeSetting = (state: AppState) => {
   const localStorage = localStorageSelector(state);

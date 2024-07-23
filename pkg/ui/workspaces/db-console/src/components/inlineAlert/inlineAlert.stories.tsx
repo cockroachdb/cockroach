@@ -8,11 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { storiesOf } from "@storybook/react";
+import React from "react";
 
-import { styledWrapper } from "src/util/decorators";
 import { Anchor } from "src/components";
+import { styledWrapper } from "src/util/decorators";
 
 import { InlineAlert } from "./inlineAlert";
 

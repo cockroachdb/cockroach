@@ -9,9 +9,9 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import React from "react";
-import { Skeleton, Tooltip } from "antd";
 import { Caution } from "@cockroachlabs/icons";
+import { Skeleton, Tooltip } from "antd";
+import React from "react";
 
 import {
   isMaxSizeError,

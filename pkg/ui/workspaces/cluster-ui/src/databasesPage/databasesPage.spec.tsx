@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { expect } from "chai";
-import * as H from "history";
 import { shallow } from "enzyme";
+import * as H from "history";
+import React from "react";
 
 import { defaultFilters } from "../queryFilter";
 import { indexUnusedDuration } from "../util";

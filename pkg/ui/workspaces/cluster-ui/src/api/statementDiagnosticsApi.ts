@@ -10,7 +10,6 @@
 
 import moment from "moment-timezone";
 
-import { Duration } from "src/util/format";
 import {
   createSqlExecutionRequest,
   executeInternalSql,
@@ -19,6 +18,7 @@ import {
   SqlTxnResult,
   txnResultSetIsEmpty,
 } from "src/api";
+import { Duration } from "src/util/format";
 
 export type StatementDiagnosticsReport = {
   id: string;

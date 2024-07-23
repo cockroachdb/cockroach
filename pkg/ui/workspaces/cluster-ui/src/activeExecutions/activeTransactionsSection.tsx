@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useMemo } from "react";
 import classNames from "classnames/bind";
+import React, { useMemo } from "react";
 
 import {
   ActiveTransaction,
@@ -18,13 +18,13 @@ import {
 import ColumnsSelector, {
   SelectOption,
 } from "src/columnsSelector/columnsSelector";
-import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import { EmptyTransactionsPlaceholder } from "src/transactionsPage/emptyTransactionsPlaceholder";
-import { TableStatistics } from "src/tableStatistics";
-import { TransactionViewType } from "src/transactionsPage/transactionsPageTypes";
-import { calculateActiveFilters } from "src/queryFilter/filter";
 import { isSelectedColumn } from "src/columnsSelector/utils";
+import { calculateActiveFilters } from "src/queryFilter/filter";
 import { SortedTable } from "src/sortedtable";
+import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
+import { TableStatistics } from "src/tableStatistics";
+import { EmptyTransactionsPlaceholder } from "src/transactionsPage/emptyTransactionsPlaceholder";
+import { TransactionViewType } from "src/transactionsPage/transactionsPageTypes";
 
 import {
   ISortedTablePagination,

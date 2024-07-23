@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 import { Tooltip } from "antd";
-import React from "react";
 import classNames from "classnames/bind";
+import React from "react";
 
 import styles from "./tooltip.module.styl";
 

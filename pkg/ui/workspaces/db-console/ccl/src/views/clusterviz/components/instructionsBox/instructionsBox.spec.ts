@@ -5,8 +5,8 @@
 // the License. You may obtain a copy of the License at
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
-import { showInstructionsBox } from "src/views/clusterviz/components/instructionsBox";
 import { LocalityTier } from "src/redux/localities";
+import { showInstructionsBox } from "src/views/clusterviz/components/instructionsBox";
 
 describe("InstructionsBox component", () => {
   describe("showInstructionsBox", () => {

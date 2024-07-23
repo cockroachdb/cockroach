@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 import "./protobufInit";
-import * as util from "./util";
 import * as api from "./api";
+import * as util from "./util";
 export * from "./anchor";
 export * from "./badge";
 export * from "./barCharts";

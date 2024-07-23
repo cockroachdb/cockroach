@@ -24,8 +24,8 @@ import {
 } from "src/api/statementDiagnosticsApi";
 import { maybeError } from "src/util";
 
-import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
 import { rootActions } from "../rootActions";
+import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
 
 import { actions } from "./statementDiagnostics.reducer";
 
