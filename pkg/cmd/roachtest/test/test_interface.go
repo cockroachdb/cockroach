@@ -26,6 +26,11 @@ const DefaultCockroachPath = "./cockroach"
 // in that environment variable.
 var EnvAssertionsEnabledSeed = "ROACHTEST_ASSERTIONS_ENABLED_SEED"
 
+// EnvWorkloadDurationFlag - evniornment variable to override
+// default run time duration of workload set in tests
+// usage ROACHTEST_PERF_WORKLOAD_DURATION="--duration 5m"
+const EnvWorkloadDurationFlag = "ROACHTEST_PERF_WORKLOAD_DURATION"
+
 // Test is the interface through which roachtests interact with the
 // test harness.
 type Test interface {

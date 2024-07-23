@@ -25,8 +25,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const envYCSBFlags = "ROACHTEST_YCSB_FLAGS"
-
 func registerYCSB(r registry.Registry) {
 	workloads := []string{"A", "B", "C", "D", "E", "F"}
 	cpusConfigs := []int{8, 32}
@@ -89,15 +87,16 @@ func registerYCSB(r registry.Registry) {
 		m.Go(func(ctx context.Context) error {
 			var args string
 			args += " --ramp=" + ifLocal(c, "0s", "2m")
-			args += " --duration=" + ifLocal(c, "10s", "30m")
 			if opts.readCommitted {
 				args += " --isolation-level=read_committed"
 			}
 			if opts.uniformDistribution {
 				args += " --request-distribution=uniform"
 			}
-			if envFlags := os.Getenv(envYCSBFlags); envFlags != "" {
+			if envFlags := os.Getenv(test.EnvWorkloadDurationFlag); envFlags != "" {
 				args += " " + envFlags
+			} else {
+				args += " --duration=" + ifLocal(c, "10s", "30m")
 			}
 			cmd := fmt.Sprintf(
 				"./workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+
