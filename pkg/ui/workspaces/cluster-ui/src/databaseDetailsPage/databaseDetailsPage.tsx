@@ -8,11 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { Link, RouteComponentProps } from "react-router-dom";
+import { InlineAlert } from "@cockroachlabs/ui-components";
 import { Tooltip } from "antd";
 import classNames from "classnames/bind";
-import { InlineAlert } from "@cockroachlabs/ui-components";
+import React from "react";
+import { Link, RouteComponentProps } from "react-router-dom";
 
 import { Dropdown, DropdownOption } from "src/dropdown";
 import { DatabaseIcon } from "src/icon/databaseIcon";
@@ -20,23 +20,24 @@ import { StackIcon } from "src/icon/stackIcon";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { Pagination } from "src/pagination";
 import {
-  ColumnDescriptor,
-  ISortedTablePagination,
-  SortedTable,
-  SortSetting,
-} from "src/sortedtable";
-import { DATE_FORMAT, EncodeDatabaseTableUri } from "src/util/format";
-import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
-import {
   calculateActiveFilters,
   defaultFilters,
   Filter,
   Filters,
 } from "src/queryFilter";
+import {
+  ColumnDescriptor,
+  ISortedTablePagination,
+  SortedTable,
+  SortSetting,
+} from "src/sortedtable";
+import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { UIConfigState } from "src/store";
 import { TableStatistics } from "src/tableStatistics";
+import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
+import { DATE_FORMAT, EncodeDatabaseTableUri } from "src/util/format";
 
+import { Anchor } from "../anchor";
 import {
   isMaxSizeError,
   SqlApiQueryResponse,
@@ -47,13 +48,13 @@ import {
   TableSpanStatsRow,
 } from "../api";
 import { LoadingCell } from "../databases";
-import { Timestamp, Timezone } from "../timestamp";
-import { Search } from "../search";
 import { Loading } from "../loading";
+import { Search } from "../search";
 import LoadingError from "../sqlActivity/errorComponent";
-import { Anchor } from "../anchor";
+import { Timestamp, Timezone } from "../timestamp";
 import { mvccGarbage, syncHistory, unique } from "../util";
 
+import styles from "./databaseDetailsPage.module.scss";
 import {
   DbDetailsBreadcrumbs,
   DiskSizeCell,
@@ -62,7 +63,6 @@ import {
   TableNameCell,
 } from "./tableCells";
 import { ViewMode } from "./types";
-import styles from "./databaseDetailsPage.module.scss";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);

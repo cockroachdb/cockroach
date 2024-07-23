@@ -11,6 +11,7 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 
+import { TxnInsightDetailsRequest } from "src/api";
 import { AppState, uiConfigActions } from "src/store";
 import {
   selectTransactionInsightDetails,
@@ -18,13 +19,12 @@ import {
   actions,
   selectTransactionInsightDetailsMaxSizeReached,
 } from "src/store/insightDetails/transactionInsightDetails";
-import { TxnInsightDetailsRequest } from "src/api";
 
-import { TimeScale } from "../../timeScaleDropdown";
-import { actions as sqlStatsActions } from "../../store/sqlStats";
-import { selectTimeScale } from "../../store/utils/selectors";
-import { selectHasAdminRole } from "../../store/uiConfig";
 import { actions as analyticsActions } from "../../store/analytics";
+import { actions as sqlStatsActions } from "../../store/sqlStats";
+import { selectHasAdminRole } from "../../store/uiConfig";
+import { selectTimeScale } from "../../store/utils/selectors";
+import { TimeScale } from "../../timeScaleDropdown";
 
 import {
   TransactionInsightDetails,

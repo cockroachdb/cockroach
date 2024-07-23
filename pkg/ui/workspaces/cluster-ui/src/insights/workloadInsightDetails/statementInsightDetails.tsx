@@ -7,25 +7,25 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import React, { useEffect, useState } from "react";
-import Helmet from "react-helmet";
-import { RouteComponentProps } from "react-router-dom";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Row, Col, Tabs } from "antd";
 import classNames from "classnames/bind";
+import React, { useEffect, useState } from "react";
+import Helmet from "react-helmet";
+import { RouteComponentProps } from "react-router-dom";
 
+import { getExplainPlanFromGist } from "src/api/decodePlanGistApi";
+import { getStmtInsightsApi } from "src/api/stmtInsightsApi";
 import { Button } from "src/button";
+import { commonStyles } from "src/common";
+import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { getMatchParamByName, idAttr } from "src/util";
-import { getExplainPlanFromGist } from "src/api/decodePlanGistApi";
-import { getStmtInsightsApi } from "src/api/stmtInsightsApi";
 // Styles
-import { commonStyles } from "src/common";
-import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
 
-import { InsightsError } from "../insightsErrorComponent";
 import { TimeScale, toDateRange } from "../../timeScaleDropdown";
+import { InsightsError } from "../insightsErrorComponent";
 import { StmtInsightEvent } from "../types";
 
 import { StatementInsightDetailsOverviewTab } from "./statementInsightDetailsOverviewTab";

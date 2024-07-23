@@ -8,39 +8,42 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { RouteComponentProps } from "react-router-dom";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+import classNames from "classnames/bind";
 import flatMap from "lodash/flatMap";
-import merge from "lodash/merge";
 import groupBy from "lodash/groupBy";
 import isString from "lodash/isString";
-import classNames from "classnames/bind";
-import { InlineAlert } from "@cockroachlabs/ui-components";
+import merge from "lodash/merge";
 import moment from "moment-timezone";
+import React from "react";
+import { RouteComponentProps } from "react-router-dom";
 
-import { getValidErrorsList, Loading } from "src/loading";
-import { Delayed } from "src/delayed";
-import { PageConfig, PageConfigItem } from "src/pageConfig";
-import {
-  handleSortSettingFromQueryString,
-  SortSetting,
-  updateSortSettingQueryParamsOnTab,
-} from "src/sortedtable";
-import { Search } from "src/search";
-import { Pagination, ResultsPerPageLabel } from "src/pagination";
-import { Timestamp, TimestampToMoment, syncHistory, unique } from "src/util";
-import {
-  ActivateDiagnosticsModalRef,
-  ActivateStatementDiagnosticsModal,
-} from "src/statementsDiagnostics";
-import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import {
   SqlStatsSortType,
   StatementsRequest,
   createCombinedStmtsRequest,
   SqlStatsSortOptions,
 } from "src/api/statementsApi";
+import { RequestState } from "src/api/types";
 import { isSelectedColumn } from "src/columnsSelector/utils";
+import { Delayed } from "src/delayed";
+import { getValidErrorsList, Loading } from "src/loading";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
+import { Pagination, ResultsPerPageLabel } from "src/pagination";
+import { Search } from "src/search";
+import { SearchCriteria } from "src/searchCriteria/searchCriteria";
+import {
+  handleSortSettingFromQueryString,
+  SortSetting,
+  updateSortSettingQueryParamsOnTab,
+} from "src/sortedtable";
+import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
+import {
+  ActivateDiagnosticsModalRef,
+  ActivateStatementDiagnosticsModal,
+} from "src/statementsDiagnostics";
+import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
+import { Timestamp, TimestampToMoment, syncHistory, unique } from "src/util";
 import {
   STATS_LONG_LOADING_DURATION,
   getSortLabel,
@@ -48,45 +51,16 @@ import {
   getSubsetWarning,
   getReqSortColumn,
 } from "src/util/sqlActivityConstants";
-import { SearchCriteria } from "src/searchCriteria/searchCriteria";
-import { RequestState } from "src/api/types";
-import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
 
-import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
-import {
-  filterStatementsData,
-  convertRawStmtsToAggregateStatisticsMemoized,
-  getAppsFromStmtsResponseMemoized,
-} from "../sqlActivity/util";
 import {
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsReport,
   SqlStatsResponse,
   StatementDiagnosticsResponse,
 } from "../api";
-import { commonStyles } from "../common";
-import {
-  getValidOption,
-  TimeScale,
-  timeScale1hMinOptions,
-  toRoundedDateRange,
-} from "../timeScaleDropdown";
-import LoadingError from "../sqlActivity/errorComponent";
-import ClearStats from "../sqlActivity/clearStats";
-import { UIConfigState } from "../store";
-import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
-import { ISortedTablePagination } from "../sortedtable";
-import {
-  getLabel,
-  StatisticTableColumnKeys,
-} from "../statsTableUtil/statsTableUtil";
-import {
-  AggregateStatistics,
-  makeStatementsColumns,
-  populateRegionNodeForStatements,
-  StatementsSortedTable,
-} from "../statementsTable";
+import { commonStyles } from "../common";
+import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
 import {
   calculateActiveFilters,
   defaultFilters,
@@ -96,9 +70,35 @@ import {
   SelectedFilters,
   updateFiltersQueryParamsOnTab,
 } from "../queryFilter";
+import { ISortedTablePagination } from "../sortedtable";
+import ClearStats from "../sqlActivity/clearStats";
+import LoadingError from "../sqlActivity/errorComponent";
+import {
+  filterStatementsData,
+  convertRawStmtsToAggregateStatisticsMemoized,
+  getAppsFromStmtsResponseMemoized,
+} from "../sqlActivity/util";
+import {
+  AggregateStatistics,
+  makeStatementsColumns,
+  populateRegionNodeForStatements,
+  StatementsSortedTable,
+} from "../statementsTable";
+import {
+  getLabel,
+  StatisticTableColumnKeys,
+} from "../statsTableUtil/statsTableUtil";
+import { UIConfigState } from "../store";
+import {
+  getValidOption,
+  TimeScale,
+  timeScale1hMinOptions,
+  toRoundedDateRange,
+} from "../timeScaleDropdown";
+import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
-import { StatementViewType } from "./statementPageTypes";
 import { EmptyStatementsPlaceholder } from "./emptyStatementsPlaceholder";
+import { StatementViewType } from "./statementPageTypes";
 import styles from "./statementsPage.module.scss";
 
 const cx = classNames.bind(styles);

@@ -8,21 +8,28 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
-import { connect } from "react-redux";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { actions as indexStatsActions } from "src/store/indexStats/indexStats.reducer";
 
+import { BreadcrumbItem } from "../breadcrumbs";
 import { AppState, uiConfigActions } from "../store";
+import { actions as analyticsActions } from "../store/analytics";
 import {
   actions as nodesActions,
   nodeRegionsByIDSelector,
 } from "../store/nodes";
-import { TimeScale } from "../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../store/sqlStats";
-import { actions as analyticsActions } from "../store/analytics";
+import {
+  selectHasAdminRole,
+  selectHasViewActivityRedactedRole,
+  selectIsTenant,
+} from "../store/uiConfig";
+import { selectTimeScale } from "../store/utils/selectors";
+import { TimeScale } from "../timeScaleDropdown";
 import {
   databaseNameAttr,
   generateTableID,
@@ -33,13 +40,6 @@ import {
   tableNameAttr,
   TimestampToMoment,
 } from "../util";
-import { BreadcrumbItem } from "../breadcrumbs";
-import {
-  selectHasAdminRole,
-  selectHasViewActivityRedactedRole,
-  selectIsTenant,
-} from "../store/uiConfig";
-import { selectTimeScale } from "../store/utils/selectors";
 
 import {
   IndexDetailPageActions,

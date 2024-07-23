@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { format as d3Format } from "d3-format";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import { format as d3Format } from "d3-format";
 
 import { TransactionInfo } from "../transactionsTable";
 

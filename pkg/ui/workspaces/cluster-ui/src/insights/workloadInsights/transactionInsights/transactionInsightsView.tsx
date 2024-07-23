@@ -8,18 +8,22 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useCallback, useEffect, useState } from "react";
-import classNames from "classnames/bind";
-import { useHistory } from "react-router-dom";
 import { InlineAlert } from "@cockroachlabs/ui-components";
+import classNames from "classnames/bind";
+import React, { useCallback, useEffect, useState } from "react";
+import { useHistory } from "react-router-dom";
 
+import { Anchor } from "src/anchor";
+import { TxnInsightsRequest } from "src/api";
 import {
-  ISortedTablePagination,
-  SortSetting,
-} from "src/sortedtable/sortedtable";
+  filterTransactionInsights,
+  getAppsFromTransactionInsights,
+  WorkloadInsightEventFilters,
+  TxnInsightEvent,
+} from "src/insights";
 import { Loading } from "src/loading/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
-import { Search } from "src/search/search";
+import { Pagination } from "src/pagination";
 import {
   calculateActiveFilters,
   defaultFilters,
@@ -28,22 +32,18 @@ import {
   SelectedFilters,
 } from "src/queryFilter/filter";
 import { getWorkloadInsightEventFiltersFromURL } from "src/queryFilter/utils";
-import { Pagination } from "src/pagination";
-import { queryByName, syncHistory } from "src/util/query";
+import { Search } from "src/search/search";
 import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
-import { TableStatistics } from "src/tableStatistics";
 import {
-  filterTransactionInsights,
-  getAppsFromTransactionInsights,
-  WorkloadInsightEventFilters,
-  TxnInsightEvent,
-} from "src/insights";
-import { TxnInsightsRequest } from "src/api";
-import styles from "src/statementsPage/statementsPage.module.scss";
+  ISortedTablePagination,
+  SortSetting,
+} from "src/sortedtable/sortedtable";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import { useScheduleFunction } from "src/util/hooks";
+import styles from "src/statementsPage/statementsPage.module.scss";
+import { TableStatistics } from "src/tableStatistics";
 import { insights } from "src/util";
-import { Anchor } from "src/anchor";
+import { useScheduleFunction } from "src/util/hooks";
+import { queryByName, syncHistory } from "src/util/query";
 
 import { commonStyles } from "../../../common";
 import {

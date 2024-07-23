@@ -8,51 +8,51 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { ArrowLeft } from "@cockroachlabs/icons";
+import { Col, Row } from "antd";
+import classNames from "classnames/bind";
+import isNil from "lodash/isNil";
+import moment from "moment-timezone";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
-import { Col, Row } from "antd";
-import { ArrowLeft } from "@cockroachlabs/icons";
-import classNames from "classnames/bind";
-import moment from "moment-timezone";
-import isNil from "lodash/isNil";
 
-import { DurationToMomentDuration, TimestampToMoment } from "src/util/convert";
-import { Bytes, DATE_FORMAT_24_TZ, Count } from "src/util/format";
+import { commonStyles } from "src/common";
 import { SqlBox, SqlBoxSize } from "src/sql/box";
+import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
 import { NodeLink } from "src/statementsTable/statementsTableContent";
+import { UIConfigState } from "src/store";
 import {
   ICancelQueryRequest,
   ICancelSessionRequest,
 } from "src/store/terminateQuery";
-import { UIConfigState } from "src/store";
-import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
-import { commonStyles } from "src/common";
 import { createTimeScaleFromDateRange, TimeScale } from "src/timeScaleDropdown";
-import { getMatchParamByName } from "src/util/query";
 import { sessionAttr } from "src/util/constants";
+import { DurationToMomentDuration, TimestampToMoment } from "src/util/convert";
+import { Bytes, DATE_FORMAT_24_TZ, Count } from "src/util/format";
+import { getMatchParamByName } from "src/util/query";
 
-import { CircleFilled } from "../icon";
-import { Text, TextTypes } from "../text";
 import { Button } from "../button";
-import { SummaryCard, SummaryCardItem } from "../summaryCard";
-import LoadingError from "../sqlActivity/errorComponent";
+import { CircleFilled } from "../icon";
 import { Loading } from "../loading";
+import LoadingError from "../sqlActivity/errorComponent";
+import { SummaryCard, SummaryCardItem } from "../summaryCard";
+import { Text, TextTypes } from "../text";
 import { Timestamp } from "../timestamp";
 import { FixLong } from "../util";
 
 import styles from "./sessionDetails.module.scss";
+import {
+  getStatusClassname,
+  getStatusString,
+  SessionInfo,
+} from "./sessionsTable";
 import TerminateQueryModal, {
   TerminateQueryModalRef,
 } from "./terminateQueryModal";
 import TerminateSessionModal, {
   TerminateSessionModalRef,
 } from "./terminateSessionModal";
-import {
-  getStatusClassname,
-  getStatusString,
-  SessionInfo,
-} from "./sessionsTable";
 
 const cx = classNames.bind(styles);
 const statementsPageCx = classNames.bind(statementsPageStyles);

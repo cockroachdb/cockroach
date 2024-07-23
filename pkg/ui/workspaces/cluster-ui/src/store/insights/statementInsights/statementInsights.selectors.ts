@@ -10,14 +10,14 @@
 
 import { createSelector } from "reselect";
 
-import { localStorageSelector } from "src/store/utils/selectors";
-import { AppState } from "src/store/reducers";
+import { InsightEnumToLabel, StmtInsightEvent } from "src/insights";
+import { selectStatementFingerprintID, selectID } from "src/selectors/common";
 import {
   selectStatementInsightDetailsCombiner,
   selectStatementInsightDetailsCombinerByFingerprint,
 } from "src/selectors/insightsCommon.selectors";
-import { selectStatementFingerprintID, selectID } from "src/selectors/common";
-import { InsightEnumToLabel, StmtInsightEvent } from "src/insights";
+import { AppState } from "src/store/reducers";
+import { localStorageSelector } from "src/store/utils/selectors";
 
 export const selectStmtInsights = (state: AppState): StmtInsightEvent[] =>
   state.adminUI?.stmtInsights?.data?.results;

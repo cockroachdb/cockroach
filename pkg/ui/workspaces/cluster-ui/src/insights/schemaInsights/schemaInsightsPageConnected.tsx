@@ -12,6 +12,9 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 
+import { SortSetting } from "src/sortedtable";
+import { AppState, uiConfigActions } from "src/store";
+import { selectDropUnusedIndexDuration } from "src/store/clusterSettings/clusterSettings.selectors";
 import {
   actions,
   selectSchemaInsights,
@@ -22,14 +25,11 @@ import {
   selectFilters,
   selectSortSetting,
 } from "src/store/schemaInsights";
-import { AppState, uiConfigActions } from "src/store";
-import { SortSetting } from "src/sortedtable";
-import { selectDropUnusedIndexDuration } from "src/store/clusterSettings/clusterSettings.selectors";
 
-import { SchemaInsightEventFilters } from "../types";
+import { actions as analyticsActions } from "../../store/analytics";
 import { actions as localStorageActions } from "../../store/localStorage";
 import { selectHasAdminRole } from "../../store/uiConfig";
-import { actions as analyticsActions } from "../../store/analytics";
+import { SchemaInsightEventFilters } from "../types";
 
 import {
   SchemaInsightsView,

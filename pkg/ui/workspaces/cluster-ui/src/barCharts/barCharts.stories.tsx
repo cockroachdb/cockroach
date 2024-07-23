@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { storiesOf, DecoratorFn } from "@storybook/react";
 import Long from "long";
+import React from "react";
 
 import statementsPagePropsFixture from "src/statementsPage/statementsPage.fixture";
 

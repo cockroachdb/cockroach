@@ -8,16 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useContext } from "react";
 import moment from "moment-timezone";
+import React, { useContext } from "react";
 
 import { Timezone } from "src/timestamp";
 
 import { TimezoneContext } from "../contexts";
 
 import { dateFormat, timeFormat } from "./timeScaleDropdown";
-import { toRoundedDateRange } from "./utils";
 import { TimeScale } from "./timeScaleTypes";
+import { toRoundedDateRange } from "./utils";
 
 export const FormattedTimescale = (props: {
   ts: TimeScale;

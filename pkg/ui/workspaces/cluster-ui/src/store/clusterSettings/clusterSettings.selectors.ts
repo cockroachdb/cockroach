@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { AppState } from "../reducers";
 import { greaterOrEqualThanVersion, indexUnusedDuration } from "../../util";
+import { AppState } from "../reducers";
 
 export const selectAutomaticStatsCollectionEnabled = (
   state: AppState,

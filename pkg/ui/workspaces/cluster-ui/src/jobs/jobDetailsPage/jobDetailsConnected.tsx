@@ -8,19 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import long from "long";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
-import long from "long";
 
-import { AppState, uiConfigActions } from "src/store";
-import { JobRequest, JobResponse } from "src/api/jobsApi";
-import { actions as jobActions } from "src/store/jobDetails";
 import {
   ListJobProfilerExecutionDetailsRequest,
   createInitialState,
   getExecutionDetailFile,
 } from "src/api";
+import { JobRequest, JobResponse } from "src/api/jobsApi";
+import { AppState, uiConfigActions } from "src/store";
+import { actions as jobActions } from "src/store/jobDetails";
 import {
   initialState,
   actions as jobProfilerActions,

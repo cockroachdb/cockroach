@@ -8,14 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { ReactElement } from "react";
 import { Tooltip } from "@cockroachlabs/ui-components";
+import React, { ReactElement } from "react";
 
 import { InsightExecEnum } from "src/insights/types";
 import { Timezone } from "src/timestamp";
 
-import { contentModifiers } from "../../../statsTableUtil/statsTableUtil";
 import { Anchor } from "../../../anchor";
+import { contentModifiers } from "../../../statsTableUtil/statsTableUtil";
 import { contentionTime, readFromDisk, writtenToDisk } from "../../../util";
 
 export const insightsColumnLabels = {

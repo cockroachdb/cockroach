@@ -8,31 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useEffect, useState, useCallback } from "react";
-import classNames from "classnames/bind";
-import { useHistory } from "react-router-dom";
-import moment from "moment-timezone";
 import { InlineAlert } from "@cockroachlabs/ui-components";
+import classNames from "classnames/bind";
+import moment from "moment-timezone";
+import React, { useEffect, useState, useCallback } from "react";
+import { useHistory } from "react-router-dom";
 
-import {
-  ISortedTablePagination,
-  SortSetting,
-} from "src/sortedtable/sortedtable";
-import { Loading } from "src/loading/loading";
-import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
-import { Search } from "src/search/search";
-import {
-  calculateActiveFilters,
-  defaultFilters,
-  Filter,
-  getFullFiltersAsStringRecord,
-  SelectedFilters,
-} from "src/queryFilter/filter";
-import { getWorkloadInsightEventFiltersFromURL } from "src/queryFilter/utils";
-import { Pagination } from "src/pagination";
-import { queryByName, syncHistory } from "src/util/query";
-import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
-import { TableStatistics } from "src/tableStatistics";
+import { Anchor } from "src/anchor";
+import { StmtInsightsReq } from "src/api/stmtInsightsApi";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 import {
   filterStatementInsights,
@@ -41,22 +24,39 @@ import {
   makeStatementInsightsColumns,
   WorkloadInsightEventFilters,
 } from "src/insights";
-import { StmtInsightsReq } from "src/api/stmtInsightsApi";
-import styles from "src/statementsPage/statementsPage.module.scss";
+import { Loading } from "src/loading/loading";
+import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
+import { Pagination } from "src/pagination";
+import {
+  calculateActiveFilters,
+  defaultFilters,
+  Filter,
+  getFullFiltersAsStringRecord,
+  SelectedFilters,
+} from "src/queryFilter/filter";
+import { getWorkloadInsightEventFiltersFromURL } from "src/queryFilter/utils";
+import { Search } from "src/search/search";
+import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
+import {
+  ISortedTablePagination,
+  SortSetting,
+} from "src/sortedtable/sortedtable";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import { useScheduleFunction } from "src/util/hooks";
+import styles from "src/statementsPage/statementsPage.module.scss";
+import { TableStatistics } from "src/tableStatistics";
 import { insights } from "src/util";
-import { Anchor } from "src/anchor";
+import { useScheduleFunction } from "src/util/hooks";
+import { queryByName, syncHistory } from "src/util/query";
 
+import ColumnsSelector from "../../../columnsSelector/columnsSelector";
 import { commonStyles } from "../../../common";
+import { SelectOption } from "../../../multiSelectCheckbox/multiSelectCheckbox";
 import {
   defaultTimeScaleOptions,
   TimeScale,
   TimeScaleDropdown,
   timeScaleRangeToObj,
 } from "../../../timeScaleDropdown";
-import { SelectOption } from "../../../multiSelectCheckbox/multiSelectCheckbox";
-import ColumnsSelector from "../../../columnsSelector/columnsSelector";
 import { InsightsError } from "../../insightsErrorComponent";
 import { EmptyInsightsTablePlaceholder } from "../util";
 

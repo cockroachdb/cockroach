@@ -11,8 +11,8 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import moment from "moment-timezone";
 
-import { StmtInsightEvent } from "src/insights";
 import { SqlApiResponse, StmtInsightsReq } from "src/api";
+import { StmtInsightEvent } from "src/insights";
 
 import { DOMAIN_NAME } from "../../utils";
 

@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { render } from "@testing-library/react";
+import * as H from "history";
+import Long from "long";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
-import * as H from "history";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import Long from "long";
 
 import {
   RecordingMode,

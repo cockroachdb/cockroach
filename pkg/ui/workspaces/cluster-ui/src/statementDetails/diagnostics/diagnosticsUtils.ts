@@ -10,8 +10,8 @@
 
 import moment from "moment-timezone";
 
-import { TimeScale, toDateRange } from "src/timeScaleDropdown";
 import { DiagnosticStatuses } from "src/statementsDiagnostics";
+import { TimeScale, toDateRange } from "src/timeScaleDropdown";
 
 import { StatementDiagnosticsReport } from "../../api";
 

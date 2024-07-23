@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Tooltip } from "@cockroachlabs/ui-components";
 import React from "react";
 import { Link } from "react-router-dom";
-import { Tooltip } from "@cockroachlabs/ui-components";
 
 import { isSelectedColumn } from "../../columnsSelector/utils";
 import { ColumnDescriptor } from "../../sortedtable";
+import { limitText } from "../../util";
 import {
   activeTransactionColumnsFromCommon,
   ExecutionsColumn,
@@ -21,7 +22,6 @@ import {
   getLabel,
 } from "../execTableCommon";
 import { ActiveTransaction, ExecutionType } from "../types";
-import { limitText } from "../../util";
 
 export function makeActiveTransactionsColumns(
   isTenant: boolean,

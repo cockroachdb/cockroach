@@ -8,14 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { Button, Input, ConfigProvider } from "antd";
-import classNames from "classnames/bind";
-import noop from "lodash/noop";
 import {
   Cancel as CancelIcon,
   Search as SearchIcon,
 } from "@cockroachlabs/icons";
+import { Button, Input, ConfigProvider } from "antd";
+import classNames from "classnames/bind";
+import noop from "lodash/noop";
+import React from "react";
 
 import { crlTheme } from "../antdTheme";
 

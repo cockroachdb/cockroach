@@ -10,18 +10,18 @@
 
 import React from "react";
 
+import { Anchor } from "src/anchor";
 import { Option } from "src/selectWithDescription/selectWithDescription";
 import { SQLActivityRootControls } from "src/sqlActivityRootControls/sqlActivityRootControls";
-import { Anchor } from "src/anchor";
 
 import { statementsSql } from "../util/docs";
 
-import { TransactionViewType } from "./transactionsPageTypes";
-import { TransactionsPageProps } from "./transactionsPage";
 import {
   ActiveTransactionsView,
   ActiveTransactionsViewProps,
 } from "./activeTransactionsView";
+import { TransactionsPageProps } from "./transactionsPage";
+import { TransactionViewType } from "./transactionsPageTypes";
 
 import { TransactionsPage } from ".";
 

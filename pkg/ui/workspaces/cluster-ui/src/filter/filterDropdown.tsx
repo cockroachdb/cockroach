@@ -8,14 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import classnames from "classnames/bind";
+import React from "react";
 
-import { DropdownButton } from "../dropdown";
-import { OutsideEventHandler } from "../outsideEventHandler";
-import styles from "../dropdown/dropdown.module.scss";
-import { applyBtn } from "../queryFilter/filterClasses";
 import { Button } from "../button";
+import { DropdownButton } from "../dropdown";
+import styles from "../dropdown/dropdown.module.scss";
+import { OutsideEventHandler } from "../outsideEventHandler";
+import { applyBtn } from "../queryFilter/filterClasses";
 
 const cx = classnames.bind(styles);
 
