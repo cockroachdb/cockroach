@@ -230,7 +230,7 @@ func (ie *InternalExecutor) runWithEx(
 		return err
 	}
 	wg.Add(1)
-	cleanup := func() {
+	cleanup := func(ctx context.Context) {
 		closeMode := normalClose
 		if txn != nil {
 			closeMode = externalTxnClose
@@ -245,7 +245,7 @@ func (ie *InternalExecutor) runWithEx(
 			SpanOpt:  stop.ChildSpan,
 		},
 		func(ctx context.Context) {
-			defer cleanup()
+			defer cleanup(ctx)
 			// TODO(yuzefovich): benchmark whether we should be growing the
 			// stack size unconditionally.
 			if growStackSize {
@@ -265,7 +265,7 @@ func (ie *InternalExecutor) runWithEx(
 	); err != nil {
 		// The goroutine wasn't started, so we need to perform the cleanup
 		// ourselves.
-		cleanup()
+		cleanup(ctx)
 		return err
 	}
 	return nil
