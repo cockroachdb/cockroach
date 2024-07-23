@@ -8,18 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Action, Dispatch } from "redux";
-import * as protobuf from "protobufjs/minimal";
-import isNil from "lodash/isNil";
 import clone from "lodash/clone";
 import each from "lodash/each";
 import filter from "lodash/filter";
-import map from "lodash/map";
 import has from "lodash/has";
+import isNil from "lodash/isNil";
+import map from "lodash/map";
+import * as protobuf from "protobufjs/minimal";
+import { Action, Dispatch } from "redux";
 
-import { getUIData, setUIData } from "src/util/api";
 import { PayloadAction } from "src/interfaces/action";
 import * as protos from "src/js/protos";
+import { getUIData, setUIData } from "src/util/api";
 
 import { AdminUIState } from "./state";
 

@@ -7,11 +7,11 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import React from "react";
 import { shallow } from "enzyme";
+import React from "react";
 
-import { ScheduleTable, ScheduleTableProps } from "./scheduleTable";
 import { allSchedulesFixture } from "./schedulesPage.fixture";
+import { ScheduleTable, ScheduleTableProps } from "./scheduleTable";
 
 describe("<ScheduleTable>", () => {
   it("should reset page to 1 after schedule list prop changes", () => {

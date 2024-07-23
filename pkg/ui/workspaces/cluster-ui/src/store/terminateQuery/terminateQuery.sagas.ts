@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { PayloadAction } from "@reduxjs/toolkit";
 import { all, call, put, takeEvery } from "redux-saga/effects";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { terminateQuery, terminateSession } from "src/api/terminateQueryApi";
 import { actions as sessionsActions } from "src/store/sessions";

@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import classNames from "classnames/bind";
-import { Button, Tooltip } from "antd";
 import { CaretLeft, CaretRight } from "@cockroachlabs/icons";
+import { Button, Tooltip } from "antd";
+import classNames from "classnames/bind";
+import React from "react";
 
-import { ArrowDirection } from "./timeScaleTypes";
 import styles from "./timeFrameControls.module.scss";
+import { ArrowDirection } from "./timeScaleTypes";
 
 const cx = classNames.bind(styles);
 

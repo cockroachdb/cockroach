@@ -9,11 +9,18 @@
 // licenses/APL.txt.
 
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import moment from "moment-timezone";
 import Long from "long";
+import moment from "moment-timezone";
 
 import { TimestampToMoment } from "../util";
 
+import {
+  getActiveExecutionsFromSessions,
+  getAppsFromActiveExecutions,
+  filterActiveStatements,
+  filterActiveTransactions,
+  INTERNAL_APP_NAME_PREFIX,
+} from "./activeStatementUtils";
 import {
   ActiveStatementPhase,
   SessionsResponse,
@@ -24,13 +31,6 @@ import {
   ActiveTransactionFilters,
   ExecutionStatus,
 } from "./types";
-import {
-  getActiveExecutionsFromSessions,
-  getAppsFromActiveExecutions,
-  filterActiveStatements,
-  filterActiveTransactions,
-  INTERNAL_APP_NAME_PREFIX,
-} from "./activeStatementUtils";
 
 type ActiveQuery = protos.cockroach.server.serverpb.ActiveQuery;
 const Timestamp = protos.google.protobuf.Timestamp;

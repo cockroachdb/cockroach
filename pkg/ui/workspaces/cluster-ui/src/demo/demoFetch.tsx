@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import React from "react";
 
 import { fetchData } from "src/api";
 

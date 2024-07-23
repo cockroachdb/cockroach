@@ -11,9 +11,9 @@
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import classNames from "classnames/bind";
 
-import { stdDevLong, Duration, Bytes, longToInt } from "src/util";
 import { barChartFactory } from "src/barCharts/barChartFactory";
 import { bar, approximify } from "src/barCharts/utils";
+import { stdDevLong, Duration, Bytes, longToInt } from "src/util";
 
 import styles from "../barCharts/barCharts.module.scss";
 

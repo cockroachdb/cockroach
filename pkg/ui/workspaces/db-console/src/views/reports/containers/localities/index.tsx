@@ -8,14 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Loading } from "@cockroachlabs/cluster-ui";
 import isNil from "lodash/isNil";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { Loading } from "@cockroachlabs/cluster-ui";
 
 import { refreshLocations, refreshNodes } from "src/redux/apiReducers";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import {
   LocalityTier,
   LocalityTree,
@@ -31,7 +32,6 @@ import { AdminUIState } from "src/redux/state";
 import { getNodeLocalityTiers } from "src/util/localities";
 import { findMostSpecificLocation, hasLocation } from "src/util/locations";
 import "./localities.styl";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
 import { BackToAdvanceDebug } from "../util";
 

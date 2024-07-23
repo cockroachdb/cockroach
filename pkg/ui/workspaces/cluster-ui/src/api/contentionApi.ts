@@ -33,12 +33,12 @@ import {
   sqlResultsAreEmpty,
 } from "./sqlApi";
 import { TxnInsightDetailsRequest } from "./txnInsightDetailsApi";
-import { makeInsightsSqlRequest } from "./txnInsightsUtils";
 import {
   FingerprintStmtsResponseColumns,
   TxnStmtFingerprintsResponseColumns,
   TxnWithStmtFingerprints,
 } from "./txnInsightsApi";
+import { makeInsightsSqlRequest } from "./txnInsightsUtils";
 
 export type ContentionFilters = {
   waitingTxnID?: string;

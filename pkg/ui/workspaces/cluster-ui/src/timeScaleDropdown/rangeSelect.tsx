@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useState, useRef } from "react";
 import { Button, Dropdown } from "antd";
-import moment, { Moment } from "moment-timezone";
 import classNames from "classnames/bind";
+import moment, { Moment } from "moment-timezone";
+import React, { useState, useRef } from "react";
 
 import { DateRangeMenu } from "src/dateRangeMenu";
 import { CaretDown } from "src/icon/caretDown";

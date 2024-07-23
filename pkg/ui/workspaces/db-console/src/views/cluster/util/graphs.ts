@@ -8,11 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import isEmpty from "lodash/isEmpty";
-import each from "lodash/each";
-import without from "lodash/without";
 import { AxisDomain } from "@cockroachlabs/cluster-ui";
+import each from "lodash/each";
+import isEmpty from "lodash/isEmpty";
+import without from "lodash/without";
+import React from "react";
 import uPlot from "uplot";
 
 import * as protos from "src/js/protos";

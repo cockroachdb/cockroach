@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createSelector } from "reselect";
 import {
   defaultFilters,
   WorkloadInsightEventFilters,
@@ -24,6 +23,7 @@ import {
   api,
   util,
 } from "@cockroachlabs/cluster-ui";
+import { createSelector } from "reselect";
 
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";

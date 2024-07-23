@@ -8,9 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { useDispatch, useSelector } from "react-redux";
-import React, { useRef, useEffect, useState, useContext } from "react";
-import { Helmet } from "react-helmet";
 import {
   Loading,
   Text,
@@ -19,9 +16,12 @@ import {
   TimezoneContext,
 } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames/bind";
+import React, { useRef, useEffect, useState, useContext } from "react";
+import { Helmet } from "react-helmet";
+import { useDispatch, useSelector } from "react-redux";
 
-import { refreshHotRanges } from "src/redux/apiReducers";
 import { cockroach } from "src/js/protos";
+import { refreshHotRanges } from "src/redux/apiReducers";
 import {
   hotRangesSelector,
   isLoadingSelector,

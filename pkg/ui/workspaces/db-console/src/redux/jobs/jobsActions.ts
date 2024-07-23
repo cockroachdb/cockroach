@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Action } from "redux";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import { Action } from "redux";
 
 import { PayloadAction } from "src/interfaces/action";
 

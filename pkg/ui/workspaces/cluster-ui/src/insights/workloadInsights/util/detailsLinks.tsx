@@ -11,10 +11,10 @@
 import React from "react";
 import { Link } from "react-router-dom";
 
-import { StmtInsightEvent } from "../../types";
-import { HexStringToInt64String } from "../../../util";
 import { StatementLinkTarget } from "../../../statementsTable";
 import { TransactionLinkTarget } from "../../../transactionsTable";
+import { HexStringToInt64String } from "../../../util";
+import { StmtInsightEvent } from "../../types";
 
 export function TransactionDetailsLink(
   transactionFingerprintID: string,

@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { Modal as AntModal } from "antd";
+import React from "react";
 
 import "antd/lib/modal/style";
 import { Button, Text, TextTypes } from "src/components";

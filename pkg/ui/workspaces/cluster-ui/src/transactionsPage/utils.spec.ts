@@ -8,19 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { assert } from "chai";
 import Long from "long";
-import * as protos from "@cockroachlabs/crdb-protobuf-client";
 
 import { Filters } from "../queryFilter";
 
+import { data, nodeRegions } from "./transactions.fixture";
 import {
   filterTransactions,
   generateRegion,
   getStatementsByFingerprintId,
   statementFingerprintIdsToText,
 } from "./utils";
-import { data, nodeRegions } from "./transactions.fixture";
 
 type Statement =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;

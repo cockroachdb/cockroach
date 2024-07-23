@@ -7,20 +7,20 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import moment from "moment-timezone";
-import React, { useState } from "react";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Nodes, Caution, Plus, Minus } from "@cockroachlabs/icons";
 import classNames from "classnames/bind";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { Link } from "react-router-dom";
 import Long from "long";
+import moment from "moment-timezone";
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
 
 import { Span, Snapshot } from "src/api/tracezApi";
+import { Dropdown } from "src/dropdown";
 import { EmptyTable } from "src/empty";
+import { CircleFilled } from "src/icon";
 import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
 import { TimestampToMoment } from "src/util";
-import { CircleFilled } from "src/icon";
-import { Dropdown } from "src/dropdown";
 
 import styles from "../snapshot.module.scss";
 

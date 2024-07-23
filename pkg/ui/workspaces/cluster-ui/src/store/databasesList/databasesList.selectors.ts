@@ -10,11 +10,11 @@
 
 import { createSelector } from "reselect";
 
-import { adminUISelector, localStorageSelector } from "../utils/selectors";
-import { LocalStorageKeys } from "../localStorage";
-import { SortSetting } from "../../sortedtable";
-import { AppState } from "../reducers";
 import { Filters } from "../../queryFilter";
+import { SortSetting } from "../../sortedtable";
+import { LocalStorageKeys } from "../localStorage";
+import { AppState } from "../reducers";
+import { adminUISelector, localStorageSelector } from "../utils/selectors";
 
 export const databasesListSelector = createSelector(
   adminUISelector,

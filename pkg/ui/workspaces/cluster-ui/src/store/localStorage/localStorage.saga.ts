@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { PayloadAction } from "@reduxjs/toolkit";
 import { AnyAction } from "redux";
 import { all, call, takeEvery, takeLatest, put } from "redux-saga/effects";
-import { PayloadAction } from "@reduxjs/toolkit";
 
-import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { actions as stmtInsightActions } from "src/store/insights/statementInsights";
 import { actions as txnInsightActions } from "src/store/insights/transactionInsights";
+import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { actions as txnStatsActions } from "src/store/transactionStats";
 import { TimeScale } from "src/timeScaleDropdown";
 

@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import classnames from "classnames/bind";
+import React from "react";
 
 import heroBannerLp from "assets/heroBannerLp.png";
 import { Anchor, Button, Text, TextTypes } from "src/components";

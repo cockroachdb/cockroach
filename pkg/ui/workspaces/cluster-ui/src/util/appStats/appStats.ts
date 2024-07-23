@@ -11,9 +11,9 @@
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import Long from "long";
 
+import { uniqueLong, unique } from "src/util/arrays";
 import { TimestampToNumber, DurationToNumber } from "src/util/convert";
 import { FixLong } from "src/util/fixLong";
-import { uniqueLong, unique } from "src/util/arrays";
 
 export type StatementStatistics = cockroach.sql.IStatementStatistics;
 export type ExecStats = cockroach.sql.IExecStats;

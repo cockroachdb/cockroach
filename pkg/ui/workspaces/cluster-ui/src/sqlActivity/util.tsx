@@ -10,16 +10,16 @@
 
 import { createSelector } from "@reduxjs/toolkit";
 
-import { containAny } from "src/util/arrays";
+import { SqlStatsResponse } from "src/api/statementsApi";
+import { Filters, getTimeValueInSeconds } from "src/queryFilter";
+import { AggregateStatistics } from "src/statementsTable";
 import {
   CollectedStatementStatistics,
   flattenStatementStats,
 } from "src/util/appStats/appStats";
-import { FixFingerprintHexValue } from "src/util/format";
+import { containAny } from "src/util/arrays";
 import { INTERNAL_APP_NAME_PREFIX, unset } from "src/util/constants";
-import { SqlStatsResponse } from "src/api/statementsApi";
-import { Filters, getTimeValueInSeconds } from "src/queryFilter";
-import { AggregateStatistics } from "src/statementsTable";
+import { FixFingerprintHexValue } from "src/util/format";
 
 // filterBySearchQuery returns true if a search query matches the statement.
 export function filterBySearchQuery(

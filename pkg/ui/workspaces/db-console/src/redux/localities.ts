@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import groupBy from "lodash/groupBy";
 import isEmpty from "lodash/isEmpty";
 import mapValues from "lodash/mapValues";
-import groupBy from "lodash/groupBy";
 import partition from "lodash/partition";
 import { createSelector } from "reselect";
 

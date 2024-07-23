@@ -7,8 +7,8 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import React from "react";
 import { Dropdown } from "@cockroachlabs/cluster-ui";
+import React from "react";
 
 import { getCookieValue, setCookie } from "src/redux/cookies";
 import { isSystemTenant } from "src/redux/tenants";

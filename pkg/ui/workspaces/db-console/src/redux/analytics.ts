@@ -10,14 +10,14 @@
 
 import Analytics from "analytics-node";
 import { Location } from "history";
-import { Store } from "redux";
 import each from "lodash/each";
 import isEmpty from "lodash/isEmpty";
+import { Store } from "redux";
 
 import * as protos from "src/js/protos";
+import { history } from "src/redux/history";
 import { versionsSelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
-import { history } from "src/redux/history";
 import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
 
 type ClusterResponse = protos.cockroach.server.serverpb.IClusterResponse;

@@ -13,27 +13,39 @@
  * to display based on the current redux state.
  */
 
+import filter from "lodash/filter";
+import has from "lodash/has";
+import isEmpty from "lodash/isEmpty";
+import isNil from "lodash/isNil";
+import without from "lodash/without";
 import moment from "moment-timezone";
-import { createSelector } from "reselect";
 import { Store, Dispatch, Action, AnyAction } from "redux";
 import { ThunkAction } from "redux-thunk";
-import has from "lodash/has";
-import without from "lodash/without";
-import isEmpty from "lodash/isEmpty";
-import filter from "lodash/filter";
-import isNil from "lodash/isNil";
+import { createSelector } from "reselect";
 
-import { longToInt } from "src/util/fixLong";
-import * as docsURL from "src/util/docs";
 import {
   singleVersionSelector,
   numNodesByVersionsTagSelector,
   numNodesByVersionsSelector,
 } from "src/redux/nodes";
+import * as docsURL from "src/util/docs";
+import { longToInt } from "src/util/fixLong";
 
 import { getDataFromServer } from "../util/dataFromServer";
 
+import {
+  refreshCluster,
+  refreshNodes,
+  refreshVersion,
+  refreshHealth,
+  refreshSettings,
+} from "./apiReducers";
+import {
+  selectClusterSettings,
+  selectClusterSettingVersion,
+} from "./clusterSettings";
 import { LocalSetting } from "./localsettings";
+import { AdminUIState, AppDispatch } from "./state";
 import {
   VERSION_DISMISSED_KEY,
   INSTRUCTIONS_BOX_COLLAPSED_KEY,
@@ -43,18 +55,6 @@ import {
   UIDataState,
   UIDataStatus,
 } from "./uiData";
-import {
-  refreshCluster,
-  refreshNodes,
-  refreshVersion,
-  refreshHealth,
-  refreshSettings,
-} from "./apiReducers";
-import { AdminUIState, AppDispatch } from "./state";
-import {
-  selectClusterSettings,
-  selectClusterSettingVersion,
-} from "./clusterSettings";
 
 export enum AlertLevel {
   NOTIFICATION,

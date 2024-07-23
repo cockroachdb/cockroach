@@ -8,16 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import classNames from "classnames/bind";
 import { Tooltip } from "@cockroachlabs/ui-components";
+import classNames from "classnames/bind";
+import React from "react";
 
-import { Badge } from "src/badge";
 import { Anchor } from "src/anchor";
+import { Badge } from "src/badge";
 import { statementDiagnostics } from "src/util";
 
-import { DiagnosticStatuses } from "./diagnosticStatuses";
 import styles from "./diagnosticStatusBadge.module.scss";
+import { DiagnosticStatuses } from "./diagnosticStatuses";
 
 interface OwnProps {
   status: DiagnosticStatuses;

@@ -8,10 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { Tooltip } from "@cockroachlabs/ui-components";
+import React from "react";
 
 import { Anchor } from "src/anchor";
+import { Timezone } from "src/timestamp";
 import {
   contentionTime,
   planningExecutionTime,
@@ -22,7 +23,6 @@ import {
   statementsSql,
   writtenToDisk,
 } from "src/util";
-import { Timezone } from "src/timestamp";
 
 // Single place for column names. Used in table columns and in columns selector.
 export const statisticsColumnLabels = {

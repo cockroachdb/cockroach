@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { createRef } from "react";
 import { render, waitFor } from "@testing-library/react";
+import React, { createRef } from "react";
 
 import { OutsideEventHandler } from "./index";
 

@@ -8,15 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 
-import { actions as sessionsActions } from "src/store/sessions";
 import {
   selectActiveTransaction,
   selectContentionDetailsForTransaction,
 } from "src/selectors/activeExecutions.selectors";
+import { actions as sessionsActions } from "src/store/sessions";
 
 import { AppState } from "../store";
 

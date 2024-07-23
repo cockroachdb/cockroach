@@ -15,6 +15,7 @@ import {
 } from "../insights";
 import { HexStringToInt64String, indexUnusedDuration } from "../util";
 
+import { QuoteIdentifier } from "./safesql";
 import {
   SqlExecutionRequest,
   SqlTxnResult,
@@ -25,7 +26,6 @@ import {
   SqlApiResponse,
   formatApiResult,
 } from "./sqlApi";
-import { QuoteIdentifier } from "./safesql";
 
 // Export for db-console import from clusterUiApi.
 export type { InsightRecommendation } from "../insights";

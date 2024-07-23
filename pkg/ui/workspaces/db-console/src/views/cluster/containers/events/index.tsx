@@ -8,13 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import map from "lodash/map";
-import take from "lodash/take";
-import moment from "moment-timezone";
-import React, { useContext } from "react";
-import { Helmet } from "react-helmet";
-import { Link, RouteComponentProps, withRouter } from "react-router-dom";
-import { connect } from "react-redux";
 import {
   Loading,
   SortSetting,
@@ -25,6 +18,13 @@ import {
   WithTimezone,
 } from "@cockroachlabs/cluster-ui";
 import { InlineAlert } from "@cockroachlabs/ui-components";
+import map from "lodash/map";
+import take from "lodash/take";
+import moment from "moment-timezone";
+import React, { useContext } from "react";
+import { Helmet } from "react-helmet";
+import { connect } from "react-redux";
+import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 
 import { refreshEvents } from "src/redux/apiReducers";
 import {

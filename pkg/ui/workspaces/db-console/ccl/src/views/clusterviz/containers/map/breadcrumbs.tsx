@@ -6,15 +6,15 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import React from "react";
-import { Link } from "react-router-dom";
 import { util } from "@cockroachlabs/cluster-ui";
 import clone from "lodash/clone";
+import React from "react";
+import { Link } from "react-router-dom";
 
-import { generateLocalityRoute, getLocalityLabel } from "src/util/localities";
 import { LocalityTier } from "src/redux/localities";
-import { trustIcon } from "src/util/trust";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
+import { generateLocalityRoute, getLocalityLabel } from "src/util/localities";
+import { trustIcon } from "src/util/trust";
 
 import mapPinIcon from "!!raw-loader!assets/mapPin.svg";
 

@@ -6,12 +6,12 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
+import { Loading } from "@cockroachlabs/cluster-ui";
 import isNil from "lodash/isNil";
 import React from "react";
 import { connect } from "react-redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 import { createSelector } from "reselect";
-import { Loading } from "@cockroachlabs/cluster-ui";
 
 import { cockroach } from "src/js/protos";
 import {

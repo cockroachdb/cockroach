@@ -9,16 +9,16 @@
 // licenses/APL.txt.
 
 /* eslint-disable prettier/prettier */
-import moment from "moment-timezone";
-import { createMemoryHistory } from "history";
-import Long from "long";
-import noop from "lodash/noop";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import { createMemoryHistory } from "history";
+import noop from "lodash/noop";
+import Long from "long";
+import moment from "moment-timezone";
 
-import { RequestError } from "src/util";
 import { DEFAULT_STATS_REQ_OPTIONS } from "src/api/statementsApi";
 import { mockStmtStats } from "src/api/testUtils";
+import { RequestError } from "src/util";
 
 
 import { StatementDiagnosticsReport } from "../api";

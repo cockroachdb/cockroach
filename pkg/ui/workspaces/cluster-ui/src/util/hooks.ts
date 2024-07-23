@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { useEffect, useCallback, useRef } from "react";
 import moment from "moment/moment";
+import { useEffect, useCallback, useRef } from "react";
 
 export const usePrevious = <T>(value: T): T | undefined => {
   const ref = useRef<T>();

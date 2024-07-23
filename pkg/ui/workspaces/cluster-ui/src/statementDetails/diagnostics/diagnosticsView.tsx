@@ -8,36 +8,36 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Button, Icon, InlineAlert } from "@cockroachlabs/ui-components";
+import classnames from "classnames/bind";
+import classNames from "classnames/bind";
+import moment from "moment-timezone";
 import React from "react";
 import { Link } from "react-router-dom";
-import classnames from "classnames/bind";
-import { Button, Icon, InlineAlert } from "@cockroachlabs/ui-components";
-import moment from "moment-timezone";
-import classNames from "classnames/bind";
 
+import emptyListResultsImg from "src/assets/emptyState/empty-list-results.svg";
 import { Button as CancelButton } from "src/button";
-import { SummaryCard } from "src/summaryCard";
+import { EmptyTable } from "src/empty";
+import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
 import {
   ActivateDiagnosticsModalRef,
   DiagnosticStatusBadge,
 } from "src/statementsDiagnostics";
-import emptyListResultsImg from "src/assets/emptyState/empty-list-results.svg";
-import { EmptyTable } from "src/empty";
+import { SummaryCard } from "src/summaryCard";
 import {
   TimeScale,
   timeScale1hMinOptions,
   TimeScaleDropdown,
 } from "src/timeScaleDropdown";
-import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
 import timeScaleStyles from "src/timeScaleDropdown/timeScale.module.scss";
 
-import { DATE_FORMAT_24_TZ } from "../../util";
-import { Timestamp } from "../../timestamp";
-import { FormattedTimescale } from "../../timeScaleDropdown/formattedTimeScale";
 import { StatementDiagnosticsReport, withBasePath } from "../../api";
+import { FormattedTimescale } from "../../timeScaleDropdown/formattedTimeScale";
+import { Timestamp } from "../../timestamp";
+import { DATE_FORMAT_24_TZ } from "../../util";
 
-import styles from "./diagnosticsView.module.scss";
 import { filterByTimeScale, getDiagnosticsStatus } from "./diagnosticsUtils";
+import styles from "./diagnosticsView.module.scss";
 
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 

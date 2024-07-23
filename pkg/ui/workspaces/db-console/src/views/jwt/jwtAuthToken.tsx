@@ -8,11 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Spinner } from "@cockroachlabs/ui-components";
 import React, { useEffect, useState } from "react";
 import Helmet from "react-helmet";
 import { useParams } from "react-router-dom";
 import Select, { Option } from "react-select";
-import { Spinner } from "@cockroachlabs/ui-components";
 
 import ErrorCircle from "assets/error-circle.svg";
 import {
