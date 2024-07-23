@@ -65,6 +65,13 @@ func convertToVecTree(
 	)
 	fuseOpt := flowinfra.FuseNormally
 	if flowCtx.Local && !execinfra.HasParallelProcessors(flow) {
+		// TODO(yuzefovich): this check doesn't exactly match what we have on
+		// the main code path where we use !LocalState.MustUseLeafTxn() in the
+		// conditional. Concretely, it means that if we choose to use the
+		// Streamer at the execution time, we will use FuseNormally, yet here
+		// we'd pick FuseAggressively. The issue is minor though since we do
+		// capture the correct vectorized plan in the stmt bundle, so only
+		// explicit EXPLAIN (VEC) is affected.
 		fuseOpt = flowinfra.FuseAggressively
 	}
 	opChains, _, err = creator.setupFlow(ctx, flow.Processors, fuseOpt)

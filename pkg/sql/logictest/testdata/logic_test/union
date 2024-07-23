@@ -678,3 +678,25 @@ SELECT a, b AS b1, b AS b2 FROM abc INTERSECT SELECT a, c, b FROM abc ORDER by a
 1  1  1
 1  2  2
 2  2  2
+
+# Regression test for #127043 where eager cancellation of the parallel unordered
+# synchronizer was causing spurious errors on queries with LIMIT.
+statement ok
+CREATE TABLE t127043_1 (k1 INT, v1 INT, INDEX (k1));
+INSERT INTO t127043_1 VALUES (1, 1);
+CREATE TABLE t127043_2 (k2 INT, v2 INT, INDEX (k2));
+INSERT INTO t127043_2 VALUES (1, 1);
+CREATE TABLE t127043_3 (k3 INT, v3 INT, INDEX (k3));
+INSERT INTO t127043_3 VALUES (1, 1);
+CREATE VIEW v127043 (k, v) AS
+  SELECT
+    k1 AS k, v1 AS v FROM t127043_1@t127043_1_k1_idx
+  UNION SELECT
+    k2 AS k, v2 AS v FROM t127043_2@t127043_2_k2_idx
+  UNION SELECT
+    k3 AS k, v3 AS v FROM t127043_3@t127043_3_k3_idx;
+
+query II
+SELECT k, v FROM v127043 WHERE k = 1 LIMIT 1;
+----
+1  1
