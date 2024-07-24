@@ -2202,6 +2202,21 @@ func handleTTLStorageParamChange(
 			&descpb.ModifyRowLevelTTL{RowLevelTTL: after},
 			direction,
 		)
+		// Also, check if the table has inbound foreign keys (i.e. this table is being
+		// referenced  by other tables). In such a case, flag a notice to the user
+		// advising them to update the ttl_delete_batch_size to avoid generating
+		// TTL deletion jobs with a high cardinality of rows being deleted.
+		// See https://github.com/cockroachdb/cockroach/issues/125103 for more details.
+		if len(tableDesc.InboundFKs) > 0 {
+			params.p.BufferClientNotice(
+				params.ctx,
+				pgnotice.Newf(`
+Columns within table %s are referenced as foreign keys.
+This will make TTL deletion jobs more expensive as dependent rows
+in other tables will need to be updated as well. To improve performance
+of the TTL job, consider setting the value of ttl_delete_batch_size to
+a reasonable number.`, tableDesc.GetName()))
+		}
 	}
 
 	// Validate the type and volatility of ttl_expiration_expression.

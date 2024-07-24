@@ -1325,3 +1325,72 @@ WHERE label = 'row-level-ttl: $label_suffix'
 ACTIVE  @daily  root
 
 subtest end
+
+# creates inbound foreign key dependency on table with TTL enabled
+# and confirms that a notice regarding implications on TTL job deletions
+# is raised
+subtest set_fk_on_table_with_ttl
+
+statement ok
+CREATE TABLE tbl_with_ttl (
+  id INT PRIMARY KEY,
+  expire_at TIMESTAMPTZ,
+  FAMILY (id, expire_at)
+) WITH (
+  ttl_expiration_expression = 'expire_at'
+)
+
+# create a table with a dependency on tbl_with_ttl and confirm notice is raised
+
+query T noticetrace
+CREATE TABLE tbl_with_dep(
+  id1 INT PRIMARY KEY,
+  id INT REFERENCES tbl_with_ttl(id)
+)
+----
+NOTICE: Table tbl_with_ttl has row level TTL enabled. This will make TTL deletion jobs more expensive as dependent rows
+will need to be updated as well. To improve performance of the TTL job, consider setting
+the value of ttl_delete_batch_size to a reasonable number.
+
+# alter a table with dependency on tbl_with_ttl and confirm notice is raised
+
+statement ok
+CREATE TABLE tbl_to_alter (
+    t_id SERIAL PRIMARY KEY,
+    f_id INT NOT NULL,
+    name STRING NOT NULL
+);
+
+query T noticetrace
+ALTER TABLE tbl_to_alter ADD CONSTRAINT fk_tbl_with_ttl FOREIGN KEY(f_id) REFERENCES tbl_with_ttl(id)
+----
+NOTICE: Table tbl_with_ttl has row level TTL enabled. This will make TTL deletion jobs more expensive as dependent rows
+will need to be updated as well. To improve performance of the TTL job, consider setting
+the value of ttl_delete_batch_size to a reasonable number.
+
+# alter a table with inbound foreign keys to enable row level TTL and confirm
+# notice is raised
+
+statement ok
+CREATE TABLE tbl_to_add_ttl(
+  id INT PRIMARY KEY,
+  expire_at TIMESTAMPTZ NOT NULL DEFAULT now() + '30 days'
+)
+
+statement ok
+CREATE TABLE tbl_with_fk(
+  id1 INT PRIMARY KEY,
+  name STRING,
+  id INT REFERENCES tbl_to_add_ttl(id)
+)
+
+query T noticetrace
+ALTER TABLE tbl_to_add_ttl SET (ttl_expiration_expression = 'expire_at')
+----
+NOTICE: Columns within table tbl_to_add_ttl are referenced as foreign keys.
+This will make TTL deletion jobs more expensive as dependent rows
+in other tables will need to be updated as well. To improve performance
+of the TTL job, consider setting the value of ttl_delete_batch_size to
+a reasonable number.
+
+subtest end
