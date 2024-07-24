@@ -29,7 +29,7 @@ func (node *AlterBackup) Format(ctx *FmtCtx) {
 		ctx.WriteString(" IN ")
 	}
 
-	ctx.FormatNode(node.Backup)
+	ctx.FormatURI(node.Backup)
 	ctx.FormatNode(&node.Cmds)
 }
 
@@ -64,10 +64,10 @@ type AlterBackupKMS struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterBackupKMS) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ADD NEW_KMS=")
-	ctx.FormatNode(&node.KMSInfo.NewKMSURI)
+	ctx.FormatURIs(node.KMSInfo.NewKMSURI)
 
 	ctx.WriteString(" WITH OLD_KMS=")
-	ctx.FormatNode(&node.KMSInfo.OldKMSURI)
+	ctx.FormatURIs(node.KMSInfo.OldKMSURI)
 }
 
 // BackupKMS represents possible options used when altering a backup KMS

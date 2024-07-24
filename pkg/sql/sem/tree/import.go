@@ -35,7 +35,7 @@ func (node *Import) Format(ctx *FmtCtx) {
 		}
 		ctx.WriteString(node.FileFormat)
 		ctx.WriteByte(' ')
-		ctx.FormatNode(&node.Files)
+		ctx.FormatURIs(node.Files)
 	} else {
 		if node.Into {
 			ctx.WriteString("INTO ")
@@ -52,9 +52,14 @@ func (node *Import) Format(ctx *FmtCtx) {
 			ctx.FormatNode(node.Table)
 		}
 		ctx.WriteString(node.FileFormat)
-		ctx.WriteString(" DATA (")
-		ctx.FormatNode(&node.Files)
-		ctx.WriteString(")")
+		ctx.WriteString(" DATA ")
+		if len(node.Files) == 1 {
+			ctx.WriteString("(")
+		}
+		ctx.FormatURIs(node.Files)
+		if len(node.Files) == 1 {
+			ctx.WriteString(")")
+		}
 	}
 
 	if node.Options != nil {

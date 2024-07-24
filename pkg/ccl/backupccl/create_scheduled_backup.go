@@ -547,7 +547,7 @@ func emitSchedule(
 		tree.NewDString(status),
 		nextRun,
 		tree.NewDString(sj.ScheduleExpr()),
-		tree.NewDString(tree.AsString(redactedBackupNode)),
+		tree.NewDString(tree.AsStringWithFlags(redactedBackupNode, tree.FmtShowFullURIs)),
 	}
 	return nil
 }

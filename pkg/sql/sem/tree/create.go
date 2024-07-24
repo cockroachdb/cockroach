@@ -2159,7 +2159,7 @@ func (node *CreateExternalConnection) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE EXTERNAL CONNECTION")
 	ctx.FormatNode(&node.ConnectionLabelSpec)
 	ctx.WriteString(" AS ")
-	ctx.FormatNode(node.As)
+	ctx.FormatURI(node.As)
 }
 
 // CreateTenant represents a CREATE VIRTUAL CLUSTER statement.

@@ -305,7 +305,7 @@ func (e *externalConnectionFeedFactory) Feed(
 	}
 	createStmt.SinkURI = tree.NewStrVal(`external://` + randomExternalConnectionName)
 
-	return e.TestFeedFactory.Feed(createStmt.String(), args...)
+	return e.TestFeedFactory.Feed(tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...)
 }
 
 func setURI(
@@ -884,7 +884,7 @@ func (f *tableFeedFactory) Feed(
 		return nil, err
 	}
 
-	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := f.startFeedJob(c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -1124,7 +1124,7 @@ func (f *cloudFeedFactory) Feed(
 		dir:            feedDir,
 		isBare:         createStmt.Select != nil && !explicitEnvelope,
 	}
-	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := f.startFeedJob(c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -1852,7 +1852,7 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 		registry:       registry,
 	}
 
-	if err := k.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := k.startFeedJob(c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...); err != nil {
 		return nil, errors.CombineErrors(err, c.Close())
 	}
 	return c, nil
@@ -2052,7 +2052,7 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 		isBare:         createStmt.Select != nil && !explicitEnvelope,
 		mockSink:       sinkDest,
 	}
-	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := f.startFeedJob(c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...); err != nil {
 		sinkDest.Close()
 		return nil, err
 	}
@@ -2441,7 +2441,7 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		deprecatedClient: deprecatedClient,
 	}
 
-	if err := p.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := p.startFeedJob(c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...); err != nil {
 		_ = mockServer.Close()
 		return nil, err
 	}
