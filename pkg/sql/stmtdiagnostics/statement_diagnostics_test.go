@@ -46,7 +46,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderShort(t)
-	skip.UnderDeadlock(t, "the test is too slow")
+	skip.UnderDuress(t, "the test is too slow")
 
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
