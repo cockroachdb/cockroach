@@ -168,8 +168,9 @@ func runDrainAndDecommission(
 		db := c.Conn(ctx, t.L(), pinnedNode)
 		defer db.Close()
 
-		run(fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE USING num_replicas=%d`, defaultReplicationFactor))
-		run(fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, defaultReplicationFactor))
+		run(fmt.Sprintf(`ALTER RANGE default    CONFIGURE ZONE USING num_replicas=%d`, defaultReplicationFactor))
+		run(fmt.Sprintf(`ALTER DATABASE system  CONFIGURE ZONE USING num_replicas=%d`, defaultReplicationFactor))
+		run(fmt.Sprintf(`ALTER RANGE timeseries CONFIGURE ZONE USING num_replicas=%d`, defaultReplicationFactor))
 
 		// Speed up the decommissioning.
 		run(`SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
@@ -1100,8 +1101,9 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 		defer db.Close()
 
 		// Set the replication factor to 5.
-		run(db, fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
-		run(db, fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
+		run(db, fmt.Sprintf(`ALTER RANGE default    CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
+		run(db, fmt.Sprintf(`ALTER DATABASE system  CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
+		run(db, fmt.Sprintf(`ALTER RANGE timeseries CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
 
 		// Increase the speed of decommissioning.
 		run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)

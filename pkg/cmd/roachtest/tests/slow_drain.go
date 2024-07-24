@@ -71,8 +71,9 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 		defer db.Close()
 
 		// Set the replication factor.
-		run(db, fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
-		run(db, fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
+		run(db, fmt.Sprintf(`ALTER RANGE default    CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
+		run(db, fmt.Sprintf(`ALTER DATABASE system  CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
+		run(db, fmt.Sprintf(`ALTER RANGE timeseries CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
 
 		// Wait for initial up-replication.
 		err := WaitForReplication(ctx, t, t.L(), db, replicationFactor, atLeastReplicationFactor)
