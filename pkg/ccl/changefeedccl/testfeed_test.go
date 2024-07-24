@@ -73,6 +73,7 @@ import (
 )
 
 type sinklessFeedFactory struct {
+	t *testing.T
 	s serverutils.ApplicationLayerInterface
 	// postgres url used for creating sinkless changefeeds. This may be the same as
 	// the rootURL.
@@ -85,9 +86,19 @@ type sinklessFeedFactory struct {
 // makeSinklessFeedFactory returns a TestFeedFactory implementation using the
 // `experimental-sql` uri.
 func makeSinklessFeedFactory(
-	s serverutils.ApplicationLayerInterface, sink url.URL, rootConn url.URL, sinkForUser sinkForUser,
+	t *testing.T,
+	s serverutils.ApplicationLayerInterface,
+	sink url.URL,
+	rootConn url.URL,
+	sinkForUser sinkForUser,
 ) cdctest.TestFeedFactory {
-	return &sinklessFeedFactory{s: s, sink: sink, rootURL: rootConn, sinkForUser: sinkForUser}
+	return &sinklessFeedFactory{
+		t:           t,
+		s:           s,
+		sink:        sink,
+		rootURL:     rootConn,
+		sinkForUser: sinkForUser,
+	}
 }
 
 // AsUser executes fn as the specified user.
@@ -138,6 +149,7 @@ func (f *sinklessFeedFactory) Feed(create string, args ...interface{}) (cdctest.
 		return nil, err
 	}
 	s := &sinklessFeed{
+		t:              f.t,
 		seenTrackerMap: make(map[string]struct{}),
 		create:         create,
 		args:           args,
@@ -183,6 +195,7 @@ func (t seenTrackerMap) reset() {
 // sinklessFeed is an implementation of the `TestFeed` interface for a
 // "sinkless" (results returned over pgwire) feed.
 type sinklessFeed struct {
+	t *testing.T
 	seenTrackerMap
 	create  string
 	args    []interface{}
@@ -208,6 +221,7 @@ func (c *sinklessFeed) Partitions() []string { return []string{`sinkless`} }
 // Next implements the TestFeed interface.
 func (c *sinklessFeed) Next() (*cdctest.TestFeedMessage, error) {
 	defer time.AfterFunc(timeout(), func() {
+		c.t.Logf("sinkless feed closing connection due to timeout (%s): %s", timeout(), c.create)
 		_ = c.conn.Close(context.Background())
 	}).Stop()
 
@@ -247,22 +261,23 @@ func (c *sinklessFeed) start() (err error) {
 		return err
 	}
 
-	create := c.create
 	if !c.latestResolved.IsEmpty() {
 		// NB: The TODO in Next means c.latestResolved is currently never set for
 		// non-json feeds.
-		if strings.Contains(create, `WITH`) {
-			create += fmt.Sprintf(`, cursor='%s'`, c.latestResolved.AsOfSystemTime())
+		if strings.Contains(c.create, `WITH`) {
+			c.create += fmt.Sprintf(`, cursor='%s'`, c.latestResolved.AsOfSystemTime())
 		} else {
-			create += fmt.Sprintf(` WITH cursor='%s'`, c.latestResolved.AsOfSystemTime())
+			c.create += fmt.Sprintf(` WITH cursor='%s'`, c.latestResolved.AsOfSystemTime())
 		}
 	}
-	c.rows, err = c.conn.Query(context.Background(), create, c.args...)
+	c.t.Logf("sinkless feed creating changefeed: %s", c.create)
+	c.rows, err = c.conn.Query(context.Background(), c.create, c.args...)
 	return err
 }
 
 // Close implements the TestFeed interface.
 func (c *sinklessFeed) Close() error {
+	c.t.Logf("closing sinkless feed")
 	c.rows = nil
 	return c.conn.Close(context.Background())
 }
