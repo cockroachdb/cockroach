@@ -181,7 +181,9 @@ func backupJobDescription(
 	}
 
 	ann := p.ExtendedEvalContext().Annotations
-	return tree.AsStringWithFQNames(b, ann), nil
+	return tree.AsStringWithFlags(
+		b, tree.FmtAlwaysQualifyTableNames|tree.FmtShowFullURIs, tree.FmtAnnotations(ann),
+	), nil
 }
 
 // annotatedBackupStatement is a tree.Backup, optionally
