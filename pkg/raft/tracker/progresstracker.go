@@ -29,19 +29,16 @@ import (
 // configuration. In particular, it tracks the match index for each peer, which
 // in-turn allows for reasoning about the committed index.
 type ProgressTracker struct {
-	Config *quorum.Config
+	config *quorum.Config
 
 	Progress ProgressMap
-
-	Votes map[pb.PeerID]bool
 }
 
 // MakeProgressTracker initializes a ProgressTracker.
 func MakeProgressTracker(config *quorum.Config, progressMap ProgressMap) ProgressTracker {
 	p := ProgressTracker{
-		Config:   config,
+		config:   config,
 		Progress: progressMap,
-		Votes:    map[pb.PeerID]bool{},
 	}
 	return p
 }
@@ -62,7 +59,7 @@ func (l matchAckIndexer) AckedIndex(id pb.PeerID) (quorum.Index, bool) {
 // Committed returns the largest log index known to be committed based on what
 // the voting members of the group have acknowledged.
 func (p *ProgressTracker) Committed() uint64 {
-	return uint64(p.Config.Voters.CommittedIndex(matchAckIndexer(p.Progress)))
+	return uint64(p.config.Voters.CommittedIndex(matchAckIndexer(p.Progress)))
 }
 
 // Visit invokes the supplied closure for all tracked progresses in stable order.
@@ -99,12 +96,12 @@ func (p *ProgressTracker) QuorumActive() bool {
 		votes[id] = pr.RecentActive
 	})
 
-	return p.Config.Voters.VoteResult(votes) == quorum.VoteWon
+	return p.config.Voters.VoteResult(votes) == quorum.VoteWon
 }
 
 // VoterNodes returns a sorted slice of voters.
 func (p *ProgressTracker) VoterNodes() []pb.PeerID {
-	m := p.Config.Voters.IDs()
+	m := p.config.Voters.IDs()
 	nodes := make([]pb.PeerID, 0, len(m))
 	for id := range m {
 		nodes = append(nodes, id)
@@ -115,52 +112,13 @@ func (p *ProgressTracker) VoterNodes() []pb.PeerID {
 
 // LearnerNodes returns a sorted slice of learners.
 func (p *ProgressTracker) LearnerNodes() []pb.PeerID {
-	if len(p.Config.Learners) == 0 {
+	if len(p.config.Learners) == 0 {
 		return nil
 	}
-	nodes := make([]pb.PeerID, 0, len(p.Config.Learners))
-	for id := range p.Config.Learners {
+	nodes := make([]pb.PeerID, 0, len(p.config.Learners))
+	for id := range p.config.Learners {
 		nodes = append(nodes, id)
 	}
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i] < nodes[j] })
 	return nodes
-}
-
-// ResetVotes prepares for a new round of vote counting via recordVote.
-func (p *ProgressTracker) ResetVotes() {
-	p.Votes = map[pb.PeerID]bool{}
-}
-
-// RecordVote records that the node with the given id voted for this Raft
-// instance if v == true (and declined it otherwise).
-func (p *ProgressTracker) RecordVote(id pb.PeerID, v bool) {
-	_, ok := p.Votes[id]
-	if !ok {
-		p.Votes[id] = v
-	}
-}
-
-// TallyVotes returns the number of granted and rejected Votes, and whether the
-// election outcome is known.
-func (p *ProgressTracker) TallyVotes() (granted int, rejected int, _ quorum.VoteResult) {
-	// Make sure to populate granted/rejected correctly even if the Votes slice
-	// contains members no longer part of the configuration. This doesn't really
-	// matter in the way the numbers are used (they're informational), but might
-	// as well get it right.
-	for id, pr := range p.Progress {
-		if pr.IsLearner {
-			continue
-		}
-		v, voted := p.Votes[id]
-		if !voted {
-			continue
-		}
-		if v {
-			granted++
-		} else {
-			rejected++
-		}
-	}
-	result := p.Config.Voters.VoteResult(p.Votes)
-	return granted, rejected, result
 }
