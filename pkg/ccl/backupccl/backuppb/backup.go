@@ -161,7 +161,7 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(marshaller *jsonpb.Marshaler
 		backup.Options.EncryptionPassphrase = tree.NewDString("redacted")
 	}
 
-	m.BackupStatement = backup.String()
+	m.BackupStatement = tree.AsStringWithFlags(backup, tree.FmtShowFullURIs)
 	return json.Marshal(m)
 }
 

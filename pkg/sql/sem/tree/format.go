@@ -34,7 +34,7 @@ func (f FmtFlags) HasFlags(subset FmtFlags) bool {
 	return f&subset == subset
 }
 
-// HasAnyFlags tests whether any of the given flags are all set.
+// HasAnyFlags tests whether any of the given flags are set.
 func (f FmtFlags) HasAnyFlags(subset FmtFlags) bool {
 	return f&subset != 0
 }
@@ -172,6 +172,10 @@ const (
 	// FmtTagDollarQuotes instructs tags to be kept intact in tagged dollar
 	// quotes. It also applies tags when formatting UDFs.
 	FmtTagDollarQuotes
+
+	// FmtShowFullURIs instructs the pretty-printer to not sanitize URIs. If not
+	// set, URIs are sanitized to prevent leaking secrets.
+	FmtShowFullURIs
 )
 
 // PasswordSubstitution is the string that replaces
@@ -394,9 +398,16 @@ func (ctx *FmtCtx) WithFlags(flags FmtFlags, fn func()) {
 	fn()
 }
 
-// HasFlags returns true iff the given flags are set in the formatter context.
+// HasFlags returns true iff all of the given flags are set in the formatter
+// context.
 func (ctx *FmtCtx) HasFlags(f FmtFlags) bool {
 	return ctx.flags.HasFlags(f)
+}
+
+// HasAnyFlags returns true iff any of the given flags are set in the formatter
+// context.
+func (ctx *FmtCtx) HasAnyFlags(f FmtFlags) bool {
+	return ctx.flags.HasAnyFlags(f)
 }
 
 // Printf calls fmt.Fprintf on the linked bytes.Buffer. It is provided
@@ -428,6 +439,59 @@ func (ctx *FmtCtx) FormatName(s string) {
 // FormatNameP formats a string reference as a name.
 func (ctx *FmtCtx) FormatNameP(s *string) {
 	ctx.FormatNode((*Name)(s))
+}
+
+// FormatURIs formats a list of string literals or placeholders containing URIs.
+func (ctx *FmtCtx) FormatURIs(uris []Expr) {
+	if len(uris) > 1 {
+		ctx.WriteString("(")
+	}
+	for i, uri := range uris {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.FormatURI(uri)
+	}
+	if len(uris) > 1 {
+		ctx.WriteString(")")
+	}
+}
+
+// FormatURI formats a string literal or placeholder containing a URI. If the
+// node is a string literal, we redact the contents to avoid leaking secrets.
+func (ctx *FmtCtx) FormatURI(uri Expr) {
+	switch n := uri.(type) {
+	case *StrVal, *DString:
+		if ctx.HasAnyFlags(
+			FmtShowPasswords | FmtShowFullURIs | FmtHideConstants,
+		) {
+			ctx.FormatNode(n)
+			return
+		}
+		var raw, elided string
+		if str, ok := n.(*StrVal); ok {
+			raw = str.RawString()
+		} else {
+			raw = string(MustBeDString(uri))
+		}
+		if raw == "" || raw == "_" {
+			// Some commands treat empty URIs as special. And if we've re-parsed a URI
+			// formatted with FmtHideConstants, we should not try to interpret it as a
+			// URL but should leave it as-is.
+			ctx.FormatNode(n)
+			return
+		}
+		// TODO(michae2): Call SanitizeExternalStorageURI for fine-grained
+		// sanitization.
+		elided = strings.Trim(PasswordSubstitution, "'")
+		ctx.FormatNode(NewStrVal(elided))
+	case *Placeholder:
+		ctx.FormatNode(n)
+	default:
+		// We don't want to fail to sanitize other literals, so disallow other types
+		// of expressions (which should already be disallowed by the parser anyway).
+		panic(errors.AssertionFailedf("expected *StrVal, *DString, or *Placeholder, found %T", n))
+	}
 }
 
 // FormatNode recurses into a node for pretty-printing.

@@ -113,7 +113,7 @@ type ShowBackup struct {
 func (node *ShowBackup) Format(ctx *FmtCtx) {
 	if node.InCollection != nil && node.Path == nil {
 		ctx.WriteString("SHOW BACKUPS IN ")
-		ctx.FormatNode(&node.InCollection)
+		ctx.FormatURIs(node.InCollection)
 		return
 	}
 	ctx.WriteString("SHOW BACKUP ")
@@ -133,10 +133,12 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		ctx.WriteString("FROM ")
 	}
 
-	ctx.FormatNode(node.Path)
 	if node.InCollection != nil {
+		ctx.FormatNode(node.Path)
 		ctx.WriteString(" IN ")
-		ctx.FormatNode(&node.InCollection)
+		ctx.FormatURIs(node.InCollection)
+	} else {
+		ctx.FormatURI(node.Path)
 	}
 	if !node.Options.IsDefault() {
 		ctx.WriteString(" WITH OPTIONS (")
@@ -205,7 +207,7 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 	if o.IncrementalStorage != nil {
 		maybeAddSep()
 		ctx.WriteString("incremental_location = ")
-		ctx.FormatNode(&o.IncrementalStorage)
+		ctx.FormatURIs(o.IncrementalStorage)
 	}
 
 	if o.Privileges {
@@ -221,7 +223,7 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 	if o.DecryptionKMSURI != nil {
 		maybeAddSep()
 		ctx.WriteString("kms = ")
-		ctx.FormatNode(&o.DecryptionKMSURI)
+		ctx.FormatURIs(o.DecryptionKMSURI)
 	}
 	if o.SkipSize {
 		maybeAddSep()
