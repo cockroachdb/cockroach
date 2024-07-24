@@ -1325,3 +1325,105 @@ WHERE label = 'row-level-ttl: $label_suffix'
 ACTIVE  @daily  root
 
 subtest end
+
+# Subtest set_fk_on_table_with_ttl creates inbound foreign key dependency
+# on table with TTL enabled and confirms that a notice regarding implications
+# on performance of TTL job deletions is raised as appropriate.
+# Weak isolation levels emit extra notices, so skip them for the purpose
+# of this subtest.
+subtest set_fk_on_table_with_ttl
+statement ok
+CREATE TABLE tbl_with_ttl (
+  id INT PRIMARY KEY,
+  expire_at TIMESTAMPTZ,
+  FAMILY (id, expire_at)
+) WITH (
+  ttl_expiration_expression = 'expire_at'
+)
+
+skipif config weak-iso-level-configs
+query T noticetrace
+CREATE TABLE tbl_with_dep(
+  id1 INT PRIMARY KEY,
+  id INT REFERENCES tbl_with_ttl(id) ON DELETE CASCADE
+)
+----
+NOTICE: Table tbl_with_ttl has row level TTL enabled. This will make TTL deletion jobs more expensive as dependent rows will need to be updated as well. To improve performance of the TTL job, consider reducing the value of ttl_delete_batch_size.
+
+# Create a table with a dependency on tbl_with_ttl but with the default action of no update on delete
+# and confirm no notice is raised.
+skipif config weak-iso-level-configs
+query T noticetrace
+CREATE TABLE tbl_with_dep_2(
+  id1 INT PRIMARY KEY,
+  id INT REFERENCES tbl_with_ttl(id)
+)
+----
+
+# Alter a table with dependency on tbl_with_ttl and confirm notice is raised.
+statement ok
+CREATE TABLE tbl_to_alter (
+    t_id SERIAL PRIMARY KEY,
+    f_id INT NOT NULL,
+    name STRING NOT NULL
+);
+
+skipif config weak-iso-level-configs
+query T noticetrace
+ALTER TABLE tbl_to_alter ADD CONSTRAINT fk_tbl_with_ttl FOREIGN KEY(f_id) REFERENCES tbl_with_ttl(id) ON DELETE CASCADE
+----
+NOTICE: Table tbl_with_ttl has row level TTL enabled. This will make TTL deletion jobs more expensive as dependent rows will need to be updated as well. To improve performance of the TTL job, consider reducing the value of ttl_delete_batch_size.
+
+# Alter a table with dependency on tbl_with_ttl with the default action of
+# no updates on deletes and confirm no notice is raised.
+statement ok
+CREATE TABLE tbl_to_alter_2 (
+    t_id SERIAL PRIMARY KEY,
+    f_id INT NOT NULL,
+    name STRING NOT NULL
+);
+
+skipif config weak-iso-level-configs
+query T noticetrace
+ALTER TABLE tbl_to_alter_2 ADD CONSTRAINT fk_tbl_with_ttl FOREIGN KEY(f_id) REFERENCES tbl_with_ttl(id)
+----
+
+# Alter a table with inbound foreign keys to enable row level TTL and confirm
+# notice is raised.
+statement ok
+CREATE TABLE tbl_to_add_ttl(
+  id INT PRIMARY KEY,
+  expire_at TIMESTAMPTZ NOT NULL DEFAULT now() + '30 days'
+)
+
+statement ok
+CREATE TABLE tbl_with_fk_default_action(
+  id1 INT PRIMARY KEY,
+  name STRING,
+  id INT REFERENCES tbl_to_add_ttl(id)
+)
+
+# Confirm no notice is raised.
+skipif config weak-iso-level-configs
+query T noticetrace
+ALTER TABLE tbl_to_add_ttl SET (ttl_expiration_expression = 'expire_at')
+----
+
+statement ok
+ALTER TABLE tbl_to_add_ttl RESET (ttl);
+
+statement ok
+CREATE TABLE tbl_with_fk(
+  id1 INT PRIMARY KEY,
+  name STRING,
+  id INT REFERENCES tbl_to_add_ttl(id) ON DELETE CASCADE
+)
+
+# Confirm notice is raised.
+skipif config weak-iso-level-configs
+query T noticetrace
+ALTER TABLE tbl_to_add_ttl SET (ttl_expiration_expression = 'expire_at')
+----
+NOTICE: Columns within table tbl_to_add_ttl are referenced as foreign keys. This will make TTL deletion jobs more expensive as dependent rows in other tables will need to be updated as well. To improve performance of the TTL job, consider reducing the value of ttl_delete_batch_size.
+
+subtest end
