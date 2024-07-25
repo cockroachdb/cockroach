@@ -829,6 +829,19 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromTable(
 		}
 	}
 
+	// If the descriptor has any inaccessible columns, we need to scan those.
+	var syntheticDescs []catalog.Descriptor
+	if len(desc.AccessibleColumns()) != len(desc.PublicColumns()) {
+		descBuilder := desc.NewBuilder()
+		fullyAccessibleDesc := descBuilder.BuildExistingMutable().(*tabledesc.Mutable)
+		for colIdx := range fullyAccessibleDesc.Columns {
+			if col := &fullyAccessibleDesc.Columns[colIdx]; col.Inaccessible {
+				col.Inaccessible = false
+			}
+		}
+		syntheticDescs = []catalog.Descriptor{descBuilder.BuildImmutable().(catalog.TableDescriptor)}
+	}
+
 	var query strings.Builder
 	colSelectors := tabledesc.ColumnsSelectors(desc.AccessibleColumns())
 	columns := tree.AsStringWithFlags(&colSelectors, tree.FmtSerializable)
@@ -976,7 +989,12 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromTable(
 			User:     username.NodeUserName(),
 			Database: dbDesc.GetName(),
 		}
-		rows, err := txn.QueryRowEx(ctx, "count-value-usage", txn.KV(), override, query.String())
+		var rows tree.Datums
+		err = txn.WithSyntheticDescriptors(syntheticDescs, func() error {
+			var err error
+			rows, err = txn.QueryRowEx(ctx, "count-value-usage", txn.KV(), override, query.String())
+			return err
+		})
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
