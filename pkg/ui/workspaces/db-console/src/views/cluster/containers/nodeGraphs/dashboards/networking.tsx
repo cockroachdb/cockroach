@@ -17,11 +17,10 @@ import { Axis, Metric } from "src/views/shared/components/metricQuery";
 import {
   GraphDashboardProps,
   nodeDisplayName,
-  storeIDsForNode,
 } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodeDisplayNameByID, storeIDsByNodeID, tenantSource } =
+  const { nodeIDs, nodeDisplayNameByID, tenantSource } =
     props;
 
   return [
@@ -31,7 +30,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.recv.bytes"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={nid}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -45,7 +44,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.recv.packets"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={nid}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -62,7 +61,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.recv.err"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={nid}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -79,7 +78,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.recv.drop"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={nid}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -93,7 +92,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.send.bytes"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={nid}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -107,7 +106,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.send.packets"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={nid}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -124,7 +123,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.send.err"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={nid}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -138,7 +137,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.send.drop"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={nid}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -157,7 +156,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.round-trip-latency-p50"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={nid}
             tenantSource={tenantSource}
             downsampleMax
           />
@@ -176,7 +175,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.round-trip-latency-p99"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={nid}
             tenantSource={tenantSource}
             downsampleMax
           />
@@ -196,7 +195,7 @@ export default function (props: GraphDashboardProps) {
             key={nid}
             name="cr.node.rpc.connection.unhealthy"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={nid}
             tenantSource={tenantSource}
           />
         ))}
@@ -214,7 +213,7 @@ export default function (props: GraphDashboardProps) {
             key={nid}
             name="cr.node.distsender.rpc.proxy.sent"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={nid}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -233,7 +232,7 @@ export default function (props: GraphDashboardProps) {
             key={nid}
             name="cr.node.distsender.rpc.proxy.err"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={nid}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -252,7 +251,7 @@ export default function (props: GraphDashboardProps) {
             key={nid}
             name="cr.node.distsender.rpc.proxy.forward.sent"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={nid}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -271,7 +270,7 @@ export default function (props: GraphDashboardProps) {
             key={nid}
             name="cr.node.distsender.rpc.proxy.forward.err"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={nid}
             tenantSource={tenantSource}
             nonNegativeRate
           />
