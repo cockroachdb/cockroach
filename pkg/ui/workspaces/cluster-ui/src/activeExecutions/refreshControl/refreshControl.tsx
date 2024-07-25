@@ -9,9 +9,9 @@
 // licenses/APL.txt.
 
 import { Switch } from "antd";
-import React from "react";
 import classNames from "classnames/bind";
 import { Moment } from "moment-timezone";
+import React from "react";
 
 import RefreshIcon from "src/icon/refreshIcon";
 import { Timestamp } from "src/timestamp";

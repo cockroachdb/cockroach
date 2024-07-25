@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import classNames from "classnames/bind";
 import { Tooltip } from "antd";
+import classNames from "classnames/bind";
+import React from "react";
 
 import spinner from "src/assets/spinner.gif";
 

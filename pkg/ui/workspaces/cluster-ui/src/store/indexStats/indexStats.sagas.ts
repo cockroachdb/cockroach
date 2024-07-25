@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { PayloadAction } from "@reduxjs/toolkit";
 import {
   all,
@@ -17,19 +18,17 @@ import {
   takeLatest,
   takeEvery,
 } from "redux-saga/effects";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { ErrorWithKey } from "src/api/statementsApi";
 import { CACHE_INVALIDATION_PERIOD } from "src/store/utils";
 
-import { generateTableID } from "../../util";
 import {
   getIndexStats,
   resetIndexStats,
   TableIndexStatsRequest,
   TableIndexStatsResponseWithKey,
 } from "../../api/indexDetailsApi";
-import { maybeError } from "../../util";
+import { generateTableID, maybeError } from "../../util";
 
 import {
   actions as indexStatsActions,

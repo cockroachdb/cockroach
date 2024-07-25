@@ -11,18 +11,18 @@
 import React from "react";
 import { Link } from "react-router-dom";
 
+import { Loading } from "src/loading";
 import { ColumnDescriptor, SortedTable } from "src/sortedtable";
 import {
   DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT,
   Duration,
   limitText,
 } from "src/util";
-import { Loading } from "src/loading";
 
+import { Timestamp, Timezone } from "../../timestamp";
+import { InsightsError } from "../insightsErrorComponent";
 import { StmtInsightEvent } from "../types";
 import { InsightCell } from "../workloadInsights/util/insightCell";
-import { InsightsError } from "../insightsErrorComponent";
-import { Timestamp, Timezone } from "../../timestamp";
 
 const stmtColumns: ColumnDescriptor<StmtInsightEvent>[] = [
   {

@@ -9,11 +9,11 @@
 import React from "react";
 
 import { Tooltip, Anchor } from "src/components";
+import { TooltipProps } from "src/components/tooltip/tooltip";
 import {
   howAreCapacityMetricsCalculatedOverview,
   clusterStore,
 } from "src/util/docs";
-import { TooltipProps } from "src/components/tooltip/tooltip";
 
 export const NodeArcPercentageTooltip: React.FC<
   TooltipProps & {

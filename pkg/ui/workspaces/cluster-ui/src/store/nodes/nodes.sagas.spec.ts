@@ -9,20 +9,20 @@
 // licenses/APL.txt.
 
 import { expectSaga } from "redux-saga-test-plan";
-import { throwError } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
+import { throwError } from "redux-saga-test-plan/providers";
 
 import { getNodes } from "src/api/nodesApi";
 
 import { accumulateMetrics } from "../../util";
 
+import { getNodesResponse } from "./nodes.fixtures";
+import { actions, reducer, NodesState } from "./nodes.reducer";
 import {
   receivedNodesSaga,
   requestNodesSaga,
   refreshNodesSaga,
 } from "./nodes.sagas";
-import { actions, reducer, NodesState } from "./nodes.reducer";
-import { getNodesResponse } from "./nodes.fixtures";
 
 describe("Nodes sagas", () => {
   const nodesResponse = getNodesResponse();

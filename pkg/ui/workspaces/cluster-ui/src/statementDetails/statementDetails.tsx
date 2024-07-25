@@ -8,21 +8,30 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { ReactNode, useContext } from "react";
-import { Col, Row, Tabs } from "antd";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { InlineAlert, Text } from "@cockroachlabs/ui-components";
 import { ArrowLeft } from "@cockroachlabs/icons";
+import { InlineAlert, Text } from "@cockroachlabs/ui-components";
+import { Col, Row, Tabs } from "antd";
+import classNames from "classnames/bind";
 import isNil from "lodash/isNil";
 import Long from "long";
+import moment from "moment-timezone";
+import React, { ReactNode, useContext } from "react";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps } from "react-router-dom";
-import classNames from "classnames/bind";
 import { AlignedData, Options } from "uplot";
-import moment from "moment-timezone";
 
 import { Anchor } from "src/anchor";
+import { StatementDetailsRequest } from "src/api/statementsApi";
+import { Button } from "src/button";
+import { commonStyles } from "src/common";
+import { getValidErrorsList, Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
+import { SqlBox, SqlBoxSize } from "src/sql";
+import { SummaryCard, SummaryCardItem } from "src/summaryCard";
+import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
+import timeScaleStyles from "src/timeScaleDropdown/timeScale.module.scss";
+import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
 import {
   appAttr,
   appNamesAttr,
@@ -39,36 +48,17 @@ import {
   Count,
   longToInt,
 } from "src/util";
-import { getValidErrorsList, Loading } from "src/loading";
-import { Button } from "src/button";
-import { SqlBox, SqlBoxSize } from "src/sql";
-import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
-import timeScaleStyles from "src/timeScaleDropdown/timeScale.module.scss";
-import { commonStyles } from "src/common";
-import { StatementDetailsRequest } from "src/api/statementsApi";
-import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
 
-import { UIConfigState } from "../store";
-import {
-  getValidOption,
-  TimeScale,
-  timeScale1hMinOptions,
-  TimeScaleDropdown,
-  toRoundedDateRange,
-} from "../timeScaleDropdown";
-import LoadingError from "../sqlActivity/errorComponent";
-import {
-  ActivateDiagnosticsModalRef,
-  ActivateStatementDiagnosticsModal,
-} from "../statementsDiagnostics";
-import { Delayed } from "../delayed";
 import {
   InsertStmtDiagnosticRequest,
   InsightRecommendation,
   StatementDiagnosticsReport,
   StmtInsightsReq,
 } from "../api";
+import { CockroachCloudContext } from "../contexts";
+import { Delayed } from "../delayed";
+import { AxisUnits } from "../graphs";
+import { BarGraphTimeSeries, XScale } from "../graphs/bargraph";
 import {
   getStmtInsightRecommendations,
   InsightType,
@@ -78,14 +68,27 @@ import {
   InsightsSortedTable,
   makeInsightsColumns,
 } from "../insightsTable/insightsTable";
-import { CockroachCloudContext } from "../contexts";
+import insightTableStyles from "../insightsTable/insightsTable.module.scss";
+import LoadingError from "../sqlActivity/errorComponent";
+import {
+  ActivateDiagnosticsModalRef,
+  ActivateStatementDiagnosticsModal,
+} from "../statementsDiagnostics";
+import { UIConfigState } from "../store";
+import {
+  getValidOption,
+  TimeScale,
+  timeScale1hMinOptions,
+  TimeScaleDropdown,
+  toRoundedDateRange,
+} from "../timeScaleDropdown";
 import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
 import { Timestamp } from "../timestamp";
-import insightTableStyles from "../insightsTable/insightsTable.module.scss";
-import { AxisUnits } from "../graphs";
-import { BarGraphTimeSeries, XScale } from "../graphs/bargraph";
 
 import { filterByTimeScale } from "./diagnostics/diagnosticsUtils";
+import { DiagnosticsView } from "./diagnostics/diagnosticsView";
+import { PlanDetails } from "./planDetails";
+import styles from "./statementDetails.module.scss";
 import {
   generateContentionTimeseries,
   generateExecCountTimeseries,
@@ -95,9 +98,6 @@ import {
   generateCPUTimeseries,
   generateClientWaitTimeseries,
 } from "./timeseriesUtils";
-import styles from "./statementDetails.module.scss";
-import { DiagnosticsView } from "./diagnostics/diagnosticsView";
-import { PlanDetails } from "./planDetails";
 
 type StatementDetailsResponse =
   cockroach.server.serverpb.StatementDetailsResponse;

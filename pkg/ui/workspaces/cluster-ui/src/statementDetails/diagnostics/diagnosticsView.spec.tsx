@@ -8,15 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import { Button } from "@cockroachlabs/ui-components";
 import { assert } from "chai";
 import { mount, ReactWrapper } from "enzyme";
-import { MemoryRouter } from "react-router-dom";
-import { Button } from "@cockroachlabs/ui-components";
 import moment from "moment-timezone";
+import React from "react";
+import { MemoryRouter } from "react-router-dom";
 
-import { TestStoreProvider } from "src/test-utils";
 import { SortedTable } from "src/sortedtable";
+import { TestStoreProvider } from "src/test-utils";
 import { TimeScale } from "src/timeScaleDropdown";
 
 import { StatementDiagnosticsReport } from "../../api";

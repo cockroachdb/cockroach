@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { Drawer, Button, Divider } from "antd";
-import { Link } from "react-router-dom";
 import classNames from "classnames/bind";
+import React from "react";
+import { Link } from "react-router-dom";
 
 import styles from "./drawer.module.styl";
 

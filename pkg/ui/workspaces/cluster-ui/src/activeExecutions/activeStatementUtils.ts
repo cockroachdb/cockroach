@@ -10,9 +10,9 @@
 
 import moment from "moment-timezone";
 
+import { ClusterLocksResponse, ClusterLockState } from "src/api";
 import { byteArrayToUuid } from "src/sessions";
 import { TimestampToMoment, unset } from "src/util";
-import { ClusterLocksResponse, ClusterLockState } from "src/api";
 import { DurationToMomentDuration } from "src/util/convert";
 
 import {

@@ -8,14 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import * as React from "react";
-import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
-import { RouteComponentProps, withRouter } from "react-router-dom";
-import { Moment } from "moment-timezone";
-import flow from "lodash/flow";
-import orderBy from "lodash/orderBy";
-import map from "lodash/map";
 import {
   ColumnsConfig,
   Table,
@@ -23,14 +15,22 @@ import {
   util,
   Timestamp,
 } from "@cockroachlabs/cluster-ui";
+import flow from "lodash/flow";
+import map from "lodash/map";
+import orderBy from "lodash/orderBy";
+import { Moment } from "moment-timezone";
+import * as React from "react";
+import { Helmet } from "react-helmet";
+import { connect } from "react-redux";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 
-import { AdminUIState } from "src/redux/state";
-import { nodesSummarySelector } from "src/redux/nodes";
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { cockroach } from "src/js/protos";
-import { LocalSetting } from "src/redux/localsettings";
 import { Text } from "src/components";
+import { cockroach } from "src/js/protos";
+import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
+import { LocalSetting } from "src/redux/localsettings";
+import { nodesSummarySelector } from "src/redux/nodes";
+import { AdminUIState } from "src/redux/state";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 
 import "./decommissionedNodeHistory.styl";

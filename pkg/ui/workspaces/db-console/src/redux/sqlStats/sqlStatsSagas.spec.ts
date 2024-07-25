@@ -12,16 +12,16 @@ import { expectSaga } from "redux-saga-test-plan";
 import { call } from "redux-saga-test-plan/matchers";
 import { throwError } from "redux-saga-test-plan/providers";
 
-import { resetSQLStats } from "src/util/api";
+import { cockroach } from "src/js/protos";
 import {
   apiReducersReducer,
   invalidateStatements,
   invalidateAllStatementDetails,
 } from "src/redux/apiReducers";
-import { cockroach } from "src/js/protos";
+import { resetSQLStats } from "src/util/api";
 
-import { resetSQLStatsSaga } from "./sqlStatsSagas";
 import { resetSQLStatsFailedAction } from "./sqlStatsActions";
+import { resetSQLStatsSaga } from "./sqlStatsSagas";
 
 describe("SQL Stats sagas", () => {
   describe("resetSQLStatsSaga", () => {

@@ -8,35 +8,37 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { util, Loading } from "@cockroachlabs/cluster-ui";
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { deviation as d3Deviation, mean as d3Mean } from "d3";
 import capitalize from "lodash/capitalize";
-import flow from "lodash/flow";
-import isUndefined from "lodash/isUndefined";
-import isEmpty from "lodash/isEmpty";
-import sortBy from "lodash/sortBy";
-import max from "lodash/max";
-import union from "lodash/union";
-import values from "lodash/values";
 import filter from "lodash/filter";
 import flatMap from "lodash/flatMap";
+import flow from "lodash/flow";
+import isEmpty from "lodash/isEmpty";
+import isUndefined from "lodash/isUndefined";
 import map from "lodash/map";
+import max from "lodash/max";
+import sortBy from "lodash/sortBy";
+import union from "lodash/union";
+import values from "lodash/values";
 import moment from "moment-timezone";
+import { common } from "protobufjs";
 import React, { Fragment } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { createSelector } from "reselect";
 import { withRouter, RouteComponentProps } from "react-router-dom";
-import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { util, Loading } from "@cockroachlabs/cluster-ui";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { common } from "protobufjs";
+import { createSelector } from "reselect";
 
+import { InlineAlert } from "src/components";
 import {
   CachedDataReducerState,
   refreshConnectivity,
   refreshLiveness,
   refreshNodes,
 } from "src/redux/apiReducers";
+import { connectivitySelector } from "src/redux/connectivity";
 import {
   NodesSummary,
   nodesSummarySelector,
@@ -45,16 +47,14 @@ import {
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { trackFilter, trackCollapseNodes } from "src/util/analytics";
+import { getDataFromServer } from "src/util/dataFromServer";
+import { getMatchParamByName } from "src/util/query";
 import {
   getFilters,
   localityToString,
   NodeFilterList,
   NodeFilterListProps,
 } from "src/views/reports/components/nodeFilterList";
-import { getMatchParamByName } from "src/util/query";
-import { connectivitySelector } from "src/redux/connectivity";
-import { getDataFromServer } from "src/util/dataFromServer";
-import { InlineAlert } from "src/components";
 
 
 import { Latency } from "./latency";

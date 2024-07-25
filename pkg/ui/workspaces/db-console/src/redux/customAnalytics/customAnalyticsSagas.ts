@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { call, put, takeEvery } from "redux-saga/effects";
 import Analytics from "analytics-node";
+import { call, put, takeEvery } from "redux-saga/effects";
 
 import { PayloadAction } from "src/interfaces/action";
-import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
 import { emailSubscriptionAlertLocalSetting } from "src/redux/alerts";
+import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
 
 import {
   EMAIL_SUBSCRIPTION_SIGN_UP,

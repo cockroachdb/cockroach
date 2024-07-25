@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { render } from "@testing-library/react";
+import React from "react";
 
 import { INodeStatus } from "../util";
 

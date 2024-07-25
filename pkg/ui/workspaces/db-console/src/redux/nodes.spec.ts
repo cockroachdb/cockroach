@@ -11,9 +11,10 @@
 import { createHashHistory, createMemoryHistory } from "history";
 import merge from "lodash/merge";
 
-import { MetricConstants, INodeStatus } from "src/util/proto";
 import * as protos from "src/js/protos";
+import { MetricConstants, INodeStatus } from "src/util/proto";
 
+import { nodesReducerObj, livenessReducerObj } from "./apiReducers";
 import {
   nodeDisplayNameByIDSelector,
   selectCommissionedNodeStatuses,
@@ -22,7 +23,6 @@ import {
   sumNodeStats,
   numNodesByVersionsTagSelector,
 } from "./nodes";
-import { nodesReducerObj, livenessReducerObj } from "./apiReducers";
 import { AdminUIState, createAdminUIStore } from "./state";
 
 function makeNodesState(

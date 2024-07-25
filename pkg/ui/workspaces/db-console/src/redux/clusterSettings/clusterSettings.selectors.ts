@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createSelector } from "reselect";
-import moment from "moment-timezone";
 import { CoordinatedUniversalTime, util } from "@cockroachlabs/cluster-ui";
+import moment from "moment-timezone";
+import { createSelector } from "reselect";
 
-import { AdminUIState } from "src/redux/state";
 import { cockroach } from "src/js/protos";
+import { AdminUIState } from "src/redux/state";
 import { indexUnusedDuration } from "src/util/constants";
 
 export const selectClusterSettings = createSelector(

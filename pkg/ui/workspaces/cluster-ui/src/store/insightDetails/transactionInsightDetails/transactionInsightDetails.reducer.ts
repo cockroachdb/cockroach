@@ -11,10 +11,10 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import moment, { Moment } from "moment-timezone";
 
-import { DOMAIN_NAME } from "src/store/utils";
+import { SqlApiResponse, TxnInsightDetailsReqErrs } from "src/api";
 import { ErrorWithKey } from "src/api/statementsApi";
 import { TxnInsightDetails } from "src/insights";
-import { SqlApiResponse, TxnInsightDetailsReqErrs } from "src/api";
+import { DOMAIN_NAME } from "src/store/utils";
 
 import {
   TxnInsightDetailsRequest,

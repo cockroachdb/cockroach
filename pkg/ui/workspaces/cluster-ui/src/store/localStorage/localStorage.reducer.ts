@@ -10,13 +10,13 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
-import { defaultFilters, Filters } from "src/queryFilter/";
-import { WorkloadInsightEventFilters } from "src/insights";
 import {
   SqlStatsSortType,
   DEFAULT_STATS_REQ_OPTIONS,
 } from "src/api/statementsApi";
 import { ViewMode } from "src/databaseDetailsPage/types";
+import { WorkloadInsightEventFilters } from "src/insights";
+import { defaultFilters, Filters } from "src/queryFilter/";
 
 import { TimeScale, defaultTimeScaleSelected } from "../../timeScaleDropdown";
 import { DOMAIN_NAME } from "../utils";

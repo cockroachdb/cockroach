@@ -10,8 +10,8 @@
 
 import { createSelector } from "reselect";
 
-import { AppState } from "src/store/reducers";
 import { selectStatementFingerprintID } from "src/selectors/common";
+import { AppState } from "src/store/reducers";
 
 export const selectStatementFingerprintInsights = createSelector(
   (state: AppState) => state.adminUI?.statementFingerprintInsights?.cachedData,

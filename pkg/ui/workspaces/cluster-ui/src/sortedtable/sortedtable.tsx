@@ -8,22 +8,22 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import * as Long from "long";
-import { History } from "history";
-import { Moment } from "moment-timezone";
-import { createSelector } from "reselect";
-import times from "lodash/times";
-import classNames from "classnames/bind";
 import { Tooltip } from "@cockroachlabs/ui-components";
+import classNames from "classnames/bind";
+import { History } from "history";
 import orderBy from "lodash/orderBy";
+import times from "lodash/times";
+import * as Long from "long";
+import { Moment } from "moment-timezone";
+import React from "react";
+import { createSelector } from "reselect";
 
 import { EmptyPanel, EmptyPanelProps } from "../empty";
 
 import styles from "./sortedtable.module.scss";
-import { TableSpinner } from "./tableSpinner";
 import { TableHead } from "./tableHead";
 import { TableRow } from "./tableRow";
+import { TableSpinner } from "./tableSpinner";
 
 export interface ISortedTablePagination {
   current: number;

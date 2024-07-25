@@ -9,9 +9,9 @@
 // licenses/APL.txt.
 
 /* eslint-disable react/jsx-key */
-import React from "react";
-import { storiesOf } from "@storybook/react";
 import { CaretDown } from "@cockroachlabs/icons";
+import { storiesOf } from "@storybook/react";
+import React from "react";
 
 import { Button, ButtonProps } from "src/button";
 

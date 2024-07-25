@@ -9,12 +9,12 @@
 // licenses/APL.txt.
 
 import keys from "lodash/keys"
-import { Action } from "redux";
 import * as protobuf from "protobufjs/minimal";
+import { Action } from "redux";
 
-import fetchMock from "src/util/fetch-mock";
 import * as protos from "src/js/protos";
 import * as api from "src/util/api";
+import fetchMock from "src/util/fetch-mock";
 
 import * as uidata from "./uiData";
 

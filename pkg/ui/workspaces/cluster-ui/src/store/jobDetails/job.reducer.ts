@@ -18,8 +18,8 @@ import {
   JobResponseWithKey,
 } from "src/api/jobsApi";
 
-import { DOMAIN_NAME } from "../utils";
 import { RequestState } from "../../api";
+import { DOMAIN_NAME } from "../utils";
 
 export type JobState = RequestState<JobResponse>;
 

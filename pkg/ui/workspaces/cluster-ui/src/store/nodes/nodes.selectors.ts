@@ -8,15 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createSelector } from "@reduxjs/toolkit";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { createSelector } from "@reduxjs/toolkit";
 import isEmpty from "lodash/isEmpty";
 
 import { accumulateMetrics } from "src/util/proto";
 
-import { AppState } from "../reducers";
 import { getDisplayName } from "../../nodes";
 import { livenessStatusByNodeIDSelector } from "../liveness";
+import { AppState } from "../reducers";
 type ILocality = cockroach.roachpb.ILocality;
 
 export const nodeStatusesSelector = (state: AppState) =>

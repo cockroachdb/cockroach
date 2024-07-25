@@ -6,8 +6,8 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import React from "react";
 import * as d3 from "d3";
+import React from "react";
 
 import shapes from "./world.json";
 

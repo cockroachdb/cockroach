@@ -9,8 +9,8 @@
 import React from "react";
 import { RouteComponentProps } from "react-router-dom";
 
-import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
 import { Dropdown } from "src/components/dropdown";
+import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
 
 import "./nodesList.styl";
 

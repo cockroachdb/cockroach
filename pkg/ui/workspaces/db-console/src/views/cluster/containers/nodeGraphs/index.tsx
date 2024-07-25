@@ -8,33 +8,29 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import map from "lodash/map";
+import { Anchor, TimeScale } from "@cockroachlabs/cluster-ui";
 import has from "lodash/has";
+import map from "lodash/map";
+import moment from "moment-timezone";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { createSelector } from "reselect";
 import { withRouter, RouteComponentProps } from "react-router-dom";
-import { Anchor, TimeScale } from "@cockroachlabs/cluster-ui";
-import moment from "moment-timezone";
+import { createSelector } from "reselect";
 
-import {
-  nodeIDAttr,
-  dashboardNameAttr,
-  tenantNameAttr,
-} from "src/util/constants";
-import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
-import {
-  PageConfig,
-  PageConfigItem,
-} from "src/views/shared/components/pageconfig";
-import { AdminUIState } from "src/redux/state";
+import { InlineAlert } from "src/components";
+import { PayloadAction } from "src/interfaces/action";
 import {
   refreshNodes,
   refreshLiveness,
   refreshSettings,
   refreshTenantsList,
 } from "src/redux/apiReducers";
+import {
+  selectResolution10sStorageTTL,
+  selectResolution30mStorageTTL,
+} from "src/redux/clusterSettings";
+import { getCookieValue } from "src/redux/cookies";
 import {
   hoverStateSelector,
   HoverState,
@@ -49,10 +45,12 @@ import {
   nodeIDsStringifiedSelector,
   selectStoreIDsByNodeID,
 } from "src/redux/nodes";
-import Alerts from "src/views/shared/containers/alerts";
-import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
-import { getMatchParamByName } from "src/util/query";
-import { PayloadAction } from "src/interfaces/action";
+import { AdminUIState } from "src/redux/state";
+import {
+  containsApplicationTenants,
+  isSystemTenant,
+  tenantDropdownOptions,
+} from "src/redux/tenants";
 import {
   setMetricsFixedWindow,
   TimeWindow,
@@ -60,41 +58,43 @@ import {
   setTimeScale,
   selectTimeScale,
 } from "src/redux/timeScale";
-import { InlineAlert } from "src/components";
-import { reduceStorageOfTimeSeriesDataOperationalFlags } from "src/util/docs";
 import {
-  selectResolution10sStorageTTL,
-  selectResolution30mStorageTTL,
-} from "src/redux/clusterSettings";
+  nodeIDAttr,
+  dashboardNameAttr,
+  tenantNameAttr,
+} from "src/util/constants";
 import { getDataFromServer } from "src/util/dataFromServer";
-import { getCookieValue } from "src/redux/cookies";
+import { reduceStorageOfTimeSeriesDataOperationalFlags } from "src/util/docs";
+import { getMatchParamByName } from "src/util/query";
+import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import {
-  containsApplicationTenants,
-  isSystemTenant,
-  tenantDropdownOptions,
-} from "src/redux/tenants";
+  PageConfig,
+  PageConfigItem,
+} from "src/views/shared/components/pageconfig";
+import Alerts from "src/views/shared/containers/alerts";
+import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 
 import TimeScaleDropdown from "../timeScaleDropdownWithSearchParams";
 
+import changefeedsDashboard from "./dashboards/changefeeds";
+import crossClusterReplicationDashboard from "./dashboards/crossClusterReplication";
 import {
   GraphDashboardProps,
   storeIDsForNode,
 } from "./dashboards/dashboardUtils";
+import distributedDashboard from "./dashboards/distributed";
+import hardwareDashboard from "./dashboards/hardware";
+import logicalDataReplicationDashboard from "./dashboards/logicalDataReplication";
+import networkingDashboard from "./dashboards/networking";
+import overloadDashboard from "./dashboards/overload";
 import overviewDashboard from "./dashboards/overview";
+import queuesDashboard from "./dashboards/queues";
+import replicationDashboard from "./dashboards/replication";
+import requestsDashboard from "./dashboards/requests";
 import runtimeDashboard from "./dashboards/runtime";
 import sqlDashboard from "./dashboards/sql";
 import storageDashboard from "./dashboards/storage";
-import replicationDashboard from "./dashboards/replication";
-import distributedDashboard from "./dashboards/distributed";
-import queuesDashboard from "./dashboards/queues";
-import requestsDashboard from "./dashboards/requests";
-import hardwareDashboard from "./dashboards/hardware";
-import changefeedsDashboard from "./dashboards/changefeeds";
-import overloadDashboard from "./dashboards/overload";
 import ttlDashboard from "./dashboards/ttl";
-import crossClusterReplicationDashboard from "./dashboards/crossClusterReplication";
-import logicalDataReplicationDashboard from "./dashboards/logicalDataReplication";
-import networkingDashboard from "./dashboards/networking";
 import ClusterSummaryBar from "./summaryBar";
 
 interface GraphDashboard {

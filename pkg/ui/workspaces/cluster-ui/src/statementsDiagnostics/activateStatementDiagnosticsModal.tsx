@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { InlineAlert } from "@cockroachlabs/ui-components";
 import {
   Checkbox,
   Divider,
@@ -19,17 +20,16 @@ import {
   Row,
   Col,
 } from "antd";
-import React, { useCallback, useImperativeHandle, useState } from "react";
 import classNames from "classnames/bind";
-import { InlineAlert } from "@cockroachlabs/ui-components";
+import React, { useCallback, useImperativeHandle, useState } from "react";
 
-import { Modal } from "src/modal";
 import { Anchor } from "src/anchor";
+import { Modal } from "src/modal";
 import { Text, TextTypes } from "src/text";
 import { statementDiagnostics, statementsSql } from "src/util";
 
-import { InsertStmtDiagnosticRequest } from "../api";
 import { crlTheme } from "../antdTheme";
+import { InsertStmtDiagnosticRequest } from "../api";
 
 import styles from "./activateStatementDiagnosticsModal.module.scss";
 

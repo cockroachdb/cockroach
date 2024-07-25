@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import merge from "lodash/merge";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { DOMAIN_NAME, noopReducer } from "../utils";
 export type UserSQLRolesRequest = cockroach.server.serverpb.UserSQLRolesRequest;

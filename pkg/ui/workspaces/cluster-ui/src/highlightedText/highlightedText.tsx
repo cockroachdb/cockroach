@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 /* eslint-disable no-useless-escape */
-import React from "react";
 import classNames from "classnames/bind";
+import React from "react";
 
 import styles from "./highlightedText.module.scss";
 

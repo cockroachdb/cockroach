@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { expectSaga } from "redux-saga-test-plan";
 import { call } from "redux-saga-test-plan/matchers";
 import { throwError } from "redux-saga-test-plan/providers";
-import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
 import { PayloadAction, WithRequest } from "src/interfaces/action";
 import {

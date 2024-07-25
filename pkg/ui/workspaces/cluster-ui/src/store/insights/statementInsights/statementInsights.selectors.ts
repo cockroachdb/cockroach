@@ -10,17 +10,18 @@
 
 import { createSelector } from "reselect";
 
-import { localStorageSelector } from "src/store/utils/selectors";
-import { AppState } from "src/store/reducers";
+import { InsightEnumToLabel } from "src/insights";
+import {
+  selectStatementFingerprintID,
+  selectID,
+  selectStmtInsights,
+} from "src/selectors/common";
 import {
   selectStatementInsightDetailsCombiner,
   selectStatementInsightDetailsCombinerByFingerprint,
 } from "src/selectors/insightsCommon.selectors";
-import { selectStatementFingerprintID, selectID } from "src/selectors/common";
-import { InsightEnumToLabel, StmtInsightEvent } from "src/insights";
-
-export const selectStmtInsights = (state: AppState): StmtInsightEvent[] =>
-  state.adminUI?.stmtInsights?.data?.results;
+import { AppState } from "src/store/reducers";
+import { localStorageSelector } from "src/store/utils/selectors";
 
 export const selectStmtInsightsError = (state: AppState): Error | null =>
   state.adminUI?.stmtInsights?.lastError;

@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import throttle from "lodash/throttle";
+import React from "react";
 
 import {
   CanvasHeight,

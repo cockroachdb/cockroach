@@ -7,12 +7,8 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import React, { useContext } from "react";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import classNames from "classnames/bind";
-import { RouteComponentProps } from "react-router-dom";
-import { Helmet } from "react-helmet";
-import moment from "moment-timezone";
+import { ArrowLeft } from "@cockroachlabs/icons";
 import {
   InlineAlert,
   Tooltip,
@@ -20,12 +16,22 @@ import {
   Heading,
 } from "@cockroachlabs/ui-components";
 import { Col, Row } from "antd";
-import { ArrowLeft } from "@cockroachlabs/icons";
-import Long from "long";
+import classNames from "classnames/bind";
 import get from "lodash/get";
+import Long from "long";
+import moment from "moment-timezone";
+import React, { useContext } from "react";
+import { Helmet } from "react-helmet";
+import { RouteComponentProps } from "react-router-dom";
 
-import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { SqlStatsSortType } from "src/api/statementsApi";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
+import {
+  populateRegionNodeForStatements,
+  makeStatementsColumns,
+} from "src/statementsTable/statementsTable";
+import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
+import { Transaction } from "src/transactionsTable";
 import {
   Bytes,
   calculateTotalWorkload,
@@ -36,30 +42,7 @@ import {
   appNamesAttr,
   unset,
 } from "src/util";
-import { Transaction } from "src/transactionsTable";
-import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
-import {
-  populateRegionNodeForStatements,
-  makeStatementsColumns,
-} from "src/statementsTable/statementsTable";
 
-import {
-  SortedTable,
-  ISortedTablePagination,
-  SortSetting,
-} from "../sortedtable";
-import { Pagination } from "../pagination";
-import { TableStatistics } from "../tableStatistics";
-import { baseHeadingClasses } from "../transactionsPage/transactionsPageClasses";
-import { Button } from "../button";
-import { tableClasses } from "../transactionsTable/transactionsTableClasses";
-import { SqlBox } from "../sql";
-import { aggregateStatements } from "../transactionsPage/utils";
-import { Loading } from "../loading";
-import { SummaryCard, SummaryCardItem } from "../summaryCard";
-import { UIConfigState } from "../store";
-import LoadingError from "../sqlActivity/errorComponent";
-import { formatTwoPlaces } from "../barCharts";
 import {
   createCombinedStmtsRequest,
   InsightRecommendation,
@@ -68,11 +51,33 @@ import {
   StatementsRequest,
   TxnInsightsRequest,
 } from "../api";
+import { formatTwoPlaces } from "../barCharts";
+import { Button } from "../button";
+import { CockroachCloudContext } from "../contexts";
 import {
   getTxnInsightRecommendations,
   InsightType,
   TxnInsightEvent,
 } from "../insights";
+import {
+  InsightsSortedTable,
+  makeInsightsColumns,
+} from "../insightsTable/insightsTable";
+import insightTableStyles from "../insightsTable/insightsTable.module.scss";
+import { Loading } from "../loading";
+import { Pagination } from "../pagination";
+import {
+  SortedTable,
+  ISortedTablePagination,
+  SortSetting,
+} from "../sortedtable";
+import { SqlBox } from "../sql";
+import LoadingError from "../sqlActivity/errorComponent";
+import statementsStyles from "../statementsPage/statementsPage.module.scss";
+import { UIConfigState } from "../store";
+import { SummaryCard, SummaryCardItem } from "../summaryCard";
+import summaryCardStyles from "../summaryCard/summaryCard.module.scss";
+import { TableStatistics } from "../tableStatistics";
 import {
   getValidOption,
   TimeScale,
@@ -81,15 +86,10 @@ import {
   timeScaleRangeToObj,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
-import {
-  InsightsSortedTable,
-  makeInsightsColumns,
-} from "../insightsTable/insightsTable";
-import { CockroachCloudContext } from "../contexts";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
-import insightTableStyles from "../insightsTable/insightsTable.module.scss";
-import statementsStyles from "../statementsPage/statementsPage.module.scss";
-import summaryCardStyles from "../summaryCard/summaryCard.module.scss";
+import { baseHeadingClasses } from "../transactionsPage/transactionsPageClasses";
+import { aggregateStatements } from "../transactionsPage/utils";
+import { tableClasses } from "../transactionsTable/transactionsTableClasses";
 
 import transactionDetailsStyles from "./transactionDetails.modules.scss";
 import {

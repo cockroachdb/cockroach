@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import React from "react";
 import classNames from "classnames/bind";
+import React from "react";
 
 import { Anchor } from "src/anchor";
 import { EmptyTable } from "src/empty";
@@ -30,9 +30,9 @@ import {
 } from "src/util/docs";
 import { DATE_WITH_SECONDS_FORMAT } from "src/util/format";
 
-import { HighwaterTimestamp, JobStatusCell } from "../util";
-import styles from "../jobs.module.scss";
 import { Timestamp, Timezone } from "../../timestamp";
+import styles from "../jobs.module.scss";
+import { HighwaterTimestamp, JobStatusCell } from "../util";
 
 import { JobDescriptionCell } from "./jobDescriptionCell";
 const cx = classNames.bind(styles);

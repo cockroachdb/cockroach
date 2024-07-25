@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import classnames from "classnames/bind";
 import React, { FunctionComponent, ReactElement } from "react";
 import { Link } from "react-router-dom";
-import classnames from "classnames/bind";
 
 import styles from "./breadcrumbs.module.scss";
 

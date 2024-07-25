@@ -8,11 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { Loading, util } from "@cockroachlabs/cluster-ui";
 import isEmpty from "lodash/isEmpty";
-import orderBy from "lodash/orderBy";
 import map from "lodash/map";
+import orderBy from "lodash/orderBy";
+import React from "react";
 
 import * as protos from "src/js/protos";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";

@@ -8,14 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment from "moment-timezone";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import moment from "moment-timezone";
 
 import { IndexUsageStatistic, recommendDropUnusedIndex } from "../insights";
 import { getLogger, indexUnusedDuration, maybeError } from "../util";
 
 import { Format, Identifier, Join, SQL } from "./safesql";
-import { fromHexString, withTimeout } from "./util";
 import {
   combineQueryErrors,
   executeInternalSql,
@@ -30,6 +29,7 @@ import {
   SqlTxnResult,
   txnResultIsEmpty,
 } from "./sqlApi";
+import { fromHexString, withTimeout } from "./util";
 
 const { ZoneConfig } = cockroach.config.zonepb;
 const { ZoneConfigurationLevel } = cockroach.server.serverpb;

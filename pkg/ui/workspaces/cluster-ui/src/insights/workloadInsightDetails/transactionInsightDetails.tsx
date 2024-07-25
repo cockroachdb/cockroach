@@ -7,20 +7,20 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
+import { ArrowLeft } from "@cockroachlabs/icons";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+import { Tabs } from "antd";
 import React, { useEffect, useRef } from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
-import { ArrowLeft } from "@cockroachlabs/icons";
-import { Tabs } from "antd";
-import { InlineAlert } from "@cockroachlabs/ui-components";
 
-import { Button } from "src/button";
-import { getMatchParamByName } from "src/util/query";
-import { TxnInsightDetailsRequest, TxnInsightDetailsReqErrs } from "src/api";
-import { commonStyles } from "src/common";
-import { idAttr, insights } from "src/util";
-import { timeScaleRangeToObj } from "src/timeScaleDropdown/utils";
 import { Anchor } from "src/anchor";
+import { TxnInsightDetailsRequest, TxnInsightDetailsReqErrs } from "src/api";
+import { Button } from "src/button";
+import { commonStyles } from "src/common";
+import { timeScaleRangeToObj } from "src/timeScaleDropdown/utils";
+import { idAttr, insights } from "src/util";
+import { getMatchParamByName } from "src/util/query";
 
 import { TimeScale } from "../../timeScaleDropdown";
 import {
@@ -29,8 +29,8 @@ import {
   TxnInsightDetails,
 } from "../types";
 
-import { TransactionInsightsDetailsStmtsTab } from "./transactionInsightDetailsStmtsTab";
 import { TransactionInsightDetailsOverviewTab } from "./transactionInsightDetailsOverviewTab";
+import { TransactionInsightsDetailsStmtsTab } from "./transactionInsightDetailsStmtsTab";
 
 export interface TransactionInsightDetailsStateProps {
   insightDetails: TxnInsightDetails;

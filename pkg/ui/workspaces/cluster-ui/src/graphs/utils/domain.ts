@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import sortedIndex from "lodash/sortedIndex";
-import min from "lodash/min";
 import max from "lodash/max";
+import min from "lodash/min";
+import sortedIndex from "lodash/sortedIndex";
 import moment from "moment-timezone";
 
 import {

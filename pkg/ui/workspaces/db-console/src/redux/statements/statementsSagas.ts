@@ -9,6 +9,11 @@
 // licenses/APL.txt.
 
 import {
+  TimeScale,
+  api as clusterApi,
+  api as clusterUiApi,
+} from "@cockroachlabs/cluster-ui";
+import {
   all,
   call,
   delay,
@@ -16,23 +21,18 @@ import {
   takeEvery,
   takeLatest,
 } from "redux-saga/effects";
-import {
-  TimeScale,
-  api as clusterApi,
-  api as clusterUiApi,
-} from "@cockroachlabs/cluster-ui";
 
 import { PayloadAction, WithRequest } from "src/interfaces/action";
+import {
+  createStatementDiagnosticsAlertLocalSetting,
+  cancelStatementDiagnosticsAlertLocalSetting,
+} from "src/redux/alerts";
 import {
   invalidateStatementDiagnosticsRequests,
   RECEIVE_STATEMENT_DIAGNOSTICS_REPORT,
   refreshStatementDiagnosticsRequests,
   statementDiagnosticInvalidationPeriod,
 } from "src/redux/apiReducers";
-import {
-  createStatementDiagnosticsAlertLocalSetting,
-  cancelStatementDiagnosticsAlertLocalSetting,
-} from "src/redux/alerts";
 import { setTimeScale } from "src/redux/timeScale";
 
 import {

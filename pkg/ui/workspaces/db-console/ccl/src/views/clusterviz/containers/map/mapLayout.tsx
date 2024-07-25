@@ -6,19 +6,19 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import React from "react";
 import * as d3 from "d3";
-import isEqual from "lodash/isEqual";
 import isEmpty from "lodash/isEmpty";
+import isEqual from "lodash/isEqual";
 import map from "lodash/map";
+import React from "react";
 
 import * as protos from "src/js/protos";
 import { LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
+import { LivenessStatus } from "src/redux/nodes";
 import { getChildLocalities } from "src/util/localities";
 import { findOrCalculateLocation } from "src/util/locations";
 import * as vector from "src/util/vector";
-import { LivenessStatus } from "src/redux/nodes";
 
 import { LocalityView } from "./localityView";
 import { WorldMap } from "./worldmap";

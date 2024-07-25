@@ -8,11 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import classNames from "classnames";
 import * as React from "react";
+import CopyToClipboard from "react-copy-to-clipboard";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import classNames from "classnames";
-import CopyToClipboard from "react-copy-to-clipboard";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { AdminUIState } from "src/redux/state";

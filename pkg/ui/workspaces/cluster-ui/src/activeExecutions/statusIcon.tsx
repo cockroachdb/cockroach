@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import classNames from "classnames/bind";
+import React from "react";
 
 import { CircleFilled } from "src/icon";
 
-import { ExecutionStatus } from "./types";
 import styles from "./executionStatusIcon.module.scss";
+import { ExecutionStatus } from "./types";
 
 const cx = classNames.bind(styles);
 

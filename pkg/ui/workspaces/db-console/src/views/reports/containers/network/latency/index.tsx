@@ -8,15 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Badge, Divider, Tooltip } from "antd";
 import { ExclamationCircleOutlined, StopOutlined } from "@ant-design/icons";
+import { util } from "@cockroachlabs/cluster-ui";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { Badge, Divider, Tooltip } from "antd";
+import { BadgeProps } from "antd/lib/badge";
 import classNames from "classnames";
 import map from "lodash/map";
-import { util } from "@cockroachlabs/cluster-ui";
 import React from "react";
 import { Link } from "react-router-dom";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { BadgeProps } from "antd/lib/badge";
 
 import { Empty } from "src/components/empty";
 import { livenessNomenclature } from "src/redux/nodes";

@@ -8,9 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createMemoryHistory } from "history";
-import find from "lodash/find";
-import { bindActionCreators, Store } from "redux";
 import {
   DatabasesPageActions,
   DatabasesPageData,
@@ -19,10 +16,13 @@ import {
   api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { createMemoryHistory } from "history";
+import find from "lodash/find";
+import { bindActionCreators, Store } from "redux";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
-import * as fakeApi from "src/util/fakeApi";
 import { indexUnusedDuration } from "src/util/constants";
+import * as fakeApi from "src/util/fakeApi";
 
 import { mapDispatchToProps, mapStateToProps } from "./redux";
 

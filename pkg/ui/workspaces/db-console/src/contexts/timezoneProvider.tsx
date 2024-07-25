@@ -8,15 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { TimezoneContext } from "@cockroachlabs/cluster-ui";
 import React, { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { TimezoneContext } from "@cockroachlabs/cluster-ui";
 
+import { refreshSettings } from "src/redux/apiReducers";
 import {
   selectClusterSettings,
   selectTimezoneSetting,
 } from "src/redux/clusterSettings";
-import { refreshSettings } from "src/redux/apiReducers";
 
 export const TimezoneProvider = (props: any) => {
   // Refresh cluster settings if needed.

@@ -8,16 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import Long from "long";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import Long from "long";
 
+import { mockStmtStats, Stmt } from "src/api/testUtils";
+import { Filters } from "src/queryFilter/filter";
 import {
   convertRawStmtsToAggregateStatistics,
   filterStatementsData,
   getAppsFromStmtsResponse,
 } from "src/sqlActivity/util";
-import { mockStmtStats, Stmt } from "src/api/testUtils";
-import { Filters } from "src/queryFilter/filter";
 
 import { INTERNAL_APP_NAME_PREFIX, unset } from "../util";
 

@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment from "moment-timezone";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { fromNumber } from "long";
+import moment from "moment-timezone";
 
 import {
   NanoToMilli,

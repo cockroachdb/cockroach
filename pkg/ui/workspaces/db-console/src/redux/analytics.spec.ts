@@ -15,9 +15,9 @@ import { Store } from "redux";
 
 import * as protos from "src/js/protos";
 
-import { history } from "./history";
 import { AnalyticsSync, defaultRedactions } from "./analytics";
 import { clusterReducerObj, nodesReducerObj } from "./apiReducers";
+import { history } from "./history";
 import { AdminUIState, createAdminUIStore } from "./state";
 
 describe("analytics listener", function () {

@@ -11,10 +11,10 @@
 import React from "react";
 
 import { Anchor, Tooltip, Text } from "src/components";
-import { nodeLivenessIssues, howItWork, capacityMetrics } from "src/util/docs";
-import { LivenessStatus } from "src/redux/nodes";
-import { NodeStatusRow } from "src/views/cluster/containers/nodesOverview/index";
 import { TooltipProps } from "src/components/tooltip/tooltip";
+import { LivenessStatus } from "src/redux/nodes";
+import { nodeLivenessIssues, howItWork, capacityMetrics } from "src/util/docs";
+import { NodeStatusRow } from "src/views/cluster/containers/nodesOverview/index";
 
 import { AggregatedNodeStatus } from ".";
 

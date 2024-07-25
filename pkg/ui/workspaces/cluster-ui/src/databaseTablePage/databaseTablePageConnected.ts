@@ -8,13 +8,28 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { RouteComponentProps } from "react-router";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { Dispatch } from "redux";
-import { withRouter } from "react-router-dom";
 import { connect } from "react-redux";
+import { RouteComponentProps } from "react-router";
+import { withRouter } from "react-router-dom";
+import { Dispatch } from "redux";
 
 import { AppState, uiConfigActions } from "src/store";
+import { actions as analyticsActions } from "src/store/analytics";
+import { actions as clusterSettingsActions } from "src/store/clusterSettings";
+import {
+  selectAutomaticStatsCollectionEnabled,
+  selectDropUnusedIndexDuration,
+  selectIndexRecommendationsEnabled,
+  selectIndexUsageStatsEnabled,
+} from "src/store/clusterSettings/clusterSettings.selectors";
+import { actions as tableDetailsActions } from "src/store/databaseTableDetails";
+import { actions as indexStatsActions } from "src/store/indexStats";
+import {
+  actions as nodesActions,
+  nodeRegionsByIDSelector,
+} from "src/store/nodes";
+import { selectHasAdminRole, selectIsTenant } from "src/store/uiConfig";
 import {
   databaseNameCCAttr,
   generateTableID,
@@ -24,21 +39,6 @@ import {
   tableNameCCAttr,
   TimestampToMoment,
 } from "src/util";
-import {
-  actions as nodesActions,
-  nodeRegionsByIDSelector,
-} from "src/store/nodes";
-import {
-  selectAutomaticStatsCollectionEnabled,
-  selectDropUnusedIndexDuration,
-  selectIndexRecommendationsEnabled,
-  selectIndexUsageStatsEnabled,
-} from "src/store/clusterSettings/clusterSettings.selectors";
-import { selectHasAdminRole, selectIsTenant } from "src/store/uiConfig";
-import { actions as tableDetailsActions } from "src/store/databaseTableDetails";
-import { actions as indexStatsActions } from "src/store/indexStats";
-import { actions as analyticsActions } from "src/store/analytics";
-import { actions as clusterSettingsActions } from "src/store/clusterSettings";
 
 import {
   deriveIndexDetailsMemoized,

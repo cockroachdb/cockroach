@@ -8,15 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { CaretLeftOutlined, CaretDownOutlined } from "@ant-design/icons";
+import cn from "classnames";
 import * as React from "react";
 import { connect } from "react-redux";
-import cn from "classnames";
-import { CaretLeftOutlined, CaretDownOutlined } from "@ant-design/icons";
 import { Action, Dispatch } from "redux";
 
+import { Text, TextTypes } from "src/components";
 import { LocalSetting, setLocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
-import { Text, TextTypes } from "src/components";
 
 import "./tableSection.styl";
 

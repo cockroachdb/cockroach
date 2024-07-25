@@ -14,8 +14,8 @@ import { Link, withRouter, RouteComponentProps } from "react-router-dom";
 
 import { SideNavigation } from "src/components";
 import "./navigation-bar.styl";
-import { AdminUIState } from "src/redux/state";
 import { isSingleNodeCluster } from "src/redux/nodes";
+import { AdminUIState } from "src/redux/state";
 
 interface RouteParam {
   path: string;

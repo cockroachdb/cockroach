@@ -8,30 +8,30 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { util } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames";
-import toLower from "lodash/toLower";
+import concat from "lodash/concat";
+import flow from "lodash/flow";
+import forEach from "lodash/forEach";
+import head from "lodash/head";
+import isEqual from "lodash/isEqual";
+import isNil from "lodash/isNil";
 import isNull from "lodash/isNull";
+import join from "lodash/join";
+import map from "lodash/map";
+import size from "lodash/size";
+import sortBy from "lodash/sortBy";
+import toLower from "lodash/toLower";
 import Long from "long";
 import moment from "moment-timezone";
 import React from "react";
-import { util } from "@cockroachlabs/cluster-ui";
-import isNil from "lodash/isNil";
-import concat from "lodash/concat";
-import join from "lodash/join";
-import isEqual from "lodash/isEqual";
-import map from "lodash/map";
-import head from "lodash/head";
-import flow from "lodash/flow";
-import sortBy from "lodash/sortBy";
-import forEach from "lodash/forEach";
-import size from "lodash/size";
 
-import RangeInfo from "src/views/reports/containers/range/rangeInfo";
-import Print from "src/views/reports/containers/range/print";
-import Lease from "src/views/reports/containers/range/lease";
-import { FixLong } from "src/util/fixLong";
 import { cockroach } from "src/js/protos";
 import * as protos from "src/js/protos";
+import { FixLong } from "src/util/fixLong";
+import Lease from "src/views/reports/containers/range/lease";
+import Print from "src/views/reports/containers/range/print";
+import RangeInfo from "src/views/reports/containers/range/rangeInfo";
 
 import IRangeInfo = cockroach.server.serverpb.IRangeInfo;
 
@@ -679,7 +679,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     // We want to display ordered by store ID.
     const sortedStoreIDs = flow(
       (infos: IRangeInfo[]) => map(infos, info => info.source_store_id),
-      (storeIds) => sortBy(storeIds, id => id)
+      storeIds => sortBy(storeIds, id => id),
     )(infos);
 
     const dormantStoreIDs: Set<number> = new Set();
@@ -748,7 +748,9 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
             ? "range-table__cell--lease-holder"
             : "range-table__cell--lease-follower",
         ),
-        leaseType: this.createContent(leaseEpoch ? "epoch" : leaseLeader ? "leader" : "expiration"),
+        leaseType: this.createContent(
+          leaseEpoch ? "epoch" : leaseLeader ? "leader" : "expiration",
+        ),
         leaseEpoch: leaseEpoch
           ? this.createContent(lease.epoch)
           : rangeTableEmptyContent,
@@ -925,10 +927,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
           info.state.circuit_breaker_error,
         ),
         locality: this.contentIf(size(info.locality.tiers) > 0, () => ({
-          value: map(
-            info.locality.tiers,
-            tier => `${tier.key}: ${tier.value}`,
-          ),
+          value: map(info.locality.tiers, tier => `${tier.key}: ${tier.value}`),
         })),
         pausedFollowers: this.createContent(
           info.state.paused_replicas?.join(", "),

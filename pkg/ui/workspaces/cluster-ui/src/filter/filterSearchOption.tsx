@@ -10,8 +10,8 @@
 
 import React from "react";
 
-import { Search } from "../search";
 import { filterLabel } from "../queryFilter/filterClasses";
+import { Search } from "../search";
 
 export type FilterSearchOptionProps = {
   label: string;

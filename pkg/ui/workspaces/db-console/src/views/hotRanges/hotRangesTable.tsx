@@ -8,9 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
-import { Tooltip } from "antd";
 import {
   ColumnDescriptor,
   SortedTable,
@@ -21,19 +18,22 @@ import {
   EmptyTable,
   util,
 } from "@cockroachlabs/cluster-ui";
+import { Tooltip } from "antd";
 import classNames from "classnames/bind";
 import round from "lodash/round";
+import React, { useState } from "react";
 import { connect } from "react-redux";
+import { Link } from "react-router-dom";
 
 import emptyTableResultsImg from "assets/emptyState/empty-table-results.svg";
+import { sortSettingLocalSetting } from "oss/src/redux/hotRanges";
+import { AdminUIState } from "oss/src/redux/state";
 import { cockroach } from "src/js/protos";
 import {
   performanceBestPracticesHotSpots,
   readsAndWritesOverviewPage,
   uiDebugPages,
 } from "src/util/docs";
-import { sortSettingLocalSetting } from "oss/src/redux/hotRanges";
-import { AdminUIState } from "oss/src/redux/state";
 
 
 import styles from "./hotRanges.module.styl";

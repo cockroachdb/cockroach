@@ -8,15 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { AxisUnits } from "@cockroachlabs/cluster-ui";
 import assign from "lodash/assign";
 import isEmpty from "lodash/isEmpty";
 import * as React from "react";
 import Select, { Option } from "react-select";
-import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 import * as protos from "src/js/protos";
-import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { isSystemTenant } from "src/redux/tenants";
+import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 
 import { MetricOption } from "./metricOption";
 

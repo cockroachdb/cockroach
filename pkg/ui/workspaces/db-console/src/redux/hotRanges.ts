@@ -10,8 +10,8 @@
 
 import { createSelector } from "reselect";
 
-import { AdminUIState } from "src/redux/state";
 import { cockroach } from "src/js/protos";
+import { AdminUIState } from "src/redux/state";
 
 import { LocalSetting } from "./localsettings";
 

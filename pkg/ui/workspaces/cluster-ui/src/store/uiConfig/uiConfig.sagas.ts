@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, delay, put, takeLatest } from "redux-saga/effects";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { all, call, delay, put, takeLatest } from "redux-saga/effects";
 
 import { getUserSQLRoles } from "../../api/userApi";
-import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
 import { maybeError, getLogger } from "../../util";
 import { rootActions } from "../rootActions";
+import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
 
 import { actions } from "./uiConfig.reducer";
 

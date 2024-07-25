@@ -19,12 +19,12 @@
  * it should be given the full redux treatment with unique modification actions.
  */
 
-import { createSelector, Selector } from "reselect";
-import { Action } from "redux";
-import { call, takeEvery } from "redux-saga/effects";
+import { util } from "@cockroachlabs/cluster-ui";
 import clone from "lodash/clone";
 import isNil from "lodash/isNil";
-import { util } from "@cockroachlabs/cluster-ui";
+import { Action } from "redux";
+import { call, takeEvery } from "redux-saga/effects";
+import { createSelector, Selector } from "reselect";
 
 import { PayloadAction } from "src/interfaces/action";
 

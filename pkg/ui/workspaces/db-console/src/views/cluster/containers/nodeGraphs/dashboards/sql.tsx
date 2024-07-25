@@ -8,17 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import map from "lodash/map";
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import map from "lodash/map";
+import React from "react";
 
 import LineGraph from "src/views/cluster/components/linegraph";
-import { Metric, Axis } from "src/views/shared/components/metricQuery";
 import {
   StatementDenialsClusterSettingsTooltip,
   TransactionRestartsToolTip,
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
+import { Metric, Axis } from "src/views/shared/components/metricQuery";
 
 
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";

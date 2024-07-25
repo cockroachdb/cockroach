@@ -12,15 +12,14 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 
-import { AppState } from "src/store";
-import { actions as localStorageActions } from "src/store/localStorage";
-import { actions as sqlActions } from "src/store/sqlStats";
+import { StmtInsightsReq, TxnInsightsRequest } from "src/api";
+import { selectStmtInsights } from "src/selectors/common";
 import { SortSetting } from "src/sortedtable";
+import { AppState } from "src/store";
 import {
   actions as statementInsights,
   selectColumns,
   selectInsightTypes,
-  selectStmtInsights,
   selectStmtInsightsError,
   selectStmtInsightsLoading,
   selectStmtInsightsMaxApiReached,
@@ -34,17 +33,14 @@ import {
   selectTransactionInsightsLoading,
   selectTransactionInsightsMaxApiReached,
 } from "src/store/insights/transactionInsights";
-import { StmtInsightsReq, TxnInsightsRequest } from "src/api";
+import { actions as localStorageActions } from "src/store/localStorage";
+import { actions as sqlActions } from "src/store/sqlStats";
 
+import { actions as analyticsActions } from "../../store/analytics";
+import { selectTimeScale } from "../../store/utils/selectors";
 import { TimeScale } from "../../timeScaleDropdown";
 import { WorkloadInsightEventFilters } from "../types";
-import { selectTimeScale } from "../../store/utils/selectors";
-import { actions as analyticsActions } from "../../store/analytics";
 
-import {
-  WorkloadInsightsViewProps,
-  WorkloadInsightsRootControl,
-} from "./workloadInsightRootControl";
 import {
   StatementInsightsViewDispatchProps,
   StatementInsightsViewStateProps,
@@ -53,6 +49,10 @@ import {
   TransactionInsightsViewDispatchProps,
   TransactionInsightsViewStateProps,
 } from "./transactionInsights";
+import {
+  WorkloadInsightsViewProps,
+  WorkloadInsightsRootControl,
+} from "./workloadInsightRootControl";
 
 const transactionMapStateToProps = (
   state: AppState,

@@ -8,53 +8,53 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
+import flatMap from "lodash/flatMap";
+import flow from "lodash/flow";
+import has from "lodash/has";
+import isEmpty from "lodash/isEmpty";
+import keys from "lodash/keys";
 import map from "lodash/map";
 import sortBy from "lodash/sortBy";
 import startsWith from "lodash/startsWith";
-import isEmpty from "lodash/isEmpty";
-import keys from "lodash/keys";
-import flatMap from "lodash/flatMap";
-import has from "lodash/has";
-import flow from "lodash/flow";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
-import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
 
+import TimeScaleDropdown from "oss/src/views/cluster/containers/timeScaleDropdownWithSearchParams";
+import { PayloadAction } from "src/interfaces/action";
 import {
   refreshMetricMetadata,
   refreshNodes,
   refreshTenantsList,
 } from "src/redux/apiReducers";
-import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
-import LineGraph from "src/views/cluster/components/linegraph";
-import { DropdownOption } from "src/views/shared/components/dropdown";
-import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
-import { Metric, Axis } from "src/views/shared/components/metricQuery";
-import TimeScaleDropdown from "oss/src/views/cluster/containers/timeScaleDropdownWithSearchParams";
-import {
-  PageConfig,
-  PageConfigItem,
-} from "src/views/shared/components/pageconfig";
+import { getCookieValue } from "src/redux/cookies";
 import {
   MetricsMetadata,
   metricsMetadataSelector,
 } from "src/redux/metricMetadata";
-import { INodeStatus } from "src/util/proto";
-import { queryByName } from "src/util/query";
-import { PayloadAction } from "src/interfaces/action";
+import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
+import { AdminUIState } from "src/redux/state";
+import { tenantDropdownOptions } from "src/redux/tenants";
 import {
   TimeWindow,
   setMetricsFixedWindow,
   selectTimeScale,
   setTimeScale,
 } from "src/redux/timeScale";
+import { INodeStatus } from "src/util/proto";
+import { queryByName } from "src/util/query";
+import LineGraph from "src/views/cluster/components/linegraph";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
-import { getCookieValue } from "src/redux/cookies";
-import { tenantDropdownOptions } from "src/redux/tenants";
+import { DropdownOption } from "src/views/shared/components/dropdown";
+import { Metric, Axis } from "src/views/shared/components/metricQuery";
+import {
+  PageConfig,
+  PageConfigItem,
+} from "src/views/shared/components/pageconfig";
+import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 
 import {
   CustomChartState,

@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { assert } from "chai";
-import { mount, ReactWrapper } from "enzyme";
 import classNames from "classnames/bind";
-import sumBy from "lodash/sumBy";
+import { mount, ReactWrapper } from "enzyme";
 import each from "lodash/each";
 import sortBy from "lodash/sortBy";
+import sumBy from "lodash/sumBy";
+import React from "react";
 
 import styles from "src/sortabletable/sortabletable.module.scss";
 import {

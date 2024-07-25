@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { util } from "@cockroachlabs/cluster-ui";
+import classNames from "classnames";
 import isEqual from "lodash/isEqual";
 import React, { Component } from "react";
-import classNames from "classnames";
-import { util } from "@cockroachlabs/cluster-ui";
 
-import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import { cockroach, google } from "src/js/protos";
+import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 import {
   TreeNode,

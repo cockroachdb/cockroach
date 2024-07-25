@@ -8,14 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createMemoryHistory } from "history";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import { createMemoryHistory } from "history";
 import Long from "long";
 import moment from "moment-timezone";
-import * as protos from "@cockroachlabs/crdb-protobuf-client";
 
-import { SortSetting } from "../sortedtable";
 import { Filters } from "../queryFilter";
+import { SortSetting } from "../sortedtable";
 import { TimeScale } from "../timeScaleDropdown";
 
 const history = createMemoryHistory({ initialEntries: ["/transactions"] });

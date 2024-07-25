@@ -8,14 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { storiesOf } from "@storybook/react";
-import random from "lodash/random";
 import * as H from "history";
+import random from "lodash/random";
+import React from "react";
 
+import { defaultFilters } from "src/queryFilter";
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import { randomName } from "src/storybook/fixtures";
-import { defaultFilters } from "src/queryFilter";
 import { indexUnusedDuration } from "src/util/constants";
 
 import { DatabasesPage, DatabasesPageProps } from "./databasesPage";

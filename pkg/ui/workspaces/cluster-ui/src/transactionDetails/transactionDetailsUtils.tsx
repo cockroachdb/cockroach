@@ -8,14 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createSelector } from "@reduxjs/toolkit";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { match } from "react-router";
+import { createSelector } from "@reduxjs/toolkit";
 import { Location } from "history";
 import cloneDeep from "lodash/cloneDeep";
+import { match } from "react-router";
 
-import { statementFingerprintIdsToText } from "../transactionsPage/utils";
 import { SqlStatsResponse } from "../api";
+import { statementFingerprintIdsToText } from "../transactionsPage/utils";
 import {
   addExecStats,
   aggregateNumericStats,

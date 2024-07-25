@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import Long from "long";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import Long from "long";
 
 import { NodeLivenessStatus } from "./nodeLivenessStatus";
 

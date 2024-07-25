@@ -11,6 +11,7 @@
 import React from "react";
 
 import { Tooltip, Anchor } from "src/components";
+import { TooltipProps } from "src/components/tooltip/tooltip";
 import {
   keyValuePairs,
   writeIntents,
@@ -18,7 +19,6 @@ import {
   clusterStore,
   capacityMetrics,
 } from "src/util/docs";
-import { TooltipProps } from "src/components/tooltip/tooltip";
 
 export type CellTooltipProps = {
   nodeName?: string;

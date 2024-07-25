@@ -8,10 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import classNames from "classnames/bind";
+import React from "react";
 
+import statsTablePageStyles from "src/statementsTable/statementsTableContent.module.scss";
 import {
   FixFingerprintHexValue,
   Count,
@@ -21,8 +22,8 @@ import {
   appNamesAttr,
   propsToQueryString,
 } from "src/util";
-import statsTablePageStyles from "src/statementsTable/statementsTableContent.module.scss";
 
+import { BarChartOptions } from "../barCharts/barChartFactory";
 import {
   SortedTable,
   ISortedTablePagination,
@@ -37,7 +38,6 @@ import {
   statementFingerprintIdsToText,
   statementFingerprintIdsToSummarizedText,
 } from "../transactionsPage/utils";
-import { BarChartOptions } from "../barCharts/barChartFactory";
 
 import {
   transactionsCountBarChart,
@@ -49,8 +49,8 @@ import {
   transactionsNetworkBytesBarChart,
   transactionsRetryBarChart,
 } from "./transactionsBarCharts";
-import { tableClasses } from "./transactionsTableClasses";
 import { transactionLink } from "./transactionsCells";
+import { tableClasses } from "./transactionsTableClasses";
 
 export type Transaction =
   protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;

@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { shallow } from "enzyme";
 import { createMemoryHistory, History } from "history";
+import React from "react";
 import { match as Match } from "react-router";
 
 import { Sidebar } from "./index";

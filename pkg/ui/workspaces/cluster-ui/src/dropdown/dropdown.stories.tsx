@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import { Download } from "@cockroachlabs/icons";
 import { storiesOf } from "@storybook/react";
 import noop from "lodash/noop";
-import { Download } from "@cockroachlabs/icons";
+import React from "react";
 
 import { Button } from "src/button";
 

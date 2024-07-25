@@ -8,40 +8,40 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { withRouter } from "react-router-dom";
 import { connect } from "react-redux";
+import { withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 
-import { selectIsTenant } from "../store/uiConfig";
+import { deriveDatabaseDetailsMemoized } from "../databases";
+import { Filters } from "../queryFilter";
+import { AppState } from "../store";
+import { actions as analyticsActions } from "../store/analytics";
+import { actions as clusterSettingsActions } from "../store/clusterSettings";
 import {
-  actions as nodesActions,
-  nodeRegionsByIDSelector,
-} from "../store/nodes";
+  selectAutomaticStatsCollectionEnabled,
+  selectDropUnusedIndexDuration,
+  selectIndexRecommendationsEnabled,
+} from "../store/clusterSettings/clusterSettings.selectors";
+import {
+  databaseDetailsReducer,
+  databaseDetailsSpanStatsReducer,
+} from "../store/databaseDetails";
+import { actions as databasesListActions } from "../store/databasesList";
 import {
   databasesListSelector,
   selectDatabasesFilters,
   selectDatabasesSearch,
   selectDatabasesSortSetting,
 } from "../store/databasesList/databasesList.selectors";
-import { AppState } from "../store";
-import { actions as clusterSettingsActions } from "../store/clusterSettings";
-import { actions as databasesListActions } from "../store/databasesList";
-import {
-  databaseDetailsReducer,
-  databaseDetailsSpanStatsReducer,
-} from "../store/databaseDetails";
 import {
   actions as localStorageActions,
   LocalStorageKeys,
 } from "../store/localStorage";
-import { Filters } from "../queryFilter";
-import { actions as analyticsActions } from "../store/analytics";
 import {
-  selectAutomaticStatsCollectionEnabled,
-  selectDropUnusedIndexDuration,
-  selectIndexRecommendationsEnabled,
-} from "../store/clusterSettings/clusterSettings.selectors";
-import { deriveDatabaseDetailsMemoized } from "../databases";
+  actions as nodesActions,
+  nodeRegionsByIDSelector,
+} from "../store/nodes";
+import { selectIsTenant } from "../store/uiConfig";
 
 import {
   DatabasesPage,

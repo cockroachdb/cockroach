@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment from "moment-timezone";
 import noop from "lodash/noop";
+import moment from "moment-timezone";
 
 import { ExecutionStatus } from "../activeExecutions";
 

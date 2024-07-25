@@ -8,17 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import Select from "react-select";
-import { History } from "history";
 import { CaretDown, Cancel } from "@cockroachlabs/icons";
 import { Input } from "antd";
+import { History } from "history";
 import isEqual from "lodash/isEqual";
+import React from "react";
+import Select from "react-select";
 
+import { Button } from "../button";
+import { selectCustomStyles } from "../common";
 import { MultiSelectCheckbox } from "../multiSelectCheckbox/multiSelectCheckbox";
 import { syncHistory } from "../util";
-import { selectCustomStyles } from "../common";
-import { Button } from "../button";
 
 import {
   dropdownButton,

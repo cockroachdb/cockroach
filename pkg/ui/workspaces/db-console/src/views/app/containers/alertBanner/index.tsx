@@ -9,12 +9,12 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Action, Dispatch, bindActionCreators } from "redux";
 import { connect } from "react-redux";
+import { Action, Dispatch, bindActionCreators } from "redux";
 
-import { AlertBox } from "src/views/shared/components/alertBox";
 import { Alert, bannerAlertsSelector } from "src/redux/alerts";
 import { AdminUIState } from "src/redux/state";
+import { AlertBox } from "src/views/shared/components/alertBox";
 import { AlertMessage } from "src/views/shared/components/alertMessage";
 
 import "./alertbanner.styl";

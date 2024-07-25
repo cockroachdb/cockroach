@@ -8,10 +8,28 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import classNames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import classNames from "classnames/bind";
+import React from "react";
 
+import {
+  countBarChart,
+  bytesReadBarChart,
+  latencyBarChart,
+  contentionBarChart,
+  cpuBarChart,
+  maxMemUsageBarChart,
+  networkBytesBarChart,
+  retryBarChart,
+  workloadPctBarChart,
+} from "src/barCharts";
+import { BarChartOptions } from "src/barCharts/barChartFactory";
+import {
+  ColumnDescriptor,
+  longListWithTooltip,
+  SortedTable,
+} from "src/sortedtable";
+import { ActivateDiagnosticsModalRef } from "src/statementsDiagnostics";
 import {
   FixLong,
   longToInt,
@@ -24,30 +42,12 @@ import {
   DurationCheckSample,
 } from "src/util";
 import { DATE_FORMAT, Duration } from "src/util/format";
-import {
-  countBarChart,
-  bytesReadBarChart,
-  latencyBarChart,
-  contentionBarChart,
-  cpuBarChart,
-  maxMemUsageBarChart,
-  networkBytesBarChart,
-  retryBarChart,
-  workloadPctBarChart,
-} from "src/barCharts";
-import { ActivateDiagnosticsModalRef } from "src/statementsDiagnostics";
-import {
-  ColumnDescriptor,
-  longListWithTooltip,
-  SortedTable,
-} from "src/sortedtable";
-import { BarChartOptions } from "src/barCharts/barChartFactory";
 
+import { StatementDiagnosticsReport } from "../api";
 import {
   statisticsTableTitles,
   StatisticType,
 } from "../statsTableUtil/statsTableUtil";
-import { StatementDiagnosticsReport } from "../api";
 import { Timestamp } from "../timestamp";
 
 import styles from "./statementsTable.module.scss";

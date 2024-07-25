@@ -9,13 +9,13 @@
 // licenses/APL.txt.
 
 import { PayloadAction } from "@reduxjs/toolkit";
+import { expectSaga } from "redux-saga-test-plan";
+import * as matchers from "redux-saga-test-plan/matchers";
 import {
   EffectProviders,
   StaticProvider,
   throwError,
 } from "redux-saga-test-plan/providers";
-import * as matchers from "redux-saga-test-plan/matchers";
-import { expectSaga } from "redux-saga-test-plan";
 
 import {
   DatabaseDetailsSpanStatsReqParams,

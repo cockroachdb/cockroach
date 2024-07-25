@@ -8,9 +8,9 @@
 import React from "react";
 import { Redirect, Route, Switch } from "react-router-dom";
 
+import ClusterOverview from "src/views/cluster/containers/clusterOverview";
 import ClusterViz from "src/views/clusterviz/containers/map";
 import NodeList from "src/views/clusterviz/containers/map/nodeList";
-import ClusterOverview from "src/views/cluster/containers/clusterOverview";
 
 export const CLUSTERVIZ_ROOT = "/overview/map";
 

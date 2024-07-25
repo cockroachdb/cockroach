@@ -11,11 +11,11 @@
 import { all, call, put, takeEvery } from "redux-saga/effects";
 
 import { cockroach } from "src/js/protos";
-import { resetSQLStats } from "src/util/api";
 import {
   invalidateAllStatementDetails,
   invalidateStatements,
 } from "src/redux/apiReducers";
+import { resetSQLStats } from "src/util/api";
 
 import { RESET_SQL_STATS, resetSQLStatsFailedAction } from "./sqlStatsActions";
 

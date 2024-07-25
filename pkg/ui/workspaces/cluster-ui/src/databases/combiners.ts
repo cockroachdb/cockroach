@@ -8,22 +8,22 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createSelector } from "@reduxjs/toolkit";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { createSelector } from "@reduxjs/toolkit";
 
 import { DatabaseDetailsPageDataTable } from "src/databaseDetailsPage";
 
+import { DatabasesListResponse, TableNameParts } from "../api";
+import { DatabasesPageDataDatabase } from "../databasesPage";
+import { DatabaseTablePageDataDetails, IndexStat } from "../databaseTablePage";
+import { RecommendationType as RecType } from "../indexDetailsPage";
 import {
   DatabaseDetailsSpanStatsState,
   DatabaseDetailsState,
 } from "../store/databaseDetails";
 import { TableDetailsState } from "../store/databaseTableDetails";
-import { generateTableID, longToInt, TimestampToMoment } from "../util";
-import { DatabaseTablePageDataDetails, IndexStat } from "../databaseTablePage";
 import { IndexStatsState } from "../store/indexStats";
-import { DatabasesPageDataDatabase } from "../databasesPage";
-import { DatabasesListResponse, TableNameParts } from "../api";
-import { RecommendationType as RecType } from "../indexDetailsPage";
+import { generateTableID, longToInt, TimestampToMoment } from "../util";
 
 import {
   Nodes,

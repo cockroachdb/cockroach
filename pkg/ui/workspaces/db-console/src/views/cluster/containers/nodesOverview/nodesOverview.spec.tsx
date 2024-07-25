@@ -8,17 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import { SortSetting } from "@cockroachlabs/cluster-ui";
 import { ReactWrapper } from "enzyme";
 import times from "lodash/times";
 import Long from "long";
-import { SortSetting } from "@cockroachlabs/cluster-ui";
+import React from "react";
 
-import { AdminUIState } from "src/redux/state";
-import { LocalSetting } from "src/redux/localsettings";
-import { connectedMount } from "src/test-utils";
 import { cockroach } from "src/js/protos";
+import { LocalSetting } from "src/redux/localsettings";
 import { livenessByNodeIDSelector, LivenessStatus } from "src/redux/nodes";
+import { AdminUIState } from "src/redux/state";
+import { connectedMount } from "src/test-utils";
 
 import {
   decommissionedNodesTableDataSelector,

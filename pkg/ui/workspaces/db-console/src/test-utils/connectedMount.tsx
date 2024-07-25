@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { mount, ReactWrapper } from "enzyme";
-import { Action, Store } from "redux";
-import { Provider } from "react-redux";
 import { ConnectedRouter } from "connected-react-router";
+import { mount, ReactWrapper } from "enzyme";
 import { createMemoryHistory } from "history";
+import React from "react";
+import { Provider } from "react-redux";
+import { Action, Store } from "redux";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 

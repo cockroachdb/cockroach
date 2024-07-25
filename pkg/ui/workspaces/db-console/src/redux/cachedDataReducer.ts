@@ -16,18 +16,18 @@
 
 import assert from "assert";
 
-import isNil from "lodash/isNil";
-import clone from "lodash/clone";
-import { Action } from "redux";
-import moment from "moment-timezone";
-import { push } from "connected-react-router";
-import { ThunkAction, ThunkDispatch } from "redux-thunk";
-import { createHashHistory } from "history";
 import { util as clusterUiUtil } from "@cockroachlabs/cluster-ui";
+import { push } from "connected-react-router";
+import { createHashHistory } from "history";
+import clone from "lodash/clone";
+import isNil from "lodash/isNil";
+import moment from "moment-timezone";
+import { Action } from "redux";
+import { ThunkAction, ThunkDispatch } from "redux-thunk";
 
+import { PayloadAction, WithRequest } from "src/interfaces/action";
 import { getLoginPage } from "src/redux/login";
 import { APIRequestFn } from "src/util/api";
-import { PayloadAction, WithRequest } from "src/interfaces/action";
 
 import { clearTenantCookie } from "./cookies";
 

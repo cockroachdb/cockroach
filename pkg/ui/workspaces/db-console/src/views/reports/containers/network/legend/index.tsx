@@ -11,8 +11,8 @@
 import { Tooltip } from "antd";
 import React from "react";
 
-import { Chip } from "src/views/app/components/chip";
 import { Text, TextTypes } from "src/components";
+import { Chip } from "src/views/app/components/chip";
 import "./legend.styl";
 
 interface ILegendProps {

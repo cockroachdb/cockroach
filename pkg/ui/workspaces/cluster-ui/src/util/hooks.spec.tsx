@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import {
   render,
   cleanup,
@@ -17,6 +16,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import moment from "moment-timezone";
+import React from "react";
 
 import { useScheduleFunction } from "./hooks";
 

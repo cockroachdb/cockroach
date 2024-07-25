@@ -8,17 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import { Heading } from "@cockroachlabs/ui-components";
 import { Col, Row } from "antd";
 import classNames from "classnames/bind";
-import { Heading } from "@cockroachlabs/ui-components";
+import React from "react";
 
-import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { ContendedExecution, ExecutionType } from "src/activeExecutions";
+import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 
-import { capitalize, Duration, NO_SAMPLES_FOUND } from "../util";
 import { ExecutionContentionTable } from "../activeExecutions/activeTransactionsTable/execContentionTable";
 import styles from "../statementDetails/statementDetails.module.scss";
+import { capitalize, Duration, NO_SAMPLES_FOUND } from "../util";
 
 const cx = classNames.bind(styles);
 

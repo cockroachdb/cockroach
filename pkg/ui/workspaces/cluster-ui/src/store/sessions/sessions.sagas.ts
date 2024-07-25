@@ -21,9 +21,9 @@ import {
 
 import { getSessions } from "src/api/sessionsApi";
 
+import { maybeError } from "../../util";
 import { actions as clusterLockActions } from "../clusterLocks/clusterLocks.reducer";
 import { selectIsTenant } from "../uiConfig";
-import { maybeError } from "../../util";
 
 import { actions } from "./sessions.reducer";
 

@@ -8,10 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { connect } from "react-redux";
-import { bindActionCreators } from "redux";
-import { createSelector } from "reselect";
-import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   Filters,
   defaultFilters,
@@ -24,7 +20,21 @@ import {
   StatementsPageRootProps,
   api,
 } from "@cockroachlabs/cluster-ui";
+import { connect } from "react-redux";
+import { RouteComponentProps, withRouter } from "react-router-dom";
+import { bindActionCreators } from "redux";
+import { createSelector } from "reselect";
 
+import {
+  createStatementDiagnosticsAlertLocalSetting,
+  cancelStatementDiagnosticsAlertLocalSetting,
+} from "src/redux/alerts";
+import {
+  trackApplySearchCriteriaAction,
+  trackCancelDiagnosticsBundleAction,
+  trackDownloadDiagnosticsBundleAction,
+  trackStatementsPaginationAction,
+} from "src/redux/analyticsActions";
 import {
   refreshNodes,
   refreshDatabases,
@@ -34,32 +44,22 @@ import {
   createSelectorForCachedDataField,
 } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { LocalSetting } from "src/redux/localsettings";
+import { nodeRegionsByIDSelector } from "src/redux/nodes";
+import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { AdminUIState, AppDispatch } from "src/redux/state";
-import { PrintTime } from "src/views/reports/containers/range/print";
-import {
-  createStatementDiagnosticsAlertLocalSetting,
-  cancelStatementDiagnosticsAlertLocalSetting,
-} from "src/redux/alerts";
-import {
-  selectHasViewActivityRedactedRole,
-  selectHasAdminRole,
-} from "src/redux/user";
 import {
   cancelStatementDiagnosticsReportAction,
   createOpenDiagnosticsModalAction,
   createStatementDiagnosticsReportAction,
   setGlobalTimeScaleAction,
 } from "src/redux/statements";
-import {
-  trackApplySearchCriteriaAction,
-  trackCancelDiagnosticsBundleAction,
-  trackDownloadDiagnosticsBundleAction,
-  trackStatementsPaginationAction,
-} from "src/redux/analyticsActions";
-import { resetSQLStatsAction } from "src/redux/sqlStats";
-import { LocalSetting } from "src/redux/localsettings";
-import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { selectTimeScale } from "src/redux/timeScale";
+import {
+  selectHasViewActivityRedactedRole,
+  selectHasAdminRole,
+} from "src/redux/user";
+import { PrintTime } from "src/views/reports/containers/range/print";
 
 import {
   activeStatementsViewActions,

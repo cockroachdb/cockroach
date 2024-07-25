@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { RouteComponentProps } from "react-router";
 import {
   DatabaseDetailsPageData,
   defaultFilters,
@@ -16,24 +15,25 @@ import {
   ViewMode,
   deriveTableDetailsMemoized,
 } from "@cockroachlabs/cluster-ui";
+import { RouteComponentProps } from "react-router";
 
-import { LocalSetting } from "src/redux/localsettings";
 import {
   refreshDatabaseDetails,
   refreshNodes,
   refreshTableDetails,
 } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
-import { databaseNameAttr } from "src/util/constants";
-import { getMatchParamByName } from "src/util/query";
-import {
-  nodeRegionsByIDSelector,
-  selectIsMoreThanOneNode,
-} from "src/redux/nodes";
 import {
   selectDropUnusedIndexDuration,
   selectIndexRecommendationsEnabled,
 } from "src/redux/clusterSettings";
+import { LocalSetting } from "src/redux/localsettings";
+import {
+  nodeRegionsByIDSelector,
+  selectIsMoreThanOneNode,
+} from "src/redux/nodes";
+import { AdminUIState } from "src/redux/state";
+import { databaseNameAttr } from "src/util/constants";
+import { getMatchParamByName } from "src/util/query";
 
 const sortSettingTablesLocalSetting = new LocalSetting(
   "sortSetting/DatabasesDetailsTablesPage",

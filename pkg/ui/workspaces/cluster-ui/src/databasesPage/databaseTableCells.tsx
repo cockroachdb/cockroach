@@ -8,25 +8,25 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useContext } from "react";
+import { Caution } from "@cockroachlabs/icons";
 import { Tooltip } from "antd";
 import classNames from "classnames/bind";
+import React, { useContext } from "react";
 import { Link } from "react-router-dom";
-import { Caution } from "@cockroachlabs/icons";
 
-import { CircleFilled } from "../icon";
-import { EncodeDatabaseUri } from "../util";
-import { StackIcon } from "../icon/stackIcon";
 import { CockroachCloudContext } from "../contexts";
 import {
   LoadingCell,
   getNetworkErrorMessage,
   getQueryErrorMessage,
 } from "../databases";
+import { CircleFilled } from "../icon";
+import { StackIcon } from "../icon/stackIcon";
+import { EncodeDatabaseUri } from "../util";
 import * as format from "../util/format";
 
-import styles from "./databasesPage.module.scss";
 import { DatabasesPageDataDatabase } from "./databasesPage";
+import styles from "./databasesPage.module.scss";
 
 const cx = classNames.bind(styles);
 

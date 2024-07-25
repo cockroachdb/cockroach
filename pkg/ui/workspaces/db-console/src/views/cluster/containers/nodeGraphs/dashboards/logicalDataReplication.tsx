@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { AxisUnits, util } from "@cockroachlabs/cluster-ui";
+import React from "react";
 
+import { cockroach } from "src/js/protos";
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
-import { cockroach } from "src/js/protos";
 
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 

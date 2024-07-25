@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { expect } from "chai";
 import { shallow } from "enzyme";
 import moment from "moment";
+import React from "react";
 
 import { IndexDetailsPage, IndexDetailsPageProps, util } from "../index";
 

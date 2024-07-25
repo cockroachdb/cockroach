@@ -8,16 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import classNames from "classnames";
+import React from "react";
 
 import { AlertInfo, AlertLevel } from "src/redux/alerts";
+import { trustIcon } from "src/util/trust";
 import {
   warningIcon,
   notificationIcon,
   criticalIcon,
 } from "src/views/shared/components/icons";
-import { trustIcon } from "src/util/trust";
 
 import "./alertbox.styl";
 
