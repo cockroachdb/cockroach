@@ -437,6 +437,13 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 			return nil, false
 		}
 	}
+	if fn.def.Name == "abs" && typ.Identical(types.Float4) {
+		// The 'abs' function is known to return somewhat unpredictable results
+		// on FLOAT4 type (different precision depending on the execution engine
+		// and the optimizer plan), so we choose to never use it in this
+		// context.
+		return nil, false
+	}
 
 	args := make(tree.TypedExprs, 0)
 	for _, argTyp := range fn.overload.Types.Types() {
