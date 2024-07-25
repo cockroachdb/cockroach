@@ -13,16 +13,11 @@ import React from "react";
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Axis, Metric } from "src/views/shared/components/metricQuery";
 
-import {
-  GraphDashboardProps,
-  nodeDisplayName,
-  storeIDsForNode,
-} from "./dashboardUtils";
+import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodeDisplayNameByID, storeIDsByNodeID, tenantSource } =
-    props;
+  const { nodeIDs, nodeDisplayNameByID, tenantSource } = props;
 
   return [
     <LineGraph title="Network Bytes Received" showMetricsInTooltip={true}>
@@ -31,7 +26,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.recv.bytes"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={[nid]}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -45,7 +40,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.recv.packets"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={[nid]}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -62,7 +57,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.recv.err"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={[nid]}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -79,7 +74,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.recv.drop"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={[nid]}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -93,7 +88,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.send.bytes"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={[nid]}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -107,7 +102,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.send.packets"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={[nid]}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -124,7 +119,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.send.err"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={[nid]}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -138,7 +133,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.sys.host.net.send.drop"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={[nid]}
             tenantSource={tenantSource}
             nonNegativeRate
           />
@@ -157,7 +152,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.round-trip-latency-p50"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={[nid]}
             tenantSource={tenantSource}
             downsampleMax
           />
@@ -176,7 +171,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             name="cr.node.round-trip-latency-p99"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={[nid]}
             tenantSource={tenantSource}
             downsampleMax
           />
@@ -196,7 +191,7 @@ export default function (props: GraphDashboardProps) {
             key={nid}
             name="cr.node.rpc.connection.unhealthy"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            sources={[nid]}
             tenantSource={tenantSource}
           />
         ))}
