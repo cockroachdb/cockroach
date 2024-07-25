@@ -238,7 +238,9 @@ func (idp *readImportDataProcessor) close() {
 		return
 	}
 
-	idp.cancel()
+	if idp.cancel != nil {
+		idp.cancel()
+	}
 	_ = idp.wg.Wait()
 
 	idp.InternalClose()

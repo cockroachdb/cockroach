@@ -667,7 +667,9 @@ func (rd *restoreDataProcessor) ConsumerClosed() {
 	if rd.Closed {
 		return
 	}
-	rd.cancelWorkersAndWait()
+	if rd.cancelWorkersAndWait != nil {
+		rd.cancelWorkersAndWait()
+	}
 
 	rd.qp.Close(rd.Ctx())
 	rd.aggTimer.Stop()
