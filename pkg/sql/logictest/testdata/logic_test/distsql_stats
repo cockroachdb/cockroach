@@ -2410,15 +2410,10 @@ INSERT INTO a_null VALUES (NULL), (1), (2);
 statement ok
 CREATE STATISTICS a_null_stat ON a FROM a_null;
 
-let $a_null_stats
-SHOW STATISTICS USING JSON FOR TABLE a_null
-
-# Inject statistics so that the current stats
-# cache is invalidated and creating partial
-# statistics has access to the latest full
-# statistic.
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
 statement ok
-ALTER TABLE a_null INJECT STATISTICS '$a_null_stats'
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement ok
 INSERT INTO a_null VALUES (NULL), (NULL), (NULL);
@@ -2453,15 +2448,10 @@ INSERT INTO d_desc VALUES (1, 10), (2, 20), (3, 30), (4, 40);
 statement ok
 CREATE STATISTICS sd ON a FROM d_desc;
 
-let $d_desc_stats
-SHOW STATISTICS USING JSON FOR TABLE d_desc;
-
-# Inject statistics so that the current stats
-# cache is invalidated and creating partial
-# statistics has access to the latest full
-# statistic.
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
 statement ok
-ALTER TABLE d_desc INJECT STATISTICS '$d_desc_stats'
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement ok
 INSERT INTO d_desc VALUES (0, 0), (5, 50);
@@ -2495,15 +2485,10 @@ INSERT INTO d_desc VALUES (NULL, NULL), (NULL, 2);
 statement ok
 CREATE STATISTICS sdn ON a FROM d_desc;
 
-let $d_desc_null_stats
-SHOW STATISTICS USING JSON FOR TABLE d_desc;
-
-# Inject statistics so that the current stats
-# cache is invalidated and creating partial
-# statistics has access to the latest full
-# statistic.
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
 statement ok
-ALTER TABLE d_desc INJECT STATISTICS '$d_desc_null_stats'
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement ok
 CREATE STATISTICS sdnp ON a FROM d_desc USING EXTREMES;
@@ -2535,18 +2520,13 @@ INSERT INTO s VALUES ('c'), ('d'), ('e');
 statement ok
 CREATE STATISTICS str ON s FROM s;
 
-let $s_stats
-SHOW STATISTICS USING JSON FOR TABLE s;
-
 statement ok
 INSERT INTO s VALUES ('a'), ('b'), ('f');
 
-# Inject statistics so that the current stats
-# cache is invalidated and creating partial
-# statistics has access to the latest full
-# statistic.
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
 statement ok
-ALTER TABLE s INJECT STATISTICS '$s_stats'
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement ok
 CREATE STATISTICS s_partial ON s FROM s USING EXTREMES;
@@ -2570,15 +2550,10 @@ INSERT INTO j VALUES ('{"1":"10"}'), ('{"2":"20"}'),  ('{"3":"30"}');
 statement ok
 CREATE STATISTICS j_full ON j FROM j;
 
-let $j_stats
-SHOW STATISTICS USING JSON FOR TABLE j;
-
-# Inject statistics so that the current stats
-# cache is invalidated and creating partial
-# statistics has access to the latest full
-# statistic.
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
 statement ok
-ALTER TABLE j INJECT STATISTICS '$j_stats'
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement error pq: table j does not contain a non-partial forward index with j as a prefix column
 CREATE STATISTICS j_partial ON j FROM j USING EXTREMES;
@@ -2604,15 +2579,10 @@ INSERT INTO only_null VALUES (NULL), (NULL), (NULL);
 statement ok
 CREATE STATISTICS only_null_stat ON a FROM only_null;
 
-let $only_null_stat
-SHOW STATISTICS USING JSON FOR TABLE only_null;
-
-# Inject statistics so that the current stats
-# cache is invalidated and creating partial
-# statistics has access to the latest full
-# statistic.
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
 statement ok
-ALTER TABLE only_null INJECT STATISTICS '$only_null_stat';
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement error pq: only outer or NULL bounded buckets exist in the index, so partial stats cannot be collected
 CREATE STATISTICS only_null_partial ON a FROM only_null USING EXTREMES;
@@ -2953,6 +2923,9 @@ CREATE TABLE int_outer_buckets (a PRIMARY KEY) AS SELECT generate_series(0, 9999
 statement ok
 CREATE STATISTICS int_outer_buckets_full ON a FROM int_outer_buckets;
 
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
 let $hist_id_int_outer_buckets_full
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE int_outer_buckets] WHERE statistics_name = 'int_outer_buckets_full'
 
@@ -2990,6 +2963,11 @@ SET CLUSTER SETTING sql.stats.histogram_samples.count = 10050;
 statement ok
 CREATE STATISTICS int_outer_buckets_full ON a FROM int_outer_buckets;
 
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
 statement ok
 CREATE STATISTICS int_outer_buckets_partial ON a FROM int_outer_buckets USING EXTREMES;
 
@@ -3017,6 +2995,11 @@ INSERT INTO timestamp_outer_buckets VALUES
 
 statement ok
 CREATE STATISTICS timestamp_outer_buckets_full ON a FROM timestamp_outer_buckets;
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
 
 let $hist_id_timestamp_outer_buckets_full
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE timestamp_outer_buckets] WHERE statistics_name = 'timestamp_outer_buckets_full'
@@ -3128,6 +3111,11 @@ INSERT INTO bool_table VALUES (true), (false)
 statement ok
 CREATE STATISTICS bool_table_full ON a FROM bool_table
 
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
 statement error pgcode 0A000 creating partial statistics at extremes on bool and enum columns is disabled
 CREATE STATISTICS bool_table_partial ON a FROM bool_table USING EXTREMES;
 
@@ -3139,6 +3127,11 @@ INSERT INTO enum_table VALUES ('hello'), ('howdy'), ('hi')
 
 statement ok
 CREATE STATISTICS enum_table_full ON a FROM enum_table
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement error pgcode 0A000 creating partial statistics at extremes on bool and enum columns is disabled
 CREATE STATISTICS enum_table_full ON a FROM enum_table USING EXTREMES
