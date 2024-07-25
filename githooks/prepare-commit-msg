@@ -120,7 +120,7 @@ ${cchar}Release note (performance improvement): \\
 ${cchar}Release note (cluster virtualization): \\
 ${cchar}Release note (bug fix): \\
 ${cchar}              ^-- ensure there is a corresponding GitHub issue labeled \\
-${cchar}                  with C-bug and earliest known release branch \\
+${cchar}                  with C-bug and all known affected release branches \\
 
 ;
 "
