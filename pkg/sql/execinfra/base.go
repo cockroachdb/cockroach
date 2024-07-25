@@ -123,7 +123,7 @@ type RowSource interface {
 
 	// Start prepares the RowSource for future Next() calls and takes in the
 	// context in which these future calls should operate. Start needs to be
-	// called before Next/ConsumerDone/ConsumerClosed.
+	// called before Next and ConsumerDone.
 	//
 	// RowSources that consume other RowSources are expected to Start() their
 	// inputs.
@@ -169,7 +169,8 @@ type RowSource interface {
 
 	// ConsumerClosed informs the source that the consumer is done and will not
 	// make any more calls to Next(). Must be called at least once on a given
-	// RowSource and can be called multiple times.
+	// RowSource and can be called multiple times. Implementations must support
+	// the case when Start was never called.
 	//
 	// Like ConsumerDone(), if the consumer of the source stops consuming rows
 	// before Next indicates that there are no more rows, ConsumerDone() and/or
