@@ -51,6 +51,7 @@ import {
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import { RequestState } from "src/api/types";
 import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
+import SqlActivityDebugInfo from "src/sqlActivity/sqlActivityDebugInfo";
 
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import {
@@ -669,6 +670,9 @@ export class StatementsPage extends React.Component<
                 />
               </PageConfigItem>
             )}
+            <PageConfigItem className={commonStyles("separator")}>
+              <SqlActivityDebugInfo info={this.props.statementsResponse.data} />
+            </PageConfigItem>
           </PageConfig>
         </section>
         <section className={sortableTableCx("cl-table-container")}>
