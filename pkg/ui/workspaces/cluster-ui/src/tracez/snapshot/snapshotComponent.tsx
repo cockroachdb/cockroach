@@ -8,23 +8,23 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Helmet } from "react-helmet";
-import { Button, Icon } from "@cockroachlabs/ui-components";
-import React, { useMemo } from "react";
-import classNames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { Button, Icon } from "@cockroachlabs/ui-components";
+import classNames from "classnames/bind";
 import Long from "long";
+import React, { useMemo } from "react";
+import { Helmet } from "react-helmet";
 
-import { commonStyles } from "src/common";
-import { PageConfig, PageConfigItem } from "src/pageConfig";
-import { Dropdown } from "src/dropdown";
-import { Loading } from "src/loading";
-import { TimestampToMoment } from "src/util";
-import { SortSetting } from "src/sortedtable";
 import {
   GetTracingSnapshotResponse,
   ListTracingSnapshotsResponse,
 } from "src/api";
+import { commonStyles } from "src/common";
+import { Dropdown } from "src/dropdown";
+import { Loading } from "src/loading";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
+import { SortSetting } from "src/sortedtable";
+import { TimestampToMoment } from "src/util";
 
 import styles from "../snapshot.module.scss";
 

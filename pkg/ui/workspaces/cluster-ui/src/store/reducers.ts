@@ -16,9 +16,23 @@ import {
   reducer as clusterLocks,
 } from "./clusterLocks/clusterLocks.reducer";
 import {
+  ClusterSettingsState,
+  reducer as clusterSettings,
+} from "./clusterSettings/clusterSettings.reducer";
+import {
+  KeyedDatabaseDetailsState,
+  KeyedDatabaseDetailsSpanStatsState,
+  databaseDetailsReducer,
+  databaseDetailsSpanStatsReducer,
+} from "./databaseDetails";
+import {
   DatabasesListState,
   reducer as databasesList,
 } from "./databasesList/databasesList.reducers";
+import {
+  KeyedTableDetailsState,
+  reducer as tableDetails,
+} from "./databaseTableDetails/tableDetails.reducer";
 import {
   IndexStatsReducerState,
   reducer as indexStats,
@@ -27,6 +41,10 @@ import {
   reducer as txnInsightDetails,
   TxnInsightDetailsCachedState,
 } from "./insightDetails/transactionInsightDetails";
+import {
+  reducer as statementFingerprintInsights,
+  StatementFingerprintInsightsCachedState,
+} from "./insights/statementFingerprintInsights";
 import {
   reducer as stmtInsights,
   StmtInsightsState,
@@ -37,9 +55,14 @@ import {
 } from "./insights/transactionInsights";
 import { JobDetailsReducerState, reducer as job } from "./jobDetails";
 import { JobsState, reducer as jobs } from "./jobs";
+import {
+  JobProfilerExecutionDetailFilesState,
+  reducer as executionDetailFiles,
+} from "./jobs/jobProfiler.reducer";
 import { LivenessState, reducer as liveness } from "./liveness";
 import { LocalStorageState, reducer as localStorage } from "./localStorage";
 import { NodesState, reducer as nodes } from "./nodes";
+import { rootActions } from "./rootActions";
 import {
   reducer as schemaInsights,
   SchemaInsightsState,
@@ -58,31 +81,8 @@ import {
   reducer as terminateQuery,
   TerminateQueryState,
 } from "./terminateQuery";
-import { reducer as uiConfig, UIConfigState } from "./uiConfig";
-import {
-  reducer as statementFingerprintInsights,
-  StatementFingerprintInsightsCachedState,
-} from "./insights/statementFingerprintInsights";
 import { reducer as txnStats, TxnStatsState } from "./transactionStats";
-import {
-  ClusterSettingsState,
-  reducer as clusterSettings,
-} from "./clusterSettings/clusterSettings.reducer";
-import {
-  KeyedDatabaseDetailsState,
-  KeyedDatabaseDetailsSpanStatsState,
-  databaseDetailsReducer,
-  databaseDetailsSpanStatsReducer,
-} from "./databaseDetails";
-import {
-  KeyedTableDetailsState,
-  reducer as tableDetails,
-} from "./databaseTableDetails/tableDetails.reducer";
-import {
-  JobProfilerExecutionDetailFilesState,
-  reducer as executionDetailFiles,
-} from "./jobs/jobProfiler.reducer";
-import { rootActions } from "./rootActions";
+import { reducer as uiConfig, UIConfigState } from "./uiConfig";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;

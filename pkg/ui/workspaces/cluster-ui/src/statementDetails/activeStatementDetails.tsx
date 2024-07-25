@@ -8,28 +8,28 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useEffect, useState } from "react";
 import { ArrowLeft } from "@cockroachlabs/icons";
-import Helmet from "react-helmet";
-import classNames from "classnames/bind";
-import { useHistory, match } from "react-router-dom";
 import { Col, Row, Tabs } from "antd";
+import classNames from "classnames/bind";
+import React, { useEffect, useState } from "react";
+import Helmet from "react-helmet";
+import { useHistory, match } from "react-router-dom";
 
-import { commonStyles } from "src/common";
-import { Button } from "src/button";
-import { SqlBox, SqlBoxSize } from "src/sql/box";
-import { getMatchParamByName } from "src/util/query";
 import {
   ActiveStatement,
   ExecutionContentionDetails,
 } from "src/activeExecutions";
+import { Button } from "src/button";
+import { commonStyles } from "src/common";
+import { SqlBox, SqlBoxSize } from "src/sql/box";
+import { getMatchParamByName } from "src/util/query";
 
-import LoadingError from "../sqlActivity/errorComponent";
-import { Loading } from "../loading";
-import { getIdxRecommendationsFromExecution } from "../api/idxRecForStatementApi";
-import { SortSetting } from "../sortedtable";
-import { executionIdAttr } from "../util";
 import { getExplainPlanFromGist } from "../api/decodePlanGistApi";
+import { getIdxRecommendationsFromExecution } from "../api/idxRecForStatementApi";
+import { Loading } from "../loading";
+import { SortSetting } from "../sortedtable";
+import LoadingError from "../sqlActivity/errorComponent";
+import { executionIdAttr } from "../util";
 
 import { ActiveStatementDetailsOverviewTab } from "./activeStatementDetailsOverviewTab";
 import { Insights } from "./planDetails";

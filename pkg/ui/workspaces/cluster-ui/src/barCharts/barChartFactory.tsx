@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { scaleLinear } from "d3-scale";
-import { extent as d3Extent } from "d3-array";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
-import sum from "lodash/sum";
+import { extent as d3Extent } from "d3-array";
+import { scaleLinear } from "d3-scale";
 import map from "lodash/map";
+import sum from "lodash/sum";
+import React from "react";
 
 import styles from "./barCharts.module.scss";
 import { NumericStatLegend } from "./numericStatLegend";

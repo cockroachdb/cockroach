@@ -8,18 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import filter from "lodash/filter";
 import flatMap from "lodash/flatMap";
+import flow from "lodash/flow";
 import map from "lodash/map";
+import sortBy from "lodash/sortBy";
 import uniq from "lodash/uniq";
 import values from "lodash/values";
-import sortBy from "lodash/sortBy";
-import flow from "lodash/flow";
 import React from "react";
 import ReactPaginate from "react-paginate";
 import { connect } from "react-redux";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import * as protos from "src/js/protos";
 import { refreshRaft } from "src/redux/apiReducers";

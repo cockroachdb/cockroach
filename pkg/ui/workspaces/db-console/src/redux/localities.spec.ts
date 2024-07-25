@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import merge from "lodash/merge";
 import { createMemoryHistory } from "history";
+import merge from "lodash/merge";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 

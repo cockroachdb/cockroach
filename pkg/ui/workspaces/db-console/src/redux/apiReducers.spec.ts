@@ -9,10 +9,10 @@
 // licenses/APL.txt.
 
 import { api as clusterUiApi, util } from "@cockroachlabs/cluster-ui";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { createMemoryHistory } from "history";
 import merge from "lodash/merge";
 import moment from "moment-timezone";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { RouteComponentProps } from "react-router";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";

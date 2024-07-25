@@ -7,34 +7,34 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import React, { useContext } from "react";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Col, Row, Tabs } from "antd";
+import classNames from "classnames/bind";
 import Long from "long";
+import moment from "moment-timezone";
+import React, { useContext } from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
-import classNames from "classnames/bind";
-import moment from "moment-timezone";
 
 import { JobRequest, JobResponse } from "src/api/jobsApi";
 import { Button } from "src/button";
+import { commonStyles } from "src/common";
+import { CockroachCloudContext } from "src/contexts";
+import jobStyles from "src/jobs/jobs.module.scss";
+import { HighwaterTimestamp } from "src/jobs/util/highwaterTimestamp";
+import { JobStatusCell } from "src/jobs/util/jobStatusCell";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
+import { UIConfigState } from "src/store";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
+import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import {
   TimestampToMoment,
   idAttr,
   getMatchParamByName,
   DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
 } from "src/util";
-import { HighwaterTimestamp } from "src/jobs/util/highwaterTimestamp";
-import { JobStatusCell } from "src/jobs/util/jobStatusCell";
-import { commonStyles } from "src/common";
-import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
-import jobStyles from "src/jobs/jobs.module.scss";
-import { CockroachCloudContext } from "src/contexts";
-import { UIConfigState } from "src/store";
 
 import {
   GetJobProfilerExecutionDetailRequest,

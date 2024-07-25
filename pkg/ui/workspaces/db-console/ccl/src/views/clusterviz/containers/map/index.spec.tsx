@@ -6,9 +6,9 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import React from "react";
 import { shallow } from "enzyme";
 import { createMemoryHistory, History } from "history";
+import React from "react";
 import { match as Match } from "react-router-dom";
 
 import { refreshCluster } from "src/redux/apiReducers";

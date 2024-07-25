@@ -8,11 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { Tooltip } from "antd";
-import { useSelector } from "react-redux";
 import classNames from "classnames/bind";
 import moment from "moment";
+import React from "react";
+import { useSelector } from "react-redux";
 
 import ErrorIcon from "assets/error-circle.svg";
 import InfoIcon from "assets/info-filled-circle.svg";

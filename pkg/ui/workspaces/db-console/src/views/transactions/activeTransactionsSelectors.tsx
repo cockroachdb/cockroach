@@ -15,14 +15,14 @@ import {
   SortSetting,
 } from "@cockroachlabs/cluster-ui";
 
+import { refreshLiveWorkload } from "src/redux/apiReducers";
+import { LocalSetting } from "src/redux/localsettings";
+import { AdminUIState } from "src/redux/state";
 import {
   selectAppName,
   selectActiveTransactions,
   selectClusterLocksMaxApiSizeReached,
 } from "src/selectors";
-import { refreshLiveWorkload } from "src/redux/apiReducers";
-import { LocalSetting } from "src/redux/localsettings";
-import { AdminUIState } from "src/redux/state";
 
 export const ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED =
   "isAutoRefreshEnabled/ActiveExecutions";

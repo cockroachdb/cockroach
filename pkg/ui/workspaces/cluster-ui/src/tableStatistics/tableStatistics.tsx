@@ -8,17 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import classNames from "classnames/bind";
 import moment from "moment-timezone";
+import React from "react";
 
 import { Button } from "src/button";
 import { ResultsPerPageLabel } from "src/pagination";
-import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
 import { TimeScale } from "src/timeScaleDropdown";
+import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
 
-import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import { ISortedTablePagination } from "../sortedtable";
+import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import { statisticsClasses } from "../transactionsPage/transactionsPageClasses";
 
 const { statistic, countTitle } = statisticsClasses;

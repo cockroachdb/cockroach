@@ -13,8 +13,8 @@ import moment, { Moment } from "moment-timezone";
 
 import { SqlApiResponse, ErrorWithKey, StmtInsightsReq } from "src/api";
 
-import { DOMAIN_NAME } from "../../utils";
 import { StmtInsightEvent } from "../../../insights";
+import { DOMAIN_NAME } from "../../utils";
 
 export type StatementFingerprintInsightsState = {
   data: SqlApiResponse<StmtInsightEvent[]> | null;

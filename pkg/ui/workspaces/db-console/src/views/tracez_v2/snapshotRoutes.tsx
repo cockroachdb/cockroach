@@ -10,11 +10,11 @@
 
 import { join } from "path";
 
-import { Route, Switch, useHistory, useRouteMatch } from "react-router-dom";
 import React, { useEffect } from "react";
+import { Route, Switch, useHistory, useRouteMatch } from "react-router-dom";
 
-import SnapshotPage from "src/views/tracez_v2/snapshotPage";
 import { getDataFromServer } from "src/util/dataFromServer";
+import SnapshotPage from "src/views/tracez_v2/snapshotPage";
 
 const NodePicker: React.FC = () => {
   // If no node was provided, navigate explicitly to the local node.

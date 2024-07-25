@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { util } from "@cockroachlabs/cluster-ui";
 import moment from "moment-timezone";
 import { Action } from "redux";
 import { channel, Task, Channel } from "redux-saga";
@@ -21,7 +22,6 @@ import {
   take,
   delay,
 } from "redux-saga/effects";
-import { util } from "@cockroachlabs/cluster-ui";
 
 import { queryBegin, queryComplete, queryError } from "./reducer";
 

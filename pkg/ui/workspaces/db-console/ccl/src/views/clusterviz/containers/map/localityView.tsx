@@ -11,18 +11,18 @@ import { RouteComponentProps } from "react-router";
 import { withRouter } from "react-router-dom";
 
 import { LocalityTree } from "src/redux/localities";
+import { sumNodeStats, LivenessStatus } from "src/redux/nodes";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import {
   generateLocalityRoute,
   getLocalityLabel,
   getLeaves,
 } from "src/util/localities";
-import { sumNodeStats, LivenessStatus } from "src/redux/nodes";
 import { pluralize } from "src/util/pluralize";
 import { trustIcon } from "src/util/trust";
-import { Sparklines } from "src/views/clusterviz/components/nodeOrLocality/sparklines";
 import { CapacityArc } from "src/views/clusterviz/components/nodeOrLocality/capacityArc";
 import { Labels } from "src/views/clusterviz/components/nodeOrLocality/labels";
+import { Sparklines } from "src/views/clusterviz/components/nodeOrLocality/sparklines";
 
 import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import localityIcon from "!!raw-loader!assets/localityIcon.svg";

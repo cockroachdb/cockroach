@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useState } from "react";
 import { storiesOf } from "@storybook/react";
 import moment from "moment-timezone";
+import React, { useState } from "react";
 
 import { TimeScaleDropdown } from "./timeScaleDropdown";
 import { defaultTimeScaleOptions, defaultTimeScaleSelected } from "./utils";

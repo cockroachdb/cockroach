@@ -11,16 +11,16 @@
 import { PayloadAction } from "@reduxjs/toolkit";
 import { all, call, put, takeLatest, takeEvery } from "redux-saga/effects";
 
+import { resetSQLStats } from "src/api/sqlStatsApi";
 import {
   getCombinedStatements,
   StatementsRequest,
 } from "src/api/statementsApi";
-import { resetSQLStats } from "src/api/sqlStatsApi";
 import { actions as localStorageActions } from "src/store/localStorage";
 
 import { maybeError } from "../../util";
-import { actions as txnStatsActions } from "../transactionStats";
 import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
+import { actions as txnStatsActions } from "../transactionStats";
 
 import {
   actions as sqlStatsActions,

@@ -8,19 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment-timezone";
+import { call } from "redux-saga/effects";
 import { expectSaga } from "redux-saga-test-plan";
 import { throwError } from "redux-saga-test-plan/providers";
-import { call } from "redux-saga/effects";
-import moment from "moment-timezone";
 
-import {
-  createDiagnosticsReportSaga,
-  requestStatementsDiagnosticsSaga,
-  cancelDiagnosticsReportSaga,
-  StatementDiagnosticsState,
-  actions,
-  reducer,
-} from "src/store/statementDiagnostics";
 import {
   createStatementDiagnosticsReport,
   cancelStatementDiagnosticsReport,
@@ -31,6 +23,14 @@ import {
   CancelStmtDiagnosticRequest,
   CancelStmtDiagnosticResponse,
 } from "src/api/statementDiagnosticsApi";
+import {
+  createDiagnosticsReportSaga,
+  requestStatementsDiagnosticsSaga,
+  cancelDiagnosticsReportSaga,
+  StatementDiagnosticsState,
+  actions,
+  reducer,
+} from "src/store/statementDiagnostics";
 
 describe("statementsDiagnostics sagas", () => {
   describe("createDiagnosticsReportSaga", () => {

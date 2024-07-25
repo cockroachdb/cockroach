@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { storiesOf } from "@storybook/react";
-import { MemoryRouter } from "react-router-dom";
 import cloneDeep from "lodash/cloneDeep";
+import React from "react";
+import { MemoryRouter } from "react-router-dom";
 
 import { StatementsPage } from "./statementsPage";
 import statementsPagePropsFixture, {

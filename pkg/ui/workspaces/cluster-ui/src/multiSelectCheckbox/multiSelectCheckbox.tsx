@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import classNames from "classnames/bind";
 import React from "react";
 import Select, { components, OptionsType } from "react-select";
-import classNames from "classnames/bind";
 
 import { Filter } from "../queryFilter";
 

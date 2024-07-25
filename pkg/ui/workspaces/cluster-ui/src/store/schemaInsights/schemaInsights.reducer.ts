@@ -13,8 +13,8 @@ import moment, { Moment } from "moment-timezone";
 
 import { SchemaInsightReqParams, SqlApiResponse } from "src/api";
 
-import { DOMAIN_NAME } from "../utils";
 import { InsightRecommendation } from "../../insights";
+import { DOMAIN_NAME } from "../utils";
 
 export type SchemaInsightsState = {
   data: SqlApiResponse<InsightRecommendation[]>;

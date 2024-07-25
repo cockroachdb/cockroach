@@ -17,6 +17,7 @@ import {
 } from "../insights";
 import { maybeError } from "../util";
 
+import { getTxnInsightsContentionDetailsApi } from "./contentionApi";
 import {
   executeInternalSql,
   isMaxSizeError,
@@ -34,7 +35,6 @@ import {
   TxnInsightsResponseRow,
 } from "./txnInsightsApi";
 import { makeInsightsSqlRequest } from "./txnInsightsUtils";
-import { getTxnInsightsContentionDetailsApi } from "./contentionApi";
 
 export type TxnInsightDetailsRequest = {
   txnExecutionID: string;

@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import classNames from "classnames/bind";
 import { Line } from "rc-progress";
 import React from "react";
-import classNames from "classnames/bind";
 
 import { Badge } from "src/badge";
 

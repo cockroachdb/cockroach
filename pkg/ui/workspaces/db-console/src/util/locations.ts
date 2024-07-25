@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import some from "lodash/some";
 import isEmpty from "lodash/isEmpty";
 import isNil from "lodash/isNil";
+import some from "lodash/some";
 import values from "lodash/values";
 
 import { LocalityTier, LocalityTree } from "src/redux/localities";

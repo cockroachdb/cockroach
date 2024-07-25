@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { scaleLinear } from "d3-scale";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import { scaleLinear } from "d3-scale";
 
 import { stdDevLong } from "src/util";
 

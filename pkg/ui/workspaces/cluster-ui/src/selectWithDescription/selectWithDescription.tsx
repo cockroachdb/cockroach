@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useState } from "react";
-import classNames from "classnames/bind";
 import { CaretUp, CaretDown } from "@cockroachlabs/icons";
 import { Radio } from "antd";
+import classNames from "classnames/bind";
+import React, { useState } from "react";
 
 import { Button } from "../button";
 import styles from "../statementsPage/statementTypeSelect.module.scss";

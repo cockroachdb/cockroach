@@ -8,11 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useCallback, useState } from "react";
 import classNames from "classnames/bind";
+import React, { useCallback, useState } from "react";
 
-import { StatisticType } from "../statsTableUtil/statsTableUtil";
 import { Modal } from "../modal";
+import { StatisticType } from "../statsTableUtil/statsTableUtil";
 import { Text } from "../text";
 
 import styles from "./sqlActivity.module.scss";

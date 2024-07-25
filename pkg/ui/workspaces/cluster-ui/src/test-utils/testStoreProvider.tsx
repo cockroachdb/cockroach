@@ -8,7 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import {
+  ConnectedRouter,
+  connectRouter,
+  routerMiddleware,
+} from "connected-react-router";
+import { createMemoryHistory } from "history";
 import React from "react";
+import { Provider } from "react-redux";
 import {
   Action,
   Store,
@@ -16,13 +23,6 @@ import {
   combineReducers,
   applyMiddleware,
 } from "redux";
-import { Provider } from "react-redux";
-import {
-  ConnectedRouter,
-  connectRouter,
-  routerMiddleware,
-} from "connected-react-router";
-import { createMemoryHistory } from "history";
 
 import { AppState, rootReducer } from "src/store";
 

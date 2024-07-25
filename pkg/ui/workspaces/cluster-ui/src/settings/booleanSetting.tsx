@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import * as React from "react";
 import { Tooltip } from "antd";
 import classNames from "classnames/bind";
+import * as React from "react";
 
 import { CircleFilled } from "src/icon";
 

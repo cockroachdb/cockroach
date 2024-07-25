@@ -8,14 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { storiesOf } from "@storybook/react";
-import { createMemoryHistory } from "history";
 import {
   ConnectedRouter,
   connectRouter,
   routerMiddleware,
 } from "connected-react-router";
+import { createMemoryHistory } from "history";
+import React from "react";
+import { Provider } from "react-redux";
 import {
   applyMiddleware,
   combineReducers,
@@ -23,12 +24,11 @@ import {
   createStore,
   Store,
 } from "redux";
-import { Provider } from "react-redux";
 
 import { AppState, rootReducer } from "../store";
 
-import { getStatementDetailsPropsFixture } from "./statementDetails.fixture";
 import { StatementDetails } from "./statementDetails";
+import { getStatementDetailsPropsFixture } from "./statementDetails.fixture";
 
 const history = createMemoryHistory();
 const routerReducer = connectRouter(history);

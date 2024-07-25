@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useCallback, useEffect, useState, useMemo } from "react";
-import ReactDOM from "react-dom";
 import {
   Button,
   FilterCheckboxOption,
@@ -19,12 +17,14 @@ import {
   FilterSearchOption,
 } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import isEmpty from "lodash/isEmpty";
-import isArray from "lodash/isArray";
-import isString from "lodash/isString";
 import classNames from "classnames/bind";
-import { useHistory } from "react-router-dom";
+import isArray from "lodash/isArray";
+import isEmpty from "lodash/isEmpty";
+import isString from "lodash/isString";
 import noop from "lodash/noop";
+import React, { useCallback, useEffect, useState, useMemo } from "react";
+import ReactDOM from "react-dom";
+import { useHistory } from "react-router-dom";
 
 import styles from "./hotRanges.module.styl";
 

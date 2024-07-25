@@ -18,15 +18,15 @@ import {
 import { MockSqlResponse } from "../util/testing";
 
 import {
-  TxnStmtFingerprintsResponseColumns,
-  FingerprintStmtsResponseColumns,
-} from "./txnInsightsApi";
-import * as sqlApi from "./sqlApi";
-import { SqlExecutionResponse } from "./sqlApi";
-import {
   ContentionResponseColumns,
   getTxnInsightsContentionDetailsApi,
 } from "./contentionApi";
+import * as sqlApi from "./sqlApi";
+import { SqlExecutionResponse } from "./sqlApi";
+import {
+  TxnStmtFingerprintsResponseColumns,
+  FingerprintStmtsResponseColumns,
+} from "./txnInsightsApi";
 
 type TxnContentionDetailsTests = {
   name: string;

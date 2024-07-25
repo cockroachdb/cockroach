@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { createSandbox } from "sinon";
+import React from "react";
 import { MemoryRouter as Router } from "react-router-dom";
+import { createSandbox } from "sinon";
 
 import * as sqlApi from "../api/sqlApi";
 import { MockSqlResponse } from "../util/testing";

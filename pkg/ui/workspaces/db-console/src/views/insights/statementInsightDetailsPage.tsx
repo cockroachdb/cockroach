@@ -15,12 +15,12 @@ import {
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import { AdminUIState } from "src/redux/state";
 import { refreshUserSQLRoles } from "src/redux/apiReducers";
-import { selectStatementInsightDetails } from "src/views/insights/insightsSelectors";
+import { AdminUIState } from "src/redux/state";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
 import { selectHasAdminRole } from "src/redux/user";
+import { selectStatementInsightDetails } from "src/views/insights/insightsSelectors";
 
 const mapStateToProps = (
   state: AdminUIState,
