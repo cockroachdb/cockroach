@@ -2554,3 +2554,15 @@ func (r *Replica) SendRaftMessage(
 ) {
 	r.sendRaftMessage(ctx, msg, kvflowcontrolpb.RaftPriorityConversionForUnusedZero(priorityInherited))
 }
+
+func (r *Replica) ValidFlowControlLeaseTarget(replicaID roachpb.ReplicaID) bool {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+
+	rc := r.raftMu.racV2Integration.RangeController()
+	if rc == nil {
+		return true
+	}
+
+	return rc.ValidLeaseTarget(replicaID)
+}

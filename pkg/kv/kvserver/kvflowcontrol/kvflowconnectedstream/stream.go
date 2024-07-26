@@ -504,6 +504,7 @@ type RangeController interface {
 	// SendQueueSize returns the size of all send queues for this range
 	// controller.
 	SendQueueSize() kvflowcontrol.Tokens
+	ValidLeaseTarget(roachpb.ReplicaID) bool
 	// String returns a string representation of the RangeController.
 	String() string
 }
@@ -1340,6 +1341,24 @@ func (rc *RangeControllerImpl) SendQueueSize() kvflowcontrol.Tokens {
 		}
 	}
 	return size
+}
+
+func (rc *RangeControllerImpl) ValidLeaseTarget(replicaID roachpb.ReplicaID) bool {
+	if rc.leaseholder == replicaID || rc.opts.LocalReplicaID == replicaID {
+		return true
+	}
+
+	if rs, ok := rc.replicaMap[replicaID]; ok && rs.replicaSendStream != nil {
+		rs.replicaSendStream.mu.Lock()
+		defer rs.replicaSendStream.mu.Unlock()
+
+		return rs.replicaSendStream.queueSizeLocked() == 0 &&
+			rs.replicaSendStream.connectedState == replicate &&
+			rs.evalTokenCounter.Tokens(admissionpb.RegularWorkClass) > 1<<20 &&
+			rs.sendTokenCounter.Tokens(admissionpb.RegularWorkClass) > 1<<20
+	}
+
+	return false
 }
 
 type replicaState struct {

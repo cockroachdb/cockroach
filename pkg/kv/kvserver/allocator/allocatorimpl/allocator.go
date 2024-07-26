@@ -2020,6 +2020,7 @@ func (a *Allocator) ValidLeaseTargets(
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
+		ValidFlowControlLeaseTarget(replicaID roachpb.ReplicaID) bool
 	},
 	opts allocator.TransferLeaseOptions,
 ) []roachpb.ReplicaDescriptor {
@@ -2081,6 +2082,7 @@ func (a *Allocator) ValidLeaseTargets(
 			status = a.knobs.RaftStatusFn(desc, leaseRepl.StoreID())
 		}
 
+		candidates = excludeReplicasInNeedOfCatchup(ctx, candidates, leaseRepl)
 		candidates = append(validSnapshotCandidates, excludeReplicasInNeedOfSnapshots(
 			ctx, status, leaseRepl.GetFirstIndex(), candidates)...)
 	}
@@ -2191,6 +2193,7 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
+		ValidFlowControlLeaseTarget(replicaID roachpb.ReplicaID) bool
 	},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
 	exclReplsInNeedOfSnapshots bool,
@@ -2223,6 +2226,8 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 	if exclReplsInNeedOfSnapshots {
 		preferred = excludeReplicasInNeedOfSnapshots(
 			ctx, leaseRepl.RaftStatus(), leaseRepl.GetFirstIndex(), preferred)
+		preferred = excludeReplicasInNeedOfCatchup(
+			ctx, preferred, leaseRepl)
 	}
 	if len(preferred) == 0 {
 		return false
@@ -2281,6 +2286,7 @@ func (a *Allocator) TransferLeaseTarget(
 		GetRangeID() roachpb.RangeID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
+		ValidFlowControlLeaseTarget(replicaID roachpb.ReplicaID) bool
 	},
 	usageInfo allocator.RangeUsageInfo,
 	forceDecisionWithoutStats bool,
@@ -2649,6 +2655,7 @@ func (a *Allocator) ShouldTransferLease(
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
+		ValidFlowControlLeaseTarget(replicaID roachpb.ReplicaID) bool
 	},
 	usageInfo allocator.RangeUsageInfo,
 ) TransferLeaseDecision {
@@ -3022,6 +3029,31 @@ func FilterBehindReplicas(
 	return candidates
 }
 
+func excludeReplicasInNeedOfCatchup(
+	ctx context.Context,
+	replicas []roachpb.ReplicaDescriptor,
+	leaseRepl interface {
+		ValidFlowControlLeaseTarget(replicaID roachpb.ReplicaID) bool
+	},
+) []roachpb.ReplicaDescriptor {
+	filled := 0
+	for _, repl := range replicas {
+		if !leaseRepl.ValidFlowControlLeaseTarget(repl.ReplicaID) {
+			log.KvDistribution.VEventf(
+				ctx,
+				5,
+				"not considering [n%d, s%d] as a potential candidate for a lease transfer"+
+					" because the replica may be waiting for a catch-up",
+				repl.NodeID, repl.StoreID,
+			)
+			continue
+		}
+		replicas[filled] = repl
+		filled++
+	}
+	return replicas[:filled]
+}
+
 // excludeReplicasInNeedOfSnapshots filters out the `replicas` that may be in
 // need of a raft snapshot. VOTER_INCOMING replicas are not filtered out.
 // Other replicas may be filtered out if this function is called with the
@@ -3032,6 +3064,8 @@ func excludeReplicasInNeedOfSnapshots(
 	firstIndex kvpb.RaftIndex,
 	replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
+	// 1. no send queue for the range to this replica
+	// 2. connected stream
 	filled := 0
 	for _, repl := range replicas {
 		snapStatus := raftutil.ReplicaMayNeedSnapshot(st, firstIndex, repl.ReplicaID)

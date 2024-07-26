@@ -48,6 +48,7 @@ type CandidateReplica interface {
 	// LoadSpanConfig returns the span config for the replica or an error if it can't
 	// be determined.
 	LoadSpanConfig(context.Context) (*roachpb.SpanConfig, error)
+	ValidFlowControlLeaseTarget(replicaID roachpb.ReplicaID) bool
 	// Desc returns the authoritative range descriptor.
 	Desc() *roachpb.RangeDescriptor
 	// RangeUsageInfo returns usage information (sizes and traffic) needed by

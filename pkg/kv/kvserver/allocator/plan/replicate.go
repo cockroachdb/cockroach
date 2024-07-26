@@ -92,6 +92,7 @@ type LeaseCheckReplica interface {
 	LeaseStatusAt(ctx context.Context, now hlc.ClockTimestamp) kvserverpb.LeaseStatus
 	LeaseViolatesPreferences(context.Context, *roachpb.SpanConfig) bool
 	OwnsValidLease(context.Context, hlc.ClockTimestamp) bool
+	ValidFlowControlLeaseTarget(replicaID roachpb.ReplicaID) bool
 }
 
 // AllocatorReplica contains methods used for planning changes for the range a
@@ -104,6 +105,7 @@ type AllocatorReplica interface {
 	LastReplicaAdded() (roachpb.ReplicaID, time.Time)
 	StoreID() roachpb.StoreID
 	GetRangeID() roachpb.RangeID
+	ValidFlowControlLeaseTarget(replicaID roachpb.ReplicaID) bool
 }
 
 // ReplicaPlanner implements the ReplicationPlanner interface.
