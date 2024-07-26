@@ -22,6 +22,7 @@ import {
   LivenessStatus,
   sumNodeStats,
   numNodesByVersionsTagSelector,
+  nodeDisplayNameByIDSelectorWithoutAddress,
 } from "./nodes";
 import { AdminUIState, createAdminUIStore } from "./state";
 
@@ -216,6 +217,137 @@ describe("node data selectors", function () {
         ["v21.1.7", 1],
       ]);
       expect(numNodesByVersionsTagSelector(state)).toEqual(expectedResult);
+    });
+  });
+});
+
+describe("node data selectors without addresses", function () {
+  describe("display name by ID", function () {
+    it("display name is node id appended to address", function () {
+      const state: any = makeNodesState(
+        { id: 1, address: "addressA" },
+        { id: 2, address: "addressB" },
+        { id: 3, address: "addressC" },
+        { id: 4, address: "addressD" },
+      );
+
+      const addressesByID = nodeDisplayNameByIDSelectorWithoutAddress(state);
+      expect(addressesByID).toEqual({
+        1: "n1",
+        2: "n2",
+        3: "n3",
+        4: "n4",
+      });
+    });
+
+    it("generates unique names for re-used addresses", function () {
+      const state: any = makeNodesState(
+        { id: 1, address: "addressA" },
+        { id: 2, address: "addressB" },
+        { id: 3, address: "addressC" },
+        { id: 4, address: "addressD" },
+        { id: 5, address: "addressA" },
+        { id: 6, address: "addressC" },
+        { id: 7, address: "addressA" },
+      );
+
+      const addressesByID = nodeDisplayNameByIDSelectorWithoutAddress(state);
+      expect(addressesByID).toEqual({
+        1: "n1",
+        2: "n2",
+        3: "n3",
+        4: "n4",
+        5: "n5",
+        6: "n6",
+        7: "n7",
+      });
+    });
+
+    it("adds decommissioned flag to decommissioned nodes", function () {
+      const state: any = makeNodesState(
+        {
+          id: 1,
+          address: "addressA",
+          status: LivenessStatus.NODE_STATUS_DECOMMISSIONED,
+        },
+        { id: 2, address: "addressB" },
+        {
+          id: 3,
+          address: "addressC",
+          status: LivenessStatus.NODE_STATUS_DECOMMISSIONED,
+        },
+        { id: 4, address: "addressD", status: LivenessStatus.NODE_STATUS_DEAD },
+        {
+          id: 5,
+          address: "addressA",
+          status: LivenessStatus.NODE_STATUS_DECOMMISSIONED,
+        },
+        { id: 6, address: "addressC" },
+        { id: 7, address: "addressA" },
+        {
+          id: 8,
+          address: "addressE",
+          status: LivenessStatus.NODE_STATUS_DECOMMISSIONING,
+        },
+        {
+          id: 9,
+          address: "addressF",
+          status: LivenessStatus.NODE_STATUS_UNAVAILABLE,
+        },
+      );
+
+      const addressesByID = nodeDisplayNameByIDSelectorWithoutAddress(state);
+      expect(addressesByID[1]).toEqual("[decommissioned] n1");
+      expect(addressesByID).toEqual({
+        1: "[decommissioned] n1",
+        2: "n2",
+        3: "[decommissioned] n3",
+        4: "n4",
+        5: "[decommissioned] n5",
+        6: "n6",
+        7: "n7",
+        8: "n8",
+        9: "n9",
+      });
+    });
+
+    it("returns empty collection for empty state", function () {
+      const store = createAdminUIStore(createHashHistory());
+      expect(nodeDisplayNameByIDSelectorWithoutAddress(store.getState())).toEqual({});
+    });
+  });
+  describe("store IDs by node ID", function () {
+    it("correctly creates storeID map", function () {
+      const data = [
+        {
+          desc: { node_id: 1 },
+          store_statuses: [
+            { desc: { store_id: 1 } },
+            { desc: { store_id: 2 } },
+            { desc: { store_id: 3 } },
+          ],
+        },
+        {
+          desc: { node_id: 2 },
+          store_statuses: [{ desc: { store_id: 4 } }],
+        },
+        {
+          desc: { node_id: 3 },
+          store_statuses: [
+            { desc: { store_id: 5 } },
+            { desc: { store_id: 6 } },
+          ],
+        },
+      ];
+      const store = createAdminUIStore(createHashHistory());
+      store.dispatch(nodesReducerObj.receiveData(data));
+      const state = store.getState();
+
+      expect(selectStoreIDsByNodeID(state)).toEqual({
+        1: ["1", "2", "3"],
+        2: ["4"],
+        3: ["5", "6"],
+      });
     });
   });
 });

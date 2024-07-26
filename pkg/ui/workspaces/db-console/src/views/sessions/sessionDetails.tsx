@@ -19,7 +19,9 @@ import {
   refreshNodes,
   refreshSessions,
 } from "src/redux/apiReducers";
-import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
+import {
+  nodeDisplayNameByIDSelectorWithoutAddress
+} from "src/redux/nodes";
 import {
   terminateQueryAction,
   terminateSessionAction,
@@ -54,7 +56,7 @@ export const selectSession = createSelector(
 const SessionDetailsPageConnected = withRouter(
   connect(
     (state: AdminUIState, props: RouteComponentProps) => ({
-      nodeNames: nodeDisplayNameByIDSelector(state),
+      nodeNames: nodeDisplayNameByIDSelectorWithoutAddress(state),
       session: selectSession(state, props),
       sessionError: state.cachedData.sessions.lastError,
     }),
