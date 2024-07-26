@@ -21,7 +21,6 @@ import {
   MetricProps,
 } from "src/views/shared/components/metricQuery";
 
-
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 type TSQueryResult = protos.cockroach.ts.tspb.TimeSeriesQueryResponse.IResult;
 
@@ -99,7 +98,7 @@ function hoverTooltipPlugin(formatter: (v: number) => string) {
   const tooltip = document.createElement("div");
   tooltip.className = "u-tooltip";
 
-  let seriesIdx: number= null;
+  let seriesIdx: number = null;
   let dataIdx: number = null;
   let over: HTMLDivElement;
   let tooltipVisible = false;
@@ -125,21 +124,21 @@ function hoverTooltipPlugin(formatter: (v: number) => string) {
 
     // `yAxis` is used instead of `y` here because that's below in the
     // `uPlot` config as the custom scale that we define.n
-    let top = u.valToPos(u.data[seriesIdx][dataIdx], 'yAxis');
-    let lft = u.valToPos(u.data[        0][dataIdx], 'x');
+    let top = u.valToPos(u.data[seriesIdx][dataIdx], "yAxis");
+    let lft = u.valToPos(u.data[0][dataIdx], "x");
 
-    tooltip.style.top  = (tooltipTopOffset  + top + shiftX) + "px";
-    tooltip.style.left = (tooltipLeftOffset + lft + shiftY) + "px";
+    tooltip.style.top = tooltipTopOffset + top + shiftX + "px";
+    tooltip.style.left = tooltipLeftOffset + lft + shiftY + "px";
     tooltip.innerHTML = `<div class="u-label">${u.series[seriesIdx].label}</div>: ${formatter(u.data[seriesIdx][dataIdx])}`;
 
     // TODO(davidh): can this be simplified? Typescript makes this a bit of a mess.
     let stroke = u.series[seriesIdx].stroke;
-    if (typeof stroke === 'function' && stroke.length === 0) {
+    if (typeof stroke === "function" && stroke.length === 0) {
       tooltip.style.borderColor = stroke(u, seriesIdx) as string;
-    } else if (typeof stroke === 'string') {
+    } else if (typeof stroke === "string") {
       tooltip.style.borderColor = stroke;
     }
-    tooltip.style.borderWidth = '2px';
+    tooltip.style.borderWidth = "2px";
   }
 
   return {
@@ -150,7 +149,7 @@ function hoverTooltipPlugin(formatter: (v: number) => string) {
           tooltipLeftOffset = parseFloat(over.style.left);
           tooltipTopOffset = parseFloat(over.style.top);
           u.root.querySelector(".u-wrap").appendChild(tooltip);
-        }
+        },
       ],
       setCursor: [
         (u: uPlot) => {
@@ -159,27 +158,26 @@ function hoverTooltipPlugin(formatter: (v: number) => string) {
           if (dataIdx !== c.idx) {
             dataIdx = c.idx;
 
-            if (seriesIdx != null)
-              setTooltip(u);
+            if (seriesIdx != null) setTooltip(u);
           }
-        }
+        },
       ],
       setSeries: [
         (u: uPlot, sidx: number) => {
           if (seriesIdx !== sidx) {
+            // if (u.series[sidx]?.show) {
+            //   seriesIdx = sidx;
+            // }
             seriesIdx = sidx;
 
-            if (sidx == null)
-              hideTooltip();
-            else if (dataIdx !== null)
-              setTooltip(u);
+            if (sidx == null) hideTooltip();
+            else if (dataIdx !== null) setTooltip(u);
           }
-        }
+        },
       ],
-    }
+    },
   };
 }
-
 
 // configureUPlotLineChart constructs the uplot Options object based on
 // information about the metrics, axis, and data that we'd like to plot.
@@ -191,6 +189,7 @@ export function configureUPlotLineChart(
   metrics: React.ReactElement<MetricProps>[],
   axis: React.ReactElement<AxisProps>,
   data: TSResponse,
+  userPlugins: uPlot.Options["plugins"],
   setMetricsFixedWindow: (startMillis: number, endMillis: number) => void,
   getLatestXAxisDomain: () => AxisDomain,
   getLatestYAxisDomain: () => AxisDomain,
@@ -206,6 +205,10 @@ export function configureUPlotLineChart(
     ...formattedRaw.filter(r => !!r.color).map(r => r.color),
   );
 
+  const plugins = userPlugins.concat([
+    hoverTooltipPlugin(getLatestYAxisDomain().guideFormat),
+  ]);
+
   // Please see https://github.com/leeoniya/uPlot/tree/master/docs for
   // information on how to construct this object.
   return {
@@ -218,7 +221,7 @@ export function configureUPlotLineChart(
       },
     },
     legend: {
-      show: true,
+      show: false,
 
       // This setting sets the default legend behavior to isolate
       // a series when it's clicked in the legend.
@@ -292,7 +295,7 @@ export function configureUPlotLineChart(
         range: () => getLatestYAxisDomain().extent,
       },
     },
-    plugins: [hoverTooltipPlugin(getLatestYAxisDomain().guideFormat)],
+    plugins,
     hooks: {
       // setSelect is a hook that fires when a selection is made on the graph
       // by dragging a range to zoom.

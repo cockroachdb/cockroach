@@ -1,0 +1,32 @@
+
+.sortable-legend {
+  font-size: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  width: 100%;
+}
+
+
+.sortable-legend .time-label {
+  padding: 8px;
+  font-weight: bold;
+  background-color: #f0f0f0;
+  border-bottom: 1px solid #ddd;
+}
+
+.color-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+.sortable-legend-row {
+ cursor: pointer;
+}
+
+.hidden-row {
+  opacity: 0.5;
+}
