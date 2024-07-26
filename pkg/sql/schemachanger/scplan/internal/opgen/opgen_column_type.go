@@ -46,13 +46,13 @@ func init() {
 			to(scpb.Status_ABSENT,
 				revertible(false),
 				emit(func(this *scpb.ColumnType, md *opGenContext) *scop.RemoveDroppedColumnType {
-					// Make this a no-op if the column type already exists. The
-					// RemoveDroppedColumnType op is meant to be emitted only for columns
-					// that were dropped.
-					if checkIfColumnTypeExists(this.TableID, this.ColumnID, md) {
-						return nil
-					}
 					if ids := referencedTypeIDs(this); len(ids) > 0 {
+						// Make this a no-op if the column type already exists. The
+						// RemoveDroppedColumnType op is meant to be emitted only for columns
+						// that were dropped.
+						if checkIfColumnTypeExists(this.TableID, this.ColumnID, md) {
+							return nil
+						}
 						return &scop.RemoveDroppedColumnType{
 							TableID:  this.TableID,
 							ColumnID: this.ColumnID,

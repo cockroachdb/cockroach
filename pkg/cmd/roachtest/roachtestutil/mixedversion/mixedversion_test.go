@@ -16,10 +16,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -190,6 +192,23 @@ func Test_choosePreviousReleases(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTest_plan(t *testing.T) {
+	// Assert that planning failures are owned by test-eng. At the time
+	// of writing, planning can only return an error if we fail to find
+	// a required predecessor of a certain release.
+	mvt := newTest(NumUpgrades(100))
+	_, err := mvt.plan()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no known predecessor for")
+
+	var errWithOwnership registry.ErrorWithOwnership
+	require.True(t,
+		errors.As(err, &errWithOwnership),
+		"error %q (%T) is not ErrorWithOwnership", err.Error(), err,
+	)
+	require.Equal(t, registry.OwnerTestEng, errWithOwnership.Owner)
 }
 
 // withTestBuildVersion overwrites the `TestBuildVersion` variable in

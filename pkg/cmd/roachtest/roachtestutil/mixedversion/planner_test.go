@@ -375,7 +375,12 @@ func boolP(b bool) *bool {
 func testPredecessorFunc(
 	rng *rand.Rand, v *clusterupgrade.Version,
 ) (*clusterupgrade.Version, error) {
-	return testPredecessorMapping[release.VersionSeries(&v.Version)], nil
+	pred, ok := testPredecessorMapping[release.VersionSeries(&v.Version)]
+	if !ok {
+		return nil, fmt.Errorf("no known predecessor for %q", v)
+	}
+
+	return pred, nil
 }
 
 // createDataDrivenMixedVersionTest creates a `*Test` instance based
