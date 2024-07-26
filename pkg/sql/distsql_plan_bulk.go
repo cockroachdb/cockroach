@@ -107,7 +107,7 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningTenant(
 	if err != nil {
 		return nil, nil, err
 	}
-	pods, _ = dsp.filterUnhealthyInstances(pods, planCtx.nodeStatuses)
+	pods = dsp.filterUnhealthyInstances(ctx, pods, planCtx.nodeStatuses)
 
 	sqlInstanceIDs := make([]base.SQLInstanceID, 0, len(pods))
 	for _, pod := range pods {
