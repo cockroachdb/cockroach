@@ -1351,7 +1351,7 @@ func TestPartitionSpans(t *testing.T) {
 				spanResolver:         tsp,
 				gossip:               gw,
 				kvNodeAvailable:      func(id roachpb.NodeID) bool { return connHealth(int(id)) },
-				sqlNodeAvailable:     func(id base.SQLInstanceID, _ string) bool { return connHealth(int(id)) },
+				sqlNodeAvailable:     func(id base.SQLInstanceID) bool { return connHealth(int(id)) },
 				sqlAddressResolver:   mockInstances,
 				distSQLSrv: &distsql.ServerImpl{
 					ServerConfig: execinfra.ServerConfig{

@@ -955,13 +955,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// NB: This will return ErrNotHeartbeated on the first call, but that's fine
 	// as we will plan without this node. The connection will still be
 	// established asyncronously and cached in the rpc layer for future calls.
-	//
-	// TODO(baptist): We shouldn't need the addr passed into this function. The
-	// cfg.sqlInstanceDialer used here already has an address resolver. Which
-	// would presumably return the same result. Clean this up and replace calls
-	// to ConnHealthTryDialInstance with ConnHealthTryDial.
-	sqlNodeAvailable := func(sqlInstanceID base.SQLInstanceID, addr string) bool {
-		if err := cfg.sqlInstanceDialer.ConnHealthTryDialInstance(sqlInstanceID, addr); err != nil {
+	sqlNodeAvailable := func(sqlInstanceID base.SQLInstanceID) bool {
+		if err := cfg.sqlInstanceDialer.ConnHealthTryDial(roachpb.NodeID(sqlInstanceID), rpc.DefaultClass); err != nil {
 			log.VEventf(ctx, 2, "sql instance n%d is not available for planning %v", sqlInstanceID, err)
 			return false
 		}
