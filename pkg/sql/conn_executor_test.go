@@ -790,9 +790,6 @@ func TestRetriableErrorDuringPrepare(t *testing.T) {
 func TestStatementCancelRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderDuress(t)
-	// Flaky test.
-	skip.WithIssue(t, 127032)
 
 	for _, useStatementTimeout := range []bool{true, false} {
 		t.Run(fmt.Sprintf("Cancel with statement timeout=%t", useStatementTimeout),
@@ -806,7 +803,7 @@ func TestStatementCancelRollback(t *testing.T) {
 				if useStatementTimeout {
 					queryCtx, cancelFn = context.WithCancel(ctx)
 				} else {
-					queryCtx, cancelFn = context.WithTimeout(ctx, 1*time.Second)
+					queryCtx, cancelFn = context.WithTimeout(ctx, 10*time.Second)
 				}
 				defer cancelFn()
 				s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -814,8 +811,8 @@ func TestStatementCancelRollback(t *testing.T) {
 						Store: &kvserver.StoreTestingKnobs{
 							TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
 								// Once the hook is enabled we are expecting a txn rollback involving
-								// the system.descriptor key, because the first tihng accessed by the
-								// txn below is the descriptor table.
+								// the system.descriptor / system.namespace key, because the first thing
+								// accessed by the txn one of those tables (depending on if retries occur).
 								if hookEnabled.Load() {
 									if request.IsSingleEndTxnRequest() {
 										if !request.Requests[0].GetEndTxn().Commit {
@@ -823,7 +820,7 @@ func TestStatementCancelRollback(t *testing.T) {
 											if err != nil {
 												return nil
 											}
-											if tblID == keys.DescriptorTableID {
+											if tblID == keys.DescriptorTableID || tblID == keys.NamespaceTableID {
 												// This channel will only be closed once the "synchronous" rollback returns.
 												<-rollbackExpected
 												close(rollbackCompleted)
@@ -847,7 +844,7 @@ func TestStatementCancelRollback(t *testing.T) {
 					_, err = conn.ExecContext(queryCtx, "SET statement_timeout='1s'")
 					require.NoError(t, err)
 				}
-				_, err = conn.ExecContext(queryCtx, "CREATE TABLE t1(n int);SELECT * FROM pg_sleep(5)")
+				_, err = conn.ExecContext(queryCtx, "CREATE TABLE t1(n int);SELECT * FROM pg_sleep(20)")
 				expectedError := "query execution canceled due to statement timeout"
 				if !useStatementTimeout {
 					expectedError = "pq: query execution canceled"
@@ -857,11 +854,15 @@ func TestStatementCancelRollback(t *testing.T) {
 					expectedError,
 					"expected timeout error")
 				// Because the rollback is asynchronous due to the timeout, we expected
-				// to just return here. Any rollbacks involving the descriptor key above are
-				// *blocked*.
+				// to just return here. Any rollbacks involving the descriptor/namespace key a
+				// above are  *blocked*.
 				close(rollbackExpected)
 				// Confirm the async rollback happened.
-				<-rollbackCompleted
+				select {
+				case <-rollbackCompleted:
+				case <-time.After(time.Minute):
+					t.Fatal("dead")
+				}
 			})
 	}
 }
