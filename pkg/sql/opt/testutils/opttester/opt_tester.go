@@ -298,7 +298,6 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 	ot.evalCtx.SessionData().UserProto = username.MakeSQLUsernameFromPreNormalizedString("opttester").EncodeProto()
 	ot.evalCtx.SessionData().Database = "defaultdb"
 	ot.evalCtx.SessionData().ZigzagJoinEnabled = true
-	ot.evalCtx.SessionData().ImplicitSelectForUpdate = false
 
 	return ot
 }

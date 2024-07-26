@@ -237,6 +237,7 @@ explain(shape):
 │                   └── • scan
 │                         table: last_trade@last_trade_pkey
 │                         spans: 1+ spans
+│                         locking strength: for update
 │
 ├── • subquery
 │   │ id: @S2
