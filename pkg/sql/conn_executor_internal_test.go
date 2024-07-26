@@ -333,8 +333,8 @@ func startConnExecutor(
 			nil, /* nodeDescs */
 			gw,
 			stopper,
-			func(roachpb.NodeID) bool { return true },             // everybody is available
-			func(base.SQLInstanceID, string) bool { return true }, // everybody is available
+			func(roachpb.NodeID) bool { return true },     // everybody is available
+			func(base.SQLInstanceID) bool { return true }, // everybody is available
 			nil, /* sqlInstanceDialer */
 			keys.SystemSQLCodec,
 			nil, /* sqlAddressResolver */
