@@ -210,13 +210,14 @@ func registerBackupNodeShutdown(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:              fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
-		Owner:             registry.OwnerDisasterRecovery,
-		Cluster:           backupNodeRestartSpec,
-		EncryptionSupport: registry.EncryptionMetamorphic,
-		Leases:            registry.MetamorphicLeases,
-		CompatibleClouds:  registry.AllExceptAWS,
-		Suites:            registry.Suites(registry.Nightly),
+		Name:                      fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
+		Owner:                     registry.OwnerDisasterRecovery,
+		Cluster:                   backupNodeRestartSpec,
+		EncryptionSupport:         registry.EncryptionMetamorphic,
+		Leases:                    registry.MetamorphicLeases,
+		CompatibleClouds:          registry.AllExceptAWS,
+		Suites:                    registry.Suites(registry.Nightly),
+		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
@@ -234,13 +235,14 @@ func registerBackupNodeShutdown(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:              fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
-		Owner:             registry.OwnerDisasterRecovery,
-		Cluster:           backupNodeRestartSpec,
-		EncryptionSupport: registry.EncryptionMetamorphic,
-		Leases:            registry.MetamorphicLeases,
-		CompatibleClouds:  registry.AllExceptAWS,
-		Suites:            registry.Suites(registry.Nightly),
+		Name:                      fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
+		Owner:                     registry.OwnerDisasterRecovery,
+		Cluster:                   backupNodeRestartSpec,
+		EncryptionSupport:         registry.EncryptionMetamorphic,
+		Leases:                    registry.MetamorphicLeases,
+		CompatibleClouds:          registry.AllExceptAWS,
+		Suites:                    registry.Suites(registry.Nightly),
+		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
@@ -322,9 +324,10 @@ func registerBackup(r registry.Registry) {
 		// to 400 on GCE, which is not enough for this test. We could request a
 		// larger volume size and set spec.LocalSSDDisable if we wanted to run
 		// this on Azure.
-		CompatibleClouds:  registry.OnlyGCE,
-		Suites:            registry.Suites(registry.Nightly),
-		EncryptionSupport: registry.EncryptionAlwaysDisabled,
+		CompatibleClouds:          registry.OnlyGCE,
+		Suites:                    registry.Suites(registry.Nightly),
+		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		EncryptionSupport:         registry.EncryptionAlwaysDisabled,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			rows := rows2TiB
 			if c.IsLocal() {
@@ -371,13 +374,14 @@ func registerBackup(r registry.Registry) {
 	// credentials. See 127062
 	for _, cloudProvider := range []spec.Cloud{spec.GCE} {
 		r.Add(registry.TestSpec{
-			Name:              fmt.Sprintf("backup/assume-role/%s", cloudProvider),
-			Owner:             registry.OwnerDisasterRecovery,
-			Cluster:           r.MakeClusterSpec(3),
-			EncryptionSupport: registry.EncryptionMetamorphic,
-			Leases:            registry.MetamorphicLeases,
-			CompatibleClouds:  registry.Clouds(cloudProvider),
-			Suites:            registry.Suites(registry.Nightly),
+			Name:                      fmt.Sprintf("backup/assume-role/%s", cloudProvider),
+			Owner:                     registry.OwnerDisasterRecovery,
+			Cluster:                   r.MakeClusterSpec(3),
+			EncryptionSupport:         registry.EncryptionMetamorphic,
+			Leases:                    registry.MetamorphicLeases,
+			CompatibleClouds:          registry.Clouds(cloudProvider),
+			Suites:                    registry.Suites(registry.Nightly),
+			TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rows := 100
 
@@ -449,13 +453,14 @@ func registerBackup(r registry.Registry) {
 	KMSSpec := r.MakeClusterSpec(3)
 	for _, cloudProvider := range []spec.Cloud{spec.GCE, spec.AWS} {
 		r.Add(registry.TestSpec{
-			Name:              fmt.Sprintf("backup/KMS/%s/%s", cloudProvider, KMSSpec.String()),
-			Owner:             registry.OwnerDisasterRecovery,
-			Cluster:           KMSSpec,
-			EncryptionSupport: registry.EncryptionMetamorphic,
-			Leases:            registry.MetamorphicLeases,
-			CompatibleClouds:  registry.Clouds(cloudProvider),
-			Suites:            registry.Suites(registry.Nightly),
+			Name:                      fmt.Sprintf("backup/KMS/%s/%s", cloudProvider, KMSSpec.String()),
+			Owner:                     registry.OwnerDisasterRecovery,
+			Cluster:                   KMSSpec,
+			EncryptionSupport:         registry.EncryptionMetamorphic,
+			Leases:                    registry.MetamorphicLeases,
+			CompatibleClouds:          registry.Clouds(cloudProvider),
+			Suites:                    registry.Suites(registry.Nightly),
+			TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				// ~10GiB - which is 30Gib replicated.
 				rows := rows30GiB
@@ -567,8 +572,9 @@ func registerBackup(r registry.Registry) {
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		// Uses gs://cockroach-fixtures-us-east1. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
-		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
-		Suites:           registry.Suites(registry.Nightly),
+		CompatibleClouds:          registry.Clouds(spec.GCE, spec.Local),
+		Suites:                    registry.Suites(registry.Nightly),
+		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runBackupMVCCRangeTombstones(ctx, t, c, mvccRangeTombstoneConfig{})
 		},
