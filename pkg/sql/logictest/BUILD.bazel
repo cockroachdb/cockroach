@@ -105,6 +105,7 @@ go_test(
     name = "logictest_test",
     size = "medium",
     srcs = [
+        "logic_test.go",
         "main_test.go",
         "parallel_test.go",
     ],
@@ -113,6 +114,7 @@ go_test(
     exec_properties = {"test.Pool": "large"},
     deps = [
         "//pkg/base",
+        "//pkg/build/bazel",
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/security/securityassets",
