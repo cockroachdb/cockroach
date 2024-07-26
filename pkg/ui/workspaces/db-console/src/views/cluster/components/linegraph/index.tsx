@@ -67,7 +67,6 @@ export interface OwnProps extends MetricsDataComponentProps {
   hoverOff?: typeof hoverOff;
   hoverState?: HoverState;
   preCalcGraphSize?: boolean;
-  legendAsTooltip?: boolean;
   showMetricsInTooltip?: boolean;
 }
 
@@ -357,7 +356,6 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
         this.setNewTimeRange,
         () => this.xAxisDomain,
         () => this.yAxisDomain,
-        this.props.legendAsTooltip,
       );
 
       if (this.u) {
@@ -382,7 +380,6 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
       data,
       tenantSource,
       preCalcGraphSize,
-      legendAsTooltip,
       showMetricsInTooltip,
     } = this.props;
     let tt = tooltip;
@@ -436,7 +433,6 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
         </div>
       );
     }
-    const legendClassName = legendAsTooltip ? "linegraph-tooltip" : "linegraph";
     return (
       <Visualization
         title={title}
@@ -445,7 +441,7 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
         loading={!data}
         preCalcGraphSize={preCalcGraphSize}
       >
-        <div className={legendClassName}>
+        <div className="linegraph">
           <div ref={this.el} />
         </div>
       </Visualization>

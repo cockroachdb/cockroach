@@ -77,6 +77,118 @@ export function formatMetricData(
   return formattedData;
 }
 
+function hoverTooltipPlugin(xFormatter: (v: number) => string, yFormatter: (v: number) => string) {
+  const shiftX = 10;
+  const shiftY = 10;
+  let tooltipLeftOffset = 0;
+  let tooltipTopOffset = 0;
+
+  const tooltip = document.createElement("div");
+  tooltip.className = "u-tooltip";
+
+  let timeNode = document.createElement("div")
+  timeNode.className = "u-time"
+  tooltip.appendChild(timeNode)
+
+  let seriesNode = document.createElement("div")
+  seriesNode.className = "u-series"
+
+  let markerNode = document.createElement("div")
+  markerNode.className = "u-marker"
+
+  let labelNode = document.createElement("div")
+  labelNode.className = "u-label"
+
+  let dataNode = document.createTextNode(`--`)
+
+  seriesNode.appendChild(markerNode)
+  seriesNode.appendChild(labelNode)
+  seriesNode.appendChild(dataNode)
+  tooltip.appendChild(seriesNode)
+
+  let seriesIdx: number= null;
+  let dataIdx: number = null;
+  let over: HTMLDivElement;
+  let tooltipVisible = false;
+
+  function showTooltip() {
+    if (!tooltipVisible) {
+      tooltip.style.display = "block";
+      over.style.cursor = "pointer";
+      tooltipVisible = true;
+    }
+  }
+
+  function hideTooltip() {
+    if (tooltipVisible) {
+      tooltip.style.display = "none";
+      over.style.cursor = null;
+      tooltipVisible = false;
+    }
+  }
+
+  function setTooltip(u: uPlot) {
+    showTooltip();
+
+    // `yAxis` is used instead of `y` here because that's below in the
+    // `uPlot` config as the custom scale that we define.n
+    let top = u.valToPos(u.data[seriesIdx][dataIdx], 'yAxis');
+    let lft = u.valToPos(u.data[        0][dataIdx], 'x');
+
+    tooltip.style.top  = (tooltipTopOffset  + top + shiftX) + "px";
+    tooltip.style.left = (tooltipLeftOffset + lft + shiftY) + "px";
+
+    timeNode.textContent = `Time: ${xFormatter(u.data[0][dataIdx])}`
+    labelNode.textContent = `${u.series[seriesIdx].label}:`
+    dataNode.textContent = ` ${yFormatter(u.data[seriesIdx][dataIdx])}`
+
+    let stroke = u.series[seriesIdx].stroke;
+    if (typeof stroke === 'function' && stroke.length === 0) {
+      markerNode.style.background = stroke(u, seriesIdx) as string;
+    } else if (typeof stroke === 'string') {
+      markerNode.style.borderColor = stroke;
+    }
+  }
+
+  return {
+    hooks: {
+      ready: [
+        (u: uPlot) => {
+          over = u.over;
+          tooltipLeftOffset = parseFloat(over.style.left);
+          tooltipTopOffset = parseFloat(over.style.top);
+          u.root.querySelector(".u-wrap").appendChild(tooltip);
+        }
+      ],
+      setCursor: [
+        (u: uPlot) => {
+          let c = u.cursor;
+
+          if (dataIdx !== c.idx) {
+            dataIdx = c.idx;
+
+            if (seriesIdx != null)
+              setTooltip(u);
+          }
+        }
+      ],
+      setSeries: [
+        (u: uPlot, sidx: number) => {
+          if (seriesIdx !== sidx) {
+            seriesIdx = sidx;
+
+            if (sidx == null)
+              hideTooltip();
+            else if (dataIdx !== null)
+              setTooltip(u);
+          }
+        }
+      ],
+    }
+  };
+}
+
+
 // configureUPlotLineChart constructs the uplot Options object based on
 // information about the metrics, axis, and data that we'd like to plot.
 // Most of the settings are defined as functions instead of static values
@@ -90,7 +202,6 @@ export function configureUPlotLineChart(
   setMetricsFixedWindow: (startMillis: number, endMillis: number) => void,
   getLatestXAxisDomain: () => AxisDomain,
   getLatestYAxisDomain: () => AxisDomain,
-  legendAsTooltip: boolean,
 ): uPlot.Options {
   const formattedRaw = formatMetricData(metrics, data);
   // Copy palette over since we mutate it in the `series` function
@@ -103,67 +214,16 @@ export function configureUPlotLineChart(
     ...formattedRaw.filter(r => !!r.color).map(r => r.color),
   );
 
-  const tooltipPlugin = () => {
-    return {
-      hooks: {
-        init: (self: uPlot) => {
-          const over: HTMLElement = self.root.querySelector(".u-over");
-          const legend: HTMLElement = self.root.querySelector(".u-legend");
-
-          // apply class to stick a legend to the bottom of a chart if it has more than 10 series
-          if (self.series.length > 10) {
-            legend.classList.add("u-legend--place-bottom");
-          }
-
-          // Show/hide legend when we enter/exit the bounds of the graph
-          over.onmouseenter = () => {
-            legend.style.display = "block";
-          };
-
-          // persistLegend determines if legend should continue showing even when mouse
-          // hovers away.
-          let persistLegend = false;
-
-          over.addEventListener("click", () => {
-            persistLegend = !persistLegend;
-          });
-
-          over.onmouseleave = () => {
-            if (!persistLegend) {
-              legend.style.display = "none";
-            }
-          };
-        },
-        setCursor: (self: uPlot) => {
-          // Place legend to the right of the mouse pointer
-          const legend: HTMLElement = self.root.querySelector(".u-legend");
-          if (self.cursor.left > 0 && self.cursor.top > 0) {
-            // TODO(davidh): This placement is not aware of the viewport edges
-            legend.style.left = self.cursor.left + 100 + "px";
-            legend.style.top = self.cursor.top - 10 + "px";
-          }
-        },
-      },
-    };
-  };
-
   // Please see https://github.com/leeoniya/uPlot/tree/master/docs for
   // information on how to construct this object.
   return {
     width: 947,
     height: 300,
-    // TODO(davidh): Enable sync-ed guidelines once legend is redesigned
-    // currently, if you enable this with a hovering legend, the FPS
-    // gets quite choppy on large clusters.
-    // cursor: {
-    //   sync: {
-    //     // graphs with matching keys will get their guidelines
-    //     // sync-ed so we just use the same key for the page
-    //     key: "sync-everything",
-    //   },
-    // },
     cursor: {
       lock: true,
+      focus: {
+        prox: 5,
+      },
     },
     legend: {
       show: true,
@@ -171,6 +231,19 @@ export function configureUPlotLineChart(
       // This setting sets the default legend behavior to isolate
       // a series when it's clicked in the legend.
       isolate: true,
+      markers: {
+        stroke: () => {
+          return null
+        },
+        fill: (u: uPlot, i: number) => {
+          let stroke = u.series[i].stroke;
+          if (typeof stroke === 'function' && stroke.length === 0) {
+            return stroke(u, i) as string;
+          } else if (typeof stroke === 'string') {
+            return stroke;
+          }
+        },
+      }
     },
     // By default, uPlot expects unix seconds in the x axis.
     // This setting defaults it to milliseconds which our
@@ -230,6 +303,7 @@ export function configureUPlotLineChart(
           return [domain.extent[0], ...domain.ticks, domain.extent[1]];
         },
         scale: "yAxis",
+        labelGap: 5,
       },
     ],
     scales: {
@@ -240,7 +314,7 @@ export function configureUPlotLineChart(
         range: () => getLatestYAxisDomain().extent,
       },
     },
-    plugins: legendAsTooltip ? [tooltipPlugin()] : null,
+    plugins: [hoverTooltipPlugin(getLatestXAxisDomain().guideFormat, getLatestYAxisDomain().guideFormat)],
     hooks: {
       // setSelect is a hook that fires when a selection is made on the graph
       // by dragging a range to zoom.

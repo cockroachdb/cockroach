@@ -22,13 +22,13 @@ import {
   refreshNodes,
   refreshSessions,
 } from "src/redux/apiReducers";
-import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
-import { SessionDetails, byteArrayToUuid } from "@cockroachlabs/cluster-ui";
+import { nodeDisplayNameByIDSelectorWithoutAddress } from "src/redux/nodes";
 import {
   terminateQueryAction,
   terminateSessionAction,
 } from "src/redux/sessions/sessionsSagas";
 import { setTimeScale } from "src/redux/timeScale";
+import { byteArrayToUuid, SessionDetails } from "@cockroachlabs/cluster-ui";
 
 type SessionsState = Pick<AdminUIState, "cachedData", "sessions">;
 
@@ -53,7 +53,7 @@ export const selectSession = createSelector(
 const SessionDetailsPageConnected = withRouter(
   connect(
     (state: AdminUIState, props: RouteComponentProps) => ({
-      nodeNames: nodeDisplayNameByIDSelector(state),
+      nodeNames: nodeDisplayNameByIDSelectorWithoutAddress(state),
       session: selectSession(state, props),
       sessionError: state.cachedData.sessions.lastError,
     }),
