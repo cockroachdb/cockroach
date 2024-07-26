@@ -67,13 +67,14 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:             "restore/nodeShutdown/worker",
-		Owner:            registry.OwnerDisasterRecovery,
-		Cluster:          sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
-		CompatibleClouds: registry.Clouds(sp.backup.cloud),
-		Suites:           registry.Suites(registry.Nightly),
-		Leases:           registry.MetamorphicLeases,
-		Timeout:          sp.timeout,
+		Name:                      "restore/nodeShutdown/worker",
+		Owner:                     registry.OwnerDisasterRecovery,
+		Cluster:                   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+		CompatibleClouds:          registry.Clouds(sp.backup.cloud),
+		Suites:                    registry.Suites(registry.Nightly),
+		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		Leases:                    registry.MetamorphicLeases,
+		Timeout:                   sp.timeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
@@ -90,13 +91,14 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:             "restore/nodeShutdown/coordinator",
-		Owner:            registry.OwnerDisasterRecovery,
-		Cluster:          sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
-		CompatibleClouds: registry.Clouds(sp.backup.cloud),
-		Suites:           registry.Suites(registry.Nightly),
-		Leases:           registry.MetamorphicLeases,
-		Timeout:          sp.timeout,
+		Name:                      "restore/nodeShutdown/coordinator",
+		Owner:                     registry.OwnerDisasterRecovery,
+		Cluster:                   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+		CompatibleClouds:          registry.Clouds(sp.backup.cloud),
+		Suites:                    registry.Suites(registry.Nightly),
+		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		Leases:                    registry.MetamorphicLeases,
+		Timeout:                   sp.timeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
@@ -131,13 +133,14 @@ func registerRestore(r registry.Registry) {
 	withPauseSpecs.initTestName()
 
 	r.Add(registry.TestSpec{
-		Name:             withPauseSpecs.testName,
-		Owner:            registry.OwnerDisasterRecovery,
-		Benchmark:        true,
-		Cluster:          withPauseSpecs.hardware.makeClusterSpecs(r, withPauseSpecs.backup.cloud),
-		Timeout:          withPauseSpecs.timeout,
-		CompatibleClouds: registry.Clouds(withPauseSpecs.backup.cloud),
-		Suites:           registry.Suites(registry.Nightly),
+		Name:                      withPauseSpecs.testName,
+		Owner:                     registry.OwnerDisasterRecovery,
+		Benchmark:                 true,
+		Cluster:                   withPauseSpecs.hardware.makeClusterSpecs(r, withPauseSpecs.backup.cloud),
+		Timeout:                   withPauseSpecs.timeout,
+		CompatibleClouds:          registry.Clouds(withPauseSpecs.backup.cloud),
+		Suites:                    registry.Suites(registry.Nightly),
+		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			rd := makeRestoreDriver(t, c, withPauseSpecs)
@@ -430,10 +433,11 @@ func registerRestore(r registry.Registry) {
 			Timeout:   sp.timeout,
 			// These tests measure performance. To ensure consistent perf,
 			// disable metamorphic encryption.
-			EncryptionSupport: registry.EncryptionAlwaysDisabled,
-			CompatibleClouds:  registry.Clouds(sp.backup.cloud),
-			Suites:            sp.suites,
-			Skip:              sp.skip,
+			EncryptionSupport:         registry.EncryptionAlwaysDisabled,
+			CompatibleClouds:          registry.Clouds(sp.backup.cloud),
+			Suites:                    sp.suites,
+			TestSelectionOptOutSuites: sp.suites,
+			Skip:                      sp.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 				rd := makeRestoreDriver(t, c, sp)

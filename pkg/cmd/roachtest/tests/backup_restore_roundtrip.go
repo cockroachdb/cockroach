@@ -89,6 +89,7 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 			NativeLibs:                 registry.LibGEOS,
 			CompatibleClouds:           registry.OnlyGCE,
 			Suites:                     registry.Suites(registry.Nightly),
+			TestSelectionOptOutSuites:  registry.Suites(registry.Nightly),
 			Skip:                       sp.skip,
 			RequiresDeprecatedWorkload: true, // uses schemachange
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
