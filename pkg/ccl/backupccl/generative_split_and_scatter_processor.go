@@ -393,7 +393,9 @@ func (gssp *generativeSplitAndScatterProcessor) ConsumerClosed() {
 // runs into an error and stops consuming scattered entries to make sure we
 // don't leak goroutines.
 func (gssp *generativeSplitAndScatterProcessor) close() {
-	gssp.cancelScatterAndWaitForWorker()
+	if gssp.cancelScatterAndWaitForWorker != nil {
+		gssp.cancelScatterAndWaitForWorker()
+	}
 	gssp.InternalClose()
 }
 
