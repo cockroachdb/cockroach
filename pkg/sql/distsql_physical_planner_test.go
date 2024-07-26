@@ -1306,11 +1306,8 @@ func TestPartitionSpans(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := mockGossip.AddInfoProto(
-			gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
-			&execinfrapb.DistSQLVersionGossipInfo{
-				MinAcceptedVersion: execinfra.MinAcceptedVersion,
-				Version:            execinfra.Version,
-			},
+			gossip.MakeDistSQLDrainingKey(sqlInstanceID),
+			&execinfrapb.DistSQLDrainingInfo{Draining: false},
 			0, // ttl - no expiration
 		); err != nil {
 			t.Fatal(err)
@@ -1688,15 +1685,15 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		// All the nodes advertise their DistSQL versions. This is to simulate the
-		// "node overridden by another node at the same address" case mentioned in
-		// the test comment - for such a node, the descriptor would be taken out of
-		// the gossip data, but other datums it advertised are left in place.
+		// All the nodes advertise that they are not draining. This is to
+		// simulate the "node overridden by another node at the same address"
+		// case mentioned in the test comment - for such a node, the descriptor
+		// would be taken out of the gossip data, but other datums it advertised
+		// are left in place.
 		if err := mockGossip.AddInfoProto(
-			gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
-			&execinfrapb.DistSQLVersionGossipInfo{
-				MinAcceptedVersion: execinfra.MinAcceptedVersion,
-				Version:            execinfra.Version,
+			gossip.MakeDistSQLDrainingKey(sqlInstanceID),
+			&execinfrapb.DistSQLDrainingInfo{
+				Draining: false,
 			},
 			0, // ttl - no expiration
 		); err != nil {
@@ -1780,11 +1777,8 @@ func TestCheckNodeHealth(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := mockGossip.AddInfoProto(
-		gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
-		&execinfrapb.DistSQLVersionGossipInfo{
-			MinAcceptedVersion: execinfra.MinAcceptedVersion,
-			Version:            execinfra.Version,
-		},
+		gossip.MakeDistSQLDrainingKey(sqlInstanceID),
+		&execinfrapb.DistSQLDrainingInfo{Draining: false},
 		0, // ttl - no expiration
 	); err != nil {
 		t.Fatal(err)
