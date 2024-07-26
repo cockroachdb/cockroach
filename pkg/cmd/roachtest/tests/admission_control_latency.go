@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -671,7 +672,9 @@ func isAcceptableChange(
 		return true
 	}
 	allPassed := true
-	for name, baseStat := range baseline {
+	keys := sortedStringKeys(baseline)
+	for _, name := range keys {
+		baseStat := baseline[name]
 		otherStat := other[name]
 		if float64(otherStat.TotalCount()) < float64(baseStat.TotalCount())*(1-acceptableCountDecrease) {
 			logger.Printf("%s: qps decreased from %d to %d", name, baseStat.TotalCount(), otherStat.TotalCount())
@@ -766,7 +769,10 @@ outer:
 func shortString(sMap map[string]*hdrhistogram.Histogram) string {
 	var outputStr strings.Builder
 	var count int64
-	for name, hist := range sMap {
+
+	keys := sortedStringKeys(sMap)
+	for _, name := range keys {
+		hist := sMap[name]
 		outputStr.WriteString(fmt.Sprintf("%s: %s, ", name, time.Duration(hist.ValueAtQuantile(99))))
 		count += hist.TotalCount()
 	}
@@ -819,4 +825,13 @@ func waitDuration(ctx context.Context, duration time.Duration) {
 		return
 	case <-time.After(duration):
 	}
+}
+
+func sortedStringKeys(m map[string]*hdrhistogram.Histogram) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
