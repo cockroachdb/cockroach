@@ -323,3 +323,31 @@ func TestingGetPTSFromReplicationJob(
 
 	return ptsRecord.Timestamp
 }
+
+func TestingGetRetainedTimeFromReplicationJob(
+	t *testing.T,
+	ctx context.Context,
+	sqlRunner *sqlutils.SQLRunner,
+	srv serverutils.ApplicationLayerInterface,
+	producerJobID int,
+) hlc.Timestamp {
+	var retainedTime hlc.Timestamp
+	payload := jobutils.GetJobPayload(t, sqlRunner, jobspb.JobID(producerJobID))
+	details := payload.GetStreamIngestion()
+	if details == nil {
+		return retainedTime
+	}
+	ptsRecordID := details.ProtectedTimestampRecordID
+	ptsProvider := srv.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+
+	var ptsRecord *ptpb.Record
+	err := srv.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var err error
+		ptsRecord, err = ptsProvider.WithTxn(txn).GetRecord(ctx, *ptsRecordID)
+		return err
+	})
+	require.NoError(t, err)
+	retainedTime = ptsRecord.Timestamp
+
+	return retainedTime
+}
