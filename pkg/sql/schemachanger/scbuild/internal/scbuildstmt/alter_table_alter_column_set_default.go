@@ -32,6 +32,13 @@ func alterTableSetDefault(
 	colID := getColumnIDFromColumnName(b, tbl.TableID, t.Column, true /* required */)
 	col := mustRetrieveColumnElem(b, tbl.TableID, colID)
 	oldDefaultExpr := retrieveColumnDefaultExpressionElem(b, tbl.TableID, colID)
+	colType := mustRetrieveColumnTypeElem(b, tbl.TableID, colID)
+
+	// Block alters on system columns.
+	panicIfSystemColumn(col, t.Column.String())
+
+	// Block disallowed operations on computed columns.
+	panicIfComputedColumn(tn.ObjectName, colType, t.Column.String(), t.Default)
 
 	// For DROP DEFAULT.
 	if t.Default == nil {
@@ -40,9 +47,6 @@ func alterTableSetDefault(
 		}
 		return
 	}
-
-	// Block alters on system columns.
-	panicIfSystemColumn(col, t.Column.String())
 
 	// If our target column already has a default expression, we want to drop it first.
 	if oldDefaultExpr != nil {
@@ -141,4 +145,23 @@ func sanitizeColumnExpression(
 
 	s := tree.Serialize(typedExpr)
 	return typedExpr, s, nil
+}
+
+// panicIfComputedColumn blocks disallowed operations on computed columns.
+func panicIfComputedColumn(tn tree.Name, col *scpb.ColumnType, colName string, def tree.Expr) {
+	// Block setting a column default if the column is computed.
+	if col.ComputeExpr != nil {
+		// Block dropping a computed col "default" as well.
+		if def == nil {
+			panic(pgerror.Newf(
+				pgcode.Syntax,
+				"column %q of relation %q is a computed column",
+				colName,
+				tn))
+		}
+		panic(pgerror.Newf(
+			pgcode.Syntax,
+			"computed column %q cannot also have a DEFAULT expression",
+			colName))
+	}
 }

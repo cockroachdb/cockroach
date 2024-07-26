@@ -1143,7 +1143,7 @@ func (desc *wrapper) validateColumns() error {
 
 		if column.IsComputed() {
 			if column.HasDefault() {
-				return pgerror.Newf(pgcode.InvalidTableDefinition,
+				return pgerror.Newf(pgcode.Syntax,
 					"computed column %q cannot also have a DEFAULT expression",
 					column.GetName(),
 				)
