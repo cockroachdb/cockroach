@@ -11,6 +11,7 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -81,23 +82,22 @@ func alterTableAlterColumnType(
 	validateAutomaticCastForNewType(b, tbl.TableID, colID, t.Column.String(),
 		oldColType.Type, newColType.Type, t.Using != nil)
 
-	// We currently only support trivial conversions. Fallback to legacy schema
-	// changer if not trivial.
 	kind, err := schemachange.ClassifyConversionFromTree(b, t, oldColType.Type, newColType.Type)
 	if err != nil {
 		panic(err)
 	}
-	if kind != schemachange.ColumnConversionTrivial {
-		// TODO(spilchen): implement support for non-trivial type changes in issue #127014
-		panic(scerrors.NotImplementedErrorf(t,
-			"alter type conversion not supported in the declarative schema changer"))
-	}
 
-	// Okay to proceed with DSC. Add the new type and remove the old type. The
-	// removal of the old type is a no-op in opgen. But we need the drop here so
-	// that we only have 1 public type for the column.
-	b.Drop(oldColType)
-	b.Add(&newColType)
+	switch kind {
+	case schemachange.ColumnConversionTrivial:
+		handleTrivialColumnConversion(b, oldColType, &newColType)
+	case schemachange.ColumnConversionValidate:
+		handleValidationOnlyColumnConversion(b, t, oldColType, &newColType)
+	case schemachange.ColumnConversionGeneral:
+		handleGeneralColumnConversion(b, t, col, oldColType, &newColType)
+	default:
+		panic(scerrors.NotImplementedErrorf(t,
+			"alter type conversion %v not handled", kind))
+	}
 }
 
 // ValidateColExprForNewType will ensure that the existing expressions for
@@ -110,6 +110,32 @@ func validateAutomaticCastForNewType(
 	fromType, toType *types.T,
 	hasUsingExpr bool,
 ) {
+	if validCast := cast.ValidCast(fromType, toType, cast.ContextAssignment); validCast {
+		return
+	}
+
+	// If the USING expression is missing, we will report an error with a
+	// suggested hint to use one.
+	if !hasUsingExpr {
+		// Compute a suggested default computed expression for inclusion in the error hint.
+		hintExpr := tree.CastExpr{
+			Expr:       &tree.ColumnItem{ColumnName: tree.Name(colName)},
+			Type:       toType,
+			SyntaxMode: tree.CastShort,
+		}
+		panic(errors.WithHintf(
+			pgerror.Newf(
+				pgcode.DatatypeMismatch,
+				"column %q cannot be cast automatically to type %s",
+				colName,
+				toType.SQLString(),
+			), "You might need to specify \"USING %s\".", tree.Serialize(&hintExpr),
+		))
+	}
+
+	// We have a USING clause, but if we have DEFAULT or ON UPDATE expressions,
+	// then we raise an error because those expressions cannot be automatically
+	// cast to the new type.
 	columnElements(b, tableID, colID).ForEach(func(
 		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
 	) {
@@ -119,36 +145,84 @@ func validateAutomaticCastForNewType(
 			exprType = "default"
 		case *scpb.ColumnOnUpdateExpression:
 			exprType = "on update"
+		default:
+			return
 		}
-		if exprType != "" {
-			if validCast := cast.ValidCast(fromType, toType, cast.ContextAssignment); !validCast {
-				// If the USING expression is missing, we will report an error with a
-				// suggested hint to use one. This is mainly done for compatability
-				// with the legacy schema changer.
-				if !hasUsingExpr {
-					// Compute a suggested default computed expression for inclusion in the error hint.
-					hintExpr := tree.CastExpr{
-						Expr:       &tree.ColumnItem{ColumnName: tree.Name(colName)},
-						Type:       toType,
-						SyntaxMode: tree.CastShort,
-					}
-					panic(errors.WithHintf(
-						pgerror.Newf(
-							pgcode.DatatypeMismatch,
-							"column %q cannot be cast automatically to type %s",
-							colName,
-							toType.SQLString(),
-						), "You might need to specify \"USING %s\".", tree.Serialize(&hintExpr),
-					))
-				}
-				panic(pgerror.Newf(
-					pgcode.DatatypeMismatch,
-					"%s for column %q cannot be cast automatically to type %s",
-					exprType,
-					colName,
-					toType.SQLString(),
-				))
-			}
+		panic(pgerror.Newf(
+			pgcode.DatatypeMismatch,
+			"%s for column %q cannot be cast automatically to type %s",
+			exprType,
+			colName,
+			toType.SQLString(),
+		))
+	})
+}
+
+// handleTrivialColumnConversion is called to just change the type in-place without
+// no rewrite or validation required.
+func handleTrivialColumnConversion(b BuildCtx, oldColType, newColType *scpb.ColumnType) {
+	// Add the new type and remove the old type. The removal of the old type is a
+	// no-op in opgen. But we need the drop here so that we only have 1 public
+	// type for the column.
+	b.Drop(oldColType)
+	b.Add(newColType)
+}
+
+// handleValidationOnlyColumnConversion is called when we don't need to rewrite
+// data, only validate the existing data is compatible with the type.
+func handleValidationOnlyColumnConversion(
+	b BuildCtx, t *tree.AlterTableAlterColumnType, oldColType, newColType *scpb.ColumnType,
+) {
+	failIfExperimentalSettingNotSet(b, oldColType, newColType)
+
+	// TODO(spilchen): Implement the validation-only logic in #127516
+	panic(scerrors.NotImplementedErrorf(t,
+		"alter type conversion that requires validation only is not supported in the declarative schema changer"))
+}
+
+// handleGeneralColumnConversion is called when we need to rewrite the data in order
+// to complete the data type conversion.
+func handleGeneralColumnConversion(
+	b BuildCtx,
+	t *tree.AlterTableAlterColumnType,
+	col *scpb.Column,
+	oldColType, newColType *scpb.ColumnType,
+) {
+	failIfExperimentalSettingNotSet(b, oldColType, newColType)
+
+	// Because we need to rewrite data to change the data type, there are
+	// additional validation checks required that are incompatible with this
+	// process.
+	walkColumnDependencies(b, col, "alter type of", "column", func(e scpb.Element, op, objType string) {
+		switch e.(type) {
+		case *scpb.SequenceOwner:
+			panic(sqlerrors.NewAlterColumnTypeColOwnsSequenceNotSupportedErr())
+		case *scpb.CheckConstraint, *scpb.CheckConstraintUnvalidated,
+			*scpb.UniqueWithoutIndexConstraint, *scpb.UniqueWithoutIndexConstraintUnvalidated,
+			*scpb.ForeignKeyConstraint, *scpb.ForeignKeyConstraintUnvalidated:
+			panic(sqlerrors.NewAlterColumnTypeColWithConstraintNotSupportedErr())
+		case *scpb.SecondaryIndex:
+			panic(sqlerrors.NewAlterColumnTypeColInIndexNotSupportedErr())
 		}
 	})
+
+	// TODO(spilchen): Implement the general conversion logic in #127014
+	panic(scerrors.NotImplementedErrorf(t, "general alter type conversion not supported in the declarative schema changer"))
+}
+
+// failIfExperimentalSettingNotSet checks if the setting that allows altering
+// types is enabled. If the setting is not enabled, this function will panic.
+func failIfExperimentalSettingNotSet(b BuildCtx, oldColType, newColType *scpb.ColumnType) {
+	if !b.SessionData().AlterColumnTypeGeneralEnabled {
+		panic(pgerror.WithCandidateCode(
+			errors.WithHint(
+				errors.WithIssueLink(
+					errors.Newf("ALTER COLUMN TYPE from %v to %v is only "+
+						"supported experimentally",
+						oldColType.Type, newColType.Type),
+					errors.IssueLink{IssueURL: build.MakeIssueURL(49329)}),
+				"you can enable alter column type general support by running "+
+					"`SET enable_experimental_alter_column_type_general = true`"),
+			pgcode.ExperimentalFeature))
+	}
 }
