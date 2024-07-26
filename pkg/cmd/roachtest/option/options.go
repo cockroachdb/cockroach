@@ -81,10 +81,15 @@ func StartVirtualClusterOpts(name string, nodes NodeListOption, opts ...StartSto
 
 // DefaultStartSharedVirtualClusterOpts returns StartOpts for starting a shared
 // process virtual cluster with the given name.
-func StartSharedVirtualClusterOpts(name string) StartOpts {
+func StartSharedVirtualClusterOpts(name string, opts ...StartStopOption) StartOpts {
 	startOpts := DefaultStartOpts()
 	startOpts.RoachprodOpts.Target = install.StartSharedProcessForVirtualCluster
 	startOpts.RoachprodOpts.VirtualClusterName = name
+
+	for _, opt := range opts {
+		opt(&startOpts)
+	}
+
 	return startOpts
 }
 
@@ -154,6 +159,19 @@ func SkipInit(opts interface{}) {
 	switch opts := opts.(type) {
 	case *StartOpts:
 		opts.RoachprodOpts.SkipInit = true
+	}
+}
+
+// WithInitTarget allows the caller to configure which node is used as
+// `InitTarget` when starting cockroach. Specially useful when
+// starting clusters in a subset of VMs in the cluster that doesn't
+// include the default init target (node 1).
+func WithInitTarget(node int) StartStopOption {
+	return func(opts interface{}) {
+		switch opts := opts.(type) {
+		case *StartOpts:
+			opts.RoachprodOpts.InitTarget = node
+		}
 	}
 }
 
