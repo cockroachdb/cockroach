@@ -22,49 +22,40 @@ $viz-sides = 62px
     color gray
     text-decoration underline
 
-.linegraph-tooltip
-  height 100%
-  .uplot
+.u-legend
+  max-height: 300px
+  display flex
+  flex-wrap wrap
+  flex-direction row
+  align-items flex-start
+  align-content flex-start
+  overflow auto
+  > tr
     display flex
-    flex-direction column
-    > .u-legend
+    flex-direction row
+    .u-marker
+      border-radius 9px
+      border-width 4px
+  > tr:first-child
+    flex-basis 100%
+    text-align left
+    color gray
+    .u-marker
       display none
-      position absolute
-      left 0
-      top 0
-      font-size 10px
-      background-color white
-      text-align left
-      margin-top 20px
-      z-index 100
-      pointer-events: none;
-      width: max-content;
-      border-radius: 5px
-      padding: 10px;
-      border 1px solid rgba(0,0,0,0.1)
 
-    // stick the legend to the char's bottom.
-    // Chart height is hardcoded to 300px (pkg/ui/src/views/cluster/util/graphs.ts)
-    > .u-legend.u-legend--place-bottom
-      position relative
-      top 0!important // Necessary because uPlot adds top/left on hover to make legend appear near mouse pointer
-      left 0!important // Necessary because uPlot adds top/left on hover to make legend appear near mouse pointer
-      width auto
-      margin-left -1px
-      margin-right -1px
-      padding-left 50px
-      // the first line in the legend represents Y-axis and it occupies an entire line
-      // to stand out from the rest of x-axis values
-      > tr:first-child
-        width 100%
-        font-size $font-size--small
-
-      > tr
-        min-width 30%
-
-  .u-legend:not(.u-legend--place-bottom)
-    .u-series
-      display block
+.u-tooltip
+  font-size 10pt
+  position absolute
+  background #fff
+  display none
+  border 2px solid black
+  padding 2px
+  pointer-events none
+  z-index 100
+  white-space pre
+  .u-label
+    display inline
+    font-weight bold
 
 .no-data
   width 100%
