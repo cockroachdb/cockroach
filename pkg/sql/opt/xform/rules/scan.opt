@@ -14,11 +14,19 @@
 # to avoid communicating with remote nodes (relative to the gateway region) if
 # at all possible.
 #
-# LocalityOptimizedSearch can be planned under the following conditions:
-#  - A scan is known to produce at most one row.
-#  - The scan contains multiple spans, with some spans targeting partitions on
-#    local nodes (relative to the gateway region), and some targeting partitions
-#    on remote nodes. It is not known which span will produce the row.
+# LocalityOptimizedSearch can be planned when the scan contains multiple spans,
+# with some spans targeting partitions on local nodes (relative to the gateway
+# region), and some targeting partitions on remote nodes, and one of the
+# following is true:
+#
+#  - The scan has a hard limit that is less than or equal to the maximum
+#    cardinality of the local span.
+#
+#  - Or, the maximum cardinality of the local span is greater than or equal to
+#    the maximum cardinality of the original scan.
+#
+# If either one of these conditions is met, then the scan may be satisfied with
+# only the local spans, so there is benefit to using locality-optimized search.
 #
 # The result of GenerateLocalityOptimizedScan will be a LocalityOptimizedSearch
 # in which the left child contains a new scan operator with the local spans from
