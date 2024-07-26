@@ -47,7 +47,7 @@ import {
   livenessStatusByNodeIDSelector,
   nodeIDsSelector,
   nodeIDsStringifiedSelector,
-  selectStoreIDsByNodeID,
+  selectStoreIDsByNodeID, nodeDisplayNameByIDSelectorWithoutAddress,
 } from "src/redux/nodes";
 import Alerts from "src/views/shared/containers/alerts";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
@@ -516,7 +516,7 @@ export class NodeGraphs extends React.Component<
  */
 const nodeDropdownOptionsSelector = createSelector(
   nodeIDsSelector,
-  nodeDisplayNameByIDSelector,
+    (state) => nodeDisplayNameByIDSelector(state),
   livenessStatusByNodeIDSelector,
   (nodeIds, nodeDisplayNameByID, livenessStatusByNodeID): DropdownOption[] => {
     const base = [{ value: "", label: "Cluster" }];
@@ -544,7 +544,7 @@ const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   nodeIds: nodeIDsStringifiedSelector(state),
   storeIDsByNodeID: selectStoreIDsByNodeID(state),
   nodeDropdownOptions: nodeDropdownOptionsSelector(state),
-  nodeDisplayNameByID: nodeDisplayNameByIDSelector(state),
+  nodeDisplayNameByID: nodeDisplayNameByIDSelectorWithoutAddress(state),
   tenantOptions: tenantDropdownOptions(state),
   currentTenant: getCookieValue("tenant"),
 });
