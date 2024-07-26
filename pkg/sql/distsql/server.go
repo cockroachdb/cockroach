@@ -108,23 +108,6 @@ func NewServer(
 // initialized. For example, the initialization of the flow runner has to
 // happen in NewServer.
 func (ds *ServerImpl) Start() {
-	// Gossip the version info so that other nodes don't plan incompatible flows
-	// for us.
-	if g, ok := ds.ServerConfig.Gossip.Optional(MultiTenancyIssueNo); ok {
-		if nodeID, ok := ds.ServerConfig.NodeID.OptionalNodeID(); ok {
-			if err := g.AddInfoProto(
-				gossip.MakeDistSQLNodeVersionKey(base.SQLInstanceID(nodeID)),
-				&execinfrapb.DistSQLVersionGossipInfo{
-					Version:            execinfra.Version,
-					MinAcceptedVersion: execinfra.MinAcceptedVersion,
-				},
-				0, // ttl - no expiration
-			); err != nil {
-				panic(err)
-			}
-		}
-	}
-
 	if err := ds.setDraining(false); err != nil {
 		panic(err)
 	}

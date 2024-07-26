@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	spec2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -60,7 +61,7 @@ func (s loqTestSpec) testName(mode string) string {
 }
 
 func registerLOQRecovery(r registry.Registry) {
-	spec := r.MakeClusterSpec(6)
+	spec := r.MakeClusterSpec(6, spec2.WorkloadNode())
 	for _, s := range []loqTestSpec{
 		{wl: movrLoqWorkload{concurrency: 32}, rangeSizeMB: 2},
 		{wl: movrLoqWorkload{concurrency: 32}},
@@ -162,11 +163,6 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 	// clusters running.
 	debugFailures := t.IsDebug()
 
-	// Number of cockroach cluster nodes.
-	maxNode := c.Spec().NodeCount - 1
-	nodes := c.Range(1, maxNode)
-	// Controller node runs offline procedures and workload.
-	controller := c.Spec().NodeCount
 	// Nodes that we plan to keep after simulated failure.
 	remaining := []int{1, 4, 5}
 	planName := "recover-plan.json"
@@ -177,7 +173,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 	settings := install.MakeClusterSettings(install.EnvOption([]string{
 		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
 	}))
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, nodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.CRDBNodes())
 
 	// Cleanup stale files generated during recovery. We do this for the case
 	// where the cluster is reused and cli would refuse to overwrite files
@@ -204,11 +200,11 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		_, err = db.Exec("SET CLUSTER SETTING sql.trace.stmt.enable_threshold = '30s'")
 	}
 
-	m := c.NewMonitor(ctx, nodes)
+	m := c.NewMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		t.L().Printf("initializing workload")
 
-		c.Run(ctx, option.WithNodes(c.Node(controller)), s.wl.initCmd(pgURL, dbName))
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.initCmd(pgURL, dbName))
 
 		if s.rangeSizeMB > 0 {
 			err = setDBRangeLimits(ctx, db, dbName, s.rangeSizeMB*(1<<20))
@@ -222,12 +218,12 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		require.NoError(t, err, "failed to set default statement timeout")
 
 		t.L().Printf("running workload")
-		c.Run(ctx, option.WithNodes(c.Node(controller)), s.wl.runCmd(pgURL, dbName, ifLocal(c, "10s", "30s"), ""))
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.runCmd(pgURL, dbName, ifLocal(c, "10s", "30s"), ""))
 		t.L().Printf("workload finished")
 
 		m.ExpectDeaths(int32(c.Spec().NodeCount - 1))
 		stopOpts := option.DefaultStopOpts()
-		c.Stop(ctx, t.L(), stopOpts, nodes)
+		c.Stop(ctx, t.L(), stopOpts, c.CRDBNodes())
 
 		planArguments := ""
 		for _, node := range remaining {
@@ -239,20 +235,20 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 				c.Node(node)); err != nil {
 				t.Fatalf("failed to collect node replica info %s from node %d: %s", name, node, err)
 			}
-			c.Put(ctx, path.Join(t.ArtifactsDir(), name), name, c.Nodes(controller))
+			c.Put(ctx, path.Join(t.ArtifactsDir(), name), name, c.WorkloadNode())
 			planArguments += " " + name
 		}
 		t.L().Printf("running plan creation")
 		planCmd := "./cockroach debug recover make-plan --confirm y -o " + planName + planArguments
-		if err = c.RunE(ctx, option.WithNodes(c.Node(controller)), planCmd); err != nil {
+		if err = c.RunE(ctx, option.WithNodes(c.WorkloadNode()), planCmd); err != nil {
 			t.L().Printf("failed to create plan, test can't proceed assuming unrecoverable cluster: %s",
 				err)
 			return &recoveryImpossibleError{testOutcome: planCantBeCreated}
 		}
 
 		if err := c.Get(ctx, t.L(), planName, path.Join(t.ArtifactsDir(), planName),
-			c.Node(controller)); err != nil {
-			t.Fatalf("failed to collect plan %s from controller node %d: %s", planName, controller, err)
+			c.WorkloadNode()); err != nil {
+			t.Fatalf("failed to collect plan %s from controller node %s: %s", planName, c.WorkloadNode(), err)
 		}
 
 		t.L().Printf("distributing and applying recovery plan")
@@ -306,7 +302,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 			func(ctx context.Context) error {
 				decommissionCmd := fmt.Sprintf(
 					"./cockroach node decommission --wait none --url={pgurl:%d} 2 3", 1)
-				return c.RunE(ctx, option.WithNodes(c.Node(controller)), decommissionCmd)
+				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), decommissionCmd)
 			}); err != nil {
 			// Timeout means we failed to recover ranges especially system ones
 			// correctly. We don't wait for all ranges to drain from the nodes to
@@ -314,9 +310,9 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 			return &recoveryImpossibleError{testOutcome: decommissionFailed}
 		}
 		t.L().Printf("resuming workload")
-		if err = c.RunE(ctx, option.WithNodes(c.Node(controller)),
+		if err = c.RunE(ctx, option.WithNodes(c.WorkloadNode()),
 			s.wl.runCmd(
-				fmt.Sprintf("{pgurl:1,4-%d}", maxNode), dbName, ifLocal(c, "30s", "3m"),
+				fmt.Sprintf("{pgurl:1,4-%d}", len(c.CRDBNodes())), dbName, ifLocal(c, "30s", "3m"),
 				workloadHistogramFile)); err != nil {
 			return &recoveryImpossibleError{testOutcome: workloadFailed}
 		}
@@ -332,7 +328,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 			func(ctx context.Context) error {
 				decommissionCmd := fmt.Sprintf(
 					"./cockroach node decommission --wait all --url={pgurl:%d} 2 3", 1)
-				return c.RunE(ctx, option.WithNodes(c.Nodes(controller)), decommissionCmd)
+				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), decommissionCmd)
 			}); err != nil {
 			// Timeout means we failed to drain all ranges from failed nodes, possibly
 			// because some ranges were not recovered.
@@ -377,11 +373,6 @@ func runHalfOnlineRecoverLossOfQuorum(
 	// clusters running.
 	debugFailures := t.IsDebug()
 
-	// Number of cockroach cluster nodes.
-	maxNode := c.Spec().NodeCount - 1
-	nodes := c.Range(1, maxNode)
-	// Controller node runs offline procedures and workload.
-	controller := c.Spec().NodeCount
 	// Nodes that we plan to keep after simulated failure.
 	remaining := []int{1, 4, 5}
 	killed := []int{2, 3}
@@ -394,7 +385,7 @@ func runHalfOnlineRecoverLossOfQuorum(
 	settings := install.MakeClusterSettings(install.EnvOption([]string{
 		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
 	}))
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, nodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.CRDBNodes())
 
 	// Cleanup stale files generated during recovery. We do this for the case
 	// where the cluster is reused and cli would refuse to overwrite files
@@ -417,11 +408,11 @@ func runHalfOnlineRecoverLossOfQuorum(
 		_, err = db.Exec("SET CLUSTER SETTING sql.trace.stmt.enable_threshold = '30s'")
 	}
 
-	m := c.NewMonitor(ctx, nodes)
+	m := c.NewMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		t.L().Printf("initializing workload")
 
-		c.Run(ctx, option.WithNodes(c.Node(controller)), s.wl.initCmd(pgURL, dbName))
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.initCmd(pgURL, dbName))
 
 		if s.rangeSizeMB > 0 {
 			err = setDBRangeLimits(ctx, db, dbName, s.rangeSizeMB*(1<<20))
@@ -435,7 +426,7 @@ func runHalfOnlineRecoverLossOfQuorum(
 		require.NoError(t, err, "failed to set default statement timeout")
 
 		t.L().Printf("running workload")
-		c.Run(ctx, option.WithNodes(c.Node(controller)), s.wl.runCmd(pgURL, dbName, ifLocal(c, "10s", "30s"), ""))
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.runCmd(pgURL, dbName, ifLocal(c, "10s", "30s"), ""))
 		t.L().Printf("workload finished")
 
 		m.ExpectDeaths(int32(len(killed)))
@@ -449,20 +440,20 @@ func runHalfOnlineRecoverLossOfQuorum(
 		addr := addrs[0]
 		planCmd := "./cockroach debug recover make-plan --confirm y --host " + addr + " -o " + planName
 
-		if err = c.RunE(ctx, option.WithNodes(c.Node(controller)), planCmd); err != nil {
+		if err = c.RunE(ctx, option.WithNodes(c.WorkloadNode()), planCmd); err != nil {
 			t.L().Printf("failed to create plan, test can't proceed assuming unrecoverable cluster: %s",
 				err)
 			return &recoveryImpossibleError{testOutcome: planCantBeCreated}
 		}
 
 		if err := c.Get(ctx, t.L(), planName, path.Join(t.ArtifactsDir(), planName),
-			c.Node(controller)); err != nil {
-			t.Fatalf("failed to collect plan %s from controller node %d: %s", planName, controller, err)
+			c.WorkloadNode()); err != nil {
+			t.Fatalf("failed to collect plan %s from controller node %s: %s", planName, c.WorkloadNode(), err)
 		}
 
 		t.L().Printf("staging recovery plan")
 		applyCommand := "./cockroach debug recover apply-plan --confirm y --host " + addr + " " + planName
-		c.Run(ctx, option.WithNodes(c.Nodes(controller)), applyCommand)
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), applyCommand)
 
 		// Ignore node failures because they could fail if recovered ranges
 		// generate panics. We don't want test to fail in that case, and we
@@ -481,7 +472,7 @@ func runHalfOnlineRecoverLossOfQuorum(
 		if err = timeutil.RunWithTimeout(ctx, "wait-for-restart", 2*time.Minute,
 			func(ctx context.Context) error {
 				for {
-					res, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(controller)), verifyCommand)
+					res, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), verifyCommand)
 					if res.RemoteExitStatus == 0 {
 						if ctx.Err() != nil {
 							return &recoveryImpossibleError{testOutcome: restartFailed}
@@ -524,9 +515,9 @@ func runHalfOnlineRecoverLossOfQuorum(
 		}
 
 		t.L().Printf("resuming workload")
-		if err = c.RunE(ctx, option.WithNodes(c.Node(controller)),
+		if err = c.RunE(ctx, option.WithNodes(c.WorkloadNode()),
 			s.wl.runCmd(
-				fmt.Sprintf("{pgurl:1,4-%d}", maxNode), dbName, ifLocal(c, "30s", "3m"),
+				fmt.Sprintf("{pgurl:1,4-%d}", len(c.CRDBNodes())), dbName, ifLocal(c, "30s", "3m"),
 				workloadHistogramFile)); err != nil {
 			return &recoveryImpossibleError{testOutcome: workloadFailed}
 		}
