@@ -286,6 +286,13 @@ EOF"
       --datadog-service drt-cockroachdb \
       --datadog-tags 'service:drt-cockroachdb,team:drt'
 
+    echo
+    echo "Updated ${cluster} configuration to send telemetry data to Datadog."
+    echo
+    echo "If this was the first time this script was run against ${cluster} then"
+    echo "CockroachDB must be restarted to reload its logging configuration."
+    echo
+
     exit 0
     ;;
   "ua-failover")
