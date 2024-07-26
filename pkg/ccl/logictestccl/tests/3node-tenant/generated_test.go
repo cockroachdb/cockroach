@@ -333,13 +333,6 @@ func TestTenantLogic_bit(
 	runLogicTest(t, "bit")
 }
 
-func TestTenantLogic_blathers_test_delete_me(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "blathers_test_delete_me")
-}
-
 func TestTenantLogic_builtin_function(
 	t *testing.T,
 ) {
