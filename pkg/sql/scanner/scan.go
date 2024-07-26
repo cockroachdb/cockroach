@@ -98,6 +98,7 @@ func (s *Scanner) Init(str string) {
 // where we reuse a Scanner).
 func (s *Scanner) Cleanup() {
 	s.bytesPrealloc = nil
+	s.Comments = nil
 }
 
 func (s *Scanner) allocBytes(length int) []byte {
