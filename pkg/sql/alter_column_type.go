@@ -26,22 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
-
-var colInIndexNotSupportedErr = unimplemented.NewWithIssuef(
-	47636, "ALTER COLUMN TYPE requiring rewrite of on-disk "+
-		"data is currently not supported for columns that are part of an index")
-
-var colOwnsSequenceNotSupportedErr = unimplemented.NewWithIssuef(
-	48244, "ALTER COLUMN TYPE for a column that owns a sequence "+
-		"is currently not supported")
-
-var colWithConstraintNotSupportedErr = unimplemented.NewWithIssuef(
-	48288, "ALTER COLUMN TYPE for a column that has a constraint "+
-		"is currently not supported")
 
 // AlterColTypeInTxnNotSupportedErr is returned when an ALTER COLUMN TYPE
 // is tried in an explicit transaction.
@@ -177,14 +166,14 @@ func alterColumnTypeGeneral(
 
 	// Disallow ALTER COLUMN TYPE general for columns that own sequences.
 	if col.NumOwnsSequences() != 0 {
-		return colOwnsSequenceNotSupportedErr
+		return sqlerrors.NewAlterColumnTypeColOwnsSequenceNotSupportedErr()
 	}
 
 	// Disallow ALTER COLUMN TYPE general for columns that have a check
 	// constraint.
 	for _, ck := range tableDesc.EnforcedCheckConstraints() {
 		if ck.CollectReferencedColumnIDs().Contains(col.GetID()) {
-			return colWithConstraintNotSupportedErr
+			return sqlerrors.NewAlterColumnTypeColWithConstraintNotSupportedErr()
 		}
 	}
 
@@ -192,7 +181,7 @@ func alterColumnTypeGeneral(
 	// UNIQUE WITHOUT INDEX constraint.
 	for _, uc := range tableDesc.UniqueConstraintsWithoutIndex() {
 		if uc.CollectKeyColumnIDs().Contains(col.GetID()) {
-			return colWithConstraintNotSupportedErr
+			return sqlerrors.NewAlterColumnTypeColWithConstraintNotSupportedErr()
 		}
 	}
 
@@ -200,11 +189,13 @@ func alterColumnTypeGeneral(
 	// constraint.
 	for _, fk := range tableDesc.OutboundForeignKeys() {
 		if fk.CollectOriginColumnIDs().Contains(col.GetID()) {
-			return colWithConstraintNotSupportedErr
+			return sqlerrors.NewAlterColumnTypeColWithConstraintNotSupportedErr()
 		}
+	}
+	for _, fk := range tableDesc.InboundForeignKeys() {
 		if fk.GetReferencedTableID() == tableDesc.GetID() &&
 			fk.CollectReferencedColumnIDs().Contains(col.GetID()) {
-			return colWithConstraintNotSupportedErr
+			return sqlerrors.NewAlterColumnTypeColWithConstraintNotSupportedErr()
 		}
 	}
 
@@ -214,7 +205,7 @@ func alterColumnTypeGeneral(
 		if idx.CollectKeyColumnIDs().Contains(col.GetID()) ||
 			idx.CollectKeySuffixColumnIDs().Contains(col.GetID()) ||
 			idx.CollectSecondaryStoredColumnIDs().Contains(col.GetID()) {
-			return colInIndexNotSupportedErr
+			return sqlerrors.NewAlterColumnTypeColInIndexNotSupportedErr()
 		}
 	}
 
