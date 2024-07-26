@@ -287,10 +287,10 @@ func InstallFixtures(
 	name := CheckpointName(
 		roachpb.Version{Major: int32(v.Major()), Minor: int32(v.Minor())}.String(),
 	)
-	for _, n := range nodes {
+	for n := 1; n <= len(nodes); n++ {
 		if err := c.PutE(ctx, l,
 			"pkg/cmd/roachtest/fixtures/"+strconv.Itoa(n)+"/"+name+".tgz",
-			"{store-dir}/fixture.tgz", c.Node(n),
+			"{store-dir}/fixture.tgz", c.Node(nodes[n-1]),
 		); err != nil {
 			return err
 		}
