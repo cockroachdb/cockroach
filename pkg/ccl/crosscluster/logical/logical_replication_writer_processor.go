@@ -505,6 +505,12 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 	case lrw.checkpointCh <- resolvedSpans:
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-lrw.stopCh:
+		// we need to select on stopCh here because the reader
+		// of checkpointCh is the caller of Next(). But there
+		// might never be another Next() call since it may
+		// have exited based on an error.
+		return nil
 	}
 	lrw.metrics.CheckpointEvents.Inc(1)
 	return nil
