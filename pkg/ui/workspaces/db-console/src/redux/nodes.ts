@@ -331,6 +331,7 @@ export function nodeCapacityStats(n: INodeStatus): CapacityStats {
 export function getDisplayName(
   node: INodeStatus | NoConnection,
   livenessStatus = LivenessStatus.NODE_STATUS_LIVE,
+  includeAddress = true,
 ) {
   const decommissionedString =
     livenessStatus === LivenessStatus.NODE_STATUS_DECOMMISSIONED
@@ -341,7 +342,11 @@ export function getDisplayName(
     return `${decommissionedString}(n${node.from.nodeID})`;
   }
   // as the only other type possible right now is INodeStatus we don't have a type guard for that
-  return `${decommissionedString}(n${node.desc.node_id}) ${node.desc.address.address_field}`;
+  if (includeAddress) {
+    return `${decommissionedString}(n${node.desc.node_id}) ${node.desc.address.address_field}`;
+  } else {
+    return `${decommissionedString}n${node.desc.node_id}`;
+  }
 }
 
 function isNoConnection(
@@ -368,6 +373,25 @@ export const nodeDisplayNameByIDSelector = createSelector(
         result[ns.desc.node_id] = getDisplayName(
           ns,
           livenessStatusByNodeID[ns.desc.node_id],
+          true,
+        );
+      });
+    }
+    return result;
+  },
+);
+
+export const nodeDisplayNameByIDSelectorWithoutAddress = createSelector(
+  partialNodeStatusesSelector,
+  livenessStatusByNodeIDSelector,
+  (nodeStatuses, livenessStatusByNodeID) => {
+    const result: { [key: string]: string } = {};
+    if (!isEmpty(nodeStatuses)) {
+      nodeStatuses.forEach(ns => {
+        result[ns.desc.node_id] = getDisplayName(
+          ns,
+          livenessStatusByNodeID[ns.desc.node_id],
+          false,
         );
       });
     }
