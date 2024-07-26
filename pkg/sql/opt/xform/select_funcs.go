@@ -917,14 +917,6 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 			invertedCol = scanPrivate.Table.ColumnID(index.InvertedColumn().Ordinal())
 			newScanPrivate.Cols.Add(invertedCol)
 		}
-
-		// The Scan operator always goes in a new group, since it's always nested
-		// underneath the IndexJoin. The IndexJoin may also go into its own group,
-		// if there's a remaining filter above it.
-		// TODO(mgartner): We don't always need to create an index join. The
-		// index join will be removed by EliminateIndexJoinInsideProject, but
-		// it'd be more efficient to not create the index join in the first
-		// place.
 		sb.SetScan(&newScanPrivate)
 
 		// Add an inverted filter if needed.
@@ -932,10 +924,16 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 			sb.AddInvertedFilter(spanExpr, pfState, invertedCol)
 		}
 
-		// If remaining filter exists, split it into one part that can be pushed
-		// below the IndexJoin, and one part that needs to stay above.
+		// If remaining filters exists, split them into two parts: one that can
+		// be applied above the scan, and one that requires columns not produced
+		// by the scan.
 		filters = sb.AddSelectAfterSplit(filters, pkCols)
-		sb.AddIndexJoin(scanPrivate.Cols)
+		if !scanPrivate.Cols.SubsetOf(newScanPrivate.Cols) {
+			// Add an index join if the scan does not produce all the needed
+			// columns.
+			sb.AddIndexJoin(scanPrivate.Cols)
+		}
+		// Add the remaining filters, if any.
 		sb.AddSelect(filters)
 
 		sb.Build(grp)
