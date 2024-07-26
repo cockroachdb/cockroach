@@ -663,6 +663,11 @@ func TestSchemaChangeComparator_format(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/format"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_formatting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/formatting"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_function_lookup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/function_lookup"
