@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -71,6 +72,24 @@ func NewTransactionCommittedError() error {
 // NewNonNullViolationError creates an error for a violation of a non-NULL constraint.
 func NewNonNullViolationError(columnName string) error {
 	return pgerror.Newf(pgcode.NotNullViolation, "null value in column %q violates not-null constraint", columnName)
+}
+
+func NewAlterColumnTypeColOwnsSequenceNotSupportedErr() error {
+	return unimplemented.NewWithIssuef(
+		48244, "ALTER COLUMN TYPE for a column that owns a sequence "+
+			"is currently not supported")
+}
+
+func NewAlterColumnTypeColWithConstraintNotSupportedErr() error {
+	return unimplemented.NewWithIssuef(
+		48288, "ALTER COLUMN TYPE for a column that has a constraint "+
+			"is currently not supported")
+}
+
+func NewAlterColumnTypeColInIndexNotSupportedErr() error {
+	return unimplemented.NewWithIssuef(
+		47636, "ALTER COLUMN TYPE requiring rewrite of on-disk "+
+			"data is currently not supported for columns that are part of an index")
 }
 
 // NewInvalidAssignmentCastError creates an error that is used when a mutation
