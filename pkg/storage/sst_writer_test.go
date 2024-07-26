@@ -91,6 +91,15 @@ func TestMakeIngestionWriterOptions(t *testing.T) {
 			}(),
 			want: sstable.TableFormatPebblev4,
 		},
+		{
+			name: "disable value blocks",
+			st: func() *cluster.Settings {
+				st := cluster.MakeTestingClusterSettings()
+				ValueBlocksEnabled.Override(context.Background(), &st.SV, false)
+				return st
+			}(),
+			want: sstable.TableFormatPebblev2,
+		},
 	}
 
 	for _, tc := range testCases {

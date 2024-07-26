@@ -91,8 +91,9 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 // ValueBlocksEnabled controls whether older versions of MVCC keys in the same
 // sstable will have their values written to value blocks. This only affects
 // sstables that will be written in the future, as part of flushes or
-// compactions, and does not eagerly change the encoding of existing sstables.
-// Reads can correctly read both kinds of sstables.
+// compactions inside Pebble, and for ingestions (outside Pebble), and does
+// not eagerly change the encoding of existing sstables. Reads can correctly
+// read both kinds of sstables.
 var ValueBlocksEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel, // used for temp storage in virtual cluster servers
 	"storage.value_blocks.enabled",
