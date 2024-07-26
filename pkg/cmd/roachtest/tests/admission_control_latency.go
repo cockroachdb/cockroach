@@ -484,6 +484,12 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 			`SET CLUSTER SETTING server.time_after_store_suspect = '10s'`); err != nil {
 			t.Fatal(err)
 		}
+		// Avoid stores up-replicating away from the target node, reducing the
+		// backlog of work.
+		if _, err := db.Exec(
+			`SET CLUSTER SETTING server.time_until_store_dead = '10m'`); err != nil {
+			t.Fatal(err)
+		}
 	}()
 	v.initWorkload(ctx, t.L())
 
