@@ -423,7 +423,7 @@ func makeSchemaChangeBulkIngestTest(
 }
 
 func registerSchemaChangeDuringTPCC800(r registry.Registry) {
-	r.Add(makeSchemaChangeDuringTPCC(r.MakeClusterSpec(5, spec.CPU(16)), 800, time.Hour*3))
+	r.Add(makeSchemaChangeDuringTPCC(r.MakeClusterSpec(5, spec.CPU(16), spec.WorkloadNode()), 800, time.Hour*3))
 }
 
 func makeSchemaChangeDuringTPCC(
