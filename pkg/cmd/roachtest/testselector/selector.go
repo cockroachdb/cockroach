@@ -25,7 +25,7 @@ import (
 const (
 	defaultForPastDays = 30
 	defaultFirstRunOn  = 20
-	defaultLastRunOn   = 7
+	defaultLastRunOn   = 4
 
 	account   = "lt53838.us-central1.gcp"
 	database  = "DATAMART_PROD"
