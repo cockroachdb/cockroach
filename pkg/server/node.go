@@ -1963,6 +1963,10 @@ func (s *perRangeEventSink) Disconnect(err *kvpb.Error) {
 	s.wrapped.DisconnectStreamWithError(s.streamID, s.rangeID, err)
 }
 
+func (s *perRangeEventSink) RegisterRangefeedCleanUp(f func()) {
+	s.wrapped.RegisterRangefeedCleanUp(s.streamID, f)
+}
+
 // lockedMuxStream provides support for concurrent calls to Send. The underlying
 // MuxRangeFeedServer (default grpc.Stream) is not safe for concurrent calls to
 // Send.
@@ -1980,7 +1984,7 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 }
 
 // MuxRangeFeed implements the roachpb.InternalServer interface.
-func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
+func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) (err error) {
 	muxStream := &lockedMuxStream{wrapped: stream}
 
 	// All context created below should derive from this context, which is
@@ -1991,7 +1995,12 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	if err := streamMuxer.Start(ctx, n.stopper); err != nil {
 		return err
 	}
-	defer streamMuxer.Stop()
+	// TODO(wenyihu6): check if we should still try sending the error back to
+	// client when n.stopper is stopping or stream is broken.
+	defer func() {
+		// err should be non-nil here.
+		streamMuxer.StopWithErr(err)
+	}()
 
 	for {
 		select {

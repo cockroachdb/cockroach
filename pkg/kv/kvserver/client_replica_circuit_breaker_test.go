@@ -447,10 +447,11 @@ func TestReplicaCircuitBreaker_ResolveIntent_QuorumLoss(t *testing.T) {
 }
 
 type dummyStream struct {
-	name string
-	ctx  context.Context
-	recv chan *kvpb.RangeFeedEvent
-	done chan *kvpb.Error
+	name    string
+	ctx     context.Context
+	recv    chan *kvpb.RangeFeedEvent
+	done    chan *kvpb.Error
+	cleanUp func()
 }
 
 func newDummyStream(ctx context.Context, name string) *dummyStream {
@@ -481,10 +482,18 @@ func (s *dummyStream) Send(ev *kvpb.RangeFeedEvent) error {
 	}
 }
 
+func (s *dummyStream) RegisterRangefeedCleanUp(cleanUp func()) {
+	s.cleanUp = cleanUp
+}
+
 // Disconnect implements the Stream interface. It mocks the disconnect behavior
 // by sending the error to the done channel.
 func (s *dummyStream) Disconnect(err *kvpb.Error) {
 	s.done <- err
+	if s.cleanUp != nil {
+		go s.cleanUp()
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func waitReplicaRangeFeed(

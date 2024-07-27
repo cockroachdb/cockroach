@@ -42,7 +42,7 @@ func TestStreamMuxer(t *testing.T) {
 	testRangefeedCounter := newTestRangefeedCounter()
 	muxer := NewStreamMuxer(testServerStream, testRangefeedCounter)
 	require.NoError(t, muxer.Start(ctx, stopper))
-	defer muxer.Stop()
+	defer muxer.stop()
 
 	t.Run("nil handling", func(t *testing.T) {
 		const streamID = 0
@@ -135,7 +135,7 @@ func TestStreamMuxerOnBlockingIO(t *testing.T) {
 	testRangefeedCounter := newTestRangefeedCounter()
 	muxer := NewStreamMuxer(testServerStream, testRangefeedCounter)
 	require.NoError(t, muxer.Start(ctx, stopper))
-	defer muxer.Stop()
+	defer muxer.stop()
 
 	const streamID = 0
 	const rangeID = 1
