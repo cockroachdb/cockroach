@@ -118,10 +118,16 @@ type StreamMuxer struct {
 	// streamID -> context.CancelFunc for active rangefeeds
 	activeStreams syncutil.Map[int64, streamInfo]
 
+	// streamID -> cleanup function
+	rangefeedCleanUps syncutil.Map[int64, func()]
+
 	// notifyMuxError is a buffered channel of size 1 used to signal the presence
 	// of muxErrors. Additional signals are dropped if the channel is already full
 	// so that it's non-blocking.
 	notifyMuxError chan struct{}
+
+	// notifyCleanUp is to signal the presence of cleanUpIDs.
+	notifyRangefeedCleanUp chan struct{}
 
 	mu struct {
 		syncutil.Mutex
@@ -129,6 +135,8 @@ type StreamMuxer struct {
 		// to the client. Upon receiving the error, the client restart rangefeed
 		// when possible.
 		muxErrors []*kvpb.MuxRangeFeedEvent
+		// cleanUpIDs is a slice of streamIDs disconnected and needs a clean up.
+		cleanUpIDs []int64
 	}
 }
 
@@ -200,6 +208,17 @@ func (sm *StreamMuxer) appendMuxError(e *kvpb.MuxRangeFeedEvent) {
 	}
 }
 
+func (sm *StreamMuxer) appendCleanUp(streamID int64) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.mu.cleanUpIDs = append(sm.mu.cleanUpIDs, streamID)
+	// Note that notifyCleanUp is non-blocking.
+	select {
+	case sm.notifyRangefeedCleanUp <- struct{}{}:
+	default:
+	}
+}
+
 // DisconnectStreamWithError disconnects a stream with an error. Safe to call
 // repeatedly for the same stream, but subsequent errors are ignored. It ensures
 // 1. the stream context is cancelled 2. exactly one error is sent back to the
@@ -214,7 +233,7 @@ func (sm *StreamMuxer) DisconnectStreamWithError(
 	if stream, ok := sm.activeStreams.LoadAndDelete(streamID); ok {
 		// It is fine to skip nil checking here since that would be a programming
 		// error.
-		(*stream).cancel()
+		stream.cancel()
 		clientErrorEvent := transformRangefeedErrToClientError(err)
 		ev := &kvpb.MuxRangeFeedEvent{
 			StreamID: streamID,
@@ -226,6 +245,29 @@ func (sm *StreamMuxer) DisconnectStreamWithError(
 		sm.appendMuxError(ev)
 		sm.metrics.UpdateMetricsOnRangefeedDisconnect()
 	}
+
+	// Note that we may repeatedly append cleanup signal for the same id. We will
+	// rely on the map rangefeedCleanUps to dedupe during Run.
+	if _, ok := sm.rangefeedCleanUps.Load(streamID); ok {
+		sm.appendCleanUp(streamID)
+	}
+}
+
+// RegisterRangefeedCleanUp registers a cleanup function which is called when
+// the stream disconnects. The muxer ensures: 1. the cleanup function is called
+// only once per stream, 2. it is called when muxer disconnects streams or when
+// a stream disconnects itself via DisconnectRangefeedWithError. Caller must
+// ensure that cleanUp is thread safe.
+func (sm *StreamMuxer) RegisterRangefeedCleanUp(streamID int64, cleanUp func()) {
+	sm.rangefeedCleanUps.Store(streamID, &cleanUp)
+}
+
+func (sm *StreamMuxer) detachCleanUpIDs() []int64 {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	toCleanUp := sm.mu.cleanUpIDs
+	sm.mu.cleanUpIDs = nil
+	return toCleanUp
 }
 
 // detachMuxErrors returns muxErrors and clears the slice. Caller must ensure
@@ -252,6 +294,15 @@ func (sm *StreamMuxer) run(ctx context.Context, stopper *stop.Stopper) error {
 					log.Errorf(ctx,
 						"failed to send rangefeed completion error back to client due to broken stream: %v", err)
 					return err
+				}
+			}
+		case <-sm.notifyRangefeedCleanUp:
+			toCleanUp := sm.detachCleanUpIDs()
+			for _, streamID := range toCleanUp {
+				if cleanUp, ok := sm.rangefeedCleanUps.LoadAndDelete(streamID); ok {
+					// TODO(wenyihu6): add more observability metrics into how long the
+					// clean up call is taking
+					(*cleanUp)()
 				}
 			}
 		case <-ctx.Done():
@@ -281,7 +332,7 @@ func (sm *StreamMuxer) Error() chan error {
 // nothing if StreamMuxer.run is already finished. It is expected to be called
 // after StreamMuxer.Start. Note that the caller is responsible for handling any
 // cleanups for any active streams.
-func (sm *StreamMuxer) Stop() {
+func (sm *StreamMuxer) stop() {
 	sm.taskCancel()
 	sm.wg.Wait()
 }
@@ -315,4 +366,40 @@ func (sm *StreamMuxer) Start(ctx context.Context, stopper *stop.Stopper) error {
 		return err
 	}
 	return nil
+}
+
+// err should be non-nil here.
+func (sm *StreamMuxer) StopWithErr(err error) {
+	sm.stop()
+	sm.disconnectAllWithErr(err)
+}
+
+// It is possible to disconnect with nil error, which means stream is broken do
+// not send any error back to the client but does disconnect all active
+// rangefeeds.
+func (sm *StreamMuxer) disconnectAllWithErr(err error) {
+	sm.activeStreams.Range(func(streamID int64, info *streamInfo) bool {
+		info.cancel()
+		ev := &kvpb.MuxRangeFeedEvent{
+			StreamID: streamID,
+			RangeID:  info.rangeID,
+		}
+		ev.SetValue(&kvpb.RangeFeedError{
+			Error: *kvpb.NewError(err),
+		})
+		// TODO(wenyihu6): check if we should handle this err and maybe do early
+		// return next iteration
+		_ = sm.sender.Send(ev)
+		// Remove the stream from the activeStreams map.
+		sm.activeStreams.Delete(streamID)
+		sm.metrics.UpdateMetricsOnRangefeedDisconnect()
+		return true
+	})
+
+	sm.rangefeedCleanUps.Range(func(streamID int64, cleanUp *func()) bool {
+		// TODO(wenyihu6): think about whether this is okay to call before r.disconnect
+		(*cleanUp)()
+		sm.rangefeedCleanUps.Delete(streamID)
+		return true
+	})
 }

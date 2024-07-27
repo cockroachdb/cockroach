@@ -35,6 +35,7 @@ type Stream interface {
 	// is important that this function doesn't block IO or try acquiring locks
 	// that could lead to deadlocks.
 	Disconnect(err *kvpb.Error)
+	RegisterRangefeedCleanUp(func())
 }
 
 // Shared event is an entry stored in registration channel. Each entry is
@@ -157,7 +158,7 @@ func (r *registration) publish(
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.mu.overflowed {
+	if r.mu.overflowed || r.mu.disconnected {
 		return
 	}
 	alloc.Use(ctx)
@@ -285,21 +286,31 @@ func (r *registration) maybeStripEvent(
 	return ret
 }
 
+func (r *registration) setDisconnected() (alreadyDisconnected bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.mu.disconnected {
+		return true
+	}
+
+	if r.mu.catchUpIter != nil {
+		r.mu.catchUpIter.Close()
+		r.mu.catchUpIter = nil
+	}
+	if r.mu.outputLoopCancelFn != nil {
+		r.mu.outputLoopCancelFn()
+	}
+	r.mu.disconnected = true
+	return false
+}
+
 // disconnect cancels the output loop context for the registration and passes an
 // error to the output error stream for the registration.
 // Safe to run multiple times, but subsequent errors would be discarded.
 func (r *registration) disconnect(pErr *kvpb.Error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.mu.disconnected {
-		if r.mu.catchUpIter != nil {
-			r.mu.catchUpIter.Close()
-			r.mu.catchUpIter = nil
-		}
-		if r.mu.outputLoopCancelFn != nil {
-			r.mu.outputLoopCancelFn()
-		}
-		r.mu.disconnected = true
+	if alreadyDisconnected := r.setDisconnected(); !alreadyDisconnected {
+		// It is fine to not hold the lock here as the registration has been set as
+		// disconnected.
 		r.stream.Disconnect(pErr)
 	}
 }
