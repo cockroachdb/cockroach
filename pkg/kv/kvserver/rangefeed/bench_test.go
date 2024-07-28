@@ -215,7 +215,9 @@ func (s *noopStream) SendIsThreadSafe() {}
 // by sending the error to the done channel.
 func (s *noopStream) Disconnect(error *kvpb.Error) {
 	s.done <- error
-	s.cleanUp()
+	if s.cleanUp != nil {
+		s.cleanUp()
+	}
 }
 
 func (s *noopStream) RegisterRangefeedCleanUp(cleanUp func()) {

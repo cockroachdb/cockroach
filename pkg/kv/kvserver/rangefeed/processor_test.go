@@ -1801,7 +1801,9 @@ func (c *consumer) WaitBlock() {
 // by sending the error to the done channel.
 func (c *consumer) Disconnect(error *kvpb.Error) {
 	c.done <- error
-	c.cleanUp()
+	if c.cleanUp != nil {
+		c.cleanUp()
+	}
 }
 
 func (c *consumer) RegisterRangefeedCleanUp(cleanUp func()) {

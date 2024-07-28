@@ -1664,7 +1664,9 @@ func (c *channelSink) Error() error {
 // by sending the error to the done channel.
 func (c *channelSink) Disconnect(err *kvpb.Error) {
 	c.done <- err
-	c.cleanUp()
+	if c.cleanUp != nil {
+		c.cleanUp()
+	}
 }
 
 func (c *channelSink) RegisterRangefeedCleanUp(cleanUp func()) {

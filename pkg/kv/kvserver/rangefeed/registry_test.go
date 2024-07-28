@@ -105,7 +105,9 @@ func (s *testStream) BlockSend() func() {
 // by sending the error to the done channel.
 func (s *testStream) Disconnect(err *kvpb.Error) {
 	s.done <- err
-	s.cleanUp()
+	if s.cleanUp != nil {
+		s.cleanUp()
+	}
 }
 
 func (s *testStream) RegisterRangefeedCleanUp(cleanUp func()) {

@@ -99,7 +99,9 @@ func (s *testStream) Events() []*kvpb.RangeFeedEvent {
 // by sending the error to the done channel.
 func (s *testStream) Disconnect(error *kvpb.Error) {
 	s.done <- error
-	s.cleanUp()
+	if s.cleanUp != nil {
+		s.cleanUp()
+	}
 }
 
 func (s *testStream) RegisterRangefeedCleanUp(cleanUp func()) {
