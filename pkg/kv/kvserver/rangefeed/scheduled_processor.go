@@ -347,13 +347,14 @@ func (p *ScheduledProcessor) Register(
 			// Invoke rangefeed clean up callback regardless of whether registration
 			// has been disconnected during the callback.
 			// What happens if p is stopped here already
-			if p.unregisterClient(&r) {
-				// unreg callback is set by replica to tear down processors that have
-				// zero registrations left and to update event filters.
-				if r.unreg != nil {
-					r.unreg()
-				}
+			p.reg.Unregister(ctx, &r)
+			//if p.unregisterClient(&r) {
+			// unreg callback is set by replica to tear down processors that have
+			// zero registrations left and to update event filters.
+			if r.unreg != nil {
+				r.unreg()
 			}
+			//}
 		})
 
 		// Run an output loop for the registry.
