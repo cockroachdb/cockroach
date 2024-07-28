@@ -9054,15 +9054,15 @@ with_comment:
 
 // %Help: SHOW SCHEMAS - list schemas
 // %Category: DDL
-// %Text: SHOW SCHEMAS [FROM <databasename> ]
+// %Text: SHOW SCHEMAS [FROM <databasename> ] [WITH COMMENT]
 show_schemas_stmt:
-  SHOW SCHEMAS FROM name
+  SHOW SCHEMAS FROM name with_comment
   {
-    $$.val = &tree.ShowSchemas{Database: tree.Name($4)}
+    $$.val = &tree.ShowSchemas{Database: tree.Name($4), WithComment: $5.bool()}
   }
-| SHOW SCHEMAS
+| SHOW SCHEMAS with_comment
   {
-    $$.val = &tree.ShowSchemas{}
+    $$.val = &tree.ShowSchemas{WithComment: $3.bool()}
   }
 | SHOW SCHEMAS error // SHOW HELP: SHOW SCHEMAS
 
