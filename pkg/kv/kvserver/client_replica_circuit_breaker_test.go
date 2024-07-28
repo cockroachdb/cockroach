@@ -491,7 +491,8 @@ func (s *dummyStream) RegisterRangefeedCleanUp(cleanUp func()) {
 func (s *dummyStream) Disconnect(err *kvpb.Error) {
 	s.done <- err
 	if s.cleanUp != nil {
-		s.cleanUp()
+		go s.cleanUp()
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

@@ -1802,7 +1802,8 @@ func (c *consumer) WaitBlock() {
 func (c *consumer) Disconnect(error *kvpb.Error) {
 	c.done <- error
 	if c.cleanUp != nil {
-		c.cleanUp()
+		go c.cleanUp()
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

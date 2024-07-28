@@ -100,7 +100,8 @@ func (s *testStream) Events() []*kvpb.RangeFeedEvent {
 func (s *testStream) Disconnect(error *kvpb.Error) {
 	s.done <- error
 	if s.cleanUp != nil {
-		s.cleanUp()
+		go s.cleanUp()
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

@@ -1665,7 +1665,8 @@ func (c *channelSink) Error() error {
 func (c *channelSink) Disconnect(err *kvpb.Error) {
 	c.done <- err
 	if c.cleanUp != nil {
-		c.cleanUp()
+		go c.cleanUp()
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
