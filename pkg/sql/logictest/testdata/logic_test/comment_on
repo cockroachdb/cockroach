@@ -59,6 +59,34 @@ SELECT COMMENT FROM system.comments WHERE type = 4;
 ----
 SC AGAIN
 
+query TTT colnames,rowsort
+SHOW SCHEMAS WITH COMMENT
+----
+schema_name         owner  comment
+crdb_internal       node   NULL
+information_schema  node   NULL
+pg_catalog          node   NULL
+pg_extension        node   NULL
+public              root   NULL
+sc                  root   SC AGAIN
+
+statement ok
+CREATE SCHEMA db.schema1
+
+statement ok
+COMMENT ON SCHEMA db.schema1 IS 'Database Schema'
+
+query TTT colnames,rowsort
+SHOW SCHEMAS FROM db WITH COMMENT
+----
+schema_name         owner  comment
+crdb_internal       node   NULL
+information_schema  node   NULL
+pg_catalog          node   NULL
+pg_extension        node   NULL
+public              root   NULL
+schema1             root   Database Schema
+
 statement ok
 CREATE TABLE t(
   a INT PRIMARY KEY,
@@ -311,8 +339,9 @@ query IIIT colnames,rowsort
 SELECT * FROM SYSTEM.COMMENTS;
 ----
 type  object_id  sub_id  comment
-7     111        0       First-CRDB-comment-on-types-again
-7     113        0       Second-CRDB-comment-on-types-again
+7     112        0       First-CRDB-comment-on-types-again
+7     114        0       Second-CRDB-comment-on-types-again
+4     109        0       Database Schema
 
 skipif config local-legacy-schema-changer
 skipif config local-mixed-23.2
@@ -330,3 +359,4 @@ query IIIT colnames
 SELECT * FROM SYSTEM.COMMENTS;
 ----
 type  object_id  sub_id  comment
+4     109        0       Database Schema
