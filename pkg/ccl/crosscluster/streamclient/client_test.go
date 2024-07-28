@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -194,7 +194,7 @@ func TestExternalConnectionClient(t *testing.T) {
 	address := crosscluster.StreamAddress(fmt.Sprintf("external://%s", externalConnection))
 	dontExistAddress := crosscluster.StreamAddress(fmt.Sprintf("external://%s", nonExistentConnection))
 
-	isqlDB := srv.InternalDB().(isql.DB)
+	isqlDB := srv.InternalDB().(descs.DB)
 	client, err := NewStreamClient(ctx, address, isqlDB)
 	require.NoError(t, err)
 	require.NoError(t, client.Dial(ctx))
@@ -210,56 +210,6 @@ func TestExternalConnectionClient(t *testing.T) {
 	require.NoError(t, err)
 	_, err = NewSpanConfigStreamClient(ctx, dontExistURL, isqlDB)
 	require.Contains(t, err.Error(), "failed to load external connection object")
-}
-
-func TestGetFirstActiveClient(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	client := GetRandomStreamClientSingletonForTesting()
-	defer func() {
-		require.NoError(t, client.Close(context.Background()))
-	}()
-
-	streamAddresses := []string{
-		"randomgen://test0/",
-		"<invalid-url-test1>",
-		"randomgen://test2/",
-		"invalidScheme://test3",
-		"randomgen://test4/",
-		"randomgen://test5/",
-		"randomgen://test6/",
-	}
-	addressDialCount := map[string]int{}
-	for _, addr := range streamAddresses {
-		addressDialCount[addr] = 0
-	}
-
-	// Track dials and error for all but test3 and test4
-	client.RegisterDialInterception(func(streamURL *url.URL) error {
-		addr := streamURL.String()
-		addressDialCount[addr]++
-		if addr != streamAddresses[3] && addr != streamAddresses[4] {
-			return errors.Errorf("injected dial error")
-		}
-		return nil
-	})
-
-	activeClient, err := GetFirstActiveClient(context.Background(), streamAddresses, nil)
-	require.NoError(t, err)
-
-	// Should've dialed the valid schemes up to the 5th one where it should've
-	// succeeded
-	require.Equal(t, 1, addressDialCount[streamAddresses[0]])
-	require.Equal(t, 0, addressDialCount[streamAddresses[1]])
-	require.Equal(t, 1, addressDialCount[streamAddresses[2]])
-	require.Equal(t, 0, addressDialCount[streamAddresses[3]])
-	require.Equal(t, 1, addressDialCount[streamAddresses[4]])
-	require.Equal(t, 0, addressDialCount[streamAddresses[5]])
-	require.Equal(t, 0, addressDialCount[streamAddresses[6]])
-
-	// The 5th should've succeded as it was a valid scheme and succeeded Dial
-	require.Equal(t, activeClient.(*RandomStreamClient).streamURL.String(), streamAddresses[4])
 }
 
 func TestPlannedPartitionBackwardCompatibility(t *testing.T) {
