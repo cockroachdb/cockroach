@@ -12,6 +12,7 @@ package delegate
 
 import (
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -27,14 +28,34 @@ func (d *delegator) delegateShowSchemas(n *tree.ShowSchemas) (tree.Statement, er
 	if err != nil {
 		return nil, err
 	}
-	getSchemasQuery := fmt.Sprintf(`
-      SELECT nspname AS schema_name, rolname AS owner
+	getSchemasQuery := `SELECT nspname AS schema_name, rolname AS owner`
+	if n.WithComment {
+		getSchemasQuery += `, comment`
+	}
+
+	getSchemasQuery += fmt.Sprintf(`
       FROM %[1]s.information_schema.schemata i
       INNER JOIN %[1]s.pg_catalog.pg_namespace n ON (n.nspname = i.schema_name)
-      LEFT JOIN %[1]s.pg_catalog.pg_roles r ON (n.nspowner = r.oid)
-			WHERE catalog_name = %[2]s
-			ORDER BY schema_name`,
+      LEFT JOIN %[1]s.pg_catalog.pg_roles r ON (n.nspowner = r.oid)`,
 		name.String(), // note: (tree.Name).String() != string(name)
+	)
+	if n.WithComment {
+		getSchemasQuery += fmt.Sprintf(`
+			LEFT JOIN
+				(
+					SELECT 
+						object_id, type, comment
+					FROM
+						system.comments
+					WHERE
+						type = %d
+				) c
+			ON
+				c.object_id = n.oid`, catalogkeys.SchemaCommentType)
+	}
+	getSchemasQuery += fmt.Sprintf(`
+				WHERE catalog_name = %[1]s
+				ORDER BY schema_name`,
 		lexbase.EscapeSQLString(string(name)),
 	)
 
