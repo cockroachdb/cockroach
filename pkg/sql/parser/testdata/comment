@@ -103,3 +103,19 @@ COMMENT ON TYPE foo IS NULL
 COMMENT ON TYPE foo IS NULL -- fully parenthesized
 COMMENT ON TYPE foo IS NULL -- literals removed
 COMMENT ON TYPE _ IS NULL -- identifiers removed
+
+parse
+COMMENT ON SCHEMA foo IS 'a'
+----
+COMMENT ON SCHEMA foo IS 'a'
+COMMENT ON SCHEMA foo IS 'a' -- fully parenthesized
+COMMENT ON SCHEMA foo IS '_' -- literals removed
+COMMENT ON SCHEMA _ IS 'a' -- identifiers removed
+
+parse
+COMMENT ON SCHEMA foo IS NULL
+----
+COMMENT ON SCHEMA foo IS NULL
+COMMENT ON SCHEMA foo IS NULL -- fully parenthesized
+COMMENT ON SCHEMA foo IS NULL -- literals removed
+COMMENT ON SCHEMA _ IS NULL -- identifiers removed
