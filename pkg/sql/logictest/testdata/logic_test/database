@@ -70,6 +70,20 @@ public              root
 s                   root
 
 statement ok
+COMMENT ON SCHEMA a.s IS 'Test_Comment'
+
+query TTT colnames,rowsort
+SHOW SCHEMAS FROM a WITH COMMENT
+----
+schema_name         owner      comment
+crdb_internal       node       NULL
+information_schema  node       NULL
+pg_catalog          node       NULL
+pg_extension        node       NULL
+public              admin      NULL
+s                   root       Test_Comment
+
+statement ok
 CREATE DATABASE b TEMPLATE=template0
 
 statement error unsupported template: nope
