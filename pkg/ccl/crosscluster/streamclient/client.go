@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -208,7 +209,7 @@ type Subscription interface {
 
 // NewStreamClient creates a new stream client based on the stream address.
 func NewStreamClient(
-	ctx context.Context, streamAddress crosscluster.StreamAddress, db isql.DB, opts ...Option,
+	ctx context.Context, streamAddress crosscluster.StreamAddress, db descs.DB, opts ...Option,
 ) (Client, error) {
 	var streamClient Client
 	streamURL, err := streamAddress.URL()
@@ -231,7 +232,7 @@ func NewStreamClient(
 		}
 		return NewStreamClient(ctx, addr, db, opts...)
 	case RandomGenScheme:
-		streamClient, err = newRandomStreamClient(streamURL)
+		streamClient, err = RandomGenClientBuilder(streamURL, db)
 		if err != nil {
 			return streamClient, err
 		}
@@ -260,7 +261,7 @@ func lookupExternalConnection(
 // GetFirstActiveClient iterates through each provided stream address
 // and returns the first client it's able to successfully dial.
 func GetFirstActiveClient(
-	ctx context.Context, streamAddresses []string, db isql.DB, opts ...Option,
+	ctx context.Context, streamAddresses []string, db descs.DB, opts ...Option,
 ) (Client, error) {
 
 	newClient := func(ctx context.Context, address crosscluster.StreamAddress) (Dialer, error) {
