@@ -13,6 +13,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"hash/fnv"
+	"io"
 	"net/url"
 	"strings"
 	"time"
@@ -28,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/klauspost/compress/gzip"
+	"github.com/klauspost/compress/zstd"
 	"github.com/rcrowley/go-metrics"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kerr"
@@ -494,20 +497,29 @@ func buildKgoConfig(
 
 	// TODO(#126991): Remove this sarama dependency.
 	// NOTE: kgo lets you give multiple compression options in preference order, which is cool but the config json doesnt support that. Should we?
+	var comp kgo.CompressionCodec
 	switch sarama.CompressionCodec(sinkCfg.Compression) {
 	case sarama.CompressionNone:
-		opts = append(opts, kgo.ProducerBatchCompression(kgo.NoCompression()))
 	case sarama.CompressionGZIP:
-		opts = append(opts, kgo.ProducerBatchCompression(kgo.GzipCompression()))
+		comp = kgo.GzipCompression()
 	case sarama.CompressionSnappy:
-		opts = append(opts, kgo.ProducerBatchCompression(kgo.SnappyCompression()))
+		comp = kgo.SnappyCompression()
 	case sarama.CompressionLZ4:
-		opts = append(opts, kgo.ProducerBatchCompression(kgo.Lz4Compression()))
+		comp = kgo.Lz4Compression()
 	case sarama.CompressionZSTD:
-		opts = append(opts, kgo.ProducerBatchCompression(kgo.ZstdCompression()))
+		comp = kgo.ZstdCompression()
 	default:
 		return nil, errors.Errorf(`unknown compression codec: %v`, sinkCfg.Compression)
 	}
+
+	if level := sinkCfg.CompressionLevel; level != sarama.CompressionLevelDefault {
+		if err := validateCompressionLevel(sinkCfg.Compression, level); err != nil {
+			return nil, err
+		}
+		comp = comp.WithLevel(level)
+	}
+
+	opts = append(opts, kgo.ProducerBatchCompression(comp))
 
 	if version := sinkCfg.Version; version != "" {
 		if !strings.HasPrefix(version, `v`) {
@@ -524,6 +536,38 @@ func buildKgoConfig(
 	}
 
 	return opts, nil
+}
+
+// NOTE: kgo will ignore invalid compression levels, but the v1 sinks will fail validations. So we have to validate these ourselves.
+func validateCompressionLevel(compressionType compressionCodec, level int) error {
+	switch sarama.CompressionCodec(compressionType) {
+	case sarama.CompressionNone:
+		return nil
+	case sarama.CompressionGZIP:
+		if level < gzip.NoCompression || level > gzip.BestCompression {
+			return errors.Errorf(`invalid gzip compression level: %d`, level)
+		}
+	case sarama.CompressionSnappy:
+		return errors.Errorf(`snappy does not support compression levels`)
+	case sarama.CompressionLZ4:
+		// NOTE: it's not possible to define a valid non-default lz4 compression
+		// level before https://github.com/twmb/franz-go/pull/781 is released in
+		// the next kgo version.
+		//
+		// Additionally, the v1 sink ignores `level` for lz4 anyway. So let's do
+		// the best of both worlds and let the user specify valid levels and
+		// default to the default level.
+		return nil
+	case sarama.CompressionZSTD:
+		w, err := zstd.NewWriter(io.Discard, zstd.WithEncoderLevel(zstd.EncoderLevel(level)))
+		if err != nil {
+			return errors.Errorf(`invalid zstd compression level: %d`, level)
+		}
+		_ = w.Close()
+	default:
+		return errors.Errorf(`unknown compression codec: %v`, compressionType)
+	}
+	return nil
 }
 
 type kgoLogAdapter struct {
