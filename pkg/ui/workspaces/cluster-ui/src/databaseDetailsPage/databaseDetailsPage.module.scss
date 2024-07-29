@@ -30,6 +30,15 @@
   &__no-result {
     @include text--body-strong;
   }
+
+  &__cell-error {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    svg {
+      fill: $colors--warning;
+    }
+  }
 }
 
 .sorted-table {
