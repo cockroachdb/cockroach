@@ -62,7 +62,7 @@ func putPooledSharedEvent(e *sharedEvent) {
 // registry holds a set of registrations and manages their lifecycle.
 type registry struct {
 	metrics *Metrics
-	tree    interval.Tree // *registration items
+	tree    interval.Tree // registration items
 	idAlloc int64
 }
 
@@ -85,10 +85,10 @@ func (reg *registry) NewFilter() *Filter {
 }
 
 // Register adds the provided registration to the registry.
-func (reg *registry) Register(ctx context.Context, r *registration) {
+func (reg *registry) Register(ctx context.Context, r registration) {
 	reg.metrics.RangeFeedRegistrations.Inc(1)
-	r.id = reg.nextID()
-	r.keys = r.span.AsRange()
+	r.setID(reg.nextID())
+	r.setSpanAsKeys()
 	if err := reg.tree.Insert(r, false /* fast */); err != nil {
 		// TODO(erikgrinaker): these errors should arguably be returned.
 		log.Fatalf(ctx, "%v", err)
@@ -130,12 +130,12 @@ func (reg *registry) PublishToOverlapping(
 		log.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
 	}
 
-	reg.forOverlappingRegs(ctx, span, func(r *registration) (bool, *kvpb.Error) {
+	reg.forOverlappingRegs(ctx, span, func(r registration) (bool, *kvpb.Error) {
 		// Don't publish events if they:
 		// 1. are equal to or less than the registration's starting timestamp, or
 		// 2. have OmitInRangefeeds = true and this registration has opted into filtering, or
 		// 3. have OmitRemote = true and this value is from a remote cluster.
-		if r.catchUpTimestamp.Less(minTS) && !(r.withFiltering && valueMetadata.omitInRangefeeds) && (!r.withOmitRemote || valueMetadata.originID == 0) {
+		if r.getCatchUpTimestamp().Less(minTS) && !(r.getWithFiltering() && valueMetadata.omitInRangefeeds) && (!r.getWithOmitRemote() || valueMetadata.originID == 0) {
 			r.publish(ctx, event, alloc)
 		}
 		return false, nil
@@ -148,7 +148,7 @@ func (reg *registry) PublishToOverlapping(
 // We also drain all pending events for the sake of memory accounting. To do
 // that we rely on a fact that caller is not going to post any more events
 // concurrently or after this function is called.
-func (reg *registry) Unregister(ctx context.Context, r *registration) {
+func (reg *registry) Unregister(ctx context.Context, r registration) {
 	reg.metrics.RangeFeedRegistrations.Dec(1)
 	if err := reg.tree.Delete(r, false /* fast */); err != nil {
 		log.Fatalf(ctx, "%v", err)
@@ -177,7 +177,7 @@ func (reg *registry) Disconnect(ctx context.Context, span roachpb.Span) {
 // DisconnectWithErr disconnects all registrations that overlap the specified
 // span with the provided error.
 func (reg *registry) DisconnectWithErr(ctx context.Context, span roachpb.Span, pErr *kvpb.Error) {
-	reg.forOverlappingRegs(ctx, span, func(r *registration) (bool, *kvpb.Error) {
+	reg.forOverlappingRegs(ctx, span, func(r registration) (bool, *kvpb.Error) {
 		return true /* disconned */, pErr
 	})
 }
@@ -190,13 +190,11 @@ var all = roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}
 // then that registration is unregistered and the error returned by the
 // function is send on its corresponding error channel.
 func (reg *registry) forOverlappingRegs(
-	ctx context.Context,
-	span roachpb.Span,
-	fn func(*registration) (disconnect bool, pErr *kvpb.Error),
+	ctx context.Context, span roachpb.Span, fn func(registration) (disconnect bool, pErr *kvpb.Error),
 ) {
 	var toDelete []interval.Interface
 	matchFn := func(i interval.Interface) (done bool) {
-		r := i.(*registration)
+		r := i.(registration)
 		dis, pErr := fn(r)
 		if dis {
 			r.disconnect(pErr)
@@ -230,7 +228,7 @@ func (reg *registry) forOverlappingRegs(
 // completely process their internal buffers.
 func (reg *registry) waitForCaughtUp(ctx context.Context, span roachpb.Span) error {
 	var outerErr error
-	reg.forOverlappingRegs(ctx, span, func(r *registration) (bool, *kvpb.Error) {
+	reg.forOverlappingRegs(ctx, span, func(r registration) (bool, *kvpb.Error) {
 		if outerErr == nil {
 			outerErr = r.waitForCaughtUp(ctx)
 		}
