@@ -1670,9 +1670,10 @@ func registerCDC(r registry.Registry) {
 				_ = conn2.Close()
 			}()
 
+			const testDuration = 30 * time.Minute
 			// Repeatedly update a single row in a table in order to create a large
 			// number of events with the same key that will span multiple batches.
-			for i := 0; i < 1000000; i++ {
+			for start, i := timeutil.Now(), 0; i < 1000000 && timeutil.Since(start) < testDuration; i++ {
 				stmt := fmt.Sprintf(`UPDATE t SET x = %d WHERE id = 1;`, i)
 				if i%2 == 0 {
 					_, err = conn1.ExecContext(ctx, stmt)
