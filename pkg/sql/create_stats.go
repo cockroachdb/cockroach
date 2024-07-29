@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -77,7 +78,7 @@ func StubTableStats(
 ) ([]*stats.TableStatisticProto, error) {
 	colStats, err := createStatsDefaultColumns(
 		context.Background(), desc, false /* virtColEnabled */, false, /* multiColEnabled */
-		nonIndexColHistogramBuckets, nil, /* evalCtx */
+		false /* partialStats */, nonIndexColHistogramBuckets, nil, /* evalCtx */
 	)
 	if err != nil {
 		return nil, err
@@ -249,7 +250,13 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		}
 		defaultHistogramBuckets := stats.GetDefaultHistogramBuckets(n.p.ExecCfg().SV(), tableDesc)
 		if colStats, err = createStatsDefaultColumns(
-			ctx, tableDesc, virtColEnabled, multiColEnabled, defaultHistogramBuckets, n.p.EvalContext(),
+			ctx,
+			tableDesc,
+			virtColEnabled,
+			multiColEnabled,
+			n.Options.UsingExtremes,
+			defaultHistogramBuckets,
+			n.p.EvalContext(),
 		); err != nil {
 			return nil, err
 		}
@@ -366,13 +373,17 @@ const maxNonIndexCols = 100
 // predicate expressions are also likely to appear in query filters, so stats
 // are collected for those columns as well.
 //
+// If partialStats is true, we only collect statistics on single columns that
+// are prefixes of forwards indexes. Partial statistic creation only supports
+// these columns.
+//
 // In addition to the index columns, we collect stats on up to maxNonIndexCols
 // other columns from the table. We only collect histograms for index columns,
 // plus any other boolean or enum columns (where the "histogram" is tiny).
 func createStatsDefaultColumns(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
-	virtColEnabled, multiColEnabled bool,
+	virtColEnabled, multiColEnabled, partialStats bool,
 	defaultHistogramBuckets uint32,
 	evalCtx *eval.Context,
 ) ([]jobspb.CreateStatsDetails_ColStat, error) {
@@ -470,6 +481,23 @@ func createStatsDefaultColumns(
 		}
 
 		return nil
+	}
+
+	// Only collect statistics on single columns that are prefixes of forwards
+	// indexes for partial statistics.
+	if partialStats {
+		for _, idx := range desc.ActiveIndexes() {
+			if idx.GetType() != descpb.IndexDescriptor_FORWARD || idx.IsPartial() {
+				continue
+			}
+			if idx.NumKeyColumns() != 0 {
+				colID := idx.GetKeyColumnID(0)
+				if err := addIndexColumnStatsIfNotExists(colID, false /* isInverted */); err != nil {
+					return nil, err
+				}
+			}
+		}
+		return colStats, nil
 	}
 
 	// Add column stats for the primary key.
@@ -690,13 +718,33 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 		}
 
 		dsp := innerP.DistSQLPlanner()
-		planCtx := dsp.NewPlanningCtx(ctx, innerEvalCtx, innerP, txn.KV(), FullDistribution)
 		// CREATE STATS flow doesn't produce any rows and only emits the
 		// metadata, so we can use a nil rowContainerHelper.
 		resultWriter := NewRowResultWriter(nil /* rowContainer */)
-		if err := dsp.planAndRunCreateStats(
-			ctx, innerEvalCtx, planCtx, innerP.SemaCtx(), txn.KV(), r.job, resultWriter,
-		); err != nil {
+
+		var err error
+		if details.UsingExtremes {
+			for _, colStat := range details.ColumnStats {
+				// Plan and run partial stats on multiple columns separately since each
+				// partial stat collection will use a different index and have different
+				// plans.
+				singleColDetails := protoutil.Clone(&details).(*jobspb.CreateStatsDetails)
+				singleColDetails.ColumnStats = []jobspb.CreateStatsDetails_ColStat{colStat}
+				planCtx := dsp.NewPlanningCtx(ctx, innerEvalCtx, innerP, txn.KV(), FullDistribution)
+				if err = dsp.planAndRunCreateStats(
+					ctx, innerEvalCtx, planCtx, innerP.SemaCtx(), txn.KV(), resultWriter, r.job.ID(), *singleColDetails,
+				); err != nil {
+					break
+				}
+			}
+		} else {
+			planCtx := dsp.NewPlanningCtx(ctx, innerEvalCtx, innerP, txn.KV(), FullDistribution)
+			err = dsp.planAndRunCreateStats(
+				ctx, innerEvalCtx, planCtx, innerP.SemaCtx(), txn.KV(), resultWriter, r.job.ID(), details,
+			)
+		}
+
+		if err != nil {
 			// Check if this was a context canceled error and restart if it was.
 			if grpcutil.IsContextCanceled(err) {
 				return jobs.MarkAsRetryJobError(err)

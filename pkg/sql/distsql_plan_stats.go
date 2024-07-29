@@ -15,7 +15,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -274,13 +273,10 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	jobID jobspb.JobID,
 	details jobspb.CreateStatsDetails,
 ) (*PhysicalPlan, error) {
-
-	// Currently, we limit the number of requests for partial statistics
-	// stats at a given point in time to 1.
-	// TODO (faizaanmadhani): Add support for multiple distinct requested
-	// partial stats in one job.
+	// Partial stats collections on multiple columns create different plans,
+	// so we only support one requested stat at a time here.
 	if len(reqStats) > 1 {
-		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot process multiple partial statistics at once")
+		return nil, errors.AssertionFailedf("only one partial statistic can be requested at a time")
 	}
 
 	reqStat := reqStats[0]
@@ -729,13 +725,13 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	planCtx *PlanningCtx,
 	semaCtx *tree.SemaContext,
 	txn *kv.Txn,
-	job *jobs.Job,
 	resultWriter *RowResultWriter,
+	jobId jobspb.JobID,
+	details jobspb.CreateStatsDetails,
 ) error {
 	ctx = logtags.AddTag(ctx, "create-stats-distsql", nil)
 
-	details := job.Details().(jobspb.CreateStatsDetails)
-	physPlan, err := dsp.createPlanForCreateStats(ctx, planCtx, semaCtx, job.ID(), details)
+	physPlan, err := dsp.createPlanForCreateStats(ctx, planCtx, semaCtx, jobId, details)
 	if err != nil {
 		return err
 	}
