@@ -64,8 +64,8 @@ genrule(
        ApplicationLayerInterface
 $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
 """,
-    exec_tools = [
-        "//pkg/testutils/serverutils/fwgen:fwgen",
+    tools = [
+        "//pkg/testutils/serverutils/fwgen",
         "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
     ],
     visibility = [
@@ -84,8 +84,8 @@ genrule(
        StorageLayerInterface
 $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
 """,
-    exec_tools = [
-        "//pkg/testutils/serverutils/fwgen:fwgen",
+    tools = [
+        "//pkg/testutils/serverutils/fwgen",
         "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
     ],
     visibility = [
@@ -104,8 +104,8 @@ genrule(
        TenantControlInterface
 $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
 """,
-    exec_tools = [
-        "//pkg/testutils/serverutils/fwgen:fwgen",
+    tools = [
+        "//pkg/testutils/serverutils/fwgen",
         "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
     ],
     visibility = [
@@ -124,8 +124,8 @@ genrule(
        TestServerController
 $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
 """,
-    exec_tools = [
-        "//pkg/testutils/serverutils/fwgen:fwgen",
+    tools = [
+        "//pkg/testutils/serverutils/fwgen",
         "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
     ],
     visibility = [
