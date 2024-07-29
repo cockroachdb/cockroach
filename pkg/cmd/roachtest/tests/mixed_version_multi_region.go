@@ -59,6 +59,7 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 		Owner:   registry.OwnerTestEng,
 		Cluster: r.MakeClusterSpec(
 			len(regions)*nodesPerRegion+1, // add one workload node
+			spec.WorkloadNode(),
 			spec.Geo(),
 			spec.GCEZones(strings.Join(zones, ",")),
 		),
