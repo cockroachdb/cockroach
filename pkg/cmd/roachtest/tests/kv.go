@@ -64,6 +64,9 @@ func registerKV(r registry.Registry) {
 		weekly                   bool
 		owner                    registry.Owner // defaults to KV
 		sharedProcessMT          bool
+		// Set to true to make jemalloc release memory more aggressively to the
+		// OS, to reduce resident size.
+		jemallocReleaseFaster bool
 	}
 	computeConcurrency := func(opts kvOptions) int {
 		// Scale the workload concurrency with the number of nodes in the cluster to
@@ -95,6 +98,10 @@ func registerKV(r registry.Registry) {
 		settings := install.MakeClusterSettings()
 		if opts.globalMVCCRangeTombstone {
 			settings.Env = append(settings.Env, "COCKROACH_GLOBAL_MVCC_RANGE_TOMBSTONE=true")
+		}
+		if opts.jemallocReleaseFaster {
+			settings.Env = append(settings.Env,
+				"MALLOC_CONF=background_thread:true,dirty_decay_ms:2000,muzzy_decay_ms:0")
 		}
 		c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 
@@ -190,7 +197,15 @@ func registerKV(r registry.Registry) {
 		// CPU overload test, to stress admission control.
 		{nodes: 1, cpus: 8, readPercent: 50, concMultiplier: 8192},
 		// IO write overload test, to stress admission control.
-		{nodes: 1, cpus: 8, readPercent: 0, concMultiplier: 4096, blockSize: 1 << 16 /* 64 KB */},
+		//
+		// jemallocReleaseFaster is set to true due to OOMs observed in
+		// https://github.com/cockroachdb/cockroach/issues/125769. There is
+		// unavoidable 20% internal fragmentation in the Pebble block cache, since
+		// a 64KB value size causes a 64+KB sstable block, which allocates
+		// from the 80KB size class in jemalloc. So the allocated bytes from jemalloc
+		// by the block cache are 20% higher than configured. By setting this flag to true,
+		// we reduce the (resident-allocated) size in jemalloc.
+		{nodes: 1, cpus: 8, readPercent: 0, concMultiplier: 4096, blockSize: 1 << 16 /* 64 KB */, jemallocReleaseFaster: true},
 		{nodes: 1, cpus: 8, readPercent: 95},
 		{nodes: 1, cpus: 8, readPercent: 95, sharedProcessMT: true},
 		{nodes: 1, cpus: 32, readPercent: 0},
