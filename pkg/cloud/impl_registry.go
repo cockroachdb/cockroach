@@ -246,14 +246,14 @@ func MakeExternalStorage(
 	}
 	args := ExternalStorageContext{
 		EarlyBootExternalStorageContext: EarlyBootExternalStorageContext{
-			IOConf:   conf,
-			Settings: settings,
-			Options:  opts,
-			Limiters: limiters,
+			IOConf:          conf,
+			Settings:        settings,
+			Options:         opts,
+			Limiters:        limiters,
+			MetricsRecorder: cloudMetrics,
 		},
 		BlobClientFactory: blobClientFactory,
 		DB:                db,
-		MetricsRecorder:   cloudMetrics,
 	}
 
 	return makeExternalStorage[ExternalStorageContext](ctx, dest, conf, limiters, metrics, settings, args, getImpl, opts...)

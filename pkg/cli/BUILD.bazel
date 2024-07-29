@@ -189,6 +189,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/cgroups",
+        "//pkg/util/cidr",
         "//pkg/util/encoding",
         "//pkg/util/envutil",
         "//pkg/util/flagutil",

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
@@ -170,7 +171,6 @@ type ExternalStorageContext struct {
 
 	BlobClientFactory blobs.BlobClientFactory
 	DB                isql.DB
-	MetricsRecorder   *Metrics
 }
 
 // ExternalStorageContext contains the dependencies passed to external storage
@@ -181,9 +181,10 @@ type EarlyBootExternalStorageContext struct {
 	// storage, but I am rather uncertain it is a good idea. We
 	// may be using this provider before we've even read our
 	// cached settings.
-	Settings *cluster.Settings
-	Options  []ExternalStorageOption
-	Limiters Limiters
+	Settings        *cluster.Settings
+	Options         []ExternalStorageOption
+	Limiters        Limiters
+	MetricsRecorder *Metrics
 }
 
 // ExternalStorageOptions holds dependencies and values that can be
@@ -207,13 +208,13 @@ type EarlyBootExternalStorageConstructor func(
 // NewEarlyBootExternalStorageAccessor creates an
 // EarlyBootExternalStorageAccessor
 func NewEarlyBootExternalStorageAccessor(
-	st *cluster.Settings, conf base.ExternalIODirConfig,
+	st *cluster.Settings, conf base.ExternalIODirConfig, lookup *cidr.Lookup,
 ) *EarlyBootExternalStorageAccessor {
 	return &EarlyBootExternalStorageAccessor{
 		conf:     conf,
 		settings: st,
 		limiters: MakeLimiters(&st.SV),
-		metrics:  MakeMetrics(),
+		metrics:  MakeMetrics(lookup),
 	}
 }
 

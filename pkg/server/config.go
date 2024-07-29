@@ -333,7 +333,7 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.Config.InitDefaults()
 	cfg.InitTestingKnobs()
 	cfg.CidrLookup = cidr.NewLookup(&st.SV)
-	cfg.EarlyBootExternalStorageAccessor = cloud.NewEarlyBootExternalStorageAccessor(st, cfg.ExternalIODirConfig)
+	cfg.EarlyBootExternalStorageAccessor = cloud.NewEarlyBootExternalStorageAccessor(st, cfg.ExternalIODirConfig, cfg.CidrLookup)
 	cfg.DiskMonitorManager = disk.NewMonitorManager(vfs.Default)
 }
 
