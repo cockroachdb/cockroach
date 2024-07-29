@@ -264,8 +264,8 @@ type LegacyProcessor struct {
 	reg registry
 	rts resolvedTimestamp
 
-	regC       chan *registration
-	unregC     chan *registration
+	regC       chan *bufferedRegistration
+	unregC     chan *bufferedRegistration
 	lenReqC    chan struct{}
 	lenResC    chan int
 	filterReqC chan struct{}
@@ -349,8 +349,8 @@ func NewLegacyProcessor(cfg Config) *LegacyProcessor {
 		reg:    makeRegistry(cfg.Metrics),
 		rts:    makeResolvedTimestamp(cfg.Settings),
 
-		regC:       make(chan *registration),
-		unregC:     make(chan *registration),
+		regC:       make(chan *bufferedRegistration),
+		unregC:     make(chan *bufferedRegistration),
 		lenReqC:    make(chan struct{}),
 		lenResC:    make(chan int),
 		filterReqC: make(chan struct{}),
@@ -600,7 +600,7 @@ func (p *LegacyProcessor) Register(
 	p.syncEventC()
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
-	r := newRegistration(
+	r := newBufferedRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
 	)

@@ -30,7 +30,7 @@ func newFilterFromRegistry(reg *registry) *Filter {
 		needVals:     interval.NewRangeList(),
 	}
 	reg.tree.Do(func(i interval.Interface) (done bool) {
-		r := i.(*registration)
+		r := i.(*bufferedRegistration)
 		if r.withDiff {
 			f.needPrevVals.Add(r.Range())
 		}

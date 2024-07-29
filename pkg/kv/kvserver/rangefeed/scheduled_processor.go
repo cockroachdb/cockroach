@@ -316,7 +316,7 @@ func (p *ScheduledProcessor) Register(
 	p.syncEventC()
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
-	r := newRegistration(
+	r := newBufferedRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
 	)
@@ -369,7 +369,7 @@ func (p *ScheduledProcessor) Register(
 	return false, nil
 }
 
-func (p *ScheduledProcessor) unregisterClient(r *registration) bool {
+func (p *ScheduledProcessor) unregisterClient(r *bufferedRegistration) bool {
 	return runRequest(p, func(ctx context.Context, p *ScheduledProcessor) bool {
 		p.reg.Unregister(ctx, r)
 		return true
