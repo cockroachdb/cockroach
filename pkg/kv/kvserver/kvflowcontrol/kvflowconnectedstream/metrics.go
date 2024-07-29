@@ -341,7 +341,7 @@ func newTypeMetrics(
 						if logStream {
 							if streamStatsCount <= streamStatsCountCap {
 								var b strings.Builder
-								fmt.Fprintf(&b, "stream %s was blocked: durations:", stream.String())
+								fmt.Fprintf(&b, "stream %s %s was blocked: durations:", t, stream.String())
 								if regularStats.NoTokenDuration > 0 {
 									fmt.Fprintf(&b, " regular %s", regularStats.NoTokenDuration.String())
 								}
