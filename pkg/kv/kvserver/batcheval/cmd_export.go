@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -174,10 +173,7 @@ func evalExport(
 	}
 
 	// Only use resume timestamp if splitting mid key is enabled.
-	resumeKeyTS := hlc.Timestamp{}
-	if args.SplitMidKey {
-		resumeKeyTS = args.ResumeKeyTS
-	}
+	resumeKeyTS := args.ResumeKeyTS
 
 	maybeAnnotateExceedMaxSizeError := func(err error) error {
 		if errors.HasType(err, (*storage.ExceedMaxSizeError)(nil)) {

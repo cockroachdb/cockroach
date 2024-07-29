@@ -245,6 +245,9 @@ var retiredSettings = map[InternalKey]struct{}{
 	"storage.value_blocks.enabled":       {},
 	"kv.gc.sticky_hint.enabled":          {},
 	"kv.rangefeed.range_stuck_threshold": {},
+
+	// removed as of 24.3
+	"bulkio.backup.split_keys_on_timestamps": {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
