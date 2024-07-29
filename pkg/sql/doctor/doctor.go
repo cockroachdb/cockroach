@@ -240,6 +240,8 @@ func ExamineJobs(
 		jobs.ValidateDescriptorReferencesInJob(j, descLookupFn, func(err error) {
 			problemsFound = true
 			fmt.Fprintf(stdout, "job %d: %s.\n", j.ID, err)
+		}, func(s string) {
+			fmt.Fprintf(stdout, "job %d: %s.\n", j.ID, s)
 		})
 	}
 	return !problemsFound, nil
