@@ -4,6 +4,7 @@ go_library(
     name = "rangefeed",
     srcs = [
         "budget.go",
+        "buffered_registration.go",
         "catchup_scan.go",
         "event_size.go",
         "filter.go",
