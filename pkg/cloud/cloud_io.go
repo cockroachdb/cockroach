@@ -81,8 +81,10 @@ var httpMetrics = settings.RegisterBoolSetting(
 
 // MakeHTTPClient makes an http client configured with the common settings used
 // for interacting with cloud storage (timeouts, retries, CA certs, etc).
-func MakeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
-	t, err := MakeTransport(settings)
+func MakeHTTPClient(
+	settings *cluster.Settings, metrics *Metrics, cloud, bucket string,
+) (*http.Client, error) {
+	t, err := MakeTransport(settings, metrics, cloud, bucket)
 	if err != nil {
 		return nil, err
 	}
@@ -98,10 +100,12 @@ func MakeHTTPClientForTransport(t http.RoundTripper) (*http.Client, error) {
 	return &http.Client{Transport: t}, nil
 }
 
-// MakeHTTPClient makes an http transport configured with the common
-// settings used for interacting with cloud storage (timeouts,
-// retries, CA certs, etc). Prefer MakeHTTPClient where possible.
-func MakeTransport(settings *cluster.Settings) (*http.Transport, error) {
+// MakeTransport makes an http transport configured with the common settings
+// used for interacting with cloud storage (timeouts, retries, CA certs, etc).
+// Prefer MakeHTTPClient where possible.
+func MakeTransport(
+	settings *cluster.Settings, metrics *Metrics, cloud, bucket string,
+) (*http.Transport, error) {
 	var tlsConf *tls.Config
 	if pem := httpCustomCA.Get(&settings.SV); pem != "" {
 		roots, err := x509.SystemCertPool()
@@ -121,6 +125,9 @@ func MakeTransport(settings *cluster.Settings) (*http.Transport, error) {
 	// Bump up the default idle conn pool size as we have many parallel workers in
 	// most bulk jobs.
 	t.MaxIdleConnsPerHost = 64
+	if metrics != nil {
+		t.DialContext = metrics.NetMetrics.Wrap(t.DialContext, cloud, bucket)
+	}
 	return t, nil
 }
 

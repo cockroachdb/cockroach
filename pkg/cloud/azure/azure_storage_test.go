@@ -259,7 +259,8 @@ func TestMakeAzureStorageURLFromEnvironment(t *testing.T) {
 		{environment: azure.USGovernmentCloud.Name, expected: "https://account.blob.core.usgovcloudapi.net/container"},
 	} {
 		t.Run(tt.environment, func(t *testing.T) {
-			sut, err := makeAzureStorage(context.Background(), cloud.EarlyBootExternalStorageContext{}, cloudpb.ExternalStorage{
+			testSettings := cluster.MakeTestingClusterSettings()
+			sut, err := makeAzureStorage(context.Background(), cloud.EarlyBootExternalStorageContext{Settings: testSettings}, cloudpb.ExternalStorage{
 				AzureConfig: &cloudpb.ExternalStorage_Azure{
 					Container:   "container",
 					Prefix:      "path",

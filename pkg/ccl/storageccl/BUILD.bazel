@@ -47,6 +47,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/storageutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/cidr",
         "//pkg/util/encoding",
         "//pkg/util/humanizeutil",
         "//pkg/util/ioctx",
