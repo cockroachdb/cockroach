@@ -594,11 +594,10 @@ func TestRandomStream(t *testing.T) {
 
 	streamStartStmt := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab"
 	runnerA.Exec(t, streamStartStmt, uri)
-
 	t.Logf("waiting for %d events", eventCount)
 	select {
 	case <-testState.done:
-	case <-time.After(45 * time.Second):
+	case <-time.After(testutils.SucceedsSoonDuration()):
 		t.Logf("%s", string(allstacks.Get()))
 		t.Fatal("timed out waiting for events")
 	}
