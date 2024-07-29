@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sys/unix"
 )
 
 // A SyncedCluster is created from the cluster metadata in the synced clusters
@@ -1634,8 +1635,10 @@ func tenantCertsTarName(virtualClusterID int) string {
 }
 
 // DistributeCerts will generate and distribute certificates to all the nodes.
-func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) error {
-	if c.checkForCertificates(ctx, l) {
+func (c *SyncedCluster) DistributeCerts(
+	ctx context.Context, l *logger.Logger, redistribute bool,
+) error {
+	if !redistribute && c.checkForCertificates(ctx, l) {
 		return nil
 	}
 
@@ -1682,7 +1685,15 @@ tar cvf %[5]s %[2]s
 
 	// Skip the first node which is where we generated the certs.
 	nodes := allNodes(len(c.VMs))[1:]
-	return c.distributeLocalCertsTar(ctx, l, tarfile, nodes, 0)
+	if err = c.distributeLocalCertsTar(ctx, l, tarfile, nodes, 0); err != nil {
+		return err
+	}
+	if redistribute {
+		if err = c.Signal(ctx, l, int(unix.SIGHUP)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // RedistributeNodeCert will generate a new node cert to capture any new hosts
@@ -1722,7 +1733,12 @@ tar cvf %[5]s %[2]s
 
 	// Skip the first node which is where we generated the certs.
 	nodes := allNodes(len(c.VMs))[1:]
-	return c.distributeLocalCertsTar(ctx, l, tarfile, nodes, 0)
+
+	if err := c.distributeLocalCertsTar(ctx, l, tarfile, nodes, 0); err != nil {
+		return err
+	}
+	// Send a SIGHUP to the nodes to reload the certificates.
+	return c.Signal(ctx, l, int(unix.SIGHUP))
 }
 
 // DistributeTenantCerts will generate and distribute certificates to all of the
