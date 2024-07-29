@@ -366,6 +366,9 @@ func boolP(b bool) *bool {
 func testPredecessorFunc(
 	rng *rand.Rand, v *clusterupgrade.Version, n int,
 ) ([]*clusterupgrade.Version, error) {
+	if n > 5 { // arbitrary check, simulating errors in the predecessor function
+		return nil, fmt.Errorf("no known predecessor for %q", v)
+	}
 	return parseVersions([]string{predecessorVersion}), nil
 }
 
