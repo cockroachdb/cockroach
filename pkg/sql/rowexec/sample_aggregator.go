@@ -265,7 +265,16 @@ func (s *sampleAggregator) mainLoop(
 					// not been paused or canceled.
 					var fractionCompleted float32
 					if s.spec.RowsExpected > 0 {
-						fractionCompleted = float32(float64(rowsProcessed) / float64(s.spec.RowsExpected))
+						// Compute the fraction of rows processed so far for the current
+						// index.
+						fractionCompleted = min(float32(float64(rowsProcessed)/float64(s.spec.RowsExpected)), 1.0)
+
+						if s.spec.NumIndexes > 0 {
+							// Adjust the fraction to account for the indexes that have already
+							// been processed.
+							fractionCompleted = (float32(s.spec.CurIndex) + fractionCompleted) / float32(s.spec.NumIndexes)
+						}
+
 						const maxProgress = 0.99
 						if fractionCompleted > maxProgress {
 							// Since the total number of rows expected is just an estimate,
@@ -347,10 +356,12 @@ func (s *sampleAggregator) mainLoop(
 			return false, err
 		}
 	}
-	// Report progress one last time so we don't write results if the job was
-	// canceled.
-	if err = progFn(1.0); err != nil {
-		return false, err
+	// Report progress one last time if this is the last index being scanned, so
+	// we don't write results if the job was canceled.
+	if s.spec.CurIndex+1 == s.spec.NumIndexes {
+		if err = progFn(1.0); err != nil {
+			return false, err
+		}
 	}
 	return false, s.writeResults(ctx)
 }
