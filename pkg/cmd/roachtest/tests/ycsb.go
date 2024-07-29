@@ -93,10 +93,14 @@ func registerYCSB(r registry.Registry) {
 			if opts.uniformDistribution {
 				args += " --request-distribution=uniform"
 			}
-			if envFlags := os.Getenv(test.EnvWorkloadDurationFlag); envFlags != "" {
-				args += " " + envFlags
+
+			envWorkloadDurationFlag := os.Getenv(test.EnvWorkloadDurationFlag)
+			defaultDuration := ifLocal(c, "10s", "30m")
+
+			if envWorkloadDurationFlag != "" && test.ValidateWorkloadDurationFlag(envWorkloadDurationFlag) {
+				args += " --duration=" + envWorkloadDurationFlag
 			} else {
-				args += " --duration=" + ifLocal(c, "10s", "30m")
+				args += " --duration=" + defaultDuration
 			}
 			cmd := fmt.Sprintf(
 				"./workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+

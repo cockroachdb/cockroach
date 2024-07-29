@@ -11,6 +11,8 @@
 package test
 
 import (
+	"regexp"
+
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -26,10 +28,23 @@ const DefaultCockroachPath = "./cockroach"
 // in that environment variable.
 var EnvAssertionsEnabledSeed = "ROACHTEST_ASSERTIONS_ENABLED_SEED"
 
-// EnvWorkloadDurationFlag - evniornment variable to override
+// EnvWorkloadDurationFlag - environment variable to override
 // default run time duration of workload set in tests
-// usage ROACHTEST_PERF_WORKLOAD_DURATION="--duration 5m"
+// usage ROACHTEST_PERF_WORKLOAD_DURATION="5m"
 const EnvWorkloadDurationFlag = "ROACHTEST_PERF_WORKLOAD_DURATION"
+
+// ValidateWorkloadDurationFlag checks if EnvWorkloadDurationFlag
+// input is a valid duration string - matches the pattern
+func ValidateWorkloadDurationFlag(input string) bool {
+	// Define the regex pattern for EnvWorkloadDurationFlag
+	pattern := `^\d+[mhsMHS]$`
+
+	// Compile the regex
+	re := regexp.MustCompile(pattern)
+
+	// Match the input string against the regex pattern
+	return re.MatchString(input)
+}
 
 // Test is the interface through which roachtests interact with the
 // test harness.

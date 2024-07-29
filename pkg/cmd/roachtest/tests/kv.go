@@ -168,10 +168,13 @@ func registerKV(r registry.Registry) {
 			}
 
 			var duration string
-			if e := os.Getenv(test.EnvWorkloadDurationFlag); e != "" {
-				duration = " " + e
+			envWorkloadDurationFlag := os.Getenv(test.EnvWorkloadDurationFlag)
+			defaultDuration := ifLocal(c, "10s", opts.duration.String())
+
+			if envWorkloadDurationFlag != "" && test.ValidateWorkloadDurationFlag(envWorkloadDurationFlag) {
+				duration += " --duration=" + envWorkloadDurationFlag
 			} else {
-				duration = " --duration=" + ifLocal(c, "10s", opts.duration.String())
+				duration += " --duration=" + defaultDuration
 			}
 
 			url := fmt.Sprintf(" {pgurl:1-%d}", nodes)
