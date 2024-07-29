@@ -915,7 +915,11 @@ func (bq *baseQueue) processOneAsyncAndReleaseSem(
 	// it is no longer processable, return immediately.
 	if _, err := bq.replicaCanBeProcessed(ctx, repl, false /*acquireLeaseIfNeeded */); err != nil {
 		bq.finishProcessingReplica(ctx, stopper, repl, err)
-		log.Infof(ctx, "%s: skipping %d since replica can't be processed %v", taskName, repl.ReplicaID(), err)
+		// Don't bother logging benign errors, such as when the replica is not the
+		// current leaseholder as we expect this to occur semi-frequently.
+		if !benignerror.IsBenign(err) {
+			log.Infof(ctx, "%s: skipping %d since replica can't be processed %v", taskName, repl.ReplicaID(), err)
+		}
 		<-bq.processSem
 		return
 	}
@@ -1080,7 +1084,7 @@ func (bq *baseQueue) replicaCanBeProcessed(
 			st := repl.CurrentLeaseStatus(ctx)
 			if st.IsValid() && !st.OwnedBy(repl.StoreID()) {
 				log.VEventf(ctx, 1, "needs lease; not adding: %v", st.Lease)
-				return nil, errors.Newf("needs lease, not adding: %v", st.Lease)
+				return nil, benignerror.New(errors.Newf("needs lease, not adding: %v", st.Lease))
 			}
 		}
 	}
