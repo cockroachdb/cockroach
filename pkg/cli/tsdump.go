@@ -332,7 +332,7 @@ type datadogWriter struct {
 	targetURL string
 	buffer    bytes.Buffer
 	series    []DatadogSeries
-	timestamp int64
+	uploadID  string
 	init      bool
 	apiKey    string
 	// namePrefix sets the string to prepend to all metric names. The
@@ -353,13 +353,25 @@ func makeDatadogWriter(
 	return &datadogWriter{
 		targetURL:  targetURL,
 		buffer:     bytes.Buffer{},
-		timestamp:  timeutil.Now().Unix(),
+		uploadID:   newTsdumpUploadID(),
 		init:       init,
 		apiKey:     apiKey,
 		namePrefix: "crdb.tsdump.", // Default pre-set prefix to distinguish these uploads.
 		doRequest:  doRequest,
 		threshold:  threshold,
 	}
+}
+
+var newTsdumpUploadID = func() string {
+	clusterTagValue := ""
+	if debugTimeSeriesDumpOpts.clusterLabel != "" {
+		clusterTagValue = debugTimeSeriesDumpOpts.clusterLabel
+	} else if serverCfg.ClusterName != "" {
+		clusterTagValue = serverCfg.ClusterName
+	} else {
+		clusterTagValue = fmt.Sprintf("cluster-debug-%d", timeutil.Now().Unix())
+	}
+	return newUploadID(clusterTagValue)
 }
 
 // DatadogPoint is a single metric point in Datadog format
@@ -413,18 +425,14 @@ func (d *datadogWriter) Emit(data *tspb.TimeSeriesData) error {
 	tags = append(tags, "job:cockroachdb")
 	tags = append(tags, "region:local")
 
-	// Command values
-	clusterTag := ""
 	if debugTimeSeriesDumpOpts.clusterLabel != "" {
-		clusterTag = fmt.Sprintf("cluster:%s", debugTimeSeriesDumpOpts.clusterLabel)
-	} else if serverCfg.ClusterName != "" {
-		clusterTag = fmt.Sprintf("cluster:%s", serverCfg.ClusterName)
-	} else {
-		clusterTag = fmt.Sprintf("cluster:cluster-debug-%d", d.timestamp)
+		tags = append(tags, makeDDTag("cluster", debugTimeSeriesDumpOpts.clusterLabel))
 	}
-	tags = append(tags, clusterTag)
+
+	tags = append(tags, makeDDTag(uuidTag, d.uploadID))
+
 	d.Do(func() {
-		fmt.Printf("Cluster label is set to: %s\n", clusterTag)
+		fmt.Println("Upload ID:", d.uploadID)
 	})
 
 	sl := reCrStoreNode.FindStringSubmatch(data.Name)
