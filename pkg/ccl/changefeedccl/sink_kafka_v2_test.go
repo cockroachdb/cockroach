@@ -548,7 +548,7 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	}
 
 	var err error
-	fx.sink, err = newKafkaSinkClientV2(ctx, fx.additionalKOpts, fx.batchConfig, "no addrs", settings, knobs, nilMetricsRecorderBuilder)
+	fx.sink, err = newKafkaSinkClientV2(ctx, fx.additionalKOpts, fx.batchConfig, "no addrs", settings, &TestingKnobs{kafkaSinkClientV2Knobs: knobs}, nilMetricsRecorderBuilder)
 	require.NoError(t, err)
 
 	targets := makeChangefeedTargets(fx.targetNames...)
@@ -565,7 +565,7 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	}
 	u.RawQuery = q.Encode()
 
-	bs, err := makeKafkaSinkV2(ctx, sinkURL{URL: u}, targets, fx.sinkJSONConfig, 1, nilPacerFactory, timeutil.DefaultTimeSource{}, settings, nilMetricsRecorderBuilder, knobs)
+	bs, err := makeKafkaSinkV2(ctx, sinkURL{URL: u}, targets, fx.sinkJSONConfig, 1, nilPacerFactory, timeutil.DefaultTimeSource{}, settings, nilMetricsRecorderBuilder, &TestingKnobs{kafkaSinkClientV2Knobs: knobs})
 	require.NoError(t, err)
 	fx.bs = bs.(*batchingSink)
 

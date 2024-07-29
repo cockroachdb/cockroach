@@ -77,7 +77,7 @@ type batchingSink struct {
 	ts       timeutil.TimeSource
 	metrics  metricsRecorder
 	settings *cluster.Settings
-	knobs    batchingSinkKnobs
+	knobs    *TestingKnobs
 
 	// eventCh is the channel used to send requests from the Sink caller routines
 	// to the batching routine.  Messages can either be a flushReq or a rowEvent.
@@ -90,10 +90,6 @@ type batchingSink struct {
 	wg      ctxgroup.Group
 	hasher  hash.Hash32
 	doneCh  chan struct{}
-}
-
-type batchingSinkKnobs struct {
-	OnAppend func(*rowEvent)
 }
 
 type flushReq struct {
@@ -341,7 +337,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		s.metrics.recordSinkIOInflightChange(int64(batch.numMessages))
 		return s.client.Flush(ctx, batch.payload)
 	}
-	ioEmitter := NewParallelIO(ctx, s.retryOpts, s.ioWorkers, ioHandler, s.metrics, s.settings)
+	ioEmitter := NewParallelIO(ctx, s.retryOpts, s.ioWorkers, ioHandler, s.metrics, s.settings, s.knobs)
 	defer ioEmitter.Close()
 
 	// Flushing requires tracking the number of inflight messages and confirming
@@ -481,8 +477,8 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 				}
 
 				batchBuffer.Append(r)
-				if s.knobs.OnAppend != nil {
-					s.knobs.OnAppend(r)
+				if s.knobs.BatchingSinkOnAppend != nil {
+					s.knobs.BatchingSinkOnAppend(r)
 				}
 
 				// The event struct can be freed as the contents are expected to be
@@ -535,6 +531,7 @@ func makeBatchingSink(
 	timeSource timeutil.TimeSource,
 	metrics metricsRecorder,
 	settings *cluster.Settings,
+	knobs *TestingKnobs,
 ) Sink {
 	sink := &batchingSink{
 		client:            client,
@@ -552,6 +549,7 @@ func makeBatchingSink(
 		pacerFactory:      pacerFactory,
 		pacer:             pacerFactory(),
 		doneCh:            make(chan struct{}),
+		knobs:             knobs,
 	}
 
 	sink.wg.GoCtx(func(ctx context.Context) error {

@@ -9218,8 +9218,17 @@ func TestParallelIOMetrics(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		registry := s.Server.JobRegistry().(*jobs.Registry)
-		metrics := registry.MetricsStruct().Changefeed.(*Metrics).AggMetrics
+		pmr := &parallelIOMetricsRecorderImpl{
+			pendingQueueNanos: &testMetric{},
+			pendingRows:       &testMetric{},
+			resultQueueNanos:  &testMetric{},
+			inFlight:          &testMetric{},
+		}
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		knobs.OverrideParallelIOMetricsRecorder = func() parallelIOMetricsRecorder { return pmr }
 
 		// Add delay so queuing occurs, which results in the below metrics being
 		// nonzero.
@@ -9253,41 +9262,22 @@ func TestParallelIOMetrics(t *testing.T) {
 				}
 			}
 		})
+
+		g.Go(func() error {
+			return waitMultiple(
+				10*time.Second,
+				pmr.pendingQueueNanos.(*testMetric).SetWaiter(func(val int64) bool { return val > 0 }),
+				pmr.pendingRows.(*testMetric).SetWaiter(func(val int64) bool { return val > 0 }),
+				pmr.resultQueueNanos.(*testMetric).SetWaiter(func(val int64) bool { return val > 0 }),
+				pmr.inFlight.(*testMetric).SetWaiter(func(val int64) bool { return val > 0 }),
+			)
+		})
+
 		// Set the frequency to 1s. The default frequency at the time of writing is
 		foo, err := f.Feed("CREATE CHANGEFEED FOR TABLE foo WITH pubsub_sink_config=" +
 			"'{\"Flush\": {\"Frequency\": \"100ms\"}}'")
 		require.NoError(t, err)
 
-		testutils.SucceedsSoon(t, func() error {
-			numSamples, sum := metrics.ParallelIOPendingQueueNanos.WindowedSnapshot().Total()
-			if numSamples <= 0 && sum <= 0.0 {
-				return errors.Newf("waiting for queue nanos: %d %f", numSamples, sum)
-			}
-			return nil
-		})
-		testutils.SucceedsSoon(t, func() error {
-			pendingKeys := metrics.ParallelIOPendingRows.Value()
-			if pendingKeys <= 0 {
-				return errors.Newf("waiting for pending keys: %d", pendingKeys)
-			}
-			return nil
-		})
-		testutils.SucceedsSoon(t, func() error {
-			for i := 0; i < 50; i++ {
-				inFlightKeys := metrics.ParallelIOInFlightKeys.Value()
-				if inFlightKeys > 0 {
-					return nil
-				}
-			}
-			return errors.New("waiting for in-flight keys")
-		})
-		testutils.SucceedsSoon(t, func() error {
-			numSamples, sum := metrics.ParallelIOResultQueueNanos.WindowedSnapshot().Total()
-			if numSamples <= 0 && sum <= 0.0 {
-				return errors.Newf("waiting for result queue nanos: %d %f", numSamples, sum)
-			}
-			return nil
-		})
 		close(done)
 		require.NoError(t, g.Wait())
 		require.NoError(t, foo.Close())

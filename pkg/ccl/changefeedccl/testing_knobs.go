@@ -96,6 +96,12 @@ type TestingKnobs struct {
 
 	// OverrideExecCfg returns a modified ExecutorConfig to use under tests.
 	OverrideExecCfg func(actual *sql.ExecutorConfig) *sql.ExecutorConfig
+
+	BatchingSinkOnAppend func(*rowEvent)
+
+	OverrideParallelIOMetricsRecorder func() parallelIOMetricsRecorder
+
+	kafkaSinkClientV2Knobs kafkaSinkV2Knobs
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
