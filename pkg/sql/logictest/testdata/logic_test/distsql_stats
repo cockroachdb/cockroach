@@ -2506,9 +2506,6 @@ CREATE STATISTICS abcd_defaults ON a FROM abcd USING EXTREMES;
 statement ok
 RESET enable_create_stats_using_extremes
 
-statement error pq: cannot process multiple partial statistics at once
-CREATE STATISTICS abcd_defaults FROM abcd USING EXTREMES;
-
 statement error pq: multi-column partial statistics are not currently supported
 CREATE STATISTICS abcd_a_b ON a, c FROM abcd USING EXTREMES;
 
@@ -3348,3 +3345,68 @@ upper_bound   range_rows  distinct_range_rows  equal_rows
 'paid'        0           0                    1
 'dispatched'  0           0                    1
 'delivered'   0           0                    1
+
+# Verify that partial stats are collected on single column prefixes of forward
+# indexes when columns are unspecified.
+statement ok
+SET enable_create_stats_using_extremes = on
+
+statement ok
+CREATE TABLE pstat_allindex (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  j JSONB,
+  PRIMARY KEY (a),
+  INDEX(b, c),
+  INDEX(b, c, d),
+  INDEX(d),
+  INVERTED INDEX (j)
+);
+
+statement ok
+INSERT INTO pstat_allindex VALUES
+  (1, 1, 1, 1, '{"1": "1"}'),
+  (2, 2, 2, 2, '{"2": "2"}'),
+  (3, 3, 3, 3, '{"3": "3"}'),
+  (4, 4, 4, 4, '{"4": "4"}');
+
+statement ok
+CREATE STATISTICS pstat_allindex_full FROM pstat_allindex;
+
+statement ok
+INSERT INTO pstat_allindex VALUES
+  (5, 5, 5, 5, '{"5": "5"}'),
+  (6, 6, 6, 6, '{"6": "6"}'),
+  (7, 7, 7, 7, '{"7": "7"}'),
+  (8, 8, 8, 8, '{"8": "8"}');
+
+statement ok
+CREATE STATISTICS pstat_allindex_partial FROM pstat_allindex USING EXTREMES;
+
+query TTIII colnames
+SELECT
+	statistics_name,
+	column_names,
+	row_count,
+	distinct_count,
+	null_count
+FROM
+	[SHOW STATISTICS FOR TABLE pstat_allindex]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name         column_names  row_count  distinct_count  null_count
+pstat_allindex_full     {a}           4          4               0
+pstat_allindex_full     {b,c,d}       4          4               0
+pstat_allindex_full     {b,c}         4          4               0
+pstat_allindex_full     {b}           4          4               0
+pstat_allindex_full     {c}           4          4               0
+pstat_allindex_full     {d}           4          4               0
+pstat_allindex_full     {j}           4          4               0
+pstat_allindex_partial  {a}           4          4               0
+pstat_allindex_partial  {b}           4          4               0
+pstat_allindex_partial  {d}           4          4               0
+
+statement ok
+RESET enable_create_stats_using_extremes
