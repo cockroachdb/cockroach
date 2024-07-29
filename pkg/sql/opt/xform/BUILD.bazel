@@ -122,7 +122,7 @@ genrule(
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ explorer $(locations //pkg/sql/opt:ops) $(locations :rules)
     """,
-    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",

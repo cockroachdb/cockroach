@@ -35,7 +35,7 @@ genrule(
     cmd = """
       $(location //pkg/roachprod/vm/aws/terraformgen) -o $@
     """,
-    exec_tools = ["//pkg/roachprod/vm/aws/terraformgen"],
+    tools = ["//pkg/roachprod/vm/aws/terraformgen"],
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",

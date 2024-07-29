@@ -20,9 +20,9 @@ http_archive(
 # Like the above, but for JS.
 http_archive(
     name = "aspect_rules_js",
-    sha256 = "08061ba5e5e7f4b1074538323576dac819f9337a0c7d75aee43afc8ae7cb6e18",
-    strip_prefix = "rules_js-1.26.1",
-    url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_js-v1.26.1.tar.gz",
+    sha256 = "2cfb3875e1231cefd3fada6774f2c0c5a99db0070e0e48ea398acbff7c6c765b",
+    strip_prefix = "rules_js-1.42.3",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_js-v1.42.3.tar.gz",
 )
 
 http_archive(
@@ -214,10 +214,17 @@ http_archive(
 )
 
 http_archive(
+    name = "bazel_features",
+    sha256 = "1aabce613b3ed83847b47efa69eb5dc9aa3ae02539309792a60e705ca4ab92a5",
+    strip_prefix = "bazel_features-0.2.0",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel_features-v0.2.0.tar.gz",
+)
+
+http_archive(
     name = "aspect_bazel_lib",
-    sha256 = "0da75299c5a52737b2ac39458398b3f256e41a1a6748e5457ceb3a6225269485",
-    strip_prefix = "bazel-lib-1.31.2",
-    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-lib-v1.31.2.tar.gz",
+    sha256 = "d0529773764ac61184eb3ad3c687fb835df5bee01afedf07f0cf1a45515c96bc",
+    strip_prefix = "bazel-lib-1.42.3",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-lib-v1.42.3.tar.gz",
 )
 
 # Load custom toolchains.

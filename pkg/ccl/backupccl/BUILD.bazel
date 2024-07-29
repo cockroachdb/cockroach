@@ -365,7 +365,7 @@ genrule(
         $(location //pkg/ccl/backupccl/testgen) \
         -data-driven=$(location data_driven_generated_test.go) 
        """,
-    exec_tools = [
+    tools = [
         "//pkg/ccl/backupccl/testgen",
     ],
     visibility = [
