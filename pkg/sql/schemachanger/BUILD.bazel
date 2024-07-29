@@ -115,7 +115,7 @@ genrule(
     cmd = """
         $(location //pkg/sql/schemachanger/sctest/sccomparatortestgen) -out-file=$(location comparator_generated_test.go)
     """,
-    exec_tools = [
+    tools = [
         "//pkg/sql/schemachanger/sctest/sccomparatortestgen",
     ],
     visibility = [

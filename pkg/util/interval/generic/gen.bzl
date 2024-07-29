@@ -6,7 +6,7 @@ def gen_interval_btree(name, type, package):
         name = name,
         srcs = ["//pkg/util/interval/generic:gen_srcs"],
         outs = [src_out, test_out],
-        exec_tools = [
+        tools = [
             "@com_github_cockroachdb_crlfmt//:crlfmt",
             "@com_github_mmatczuk_go_generics//cmd/go_generics",
         ],
