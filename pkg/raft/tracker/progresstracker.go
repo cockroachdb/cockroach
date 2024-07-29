@@ -31,16 +31,38 @@ import (
 type ProgressTracker struct {
 	config *quorum.Config
 
-	Progress ProgressMap
+	progress ProgressMap
 }
 
 // MakeProgressTracker initializes a ProgressTracker.
 func MakeProgressTracker(config *quorum.Config, progressMap ProgressMap) ProgressTracker {
 	p := ProgressTracker{
 		config:   config,
-		Progress: progressMap,
+		progress: progressMap,
 	}
 	return p
+}
+
+// Progress returns the progress associated with the supplied ID.
+func (p *ProgressTracker) Progress(id pb.PeerID) *Progress {
+	return p.progress[id]
+}
+
+// MoveProgressMap transfers ownership of the progress map to the caller. It
+// shouldn't be used by the progress tracker after this.
+func (p *ProgressTracker) MoveProgressMap() ProgressMap {
+	progress := p.progress
+	p.progress = nil
+	return progress
+}
+
+// Len returns the length of the progress map.
+func (p *ProgressTracker) Len() int {
+	return len(p.progress)
+}
+
+func (p *ProgressTracker) TestingSetProgress(id pb.PeerID, progress *Progress) {
+	p.progress[id] = progress
 }
 
 type matchAckIndexer map[pb.PeerID]*Progress
@@ -59,12 +81,12 @@ func (l matchAckIndexer) AckedIndex(id pb.PeerID) (quorum.Index, bool) {
 // Committed returns the largest log index known to be committed based on what
 // the voting members of the group have acknowledged.
 func (p *ProgressTracker) Committed() uint64 {
-	return uint64(p.config.Voters.CommittedIndex(matchAckIndexer(p.Progress)))
+	return uint64(p.config.Voters.CommittedIndex(matchAckIndexer(p.progress)))
 }
 
 // Visit invokes the supplied closure for all tracked progresses in stable order.
 func (p *ProgressTracker) Visit(f func(id pb.PeerID, pr *Progress)) {
-	n := len(p.Progress)
+	n := len(p.progress)
 	// We need to sort the IDs and don't want to allocate since this is hot code.
 	// The optimization here mirrors that in `(MajorityConfig).CommittedIndex`,
 	// see there for details.
@@ -75,13 +97,13 @@ func (p *ProgressTracker) Visit(f func(id pb.PeerID, pr *Progress)) {
 	} else {
 		ids = make([]pb.PeerID, n)
 	}
-	for id := range p.Progress {
+	for id := range p.progress {
 		n--
 		ids[n] = id
 	}
 	slices.Sort(ids)
 	for _, id := range ids {
-		f(id, p.Progress[id])
+		f(id, p.progress[id])
 	}
 }
 
