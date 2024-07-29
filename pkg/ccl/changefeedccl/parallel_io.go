@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -44,6 +45,8 @@ type ParallelIO struct {
 	quota     *quotapool.IntPool
 	requestCh chan AdmittedIORequest
 	resultCh  chan IOResult
+
+	knobs *TestingKnobs
 }
 
 // IORequest represents an abstract unit of IO that has a set of keys upon which
@@ -84,6 +87,7 @@ func NewParallelIO(
 	handler IOHandler,
 	metrics metricsRecorder,
 	settings *cluster.Settings,
+	knobs *TestingKnobs,
 ) *ParallelIO {
 	quota := uint64(requestQuota.Get(&settings.SV))
 	wg := ctxgroup.WithContext(ctx)
@@ -98,6 +102,7 @@ func NewParallelIO(
 		requestCh: make(chan AdmittedIORequest, quota),
 		resultCh:  make(chan IOResult, quota),
 		doneCh:    make(chan struct{}),
+		knobs:     knobs,
 	}
 
 	wg.GoCtx(func(ctx context.Context) error {
@@ -248,6 +253,10 @@ func (p *ParallelIO) GetResult() chan IOResult {
 // keys currently being sent, followed by checking each pending batch's intset.
 func (p *ParallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 	emitWithRetries := func(ctx context.Context, r IORequest) error {
+		if p.knobs.ParallelIOOnEmit != nil {
+			p.knobs.ParallelIOOnEmit()
+		}
+
 		if testQueuingDelay > 0*time.Second {
 			select {
 			case <-ctx.Done():
@@ -319,6 +328,9 @@ func (p *ParallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 	var inflight intsets.Fast
 	var pending []*ioRequest
 	metricsRec := p.metrics.newParallelIOMetricsRecorder()
+	if p.knobs.OverrideParallelIOMetricsRecorder != nil {
+		metricsRec = p.knobs.OverrideParallelIOMetricsRecorder()
+	}
 
 	handleResult := func(res *ioRequest) error {
 		if res.err == nil {
@@ -364,7 +376,12 @@ func (p *ParallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 	// If any yet-to-be-handled request observed so far shares any keys with an
 	// incoming request, the incoming request cannot be sent out and risk arriving
 	// earlier.
-	hasConflictingKeys := func(keys intsets.Fast) bool {
+	hasConflictingKeys := func(keys intsets.Fast) (ret bool) {
+		pendingKeys := intsets.Fast{}
+		for _, req := range pending {
+			pendingKeys.UnionWith(req.r.Keys())
+		}
+		defer log.Infof(ctx, "hasConflictingKeys: %v, inflight: %v, pending: %v, req: %v", ret, inflight.String(), pendingKeys.String(), keys.String())
 		if inflight.Intersects(keys) {
 			return true
 		}
