@@ -89,6 +89,13 @@ var RangeFeedUseScheduler = settings.RegisterBoolSetting(
 	metamorphic.ConstantWithTestBool("kv_rangefeed_scheduler_enabled", true),
 )
 
+//var RangefeedUseBufferedStream = settings.RegisterBoolSetting(
+//	settings.SystemOnly,
+//	"kv.rangefeed.buffered_stream.enabled",
+//	"not empty",
+//	metamorphic.ConstantWithTestBool("kv_rangefeed_buffered_stream_enabled", false),
+//)
+
 // RangefeedSchedulerDisabled is a kill switch for scheduler based rangefeed
 // processors. To be removed in 24.1 after new processor becomes default.
 var RangefeedSchedulerDisabled = envutil.EnvOrDefaultBool("COCKROACH_RANGEFEED_DISABLE_SCHEDULER",
