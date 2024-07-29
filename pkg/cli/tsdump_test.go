@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -151,6 +152,9 @@ func parseTSInput(t *testing.T, input string, w tsWriter) {
 func TestTsDumpFormatsDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer testutils.TestingHook(&newUploadID, func(cluster string) string {
+		return fmt.Sprintf("%s-1234", cluster)
+	})()
 
 	datadriven.Walk(t, "testdata/tsdump", func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
