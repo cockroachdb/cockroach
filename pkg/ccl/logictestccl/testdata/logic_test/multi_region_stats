@@ -125,3 +125,38 @@ WHERE stat->>'columns' = '["region"]'
 # Make sure we can still use the histogram in statistics_builder.
 statement ok
 INSERT INTO t124181 (region, a) VALUES ('ca-central-1', 2)
+
+# Verify that we don't collect partial stats on LOCALITY REGIONAL BY ROW table
+# indexes when columns are unspecified since they are implicitly partitioned
+# by the region column.
+statement ok
+CREATE TABLE multiregion_pstats (a INT PRIMARY KEY, b INT) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO multiregion_pstats (a, b, crdb_region) VALUES (1, 1, 'ap-southeast-2'), (2, 2, 'ca-central-1'), (3, 3, 'us-east-1')
+
+statement ok
+CREATE STATISTICS multiregion_full FROM multiregion_pstats
+
+statement ok
+INSERT INTO multiregion_pstats (a, b, crdb_region) VALUES (4, 4, 'ap-southeast-2'), (5, 5, 'ca-central-1')
+
+statement ok
+CREATE STATISTICS multiregion_partial FROM multiregion_pstats USING EXTREMES
+
+query TTIII colnames
+SELECT
+	statistics_name,
+	column_names,
+	row_count,
+	distinct_count,
+	null_count
+FROM
+	[SHOW STATISTICS FOR TABLE multiregion_pstats]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name   column_names     row_count  distinct_count  null_count
+multiregion_full  {a,crdb_region}  3          3               0
+multiregion_full  {a}              3          3               0
+multiregion_full  {b}              3          3               0
+multiregion_full  {crdb_region}    3          3               0
