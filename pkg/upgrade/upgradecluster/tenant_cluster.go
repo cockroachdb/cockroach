@@ -277,14 +277,9 @@ func annotateDialError(err error) error {
 // tenant upgrade interlock which prevent those new SQL servers from starting if
 // they're at an incompatible binary version (at the time of writing, in
 // SQLServer.preStart).
-func (t *TenantCluster) UntilClusterStable(ctx context.Context, fn func() error) error {
-	retryOpts := retry.Options{
-		InitialBackoff: 1 * time.Second,
-		MaxBackoff:     1 * time.Second,
-		Multiplier:     1.0,
-		MaxRetries:     60, // retry for 60 seconds
-	}
-
+func (t *TenantCluster) UntilClusterStable(
+	ctx context.Context, retryOpts retry.Options, fn func() error,
+) error {
 	instances, err := t.InstanceReader.GetAllInstancesNoCache(ctx)
 	if err != nil {
 		return err
