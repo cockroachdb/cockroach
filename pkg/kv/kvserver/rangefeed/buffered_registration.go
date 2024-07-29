@@ -12,14 +12,12 @@ package rangefeed
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -43,20 +41,13 @@ import (
 // channel is sent an error to inform it that the registration
 // has finished.
 type bufferedRegistration struct {
+	baseRegistration
 	// Input.
-	span             roachpb.Span
-	catchUpTimestamp hlc.Timestamp // exclusive
-	withDiff         bool
-	withFiltering    bool
-	withOmitRemote   bool
-	metrics          *Metrics
+	metrics *Metrics
 
 	// Output.
 	stream Stream
-	unreg  func()
 	// Internal.
-	id            int64
-	keys          interval.Range
 	buf           chan *sharedEvent
 	blockWhenFull bool // if true, block when buf is full (for tests)
 
@@ -81,6 +72,8 @@ type bufferedRegistration struct {
 	}
 }
 
+var _ registration = &bufferedRegistration{}
+
 func newBufferedRegistration(
 	span roachpb.Span,
 	startTS hlc.Timestamp,
@@ -95,16 +88,18 @@ func newBufferedRegistration(
 	unregisterFn func(),
 ) *bufferedRegistration {
 	br := &bufferedRegistration{
-		span:             span,
-		catchUpTimestamp: startTS,
-		withDiff:         withDiff,
-		withFiltering:    withFiltering,
-		withOmitRemote:   withOmitRemote,
-		metrics:          metrics,
-		stream:           stream,
-		unreg:            unregisterFn,
-		buf:              make(chan *sharedEvent, bufferSz),
-		blockWhenFull:    blockWhenFull,
+		baseRegistration: baseRegistration{
+			span:             span,
+			catchUpTimestamp: startTS,
+			withDiff:         withDiff,
+			withFiltering:    withFiltering,
+			withOmitRemote:   withOmitRemote,
+			unreg:            unregisterFn,
+		},
+		metrics:       metrics,
+		stream:        stream,
+		buf:           make(chan *sharedEvent, bufferSz),
+		blockWhenFull: blockWhenFull,
 	}
 	br.mu.Locker = &syncutil.Mutex{}
 	br.mu.caughtUp = true
@@ -154,103 +149,6 @@ func (br *bufferedRegistration) publish(
 		br.mu.overflowed = true
 		alloc.Release(ctx)
 	}
-}
-
-// assertEvent asserts that the event contains the necessary data.
-func (br *bufferedRegistration) assertEvent(ctx context.Context, event *kvpb.RangeFeedEvent) {
-	switch t := event.GetValue().(type) {
-	case *kvpb.RangeFeedValue:
-		if t.Key == nil {
-			log.Fatalf(ctx, "unexpected empty RangeFeedValue.Key: %v", t)
-		}
-		if t.Value.RawBytes == nil {
-			log.Fatalf(ctx, "unexpected empty RangeFeedValue.Value.RawBytes: %v", t)
-		}
-		if t.Value.Timestamp.IsEmpty() {
-			log.Fatalf(ctx, "unexpected empty RangeFeedValue.Value.Timestamp: %v", t)
-		}
-	case *kvpb.RangeFeedCheckpoint:
-		if t.Span.Key == nil {
-			log.Fatalf(ctx, "unexpected empty RangeFeedCheckpoint.Span.Key: %v", t)
-		}
-	case *kvpb.RangeFeedSSTable:
-		if len(t.Data) == 0 {
-			log.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Data: %v", t)
-		}
-		if len(t.Span.Key) == 0 {
-			log.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Span: %v", t)
-		}
-		if t.WriteTS.IsEmpty() {
-			log.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Timestamp: %v", t)
-		}
-	case *kvpb.RangeFeedDeleteRange:
-		if len(t.Span.Key) == 0 || len(t.Span.EndKey) == 0 {
-			log.Fatalf(ctx, "unexpected empty key in RangeFeedDeleteRange.Span: %v", t)
-		}
-		if t.Timestamp.IsEmpty() {
-			log.Fatalf(ctx, "unexpected empty RangeFeedDeleteRange.Timestamp: %v", t)
-		}
-	default:
-		log.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
-	}
-}
-
-// maybeStripEvent determines whether the event contains excess information not
-// applicable to the current registration. If so, it makes a copy of the event
-// and strips the incompatible information to match only what the registration
-// requested.
-func (br *bufferedRegistration) maybeStripEvent(
-	ctx context.Context, event *kvpb.RangeFeedEvent,
-) *kvpb.RangeFeedEvent {
-	ret := event
-	copyOnWrite := func() interface{} {
-		if ret == event {
-			ret = event.ShallowCopy()
-		}
-		return ret.GetValue()
-	}
-
-	switch t := ret.GetValue().(type) {
-	case *kvpb.RangeFeedValue:
-		if t.PrevValue.IsPresent() && !br.withDiff {
-			// If no registrations for the current Range are requesting previous
-			// values, then we won't even retrieve them on the Raft goroutine.
-			// However, if any are and they overlap with an update then the
-			// previous value on the corresponding events will be populated.
-			// If we're in this case and any other registrations don't want
-			// previous values then we'll need to strip them.
-			t = copyOnWrite().(*kvpb.RangeFeedValue)
-			t.PrevValue = roachpb.Value{}
-		}
-	case *kvpb.RangeFeedCheckpoint:
-		if !t.Span.EqualValue(br.span) {
-			// Checkpoint events are always created spanning the entire Range.
-			// However, a registration might not be listening on updates over
-			// the entire Range. If this is the case then we need to constrain
-			// the checkpoint events published to that registration to just the
-			// span that it's listening on. This is more than just a convenience
-			// to consumers - it would be incorrect to say that a rangefeed has
-			// observed all values up to the checkpoint timestamp over a given
-			// key span if any updates to that span have been filtered out.
-			if !t.Span.Contains(br.span) {
-				log.Fatalf(ctx, "registration span %v larger than checkpoint span %v", br.span, t.Span)
-			}
-			t = copyOnWrite().(*kvpb.RangeFeedCheckpoint)
-			t.Span = br.span
-		}
-	case *kvpb.RangeFeedDeleteRange:
-		// Truncate the range tombstone to the registration bounds.
-		if i := t.Span.Intersect(br.span); !i.Equal(t.Span) {
-			t = copyOnWrite().(*kvpb.RangeFeedDeleteRange)
-			t.Span = i.Clone()
-		}
-	case *kvpb.RangeFeedSSTable:
-		// SSTs are always sent in their entirety, it is up to the caller to
-		// filter out irrelevant entries.
-	default:
-		log.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
-	}
-	return ret
 }
 
 // disconnect cancels the output loop context for the registration and passes an
@@ -374,20 +272,6 @@ func (br *bufferedRegistration) maybeRunCatchUpScan(ctx context.Context) error {
 	}()
 
 	return catchUpIter.CatchUpScan(ctx, br.stream.Send, br.withDiff, br.withFiltering, br.withOmitRemote)
-}
-
-// ID implements interval.Interface.
-func (br *bufferedRegistration) ID() uintptr {
-	return uintptr(br.id)
-}
-
-// Range implements interval.Interface.
-func (br *bufferedRegistration) Range() interval.Range {
-	return br.keys
-}
-
-func (br *bufferedRegistration) String() string {
-	return fmt.Sprintf("[%s @ %s+]", br.span, br.catchUpTimestamp)
 }
 
 // Wait for this registration to completely process its internal buffer.

@@ -369,7 +369,7 @@ func (p *ScheduledProcessor) Register(
 	return false, nil
 }
 
-func (p *ScheduledProcessor) unregisterClient(r *bufferedRegistration) bool {
+func (p *ScheduledProcessor) unregisterClient(r registration) bool {
 	return runRequest(p, func(ctx context.Context, p *ScheduledProcessor) bool {
 		p.reg.Unregister(ctx, r)
 		return true
