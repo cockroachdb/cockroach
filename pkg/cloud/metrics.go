@@ -13,9 +13,15 @@ package cloud
 import (
 	"context"
 	"io"
+	"net"
+	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
@@ -30,14 +36,14 @@ type Metrics struct {
 	// OpenReaders is the number of currently open cloud readers.
 	OpenReaders *metric.Gauge
 	// ReadBytes counts the bytes read from cloud storage.
-	ReadBytes *metric.Counter
+	ReadBytes *aggmetric.AggCounter
 
 	// Writers counts the cloud storage writers opened.
 	CreatedWriters *metric.Counter
 	// OpenReaders is the number of currently open cloud writers.
 	OpenWriters *metric.Gauge
 	// WriteBytes counts the bytes written to cloud storage.
-	WriteBytes *metric.Counter
+	WriteBytes *aggmetric.AggCounter
 
 	// Listings counts the listing calls made to cloud storage.
 	Listings *metric.Counter
@@ -47,10 +53,22 @@ type Metrics struct {
 	// ConnsOpened, ConnsReused and TLSHandhakes track connection http info for cloud
 	// storage when collecting this info is enabled.
 	ConnsOpened, ConnsReused, TLSHandhakes *metric.Counter
+
+	cidrLookup *cidr.Lookup
+
+	mu struct {
+		syncutil.Mutex
+		buckets map[string]*bucketMetrics
+	}
+}
+
+type bucketMetrics struct {
+	WriteBytes *aggmetric.Counter
+	ReadBytes  *aggmetric.Counter
 }
 
 // MakeMetrics returns a new instance of Metrics.
-func MakeMetrics() metric.Struct {
+func MakeMetrics(cidrLookup *cidr.Lookup) metric.Struct {
 	cloudReaders := metric.Metadata{
 		Name:        "cloud.readers_opened",
 		Help:        "Readers opened by all cloud operations",
@@ -128,19 +146,23 @@ func MakeMetrics() metric.Struct {
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
 	}
-	return &Metrics{
+	m := Metrics{
 		CreatedReaders: metric.NewCounter(cloudReaders),
 		OpenReaders:    metric.NewGauge(cloudOpenReaders),
-		ReadBytes:      metric.NewCounter(cloudReadBytes),
+		ReadBytes:      aggmetric.NewCounter(cloudReadBytes, "cloud", "bucket", "remote"),
 		CreatedWriters: metric.NewCounter(cloudWriters),
 		OpenWriters:    metric.NewGauge(cloudOpenWriters),
-		WriteBytes:     metric.NewCounter(cloudWriteBytes),
+		WriteBytes:     aggmetric.NewCounter(cloudWriteBytes, "cloud", "bucket", "remote"),
 		Listings:       metric.NewCounter(listings),
 		ListingResults: metric.NewCounter(listingResults),
 		ConnsOpened:    metric.NewCounter(connsOpened),
 		ConnsReused:    metric.NewCounter(connsReused),
 		TLSHandhakes:   metric.NewCounter(tlsHandhakes),
+		cidrLookup:     cidrLookup,
 	}
+	m.mu.buckets = make(map[string]*bucketMetrics)
+
+	return &m
 }
 
 var _ metric.Struct = (*Metrics)(nil)
@@ -150,42 +172,87 @@ func (m *Metrics) MetricStruct() {}
 
 // Reader implements the ReadWriterInterceptor interface.
 func (m *Metrics) Reader(
-	_ context.Context, _ ExternalStorage, r ioctx.ReadCloserCtx,
+	_ context.Context, es ExternalStorage, r ioctx.ReadCloserCtx, bm *atomic.Pointer[bucketMetrics],
 ) ioctx.ReadCloserCtx {
 	if m == nil {
 		return r
 	}
 	m.CreatedReaders.Inc(1)
 	m.OpenReaders.Inc(1)
+
+	// TODO: Is this called before or after the connection is open?
 	return &metricsReader{
 		inner: r,
 		m:     m,
+		bm:    bm,
 	}
 }
 
 // Writer implements the ReadWriterInterceptor interface.
-func (m *Metrics) Writer(_ context.Context, _ ExternalStorage, w io.WriteCloser) io.WriteCloser {
+func (m *Metrics) Writer(
+	_ context.Context, es ExternalStorage, w io.WriteCloser, bm *atomic.Pointer[bucketMetrics],
+) io.WriteCloser {
 	if m == nil {
 		return w
 	}
 	m.CreatedWriters.Inc(1)
 	m.OpenWriters.Inc(1)
 	return &metricsWriter{
-		w: w,
-		m: m,
+		w:  w,
+		m:  m,
+		bm: bm,
 	}
+}
+
+// getEndpointAndBucket returns the endpoint and bucket for a provider. This is
+// used for tracking how many reads and writes go to it.
+func getEndpointAndBucket(m cloudpb.ExternalStorage) (string, string) {
+	switch m.Provider {
+	case cloudpb.ExternalStorageProvider_s3:
+		return "s3", m.S3Config.Bucket
+	case cloudpb.ExternalStorageProvider_gs:
+		return "gcs", m.GoogleCloudConfig.Bucket
+	case cloudpb.ExternalStorageProvider_azure:
+		return "azure", m.AzureConfig.Container
+	}
+	return "other", ""
+}
+
+// makeBucketMetrics returns the bucketMetrics for a given external storage and
+// address. It caches the bucketMetrics for the given key.
+func (m *Metrics) makeBucketMetrics(es cloudpb.ExternalStorage, addr net.Addr) *bucketMetrics {
+	var remote string
+	ip, ok := addr.(*net.TCPAddr)
+	if ok {
+		remote = m.cidrLookup.LookupIP(ip.IP)
+	}
+	endpoint, bucket := getEndpointAndBucket(es)
+	key := endpoint + "/" + bucket + "/" + remote
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if ret, ok := m.mu.buckets[key]; ok {
+		return ret
+	}
+
+	bm := &bucketMetrics{
+		WriteBytes: m.WriteBytes.AddChild(endpoint, bucket, remote),
+		ReadBytes:  m.ReadBytes.AddChild(endpoint, bucket, remote),
+	}
+	m.mu.buckets[key] = bm
+	return bm
 }
 
 type metricsReader struct {
 	inner  ioctx.ReadCloserCtx
 	m      *Metrics
+	bm     *atomic.Pointer[bucketMetrics]
 	closed bool
 }
 
 // Read implements the ioctx.ReadCloserCtx interface.
 func (mr *metricsReader) Read(ctx context.Context, p []byte) (int, error) {
 	n, err := mr.inner.Read(ctx, p)
-	mr.m.ReadBytes.Inc(int64(n))
+	mr.bm.Load().ReadBytes.Inc(int64(n))
 	return n, err
 }
 
@@ -202,13 +269,14 @@ func (mr *metricsReader) Close(ctx context.Context) error {
 type metricsWriter struct {
 	w      io.WriteCloser
 	m      *Metrics
+	bm     *atomic.Pointer[bucketMetrics]
 	closed bool
 }
 
 // Write implements the WriteCloser interface.
 func (mw *metricsWriter) Write(p []byte) (int, error) {
 	n, err := mw.w.Write(p)
-	mw.m.WriteBytes.Inc(int64(n))
+	mw.bm.Load().WriteBytes.Inc(int64(n))
 	return n, err
 }
 
