@@ -131,7 +131,7 @@ func (s *testStream) WaitForError(t *testing.T) error {
 }
 
 type testRegistration struct {
-	registration
+	*bufferedRegistration
 	*testStream
 }
 
@@ -157,7 +157,7 @@ func newTestRegistration(
 	withOmitRemote bool,
 ) *testRegistration {
 	s := newTestStream()
-	r := newRegistration(
+	r := newBufferedRegistration(
 		span,
 		ts,
 		makeCatchUpIterator(catchup, span, ts),
@@ -171,8 +171,8 @@ func newTestRegistration(
 		func() {},
 	)
 	return &testRegistration{
-		registration: r,
-		testStream:   s,
+		bufferedRegistration: r,
+		testStream:           s,
 	}
 }
 
@@ -415,8 +415,8 @@ func TestRegistryWithOmitOrigin(t *testing.T) {
 	defer rAC.disconnect(nil)
 	defer originFiltering.disconnect(nil)
 
-	reg.Register(ctx, &rAC.registration)
-	reg.Register(ctx, &originFiltering.registration)
+	reg.Register(ctx, rAC.bufferedRegistration)
+	reg.Register(ctx, originFiltering.bufferedRegistration)
 
 	reg.PublishToOverlapping(ctx, spAC, ev1, logicalOpMetadata{}, nil /* alloc */)
 	reg.PublishToOverlapping(ctx, spAC, ev2, logicalOpMetadata{originID: 1}, nil /* alloc */)
@@ -471,15 +471,15 @@ func TestRegistryBasic(t *testing.T) {
 	defer rACFiltering.disconnect(nil)
 
 	// Register 6 registrations.
-	reg.Register(ctx, &rAB.registration)
+	reg.Register(ctx, rAB.bufferedRegistration)
 	require.Equal(t, 1, reg.Len())
-	reg.Register(ctx, &rBC.registration)
+	reg.Register(ctx, rBC.bufferedRegistration)
 	require.Equal(t, 2, reg.Len())
-	reg.Register(ctx, &rCD.registration)
+	reg.Register(ctx, rCD.bufferedRegistration)
 	require.Equal(t, 3, reg.Len())
-	reg.Register(ctx, &rAC.registration)
+	reg.Register(ctx, rAC.bufferedRegistration)
 	require.Equal(t, 4, reg.Len())
-	reg.Register(ctx, &rACFiltering.registration)
+	reg.Register(ctx, rACFiltering.bufferedRegistration)
 	require.Equal(t, 5, reg.Len())
 
 	// Publish to different spans.
@@ -569,7 +569,7 @@ func TestRegistryBasic(t *testing.T) {
 	require.False(t, f.NeedPrevVal(roachpb.Span{Key: keyX}))
 
 	// Unregister the rBC registration.
-	reg.Unregister(ctx, &rBC.registration)
+	reg.Unregister(ctx, rBC.bufferedRegistration)
 	require.Equal(t, 0, reg.Len())
 }
 
@@ -581,7 +581,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	r := newTestRegistration(spAB, hlc.Timestamp{WallTime: 10}, nil, /* catchup */
 		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
 	go r.runOutputLoop(ctx, 0)
-	reg.Register(ctx, &r.registration)
+	reg.Register(ctx, r.bufferedRegistration)
 
 	// Publish a value with a timestamp beneath the registration's start
 	// timestamp. Should be ignored.
@@ -616,30 +616,30 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 
 func TestRegistrationString(t *testing.T) {
 	testCases := []struct {
-		r   registration
+		r   baseRegistration
 		exp string
 	}{
 		{
-			r: registration{
+			r: baseRegistration{
 				span: roachpb.Span{Key: roachpb.Key("a")},
 			},
 			exp: `[a @ 0,0+]`,
 		},
 		{
-			r: registration{span: roachpb.Span{
+			r: baseRegistration{span: roachpb.Span{
 				Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 			},
 			exp: `[{a-c} @ 0,0+]`,
 		},
 		{
-			r: registration{
+			r: baseRegistration{
 				span:             roachpb.Span{Key: roachpb.Key("d")},
 				catchUpTimestamp: hlc.Timestamp{WallTime: 10, Logical: 1},
 			},
 			exp: `[d @ 0.000000010,1+]`,
 		},
 		{
-			r: registration{span: roachpb.Span{
+			r: baseRegistration{span: roachpb.Span{
 				Key: roachpb.Key("d"), EndKey: roachpb.Key("z")},
 				catchUpTimestamp: hlc.Timestamp{WallTime: 40, Logical: 9},
 			},
@@ -666,9 +666,26 @@ func TestRegistryShutdownMetrics(t *testing.T) {
 		r.runOutputLoop(ctx, 0)
 		close(regDoneC)
 	}()
-	reg.Register(ctx, &r.registration)
+	reg.Register(ctx, r.bufferedRegistration)
 
 	reg.DisconnectAllOnShutdown(ctx, nil)
 	<-regDoneC
 	require.Zero(t, reg.metrics.RangeFeedRegistrations.Value(), "metric is not zero on stop")
+}
+
+// TestBaseRegistration tests base registration implementation methods.
+func TestBaseRegistration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	r := newTestRegistration(spAB, hlc.Timestamp{WallTime: 10}, nil, /*catchup */
+		true /* withDiff */, true /* withFiltering */, false /* withOmitRemote */)
+	require.Equal(t, spAB, r.getSpan())
+	require.Equal(t, hlc.Timestamp{WallTime: 10}, r.getCatchUpTimestamp())
+	r.setSpanAsKeys()
+	require.Equal(t, r.keys, spAB.AsRange())
+	require.Equal(t, r.keys, r.Range())
+	r.setID(10)
+	require.Equal(t, uintptr(10), r.ID())
+	require.True(t, r.getWithDiff())
+	require.True(t, r.getWithFiltering())
+	require.False(t, r.getWithOmitRemote())
 }
