@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -77,7 +78,7 @@ type batchingSink struct {
 	ts       timeutil.TimeSource
 	metrics  metricsRecorder
 	settings *cluster.Settings
-	knobs    batchingSinkKnobs
+	knobs    *TestingKnobs
 
 	// eventCh is the channel used to send requests from the Sink caller routines
 	// to the batching routine.  Messages can either be a flushReq or a rowEvent.
@@ -90,10 +91,6 @@ type batchingSink struct {
 	wg      ctxgroup.Group
 	hasher  hash.Hash32
 	doneCh  chan struct{}
-}
-
-type batchingSinkKnobs struct {
-	OnAppend func(*rowEvent)
 }
 
 type flushReq struct {
@@ -299,6 +296,7 @@ func (sb *sinkBatch) Append(e *rowEvent) {
 		tableName: e.topicDescriptor.GetTableName(),
 	})
 
+	// log.Infof(context.Background(), "Appending key: %s, hashed to: %d", e.key, hashToInt(sb.hasher, e.key))
 	sb.keys.Add(hashToInt(sb.hasher, e.key))
 	sb.numMessages += 1
 	sb.numKVBytes += len(e.key) + len(e.val)
@@ -341,7 +339,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		s.metrics.recordSinkIOInflightChange(int64(batch.numMessages))
 		return s.client.Flush(ctx, batch.payload)
 	}
-	ioEmitter := NewParallelIO(ctx, s.retryOpts, s.ioWorkers, ioHandler, s.metrics, s.settings)
+	ioEmitter := NewParallelIO(ctx, s.retryOpts, s.ioWorkers, ioHandler, s.metrics, s.settings, s.knobs)
 	defer ioEmitter.Close()
 
 	// Flushing requires tracking the number of inflight messages and confirming
@@ -481,8 +479,8 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 				}
 
 				batchBuffer.Append(r)
-				if s.knobs.OnAppend != nil {
-					s.knobs.OnAppend(r)
+				if s.knobs.BatchingSinkOnAppend != nil {
+					s.knobs.BatchingSinkOnAppend(r)
 				}
 
 				// The event struct can be freed as the contents are expected to be
@@ -490,6 +488,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 				freeRowEvent(r)
 
 				if batchBuffer.buffer.ShouldFlush() {
+					log.Infof(ctx, "Flushing batch because we should: %+v", batchBuffer.buffer)
 					s.metrics.recordSizeBasedFlush()
 					if err := tryFlushBatch(topic); err != nil {
 						s.handleError(err)
@@ -512,6 +511,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		case <-flushTimer.Ch():
 			flushTimer.MarkRead()
 			isTimerPending = false
+			log.Infof(ctx, "flushing due to timer")
 			if err := flushAll(); err != nil {
 				s.handleError(err)
 			}
@@ -535,6 +535,7 @@ func makeBatchingSink(
 	timeSource timeutil.TimeSource,
 	metrics metricsRecorder,
 	settings *cluster.Settings,
+	knobs *TestingKnobs,
 ) Sink {
 	sink := &batchingSink{
 		client:            client,
@@ -552,6 +553,7 @@ func makeBatchingSink(
 		pacerFactory:      pacerFactory,
 		pacer:             pacerFactory(),
 		doneCh:            make(chan struct{}),
+		knobs:             knobs,
 	}
 
 	sink.wg.GoCtx(func(ctx context.Context) error {

@@ -360,6 +360,7 @@ func makeWebhookSink(
 	source timeutil.TimeSource,
 	mb metricsRecorderBuilder,
 	settings *cluster.Settings,
+	knobs *TestingKnobs,
 ) (Sink, error) {
 	batchCfg, retryOpts, err := getSinkConfigFromJson(opts.JSONConfig, sinkJSONConfig{})
 	if err != nil {
@@ -383,5 +384,6 @@ func makeWebhookSink(
 		source,
 		mb(requiresResourceAccounting),
 		settings,
+		knobs,
 	), nil
 }

@@ -470,5 +470,6 @@ func makePubsubSink(
 		source,
 		mb(requiresResourceAccounting),
 		settings,
+		knobs,
 	), nil
 }
