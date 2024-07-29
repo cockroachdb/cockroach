@@ -2845,7 +2845,7 @@ disallow_full_table_scans                                  off                 N
 distsql                                                    off                 NULL      NULL        NULL        string
 distsql_plan_gateway_bias                                  2                   NULL      NULL        NULL        string
 enable_auto_rehoming                                       off                 NULL      NULL        NULL        string
-enable_create_stats_using_extremes                         off                 NULL      NULL        NULL        string
+enable_create_stats_using_extremes                         on                  NULL      NULL        NULL        string
 enable_create_stats_using_extremes_bool_enum               off                 NULL      NULL        NULL        string
 enable_durable_locking_for_serializable                    off                 NULL      NULL        NULL        string
 enable_experimental_alter_column_type_general              off                 NULL      NULL        NULL        string
@@ -3034,7 +3034,7 @@ disallow_full_table_scans                                  off                 N
 distsql                                                    off                 NULL  user     NULL      off                 off
 distsql_plan_gateway_bias                                  2                   NULL  user     NULL      2                   2
 enable_auto_rehoming                                       off                 NULL  user     NULL      off                 off
-enable_create_stats_using_extremes                         off                 NULL  user     NULL      off                 off
+enable_create_stats_using_extremes                         on                  NULL  user     NULL      on                  on
 enable_create_stats_using_extremes_bool_enum               off                 NULL  user     NULL      off                 off
 enable_durable_locking_for_serializable                    off                 NULL  user     NULL      off                 off
 enable_experimental_alter_column_type_general              off                 NULL  user     NULL      off                 off
