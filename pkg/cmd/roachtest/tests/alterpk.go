@@ -55,6 +55,10 @@ func registerAlterPK(r registry.Registry) {
 			initDone <- struct{}{}
 
 			// Run the workload while the primary key change is happening.
+			cmd = fmt.Sprintf("./cockroach workload run bank --duration=%s {pgurl%s}", duration, c.CRDBNodes())
+			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
+			// Wait for the primary key change to finish.
+			<-pkChangeDone
 			t.Status("starting second run of the workload after primary key change")
 			// Run the workload after the primary key change occurs.
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
@@ -68,7 +72,7 @@ func registerAlterPK(r registry.Registry) {
 
 			t.Status("beginning primary key change")
 			defer func() { pkChangeDone <- struct{}{} }()
-			db := c.Conn(ctx, t.L(), c.WorkloadNode()[0])
+			db := c.Conn(ctx, t.L(), c.CRDBNodes()[0])
 			defer db.Close()
 			cmds := []string{
 				`SET CLUSTER SETTING kv.transaction.internal.max_auto_retries = 10000`,
