@@ -70,7 +70,7 @@ func newKafkaSinkClientV2(
 	batchCfg sinkBatchConfig,
 	bootstrapAddrs string,
 	settings *cluster.Settings,
-	knobs kafkaSinkV2Knobs,
+	testingKnobs *TestingKnobs,
 	mb metricsRecorderBuilder,
 	topicsForConnectionCheck []string,
 ) (*kafkaSinkClientV2, error) {
@@ -108,6 +108,11 @@ func newKafkaSinkClientV2(
 	}
 
 	clientOpts = append(baseOpts, clientOpts...)
+
+	var knobs kafkaSinkV2Knobs
+	if testingKnobs != nil {
+		knobs = testingKnobs.KafkaSinkClientV2Knobs
+	}
 
 	var client KafkaClientV2
 	var adminClient KafkaAdminClientV2
@@ -338,7 +343,7 @@ func makeKafkaSinkV2(
 	timeSource timeutil.TimeSource,
 	settings *cluster.Settings,
 	mb metricsRecorderBuilder,
-	knobs kafkaSinkV2Knobs,
+	knobs *TestingKnobs,
 ) (Sink, error) {
 	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonConfig, sinkJSONConfig{
 		// Defaults from the v1 sink - flush immediately.
@@ -384,7 +389,7 @@ func makeKafkaSinkV2(
 	}
 
 	return makeBatchingSink(ctx, sinkTypeKafka, client, time.Duration(batchCfg.Frequency), retryOpts,
-		parallelism, topicNamer, pacerFactory, timeSource, mb(true), settings), nil
+		parallelism, topicNamer, pacerFactory, timeSource, mb(true), settings, knobs), nil
 }
 
 func buildKgoConfig(

@@ -83,7 +83,7 @@ func setupWebhookSinkWithDetails(
 	if err != nil {
 		return nil, err
 	}
-	sinkSrc, err := makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, sinkOpts, parallelism, nilPacerFactory, source, nilMetricsRecorderBuilder, cluster.MakeClusterSettings())
+	sinkSrc, err := makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, sinkOpts, parallelism, nilPacerFactory, source, nilMetricsRecorderBuilder, cluster.MakeClusterSettings(), &TestingKnobs{})
 	if err != nil {
 		return nil, err
 	}
@@ -603,7 +603,7 @@ func TestWebhookSinkConfig(t *testing.T) {
 		batchingSink, ok := sinkSrc.(*batchingSink)
 		require.True(t, ok)
 		var appendCount int32 = 0
-		batchingSink.knobs.OnAppend = func(event *rowEvent) {
+		batchingSink.knobs.BatchingSinkOnAppend = func(event *rowEvent) {
 			atomic.AddInt32(&appendCount, 1)
 		}
 

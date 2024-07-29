@@ -220,6 +220,7 @@ go_test(
         "fetch_table_bytes_test.go",
         "helpers_test.go",
         "main_test.go",
+        "metrics_test.go",
         "name_test.go",
         "nemeses_test.go",
         "parquet_test.go",
