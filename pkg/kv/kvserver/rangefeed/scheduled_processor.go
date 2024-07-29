@@ -330,7 +330,7 @@ func (p *ScheduledProcessor) Register(
 		}
 
 		// Add the new registration to the registry.
-		p.reg.Register(ctx, &r)
+		p.reg.Register(ctx, r)
 
 		// Prep response with filter that includes the new registration.
 		f := p.reg.NewFilter()
@@ -345,7 +345,7 @@ func (p *ScheduledProcessor) Register(
 		// Run an output loop for the registry.
 		runOutputLoop := func(ctx context.Context) {
 			r.runOutputLoop(ctx, p.RangeID)
-			if p.unregisterClient(&r) {
+			if p.unregisterClient(r) {
 				// unreg callback is set by replica to tear down processors that have
 				// zero registrations left and to update event filters.
 				if r.unreg != nil {
@@ -359,7 +359,7 @@ func (p *ScheduledProcessor) Register(
 			// could only happen on shutdown. Disconnect stream and just remove
 			// registration.
 			r.disconnect(kvpb.NewError(err))
-			p.reg.Unregister(ctx, &r)
+			p.reg.Unregister(ctx, r)
 		}
 		return f
 	})

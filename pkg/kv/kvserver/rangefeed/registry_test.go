@@ -131,7 +131,7 @@ func (s *testStream) WaitForError(t *testing.T) error {
 }
 
 type testRegistration struct {
-	registration
+	*registration
 	*testStream
 }
 
@@ -415,8 +415,8 @@ func TestRegistryWithOmitOrigin(t *testing.T) {
 	defer rAC.disconnect(nil)
 	defer originFiltering.disconnect(nil)
 
-	reg.Register(ctx, &rAC.registration)
-	reg.Register(ctx, &originFiltering.registration)
+	reg.Register(ctx, rAC.registration)
+	reg.Register(ctx, originFiltering.registration)
 
 	reg.PublishToOverlapping(ctx, spAC, ev1, logicalOpMetadata{}, nil /* alloc */)
 	reg.PublishToOverlapping(ctx, spAC, ev2, logicalOpMetadata{originID: 1}, nil /* alloc */)
@@ -471,15 +471,15 @@ func TestRegistryBasic(t *testing.T) {
 	defer rACFiltering.disconnect(nil)
 
 	// Register 6 registrations.
-	reg.Register(ctx, &rAB.registration)
+	reg.Register(ctx, rAB.registration)
 	require.Equal(t, 1, reg.Len())
-	reg.Register(ctx, &rBC.registration)
+	reg.Register(ctx, rBC.registration)
 	require.Equal(t, 2, reg.Len())
-	reg.Register(ctx, &rCD.registration)
+	reg.Register(ctx, rCD.registration)
 	require.Equal(t, 3, reg.Len())
-	reg.Register(ctx, &rAC.registration)
+	reg.Register(ctx, rAC.registration)
 	require.Equal(t, 4, reg.Len())
-	reg.Register(ctx, &rACFiltering.registration)
+	reg.Register(ctx, rACFiltering.registration)
 	require.Equal(t, 5, reg.Len())
 
 	// Publish to different spans.
@@ -569,7 +569,7 @@ func TestRegistryBasic(t *testing.T) {
 	require.False(t, f.NeedPrevVal(roachpb.Span{Key: keyX}))
 
 	// Unregister the rBC registration.
-	reg.Unregister(ctx, &rBC.registration)
+	reg.Unregister(ctx, rBC.registration)
 	require.Equal(t, 0, reg.Len())
 }
 
@@ -581,7 +581,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	r := newTestRegistration(spAB, hlc.Timestamp{WallTime: 10}, nil, /* catchup */
 		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
 	go r.runOutputLoop(ctx, 0)
-	reg.Register(ctx, &r.registration)
+	reg.Register(ctx, r.registration)
 
 	// Publish a value with a timestamp beneath the registration's start
 	// timestamp. Should be ignored.
@@ -666,7 +666,7 @@ func TestRegistryShutdownMetrics(t *testing.T) {
 		r.runOutputLoop(ctx, 0)
 		close(regDoneC)
 	}()
-	reg.Register(ctx, &r.registration)
+	reg.Register(ctx, r.registration)
 
 	reg.DisconnectAllOnShutdown(ctx, nil)
 	<-regDoneC

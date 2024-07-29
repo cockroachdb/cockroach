@@ -125,8 +125,8 @@ func newRegistration(
 	metrics *Metrics,
 	stream Stream,
 	unregisterFn func(),
-) registration {
-	r := registration{
+) *registration {
+	r := &registration{
 		span:             span,
 		catchUpTimestamp: startTS,
 		withDiff:         withDiff,
@@ -418,7 +418,7 @@ func (r *registration) Range() interval.Range {
 	return r.keys
 }
 
-func (r registration) String() string {
+func (r *registration) String() string {
 	return fmt.Sprintf("[%s @ %s+]", r.span, r.catchUpTimestamp)
 }
 
