@@ -2002,16 +2002,16 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 			panic("hack42: should never happen")
 			// Best guess at the inheritedPri based on the stats. We will correct
 			// this before.
-			inheritedPri = rss.queuePriorityLocked()
+			// inheritedPri = rss.queuePriorityLocked()
 			// It is possible that we have already popped the RegularWorkClass items
 			// from the send-queue in a previous dequeueFromQueueAndSendLocked, and
 			// we had some remaining regular tokens that we are using now. We
 			// lower-bound the inheritedPri to be one corresponding to a regular
 			// work class
-			if inheritedPri < kvflowcontrolpb.RaftLowPri {
-				inheritedPri = kvflowcontrolpb.RaftNormalPri
-			}
-			remainingTokens[admissionpb.RegularWorkClass] = rss.sendQueue.deductedForScheduler.tokens
+			// if inheritedPri < kvflowcontrolpb.RaftLowPri {
+			// 	inheritedPri = kvflowcontrolpb.RaftNormalPri
+			// }
+			// remainingTokens[admissionpb.RegularWorkClass] = rss.sendQueue.deductedForScheduler.tokens
 		} else {
 			remainingTokens[admissionpb.ElasticWorkClass] = rss.sendQueue.deductedForScheduler.tokens
 		}
@@ -2056,9 +2056,9 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 				// hack42
 				panic(errors.AssertionFailedf("inherited priority value %s should not occur", inheritedPri))
 			}
-			remainingTokens[originalEntryWC] -= entryFCState.tokens
-			rss.tracker.Track(
-				ctx, entryFCState.index, entryFCState.originalPri, entryFCState.originalPri, entryFCState.tokens)
+			// remainingTokens[originalEntryWC] -= entryFCState.tokens
+			// rss.tracker.Track(
+			// 	ctx, entryFCState.index, entryFCState.originalPri, entryFCState.originalPri, entryFCState.tokens)
 		case kvflowcontrolpb.RaftLowPri:
 			// TODO: hack42. Remove case entirely to undo. This fcStates buffering
 			// is also unnecessary if we do this.
@@ -2069,13 +2069,13 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 				// hack42
 				panic(errors.AssertionFailedf("inherited priority value %s should not occur", inheritedPri))
 			}
-			if entryFCState.originalPri > inheritedPri {
-				// This can happen since the priorityCounts are not complete.
-				// They only track >= nextRaftIndexInitial.
-				inheritedPri = entryFCState.originalPri
-			}
-			fcStates = append(fcStates, entryFCState)
-			remainingTokens[admissionpb.RegularWorkClass] -= entryFCState.tokens
+			// if entryFCState.originalPri > inheritedPri {
+			// 	// This can happen since the priorityCounts are not complete.
+			// 	// They only track >= nextRaftIndexInitial.
+			// 	inheritedPri = entryFCState.originalPri
+			// }
+			// fcStates = append(fcStates, entryFCState)
+			// remainingTokens[admissionpb.RegularWorkClass] -= entryFCState.tokens
 		}
 	}
 	for _, e := range fcStates {
@@ -2160,10 +2160,10 @@ func (rss *replicaSendStream) notifyLocked(ctx context.Context) {
 		return
 	}
 
-	pri := rss.queuePriorityLocked()
-	wc := kvflowcontrolpb.WorkClassFromRaftPriority(pri)
 	// TODO(sumeer): hack42.
-	wc = admissionpb.ElasticWorkClass
+	// pri := rss.queuePriorityLocked()
+	// wc := kvflowcontrolpb.WorkClassFromRaftPriority(pri)
+	wc := admissionpb.ElasticWorkClass
 	queueSize := rss.queueSizeLocked()
 	// hack42. Deduct a bit more so we can also dequeue things that get enqueued
 	// afterwards, and transition to an empty send-queue. This is a hacky
