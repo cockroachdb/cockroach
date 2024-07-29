@@ -13,6 +13,8 @@ package cloudpb
 import (
 	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 )
 
 const (
@@ -62,6 +64,29 @@ func (m *ExternalStorage) AccessIsWithExplicitAuth() bool {
 	default:
 		return false
 	}
+}
+
+type MetricKey struct {
+	Endpoint  string
+	Container string
+	Cidr      string
+}
+
+// GetMetricKey returns the key for this storage endpoint. This is used for
+// tracking how many reads and writes go to it.
+func (m ExternalStorage) GetMetricKey(l *cidr.Lookup) MetricKey {
+	// TODO(baptist) m.URI is not populated in all cases, look at ways to get
+	// this correctly in all cases.
+	cidr := l.LookupURI(m.URI)
+	switch m.Provider {
+	case ExternalStorageProvider_s3:
+		return MetricKey{"s3", m.S3Config.Bucket, cidr}
+	case ExternalStorageProvider_gs:
+		return MetricKey{"gcs", m.GoogleCloudConfig.Bucket, cidr}
+	case ExternalStorageProvider_azure:
+		return MetricKey{"azure", m.AzureConfig.Container, cidr}
+	}
+	return MetricKey{}
 }
 
 const assumeRoleProviderExternalIDParam = "external_id"
