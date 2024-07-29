@@ -29,7 +29,8 @@ work-Fuzz*
 /.vendor.tmp.*
 # The Observability Service binary.
 /obsservice
-
+# The Workload Binary
+/workload
 # Instrumentation artifacts.
 /instrument*
 .instrumentor_exclusions.tmp

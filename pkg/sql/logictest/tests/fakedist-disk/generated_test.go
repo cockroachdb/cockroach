@@ -288,13 +288,6 @@ func TestLogic_bit(
 	runLogicTest(t, "bit")
 }
 
-func TestLogic_blathers_test_delete_me(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "blathers_test_delete_me")
-}
-
 func TestLogic_builtin_function(
 	t *testing.T,
 ) {
