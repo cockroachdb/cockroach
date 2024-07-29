@@ -82,6 +82,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -636,7 +637,7 @@ func (t *Test) Workload(
 func (t *Test) Run() {
 	plan, err := t.plan()
 	if err != nil {
-		t.rt.Fatal(fmt.Errorf("error creating test plan: %w", err))
+		t.rt.Fatal(err)
 	}
 
 	t.logger.Printf("mixed-version test:\n%s", plan.PrettyPrint())
@@ -652,7 +653,18 @@ func (t *Test) run(plan *TestPlan) error {
 	).run()
 }
 
-func (t *Test) plan() (*TestPlan, error) {
+func (t *Test) plan() (plan *TestPlan, retErr error) {
+	defer func() {
+		if retErr != nil {
+			// Planning failures are always internal framework errors, so
+			// they should be sent to TestEng.
+			retErr = registry.ErrorWithOwner(
+				registry.OwnerTestEng,
+				fmt.Errorf("error creating test plan: %w", retErr),
+			)
+		}
+	}()
+
 	previousReleases, err := t.choosePreviousReleases()
 	if err != nil {
 		return nil, err
