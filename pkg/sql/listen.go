@@ -13,17 +13,14 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 func (p *planner) Listen(ctx context.Context, n *tree.Listen) (planNode, error) {
-	p.BufferClientNotice(ctx,
-		pgerror.WithSeverity(
-			unimplemented.NewWithIssuef(41522, "CRDB does not support LISTEN"),
-			"ERROR",
-		),
-	)
-	return newZeroNode(nil /* columns */), nil
+	// TODO: run an EXPERIMENTAL CREATE CHANGEFEED plan/stmt basically with a different sort of sink that hooks up to this guy
+
+	// Dummy implementation.
+	dummyNotificationListens[n.ChannelName.String()] = struct{}{}
+
+	return newZeroNode(nil), nil
 }

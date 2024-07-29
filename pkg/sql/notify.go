@@ -12,18 +12,24 @@ package sql
 
 import (
 	"context"
+	"os"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotification"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
+var dummyNotificationListens = make(map[string]struct{})
+
 func (p *planner) Notify(ctx context.Context, n *tree.Notify) (planNode, error) {
-	p.BufferClientNotice(ctx,
-		pgerror.WithSeverity(
-			unimplemented.NewWithIssuef(41522, "CRDB does not support LISTEN"),
-			"ERROR",
-		),
-	)
-	return newZeroNode(nil /* columns */), nil
+	// This is a dummy implementation.
+	if _, ok := dummyNotificationListens[n.ChannelName.String()]; !ok {
+		return newZeroNode(nil), nil
+	}
+	p.BufferClientNotification(ctx, pgnotification.Notification{
+		Channel: n.ChannelName.String(),
+		Payload: n.Payload.String(),
+		PID:     int32(os.Getpid()),
+	})
+
+	return newZeroNode(nil), nil
 }
