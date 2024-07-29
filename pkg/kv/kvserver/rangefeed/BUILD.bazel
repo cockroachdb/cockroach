@@ -9,7 +9,6 @@ go_library(
         "event_size.go",
         "filter.go",
         "metrics.go",
-        "nonbuffered_registration.go",
         "processor.go",
         "registration.go",
         "registry.go",
