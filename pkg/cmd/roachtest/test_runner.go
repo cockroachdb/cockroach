@@ -343,7 +343,7 @@ func (r *testRunner) Run(
 			}
 			//  TODO(bhaskar): remove this once we have more usage details
 			//  and more convinced about using spot VMs for all the runs.
-			if roachtestflags.Cloud == spec.GCE &&
+			if (roachtestflags.Cloud == spec.GCE || roachtestflags.Cloud == spec.AWS) &&
 				tests[i].Benchmark &&
 				!tests[i].Suites.Contains(registry.Weekly) &&
 				!tests[i].IsLastFailurePreempt() &&
