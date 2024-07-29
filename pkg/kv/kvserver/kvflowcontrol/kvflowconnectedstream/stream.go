@@ -1683,6 +1683,19 @@ type replicaSendStream struct {
 		// not sacrificing quorum on the range, or preventing new regular work
 		// from evaluating).
 		//
+		// The above statement "not sacrificing quorum on the range" needs some
+		// qualification. It is possible that quorum has not been achieved for
+		// some indices < nextRaftIndexInitial, because some store is misbehaving.
+		// What we are concerned with here is the lack of quorum because we have
+		// explicitly build up some send-queues for replicas that are needed to
+		// achieve quorum. Our goal is not have a send-queue for a quorum. For
+		// those that have a send-queue we could always chose to drain it at
+		// slightly lower than RaftNormalPri. So for entries sent when there is no
+		// send-queue, we use the entry priority, and for those sent from the
+		// send-queue we use < RaftNormalPri, if they have >= RaftNormalPri. With
+		// this simplification, we could possibly eliminate priorityCount. See
+		// hack42 for the above related changes.
+		//
 		// approxMeanSizeBytes is useful since it guides how many bytes to
 		// grab in deductedForScheduler.tokens.
 		approxMeanSizeBytes kvflowcontrol.Tokens
@@ -1980,10 +1993,13 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 	if rss.sendQueue.forceFlushScheduled {
 		inheritedPri = kvflowcontrolpb.NotSubjectToACForFlowControl
 	} else {
+		// hack42
+		inheritedPri = kvflowcontrolpb.RaftLowPri
 		// Only inherit the priority if have regular tokens. If have elastic
 		// tokens, will not inherit.
 		if rss.sendQueue.deductedForScheduler.tokens > 0 &&
 			rss.sendQueue.deductedForScheduler.wc == admissionpb.RegularWorkClass {
+			panic("hack42: should never happen")
 			// Best guess at the inheritedPri based on the stats. We will correct
 			// this before.
 			inheritedPri = rss.queuePriorityLocked()
@@ -2036,10 +2052,23 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 					ctx, originalEntryWC, entryFCState.tokens)
 			}
 		case kvflowcontrolpb.PriorityNotInheritedForFlowControl:
+			{
+				// hack42
+				panic(errors.AssertionFailedf("inherited priority value %s should not occur", inheritedPri))
+			}
 			remainingTokens[originalEntryWC] -= entryFCState.tokens
 			rss.tracker.Track(
 				ctx, entryFCState.index, entryFCState.originalPri, entryFCState.originalPri, entryFCState.tokens)
+		case kvflowcontrolpb.RaftLowPri:
+			// TODO: hack42. Remove case entirely to undo. This fcStates buffering
+			// is also unnecessary if we do this.
+			fcStates = append(fcStates, entryFCState)
+			remainingTokens[admissionpb.ElasticWorkClass] -= entryFCState.tokens
 		default:
+			{
+				// hack42
+				panic(errors.AssertionFailedf("inherited priority value %s should not occur", inheritedPri))
+			}
 			if entryFCState.originalPri > inheritedPri {
 				// This can happen since the priorityCounts are not complete.
 				// They only track >= nextRaftIndexInitial.
@@ -2133,7 +2162,18 @@ func (rss *replicaSendStream) notifyLocked(ctx context.Context) {
 
 	pri := rss.queuePriorityLocked()
 	wc := kvflowcontrolpb.WorkClassFromRaftPriority(pri)
+	// TODO(sumeer): hack42.
+	wc = admissionpb.ElasticWorkClass
 	queueSize := rss.queueSizeLocked()
+	// hack42. Deduct a bit more so we can also dequeue things that get enqueued
+	// afterwards, and transition to an empty send-queue. This is a hacky
+	// heuristic.
+	if queueSize > 0 {
+		queueSize = kvflowcontrol.Tokens(float64(queueSize) * 1.1)
+		if queueSize < 1000 {
+			queueSize = 2000
+		}
+	}
 
 	tokens := rss.parent.sendTokenCounter.TryDeduct(ctx, wc, queueSize)
 	if tokens > 0 || queueSize == 0 {
