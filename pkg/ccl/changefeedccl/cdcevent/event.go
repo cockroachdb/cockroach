@@ -488,6 +488,11 @@ func (d *eventDecoder) DecodeKV(
 	if err == nil {
 		return r, nil
 	}
+	// Unwatched family errors aren't terminal so return early and let caller
+	// decide what to do with it.
+	if errors.Is(err, ErrUnwatchedFamily) {
+		return Row{}, err
+	}
 
 	// Failure to decode roachpb.KeyValue we received from rangefeed is pretty bad.
 	// At this point, we only have guesses why this happened (schema change? data corruption?).
