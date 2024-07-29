@@ -168,11 +168,6 @@ func TestSchemaChangeComparator_bit(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/bit"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
-func TestSchemaChangeComparator_blathers_test_delete_me(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/blathers_test_delete_me"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
 func TestSchemaChangeComparator_builtin_function(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/builtin_function"
