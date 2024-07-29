@@ -351,12 +351,12 @@ func newTypeMetrics(
 								regularDelta := regularStats.TokensReturned - regularStats.TokensDeducted
 								elasticDelta := elasticStats.TokensReturned - elasticStats.TokensDeducted
 								fmt.Fprintf(&b, " tokens delta: regular %s (%s - %s) elastic %s (%s - %s)",
-									humanize.IBytes(uint64(regularDelta)),
-									humanize.IBytes(uint64(regularStats.TokensReturned)),
-									humanize.IBytes(uint64(regularStats.TokensDeducted)),
-									humanize.IBytes(uint64(elasticDelta)),
-									humanize.IBytes(uint64(elasticStats.TokensReturned)),
-									humanize.IBytes(uint64(elasticStats.TokensDeducted)))
+									pprintTokens(regularDelta),
+									pprintTokens(regularStats.TokensReturned),
+									pprintTokens(regularStats.TokensDeducted),
+									pprintTokens(elasticDelta),
+									pprintTokens(elasticStats.TokensReturned),
+									pprintTokens(elasticStats.TokensDeducted))
 								log.Infof(context.Background(), "%s", redact.SafeString(b.String()))
 							} else if streamStatsCount == streamStatsCountCap+1 {
 								log.Infof(context.Background(), "skipped logging some streams that were blocked")
@@ -373,6 +373,13 @@ func newTypeMetrics(
 		)
 	}
 	return m
+}
+
+func pprintTokens(t kvflowcontrol.Tokens) string {
+	if t < 0 {
+		return fmt.Sprintf("-%s", humanize.IBytes(uint64(-t)))
+	}
+	return humanize.IBytes(uint64(t))
 }
 
 func (m *flowControlMetrics) onWaiting(class admissionpb.WorkClass) {
