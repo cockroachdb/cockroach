@@ -64,7 +64,7 @@ genrule(
       --zoneinfo=$(location @go_sdk//:lib/time/zoneinfo.zip) \
       --crlfmt=$(location @com_github_cockroachdb_crlfmt//:crlfmt)
        """,
-    exec_tools = [
+    tools = [
         "//pkg/util/timeutil/gen",
         "@com_github_cockroachdb_crlfmt//:crlfmt",
     ],
