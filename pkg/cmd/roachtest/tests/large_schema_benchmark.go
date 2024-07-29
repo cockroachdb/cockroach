@@ -105,6 +105,7 @@ func registerSchemaChangeBenchmarkLargeSchema(r registry.Registry, numTables int
 				}
 				err := c.PutString(ctx, strings.Join(dbList, "\n"), populateFileName, 0755, c.WorkloadNode())
 				require.NoError(t, err)
+				setupTPCC(ctx, t, t.L(), c, options)
 			}
 			// Upload a file containing the ORM queries.
 			require.NoError(t, c.PutString(ctx, LargeSchemaOrmQueries, "ormQueries.sql", 0755, c.WorkloadNode()))
