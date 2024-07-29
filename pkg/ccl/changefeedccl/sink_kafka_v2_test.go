@@ -281,8 +281,9 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 		name       string
 		jsonConfig map[string]any
 		// Both expectedOpts and expectedBatchCfg will be merged with their respective base* before comparison.
-		expectedOpts        map[string]any
-		expectedBatchConfig sinkBatchConfig
+		expectedOpts                map[string]any
+		expectedBatchConfig         sinkBatchConfig
+		expectedBatchingSinkMinFreq time.Duration
 	}{
 		{
 			name: "default",
@@ -337,7 +338,7 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 				"Flush": map[string]any{
 					"Messages":    100,
 					"Bytes":       1000,
-					"Frequency":   "1s",
+					"Frequency":   "2s",
 					"MaxMessages": 2000,
 				},
 			},
@@ -349,10 +350,11 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 				"MaxBufferedRecords":       int64(2000),
 			},
 			expectedBatchConfig: sinkBatchConfig{
-				Frequency: jsonDuration(1 * time.Second),
+				Frequency: jsonDuration(2 * time.Second),
 				Messages:  100,
 				Bytes:     1000,
 			},
+			expectedBatchingSinkMinFreq: 2 * time.Second,
 		},
 	}
 
@@ -374,6 +376,9 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 				assert.Equal(t, v, val, "opt %q has value %+#v, expected %+#v", k, val, v)
 			}
 			assert.Equal(t, expectedBatchCfg, batchCfg)
+			if c.expectedBatchingSinkMinFreq != 0 {
+				assert.Equal(t, c.expectedBatchingSinkMinFreq, fx.bs.minFlushFrequency)
+			}
 		})
 	}
 }
