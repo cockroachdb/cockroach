@@ -154,8 +154,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						settings := install.MakeClusterSettings()
 						startOpts := option.DefaultStartOpts()
 						startOpts.RoachprodOpts.ScheduleBackups = false
-						crdbNodes := c.Range(1, c.Spec().NodeCount-1)
-						c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
+						c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 						conn := c.Conn(ctx, t.L(), 1)
 						defer conn.Close()
 						// Since we will be making a large number of databases / tables
@@ -174,6 +173,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 				}
 				err := c.PutString(ctx, strings.Join(dbList, "\n"), populateFileName, 0755, c.WorkloadNode())
 				require.NoError(t, err)
+				setupTPCC(ctx, t, t.L(), c, options)
 			}
 			// Upload a file containing the ORM queries.
 			require.NoError(t, c.PutString(ctx, LargeSchemaOrmQueries, "ormQueries.sql", 0755, c.WorkloadNode()))
