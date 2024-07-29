@@ -288,25 +288,6 @@ func (p *pebbleIterator) setOptions(
 		}), 0x01 /* Synthetic bit */)
 		p.options.SkipPoint = p.skipPointIfOutsideTimeBounds
 
-		// TODO(erikgrinaker): For compatibility with SSTables written by 21.2 nodes
-		// or earlier, we filter on table properties too. We still wrote these
-		// properties in 22.1, but stop doing so in 22.2. We can remove this
-		// filtering when nodes are guaranteed to no longer have SSTables written by
-		// 21.2 or earlier (which can still happen e.g. when clusters are upgraded
-		// through multiple major versions in rapid succession).
-		encodedMinTS := string(p.minTimestamp)
-		encodedMaxTS := string(p.maxTimestamp)
-		p.options.TableFilter = func(userProps map[string]string) bool {
-			tableMinTS := userProps["crdb.ts.min"]
-			if len(tableMinTS) == 0 {
-				return true
-			}
-			tableMaxTS := userProps["crdb.ts.max"]
-			if len(tableMaxTS) == 0 {
-				return true
-			}
-			return encodedMaxTS >= tableMinTS && encodedMinTS <= tableMaxTS
-		}
 		// We are given an inclusive [MinTimestamp, MaxTimestamp]. The
 		// MVCCWAllTimeIntervalCollector has collected the WallTimes and we need
 		// [min, max), i.e., exclusive on the upper bound.
