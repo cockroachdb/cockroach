@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
@@ -207,13 +208,13 @@ type EarlyBootExternalStorageConstructor func(
 // NewEarlyBootExternalStorageAccessor creates an
 // EarlyBootExternalStorageAccessor
 func NewEarlyBootExternalStorageAccessor(
-	st *cluster.Settings, conf base.ExternalIODirConfig,
+	st *cluster.Settings, conf base.ExternalIODirConfig, lookup *cidr.Lookup,
 ) *EarlyBootExternalStorageAccessor {
 	return &EarlyBootExternalStorageAccessor{
 		conf:     conf,
 		settings: st,
 		limiters: MakeLimiters(&st.SV),
-		metrics:  MakeMetrics(),
+		metrics:  MakeMetrics(lookup),
 	}
 }
 

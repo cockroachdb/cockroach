@@ -19,6 +19,7 @@ import (
 	"net/http/httptrace"
 	"net/url"
 	"strings"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
@@ -369,6 +370,7 @@ type esWrapper struct {
 	ioRecorder ReadWriterInterceptor
 	metrics    *Metrics
 	httpTracer *httptrace.ClientTrace
+	bm         atomic.Pointer[bucketMetrics]
 }
 
 func (e *esWrapper) wrapReader(ctx context.Context, r ioctx.ReadCloserCtx) ioctx.ReadCloserCtx {
@@ -379,7 +381,7 @@ func (e *esWrapper) wrapReader(ctx context.Context, r ioctx.ReadCloserCtx) ioctx
 		r = e.ioRecorder.Reader(ctx, e.ExternalStorage, r)
 	}
 
-	r = e.metrics.Reader(ctx, e.ExternalStorage, r)
+	r = e.metrics.Reader(ctx, e.ExternalStorage, r, &e.bm)
 	return r
 }
 
@@ -391,7 +393,7 @@ func (e *esWrapper) wrapWriter(ctx context.Context, w io.WriteCloser) io.WriteCl
 		w = e.ioRecorder.Writer(ctx, e.ExternalStorage, w)
 	}
 
-	w = e.metrics.Writer(ctx, e.ExternalStorage, w)
+	w = e.metrics.Writer(ctx, e.ExternalStorage, w, &e.bm)
 	return w
 }
 
@@ -545,15 +547,24 @@ func makeExternalStorage[T interface {
 			return e, nil
 		}
 
-		var httpTracer *httptrace.ClientTrace
-		if cloudMetrics != nil && httpMetrics.Get(&settings.SV) {
-			httpTracer = &httptrace.ClientTrace{
+		es := esWrapper{
+			ExternalStorage: e,
+			lim:             limiters[dest.Provider],
+			ioRecorder:      options.ioAccountingInterceptor,
+			metrics:         cloudMetrics,
+		}
+		// Set the bucket metrics up without an address, it is replaced once we establish a connection.
+		es.bm.Store(cloudMetrics.makeBucketMetrics(dest, nil))
+
+		if httpMetrics.Get(&settings.SV) {
+			es.httpTracer = &httptrace.ClientTrace{
 				GotConn: func(info httptrace.GotConnInfo) {
 					if info.Reused {
 						cloudMetrics.ConnsReused.Inc(1)
 					} else {
 						cloudMetrics.ConnsOpened.Inc(1)
 					}
+					es.bm.Store(cloudMetrics.makeBucketMetrics(dest, info.Conn.RemoteAddr()))
 				},
 				TLSHandshakeDone: func(_ tls.ConnectionState, _ error) {
 					cloudMetrics.TLSHandhakes.Inc(1)
@@ -561,13 +572,7 @@ func makeExternalStorage[T interface {
 			}
 		}
 
-		return &esWrapper{
-			ExternalStorage: e,
-			lim:             limiters[dest.Provider],
-			ioRecorder:      options.ioAccountingInterceptor,
-			metrics:         cloudMetrics,
-			httpTracer:      httpTracer,
-		}, nil
+		return &es, nil
 	}
 
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
