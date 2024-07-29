@@ -36,6 +36,7 @@ type Stream interface {
 	// that could lead to deadlocks.
 	Disconnect(err *kvpb.Error)
 	RegisterRangefeedCleanUp(func())
+	ShouldUseBufferedRegistration() bool
 }
 
 // Shared event is an entry stored in registration channel. Each entry is

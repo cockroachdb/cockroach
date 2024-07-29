@@ -1946,6 +1946,10 @@ func (s *perRangeEventSink) Context() context.Context {
 // declares its Send method to be thread-safe.
 func (s *perRangeEventSink) SendIsThreadSafe() {}
 
+func (s *perRangeEventSink) ShouldUseBufferedRegistration() bool {
+	return s.wrapped.ShouldUseBufferedRegistration()
+}
+
 func (s *perRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	response := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
@@ -1975,7 +1979,11 @@ type lockedMuxStream struct {
 	sendMu  syncutil.Mutex
 }
 
+var _ rangefeed.ServerStreamSender = (*lockedMuxStream)(nil)
+
 func (s *lockedMuxStream) SendIsThreadSafe() {}
+
+func (s *lockedMuxStream) SendIsBuffered() bool { return false }
 
 func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	s.sendMu.Lock()

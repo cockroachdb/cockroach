@@ -35,6 +35,7 @@ type ServerStreamSender interface {
 	// SendIsThreadSafe is a no-op declaration method. It is a contract that the
 	// interface has a thread-safe Send method.
 	SendIsThreadSafe()
+	SendIsBuffered() bool
 }
 
 // StreamMuxer is responsible for managing a set of active rangefeed streams and
@@ -153,6 +154,10 @@ func NewStreamMuxer(sender ServerStreamSender, metrics RangefeedMetricsRecorder)
 type streamInfo struct {
 	rangeID roachpb.RangeID
 	cancel  context.CancelFunc
+}
+
+func (sm *StreamMuxer) ShouldUseBufferedRegistration() bool {
+	return !sm.sender.SendIsBuffered()
 }
 
 // AddStream registers a server rangefeed stream with the StreamMuxer. It

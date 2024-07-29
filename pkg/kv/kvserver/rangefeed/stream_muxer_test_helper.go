@@ -53,6 +53,8 @@ type testServerStream struct {
 	streamEvents map[int64][]*kvpb.MuxRangeFeedEvent
 }
 
+var _ ServerStreamSender = (*testServerStream)(nil)
+
 func newTestServerStream() *testServerStream {
 	return &testServerStream{
 		streamEvents: make(map[int64][]*kvpb.MuxRangeFeedEvent),
@@ -91,6 +93,8 @@ func (s *testServerStream) String() string {
 }
 
 func (s *testServerStream) SendIsThreadSafe() {}
+
+func (s *testServerStream) SendIsBuffered() bool { return false }
 
 // Send mocks grpc.ServerStream Send method. It only counts events and stores
 // events by streamID in streamEvents.
