@@ -190,7 +190,7 @@ func makeGCSStorage(
 		opts = append(opts, assumeOpt)
 	}
 
-	baseTransport, err := cloud.MakeTransport(args.Settings)
+	baseTransport, err := cloud.MakeTransport(args.Settings, args.MetricsRecorder, "gcs", conf.Bucket)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create http transport")
 	}

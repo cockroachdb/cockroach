@@ -227,6 +227,13 @@ func makeAzureStorage(
 		return nil, errors.Wrap(err, "azure: account name is not valid")
 	}
 
+	t, err := cloud.MakeHTTPClient(args.Settings, args.MetricsRecorder, "azure", dest.AzureConfig.Container)
+	if err != nil {
+		return nil, errors.Wrap(err, "azure: unable to create transport")
+	}
+	var opts service.ClientOptions
+	opts.Transport = t
+
 	var azClient *service.Client
 	switch conf.Auth {
 	case cloudpb.AzureAuth_LEGACY:
@@ -234,7 +241,7 @@ func makeAzureStorage(
 		if err != nil {
 			return nil, errors.Wrap(err, "azure shared key credential")
 		}
-		azClient, err = service.NewClientWithSharedKeyCredential(u.String(), credential, nil)
+		azClient, err = service.NewClientWithSharedKeyCredential(u.String(), credential, &opts)
 		if err != nil {
 			return nil, err
 		}
@@ -243,7 +250,7 @@ func makeAzureStorage(
 		if err != nil {
 			return nil, errors.Wrap(err, "azure client secret credential")
 		}
-		azClient, err = service.NewClient(u.String(), credential, nil)
+		azClient, err = service.NewClient(u.String(), credential, &opts)
 		if err != nil {
 			return nil, err
 		}
@@ -267,7 +274,7 @@ func makeAzureStorage(
 		if err != nil {
 			return nil, errors.Wrap(err, "azure default credential")
 		}
-		azClient, err = service.NewClient(u.String(), credential, nil)
+		azClient, err = service.NewClient(u.String(), credential, &opts)
 		if err != nil {
 			return nil, err
 		}
