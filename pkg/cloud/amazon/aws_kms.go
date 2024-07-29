@@ -148,7 +148,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 			// situation is.
 			region = "default-region"
 		}
-		client, err := cloud.MakeHTTPClient(env.ClusterSettings())
+		client, err := cloud.MakeHTTPClient(env.ClusterSettings(), cloud.NilMetrics, "aws", "KMS")
 		if err != nil {
 			return nil, err
 		}

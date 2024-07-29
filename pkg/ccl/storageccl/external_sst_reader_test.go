@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -170,7 +171,7 @@ func TestNewExternalSSTReaderFailure(t *testing.T) {
 
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
-	metrics := cloud.MakeMetrics()
+	metrics := cloud.MakeMetrics(cidr.NewLookup(&settings.SV))
 
 	const localFoo = "nodelocal://1/foo"
 
