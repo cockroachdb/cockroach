@@ -109,10 +109,12 @@ var (
 		Usage: `Absolute path to cockroach binary to use`,
 	})
 
-	CockroachBinaryPath string = "cockroach"
-	_                          = registerRunOpsFlag(&CockroachBinaryPath, FlagInfo{
-		Name:  "cockroach-binary",
-		Usage: `Relative path to cockroach binary to use, on the cluster specified in --cluster`,
+	ConfigPath string
+	_          = registerRunOpsFlag(&ConfigPath, FlagInfo{
+		Name: "config",
+		Usage: `Path to a YAML config file containing the state of the cluster.
+						Used by operations to determine cluster settings, start options,
+						and the cluster spec.`,
 	})
 
 	CertsDir string

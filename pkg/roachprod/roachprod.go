@@ -58,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
-	"golang.org/x/sys/unix"
 )
 
 // MalformedClusterNameError is returned when the cluster name passed to Create is invalid.
@@ -1008,7 +1007,7 @@ func DistributeCerts(ctx context.Context, l *logger.Logger, clusterName string) 
 	if err != nil {
 		return err
 	}
-	return c.DistributeCerts(ctx, l)
+	return c.DistributeCerts(ctx, l, false)
 }
 
 // Put copies a local file to the nodes in a cluster.
@@ -1631,7 +1630,9 @@ func Create(
 	return SetupSSH(ctx, l, clusterName)
 }
 
-func Grow(ctx context.Context, l *logger.Logger, clusterName string, numNodes int) error {
+func Grow(
+	ctx context.Context, l *logger.Logger, clusterName string, secure bool, numNodes int,
+) error {
 	if numNodes <= 0 || numNodes >= 1000 {
 		// Upper limit is just for safety.
 		return fmt.Errorf("number of nodes must be in [1..999]")
@@ -1646,12 +1647,31 @@ func Grow(ctx context.Context, l *logger.Logger, clusterName string, numNodes in
 	if err != nil {
 		return err
 	}
-	if c.IsLocal() {
-		// If this is used externally with roachtest then we need to reload the
-		// clusters before returning.
-		return LoadClusters()
+	switch {
+	case c.IsLocal():
+		// If this local cluster is used externally with roachtest then we need to
+		// reload the clusters before returning.
+		err = LoadClusters()
+	default:
+		err = SetupSSH(ctx, l, clusterName)
 	}
-	return SetupSSH(ctx, l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if secure {
+		// Grab the cluster from the cache again to ensure we have the latest
+		// information.
+		c, err = getClusterFromCache(l, clusterName)
+		if err != nil {
+			return err
+		}
+		err = c.DistributeCerts(ctx, l, true)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func Shrink(ctx context.Context, l *logger.Logger, clusterName string, numNodes int) error {
@@ -2695,11 +2715,6 @@ func CreateLoadBalancer(
 	// cluster's certificate.
 	if secure {
 		err = c.RedistributeNodeCert(ctx, l)
-		if err != nil {
-			return err
-		}
-		// Send a SIGHUP to the nodes to reload the certificates.
-		err = c.Signal(ctx, l, int(unix.SIGHUP))
 		if err != nil {
 			return err
 		}
