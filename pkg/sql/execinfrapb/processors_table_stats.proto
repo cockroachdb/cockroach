@@ -194,4 +194,12 @@ message SampleAggregatorSpec {
   // If true, calculate partial table statistics on the extreme values of
   // the previous full table stat.
   optional bool using_extremes = 11 [(gogoproto.nullable) = false];
+
+  // The number of indexes expected to be scanned as part of this stats
+  // collection. Used for progress reporting.
+  optional uint64 num_indexes = 12 [(gogoproto.nullable) = false];
+
+  // The number of indexes that have been scanned so far. Used for progress
+  // reporting.
+  optional uint64 cur_index = 13 [(gogoproto.nullable) = false];
 }
