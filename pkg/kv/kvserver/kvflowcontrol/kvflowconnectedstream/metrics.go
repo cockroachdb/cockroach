@@ -350,7 +350,7 @@ func newTypeMetrics(
 								}
 								regularDelta := regularStats.TokensReturned - regularStats.TokensDeducted
 								elasticDelta := elasticStats.TokensReturned - elasticStats.TokensDeducted
-								fmt.Fprintf(&b, " tokens delta: regular %s (%s-%s) elastic %s (%s-%s)",
+								fmt.Fprintf(&b, " tokens delta: regular %s (%s - %s) elastic %s (%s - %s)",
 									humanize.IBytes(uint64(regularDelta)),
 									humanize.IBytes(uint64(regularStats.TokensReturned)),
 									humanize.IBytes(uint64(regularStats.TokensDeducted)),
