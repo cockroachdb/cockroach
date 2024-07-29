@@ -616,30 +616,30 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 
 func TestRegistrationString(t *testing.T) {
 	testCases := []struct {
-		r   bufferedRegistration
+		r   baseRegistration
 		exp string
 	}{
 		{
-			r: bufferedRegistration{
+			r: baseRegistration{
 				span: roachpb.Span{Key: roachpb.Key("a")},
 			},
 			exp: `[a @ 0,0+]`,
 		},
 		{
-			r: bufferedRegistration{span: roachpb.Span{
+			r: baseRegistration{span: roachpb.Span{
 				Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 			},
 			exp: `[{a-c} @ 0,0+]`,
 		},
 		{
-			r: bufferedRegistration{
+			r: baseRegistration{
 				span:             roachpb.Span{Key: roachpb.Key("d")},
 				catchUpTimestamp: hlc.Timestamp{WallTime: 10, Logical: 1},
 			},
 			exp: `[d @ 0.000000010,1+]`,
 		},
 		{
-			r: bufferedRegistration{span: roachpb.Span{
+			r: baseRegistration{span: roachpb.Span{
 				Key: roachpb.Key("d"), EndKey: roachpb.Key("z")},
 				catchUpTimestamp: hlc.Timestamp{WallTime: 40, Logical: 9},
 			},
@@ -671,4 +671,21 @@ func TestRegistryShutdownMetrics(t *testing.T) {
 	reg.DisconnectAllOnShutdown(ctx, nil)
 	<-regDoneC
 	require.Zero(t, reg.metrics.RangeFeedRegistrations.Value(), "metric is not zero on stop")
+}
+
+// TestBaseRegistration tests base registration implementation methods.
+func TestBaseRegistration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	r := newTestRegistration(spAB, hlc.Timestamp{WallTime: 10}, nil, /*catchup */
+		true /* withDiff */, true /* withFiltering */, false /* withOmitRemote */)
+	require.Equal(t, spAB, r.getSpan())
+	require.Equal(t, hlc.Timestamp{WallTime: 10}, r.getCatchUpTimestamp())
+	r.setSpanAsKeys()
+	require.Equal(t, r.keys, spAB.AsRange())
+	require.Equal(t, r.keys, r.Range())
+	r.setID(10)
+	require.Equal(t, uintptr(10), r.ID())
+	require.True(t, r.getWithDiff())
+	require.True(t, r.getWithFiltering())
+	require.False(t, r.getWithOmitRemote())
 }
