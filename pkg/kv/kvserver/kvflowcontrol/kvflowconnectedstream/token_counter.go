@@ -106,6 +106,7 @@ type tokenCounterPerWorkClass struct {
 type DeltaStats struct {
 	NoTokenDuration time.Duration
 	TokensDeducted  kvflowcontrol.Tokens
+	TokensReturned  kvflowcontrol.Tokens
 }
 
 func makeTokenCounterPerWorkClass(
@@ -130,6 +131,7 @@ func (bwc *tokenCounterPerWorkClass) adjustTokensLocked(
 	before := bwc.tokens
 	bwc.tokens += delta
 	if delta > 0 {
+		bwc.stats.DeltaStats.TokensReturned += delta
 		if bwc.tokens > limit {
 			unaccounted = bwc.tokens - limit
 			bwc.tokens = limit

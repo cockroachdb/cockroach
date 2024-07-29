@@ -348,8 +348,14 @@ func newTypeMetrics(
 								if elasticStats.NoTokenDuration > 0 {
 									fmt.Fprintf(&b, " elastic %s", elasticStats.NoTokenDuration.String())
 								}
-								fmt.Fprintf(&b, " tokens deducted: regular %s elastic %s",
+								regularDelta := regularStats.TokensReturned - regularStats.TokensDeducted
+								elasticDelta := elasticStats.TokensReturned - elasticStats.TokensDeducted
+								fmt.Fprintf(&b, " tokens delta: regular %s (%s-%s) elastic %s (%s-%s)",
+									humanize.IBytes(uint64(regularDelta)),
+									humanize.IBytes(uint64(regularStats.TokensReturned)),
 									humanize.IBytes(uint64(regularStats.TokensDeducted)),
+									humanize.IBytes(uint64(elasticDelta)),
+									humanize.IBytes(uint64(elasticStats.TokensReturned)),
 									humanize.IBytes(uint64(elasticStats.TokensDeducted)))
 								log.Infof(context.Background(), "%s", redact.SafeString(b.String()))
 							} else if streamStatsCount == streamStatsCountCap+1 {
