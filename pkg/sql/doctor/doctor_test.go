@@ -613,6 +613,35 @@ job 100: running type schema change refers to missing type descriptor [500].
 job 100: running schema change refers to missing descriptor(s) [500].
 `,
 		},
+		{
+			descTable: doctor.DescriptorTable{
+				{
+					ID: 2,
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Table{
+						Table: &descpb.TableDescriptor{ID: 2},
+					}}),
+				},
+			},
+			valid: true,
+			jobsTable: doctor.JobsTable{
+				{
+					ID:      100,
+					Payload: &jobspb.Payload{Details: jobspb.WrapPayloadDetails(jobspb.SchemaChangeGCDetails{})},
+					Progress: &jobspb.Progress{Details: jobspb.WrapProgressDetails(
+						jobspb.SchemaChangeGCProgress{
+							Tables: []jobspb.SchemaChangeGCProgress_TableProgress{
+								{ID: 1, Status: jobspb.SchemaChangeGCProgress_CLEARED},
+								{ID: 2, Status: jobspb.SchemaChangeGCProgress_CLEARING},
+								{ID: 3, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR},
+							},
+						})},
+					Status: jobs.StatusRunning,
+				},
+			},
+			expected: `Examining 1 jobs...
+job 100: running schema change GC refers to missing table descriptor(s) [3]; existing descriptors that still need to be dropped [2]; job safe to delete: false.
+`,
+		},
 	}
 
 	for i, test := range tests {
