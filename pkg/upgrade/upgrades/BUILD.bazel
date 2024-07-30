@@ -23,6 +23,7 @@ go_library(
         "v24_2_delete_version_tenant_settings.go",
         "v24_2_tenant_rates.go",
         "v24_2_tenant_system_tables.go",
+        "v24_3_listen_notify_queue.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/upgrade/upgrades",
     visibility = ["//visibility:public"],
