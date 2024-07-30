@@ -968,7 +968,12 @@ func runFollowerReadsMixedVersionTest(
 	rc readConsistency,
 	opts ...mixedversion.CustomOption,
 ) {
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), opts...)
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(),
+		append([]mixedversion.CustomOption{
+			// Multi-tenant deployments are currently unsupported. See #127378.
+			mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
+		}, opts...)...,
+	)
 
 	var data map[int]int64
 	runInit := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {

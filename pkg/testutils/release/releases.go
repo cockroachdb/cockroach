@@ -56,6 +56,36 @@ func parseReleases() (map[string]Series, error) {
 	return result, nil
 }
 
+// WithReleaseData overwrites the release mapping while the function
+// passed runs. Only used for tests and, needless to say, it is not
+// safe for concurrent use.
+func WithReleaseData(data map[string]Series, fn func() error) error {
+	oldReleaseData := releaseData
+	releaseData = data
+	defer func() {
+		releaseData = oldReleaseData
+	}()
+
+	return fn()
+}
+
+// IsWithdrawn returns whether the given version is known to be a
+// withdrawn release. Returns an error for invalid or unknown versions.
+func IsWithdrawn(v *version.Version) (bool, error) {
+	series, ok := releaseData[VersionSeries(v)]
+	if !ok {
+		return false, fmt.Errorf("no release data for version %s", v)
+	}
+
+	for _, w := range series.Withdrawn {
+		if fmt.Sprintf("v%s", w) == v.String() {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // MajorReleasesBetween returns the number of major releases between
 // any two versions passed. Returns an error when there is no
 // predecessor information for a release in the chain (which should

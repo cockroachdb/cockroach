@@ -79,6 +79,8 @@ func runValidateSystemSchemaAfterVersionUpgrade(
 		// We limit the number of upgrades since the test is not expected to work
 		// on versions older than 22.2.
 		mixedversion.MaxUpgrades(2),
+		// Multi-tenant deployments are currently unsupported. See #127378.
+		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 	)
 	mvt.AfterUpgradeFinalized(
 		"obtain system schema from the upgraded cluster",
