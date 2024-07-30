@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -41,6 +42,17 @@ var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
 	catpb.AutoStatsEnabledSettingName,
 	"automatic statistics collection mode",
 	true,
+	settings.WithPublic)
+
+// AutomaticPartialTableStatisticsClusterMode controls the cluster setting for
+// enabling automatic table partial statistics collection. If automatic full
+// table statistics are disabled for a table, then automatic partial statistics
+// will also be disabled.
+var AutomaticPartialTableStatisticsClusterMode = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	catpb.AutoPartialStatsEnabledSettingName,
+	"automatic partial statistics collection mode",
+	false,
 	settings.WithPublic)
 
 // UseStatisticsOnSystemTables controls the cluster setting for enabling
@@ -98,6 +110,19 @@ var AutomaticStatisticsFractionStaleRows = settings.RegisterFloatSetting(
 	settings.WithPublic,
 )
 
+// AutomaticPartialStatisticsFractionStaleRows controls the cluster setting for
+// the target fraction of rows in a table that should be stale before partial
+// statistics on that table are refreshed, in addition to the constant value
+// AutomaticPartialStatisticsMinStaleRows.
+var AutomaticPartialStatisticsFractionStaleRows = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	catpb.AutoPartialStatsFractionStaleSettingName,
+	"target fraction of stale rows per table that will trigger a partial statistics refresh",
+	0.05,
+	settings.NonNegativeFloat,
+	settings.WithPublic,
+)
+
 // AutomaticStatisticsMinStaleRows controls the cluster setting for the target
 // number of rows that should be updated before a table is refreshed, in
 // addition to the fraction AutomaticStatisticsFractionStaleRows.
@@ -105,6 +130,18 @@ var AutomaticStatisticsMinStaleRows = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	catpb.AutoStatsMinStaleSettingName,
 	"target minimum number of stale rows per table that will trigger a statistics refresh",
+	500,
+	settings.NonNegativeInt,
+	settings.WithPublic,
+)
+
+// AutomaticPartialStatisticsMinStaleRows controls the cluster setting for the
+// target number of rows that should be updated before a table is refreshed, in
+// addition to the fraction AutomaticStatisticsFractionStaleRows.
+var AutomaticPartialStatisticsMinStaleRows = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	catpb.AutoPartialStatsMinStaleSettingName,
+	"target minimum number of stale rows per table that will trigger a partial statistics refresh",
 	500,
 	settings.NonNegativeInt,
 	settings.WithPublic,
@@ -336,6 +373,20 @@ func (r *Refresher) autoStatsEnabled(desc catalog.TableDescriptor) bool {
 	return enabledForTable == catpb.AutoStatsCollectionEnabled
 }
 
+func (r *Refresher) autoPartialStatsEnabled(desc catalog.TableDescriptor) bool {
+	if desc == nil {
+		// If the descriptor could not be accessed, defer to the cluster setting.
+		return AutomaticPartialTableStatisticsClusterMode.Get(&r.st.SV)
+	}
+	enabledForTable := desc.AutoPartialStatsCollectionEnabled()
+	// The table-level setting of sql_partial_stats_automatic_collection_enabled
+	// takes precedence over the cluster setting.
+	if enabledForTable == catpb.AutoPartialStatsCollectionNotSet {
+		return AutomaticPartialTableStatisticsClusterMode.Get(&r.st.SV)
+	}
+	return enabledForTable == catpb.AutoPartialStatsCollectionEnabled
+}
+
 func (r *Refresher) autoStatsEnabledForTableID(
 	tableID descpb.ID, settingOverrides map[descpb.ID]catpb.AutoStatsSettings,
 ) bool {
@@ -368,6 +419,16 @@ func (r *Refresher) autoStatsMinStaleRows(explicitSettings *catpb.AutoStatsSetti
 	return AutomaticStatisticsMinStaleRows.Get(&r.st.SV)
 }
 
+func (r *Refresher) autoPartialStatsMinStaleRows(explicitSettings *catpb.AutoStatsSettings) int64 {
+	if explicitSettings == nil {
+		return AutomaticPartialStatisticsMinStaleRows.Get(&r.st.SV)
+	}
+	if minStaleRows, ok := explicitSettings.AutoPartialStatsMinStaleRows(); ok {
+		return minStaleRows
+	}
+	return AutomaticPartialStatisticsMinStaleRows.Get(&r.st.SV)
+}
+
 func (r *Refresher) autoStatsFractionStaleRows(explicitSettings *catpb.AutoStatsSettings) float64 {
 	if explicitSettings == nil {
 		return AutomaticStatisticsFractionStaleRows.Get(&r.st.SV)
@@ -376,6 +437,18 @@ func (r *Refresher) autoStatsFractionStaleRows(explicitSettings *catpb.AutoStats
 		return fractionStaleRows
 	}
 	return AutomaticStatisticsFractionStaleRows.Get(&r.st.SV)
+}
+
+func (r *Refresher) autoPartialStatsFractionStaleRows(
+	explicitSettings *catpb.AutoStatsSettings,
+) float64 {
+	if explicitSettings == nil {
+		return AutomaticPartialStatisticsFractionStaleRows.Get(&r.st.SV)
+	}
+	if fractionStaleRows, ok := explicitSettings.AutoPartialStatsFractionStaleRows(); ok {
+		return fractionStaleRows
+	}
+	return AutomaticPartialStatisticsFractionStaleRows.Get(&r.st.SV)
 }
 
 func (r *Refresher) getTableDescriptor(
@@ -502,6 +575,9 @@ func (r *Refresher) Start(
 							// have stale table settings.
 							if elapsed > DefaultRefreshInterval || refreshingAllTables {
 								desc = r.getTableDescriptor(ctx, tableID)
+								name := desc.GetName()
+								_ = name
+								fmt.Printf("Maybe trigger partial stats refresh %v\n", name)
 								if desc != nil {
 									if !r.autoStatsEnabled(desc) {
 										continue
@@ -530,6 +606,8 @@ func (r *Refresher) Start(
 									explicitSettings = &settings
 								}
 							}
+							name := desc.GetName()
+							_ = name
 							r.maybeRefreshStats(ctx, stopper, tableID, explicitSettings, rowsAffected, r.asOfTime)
 
 							select {
@@ -696,6 +774,8 @@ func (r *Refresher) ensureAllTables(
 // successful insert, update, upsert or delete. rowsAffected refers to the
 // number of rows written as part of the mutation operation.
 func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected int) {
+	name := table.GetName()
+	_ = name
 	if !r.autoStatsEnabled(table) {
 		return
 	}
@@ -768,7 +848,12 @@ func (r *Refresher) maybeRefreshStats(
 
 	var rowCount float64
 	mustRefresh := false
-	if stat := mostRecentAutomaticStat(tableStats); stat != nil {
+	mustRefreshPartial := false
+	stat := mostRecentAutomaticFullStat(tableStats)
+	if tableID == 106 {
+		fmt.Printf("The most recent automatic statistic: %v\n", stat)
+	}
+	if stat != nil {
 		// Check if too much time has passed since the last refresh.
 		// This check is in place to corral statistical outliers and avoid a
 		// case where a significant portion of the data in a table has changed but
@@ -791,8 +876,8 @@ func (r *Refresher) maybeRefreshStats(
 		}
 		rowCount = float64(stat.RowCount)
 	} else {
-		// If there are no statistics available on this table, we must perform a
-		// refresh.
+		// If there are no full statistics available on this table, we must perform
+		// a refresh.
 		mustRefresh = true
 	}
 
@@ -800,16 +885,48 @@ func (r *Refresher) maybeRefreshStats(
 	statsMinStaleRows := r.autoStatsMinStaleRows(explicitSettings)
 	targetRows := int64(rowCount*statsFractionStaleRows) + statsMinStaleRows
 	// randInt will panic if we pass it a value of 0.
+	//randomTargetRows := targetRows
 	randomTargetRows := int64(0)
 	if targetRows > 0 {
 		randomTargetRows = r.randGen.randInt(targetRows)
+		fmt.Println("Random target rows for table name: ", r.getTableDescriptor(ctx, tableID).GetName(), randomTargetRows)
 	}
 	if !mustRefresh && rowsAffected < math.MaxInt32 && randomTargetRows >= rowsAffected {
-		// No refresh is happening this time.
-		return
+		desc := r.getTableDescriptor(ctx, tableID)
+
+		// Check if auto partial stats are enabled for this table.
+		if !r.autoPartialStatsEnabled(desc) {
+			return
+		}
+
+		if desc.GetName() == "data" {
+			fmt.Printf("Partial stat refresh triggered %v \n", desc.GetName())
+		}
+		// No full statistics refresh is happening this time. Let's try a partial
+		// stats refresh.
+		mergedStat := mostRecentMergedStat(tableStats)
+		if mergedStat != nil && mergedStat.CreatedAt.After(stat.CreatedAt) {
+			rowCount = float64(mergedStat.RowCount)
+		}
+		randomTargetRows = int64(0)
+		partialStatsMinStaleRows := r.autoPartialStatsMinStaleRows(explicitSettings)
+		partialStatsFractionStaleRows := r.autoPartialStatsFractionStaleRows(explicitSettings)
+		targetRows = int64(rowCount*partialStatsFractionStaleRows) + partialStatsMinStaleRows
+		// randInt will panic if we pass it a value of 0.
+		if targetRows > 0 {
+			randomTargetRows = r.randGen.randInt(targetRows)
+		}
+
+		if randomTargetRows >= rowsAffected {
+			// No refreshes happening at this time, full or partial
+			fmt.Printf("No partial stats refreshes happening %d %d %d \n", rowsAffected, randomTargetRows, targetRows)
+			return
+		}
+
+		mustRefreshPartial = true
 	}
 
-	if err := r.refreshStats(ctx, tableID, asOf); err != nil {
+	if err := r.refreshStats(ctx, tableID, asOf, mustRefreshPartial, tableStats); err != nil {
 		if errors.Is(err, ConcurrentCreateStatsError) {
 			// Another stats job was already running. Attempt to reschedule this
 			// refresh.
@@ -853,7 +970,58 @@ func (r *Refresher) maybeRefreshStats(
 	}
 }
 
-func (r *Refresher) refreshStats(ctx context.Context, tableID descpb.ID, asOf time.Duration) error {
+func (r *Refresher) refreshPartialStats(
+	ctx context.Context, tableID descpb.ID, asOf time.Duration, stats []*TableStatistic,
+) error {
+	desc := r.getTableDescriptor(ctx, tableID)
+	name := desc.GetName()
+	_ = name
+	columns := getPrefixColumns(desc)
+	if desc.GetName() == "data" {
+		fmt.Printf("NOW TRY REFRESHING STATS %v %v \n", name, columns)
+	}
+	for _, column := range columns {
+		if desc.GetName() == "data" {
+			fmt.Printf("EXECUTE QUERY PRE %v %v  \n", column.GetName(), asOf)
+			for _, stat := range stats {
+				if len(stat.ColumnIDs) == 1 && column.GetID() == stat.ColumnIDs[0] {
+					fmt.Printf("The stat for %s: %v \n", column.GetName(), stat)
+				}
+			}
+		}
+		_ /* rows */, err := r.internalDB.Executor().Exec(
+			ctx,
+			"create-stats",
+			nil, /* txn */
+			fmt.Sprintf(
+				"CREATE STATISTICS %s ON %s FROM [%d] WITH OPTIONS THROTTLING %g AS OF SYSTEM TIME '-%s' USING EXTREMES",
+				jobspb.AutoPartialStatsName,
+				column.GetName(),
+				tableID,
+				AutomaticStatisticsMaxIdleTime.Get(&r.st.SV),
+				asOf.String(),
+			),
+		)
+		if desc.GetName() == "data" {
+			fmt.Printf("EXECUTE QUERY POST %v %v \n", column.GetName(), err)
+		}
+		// How should we be returning 1 err since we trigger multiple partial stats collections?
+	}
+	return nil
+}
+
+func (r *Refresher) refreshStats(
+	ctx context.Context,
+	tableID descpb.ID,
+	asOf time.Duration,
+	isPartial bool,
+	stats []*TableStatistic,
+) error {
+	fmt.Printf("Refresh stats partial %v %v \n", isPartial, tableID)
+	if isPartial {
+		return r.refreshPartialStats(ctx, tableID, asOf, stats)
+	}
+
 	// Create statistics for all default column sets on the given table.
 	stmt := fmt.Sprintf(
 		"CREATE STATISTICS %s FROM [%d] WITH OPTIONS THROTTLING %g AS OF SYSTEM TIME '-%s'",
@@ -872,12 +1040,24 @@ func (r *Refresher) refreshStats(ctx context.Context, tableID descpb.ID, asOf ti
 	return err
 }
 
-// mostRecentAutomaticStat finds the most recent automatic statistic
+// mostRecentAutomaticFullStat finds the most recent automatic statistic
 // (identified by the name AutoStatsName).
-func mostRecentAutomaticStat(tableStats []*TableStatistic) *TableStatistic {
+func mostRecentAutomaticFullStat(tableStats []*TableStatistic) *TableStatistic {
 	// Stats are sorted with the most recent first.
 	for _, stat := range tableStats {
 		if stat.Name == jobspb.AutoStatsName {
+			return stat
+		}
+	}
+	return nil
+}
+
+// mostRecentMergedStat finds the most recent merged statistic
+// (identified by the name MergedStatsName).
+func mostRecentMergedStat(tableStats []*TableStatistic) *TableStatistic {
+	// Stats are sorted with the most recent first.
+	for _, stat := range tableStats {
+		if stat.Name == jobspb.MergedStatsName {
 			return stat
 		}
 	}
@@ -963,3 +1143,17 @@ func (concurrentCreateStatisticsError) Error() string {
 // ConcurrentCreateStatsError is reported when two CREATE STATISTICS jobs
 // are issued concurrently. This is a sentinel error.
 var ConcurrentCreateStatsError error = concurrentCreateStatisticsError{}
+
+func getPrefixColumns(desc catalog.TableDescriptor) []catalog.Column {
+	indexes := desc.ActiveIndexes()
+	prefixes := make([]catalog.Column, 0, len(indexes))
+	var seen intsets.Fast
+	for _, idx := range indexes {
+		prefixCol := desc.IndexKeyColumns(idx)[0]
+		if !seen.Contains(int(prefixCol.GetID())) {
+			prefixes = append(prefixes, prefixCol)
+			seen.Add(int(prefixCol.GetID()))
+		}
+	}
+	return prefixes
+}

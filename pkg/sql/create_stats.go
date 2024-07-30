@@ -218,7 +218,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		)
 	}
 
-	if n.Options.UsingExtremes && !n.p.SessionData().EnableCreateStatsUsingExtremes {
+	if n.Options.UsingExtremes && !n.p.SessionData().EnableCreateStatsUsingExtremes && n.Name.String() != jobspb.AutoPartialStatsName {
 		return nil, pgerror.New(pgcode.FeatureNotSupported,
 			"creating partial statistics at extremes is not yet supported",
 		)
