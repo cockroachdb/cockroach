@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -98,7 +100,8 @@ type splitAndScatterer interface {
 }
 
 type noopSplitAndScatterer struct {
-	scatterNode roachpb.NodeID
+	rng            *rand.Rand
+	sqlInstanceIDs []int32
 }
 
 var _ splitAndScatterer = noopSplitAndScatterer{}
@@ -112,7 +115,13 @@ func (n noopSplitAndScatterer) split(_ context.Context, _ keys.SQLCodec, _ roach
 func (n noopSplitAndScatterer) scatter(
 	_ context.Context, _ keys.SQLCodec, _ roachpb.Key,
 ) (roachpb.NodeID, error) {
-	return n.scatterNode, nil
+	numInstances := len(n.sqlInstanceIDs)
+	if numInstances == 0 {
+		return 0, nil
+	}
+	idx := n.rng.Intn(numInstances)
+	sqlInstanceID := n.sqlInstanceIDs[idx]
+	return roachpb.NodeID(sqlInstanceID), nil
 }
 
 // dbSplitAndScatter is the production implementation of this processor's
@@ -252,7 +261,8 @@ func newGenerativeSplitAndScatterProcessor(
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
 	db := flowCtx.Cfg.DB
-	numChunkSplitAndScatterWorkers := int(spec.NumNodes)
+	numNodes := int(spec.NumNodes)
+	numChunkSplitAndScatterWorkers := numNodes
 	// numEntrySplitWorkers is set to be 2 * numChunkSplitAndScatterWorkers in
 	// order to keep up with the rate at which chunks are split and scattered.
 	// TODO(rui): This tries to cover for a bad scatter by having 2 * the number
@@ -261,8 +271,8 @@ func newGenerativeSplitAndScatterProcessor(
 
 	mkSplitAndScatterer := func() (splitAndScatterer, error) {
 		if spec.ValidateOnly {
-			nodeID, _ := flowCtx.NodeID.OptionalNodeID()
-			return noopSplitAndScatterer{nodeID}, nil
+			rng, _ := randutil.NewPseudoRand()
+			return noopSplitAndScatterer{rng, spec.SQLInstanceIDs}, nil
 		}
 		kr, err := MakeKeyRewriterFromRekeys(flowCtx.Codec(), spec.TableRekeys, spec.TenantRekeys,
 			false /* restoreTenantFromStream */)
@@ -299,7 +309,7 @@ func newGenerativeSplitAndScatterProcessor(
 		// other than it's the max number of entries that can be processed
 		// in parallel downstream. It has been verified ad-hoc that this
 		// sizing does not bottleneck restore.
-		doneScatterCh:     make(chan entryNode, int(spec.NumNodes)*maxConcurrentRestoreWorkers),
+		doneScatterCh:     make(chan entryNode, numNodes*maxConcurrentRestoreWorkers),
 		routingDatumCache: newRoutingDatumCache(),
 	}
 	if err := ssp.Init(ctx, ssp, post, generativeSplitAndScatterOutputTypes, flowCtx, processorID, nil, /* memMonitor */
