@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotification"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
@@ -278,8 +280,18 @@ func startDistChangefeed(
 		localState.drainingNodes = localState.drainingNodes[:0]
 		localState.aggregatorFrontier = localState.aggregatorFrontier[:0]
 
+		_, isNotification := details.Opts[changefeedbase.OptExperimentalListenChannel]
+
+		var innerResultWriter sql.RowResultWriterI
+
+		if isNotification {
+			innerResultWriter = makeNotificationResultWriter(execCtx.(sql.NotificationClientSender), cancel)
+		} else {
+			innerResultWriter = makeChangefeedResultWriter(resultsCh, cancel)
+		}
+
 		resultRows := sql.NewMetadataCallbackWriter(
-			makeChangefeedResultWriter(resultsCh, cancel),
+			innerResultWriter,
 			func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 				if meta.Changefeed != nil {
 					if meta.Changefeed.DrainInfo != nil {
@@ -290,6 +302,9 @@ func startDistChangefeed(
 				return nil
 			},
 		)
+
+		// in core mode, this guy gets a stream of rows. we want that behaviour too, just we want someone else to get it.
+		// so make something like him.
 
 		recv := sql.MakeDistSQLReceiver(
 			ctx,
@@ -585,6 +600,61 @@ func (w *changefeedResultWriter) SetError(err error) {
 }
 
 func (w *changefeedResultWriter) Err() error {
+	return w.err
+}
+
+// notificationResultWriter implements the `sql.rowResultWriter` that sends
+// the received rows back over notifications
+type notificationResultWriter struct {
+	sender       sql.NotificationClientSender
+	rowsAffected int
+	err          error
+	cancel       context.CancelFunc
+}
+
+func makeNotificationResultWriter(
+	sender sql.NotificationClientSender, cancel context.CancelFunc,
+) *notificationResultWriter {
+	return &notificationResultWriter{sender: sender, cancel: cancel}
+}
+
+func (w *notificationResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	// Copy the row because it's not guaranteed to exist after this function
+	// returns. ??
+	row = append(tree.Datums(nil), row...)
+	// datum is [topic ("notifications"), key ("[xx]"), json data]
+	// TODO: can also do channel filtering in here maybe
+	// key := string(tree.MustBeDString(row[1]))
+	jsonEncodedMessage := []byte(tree.MustBeDBytes(row[2]))
+
+	type msg struct {
+		After pgnotification.Notification `json:"after"`
+	}
+
+	var m msg
+	if err := json.Unmarshal(jsonEncodedMessage, &m); err != nil {
+		return err
+	}
+
+	return w.sender.BufferClientNotification(ctx, m.After)
+}
+func (w *notificationResultWriter) SetRowsAffected(ctx context.Context, n int) {
+	w.rowsAffected = n
+}
+func (w *notificationResultWriter) SetError(err error) {
+	w.err = err
+	switch {
+	case errors.Is(err, changefeedbase.ErrNodeDraining):
+		// Let drain signal proceed w/out cancellation.
+		// We want to make sure change frontier processor gets a chance
+		// to send out cancellation to the aggregator so that everything
+		// transitions to "drain metadata" stage.
+	default:
+		w.cancel()
+	}
+}
+
+func (w *notificationResultWriter) Err() error {
 	return w.err
 }
 

@@ -107,6 +107,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
+        "//pkg/sql/pgwire/pgnotification",
         "//pkg/sql/physicalplan",
         "//pkg/sql/physicalplan/replicaoracle",
         "//pkg/sql/privilege",

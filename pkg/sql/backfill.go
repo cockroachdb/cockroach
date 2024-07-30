@@ -1094,7 +1094,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		}
 		return nil
 	}
-	cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
+	cbw := MetadataCallbackWriter{RowResultWriterI: &errOnlyResultWriter{}, fn: metaFn}
 	recv := MakeDistSQLReceiver(
 		ctx,
 		&cbw,
@@ -1337,7 +1337,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 				}
 				return nil
 			}
-			cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
+			cbw := MetadataCallbackWriter{RowResultWriterI: &errOnlyResultWriter{}, fn: metaFn}
 			sd := NewInternalSessionData(ctx, sc.execCfg.Settings, "dist-column-backfill")
 			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, sd, txn.KV().ReadTimestamp(), txn.Descriptors())
 			recv := MakeDistSQLReceiver(

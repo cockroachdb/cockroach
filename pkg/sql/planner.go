@@ -276,7 +276,7 @@ type planner struct {
 	// ditto? idk.
 	// hooked up to the client comm. this is like a sink.
 	// TODO: this has to be thread safe wrt the conn and statements executing on it.
-	notificationSender notificationSender
+	notificationSender NotificationSender
 
 	queryCacheSession querycache.Session
 

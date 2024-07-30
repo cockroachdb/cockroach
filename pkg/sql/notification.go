@@ -27,22 +27,23 @@ var Notifications = settings.RegisterBoolSetting(
 	true,
 	settings.WithPublic)
 
-type notificationSender interface {
+type NotificationSender interface {
 	// BufferNotification buffers the given notification to be flushed to the
 	// client before the connection is closed.
 	BufferNotification(pgnotification.Notification) error
 }
 
+type NotificationClientSender interface {
+	BufferClientNotification(context.Context, pgnotification.Notification) error
+}
+
 // BufferClientNotice implements the eval.ClientNotificationSender interface.
-func (p *planner) BufferClientNotification(ctx context.Context, notification pgnotification.Notification) {
+func (p *planner) BufferClientNotification(ctx context.Context, notification pgnotification.Notification) error {
 	if log.V(2) {
 		log.Infof(ctx, "buffered notification: %+v", notification)
 	}
 	if !Notifications.Get(&p.ExecCfg().Settings.SV) {
-		return
+		return nil
 	}
-	if err := p.notificationSender.BufferNotification(notification); err != nil {
-		// This is just an artifact of the dummy impl, probably.
-		log.Errorf(ctx, "buffering notification: %v", err)
-	}
+	return p.notificationSender.BufferNotification(notification)
 }

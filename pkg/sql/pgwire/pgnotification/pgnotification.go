@@ -11,7 +11,7 @@
 package pgnotification
 
 type Notification struct {
-	Channel string
-	Payload string
-	PID     int32
+	Channel string `json:"channel"`
+	Payload string `json:"payload"`
+	PID     int32  `json:"pid"`
 }
