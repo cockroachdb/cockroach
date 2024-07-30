@@ -325,7 +325,7 @@ func (p *ScheduledProcessor) Register(
 		if p.stopping {
 			return nil
 		}
-		if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
+		if !p.Span.AsRawSpanWithNoLocals().Contains(r.getSpan()) {
 			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 		}
 
@@ -348,8 +348,8 @@ func (p *ScheduledProcessor) Register(
 			if p.unregisterClient(r) {
 				// unreg callback is set by replica to tear down processors that have
 				// zero registrations left and to update event filters.
-				if r.unreg != nil {
-					r.unreg()
+				if f := r.getUnreg(); f != nil {
+					f()
 				}
 			}
 		}
