@@ -159,7 +159,6 @@ go_library(
         "name_util.go",
         "notice.go",
         "notification.go",
-        "notify.go",
         "opaque.go",
         "opt_catalog.go",
         "opt_exec_factory.go",

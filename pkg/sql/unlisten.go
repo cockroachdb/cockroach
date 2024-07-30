@@ -17,6 +17,6 @@ import (
 )
 
 func (p *planner) Unlisten(ctx context.Context, n *tree.Unlisten) (planNode, error) {
-	delete(dummyNotificationListens, n.ChannelName.String())
+	// TODO
 	return newZeroNode(nil /* columns */), nil
 }

@@ -18,9 +18,5 @@ import (
 
 func (p *planner) Listen(ctx context.Context, n *tree.Listen) (planNode, error) {
 	// TODO: run an EXPERIMENTAL CREATE CHANGEFEED plan/stmt basically with a different sort of sink that hooks up to this guy
-
-	// Dummy implementation.
-	dummyNotificationListens[n.ChannelName.String()] = struct{}{}
-
 	return newZeroNode(nil), nil
 }
