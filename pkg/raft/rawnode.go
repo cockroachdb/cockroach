@@ -219,6 +219,10 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 		From:    r.id,
 		Entries: rd.Entries,
 	}
+	if ln := len(rd.Entries); ln != 0 {
+		m.LogTerm = r.raftLog.accTerm()
+		m.Index = rd.Entries[ln-1].Index
+	}
 	if !IsEmptyHardState(rd.HardState) {
 		// If the Ready includes a HardState update, assign each of its fields
 		// to the corresponding fields in the Message. This allows clients to
