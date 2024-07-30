@@ -124,6 +124,12 @@ type (
 var (
 	// everything that is not an alphanum or a few special characters
 	invalidChars = regexp.MustCompile(`[^a-zA-Z0-9 \-_\.]`)
+
+	// internalQueryTimeout is the maximum amount of time we will wait
+	// for an internal query (i.e., performed by the framework) to
+	// complete. These queries are typically associated with gathering
+	// upgrade state data to be displayed during execution.
+	internalQueryTimeout = 10 * time.Second
 )
 
 func newServiceRuntime(desc *ServiceDescriptor) *serviceRuntime {
@@ -215,7 +221,7 @@ func (tr *testRunner) run() (retErr error) {
 			return fmt.Errorf("background step `%s` returned error: %w", event.Name, event.Err)
 
 		case err := <-tr.monitor.Err():
-			return tr.testFailure(err, tr.logger, nil)
+			return tr.testFailure(tr.ctx, err, tr.logger, nil)
 		}
 	}
 }
@@ -225,13 +231,13 @@ func (tr *testRunner) run() (retErr error) {
 func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 	if ss, ok := step.(*singleStep); ok {
 		if ss.ID > tr.plan.startSystemID {
-			if err := tr.refreshServiceData(tr.systemService); err != nil {
+			if err := tr.refreshServiceData(ctx, tr.systemService); err != nil {
 				return err
 			}
 		}
 
 		if ss.ID > tr.plan.startTenantID && tr.tenantService != nil {
-			if err := tr.refreshServiceData(tr.tenantService); err != nil {
+			if err := tr.refreshServiceData(ctx, tr.tenantService); err != nil {
 				return err
 			}
 		}
@@ -308,7 +314,7 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logg
 			// queries would be wasteful.
 			return err
 		}
-		return tr.stepError(err, ss, l)
+		return tr.stepError(ctx, err, ss, l)
 	}
 
 	return nil
@@ -339,21 +345,25 @@ func (tr *testRunner) startBackgroundStep(ss *singleStep, l *logger.Logger, stop
 // binary version on each node when the error occurred, and the
 // cluster version before and after the step (in case the failure
 // happened *while* the cluster version was updating).
-func (tr *testRunner) stepError(err error, step *singleStep, l *logger.Logger) error {
+func (tr *testRunner) stepError(
+	ctx context.Context, err error, step *singleStep, l *logger.Logger,
+) error {
 	stepErr := errors.Wrapf(
 		err,
 		"mixed-version test failure while running step %d (%s)",
 		step.ID, step.impl.Description(),
 	)
 
-	return tr.testFailure(stepErr, l, &step.context)
+	return tr.testFailure(ctx, stepErr, l, &step.context)
 }
 
 // testFailure generates a `testFailure` for failures that happened
 // due to the given error.  It logs the error to the logger passed,
 // and renames the underlying file to include the "FAILED" prefix to
 // help in debugging.
-func (tr *testRunner) testFailure(err error, l *logger.Logger, testContext *Context) error {
+func (tr *testRunner) testFailure(
+	ctx context.Context, err error, l *logger.Logger, testContext *Context,
+) error {
 	detailsForService := func(service *serviceRuntime) *serviceFailureDetails {
 		return &serviceFailureDetails{
 			descriptor:            service.descriptor,
@@ -375,7 +385,7 @@ func (tr *testRunner) testFailure(err error, l *logger.Logger, testContext *Cont
 
 	currentClusterVersions := func(service *serviceRuntime) []roachpb.Version {
 		if tr.connCacheInitialized(service) {
-			if err := tr.refreshClusterVersions(service); err == nil {
+			if err := tr.refreshClusterVersions(ctx, service); err == nil {
 				return loadAtomicVersions(service.clusterVersions)
 			} else {
 				tr.logger.Printf(
@@ -508,10 +518,13 @@ func (tr *testRunner) loggerFor(step *singleStep) (*logger.Logger, error) {
 // service with the binary version running on each node of the
 // cluster. We use the `atomic` package here as this function may be
 // called by two steps that are running concurrently.
-func (tr *testRunner) refreshBinaryVersions(service *serviceRuntime) error {
+func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *serviceRuntime) error {
 	newBinaryVersions := make([]roachpb.Version, 0, len(tr.systemService.descriptor.Nodes))
 	for _, node := range service.descriptor.Nodes {
-		bv, err := clusterupgrade.BinaryVersion(tr.conn(node, service.descriptor.Name))
+		connectionCtx, cancel := context.WithTimeout(ctx, internalQueryTimeout)
+		defer cancel()
+
+		bv, err := clusterupgrade.BinaryVersion(connectionCtx, tr.conn(node, service.descriptor.Name))
 		if err != nil {
 			return fmt.Errorf("failed to get binary version for node %d: %w", node, err)
 		}
@@ -525,10 +538,13 @@ func (tr *testRunner) refreshBinaryVersions(service *serviceRuntime) error {
 // refreshClusterVersions updates the internal `clusterVersions` field
 // with the current view of the cluster version in each of the nodes
 // of the cluster.
-func (tr *testRunner) refreshClusterVersions(service *serviceRuntime) error {
+func (tr *testRunner) refreshClusterVersions(ctx context.Context, service *serviceRuntime) error {
 	newClusterVersions := make([]roachpb.Version, 0, len(service.descriptor.Nodes))
 	for _, node := range service.descriptor.Nodes {
-		cv, err := clusterupgrade.ClusterVersion(tr.ctx, tr.conn(node, service.descriptor.Name))
+		connectionCtx, cancel := context.WithTimeout(ctx, internalQueryTimeout)
+		defer cancel()
+
+		cv, err := clusterupgrade.ClusterVersion(connectionCtx, tr.conn(node, service.descriptor.Name))
 		if err != nil {
 			return err
 		}
@@ -540,7 +556,7 @@ func (tr *testRunner) refreshClusterVersions(service *serviceRuntime) error {
 	return nil
 }
 
-func (tr *testRunner) refreshServiceData(service *serviceRuntime) error {
+func (tr *testRunner) refreshServiceData(ctx context.Context, service *serviceRuntime) error {
 	// Update the runner's view of the cluster's binary and cluster
 	// versions for given service before every non-initialization
 	// `singleStep` is executed.
@@ -549,12 +565,12 @@ func (tr *testRunner) refreshServiceData(service *serviceRuntime) error {
 	}
 
 	if service == tr.systemService {
-		if err := tr.refreshBinaryVersions(service); err != nil {
+		if err := tr.refreshBinaryVersions(ctx, service); err != nil {
 			return err
 		}
 	}
 
-	if err := tr.refreshClusterVersions(service); err != nil {
+	if err := tr.refreshClusterVersions(ctx, service); err != nil {
 		return err
 	}
 

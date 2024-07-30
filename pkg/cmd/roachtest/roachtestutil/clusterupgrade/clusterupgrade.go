@@ -125,10 +125,10 @@ func MustParseVersion(v string) *Version {
 // associated with the given database connection.
 // NB: version means major.minor[-internal]; the patch level isn't
 // returned. For example, a binary of version 19.2.4 will return 19.2.
-func BinaryVersion(db *gosql.DB) (roachpb.Version, error) {
+func BinaryVersion(ctx context.Context, db *gosql.DB) (roachpb.Version, error) {
 	zero := roachpb.Version{}
 	var sv string
-	if err := db.QueryRow(`SELECT crdb_internal.node_executable_version();`).Scan(&sv); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT crdb_internal.node_executable_version();`).Scan(&sv); err != nil {
 		return zero, err
 	}
 
@@ -428,7 +428,7 @@ func WaitForClusterUpgrade(
 	timeout time.Duration,
 ) error {
 	firstNode := nodes[0]
-	newVersion, err := BinaryVersion(dbFunc(firstNode))
+	newVersion, err := BinaryVersion(ctx, dbFunc(firstNode))
 	if err != nil {
 		return err
 	}
