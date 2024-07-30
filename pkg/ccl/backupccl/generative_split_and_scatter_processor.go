@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -251,7 +252,8 @@ func newGenerativeSplitAndScatterProcessor(
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
 	db := flowCtx.Cfg.DB
-	numChunkSplitAndScatterWorkers := int(spec.NumNodes)
+	numNodes := len(spec.NodeIds)
+	numChunkSplitAndScatterWorkers := numNodes
 	// numEntrySplitWorkers is set to be 2 * numChunkSplitAndScatterWorkers in
 	// order to keep up with the rate at which chunks are split and scattered.
 	// TODO(rui): This tries to cover for a bad scatter by having 2 * the number
@@ -260,8 +262,10 @@ func newGenerativeSplitAndScatterProcessor(
 
 	mkSplitAndScatterer := func() (splitAndScatterer, error) {
 		if spec.ValidateOnly {
-			nodeID, _ := flowCtx.NodeID.OptionalNodeID()
-			return noopSplitAndScatterer{nodeID}, nil
+			rng, _ := randutil.NewPseudoRand()
+			idx := rng.Intn(numNodes)
+			nodeID := spec.NodeIds[idx]
+			return noopSplitAndScatterer{roachpb.NodeID(nodeID)}, nil
 		}
 		kr, err := MakeKeyRewriterFromRekeys(flowCtx.Codec(), spec.TableRekeys, spec.TenantRekeys,
 			false /* restoreTenantFromStream */)
@@ -297,7 +301,7 @@ func newGenerativeSplitAndScatterProcessor(
 		// other than it's the max number of entries that can be processed
 		// in parallel downstream. It has been verified ad-hoc that this
 		// sizing does not bottleneck restore.
-		doneScatterCh:     make(chan entryNode, int(spec.NumNodes)*maxConcurrentRestoreWorkers),
+		doneScatterCh:     make(chan entryNode, numNodes*maxConcurrentRestoreWorkers),
 		routingDatumCache: newRoutingDatumCache(),
 	}
 	if err := ssp.Init(ctx, ssp, post, generativeSplitAndScatterOutputTypes, flowCtx, processorID, nil, /* memMonitor */
@@ -439,8 +443,9 @@ func runGenerativeSplitAndScatter(
 	doneScatterCh chan<- entryNode,
 	cache *routingDatumCache,
 ) error {
+	numNodes := len(spec.NodeIds)
 	log.Infof(ctx, "Running generative split and scatter with %d total spans, %d chunk size, %d nodes",
-		spec.NumEntries, spec.ChunkSize, spec.NumNodes)
+		spec.NumEntries, spec.ChunkSize, numNodes)
 	g := ctxgroup.WithContext(ctx)
 
 	chunkSplitAndScatterWorkers := len(chunkSplitAndScatterers)

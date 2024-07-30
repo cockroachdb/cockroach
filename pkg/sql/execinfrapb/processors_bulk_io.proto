@@ -449,8 +449,8 @@ message GenerativeSplitAndScatterSpec {
   optional int64 target_size = 15[(gogoproto.nullable) = false];
   // NumEntries is the total number of import spans in this restore.
   optional int64 num_entries = 16[(gogoproto.nullable) = false];
-  // NumNodes is the number of nodes available for dist restore.
-  optional int64 num_nodes = 17[(gogoproto.nullable) = false];
+  // NodeIds is a slice of IDs of nodes available for dist restore.
+  repeated int32 node_ids = 17[(gogoproto.nullable) = false];
   optional int64 job_id = 18 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   optional bool use_frontier_checkpointing = 20 [(gogoproto.nullable) = false];
   repeated jobs.jobspb.RestoreProgress.FrontierEntry checkpointed_spans = 21 [(gogoproto.nullable) = false];

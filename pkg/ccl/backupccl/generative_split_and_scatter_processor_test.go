@@ -263,7 +263,7 @@ func makeTestingGenerativeSplitAndScatterSpec(
 		ChunkSize:          1,
 		TargetSize:         1,
 		NumEntries:         1,
-		NumNodes:           1,
+		NodeIds:            []int32{1},
 		JobID:              0,
 	}
 }
