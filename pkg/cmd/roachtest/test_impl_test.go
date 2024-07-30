@@ -139,6 +139,22 @@ func Test_failuresMatchingError(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "an error contains the expected error, as part of a multi-error",
+			args: args{
+				failures: []failure{
+					createFailure(
+						// Errors that use the `Join` API are recognizable by the
+						// flake detection logic. This test fails if we use
+						// `CombineErrors`.
+						errors.Join(errors.New("oops"), targetError{errors.New("expected-error")}),
+						nil,
+					),
+				},
+				refError: targetError{errors.New("some error")},
+			},
+			want: true,
+		},
+		{
 			name: "single failure - none of errors or squashedErr contains expected error",
 			args: args{
 				failures: []failure{

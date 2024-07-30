@@ -234,11 +234,5 @@ func (m *monitorImpl) wait() error {
 	// goroutines after wait() returns.
 	monitorErr := m.WaitForNodeDeath()
 
-	// For better error messages in roachtest failures, we make the
-	// "context canceled" error secondary.
-	if errors.Is(userErr, context.Canceled) {
-		return errors.CombineErrors(monitorErr, userErr)
-	}
-
-	return errors.CombineErrors(userErr, monitorErr)
+	return errors.Join(userErr, monitorErr)
 }
