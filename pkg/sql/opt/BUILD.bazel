@@ -111,7 +111,7 @@ genrule(
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ ops $(locations :ops)
     """,
-    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",
@@ -131,7 +131,7 @@ genrule(
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ rulenames \
           $(locations :ops) $(locations //pkg/sql/opt/norm:rules) $(locations //pkg/sql/opt/xform:rules)
     """,
-    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",
@@ -155,7 +155,7 @@ genrule(
       $(location //pkg/build/bazel/util/tinystringer) -output=$@ \
           -type=RuleName `dirname $(location :gen-rulenames)`/rule_name.go $(location :gen-rulenames)
     """,
-    exec_tools = [
+    tools = [
         "//pkg/build/bazel/util/tinystringer",
     ],
     visibility = [
