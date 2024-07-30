@@ -472,7 +472,7 @@ func TestUnstableStableTo(t *testing.T) {
 				u.stableSnapTo(u.snapshot.Metadata.Index)
 			}
 			u.checkInvariants(t)
-			u.stableTo(entryID{term: tt.term, index: tt.index})
+			u.stableTo(logMark{term: tt.term, index: tt.index})
 			u.checkInvariants(t)
 			require.Equal(t, tt.wprev, u.prev.index)
 			require.Equal(t, tt.wentryInProgress, u.entryInProgress)
