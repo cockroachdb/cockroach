@@ -533,6 +533,7 @@ func (opc *optPlanningCtx) buildReusableMemo(
 func (opc *optPlanningCtx) reuseMemo(
 	ctx context.Context, cachedMemo *memo.Memo,
 ) (*memo.Memo, error) {
+	opc.incPlanTypeTelemetry(cachedMemo)
 	if cachedMemo.IsOptimized() {
 		// The query could have been already fully optimized in
 		// buildReusableMemo, in which case it is considered a "generic" plan.
@@ -557,6 +558,24 @@ func (opc *optPlanningCtx) reuseMemo(
 		prep.Costs.AddCustom(mem.RootExpr().(memo.RelExpr).Cost() + mem.OptimizationCost())
 	}
 	return mem, nil
+}
+
+// incPlanTypeTelemetry increments the telemetry counters for the type of the
+// plan: generic or custom.
+func (opc *optPlanningCtx) incPlanTypeTelemetry(cachedMemo *memo.Memo) {
+	switch opc.p.SessionData().PlanCacheMode {
+	case sessiondatapb.PlanCacheModeForceCustom:
+		telemetry.Inc(sqltelemetry.PlanTypeForceCustomCounter)
+	case sessiondatapb.PlanCacheModeForceGeneric:
+		telemetry.Inc(sqltelemetry.PlanTypeForceGenericCounter)
+	case sessiondatapb.PlanCacheModeAuto:
+		if cachedMemo.IsOptimized() {
+			// A fully optimized memo is generic.
+			telemetry.Inc(sqltelemetry.PlanTypeAutoGenericCounter)
+		} else {
+			telemetry.Inc(sqltelemetry.PlanTypeAutoCustomCounter)
+		}
+	}
 }
 
 // useGenericPlan returns true if a generic query plan should be used instead of
