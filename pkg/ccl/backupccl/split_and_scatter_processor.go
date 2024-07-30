@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -44,7 +46,8 @@ type splitAndScatterer interface {
 }
 
 type noopSplitAndScatterer struct {
-	scatterNode roachpb.NodeID
+	rng            *rand.Rand
+	sqlInstanceIDs []int32
 }
 
 var _ splitAndScatterer = noopSplitAndScatterer{}
@@ -58,7 +61,13 @@ func (n noopSplitAndScatterer) split(_ context.Context, _ keys.SQLCodec, _ roach
 func (n noopSplitAndScatterer) scatter(
 	_ context.Context, _ keys.SQLCodec, _ roachpb.Key,
 ) (roachpb.NodeID, error) {
-	return n.scatterNode, nil
+	numInstances := len(n.sqlInstanceIDs)
+	if numInstances == 0 {
+		return 0, nil
+	}
+	idx := n.rng.Intn(numInstances)
+	sqlInstanceID := n.sqlInstanceIDs[idx]
+	return roachpb.NodeID(sqlInstanceID), nil
 }
 
 // dbSplitAndScatter is the production implementation of this processor's
@@ -229,7 +238,11 @@ func newSplitAndScatterProcessor(
 	scatterer := makeSplitAndScatterer(db.KV(), kr)
 	if spec.ValidateOnly {
 		nodeID, _ := flowCtx.NodeID.OptionalNodeID()
-		scatterer = noopSplitAndScatterer{nodeID}
+		rng, _ := randutil.NewPseudoRand()
+		scatterer = noopSplitAndScatterer{
+			rng:            rng,
+			sqlInstanceIDs: []int32{int32(nodeID)},
+		}
 	}
 	ssp := &splitAndScatterProcessor{
 		flowCtx:   flowCtx,
