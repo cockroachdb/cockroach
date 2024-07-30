@@ -511,6 +511,12 @@ func InitialZoneConfigKVs(
 	metaRangeZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
 	livenessZoneConf := protoutil.Clone(defaultSystemZoneConfig).(*zonepb.ZoneConfig)
 
+	// The timeseries zone should inherit everything except for gc.ttlseconds from
+	// the default zone. We create it explicitly here so it's clearly visible
+	// when using SHOW ALL ZONE CONFIGURATIONS.
+	timeseriesZoneConf := zonepb.NewZoneConfig()
+	timeseriesZoneConf.GC = &zonepb.GCPolicy{TTLSeconds: defaultZoneConfig.GC.TTLSeconds}
+
 	// .meta zone config entry with a shorter GC time.
 	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
 
@@ -534,6 +540,7 @@ func InitialZoneConfigKVs(
 	add(keys.MetaRangesID, metaRangeZoneConf)
 	add(keys.LivenessRangesID, livenessZoneConf)
 	add(keys.SystemRangesID, systemZoneConf)
+	add(keys.TimeseriesRangesID, timeseriesZoneConf)
 	add(keys.SystemDatabaseID, systemZoneConf)
 	add(keys.ReplicationConstraintStatsTableID, replicationConstraintStatsZoneConf)
 	add(keys.ReplicationStatsTableID, replicationStatsZoneConf)

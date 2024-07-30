@@ -72,6 +72,7 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 0    RANGE default
 16   RANGE meta
 17   RANGE system
+18   RANGE timeseries
 22   RANGE liveness
 111  TABLE test.public.t4
 111  INDEX test.public.t4@myt4index
@@ -109,6 +110,8 @@ RANGE system                    ALTER RANGE system CONFIGURE ZONE USING
                                   num_replicas = 5,
                                   constraints = '[]',
                                   lease_preferences = '[]'
+RANGE timeseries                ALTER RANGE timeseries CONFIGURE ZONE USING
+                                  gc.ttlseconds = 14400
 TABLE test.public.t4            ALTER TABLE test.public.t4 CONFIGURE ZONE USING
                                   num_replicas = 7
 
