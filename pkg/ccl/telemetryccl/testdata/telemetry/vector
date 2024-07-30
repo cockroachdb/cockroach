@@ -1,0 +1,20 @@
+# This file contains telemetry tests for telemetry counters related to
+# pg_vector.
+
+feature-list
+sql.schema.new_column_type.*
+----
+
+feature-usage
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  x VECTOR
+)
+----
+sql.schema.new_column_type.int8
+sql.schema.new_column_type.vector
+
+feature-usage
+ALTER TABLE t ADD COLUMN y VECTOR
+----
+sql.schema.new_column_type.vector
