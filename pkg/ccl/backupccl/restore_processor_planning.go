@@ -103,6 +103,10 @@ func distRestore(
 		}
 
 		numNodes := len(sqlInstanceIDs)
+		instanceIDs := make([]int32, numNodes)
+		for i, instanceID := range sqlInstanceIDs {
+			instanceIDs[i] = int32(instanceID)
+		}
 		p := planCtx.NewPhysicalPlan()
 
 		restoreDataSpec := execinfrapb.RestoreDataSpec{
@@ -177,9 +181,10 @@ func distRestore(
 			MaxFileCount:                int64(md.spanFilter.maxFileCount),
 			ChunkSize:                   int64(chunkSize),
 			NumEntries:                  int64(md.numImportSpans),
-			NumNodes:                    int64(numNodes),
 			UseFrontierCheckpointing:    md.spanFilter.useFrontierCheckpointing,
+			NumNodes:                    int64(numNodes),
 			JobID:                       int64(md.jobID),
+			SqlInstanceIds:              instanceIDs,
 			ExclusiveFileSpanComparison: md.exclusiveEndKeys,
 		}
 		if md.spanFilter.useFrontierCheckpointing {
