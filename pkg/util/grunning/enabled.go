@@ -10,8 +10,7 @@
 
 // See grunning.Supported() for an explanation behind this build tag.
 //
-//go:build !((linux && s390x) || !bazel)
-// +build !linux !s390x
+//go:build bazel
 // +build bazel
 
 package grunning
