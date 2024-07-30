@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -284,12 +285,13 @@ func (c *TenantStreamingClusters) Cutover(
 	require.LessOrEqual(c.T, protectedTimestamp.GoTime(), cutoverOutput.GoTime())
 
 	// PTS should be less than or equal to retained time as a result of heartbeats.
-	var retainedTime time.Time
+	var retainedTime pq.NullTime
 	c.DestSysSQL.QueryRow(c.T,
 		`SELECT retained_time FROM [SHOW TENANT $1 WITH REPLICATION STATUS]`,
 		c.Args.DestTenantName).Scan(&retainedTime)
-
-	require.LessOrEqual(c.T, protectedTimestamp.GoTime(), retainedTime)
+	if retainedTime.Valid {
+		require.LessOrEqual(c.T, protectedTimestamp.GoTime(), retainedTime.Time)
+	}
 
 	if !async {
 		jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
