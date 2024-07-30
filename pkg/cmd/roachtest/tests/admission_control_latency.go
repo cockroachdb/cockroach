@@ -88,6 +88,7 @@ type variations struct {
 	disks                int
 	roachtestAddr        string
 	leaseType            registry.LeaseType
+	cleanRestart         bool
 	perturbation         perturbation
 }
 
@@ -149,6 +150,7 @@ func setupMetamorphic(p perturbation) variations {
 	v.vcpu = numVCPUs[rng.Intn(len(numVCPUs))]
 	v.disks = numDisks[rng.Intn(len(numDisks))]
 	v.partitionSite = rng.Intn(2) == 0
+	v.cleanRestart = rng.Intn(2) == 0
 	v.perturbation = p
 	return v
 }
@@ -167,6 +169,7 @@ func setupFull(p perturbation) variations {
 	v.validationDuration = 5 * time.Minute
 	v.perturbationDuration = 10 * time.Minute
 	v.ratioOfMax = 0.5
+	v.cleanRestart = true
 	v.perturbation = p
 	return v
 }
@@ -185,6 +188,7 @@ func setupDev(p perturbation) variations {
 	v.validationDuration = 10 * time.Second
 	v.perturbationDuration = 30 * time.Second
 	v.ratioOfMax = 0.5
+	v.cleanRestart = true
 	v.perturbation = p
 	return v
 }
@@ -276,11 +280,19 @@ func (r restart) startPerturbation(
 	startTime := timeutil.Now()
 	gracefulOpts := option.DefaultStopOpts()
 	// SIGTERM for clean shutdown
-	gracefulOpts.RoachprodOpts.Sig = 15
+	if v.cleanRestart {
+		gracefulOpts.RoachprodOpts.Sig = 15
+	} else {
+		gracefulOpts.RoachprodOpts.Sig = 9
+	}
 	gracefulOpts.RoachprodOpts.Wait = true
 	v.cluster.Stop(ctx, l, gracefulOpts, v.cluster.Node(v.targetNode))
 	waitDuration(ctx, v.perturbationDuration)
-	return timeutil.Since(startTime)
+	if v.cleanRestart {
+		return timeutil.Since(startTime)
+	}
+	// If it is not a clean restart, we ignore the first 10 seconds to allow for lease movement.
+	return timeutil.Since(startTime) + 10*time.Second
 }
 
 // endPerturbation restarts the node.
