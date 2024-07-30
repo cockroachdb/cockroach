@@ -46,6 +46,7 @@ type testStream struct {
 	ctx     context.Context
 	ctxDone func()
 	done    chan *kvpb.Error
+	cleanup func()
 	mu      struct {
 		syncutil.Mutex
 		sendErr error
@@ -106,6 +107,14 @@ func (s *testStream) BlockSend() func() {
 // by sending the error to the done channel.
 func (s *testStream) Disconnect(err *kvpb.Error) {
 	s.done <- err
+	if s.cleanup != nil {
+		go s.cleanup()
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func (s *testStream) RegisterRangefeedCleanUp(cleanup func()) {
+	s.cleanup = cleanup
 }
 
 // Error returns the error that was sent to the done channel. It returns nil if
