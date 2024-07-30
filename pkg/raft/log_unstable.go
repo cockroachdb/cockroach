@@ -167,41 +167,39 @@ func (u *unstable) acceptInProgress() {
 	u.entryInProgress = u.lastIndex()
 }
 
-// stableTo marks entries up to the entry with the specified (index, term) as
+// stableTo marks entries up to the entry at the specified (term, index) mark as
 // being successfully written to stable storage.
 //
-// The method should only be called when the caller can attest that the entries
-// can not be overwritten by an in-progress log append. See the related comment
-// in newStorageAppendRespMsg.
-func (u *unstable) stableTo(id entryID) {
-	if u.snapshot != nil && id.index == u.snapshot.Metadata.Index {
+// The method makes sure the entries can not be overwritten by an in-progress
+// log append. See the related comment in newStorageAppendRespMsg.
+func (u *unstable) stableTo(mark logMark) {
+	if mark.term != u.term {
+		// The last accepted term has changed. Ignore. This is possible if part or
+		// all of the unstable log was replaced between that time that a set of
+		// entries started to be written to stable storage and when they finished.
+		u.logger.Infof("mark (term,index)=(%d,%d) mismatched the last accepted "+
+			"term %d in unstable log; ignoring ", mark.term, mark.index, u.term)
+		return
+	}
+	if u.snapshot != nil && mark.index == u.snapshot.Metadata.Index {
 		// Index matched unstable snapshot, not unstable entry. Ignore.
-		u.logger.Infof("entry at index %d matched unstable snapshot; ignoring", id.index)
+		u.logger.Infof("entry at index %d matched unstable snapshot; ignoring", mark.index)
 		return
 	}
-	if id.index <= u.prev.index || id.index > u.lastIndex() {
+	if mark.index <= u.prev.index || mark.index > u.lastIndex() {
 		// Unstable entry missing. Ignore.
-		u.logger.Infof("entry at index %d missing from unstable log; ignoring", id.index)
-		return
-	}
-	if term := u.termAt(id.index); term != id.term {
-		// Term mismatch between unstable entry and specified entry. Ignore.
-		// This is possible if part or all of the unstable log was replaced
-		// between that time that a set of entries started to be written to
-		// stable storage and when they finished.
-		u.logger.Infof("entry at (index,term)=(%d,%d) mismatched with "+
-			"entry at (%d,%d) in unstable log; ignoring", id.index, id.term, id.index, term)
+		u.logger.Infof("entry at index %d missing from unstable log; ignoring", mark.index)
 		return
 	}
 	if u.snapshot != nil {
-		u.logger.Panicf("entry %+v acked earlier than the snapshot(in-progress=%t): %s",
-			id, u.snapshotInProgress, DescribeSnapshot(*u.snapshot))
+		u.logger.Panicf("mark %+v acked earlier than the snapshot(in-progress=%t): %s",
+			mark, u.snapshotInProgress, DescribeSnapshot(*u.snapshot))
 	}
-	u.logSlice = u.forward(id.index)
-	// TODO(pav-kv): why can id.index overtake u.entryInProgress? Probably bugs in
-	// tests using the log writes incorrectly, e.g. TestLeaderStartReplication
+	u.logSlice = u.forward(mark.index)
+	// TODO(pav-kv): why can mark.index overtake u.entryInProgress? Probably bugs
+	// in tests using the log writes incorrectly, e.g. TestLeaderStartReplication
 	// takes nextUnstableEnts() without acceptInProgress().
-	u.entryInProgress = max(u.entryInProgress, id.index)
+	u.entryInProgress = max(u.entryInProgress, mark.index)
 	u.shrinkEntriesArray()
 }
 
