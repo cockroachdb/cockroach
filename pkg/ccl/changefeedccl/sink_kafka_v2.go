@@ -550,13 +550,9 @@ func validateCompressionLevel(compressionType compressionCodec, level int) error
 	case sarama.CompressionSnappy:
 		return errors.Errorf(`snappy does not support compression levels`)
 	case sarama.CompressionLZ4:
-		// NOTE: it's not possible to define a valid non-default lz4 compression
-		// level before https://github.com/twmb/franz-go/pull/781 is released in
-		// the next kgo version.
-		//
-		// Additionally, the v1 sink ignores `level` for lz4 anyway. So let's do
-		// the best of both worlds and let the user specify valid levels and
-		// default to the default level.
+		// The v1 sink ignores `level` for lz4, So let's use kgo's default
+		// behavior, which is to apply the level if it's valid, and fall back to
+		// the default otherwise.
 		return nil
 	case sarama.CompressionZSTD:
 		w, err := zstd.NewWriter(io.Discard, zstd.WithEncoderLevel(zstd.EncoderLevel(level)))
