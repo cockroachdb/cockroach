@@ -379,7 +379,6 @@ func maybeFillInDescriptor(
 	}
 	set(catalog.SetCreateAsOfTimeUsingModTime, maybeSetCreateAsOfTime(desc))
 	set(catalog.UpgradedFormatVersion, maybeUpgradeFormatVersion(desc))
-	set(catalog.FixedIndexEncodingType, maybeFixPrimaryIndexEncoding(&desc.PrimaryIndex))
 	set(catalog.UpgradedIndexFormatVersion, maybeUpgradePrimaryIndexFormatVersion(desc))
 	for i := range desc.Indexes {
 		idx := &desc.Indexes[i]
@@ -397,10 +396,6 @@ func maybeFillInDescriptor(
 				maybeUpgradeSecondaryIndexFormatVersion(idx))
 		}
 	}
-	set(catalog.UpgradedNamespaceName, maybeUpgradeNamespaceName(desc))
-	set(catalog.RemovedDefaultExprFromComputedColumn,
-		maybeRemoveDefaultExprFromComputedColumns(desc))
-
 	parentSchemaID := desc.GetUnexposedParentSchemaID()
 	// TODO(richardjcai): Remove this case in 22.2.
 	if parentSchemaID == descpb.InvalidID {
@@ -431,30 +426,6 @@ func maybeFillInDescriptor(
 	set(catalog.FixSecondaryIndexEncodingType, maybeFixSecondaryIndexEncodingType(desc))
 	set(catalog.FixedIncorrectForeignKeyOrigins, maybeFixForeignKeySelfReferences(desc))
 	return changes, nil
-}
-
-// maybeRemoveDefaultExprFromComputedColumns removes DEFAULT expressions on
-// computed columns. Although we now have a descriptor validation check to
-// prevent this, this hasn't always been the case, so it's theoretically
-// possible to encounter table descriptors which would fail this validation
-// check. See issue #72881 for details.
-func maybeRemoveDefaultExprFromComputedColumns(desc *descpb.TableDescriptor) (hasChanged bool) {
-	doCol := func(col *descpb.ColumnDescriptor) {
-		if col.IsComputed() && col.HasDefault() {
-			col.DefaultExpr = nil
-			hasChanged = true
-		}
-	}
-
-	for i := range desc.Columns {
-		doCol(&desc.Columns[i])
-	}
-	for _, m := range desc.Mutations {
-		if col := m.GetColumn(); col != nil && m.Direction != descpb.DescriptorMutation_DROP {
-			doCol(col)
-		}
-	}
-	return hasChanged
 }
 
 // maybeUpgradeForeignKeyRepresentation destructively modifies the input table
@@ -790,28 +761,6 @@ func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasCh
 		return false
 	}
 	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
-	return true
-}
-
-// maybeUpgradeNamespaceName deals with upgrading the name field of the
-// namespace table (30) to be "namespace" rather than "namespace2". This
-// occurs in clusters which were bootstrapped before 21.2 and have not
-// run the corresponding migration.
-func maybeUpgradeNamespaceName(d *descpb.TableDescriptor) (hasChanged bool) {
-	if d.ID != keys.NamespaceTableID || d.Name != catconstants.PreMigrationNamespaceTableName {
-		return false
-	}
-	d.Name = string(catconstants.NamespaceTableName)
-	return true
-}
-
-// maybeFixPrimaryIndexEncoding ensures that the index descriptor for a primary
-// index has the correct encoding type set.
-func maybeFixPrimaryIndexEncoding(idx *descpb.IndexDescriptor) (hasChanged bool) {
-	if idx.EncodingType == catenumpb.PrimaryIndexEncoding {
-		return false
-	}
-	idx.EncodingType = catenumpb.PrimaryIndexEncoding
 	return true
 }
 

@@ -294,56 +294,6 @@ func TestFitColumnToFamily(t *testing.T) {
 	}
 }
 
-func TestMaybeUpgradeFormatVersion(t *testing.T) {
-	tests := []struct {
-		desc       descpb.TableDescriptor
-		expUpgrade bool
-		verify     func(int, catalog.TableDescriptor) // nil means no extra verification.
-	}{
-		{
-			desc: descpb.TableDescriptor{
-				FormatVersion: descpb.BaseFormatVersion,
-				Columns: []descpb.ColumnDescriptor{
-					{ID: 1, Name: "foo"},
-				},
-				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
-			},
-			expUpgrade: true,
-			verify: func(i int, desc catalog.TableDescriptor) {
-				if len(desc.GetFamilies()) == 0 {
-					t.Errorf("%d: expected families to be set, but it was empty", i)
-				}
-			},
-		},
-		// Test that a version from the future is left alone.
-		{
-			desc: descpb.TableDescriptor{
-				FormatVersion: descpb.InterleavedFormatVersion,
-				Columns: []descpb.ColumnDescriptor{
-					{ID: 1, Name: "foo"},
-				},
-				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
-			},
-			expUpgrade: false,
-			verify:     nil,
-		},
-	}
-	for i, test := range tests {
-		b := NewBuilder(&test.desc)
-		require.NoError(t, b.RunPostDeserializationChanges())
-		desc := b.BuildImmutableTable()
-		changes, err := GetPostDeserializationChanges(desc)
-		require.NoError(t, err)
-		upgraded := changes.Contains(catalog.UpgradedFormatVersion)
-		if upgraded != test.expUpgrade {
-			t.Fatalf("%d: expected upgraded=%t, but got upgraded=%t", i, test.expUpgrade, upgraded)
-		}
-		if test.verify != nil {
-			test.verify(i, desc)
-		}
-	}
-}
-
 func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 	tests := []struct {
 		desc        descpb.TableDescriptor
@@ -1013,49 +963,16 @@ func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
-	codec := srv.ApplicationLayer().Codec()
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
 	const expectedErrRE = `.*: computed column \"b\" cannot also have a DEFAULT expression`
 	// Create a table with a computed column.
 	tdb.Exec(t, `CREATE DATABASE t`)
 	tdb.Exec(t, `CREATE TABLE t.tbl (a INT PRIMARY KEY, b INT AS (1) STORED)`)
-
-	// Get the descriptor for the table.
-	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "tbl")
-
 	// Setting a default value on the computed column should fail.
 	tdb.ExpectErr(t, expectedErrRE, `ALTER TABLE t.tbl ALTER COLUMN b SET DEFAULT 2`)
-
-	// Copy the descriptor proto for the table and modify it by setting a default
-	// expression.
-	var desc *descpb.TableDescriptor
-	{
-		desc = NewBuilder(tbl.TableDesc()).BuildImmutableTable().TableDesc()
-		defaultExpr := "2"
-		desc.Columns[1].DefaultExpr = &defaultExpr
-	}
-
-	// This modified table descriptor should fail validation.
-	{
-		broken := NewBuilder(desc).BuildImmutableTable()
-		require.Error(t, validate.Self(clusterversion.TestingClusterVersion, broken))
-	}
-
-	// This modified table descriptor should be fixed by removing the default
-	// expression.
-	{
-		b := NewBuilder(desc)
-		require.NoError(t, b.RunPostDeserializationChanges())
-		fixed := b.BuildImmutableTable()
-		require.NoError(t, validate.Self(clusterversion.TestingClusterVersion, fixed))
-		changes, err := GetPostDeserializationChanges(fixed)
-		require.NoError(t, err)
-		require.True(t, changes.Contains(catalog.RemovedDefaultExprFromComputedColumn))
-		require.False(t, fixed.PublicColumns()[1].HasDefault())
-	}
 }
 
 func TestLogicalColumnID(t *testing.T) {
