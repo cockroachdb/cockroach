@@ -615,20 +615,6 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 			// If we receive a (pre)vote request, and we find our leader to be dead or
 			// removed, forget it so we can grant the (pre)votes.
 			r.maybeForgetLeaderOnVoteRequestLocked()
-		case raftpb.MsgSnap:
-			// Occasionally a snapshot message may arrive under an outdated term,
-			// which would lead to Raft discarding the snapshot. This should be
-			// really rare in practice, but it does happen in tests and in particular
-			// can happen to the synchronous snapshots on the learner path, which
-			// will then have to wait for the raft snapshot queue to send another
-			// snapshot. However, in some tests it is desirable to disable the
-			// raft snapshot queue. This workaround makes that possible.
-			//
-			// See TestReportUnreachableRemoveRace for the test that prompted
-			// this addition.
-			if term := raftGroup.BasicStatus().Term; term > req.Message.Term {
-				req.Message.Term = term
-			}
 		}
 		err := raftGroup.Step(req.Message)
 		if errors.Is(err, raft.ErrProposalDropped) {
