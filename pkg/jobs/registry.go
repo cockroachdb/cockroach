@@ -720,6 +720,7 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 			User:     username.NodeUserName(),
 			Database: catconstants.SystemDatabaseName,
 		}, stmt, values[:nCols]...)
+
 		if err != nil {
 			return err
 		}

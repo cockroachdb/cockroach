@@ -58,6 +58,7 @@ const (
 	CategorySystemInfo          = "System info"
 	CategorySystemRepair        = "System repair"
 	CategoryClusterReplication  = "Cluster Replication and Migration"
+	CategoryJobs                = "Jobs"
 	CategoryTesting             = "Testing"
 )
 

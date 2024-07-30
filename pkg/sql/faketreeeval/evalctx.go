@@ -362,6 +362,12 @@ func (p *DummyEvalPlanner) ExtendHistoryRetention(ctx context.Context, id jobspb
 	return errors.WithStack(errEvalPlanner)
 }
 
+func (p *DummyEvalPlanner) StartUpdateCachedTableMetadataJob(
+	_ context.Context,
+) (jobspb.JobID, error) {
+	return 0, nil
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
