@@ -2292,12 +2292,6 @@ INSERT INTO xy VALUES (-1, 9), (-2, 8), (5, 15), (6, 16)
 statement error pgcode 0A000 creating partial statistics with a WHERE clause is not yet supported
 CREATE STATISTICS abcd_a_partial ON a FROM abcd WHERE a > 1;
 
-statement error pgcode 0A000 creating partial statistics at extremes is not yet supported
-CREATE STATISTICS abcd_a_partial ON a FROM abcd USING EXTREMES;
-
-statement ok
-SET enable_create_stats_using_extremes = on
-
 statement ok
 CREATE STATISTICS abcd_a_partial ON a FROM abcd USING EXTREMES;
 
@@ -2503,6 +2497,15 @@ sdn              NULL                                               8          2
 sdnp             (a IS NULL) OR ((a < 0:::INT8) OR (a > 5:::INT8))  2          2
 
 # Verify errors.
+statement ok
+SET enable_create_stats_using_extremes = off
+
+statement error creating partial statistics at extremes is disabled
+CREATE STATISTICS abcd_defaults ON a FROM abcd USING EXTREMES;
+
+statement ok
+RESET enable_create_stats_using_extremes
+
 statement error pq: cannot process multiple partial statistics at once
 CREATE STATISTICS abcd_defaults FROM abcd USING EXTREMES;
 
@@ -2592,9 +2595,6 @@ CREATE INDEX ON xy (y) WHERE y > 5;
 
 statement error pq: table xy does not contain a non-partial forward index with y as a prefix column
 CREATE STATISTICS xy_partial_idx ON y FROM xy USING EXTREMES;
-
-statement ok
-RESET enable_create_stats_using_extremes
 
 # Regression test for #100909. Ensure enum is hydrated in SHOW HISTOGRAM.
 statement ok
@@ -2874,9 +2874,6 @@ upper_bound            range_rows  distinct_range_rows  equal_rows
 
 # Test partial stats using extremes on indexed virtual computed columns.
 statement ok
-SET enable_create_stats_using_extremes = on
-
-statement ok
 INSERT INTO t68254 (a, b, c) VALUES (5, '5', '{"foo": {"bar": {"baz": 5}}}')
 
 statement ok
@@ -3147,9 +3144,6 @@ CREATE STATISTICS enum_table_partial ON a FROM bool_table USING EXTREMES
 
 statement ok
 RESET enable_create_stats_using_extremes_bool_enum
-
-statement ok
-RESET enable_create_stats_using_extremes
 
 # Regression test for #118537. Do not create stats on non-public mutation
 # columns.

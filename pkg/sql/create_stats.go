@@ -219,9 +219,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	}
 
 	if n.Options.UsingExtremes && !n.p.SessionData().EnableCreateStatsUsingExtremes {
-		return nil, pgerror.New(pgcode.FeatureNotSupported,
-			"creating partial statistics at extremes is not yet supported",
-		)
+		return nil, errors.Errorf(`creating partial statistics at extremes is disabled`)
 	}
 
 	// TODO(93998): Add support for WHERE.
