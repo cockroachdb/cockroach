@@ -1768,6 +1768,8 @@ func newConsumer(blockAfter int) *consumer {
 
 func (c *consumer) SendIsThreadSafe() {}
 
+func (c *consumer) ShouldUseBufferedRegistration() bool { return true }
+
 func (c *consumer) Send(e *kvpb.RangeFeedEvent) error {
 	if e.Val != nil {
 		v := int(atomic.AddInt32(&c.sentValues, 1))

@@ -89,6 +89,18 @@ var RangeFeedUseScheduler = settings.RegisterBoolSetting(
 	metamorphic.ConstantWithTestBool("kv_rangefeed_scheduler_enabled", true),
 )
 
+// RangefeedUseBufferedSender controls whether to use a buffered sender,
+// buffering events before sending them back to clients. When enabled, buffered
+// sender will be used, making it unnecessary for rangefeed to buffer events at
+// the per client per registration level.
+var RangefeedUseBufferedSender = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.rangefeed.buffered_sender.enabled",
+	"use buffered sender for all range feeds instead of buffering events "+
+		"separately per client per range",
+	metamorphic.ConstantWithTestBool("kv_rangefeed_buffered_sender_enabled", false),
+)
+
 // RangefeedSchedulerDisabled is a kill switch for scheduler based rangefeed
 // processors. To be removed in 24.1 after new processor becomes default.
 var RangefeedSchedulerDisabled = envutil.EnvOrDefaultBool("COCKROACH_RANGEFEED_DISABLE_SCHEDULER",

@@ -68,6 +68,8 @@ func (s *testStream) Cancel() {
 
 func (s *testStream) SendIsThreadSafe() {}
 
+func (s *testStream) ShouldUseBufferedRegistration() bool { return true }
+
 func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
