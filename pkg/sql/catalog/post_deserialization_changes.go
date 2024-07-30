@@ -50,10 +50,6 @@ const (
 	// UpgradedFormatVersion indicates that the FormatVersion was upgraded.
 	UpgradedFormatVersion PostDeserializationChangeType = iota
 
-	// FixedIndexEncodingType indicates that the encoding type of a public index
-	// was fixed.
-	FixedIndexEncodingType
-
 	// UpgradedIndexFormatVersion indicates that the format version of at least
 	// one index descriptor was upgraded.
 	UpgradedIndexFormatVersion
@@ -62,20 +58,8 @@ const (
 	// representation was upgraded.
 	UpgradedForeignKeyRepresentation
 
-	// UpgradedNamespaceName indicates that the table was system.namespace
-	// and it had its name upgraded from "namespace2".
-	//
-	// TODO(ajwerner): Remove this and the associated migration in 22.1 as
-	// this will never be true due to the corresponding long-running migration.
-	UpgradedNamespaceName
-
 	// UpgradedPrivileges indicates that the PrivilegeDescriptor version was upgraded.
 	UpgradedPrivileges
-
-	// RemovedDefaultExprFromComputedColumn indicates that the table had at least
-	// one computed column which also had a DEFAULT expression, which therefore
-	// had to be removed. See issue #72881 for details.
-	RemovedDefaultExprFromComputedColumn
 
 	// RemovedDuplicateIDsInRefs indicates that the table
 	// has redundant IDs in its DependsOn, DependsOnTypes and DependedOnBy
