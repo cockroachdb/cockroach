@@ -231,22 +231,25 @@ func changefeedPlanHook(
 			telemetry.Count(`changefeed.create.core`)
 			logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
 
-			// if _, ok := rawOpts[changefeedbase.OptExperimentalListenChannel]; ok { // i think we still need to do this though. but then how do we unlisten?
-
-			// 	go func() {
-			// 		err := coreChangefeed(ctx, p, details, progress, resultsCh)
-			// 		if err != nil {
-			// 			log.Warningf(ctx, "core notification changefeed failed: %s", err)
-			// 		}
-			// 	}()
-			// }
-
-			err := coreChangefeed(ctx, p, details, progress, resultsCh)
-			// TODO(yevgeniy): This seems wrong -- core changefeeds always terminate
-			// with an error.  Perhaps rename this telemetry to indicate number of
-			// completed feeds.
-			telemetry.Count(`changefeed.core.error`)
-			return err
+			// Need to spawn this as async so we get results back without blocking.
+			// TODO: But how do we unlisten? including on session end?
+			if _, ok := rawOpts[changefeedbase.OptExperimentalListenChannel]; ok {
+				newCtx := context.WithoutCancel(ctx) // orphan the context so it doesn't immediately cancel
+				go func() {
+					err := coreChangefeed(newCtx, p, details, progress, resultsCh)
+					if err != nil {
+						log.Warningf(newCtx, "core notification changefeed failed: %s", err)
+					}
+				}()
+				return nil
+			} else {
+				err := coreChangefeed(ctx, p, details, progress, resultsCh)
+				// TODO(yevgeniy): This seems wrong -- core changefeeds always terminate
+				// with an error.  Perhaps rename this telemetry to indicate number of
+				// completed feeds.
+				telemetry.Count(`changefeed.core.error`)
+				return err
+			}
 		}
 
 		// TODO: probably want to do this PTS stuff too

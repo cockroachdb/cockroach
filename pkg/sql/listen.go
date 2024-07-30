@@ -32,6 +32,17 @@ func (p *planner) Listen(ctx context.Context, n *tree.Listen) (planNode, error) 
 	// so then they send their output to the recv/DistSQLReceiver thingy
 
 	// TODO: getting single quotes around payloads somewhere
+	// TODO: what about the requirement that we only start receiving notifications after txn end (if in one)
+	// TODO: synchronize connection - notifications async vs data
+	// TODO: unlisten, incl on session end
+	// - could just make ` write tcp ‹[::1]:26257› -> ‹[::1]:56383›: ‹use of closed network connection›` a non transient err for the latter maybe?
+
+	// currently it seems to only send psql data after i run commands. maybe just a psql artifact, maybe not
+	//   defaultdb=> notify hi aaa;
+	//   NOTIFY
+	//   defaultdb=> ;
+	//   Asynchronous notification "hi" with payload "'aaa'" received from server process with PID 16239.
+	// TODO: make a test suite
 
 	stmt := &tree.CreateChangefeed{
 		Targets: []tree.ChangefeedTarget{{TableName: tree.NewTableNameWithSchema("system", "public", "notifications")}},

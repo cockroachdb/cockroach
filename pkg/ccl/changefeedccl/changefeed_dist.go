@@ -280,12 +280,12 @@ func startDistChangefeed(
 		localState.drainingNodes = localState.drainingNodes[:0]
 		localState.aggregatorFrontier = localState.aggregatorFrontier[:0]
 
-		_, isNotification := details.Opts[changefeedbase.OptExperimentalListenChannel]
+		notifChannel, isNotification := details.Opts[changefeedbase.OptExperimentalListenChannel]
 
 		var innerResultWriter sql.RowResultWriterI
 
 		if isNotification {
-			innerResultWriter = makeNotificationResultWriter(execCtx.(sql.NotificationClientSender), cancel)
+			innerResultWriter = makeNotificationResultWriter(execCtx.(sql.NotificationClientSender), cancel, notifChannel)
 		} else {
 			innerResultWriter = makeChangefeedResultWriter(resultsCh, cancel)
 		}
@@ -607,15 +607,16 @@ func (w *changefeedResultWriter) Err() error {
 // the received rows back over notifications
 type notificationResultWriter struct {
 	sender       sql.NotificationClientSender
+	channel      string
 	rowsAffected int
 	err          error
 	cancel       context.CancelFunc
 }
 
 func makeNotificationResultWriter(
-	sender sql.NotificationClientSender, cancel context.CancelFunc,
+	sender sql.NotificationClientSender, cancel context.CancelFunc, channel string,
 ) *notificationResultWriter {
-	return &notificationResultWriter{sender: sender, cancel: cancel}
+	return &notificationResultWriter{sender: sender, cancel: cancel, channel: channel}
 }
 
 func (w *notificationResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
@@ -624,7 +625,17 @@ func (w *notificationResultWriter) AddRow(ctx context.Context, row tree.Datums) 
 	row = append(tree.Datums(nil), row...)
 	// datum is [topic ("notifications"), key ("[xx]"), json data]
 	// TODO: can also do channel filtering in here maybe
-	// key := string(tree.MustBeDString(row[1]))
+	jsonEncodedKey := []byte(tree.MustBeDBytes(row[1]))
+
+	var keyParts []string
+	if err := json.Unmarshal(jsonEncodedKey, &keyParts); err != nil {
+		return err
+	}
+	key := keyParts[0]
+	if key != w.channel {
+		return nil
+	}
+
 	jsonEncodedMessage := []byte(tree.MustBeDBytes(row[2]))
 
 	type msg struct {
