@@ -27,6 +27,12 @@ type RangefeedMetricsRecorder interface {
 	UpdateMetricsOnRangefeedDisconnect()
 }
 
+// BufferedSender is an interface for declaring that the Send method is
+// buffered. This is currently not implemented by any structs.
+type BufferedSender interface {
+	SendIsBuffered()
+}
+
 // ServerStreamSender forwards MuxRangefeedEvents from StreamMuxer to the
 // underlying stream.
 type ServerStreamSender interface {
@@ -169,6 +175,17 @@ func (sm *StreamMuxer) AddStream(
 // Send method is thread-safe. Note that Send wraps ServerStreamSender which
 // also declares its Send method to be thread-safe.
 func (sm *StreamMuxer) SendIsThreadSafe() {}
+
+// ShouldUseBufferedRegistration returns true if the underlying stream is an
+// unbuffered sender. This means that the registrations needs to buffer events
+// themselves (buffered registration should be used). If the method returns
+// false, underlying stream is a buffered sender that buffers events already,
+// making it unnecessary to buffer events at registration level (unbuffered
+// registration should be used).
+func (sm *StreamMuxer) ShouldUseBufferedRegistration() bool {
+	_, ok := sm.sender.(BufferedSender)
+	return !ok
+}
 
 func (sm *StreamMuxer) Send(e *kvpb.MuxRangeFeedEvent) error {
 	return sm.sender.Send(e)

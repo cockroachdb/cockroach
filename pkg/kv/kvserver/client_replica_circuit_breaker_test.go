@@ -468,6 +468,8 @@ func (s *dummyStream) Context() context.Context {
 
 func (s *dummyStream) SendIsThreadSafe() {}
 
+func (s *dummyStream) ShouldUseBufferedRegistration() bool { return true }
+
 func (s *dummyStream) Send(ev *kvpb.RangeFeedEvent) error {
 	if ev.Val == nil && ev.Error == nil {
 		return nil
