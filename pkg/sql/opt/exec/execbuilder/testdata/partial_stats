@@ -1241,9 +1241,6 @@ SET CLUSTER SETTING sql.stats.forecasts.enabled = $forecastsEnabledPrev
 # Verify that we can merge partial stats with full stats that have outer
 # buckets.
 statement ok
-SET enable_create_stats_using_extremes = on
-
-statement ok
 CREATE TABLE ka (k INT PRIMARY KEY, a INT, INDEX(a))
 
 statement ok
