@@ -247,6 +247,8 @@ catalog:
     zone: gc.ttlseconds=3600
   "017":
     zone: gc.ttlseconds=14400
+  "018":
+    zone: gc.ttlseconds=14400
   "019":
     descriptor: relation
     namespace: (1, 29, "web_sessions")
