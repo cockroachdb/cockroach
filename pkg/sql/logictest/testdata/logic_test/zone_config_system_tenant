@@ -1,6 +1,15 @@
 # LogicTest: !3node-tenant-default-configs
 # Zone config logic tests that are only meant to work for the system tenant.
 
+# Verify that the timeseries range has a zone config after bootstrap. It should
+# only specify gc.ttlseconds, and everything should be implicitly inherited
+# from the default range zone config.
+query TT
+SELECT target, raw_config_sql FROM [SHOW ZONE CONFIGURATIONS] WHERE target = 'RANGE timeseries'
+----
+RANGE timeseries  ALTER RANGE timeseries CONFIGURE ZONE USING
+                    gc.ttlseconds = 14400
+
 statement ok
 CREATE TABLE t();
 
@@ -29,6 +38,7 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 11   TABLE system.public.lease
 16   RANGE meta
 17   RANGE system
+18   RANGE timeseries
 22   RANGE liveness
 25   TABLE system.public.replication_constraint_stats
 27   TABLE system.public.replication_stats
@@ -194,8 +204,8 @@ ORDER BY start_key
 /Table/106  14400
 /Table/107  14400
 /Table/110  90001
-/Table/111  1
-/Table/112  1
+/Table/111  90001
+/Table/112  14400
 
 subtest transactional_schemachanges
 
