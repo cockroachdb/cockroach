@@ -1969,6 +1969,10 @@ func (s *perRangeEventSink) Disconnect(err *kvpb.Error) {
 	s.wrapped.DisconnectStreamWithError(s.streamID, s.rangeID, err)
 }
 
+func (s *perRangeEventSink) RegisterRangefeedCleanUp(f func()) {
+	s.wrapped.RegisterRangefeedCleanUp(s.streamID, f)
+}
+
 // lockedMuxStream provides support for concurrent calls to Send. The underlying
 // MuxRangeFeedServer (default grpc.Stream) is not safe for concurrent calls to
 // Send.

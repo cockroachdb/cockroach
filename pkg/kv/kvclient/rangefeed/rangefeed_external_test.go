@@ -1624,9 +1624,10 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 
 // channelSink is a rangefeed sink which posts events to a channel.
 type channelSink struct {
-	ctx  context.Context
-	ch   chan<- *kvpb.RangeFeedEvent
-	done chan *kvpb.Error
+	ctx     context.Context
+	ch      chan<- *kvpb.RangeFeedEvent
+	done    chan *kvpb.Error
+	cleanup func()
 }
 
 func newChannelSink(ctx context.Context, ch chan<- *kvpb.RangeFeedEvent) *channelSink {
@@ -1665,6 +1666,14 @@ func (c *channelSink) Error() error {
 // by sending the error to the done channel.
 func (c *channelSink) Disconnect(err *kvpb.Error) {
 	c.done <- err
+	if c.cleanup != nil {
+		go c.cleanup()
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func (c *channelSink) RegisterRangefeedCleanUp(cleanup func()) {
+	c.cleanup = cleanup
 }
 
 // TestRangeFeedMetadataManualSplit tests that a spawned rangefeed emits a

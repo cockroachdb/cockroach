@@ -26,15 +26,16 @@ import (
 type Stream interface {
 	kvpb.RangeFeedEventSink
 	// Disconnect disconnects the stream with the provided error. Note that this
-	// function can be called by the processor worker while holding raftMu, so it
-	// is important that this function doesn't block IO or try acquiring locks
-	// that could lead to deadlocks.
+	// function can be called by the processor worker while holding raftMu and
+	// registration mu, so it is important that this function doesn't block IO or
+	// try acquiring locks that could lead to deadlocks.
 	Disconnect(err *kvpb.Error)
 	// ShouldUseBufferedRegistration returns true if the processor should use
 	// buffered registrations. This method returns false when the underlying
 	// stream Send is buffered, making it unnecessary to buffer events in the
 	// registration.
 	ShouldUseBufferedRegistration() bool
+	RegisterRangefeedCleanUp(func())
 }
 
 // registration defines an interface for registration that can be added to a

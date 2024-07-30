@@ -1748,6 +1748,7 @@ type consumer struct {
 	ctxDone    func()
 	sentValues int32
 	done       chan *kvpb.Error
+	cleanup    func()
 
 	blockAfter int
 	blocked    chan interface{}
@@ -1802,6 +1803,14 @@ func (c *consumer) WaitBlock() {
 // by sending the error to the done channel.
 func (c *consumer) Disconnect(error *kvpb.Error) {
 	c.done <- error
+	if c.cleanup != nil {
+		go c.cleanup()
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func (c *consumer) RegisterRangefeedCleanUp(cleanup func()) {
+	c.cleanup = cleanup
 }
 
 // WaitForError waits for the rangefeed to complete and returns the error sent

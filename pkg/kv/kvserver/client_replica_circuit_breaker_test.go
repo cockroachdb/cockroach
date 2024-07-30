@@ -447,10 +447,11 @@ func TestReplicaCircuitBreaker_ResolveIntent_QuorumLoss(t *testing.T) {
 }
 
 type dummyStream struct {
-	name string
-	ctx  context.Context
-	recv chan *kvpb.RangeFeedEvent
-	done chan *kvpb.Error
+	name    string
+	ctx     context.Context
+	recv    chan *kvpb.RangeFeedEvent
+	done    chan *kvpb.Error
+	cleanup func()
 }
 
 func newDummyStream(ctx context.Context, name string) *dummyStream {
@@ -487,6 +488,14 @@ func (s *dummyStream) Send(ev *kvpb.RangeFeedEvent) error {
 // by sending the error to the done channel.
 func (s *dummyStream) Disconnect(err *kvpb.Error) {
 	s.done <- err
+	if s.cleanup != nil {
+		go s.cleanup()
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func (s *dummyStream) RegisterRangefeedCleanUp(cleanup func()) {
+	s.cleanup = cleanup
 }
 
 func waitReplicaRangeFeed(
