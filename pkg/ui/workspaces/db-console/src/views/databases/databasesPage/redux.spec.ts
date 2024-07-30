@@ -307,7 +307,18 @@ describe("Databases Page", function () {
         range_count: 400,
       },
       tables: {
-        tables: [`"public"."foo"`, `"public"."bar"`],
+        tables: [
+          {
+            schema: "public",
+            table: "foo",
+            qualifiedNameWithSchemaAndTable: `"public"."foo"`,
+          },
+          {
+            schema: "public",
+            table: "bar",
+            qualifiedNameWithSchemaAndTable: `"public"."bar"`,
+          },
+        ],
       },
       nodesByRegionString: "gcp-europe-west1(n3), gcp-us-east1(n1,n2)",
       numIndexRecommendations: 1,

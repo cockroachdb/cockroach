@@ -116,7 +116,12 @@ function createTable(): DatabaseDetailsPageDataTable {
     loaded: true,
     requestError: null,
     queryError: undefined,
-    name: randomName(),
+    name: {
+      qualifiedNameWithSchemaAndTable: "public.table",
+      schema: "public",
+      table: "table",
+    },
+    qualifiedDisplayName: "public.table",
     details: {
       grants: {
         roles,
