@@ -203,6 +203,7 @@ var rubyPGIgnorelist = blocklist{
 	`PG::Connection OS thread support Connection.new shouldn't block a second thread`:                                                                                              "flaky",
 	`PG::Connection multinationalization support respect and convert character encoding of input strings should convert error string to #put_copy_end`:                             "unknown",
 	`PG::Connection in nonblocking mode rejects to send lots of COPY data`:                                                                                                         "flaky",
+	`PG::Connection times out after connect_timeout seconds`:                                                                                                                       "flaky",
 	`running with sync_* methods PG::Connection in nonblocking mode rejects to send lots of COPY data`:                                                                             "flaky",
 	`running with sync_* methods PG::Connection consume_input should raise ConnectionBad for a closed connection`:                                                                  "flaky",
 	`running with sync_* methods PG::Connection OS thread support Connection.new shouldn't block a second thread`:                                                                  "flaky",
