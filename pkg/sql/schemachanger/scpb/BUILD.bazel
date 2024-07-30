@@ -75,7 +75,7 @@ genrule(
     cmd = """
         $(location //pkg/sql/schemachanger/scpb/element-generator) --in $< --out $(location elements_generated.go)
        """,
-    exec_tools = [
+    tools = [
         "//pkg/sql/schemachanger/scpb/element-generator",
     ],
     visibility = [
@@ -90,7 +90,7 @@ genrule(
     cmd = """
         $(location //pkg/sql/schemachanger/scpb/element-uml-generator) --out $(location uml/table.puml)
        """,
-    exec_tools = [
+    tools = [
         "//pkg/sql/schemachanger/scpb/element-uml-generator",
     ],
     visibility = [
