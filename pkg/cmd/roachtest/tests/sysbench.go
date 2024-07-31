@@ -231,7 +231,7 @@ func registerSysbench(r registry.Registry) {
 				Name:             fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
 				Benchmark:        true,
 				Owner:            registry.OwnerTestEng,
-				Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus), spec.WorkloadNode()),
+				Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
 				CompatibleClouds: registry.OnlyGCE,
 				Suites:           registry.Suites(registry.Nightly),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -247,7 +247,7 @@ func registerSysbench(r registry.Registry) {
 					Name:             fmt.Sprintf("sysbench/%s/postgres/cpu=%d/conc=%d", w, cpus, conc),
 					Benchmark:        true,
 					Owner:            registry.OwnerTestEng,
-					Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus), spec.WorkloadNode()),
+					Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
 					CompatibleClouds: registry.OnlyGCE,
 					Suites:           registry.ManualOnly,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
