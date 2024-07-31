@@ -325,5 +325,5 @@ func (s *mockCluster) getRangeDescriptor(id roachpb.RangeID) roachpb.RangeDescri
 func (s *mockCluster) applyConfig(ctx context.Context, span roachpb.Span, conf roachpb.SpanConfig) {
 	update, err := spanconfig.Addition(spanconfig.MakeTargetFromSpan(span), conf)
 	require.NoError(s.t, err)
-	s.store.Apply(ctx, false, update)
+	s.store.Apply(ctx, update)
 }

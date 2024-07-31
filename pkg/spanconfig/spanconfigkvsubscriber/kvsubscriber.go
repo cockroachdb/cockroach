@@ -414,7 +414,7 @@ func (s *KVSubscriber) handleCompleteUpdate(
 ) {
 	freshStore := spanconfigstore.New(s.fallback, s.settings, s.boundsReader, s.knobs)
 	for _, ev := range events {
-		freshStore.Apply(ctx, false /* dryrun */, ev.Update)
+		freshStore.Apply(ctx, ev.Update)
 	}
 	handlers := func() []handler {
 		s.mu.Lock()
@@ -468,7 +468,7 @@ func (s *KVSubscriber) handlePartialUpdate(
 			// atomically, the updates need to be non-overlapping. That's not the case
 			// here because we can have deletion events followed by additions for
 			// overlapping spans.
-			s.mu.internal.Apply(ctx, false /* dryrun */, ev.Update)
+			s.mu.internal.Apply(ctx, ev.Update)
 		}
 		s.setLastUpdatedLocked(ts)
 		return s.mu.handlers

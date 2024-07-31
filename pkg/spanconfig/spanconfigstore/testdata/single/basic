@@ -8,18 +8,7 @@ get key=b
 conf=FALLBACK
 
 
-# Test that dryruns don't actually mutate anything.
-apply dryrun
-set [b,d):A
-----
-added [b,d):A
-
-get key=b
-----
-conf=FALLBACK
-
-
-# Add span configs for real.
+# Add span configs.
 apply
 set [b,d):A
 ----
@@ -59,18 +48,7 @@ get key=h
 conf=FALLBACK
 
 
-# Check that a delete dryrun does nothing.
-apply dryrun
-delete [f,h)
-----
-deleted [f,h)
-
-get key=f
-----
-conf=B
-
-
-# Delete a span for real.
+# Delete a span.
 apply
 delete [f,h)
 ----

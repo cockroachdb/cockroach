@@ -183,21 +183,19 @@ func (s *Store) getFallbackConfig() roachpb.SpanConfig {
 
 // Apply is part of the spanconfig.StoreWriter interface.
 func (s *Store) Apply(
-	ctx context.Context, dryrun bool, updates ...spanconfig.Update,
+	ctx context.Context, updates ...spanconfig.Update,
 ) (deleted []spanconfig.Target, added []spanconfig.Record) {
 
 	// Log the potential span config changes.
-	if !dryrun {
-		for _, update := range updates {
-			err := s.maybeLogUpdate(ctx, &update)
-			if err != nil {
-				log.KvDistribution.Warningf(ctx, "attempted to log a spanconfig update to "+
-					"target:%+v, but got the following error:%+v", update.GetTarget(), err)
-			}
+	for _, update := range updates {
+		err := s.maybeLogUpdate(ctx, &update)
+		if err != nil {
+			log.KvDistribution.Warningf(ctx, "attempted to log a spanconfig update to "+
+				"target:%+v, but got the following error:%+v", update.GetTarget(), err)
 		}
 	}
 
-	deleted, added, err := s.applyInternal(ctx, dryrun, updates...)
+	deleted, added, err := s.applyInternal(ctx, updates...)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
@@ -255,7 +253,7 @@ func (s *Store) Clone() *Store {
 }
 
 func (s *Store) applyInternal(
-	ctx context.Context, dryrun bool, updates ...spanconfig.Update,
+	ctx context.Context, updates ...spanconfig.Update,
 ) (deleted []spanconfig.Target, added []spanconfig.Record, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -275,7 +273,7 @@ func (s *Store) applyInternal(
 			return nil, nil, errors.AssertionFailedf("unknown target type")
 		}
 	}
-	deletedSpans, addedEntries, err := s.mu.spanConfigStore.apply(ctx, dryrun, spanStoreUpdates...)
+	deletedSpans, addedEntries, err := s.mu.spanConfigStore.apply(ctx, spanStoreUpdates...)
 	if err != nil {
 		return nil, nil, err
 	}
