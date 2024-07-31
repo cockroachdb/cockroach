@@ -336,6 +336,11 @@ func testShouldBeSkipped(
 		// test should not be skipped for this suite
 		return false
 	}
+
+	if test.Randomized {
+		return false
+	}
+
 	td, ok := testNamesToRun[test.Name]
 	return ok && test.Skip == "" && !td.Selected
 }
