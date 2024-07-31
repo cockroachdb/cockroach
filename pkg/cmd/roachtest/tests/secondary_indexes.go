@@ -148,6 +148,7 @@ func registerSecondaryIndexesMultiVersionCluster(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(3),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
+		Randomized:       true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runIndexUpgrade(ctx, t, c)
 		},

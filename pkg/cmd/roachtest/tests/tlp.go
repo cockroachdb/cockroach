@@ -43,6 +43,7 @@ func registerTLP(r registry.Registry) {
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		NativeLibs:       registry.LibGEOS,
+		Randomized:       true,
 		Run:              runTLP,
 		ExtraLabels:      []string{"O-rsg"},
 	})
