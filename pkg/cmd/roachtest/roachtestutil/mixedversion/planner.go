@@ -246,12 +246,18 @@ func (p *testPlanner) Plan() *TestPlan {
 		upgrade.Add(p.initUpgradeSteps(virtualClusterSetup))
 		if p.shouldRollback(upgrade.to) {
 			// previous -> next
-			upgrade.Add(p.upgradeSteps(TemporaryUpgradeStage, upgrade.from, upgrade.to, scheduleHooks))
+			upgrade.Add(p.upgradeSteps(
+				TemporaryUpgradeStage, upgrade.from, upgrade.to, scheduleHooks, virtualClusterSetup,
+			))
 			// next -> previous (rollback)
-			upgrade.Add(p.downgradeSteps(upgrade.to, upgrade.from, scheduleHooks))
+			upgrade.Add(p.downgradeSteps(
+				upgrade.to, upgrade.from, scheduleHooks, virtualClusterSetup,
+			))
 		}
 		// previous -> next
-		upgrade.Add(p.upgradeSteps(LastUpgradeStage, upgrade.from, upgrade.to, scheduleHooks))
+		upgrade.Add(p.upgradeSteps(
+			LastUpgradeStage, upgrade.from, upgrade.to, scheduleHooks, virtualClusterSetup,
+		))
 
 		// finalize -- i.e., run upgrade migrations.
 		upgrade.Add(p.finalizeUpgradeSteps(upgrade.from, upgrade.to, scheduleHooks, virtualClusterSetup))
@@ -577,21 +583,21 @@ func (p *testPlanner) afterUpgradeSteps(
 }
 
 func (p *testPlanner) upgradeSteps(
-	stage UpgradeStage, from, to *clusterupgrade.Version, scheduleHooks bool,
+	stage UpgradeStage, from, to *clusterupgrade.Version, scheduleHooks, virtualClusterSetup bool,
 ) []testStep {
 	p.currentContext.SetStage(stage)
 	nodes := p.currentContext.System.Descriptor.Nodes
 	msg := fmt.Sprintf("upgrade nodes %v from %q to %q", nodes, from.String(), to.String())
-	return p.changeVersionSteps(from, to, msg, scheduleHooks)
+	return p.changeVersionSteps(from, to, msg, scheduleHooks, virtualClusterSetup)
 }
 
 func (p *testPlanner) downgradeSteps(
-	from, to *clusterupgrade.Version, scheduleHooks bool,
+	from, to *clusterupgrade.Version, scheduleHooks, virtualClusterSetup bool,
 ) []testStep {
 	p.currentContext.SetStage(RollbackUpgradeStage)
 	nodes := p.currentContext.System.Descriptor.Nodes
 	msg := fmt.Sprintf("downgrade nodes %v from %q to %q", nodes, from.String(), to.String())
-	return p.changeVersionSteps(from, to, msg, scheduleHooks)
+	return p.changeVersionSteps(from, to, msg, scheduleHooks, virtualClusterSetup)
 }
 
 // changeVersionSteps returns the sequence of steps to be performed
@@ -601,7 +607,7 @@ func (p *testPlanner) downgradeSteps(
 // mixed-version hooks will be scheduled randomly during the
 // upgrade/downgrade process.
 func (p *testPlanner) changeVersionSteps(
-	from, to *clusterupgrade.Version, label string, scheduleHooks bool,
+	from, to *clusterupgrade.Version, label string, scheduleHooks, virtualClusterSetup bool,
 ) []testStep {
 	nodes := p.currentContext.System.Descriptor.Nodes
 	// copy system `Nodes` here so that shuffling won't mutate that array
@@ -626,6 +632,7 @@ func (p *testPlanner) changeVersionSteps(
 		steps = append(steps, p.newSingleStep(
 			restartWithNewBinaryStep{
 				version: to, node: node, rt: p.rt, settings: p.clusterSettingsForSystem(),
+				sharedProcessStarted: virtualClusterSetup,
 			},
 		))
 		for _, s := range p.services() {
