@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -509,6 +510,32 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 		))
 	}
 
+	// deriveLCP is a closure that returns the longest common prefix between the
+	// interesting orderings of the group and the required ordering.
+	//
+	// Interesting orderings are shared by all members of a group (see
+	// ordering.DeriveInterestingOrderings), so the longest common prefix
+	// between the interesting ordering and a specific required ordering is also
+	// the same for all members.
+	//
+	// Caching and reusing the result in lcp reduces the expensive computation
+	// of the deriving the longest common prefix. The closure allows lazily
+	// deriving the longest common prefix only when needed.
+	var cachedLCP struct {
+		lcp    props.OrderingChoice
+		ok     bool
+		exists bool
+	}
+	deriveLCP := func() (_ props.OrderingChoice, ok bool) {
+		if cachedLCP.exists {
+			return cachedLCP.lcp, cachedLCP.ok
+		}
+		interestingOrderings := ordering.DeriveInterestingOrderings(grp)
+		cachedLCP.lcp, cachedLCP.ok = interestingOrderings.LongestCommonPrefix(&required.Ordering)
+		cachedLCP.exists = true
+		return cachedLCP.lcp, cachedLCP.ok
+	}
+
 	// Iterate until the group has been fully optimized.
 	for {
 		fullyOptimized := true
@@ -521,7 +548,7 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 			}
 
 			// Optimize the group member with respect to the required properties.
-			memberOptimized := o.optimizeGroupMember(state, member, required)
+			memberOptimized := o.optimizeGroupMember(state, member, required, deriveLCP)
 
 			// If any of the group members have not yet been fully optimized, then
 			// the group is not yet fully optimized.
@@ -554,14 +581,17 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 // can provide the required properties at a lower cost. The lowest cost
 // expression is saved to groupState.
 func (o *Optimizer) optimizeGroupMember(
-	state *groupState, member memo.RelExpr, required *physical.Required,
+	state *groupState,
+	member memo.RelExpr,
+	required *physical.Required,
+	deriveLCP func() (_ props.OrderingChoice, ok bool),
 ) (fullyOptimized bool) {
 	// Compute the cost for enforcers to provide the required properties. This
 	// may be lower than the expression providing the properties itself. For
 	// example, it might be better to sort the results of a hash join than to
 	// use the results of a merge join that are already sorted, but at the cost
 	// of requiring one of the merge join children to be sorted.
-	fullyOptimized = o.enforceProps(state, member, required)
+	fullyOptimized = o.enforceProps(state, member, required, deriveLCP)
 
 	// If the expression cannot provide the required properties, then don't
 	// continue. But what if the expression is able to provide a subset of the
@@ -655,7 +685,10 @@ func (o *Optimizer) optimizeScalarExpr(
 // update shouldExplore, which should return true if enforceProps will explore
 // the group by recursively calling optimizeGroup (by way of optimizeEnforcer).
 func (o *Optimizer) enforceProps(
-	state *groupState, member memo.RelExpr, required *physical.Required,
+	state *groupState,
+	member memo.RelExpr,
+	required *physical.Required,
+	deriveLCP func() (_ props.OrderingChoice, ok bool),
 ) (fullyOptimized bool) {
 	// Strip off one property that can be enforced. Other properties will be
 	// stripped by recursively optimizing the group with successively fewer
@@ -683,8 +716,7 @@ func (o *Optimizer) enforceProps(
 		// with the required ordering. We do not need to add the enforcer if
 		// there is no common prefix or if the required ordering is implied by
 		// the input ordering.
-		interestingOrderings := ordering.DeriveInterestingOrderings(member)
-		if lcp, ok := interestingOrderings.LongestCommonPrefix(&required.Ordering); ok {
+		if lcp, ok := deriveLCP(); ok {
 			getEnforcer = func() memo.RelExpr {
 				enforcer := o.getScratchSort()
 				enforcer.Input = state.best
