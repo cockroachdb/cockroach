@@ -315,6 +315,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			Cluster:          clusterSpec,
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),
+			Randomized:       true,
 			Leases:           registry.MetamorphicLeases,
 			NativeLibs:       registry.LibGEOS,
 			Timeout:          time.Minute * 20,
