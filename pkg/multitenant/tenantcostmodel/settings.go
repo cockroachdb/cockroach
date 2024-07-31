@@ -151,7 +151,8 @@ func validateEstimatedCPUSetting(values *settings.Values, jsonStr string) error 
 		return errors.Wrapf(err, "validating estimated_cpu model: %s", jsonStr)
 	}
 
-	if len(model.ReadBytesCost.PayloadSize) != len(model.ReadBytesCost.CPUPerByte) ||
+	if len(model.ReadRequestCost.BatchSize) != len(model.ReadRequestCost.CPUPerRequest) ||
+		len(model.ReadBytesCost.PayloadSize) != len(model.ReadBytesCost.CPUPerByte) ||
 		len(model.WriteBatchCost.RatePerNode) != len(model.WriteBatchCost.CPUPerBatch) ||
 		len(model.WriteRequestCost.BatchSize) != len(model.WriteRequestCost.CPUPerRequest) ||
 		len(model.WriteBytesCost.PayloadSize) != len(model.WriteBytesCost.CPUPerByte) {

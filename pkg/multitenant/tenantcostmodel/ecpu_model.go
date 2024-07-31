@@ -36,9 +36,14 @@ type EstimatedCPUModel struct {
 	// ReadBatchCost is the amount of KV CPU needed to process 1 read batch
 	// containing 1 read request with a 1-byte payload.
 	ReadBatchCost EstimatedCPU
-	// ReadRequestCost is the amount of KV CPU needed to process each additional
-	// read request in a batch, beyond the first.
-	ReadRequestCost EstimatedCPU
+	// ReadRequestCost is a lookup table that maps from the number of requests
+	// in a read batch, to the amount of KV CPU used to process each additional
+	// read request in a batch, beyond the first. As the batch size increases,
+	// each KV CPU can process more read requests.
+	ReadRequestCost struct {
+		BatchSize     []float64
+		CPUPerRequest []EstimatedCPU
+	}
 	// ReadBytesCost is a lookup table that maps from the total payload size of
 	// a read batch, to the amount of KV CPU needed to process those bytes. As
 	// the payload size increases, each KV CPU can process more bytes.
@@ -56,8 +61,10 @@ type EstimatedCPUModel struct {
 	}
 	// WriteRequestCost is a lookup table that maps from the number of requests
 	// in a write batch, to the amount of KV CPU used to process each additional
-	// write request in a batch, beyond the first. As the batch size increases,
-	// each KV CPU can process more write requests.
+	// write request in a batch, beyond the second. The second request in simple
+	// write batches is often an EndTxn request, which has near-zero cost in the
+	// fast path. As the batch size increases, each KV CPU can process more write
+	// requests.
 	WriteRequestCost struct {
 		BatchSize     []float64
 		CPUPerRequest []EstimatedCPU
@@ -85,20 +92,28 @@ type EstimatedCPUModel struct {
 // DefaultEstimatedCPUModel is the default model that is used if the
 // tenant_cost_model.estimated_cpu cluster setting is not specified.
 var DefaultEstimatedCPUModel = EstimatedCPUModel{
-	ReadBatchCost:   1.0 / 3500,
-	ReadRequestCost: 1.0 / 45000,
+	ReadBatchCost: 1.0 / 3500,
+	ReadRequestCost: struct {
+		BatchSize     []float64
+		CPUPerRequest []EstimatedCPU
+	}{
+		BatchSize: []float64{8, 16, 32, 64},
+		CPUPerRequest: []EstimatedCPU{
+			1.0 / 16500, 1.0 / 26700, 1.0 / 35000, 1.0 / 40400,
+		},
+	},
 	ReadBytesCost: struct {
 		PayloadSize []float64
 		CPUPerByte  []EstimatedCPU
 	}{
 		PayloadSize: []float64{256, 1024, 4 * 1024, 16 * 1024, 64 * 1024, 256 * 1024},
 		CPUPerByte: []EstimatedCPU{
-			1.0 / 1.5 / 1024 / 1024,
-			1.0 / 5.5 / 1024 / 1024,
-			1.0 / 12 / 1024 / 1024,
-			1.0 / 34 / 1024 / 1024,
-			1.0 / 64 / 1024 / 1024,
-			1.0 / 89 / 1024 / 1024,
+			1.0 / 3 / 1024 / 1024,
+			1.0 / 5 / 1024 / 1024,
+			1.0 / 9 / 1024 / 1024,
+			1.0 / 27 / 1024 / 1024,
+			1.0 / 62 / 1024 / 1024,
+			1.0 / 106 / 1024 / 1024,
 		},
 	},
 	WriteBatchCost: struct {
@@ -107,16 +122,17 @@ var DefaultEstimatedCPUModel = EstimatedCPUModel{
 	}{
 		RatePerNode: []float64{100, 200, 400, 800, 1600, 3200, 6400, 12800},
 		CPUPerBatch: []EstimatedCPU{
-			1.0 / 660, 1.0 / 850, 1.0 / 1090, 1.0 / 1400, 1.0 / 1790, 1.0 / 2290, 1.0 / 2930, 1.0 / 3150,
+			1.0 / 700, 1.0 / 900, 1.0 / 1100, 1.0 / 1300, 1.0 / 1700, 1.0 / 2200, 1.0 / 2700, 1.0 / 3150,
 		},
 	},
 	WriteRequestCost: struct {
 		BatchSize     []float64
 		CPUPerRequest []EstimatedCPU
 	}{
-		BatchSize: []float64{3, 6, 12, 25, 50, 100, 200},
+		BatchSize: []float64{2, 3, 6, 11, 22, 43, 84},
 		CPUPerRequest: []EstimatedCPU{
-			1.0 / 2500, 1.0 / 5250, 1.0 / 9050, 1.0 / 11900, 1.0 / 15400, 1.0 / 17400, 1.0 / 19000},
+			1.0 / 1100, 1.0 / 2700, 1.0 / 6400, 1.0 / 10200, 1.0 / 14600, 1.0 / 18500, 1.0 / 19600,
+		},
 	},
 	WriteBytesCost: struct {
 		PayloadSize []float64
@@ -124,11 +140,11 @@ var DefaultEstimatedCPUModel = EstimatedCPUModel{
 	}{
 		PayloadSize: []float64{256, 1024, 4 * 1024, 16 * 1024, 64 * 1024},
 		CPUPerByte: []EstimatedCPU{
-			1.0 / 3.75 / 1024 / 1024,
-			1.0 / 8 / 1024 / 1024,
-			1.0 / 11 / 1024 / 1024,
-			1.0 / 14 / 1024 / 1024,
-			1.0 / 18.5 / 1024 / 1024,
+			1.0 / 9 / 1024 / 1024,
+			1.0 / 10 / 1024 / 1024,
+			1.0 / 12.5 / 1024 / 1024,
+			1.0 / 15 / 1024 / 1024,
+			1.0 / 19 / 1024 / 1024,
 		},
 	},
 	BackgroundCPU: struct {
@@ -183,7 +199,9 @@ func (m *EstimatedCPUModel) BatchCost(
 
 		// Add cost for additional requests in the batch, beyond the first.
 		if bi.ReadCount > 1 {
-			readCPU += m.ReadRequestCost * EstimatedCPU(bi.ReadCount-1)
+			ecpuPerRequest := m.lookupCost(
+				m.ReadRequestCost.BatchSize, m.ReadRequestCost.CPUPerRequest, float64(bi.ReadCount))
+			readCPU += ecpuPerRequest * EstimatedCPU(bi.ReadCount-1)
 		}
 
 		// Add cost for bytes in the requests.
@@ -196,11 +214,12 @@ func (m *EstimatedCPUModel) BatchCost(
 		// Add cost for the batch.
 		writeCPU = m.lookupCost(m.WriteBatchCost.RatePerNode, m.WriteBatchCost.CPUPerBatch, ratePerNode)
 
-		// Add cost for additional requests in the batch, beyond the first.
-		if bi.WriteCount > 1 {
+		// Add cost for additional requests in the batch, beyond the second (see
+		// EstimatedCPUModel.WriteRequestCost comment for furthe).
+		if bi.WriteCount > 2 {
 			ecpuPerRequest := m.lookupCost(
 				m.WriteRequestCost.BatchSize, m.WriteRequestCost.CPUPerRequest, float64(bi.WriteCount))
-			writeCPU += ecpuPerRequest * EstimatedCPU(bi.WriteCount-1)
+			writeCPU += ecpuPerRequest * EstimatedCPU(bi.WriteCount-2)
 		}
 
 		// Add cost for bytes in the requests.
