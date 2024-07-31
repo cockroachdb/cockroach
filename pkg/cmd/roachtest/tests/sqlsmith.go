@@ -342,6 +342,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			// https://github.com/cockroachdb/cockroach/issues/105968
 			CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 			Suites:           registry.Suites(registry.Nightly),
+			Randomized:       true,
 			Leases:           registry.MetamorphicLeases,
 			NativeLibs:       registry.LibGEOS,
 			Timeout:          time.Minute * 20,
