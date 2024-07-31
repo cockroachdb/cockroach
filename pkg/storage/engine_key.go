@@ -419,3 +419,8 @@ func decodeMVCCMetaAndVerify(key roachpb.Key, value []byte) error {
 	}
 	return decodeMVCCValueAndVerify(key, meta.RawBytes)
 }
+
+// EngineKeyRange is a key range composed of EngineKeys.
+type EngineKeyRange struct {
+	Start, End EngineKey
+}
