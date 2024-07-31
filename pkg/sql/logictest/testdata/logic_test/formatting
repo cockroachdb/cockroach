@@ -1,0 +1,67 @@
+# LogicTest: local
+# This test is intended to test the logictest framework's formatting logic.
+# Specifically when `\n` exist in the testdata outputs.
+
+statement ok
+CREATE TABLE test_table (col1 string, col2 string, col3 string)
+
+statement ok
+INSERT INTO test_table (col1, col2, col3) VALUES ('r1c1', 'r1
+c2', 'r1c3'), ('r2c1', 'r2
+c2', 'r2c3'), ('r3c1', 'r3
+c2', 'r3c3');
+
+statement ok
+CREATE VIEW test_table_view (col1, col2) AS
+SELECT col1, col2 FROM test_table
+
+query TT
+SHOW CREATE test_table_view
+----
+test_table_view  CREATE VIEW public.test_table_view (
+                   col1,
+                   col2
+                 ) AS SELECT col1, col2 FROM test.public.test_table
+
+query TTT
+SELECT * FROM test_table
+ORDER BY col1
+----
+r1c1  r1\nc2  r1c3
+r2c1  r2\nc2  r2c3
+r3c1  r3\nc2  r3c3
+
+query TT
+SELECT col1, col2 FROM test_table
+ORDER BY col1
+----
+r1c1  r1
+      c2
+r2c1  r2
+      c2
+r3c1  r3
+      c2
+
+query T
+SELECT col2 FROM test_table
+ORDER BY col1
+----
+r1
+c2
+r2
+c2
+r3
+c2
+
+query TTT
+SELECT col2, col1, col3 FROM test_table
+ORDER BY col1
+----
+r1\nc2  r1c1  r1c3
+r2\nc2  r2c1  r2c3
+r3\nc2  r3c1  r3c3
+
+query T
+SELECT '"abc\n123"'::JSON
+----
+"abc\n123"

@@ -855,6 +855,13 @@ func TestLogic_format(
 	runLogicTest(t, "format")
 }
 
+func TestLogic_formatting(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "formatting")
+}
+
 func TestLogic_function_lookup(
 	t *testing.T,
 ) {

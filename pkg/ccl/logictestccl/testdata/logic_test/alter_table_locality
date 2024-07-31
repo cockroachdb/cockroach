@@ -43,24 +43,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_row
@@ -100,24 +88,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_row_as
@@ -153,24 +129,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_primary_region
@@ -206,24 +170,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_no_region
@@ -259,24 +211,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_us_east
@@ -308,24 +248,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE created_as_global
@@ -359,24 +287,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE created_as_global
@@ -412,24 +328,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE created_as_global
@@ -465,24 +369,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE created_as_global
@@ -536,24 +428,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE created_as_global
@@ -606,24 +486,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE created_as_global
@@ -713,24 +581,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE created_as_global
@@ -816,24 +672,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE created_as_global
@@ -870,24 +714,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_primary_region
@@ -920,24 +752,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_primary_region
@@ -970,24 +790,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_primary_region
@@ -1019,24 +827,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_primary_region
@@ -1068,24 +864,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_primary_region
@@ -1132,24 +916,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_no_region
@@ -1192,24 +964,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_no_region
@@ -1247,24 +1007,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_no_region
@@ -1295,24 +1043,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_no_region
@@ -1384,24 +1120,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_no_region
@@ -1456,24 +1180,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_no_region
@@ -1507,24 +1219,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_us_east
@@ -1559,24 +1259,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_us_east
@@ -1611,24 +1299,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_us_east
@@ -1660,24 +1336,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_us_east
@@ -1732,24 +1396,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_us_east
@@ -1804,24 +1456,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_us_east
@@ -2047,24 +1687,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_row
@@ -2098,24 +1726,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_row
@@ -2150,24 +1766,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_row
@@ -2214,24 +1818,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_row_to_regional_by_row_as
@@ -2268,24 +1860,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_row_as
@@ -2334,24 +1914,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_row_as
@@ -2400,24 +1968,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_row_as
@@ -2466,24 +2022,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_row_as
@@ -2529,24 +2073,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_row_as_to_regional_by_row
@@ -2591,24 +2123,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE regional_by_row_as
@@ -2633,24 +2153,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE rbt_table_gc_ttl
@@ -2673,24 +2181,12 @@ query TTT
 SELECT zone_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row@regional_by_row_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FROM TABLE rbt_table_gc_ttl
