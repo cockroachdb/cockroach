@@ -332,10 +332,15 @@ func updateSpecForSelectiveTests(ctx context.Context, specs []registry.TestSpec)
 func testShouldBeSkipped(
 	testNamesToRun map[string]*testselector.TestDetails, test registry.TestSpec, suite string,
 ) bool {
+	if test.Randomized {
+		return false
+	}
+
 	for test.TestSelectionOptOutSuites.IsInitialized() && test.TestSelectionOptOutSuites.Contains(suite) {
 		// test should not be skipped for this suite
 		return false
 	}
+
 	td, ok := testNamesToRun[test.Name]
 	return ok && test.Skip == "" && !td.Selected
 }
