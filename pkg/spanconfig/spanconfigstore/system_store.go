@@ -34,10 +34,6 @@ func newSystemSpanConfigStore() *systemSpanConfigStore {
 
 // apply takes an incremental set of system span config updates and applies them
 // to the underlying store. It returns a list of targets deleted/records added.
-//
-// TODO(arul): Even though this is called from spanconfig.Store.Apply, which
-// accepts a dryrun field, we don't accept a a dry run option here because it's
-// unused; instead, we plan on removing it entirely.
 func (s *systemSpanConfigStore) apply(
 	updates ...spanconfig.Update,
 ) (deleted []spanconfig.SystemTarget, added []spanconfig.Record, _ error) {

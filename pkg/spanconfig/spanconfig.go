@@ -274,11 +274,7 @@ type StoreWriter interface {
 	//  Deleted  |             [------------- B -----------)[---------- C -----)
 	//  Added    |             [--- D ----)[-- B --)         [-- C -)[--- E ---)
 	//  Store*   | [--- A ----)[--- D ----)[-- B --)         [-- C -)[--- E ---)
-	//
-	// [1]: Unless dryrun is true. We'll still generate the same {deleted,added}
-	//      lists.
-	// TODO(arul): Get rid of dryrun; we don't make use of it anywhere.
-	Apply(ctx context.Context, dryrun bool, updates ...Update) (
+	Apply(ctx context.Context, updates ...Update) (
 		deleted []Target, added []Record,
 	)
 }

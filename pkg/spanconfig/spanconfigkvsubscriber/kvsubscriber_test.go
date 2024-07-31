@@ -211,7 +211,7 @@ type manualStore struct {
 
 // Apply implements the spanconfig.Store interface.
 func (m *manualStore) Apply(
-	context.Context, bool, ...spanconfig.Update,
+	context.Context, ...spanconfig.Update,
 ) (deleted []spanconfig.Target, added []spanconfig.Record) {
 	panic("unimplemented")
 }

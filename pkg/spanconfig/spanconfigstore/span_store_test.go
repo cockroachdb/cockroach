@@ -118,7 +118,7 @@ func TestRandomized(t *testing.T) {
 	})
 	for i := 0; i < numOps; i++ {
 		updates := getRandomUpdates()
-		_, _, err := store.apply(ctx, false /* dryrun */, updates...)
+		_, _, err := store.apply(ctx, updates...)
 		require.NoError(t, err)
 		for _, update := range updates {
 			if testSpan.Overlaps(update.GetTarget().GetSpan()) {
