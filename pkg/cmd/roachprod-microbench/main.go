@@ -148,9 +148,7 @@ The source can be a local path or a GCS URI.`,
 
 func makeCompareCommand() *cobra.Command {
 	config := defaultCompareConfig()
-	runCmdFunc := func(cmd *cobra.Command, commandLine []string) error {
-		args, _ := splitArgsAtDash(cmd, commandLine)
-
+	runCmdFunc := func(cmd *cobra.Command, args []string) error {
 		config.newDir = args[0]
 		config.oldDir = args[1]
 		c, err := newCompare(config)
@@ -208,8 +206,7 @@ func makeExportCommand() *cobra.Command {
 		labels map[string]string
 		ts     int64
 	)
-	runCmdFunc := func(cmd *cobra.Command, commandLine []string) error {
-		args, _ := splitArgsAtDash(cmd, commandLine)
+	runCmdFunc := func(cmd *cobra.Command, args []string) error {
 		return exportMetrics(args[0], os.Stdout, timeutil.Unix(ts, 0), labels)
 	}
 
