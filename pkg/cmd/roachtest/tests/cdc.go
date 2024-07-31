@@ -1579,14 +1579,19 @@ func registerCDC(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
-		// TODO(#122372): Add this to the nightly test suite after we fix the Kafka restart bug.
-		Suites:          registry.ManualOnly,
-		RequiresLicense: true,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			_, err := ct.DB().ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY, x INT);`)
+			// Since this test fails with the v1 kafka sink, hardcode the v2 sink.
+			_, err := ct.DB().ExecContext(ctx, `SET CLUSTER SETTING changefeed.new_kafka_sink.enabled = true;`)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = ct.DB().ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY, x INT);`)
 			if err != nil {
 				t.Fatal("failed to create table")
 			}
@@ -1630,9 +1635,10 @@ func registerCDC(r registry.Registry) {
 				_ = conn2.Close()
 			}()
 
+			const testDuration = 30 * time.Minute
 			// Repeatedly update a single row in a table in order to create a large
 			// number of events with the same key that will span multiple batches.
-			for i := 0; i < 1000000; i++ {
+			for start, i := timeutil.Now(), 0; i < 1000000 && timeutil.Since(start) < testDuration; i++ {
 				stmt := fmt.Sprintf(`UPDATE t SET x = %d WHERE id = 1;`, i)
 				if i%2 == 0 {
 					_, err = conn1.ExecContext(ctx, stmt)

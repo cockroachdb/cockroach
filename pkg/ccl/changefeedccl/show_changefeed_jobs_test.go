@@ -133,7 +133,7 @@ func TestShowChangefeedJobsRedacted(t *testing.T) {
 		if _, ok := s.(*externalConnectionKafkaSink); ok {
 			return s
 		}
-		return &externalConnectionKafkaSink{sink: s}
+		return &externalConnectionKafkaSink{sink: s, ignoreDialError: true}
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -242,7 +242,7 @@ func TestShowChangefeedJobs(t *testing.T) {
 
 	var singleChangefeedID, multiChangefeedID jobspb.JobID
 
-	query = `CREATE CHANGEFEED FOR TABLE foo INTO 
+	query = `CREATE CHANGEFEED FOR TABLE foo INTO
 		'webhook-https://fake-http-sink:8081' WITH webhook_auth_header='Basic Zm9v'`
 	sqlDB.QueryRow(t, query).Scan(&singleChangefeedID)
 
