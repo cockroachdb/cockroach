@@ -1598,6 +1598,61 @@ func TestRestoreRetryProcErr(t *testing.T) {
 	})
 }
 
+func TestRestoreReplanOnLag(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "slow test under stress race")
+
+	retryErrorChan := make(chan error)
+	defer close(retryErrorChan)
+	//Shorten replan frequency setting to reduce test runtime.
+	replanFreq := time.Second
+
+	params := base.TestClusterArgs{}
+	knobs := base.TestingKnobs{
+		BackupRestore: &sql.BackupRestoreTestingKnobs{
+			RunAfterRetryIteration: func(err error) error {
+				retryErrorChan <- err
+				return jobs.MarkAsPermanentJobError(err)
+			},
+			RunAfterRestoreProcDrains: func() {
+				var timer timeutil.Timer
+				defer timer.Stop()
+				// Lag processors with double the duration of replan
+				// frequency such that the timer will be up before
+				// procCompleteCh receives a ping.
+				timer.Reset(replanFreq * 2)
+				for range timer.C {
+					timer.Read = true
+					break
+				}
+			},
+		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+	params.ServerArgs = base.TestServerArgs{Knobs: knobs}
+	c, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, 1, InitManualReplication, params)
+	defer cleanupFn()
+	serverutils.SetClusterSetting(t, c, "bulkio.restore.replan_flow_frequency", replanFreq)
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `USE d`)
+	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO t (a) SELECT * FROM generate_series(1, 100)`)
+
+	// Create BACKUP and RESTORE jobs.
+	sqlDB.Exec(t, `BACKUP DATABASE d INTO $1`, localFoo)
+	sqlDB.Exec(t, `DROP DATABASE d`)
+	var restoreJobID jobspb.JobID
+	sqlDB.QueryRow(t, `RESTORE DATABASE d FROM LATEST IN $1 WITH DETACHED`, localFoo).Scan(&restoreJobID)
+
+	require.ErrorContains(t, <-retryErrorChan, laggingRestoreProcErr.Error())
+
+	sqlDB.Exec(t, `USE system`)
+	jobutils.WaitForJobToFail(t, sqlDB, restoreJobID)
+}
+
 // TestBackupJobRetryReset tests that the job level retry counter
 // resets after the backup progresses. To do so, the test does the following:
 // 1. Intercept the backup job before the flow begins and send a retryable error.
