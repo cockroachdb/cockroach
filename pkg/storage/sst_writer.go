@@ -236,6 +236,17 @@ func (fw *SSTWriter) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) 
 	return fw.fw.RangeKeyUnset(EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix)
 }
 
+// ClearEngineRange clears point keys in the specified EngineKey range.
+func (fw *SSTWriter) ClearEngineRange(start, end EngineKey) error {
+	fw.scratch = start.EncodeToBuf(fw.scratch[:0])
+	endRaw := end.Encode()
+	fw.DataSize += int64(len(start.Key)) + int64(len(end.Key))
+	if err := fw.fw.DeleteRange(fw.scratch, endRaw); err != nil {
+		return err
+	}
+	return nil
+}
+
 // ClearRawEncodedRange implements the InternalWriter interface.
 func (fw *SSTWriter) ClearRawEncodedRange(start, end []byte) error {
 	startEngine, ok := DecodeEngineKey(start)
