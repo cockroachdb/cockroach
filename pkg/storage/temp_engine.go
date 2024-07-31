@@ -15,8 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 )
@@ -27,9 +29,9 @@ func NewTempEngine(
 	ctx context.Context,
 	tempStorage base.TempStorageConfig,
 	storeSpec base.StoreSpec,
-	statsCollector *vfs.DiskWriteStatsCollector,
+	diskWriteStats disk.WriteStatsManager,
 ) (diskmap.Factory, vfs.FS, error) {
-	return NewPebbleTempEngine(ctx, tempStorage, storeSpec, statsCollector)
+	return NewPebbleTempEngine(ctx, tempStorage, storeSpec, diskWriteStats)
 }
 
 type pebbleTempEngine struct {
@@ -61,16 +63,16 @@ func NewPebbleTempEngine(
 	ctx context.Context,
 	tempStorage base.TempStorageConfig,
 	storeSpec base.StoreSpec,
-	statsCollector *vfs.DiskWriteStatsCollector,
+	diskWriteStats disk.WriteStatsManager,
 ) (diskmap.Factory, vfs.FS, error) {
-	return newPebbleTempEngine(ctx, tempStorage, storeSpec, statsCollector)
+	return newPebbleTempEngine(ctx, tempStorage, storeSpec, diskWriteStats)
 }
 
 func newPebbleTempEngine(
 	ctx context.Context,
 	tempStorage base.TempStorageConfig,
 	storeSpec base.StoreSpec,
-	statsCollector *vfs.DiskWriteStatsCollector,
+	diskWriteStats disk.WriteStatsManager,
 ) (*pebbleTempEngine, vfs.FS, error) {
 	var baseFS vfs.FS
 	var dir string
@@ -87,9 +89,17 @@ func newPebbleTempEngine(
 		// Adopt the encryption options of the provided store spec so that
 		// temporary data is encrypted if the store is encrypted.
 		EncryptionOptions: storeSpec.EncryptionOptions,
-	}, statsCollector)
+	}, diskWriteStats)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	var statsCollector *vfs.DiskWriteStatsCollector
+	if !tempStorage.InMemory {
+		statsCollector, err = diskWriteStats.GetOrCreateCollector(dir)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "retrieving stats collector")
+		}
 	}
 
 	p, err := Open(ctx, env,
