@@ -28,6 +28,7 @@ func registerAcceptance(r registry.Registry) {
 		timeout           time.Duration
 		encryptionSupport registry.EncryptionSupport
 		defaultLeases     bool
+		randomized        bool
 	}{
 		registry.OwnerKV: {
 			{name: "decommission-self", fn: runDecommissionSelf},
@@ -61,6 +62,7 @@ func registerAcceptance(r registry.Registry) {
 				fn:            runVersionUpgrade,
 				timeout:       2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
 				defaultLeases: true,
+				randomized:    true,
 			},
 		},
 		registry.OwnerDisasterRecovery: {
@@ -80,6 +82,7 @@ func registerAcceptance(r registry.Registry) {
 				fn:            runValidateSystemSchemaAfterVersionUpgrade,
 				timeout:       30 * time.Minute,
 				defaultLeases: true,
+				randomized:    true,
 				numNodes:      1,
 			},
 			{
@@ -106,6 +109,7 @@ func registerAcceptance(r registry.Registry) {
 				Timeout:           10 * time.Minute,
 				CompatibleClouds:  registry.AllExceptAWS,
 				Suites:            registry.Suites(registry.Nightly, registry.Quick),
+				Randomized:        tc.randomized,
 			}
 
 			if tc.timeout != 0 {

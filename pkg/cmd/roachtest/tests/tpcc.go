@@ -527,6 +527,7 @@ func registerTPCC(r registry.Registry) {
 		Suites:            registry.Suites(registry.Nightly),
 		Cluster:           mixedHeadroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Randomized:        true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCMixedHeadroom(ctx, t, c)
 		},
