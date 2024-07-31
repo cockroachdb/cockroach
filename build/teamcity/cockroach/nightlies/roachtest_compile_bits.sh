@@ -34,10 +34,10 @@ for arg in "$@"; do
     *)
       # Fail now if the argument is not a valid arch.
       arch_to_config $arg >/dev/null || exit 1
-      components+=($os/$arg/cockroach)
+#      components+=($os/$arg/cockroach)
       components+=($os/$arg/cockroach-ea)
-      components+=($os/$arg/workload)
-      components+=($os/$arg/libgeos)
+#      components+=($os/$arg/workload)
+#      components+=($os/$arg/libgeos)
       ;;
   esac
 done
@@ -47,8 +47,7 @@ done
 host_arch=$(get_host_arch)
 echo "Host architecture: $host_arch"
 components+=($os/$host_arch/roachtest)
-components+=($os/$host_arch/roachprod)
-components+=($os/$host_arch/libgeos)
+#components+=($os/$host_arch/libgeos)
 
 # Prepare the bin/ and lib/ directories.
 mkdir -p bin lib
@@ -59,8 +58,22 @@ for comp in $(printf "%s\n" "${components[@]}" | sort -u); do
   "$(dirname $0)"/roachtest_compile_component.sh $extra_flags $comp
 done
 
+curl https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/cockroach.${os}-gnu-${arg}.LATEST --output bin/cockroach.${os}-${arg}
+chmod a+xw bin/cockroach.${os}-${arg}
+cp bin/cockroach.${os}-${host_arch} bin/cockroach
+
+if [ ${arg} = "arm64" ]; then
+  curl https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/workload.linux-gnu-arm64.LATEST --output bin/workload.${os}-${arg}
+else
+  curl https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/workload.LATEST --output bin/workload.${os}-${arg}
+fi
+chmod a+xw bin/workload.${os}-${arg}
+cp bin/workload.${os}-${host_arch} bin/workload
+curl https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos.${os}-gnu-${arg}.so.LATEST --output lib/libgeos.${os}-${arg}.so
+chmod a+xw lib/libgeos.${os}-${arg}.so
+curl https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos_c.${os}-gnu-${arg}.so.LATEST --output lib/libgeos_c.${os}-${arg}.so
+chmod a+xw lib/libgeos_c.${os}-${arg}.so
 cp -p bin/roachtest.$os-$host_arch bin/roachtest
-cp -p bin/roachprod.$os-$host_arch bin/roachprod
 # N.B. geos does not support the architecture suffix (see getLibraryExt() in
 # geos.go).
 cp -p lib/libgeos.$os-$host_arch.so lib/libgeos.so
