@@ -1575,7 +1575,7 @@ func (s *SQLServer) preStart(
 	// run.
 
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
-	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
+	s.leaseMgr.RunBackgroundLeasingTask(ctx)
 
 	if err := s.jobRegistry.Start(ctx, stopper); err != nil {
 		return err

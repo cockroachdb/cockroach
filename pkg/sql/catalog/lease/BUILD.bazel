@@ -122,6 +122,7 @@ go_test(
         "//pkg/sql/enum",
         "//pkg/sql/isql",
         "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/regions",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/valueside",
