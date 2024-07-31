@@ -1453,13 +1453,13 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:             "cdc/initial-scan-only/parquet/metamorphic",
-		Skip:             "#119295",
-		Owner:            registry.OwnerCDC,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
-		RequiresLicense:  true,
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:            "cdc/initial-scan-only/parquet/metamorphic",
+		Owner:           registry.OwnerCDC,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		RequiresLicense: true,
+		// TODO(#127940): Reenable GCE once GCS permissions issue is resolved.
+		CompatibleClouds: registry.Clouds(spec.Azure, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
