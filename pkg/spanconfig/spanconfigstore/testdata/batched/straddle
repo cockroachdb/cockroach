@@ -13,12 +13,16 @@ set [e,g):B
 added [b,d):A
 added [e,g):B
 
+# We will need to get back to the current state in this test.
+checkpoint
+----
+
 # keys    a  b  c  d  e  f  g  h  i  j
 # state      [--A--)  [--B--)
 # set           [---X----)
 # ====================================
 # result     [-A|----X---|-B)
-apply dryrun
+apply
 set [c,f):X
 ----
 deleted [b,d)
@@ -27,12 +31,15 @@ added [b,c):A
 added [c,f):X
 added [f,g):B
 
+restore-checkpoint
+----
+
 # keys    a  b  c  d  e  f  g  h  i  j
 # state      [--A--)  [--B--)
 # set           [---X-------)
 # ====================================
 # result     [-A|----X------)
-apply dryrun
+apply
 set [c,g):X
 ----
 deleted [b,d)
@@ -40,12 +47,15 @@ deleted [e,g)
 added [b,c):A
 added [c,g):X
 
+restore-checkpoint
+----
+
 # keys    a  b  c  d  e  f  g  h  i  j
 # state      [--A--)  [--B--)
 # set           [---X----|xx)
 # ====================================
 # result     [-A|----X---)
-apply dryrun
+apply
 set [c,f):X
 delete [f,g)
 ----
@@ -54,12 +64,15 @@ deleted [e,g)
 added [b,c):A
 added [c,f):X
 
+restore-checkpoint
+----
+
 # keys    a  b  c  d  e  f  g  h  i  j
 # state      [--A--)  [--B--)
 # set           [---X----------)
 # ====================================
 # result     [-A|----X---------)
-apply dryrun
+apply
 set [c,h):X
 ----
 deleted [b,d)
@@ -67,12 +80,15 @@ deleted [e,g)
 added [b,c):A
 added [c,h):X
 
+restore-checkpoint
+----
+
 # keys    a  b  c  d  e  f  g  h  i  j
 # state      [--A--)  [--B--)
 # set        [---X-------)
 # ====================================
 # result     [-------X---|-B)
-apply dryrun
+apply
 set [b,f):X
 ----
 deleted [b,d)
@@ -80,12 +96,15 @@ deleted [e,g)
 added [b,f):X
 added [f,g):B
 
+restore-checkpoint
+----
+
 # keys    a  b  c  d  e  f  g  h  i  j
 # state      [--A--)  [--B--)
 # set     [------X-------)
 # ====================================
 # result  [----------X---|-B)
-apply dryrun
+apply
 set [a,f):X
 ----
 deleted [b,d)
@@ -93,12 +112,15 @@ deleted [e,g)
 added [a,f):X
 added [f,g):B
 
+restore-checkpoint
+----
+
 # keys    a  b  c  d  e  f  g  h  i  j
 # state      [--A--)  [--B--)
 # set           [xxxxxxxx)
 # ====================================
 # result     [-A)        [-B)
-apply dryrun
+apply
 delete [c,f)
 ----
 deleted [b,d)
@@ -106,12 +128,15 @@ deleted [e,g)
 added [b,c):A
 added [f,g):B
 
+restore-checkpoint
+----
+
 # keys    a  b  c  d  e  f  g  h  i  j
 # state      [--A--)  [--B--)
 # set     [xxxxx|---X----------)
 # ====================================
 # result        [----X---------)
-apply dryrun
+apply
 delete [a,c)
 set [c,h):X
 ----
@@ -119,12 +144,15 @@ deleted [b,d)
 deleted [e,g)
 added [c,h):X
 
+restore-checkpoint
+----
+
 # keys    a  b  c  d  e  f  g  h  i  j
 # state      [--A--)  [--B--)
 # set        [--X--|xxxxx|-Y)
 # ====================================
 # result     [--X--)     [-Y)
-apply dryrun
+apply
 set [b,d):X
 delete [d,f)
 set [f,g):Y

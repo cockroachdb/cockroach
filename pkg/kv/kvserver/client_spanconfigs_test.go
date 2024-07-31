@@ -74,7 +74,6 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	require.NoError(t, err)
 	deleted, added := spanConfigStore.Apply(
 		ctx,
-		false, /* dryrun */
 		add,
 	)
 	require.Empty(t, deleted)
