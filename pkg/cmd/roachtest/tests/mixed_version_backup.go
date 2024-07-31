@@ -2583,6 +2583,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 		CompatibleClouds:          registry.Clouds(spec.GCE, spec.Local),
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		Randomized:                true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			mvt := mixedversion.NewTest(
 				ctx, t, t.L(), c, c.CRDBNodes(),
