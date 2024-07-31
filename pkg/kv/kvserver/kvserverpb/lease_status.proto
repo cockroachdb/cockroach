@@ -100,4 +100,17 @@ message LeaseStatus {
   // The minimum observed timestamp on a transaction that is respected by this lease.
   util.hlc.Timestamp min_valid_observed_timestamp = 7 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+  // Raft leadership support, if this is a leader lease for a leader lease's
+  // associated term.
+  RaftLeaderSupport leader_support = 8 [(gogoproto.nullable) = false];
+}
+
+// RaftLeaderSupport holds the leader lease state.
+message RaftLeaderSupport {
+  // Term is the current raft term known to the local replica.
+  uint64 term = 1;
+  // LeadSupportUntil is the timestamp at which the local replica, if leader,
+  // knows it has support to remain leader until. If the leader has not yet
+  // fortified its leadership, this will be the zero timestamp.
+  util.hlc.Timestamp lead_support_until = 2 [(gogoproto.nullable) = false];
 }

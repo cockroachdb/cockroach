@@ -2058,7 +2058,13 @@ func (l Lease) Equivalent(newL Lease, expToEpochEquiv bool) bool {
 			if l.GetExpiration().LessEq(newL.GetExpiration()) {
 				l.Expiration, newL.Expiration = nil, nil
 			}
+
+		default:
+			panic("unexpected lease type")
 		}
+
+	default:
+		panic("unexpected lease type")
 	}
 	return l == newL
 }
