@@ -139,8 +139,14 @@ func TestEstimatedCPUBatchInfo(t *testing.T) {
 
 func TestEstimatedCPUBatchCost(t *testing.T) {
 	model := EstimatedCPUModel{
-		ReadBatchCost:   1,
-		ReadRequestCost: 2,
+		ReadBatchCost: 1,
+		ReadRequestCost: struct {
+			BatchSize     []float64
+			CPUPerRequest []EstimatedCPU
+		}{
+			BatchSize:     []float64{8, 16, 32, 64},
+			CPUPerRequest: []EstimatedCPU{0.5, 1.5, 2.5, 3.5},
+		},
 		ReadBytesCost: struct {
 			PayloadSize []float64
 			CPUPerByte  []EstimatedCPU
@@ -160,7 +166,7 @@ func TestEstimatedCPUBatchCost(t *testing.T) {
 			BatchSize     []float64
 			CPUPerRequest []EstimatedCPU
 		}{
-			BatchSize:     []float64{3, 6, 12, 25},
+			BatchSize:     []float64{4, 8, 16, 32},
 			CPUPerRequest: []EstimatedCPU{2, 3, 4, 5},
 		},
 		WriteBytesCost: struct {
@@ -222,50 +228,50 @@ func TestEstimatedCPUBatchCost(t *testing.T) {
 		{
 			name: "metrics are smaller than min lookup values",
 			info: BatchInfo{
-				ReadCount:  10,
+				ReadCount:  3,
 				ReadBytes:  100,
-				WriteCount: 2,
+				WriteCount: 3,
 				WriteBytes: 1,
 			},
 			ratePerNode: 50,
 			replicas:    3,
-			cost:        119 + 13.5,
+			cost:        102 + 13.5,
 		},
 		{
 			name: "metrics are equal to min lookup values",
 			info: BatchInfo{
-				ReadCount:  10,
+				ReadCount:  8,
 				ReadBytes:  256,
-				WriteCount: 3,
+				WriteCount: 4,
 				WriteBytes: 256,
 			},
 			ratePerNode: 100,
 			replicas:    3,
-			cost:        275 + 1549.5,
+			cost:        260.5 + 1549.5,
 		},
 		{
 			name: "metrics between lookup values",
 			info: BatchInfo{
-				ReadCount:  50,
+				ReadCount:  48,
 				ReadBytes:  2560,
-				WriteCount: 9,
+				WriteCount: 12,
 				WriteBytes: 640,
 			},
 			ratePerNode: 150,
 			replicas:    5,
-			cost:        6499 + 9743.75,
+			cost:        6542 + 9778.75,
 		},
 		{
 			name: "metrics are equal to max lookup values",
 			info: BatchInfo{
-				ReadCount:  100,
+				ReadCount:  64,
 				ReadBytes:  4096,
-				WriteCount: 25,
+				WriteCount: 32,
 				WriteBytes: 4096,
 			},
 			ratePerNode: 800,
 			replicas:    3,
-			cost:        12_487 + 98_670,
+			cost:        12_509.5 + 98_760,
 		},
 		{
 			name: "metrics are larger than max lookup values",
@@ -277,7 +283,7 @@ func TestEstimatedCPUBatchCost(t *testing.T) {
 			},
 			ratePerNode: 1000,
 			replicas:    5,
-			cost:        31_999 + 402_485,
+			cost:        33_497.5 + 402_460,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
