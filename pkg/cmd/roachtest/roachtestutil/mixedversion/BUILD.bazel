@@ -29,6 +29,7 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/intsets",
         "//pkg/util/randutil",
+        "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
