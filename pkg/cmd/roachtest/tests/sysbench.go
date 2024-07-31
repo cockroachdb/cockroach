@@ -185,7 +185,7 @@ func registerSysbench(r registry.Registry) {
 			Name:             fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
 			Benchmark:        true,
 			Owner:            registry.OwnerTestEng,
-			Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus), spec.WorkloadNode()),
+			Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
