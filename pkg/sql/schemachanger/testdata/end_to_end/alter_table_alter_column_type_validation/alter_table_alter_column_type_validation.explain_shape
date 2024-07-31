@@ -1,0 +1,11 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j TEXT);
+INSERT INTO t VALUES (1,NULL),(2,'FIT1'),(3,'FIT11');
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER COLUMN j SET DATA TYPE CHAR(5);
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› SET DATA TYPE CHAR(5);
+ ├── execute 1 system table mutations transaction
+ ├── validate non-index-backed constraint t.[constraint 2] in relation t
+ └── execute 3 system table mutations transactions

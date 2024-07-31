@@ -68,8 +68,16 @@ func (i *immediateVisitor) UpsertColumnType(ctx context.Context, op scop.UpsertC
 	if catCol.HasType() {
 		return i.updateExistingColumnType(ctx, op, col)
 	}
+	return i.addNewColumnType(ctx, op, tbl, col)
+}
 
-	// Else, we are adding a new column.
+// addNewColumnType is called when adding a ColumnType for a new column.
+func (i *immediateVisitor) addNewColumnType(
+	ctx context.Context,
+	op scop.UpsertColumnType,
+	tbl *tabledesc.Mutable,
+	col *descpb.ColumnDescriptor,
+) error {
 	col.Type = op.ColumnType.Type
 	if op.ColumnType.ElementCreationMetadata.In_23_1OrLater {
 		col.Nullable = true
@@ -376,9 +384,9 @@ func (i *immediateVisitor) updateExistingColumnType(
 		return err
 	}
 	switch kind {
-	case schemachange.ColumnConversionTrivial:
-		// For trivial conversions, we can just update the column type. This is
-		// allowed because there is no backfill for this type conversion.
+	case schemachange.ColumnConversionTrivial, schemachange.ColumnConversionValidate:
+		// Tihs type of update are ones that don't do a backfill. So, we can simply
+		// update the column type and be done.
 		desc.Type = op.ColumnType.Type
 	default:
 		return errors.AssertionFailedf("unsupported column type change %v -> %v (%v)",

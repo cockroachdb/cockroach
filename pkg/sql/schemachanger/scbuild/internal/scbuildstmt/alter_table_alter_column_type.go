@@ -11,8 +11,11 @@
 package scbuildstmt
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
@@ -161,11 +164,7 @@ func validateAutomaticCastForNewType(
 // handleTrivialColumnConversion is called to just change the type in-place without
 // no rewrite or validation required.
 func handleTrivialColumnConversion(b BuildCtx, oldColType, newColType *scpb.ColumnType) {
-	// Add the new type and remove the old type. The removal of the old type is a
-	// no-op in opgen. But we need the drop here so that we only have 1 public
-	// type for the column.
-	b.Drop(oldColType)
-	b.Add(newColType)
+	updateColumnType(b, oldColType, newColType)
 }
 
 // handleValidationOnlyColumnConversion is called when we don't need to rewrite
@@ -173,11 +172,36 @@ func handleTrivialColumnConversion(b BuildCtx, oldColType, newColType *scpb.Colu
 func handleValidationOnlyColumnConversion(
 	b BuildCtx, t *tree.AlterTableAlterColumnType, oldColType, newColType *scpb.ColumnType,
 ) {
-	failIfExperimentalSettingNotSet(b, oldColType, newColType)
+	updateColumnType(b, oldColType, newColType)
 
-	// TODO(spilchen): Implement the validation-only logic in #127516
-	panic(scerrors.NotImplementedErrorf(t,
-		"alter type conversion that requires validation only is not supported in the declarative schema changer"))
+	// To validate, we add a transient check constraint. It casts the column to the
+	// new type and then back to the old type. If the cast back doesn't match the
+	// original value, the check fails. This constraint is temporary and doesn't
+	// need to persist beyond the ALTER operation.
+	expr, err := parser.ParseExpr(fmt.Sprintf("(CAST(CAST(%s AS %s) AS %s) = %s)",
+		t.Column.String(), newColType.Type.SQLString(), oldColType.Type.SQLString(), t.Column.String()))
+	if err != nil {
+		panic(err)
+	}
+
+	// The constraint requires a backing index to use, which we will use the
+	// primary index.
+	chain := getPrimaryIndexChain(b, newColType.TableID)
+	var indexID catid.IndexID
+	if chain.finalSpec.primary != nil {
+		indexID = chain.finalSpec.primary.IndexID
+	} else {
+		indexID = chain.oldSpec.primary.IndexID
+	}
+
+	chk := scpb.CheckConstraint{
+		TableID:              newColType.TableID,
+		Expression:           *b.WrapExpression(newColType.TableID, expr),
+		ConstraintID:         b.NextTableConstraintID(newColType.TableID),
+		IndexIDForValidation: indexID,
+		ColumnIDs:            []catid.ColumnID{newColType.ColumnID},
+	}
+	b.AddTransient(&chk) // Adding it as transient ensures it doesn't survive past the ALTER.
 }
 
 // handleGeneralColumnConversion is called when we need to rewrite the data in order
@@ -208,6 +232,14 @@ func handleGeneralColumnConversion(
 
 	// TODO(spilchen): Implement the general conversion logic in #127014
 	panic(scerrors.NotImplementedErrorf(t, "general alter type conversion not supported in the declarative schema changer"))
+}
+
+func updateColumnType(b BuildCtx, oldColType, newColType *scpb.ColumnType) {
+	// Add the new type and remove the old type. The removal of the old type is a
+	// no-op in opgen. But we need the drop here so that we only have 1 public
+	// type for the column.
+	b.Drop(oldColType)
+	b.Add(newColType)
 }
 
 // failIfExperimentalSettingNotSet checks if the setting that allows altering
