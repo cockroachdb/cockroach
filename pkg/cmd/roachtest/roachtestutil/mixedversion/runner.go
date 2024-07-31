@@ -261,7 +261,6 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 	case concurrentRunStep:
 		group := ctxgroup.WithContext(tr.ctx)
 		for _, cs := range s.delayedSteps {
-			cs := cs
 			group.GoCtx(func(concurrentCtx context.Context) error {
 				return tr.runStep(concurrentCtx, cs)
 			})
