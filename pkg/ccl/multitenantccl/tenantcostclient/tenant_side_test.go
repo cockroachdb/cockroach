@@ -1822,7 +1822,10 @@ func TestCPUModelSettingsChanged(t *testing.T) {
 	newModel := `
 	{
 	  "ReadBatchCost": 1,
-	  "ReadRequestCost": 2,
+	  "ReadRequestCost": {
+		"BatchSize": [1, 2, 3],
+		"CPUPerRequest": [0.1, 0.2, 0.3]
+	  },
 	  "ReadBytesCost": {
 		"PayloadSize": [1, 2, 3],
 		"CPUPerByte": [0.5, 1, 1.5]
