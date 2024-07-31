@@ -1267,11 +1267,12 @@ Closely mirrors the upstream definitions in github.com/etcd-io/raft.
 | ----- | ---- | ----- | ----------- | -------------- |
 | replica_id | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  |  | [reserved](#support-status) |
 | hard_state | [raftpb.HardState](#cockroach.server.serverpb.RaftDebugResponse-raftpb.HardState) |  |  | [reserved](#support-status) |
-| lead | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  | Lead is part of Raft's SoftState. | [reserved](#support-status) |
+| lead | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  | Lead is part of Raft's HardState. However, it used to be part of SoftState, so we keep it here as a separate field for compatibility. | [reserved](#support-status) |
 | state | [string](#cockroach.server.serverpb.RaftDebugResponse-string) |  | State is part of Raft's SoftState. It's not an enum because this is primarily for ui consumption and there are issues associated with them. | [reserved](#support-status) |
 | applied | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  |  | [reserved](#support-status) |
 | progress | [RaftState.ProgressEntry](#cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RaftState.ProgressEntry) | repeated |  | [reserved](#support-status) |
 | lead_transferee | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  |  | [reserved](#support-status) |
+| lead_support_until | [cockroach.util.hlc.Timestamp](#cockroach.server.serverpb.RaftDebugResponse-cockroach.util.hlc.Timestamp) |  |  | [reserved](#support-status) |
 
 
 
@@ -1515,11 +1516,12 @@ Closely mirrors the upstream definitions in github.com/etcd-io/raft.
 | ----- | ---- | ----- | ----------- | -------------- |
 | replica_id | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  |  | [reserved](#support-status) |
 | hard_state | [raftpb.HardState](#cockroach.server.serverpb.RangesResponse-raftpb.HardState) |  |  | [reserved](#support-status) |
-| lead | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  | Lead is part of Raft's SoftState. | [reserved](#support-status) |
+| lead | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  | Lead is part of Raft's HardState. However, it used to be part of SoftState, so we keep it here as a separate field for compatibility. | [reserved](#support-status) |
 | state | [string](#cockroach.server.serverpb.RangesResponse-string) |  | State is part of Raft's SoftState. It's not an enum because this is primarily for ui consumption and there are issues associated with them. | [reserved](#support-status) |
 | applied | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  |  | [reserved](#support-status) |
 | progress | [RaftState.ProgressEntry](#cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RaftState.ProgressEntry) | repeated |  | [reserved](#support-status) |
 | lead_transferee | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  |  | [reserved](#support-status) |
+| lead_support_until | [cockroach.util.hlc.Timestamp](#cockroach.server.serverpb.RangesResponse-cockroach.util.hlc.Timestamp) |  |  | [reserved](#support-status) |
 
 
 
@@ -3895,11 +3897,12 @@ Closely mirrors the upstream definitions in github.com/etcd-io/raft.
 | ----- | ---- | ----- | ----------- | -------------- |
 | replica_id | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  |  | [reserved](#support-status) |
 | hard_state | [raftpb.HardState](#cockroach.server.serverpb.RangeResponse-raftpb.HardState) |  |  | [reserved](#support-status) |
-| lead | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  | Lead is part of Raft's SoftState. | [reserved](#support-status) |
+| lead | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  | Lead is part of Raft's HardState. However, it used to be part of SoftState, so we keep it here as a separate field for compatibility. | [reserved](#support-status) |
 | state | [string](#cockroach.server.serverpb.RangeResponse-string) |  | State is part of Raft's SoftState. It's not an enum because this is primarily for ui consumption and there are issues associated with them. | [reserved](#support-status) |
 | applied | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  |  | [reserved](#support-status) |
 | progress | [RaftState.ProgressEntry](#cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RaftState.ProgressEntry) | repeated |  | [reserved](#support-status) |
 | lead_transferee | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  |  | [reserved](#support-status) |
+| lead_support_until | [cockroach.util.hlc.Timestamp](#cockroach.server.serverpb.RangeResponse-cockroach.util.hlc.Timestamp) |  |  | [reserved](#support-status) |
 
 
 
