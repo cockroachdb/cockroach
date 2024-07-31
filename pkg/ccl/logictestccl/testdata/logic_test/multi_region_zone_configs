@@ -462,25 +462,12 @@ query TTT
 SELECT ZONE_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
-num_replicas = 10,
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'            regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'            regional_by_row@regional_by_row_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'                regional_by_row@regional_by_row_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'                regional_by_row@regional_by_row_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'                      regional_by_row@regional_by_row_i_idx  us-east-1
+num_replicas = 10,\nnum_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_pkey   us-east-1
 
 statement error attempting to update zone configuration for table regional_by_row which contains modified field "num_replicas"
 ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE
@@ -712,24 +699,12 @@ query TTT
 SELECT ZONE_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_as]
 ORDER BY partition_name, index_name
 ----
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_as@regional_by_row_as_i_idx  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ap-southeast-2]',
-lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_as@regional_by_row_as_pkey  ap-southeast-2
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row_as@regional_by_row_as_i_idx  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=ca-central-1]',
-lease_preferences = '[[+region=ca-central-1]]'  regional_by_row_as@regional_by_row_as_pkey  ca-central-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row_as@regional_by_row_as_i_idx  us-east-1
-num_voters = 3,
-voter_constraints = '[+region=us-east-1]',
-lease_preferences = '[[+region=us-east-1]]'  regional_by_row_as@regional_by_row_as_pkey  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_as@regional_by_row_as_i_idx  ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ap-southeast-2]',\nlease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_as@regional_by_row_as_pkey   ap-southeast-2
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_as@regional_by_row_as_i_idx  ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=ca-central-1]',\nlease_preferences = '[[+region=ca-central-1]]'      regional_by_row_as@regional_by_row_as_pkey   ca-central-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_as@regional_by_row_as_i_idx  us-east-1
+num_voters = 3,\nvoter_constraints = '[+region=us-east-1]',\nlease_preferences = '[[+region=us-east-1]]'            regional_by_row_as@regional_by_row_as_pkey   us-east-1
 
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"

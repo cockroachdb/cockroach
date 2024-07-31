@@ -2856,7 +2856,6 @@ func (t *logicTest) processSubtest(
 							if len(results) == 0 {
 								break
 							}
-
 							if query.sorter == nil {
 								// When rows don't need to be sorted, then always compare by
 								// tokens, regardless of where row/column boundaries are.
@@ -3677,7 +3676,17 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 					if query.roundFloatsInStringsSigFigs > 0 {
 						s = floatcmp.RoundFloatsInString(s, query.roundFloatsInStringsSigFigs)
 					}
-					actualResultsRaw = append(actualResultsRaw, s)
+					// Replace any \n character with an escaped new line. This will ensure that
+					// tests pass and the output remains relatively well formatted. This will
+					// happen unless:
+					//	1. There is only 1 column being queried
+					//	2. The value is the last column in the row
+					colCount := len(cols)
+					if colCount == 1 || i%colCount == colCount-1 {
+						actualResultsRaw = append(actualResultsRaw, s)
+					} else {
+						actualResultsRaw = append(actualResultsRaw, strings.ReplaceAll(s, "\n", "\\n"))
+					}
 				}
 			}
 			if err := rows.Err(); err != nil {
