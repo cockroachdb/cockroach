@@ -1124,7 +1124,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	cfg.opts.Lock = cfg.env.DirectoryLock
 	cfg.opts.ErrorIfNotExists = cfg.mustExist
 	for i := range cfg.opts.Levels {
-		cfg.opts.Levels[i].Compression = func() sstable.Compression {
+		cfg.opts.Levels[i].Compression = func() pebble.Compression {
 			return getCompressionAlgorithm(ctx, cfg.settings, CompressionAlgorithmStorage)
 		}
 	}
