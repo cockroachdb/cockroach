@@ -152,5 +152,4 @@ def disallowed_imports_test(
         name = src.strip(":") + "_disallowed_imports_test",
         size = "small",
         srcs = [":" + script],
-        tags = ["local"],
     )
