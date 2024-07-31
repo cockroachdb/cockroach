@@ -183,7 +183,7 @@ func (fw *SSTWriter) Finish() error {
 		return err
 	}
 	var err error
-	fw.Meta, err = fw.fw.Metadata()
+	fw.Meta, err = fw.fw.Raw().Metadata()
 	fw.fw = nil
 	return err
 }
@@ -321,7 +321,7 @@ func (fw *SSTWriter) PutInternalPointKey(key *pebble.InternalKey, value []byte) 
 		return errors.New("cannot decode engine key")
 	}
 	fw.DataSize += int64(len(ek.Key)) + int64(len(value))
-	return fw.fw.Add(*key, value)
+	return fw.fw.Raw().Add(*key, value)
 }
 
 // clearRange clears all point keys in the given range by dropping a Pebble

@@ -11,6 +11,8 @@
 package storage
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"math"
@@ -18,6 +20,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -52,38 +55,119 @@ func TestEngineComparer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	keyAMetadata := MVCCKey{
-		Key: []byte("a"),
+	// encodeKey encodes a key. For the version, it supports arbitrary bytes or
+	// hlc.Timestamp, using either the EngineKey or MVCCKey or encoder.
+	encodeKey := func(key roachpb.Key, version any) []byte {
+		switch t := version.(type) {
+		case []byte:
+			ek := EngineKey{Key: key, Version: t}
+			return ek.Encode()
+		case hlc.Timestamp:
+			return EncodeMVCCKey(MVCCKey{Key: key, Timestamp: t})
+		default:
+			panic(t)
+		}
 	}
-	keyA2 := MVCCKey{
-		Key:       []byte("a"),
-		Timestamp: hlc.Timestamp{WallTime: 2},
-	}
-	keyA1 := MVCCKey{
-		Key:       []byte("a"),
-		Timestamp: hlc.Timestamp{WallTime: 1},
-	}
-	keyB2 := MVCCKey{
-		Key:       []byte("b"),
-		Timestamp: hlc.Timestamp{WallTime: 2},
+	encodeVersion := func(version any) []byte {
+		kBare := encodeKey(roachpb.Key("foo"), hlc.Timestamp{})
+		k := encodeKey(roachpb.Key("foo"), version)
+		result, ok := bytes.CutPrefix(k, kBare)
+		if !ok {
+			panic(fmt.Sprintf("expected %s to have prefix %s", k, kBare))
+		}
+		return result
 	}
 
-	require.Equal(t, -1, EngineComparer.Compare(EncodeMVCCKey(keyAMetadata), EncodeMVCCKey(keyA1)),
-		"expected key metadata to sort first")
-	require.Equal(t, -1, EngineComparer.Compare(EncodeMVCCKey(keyA2), EncodeMVCCKey(keyA1)),
-		"expected higher timestamp to sort first")
-	require.Equal(t, -1, EngineComparer.Compare(EncodeMVCCKey(keyA2), EncodeMVCCKey(keyB2)),
-		"expected lower key to sort first")
+	appendBytesToTimestamp := func(ts hlc.Timestamp, bytes []byte) []byte {
+		suffix := encodeVersion(ts)
+		// Strip off sentinel byte.
+		version := suffix[:len(suffix)-1]
+		return slices.Concat(version, bytes)
+	}
 
-	suffix := func(key []byte) []byte {
-		return key[EngineComparer.Split(key):]
+	ts1 := hlc.Timestamp{}
+	require.Len(t, encodeVersion(ts1), 0)
+	ts2 := hlc.Timestamp{WallTime: 2, Logical: 1}
+	ts3 := hlc.Timestamp{WallTime: 2}
+	ts4 := hlc.Timestamp{WallTime: 1, Logical: 1}
+	ts5 := hlc.Timestamp{WallTime: 1}
+
+	syntheticBit := []byte{1}
+	ts2a := appendBytesToTimestamp(ts2, syntheticBit)
+	ts3a := appendBytesToTimestamp(ts3, zeroLogical[:])
+	ts3b := appendBytesToTimestamp(ts3, slices.Concat(zeroLogical[:], syntheticBit))
+
+	// We group versions by equality and in the expected ordering.
+	orderedVersions := [][]any{
+		{ts1},       // Empty version sorts first.
+		{ts2, ts2a}, // Higher timestamps sort before lower timestamps.
+		{ts3, ts3a, ts3b},
+		{ts4},
+		{ts5},
 	}
-	require.Equal(t, -1, EngineComparer.Compare(suffix(EncodeMVCCKey(keyA2)), suffix(EncodeMVCCKey(keyA1))),
-		"expected bare suffix with higher timestamp to sort first")
-	for _, k := range []MVCCKey{keyAMetadata, keyA2, keyA1, keyB2} {
-		b := EncodeMVCCKey(k)
-		require.Equal(t, 2, EngineComparer.Split(b))
+
+	// Compare suffixes.
+	for i := range orderedVersions {
+		for j := range orderedVersions {
+			for _, v1 := range orderedVersions[i] {
+				for _, v2 := range orderedVersions[j] {
+					result := EngineComparer.CompareSuffixes(encodeVersion(v1), encodeVersion(v2))
+					if expected := cmp.Compare(i, j); result != expected {
+						t.Fatalf("CompareSuffixes(%x, %x) = %d, expected %d", v1, v2, result, expected)
+					}
+				}
+			}
+		}
 	}
+
+	lock1 := bytes.Repeat([]byte{1}, engineKeyVersionLockTableLen)
+	lock2 := bytes.Repeat([]byte{2}, engineKeyVersionLockTableLen)
+	require.Equal(t, 0, EngineComparer.CompareSuffixes(encodeVersion(lock1), encodeVersion(lock1)))
+	require.Equal(t, 0, EngineComparer.CompareSuffixes(encodeVersion(lock2), encodeVersion(lock2)))
+	require.Equal(t, +1, EngineComparer.CompareSuffixes(encodeVersion(lock1), encodeVersion(lock2)))
+	require.Equal(t, -1, EngineComparer.CompareSuffixes(encodeVersion(lock2), encodeVersion(lock1)))
+
+	keys := []roachpb.Key{
+		roachpb.Key(""),
+		roachpb.Key("a"),
+		roachpb.Key("bcd"),
+		roachpb.Key("fg"),
+	}
+
+	// We group keys by equality and in the expected ordering.
+	var orderedKeys [][][]byte
+	for _, k := range keys {
+		orderedKeys = append(orderedKeys,
+			[][]byte{encodeKey(k, ts1)},
+			[][]byte{encodeKey(k, ts2), encodeKey(k, ts2a)},
+			[][]byte{encodeKey(k, ts3), encodeKey(k, ts3a), encodeKey(k, ts3b)},
+			[][]byte{encodeKey(k, ts4)},
+			[][]byte{encodeKey(k, ts5)},
+		)
+	}
+	// Compare keys.
+	for i := range orderedKeys {
+		for j := range orderedKeys {
+			for _, k1 := range orderedKeys[i] {
+				for _, k2 := range orderedKeys[j] {
+					result := EngineComparer.Compare(k1, k2)
+					if expected := cmp.Compare(i, j); result != expected {
+						t.Fatalf("Compare(%x, %x) = %d, expected %d", k1, k2, result, expected)
+					}
+				}
+			}
+		}
+	}
+
+	// Run the Pebble test suite to check the internal consistency of the comparator.
+	var prefixes, suffixes [][]byte
+	for _, k := range keys {
+		prefixes = append(prefixes, encodeKey(k, ts1))
+	}
+	for _, v := range []any{ts1, ts2, ts2a, ts3, ts3a, ts3b, ts4, ts5, lock1, lock2} {
+		suffixes = append(suffixes, encodeVersion(v))
+	}
+	require.NoError(t, pebble.CheckComparer(EngineComparer, prefixes, suffixes))
 }
 
 func TestPebbleIterReuse(t *testing.T) {
@@ -529,23 +613,20 @@ func TestPebbleKeyValidationFunc(t *testing.T) {
 	l := &nonFatalLogger{t: t}
 	opt := func(cfg *engineConfig) error {
 		cfg.opts.LoggerAndTracer = l
+		cfg.opts.Experimental.KeyValidationFunc = func(k []byte) error {
+			if bytes.Contains(k, []byte("foo")) {
+				return errors.Errorf("key contains 'foo'")
+			}
+			return nil
+		}
 		return nil
 	}
 	engine := createTestPebbleEngine(opt).(*Pebble)
 	defer engine.Close()
 
-	// Write a key with an invalid version length (=1) to simulate
-	// programmer-error.
-	ek := EngineKey{
-		Key:     roachpb.Key("foo"),
-		Version: make([]byte, 1),
-	}
+	ek := EngineKey{Key: roachpb.Key("foo")}
 
-	// Sanity check: the key should fail validation.
-	err := ek.Validate()
-	require.Error(t, err)
-
-	err = engine.PutEngineKey(ek, []byte("bar"))
+	err := engine.PutEngineKey(ek, []byte("bar"))
 	require.NoError(t, err)
 
 	// Force a flush to trigger the compaction error.
