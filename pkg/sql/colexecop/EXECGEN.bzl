@@ -43,7 +43,7 @@ $(location :execgen) -template $(SRCS) \
         -fmt=false pkg/sql/colexec/$@ > $@
 $(location :goimports) -w $@
 """,
-            exec_tools = [
+            tools = [
                 "@go_sdk//:bin/go",
                 ":execgen",
                 ":goimports",

@@ -47,7 +47,7 @@ genrule(
     cmd = """
         $(location //pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl/testgen) -output-file-path=$(location generated_test.go)
        """,
-    exec_tools = [
+    tools = [
         "//pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl/testgen",
     ],
     visibility = [
