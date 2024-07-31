@@ -820,41 +820,19 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
 	sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3)", append(collections, asOf1)...)
 
-	// The flavors of BACKUP and RESTORE which automatically resolve the right
-	// directory to read/write data to, have URIs with the resolved path written
-	// to the job description.
-	getResolvedCollectionURIs := func(prefixes []interface{}, subdir string) []string {
-		resolvedCollectionURIs := make([]string, len(prefixes))
-		for i, collection := range prefixes {
-			parsed, err := url.Parse(collection.(string))
-			require.NoError(t, err)
-			parsed.Path = path.Join(parsed.Path, subdir)
-			resolvedCollectionURIs[i] = parsed.String()
-		}
-
-		return resolvedCollectionURIs
-	}
-
-	resolvedCollectionURIs := getResolvedCollectionURIs(collections, full1)
-	resolvedIncURIs := getResolvedCollectionURIs(incrementals, full1)
-	resolvedAsOfCollectionURIs := getResolvedCollectionURIs(collections, asOf1)
-
 	sqlDB.CheckQueryResults(
 		t, "SELECT description FROM crdb_internal.jobs WHERE job_type='RESTORE' ORDER BY created",
 		[][]string{
-			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
-				resolvedCollectionURIs[0], resolvedCollectionURIs[1],
-				resolvedCollectionURIs[2])},
-			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s') WITH OPTIONS (incremental_location = ('%s', '%s', '%s'))",
-				resolvedCollectionURIs[0], resolvedCollectionURIs[1], resolvedCollectionURIs[2],
-				resolvedIncURIs[0], resolvedIncURIs[1], resolvedIncURIs[2])},
-			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
-				resolvedAsOfCollectionURIs[0], resolvedAsOfCollectionURIs[1],
-				resolvedAsOfCollectionURIs[2])},
+			{fmt.Sprintf("RESTORE DATABASE data FROM '%s' IN ('%s', '%s', '%s')",
+				full1, collections[0], collections[1], collections[2])},
+			{fmt.Sprintf("RESTORE DATABASE data FROM '%s' IN ('%s', '%s', '%s') WITH OPTIONS (incremental_location = ('%s', '%s', '%s'))",
+				full1, collections[0], collections[1], collections[2],
+				incrementals[0], incrementals[1], incrementals[2])},
+			{fmt.Sprintf("RESTORE DATABASE data FROM '%s' IN ('%s', '%s', '%s')",
+				asOf1, collections[0], collections[1], collections[2])},
 			// and again from LATEST IN...
-			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
-				resolvedAsOfCollectionURIs[0], resolvedAsOfCollectionURIs[1],
-				resolvedAsOfCollectionURIs[2])},
+			{fmt.Sprintf("RESTORE DATABASE data FROM '%s' IN ('%s', '%s', '%s')",
+				asOf1, collections[0], collections[1], collections[2])},
 		},
 	)
 }
@@ -1239,12 +1217,12 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	sqlDB.Exec(t, `RESTORE TABLE bank FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb')`, collectionDir)
 
 	//TODO(kev-cao): fix the restore description when restoring from a backup tree
-	buggyRestoreDescription := fmt.Sprintf("%s/full%s?AWS_SESSION_TOKEN=redacted", localFoo, fullDir)
 	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
 		Username: username.RootUserName(),
 		Description: fmt.Sprintf(
-			`RESTORE TABLE bank FROM '%s' WITH OPTIONS (into_db = 'restoredb')`,
-			buggyRestoreDescription,
+			`RESTORE TABLE bank FROM '%s' IN '%sredacted' WITH OPTIONS (into_db = 'restoredb')`,
+			fullDir,
+			sanitizedCollectionDir,
 		),
 	}); err != nil {
 		t.Fatal(err)
@@ -1347,8 +1325,8 @@ into_db='restoredb', %s)`, encryptionOption), backupLoc1)
 			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
 				Username: username.RootUserName(),
 				Description: fmt.Sprintf(
-					`RESTORE TABLE data.bank FROM '%s%s' WITH OPTIONS (%s, into_db = 'restoredb')`,
-					backupLoc1, fullDir, sanitizedEncryptionOption,
+					`RESTORE TABLE data.bank FROM '%s' IN '%s' WITH OPTIONS (%s, into_db = 'restoredb')`,
+					fullDir, backupLoc1, sanitizedEncryptionOption,
 				),
 				DescriptorIDs: descpb.IDs{
 					descpb.ID(restoreDatabaseID + 1),
@@ -5759,7 +5737,7 @@ func TestBackupRestoreShowJob(t *testing.T) {
 		t, "SELECT description FROM crdb_internal.jobs WHERE job_type = 'BACKUP' OR job_type = 'RESTORE' ORDER BY description",
 		[][]string{
 			{fmt.Sprintf("BACKUP DATABASE data INTO '%s' IN 'nodelocal://1/foo' WITH OPTIONS (revision_history = true)", fullDir)},
-			{fmt.Sprintf("RESTORE TABLE data.bank FROM 'nodelocal://1/foo%s' WITH OPTIONS (into_db = 'data 2', skip_missing_foreign_keys)", fullDir)},
+			{fmt.Sprintf("RESTORE TABLE data.bank FROM '%s' IN 'nodelocal://1/foo' WITH OPTIONS (into_db = 'data 2', skip_missing_foreign_keys)", fullDir)},
 		},
 	)
 }
