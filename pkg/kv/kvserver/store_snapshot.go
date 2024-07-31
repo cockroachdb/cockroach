@@ -62,6 +62,16 @@ const (
 	tagSnapshotTiming = "snapshot_timing_tag"
 )
 
+// MaxSnapshotSSTableSize is the maximum size of an sstable containing MVCC/user keys
+// in a snapshot before we truncate and write a new snapshot sstable.
+var MaxSnapshotSSTableSize = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kv.snapshot_rebalance.max_sst_size",
+	"maximum size of a rebalance or recovery SST size",
+	32<<20, // 32 MB
+	settings.PositiveInt,
+)
+
 // snapshotMetrics contains metrics on the number and size of snapshots in
 // progress or in the snapshot queue.
 type snapshotMetrics struct {
@@ -115,11 +125,15 @@ type kvBatchSnapshotStrategy struct {
 // multiSSTWriter is a wrapper around an SSTWriter and SSTSnapshotStorageScratch
 // that handles chunking SSTs and persisting them to disk.
 type multiSSTWriter struct {
-	st       *cluster.Settings
-	scratch  *SSTSnapshotStorageScratch
-	currSST  storage.SSTWriter
-	keySpans []roachpb.Span
-	currSpan int
+	st      *cluster.Settings
+	scratch *SSTSnapshotStorageScratch
+	currSST storage.SSTWriter
+	// localKeySpans are key spans that are considered unsplittable across sstables.
+	// mvccKeySpans can be split across multiple sstables if one of them exceeds
+	// maxSSTSize.
+	localKeySpans []roachpb.Span
+	mvccKeySpans  []roachpb.Span
+	currSpan      int
 	// The approximate size of the SST chunk to buffer in memory on the receiver
 	// before flushing to disk.
 	sstChunkSize int64
@@ -128,31 +142,52 @@ type multiSSTWriter struct {
 	dataSize int64
 	// The total size of the SSTs.
 	sstSize int64
-	// if skipRangeDelForLastSpan is true, the last span is not ClearRanged in the
+	// if skipRangeDelForMVCCSpan is true, the MVCC is not ClearRanged in the
 	// same sstable. We rely on the caller to take care of clearing this span
 	// through a different process (eg. IngestAndExcise on pebble).
-	skipRangeDelForLastSpan bool
+	skipRangeDelForMVCCSpan bool
+	// maxSSTSize is the maximum size to use for SSTs containing MVCC/user keys.
+	// Once the sstable writer reaches this size, it will be finalized and a new
+	// sstable will be created.
+	maxSSTSize int64
 }
 
 func newMultiSSTWriter(
 	ctx context.Context,
 	st *cluster.Settings,
 	scratch *SSTSnapshotStorageScratch,
-	keySpans []roachpb.Span,
+	localKeySpans []roachpb.Span,
+	mvccKeySpans []roachpb.Span,
 	sstChunkSize int64,
-	skipRangeDelForLastSpan bool,
+	skipRangeDelForMVCCSpan bool,
 ) (multiSSTWriter, error) {
 	msstw := multiSSTWriter{
 		st:                      st,
 		scratch:                 scratch,
-		keySpans:                keySpans,
+		localKeySpans:           localKeySpans,
+		mvccKeySpans:            mvccKeySpans,
 		sstChunkSize:            sstChunkSize,
-		skipRangeDelForLastSpan: skipRangeDelForLastSpan,
+		skipRangeDelForMVCCSpan: skipRangeDelForMVCCSpan,
 	}
+	if st != nil {
+		msstw.maxSSTSize = MaxSnapshotSSTableSize.Get(&st.SV)
+	}
+
 	if err := msstw.initSST(ctx); err != nil {
 		return msstw, err
 	}
 	return msstw, nil
+}
+
+func (msstw *multiSSTWriter) currentSpan() roachpb.Span {
+	if msstw.currSpan >= len(msstw.localKeySpans) {
+		return msstw.mvccKeySpans[msstw.currSpan-len(msstw.localKeySpans)]
+	}
+	return msstw.localKeySpans[msstw.currSpan]
+}
+
+func (msstw *multiSSTWriter) currSpanIsMVCCSpan() bool {
+	return msstw.currSpan >= len(msstw.localKeySpans)
 }
 
 func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
@@ -162,22 +197,36 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	}
 	newSST := storage.MakeIngestionSSTWriter(ctx, msstw.st, newSSTFile)
 	msstw.currSST = newSST
-	if msstw.skipRangeDelForLastSpan && msstw.currSpan == len(msstw.keySpans)-1 {
-		// Skip this ClearRange, as it will be excised at ingestion time in the
-		// engine instead.
-		return nil
-	}
-	if err := msstw.currSST.ClearRawRange(
-		msstw.keySpans[msstw.currSpan].Key, msstw.keySpans[msstw.currSpan].EndKey,
-		true /* pointKeys */, true, /* rangeKeys */
-	); err != nil {
-		msstw.currSST.Close()
-		return errors.Wrap(err, "failed to clear range on sst file writer")
-	}
 	return nil
 }
 
 func (msstw *multiSSTWriter) finalizeSST(ctx context.Context) error {
+	if msstw.currSpanIsMVCCSpan() {
+		// We're in the MVCC span (ie. MVCC / user keys). If skipRangeDelForMVCCSpan
+		// is true, we don't write a clearRange for the last span at all. Otherwise,
+		// we need to write a clearRange for all keys leading up to the current key
+		// we're writing.
+		if !msstw.skipRangeDelForMVCCSpan {
+			currSpan := msstw.currentSpan()
+			if err := msstw.currSST.ClearRawRange(
+				currSpan.Key, currSpan.EndKey,
+				true /* pointKeys */, true, /* rangeKeys */
+			); err != nil {
+				msstw.currSST.Close()
+				return errors.Wrap(err, "failed to clear range on sst file writer")
+			}
+		}
+	} else {
+		currSpan := msstw.currentSpan()
+		if err := msstw.currSST.ClearRawRange(
+			currSpan.Key, currSpan.EndKey,
+			true /* pointKeys */, true, /* rangeKeys */
+		); err != nil {
+			msstw.currSST.Close()
+			return errors.Wrap(err, "failed to clear range on sst file writer")
+		}
+	}
+
 	err := msstw.currSST.Finish()
 	if err != nil {
 		return errors.Wrap(err, "failed to finish sst")
@@ -189,21 +238,21 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context) error {
 	return nil
 }
 
-// addRangeDelForLastSpan allows us to explicitly add a deletion tombstone
+// addRangeDelForMVCCSpan allows us to explicitly add a deletion tombstone
 // for the last span in the msstw, if it was instantiated with the expectation
 // that no tombstone was necessary.
-func (msstw *multiSSTWriter) addRangeDelForLastSpan() error {
-	if !msstw.skipRangeDelForLastSpan {
+func (msstw *multiSSTWriter) addRangeDelForMVCCSpan() error {
+	if !msstw.skipRangeDelForMVCCSpan {
 		// Nothing to do.
 		return nil
 	}
-	if msstw.currSpan < len(msstw.keySpans)-1 {
-		// When we switch to the last key span, we will just add a rangedel for it.
+	if msstw.currSpan < len(msstw.localKeySpans) {
+		// When we switch to the mvcc key span(s), we will just add a rangedel for it.
 		// Set skipRangeDelForLastSpan to false.
-		msstw.skipRangeDelForLastSpan = false
+		msstw.skipRangeDelForMVCCSpan = false
 		return nil
 	}
-	if msstw.currSpan > len(msstw.keySpans)-1 {
+	if msstw.currSpan >= len(msstw.localKeySpans) {
 		panic("cannot addRangeDel if sst writer has moved past user keys")
 	}
 	panic("multiSSTWriter already added keys to sstable that cannot be deleted by a rangedel/rangekeydel within it")
@@ -215,7 +264,7 @@ func (msstw *multiSSTWriter) addRangeDelForLastSpan() error {
 func (msstw *multiSSTWriter) rolloverSST(
 	ctx context.Context, key roachpb.Key, endKey roachpb.Key,
 ) error {
-	for msstw.keySpans[msstw.currSpan].EndKey.Compare(key) <= 0 {
+	for msstw.currentSpan().EndKey.Compare(key) <= 0 {
 		// Finish the current SST, write to the file, and move to the next key
 		// range.
 		if err := msstw.finalizeSST(ctx); err != nil {
@@ -225,13 +274,41 @@ func (msstw *multiSSTWriter) rolloverSST(
 			return err
 		}
 	}
-	if msstw.keySpans[msstw.currSpan].Key.Compare(key) > 0 ||
-		msstw.keySpans[msstw.currSpan].EndKey.Compare(endKey) < 0 {
+	currSpan := msstw.currentSpan()
+	if currSpan.Key.Compare(key) > 0 || currSpan.EndKey.Compare(endKey) < 0 {
 		if !key.Equal(endKey) {
-			return errors.AssertionFailedf("client error: expected %s to fall in one of %s",
-				roachpb.Span{Key: key, EndKey: endKey}, msstw.keySpans)
+			return errors.AssertionFailedf("client error: expected %s to fall in one of %s or %s",
+				roachpb.Span{Key: key, EndKey: endKey}, msstw.localKeySpans, msstw.mvccKeySpans)
 		}
-		return errors.AssertionFailedf("client error: expected %s to fall in one of %s", key, msstw.keySpans)
+		return errors.AssertionFailedf("client error: expected %s to fall in one of %s or %s", key, msstw.localKeySpans, msstw.mvccKeySpans)
+	}
+	if msstw.currSpanIsMVCCSpan() && msstw.maxSSTSize > 0 && msstw.currSST.DataSize > msstw.maxSSTSize {
+		// We're in an MVCC / user keys span, and the current sstable has exceeded
+		// the max size for MVCC sstables that we should be creating. Split this
+		// sstable into smaller ones. We do this by splitting the mvccKeySpan into
+		// from [oldStartKey, oldEndKey) to [oldStartKey, key) and [key, oldEndKey).
+		// This allows us to reuse finalizeSST and initSST.
+		currSpan := &msstw.mvccKeySpans[msstw.currSpan-len(msstw.localKeySpans)]
+		if key.Compare(currSpan.Key) == 0 {
+			panic("unexpectedly reached sstable size limit at start key")
+		}
+		oldEndKey := currSpan.EndKey
+		currSpan.EndKey = key.Clone()
+		newSpan := roachpb.Span{Key: currSpan.EndKey, EndKey: oldEndKey}
+		msstw.mvccKeySpans = append(msstw.mvccKeySpans, newSpan)
+		if msstw.currSpan < len(msstw.localKeySpans)+len(msstw.mvccKeySpans)-1 {
+			// We're not at the last span yet. Slot newSpan right after currSpan,
+			// not at the end.
+			currMVCCSpan := msstw.currSpan - len(msstw.localKeySpans)
+			copy(msstw.mvccKeySpans[currMVCCSpan+2:], msstw.mvccKeySpans[currMVCCSpan+1:])
+			msstw.mvccKeySpans[currMVCCSpan+1] = newSpan
+		}
+		if err := msstw.finalizeSST(ctx); err != nil {
+			return err
+		}
+		if err := msstw.initSST(ctx); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -335,12 +412,12 @@ func (msstw *multiSSTWriter) PutRangeKey(
 }
 
 func (msstw *multiSSTWriter) Finish(ctx context.Context) (int64, error) {
-	if msstw.currSpan < len(msstw.keySpans) {
+	if msstw.currSpan < (len(msstw.localKeySpans) + len(msstw.mvccKeySpans)) {
 		for {
 			if err := msstw.finalizeSST(ctx); err != nil {
 				return 0, err
 			}
-			if msstw.currSpan >= len(msstw.keySpans) {
+			if msstw.currSpan >= (len(msstw.localKeySpans) + len(msstw.mvccKeySpans)) {
 				break
 			}
 			if err := msstw.initSST(ctx); err != nil {
@@ -506,8 +583,11 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 	// TODO(aaditya): Remove once we support flushableIngests for shared and
 	// external files in the engine.
-	skipRangeDelForLastSpan := doExcise && (header.SharedReplicate || header.ExternalReplicate)
-	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, keyRanges, kvSS.sstChunkSize, skipRangeDelForLastSpan)
+	skipRangeDelForMVCCSpan := doExcise && (header.SharedReplicate || header.ExternalReplicate)
+	// The last key range is the user key span.
+	localRanges := keyRanges[:len(keyRanges)-1]
+	mvccRanges := keyRanges[len(keyRanges)-1:]
+	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, localRanges, mvccRanges, kvSS.sstChunkSize, skipRangeDelForMVCCSpan)
 	if err != nil {
 		return noSnap, err
 	}
@@ -533,7 +613,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			doExcise = false
 			sharedSSTs = nil
 			externalSSTs = nil
-			if err := msstw.addRangeDelForLastSpan(); err != nil {
+			if err := msstw.addRangeDelForMVCCSpan(); err != nil {
 				return noSnap, errors.Wrap(err, "adding tombstone for last span")
 			}
 		}
@@ -706,7 +786,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				sharedSSTs:                  sharedSSTs,
 				externalSSTs:                externalSSTs,
 				doExcise:                    doExcise,
-				includesRangeDelForLastSpan: !skipRangeDelForLastSpan,
+				includesRangeDelForLastSpan: !skipRangeDelForMVCCSpan,
 				clearedSpans:                keyRanges,
 			}
 
