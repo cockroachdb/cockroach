@@ -2200,7 +2200,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		}
 
 		// Setup changefeed job details, avoid relying on initial scan functionality
-		baseFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms', no_initial_scan`)
+		baseFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms', min_checkpoint_frequency='100ms', no_initial_scan`)
 		jobFeed := baseFeed.(cdctest.EnterpriseTestFeed)
 		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
 
@@ -2231,6 +2231,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			prog := loadProgress()
 			if p := prog.GetHighWater(); p != nil && !p.IsEmpty() {
+				t.Logf("highwater: %s", p)
 				return nil
 			}
 			return errors.New("waiting for highwater")
