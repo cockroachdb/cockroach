@@ -45,6 +45,14 @@ func (st LeaseStatus) Expiration() hlc.Timestamp {
 			exp.Forward(st.Liveness.Expiration.ToTimestamp())
 		}
 		return exp
+	case roachpb.LeaseLeader:
+		exp := st.Lease.MinExpiration
+		// The leader support applies to the lease iff the lease term matches the
+		// raft term.
+		if st.Lease.Term == st.LeaderSupport.Term {
+			exp.Forward(st.LeaderSupport.LeadSupportUntil)
+		}
+		return exp
 	default:
 		panic("unexpected")
 	}
