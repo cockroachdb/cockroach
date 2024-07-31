@@ -62,3 +62,11 @@ DETAIL: source SQL:
 CREATE LOGICAL REPLICATION STREAM FROM TABLE foo, bar ON 'uri' INTO TABLE foo, bar
                                                 ^
 HINT: try \h CREATE LOGICAL REPLICATION STREAM
+
+error
+CREATE LOGICAL REPLICATION STREAM FROM TABLES (t1, t2, t3) ON 'uri' INTO TABLES (s.t4, t5) WITH OPTIONS (FUNCTION f1 FOR TABLE d.s.t5 , FUNCTION f2 FOR TABLE s.t4, FUNCTION f3 FOR TABLE s.t4, MODE = 'immediate')
+----
+at or near ",": syntax error: multiple user functions specified for table s.t4
+DETAIL: source SQL:
+CREATE LOGICAL REPLICATION STREAM FROM TABLES (t1, t2, t3) ON 'uri' INTO TABLES (s.t4, t5) WITH OPTIONS (FUNCTION f1 FOR TABLE d.s.t5 , FUNCTION f2 FOR TABLE s.t4, FUNCTION f3 FOR TABLE s.t4, MODE = 'immediate')
+                                                                                                                                                                                              ^
