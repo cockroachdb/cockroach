@@ -95,7 +95,7 @@ func newPebbleTempEngine(
 	}
 
 	var statsCollector *vfs.DiskWriteStatsCollector
-	if !tempStorage.InMemory {
+	if diskWriteStats != nil && !tempStorage.InMemory {
 		statsCollector, err = diskWriteStats.GetOrCreateCollector(dir)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "retrieving stats collector")
