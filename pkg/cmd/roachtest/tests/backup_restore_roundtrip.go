@@ -80,18 +80,19 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 	} {
 		sp := sp
 		r.Add(registry.TestSpec{
-			Name:                       sp.name,
-			Timeout:                    4 * time.Hour,
-			Owner:                      registry.OwnerDisasterRecovery,
-			Cluster:                    r.MakeClusterSpec(4, spec.WorkloadNode()),
-			EncryptionSupport:          registry.EncryptionMetamorphic,
-			RequiresLicense:            true,
-			NativeLibs:                 registry.LibGEOS,
-			CompatibleClouds:           registry.OnlyGCE,
-			Suites:                     registry.Suites(registry.Nightly),
-			TestSelectionOptOutSuites:  registry.Suites(registry.Nightly),
-			Skip:                       sp.skip,
-			RequiresDeprecatedWorkload: true, // uses schemachange
+			Name:              sp.name,
+			Timeout:           4 * time.Hour,
+			Owner:             registry.OwnerDisasterRecovery,
+			Cluster:           r.MakeClusterSpec(4, spec.WorkloadNode()),
+			EncryptionSupport: registry.EncryptionMetamorphic,
+			RequiresLicense:   true,
+			NativeLibs:        registry.LibGEOS,
+			// See https://github.com/cockroachdb/cockroach/issues/105968
+			CompatibleClouds:          registry.Clouds(spec.GCE, spec.Local),
+			Suites:                    registry.Suites(registry.Nightly),
+			TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+			Randomized:                true,
+			Skip:                      sp.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				backupRestoreRoundTrip(ctx, t, c, sp)
 			},

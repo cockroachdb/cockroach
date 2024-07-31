@@ -156,6 +156,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			Cluster:          r.MakeClusterSpec(4), // the last node is just used to generate load
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),
+			Randomized:       true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.IsLocal() {
 					concurrency = 32
@@ -191,6 +192,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			Cluster:          r.MakeClusterSpec(7), // the last node is just used to generate load
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),
+			Randomized:       true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.IsLocal() {
 					concurrency = 32
