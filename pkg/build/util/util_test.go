@@ -46,7 +46,7 @@ func TestOutputsOfGenrule(t *testing.T) {
 <query version="2">
     <rule class="genrule" location="/Users/ricky/go/src/github.com/cockroachdb/cockroach/docs/generated/sql/BUILD.bazel:1:8" name="//docs/generated/sql:sql">
         <string name="name" value="sql"/>
-        <list name="exec_tools">
+        <list name="tools">
             <label value="//pkg/cmd/docgen:docgen"/>
         </list>
         <list name="outs">

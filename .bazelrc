@@ -9,7 +9,13 @@
 # Note that .bazelrc.user should be in your checkout (next to this file), not
 # your home directory.
 
-build --enable_platform_specific_config
+# Ignore warnings about using a source directory as an input file. This is
+# evidently a bug in rules_js that they haven't fixed yet. It seems it's
+# "mostly" fixed except for packages that have patches or lifecycle hooks.
+# Unfortunately that's many of the packages we use, so builds will be very
+# noisy without this. See aspect-build/rules_js#1408. When the upstream issue
+# is fixed, this should be removed.
+startup --host_jvm_args=-DBAZEL_TRACK_SOURCE_DIRECTORIES=1
 
 # Define a set up flag aliases, so people can use `--cross` instead of the
 # longer `//build/toolchains:cross_flag`.
@@ -35,6 +41,8 @@ build:nonogo --nolintonbuild
 build:test --crdb_test
 
 # Basic settings.
+common --noenable_bzlmod
+build --enable_platform_specific_config
 build --define gotags=bazel,gss
 build --experimental_proto_descriptor_sets_include_source_info
 build --incompatible_strict_action_env --incompatible_enable_cc_toolchain_resolution
@@ -120,7 +128,7 @@ build:engflowbase --experimental_inmemory_jdeps_files
 build:engflowbase --remote_timeout=600
 build:engflowbase --nolegacy_important_outputs
 build:engflowbase --grpc_keepalive_time=30s
-build:engflowbase --experimental_remote_cache_compression=true
+build:engflowbase --remote_cache_compression=true
 build:engflowbase --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
 build:engflowbase --extra_execution_platforms=//build/toolchains:cross_linux
 build:engflowbase --remote_upload_local_results=false

@@ -294,7 +294,7 @@ genrule(
     ),
     outs = eval_generated,
     cmd = "$(location //pkg/sql/sem/tree/evalgen) --out $(@D) $(SRCS)",
-    exec_tools = ["//pkg/sql/sem/tree/evalgen"],
+    tools = ["//pkg/sql/sem/tree/evalgen"],
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",
