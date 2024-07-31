@@ -363,3 +363,8 @@ type EngineRangeKeyValue struct {
 	Version []byte
 	Value   []byte
 }
+
+// EngineKeyRange is a key range composed of EngineKeys.
+type EngineKeyRange struct {
+	Start, End EngineKey
+}
