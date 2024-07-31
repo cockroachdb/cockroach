@@ -62,9 +62,11 @@ func distRestore(
 	md restoreJobMetadata,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	tracingAggCh chan *execinfrapb.TracingAggregatorEvents,
+	procCompleteCh chan struct{},
 ) error {
 	defer close(progCh)
 	defer close(tracingAggCh)
+	defer close(procCompleteCh)
 	var noTxn *kv.Txn
 
 	if md.encryption != nil && md.encryption.Mode == jobspb.EncryptionMode_KMS {
@@ -264,8 +266,12 @@ func distRestore(
 	g.GoCtx(func(ctx context.Context) error {
 		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 			if meta.BulkProcessorProgress != nil {
-				// Send the progress up a level to be written to the manifest.
-				progCh <- meta.BulkProcessorProgress
+				if meta.BulkProcessorProgress.Drained {
+					procCompleteCh <- struct{}{}
+				} else {
+					// Send the progress up a level to be written to the manifest.
+					progCh <- meta.BulkProcessorProgress
+				}
 			}
 
 			if meta.AggregatorEvents != nil {

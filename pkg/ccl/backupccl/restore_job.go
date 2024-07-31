@@ -93,6 +93,16 @@ var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+var replanFrequency = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"bulkio.restore.replan_flow_frequency",
+	"frequency at which RESTORE checks the number of lagging nodes to see if the job should be replanned",
+	time.Minute*10,
+	settings.PositiveDuration,
+)
+
+var laggingRestoreProcErr = errors.New("try re-planning due to lagging restore processors")
+
 // rewriteBackupSpanKey rewrites a backup span start key for the purposes of
 // splitting up the target key-space to send out the actual work of restoring.
 //
@@ -218,6 +228,11 @@ func restoreWithRetry(
 			log.Infof(restoreCtx, "restored frontier has advanced since last retry, resetting retry counter")
 		}
 		previousPersistedSpans = currentPersistedSpans
+
+		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+		if testingKnobs != nil && testingKnobs.RunAfterRetryIteration != nil {
+			testingKnobs.RunAfterRetryIteration(err)
+		}
 	}
 
 	// We have exhausted retries, but we have not seen a "PermanentBulkJobError" so
@@ -448,6 +463,36 @@ func restore(
 		tasks = append(tasks, generativeCheckpointLoop)
 	}
 
+	procCompleteCh := make(chan struct{})
+	// countCompletedProcLoop is responsible for counting the number of completed
+	// processors. The goroutine returns a retryable error such that the job can
+	// replan if there are too many lagging nodes.
+	countCompletedProcLoop := func(ctx context.Context) error {
+		var timer timeutil.Timer
+		defer timer.Stop()
+		done := ctx.Done()
+		timer.Reset(replanFrequency.Get(&execCtx.ExecCfg().Settings.SV))
+
+		for {
+			select {
+			case <-done:
+				return ctx.Err()
+			case _, ok := <-procCompleteCh:
+				if !ok {
+					return nil
+				}
+				timer.Reset(replanFrequency.Get(&execCtx.ExecCfg().Settings.SV))
+			case <-timer.C:
+				timer.Read = true
+				// Replan the restore job if it has been 10 minutes since the last
+				// processor completed working.
+				return errors.Mark(laggingRestoreProcErr, retryableRestoreProcError)
+			}
+		}
+	}
+
+	tasks = append(tasks, countCompletedProcLoop)
+
 	// tracingAggLoop is responsible for draining the channel on which processors
 	// in the DistSQL flow will send back their tracing aggregator stats. These
 	// stats will be persisted to the job_info table whenever the job is told to
@@ -472,6 +517,9 @@ func restore(
 
 	runRestore := func(ctx context.Context) error {
 		if details.ExperimentalOnline {
+			// Let countCompletedProcLoop exit immediately such that online restore
+			// does not replan on lagging nodes.
+			close(procCompleteCh)
 			log.Warningf(ctx, "EXPERIMENTAL ONLINE RESTORE being used")
 			approxRows, approxDataSize, err := sendAddRemoteSSTs(
 				ctx,
@@ -512,6 +560,7 @@ func restore(
 			md,
 			progCh,
 			tracingAggCh,
+			procCompleteCh,
 		), "running distributed restore")
 	}
 	tasks = append(tasks, runRestore)

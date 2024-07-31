@@ -1792,6 +1792,10 @@ type BackupRestoreTestingKnobs struct {
 	RunBeforeBackupFlow func() error
 
 	RunAfterBackupFlow func() error
+
+	RunAfterRetryIteration func(err error)
+
+	RunBeforeRestoreProcDrains func()
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
