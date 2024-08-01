@@ -1039,4 +1039,18 @@ LEFT JOIN LATERAL (
 row-1  row-1  {row-1}  1
 row-2  row-2  {row-2}  1
 
-subtest end
+# Regression test for #127814. The vectorized engine should correctly project
+# expressions operating on NULL.
+statement ok
+CREATE TABLE t127814_empty (i INT)
+
+statement ok
+CREATE TABLE t127814 (o OID)
+
+statement ok
+INSERT INTO t127814 VALUES (0)
+
+query B
+SELECT o NOT IN ((SELECT NULL FROM t127814_empty),) FROM t127814
+----
+NULL
