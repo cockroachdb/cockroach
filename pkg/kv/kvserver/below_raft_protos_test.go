@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -56,7 +55,7 @@ func TestBelowRaftProtosDontChange(t *testing.T) {
 				Vote      raftpb.PeerID
 				Commit    uint64
 				Lead      raftpb.PeerID
-				LeadEpoch raftstoreliveness.Epoch
+				LeadEpoch raftpb.Epoch
 			}
 			// Conversion fails if new fields are added to `HardState`, in which case this method
 			// and the expected sums should be updated.
@@ -68,7 +67,7 @@ func TestBelowRaftProtosDontChange(t *testing.T) {
 				Vote:      raftpb.PeerID(n % 7),
 				Commit:    n % 11,
 				Lead:      raftpb.PeerID(n % 13),
-				LeadEpoch: raftstoreliveness.Epoch(n % 17),
+				LeadEpoch: raftpb.Epoch(n % 17),
 			}
 		},
 		func(r *rand.Rand) protoutil.Message {
