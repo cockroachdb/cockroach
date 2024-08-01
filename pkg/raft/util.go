@@ -39,6 +39,7 @@ var isLocalMsg = [...]bool{
 	pb.MsgStorageAppendResp: true,
 	pb.MsgStorageApply:      true,
 	pb.MsgStorageApplyResp:  true,
+	pb.MsgForgetLeader:      true,
 }
 
 var isResponseMsg = [...]bool{
