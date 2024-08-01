@@ -34,6 +34,18 @@ func (i Index) String() string {
 	return strconv.FormatUint(uint64(i), 10)
 }
 
+// Compare returns -1 if this Index is lesser than the one supplied, 1 if it is
+// greater, and 0 if they're equal.
+func (a Index) Compare(b Index) int {
+	if a > b {
+		return 1
+	} else if a < b {
+		return -1
+	} else {
+		return 0
+	}
+}
+
 // AckedIndexer allows looking up a commit index for a given ID of a voter
 // from a corresponding MajorityConfig.
 type AckedIndexer interface {
