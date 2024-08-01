@@ -57,14 +57,14 @@ func TestDuplicateHandling(t *testing.T) {
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	expectRevisionCount := func(startKey roachpb.Key, endKey roachpb.Key, count int) {
+	expectRevisionCount := func(startKey roachpb.Key, endKey roachpb.Key, count int, exportStartTime hlc.Timestamp) {
 		req := &kvpb.ExportRequest{
 			RequestHeader: kvpb.RequestHeader{
 				Key:    startKey,
 				EndKey: endKey,
 			},
 			MVCCFilter: kvpb.MVCCFilter_All,
-			StartTime:  hlc.Timestamp{},
+			StartTime:  exportStartTime,
 		}
 		header := kvpb.Header{Timestamp: s.Clock().Now()}
 		resp, err := kv.SendWrappedWith(ctx,
@@ -99,11 +99,12 @@ func TestDuplicateHandling(t *testing.T) {
 	type keyBuilder func(i int, ts int) storage.MVCCKey
 
 	type testCase struct {
-		name           string
-		skipDuplicates bool
-		ingestAll      bool
-		addKeys        func(*testing.T, *bulk.SSTBatcher, keyBuilder) storage.MVCCKey
-		expectedCount  int
+		name            string
+		skipDuplicates  bool
+		ingestAll       bool
+		addKeys         func(*testing.T, *bulk.SSTBatcher, keyBuilder) storage.MVCCKey
+		expectedCount   int
+		exportStartTime hlc.Timestamp
 	}
 	testCases := []testCase{
 		{
@@ -122,6 +123,9 @@ func TestDuplicateHandling(t *testing.T) {
 		{
 			name:      "ingestAll does not error on key-value matches at different timestamps",
 			ingestAll: true,
+			// Set the export startTime to ensure all revisions are read, or fail if
+			// the gc threshold has advance past the start time
+			exportStartTime: hlc.Timestamp{WallTime: int64(tsStart) - 1},
 			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
 				for i := 0; i < keyCount; i++ {
 					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart+1), value))
@@ -134,6 +138,9 @@ func TestDuplicateHandling(t *testing.T) {
 		{
 			name:      "ingestAll does not error on key matches at different timestamps",
 			ingestAll: true,
+			// Set the export startTime to ensure all revisions are read, or fail if
+			// the gc threshold has advance past the start time
+			exportStartTime: hlc.Timestamp{WallTime: int64(tsStart) - 1},
 			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
 				for i := 0; i < keyCount; i++ {
 					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart+1), value))
@@ -208,7 +215,7 @@ func TestDuplicateHandling(t *testing.T) {
 			endKey := tc.addKeys(t, b, k)
 			if tc.expectedCount > 0 {
 				require.NoError(t, b.Flush(ctx))
-				expectRevisionCount(k(0, tsStart).Key, endKey.Key, tc.expectedCount)
+				expectRevisionCount(k(0, tsStart).Key, endKey.Key, tc.expectedCount, tc.exportStartTime)
 			}
 		})
 	}
