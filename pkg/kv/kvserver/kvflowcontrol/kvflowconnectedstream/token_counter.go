@@ -224,9 +224,6 @@ func newTokenCounter(
 		b.mu.Lock()
 		defer b.mu.Unlock()
 
-		b.mu.Lock()
-		defer b.mu.Unlock()
-
 		before := b.mu.limit
 		now := tokensPerWorkClass{
 			regular: kvflowcontrol.Tokens(RegularTokensPerStream.Get(&settings.SV)),
