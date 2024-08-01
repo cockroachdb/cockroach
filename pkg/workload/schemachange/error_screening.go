@@ -907,10 +907,10 @@ func (og *operationGenerator) constraintIsPrimary(
 	        SELECT *
 	          FROM pg_catalog.pg_constraint
 	         WHERE conrelid = '%s'::REGCLASS::INT
-	           AND conname = '%s'
+	           AND conname = $1
 	           AND (contype = 'p')
 	       );
-	`, tableName.String(), constraintName))
+	`, tableName.String()), constraintName)
 }
 
 // Checks if a column has a single unique constraint.
@@ -950,10 +950,10 @@ func (og *operationGenerator) constraintIsUnique(
 	        SELECT *
 	          FROM pg_catalog.pg_constraint
 	         WHERE conrelid = '%s'::REGCLASS::INT
-	           AND conname = '%s'
+	           AND conname = $1
 	           AND (contype = 'u')
 	       );
-	`, tableName.String(), constraintName))
+	`, tableName.String()), constraintName)
 }
 
 func (og *operationGenerator) columnIsStoredComputed(
@@ -1279,7 +1279,7 @@ const descriptorsAndConstraintMutationsCTE = `descriptors AS (
                                  WHERE (mut->'constraint') IS NOT NULL
                             )`
 
-func (og *operationGenerator) constraintInDroppingState(
+func (og *operationGenerator) constraintInAddOrDropState(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, constraintName string,
 ) (bool, error) {
 	// TODO(ajwerner): Figure out how to plumb the column name into this query.
@@ -1287,7 +1287,10 @@ func (og *operationGenerator) constraintInDroppingState(
   WITH `+descriptorsAndConstraintMutationsCTE+`
 SELECT true
        IN (
-            SELECT (t.f).value @> json_set('{"validity": "Dropping"}', ARRAY['name'], to_json($2:::STRING))
+            SELECT (
+              (t.f).value @> json_set('{"validity": "Dropping"}', ARRAY['name'], to_json($2:::STRING)) OR
+              (t.f).value @> json_set('{"validity": "Validating"}', ARRAY['name'], to_json($2:::STRING))
+            )
               FROM (
                     SELECT json_each(mut->'constraint') AS f
                       FROM constraint_mutations
