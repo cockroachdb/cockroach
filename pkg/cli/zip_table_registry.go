@@ -1134,14 +1134,13 @@ var zipSystemTables = DebugZipTableRegistry{
 		},
 	},
 	"system.descriptor": {
-		// For readability, we unmarsal the descriptor into JSON format.
 		customQueryUnredacted: `SELECT
 				id,
-        crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS descriptor
+				descriptor
 			FROM system.descriptor`,
 		customQueryRedacted: `SELECT
 				id,
-        crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', crdb_internal.redact_descriptor(descriptor), false) AS descriptor
+				crdb_internal.redact_descriptor(descriptor) AS descriptor
 			FROM system.descriptor`,
 	},
 	"system.eventlog": {
@@ -1352,26 +1351,17 @@ var zipSystemTables = DebugZipTableRegistry{
     	)`,
 	},
 	"system.span_configurations": {
-		// For readability, we decode the config into JSON format and pretty print the start and end keys.
 		nonSensitiveCols: NonSensitiveColumns{
-			"crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config) as config",
+			"config",
 			// Boundary keys for span configs, which are derived from zone configs, are typically on
 			// metadata object boundaries (database, table, or index), and not arbitrary range boundaries
 			// and therefore do not contain sensitive information. Therefore they can remain unredacted.
-			"crdb_internal.pretty_key(start_key, 0) as start_key",
+			"start_key",
 			// Boundary keys for span configs, which are derived from zone configs, are typically on
 			// metadata object boundaries (database, table, or index), and not arbitrary range boundaries
 			// and therefore do not contain sensitive information. Therefore they can remain unredacted.
-			"crdb_internal.pretty_key(end_key, 0) as end_key",
+			"end_key",
 		},
-		// Since we are decoding the columns while selecting them, we also need to
-		// provide a custom unredacted query to make sure it doesn't default to
-		// "TABLE system.span_configurations" when `--redact` flag is not set.
-		customQueryUnredacted: `SELECT
-    crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config) as config,
-    crdb_internal.pretty_key(start_key, 0) as start_key,
-    crdb_internal.pretty_key(end_key, 0) as end_key
-		FROM system.span_configurations`,
 	},
 	"system.sql_instances": {
 		// Some fields are marked as `<redacted>` because we want to redact hostname, ip address and other sensitive fields

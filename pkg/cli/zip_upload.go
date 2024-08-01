@@ -53,9 +53,9 @@ const (
 	profileVersion = "4"
 
 	// names of mandatory tag
-	nodeIDTag  = "node_id"
-	uuidTag    = "uuid"
-	clusterTag = "cluster"
+	nodeIDTag   = "node_id"
+	uploadIDTag = "upload_id"
+	clusterTag  = "cluster"
 )
 
 var debugZipUploadOpts = struct {
@@ -88,7 +88,7 @@ func runDebugZipUpload(cmd *cobra.Command, args []string) error {
 	}
 
 	// a unique ID for this upload session. This should be used to tag all the artifacts uploaded in this session
-	uploadID := newUploadID()
+	uploadID := newUploadID(debugZipUploadOpts.clusterName)
 
 	// override the list of artifacts to upload if the user has provided any
 	artifactsToUpload := zipArtifactTypes
@@ -127,7 +127,7 @@ func validateZipUploadReadiness() error {
 	return nil
 }
 
-func uploadZipProfiles(ctx context.Context, uuid string, debugDirPath string) error {
+func uploadZipProfiles(ctx context.Context, uploadID string, debugDirPath string) error {
 	paths, err := expandPatterns([]string{path.Join(debugDirPath, zippedProfilePattern)})
 	if err != nil {
 		return err
@@ -147,7 +147,7 @@ func uploadZipProfiles(ctx context.Context, uuid string, debugDirPath string) er
 		req, err := newProfileUploadReq(
 			ctx, paths, appendUserTags(
 				append(
-					ddProfileTags, makeDDTag(nodeIDTag, nodeID), makeDDTag(uuidTag, uuid),
+					ddProfileTags, makeDDTag(nodeIDTag, nodeID), makeDDTag(uploadIDTag, uploadID),
 					makeDDTag(clusterTag, debugZipUploadOpts.clusterName),
 				), // system generated tags
 				debugZipUploadOpts.tags..., // user provided tags
@@ -186,7 +186,7 @@ func uploadZipProfiles(ctx context.Context, uuid string, debugDirPath string) er
 
 		fmt.Printf("Uploaded profiles of node %s to datadog (%s)\n", nodeID, strings.Join(paths, ", "))
 		fmt.Printf("Explore this profile on datadog: "+
-			"https://{{ datadog domain }}/profiling/explorer?query=uuid:%s\n", uuid)
+			"https://{{ datadog domain }}/profiling/explorer?query=upload_id:%s\n", uploadID)
 	}
 
 	return nil
@@ -312,10 +312,10 @@ var doUploadProfileReq = func(req *http.Request) (*http.Response, error) {
 // Everything is converted to lowercase and spaces are replaced with hyphens. Because,
 // datadog will do this anyway and we want to make sure the UUIDs match when we generate the
 // explore/dashboard links.
-var newUploadID = func() string {
+var newUploadID = func(cluster string) string {
 	return strings.ToLower(
 		strings.ReplaceAll(
-			fmt.Sprintf("%s-%s", debugZipUploadOpts.clusterName, uuid.NewV4().Short()), " ", "-",
+			fmt.Sprintf("%s-%s", cluster, uuid.NewV4().Short()), " ", "-",
 		),
 	)
 }
