@@ -130,6 +130,150 @@ func (og *operationGenerator) tableHasDependencies(
 	`, tableName.Object(), tableName.Schema())
 }
 
+// columnRemovalWillDropFKBackingIndexes determines if dropping this column
+// will lead to no indexes backing a foreign key.
+func (og *operationGenerator) columnRemovalWillDropFKBackingIndexes(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columName string,
+) (bool, error) {
+	return og.scanBool(ctx, tx, fmt.Sprintf(`
+WITH
+	fk
+		AS (
+			SELECT
+				oid,
+				(
+					SELECT
+						r.relname
+					FROM
+						pg_class AS r
+					WHERE
+						r.oid = c.confrelid
+				)
+					AS base_table,
+				a.attname AS base_col,
+				array_position(c.confkey, a.attnum)
+					AS base_ordinal,
+				(
+					SELECT
+						r.relname
+					FROM
+						pg_class AS r
+					WHERE
+						r.oid = c.conrelid
+				)
+					AS referencing_table,
+				unnest(
+					(
+						SELECT
+							array_agg(attname)
+						FROM
+							pg_attribute
+						WHERE
+							attrelid = c.conrelid
+							AND ARRAY[attnum] <@ c.conkey
+							AND array_position(
+									c.confkey,
+									a.attnum
+								)
+								= array_position(
+										c.conkey,
+										attnum
+									)
+					)
+				)
+					AS referencing_col
+			FROM
+				pg_constraint AS c
+				JOIN pg_attribute AS a ON
+						c.confrelid = a.attrelid
+						AND ARRAY[attnum] <@ c.confkey
+			WHERE
+				c.confrelid = $1::REGCLASS::OID
+		),
+	valid_indexes
+		AS (
+			SELECT
+				*
+			FROM
+				[SHOW INDEXES FROM %s]
+			WHERE
+				index_name
+				NOT IN (
+						SELECT
+							DISTINCT index_name
+						FROM
+							[SHOW INDEXES FROM %s]
+						WHERE
+							column_name = $2
+							AND index_name
+								!= table_name || '_pkey'
+					)
+		),
+	matching_indexes
+		AS (
+			SELECT
+				oid,
+				index_name,
+				count(base_ordinal) AS count_base_ordinal,
+				count(seq_in_index) AS count_seq_in_index
+			FROM
+				fk, valid_indexes
+			WHERE
+				storing = 'f'
+				AND non_unique = 'f'
+				AND base_col = column_name
+			GROUP BY
+				(oid, index_name)
+		),
+	valid_index_attrib_count
+		AS (
+			SELECT
+				index_name,
+				max(seq_in_index) AS max_seq_in_index
+			FROM
+				valid_indexes
+			WHERE
+				storing = 'f'
+			GROUP BY
+				index_name
+		),
+	valid_fk_count
+		AS (
+			SELECT
+				oid, max(base_ordinal) AS max_base_ordinal
+			FROM
+				fk
+			GROUP BY
+				fk
+		),
+	matching_fks
+		AS (
+			SELECT
+				DISTINCT f.oid
+			FROM
+				valid_index_attrib_count AS i,
+				valid_fk_count AS f,
+				matching_indexes AS m
+			WHERE
+				f.oid = m.oid
+				AND i.index_name = m.index_name
+				AND i.max_seq_in_index
+					= m.count_seq_in_index
+				AND f.max_base_ordinal
+					= m.count_base_ordinal
+		)
+SELECT
+	EXISTS(
+		SELECT
+			*
+		FROM
+			fk
+		WHERE
+			oid NOT IN (SELECT oid FROM matching_fks)
+	);
+`, tableName.String(), tableName.String()), tableName.String(), columName)
+}
+
 func (og *operationGenerator) columnIsDependedOn(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
 ) (bool, error) {
@@ -142,6 +286,9 @@ func (og *operationGenerator) columnIsDependedOn(
 	// stored as a list of numbers in a string, so SQL functions are used to parse these values
 	// into arrays. unnest is used to flatten rows with this column of array type into multiple rows,
 	// so performing unions and joins is easier.
+	//
+	// To check if any foreign key references exist to this table, we use pg_constraint
+	// and check if any columns are dependent.
 	return og.scanBool(ctx, tx, `SELECT EXISTS(
 		SELECT source.column_id
 			FROM (
@@ -178,7 +325,52 @@ func (og *operationGenerator) columnIsDependedOn(
 			      AND table_name = $3
 			      AND column_name = $4
 			  ) AS source ON source.column_id = cons.column_id
-)`, tableName.String(), tableName.Schema(), tableName.Object(), columnName)
+)
+OR EXISTS(
+	-- Check for foreign key references
+  SELECT * FROM (
+		SELECT
+			(
+				SELECT
+					r.relname
+				FROM
+					pg_class AS r
+				WHERE
+					r.oid = c.confrelid
+			)
+				AS base_table,
+			a.attname AS base_col,
+			(
+				SELECT
+					r.relname
+				FROM
+					pg_class AS r
+				WHERE
+					r.oid = c.conrelid
+			)
+				AS referencing_table,
+			unnest(
+				(
+					SELECT
+						array_agg(attname)
+					FROM
+						pg_attribute
+					WHERE
+						attrelid = c.conrelid
+						AND ARRAY[attnum] <@ c.conkey
+				)
+			)
+				AS referencing_col
+		FROM
+			pg_constraint AS c
+			JOIN pg_attribute AS a ON
+					c.confrelid = a.attrelid
+					AND a.attnum = ANY (confkey)
+		WHERE
+			c.conrelid = $1::REGCLASS::OID
+	 ) WHERE base_col=$4
+	)
+`, tableName.String(), tableName.Schema(), tableName.Object(), columnName)
 }
 
 // colIsRefByComputed determines if a column is referenced by a computed column.
@@ -1297,7 +1489,7 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	return og.scanBool(ctx, tx, q)
 }
 
-func (og *operationGenerator) columnIsInDroppingIndex(
+func (og *operationGenerator) columnIsInAddingOrDroppingIndex(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
 ) (bool, error) {
 	return og.scanBool(ctx, tx, `
@@ -1312,7 +1504,6 @@ SELECT EXISTS(
                                                      = indexes.index_id
                                                  AND table_id = $1::REGCLASS
                                                  AND type = 'INDEX'
-                                                 AND direction = 'DROP'
        );
 `, tableName.String(), columnName)
 }

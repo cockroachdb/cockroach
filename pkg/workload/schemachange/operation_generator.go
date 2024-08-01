@@ -1359,9 +1359,13 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*op
 		// If the table does not exist, columns cannot be fetched from it. For this reason, the placeholder
 		// "IrrelevantColumnName" is used, and a pgcode.UndefinedTable error is expected on execution.
 		if tableExists {
-			columnNamesForTable, err := og.tableColumnsShuffled(ctx, tx, tableName.(*tree.TableName).String())
+			columnNamesForTable, err := og.tableColumnsShuffled(ctx, tx, tableName.(*tree.TableName).String(), true /*allowEmpty*/)
 			if err != nil {
 				return nil, err
+			}
+			// Table has no columns, so use an internal one here.
+			if len(columnNamesForTable) == 0 {
+				columnNamesForTable = []string{"crdb_internal_mvcc_timestamp"}
 			}
 			columnNamesForTable = columnNamesForTable[:1+og.randIntn(len(columnNamesForTable))]
 
@@ -1488,9 +1492,13 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (*opStm
 		// If the table does not exist, columns cannot be fetched from it. For this reason, the placeholder
 		// "IrrelevantColumnName" is used, and a pgcode.UndefinedTable error is expected on execution.
 		if tableExists {
-			columnNamesForTable, err := og.tableColumnsShuffled(ctx, tx, tableName.(*tree.TableName).String())
+			columnNamesForTable, err := og.tableColumnsShuffled(ctx, tx, tableName.(*tree.TableName).String(), true /*allowEmpty*/)
 			if err != nil {
 				return nil, err
+			}
+			// Table has no columns, so use an internal one here.
+			if len(columnNamesForTable) == 0 {
+				columnNamesForTable = []string{"crdb_internal_mvcc_timestamp"}
 			}
 			columnNamesForTable = columnNamesForTable[:1+og.randIntn(len(columnNamesForTable))]
 
@@ -1579,7 +1587,11 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 	if err != nil {
 		return nil, err
 	}
-	columnIsInDroppingIndex, err := og.columnIsInDroppingIndex(ctx, tx, tableName, columnName)
+	columnRemovalWillDropFKBackingIndexes, err := og.columnRemovalWillDropFKBackingIndexes(ctx, tx, tableName, columnName)
+	if err != nil {
+		return nil, err
+	}
+	columnIsInDroppingIndex, err := og.columnIsInAddingOrDroppingIndex(ctx, tx, tableName, columnName)
 	if err != nil {
 		return nil, err
 	}
@@ -1597,7 +1609,7 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey || colIsRefByComputed},
-		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
+		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn || columnRemovalWillDropFKBackingIndexes},
 		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 	})
 	// TODO(#126967): We need to add a check for the column being in an expression
@@ -3723,7 +3735,7 @@ ORDER BY random()
 }
 
 func (og *operationGenerator) tableColumnsShuffled(
-	ctx context.Context, tx pgx.Tx, tableName string,
+	ctx context.Context, tx pgx.Tx, tableName string, allowEmpty bool,
 ) ([]string, error) {
 	q := fmt.Sprintf(`
 SELECT column_name
@@ -3753,8 +3765,8 @@ FROM [SHOW COLUMNS FROM %s];
 	og.params.rng.Shuffle(len(columnNames), func(i, j int) {
 		columnNames[i], columnNames[j] = columnNames[j], columnNames[i]
 	})
-
-	if len(columnNames) <= 0 {
+	// Return an error if empty column names are not allowed.
+	if len(columnNames) == 0 && !allowEmpty {
 		return nil, errors.Errorf("table %s has no columns", tableName)
 	}
 	return columnNames, nil
