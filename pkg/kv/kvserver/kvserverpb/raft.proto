@@ -36,9 +36,11 @@ message RaftHeartbeat {
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
   uint64 term = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftTerm"];
   uint64 commit = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
+  uint64 match = 11 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
   bool quiesce = 6;
   reserved 7;
   repeated kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 8 [(gogoproto.nullable) = false];
+  reserved 9;
   // This field helps migrate in the lagging_followers_on_quiesce field. For
   // messages sent by versions of Cockroach that do not know about the
   // lagging_followers_on_quiesce field (i.e. v20.1), we need to assume that all
