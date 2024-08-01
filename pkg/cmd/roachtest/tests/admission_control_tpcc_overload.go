@@ -53,10 +53,6 @@ func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 		ctx, t, t.L(), c, tpccOptions{
 			Warehouses: s.Warehouses, SetupType: usingImport,
 		})
-	// We make use of querybench below, only available through the `workload`
-	// binary.
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNode())
-
 	const queryFileName = "queries.sql"
 	// querybench expects the entire query to be on a single line.
 	queryLine := `"` + strings.Replace(tpccOlapQuery, "\n", " ", -1) + `"`
@@ -172,7 +168,7 @@ func registerTPCCOverload(r registry.Registry) {
 			EncryptionSupport:          registry.EncryptionMetamorphic,
 			Leases:                     registry.MetamorphicLeases,
 			Timeout:                    20 * time.Minute,
-			RequiresDeprecatedWorkload: true,
+			RequiresDeprecatedWorkload: true, // uses querybench
 		})
 	}
 }

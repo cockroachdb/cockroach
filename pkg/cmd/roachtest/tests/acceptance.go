@@ -82,7 +82,7 @@ func registerAcceptance(r registry.Registry) {
 				timeout:                    2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
 				defaultLeases:              true,
 				nativeLibs:                 registry.LibGEOS,
-				requiresDeprecatedWorkload: true,
+				requiresDeprecatedWorkload: true, // uses schemachange
 			},
 		},
 		registry.OwnerDisasterRecovery: {

@@ -46,7 +46,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 		// TODO(radu): enable this test on AWS.
 		CompatibleClouds:           registry.OnlyGCE,
 		Suites:                     registry.Suites(registry.Nightly),
-		RequiresDeprecatedWorkload: true,
+		RequiresDeprecatedWorkload: true, // uses indexes
 		// Uses CONFIGURE ZONE USING ... COPY FROM PARENT syntax.
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			firstAZ := gceGeoZones[0]
@@ -55,9 +55,6 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 			}
 			gatewayNodes := c.Range(1, nodes/3)
 
-			// The indexes workload is not available in the cockroach binary,
-			// so we must use the deprecated workload.
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNode())
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 			conn := c.Conn(ctx, t.L(), 1)
 
