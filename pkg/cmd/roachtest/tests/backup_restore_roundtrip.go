@@ -91,7 +91,7 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 			TestSelectionOptOutSuites:  registry.Suites(registry.Nightly),
 			Randomized:                 true,
 			Skip:                       sp.skip,
-			RequiresDeprecatedWorkload: true,
+			RequiresDeprecatedWorkload: true, // uses schemachange
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				backupRestoreRoundTrip(ctx, t, c, sp)
 			},

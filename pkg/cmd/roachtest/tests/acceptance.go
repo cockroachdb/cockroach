@@ -84,7 +84,7 @@ func registerAcceptance(r registry.Registry) {
 				defaultLeases:              true,
 				randomized:                 true,
 				nativeLibs:                 registry.LibGEOS,
-				requiresDeprecatedWorkload: true,
+				requiresDeprecatedWorkload: true, // uses schemachange
 			},
 		},
 		registry.OwnerDisasterRecovery: {

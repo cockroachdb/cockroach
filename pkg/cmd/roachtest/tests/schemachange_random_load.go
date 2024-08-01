@@ -44,7 +44,7 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 		Suites:                     registry.Suites(registry.Nightly),
 		Leases:                     registry.MetamorphicLeases,
 		NativeLibs:                 registry.LibGEOS,
-		RequiresDeprecatedWorkload: true,
+		RequiresDeprecatedWorkload: true, // uses schemachange
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 5000
 			concurrency := 20
