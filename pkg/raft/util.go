@@ -164,6 +164,12 @@ func describeMessageWithIndent(indent string, m pb.Message, f EntryFormatter) st
 	if m.Vote != 0 {
 		fmt.Fprintf(&buf, " Vote:%d", m.Vote)
 	}
+	if m.Lead != 0 {
+		fmt.Fprintf(&buf, " Lead:%d", m.Lead)
+	}
+	if m.LeadEpoch != 0 {
+		fmt.Fprintf(&buf, " LeadEpoch:%d", m.LeadEpoch)
+	}
 	if ln := len(m.Entries); ln == 1 {
 		fmt.Fprintf(&buf, " Entries:[%s]", DescribeEntry(m.Entries[0], f))
 	} else if ln > 1 {
