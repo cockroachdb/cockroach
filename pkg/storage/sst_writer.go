@@ -18,12 +18,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/sstable"
 )
+
+// IngestionValueBlocksEnabled controls whether older versions of MVCC keys in
+// the same ingested sstable will have their values written to value blocks.
+// This configuration ability was motivated by a case of > 130GB sstables,
+// caused by snapshot ingestion. Writing value blocks requires in-memory
+// buffering of compressed value blocks, which caused OOMs in the above case.
+var IngestionValueBlocksEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"storage.ingestion.value_blocks.enabled",
+	"set to true to enable writing of value blocks in ingestion sstables",
+	metamorphic.ConstantWithTestBool(
+		"storage.ingestion.value_blocks.enabled", true),
+	settings.WithPublic)
 
 // SSTWriter writes SSTables.
 type SSTWriter struct {
@@ -83,6 +97,9 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 	// MakeIngestionSSTWriterWithOverrides).
 	opts.Compression = getCompressionAlgorithm(ctx, cs, CompressionAlgorithmStorage)
 	opts.MergerName = "nullptr"
+	if !IngestionValueBlocksEnabled.Get(&cs.SV) {
+		opts.DisableValueBlocks = true
+	}
 	return opts
 }
 
