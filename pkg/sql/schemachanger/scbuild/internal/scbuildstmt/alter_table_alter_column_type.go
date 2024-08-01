@@ -11,10 +11,14 @@
 package scbuildstmt
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -89,9 +93,9 @@ func alterTableAlterColumnType(
 
 	switch kind {
 	case schemachange.ColumnConversionTrivial:
-		handleTrivialColumnConversion(b, oldColType, &newColType)
+		handleTrivialColumnConversion(b, col, oldColType, &newColType)
 	case schemachange.ColumnConversionValidate:
-		handleValidationOnlyColumnConversion(b, t, oldColType, &newColType)
+		handleValidationOnlyColumnConversion(b, t, col, oldColType, &newColType)
 	case schemachange.ColumnConversionGeneral:
 		handleGeneralColumnConversion(b, t, col, oldColType, &newColType)
 	default:
@@ -160,24 +164,52 @@ func validateAutomaticCastForNewType(
 
 // handleTrivialColumnConversion is called to just change the type in-place without
 // no rewrite or validation required.
-func handleTrivialColumnConversion(b BuildCtx, oldColType, newColType *scpb.ColumnType) {
-	// Add the new type and remove the old type. The removal of the old type is a
-	// no-op in opgen. But we need the drop here so that we only have 1 public
-	// type for the column.
-	b.Drop(oldColType)
-	b.Add(newColType)
+func handleTrivialColumnConversion(
+	b BuildCtx, col *scpb.Column, oldColType, newColType *scpb.ColumnType,
+) {
+	maybeWriteNoticeForFKColTypeMismatch(b, col, newColType)
+	updateColumnType(b, oldColType, newColType)
 }
 
 // handleValidationOnlyColumnConversion is called when we don't need to rewrite
 // data, only validate the existing data is compatible with the type.
 func handleValidationOnlyColumnConversion(
-	b BuildCtx, t *tree.AlterTableAlterColumnType, oldColType, newColType *scpb.ColumnType,
+	b BuildCtx,
+	t *tree.AlterTableAlterColumnType,
+	col *scpb.Column,
+	oldColType, newColType *scpb.ColumnType,
 ) {
-	failIfExperimentalSettingNotSet(b, oldColType, newColType)
+	maybeWriteNoticeForFKColTypeMismatch(b, col, newColType)
+	updateColumnType(b, oldColType, newColType)
 
-	// TODO(spilchen): Implement the validation-only logic in #127516
-	panic(scerrors.NotImplementedErrorf(t,
-		"alter type conversion that requires validation only is not supported in the declarative schema changer"))
+	// To validate, we add a transient check constraint. It casts the column to the
+	// new type and then back to the old type. If the cast back doesn't match the
+	// original value, the check fails. This constraint is temporary and doesn't
+	// need to persist beyond the ALTER operation.
+	expr, err := parser.ParseExpr(fmt.Sprintf("(CAST(CAST(%s AS %s) AS %s) = %s)",
+		t.Column.String(), newColType.Type.SQLString(), oldColType.Type.SQLString(), t.Column.String()))
+	if err != nil {
+		panic(err)
+	}
+
+	// The constraint requires a backing index to use, which we will use the
+	// primary index.
+	chain := getPrimaryIndexChain(b, newColType.TableID)
+	var indexID catid.IndexID
+	if chain.finalSpec.primary != nil {
+		indexID = chain.finalSpec.primary.IndexID
+	} else {
+		indexID = chain.oldSpec.primary.IndexID
+	}
+
+	chk := scpb.CheckConstraint{
+		TableID:              newColType.TableID,
+		Expression:           *b.WrapExpression(newColType.TableID, expr),
+		ConstraintID:         b.NextTableConstraintID(newColType.TableID),
+		IndexIDForValidation: indexID,
+		ColumnIDs:            []catid.ColumnID{newColType.ColumnID},
+	}
+	b.AddTransient(&chk) // Adding it as transient ensures it doesn't survive past the ALTER.
 }
 
 // handleGeneralColumnConversion is called when we need to rewrite the data in order
@@ -210,6 +242,14 @@ func handleGeneralColumnConversion(
 	panic(scerrors.NotImplementedErrorf(t, "general alter type conversion not supported in the declarative schema changer"))
 }
 
+func updateColumnType(b BuildCtx, oldColType, newColType *scpb.ColumnType) {
+	// Add the new type and remove the old type. The removal of the old type is a
+	// no-op in opgen. But we need the drop here so that we only have 1 public
+	// type for the column.
+	b.Drop(oldColType)
+	b.Add(newColType)
+}
+
 // failIfExperimentalSettingNotSet checks if the setting that allows altering
 // types is enabled. If the setting is not enabled, this function will panic.
 func failIfExperimentalSettingNotSet(b BuildCtx, oldColType, newColType *scpb.ColumnType) {
@@ -225,4 +265,40 @@ func failIfExperimentalSettingNotSet(b BuildCtx, oldColType, newColType *scpb.Co
 					"`SET enable_experimental_alter_column_type_general = true`"),
 			pgcode.ExperimentalFeature))
 	}
+}
+
+// maybeWriteNoticeForFKColTypeMismatch will find any FK cols, and if the column
+// that we are changing doesn't match the column in the referenced table, we
+// will write a notice. This is a similar notice that is written when a table
+// has a FK constraint added to it.
+func maybeWriteNoticeForFKColTypeMismatch(b BuildCtx, col *scpb.Column, colType *scpb.ColumnType) {
+	writeNoticeHelper := func(columnIDs, referencedColumnIDs []catid.ColumnID, referencedTableID catid.DescID) {
+		// Find the corresponding column type in the referenced table
+		for i := range columnIDs {
+			// We only need to check a single column, then one we are altering.
+			if columnIDs[i] != col.ColumnID {
+				continue
+			}
+			refColType := mustRetrieveColumnTypeElem(b, referencedTableID, referencedColumnIDs[i])
+			if !colType.Type.Identical(refColType.Type) {
+				colName := mustRetrieveColumnNameElem(b, col.TableID, col.ColumnID)
+				refColName := mustRetrieveColumnNameElem(b, referencedTableID, referencedColumnIDs[i])
+				referencedTableNamespaceElem := mustRetrieveNamespaceElem(b, referencedTableID)
+				notice := pgnotice.Newf(
+					"type of foreign key column %q (%s) is not identical to referenced column %q.%q (%s)",
+					colName.Name, colType.Type.SQLString(), referencedTableNamespaceElem.Name,
+					refColName.Name, refColType.Type.SQLString())
+				b.EvalCtx().ClientNoticeSender.BufferClientNotice(b, notice)
+			}
+		}
+	}
+
+	walkColumnDependencies(b, col, "alter type of", "column", func(e scpb.Element, op, objType string) {
+		switch e := e.(type) {
+		case *scpb.ForeignKeyConstraint:
+			writeNoticeHelper(e.ColumnIDs, e.ReferencedColumnIDs, e.ReferencedTableID)
+		case *scpb.ForeignKeyConstraintUnvalidated:
+			writeNoticeHelper(e.ColumnIDs, e.ReferencedColumnIDs, e.ReferencedTableID)
+		}
+	})
 }

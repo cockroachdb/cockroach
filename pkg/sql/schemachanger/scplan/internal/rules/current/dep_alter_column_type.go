@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
 
 // This rule ensures that when changing the column type, that the old column
@@ -33,6 +34,24 @@ func init() {
 				from.CurrentStatus(scpb.Status_PUBLIC),
 				to.TargetStatus(scpb.ToPublic),
 				to.CurrentStatus(scpb.Status_ABSENT),
+			}
+		},
+	)
+
+	registerDepRule(
+		"column type is changed to public after doing validation of a transient check constraint",
+		scgraph.Precedence,
+		"transient-check-constraint", "column-type",
+		func(from, to NodeVars) rel.Clauses {
+			colID := rel.Var("columnID")
+			return rel.Clauses{
+				from.Type((*scpb.CheckConstraint)(nil)),
+				to.Type((*scpb.ColumnType)(nil)),
+				to.El.AttrEqVar(screl.ColumnID, colID),
+				from.ReferencedColumnIDsContains(colID),
+				JoinOnDescID(from, to, "table-id"),
+				from.TargetStatus(scpb.Transient),
+				to.TargetStatus(scpb.ToPublic),
 			}
 		},
 	)
