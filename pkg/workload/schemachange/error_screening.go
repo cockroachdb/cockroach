@@ -141,6 +141,9 @@ func (og *operationGenerator) columnIsDependedOn(
 	// stored as a list of numbers in a string, so SQL functions are used to parse these values
 	// into arrays. unnest is used to flatten rows with this column of array type into multiple rows,
 	// so performing unions and joins is easier.
+	//
+	// To check if any foreign key references exist to this table, we use pg_constraint
+	// and check if any columns are dependent.
 	return og.scanBool(ctx, tx, `SELECT EXISTS(
 		SELECT source.column_id
 			FROM (
@@ -177,7 +180,52 @@ func (og *operationGenerator) columnIsDependedOn(
 			      AND table_name = $3
 			      AND column_name = $4
 			  ) AS source ON source.column_id = cons.column_id
-)`, tableName.String(), tableName.Schema(), tableName.Object(), columnName)
+)
+OR EXISTS(
+	-- Check for foreign key references
+	SELECT
+		(
+			SELECT
+				r.relname
+			FROM
+				pg_class AS r
+			WHERE
+				r.oid = c.confrelid
+		)
+			AS base_table,
+		a.attname AS base_col,
+		(
+			SELECT
+				r.relname
+			FROM
+				pg_class AS r
+			WHERE
+				r.oid = c.conrelid
+		)
+			AS referencing_table,
+		unnest(
+			(
+				SELECT
+					array_agg(attname)
+				FROM
+					pg_attribute
+				WHERE
+					attrelid = c.conrelid
+					AND ARRAY[attnum] <@ c.conkey
+			)
+		)
+			AS referencing_col,
+		pg_get_constraintdef(c.oid) AS contraint_sql
+	FROM
+		pg_constraint AS c
+		JOIN pg_attribute AS a ON
+				c.confrelid = a.attrelid
+				AND a.attnum = ANY (confkey)
+	WHERE
+		c.confrelid = $4::REGCLASS::OID
+		AND c.confrelid != c.conrelid
+)
+`, tableName.String(), tableName.Schema(), tableName.Object(), columnName)
 }
 
 func (og *operationGenerator) colIsPrimaryKey(
