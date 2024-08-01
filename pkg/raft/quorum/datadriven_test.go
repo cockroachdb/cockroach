@@ -192,14 +192,14 @@ func TestDataDriven(t *testing.T) {
 						for iid := range c {
 							if iid == id {
 								ll[iid] = idx
-							} else if idx, ok := l.AckedIndex(iid); ok {
+							} else if idx, ok := l.Get(iid); ok {
 								ll[iid] = idx
 							}
 						}
 						return ll
 					}
 					for id := range c {
-						iidx, _ := l.AckedIndex(id)
+						iidx, _ := l.Get(id)
 						if idx > iidx && iidx > 0 {
 							// If the committed index was definitely above the currently
 							// inspected idx, the result shouldn't change if we lower it

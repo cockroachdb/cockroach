@@ -18,6 +18,7 @@
 package quorum
 
 import (
+	"cmp"
 	"math"
 	"strconv"
 
@@ -34,16 +35,23 @@ func (i Index) String() string {
 	return strconv.FormatUint(uint64(i), 10)
 }
 
-// AckedIndexer allows looking up a commit index for a given ID of a voter
-// from a corresponding MajorityConfig.
-type AckedIndexer interface {
-	AckedIndex(voterID pb.PeerID) (idx Index, found bool)
+// Compare returns -1 if this Index is lesser than the one supplied, 1 if it is
+// greater, and 0 if they're equal.
+func (a Index) Compare(b Index) int {
+	return cmp.Compare(a, b)
 }
 
+// AckedIndexer is a specialization of ComparableMap that allows looking up
+// commit indexes for a given ID.
+type AckedIndexer ComparableMap[Index]
+
+// mapAckIndexer is a type of AckedIndexer. It's primarily used as a type to
+// mock commit index lookups in tests. See ProgressMap for the production
+// implementation.
 type mapAckIndexer map[pb.PeerID]Index
 
-// AckedIndex implements AckedIndexer interface.
-func (m mapAckIndexer) AckedIndex(id pb.PeerID) (Index, bool) {
+// Get implements the ComparableMap interface.
+func (m mapAckIndexer) Get(id pb.PeerID) (Index, bool) {
 	idx, ok := m[id]
 	return idx, ok
 }

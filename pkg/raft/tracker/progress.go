@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
@@ -375,4 +376,13 @@ func (m ProgressMap) String() string {
 		fmt.Fprintf(&buf, "%d: %s\n", id, m[id])
 	}
 	return buf.String()
+}
+
+// Get implements the ComparableMap interface.
+func (m ProgressMap) Get(id pb.PeerID) (quorum.Index, bool) {
+	pr, ok := m[id]
+	if !ok {
+		return 0, false
+	}
+	return quorum.Index(pr.Match), true
 }

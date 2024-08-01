@@ -17,7 +17,10 @@
 
 package quorum
 
-import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+import (
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
 
 // JointConfig is a configuration of two groups of (possibly overlapping)
 // majority configurations. Decisions require the support of both majorities.
@@ -77,4 +80,13 @@ func (c JointConfig) VoteResult(votes map[pb.PeerID]bool) VoteResult {
 	}
 	// One side won, the other one is pending, so the whole outcome is.
 	return VotePending
+}
+
+// LeadSupportExpiration takes a mapping of timestamps peers have promised a
+// leader support until and returns the timestamp until which the leader is
+// guaranteed support until.
+func (c JointConfig) LeadSupportExpiration(supported supportMap) hlc.Timestamp {
+	qse := c[0].LeadSupportExpiration(supported)
+	qse.Backward(c[1].LeadSupportExpiration(supported))
+	return qse
 }
