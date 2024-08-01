@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -264,20 +265,32 @@ ORDER BY created DESC LIMIT 1`, c.Args.DestTenantName)
 // the latest replicated time.
 func (c *TenantStreamingClusters) Cutover(
 	ctx context.Context, producerJobID, ingestionJobID int, cutoverTime time.Time, async bool,
-) string {
+) hlc.Timestamp {
 	// Cut over the ingestion job and the job will stop eventually.
 	var cutoverStr string
+	var cutoverOutput hlc.Timestamp
+
 	if cutoverTime.IsZero() {
 		c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`,
 			c.Args.DestTenantName).Scan(&cutoverStr)
-		cutoverOutput := DecimalTimeToHLC(c.T, cutoverStr)
-		protectedTimestamp := replicationutils.TestingGetPTSFromReplicationJob(c.T, ctx, c.SrcSysSQL, c.SrcSysServer, producerJobID)
-		require.LessOrEqual(c.T, protectedTimestamp.GoTime(), cutoverOutput.GoTime())
+		cutoverOutput = DecimalTimeToHLC(c.T, cutoverStr)
 	} else {
 		c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
 			c.Args.DestTenantName, cutoverTime).Scan(&cutoverStr)
-		cutoverOutput := DecimalTimeToHLC(c.T, cutoverStr)
+		cutoverOutput = DecimalTimeToHLC(c.T, cutoverStr)
 		require.Equal(c.T, cutoverTime, cutoverOutput.GoTime())
+	}
+
+	protectedTimestamp := replicationutils.TestingGetPTSFromReplicationJob(c.T, ctx, c.SrcSysSQL, c.SrcSysServer, producerJobID)
+	require.LessOrEqual(c.T, protectedTimestamp.GoTime(), cutoverOutput.GoTime())
+
+	// PTS should be less than or equal to retained time as a result of heartbeats.
+	var retainedTime pq.NullTime
+	c.DestSysSQL.QueryRow(c.T,
+		`SELECT retained_time FROM [SHOW TENANT $1 WITH REPLICATION STATUS]`,
+		c.Args.DestTenantName).Scan(&retainedTime)
+	if retainedTime.Valid {
+		require.LessOrEqual(c.T, protectedTimestamp.GoTime(), retainedTime.Time)
 	}
 
 	if !async {
@@ -285,7 +298,7 @@ func (c *TenantStreamingClusters) Cutover(
 		c.WaitForPostCutoverRetentionJob()
 	}
 
-	return cutoverStr
+	return cutoverOutput
 }
 
 // StartStreamReplication producer job ID and ingestion job ID.
