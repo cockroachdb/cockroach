@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -24,7 +25,9 @@ type replicaRLockedStoreLiveness Replica
 
 var _ raftstoreliveness.StoreLiveness = (*replicaRLockedStoreLiveness)(nil)
 
-func (r *replicaRLockedStoreLiveness) getStoreIdent(replicaID uint64) (slpb.StoreIdent, bool) {
+func (r *replicaRLockedStoreLiveness) getStoreIdent(
+	replicaID raftpb.PeerID,
+) (slpb.StoreIdent, bool) {
 	r.mu.AssertRHeld()
 	desc, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(replicaID))
 	if !ok {
@@ -34,7 +37,7 @@ func (r *replicaRLockedStoreLiveness) getStoreIdent(replicaID uint64) (slpb.Stor
 }
 
 // SupportFor implements the raftstoreliveness.StoreLiveness interface.
-func (r *replicaRLockedStoreLiveness) SupportFor(replicaID uint64) (raftstoreliveness.Epoch, bool) {
+func (r *replicaRLockedStoreLiveness) SupportFor(replicaID raftpb.PeerID) (raftpb.Epoch, bool) {
 	storeID, ok := r.getStoreIdent(replicaID)
 	if !ok {
 		return 0, false
@@ -43,13 +46,13 @@ func (r *replicaRLockedStoreLiveness) SupportFor(replicaID uint64) (raftstoreliv
 	if !ok {
 		return 0, false
 	}
-	return raftstoreliveness.Epoch(epoch), true
+	return raftpb.Epoch(epoch), true
 }
 
 // SupportFrom implements the raftstoreliveness.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) SupportFrom(
-	replicaID uint64,
-) (raftstoreliveness.Epoch, hlc.Timestamp, bool) {
+	replicaID raftpb.PeerID,
+) (raftpb.Epoch, hlc.Timestamp, bool) {
 	storeID, ok := r.getStoreIdent(replicaID)
 	if !ok {
 		return 0, hlc.Timestamp{}, false
@@ -58,7 +61,7 @@ func (r *replicaRLockedStoreLiveness) SupportFrom(
 	if !ok {
 		return 0, hlc.Timestamp{}, false
 	}
-	return raftstoreliveness.Epoch(epoch), exp, true
+	return raftpb.Epoch(epoch), exp, true
 }
 
 // SupportFromEnabled implements the raftstoreliveness.StoreLiveness interface.

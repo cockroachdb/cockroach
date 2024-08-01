@@ -53,7 +53,6 @@ go_test(
     deps = [
         "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
-        "//pkg/raft/raftstoreliveness",
         "//pkg/raft/rafttest",
         "//pkg/raft/tracker",
         "@com_github_cockroachdb_datadriven//:datadriven",

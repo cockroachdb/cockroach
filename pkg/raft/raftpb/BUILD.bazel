@@ -17,7 +17,6 @@ go_proto_library(
     proto = ":raftpb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/raft/raftstoreliveness",  #keep
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

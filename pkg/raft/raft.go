@@ -354,7 +354,7 @@ type raft struct {
 	// the leader id
 	lead pb.PeerID
 	// TODO(arul): This should be populated when responding to a MsgFortify.
-	leadEpoch raftstoreliveness.Epoch
+	leadEpoch pb.Epoch
 	// leadTransferee is id of the leader transfer target when its value is not zero.
 	// Follow the procedure defined in raft thesis 3.10.
 	leadTransferee pb.PeerID
