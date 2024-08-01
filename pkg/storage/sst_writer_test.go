@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/pebble/sstable"
+	"github.com/cockroachdb/pebble/sstable/block"
 	"github.com/stretchr/testify/require"
 )
 
@@ -170,14 +171,14 @@ func TestSSTWriterOption(t *testing.T) {
 			"with snappy compression",
 			makeCompressionWriterOpt(compressionAlgorithmSnappy),
 			func(t *testing.T, opts *sstable.WriterOptions) {
-				require.Equal(t, sstable.SnappyCompression, opts.Compression)
+				require.Equal(t, block.SnappyCompression, opts.Compression)
 			},
 		},
 		{
 			"with zstd compression",
 			makeCompressionWriterOpt(compressionAlgorithmZstd),
 			func(t *testing.T, opts *sstable.WriterOptions) {
-				require.Equal(t, sstable.ZstdCompression, opts.Compression)
+				require.Equal(t, block.ZstdCompression, opts.Compression)
 			},
 		},
 	}

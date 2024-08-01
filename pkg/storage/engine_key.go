@@ -64,7 +64,7 @@ func (k EngineKey) Format(f fmt.State, c rune) {
 // The motivation for the sentinel is that we configure the underlying storage
 // engine (Pebble) with a Split function that can be used for constructing
 // Bloom filters over just the Key field. However, the encoded Key must also
-// look like an encoded EngineKey. By splitting, at Key + \x00, the Key looks
+// look like an encoded EngineKey. By splitting at Key + \x00, the Key looks
 // like an EngineKey with no Version.
 const (
 	sentinel               = '\x00'
