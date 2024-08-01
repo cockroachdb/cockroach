@@ -5391,7 +5391,6 @@ opt_no:
 //  [ FOR { EACH ROW | EACH STATEMENT } ]
 //  [ WHEN a_expr ]
 //  EXECUTE FUNCTION func_name ( trigger_func_args )
-// %SeeAlso: WEBDOCS/create-trigger.html
 create_trigger_stmt:
   CREATE opt_or_replace TRIGGER name trigger_action_time trigger_event_list
   ON table_name opt_trigger_transition_list trigger_for_each trigger_when
@@ -5578,7 +5577,6 @@ trigger_func_arg:
 // %Category: DDL
 // %Text:
 // DROP TRIGGER [ IF EXISTS ] name ON table_name [ CASCADE | RESTRICT ]
-// %SeeAlso: WEBDOCS/drop-trigger.html
 drop_trigger_stmt:
   DROP TRIGGER name ON table_name opt_drop_behavior
   {
