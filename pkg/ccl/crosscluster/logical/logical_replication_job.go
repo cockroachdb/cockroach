@@ -122,7 +122,7 @@ func (r *logicalReplicationResumer) ingest(
 	)
 
 	client, err := streamclient.NewStreamClient(ctx,
-		crosscluster.StreamAddress(payload.TargetClusterConnStr),
+		crosscluster.StreamAddress(payload.SourceClusterConnStr),
 		jobExecCtx.ExecCfg().InternalDB,
 		streamclient.WithStreamID(streampb.StreamID(streamID)),
 		streamclient.WithLogical(),
@@ -391,7 +391,7 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 	}
 
 	specs, err := constructLogicalReplicationWriterSpecs(ctx,
-		crosscluster.StreamAddress(p.payload.TargetClusterConnStr),
+		crosscluster.StreamAddress(p.payload.SourceClusterConnStr),
 		plan.Topology,
 		destNodeLocalities,
 		p.payload.ReplicationStartTime,

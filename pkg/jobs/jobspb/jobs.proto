@@ -208,10 +208,9 @@ message HistoryRetentionProgress {
 }
 
 message LogicalReplicationDetails {
-  // ID of the protected timestamp record this job is managing.
-  string target_cluster_conn_str = 1 [
-    (gogoproto.customname) = "TargetClusterConnStr"
-  ];
+  // SourceClusterConnStr is the user-provided address of the source
+  // cluster.
+  string source_cluster_conn_str = 1;
 
   // TableNames is the original list of source table names given by the user.
   repeated string table_names = 2;
