@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -21,6 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 )
 
 // installFixturesStep is the step that copies the fixtures from
@@ -98,9 +102,16 @@ func (s startSharedProcessVirtualClusterStep) Run(
 	l.Printf("starting shared process virtual cluster %s", s.name)
 	startOpts := option.StartSharedVirtualClusterOpts(s.name)
 
-	return h.runner.cluster.StartServiceForVirtualClusterE(
+	if err := h.runner.cluster.StartServiceForVirtualClusterE(
 		ctx, l, startOpts, install.MakeClusterSettings(s.settings...),
-	)
+	); err != nil {
+		return err
+	}
+
+	// When we first start the shared-process on the cluster, we wait
+	// until we are able to connect to the tenant on every node before
+	// moving on. The test runner infrastructure relies on that ability.
+	return waitForSharedProcess(ctx, l, h, h.Tenant.Descriptor.Nodes)
 }
 
 // waitForStableClusterVersionStep implements the process of waiting
@@ -153,7 +164,7 @@ func (s preserveDowngradeOptionStep) Run(
 	service := serviceByName(h, s.virtualClusterName)
 	node, db := service.RandomDB(rng)
 	l.Printf("checking binary version (via node %d)", node)
-	bv, err := clusterupgrade.BinaryVersion(db)
+	bv, err := clusterupgrade.BinaryVersion(ctx, db)
 	if err != nil {
 		return err
 	}
@@ -166,10 +177,11 @@ func (s preserveDowngradeOptionStep) Run(
 // then the new binary will be uploaded and the `cockroach` process
 // will restart using the new binary.
 type restartWithNewBinaryStep struct {
-	version  *clusterupgrade.Version
-	rt       test.Test
-	node     int
-	settings []install.ClusterSettingOption
+	version              *clusterupgrade.Version
+	rt                   test.Test
+	node                 int
+	settings             []install.ClusterSettingOption
+	sharedProcessStarted bool
 }
 
 func (s restartWithNewBinaryStep) Background() shouldStop { return nil }
@@ -182,7 +194,7 @@ func (s restartWithNewBinaryStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
 	h.ExpectDeath()
-	return clusterupgrade.RestartNodesWithNewBinary(
+	if err := clusterupgrade.RestartNodesWithNewBinary(
 		ctx,
 		s.rt,
 		l,
@@ -191,7 +203,18 @@ func (s restartWithNewBinaryStep) Run(
 		startOpts(),
 		s.version,
 		s.settings...,
-	)
+	); err != nil {
+		return err
+	}
+
+	if s.sharedProcessStarted {
+		// If we are in shared-process mode and the tenant is already
+		// running at this point, we wait for the server on the restarted
+		// node to be up before moving on.
+		return waitForSharedProcess(ctx, l, h, h.runner.cluster.Node(s.node))
+	}
+
+	return nil
 }
 
 // allowUpgradeStep resets the `preserve_downgrade_option` cluster
@@ -245,7 +268,7 @@ func (s setTenantClusterVersionStep) Run(
 	targetVersion := s.targetVersion
 	if s.targetVersion == clusterupgrade.CurrentVersionString {
 		l.Printf("querying binary version on node %d", node)
-		bv, err := clusterupgrade.BinaryVersion(db)
+		bv, err := clusterupgrade.BinaryVersion(ctx, db)
 		if err != nil {
 			return err
 		}
@@ -423,6 +446,50 @@ func serviceByName(h *Helper, virtualClusterName string) *Service {
 	}
 
 	return h.Tenant
+}
+
+// waitForSharedProcess waits for the shared-process created for this
+// test to be ready to accept connections on the `nodes` provided.
+func waitForSharedProcess(
+	ctx context.Context, l *logger.Logger, h *Helper, nodes option.NodeListOption,
+) error {
+	group := ctxgroup.WithContext(ctx)
+	for _, n := range nodes {
+		group.GoCtx(func(ctx context.Context) error {
+			// We use a new connection pool in this function as the runner's
+			// connection pool might not be initialized.
+			db, err := h.runner.cluster.ConnE(
+				ctx, l, n, option.VirtualClusterName(h.Tenant.Descriptor.Name),
+			)
+			if err != nil {
+				return errors.Wrap(err, "waitForSharedProcess: failed to connect to tenant")
+			}
+			defer db.Close()
+
+			retryOpts := retry.Options{MaxRetries: 5}
+			var nonRetryableErr error
+
+			// Retry the dummy `SELECT 1` statement if we keep getting the
+			// service unavailable error. However, any other error is
+			// unexpected and should cause the test to fail.
+			err = retryOpts.Do(ctx, func(ctx context.Context) error {
+				_, err := db.ExecContext(ctx, "SELECT 1")
+				err = errors.Wrapf(err, "waiting for shared-process tenant on n%d", n)
+
+				if err != nil && strings.Contains(err.Error(), "service unavailable for target tenant") {
+					l.Printf("failed to connect to shared-process tenant, retrying: %v", err)
+					return err
+				}
+
+				nonRetryableErr = err
+				return nil
+			})
+
+			return errors.CombineErrors(err, nonRetryableErr)
+		})
+	}
+
+	return group.Wait()
 }
 
 func quoteVersionForPresentation(v string) string {

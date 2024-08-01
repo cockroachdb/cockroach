@@ -236,7 +236,7 @@ func (h *Helper) Background(
 			}
 
 			err := errors.Wrapf(err, "error in background function %s", name)
-			return h.runner.testFailure(err, bgLogger, nil)
+			return h.runner.testFailure(ctx, err, bgLogger, nil)
 		}
 
 		return nil
