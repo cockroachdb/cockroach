@@ -2727,6 +2727,7 @@ func planProjectionExpr(
 		resultIdx = len(typs)
 		// The projection result will be outputted to a new column which is
 		// appended to the input batch.
+		// TODO(#127814): We may need to handle the case when the left is DNull.
 		op, err = colexecprojconst.GetProjectionLConstOperator(
 			allocator, typs, left.ResolvedType(), outputType, projOp, input,
 			rightIdx, lConstArg, resultIdx, evalCtx, binOp, cmpExpr, calledOnNullInput,
@@ -2769,7 +2770,12 @@ func planProjectionExpr(
 			// The projection result will be outputted to a new column which is
 			// appended to the input batch.
 			resultIdx = len(typs)
-			if isCmpProjOp {
+			if !calledOnNullInput && right == tree.DNull {
+				// If the right is NULL and the operator is not called on NULL,
+				// simply project NULL.
+				op = colexecbase.NewConstNullOp(allocator, input, resultIdx)
+			} else if isCmpProjOp {
+				// Use optimized operators for special cases.
 				switch cmpProjOp.Symbol {
 				case treecmp.Like, treecmp.NotLike, treecmp.ILike, treecmp.NotILike:
 					negate, caseInsensitive := examineLikeOp(cmpProjOp)
