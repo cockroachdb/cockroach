@@ -24,8 +24,7 @@ import (
 
 func registerRoachmart(r registry.Registry) {
 	runRoachmart := func(ctx context.Context, t test.Test, c cluster.Cluster, partition bool) {
-		// The roachmart workload is not available in the cockroach binary,
-		// so we must use the deprecated workload.
+		// This test expects the workload binary on all nodes.
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
@@ -80,7 +79,7 @@ func registerRoachmart(r registry.Registry) {
 			CompatibleClouds:           registry.OnlyGCE,
 			Suites:                     registry.Suites(registry.Nightly),
 			Leases:                     registry.MetamorphicLeases,
-			RequiresDeprecatedWorkload: true,
+			RequiresDeprecatedWorkload: true, // uses roachmart
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRoachmart(ctx, t, c, v)
 			},

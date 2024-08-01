@@ -36,7 +36,7 @@ func registerQueue(r registry.Registry) {
 		CompatibleClouds:           registry.AllExceptAWS,
 		Suites:                     registry.Suites(registry.Nightly),
 		Leases:                     registry.MetamorphicLeases,
-		RequiresDeprecatedWorkload: true,
+		RequiresDeprecatedWorkload: true, // uses queue
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runQueue(ctx, t, c)
 		},
@@ -46,9 +46,6 @@ func registerQueue(r registry.Registry) {
 func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	dbNodeCount := c.Spec().NodeCount - 1
 	// Distribute programs to the correct nodes and start CockroachDB.
-	// The queue workload is not available in the cockroach binary,
-	// so we must use the deprecated workload.
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNode())
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 
 	runQueueWorkload := func(duration time.Duration, initTables bool) {

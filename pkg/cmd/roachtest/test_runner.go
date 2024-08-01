@@ -837,6 +837,9 @@ func (r *testRunner) runWorker(
 			if setupErr == nil {
 				setupErr = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
 			}
+			if setupErr == nil {
+				setupErr = c.PutDeprecatedWorkload(ctx, l, t)
+			}
 
 			if setupErr != nil {
 				// If there was an error setting up the cluster (uploading

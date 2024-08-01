@@ -112,7 +112,7 @@ func registerConnectionLatencyTest(r registry.Registry) {
 		Cluster:                    r.MakeClusterSpec(numNodes+1, spec.WorkloadNode(), spec.GCEZones(regionUsCentral)),
 		CompatibleClouds:           registry.OnlyGCE,
 		Suites:                     registry.Suites(registry.Nightly),
-		RequiresDeprecatedWorkload: true,
+		RequiresDeprecatedWorkload: true, // uses connectionlatency
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numNodes, 1, false /*password*/)
 		},
@@ -131,7 +131,7 @@ func registerConnectionLatencyTest(r registry.Registry) {
 		Cluster:                    r.MakeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.GCEZones(geoZonesStr)),
 		CompatibleClouds:           registry.OnlyGCE,
 		Suites:                     registry.Suites(registry.Nightly),
-		RequiresDeprecatedWorkload: true,
+		RequiresDeprecatedWorkload: true, // uses connectionlatency
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones, false /*password*/)
 		},
@@ -144,7 +144,7 @@ func registerConnectionLatencyTest(r registry.Registry) {
 		Cluster:                    r.MakeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.GCEZones(geoZonesStr)),
 		CompatibleClouds:           registry.OnlyGCE,
 		Suites:                     registry.Suites(registry.Nightly),
-		RequiresDeprecatedWorkload: true,
+		RequiresDeprecatedWorkload: true, // uses connectionlatency
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones, true /*password*/)
 		},
