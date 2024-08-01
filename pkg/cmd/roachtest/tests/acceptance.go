@@ -37,6 +37,7 @@ func registerAcceptance(r registry.Registry) {
 		requiresLicense    bool
 		randomized         bool
 		nativeLibs         []string
+		workloadNode       bool
 		incompatibleClouds registry.CloudSet
 	}{
 		// NOTE: acceptance tests are lightweight tests that run as part
@@ -90,6 +91,7 @@ func registerAcceptance(r registry.Registry) {
 				fn:                 runAcceptanceClusterReplication,
 				numNodes:           3,
 				incompatibleClouds: cloudsWithoutServiceRegistration,
+				workloadNode:       true,
 			},
 			{
 				name:               "multitenant",
@@ -130,6 +132,10 @@ func registerAcceptance(r registry.Registry) {
 				}
 				extraOptions = append(extraOptions, spec.Geo())
 				extraOptions = append(extraOptions, spec.GCEZones(strings.Join(tc.nodeRegions, ",")))
+			}
+
+			if tc.workloadNode {
+				extraOptions = append(extraOptions, spec.WorkloadNode())
 			}
 
 			if tc.incompatibleClouds.IsInitialized() && tc.incompatibleClouds.Contains(spec.Local) {
