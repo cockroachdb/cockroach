@@ -1791,7 +1791,7 @@ func (og *operationGenerator) dropConstraint(ctx context.Context, tx pgx.Tx) (*o
 		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
 	}
 
-	constraintBeingDropped, err := og.constraintInDroppingState(ctx, tx, tableName, constraintName)
+	constraintBeingDropped, err := og.constraintInAddOrDropState(ctx, tx, tableName, constraintName)
 	if err != nil {
 		return nil, err
 	}
@@ -1799,7 +1799,7 @@ func (og *operationGenerator) dropConstraint(ctx context.Context, tx pgx.Tx) (*o
 		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
 	}
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT "%s"`, tableName, constraintName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT %s`, tableName.String(), lexbase.EscapeSQLIdent(constraintName))
 	return stmt, nil
 }
 
