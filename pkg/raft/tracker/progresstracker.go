@@ -65,23 +65,10 @@ func (p *ProgressTracker) TestingSetProgress(id pb.PeerID, progress *Progress) {
 	p.progress[id] = progress
 }
 
-type matchAckIndexer map[pb.PeerID]*Progress
-
-var _ quorum.AckedIndexer = matchAckIndexer(nil)
-
-// AckedIndex implements AckedIndexer interface.
-func (l matchAckIndexer) AckedIndex(id pb.PeerID) (quorum.Index, bool) {
-	pr, ok := l[id]
-	if !ok {
-		return 0, false
-	}
-	return quorum.Index(pr.Match), true
-}
-
 // Committed returns the largest log index known to be committed based on what
 // the voting members of the group have acknowledged.
 func (p *ProgressTracker) Committed() uint64 {
-	return uint64(p.config.Voters.CommittedIndex(matchAckIndexer(p.progress)))
+	return uint64(p.config.Voters.CommittedIndex(p.progress))
 }
 
 // Visit invokes the supplied closure for all tracked progresses in stable order.

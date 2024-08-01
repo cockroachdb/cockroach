@@ -94,7 +94,7 @@ func alternativeMajorityCommittedIndex(c MajorityConfig, l AckedIndexer) Index {
 
 	idToIdx := map[pb.PeerID]Index{}
 	for id := range c {
-		if idx, ok := l.AckedIndex(id); ok {
+		if idx, ok := l.Get(id); ok {
 			idToIdx[id] = idx
 		}
 	}
