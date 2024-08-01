@@ -2743,7 +2743,6 @@ func prepSchemaChangeWorkload(
 	testUtils *CommonTestUtils,
 	testRNG *rand.Rand,
 ) error {
-	testUtils.cluster.Put(ctx, testUtils.t.DeprecatedWorkload(), "./workload", workloadNode)
 	if err := testUtils.Exec(ctx, testRNG, fmt.Sprintf("CREATE DATABASE %s", schemaChangeDB)); err != nil {
 		return err
 	}
