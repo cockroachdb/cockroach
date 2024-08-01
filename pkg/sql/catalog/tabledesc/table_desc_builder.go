@@ -39,6 +39,7 @@ type TableDescriptorBuilder interface {
 	BuildImmutableTable() catalog.TableDescriptor
 	BuildExistingMutableTable() *Mutable
 	BuildCreatedMutableTable() *Mutable
+	DescriptorWasModified() bool
 }
 
 type tableDescriptorBuilder struct {
@@ -108,14 +109,39 @@ func NewUnsafeImmutable(desc *descpb.TableDescriptor) catalog.TableDescriptor {
 	return b.BuildImmutableTable()
 }
 
+// cloneWithModificationStamp will clone the table descriptor and
+// set the modification timestamp on it.
+func cloneWithModificationStamp(
+	desc *descpb.TableDescriptor, mvccTimestamp hlc.Timestamp,
+) (newDesc *descpb.TableDescriptor, updated bool) {
+	newDesc = protoutil.Clone(desc).(*descpb.TableDescriptor)
+	// Set the ModificationTime field before doing anything else.
+	// Other changes may depend on it.
+	mustSetModTime, err := descpb.MustSetModificationTime(
+		desc.ModificationTime, mvccTimestamp, desc.Version, desc.State,
+	)
+	// If we updated the modification time, then
+	// now is a good time to pick up the CreateAs time.
+	if err == nil && mustSetModTime {
+		updated = true
+		newDesc.ModificationTime = mvccTimestamp
+		maybeSetCreateAsOfTime(newDesc)
+	}
+	return newDesc, updated
+}
+
 func newBuilder(
 	desc *descpb.TableDescriptor,
 	mvccTimestamp hlc.Timestamp,
 	isUncommittedVersion bool,
 	changes catalog.PostDeserializationChanges,
 ) *tableDescriptorBuilder {
+	newDesc, modificationUpdated := cloneWithModificationStamp(desc, mvccTimestamp)
+	if modificationUpdated {
+		changes.Add(catalog.SetModTimeToMVCCTimestamp)
+	}
 	return &tableDescriptorBuilder{
-		original:             protoutil.Clone(desc).(*descpb.TableDescriptor),
+		original:             newDesc,
 		mvccTimestamp:        mvccTimestamp,
 		isUncommittedVersion: isUncommittedVersion,
 		changes:              changes,
@@ -133,17 +159,14 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() (err error) {
 	defer func() {
 		err = errors.Wrapf(err, "table %q (%d)", tdb.original.Name, tdb.original.ID)
 	}()
-	// Set the ModificationTime field before doing anything else.
-	// Other changes may depend on it.
-	mustSetModTime, err := descpb.MustSetModificationTime(
+	// Validate that the modification timestamp is valid. This
+	// is now done earlier, but we can't return errors if an
+	// assertion is hit.
+	_, err = descpb.MustSetModificationTime(
 		tdb.original.ModificationTime, tdb.mvccTimestamp, tdb.original.Version, tdb.original.State,
 	)
 	if err != nil {
 		return err
-	}
-	if mustSetModTime {
-		tdb.getOrInitModifiedDesc().ModificationTime = tdb.mvccTimestamp
-		tdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
 	}
 	c, err := maybeFillInDescriptor(tdb)
 	if err != nil {
@@ -151,6 +174,11 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() (err error) {
 	}
 	c.ForEach(tdb.changes.Add)
 	return nil
+}
+
+// DescriptorWasModified implements TableDescriptorBuilder
+func (tdb *tableDescriptorBuilder) DescriptorWasModified() bool {
+	return tdb.maybeModified != nil
 }
 
 // GetReadOnlyPrivilege implements catprivilege.PrivilegeDescriptorBuilder.
@@ -415,7 +443,6 @@ func maybeFillInDescriptor(
 			changes.Add(change)
 		}
 	}
-	set(catalog.SetCreateAsOfTimeUsingModTime, maybeSetCreateAsOfTime(builder))
 	set(catalog.UpgradedFormatVersion, maybeUpgradeFormatVersion(builder))
 	set(catalog.UpgradedIndexFormatVersion, maybeUpgradePrimaryIndexFormatVersion(builder))
 	{
@@ -1032,8 +1059,7 @@ func maybeFixSecondaryIndexEncodingType(builder *tableDescriptorBuilder) (hasCha
 // ModificationTime fields are both unset for the first Version of a
 // TableDescriptor and the code relies on the value being set based on the
 // MVCC timestamp.
-func maybeSetCreateAsOfTime(builder *tableDescriptorBuilder) (hasChanged bool) {
-	desc := builder.getLatestDesc()
+func maybeSetCreateAsOfTime(desc *descpb.TableDescriptor) (hasChanged bool) {
 	if !desc.CreateAsOfTime.IsEmpty() || desc.Version > 1 || desc.ModificationTime.IsEmpty() {
 		return false
 	}
@@ -1045,7 +1071,6 @@ func maybeSetCreateAsOfTime(builder *tableDescriptorBuilder) (hasChanged bool) {
 	// The expectation is that this is only set when the version is 2.
 	// For any version greater than that, this is not accurate but better than
 	// nothing at all.
-	desc = builder.getOrInitModifiedDesc()
 	desc.CreateAsOfTime = desc.ModificationTime
 	return true
 }
