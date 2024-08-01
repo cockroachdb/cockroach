@@ -1968,6 +1968,20 @@ func (c *clusterImpl) PutLibraries(
 	return nil
 }
 
+// PutDeprecatedWorkload checks if the test requires the deprecated
+// workload and that it has a workload node provisioned. If it does,
+// then it auto-uploads the workload binary to the workload node.
+// If the test requires the binary but doesn't have a workload node,
+// it should handle uploading it in the test itself.
+func (c *clusterImpl) PutDeprecatedWorkload(
+	ctx context.Context, l *logger.Logger, t *testImpl,
+) error {
+	if t.spec.RequiresDeprecatedWorkload && t.spec.Cluster.WorkloadNode {
+		return c.PutE(ctx, l, t.DeprecatedWorkload(), test.DefaultDeprecatedWorkloadPath, c.WorkloadNode())
+	}
+	return nil
+}
+
 // Stage stages a binary to the cluster.
 func (c *clusterImpl) Stage(
 	ctx context.Context,
