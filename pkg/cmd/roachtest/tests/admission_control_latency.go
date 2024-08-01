@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -86,6 +87,7 @@ type variations struct {
 	leaseType            registry.LeaseType
 	cleanRestart         bool
 	perturbation         perturbation
+	acceptableChange     float64
 
 	// These fields are set up at the start of the test run
 	cluster       cluster.Cluster
@@ -171,9 +173,9 @@ func setupDev(p perturbation) variations {
 	v := variations{}
 	v.leaseType = registry.ExpirationLeases
 	v.maxBlockBytes = 1024
-	v.splits = 100
+	v.splits = 1
 	v.numNodes = 4
-	v.numWorkloadNodes = 2
+	v.numWorkloadNodes = 1
 	v.vcpu = 4
 	v.disks = 1
 	v.partitionSite = true
@@ -205,27 +207,32 @@ func (v *variations) finishSetup(c cluster.Cluster, port int) {
 }
 
 func registerLatencyTests(r registry.Registry) {
-	addTest(r, "perturbation/metamorphic/restart", setupMetamorphic(restart{}))
-	addTest(r, "perturbation/metamorphic/partition", setupMetamorphic(partition{}))
-	addTest(r, "perturbation/metamorphic/add-node", setupMetamorphic(addNode{}))
-	addTest(r, "perturbation/metamorphic/decommission", setupMetamorphic(decommission{}))
+	// NB: If these tests fail because they are flaky, increase the numbers
+	// until they pass. Additionally add the seed (from the log) that caused
+	// them to fail as a comment in the test.
+	addTest(r, "perturbation/metamorphic/restart", setupMetamorphic(restart{}), 100)
+	addTest(r, "perturbation/metamorphic/partition", setupMetamorphic(partition{}), 100)
+	addTest(r, "perturbation/metamorphic/add-node", setupMetamorphic(addNode{}), 2)
+	addTest(r, "perturbation/metamorphic/decommission", setupMetamorphic(decommission{}), 3)
 
-	addTest(r, "perturbation/full/restart", setupFull(restart{}))
-	addTest(r, "perturbation/full/partition", setupFull(partition{}))
-	addTest(r, "perturbation/full/add-node", setupFull(addNode{}))
-	addTest(r, "perturbation/full/decommission", setupFull(decommission{}))
+	addTest(r, "perturbation/full/restart", setupFull(restart{}), 20)
+	addTest(r, "perturbation/full/partition", setupFull(partition{}), 100)
+	addTest(r, "perturbation/full/add-node", setupFull(addNode{}), 1.5)
+	addTest(r, "perturbation/full/decommission", setupFull(decommission{}), 1.5)
 
-	addTest(r, "perturbation/dev/restart", setupDev(restart{}))
-	addTest(r, "perturbation/dev/partition", setupDev(partition{}))
-	addTest(r, "perturbation/dev/add-node", setupDev(addNode{}))
-	addTest(r, "perturbation/dev/decommission", setupDev(decommission{}))
+	addTest(r, "perturbation/dev/restart", setupDev(restart{}), 100)
+	addTest(r, "perturbation/dev/partition", setupDev(partition{}), 100)
+	addTest(r, "perturbation/dev/add-node", setupDev(addNode{}), 100)
+	addTest(r, "perturbation/dev/decommission", setupDev(decommission{}), 100)
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
-	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, spec.CPU(v.vcpu), spec.SSD(v.disks))
+	// NB: We use low memory to force non-cache disk reads earlier.
+	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(spec.Low))
 }
 
-func addTest(r registry.Registry, testName string, v variations) {
+func addTest(r registry.Registry, testName string, v variations, acceptableChange float64) {
+	v.acceptableChange = acceptableChange
 	// TODO(baptist): Reenable this for weekly testing once consistently passing.
 	r.Add(registry.TestSpec{
 		Name:             testName,
@@ -430,6 +437,16 @@ func (d decommission) endPerturbation(
 	return v.validationDuration
 }
 
+func prettyPrint(title string, stats map[string]trackedStat) string {
+	var outputStr strings.Builder
+	outputStr.WriteString(title + "\n")
+	keys := sortedStringKeys(stats)
+	for _, name := range keys {
+		outputStr.WriteString(fmt.Sprintf("%-15s: %s\n", name, stats[name]))
+	}
+	return outputStr.String()
+}
+
 // waitForRebalanceToStop polls the system.rangelog every second to see if there
 // have been any transfers in the last 5 seconds. It returns once the system
 // stops transferring replicas.
@@ -501,8 +518,8 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	// Capture the max rate near the last 1/4 of the fill process.
 	sampleWindow := v.fillDuration / 4
 	ratioOfWrites := 0.5
-	fillStats := lm.mergeStats(sampleWindow)
-	stableRate := int(float64(fillStats[`write`].TotalCount())/sampleWindow.Seconds()*v.ratioOfMax/ratioOfWrites) / v.numWorkloadNodes
+	fillStats := lm.worstStats(sampleWindow)
+	stableRate := int(float64(fillStats[`write`].count)*v.ratioOfMax/ratioOfWrites) / v.numWorkloadNodes
 
 	// Start the consistent workload and begin collecting profiles.
 	t.L().Printf("stable rate for this cluster is %d per node", stableRate)
@@ -516,14 +533,13 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 
 	go func() {
 		waitDuration(ctx, v.validationDuration/2)
-		initialStats := lm.mergeStats(v.validationDuration / 2)
+		initialStats := lm.worstStats(v.validationDuration / 2)
 
 		// Collect profiles for the twice the 99.9th percentile of the write
 		// latency or 10ms whichever is higher.
-		const collectProfileQuantile = 99.9
 		const minProfileThreshold = 10 * time.Millisecond
 
-		profileThreshold := time.Duration(initialStats[`write`].ValueAtQuantile(collectProfileQuantile)) * 2
+		profileThreshold := initialStats[`write`].p999 * 2
 		// Set the threshold high enough that we don't spuriously collect lots of useless profiles.
 		if profileThreshold < minProfileThreshold {
 			profileThreshold = minProfileThreshold
@@ -538,20 +554,20 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	// Let enough data be written to all nodes in the cluster, then induce the perturbation.
 	waitDuration(ctx, v.validationDuration)
 	// Collect the baseline after the workload has stabilized.
-	baselineStats := lm.worstStats(t.L(), v.validationDuration/2)
+	baselineStats := lm.worstStats(v.validationDuration / 2)
 	// Now start the perturbation.
 	t.Status("T3: inducing perturbation")
 	perturbationDuration := v.perturbation.startPerturbation(ctx, t.L(), v)
-	perturbationStats := lm.worstStats(t.L(), perturbationDuration)
+	perturbationStats := lm.worstStats(perturbationDuration)
 
 	t.Status("T4: recovery from the perturbation")
 	afterDuration := v.perturbation.endPerturbation(ctx, t.L(), v)
-	afterStats := lm.worstStats(t.L(), afterDuration)
+	afterStats := lm.worstStats(afterDuration)
 
-	t.L().Printf("Fill stats %s", shortString(fillStats))
-	t.L().Printf("Baseline stats %s", shortString(baselineStats))
-	t.L().Printf("Stats during perturbation: %s", shortString(perturbationStats))
-	t.L().Printf("Stats after perturbation: %s", shortString(afterStats))
+	t.L().Printf("%s\n", prettyPrint("Fill stats", fillStats))
+	t.L().Printf("%s\n", prettyPrint("Baseline stats", baselineStats))
+	t.L().Printf("%s\n", prettyPrint("Perturbation stats", perturbationStats))
+	t.L().Printf("%s\n", prettyPrint("Recovery stats", afterStats))
 
 	t.Status("T5: validating results")
 	// Stop all the running threads and wait for them.
@@ -564,9 +580,9 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	}
 
 	t.L().Printf("validating stats during the perturbation")
-	duringOK := isAcceptableChange(t.L(), baselineStats, perturbationStats)
+	duringOK := v.isAcceptableChange(t.L(), baselineStats, perturbationStats)
 	t.L().Printf("validating stats after the perturbation")
-	afterOK := isAcceptableChange(t.L(), baselineStats, afterStats)
+	afterOK := v.isAcceptableChange(t.L(), baselineStats, afterStats)
 
 	if !duringOK || !afterOK {
 		t.Fatal("unacceptable increase in latency from the perturbation")
@@ -575,6 +591,47 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 
 // Track all histograms for up to one hour in the past.
 const numOpsToTrack = 3600
+
+// trackedStat is a collection of the relevant values from the histogram. The
+// score is a unitless composite measure representing the throughput and latency
+// of a histogram. Lower scores are better.
+type trackedStat struct {
+	clockTime time.Time
+	count     int64
+	mean      time.Duration
+	stddev    time.Duration
+	p50       time.Duration
+	p99       time.Duration
+	p999      time.Duration
+	score     time.Duration
+}
+
+func newTrackedStat(h *hdrhistogram.Histogram) trackedStat {
+	t := trackedStat{
+		clockTime: timeutil.Now(),
+		count:     h.TotalCount(),
+		mean:      time.Duration(h.Mean()),
+		stddev:    time.Duration(h.StdDev()),
+		p50:       time.Duration(h.ValueAtQuantile(50)),
+
+		p99:  time.Duration(h.ValueAtQuantile(99)),
+		p999: time.Duration(h.ValueAtQuantile(99.9)),
+	}
+	// This is an ad-hoc score. The general idea is to weigh the p50, p99 and
+	// p99.9 latency based on their relative values.
+	if t.count > 0 {
+		t.score = time.Duration(math.Sqrt((float64((t.p50 + t.p99/3 + t.p999/10)) / float64(t.count)) * float64(time.Second)))
+	} else {
+		// Set the score to infinity if the throughput dropped to 0.
+		t.score = time.Duration(math.Inf(1))
+	}
+	return t
+}
+
+func (t trackedStat) String() string {
+	return fmt.Sprintf("%s: score: %s, count: %d, mean: %s, stddev: %s, p50: %s, p99: %s, p99.9: %s",
+		t.clockTime, t.score, t.count, t.mean.String(), t.stddev.String(), t.p50.String(), t.p99.String(), t.p999.String())
+}
 
 // latencyMonitor tracks the latency of operations ver a period of time. It has
 // a fixed number of operations to track and rolls the previous operations into
@@ -585,56 +642,29 @@ type latencyMonitor struct {
 	mu struct {
 		syncutil.Mutex
 		index   int
-		tracker map[string]*[numOpsToTrack]*hdrhistogram.Histogram
+		tracker map[string]*[numOpsToTrack]trackedStat
 	}
 }
 
 func newLatencyMonitor(statNames []string) *latencyMonitor {
 	lm := latencyMonitor{}
 	lm.statNames = statNames
-	lm.mu.tracker = make(map[string]*[numOpsToTrack]*hdrhistogram.Histogram)
+	lm.mu.tracker = make(map[string]*[numOpsToTrack]trackedStat)
 	for _, name := range lm.statNames {
-		lm.mu.tracker[name] = &[numOpsToTrack]*hdrhistogram.Histogram{}
+		lm.mu.tracker[name] = &[numOpsToTrack]trackedStat{}
 	}
 	return &lm
 }
 
-// mergeStats captures the average ver the relevant stats for the last N
-// operations.
-func (lm *latencyMonitor) mergeStats(window time.Duration) map[string]*hdrhistogram.Histogram {
-	lm.mu.Lock()
-	defer lm.mu.Unlock()
-
-	// startIndex is always between 0 and numOpsToTrack - 1.
-	startIndex := (lm.mu.index + numOpsToTrack - int(window.Seconds())) % numOpsToTrack
-	// endIndex is always greater than startIndex.
-	endIndex := (lm.mu.index + numOpsToTrack) % numOpsToTrack
-	if endIndex < startIndex {
-		endIndex += numOpsToTrack
-	}
-
-	stats := make(map[string]*hdrhistogram.Histogram)
-	for name, stat := range lm.mu.tracker {
-		s := stat[startIndex]
-		for i := startIndex + 1; i < endIndex; i++ {
-			s.Merge(stat[i%numOpsToTrack])
-		}
-		stats[name] = s
-	}
-	return stats
-}
-
 // worstStats captures the worst case ver the relevant stats for the last N
-func (lm *latencyMonitor) worstStats(
-	logger *logger.Logger, window time.Duration,
-) map[string]*hdrhistogram.Histogram {
+func (lm *latencyMonitor) worstStats(window time.Duration) map[string]trackedStat {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
-	stats := make(map[string]*hdrhistogram.Histogram)
+	stats := make(map[string]trackedStat)
 	// startIndex is always between 0 and numOpsToTrack - 1.
 	startIndex := (lm.mu.index + numOpsToTrack - int(window.Seconds())) % numOpsToTrack
-	// endIndex is always greater than startIndex.
+	// endIndex is alwayss greater than startIndex.
 	endIndex := (lm.mu.index + numOpsToTrack) % numOpsToTrack
 	if endIndex < startIndex {
 		endIndex += numOpsToTrack
@@ -643,7 +673,7 @@ func (lm *latencyMonitor) worstStats(
 	for name, stat := range lm.mu.tracker {
 		s := stat[startIndex]
 		for i := startIndex + 1; i < endIndex; i++ {
-			if isWorse(logger, stat[i%numOpsToTrack], s) {
+			if stat[i%numOpsToTrack].score > s.score {
 				s = stat[i%numOpsToTrack]
 			}
 		}
@@ -652,28 +682,16 @@ func (lm *latencyMonitor) worstStats(
 	return stats
 }
 
-const acceptableCountDecrease = 0.1
-const acceptableP50Increase = 1.0
-const acceptableP99Increase = 1.0
-const acceptableP999Increase = 3.0 // this can have higher variations and not part of what we are trying to solve short term.
 // minAcceptableLatencyThreshold is the threshold below which we consider the
 // latency acceptable regardless of any relative change from the baseline.
 const minAcceptableLatencyThreshold = 10 * time.Millisecond
 
 // isAcceptableChange determines if a change from the baseline is acceptable.
-// An acceptable change is defined as the following:
-//  1. Num ops/second is within 10% of the baseline.
-//  2. The P50th percentile latency is within 4x of the baseline.
-//  3. The P99th percentile latency is within 2x of the baseline.
-//  4. The P99.9th percentile latency is within 2x of the baseline.
-//  5. OR the p50/99/99.9th percentile latencies are below 10ms, in which case
-//     the latency relative to the baseline is ignored.
-//
 // It compares all the metrics rather than failing fast. Normally multiple
 // metrics will fail at once if a test is going to fail and it is helpful to see
 // all the differences.
-func isAcceptableChange(
-	logger *logger.Logger, baseline, other map[string]*hdrhistogram.Histogram,
+func (v variations) isAcceptableChange(
+	logger *logger.Logger, baseline, other map[string]trackedStat,
 ) bool {
 	// This can happen if we aren't measuring one of the phases.
 	if len(other) == 0 {
@@ -684,57 +702,15 @@ func isAcceptableChange(
 	for _, name := range keys {
 		baseStat := baseline[name]
 		otherStat := other[name]
-		if float64(otherStat.TotalCount()) < float64(baseStat.TotalCount())*(1-acceptableCountDecrease) {
-			logger.Printf("%s: qps decreased from %d to %d", name, baseStat.TotalCount(), otherStat.TotalCount())
+		increase := float64(otherStat.score) / float64(baseStat.score)
+		if float64(otherStat.p99) > float64(minAcceptableLatencyThreshold) && increase > v.acceptableChange {
+			logger.Printf("FAILURE: %-15s: Increase %.4f > %.4f BASE: %v STAT: %v\n", name, increase, v.acceptableChange, baseStat.score, otherStat.score)
 			allPassed = false
-		}
-		if !isAcceptableLatencyChange(baseStat, otherStat, 50 /* p50 */, acceptableP50Increase) {
-			logger.Printf("%s: P50 increased from %s to %s", name, time.Duration(baseStat.ValueAtQuantile(50)), time.Duration(otherStat.ValueAtQuantile(50)))
-			allPassed = false
-		}
-		if !isAcceptableLatencyChange(baseStat, otherStat, 99 /* p99 */, acceptableP99Increase) {
-			logger.Printf("%s: P99 increased from %s to %s", name, time.Duration(baseStat.ValueAtQuantile(99)), time.Duration(otherStat.ValueAtQuantile(99)))
-			allPassed = false
-		}
-		if !isAcceptableLatencyChange(baseStat, otherStat, 99.9 /* p99.9 */, acceptableP999Increase) {
-			logger.Printf("%s: P99.9 increased from %s to %s", name, time.Duration(baseStat.ValueAtQuantile(99.9)), time.Duration(otherStat.ValueAtQuantile(99.9)))
-			allPassed = false
+		} else {
+			logger.Printf("PASSED : %-15s: Increase %.4f <= %.4f BASE: %v STAT: %v\n", name, increase, v.acceptableChange, baseStat.score, otherStat.score)
 		}
 	}
 	return allPassed
-}
-
-// isAcceptableLatencyChange determines if a change in latency, between change
-// and baseline, is acceptable.
-func isAcceptableLatencyChange(
-	base, change *hdrhistogram.Histogram, p, relativeThreshold float64,
-) bool {
-	changeLatency := time.Duration(change.ValueAtQuantile(p))
-	latencyThreshold := time.Duration(float64(base.ValueAtQuantile(p)) * (1 + relativeThreshold))
-	return changeLatency <= latencyThreshold || changeLatency < minAcceptableLatencyThreshold
-}
-
-// isWorse returns true if a is significantly worse than b. Note that this is
-// not symmetric, and will only return true if a is enough worse.
-// TODO(baptist): Consider alternative ways to do this comparison.
-func isWorse(logger *logger.Logger, a, b *hdrhistogram.Histogram) bool {
-	// Allow some delta on counts to handle variations on the total and the mean latency.
-	delta := 0.95
-	// Stat a is worse if its total count is significantly lower.
-	if float64(a.TotalCount()) < float64(b.TotalCount())*delta {
-		return true
-	}
-	// Stat a is worse if its mean latency is significantly higher.
-	if float64(a.ValueAtQuantile(50))*delta > float64(b.ValueAtQuantile(50)) {
-		return true
-	}
-	// If the total and the value are close, then the 99.9th percentile is the
-	// deciding factor. Don't multiply either by delta for this stat.
-	if float64(a.ValueAtQuantile(99.9)) > float64(b.ValueAtQuantile(99.9)) {
-		return true
-	}
-	// Stat a is not significantly worse.
-	return false
 }
 
 // start the latency monitor which will run until the context is cancelled.
@@ -748,7 +724,7 @@ outer:
 			return nil
 		case <-time.After(time.Second):
 			histograms := r.Tick()
-			sMap := make(map[string]*hdrhistogram.Histogram)
+			sMap := make(map[string]trackedStat)
 
 			// Pull out the relevant data from the stats.
 			for _, name := range lm.statNames {
@@ -756,7 +732,7 @@ outer:
 					l.Printf("no histogram for %s, %v", name, histograms)
 					continue outer
 				}
-				sMap[name] = histograms[name]
+				sMap[name] = newTrackedStat(histograms[name])
 			}
 
 			// Roll the latest stats into the tracker under lock.
@@ -774,15 +750,15 @@ outer:
 	}
 }
 
-func shortString(sMap map[string]*hdrhistogram.Histogram) string {
+func shortString(sMap map[string]trackedStat) string {
 	var outputStr strings.Builder
 	var count int64
 
 	keys := sortedStringKeys(sMap)
 	for _, name := range keys {
 		hist := sMap[name]
-		outputStr.WriteString(fmt.Sprintf("%s: %s, ", name, time.Duration(hist.ValueAtQuantile(99))))
-		count += hist.TotalCount()
+		outputStr.WriteString(fmt.Sprintf("%s: %s / %s, ", name, hist.p99, hist.score))
+		count += hist.count
 	}
 	outputStr.WriteString(fmt.Sprintf("op/s: %d", count))
 	return outputStr.String()
@@ -849,7 +825,7 @@ func waitDuration(ctx context.Context, duration time.Duration) {
 	}
 }
 
-func sortedStringKeys(m map[string]*hdrhistogram.Histogram) []string {
+func sortedStringKeys(m map[string]trackedStat) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
