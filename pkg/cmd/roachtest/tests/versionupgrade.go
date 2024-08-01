@@ -267,7 +267,7 @@ func (u *versionUpgradeTest) binaryVersion(
 	ctx context.Context, t test.Test, i int,
 ) roachpb.Version {
 	db := u.conn(ctx, t, i)
-	v, err := clusterupgrade.BinaryVersion(db)
+	v, err := clusterupgrade.BinaryVersion(ctx, db)
 	if err != nil {
 		t.Fatal(err)
 	}
