@@ -930,8 +930,8 @@ show_savepoint_stmt ::=
 	'SHOW' 'SAVEPOINT' 'STATUS'
 
 show_schemas_stmt ::=
-	'SHOW' 'SCHEMAS' 'FROM' name
-	| 'SHOW' 'SCHEMAS'
+	'SHOW' 'SCHEMAS' 'FROM' name with_comment
+	| 'SHOW' 'SCHEMAS' with_comment
 
 show_sequences_stmt ::=
 	'SHOW' 'SEQUENCES' 'FROM' name

@@ -654,7 +654,8 @@ func (node *ShowSessions) Format(ctx *FmtCtx) {
 
 // ShowSchemas represents a SHOW SCHEMAS statement.
 type ShowSchemas struct {
-	Database Name
+	Database    Name
+	WithComment bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -663,6 +664,9 @@ func (node *ShowSchemas) Format(ctx *FmtCtx) {
 	if node.Database != "" {
 		ctx.WriteString(" FROM ")
 		ctx.FormatNode(&node.Database)
+	}
+	if node.WithComment {
+		ctx.WriteString(" WITH COMMENT")
 	}
 }
 
