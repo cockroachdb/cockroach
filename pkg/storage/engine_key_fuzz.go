@@ -90,8 +90,19 @@ func FuzzEngineKeysInvariants(f *testing.F) {
 		return ek, ok1
 	}
 
-	f.Fuzz(func(t *testing.T, a, b []byte) {
+	f.Fuzz(func(t *testing.T, a []byte, b []byte) {
 		t.Logf("a = 0x%x; b = 0x%x", a, b)
+		// We can only pass valid keys to the comparer.
+		ekA, okA := decodeEngineKey(t, a)
+		ekB, okB := decodeEngineKey(t, b)
+		if !okA || !okB {
+			return
+		}
+		errA := ekA.Validate()
+		errB := ekB.Validate()
+		if errA != nil || errB != nil {
+			return
+		}
 		cmp := compareEngineKeys(t, a, b)
 		if cmp == 0 {
 			return
@@ -115,17 +126,6 @@ func FuzzEngineKeysInvariants(f *testing.F) {
 		if cmp = compareEngineKeys(t, sep, b); cmp >= 0 {
 			t.Errorf("Separator(0x%x, 0x%x) = 0x%x; but EngineKeyCompare(0x%x, 0x%x) = %d",
 				a, b, sep, sep, b, cmp)
-		}
-		ekA, okA := decodeEngineKey(t, a)
-		ekB, okB := decodeEngineKey(t, b)
-		if !okA || !okB {
-			return
-		}
-		errA := ekA.Validate()
-		errB := ekB.Validate()
-		// The below invariants only apply for valid keys.
-		if errA != nil || errB != nil {
-			return
 		}
 		t.Logf("ekA = %s (Key: 0x%x, Version: 0x%x); ekB = %s (Key: 0x%x, Version: 0x%x)",
 			ekA, ekA.Key, ekA.Version, ekB, ekB.Key, ekB.Version)
