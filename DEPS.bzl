@@ -1708,10 +1708,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "708d354be196883b6cfd1b013ec3569a39755419daa90307becb2f0a7543de68",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20240718162859-654324f90ba7",
+        sha256 = "ceaa087603890ffec5e38e4fce76b8861777cb26a3ee62c2f3a9b084e2809e8a",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20240801150650-07b2b42c5960",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20240718162859-654324f90ba7.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20240801150650-07b2b42c5960.zip",
         ],
     )
     go_repository(
@@ -3827,10 +3827,10 @@ def go_deps():
         name = "com_github_golang_snappy",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/golang/snappy",
-        sha256 = "ea4545ca44ee990554094df6de440386a440a5bd99106e048939409d63beb423",
-        strip_prefix = "github.com/golang/snappy@v0.0.4",
+        sha256 = "a40a9145f6d7c1b2c356cf024f65e0f9cbf7efe2b89330ef4bb0763859b6fdc9",
+        strip_prefix = "github.com/golang/snappy@v0.0.5-0.20231225225746-43d5d4cd4e0e",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang/snappy/com_github_golang_snappy-v0.0.4.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang/snappy/com_github_golang_snappy-v0.0.5-0.20231225225746-43d5d4cd4e0e.zip",
         ],
     )
     go_repository(
