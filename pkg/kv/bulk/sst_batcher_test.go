@@ -57,6 +57,10 @@ func TestDuplicateHandling(t *testing.T) {
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	tsStart := 1000
+	keyCount := 10
+	value := storageutils.StringValueRaw("value")
+
 	expectRevisionCount := func(startKey roachpb.Key, endKey roachpb.Key, count int) {
 		req := &kvpb.ExportRequest{
 			RequestHeader: kvpb.RequestHeader{
@@ -64,7 +68,7 @@ func TestDuplicateHandling(t *testing.T) {
 				EndKey: endKey,
 			},
 			MVCCFilter: kvpb.MVCCFilter_All,
-			StartTime:  hlc.Timestamp{},
+			StartTime:  hlc.Timestamp{WallTime: int64(tsStart)},
 		}
 		header := kvpb.Header{Timestamp: s.Clock().Now()}
 		resp, err := kv.SendWrappedWith(ctx,
@@ -92,23 +96,23 @@ func TestDuplicateHandling(t *testing.T) {
 		require.Equal(t, count, keyCount)
 	}
 
-	tsStart := 1000
-	keyCount := 10
-	value := storageutils.StringValueRaw("value")
-
 	type keyBuilder func(i int, ts int) storage.MVCCKey
 
 	type testCase struct {
-		name           string
-		skipDuplicates bool
-		ingestAll      bool
-		addKeys        func(*testing.T, *bulk.SSTBatcher, keyBuilder) storage.MVCCKey
-		expectedCount  int
+		name            string
+		skipDuplicates  bool
+		ingestAll       bool
+		addKeys         func(*testing.T, *bulk.SSTBatcher, keyBuilder) storage.MVCCKey
+		expectedCount   int
+		exportStartTime hlc.Timestamp
 	}
 	testCases := []testCase{
 		{
 			name:      "ingestAll does not add key-timestamp-value matches to SST",
 			ingestAll: true,
+			// Set the export startTime to ensure all revisions are read, or fail if
+			// the gc threshold has advance past the start time
+			exportStartTime: hlc.Timestamp{WallTime: int64(tsStart)},
 			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
 				for i := 0; i < keyCount; i++ {
 					key := k(i+1, tsStart)
