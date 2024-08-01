@@ -987,3 +987,19 @@ SELECT * FROM (
 WHERE tmp.x = bc.b + 1;
 ----
 NULL  2  1  NULL
+
+# Regression test for #127814. The vectorized engine should correctly project
+# expressions operating on NULL.
+statement ok
+CREATE TABLE t127814_empty (i INT)
+
+statement ok
+CREATE TABLE t127814 (o INT)
+
+statement ok
+INSERT INTO t127814 VALUES (0)
+
+query B
+SELECT o NOT IN ((SELECT NULL FROM t127814_empty),) FROM t127814
+----
+NULL
