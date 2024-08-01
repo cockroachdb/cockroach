@@ -35,6 +35,7 @@ func registerAcceptance(r registry.Registry) {
 		encryptionSupport  registry.EncryptionSupport
 		defaultLeases      bool
 		requiresLicense    bool
+		randomized         bool
 		nativeLibs         []string
 		incompatibleClouds registry.CloudSet
 	}{
@@ -79,6 +80,7 @@ func registerAcceptance(r registry.Registry) {
 				fn:            runVersionUpgrade,
 				timeout:       2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
 				defaultLeases: true,
+				randomized:    true,
 				nativeLibs:    registry.LibGEOS,
 			},
 		},
@@ -102,6 +104,7 @@ func registerAcceptance(r registry.Registry) {
 				fn:            runValidateSystemSchemaAfterVersionUpgrade,
 				timeout:       30 * time.Minute,
 				defaultLeases: true,
+				randomized:    true,
 				numNodes:      1,
 			},
 			{
@@ -145,6 +148,7 @@ func registerAcceptance(r registry.Registry) {
 				Timeout:           10 * time.Minute,
 				CompatibleClouds:  registry.AllClouds.Remove(tc.incompatibleClouds),
 				Suites:            registry.Suites(registry.Nightly, registry.Quick, registry.Acceptance),
+				Randomized:        tc.randomized,
 				RequiresLicense:   tc.requiresLicense,
 			}
 

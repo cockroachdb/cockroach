@@ -56,6 +56,7 @@ func registerCostFuzz(r registry.Registry) {
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
 			NativeLibs:       registry.LibGEOS,
+			Randomized:       true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				// When running in CI, only allow running workload-replay in the private roachtest,
 				// which has the required credentials.
