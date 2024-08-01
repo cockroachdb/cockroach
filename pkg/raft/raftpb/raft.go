@@ -15,3 +15,10 @@ type PeerID uint64
 
 // SafeValue implements the redact.SafeValue interface.
 func (p PeerID) SafeValue() {}
+
+// Epoch is an epoch in the Store Liveness fabric, referencing an uninterrupted
+// period of support from one store to another.
+type Epoch int64
+
+// SafeValue implements the redact.SafeValue interface.
+func (e Epoch) SafeValue() {}

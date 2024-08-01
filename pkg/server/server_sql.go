@@ -1946,6 +1946,7 @@ func startServeSQL(
 					}
 					return
 				}
+				defer status.ReleaseMemory(ctx)
 
 				if err := serveConn(connCtx, conn, status); err != nil {
 					if logEvery.ShouldLog() {
@@ -2005,6 +2006,7 @@ func startServeSQL(
 						log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
 						return
 					}
+					defer status.ReleaseMemory(ctx)
 
 					if err := serveConn(connCtx, conn, status); err != nil {
 						log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)

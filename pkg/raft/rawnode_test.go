@@ -25,7 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -634,7 +633,7 @@ func TestRawNodeRestart(t *testing.T) {
 	assert.Equal(t, uint64(1), rawNode.raft.raftLog.committed)
 	assert.Equal(t, pb.PeerID(1), rawNode.raft.lead)
 	assert.True(t, rawNode.raft.state == StateFollower)
-	assert.Equal(t, raftstoreliveness.Epoch(1), rawNode.raft.leadEpoch)
+	assert.Equal(t, pb.Epoch(1), rawNode.raft.leadEpoch)
 
 	// Ensure we campaign after the election timeout has elapsed.
 	for i := 0; i < rawNode.raft.randomizedElectionTimeout; i++ {
