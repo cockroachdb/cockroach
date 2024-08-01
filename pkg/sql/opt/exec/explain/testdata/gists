@@ -647,6 +647,7 @@ explain(shape):
     └── • scan
           table: abc@abc_pkey
           spans: 1+ spans
+          locking strength: for update
 explain(gist):
 • update
 │ table: abc
@@ -679,6 +680,7 @@ explain(shape):
     └── • scan
           table: abc@abc_pkey
           spans: 1+ spans
+          locking strength: for update
 explain(gist):
 • upsert
 │ into: abc()
