@@ -49,20 +49,20 @@ type tpccOLAPSpec struct {
 }
 
 func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
-	crdbNodes, workloadNode := setupTPCC(
+	setupTPCC(
 		ctx, t, t.L(), c, tpccOptions{
 			Warehouses: s.Warehouses, SetupType: usingImport,
 		})
 	// We make use of querybench below, only available through the `workload`
 	// binary.
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNode())
 
 	const queryFileName = "queries.sql"
 	// querybench expects the entire query to be on a single line.
 	queryLine := `"` + strings.Replace(tpccOlapQuery, "\n", " ", -1) + `"`
-	c.Run(ctx, option.WithNodes(workloadNode), "echo", queryLine, "> "+queryFileName)
+	c.Run(ctx, option.WithNodes(c.WorkloadNode()), "echo", queryLine, "> "+queryFileName)
 	t.Status("waiting")
-	m := c.NewMonitor(ctx, crdbNodes)
+	m := c.NewMonitor(ctx, c.CRDBNodes())
 	rampDuration := 2 * time.Minute
 	duration := 3 * time.Minute
 	m.Go(func(ctx context.Context) error {
@@ -75,7 +75,7 @@ func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 				" --histograms="+t.PerfArtifactsDir()+"/stats.json "+
 				" --ramp=%s --duration=%s {pgurl:1-%d}",
 			s.Concurrency, queryFileName, rampDuration, duration, c.Spec().NodeCount-1)
-		c.Run(ctx, option.WithNodes(workloadNode), cmd)
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 		return nil
 	})
 	m.Wait()
@@ -167,7 +167,7 @@ func registerTPCCOverload(r registry.Registry) {
 			Benchmark:         true,
 			CompatibleClouds:  registry.AllExceptAWS,
 			Suites:            registry.Suites(registry.Weekly),
-			Cluster:           r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs)),
+			Cluster:           r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs), spec.WorkloadNode()),
 			Run:               s.run,
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Leases:            registry.MetamorphicLeases,
@@ -190,20 +190,17 @@ func registerTPCCSevereOverload(r registry.Registry) {
 		// TODO(abaptist): This test will require a lot of admission control work
 		// to pass. Just putting it here to make easy to run at any time.
 		Skip:             "#89142",
-		Cluster:          r.MakeClusterSpec(7, spec.CPU(8)),
+		Cluster:          r.MakeClusterSpec(7, spec.CPU(8), spec.WorkloadNode(), spec.WorkloadNodeCPU(8)),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			roachNodes := c.Range(1, c.Spec().NodeCount-1)
-			workloadNode := c.Spec().NodeCount
-
 			c.Start(
 				ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule),
-				install.MakeClusterSettings(), roachNodes,
+				install.MakeClusterSettings(), c.CRDBNodes(),
 			)
 
 			t.Status("initializing (~1h)")
-			c.Run(ctx, option.WithNodes(c.Node(workloadNode)), "./cockroach workload fixtures import tpcc --checks=false --warehouses=10000 {pgurl:1}")
+			c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload fixtures import tpcc --checks=false --warehouses=10000 {pgurl:1}")
 
 			// This run passes through 4 "phases"
 			// 1) No admission control, low latencies (up to ~1500 warehouses).
@@ -211,7 +208,7 @@ func registerTPCCSevereOverload(r registry.Registry) {
 			// 3) High latencies (100s+), queues building (up to ~4500 warehouse).
 			// 4) Memory and goroutine unbounded growth with eventual node crashes (up to ~6000 warehouse).
 			t.Status("running workload (fails in ~3-4 hours)")
-			c.Run(ctx, option.WithNodes(c.Node(workloadNode)), "./cockroach workload run tpcc --ramp=6h --tolerate-errors --warehouses=10000 '{pgurl:1-6}'")
+			c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload run tpcc --ramp=6h --tolerate-errors --warehouses=10000 '{pgurl:1-6}'")
 		},
 	})
 }

@@ -883,10 +883,11 @@ func (f *clusterFactory) newCluster(
 	defer setStatus("idle")
 
 	providerOptsContainer := vm.CreateProviderOptionsContainer()
+	workloadProviderOptsContainer := vm.CreateProviderOptionsContainer()
 
-	cloud := roachtestflags.Cloud
+	clusterCloud := roachtestflags.Cloud
 	params := spec.RoachprodClusterConfig{
-		Cloud:                  cloud,
+		Cloud:                  clusterCloud,
 		UseIOBarrierOnLocalSSD: cfg.useIOBarrier,
 		PreferredArch:          cfg.arch,
 	}
@@ -897,12 +898,13 @@ func (f *clusterFactory) newCluster(
 	// The ClusterName is set below in the retry loop to ensure
 	// that each create attempt gets a unique cluster name.
 	// N.B. selectedArch may not be the same as PreferredArch, depending on (spec.CPU, spec.Mem)
-	createVMOpts, providerOpts, selectedArch, err := cfg.spec.RoachprodOpts(params)
+	createVMOpts, providerOpts, workloadProviderOpts, selectedArch, err := cfg.spec.RoachprodOpts(params)
 	if err != nil {
 		return nil, nil, err
 	}
-	if cloud != spec.Local {
-		providerOptsContainer.SetProviderOpts(cloud, providerOpts)
+	if clusterCloud != spec.Local {
+		providerOptsContainer.SetProviderOpts(clusterCloud, providerOpts)
+		workloadProviderOptsContainer.SetProviderOpts(clusterCloud, workloadProviderOpts)
 	}
 
 	createFlagsOverride(&createVMOpts)
@@ -938,7 +940,7 @@ func (f *clusterFactory) newCluster(
 		}
 
 		c := &clusterImpl{
-			cloud:      cloud,
+			cloud:      clusterCloud,
 			name:       genName,
 			spec:       cfg.spec,
 			expiration: cfg.spec.Expiration(),
@@ -954,7 +956,16 @@ func (f *clusterFactory) newCluster(
 
 		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
 		createVMOpts.ClusterName = c.name
-		err = create(ctx, l, cfg.username, cfg.spec.NodeCount, createVMOpts, providerOptsContainer)
+		opts := []*cloud.ClusterCreateOpts{{Nodes: cfg.spec.NodeCount, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer}}
+		// There can only be one local cluster so creating two sequentially overwrites the first.
+		// There isn't a point to creating a different sized vm for local clusters, so skip it.
+		if cfg.spec.WorkloadNode && !cfg.localCluster {
+			opts = []*cloud.ClusterCreateOpts{
+				{Nodes: cfg.spec.NodeCount - 1, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer},
+				{Nodes: 1, CreateOpts: createVMOpts, ProviderOptsContainer: workloadProviderOptsContainer},
+			}
+		}
+		err = create(ctx, l, cfg.username, opts...)
 		if err == nil {
 			if err := f.r.registerCluster(c); err != nil {
 				return nil, nil, err
@@ -1133,11 +1144,15 @@ func (c *clusterImpl) lister() option.NodeLister {
 	if c.t != nil { // accommodates poorly set up tests
 		fatalf = c.t.Fatalf
 	}
-	return option.NodeLister{NodeCount: c.spec.NodeCount, Fatalf: fatalf}
+	return option.NodeLister{NodeCount: c.spec.NodeCount, WorkloadNodeProvisioned: c.spec.WorkloadNode, Fatalf: fatalf}
 }
 
 func (c *clusterImpl) All() option.NodeListOption {
 	return c.lister().All()
+}
+
+func (c *clusterImpl) CRDBNodes() option.NodeListOption {
+	return c.lister().CRDBNodes()
 }
 
 func (c *clusterImpl) Range(begin, end int) option.NodeListOption {
@@ -1150,6 +1165,10 @@ func (c *clusterImpl) Nodes(ns ...int) option.NodeListOption {
 
 func (c *clusterImpl) Node(i int) option.NodeListOption {
 	return c.lister().Node(i)
+}
+
+func (c *clusterImpl) WorkloadNode() option.NodeListOption {
+	return c.lister().WorkloadNode()
 }
 
 // FetchLogs downloads the logs from the cluster using `roachprod get`.
