@@ -29,9 +29,7 @@ type dev struct {
 	debug bool
 
 	knobs struct { // testing knobs
-		skipDoctorCheck           bool
-		skipCacheCheckDuringBuild bool
-		devBinOverride            string
+		devBinOverride string
 	}
 }
 
