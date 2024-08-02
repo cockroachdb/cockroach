@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -146,41 +147,51 @@ func (t *testImpl) BuildVersion() *version.Version {
 }
 
 // Cockroach will return either `RuntimeAssertionsCockroach()` or
-// `StandardCockroach()`, picked randomly. Once a random choice has
-// been made, the same binary will be returned on every call to
-// `Cockroach`, to avoid errors that may arise from binaries having a
+// StandardCockroach(), picked based off of the test spec. Once a choice
+// has been made, the same binary will be returned on every call to
+// Cockroach, to avoid errors that may arise from binaries having a
 // different value for metamorphic constants.
 func (t *testImpl) Cockroach() string {
-	// If the test is a benchmark test, we don't want to enable assertions
-	// as it will slow down performance.
-	if t.spec.Benchmark {
-		t.l.Printf("Benchmark test, running with standard cockroach")
-		return t.StandardCockroach()
-	}
 	t.randomCockroachOnce.Do(func() {
-		//TODO(SR): assertions are temporarily disabled for _all_ tests except those using t.RuntimeAssertionsCockroach()
-		// directly, until after the stability period for 23.2. See https://github.com/cockroachdb/cockroach/issues/114615
-		assertionsEnabledProbability := 0.0
-		// If the user specified a custom seed to be used with runtime
-		// assertions, assume they want to run the test with assertions
-		// enabled, making it easier to reproduce issues.
-		if os.Getenv(test.EnvAssertionsEnabledSeed) != "" {
-			assertionsEnabledProbability = 1
-		}
-
-		if rand.Float64() < assertionsEnabledProbability {
-			// The build with runtime assertions should exist in every nightly
-			// CI build, but we can't assume it exists in every roachtest call.
-			if path := t.RuntimeAssertionsCockroach(); path != "" {
-				t.l.Printf("Runtime assertions enabled")
-				t.randomizedCockroach = path
+		switch t.Spec().(*registry.TestSpec).CockroachBinary {
+		case registry.RandomizedCockroach:
+			// If the test is a benchmark test, we don't want to enable assertions
+			// as it will slow down performance.
+			if t.spec.Benchmark {
+				t.l.Printf("Benchmark test, running with standard cockroach")
+				t.randomizedCockroach = t.StandardCockroach()
 				return
-			} else {
-				t.l.Printf("WARNING: running without runtime assertions since the corresponding binary was not specified")
 			}
+			assertionsEnabledProbability := roachtestflags.CockroachEAProbability
+			// If the user specified a custom seed to be used with runtime
+			// assertions, assume they want to run the test with assertions
+			// enabled, making it easier to reproduce issues.
+			if os.Getenv(test.EnvAssertionsEnabledSeed) != "" {
+				assertionsEnabledProbability = 1
+			}
+
+			if rand.Float64() < assertionsEnabledProbability {
+				// The build with runtime assertions should exist in every nightly
+				// CI build, but we can't assume it exists in every roachtest call.
+				if path := t.RuntimeAssertionsCockroach(); path != "" {
+					t.l.Printf("Runtime assertions enabled")
+					t.randomizedCockroach = path
+					return
+				} else {
+					t.l.Printf("WARNING: running without runtime assertions since the corresponding binary was not specified")
+				}
+			}
+			t.l.Printf("Runtime assertions disabled")
+			t.randomizedCockroach = t.StandardCockroach()
+		case registry.StandardCockroach:
+			t.l.Printf("Runtime assertions disabled: registry.StandardCockroach set")
+			t.randomizedCockroach = t.StandardCockroach()
+		case registry.RuntimeAssertionsCockroach:
+			t.l.Printf("Runtime assertions enabled: registry.RuntimeAssertionsCockroach set")
+			t.randomizedCockroach = t.RuntimeAssertionsCockroach()
+		default:
+			t.Fatal("Specified cockroach binary does not exist.")
 		}
-		t.l.Printf("Runtime assertions disabled")
-		t.randomizedCockroach = t.StandardCockroach()
 	})
 
 	return t.randomizedCockroach
