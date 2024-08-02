@@ -96,8 +96,8 @@ type Container struct {
 	txnCounts transactionCounts
 	mon       *mon.BytesMonitor
 
-	knobs              *sqlstats.TestingKnobs
-	latencyInformation insights.LatencyInformation
+	knobs     *sqlstats.TestingKnobs
+	anomalies *insights.AnomalyDetector
 }
 
 var _ sqlstats.ApplicationStats = &Container{}
@@ -109,15 +109,15 @@ func New(
 	mon *mon.BytesMonitor,
 	appName string,
 	knobs *sqlstats.TestingKnobs,
-	latencyInformation insights.LatencyInformation,
+	anomalies *insights.AnomalyDetector,
 ) *Container {
 	s := &Container{
-		st:                 st,
-		appName:            appName,
-		mon:                mon,
-		knobs:              knobs,
-		latencyInformation: latencyInformation,
-		uniqueServerCount:  uniqueServerCount,
+		st:                st,
+		appName:           appName,
+		mon:               mon,
+		knobs:             knobs,
+		anomalies:         anomalies,
+		uniqueServerCount: uniqueServerCount,
 	}
 
 	if mon != nil {
@@ -217,7 +217,7 @@ func NewTempContainerFromExistingStmtStats(
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
-		nil, /*latencyInformation */
+		nil, /*anomalies */
 	)
 
 	for i := range statistics {
@@ -290,7 +290,7 @@ func NewTempContainerFromExistingTxnStats(
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
-		nil, /* latencyInformation */
+		nil, /* anomalies */
 	)
 
 	for i := range statistics {
@@ -325,7 +325,7 @@ func (s *Container) NewApplicationStatsWithInheritedOptions() sqlstats.Applicati
 		s.mon,
 		s.appName,
 		s.knobs,
-		s.latencyInformation,
+		s.anomalies,
 	)
 }
 

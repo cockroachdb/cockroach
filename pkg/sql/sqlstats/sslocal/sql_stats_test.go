@@ -458,7 +458,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		monitor,
 		nil, /* reportingSink */
 		nil, /* knobs */
-		insightsProvider.LatencyInformation(),
+		insightsProvider.Anomalies(),
 	)
 
 	appStats := sqlStats.GetApplicationStats("" /* appName */)
@@ -586,7 +586,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			monitor,
 			nil,
 			nil,
-			insightsProvider.LatencyInformation(),
+			insightsProvider.Anomalies(),
 		)
 		appStats := sqlStats.GetApplicationStats("" /* appName */)
 		statsCollector := sslocal.NewStatsCollector(
@@ -1736,7 +1736,7 @@ func TestSQLStats_ConsumeStats(t *testing.T) {
 		monitor,
 		nil, /* reportingSink */
 		nil, /* knobs */
-		insightsProvider.LatencyInformation(),
+		insightsProvider.Anomalies(),
 	)
 
 	stmtContainer, _, _ := ssmemstorage.NewTempContainerFromExistingStmtStats(testStmtData)
