@@ -515,7 +515,7 @@ func (lrw *logicalReplicationWriterProcessor) handleStreamBuffer(
 	ctx context.Context, kvs []streampb.StreamEvent_KV,
 ) error {
 	const notRetry = false
-	unapplied, unappliedBytes, err := lrw.flushBuffer(ctx, kvs, notRetry, retryAllowed)
+	unapplied, unappliedBytes, err := lrw.flushBuffer(ctx, kvs, notRetry, lrw.purgatory.Enabled())
 	if err != nil {
 		return err
 	}

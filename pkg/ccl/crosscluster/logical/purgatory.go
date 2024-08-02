@@ -162,3 +162,10 @@ func (p *purgatory) full() bool {
 	}
 	return p.bytesGauge.Value() >= p.byteLimit()
 }
+
+func (p *purgatory) Enabled() retryEligibility {
+	if p != nil && p.byteLimit != nil && p.byteLimit() != 0 {
+		return retryAllowed
+	}
+	return noSpace
+}
