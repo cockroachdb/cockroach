@@ -460,26 +460,26 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 			testName:   "main/main_cols",
 			familyName: "main",
 			actions: []string{
-				"INSERT INTO foo (i,j,a,b) VALUES (0,1,'a0','b0')",
-				"ALTER TABLE foo ALTER COLUMN a SET DATA TYPE VARCHAR(16)",
-				"INSERT INTO foo (i,j,a,b) VALUES (1,2,'a1','b1')",
+				"INSERT INTO foo (i,j,a,b) VALUES (0,1,'2002-05-02','b0')",
+				"ALTER TABLE foo ALTER COLUMN a SET DATA TYPE DATE USING a::DATE",
+				"INSERT INTO foo (i,j,a,b) VALUES (1,2,'2021-01-01','b1')",
 			},
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"1", "0"},
-					allValues: []string{"0", "1", "a0", "b0"},
+					allValues: []string{"0", "1", "2002-05-02", "b0"},
 				},
 				{
 					keyValues: []string{"1", "0"},
-					allValues: []string{"0", "1", "a0", "b0"},
+					allValues: []string{"0", "1", "2002-05-02", "b0"},
 				},
 				{
 					keyValues: []string{"1", "0"},
-					allValues: []string{"0", "1", "a0", "b0"},
+					allValues: []string{"0", "1", "2002-05-02", "b0"},
 				},
 				{
 					keyValues: []string{"2", "1"},
-					allValues: []string{"1", "2", "a1", "b1"},
+					allValues: []string{"1", "2", "2021-01-01", "b1"},
 				},
 			},
 		},
@@ -487,9 +487,9 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 			testName:   "ec/ec_cols",
 			familyName: "ec",
 			actions: []string{
-				"INSERT INTO foo (i,j,e,c) VALUES (2,3,'e2','c2')",
-				"ALTER TABLE foo ALTER COLUMN c SET DATA TYPE VARCHAR(16)",
-				"INSERT INTO foo (i,j,e,c) VALUES (3,4,'e3','c3')",
+				"INSERT INTO foo (i,j,e,c) VALUES (2,3,'e2','2024-08-02')",
+				"ALTER TABLE foo ALTER COLUMN c SET DATA TYPE DATE USING c::DATE",
+				"INSERT INTO foo (i,j,e,c) VALUES (3,4,'e3','2024-05-21')",
 			},
 			expectMainFamily: []decodeExpectation{
 				{
@@ -502,19 +502,19 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 			expectECFamily: []decodeExpectation{
 				{
 					keyValues: []string{"3", "2"},
-					allValues: []string{"c2", "e2"},
+					allValues: []string{"2024-08-02", "e2"},
 				},
 				{
 					keyValues: []string{"3", "2"},
-					allValues: []string{"c2", "e2"},
+					allValues: []string{"2024-08-02", "e2"},
 				},
 				{
 					keyValues: []string{"3", "2"},
-					allValues: []string{"c2", "e2"},
+					allValues: []string{"2024-08-02", "e2"},
 				},
 				{
 					keyValues: []string{"4", "3"},
-					allValues: []string{"c3", "e3"},
+					allValues: []string{"2024-05-21", "e3"},
 				},
 			},
 		},
@@ -522,9 +522,9 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 			testName:   "ec/ec_cols_with_virtual",
 			familyName: "ec",
 			actions: []string{
-				"INSERT INTO foo (i,j,e,c) VALUES (4,5,'e4','c4')",
-				"ALTER TABLE foo ALTER COLUMN c SET DATA TYPE VARCHAR(16)",
-				"INSERT INTO foo (i,j,e,c) VALUES (5,6,'e5','c5')",
+				"INSERT INTO foo (i,j,e,c) VALUES (4,5,'e4','2012-11-06')",
+				"ALTER TABLE foo ALTER COLUMN c SET DATA TYPE DATE USING c::DATE",
+				"INSERT INTO foo (i,j,e,c) VALUES (5,6,'e5','2014-05-06')",
 			},
 			includeVirtual: true,
 			expectMainFamily: []decodeExpectation{
@@ -538,20 +538,20 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 			expectECFamily: []decodeExpectation{
 				{
 					keyValues: []string{"5", "4"},
-					allValues: []string{"c4", "NULL", "e4"},
+					allValues: []string{"2012-11-06", "NULL", "e4"},
 				},
 				{
 					keyValues:         []string{"5", "4"},
-					allValues:         []string{"c4", "NULL", "e4"},
+					allValues:         []string{"2012-11-06", "NULL", "e4"},
 					refreshDescriptor: true,
 				},
 				{
 					keyValues: []string{"5", "4"},
-					allValues: []string{"c4", "NULL", "e4"},
+					allValues: []string{"2012-11-06", "NULL", "e4"},
 				},
 				{
 					keyValues: []string{"6", "5"},
-					allValues: []string{"c5", "NULL", "e5"},
+					allValues: []string{"2014-05-06", "NULL", "e5"},
 				},
 			},
 		},
@@ -619,8 +619,8 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, updatedRow.IsInitialized())
 
-				require.Equal(t, expect.keyValues, slurpDatums(t, updatedRow.ForEachKeyColumn()))
-				require.Equal(t, expect.allValues, slurpDatums(t, updatedRow.ForEachColumn()))
+				require.Equal(t, expect.keyValues, slurpDatums(t, updatedRow.ForEachKeyColumn()), "row %d", i)
+				require.Equal(t, expect.allValues, slurpDatums(t, updatedRow.ForEachColumn()), "row %d", i)
 			}
 			sqlDB.Exec(t, `DROP TABLE foo`)
 		})
