@@ -20,10 +20,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -326,12 +327,13 @@ func runOneRoundQueryComparison(
 		logStmt(setUnconstrainedStmt)
 
 		conn2 := conn
+		node2 := 1
 		if qct.isMultiRegion {
 			t.Status("setting up multi-region database")
 			setupMultiRegionDatabase(t, conn, rnd, logStmt)
 
 			// Choose a different node than node 1.
-			node2 := rnd.Intn(qct.nodeCount-1) + 2
+			node2 = rnd.Intn(qct.nodeCount-1) + 2
 			t.Status(fmt.Sprintf("running some queries from node %d with conn1 and some queries from node %d with conn2", node, node2))
 			conn2 = c.Conn(ctx, t.L(), node2)
 		}
@@ -395,6 +397,8 @@ func runOneRoundQueryComparison(
 			h := queryComparisonHelper{
 				conn1:      conn,
 				conn2:      conn2,
+				node1:      node,
+				node2:      node2,
 				logStmt:    logStmt,
 				logFailure: logFailure,
 				printStmt:  printStmt,
@@ -407,8 +411,7 @@ func runOneRoundQueryComparison(
 			// state of the database.
 			if i < numInitialMutations || i%25 == 0 {
 				mConn, mConnInfo := h.chooseConn()
-				logStmt(mConnInfo)
-				runMutationStatement(mConn, mutatingSmither, logStmt)
+				runMutationStatement(mConn, mConnInfo, mutatingSmither, logStmt)
 				continue
 			}
 
@@ -459,13 +462,13 @@ type sqlAndOutput struct {
 type queryComparisonHelper struct {
 	// There are two different connections so that we sometimes execute the
 	// queries on different nodes.
-	conn1      *gosql.DB
-	conn2      *gosql.DB
-	logStmt    func(string)
-	logFailure func(string, [][]string)
-	printStmt  func(string)
-	stmtNo     int
-	rnd        *rand.Rand
+	conn1, conn2 *gosql.DB
+	node1, node2 int
+	logStmt      func(string)
+	logFailure   func(string, [][]string)
+	printStmt    func(string)
+	stmtNo       int
+	rnd          *rand.Rand
 
 	statements            []string
 	statementsAndExplains []sqlAndOutput
@@ -475,12 +478,19 @@ type queryComparisonHelper struct {
 // chooseConn flips a coin to determine which connection is used. It returns the
 // connection and a string to identify the connection for debugging purposes.
 func (h *queryComparisonHelper) chooseConn() (conn *gosql.DB, connInfo string) {
+	if h.node1 == h.node2 {
+		return h.conn1, ""
+	}
+	// Assuming we will be using cockroach demo --insecure to replay any failed
+	// logs, we add a \connect command for the SQL CLI to switch to the other node
+	// using only a port number.
+	defaultFirstPort, _ := strconv.Atoi(base.DefaultPort)
 	if h.rnd.Intn(2) == 0 {
 		conn = h.conn1
-		connInfo = "-- executing with conn1\n"
+		connInfo = fmt.Sprintf("\\connect - - - %d\n", defaultFirstPort+h.node1-1)
 	} else {
 		conn = h.conn2
-		connInfo = "-- executing with conn2\n"
+		connInfo = fmt.Sprintf("\\connect - - - %d\n", defaultFirstPort+h.node2-1)
 	}
 	return conn, connInfo
 }
@@ -501,16 +511,11 @@ func (h *queryComparisonHelper) runQuery(
 	// such a scenario, since the stmt didn't execute successfully, it won't get
 	// logged by the caller).
 	h.logStmt(fmt.Sprintf("-- %s: %s", timeutil.Now(),
-		// Replace all control characters, including newline symbols, with a
-		// single space to log this stmt as a single line. This way this
-		// auxiliary logging takes up less space (if the stmt executes
-		// successfully, it'll still get logged with the nice formatting).
-		strings.Map(func(r rune) rune {
-			if unicode.IsControl(r) {
-				return ' '
-			}
-			return r
-		}, connInfo+"; "+stmt),
+		// Escape all control characters, including newline symbols, to log this
+		// stmt as a single line. This way this auxiliary logging takes up less
+		// space (if the stmt executes successfully, it'll still get logged with the
+		// usual formatting below).
+		strconv.Quote(connInfo+stmt+";"),
 	))
 
 	runQueryImpl := func(stmt string, conn *gosql.DB) ([][]string, error) {

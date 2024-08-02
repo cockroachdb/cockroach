@@ -303,6 +303,7 @@ SELECT '%[1]s';
 		if multiRegion {
 			cmd = exec.CommandContext(ctx, binary,
 				"demo",
+				"--insecure",
 				"--empty",
 				"--nodes=9",
 				"--multitenant=false",
@@ -312,6 +313,7 @@ SELECT '%[1]s';
 		} else {
 			cmd = exec.CommandContext(ctx, binary,
 				"demo",
+				"--insecure",
 				"--empty",
 				"--set=errexit=false",
 				"--format=tsv",
@@ -402,9 +404,9 @@ func findPreviousQuery(lines []string, lineIdx int) (string, int) {
 		lineIdx--
 	}
 	// lineIdx right now points at an empty line before the query.
-	query := strings.Join(lines[lineIdx+1:lastQueryLineIdx+1], " ")
+	query := strings.Join(lines[lineIdx+1:lastQueryLineIdx+1], "\n")
 	// Remove the semicolon.
-	return query[:len(query)-1], lineIdx
+	return strings.TrimSuffix(query, ";"), lineIdx
 }
 
 // findPreviousSetStatements returns any SET or RESET statements preceding
@@ -431,7 +433,7 @@ func findPreviousSetStatements(lines []string, lineIdx int) (string, int) {
 		}
 	}
 	// firstQueryLineIdx right now points at an empty line before the statement.
-	query := strings.Join(lines[firstQueryLineIdx+1:lastQueryLineIdx+1], " ")
+	query := strings.Join(lines[firstQueryLineIdx+1:lastQueryLineIdx+1], "\n")
 	return query, firstQueryLineIdx
 }
 
