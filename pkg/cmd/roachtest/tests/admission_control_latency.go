@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -125,7 +126,6 @@ const numNodesPerWorker = 20
 // cluster spec. finishSetup below sets up the remainder after the cluster is
 // defined.
 func setupMetamorphic(p perturbation) variations {
-	// TODO(baptist): Allow specifying the seed to reproduce a metamorphic run.
 	rng, seed := randutil.NewPseudoRand()
 
 	v := variations{}
@@ -212,20 +212,24 @@ func registerLatencyTests(r registry.Registry) {
 	// NB: If these tests fail because they are flaky, increase the numbers
 	// until they pass. Additionally add the seed (from the log) that caused
 	// them to fail as a comment in the test.
-	addTest(r, "perturbation/metamorphic/restart", setupMetamorphic(restart{}), 100)
-	addTest(r, "perturbation/metamorphic/partition", setupMetamorphic(partition{}), 100)
-	addTest(r, "perturbation/metamorphic/add-node", setupMetamorphic(addNode{}), 2)
-	addTest(r, "perturbation/metamorphic/decommission", setupMetamorphic(decommission{}), 3)
+	addMetamorphic(r, restart{}, 1000)
+	addMetamorphic(r, partition{}, 1000)
+	addMetamorphic(r, addNode{}, 2.0)
+	addMetamorphic(r, decommission{}, 2.0)
 
-	addTest(r, "perturbation/full/restart", setupFull(restart{}), 20)
-	addTest(r, "perturbation/full/partition", setupFull(partition{}), 100)
-	addTest(r, "perturbation/full/add-node", setupFull(addNode{}), 1.5)
-	addTest(r, "perturbation/full/decommission", setupFull(decommission{}), 1.5)
+	// NB: If these tests fail, it likely signals a regression. Investigate the
+	// history of the test on roachperf to see what changed.
+	addFull(r, restart{}, 1000)
+	addFull(r, partition{}, 1000)
+	addFull(r, addNode{}, 2.0)
+	addFull(r, decommission{}, 2.0)
 
-	addTest(r, "perturbation/dev/restart", setupDev(restart{}), 100)
-	addTest(r, "perturbation/dev/partition", setupDev(partition{}), 100)
-	addTest(r, "perturbation/dev/add-node", setupDev(addNode{}), 100)
-	addTest(r, "perturbation/dev/decommission", setupDev(decommission{}), 100)
+	// NB: These tests will never fail and are not enabled, but they are useful
+	// for development.
+	addDev(r, restart{}, math.Inf(1))
+	addDev(r, partition{}, math.Inf(1))
+	addDev(r, addNode{}, math.Inf(1))
+	addDev(r, decommission{}, math.Inf(1))
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
@@ -233,14 +237,44 @@ func (v variations) makeClusterSpec() spec.ClusterSpec {
 	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(spec.Low))
 }
 
-func addTest(r registry.Registry, testName string, v variations, acceptableChange float64) {
+func addMetamorphic(r registry.Registry, p perturbation, acceptableChange float64) {
+	v := setupMetamorphic(p)
 	v.acceptableChange = acceptableChange
-	// TODO(baptist): Reenable this for weekly testing once consistently passing.
+	// TODO(baptist): Make the cloud be metamorphic for repeatable results with
+	// a given seed.
 	r.Add(registry.TestSpec{
-		Name:             testName,
+		Name:             fmt.Sprintf("perturbation/metamorphic/%s", reflect.TypeOf(p).Name()),
 		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Owner:            registry.OwnerKV,
+		Cluster:          v.makeClusterSpec(),
+		Leases:           v.leaseType,
+		Run:              v.runTest,
+	})
+}
+
+func addFull(r registry.Registry, p perturbation, acceptableChange float64) {
+	v := setupFull(p)
+	v.acceptableChange = acceptableChange
+	r.Add(registry.TestSpec{
+		Name:             fmt.Sprintf("perturbation/full/%s", reflect.TypeOf(p).Name()),
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		Owner:            registry.OwnerKV,
+		Cluster:          v.makeClusterSpec(),
+		Leases:           v.leaseType,
+		Run:              v.runTest,
+	})
+}
+
+func addDev(r registry.Registry, p perturbation, acceptableChange float64) {
+	v := setupDev(p)
+	v.acceptableChange = acceptableChange
+	r.Add(registry.TestSpec{
+		Name:             fmt.Sprintf("perturbation/dev/%s", reflect.TypeOf(p).Name()),
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.ManualOnly,
-		Owner:            registry.OwnerAdmissionControl,
+		Owner:            registry.OwnerKV,
 		Cluster:          v.makeClusterSpec(),
 		Leases:           v.leaseType,
 		Run:              v.runTest,
