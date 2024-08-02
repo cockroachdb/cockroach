@@ -818,6 +818,9 @@ const (
 	// NodeUnhealthy means that the node should be avoided because
 	// it's not healthy.
 	NodeUnhealthy
+	// NodeDraining means that the node should be avoided because
+	// it's draining.
+	NodeDraining
 )
 
 // spanPartitionState captures information about the current state of the
@@ -1567,6 +1570,7 @@ func (dsp *DistSQLPlanner) deprecatedHealthySQLInstanceIDForKVNodeIDSystem(
 func (dsp *DistSQLPlanner) checkInstanceHealth(
 	instanceID base.SQLInstanceID,
 	instanceRPCAddr string,
+	isDraining bool,
 	nodeStatusesCache map[base.SQLInstanceID]NodeStatus,
 ) NodeStatus {
 	if nodeStatusesCache != nil {
@@ -1575,7 +1579,9 @@ func (dsp *DistSQLPlanner) checkInstanceHealth(
 		}
 	}
 	status := NodeOK
-	if err := dsp.nodeHealth.connHealthInstance(instanceID, instanceRPCAddr); err != nil {
+	if isDraining {
+		status = NodeDraining
+	} else if err := dsp.nodeHealth.connHealthInstance(instanceID, instanceRPCAddr); err != nil {
 		if errors.Is(err, rpc.ErrNotHeartbeated) {
 			// Consider ErrNotHeartbeated as a temporary error (see its description) and
 			// avoid caching its result, as it can resolve to a more accurate result soon.
@@ -1624,7 +1630,7 @@ func (dsp *DistSQLPlanner) healthySQLInstanceIDForKVNodeHostedInstanceResolver(
 		sqlInstance := base.SQLInstanceID(nodeID)
 		if n, ok := instances[sqlInstance]; ok {
 			if status := dsp.checkInstanceHealth(
-				sqlInstance, n.InstanceRPCAddr, planCtx.nodeStatuses); status == NodeOK {
+				sqlInstance, n.InstanceRPCAddr, n.IsDraining, planCtx.nodeStatuses); status == NodeOK {
 				return sqlInstance, SpanPartitionReason_TARGET_HEALTHY
 			}
 		}
@@ -1688,7 +1694,8 @@ func (dsp *DistSQLPlanner) filterUnhealthyInstances(
 	for _, n := range instances {
 		// Gateway is always considered healthy
 		if n.InstanceID == dsp.gatewaySQLInstanceID ||
-			dsp.checkInstanceHealth(n.InstanceID, n.InstanceRPCAddr, nodeStatusesCache) == NodeOK {
+			dsp.checkInstanceHealth(n.InstanceID, n.InstanceRPCAddr,
+				n.IsDraining, nodeStatusesCache) == NodeOK {
 			instances[j] = n
 			j++
 		} else {
