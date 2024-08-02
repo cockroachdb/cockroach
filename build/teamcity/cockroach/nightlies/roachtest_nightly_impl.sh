@@ -62,6 +62,8 @@ fi
 build/teamcity-roachtest-invoke.sh \
   --metamorphic-encryption-probability=0.5 \
   --metamorphic-arm64-probability="${ARM_PROBABILITY:-0.5}" \
+  --metamorphic-cockroach-ea-probability="${COCKROACH_EA_PROBABILITY:-0.2}" \
+  --metamorphic-constants-probability="${METAMORPHIC_CONSTANTS_PROBABILITY:-0.0}" \
   --select-probability="${select_probability}" \
   --use-spot="${USE_SPOT:-auto}" \
   --cloud="${CLOUD}" \
