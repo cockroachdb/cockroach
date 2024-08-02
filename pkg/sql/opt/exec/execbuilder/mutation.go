@@ -1223,7 +1223,7 @@ func (b *Builder) buildLock(lock *memo.LockExpr) (_ execPlan, outputCols colOrdM
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	if !locking.IsNonZeroLocking() {
+	if locking.IsNoOp() {
 		return b.buildRelational(lock.Input)
 	}
 

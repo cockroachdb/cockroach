@@ -578,6 +578,9 @@ INSERT INTO xyz VALUES (1, 10, 100), (2, 10, 100)
 user testuser
 
 statement ok
+SET optimizer_use_lock_op_for_serializable = true
+
+statement ok
 BEGIN ISOLATION LEVEL SERIALIZABLE
 
 # Lock the first row.
@@ -615,4 +618,10 @@ user testuser
 statement ok
 COMMIT
 
+statement ok
+RESET optimizer_use_lock_op_for_serializable
+
 user root
+
+statement ok
+RESET optimizer_use_lock_op_for_serializable
