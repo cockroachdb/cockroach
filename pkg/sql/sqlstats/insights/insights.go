@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	prometheus "github.com/prometheus/client_model/go"
 )
 
@@ -168,29 +167,12 @@ type PercentileValues struct {
 	P99 float64
 }
 
-// Provider offers access to the insights subsystem.
-type Provider interface {
-	// Start launches the background tasks necessary for processing insights.
-	Start(ctx context.Context, stopper *stop.Stopper)
-
-	// Writer returns an object that observes statement and transaction executions.
-	// Pass true for internal when called by the internal executor.
-	Writer(internal bool) Writer
-
-	// Reader returns an object that offers read access to any detected insights.
-	Reader() Reader
-
-	// LatencyInformation returns an object that offers read access to latency information,
-	// such as percentiles.
-	LatencyInformation() LatencyInformation
-}
-
 // New builds a new Provider.
-func New(st *cluster.Settings, metrics Metrics) Provider {
+func New(st *cluster.Settings, metrics Metrics) *Provider {
 	store := newStore(st)
 	anomalyDetector := newAnomalyDetector(st, metrics)
 
-	return &defaultProvider{
+	return &Provider{
 		store: store,
 		ingester: newConcurrentBufferIngester(
 			newRegistry(st, &compositeDetector{detectors: []detector{

@@ -17,19 +17,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
-type defaultProvider struct {
+// Provider offers access to the insights subsystem.
+type Provider struct {
 	store           *lockingStore
 	ingester        *concurrentBufferIngester
 	anomalyDetector *anomalyDetector
 }
 
-var _ Provider = &defaultProvider{}
-
-func (p *defaultProvider) Start(ctx context.Context, stopper *stop.Stopper) {
+// Start launches the background tasks necessary for processing insights.
+func (p *Provider) Start(ctx context.Context, stopper *stop.Stopper) {
 	p.ingester.Start(ctx, stopper)
 }
 
-func (p *defaultProvider) Writer(internal bool) Writer {
+// Writer returns an object that observes statement and transaction executions.
+// Pass true for internal when called by the internal executor.
+func (p *Provider) Writer(internal bool) Writer {
 	// We ignore statements and transactions run by the internal executor.
 	if internal {
 		return nullWriterInstance
@@ -37,11 +39,14 @@ func (p *defaultProvider) Writer(internal bool) Writer {
 	return p.ingester
 }
 
-func (p *defaultProvider) Reader() Reader {
+// Reader returns an object that offers read access to any detected insights.
+func (p *Provider) Reader() Reader {
 	return p.store
 }
 
-func (p *defaultProvider) LatencyInformation() LatencyInformation {
+// LatencyInformation returns an object that offers read access to latency information,
+// such as percentiles.
+func (p *Provider) LatencyInformation() LatencyInformation {
 	return p.anomalyDetector
 }
 
