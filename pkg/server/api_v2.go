@@ -187,6 +187,8 @@ func registerRoutes(
 		{"rules/", a.listRules, false, authserver.RegularRole, true},
 
 		{"sql/", a.execSQL, true, authserver.RegularRole, true},
+		{"metadata/databases/", a.DbsMetadata, true, authserver.RegularRole, true},
+		{"metadata/database/{database_id}/tables/", a.DbTablesMetadata, true, authserver.RegularRole, true},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)
