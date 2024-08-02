@@ -1142,6 +1142,18 @@ func getPrimaryIndexChain(b BuildCtx, tableID catid.DescID) *primaryIndexChain {
 	return NewPrimaryIndexChain(b, old, inter1, inter2, final)
 }
 
+// getPrimaryIndexID finds and returns the PrimaryIndex. If there were changes
+// to the primary index in this transaction, it returns pointer to the modified
+// index.
+func getLatestPrimaryIndex(b BuildCtx, tableID catid.DescID) *scpb.PrimaryIndex {
+	chain := getPrimaryIndexChain(b, tableID)
+	if chain.finalSpec.primary != nil {
+		return chain.finalSpec.primary
+	} else {
+		return chain.oldSpec.primary
+	}
+}
+
 // addASwapInIndexByCloningFromSource adds a primary index `in` that is going
 // to swap out `out` yet `in`'s columns are cloned from `source`.
 //

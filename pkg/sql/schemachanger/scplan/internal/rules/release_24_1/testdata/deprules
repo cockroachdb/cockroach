@@ -21,6 +21,69 @@ deprules
     - descriptorIsDataNotBeingAdded-24.1($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: TRANSIENT_ABSENT->ABSENT'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $next-Node[CurrentStatus] = ABSENT
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: TRANSIENT_VALIDATED->VALIDATED'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = TRANSIENT_VALIDATED
+    - $next-Node[CurrentStatus] = VALIDATED
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: TRANSIENT_WRITE_ONLY->VALIDATED'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
+    - $next-Node[CurrentStatus] = VALIDATED
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
   from: prev-Node
   kind: PreviousTransactionPrecedence
@@ -40,7 +103,7 @@ deprules
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
     - descriptorIsDataNotBeingAdded-24.1($descID)
-    - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
+    - nodeNotExistsWithStatusIn_TRANSIENT_VALIDATED_WRITE_ONLY_TRANSIENT_WRITE_ONLY($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
@@ -117,6 +180,133 @@ deprules
     - $prev[Self] = $next
     - $prev-Target[Self] = $next-Target
     - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = VALIDATED
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->WRITE_ONLY'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $prev-Node[CurrentStatus] = ABSENT
+    - $next-Node[CurrentStatus] = WRITE_ONLY
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: PUBLIC->TRANSIENT_VALIDATED'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $prev-Node[CurrentStatus] = PUBLIC
+    - $next-Node[CurrentStatus] = TRANSIENT_VALIDATED
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_VALIDATED->TRANSIENT_ABSENT'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $prev-Node[CurrentStatus] = TRANSIENT_VALIDATED
+    - $next-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - nodeNotExistsWithStatusIn_TRANSIENT_WRITE_ONLY($prev-Target)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_WRITE_ONLY->TRANSIENT_VALIDATED'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $prev-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
+    - $next-Node[CurrentStatus] = TRANSIENT_VALIDATED
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: VALIDATED->PUBLIC'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-24.1($prev)
@@ -4177,6 +4367,69 @@ deprules
     - descriptorIsDataNotBeingAdded-24.1($descID)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: TRANSIENT_ABSENT->ABSENT'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $next-Node[CurrentStatus] = ABSENT
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: TRANSIENT_VALIDATED->VALIDATED'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = TRANSIENT_VALIDATED
+    - $next-Node[CurrentStatus] = VALIDATED
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: TRANSIENT_WRITE_ONLY->VALIDATED'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
+    - $next-Node[CurrentStatus] = VALIDATED
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
   from: prev-Node
   kind: PreviousTransactionPrecedence
@@ -4196,7 +4449,7 @@ deprules
     - $descriptor-data-Node[CurrentStatus] = PUBLIC
     - $descriptor-data[DescID] = $descID
     - descriptorIsDataNotBeingAdded-24.1($descID)
-    - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
+    - nodeNotExistsWithStatusIn_TRANSIENT_VALIDATED_WRITE_ONLY_TRANSIENT_WRITE_ONLY($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
@@ -4273,6 +4526,133 @@ deprules
     - $prev[Self] = $next
     - $prev-Target[Self] = $next-Target
     - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = VALIDATED
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->WRITE_ONLY'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $prev-Node[CurrentStatus] = ABSENT
+    - $next-Node[CurrentStatus] = WRITE_ONLY
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: PUBLIC->TRANSIENT_VALIDATED'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $prev-Node[CurrentStatus] = PUBLIC
+    - $next-Node[CurrentStatus] = TRANSIENT_VALIDATED
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_VALIDATED->TRANSIENT_ABSENT'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $prev-Node[CurrentStatus] = TRANSIENT_VALIDATED
+    - $next-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - nodeNotExistsWithStatusIn_TRANSIENT_WRITE_ONLY($prev-Target)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_WRITE_ONLY->TRANSIENT_VALIDATED'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $prev-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
+    - $next-Node[CurrentStatus] = TRANSIENT_VALIDATED
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: VALIDATED->PUBLIC'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - descriptorIsNotBeingDropped-24.1($prev)
+    - $descriptor-data[Type] = '*scpb.TableData'
+    - joinTargetNode($descriptor-data, $descriptor-data-Target, $descriptor-data-Node)
+    - $descriptor-data-Node[CurrentStatus] = PUBLIC
+    - $descriptor-data[DescID] = $descID
+    - descriptorIsDataNotBeingAdded-24.1($descID)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $descID
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = TRANSIENT_ABSENT
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-24.1($prev)

@@ -1,0 +1,64 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j TEXT);
+INSERT INTO t VALUES (1,NULL),(2,'FIT1'),(3,'FIT11');
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE t ALTER COLUMN j SET DATA TYPE CHAR(5);
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› SET DATA TYPE CHAR(5);
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward TRANSIENT_ABSENT
+ │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104 (t), IndexID: 1 (t_pkey), ConstraintID: 2, ReferencedColumnIDs: [2]}
+ │         ├── 1 element transitioning toward ABSENT
+ │         │    └── PUBLIC → ABSENT     ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j), TypeName: "STRING"}
+ │         └── 1 Mutation operation
+ │              └── AddCheckConstraint {"CheckExpr":"(CAST(CAST(j AS ...","ConstraintID":2,"TableID":104,"Validity":2}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
+ │    │    │    └── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 1 (t_pkey), ConstraintID: 2, ReferencedColumnIDs: [2]}
+ │    │    ├── 1 element transitioning toward ABSENT
+ │    │    │    └── ABSENT     → PUBLIC ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j), TypeName: "STRING"}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward TRANSIENT_ABSENT
+ │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104 (t), IndexID: 1 (t_pkey), ConstraintID: 2, ReferencedColumnIDs: [2]}
+ │         └── 3 Mutation operations
+ │              ├── AddCheckConstraint {"CheckExpr":"(CAST(CAST(j AS ...","ConstraintID":2,"TableID":104,"Validity":2}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ ├── PostCommitPhase
+ │    └── Stage 1 of 1 in PostCommitPhase
+ │         ├── 1 element transitioning toward TRANSIENT_ABSENT
+ │         │    └── WRITE_ONLY → VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 1 (t_pkey), ConstraintID: 2, ReferencedColumnIDs: [2]}
+ │         └── 1 Validation operation
+ │              └── ValidateConstraint {"ConstraintID":2,"IndexIDForValidation":1,"TableID":104}
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 1 element transitioning toward TRANSIENT_ABSENT
+      │    │    └── VALIDATED → PUBLIC CheckConstraint:{DescID: 104 (t), IndexID: 1 (t_pkey), ConstraintID: 2, ReferencedColumnIDs: [2]}
+      │    ├── 1 element transitioning toward ABSENT
+      │    │    └── PUBLIC    → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j), TypeName: "STRING"}
+      │    └── 3 Mutation operations
+      │         ├── MakeValidatedCheckConstraintPublic {"ConstraintID":2,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── ABSENT → PUBLIC              ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j), TypeName: "CHAR(5)"}
+      │    ├── 1 element transitioning toward TRANSIENT_ABSENT
+      │    │    └── PUBLIC → TRANSIENT_VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 1 (t_pkey), ConstraintID: 2, ReferencedColumnIDs: [2]}
+      │    └── 4 Mutation operations
+      │         ├── MakePublicCheckConstraintValidated {"ConstraintID":2,"TableID":104}
+      │         ├── UpsertColumnType {"ColumnType":{"ColumnID":2,"IsNullable":true,"TableID":104}}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_ABSENT
+           │    └── TRANSIENT_VALIDATED → TRANSIENT_ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 1 (t_pkey), ConstraintID: 2, ReferencedColumnIDs: [2]}
+           └── 3 Mutation operations
+                ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
