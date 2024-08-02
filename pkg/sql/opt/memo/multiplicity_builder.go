@@ -81,7 +81,7 @@ func deriveUnfilteredCols(in RelExpr) opt.ColSet {
 	if relational.IsAvailable(props.UnfilteredCols) {
 		return relational.Rule.UnfilteredCols
 	}
-	relational.Rule.Available |= props.UnfilteredCols
+	relational.SetAvailable(props.UnfilteredCols)
 	unfilteredCols := opt.ColSet{}
 
 	// Derive UnfilteredCols now.
