@@ -166,9 +166,26 @@ func TestLogicalStreamIngestionJobNameResolution(t *testing.T) {
 	}
 }
 
+type fatalDLQ struct{ *testing.T }
+
+func (fatalDLQ) Create(ctx context.Context) error { return nil }
+
+func (t fatalDLQ) Log(
+	_ context.Context,
+	_ int64,
+	_ streampb.StreamEvent_KV,
+	cdcEventRow cdcevent.Row,
+	_ retryEligibility,
+) error {
+	t.Fatalf("failed to apply row update: %s", cdcEventRow.DebugString())
+	return nil
+}
+
 func TestLogicalStreamIngestionJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	defer TestingSetDLQ(fatalDLQ{t})()
 
 	ctx := context.Background()
 	// keyPrefix will be set later, but before countPuts is set.
