@@ -5682,6 +5682,19 @@ func TestChangefeedPanicRecovery(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo(id, s) VALUES (0, 'hello'), (1, null)`)
 	}
 
+	waitForFeedErr := func(t *testing.T, feed cdctest.TestFeed, timeout time.Duration) error {
+		start := timeutil.Now()
+		for {
+			if time.Since(start) >= timeout {
+				t.Fatalf("feed did not return error before timeout of %s", timeout)
+			}
+			_, err := feed.Next()
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		prep(t, sqlDB)
@@ -5692,32 +5705,28 @@ func TestChangefeedPanicRecovery(t *testing.T) {
 	})
 
 	// Check that all panics while evaluating the WHERE clause in an expression are recovered from.
+	// NB: REPAIRCLUSTER is required to use crdb_internal.force_panic.
 	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		prep(t, sqlDB)
 		foo := feed(t, f,
 			`CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT 1 FROM foo WHERE crdb_internal.force_panic('wat') IS NULL`)
 		defer closeFeed(t, foo)
-		var err error
-		for err == nil {
-			_, err = foo.Next()
-		}
-		require.Error(t, err, "error while evaluating WHERE clause")
-	})
+		err := waitForFeedErr(t, foo, 2*time.Minute)
+		require.ErrorContains(t, err, "error evaluating CDC expression", "expected panic recovery while evaluating WHERE clause")
+	}, feedTestAdditionalSystemPrivs("REPAIRCLUSTER"))
 
 	// Check that all panics while evaluating the SELECT clause in an expression are recovered from.
+	// NB: REPAIRCLUSTER is required to use crdb_internal.force_panic.
 	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		prep(t, sqlDB)
 		foo := feed(t, f,
 			`CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT crdb_internal.force_panic('wat') FROM foo`)
 		defer closeFeed(t, foo)
-		var err error
-		for err == nil {
-			_, err = foo.Next()
-		}
-		require.Error(t, err, "error while evaluating SELECT clause")
-	})
+		err := waitForFeedErr(t, foo, 2*time.Minute)
+		require.ErrorContains(t, err, "error evaluating CDC expression", "expected panic recovery while evaluating SELECT clause")
+	}, feedTestAdditionalSystemPrivs("REPAIRCLUSTER"))
 }
 
 func TestChangefeedPauseUnpause(t *testing.T) {
