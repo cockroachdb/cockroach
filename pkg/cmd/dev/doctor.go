@@ -84,6 +84,21 @@ type doctorConfig struct {
 	remote bool
 }
 
+// maybePromptForAutofixPermission prompts the user for autofix permission if it
+// has not already been provided and we are running in interactive mode. It will
+// prompt with the given question with a default ansewr of 'y', call toBoolFuzzy
+// with the result, and if permission is given, will set haveAutofixPermission
+// on the doctorConfig object before returning.
+func (cfg *doctorConfig) maybePromptForAutofixPermission(question string) {
+	if !cfg.haveAutofixPermission && cfg.interactive {
+		response := promptInteractiveInput(question, "y")
+		canAutofix, ok := toBoolFuzzy(response)
+		if ok && canAutofix {
+			cfg.haveAutofixPermission = true
+		}
+	}
+}
+
 // The list of all checks performed by `dev doctor`.
 var allDoctorChecks = []doctorCheck{
 	{
@@ -201,13 +216,7 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 				}
 				return d.addLineToBazelRcUser(cfg.workspace, fmt.Sprintf("build --config=%s", response))
 			}
-			if !cfg.haveAutofixPermission && cfg.interactive {
-				response := promptInteractiveInput("Do you want me to add `build --config=dev` to your .bazelrc.user file for you?", "y")
-				canAutofix, ok := toBoolFuzzy(response)
-				if ok && canAutofix {
-					cfg.haveAutofixPermission = true
-				}
-			}
+			cfg.maybePromptForAutofixPermission("Do you want me to add `build --config=dev` to your .bazelrc.user file for you?")
 			if !cfg.haveAutofixPermission {
 				return fmt.Errorf("do not have permission to update .bazelrc.user")
 			}
@@ -224,13 +233,7 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 			return ""
 		},
 		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
-			if !cfg.haveAutofixPermission && cfg.interactive {
-				response := promptInteractiveInput("Do you want me to remove the engflow configuration from your .bazelrc.user file for you?", "y")
-				canAutofix, ok := toBoolFuzzy(response)
-				if ok && canAutofix {
-					cfg.haveAutofixPermission = true
-				}
-			}
+			cfg.maybePromptForAutofixPermission("Do you want me to remove the engflow configuration from your .bazelrc.user file for you?")
 			if !cfg.haveAutofixPermission {
 				return fmt.Errorf("do not have permission to update .bazelrc.user")
 			}
@@ -253,13 +256,7 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 			return ""
 		},
 		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
-			if !cfg.haveAutofixPermission && cfg.interactive {
-				response := promptInteractiveInput("Do you want me to update your .bazelrc.user file for you? I will set the crosslinux and engflow configs and remove any usage of the dev config if you have any.", "y")
-				canAutofix, ok := toBoolFuzzy(response)
-				if ok && canAutofix {
-					cfg.haveAutofixPermission = true
-				}
-			}
+			cfg.maybePromptForAutofixPermission("Do you want me to update your .bazelrc.user file for you? I will set the crosslinux and engflow configs and remove any usage of the dev config if you have any.")
 			if !cfg.haveAutofixPermission {
 				return fmt.Errorf("do not have permission to update .bazelrc.user")
 			}
@@ -380,13 +377,7 @@ slightly slower and introduce a noticeable delay in first-time build setup.`
 			return ""
 		},
 		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
-			if !cfg.haveAutofixPermission && cfg.interactive {
-				response := promptInteractiveInput("Do you want me to update your .bazelrc.user file for you? I will remove any `test --test_tmpdir=` line from the file.", "y")
-				canAutofix, ok := toBoolFuzzy(response)
-				if ok && canAutofix {
-					cfg.haveAutofixPermission = true
-				}
-			}
+			cfg.maybePromptForAutofixPermission("Do you want me to update your .bazelrc.user file for you? I will remove any `test --test_tmpdir=` line from the file.")
 			if !cfg.haveAutofixPermission {
 				return fmt.Errorf("do not have permission to update .bazelrc.user")
 			}
@@ -410,13 +401,7 @@ slightly slower and introduce a noticeable delay in first-time build setup.`
 			return "Should set --sandbox_add_mount_pair=/tmp given the use of --test_tmpdir=/tmp"
 		},
 		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
-			if !cfg.haveAutofixPermission && cfg.interactive {
-				response := promptInteractiveInput("Do you want me to update your .bazelrc.user file for you? I will add a line `test --sandbox_add_mount_pair=/tmp`.", "y")
-				canAutofix, ok := toBoolFuzzy(response)
-				if ok && canAutofix {
-					cfg.haveAutofixPermission = true
-				}
-			}
+			cfg.maybePromptForAutofixPermission("Do you want me to update your .bazelrc.user file for you? I will add a line `test --sandbox_add_mount_pair=/tmp`.")
 			if !cfg.haveAutofixPermission {
 				return fmt.Errorf("do not have permission to update .bazelrc.user")
 			}
@@ -433,13 +418,7 @@ slightly slower and introduce a noticeable delay in first-time build setup.`
 			return ""
 		},
 		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
-			if !cfg.haveAutofixPermission && cfg.interactive {
-				response := promptInteractiveInput("Do you want me to update your .bazelrc.user file for you? I will remove all --sandbox_add_mount_pair from your .bazelrc.user", "y")
-				canAutofix, ok := toBoolFuzzy(response)
-				if ok && canAutofix {
-					cfg.haveAutofixPermission = true
-				}
-			}
+			cfg.maybePromptForAutofixPermission("Do you want me to update your .bazelrc.user file for you? I will remove all --sandbox_add_mount_pair from your .bazelrc.user")
 			if !cfg.haveAutofixPermission {
 				return fmt.Errorf("do not have permission to update .bazelrc.user")
 			}
@@ -482,13 +461,7 @@ slightly slower and introduce a noticeable delay in first-time build setup.`
 			return fmt.Sprintf("Please add the string `%s` to your .bazelrc.user", bazelRcLine)
 		},
 		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
-			if !cfg.haveAutofixPermission && cfg.interactive {
-				response := promptInteractiveInput("Do you want me to update your .bazelrc.user for you to configure the loopback cache? I will also update ~/.bazelrc if necessary.", "y")
-				canAutofix, ok := toBoolFuzzy(response)
-				if ok && canAutofix {
-					cfg.haveAutofixPermission = true
-				}
-			}
+			cfg.maybePromptForAutofixPermission("Do you want me to update your .bazelrc.user for you to configure the loopback cache? I will also update ~/.bazelrc if necessary.")
 			if !cfg.haveAutofixPermission {
 				return fmt.Errorf("do not have permission to configure the cache")
 			}
@@ -525,13 +498,7 @@ slightly slower and introduce a noticeable delay in first-time build setup.`
 			return ""
 		},
 		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
-			if !cfg.haveAutofixPermission && cfg.interactive {
-				response := promptInteractiveInput("Do you want me to update your .bazelrc.user file for you? I will remove any `build --remote_cache=` line from the file.", "y")
-				canAutofix, ok := toBoolFuzzy(response)
-				if ok && canAutofix {
-					cfg.haveAutofixPermission = true
-				}
-			}
+			cfg.maybePromptForAutofixPermission("Do you want me to update your .bazelrc.user file for you? I will remove any `build --remote_cache=` line from the file.")
 			if !cfg.haveAutofixPermission {
 				return fmt.Errorf("do not have permission to update .bazelrc.user")
 			}
@@ -552,13 +519,7 @@ slightly slower and introduce a noticeable delay in first-time build setup.`
 			return ""
 		},
 		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
-			if !cfg.haveAutofixPermission && cfg.interactive {
-				response := promptInteractiveInput("Do you want me to update your .bazelrc.user file for you? I will remove any `build --config=lintonbuild` or `build --config=nolintonbuild` line from the file.", "y")
-				canAutofix, ok := toBoolFuzzy(response)
-				if ok && canAutofix {
-					cfg.haveAutofixPermission = true
-				}
-			}
+			cfg.maybePromptForAutofixPermission("Do you want me to update your .bazelrc.user file for you? I will remove any `build --config=lintonbuild` or `build --config=nolintonbuild` line from the file.")
 			if !cfg.haveAutofixPermission {
 				return fmt.Errorf("do not have permission to update .bazelrc.user")
 			}
