@@ -102,6 +102,7 @@ go_test(
         "//pkg/ccl/changefeedccl/cdctest",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/crosscluster/replicationtestutils",
+        "//pkg/ccl/crosscluster/replicationutils",
         "//pkg/ccl/storageccl",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
