@@ -229,10 +229,23 @@ func (dlq *deadLetterQueueClient) Log(
 func InitDeadLetterQueueClient(
 	ie isql.Executor, tableIDToName map[int32]fullyQualifiedTableName,
 ) DeadLetterQueueClient {
+	if testingDLQ != nil {
+		return testingDLQ
+	}
 	return &deadLetterQueueClient{
 		ie:            ie,
 		tableIDToName: tableIDToName,
 	}
+}
+
+var testingDLQ DeadLetterQueueClient
+
+// TestingSetDLQ sets the DLQ to the passed implementation, globally, until the
+// returned reversion function is called.
+func TestingSetDLQ(d DeadLetterQueueClient) func() {
+	v := testingDLQ
+	testingDLQ = d
+	return func() { testingDLQ = v }
 }
 
 func InitLoggingDeadLetterQueueClient() DeadLetterQueueClient {
