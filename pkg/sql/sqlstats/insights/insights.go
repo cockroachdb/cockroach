@@ -147,10 +147,6 @@ type Writer interface {
 	Clear()
 }
 
-// WriterProvider offers a Writer.
-// Pass true for internal when called by the internal executor.
-type WriterProvider func(internal bool) Writer
-
 // Reader offers access to the currently retained set of insights.
 type Reader interface {
 	// IterateInsights calls visitor with each of the currently retained set of insights.
