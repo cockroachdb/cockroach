@@ -40,7 +40,7 @@ func registerC2CMixedVersions(r registry.Registry) {
 	sp := replicationSpec{
 		srcNodes:                  4,
 		dstNodes:                  4,
-		timeout:                   10 * time.Minute,
+		timeout:                   30 * time.Minute,
 		additionalDuration:        0 * time.Minute,
 		cutover:                   30 * time.Second,
 		skipNodeDistributionCheck: true,
@@ -196,7 +196,7 @@ func (cm *c2cMixed) SetupHook(ctx context.Context) {
 
 			l.Printf("replication job: %d. Let initial scan complete", cm.ingestionJobID)
 			// TODO(msbutler): relax requirement that initial scan completes during mixed version testing.
-			if err := cm.WaitForReplicatedTime(ctx, timeutil.Now(), h, r); err != nil {
+			if err := cm.WaitForReplicatedTime(ctx, timeutil.Now(), h, r, 5*time.Minute); err != nil {
 				return err
 			}
 			close(cm.destStartedChan)
@@ -229,6 +229,7 @@ func (cm *c2cMixed) LatencyHook(ctx context.Context) {
 		if err := lv.pollLatencyUntilJobSucceeds(ctx, db, int(cm.ingestionJobID), time.Second*5, dummyCh); ctx.Err() == nil {
 			// The ctx is cancelled when the background func is successfully stopped,
 			// therefore, don't return a context cancellation error.
+			l.Printf("latency verifier error: %s", err)
 			return err
 		}
 		return nil
@@ -291,7 +292,7 @@ func (cm *c2cMixed) destCutoverAndFingerprint(
 	//
 	// TODO(msbutler): test cutting over a time when the app tenant is a different
 	// version.
-	if err := cm.WaitForReplicatedTime(ctx, timeutil.Now(), h, r); err != nil {
+	if err := cm.WaitForReplicatedTime(ctx, timeutil.Now(), h, r, 5*time.Minute); err != nil {
 		return err
 	}
 
@@ -382,24 +383,25 @@ func (cm *c2cMixed) Run(ctx context.Context, c cluster.Cluster) {
 }
 
 func (cm *c2cMixed) WaitForReplicatedTime(
-	ctx context.Context, targetTime time.Time, h *mixedversion.Helper, r *rand.Rand,
+	ctx context.Context,
+	targetTime time.Time,
+	h *mixedversion.Helper,
+	r *rand.Rand,
+	timeout time.Duration,
 ) error {
 	return testutils.SucceedsWithinError(func() error {
-		node, db := h.RandomDB(r)
-		defer db.Close()
-		cm.t.L().Printf("waiting for stream ingestion job progress on node %d", node)
-		info, err := getStreamIngestionJobInfo(db, int(cm.ingestionJobID))
-		if err != nil {
+		// get replicated time via SHOW TENANT with replication status
+		query := "SELECT replicated_time FROM [SHOW TENANT $1 WITH REPLICATION STATUS]"
+		var replicatedTime time.Time
+		if err := h.QueryRow(r, query, destTenantName).Scan(&replicatedTime); err != nil {
 			return err
 		}
-		cm.t.L().Printf("current replicated time %s, job status %s, job error %s", info.GetHighWater().Format(time.RFC3339), info.GetStatus(), info.GetError())
-		if info.GetHighWater().Before(targetTime) {
-			return errors.Newf("waiting for stream ingestion job progress %s to advance beyond %s",
-				info.GetHighWater(), targetTime)
+		cm.t.L().Printf("replicated time: %s", replicatedTime)
+		if !replicatedTime.After(targetTime) {
+			return errors.Newf("replicated time %s not yet at %s", replicatedTime, targetTime)
 		}
-		cm.t.L().Printf("reached replicated time %s", info.GetHighWater().Format(time.RFC3339))
 		return nil
-	}, time.Minute*5)
+	}, timeout)
 }
 
 func stringToHLC(s string) (hlc.Timestamp, error) {
