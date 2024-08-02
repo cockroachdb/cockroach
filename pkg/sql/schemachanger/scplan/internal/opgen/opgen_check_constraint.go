@@ -81,6 +81,7 @@ func init() {
 				}),
 			),
 		),
+		toTransientAbsentLikePublic(),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_VALIDATED,

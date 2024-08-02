@@ -348,8 +348,8 @@ func alterTableAddForeignKey(
 			b.EvalCtx().ClientNoticeSender.BufferClientNotice(b,
 				pgnotice.Newf(
 					"type of foreign key column %q (%s) is not identical to referenced column %q.%q (%s)",
-					originColName, originColType.String(),
-					referencedTableNamespaceElem.Name, referencedColName, referencedColType.String()),
+					originColName, originColType.SQLString(),
+					referencedTableNamespaceElem.Name, referencedColName, referencedColType.SQLString()),
 			)
 		}
 	}
