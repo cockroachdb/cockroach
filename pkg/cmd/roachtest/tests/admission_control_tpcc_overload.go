@@ -53,10 +53,6 @@ func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 		ctx, t, t.L(), c, tpccOptions{
 			Warehouses: s.Warehouses, SetupType: usingImport,
 		})
-	// We make use of querybench below, only available through the `workload`
-	// binary.
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNode())
-
 	const queryFileName = "queries.sql"
 	// querybench expects the entire query to be on a single line.
 	queryLine := `"` + strings.Replace(tpccOlapQuery, "\n", " ", -1) + `"`
@@ -162,16 +158,17 @@ func registerTPCCOverload(r registry.Registry) {
 		name := fmt.Sprintf("admission-control/tpcc-olap/nodes=%d/cpu=%d/w=%d/c=%d",
 			s.Nodes, s.CPUs, s.Warehouses, s.Concurrency)
 		r.Add(registry.TestSpec{
-			Name:              name,
-			Owner:             registry.OwnerAdmissionControl,
-			Benchmark:         true,
-			CompatibleClouds:  registry.AllExceptAWS,
-			Suites:            registry.Suites(registry.Weekly),
-			Cluster:           r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs), spec.WorkloadNode()),
-			Run:               s.run,
-			EncryptionSupport: registry.EncryptionMetamorphic,
-			Leases:            registry.MetamorphicLeases,
-			Timeout:           20 * time.Minute,
+			Name:                       name,
+			Owner:                      registry.OwnerAdmissionControl,
+			Benchmark:                  true,
+			CompatibleClouds:           registry.AllExceptAWS,
+			Suites:                     registry.Suites(registry.Weekly),
+			Cluster:                    r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs), spec.WorkloadNode()),
+			Run:                        s.run,
+			EncryptionSupport:          registry.EncryptionMetamorphic,
+			Leases:                     registry.MetamorphicLeases,
+			Timeout:                    20 * time.Minute,
+			RequiresDeprecatedWorkload: true, // uses querybench
 		})
 	}
 }

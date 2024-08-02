@@ -29,12 +29,13 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		// schemachange/mixed-versions tests random schema changes (via the schemachange workload)
 		// in a mixed version state, validating that the cluster is still healthy (via debug doctor examine).
-		Name:             "schemachange/mixed-versions",
-		Owner:            registry.OwnerSQLFoundations,
-		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode()),
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Nightly),
-		NativeLibs:       registry.LibGEOS,
+		Name:                       "schemachange/mixed-versions",
+		Owner:                      registry.OwnerSQLFoundations,
+		Cluster:                    r.MakeClusterSpec(4, spec.WorkloadNode()),
+		CompatibleClouds:           registry.AllExceptAWS,
+		Suites:                     registry.Suites(registry.Nightly),
+		NativeLibs:                 registry.LibGEOS,
+		RequiresDeprecatedWorkload: true, // uses schemachange
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 1000
 			concurrency := 5
@@ -62,8 +63,6 @@ func runSchemaChangeMixedVersions(
 		// See: https://github.com/cockroachdb/cockroach/issues/121411.
 		mixedversion.AlwaysUseLatestPredecessors,
 	)
-
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNode())
 
 	// Run the schemachange workload on a random node, along with validating the schema changes for the cluster on a random node.
 	schemaChangeAndValidationStep := func(

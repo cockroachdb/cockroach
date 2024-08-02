@@ -26,18 +26,19 @@ func registerAcceptance(r registry.Registry) {
 	cloudsWithoutServiceRegistration := registry.AllClouds.Remove(registry.CloudsWithServiceRegistration)
 
 	testCases := map[registry.Owner][]struct {
-		name               string
-		fn                 func(ctx context.Context, t test.Test, c cluster.Cluster)
-		skip               string
-		numNodes           int
-		nodeRegions        []string
-		timeout            time.Duration
-		encryptionSupport  registry.EncryptionSupport
-		defaultLeases      bool
-		requiresLicense    bool
-		nativeLibs         []string
-		workloadNode       bool
-		incompatibleClouds registry.CloudSet
+		name                       string
+		fn                         func(ctx context.Context, t test.Test, c cluster.Cluster)
+		skip                       string
+		numNodes                   int
+		nodeRegions                []string
+		timeout                    time.Duration
+		encryptionSupport          registry.EncryptionSupport
+		defaultLeases              bool
+		requiresLicense            bool
+		nativeLibs                 []string
+		workloadNode               bool
+		incompatibleClouds         registry.CloudSet
+		requiresDeprecatedWorkload bool
 	}{
 		// NOTE: acceptance tests are lightweight tests that run as part
 		// of CI. As such, they must:
@@ -76,11 +77,12 @@ func registerAcceptance(r registry.Registry) {
 		},
 		registry.OwnerTestEng: {
 			{
-				name:          "version-upgrade",
-				fn:            runVersionUpgrade,
-				timeout:       2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
-				defaultLeases: true,
-				nativeLibs:    registry.LibGEOS,
+				name:                       "version-upgrade",
+				fn:                         runVersionUpgrade,
+				timeout:                    2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
+				defaultLeases:              true,
+				nativeLibs:                 registry.LibGEOS,
+				requiresDeprecatedWorkload: true, // uses schemachange
 			},
 		},
 		registry.OwnerDisasterRecovery: {
@@ -143,15 +145,16 @@ func registerAcceptance(r registry.Registry) {
 			}
 
 			testSpec := registry.TestSpec{
-				Name:              "acceptance/" + tc.name,
-				Owner:             owner,
-				Cluster:           r.MakeClusterSpec(numNodes, extraOptions...),
-				Skip:              tc.skip,
-				EncryptionSupport: tc.encryptionSupport,
-				Timeout:           10 * time.Minute,
-				CompatibleClouds:  registry.AllClouds.Remove(tc.incompatibleClouds),
-				Suites:            registry.Suites(registry.Nightly, registry.Quick, registry.Acceptance),
-				RequiresLicense:   tc.requiresLicense,
+				Name:                       "acceptance/" + tc.name,
+				Owner:                      owner,
+				Cluster:                    r.MakeClusterSpec(numNodes, extraOptions...),
+				Skip:                       tc.skip,
+				EncryptionSupport:          tc.encryptionSupport,
+				Timeout:                    10 * time.Minute,
+				CompatibleClouds:           registry.AllClouds.Remove(tc.incompatibleClouds),
+				Suites:                     registry.Suites(registry.Nightly, registry.Quick, registry.Acceptance),
+				RequiresLicense:            tc.requiresLicense,
+				RequiresDeprecatedWorkload: tc.requiresDeprecatedWorkload,
 			}
 
 			if tc.timeout != 0 {

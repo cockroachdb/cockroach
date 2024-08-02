@@ -20,6 +20,11 @@ import (
 // cluster.
 const DefaultCockroachPath = "./cockroach"
 
+// DefaultDeprecatedWorkloadPath is the path where the binary passed
+// to the `--workload` flag will be made available in the workload
+// node if one is provisioned.
+const DefaultDeprecatedWorkloadPath = "./workload"
+
 // EnvAssertionsEnabledSeed is the name of the environment variable
 // that, when set, causes roachtest to use a binary with runtime
 // assertions enabled (if available), using the random seed contained
