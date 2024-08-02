@@ -26,7 +26,7 @@ type detector interface {
 }
 
 var _ detector = &compositeDetector{}
-var _ detector = &anomalyDetector{}
+var _ detector = &AnomalyDetector{}
 var _ detector = &latencyThresholdDetector{}
 
 type compositeDetector struct {
@@ -54,7 +54,7 @@ func (d *compositeDetector) isSlow(statement *Statement) bool {
 
 var desiredQuantiles = map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001}
 
-type anomalyDetector struct {
+type AnomalyDetector struct {
 	settings *cluster.Settings
 	metrics  Metrics
 	store    *list.List
@@ -70,11 +70,11 @@ type latencySummaryEntry struct {
 	value *quantile.Stream
 }
 
-func (d *anomalyDetector) enabled() bool {
+func (d *AnomalyDetector) enabled() bool {
 	return AnomalyDetectionEnabled.Get(&d.settings.SV)
 }
 
-func (d *anomalyDetector) isSlow(stmt *Statement) (decision bool) {
+func (d *AnomalyDetector) isSlow(stmt *Statement) (decision bool) {
 	if !d.enabled() {
 		return
 	}
@@ -91,7 +91,7 @@ func (d *anomalyDetector) isSlow(stmt *Statement) (decision bool) {
 	return
 }
 
-func (d *anomalyDetector) GetPercentileValues(id appstatspb.StmtFingerprintID) PercentileValues {
+func (d *AnomalyDetector) GetPercentileValues(id appstatspb.StmtFingerprintID) PercentileValues {
 	// Ensure that Query doesn't flush which allows us to take the read lock.
 	const shouldFlush = false
 	d.mu.RLock()
@@ -108,7 +108,7 @@ func (d *anomalyDetector) GetPercentileValues(id appstatspb.StmtFingerprintID) P
 	return latencies
 }
 
-func (d *anomalyDetector) withFingerprintLatencySummary(
+func (d *AnomalyDetector) withFingerprintLatencySummary(
 	stmt *Statement, consumer func(latencySummary *quantile.Stream),
 ) {
 	d.mu.Lock()
@@ -146,8 +146,8 @@ func (d *anomalyDetector) withFingerprintLatencySummary(
 	}
 }
 
-func newAnomalyDetector(settings *cluster.Settings, metrics Metrics) *anomalyDetector {
-	anomaly := &anomalyDetector{
+func newAnomalyDetector(settings *cluster.Settings, metrics Metrics) *AnomalyDetector {
+	anomaly := &AnomalyDetector{
 		settings: settings,
 		metrics:  metrics,
 		store:    list.New(),

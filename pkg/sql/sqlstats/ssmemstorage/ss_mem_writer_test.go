@@ -48,7 +48,7 @@ func TestRecordStatement(t *testing.T) {
 			testMonitor(ctx, "test-mon", settings),
 			"test-app",
 			knobs,
-			insights.New(settings, insights.NewMetrics()).LatencyInformation(),
+			insights.New(settings, insights.NewMetrics()).Anomalies(),
 		)
 		// Record a statement, ensure no insights are generated.
 		statsKey := appstatspb.StatementStatisticsKey{
@@ -82,7 +82,7 @@ func TestRecordTransaction(t *testing.T) {
 			testMonitor(ctx, "test-mon", settings),
 			"test-app",
 			knobs,
-			insights.New(settings, insights.NewMetrics()).LatencyInformation(),
+			insights.New(settings, insights.NewMetrics()).Anomalies(),
 		)
 		// Record a transaction, ensure no insights are generated.
 		require.NoError(t, memContainer.RecordTransaction(ctx, appstatspb.TransactionFingerprintID(123), sqlstats.RecordedTxnStats{}))

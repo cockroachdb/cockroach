@@ -40,7 +40,7 @@ func New(
 	pool *mon.BytesMonitor,
 	reportingSink Sink,
 	knobs *sqlstats.TestingKnobs,
-	latencyInformation insights.LatencyInformation,
+	anomalies *insights.AnomalyDetector,
 ) *SQLStats {
 	return newSQLStats(
 		settings,
@@ -51,7 +51,7 @@ func New(
 		pool,
 		reportingSink,
 		knobs,
-		latencyInformation,
+		anomalies,
 	)
 }
 
@@ -110,7 +110,7 @@ func (s *SQLStats) GetApplicationStats(appName string) sqlstats.ApplicationStats
 		s.mu.mon,
 		appName,
 		s.knobs,
-		s.latencyInformation,
+		s.anomalies,
 	)
 	s.mu.apps[appName] = a
 	return a
