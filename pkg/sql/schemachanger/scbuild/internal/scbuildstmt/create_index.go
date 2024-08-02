@@ -315,7 +315,7 @@ func processColNodeType(
 			"operator classes are only allowed for the last column of an inverted index"))
 	}
 	// Disallow descending last columns in inverted indexes.
-	if n.Inverted && columnNode.Direction == tree.Descending {
+	if n.Inverted && columnNode.Direction == tree.Descending && lastColIdx {
 		panic(pgerror.New(pgcode.FeatureNotSupported,
 			"the last column in an inverted index cannot have the DESC option"))
 	}
