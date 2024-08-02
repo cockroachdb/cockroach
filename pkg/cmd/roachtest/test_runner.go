@@ -721,6 +721,11 @@ func (r *testRunner) runWorker(
 			return err
 		}
 
+		// Verify that the deprecated workload is available if needed.
+		if testToRun.spec.RequiresDeprecatedWorkload && workload[arch] == "" {
+			return errors.Errorf("%s requires deprecated workload binary but one was not found", testToRun.spec.Name)
+		}
+
 		var clusterCreateErr error
 		var vmCreateOpts *vm.CreateOpts
 
@@ -831,6 +836,9 @@ func (r *testRunner) runWorker(
 			}
 			if setupErr == nil {
 				setupErr = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
+			}
+			if setupErr == nil {
+				setupErr = c.PutDeprecatedWorkload(ctx, l, t)
 			}
 
 			if setupErr != nil {
