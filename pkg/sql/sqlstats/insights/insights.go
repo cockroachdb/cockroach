@@ -11,7 +11,6 @@
 package insights
 
 import (
-	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -131,12 +130,6 @@ func NewMetrics() Metrics {
 			MetricType:  prometheus.MetricType_COUNTER,
 		}),
 	}
-}
-
-// Reader offers access to the currently retained set of insights.
-type Reader interface {
-	// IterateInsights calls visitor with each of the currently retained set of insights.
-	IterateInsights(context.Context, func(context.Context, *Insight))
 }
 
 type LatencyInformation interface {

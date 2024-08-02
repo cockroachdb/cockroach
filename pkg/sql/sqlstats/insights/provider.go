@@ -18,7 +18,7 @@ import (
 
 // Provider offers access to the insights subsystem.
 type Provider struct {
-	store           *lockingStore
+	store           *LockingStore
 	ingester        *ConcurrentBufferIngester
 	anomalyDetector *anomalyDetector
 }
@@ -33,8 +33,8 @@ func (p *Provider) Writer() *ConcurrentBufferIngester {
 	return p.ingester
 }
 
-// Reader returns an object that offers read access to any detected insights.
-func (p *Provider) Reader() Reader {
+// Store returns an object that offers read access to any detected insights.
+func (p *Provider) Store() *LockingStore {
 	return p.store
 }
 

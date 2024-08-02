@@ -647,8 +647,8 @@ func (s *Server) GetIndexUsageStatsController() *idxusage.Controller {
 
 // GetInsightsReader returns the insights.Reader for the current sql.Server's
 // detected execution insights.
-func (s *Server) GetInsightsReader() insights.Reader {
-	return s.insights.Reader()
+func (s *Server) GetInsightsReader() *insights.LockingStore {
+	return s.insights.Store()
 }
 
 // GetSQLStatsProvider returns the provider for the sqlstats subsystem.
