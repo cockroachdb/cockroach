@@ -52,37 +52,6 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		IsExistenceOptional: false,
 		RequiredPrivilege:   privilege.CREATE,
 	})
-	// We don't support handling zone config related properties for tables required
-	// for regional by row tables.
-	if _, _, tbl := scpb.FindTable(relationElements); tbl != nil {
-		fallBackIfRegionalByRowTable(b, n, tbl.TableID)
-	}
-	_, _, partitioning := scpb.FindTablePartitioning(relationElements)
-	if partitioning != nil && n.PartitionByIndex != nil &&
-		n.PartitionByIndex.ContainsPartitions() {
-		panic(pgerror.New(
-			pgcode.FeatureNotSupported,
-			"cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition",
-		))
-	}
-	panicIfSchemaIsLocked(relationElements)
-
-	// Inverted indexes do not support hash sharding or unique.
-	if n.Inverted {
-		if n.Sharded != nil {
-			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding"))
-		}
-		if len(n.Storing) > 0 {
-			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support stored columns"))
-		}
-		if n.Unique {
-			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique"))
-		}
-		b.IncrementSchemaChangeIndexCounter("inverted")
-		if len(n.Columns) > 1 {
-			b.IncrementSchemaChangeIndexCounter("multi_column_inverted")
-		}
-	}
 	var idxSpec indexSpec
 	idxSpec.secondary = &scpb.SecondaryIndex{
 		Index: scpb.Index{
@@ -114,23 +83,6 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			}
 			idxSpec.secondary.TableID = t.ViewID
 			relation = e
-
-		case *scpb.TableLocalityGlobal, *scpb.TableLocalityPrimaryRegion, *scpb.TableLocalitySecondaryRegion:
-			if n.PartitionByIndex != nil {
-				panic(pgerror.New(pgcode.FeatureNotSupported,
-					"cannot define PARTITION BY on a new INDEX in a multi-region database",
-				))
-			}
-
-		case *scpb.TableLocalityRegionalByRow:
-			if n.PartitionByIndex != nil {
-				panic(pgerror.New(pgcode.FeatureNotSupported,
-					"cannot define PARTITION BY on a new INDEX in a multi-region database",
-				))
-			}
-			if n.Sharded != nil {
-				panic(pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes are not compatible with REGIONAL BY ROW tables"))
-			}
 
 		case *scpb.PrimaryIndex:
 			// TODO(ajwerner): This is too simplistic. We should build a better
@@ -172,6 +124,57 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			panic(pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name))
 		}
 	}
+	// We don't support handling zone config related properties for tables required
+	// for regional by row tables.
+	if _, _, tbl := scpb.FindTable(relationElements); tbl != nil {
+		fallBackIfRegionalByRowTable(b, n, tbl.TableID)
+	}
+	_, _, partitioning := scpb.FindTablePartitioning(relationElements)
+	if partitioning != nil && n.PartitionByIndex != nil &&
+		n.PartitionByIndex.ContainsPartitions() {
+		panic(pgerror.New(
+			pgcode.FeatureNotSupported,
+			"cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition",
+		))
+	}
+	panicIfSchemaIsLocked(relationElements)
+
+	// Inverted indexes do not support hash sharding or unique.
+	if n.Inverted {
+		if n.Sharded != nil {
+			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding"))
+		}
+		if len(n.Storing) > 0 {
+			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support stored columns"))
+		}
+		if n.Unique {
+			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique"))
+		}
+		b.IncrementSchemaChangeIndexCounter("inverted")
+		if len(n.Columns) > 1 {
+			b.IncrementSchemaChangeIndexCounter("multi_column_inverted")
+		}
+	}
+	relationElements.ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		switch e.(type) {
+		case *scpb.TableLocalityGlobal, *scpb.TableLocalityPrimaryRegion, *scpb.TableLocalitySecondaryRegion:
+			if n.PartitionByIndex != nil {
+				panic(pgerror.New(pgcode.FeatureNotSupported,
+					"cannot define PARTITION BY on a new INDEX in a multi-region database",
+				))
+			}
+
+		case *scpb.TableLocalityRegionalByRow:
+			if n.PartitionByIndex != nil {
+				panic(pgerror.New(pgcode.FeatureNotSupported,
+					"cannot define PARTITION BY on a new INDEX in a multi-region database",
+				))
+			}
+			if n.Sharded != nil {
+				panic(pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes are not compatible with REGIONAL BY ROW tables"))
+			}
+		}
+	})
 	// Assign the ID here, since we may have added columns
 	// and made a new primary key above.
 	idxSpec.secondary.SourceIndexID = sourceIndex.IndexID
