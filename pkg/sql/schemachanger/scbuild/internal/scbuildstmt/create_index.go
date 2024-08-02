@@ -550,7 +550,7 @@ func addColumnsForSecondaryIndex(
 		// 1) CREATE INDEX idx ON t(i, i)
 		// 2) CREATE INDEX idx ON t(lower(i), j, lower(i)).
 		if columnNode.Expr == nil {
-			colName := columnNode.Column.Normalize()
+			colName := string(columnNode.Column)
 			if _, found := columnRefs[colName]; found {
 				panic(pgerror.Newf(pgcode.InvalidObjectDefinition,
 					"index %q contains duplicate column %q", n.Name, colName))
@@ -566,7 +566,7 @@ func addColumnsForSecondaryIndex(
 		}
 	}
 	for _, storingNode := range n.Storing {
-		colName := storingNode.Normalize()
+		colName := string(storingNode)
 		if _, found := columnRefs[colName]; found {
 			panic(sqlerrors.NewColumnAlreadyExistsInIndexError(string(n.Name), colName))
 		}
