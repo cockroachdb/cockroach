@@ -395,6 +395,59 @@ slightly slower and introduce a noticeable delay in first-time build setup.`
 		remoteOnly: true,
 	},
 	{
+		name: "sandbox_add_mount_pair_local",
+		check: func(d *dev, _ context.Context, cfg doctorConfig) string {
+			// This check only matters for Linux machines.
+			if runtime.GOOS != "linux" {
+				return ""
+			}
+			if !d.checkLinePresenceInBazelRcUser(cfg.workspace, "test --test_tmpdir=/tmp") {
+				return ""
+			}
+			if d.checkLinePresenceInBazelRcUser(cfg.workspace, "test --sandbox_add_mount_pair=/tmp") {
+				return ""
+			}
+			return "Should set --sandbox_add_mount_pair=/tmp given the use of --test_tmpdir=/tmp"
+		},
+		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
+			if !cfg.haveAutofixPermission && cfg.interactive {
+				response := promptInteractiveInput("Do you want me to update your .bazelrc.user file for you? I will add a line `test --sandbox_add_mount_pair=/tmp`.", "y")
+				canAutofix, ok := toBoolFuzzy(response)
+				if ok && canAutofix {
+					cfg.haveAutofixPermission = true
+				}
+			}
+			if !cfg.haveAutofixPermission {
+				return fmt.Errorf("do not have permission to update .bazelrc.user")
+			}
+			return d.addLineToBazelRcUser(cfg.workspace, "test --sandbox_add_mount_pair=/tmp")
+		},
+		nonRemoteOnly: true,
+	},
+	{
+		name: "sandbox_add_mount_pair_remote",
+		check: func(d *dev, _ context.Context, cfg doctorConfig) string {
+			if d.checkLinePresenceInBazelRcUser(cfg.workspace, "test --sandbox_add_mount_pair=/tmp") {
+				return "Should not set --sandbox_add_mount_pair in remote mode"
+			}
+			return ""
+		},
+		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
+			if !cfg.haveAutofixPermission && cfg.interactive {
+				response := promptInteractiveInput("Do you want me to update your .bazelrc.user file for you? I will remove all --sandbox_add_mount_pair from your .bazelrc.user", "y")
+				canAutofix, ok := toBoolFuzzy(response)
+				if ok && canAutofix {
+					cfg.haveAutofixPermission = true
+				}
+			}
+			if !cfg.haveAutofixPermission {
+				return fmt.Errorf("do not have permission to update .bazelrc.user")
+			}
+			return d.removeAllPrefixesInFile(filepath.Join(cfg.workspace, ".bazelrc.user"), "test --sandbox_add_mount_pair")
+		},
+		remoteOnly: true,
+	},
+	{
 		name: "patchelf",
 		check: func(d *dev, ctx context.Context, cfg doctorConfig) string {
 			if d.checkUsingConfig(cfg.workspace, "crosslinux") {
