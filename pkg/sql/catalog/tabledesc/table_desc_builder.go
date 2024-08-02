@@ -39,6 +39,7 @@ type TableDescriptorBuilder interface {
 	BuildImmutableTable() catalog.TableDescriptor
 	BuildExistingMutableTable() *Mutable
 	BuildCreatedMutableTable() *Mutable
+	DescriptorWasModified() bool
 }
 
 type tableDescriptorBuilder struct {
@@ -108,14 +109,41 @@ func NewUnsafeImmutable(desc *descpb.TableDescriptor) catalog.TableDescriptor {
 	return b.BuildImmutableTable()
 }
 
+// cloneWithModificationStamp will clone the table descriptor and
+// set the modification timestamp on it.
+func cloneWithModificationStamp(
+	desc *descpb.TableDescriptor, mvccTimestamp hlc.Timestamp,
+) (newDesc *descpb.TableDescriptor, updated bool) {
+	newDesc = protoutil.Clone(desc).(*descpb.TableDescriptor)
+	// Set the ModificationTime field before doing anything else.
+	// Other changes may depend on it. Note: The post deserialization
+	// will surface the errors from the must set modification time
+	// call below.
+	mustSetModTime, err := descpb.MustSetModificationTime(
+		desc.ModificationTime, mvccTimestamp, desc.Version, desc.State,
+	)
+	// If we updated the modification time, then
+	// now is a good time to pick up the CreateAs time.
+	if err == nil && mustSetModTime {
+		updated = true
+		newDesc.ModificationTime = mvccTimestamp
+		maybeSetCreateAsOfTime(newDesc)
+	}
+	return newDesc, updated
+}
+
 func newBuilder(
 	desc *descpb.TableDescriptor,
 	mvccTimestamp hlc.Timestamp,
 	isUncommittedVersion bool,
 	changes catalog.PostDeserializationChanges,
 ) *tableDescriptorBuilder {
+	newDesc, modificationUpdated := cloneWithModificationStamp(desc, mvccTimestamp)
+	if modificationUpdated {
+		changes.Add(catalog.SetModTimeToMVCCTimestamp)
+	}
 	return &tableDescriptorBuilder{
-		original:             protoutil.Clone(desc).(*descpb.TableDescriptor),
+		original:             newDesc,
 		mvccTimestamp:        mvccTimestamp,
 		isUncommittedVersion: isUncommittedVersion,
 		changes:              changes,
@@ -133,25 +161,44 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() (err error) {
 	defer func() {
 		err = errors.Wrapf(err, "table %q (%d)", tdb.original.Name, tdb.original.ID)
 	}()
-	// Set the ModificationTime field before doing anything else.
-	// Other changes may depend on it.
-	mustSetModTime, err := descpb.MustSetModificationTime(
+	// Validate that the modification timestamp is valid. This
+	// is now done earlier, but we can't return errors if an
+	// assertion is hit.
+	_, err = descpb.MustSetModificationTime(
 		tdb.original.ModificationTime, tdb.mvccTimestamp, tdb.original.Version, tdb.original.State,
 	)
 	if err != nil {
 		return err
 	}
-	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
-	if mustSetModTime {
-		tdb.maybeModified.ModificationTime = tdb.mvccTimestamp
-		tdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
-	}
-	c, err := maybeFillInDescriptor(tdb.maybeModified)
+	c, err := maybeFillInDescriptor(tdb)
 	if err != nil {
 		return err
 	}
 	c.ForEach(tdb.changes.Add)
 	return nil
+}
+
+// DescriptorWasModified implements TableDescriptorBuilder
+func (tdb *tableDescriptorBuilder) DescriptorWasModified() bool {
+	return tdb.maybeModified != nil
+}
+
+// GetReadOnlyPrivilege implements catprivilege.PrivilegeDescriptorBuilder.
+func (tdb *tableDescriptorBuilder) GetReadOnlyPrivilege() *catpb.PrivilegeDescriptor {
+	p := tdb.getLatestDesc().Privileges
+	if p == nil {
+		return tdb.GetMutablePrivilege()
+	}
+	return p
+}
+
+// GetMutablePrivilege implements catprivilege.PrivilegeDescriptorBuilder.
+func (tdb *tableDescriptorBuilder) GetMutablePrivilege() *catpb.PrivilegeDescriptor {
+	d := tdb.getOrInitModifiedDesc()
+	if d.Privileges == nil {
+		d.Privileges = &catpb.PrivilegeDescriptor{}
+	}
+	return d.Privileges
 }
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
@@ -162,7 +209,7 @@ func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 	upgradedFK, err := maybeUpgradeForeignKeyRepresentation(
 		descLookupFn,
 		tdb.skipFKsWithNoMatchingTable,
-		tdb.maybeModified,
+		tdb.getOrInitModifiedDesc(),
 	)
 	if err != nil {
 		return err
@@ -172,7 +219,7 @@ func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 	}
 
 	// Upgrade sequence reference
-	upgradedSequenceReference, err := maybeUpgradeSequenceReference(descLookupFn, tdb.maybeModified)
+	upgradedSequenceReference, err := maybeUpgradeSequenceReference(descLookupFn, tdb.getOrInitModifiedDesc())
 	if err != nil {
 		return err
 	}
@@ -186,12 +233,12 @@ func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 	// tests that restore from old versions. Until those fixtures are updated,
 	// we need to handle the case where constraint IDs are not set already.
 	// TODO(rafi): remove this once all fixtures are updated. See: https://github.com/cockroachdb/cockroach/issues/120146.
-	if changed := maybeAddConstraintIDs(tdb.maybeModified); changed {
+	if changed := maybeAddConstraintIDs(tdb.getOrInitModifiedDesc()); changed {
 		tdb.changes.Add(catalog.AddedConstraintIDs)
 	}
 
 	// Upgrade the declarative schema changer state
-	if scpb.MigrateDescriptorState(version, tdb.maybeModified.ParentID, tdb.maybeModified.DeclarativeSchemaChangerState) {
+	if scpb.MigrateDescriptorState(version, tdb.getOrInitModifiedDesc().ParentID, tdb.getOrInitModifiedDesc().DeclarativeSchemaChangerState) {
 		tdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
 	}
 
@@ -203,7 +250,7 @@ func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 func (tdb *tableDescriptorBuilder) StripDanglingBackReferences(
 	descIDMightExist func(id descpb.ID) bool, nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
 ) error {
-	tbl := tdb.maybeModified
+	tbl := tdb.getOrInitModifiedDesc()
 	// Strip dangling back-references in depended_on_by,
 	{
 		sliceIdx := 0
@@ -272,20 +319,20 @@ func (tdb *tableDescriptorBuilder) StripNonExistentRoles(
 	roleExists func(role username.SQLUsername) bool,
 ) error {
 	// If the owner doesn't exist, change the owner to admin.
-	if !roleExists(tdb.maybeModified.GetPrivileges().Owner()) {
-		tdb.maybeModified.Privileges.OwnerProto = username.AdminRoleName().EncodeProto()
+	if !roleExists(tdb.getLatestDesc().GetPrivileges().Owner()) {
+		tdb.getOrInitModifiedDesc().Privileges.OwnerProto = username.AdminRoleName().EncodeProto()
 		tdb.changes.Add(catalog.StrippedNonExistentRoles)
 	}
 	// Remove any non-existent roles from the privileges.
 	newPrivs := make([]catpb.UserPrivileges, 0, len(tdb.maybeModified.Privileges.Users))
-	for _, priv := range tdb.maybeModified.Privileges.Users {
+	for _, priv := range tdb.getLatestDesc().Privileges.Users {
 		exists := roleExists(priv.UserProto.Decode())
 		if exists {
 			newPrivs = append(newPrivs, priv)
 		}
 	}
-	if len(newPrivs) != len(tdb.maybeModified.Privileges.Users) {
-		tdb.maybeModified.Privileges.Users = newPrivs
+	if len(newPrivs) != len(tdb.getLatestDesc().Privileges.Users) {
+		tdb.getOrInitModifiedDesc().Privileges.Users = newPrivs
 		tdb.changes.Add(catalog.StrippedNonExistentRoles)
 	}
 	return nil
@@ -340,6 +387,27 @@ func (tdb *tableDescriptorBuilder) BuildCreatedMutable() catalog.MutableDescript
 	return tdb.BuildCreatedMutableTable()
 }
 
+// getLatestDesc returns the modified descriptor if it exists, or else the
+// original descriptor.
+func (tdb *tableDescriptorBuilder) getLatestDesc() *descpb.TableDescriptor {
+	desc := tdb.maybeModified
+	if desc == nil {
+		desc = tdb.original
+	}
+	return desc
+}
+
+// getOrInitModifiedDesc returns the modified descriptor, and clones it from
+// the original descriptor if it is not already available. This is a helper
+// function that makes it easier to lazily initialize the modified descriptor,
+// since protoutil.Clone is expensive.
+func (tdb *tableDescriptorBuilder) getOrInitModifiedDesc() *descpb.TableDescriptor {
+	if tdb.maybeModified == nil {
+		tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
+	}
+	return tdb.maybeModified
+}
+
 // BuildCreatedMutableTable returns a mutable descriptor for a table
 // which is in the process of being created.
 func (tdb *tableDescriptorBuilder) BuildCreatedMutableTable() *Mutable {
@@ -370,91 +438,75 @@ func makeImmutable(tbl *descpb.TableDescriptor) *immutable {
 // This includes format upgrades and optional changes that can be handled by all version
 // (for example: additional default privileges).
 func maybeFillInDescriptor(
-	desc *descpb.TableDescriptor,
+	builder *tableDescriptorBuilder,
 ) (changes catalog.PostDeserializationChanges, err error) {
 	set := func(change catalog.PostDeserializationChangeType, cond bool) {
 		if cond {
 			changes.Add(change)
 		}
 	}
-	set(catalog.SetCreateAsOfTimeUsingModTime, maybeSetCreateAsOfTime(desc))
-	set(catalog.UpgradedFormatVersion, maybeUpgradeFormatVersion(desc))
-	set(catalog.FixedIndexEncodingType, maybeFixPrimaryIndexEncoding(&desc.PrimaryIndex))
-	set(catalog.UpgradedIndexFormatVersion, maybeUpgradePrimaryIndexFormatVersion(desc))
-	for i := range desc.Indexes {
-		idx := &desc.Indexes[i]
-		set(catalog.UpgradedIndexFormatVersion,
-			maybeUpgradeSecondaryIndexFormatVersion(idx))
-		// TODO(rytaft): Remove this case in 24.1.
-		if idx.NotVisible && idx.Invisibility == 0.0 {
-			set(catalog.SetIndexInvisibility, true)
-			idx.Invisibility = 1.0
+	set(catalog.UpgradedFormatVersion, maybeUpgradeFormatVersion(builder))
+	set(catalog.UpgradedIndexFormatVersion, maybeUpgradePrimaryIndexFormatVersion(builder))
+	{
+		orig := builder.getLatestDesc()
+		for i := range orig.Indexes {
+			origIdx := orig.Indexes[i]
+			if origIdx.Version < descpb.StrictIndexColumnIDGuaranteesVersion {
+				modifiedDesc := builder.getOrInitModifiedDesc()
+				maybeUpgradeSecondaryIndexFormatVersion(&modifiedDesc.Indexes[i])
+			}
+			// TODO(rytaft): Remove this case in 24.1.
+			if origIdx.NotVisible && origIdx.Invisibility == 0.0 {
+				modifiedDesc := builder.getOrInitModifiedDesc()
+				set(catalog.SetIndexInvisibility, true)
+				modifiedDesc.Indexes[i].Invisibility = 1.0
+			}
 		}
 	}
-	for i := range desc.Mutations {
-		if idx := desc.Mutations[i].GetIndex(); idx != nil {
-			set(catalog.UpgradedIndexFormatVersion,
-				maybeUpgradeSecondaryIndexFormatVersion(idx))
+	{
+		desc := builder.getLatestDesc()
+		for i := range desc.Mutations {
+			if idx := desc.Mutations[i].GetIndex(); idx != nil &&
+				idx.Version < descpb.StrictIndexColumnIDGuaranteesVersion {
+				idx = builder.getOrInitModifiedDesc().Mutations[i].GetIndex()
+				set(catalog.UpgradedIndexFormatVersion,
+					maybeUpgradeSecondaryIndexFormatVersion(idx))
+			}
 		}
 	}
-	set(catalog.UpgradedNamespaceName, maybeUpgradeNamespaceName(desc))
-	set(catalog.RemovedDefaultExprFromComputedColumn,
-		maybeRemoveDefaultExprFromComputedColumns(desc))
-
-	parentSchemaID := desc.GetUnexposedParentSchemaID()
-	// TODO(richardjcai): Remove this case in 22.2.
-	if parentSchemaID == descpb.InvalidID {
-		parentSchemaID = keys.PublicSchemaID
+	{
+		desc := builder.getLatestDesc()
+		var objectType privilege.ObjectType
+		if desc.IsSequence() {
+			objectType = privilege.Sequence
+		} else {
+			objectType = privilege.Table
+		}
+		// Make sure the parent schema ID is valid, since during
+		// upgrades its possible for the user table to not have
+		// this set correctly.
+		parentSchemaID := desc.GetUnexposedParentSchemaID()
+		if parentSchemaID == descpb.InvalidID {
+			parentSchemaID = keys.PublicSchemaID
+		}
+		fixedPrivileges, err := catprivilege.MaybeFixPrivilegesWithBuilder(
+			builder,
+			desc.GetParentID(),
+			parentSchemaID,
+			objectType,
+			desc.GetName(),
+		)
+		if err != nil {
+			return catalog.PostDeserializationChanges{}, err
+		}
+		set(catalog.UpgradedPrivileges, fixedPrivileges)
 	}
 
-	var objectType privilege.ObjectType
-
-	if desc.IsSequence() {
-		objectType = privilege.Sequence
-	} else {
-		objectType = privilege.Table
-	}
-
-	fixedPrivileges, err := catprivilege.MaybeFixPrivileges(
-		&desc.Privileges,
-		desc.GetParentID(),
-		parentSchemaID,
-		objectType,
-		desc.GetName(),
-	)
-	if err != nil {
-		return catalog.PostDeserializationChanges{}, err
-	}
-	set(catalog.UpgradedPrivileges, fixedPrivileges)
-	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
-	set(catalog.StrippedDanglingSelfBackReferences, maybeStripDanglingSelfBackReferences(desc))
-	set(catalog.FixSecondaryIndexEncodingType, maybeFixSecondaryIndexEncodingType(desc))
-	set(catalog.FixedIncorrectForeignKeyOrigins, maybeFixForeignKeySelfReferences(desc))
+	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(builder))
+	set(catalog.StrippedDanglingSelfBackReferences, maybeStripDanglingSelfBackReferences(builder))
+	set(catalog.FixSecondaryIndexEncodingType, maybeFixSecondaryIndexEncodingType(builder))
+	set(catalog.FixedIncorrectForeignKeyOrigins, maybeFixForeignKeySelfReferences(builder))
 	return changes, nil
-}
-
-// maybeRemoveDefaultExprFromComputedColumns removes DEFAULT expressions on
-// computed columns. Although we now have a descriptor validation check to
-// prevent this, this hasn't always been the case, so it's theoretically
-// possible to encounter table descriptors which would fail this validation
-// check. See issue #72881 for details.
-func maybeRemoveDefaultExprFromComputedColumns(desc *descpb.TableDescriptor) (hasChanged bool) {
-	doCol := func(col *descpb.ColumnDescriptor) {
-		if col.IsComputed() && col.HasDefault() {
-			col.DefaultExpr = nil
-			hasChanged = true
-		}
-	}
-
-	for i := range desc.Columns {
-		doCol(&desc.Columns[i])
-	}
-	for _, m := range desc.Mutations {
-		if col := m.GetColumn(); col != nil && m.Direction != descpb.DescriptorMutation_DROP {
-			doCol(col)
-		}
-	}
-	return hasChanged
 }
 
 // maybeUpgradeForeignKeyRepresentation destructively modifies the input table
@@ -649,7 +701,8 @@ func maybeUpgradeForeignKeyRepOnIndex(
 // FormatVersion (if it's not already there) and returns true if any changes
 // were made.
 // This method should be called through maybeFillInDescriptor, not directly.
-func maybeUpgradeFormatVersion(desc *descpb.TableDescriptor) (wasUpgraded bool) {
+func maybeUpgradeFormatVersion(builder *tableDescriptorBuilder) (wasUpgraded bool) {
+	desc := builder.getLatestDesc()
 	for _, pair := range []struct {
 		targetVersion descpb.FormatVersion
 		upgradeFn     func(*descpb.TableDescriptor)
@@ -658,6 +711,7 @@ func maybeUpgradeFormatVersion(desc *descpb.TableDescriptor) (wasUpgraded bool) 
 		{descpb.InterleavedFormatVersion, func(_ *descpb.TableDescriptor) {}},
 	} {
 		if desc.FormatVersion < pair.targetVersion {
+			desc = builder.getOrInitModifiedDesc()
 			pair.upgradeFn(desc)
 			desc.FormatVersion = pair.targetVersion
 			wasUpgraded = true
@@ -713,9 +767,13 @@ func upgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) {
 
 // maybeUpgradePrimaryIndexFormatVersion tries to promote a primary index to
 // version PrimaryIndexWithStoredColumnsVersion whenever possible.
-func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasChanged bool) {
+func maybeUpgradePrimaryIndexFormatVersion(builder *tableDescriptorBuilder) (hasChanged bool) {
+	desc := builder.getLatestDesc()
 	// Always set the correct encoding type for the primary index.
-	desc.PrimaryIndex.EncodingType = catenumpb.PrimaryIndexEncoding
+	if desc.PrimaryIndex.EncodingType != catenumpb.PrimaryIndexEncoding {
+		desc = builder.getOrInitModifiedDesc()
+		desc.PrimaryIndex.EncodingType = catenumpb.PrimaryIndexEncoding
+	}
 	// Check if primary index needs updating.
 	switch desc.PrimaryIndex.Version {
 	case descpb.PrimaryIndexWithStoredColumnsVersion:
@@ -723,6 +781,7 @@ func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasCha
 	default:
 		break
 	}
+	desc = builder.getOrInitModifiedDesc()
 	// Update primary index by populating StoreColumnIDs/Names slices.
 	nonVirtualCols := make([]*descpb.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
 	maybeAddCol := func(col *descpb.ColumnDescriptor) {
@@ -790,28 +849,6 @@ func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasCh
 		return false
 	}
 	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
-	return true
-}
-
-// maybeUpgradeNamespaceName deals with upgrading the name field of the
-// namespace table (30) to be "namespace" rather than "namespace2". This
-// occurs in clusters which were bootstrapped before 21.2 and have not
-// run the corresponding migration.
-func maybeUpgradeNamespaceName(d *descpb.TableDescriptor) (hasChanged bool) {
-	if d.ID != keys.NamespaceTableID || d.Name != catconstants.PreMigrationNamespaceTableName {
-		return false
-	}
-	d.Name = string(catconstants.NamespaceTableName)
-	return true
-}
-
-// maybeFixPrimaryIndexEncoding ensures that the index descriptor for a primary
-// index has the correct encoding type set.
-func maybeFixPrimaryIndexEncoding(idx *descpb.IndexDescriptor) (hasChanged bool) {
-	if idx.EncodingType == catenumpb.PrimaryIndexEncoding {
-		return false
-	}
-	idx.EncodingType = catenumpb.PrimaryIndexEncoding
 	return true
 }
 
@@ -913,14 +950,17 @@ func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
 
 // maybeRemoveDuplicateIDsInRefs ensures that IDs in references to other tables
 // are not duplicated.
-func maybeRemoveDuplicateIDsInRefs(d *descpb.TableDescriptor) (hasChanged bool) {
+func maybeRemoveDuplicateIDsInRefs(builder *tableDescriptorBuilder) (hasChanged bool) {
 	// Strip duplicates from DependsOn.
+	d := builder.getLatestDesc()
 	if s := cleanedIDs(d.DependsOn); len(s) < len(d.DependsOn) {
+		d = builder.getOrInitModifiedDesc()
 		d.DependsOn = s
 		hasChanged = true
 	}
 	// Do the same for DependsOnTypes.
 	if s := cleanedIDs(d.DependsOnTypes); len(s) < len(d.DependsOnTypes) {
+		d = builder.getOrInitModifiedDesc()
 		d.DependsOnTypes = s
 		hasChanged = true
 	}
@@ -929,7 +969,7 @@ func maybeRemoveDuplicateIDsInRefs(d *descpb.TableDescriptor) (hasChanged bool) 
 		ref := &d.DependedOnBy[i]
 		s := catalog.MakeTableColSet(ref.ColumnIDs...).Ordered()
 		if len(s) < len(ref.ColumnIDs) {
-			ref.ColumnIDs = s
+			builder.getOrInitModifiedDesc().DependedOnBy[i].ColumnIDs = s
 			hasChanged = true
 		}
 	}
@@ -937,12 +977,13 @@ func maybeRemoveDuplicateIDsInRefs(d *descpb.TableDescriptor) (hasChanged bool) 
 	for i := range d.Columns {
 		col := &d.Columns[i]
 		if s := cleanedIDs(col.UsesSequenceIds); len(s) < len(col.UsesSequenceIds) {
-			col.UsesSequenceIds = s
+			builder.getOrInitModifiedDesc().Columns[i].UsesSequenceIds = s
 			hasChanged = true
 		}
 		if s := cleanedIDs(col.OwnsSequenceIds); len(s) < len(col.OwnsSequenceIds) {
-			col.OwnsSequenceIds = s
+			builder.getOrInitModifiedDesc().Columns[i].OwnsSequenceIds = s
 			hasChanged = true
+			break
 		}
 	}
 	return hasChanged
@@ -960,10 +1001,21 @@ func cleanedIDs(input []descpb.ID) []descpb.ID {
 // within the table descriptor itself which don't exist.
 //
 // TODO(postamar): extend as needed to column references and whatnot
-func maybeStripDanglingSelfBackReferences(tbl *descpb.TableDescriptor) (hasChanged bool) {
+func maybeStripDanglingSelfBackReferences(builder *tableDescriptorBuilder) (hasChanged bool) {
+	tbl := builder.getLatestDesc()
 	var mutationIDs intsets.Fast
 	for _, m := range tbl.Mutations {
 		mutationIDs.Add(int(m.MutationID))
+	}
+	for _, backref := range tbl.MutationJobs {
+		if !mutationIDs.Contains(int(backref.MutationID)) {
+			tbl = builder.getOrInitModifiedDesc()
+			hasChanged = true
+			break
+		}
+	}
+	if !hasChanged {
+		return
 	}
 	// Remove mutation_jobs entries which don't reference a valid mutation ID.
 	{
@@ -976,13 +1028,13 @@ func maybeStripDanglingSelfBackReferences(tbl *descpb.TableDescriptor) (hasChang
 		}
 		if sliceIdx < len(tbl.MutationJobs) {
 			tbl.MutationJobs = tbl.MutationJobs[:sliceIdx]
-			hasChanged = true
 		}
 	}
 	return hasChanged
 }
 
-func maybeFixSecondaryIndexEncodingType(desc *descpb.TableDescriptor) (hasChanged bool) {
+func maybeFixSecondaryIndexEncodingType(builder *tableDescriptorBuilder) (hasChanged bool) {
+	desc := builder.getLatestDesc()
 	if desc.DeclarativeSchemaChangerState != nil || len(desc.Mutations) > 0 {
 		// Don't try to fix the encoding type if a schema change is in progress.
 		return false
@@ -990,6 +1042,8 @@ func maybeFixSecondaryIndexEncodingType(desc *descpb.TableDescriptor) (hasChange
 	for i := range desc.Indexes {
 		idx := &desc.Indexes[i]
 		if idx.EncodingType != catenumpb.SecondaryIndexEncoding {
+			desc = builder.getOrInitModifiedDesc()
+			idx = &desc.Indexes[i]
 			idx.EncodingType = catenumpb.SecondaryIndexEncoding
 			hasChanged = true
 		}
@@ -1207,10 +1261,13 @@ func resolveTableNamesForIDs(
 
 // maybeFixForeignKeySelfReferences fixes references that should point to the
 // current descriptor inside OutboundFKs and InboundFKs.
-func maybeFixForeignKeySelfReferences(tableDesc *descpb.TableDescriptor) (wasRepaired bool) {
+func maybeFixForeignKeySelfReferences(builder *tableDescriptorBuilder) (wasRepaired bool) {
+	tableDesc := builder.getLatestDesc()
 	for idx := range tableDesc.OutboundFKs {
 		fk := &tableDesc.OutboundFKs[idx]
 		if fk.OriginTableID != tableDesc.ID {
+			tableDesc = builder.getOrInitModifiedDesc()
+			fk = &tableDesc.OutboundFKs[idx]
 			fk.OriginTableID = tableDesc.ID
 			wasRepaired = true
 		}
@@ -1218,6 +1275,8 @@ func maybeFixForeignKeySelfReferences(tableDesc *descpb.TableDescriptor) (wasRep
 	for idx := range tableDesc.InboundFKs {
 		fk := &tableDesc.InboundFKs[idx]
 		if fk.ReferencedTableID != tableDesc.ID {
+			tableDesc = builder.getOrInitModifiedDesc()
+			fk = &tableDesc.InboundFKs[idx]
 			fk.ReferencedTableID = tableDesc.ID
 			wasRepaired = true
 		}
