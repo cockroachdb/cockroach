@@ -106,7 +106,7 @@ var (
 	_ execinfra.RowSource = &logicalReplicationWriterProcessor{}
 )
 
-const useKVWriteer = false
+const useKVWriteer = true
 
 const logicalReplicationWriterProcessorName = "logical-replication-writer-processor"
 
