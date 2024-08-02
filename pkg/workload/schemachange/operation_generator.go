@@ -1791,15 +1791,16 @@ func (og *operationGenerator) dropConstraint(ctx context.Context, tx pgx.Tx) (*o
 		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
 	}
 
-	constraintBeingDropped, err := og.constraintInDroppingState(ctx, tx, tableName, constraintName)
+	constraintAddingOrDropping, err := og.constraintInAddOrDropState(ctx, tx, tableName, constraintName)
 	if err != nil {
 		return nil, err
 	}
-	if constraintBeingDropped {
+	if constraintAddingOrDropping {
 		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
+		stmt.potentialExecErrors.add(pgcode.UndefinedObject)
 	}
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT "%s"`, tableName, constraintName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT %s`, tableName.String(), lexbase.EscapeSQLIdent(constraintName))
 	return stmt, nil
 }
 
