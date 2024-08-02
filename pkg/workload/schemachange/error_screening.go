@@ -263,7 +263,10 @@ SELECT array_agg(column_name)
 	}
 
 	for _, primaryColumn := range primaryColumns {
-		if primaryColumn == columnName {
+		// primaryColumn will be double-quoted only if it had any special
+		// characters, so compare against both the quoted	and the unquoted
+		// name.
+		if primaryColumn == columnName || primaryColumn == lexbase.EscapeSQLIdent(columnName) {
 			return true, nil
 		}
 	}
@@ -909,6 +912,8 @@ func (og *operationGenerator) scanStringArray(
 
 // canApplyUniqueConstraint checks if the rows in a table are unique with respect
 // to the specified columns such that a unique constraint can successfully be applied.
+// The column names must already be quoted/escaped if necessary when this
+// function is called.
 func (og *operationGenerator) canApplyUniqueConstraint(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columns []string,
 ) (bool, error) {
@@ -1040,7 +1045,7 @@ SELECT COALESCE(
         (
             SELECT attgenerated
               FROM pg_catalog.pg_attribute
-             WHERE attrelid = $1:::REGCLASS AND attname = $2
+             WHERE attrelid = $1::REGCLASS AND attname = $2
         )
         = 'v',
         false
