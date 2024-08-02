@@ -428,7 +428,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlstats.MaxMemReportedSQLStatsTxnFingerprints,
 		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryCurBytesCount,
 		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryMaxBytesHist,
-		insightsProvider.Writer,
 		pool,
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
@@ -441,7 +440,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		serverMetrics.StatsMetrics.SQLStatsMemoryCurBytesCount,
 		serverMetrics.StatsMetrics.SQLStatsMemoryMaxBytesHist,
-		insightsProvider.Writer,
 		pool,
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
