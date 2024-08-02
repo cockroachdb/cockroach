@@ -324,7 +324,8 @@ func initBinariesAndLibraries() {
 	cockroachEAPath := roachtestflags.CockroachEAPath
 	workloadPath := roachtestflags.WorkloadPath
 	cockroach[defaultArch], _ = resolveBinary("cockroach", cockroachPath, defaultArch, true, false)
-	workload[defaultArch], _ = resolveBinary("workload", workloadPath, defaultArch, true, false)
+	// Let the test runner verify the workload binary exists if TestSpec.RequiresDeprecatedWorkload is true.
+	workload[defaultArch], _ = resolveBinary("workload", workloadPath, defaultArch, false, false)
 	cockroachEA[defaultArch], err = resolveBinary("cockroach-ea", cockroachEAPath, defaultArch, false, true)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-ea", defaultArch, err)
@@ -2002,6 +2003,20 @@ func (c *clusterImpl) PutLibraries(
 		); err != nil {
 			return errors.Wrap(err, "cluster.PutLibraries")
 		}
+	}
+	return nil
+}
+
+// PutDeprecatedWorkload checks if the test requires the deprecated
+// workload and that it has a workload node provisioned. If it does,
+// then it auto-uploads the workload binary to the workload node.
+// If the test requires the binary but doesn't have a workload node,
+// it should handle uploading it in the test itself.
+func (c *clusterImpl) PutDeprecatedWorkload(
+	ctx context.Context, l *logger.Logger, t *testImpl,
+) error {
+	if t.spec.RequiresDeprecatedWorkload && t.spec.Cluster.WorkloadNode {
+		return c.PutE(ctx, l, t.DeprecatedWorkload(), test.DefaultDeprecatedWorkloadPath, c.WorkloadNode())
 	}
 	return nil
 }

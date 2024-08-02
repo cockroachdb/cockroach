@@ -26,12 +26,13 @@ import (
 
 func registerSchemaChangeInvertedIndex(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             "schemachange/invertedindex",
-		Owner:            registry.OwnerSQLFoundations,
-		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode()),
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Nightly),
-		Leases:           registry.MetamorphicLeases,
+		Name:                       "schemachange/invertedindex",
+		Owner:                      registry.OwnerSQLFoundations,
+		Cluster:                    r.MakeClusterSpec(5, spec.WorkloadNode()),
+		CompatibleClouds:           registry.AllExceptAWS,
+		Suites:                     registry.Suites(registry.Nightly),
+		Leases:                     registry.MetamorphicLeases,
+		RequiresDeprecatedWorkload: true, // uses json
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSchemaChangeInvertedIndex(ctx, t, c)
 		},
@@ -41,9 +42,6 @@ func registerSchemaChangeInvertedIndex(r registry.Registry) {
 // runInvertedIndex tests the correctness and performance of building an
 // inverted index on randomly generated JSON data (from the JSON workload).
 func runSchemaChangeInvertedIndex(ctx context.Context, t test.Test, c cluster.Cluster) {
-	// The json workload is not available in the cockroach binary,
-	// so we must use the deprecated workload.
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNode())
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 
 	cmdInit := "./workload init json {pgurl:1}"
