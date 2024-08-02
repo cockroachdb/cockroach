@@ -252,7 +252,7 @@ func (f *fullReconciler) reconcile(
 		updates[i] = spanconfig.Update(record)
 	}
 
-	toDelete, toUpsert := storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, updates...)
+	toDelete, toUpsert := storeWithExistingSpanConfigs.Apply(ctx, updates...)
 	if len(toDelete) != 0 || len(toUpsert) != 0 {
 		if err := updateSpanConfigRecords(
 			ctx, f.kvAccessor, toDelete, toUpsert, f.session,
@@ -281,7 +281,7 @@ func (f *fullReconciler) reconcile(
 			if err != nil {
 				return nil, hlc.Timestamp{}, err
 			}
-			storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, del)
+			storeWithExistingSpanConfigs.Apply(ctx, del)
 		}
 		storeWithExtraneousSpanConfigs = storeWithExistingSpanConfigs
 	}
@@ -299,7 +299,7 @@ func (f *fullReconciler) reconcile(
 		if err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
-		storeWithLatestSpanConfigs.Apply(ctx, false /* dryrun */, del)
+		storeWithLatestSpanConfigs.Apply(ctx, del)
 	}
 
 	if !f.codec.ForSystemTenant() {
@@ -401,7 +401,7 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 		}
 
 		for _, record := range records {
-			store.Apply(ctx, false /* dryrun */, spanconfig.Update(record))
+			store.Apply(ctx, spanconfig.Update(record))
 		}
 	}
 	return store, nil
@@ -572,7 +572,7 @@ func (r *incrementalReconciler) reconcile(
 				updates = append(updates, del)
 			}
 
-			toDelete, toUpsert := r.storeWithKVContents.Apply(ctx, false /* dryrun */, updates...)
+			toDelete, toUpsert := r.storeWithKVContents.Apply(ctx, updates...)
 			if len(toDelete) != 0 || len(toUpsert) != 0 {
 				if err := updateSpanConfigRecords(
 					ctx, r.kvAccessor, toDelete, toUpsert, r.session,

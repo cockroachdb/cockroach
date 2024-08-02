@@ -17,12 +17,16 @@ added [d,e):B
 added [e,f):C
 added [g,i):D
 
+# We will need to get back to the current state in this test.
+checkpoint
+----
+
 # keys    a  b  c  d  e  f  g  h  i  j
 # state      [-A)  [-B|-C)  [--D--)
 # set     [--------X--------)
 # ====================================
 # result  [--------X--------|--D--)
-apply dryrun
+apply
 set [a,g):X
 ----
 deleted [b,c)
@@ -30,12 +34,15 @@ deleted [d,e)
 deleted [e,f)
 added [a,g):X
 
+restore-checkpoint
+----
+
 # keys    a  b  c  d  e  f  g  h  i  j
 # state      [-A)  [-B|-C)  [--D--)
 # set     [--------X--|----Y---)
 # ====================================
 # result  [--------X--|----Y---|-D)
-apply dryrun
+apply
 set [a,e):X
 set [e,h):Y
 ----
@@ -47,12 +54,15 @@ added [a,e):X
 added [e,h):Y
 added [h,i):D
 
+restore-checkpoint
+----
+
 # keys    a  b  c  d  e  f  g  h  i  j
 # state      [-A)  [-B|-C)  [--D--)
 # set     [--------X-----------)
 # ====================================
 # result  [--------X-----------|-D)
-apply dryrun
+apply
 set [a,h):X
 ----
 deleted [b,c)
@@ -62,12 +72,15 @@ deleted [g,i)
 added [a,h):X
 added [h,i):D
 
+restore-checkpoint
+----
+
 # keys    a  b  c  d  e  f  g  h  i  j
 # state      [-A)  [-B|-C)  [--D--)
 # set     [--------X-----|xxxxx)
 # ====================================
 # result  [--------X-----)     [-D)
-apply dryrun
+apply
 set [a,f):X
 delete [f,h)
 ----
