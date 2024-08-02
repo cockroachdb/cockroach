@@ -414,6 +414,16 @@ CREATE INDEX ON opclasses(c blah_ops)
 statement error pgcode 42704 operator class "blah_ops" does not exist
 CREATE INVERTED INDEX ON opclasses(c blah_ops)
 
+# Make sure that we don't permit a descending column for the last column of an
+# inverted index.
+statement error pgcode 0A000 the last column in an inverted index cannot have the DESC option
+CREATE INVERTED INDEX ON opclasses(c DESC)
+
+# Make sure that we don't permit a descending column for the last column of an
+# inverted index.
+statement ok
+CREATE INVERTED INDEX ON opclasses(a DESC, c)
+
 subtest create_index_on_materialized_view
 
 statement ok
