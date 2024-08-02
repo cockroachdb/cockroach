@@ -70,7 +70,7 @@ type sqlRowProcessor struct {
 	lastRow  cdcevent.Row
 
 	// testing knobs.
-	testingInjectFailurePercent uint32
+	failureInjector
 }
 
 // A querier handles rows for any table that has previously been added
@@ -262,15 +262,29 @@ func (*sqlRowProcessor) Close(ctx context.Context) {}
 
 var errInjected = errors.New("injected synthetic error")
 
+type failureInjector struct {
+	rate uint32
+}
+
+func (p *failureInjector) SetSyntheticFailurePercent(rate uint32) {
+	p.rate = rate
+}
+
+func (p failureInjector) injectFailure() error {
+	if p.rate != 0 {
+		if randutil.FastUint32()%100 < p.rate {
+			return errInjected
+		}
+	}
+	return nil
+}
+
 func (srp *sqlRowProcessor) ProcessRow(
 	ctx context.Context, txn isql.Txn, kv roachpb.KeyValue, prevValue roachpb.Value,
 ) (batchStats, error) {
-	if srp.testingInjectFailurePercent != 0 {
-		if randutil.FastUint32()%100 < srp.testingInjectFailurePercent {
-			return batchStats{}, errInjected
-		}
+	if err := srp.injectFailure(); err != nil {
+		return batchStats{}, err
 	}
-
 	var err error
 	kv.Key, err = keys.StripTenantPrefix(kv.Key)
 	if err != nil {
@@ -307,10 +321,6 @@ func (srp *sqlRowProcessor) ProcessRow(
 
 func (srp *sqlRowProcessor) GetLastRow() cdcevent.Row {
 	return srp.lastRow
-}
-
-func (srp *sqlRowProcessor) SetSyntheticFailurePercent(rate uint32) {
-	srp.testingInjectFailurePercent = rate
 }
 
 var (
