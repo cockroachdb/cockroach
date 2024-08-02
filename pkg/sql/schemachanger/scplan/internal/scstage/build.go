@@ -634,8 +634,13 @@ func (sb stageBuilder) hasUnmeetableOutboundDeps(n *screl.Node) (ret bool) {
 		// there are other nodes preceding it in the op-edge path that need to be
 		// scheduled first.
 		if sb.hasDebugTrace() {
-			sb.debugTracef("  - %s targeting %s hasn't reached %s yet",
-				screl.ElementString(t.n.Element()), t.n.TargetStatus, t.e.To().CurrentStatus)
+			if t.e == nil {
+				sb.debugTracef("  %s targeting %s does not have outbound edge yet",
+					screl.ElementString(t.n.Element()), t.n.TargetStatus)
+			} else {
+				sb.debugTracef("  %s targeting %s hasn't reached %s yet",
+					screl.ElementString(t.n.Element()), t.n.TargetStatus, t.e.To().CurrentStatus)
+			}
 		}
 		return true
 	}

@@ -1,0 +1,25 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j TEXT);
+INSERT INTO t VALUES (1,NULL),(2,'FIT1'),(3,'FIT11');
+----
+
+# Ensure we cannot insert new rows that don't fit in the new size of the column
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t VALUES (10+$stageKey, 'too big for char(5)');
+----
+pq: failed to satisfy CHECK constraint .*
+
+# Ensure we can insert new rows that do fit in the new size of the column
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t VALUES (20+$stageKey, 'rite');
+----
+
+# One row is expected to be added after each stage.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=$successfulStageCount FROM t WHERE i > 3;
+----
+true
+
+test
+ALTER TABLE t ALTER COLUMN j SET DATA TYPE CHAR(5);
+----
