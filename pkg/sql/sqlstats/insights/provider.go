@@ -13,14 +13,13 @@ package insights
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // Provider offers access to the insights subsystem.
 type Provider struct {
 	store           *lockingStore
-	ingester        *concurrentBufferIngester
+	ingester        *ConcurrentBufferIngester
 	anomalyDetector *anomalyDetector
 }
 
@@ -31,10 +30,10 @@ func (p *Provider) Start(ctx context.Context, stopper *stop.Stopper) {
 
 // Writer returns an object that observes statement and transaction executions.
 // Pass true for internal when called by the internal executor.
-func (p *Provider) Writer(internal bool) Writer {
+func (p *Provider) Writer(internal bool) *ConcurrentBufferIngester {
 	// We ignore statements and transactions run by the internal executor.
 	if internal {
-		return nullWriterInstance
+		return nil
 	}
 	return p.ingester
 }
@@ -49,16 +48,3 @@ func (p *Provider) Reader() Reader {
 func (p *Provider) LatencyInformation() LatencyInformation {
 	return p.anomalyDetector
 }
-
-type nullWriter struct{}
-
-func (n *nullWriter) ObserveStatement(_ clusterunique.ID, _ *Statement) {
-}
-
-func (n *nullWriter) ObserveTransaction(_ clusterunique.ID, _ *Transaction) {
-}
-
-func (n *nullWriter) Clear() {
-}
-
-var nullWriterInstance Writer = &nullWriter{}
