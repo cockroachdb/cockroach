@@ -1279,6 +1279,16 @@ INSERT INTO ka VALUES (9999, NULL)
 statement ok
 CREATE STATISTICS ka_fullstat ON a FROM ka
 
+let $ka_stats
+SHOW STATISTICS USING JSON FOR TABLE ka;
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE ka INJECT STATISTICS '$ka_stats'
+
 let $hist_id_ka_outer_buckets_full
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE ka] WHERE statistics_name = 'ka_fullstat'
 
@@ -1346,6 +1356,16 @@ INSERT INTO ka VALUES (10002, 10001)
 
 statement ok
 CREATE STATISTICS ka_fullstat ON a FROM ka
+
+let $ka_stats
+SHOW STATISTICS USING JSON FOR TABLE ka;
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE ka INJECT STATISTICS '$ka_stats'
 
 statement ok
 INSERT INTO ka VALUES (10003, 10002), (10004, NULL)

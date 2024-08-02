@@ -2916,6 +2916,16 @@ CREATE TABLE int_outer_buckets (a PRIMARY KEY) AS SELECT generate_series(0, 9999
 statement ok
 CREATE STATISTICS int_outer_buckets_full ON a FROM int_outer_buckets;
 
+let $int_outer_buckets_stats
+SHOW STATISTICS USING JSON FOR TABLE int_outer_buckets;
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE int_outer_buckets INJECT STATISTICS '$int_outer_buckets_stats'
+
 let $hist_id_int_outer_buckets_full
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE int_outer_buckets] WHERE statistics_name = 'int_outer_buckets_full'
 
@@ -2953,6 +2963,16 @@ SET CLUSTER SETTING sql.stats.histogram_samples.count = 10050;
 statement ok
 CREATE STATISTICS int_outer_buckets_full ON a FROM int_outer_buckets;
 
+let $int_outer_buckets_stats
+SHOW STATISTICS USING JSON FOR TABLE int_outer_buckets;
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE int_outer_buckets INJECT STATISTICS '$int_outer_buckets_stats'
+
 statement ok
 CREATE STATISTICS int_outer_buckets_partial ON a FROM int_outer_buckets USING EXTREMES;
 
@@ -2980,6 +3000,16 @@ INSERT INTO timestamp_outer_buckets VALUES
 
 statement ok
 CREATE STATISTICS timestamp_outer_buckets_full ON a FROM timestamp_outer_buckets;
+
+let $timestamp_outer_buckets_stats
+SHOW STATISTICS USING JSON FOR TABLE timestamp_outer_buckets;
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE timestamp_outer_buckets INJECT STATISTICS '$timestamp_outer_buckets_stats'
 
 let $hist_id_timestamp_outer_buckets_full
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE timestamp_outer_buckets] WHERE statistics_name = 'timestamp_outer_buckets_full'
@@ -3091,6 +3121,16 @@ INSERT INTO bool_table VALUES (true), (false)
 statement ok
 CREATE STATISTICS bool_table_full ON a FROM bool_table
 
+let $bool_table_stats
+SHOW STATISTICS USING JSON FOR TABLE bool_table;
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE bool_table INJECT STATISTICS '$bool_table_stats'
+
 statement error pgcode 0A000 creating partial statistics at extremes on bool and enum columns is disabled
 CREATE STATISTICS bool_table_partial ON a FROM bool_table USING EXTREMES;
 
@@ -3102,6 +3142,16 @@ INSERT INTO enum_table VALUES ('hello'), ('howdy'), ('hi')
 
 statement ok
 CREATE STATISTICS enum_table_full ON a FROM enum_table
+
+let $enum_table_stats
+SHOW STATISTICS USING JSON FOR TABLE enum_table;
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE enum_table INJECT STATISTICS '$enum_table_stats'
 
 statement error pgcode 0A000 creating partial statistics at extremes on bool and enum columns is disabled
 CREATE STATISTICS enum_table_full ON a FROM enum_table USING EXTREMES
