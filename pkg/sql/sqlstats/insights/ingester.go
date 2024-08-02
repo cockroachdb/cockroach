@@ -47,8 +47,6 @@ type eventBufChPayload struct {
 	events        *eventBuffer
 }
 
-var _ Writer = (*ConcurrentBufferIngester)(nil)
-
 // ConcurrentBufferIngester buffers the "events" it sees (via ObserveStatement
 // and ObserveTransaction) and passes them along to the underlying registry
 // once its buffer is full. (Or once a timeout has passed, for low-traffic
