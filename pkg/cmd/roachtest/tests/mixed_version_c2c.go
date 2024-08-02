@@ -194,8 +194,8 @@ func (cm *c2cMixed) SetupHook(ctx context.Context) {
 				return errors.Wrap(err, "querying ingestion job ID")
 			}
 
-			l.Printf("replication job: %d", cm.ingestionJobID)
-			// Debug, let initial scan complete
+			l.Printf("replication job: %d. Let initial scan complete", cm.ingestionJobID)
+			// TODO(msbutler): relax requirement that initial scan completes during mixed version testing.
 			if err := cm.WaitForReplicatedTime(ctx, timeutil.Now(), h, r); err != nil {
 				return err
 			}
@@ -241,11 +241,13 @@ func (cm *c2cMixed) UpdateHook(ctx context.Context) {
 	// For a given major version upgrade, this can be called three times: upgrade,
 	// downgrade, upgrade again
 	cm.sourceMvt.InMixedVersion(
-		"wait for dest to finalize",
+		"wait for dest to finalize if source is ready to finalize upgrade",
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 			if h.Context().Stage == mixedversion.LastUpgradeStage {
 				l.Printf("waiting for destination cluster to finalize upgrade")
 				chanReadCtx(ctx, destFinalized)
+			} else {
+				l.Printf("no need to wait for dest: not ready to finalize")
 			}
 
 			return nil
@@ -258,6 +260,7 @@ func (cm *c2cMixed) UpdateHook(ctx context.Context) {
 		"cutover and allow source to finalize",
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 			// Ensure the source always waits to finalize until after the dest finalizes.
+			// NB: the cutover may happen while the source is still in some mixed version state.
 			destFinalized <- struct{}{}
 			destMajorUpgradeCount++
 			if destMajorUpgradeCount == expectedMajorUpgrades {
@@ -382,19 +385,21 @@ func (cm *c2cMixed) WaitForReplicatedTime(
 	ctx context.Context, targetTime time.Time, h *mixedversion.Helper, r *rand.Rand,
 ) error {
 	return testutils.SucceedsWithinError(func() error {
-		_, db := h.RandomDB(r)
+		node, db := h.RandomDB(r)
 		defer db.Close()
+		cm.t.L().Printf("waiting for stream ingestion job progress on node %d", node)
 		info, err := getStreamIngestionJobInfo(db, int(cm.ingestionJobID))
 		if err != nil {
 			return err
 		}
+		cm.t.L().Printf("current replicated time %s, job status %s, job error %s", info.GetHighWater().Format(time.RFC3339), info.GetStatus(), info.GetError())
 		if info.GetHighWater().Before(targetTime) {
 			return errors.Newf("waiting for stream ingestion job progress %s to advance beyond %s",
 				info.GetHighWater(), targetTime)
 		}
 		cm.t.L().Printf("reached replicated time %s", info.GetHighWater().Format(time.RFC3339))
 		return nil
-	}, time.Minute*2)
+	}, time.Minute*5)
 }
 
 func stringToHLC(s string) (hlc.Timestamp, error) {
