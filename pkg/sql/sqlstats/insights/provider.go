@@ -20,7 +20,7 @@ import (
 type Provider struct {
 	store           *LockingStore
 	ingester        *ConcurrentBufferIngester
-	anomalyDetector *anomalyDetector
+	anomalyDetector *AnomalyDetector
 }
 
 // Start launches the background tasks necessary for processing insights.
@@ -38,8 +38,8 @@ func (p *Provider) Store() *LockingStore {
 	return p.store
 }
 
-// LatencyInformation returns an object that offers read access to latency information,
+// Anomalies returns an object that offers read access to latency information,
 // such as percentiles.
-func (p *Provider) LatencyInformation() LatencyInformation {
+func (p *Provider) Anomalies() *AnomalyDetector {
 	return p.anomalyDetector
 }

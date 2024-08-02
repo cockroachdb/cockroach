@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	prometheus "github.com/prometheus/client_model/go"
 )
@@ -130,10 +129,6 @@ func NewMetrics() Metrics {
 			MetricType:  prometheus.MetricType_COUNTER,
 		}),
 	}
-}
-
-type LatencyInformation interface {
-	GetPercentileValues(fingerprintID appstatspb.StmtFingerprintID) PercentileValues
 }
 
 type PercentileValues struct {
