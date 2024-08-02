@@ -499,7 +499,8 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 		// Avoid stores up-replicating away from the target node, reducing the
 		// backlog of work.
 		if _, err := db.Exec(
-			`SET CLUSTER SETTING server.time_until_store_dead = '10m'`); err != nil {
+			fmt.Sprintf(
+				`SET CLUSTER SETTING server.time_until_store_dead = '%s'`, v.perturbationDuration+time.Minute)); err != nil {
 			t.Fatal(err)
 		}
 	}()
