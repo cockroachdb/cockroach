@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "rac2",
@@ -12,6 +12,29 @@ go_library(
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/buildutil",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "rac2_test",
+    srcs = ["token_counter_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":rac2"],
+    deps = [
+        "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/settings/cluster",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_github_stretchr_testify//require",
     ],
 )
