@@ -83,8 +83,6 @@ func TestDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			dev := makeDevCmd()
 			dev.exec, dev.os = devExec, devOS
-			dev.knobs.skipDoctorCheck = true
-			dev.knobs.skipCacheCheckDuringBuild = true
 			dev.knobs.devBinOverride = "dev"
 			dev.log = log.New(logger, "", 0)
 
