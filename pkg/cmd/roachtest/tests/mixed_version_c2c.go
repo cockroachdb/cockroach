@@ -195,7 +195,7 @@ func (cm *c2cMixed) SetupHook(ctx context.Context) {
 			}
 
 			l.Printf("replication job: %d", cm.ingestionJobID)
-			// Debug, let initial scan complete
+			// Debugging... let initial scan complete
 			if err := cm.WaitForReplicatedTime(ctx, timeutil.Now(), h, r); err != nil {
 				return err
 			}
@@ -382,12 +382,14 @@ func (cm *c2cMixed) WaitForReplicatedTime(
 	ctx context.Context, targetTime time.Time, h *mixedversion.Helper, r *rand.Rand,
 ) error {
 	return testutils.SucceedsWithinError(func() error {
-		_, db := h.RandomDB(r)
+		node, db := h.RandomDB(r)
 		defer db.Close()
+		cm.t.L().Printf("waiting for stream ingestion job progress on node %d", node)
 		info, err := getStreamIngestionJobInfo(db, int(cm.ingestionJobID))
 		if err != nil {
 			return err
 		}
+		cm.t.L().Printf("current replicated time %s, job status %s, job error %s", info.GetHighWater().Format(time.RFC3339), info.GetStatus(), info.GetError())
 		if info.GetHighWater().Before(targetTime) {
 			return errors.Newf("waiting for stream ingestion job progress %s to advance beyond %s",
 				info.GetHighWater(), targetTime)
