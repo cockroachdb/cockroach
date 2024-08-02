@@ -2304,7 +2304,7 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 			return nil, err
 		}
 		if newTyp == nil {
-			errCode := pgcode.UndefinedColumn
+			errCode := pgcode.UndefinedObject // Error: type 'IrrelevantType'::<newTypeName> does not exist.
 			// Setting default on generated column short-circuits and returns a syntax
 			// error.
 			if columnForDefault.generated {
