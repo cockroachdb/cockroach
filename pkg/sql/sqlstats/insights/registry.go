@@ -29,8 +29,6 @@ type lockingRegistry struct {
 	sink       sink
 }
 
-var _ Writer = (*lockingRegistry)(nil)
-
 func (r *lockingRegistry) Clear() {
 	r.statements = make(map[clusterunique.ID]*statementBuf)
 }

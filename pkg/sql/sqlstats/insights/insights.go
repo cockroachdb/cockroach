@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	prometheus "github.com/prometheus/client_model/go"
 )
@@ -132,19 +131,6 @@ func NewMetrics() Metrics {
 			MetricType:  prometheus.MetricType_COUNTER,
 		}),
 	}
-}
-
-// Writer observes statement and transaction executions.
-type Writer interface {
-	// ObserveStatement notifies the registry of a statement execution.
-	ObserveStatement(sessionID clusterunique.ID, statement *Statement)
-
-	// ObserveTransaction notifies the registry of the end of a transaction.
-	ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction)
-
-	// Clear clears the underlying cache of its contents, with no guarantees around flush behavior.
-	// Data may simply be erased depending on the implementation.
-	Clear()
 }
 
 // Reader offers access to the currently retained set of insights.
