@@ -419,7 +419,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
 		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
-			insightsProvider.Writer(false /*internal*/).Clear()
+			insightsProvider.Writer().Clear()
 		}
 	})
 	reportedSQLStats := sslocal.New(
@@ -1136,10 +1136,16 @@ func (s *Server) newConnExecutor(
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
 
 	ex.applicationStats = applicationStats
+	// We ignore statements and transactions run by the internal executor by
+	// passing a nil writer.
+	var writer *insights.ConcurrentBufferIngester
+	if !ex.sessionData().Internal {
+		writer = ex.server.insights.Writer()
+	}
 	ex.statsCollector = sslocal.NewStatsCollector(
 		s.cfg.Settings,
 		applicationStats,
-		ex.server.insights.Writer(ex.sessionData().Internal),
+		writer,
 		ex.phaseTimes,
 		s.sqlStats.GetCounters(),
 		underOuterTxn,
