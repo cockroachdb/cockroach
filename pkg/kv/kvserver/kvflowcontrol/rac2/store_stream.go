@@ -10,7 +10,11 @@
 
 package rac2
 
-import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+)
 
 // StreamTokenCounterProvider is the interface for retrieving token counters
 // for a given stream.
@@ -22,3 +26,32 @@ type StreamTokenCounterProvider interface {
 	// Send returns the send token counter for the given stream.
 	Send(kvflowcontrol.Stream) TokenCounter
 }
+
+// StreamWatcherHandleID is a unique identifier for a handle that is
+// watching for available tokens on a stream.
+type StreamWatcherHandleID int64
+
+// SendTokenWatcher is the interface for watching and waiting on available
+// elastic send tokens. The watcher registers a notification, which will be
+// called when elastic tokens are available for a given stream. Note only
+// elastic tokens are watched as this is intended to be used when a send queue
+// exists.
+//
+// TODO(kvoli): Consider de-interfacing if not necessary for testing.
+type SendTokenWatcher interface {
+	// NotifyWhenAvailable queues up for elastic tokens for the given stream's
+	// send token counter. When elastic tokens are available, the provided
+	// TokenGrantNotification is called. It is the caller's responsibility to
+	// call CancelHandle when tokens are no longer needed, or when the caller is
+	// done.
+	NotifyWhenAvailable(
+		kvflowcontrol.Stream,
+		TokenGrantNotification,
+	) StreamWatcherHandleID
+	// CancelHandle cancels the given handle, stopping it from being notified
+	// when tokens are available. CancelHandle should be called at most once.
+	CancelHandle(StreamWatcherHandleID)
+}
+
+// TokenGrantNotification is called when tokens are available.
+type TokenGrantNotification func(context.Context)
