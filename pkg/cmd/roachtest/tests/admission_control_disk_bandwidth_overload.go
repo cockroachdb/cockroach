@@ -131,7 +131,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			m := c.NewMonitor(ctx, c.CRDBNodes())
 
 			t.Status(fmt.Sprintf("initalizing kv workload (<%s)", time.Minute))
-			c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload init kv --drop"+
+			c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload init kv --drop "+
 				"--max-block-bytes=4096 --min-block-bytes=4096 {pgurl:1}")
 
 			m.Go(func(ctx context.Context) error {
