@@ -20,12 +20,6 @@ import (
 // cluster.
 const DefaultCockroachPath = "./cockroach"
 
-// EnvAssertionsEnabledSeed is the name of the environment variable
-// that, when set, causes roachtest to use a binary with runtime
-// assertions enabled (if available), using the random seed contained
-// in that environment variable.
-var EnvAssertionsEnabledSeed = "ROACHTEST_ASSERTIONS_ENABLED_SEED"
-
 // Test is the interface through which roachtests interact with the
 // test harness.
 type Test interface {

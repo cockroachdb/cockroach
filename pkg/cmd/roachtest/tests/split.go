@@ -441,7 +441,7 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 		"--vmodule=split_queue=2,store_rebalancer=2,allocator=2,replicate_queue=2,"+
 			"decider=3,replica_split_load=1",
 	)
-	c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), crdbNodes)
 
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
