@@ -110,17 +110,19 @@ const manualAdminReason = "manual"
 // AdminSplit divides the range into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
 	ctx context.Context, args kvpb.AdminSplitRequest, reason redact.RedactableString,
-) (reply kvpb.AdminSplitResponse, _ *kvpb.Error) {
+) (reply kvpb.AdminSplitResponse, kvErr *kvpb.Error) {
 	if len(args.SplitKey) == 0 {
 		return kvpb.AdminSplitResponse{}, kvpb.NewErrorf("cannot split range with no key provided")
 	}
-
-	err := r.executeAdminCommandWithDescriptor(ctx, func(desc *roachpb.RangeDescriptor) error {
-		var err error
-		reply, err = r.adminSplitWithDescriptor(ctx, args, desc, true /* delayable */, reason, false /* findFirstSafeKey */)
+	kvErr = r.executeAdminCommandWithDescriptor(ctx, func(desc *roachpb.RangeDescriptor) error {
+		conf, err := r.LoadSpanConfig(ctx)
+		if err != nil {
+			return err
+		}
+		reply, err = r.adminSplitWithDescriptor(ctx, args, desc, conf, true /* delayable */, reason, false /* findFirstSafeKey */)
 		return err
 	})
-	return reply, err
+	return reply, kvErr
 }
 
 func maybeDescriptorChangedError(
@@ -345,6 +347,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	ctx context.Context,
 	args kvpb.AdminSplitRequest,
 	desc *roachpb.RangeDescriptor,
+	conf *roachpb.SpanConfig,
 	delayable bool,
 	reason redact.RedactableString,
 	findFirstSafeKey bool,
@@ -370,7 +373,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		if len(args.SplitKey) == 0 {
 			// Find a key to split by size.
 			var err error
-			targetSize := r.GetMaxBytes(ctx) / 2
+			targetSize := conf.RangeMaxBytes / 2
 			foundSplitKey, err = storage.MVCCFindSplitKey(
 				ctx, r.store.TODOEngine(), desc.StartKey, desc.EndKey, targetSize)
 			if err != nil {
@@ -3755,15 +3758,11 @@ func (roo *replicaRelocateOneOptions) StorePool() storepool.AllocatorStorePool {
 func (roo *replicaRelocateOneOptions) LoadSpanConfig(
 	ctx context.Context, startKey roachpb.RKey,
 ) (*roachpb.SpanConfig, error) {
-	confReader, err := roo.store.GetConfReader(ctx)
+	conf, _, err := roo.store.GetSpanConfigForKey(ctx, startKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "can't relocate range")
 	}
-	conf, _, err := confReader.GetSpanConfigForKey(ctx, startKey)
-	if err != nil {
-		return nil, err
-	}
-	return &conf, nil
+	return conf, nil
 }
 
 // Leaseholder returns the descriptor of the replica which holds the lease on
@@ -4164,12 +4163,16 @@ func (r *Replica) adminScatter(
 	}
 
 	// Loop until we hit an error or until we hit `maxAttempts` for the range.
+	// conf gets set within the loop. We want the same conf that processOneChange
+	// used in this loop.
+	var conf *roachpb.SpanConfig
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
 			break
 		}
-		desc, conf := r.DescAndSpanConfig()
-		_, err := rq.replicaCanBeProcessed(ctx, r, false /* acquireLeaseIfNeeded */)
+		desc := r.Desc()
+		var err error
+		conf, err = rq.replicaCanBeProcessed(ctx, r, false /* acquireLeaseIfNeeded */)
 		if err != nil {
 			// The replica can not be processed, so skip it.
 			break
@@ -4196,8 +4199,8 @@ func (r *Replica) adminScatter(
 	// queue would do on its own (#17341), do so after the replicate queue is
 	// done by transferring the lease to any of the given N replicas with
 	// probability 1/N of choosing each.
-	if args.RandomizeLeases && r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
-		desc, conf := r.DescAndSpanConfig()
+	if args.RandomizeLeases && conf != nil && r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
+		desc := r.Desc()
 		potentialLeaseTargets := r.store.allocator.ValidLeaseTargets(
 			ctx, r.store.cfg.StorePool, desc, conf, desc.Replicas().VoterDescriptors(), r, allocator.TransferLeaseOptions{})
 		if len(potentialLeaseTargets) > 0 {

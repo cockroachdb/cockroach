@@ -833,9 +833,7 @@ func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 	}
 
 	cfg, err := tc.store.GetConfReader(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// TODO: following computations should take care of new local timestamp
 	// for tombstones as they can be non-zero in size.
@@ -874,9 +872,7 @@ func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 		defer snap.Close()
 
 		conf, _, err := cfg.GetSpanConfigForKey(ctx, desc.StartKey)
-		if err != nil {
-			t.Fatalf("could not find zone config for range %s: %+v", tc.repl, err)
-		}
+		require.NoError(t, err)
 
 		now := tc.Clock().Now()
 		newThreshold := gc.CalculateThreshold(now, conf.TTL())
@@ -892,9 +888,7 @@ func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 				return nil
 			})
 	}()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	if gcInfo.AffectedVersionsKeyBytes != expectedVersionsKeyBytes {
 		t.Errorf("expected total keys size: %d bytes; got %d bytes", expectedVersionsKeyBytes,
 			gcInfo.AffectedVersionsKeyBytes)
@@ -917,10 +911,10 @@ func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 
 	// Process through a scan queue.
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	conf, err := tc.repl.LoadSpanConfig(ctx)
+	require.NoError(t, err)
+	processed, err := mgcq.process(ctx, tc.repl, conf)
+	require.NoError(t, err)
 	assert.True(t, processed, "queue not processed")
 
 	expKVs := []struct {
@@ -1163,15 +1157,9 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 
 	// Run GC.
 	mgcq := newMVCCGCQueue(tc.store)
-	cfg, err := tc.store.GetConfReader(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	processed, err := mgcq.process(ctx, tc.repl, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	conf := &roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{TTLSeconds: 100}}
+	processed, err := mgcq.process(ctx, tc.repl, conf)
+	require.NoError(t, err)
 	assert.True(t, processed, "queue not processed")
 
 	testutils.SucceedsSoon(t, func() error {
@@ -1297,15 +1285,10 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 	}
 
 	// Process through GC queue.
-	confReader, err := tc.store.GetConfReader(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, confReader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	conf := &roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{TTLSeconds: 100}}
+	processed, err := mgcq.process(ctx, tc.repl, conf)
+	require.NoError(t, err)
 	assert.True(t, processed, "queue not processed")
 
 	// MVCCIterate through all values to ensure intents have been fully resolved.
@@ -1360,17 +1343,11 @@ func TestMVCCGCQueueLastProcessedTimestamps(t *testing.T) {
 		}
 	}
 
-	confReader, err := tc.store.GetConfReader(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// Process through a scan queue.
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, confReader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	conf := &roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{TTLSeconds: 100}}
+	processed, err := mgcq.process(ctx, tc.repl, conf)
+	require.NoError(t, err)
 	assert.True(t, processed, "queue not processed")
 
 	// Verify GC.
@@ -1465,20 +1442,12 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	}
 
 	// Forward the clock past the default GC time.
-	confReader, err := tc.store.GetConfReader(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	conf, _, err := confReader.GetSpanConfigForKey(ctx, roachpb.RKey("key"))
-	if err != nil {
-		t.Fatalf("could not find span config for range %s", err)
-	}
+	conf, _, err := tc.store.GetSpanConfigForKey(ctx, roachpb.RKey("key"))
+	require.NoError(t, err)
 	tc.manualClock.Advance(conf.TTL() + 1)
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, confReader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	processed, err := mgcq.process(ctx, tc.repl, conf)
+	require.NoError(t, err)
 	assert.True(t, processed, "queue not processed")
 	// We wrote two batches worth of keys spread out, and two keys that
 	// each have enough old versions to fill a whole batch each in the
@@ -1523,46 +1492,42 @@ func TestMVCCGCQueueGroupsRangeDeletions(t *testing.T) {
 	require.NoError(t, store.AddReplica(r2))
 	r2.RaftStatus()
 	r2.handleGCHintResult(ctx, &roachpb.GCHint{LatestRangeDeleteTimestamp: hlc.Timestamp{WallTime: 1}})
-	r2.SetSpanConfig(roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{TTLSeconds: 100}},
-		roachpb.Span{
-			Key:    key("b").AsRawKey(),
-			EndKey: key("c").AsRawKey(),
-		})
+	conf := &roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{TTLSeconds: 100}}
 
 	gcQueue := newMVCCGCQueue(store)
 
 	// Check that low priority replicas doesn't cause hint scan.
-	gcQueue.postProcessScheduled(ctx, r1, 1)
+	gcQueue.postProcessScheduled(ctx, r1, conf, 1)
 	qr, _ := gcQueue.pop()
 	require.Nil(t, qr, "unexpected enqueued replica")
 
 	// Check that high priority replica is not added if GC hint time didn't exceed
 	// ttl.
-	gcQueue.postProcessScheduled(ctx, r1, deleteRangePriority)
+	gcQueue.postProcessScheduled(ctx, r1, conf, deleteRangePriority)
 	qr, _ = gcQueue.pop()
 	require.Nil(t, qr, "unexpected enqueued replica")
 
 	// Check that replica is not queued if sequence of hi-pri replicas are being
 	// processed.
 	clock.Advance(200 * time.Second)
-	gcQueue.postProcessScheduled(ctx, r1, deleteRangePriority)
+	gcQueue.postProcessScheduled(ctx, r1, conf, deleteRangePriority)
 	qr, _ = gcQueue.pop()
 	require.Nil(t, qr, "unexpected enqueued replica")
 
 	// Reset sequence by running a lo pri replica.
-	gcQueue.postProcessScheduled(ctx, r1, 1)
+	gcQueue.postProcessScheduled(ctx, r1, conf, 1)
 	qr, _ = gcQueue.pop()
 	require.Nil(t, qr, "unexpected enqueued replica")
 
 	// Check that replica is processed when hint criteria is met.
-	gcQueue.postProcessScheduled(ctx, r1, deleteRangePriority)
+	gcQueue.postProcessScheduled(ctx, r1, conf, deleteRangePriority)
 	qr, prio := gcQueue.pop()
 	require.NotNil(t, qr, "unexpected nil replica")
 	require.Equal(t, deleteRangePriority, prio, "expected high priority")
 
 	// Check that non leaseholder replicas are ignored.
 	leaseError = false
-	gcQueue.postProcessScheduled(ctx, r1, deleteRangePriority)
+	gcQueue.postProcessScheduled(ctx, r1, conf, deleteRangePriority)
 	qr, _ = gcQueue.pop()
 	require.Nil(t, qr, "unexpected nil replica")
 }
