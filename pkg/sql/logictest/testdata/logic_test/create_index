@@ -487,3 +487,22 @@ CREATE INDEX tab1_i1 ON tab1 (c3) STORING (c2);
 
 statement ok
 DROP TABLE tab1;
+
+# Make sure the IF NOT EXISTS clause short-circuits if the index already exists.
+subtest create_index_if_not_exists_short_circuits
+
+statement ok
+CREATE TABLE tbl_ifne (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE INDEX idx ON tbl_ifne (b)
+
+statement error index "invalid_idx" already contains column "a".*
+CREATE INDEX invalid_idx ON tbl_ifne (b) STORING (a)
+
+# With IF NOT EXISTS, the statement never runs, so this succeeds.
+statement ok
+CREATE INDEX IF NOT EXISTS idx ON tbl_ifne (b) STORING (a)
+
+statement ok
+DROP TABLE tbl_ifne CASCADE
