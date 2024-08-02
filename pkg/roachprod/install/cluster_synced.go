@@ -1643,9 +1643,9 @@ func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) e
 rm -fr %[2]s
 mkdir -p %[2]s
 VERSION=$(%[1]s version --build-tag)
-VERSION=${VERSION::5}
+VERSION=${VERSION::3}
 TENANT_SCOPE_OPT=""
-if [[ $VERSION = v22.2 ]]; then
+if [[ $VERSION = v22 ]]; then
        TENANT_SCOPE_OPT="--tenant-scope 1,2,3,4,11,12,13,14"
 fi
 %[1]s cert create-ca --certs-dir=%[2]s --ca-key=%[2]s/ca.key

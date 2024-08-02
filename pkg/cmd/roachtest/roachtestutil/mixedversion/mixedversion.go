@@ -480,7 +480,7 @@ func defaultTestOptions() testOptions {
 		useFixturesProbability:         0.7,
 		upgradeTimeout:                 clusterupgrade.DefaultUpgradeTimeout,
 		minUpgrades:                    1,
-		maxUpgrades:                    4,
+		maxUpgrades:                    3,
 		minimumSupportedVersion:        OldestSupportedVersion,
 		predecessorFunc:                randomPredecessor,
 		enabledDeploymentModes:         allDeploymentModes,
