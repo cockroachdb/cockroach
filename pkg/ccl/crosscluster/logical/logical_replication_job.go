@@ -516,6 +516,11 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 		}); err != nil {
 		return err
 	}
+	select {
+	case rh.frontierUpdates <- replicatedTime:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 
 	rh.metrics.ReplicatedTimeSeconds.Update(replicatedTime.GoTime().Unix())
 	return nil
