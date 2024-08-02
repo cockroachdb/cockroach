@@ -348,20 +348,20 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 		return nil, err
 	}
 
-	constaintName := fmt.Sprintf("%s_%s_unique", tableName.Object(), columnForConstraint.name)
+	constraintName := fmt.Sprintf("%s_%s_unique", tableName.Object(), columnForConstraint.name)
 
 	columnExistsOnTable, err := og.columnExistsOnTable(ctx, tx, tableName, columnForConstraint.name)
 	if err != nil {
 		return nil, err
 	}
-	constraintExists, err := og.constraintExists(ctx, tx, constaintName)
+	constraintExists, err := og.constraintExists(ctx, tx, constraintName)
 	if err != nil {
 		return nil, err
 	}
 
 	canApplyConstraint := true
 	if columnExistsOnTable {
-		canApplyConstraint, err = og.canApplyUniqueConstraint(ctx, tx, tableName, []string{columnForConstraint.name})
+		canApplyConstraint, err = og.canApplyUniqueConstraint(ctx, tx, tableName, []string{lexbase.EscapeSQLIdent(columnForConstraint.name)})
 		if err != nil {
 			return nil, err
 		}
@@ -383,7 +383,7 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedColumn, condition: !columnExistsOnTable},
-		{code: pgcode.DuplicateObject, condition: constraintExists},
+		{code: pgcode.DuplicateRelation, condition: constraintExists},
 		{code: pgcode.FeatureNotSupported, condition: columnExistsOnTable && !colinfo.ColumnTypeIsIndexable(columnForConstraint.typ)},
 		{pgcode.FeatureNotSupported, hasAlterPKSchemaChange},
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: databaseHasRegionChange && tableIsRegionalByRow},
@@ -393,7 +393,12 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 		og.candidateExpectedCommitErrors.add(pgcode.UniqueViolation)
 	}
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)`, tableName, constaintName, columnForConstraint.name)
+	stmt.sql = fmt.Sprintf(
+		`ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)`,
+		tableName.String(),
+		lexbase.EscapeSQLIdent(constraintName),
+		lexbase.EscapeSQLIdent(columnForConstraint.name),
+	)
 	return stmt, nil
 }
 
@@ -983,10 +988,9 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	// Define columns on which to create an index. Check for types which cannot be indexed.
 	duplicateRegionColumn := false
 	nonIndexableType := false
+	lastColInvertexIndexIsDescending := false
+	pkColUsedInInvertedIndex := false
 	def.Columns = make(tree.IndexElemList, 1+og.randIntn(len(columnNames)))
-	if err != nil {
-		return nil, err
-	}
 	for i := range def.Columns {
 		def.Columns[i].Column = tree.Name(columnNames[i].name)
 		def.Columns[i].Direction = tree.Direction(og.randIntn(1 + int(tree.Descending)))
@@ -1002,10 +1006,31 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			// We can have an inverted index on a set of columns if the last column
 			// is an inverted indexable type and the preceding columns are not.
 			invertedIndexableType := colinfo.ColumnTypeIsInvertedIndexable(columnNames[i].typ)
-			if (invertedIndexableType && i < len(def.Columns)-1) ||
+			indexableType := colinfo.ColumnTypeIsIndexable(columnNames[i].typ)
+			if (!indexableType && i < len(def.Columns)-1) ||
 				(!invertedIndexableType && i == len(def.Columns)-1) {
 				nonIndexableType = true
 			}
+			// Strings need to use the gin_trgm_ops opclass if they are being used
+			// as the last column in an inverted index.
+			if i == len(def.Columns)-1 && columnNames[i].typ.Family() == types.StringFamily {
+				def.Columns[i].OpClass = "gin_trgm_ops"
+			}
+			colUsedInPrimaryIdx, err := og.colIsPrimaryKey(ctx, tx, tableName, columnNames[i].name)
+			if err != nil {
+				return nil, err
+			}
+			if i == len(def.Columns)-1 {
+				// The last column cannot be descending or be present in the primary
+				// index.
+				if def.Columns[i].Direction == tree.Descending {
+					lastColInvertexIndexIsDescending = true
+				}
+				if colUsedInPrimaryIdx {
+					pkColUsedInInvertedIndex = true
+				}
+			}
+
 		} else {
 			if !colinfo.ColumnTypeIsIndexable(columnNames[i].typ) {
 				nonIndexableType = true
@@ -1060,7 +1085,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	if def.Unique {
 		columns := []string{}
 		for _, col := range def.Columns {
-			columns = append(columns, string(col.Column))
+			columns = append(columns, lexbase.EscapeSQLIdent(string(col.Column)))
 		}
 		uniqueViolationWillNotOccur, err = og.canApplyUniqueConstraint(ctx, tx, tableName, columns)
 		if err != nil {
@@ -1095,16 +1120,19 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			// pgcode.TransactionCommittedWithSchemaChangeFailure. The schemachange worker
 			// is expected to parse for the underlying error.
 			{code: pgcode.UniqueViolation, condition: !uniqueViolationWillNotOccur},
+			{code: pgcode.InvalidSQLStatementName, condition: def.Inverted && len(def.Storing) > 0},
 			{code: pgcode.DuplicateColumn, condition: duplicateStore},
 			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
 			{code: pgcode.FeatureNotSupported, condition: regionColStored},
 			{code: pgcode.FeatureNotSupported, condition: duplicateRegionColumn},
 			{code: pgcode.FeatureNotSupported, condition: isStoringVirtualComputed},
 			{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
+			{code: pgcode.FeatureNotSupported, condition: lastColInvertexIndexIsDescending},
+			{code: pgcode.FeatureNotSupported, condition: pkColUsedInInvertedIndex},
 		})
 	}
 
-	stmt.sql = tree.AsStringWithFlags(def, tree.FmtBareIdentifiers)
+	stmt.sql = tree.AsString(def)
 	return stmt, nil
 }
 
@@ -2787,7 +2815,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	nonGeneratedColNames := []string{}
 	rows := [][]string{}
 	for _, col := range nonGeneratedCols {
-		nonGeneratedColNames = append(nonGeneratedColNames, col.name)
+		nonGeneratedColNames = append(nonGeneratedColNames, lexbase.EscapeSQLIdent(col.name))
 	}
 	numRows := og.randIntn(3) + 1
 	for i := 0; i < numRows; i++ {
@@ -3153,7 +3181,7 @@ func (og *operationGenerator) getTableColumns(
 												 c->>'id' AS ordinal
                     FROM columns_json
                  )
-  SELECT quote_ident(show_columns.column_name),
+  SELECT show_columns.column_name,
          show_columns.data_type,
          show_columns.is_nullable,
          columns.generation_expression IS NOT NULL AS is_generated,
@@ -4477,7 +4505,7 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 			selectColumns.WriteString(", ")
 		}
 		selectColumns.WriteString(fmt.Sprintf("t%d.", tableIdx))
-		selectColumns.WriteString(col.name)
+		selectColumns.WriteString(lexbase.EscapeSQLIdent(col.name))
 		selectColumns.WriteString(" AS ")
 		selectColumns.WriteString(fmt.Sprintf("col%d", colIdx))
 	}
