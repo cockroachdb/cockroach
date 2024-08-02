@@ -128,10 +128,6 @@ type TestingKnobs struct {
 	// coalescing system database ranges for the host tenant.
 	StoreIgnoreCoalesceAdjacentExceptions bool
 
-	// StoreInternConfigsInDryRuns, if set, will intern span configs even when
-	// applying mutations in dry run mode.
-	StoreInternConfigsInDryRuns bool
-
 	// OverrideFallbackConf, if set, allows tests to override fields in the
 	// fallback config that will be applied to the span.
 	OverrideFallbackConf func(roachpb.SpanConfig) roachpb.SpanConfig
