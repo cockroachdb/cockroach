@@ -145,7 +145,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				t.Status(fmt.Sprintf("starting background kv workload thread (<%s)", time.Minute))
 				dur := " --duration=" + duration.String()
 				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
-				cmd := "./cockroach workload run kv --init --histograms=perf/stats.json --concurrency=1024 " +
+				cmd := "./cockroach workload run kv --init --db='other' --histograms=perf/stats.json --concurrency=1024 " +
 					"--splits=1000 --read-percent=0 --min-block-bytes=4096 --max-block-bytes=4096 " +
 					"--txn-qos='background' --tolerate-errors" + dur + url
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
