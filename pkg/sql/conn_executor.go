@@ -337,7 +337,7 @@ type Server struct {
 	// reportedStatsController.
 	reportedStatsController *sslocal.Controller
 
-	insights insights.Provider
+	insights *insights.Provider
 
 	reCache           *tree.RegexpCache
 	toCharFormatCache *tochar.FormatCache

@@ -22,7 +22,7 @@ func TestProvider_WriterIgnoresInternalExecutorObservations(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	store := newStore(settings)
 	ingester := newConcurrentBufferIngester(newRegistry(settings, &fakeDetector{stubEnabled: true}, store))
-	provider := &defaultProvider{store: store, ingester: ingester}
+	provider := &Provider{store: store, ingester: ingester}
 	writer := provider.Writer(true /* internal */)
 	writer.ObserveStatement(clusterunique.ID{}, &Statement{})
 	writer.ObserveTransaction(clusterunique.ID{}, &Transaction{})
