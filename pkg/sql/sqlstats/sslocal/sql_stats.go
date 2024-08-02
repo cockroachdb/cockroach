@@ -50,7 +50,6 @@ type SQLStats struct {
 
 	knobs *sqlstats.TestingKnobs
 
-	insights           insights.WriterProvider
 	latencyInformation insights.LatencyInformation
 }
 
@@ -60,7 +59,6 @@ func newSQLStats(
 	uniqueTxnFingerprintLimit *settings.IntSetting,
 	curMemBytesCount *metric.Gauge,
 	maxMemBytesHist metric.IHistogram,
-	insightsWriter insights.WriterProvider,
 	parentMon *mon.BytesMonitor,
 	flushTarget Sink,
 	knobs *sqlstats.TestingKnobs,
@@ -77,7 +75,6 @@ func newSQLStats(
 		st:                 st,
 		flushTarget:        flushTarget,
 		knobs:              knobs,
-		insights:           insightsWriter,
 		latencyInformation: latencyInformation,
 	}
 	s.atomic = ssmemstorage.NewSQLStatsAtomicCounters(
