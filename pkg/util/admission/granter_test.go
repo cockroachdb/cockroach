@@ -241,10 +241,7 @@ func TestGranterBasic(t *testing.T) {
 				loop--
 				// We are not using a real ioLoadListener, and simply setting the
 				// tokens (the ioLoadListener has its own test).
-				coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
-					int64(ioTokens), int64(ioTokens), int64(elasticTokens),
-					int64(ioTokens*250), int64(ioTokens*250), int64(elasticTokens*250), false,
-				)
+				coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(int64(ioTokens), int64(ioTokens), int64(elasticTokens), int64(ioTokens*250), int64(ioTokens*250), int64(elasticTokens*250), false, 0)
 			}
 			coord.testingTryGrant()
 			return flushAndReset()
@@ -272,11 +269,7 @@ func TestGranterBasic(t *testing.T) {
 
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
-			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
-				int64(ioTokens), int64(elasticIOTokens), int64(elasticTokens),
-				int64(ioTokens*burstMultiplier), int64(elasticIOTokens*burstMultiplier),
-				int64(elasticTokens*burstMultiplier), false,
-			)
+			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(int64(ioTokens), int64(elasticIOTokens), int64(elasticTokens), int64(ioTokens*burstMultiplier), int64(elasticIOTokens*burstMultiplier), int64(elasticTokens*burstMultiplier), false, 0)
 			coord.testingTryGrant()
 			return flushAndReset()
 
