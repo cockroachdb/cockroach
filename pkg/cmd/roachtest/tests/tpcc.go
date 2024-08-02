@@ -381,7 +381,6 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	mvt := mixedversion.NewTest(
 		ctx, t, t.L(), c, crdbNodes,
-		mixedversion.MaxUpgrades(3),
 		// Multi-tenant deployments are currently unsupported. See #127378.
 		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 	)

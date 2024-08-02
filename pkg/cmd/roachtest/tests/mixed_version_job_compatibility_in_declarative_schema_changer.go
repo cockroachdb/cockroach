@@ -163,6 +163,8 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 		// compatible with the branch it was built from and the major version before that.
 		mixedversion.NumUpgrades(1),
 		mixedversion.DisableSkipVersionUpgrades,
+		// Multi-tenant mode for this test only works on 23.2+
+		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 	)
 
 	// Set up the testing state (e.g. create a few databases and tables) and always use declarative schema
