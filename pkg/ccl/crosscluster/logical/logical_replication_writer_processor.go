@@ -107,6 +107,8 @@ var (
 	_ execinfra.RowSource = &logicalReplicationWriterProcessor{}
 )
 
+const useKVWriter = false
+
 const logicalReplicationWriterProcessorName = "logical-replication-writer-processor"
 
 func newLogicalReplicationWriterProcessor(
@@ -143,15 +145,22 @@ func newLogicalReplicationWriterProcessor(
 	}
 	bhPool := make([]BatchHandler, maxWriterWorkers)
 	for i := range bhPool {
-
-		rp, err := makeSQLProcessor(
-			ctx, flowCtx.Cfg.Settings, tableConfigs,
-			// Initialize the executor with a fresh session data - this will
-			// avoid creating a new copy on each executor usage.
-			flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
-		)
-		if err != nil {
-			return nil, err
+		var rp RowProcessor
+		if useKVWriter {
+			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, tableConfigs)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			rp, err = makeSQLProcessor(
+				ctx, flowCtx.Cfg.Settings, tableConfigs,
+				// Initialize the executor with a fresh session data - this will
+				// avoid creating a new copy on each executor usage.
+				flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
+			)
+			if err != nil {
+				return nil, err
+			}
 		}
 		bhPool[i] = &txnBatch{
 			db:       flowCtx.Cfg.DB,
@@ -921,7 +930,7 @@ func (t *txnBatch) HandleBatch(
 
 	stats := batchStats{}
 	var err error
-	if len(batch) == 1 {
+	if len(batch) == 1 && !useKVWriter {
 		s, err := t.rp.ProcessRow(ctx, nil /* txn */, batch[0].KeyValue, batch[0].PrevValue)
 		if err != nil {
 			return stats, err
