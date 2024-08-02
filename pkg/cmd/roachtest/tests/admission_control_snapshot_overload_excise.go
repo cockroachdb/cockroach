@@ -43,8 +43,7 @@ func registerSnapshotOverloadExcise(r registry.Registry) {
 		Owner:            registry.OwnerAdmissionControl,
 		Benchmark:        true,
 		CompatibleClouds: registry.OnlyGCE,
-		// TODO(aaditya): change to weekly once the test stabilizes.
-		Suites: registry.Suites(registry.Nightly),
+		Suites:           registry.Suites(registry.Weekly),
 		// The test uses a large volume size to ensure high provisioned bandwidth
 		// from the cloud provider.
 		Cluster: r.MakeClusterSpec(4, spec.CPU(4), spec.WorkloadNode(), spec.VolumeSize(2000)),
