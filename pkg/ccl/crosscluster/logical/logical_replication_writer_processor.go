@@ -378,6 +378,10 @@ func (lrw *logicalReplicationWriterProcessor) close() {
 		return
 	}
 
+	for _, b := range lrw.bh {
+		b.Close(lrw.Ctx())
+	}
+
 	defer lrw.frontier.Release()
 
 	if lrw.streamPartitionClient != nil {
@@ -874,6 +878,7 @@ type BatchHandler interface {
 	HandleBatch(context.Context, []streampb.StreamEvent_KV) (batchStats, error)
 	GetLastRow() cdcevent.Row
 	SetSyntheticFailurePercent(uint32)
+	Close(context.Context)
 }
 
 // RowProcessor knows how to process a single row from an event stream.
@@ -884,6 +889,7 @@ type RowProcessor interface {
 	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue, roachpb.Value) (batchStats, error)
 	GetLastRow() cdcevent.Row
 	SetSyntheticFailurePercent(uint32)
+	Close(context.Context)
 }
 
 type txnBatch struct {
@@ -935,6 +941,10 @@ func (t *txnBatch) GetLastRow() cdcevent.Row {
 
 func (t *txnBatch) SetSyntheticFailurePercent(rate uint32) {
 	t.rp.SetSyntheticFailurePercent(rate)
+}
+
+func (t *txnBatch) Close(ctx context.Context) {
+	t.rp.Close(ctx)
 }
 
 func init() {

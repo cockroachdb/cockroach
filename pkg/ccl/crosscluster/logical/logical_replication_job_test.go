@@ -883,6 +883,7 @@ func (m mockBatchHandler) HandleBatch(
 }
 func (m mockBatchHandler) GetLastRow() cdcevent.Row            { return cdcevent.Row{} }
 func (m mockBatchHandler) SetSyntheticFailurePercent(_ uint32) {}
+func (m mockBatchHandler) Close(context.Context)               {}
 
 type mockDLQ int
 
