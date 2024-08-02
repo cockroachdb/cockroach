@@ -47,20 +47,9 @@ func registerCopy(r registry.Registry) {
 		const rowOverheadEstimate = 160
 		const rowEstimate = rowOverheadEstimate + payload
 
-		// We run this without metamorphic constants as kv-batch-size = 1 makes
-		// this test take far too long to complete.
-		// TODO(DarrylWong): Use a metamorphic constants exclusion list instead.
-		// See: https://github.com/cockroachdb/cockroach/issues/113164
-		settings := install.MakeClusterSettings()
-		settings.Env = append(settings.Env, "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true")
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-		// Make sure the copy commands have sufficient time to finish when
-		// runtime assertions are enabled.
 		copyTimeout := 10 * time.Minute
-		if UsingRuntimeAssertions(t) {
-			copyTimeout = 20 * time.Minute
-		}
 
 		m := c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
