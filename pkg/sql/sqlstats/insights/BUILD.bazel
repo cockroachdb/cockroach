@@ -12,7 +12,6 @@ go_library(
         "pool.go",
         "provider.go",
         "registry.go",
-        "sink.go",
         "store.go",
     ],
     embed = [":insights_go_proto"],
