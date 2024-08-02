@@ -120,6 +120,7 @@ export interface DatabaseTablePageData {
   hasAdminRole?: UIConfigState["hasAdminRole"];
   csIndexUnusedDuration: string;
   isTenant?: UIConfigState["isTenant"];
+  includeLocalityMetadata: boolean;
 }
 
 export interface DatabaseTablePageDataDetails {
@@ -173,6 +174,7 @@ export interface DatabaseTablePageActions {
     database: string,
     table: string,
     csIndexUnusedDuration: string,
+    includeLocalityMetadata: boolean,
   ) => void;
   refreshSettings: () => void;
   refreshIndexStats?: (database: string, table: string) => void;
@@ -256,10 +258,10 @@ export class DatabaseTablePage extends React.Component<
   };
 
   componentDidMount(): void {
-    this.refresh();
     if (this.props.refreshSettings != null) {
       this.props.refreshSettings();
     }
+    this.refresh();
   }
 
   componentDidUpdate(prevProp: Readonly<DatabaseTablePageProps>): void {
@@ -286,6 +288,7 @@ export class DatabaseTablePage extends React.Component<
         this.props.databaseName,
         this.props.name,
         this.props.csIndexUnusedDuration,
+        this.props.includeLocalityMetadata,
       );
     }
 

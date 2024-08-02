@@ -84,7 +84,13 @@ const mapDispatchToProps = (dispatch: Dispatch): DatabasesPageActions => ({
   },
   refreshDatabaseDetails: (database: string, csIndexUnusedDuration: string) => {
     dispatch(
-      databaseDetailsActions.refresh({ database, csIndexUnusedDuration }),
+      databaseDetailsActions.refresh({
+        database,
+        csIndexUnusedDuration,
+        // When running in cloud, we always load this information. The
+        // configurability is for SH customers.
+        includeLocalityMetadata: true,
+      }),
     );
   },
   refreshDatabaseSpanStats: (database: string) => {

@@ -121,6 +121,7 @@ export interface DatabaseDetailsPageData {
   showNodeRegionsColumn?: boolean;
   showIndexRecommendations: boolean;
   csIndexUnusedDuration: string;
+  includeLocalityMetadataSetting?: boolean;
 }
 
 export interface DatabaseDetailsPageDataTable {
@@ -159,11 +160,13 @@ export interface DatabaseDetailsPageActions {
   refreshDatabaseDetails: (
     database: string,
     csIndexUnusedDuration: string,
+    includeLocalityMetadata: boolean,
   ) => void;
   refreshTableDetails: (
     database: string,
     table: string,
     csIndexUnusedDuration: string,
+    includeLocalityMetadata: boolean,
   ) => void;
   onFilterChange?: (value: Filters) => void;
   onSearchComplete?: (query: string) => void;
@@ -267,6 +270,7 @@ export class DatabaseDetailsPage extends React.Component<
       this.props.refreshDatabaseDetails(
         this.props.name,
         this.props.csIndexUnusedDuration,
+        this.props.includeLocalityMetadataSetting,
       );
     } else {
       // If the props are already loaded then componentDidUpdate
@@ -352,6 +356,7 @@ export class DatabaseDetailsPage extends React.Component<
           this.props.name,
           table.name.qualifiedNameWithSchemaAndTable,
           this.props.csIndexUnusedDuration,
+          this.props.includeLocalityMetadataSetting,
         );
       }
     });

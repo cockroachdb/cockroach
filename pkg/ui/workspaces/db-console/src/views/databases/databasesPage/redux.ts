@@ -9,6 +9,8 @@ import {
   Filters,
   deriveDatabaseDetailsMemoized,
 } from "@cockroachlabs/cluster-ui";
+import { RouteComponentProps } from "react-router";
+import { Dispatch } from "redux";
 import { createSelector } from "reselect";
 
 import {
@@ -21,6 +23,7 @@ import {
 import {
   selectAutomaticStatsCollectionEnabled,
   selectDropUnusedIndexDuration,
+  selectIncludeLocalityMetadataEnabled,
   selectIndexRecommendationsEnabled,
 } from "src/redux/clusterSettings";
 import { LocalSetting } from "src/redux/localsettings";
@@ -94,16 +97,22 @@ export const mapStateToProps = (state: AdminUIState): DatabasesPageData => {
     indexRecommendationsEnabled: selectIndexRecommendationsEnabled(state),
     showNodeRegionsColumn: selectIsMoreThanOneNode(state),
     csIndexUnusedDuration: selectDropUnusedIndexDuration(state),
+    includeLocalityMetadata: selectIncludeLocalityMetadataEnabled(state),
   };
 };
 
 export const mapDispatchToProps = {
   refreshSettings,
   refreshDatabases,
-  refreshDatabaseDetails: (database: string, csIndexUnusedDuration: string) => {
+  refreshDatabaseDetails: (
+    database: string,
+    csIndexUnusedDuration: string,
+    includeLocalityMetadata: boolean,
+  ) => {
     return refreshDatabaseDetails({
       database,
       csIndexUnusedDuration,
+      includeLocalityMetadata,
     });
   },
   refreshDatabaseSpanStats: (database: string) => {

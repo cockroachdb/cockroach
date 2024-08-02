@@ -545,47 +545,84 @@ export type TableDetailsRow =
   | TableZoneConfigRow
   | TableReplicasRow;
 
-const tableDetailQueries: TableDetailsQuery<TableDetailsRow>[] = [
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getTableId,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getTableGrants,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getTableSchemaDetails,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getTableCreateStatement,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getTableZoneConfigStmt,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getTableHeuristicsDetails,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getTableSpanStats,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getTableIndexUsageStats,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getTableZoneConfig,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  getTableReplicaStoreIDs,
-];
+function tableDetailQueries(
+  includeLocalityData: boolean,
+): TableDetailsQuery<TableDetailsRow>[] {
+  if (includeLocalityData) {
+    return [
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableId,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableGrants,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableSchemaDetails,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableCreateStatement,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableZoneConfigStmt,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableHeuristicsDetails,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableSpanStats,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableIndexUsageStats,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableZoneConfig,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableReplicaStoreIDs,
+    ];
+  } else {
+    return [
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableId,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableGrants,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableSchemaDetails,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableCreateStatement,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableZoneConfigStmt,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableHeuristicsDetails,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableSpanStats,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableIndexUsageStats,
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      getTableZoneConfig,
+    ];
+  }
+}
 
 export function createTableDetailsReq(
   dbName: string,
   tableName: string,
   csIndexUnusedDuration: string,
+  includeLocalityData: boolean,
 ): SqlExecutionRequest {
   return {
     execute: true,
-    statements: tableDetailQueries.map(query =>
+    statements: tableDetailQueries(includeLocalityData).map(query =>
       query.createStmt(dbName, tableName, csIndexUnusedDuration),
     ),
     max_result_size: LARGE_RESULT_SIZE,
@@ -600,6 +637,7 @@ export type TableDetailsReqParams = {
   // Note: table name is expected in the following format: "schemaName"."tableName"
   table: string;
   csIndexUnusedDuration: string;
+  includeLocalityMetadata: boolean;
 };
 
 export async function getTableDetails(
@@ -611,6 +649,7 @@ export async function getTableDetails(
       params.database,
       params.table,
       params.csIndexUnusedDuration,
+      params.includeLocalityMetadata,
     ),
     timeout,
   );
@@ -620,12 +659,14 @@ async function fetchTableDetails(
   databaseName: string,
   tableName: string,
   csIndexUnusedDuration: string,
+  includeLocalityMetadata: boolean,
 ): Promise<SqlApiResponse<TableDetailsResponse>> {
   const detailsResponse: TableDetailsResponse = newTableDetailsResponse();
   const req: SqlExecutionRequest = createTableDetailsReq(
     databaseName,
     tableName,
     csIndexUnusedDuration,
+    includeLocalityMetadata,
   );
   const resp = await executeInternalSql<TableDetailsRow>(req);
   const errs: Error[] = [];
@@ -633,7 +674,9 @@ async function fetchTableDetails(
     if (txnResult.error) {
       errs.push(txnResult.error);
     }
-    const query = tableDetailQueries[txnResult.statement - 1];
+    const query = tableDetailQueries(includeLocalityMetadata)[
+      txnResult.statement - 1
+    ];
     query.addToTableDetail(txnResult, detailsResponse);
   });
   if (resp.error) {

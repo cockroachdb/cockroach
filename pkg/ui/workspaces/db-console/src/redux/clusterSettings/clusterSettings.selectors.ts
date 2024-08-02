@@ -17,6 +17,17 @@ export const selectClusterSettings = createSelector(
     settings?.key_values,
 );
 
+export const selectIncludeLocalityMetadataEnabled = createSelector(
+  selectClusterSettings,
+  settings => {
+    if (!settings) {
+      return true;
+    }
+    const value = settings["ui.database_locality_metadata.enabled"]?.value;
+    return value === "true";
+  },
+);
+
 export const selectTimezoneSetting = createSelector(
   selectClusterSettings,
   settings => {

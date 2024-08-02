@@ -73,10 +73,10 @@ export const TableNameCell = ({
       linkURL += `?viewMode=${ViewMode.Grants}`;
     }
   } else {
-    linkURL = EncodeDatabaseTableUri(
+    linkURL = `/legacy${EncodeDatabaseTableUri(
       dbDetails.name,
       table.name.qualifiedNameWithSchemaAndTable,
-    );
+    )}`;
     if (dbDetails.viewMode === ViewMode.Grants) {
       linkURL += `?tab=grants`;
     }
@@ -182,7 +182,7 @@ export const DbDetailsBreadcrumbs = ({ dbName }: { dbName: string }) => {
         {
           link: isCockroachCloud
             ? `/databases/${EncodeUriName(dbName)}`
-            : EncodeDatabaseUri(dbName),
+            : `/legacy${EncodeDatabaseUri(dbName)}`,
           name: "Tables",
         },
       ]}

@@ -80,7 +80,7 @@ export const DbTablesBreadcrumbs = ({
         {
           link: isCockroachCloud
             ? `/databases/${EncodeUriName(databaseName)}`
-            : EncodeDatabaseUri(databaseName),
+            : `/legacy${EncodeDatabaseUri(databaseName)}`,
           name: "Tables",
         },
         {
@@ -88,7 +88,7 @@ export const DbTablesBreadcrumbs = ({
             ? `/databases/${EncodeUriName(databaseName)}/${EncodeUriName(
                 schemaName,
               )}/${EncodeUriName(tableName)}`
-            : EncodeDatabaseTableUri(databaseName, tableName),
+            : `/legacy${EncodeDatabaseTableUri(databaseName, tableName)}`,
           name: `Table: ${tableName}`,
         },
       ]}

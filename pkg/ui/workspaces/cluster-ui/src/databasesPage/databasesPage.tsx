@@ -82,6 +82,7 @@ export interface DatabasesPageData {
   indexRecommendationsEnabled: boolean;
   showNodeRegionsColumn?: boolean;
   csIndexUnusedDuration: string;
+  includeLocalityMetadata?: boolean;
 }
 
 export interface DatabasesPageDataDatabase {
@@ -114,6 +115,7 @@ export interface DatabasesPageActions {
   refreshDatabaseDetails: (
     database: string,
     csIndexUnusedDuration: string,
+    includeLocalityMetadata: boolean,
   ) => void;
   refreshDatabaseSpanStats: (database: string) => void;
   refreshSettings: () => void;
@@ -324,6 +326,7 @@ export class DatabasesPage extends React.Component<
         this.props.refreshDatabaseDetails(
           database.name,
           this.props.csIndexUnusedDuration,
+          this.props.includeLocalityMetadata,
         );
       }
       if (

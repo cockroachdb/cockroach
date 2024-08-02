@@ -40,7 +40,12 @@ describe("TableDetails sagas", () => {
   const table = "test_table";
   const key = generateTableID(database, table);
   const requestAction: PayloadAction<TableDetailsReqParams> = {
-    payload: { database, table, csIndexUnusedDuration: indexUnusedDuration },
+    payload: {
+      database,
+      table,
+      csIndexUnusedDuration: indexUnusedDuration,
+      includeLocalityMetadata: true,
+    },
     type: "request",
   };
   const tableDetailsResponse: SqlApiResponse<TableDetailsResponse> = {
