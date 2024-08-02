@@ -265,5 +265,6 @@ func makeTestingGenerativeSplitAndScatterSpec(
 		NumEntries:         1,
 		NumNodes:           1,
 		JobID:              0,
+		SQLInstanceIDs:     []int32{1},
 	}
 }
