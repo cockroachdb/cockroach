@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -133,6 +134,9 @@ type testImpl struct {
 	// If true, go coverage is enabled and the BAZEL_COVER_DIR env var will be set
 	// when starting nodes.
 	goCoverEnabled bool
+
+	// If true, metamorphic constants will be used.
+	metamorphicConstantsEnabled bool
 }
 
 func newFailure(squashedErr error, errs []error) failure {
@@ -158,9 +162,7 @@ func (t *testImpl) Cockroach() string {
 		return t.StandardCockroach()
 	}
 	t.randomCockroachOnce.Do(func() {
-		//TODO(SR): assertions are temporarily disabled for _all_ tests except those using t.RuntimeAssertionsCockroach()
-		// directly, until after the stability period for 23.2. See https://github.com/cockroachdb/cockroach/issues/114615
-		assertionsEnabledProbability := 0.0
+		assertionsEnabledProbability := roachtestflags.CockroachEAProbability
 		// If the user specified a custom seed to be used with runtime
 		// assertions, assume they want to run the test with assertions
 		// enabled, making it easier to reproduce issues.

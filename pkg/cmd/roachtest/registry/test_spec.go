@@ -180,6 +180,10 @@ type TestSpec struct {
 
 	// stats are populated by test selector based on previous execution data
 	stats *testStats
+
+	// DisableMetamorphicTesting indicates that the test should not be run
+	// with metamorphic constants enabled.
+	DisableMetamorphicTesting bool
 }
 
 // SetStats sets the stats for the test

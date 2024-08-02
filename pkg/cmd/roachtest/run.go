@@ -272,6 +272,12 @@ func initRunFlagsBinariesAndLibraries(cmd *cobra.Command) error {
 	if !(0 <= roachtestflags.FIPSProbability && roachtestflags.FIPSProbability <= 1) {
 		return fmt.Errorf("'metamorphic-fips-probability' must be in [0,1]")
 	}
+	if !(0 <= roachtestflags.CockroachEAProbability && roachtestflags.CockroachEAProbability <= 1) {
+		return fmt.Errorf("'metamorphic-cockroach-ea-probability' must be in [0,1]")
+	}
+	if !(0 <= roachtestflags.MetamorphicConstantsProbability && roachtestflags.MetamorphicConstantsProbability <= 1) {
+		return fmt.Errorf("'metamorphic-constants-probability' must be in [0,1]")
+	}
 	if roachtestflags.ARM64Probability == 1 && roachtestflags.FIPSProbability != 0 {
 		return fmt.Errorf("'metamorphic-fips-probability' must be 0 when 'metamorphic-arm64-probability' is 1")
 	}

@@ -114,7 +114,7 @@ func validateBinaryFormat(path string, arch vm.CPUArch, checkEA bool) (string, e
 	}
 	if checkEA {
 		// Check that the binary was compiled with assertions _enabled_.
-		cmd = exec.Command("bash", "-c", fmt.Sprintf("%s version |grep \"Enabled Assertions\" |grep true", abspath))
+		cmd = exec.Command("bash", "-c", fmt.Sprintf("%s %s version |grep \"Enabled Assertions\" |grep true", install.SuppressMetamorphicConstantsEnvVar(), abspath))
 		if err := cmd.Run(); err != nil {
 			return "", errors.Newf("%s is not compiled with assertions enabled", abspath)
 		}
@@ -1954,17 +1954,43 @@ func (c *clusterImpl) PutCockroach(ctx context.Context, l *logger.Logger, t *tes
 	switch t.spec.CockroachBinary {
 	case registry.RandomizedCockroach:
 		if tests.UsingRuntimeAssertions(t) {
-			t.l.Printf("To reproduce the same set of metamorphic constants, run this test with %s=%d", test.EnvAssertionsEnabledSeed, c.cockroachRandomSeed())
+			maybeEnableMetamorphicTesting(c, l, t)
 		}
 		return c.PutE(ctx, l, t.Cockroach(), test.DefaultCockroachPath, c.All())
 	case registry.StandardCockroach:
 		return c.PutE(ctx, l, t.StandardCockroach(), test.DefaultCockroachPath, c.All())
 	case registry.RuntimeAssertionsCockroach:
-		t.l.Printf("To reproduce the same set of metamorphic constants, run this test with %s=%d", test.EnvAssertionsEnabledSeed, c.cockroachRandomSeed())
+		t.l.Printf("Runtime assertions enabled by default through test spec.")
+		maybeEnableMetamorphicTesting(c, l, t)
 		return c.PutE(ctx, l, t.RuntimeAssertionsCockroach(), test.DefaultCockroachPath, c.All())
 	default:
 		return errors.Errorf("Specified cockroach binary does not exist.")
 	}
+}
+
+func maybeEnableMetamorphicTesting(c *clusterImpl, l *logger.Logger, t *testImpl) {
+	// If the test explicitly disables metamorphic testing then that takes precedence.
+	if t.spec.DisableMetamorphicTesting {
+		l.Printf("Metamorphic constants are disabled.")
+		return
+	}
+
+	// Otherwise, let the framework decide.
+	if prng.Float64() > roachtestflags.MetamorphicConstantsProbability {
+		l.Printf("Metamorphic constants are disabled.")
+		return
+	}
+
+	// Mark that the test is being run with metamorphic constants enabled. The actual
+	// enabling of metamorphic constants is done when the cluster is started but logging
+	// at the start makes this info easier to find.
+	t.metamorphicConstantsEnabled = true
+
+	// TODO(darrylwong): The metamorphic constants being logged in stderr is unintuitive and
+	// hard to find. It also isn't available if the test doesn't fail. They should be logged
+	// somewhere more obvious or in their own file.
+	l.Printf("Metamorphic constants are enabled. To find the list of constants and their values see: %s/logs/1.unredacted/cockroach.stderr.log", c.t.ArtifactsDir())
+	l.Printf("To reproduce the same set of metamorphic constants, run this test with %s=%d", test.EnvAssertionsEnabledSeed, c.cockroachRandomSeed())
 }
 
 // PutLibraries inserts the specified libraries, by name, into all nodes on the cluster
@@ -2129,7 +2155,9 @@ func (c *clusterImpl) clearStatusForClusterOpt(worker bool) {
 }
 
 func (c *clusterImpl) configureClusterSettingOptions(
-	defaultClusterSettings install.ClusterSettingsOption, settings install.ClusterSettings,
+	l *logger.Logger,
+	defaultClusterSettings install.ClusterSettingsOption,
+	settings install.ClusterSettings,
 ) []install.ClusterSettingOption {
 	setUnlessExists := func(name string, value interface{}) {
 		if !envExists(settings.Env, name) {
@@ -2142,6 +2170,13 @@ func (c *clusterImpl) configureClusterSettingOptions(
 
 	// Panic on span use-after-Finish, so we catch such bugs.
 	setUnlessExists("COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH", true)
+
+	if c.t.(*testImpl).metamorphicConstantsEnabled {
+		// Metamorphic constants are enabled by default with the cockroach-ea binary,
+		// but we disable metamorphic constants in config.DefaultEnvVar. If metamorphic
+		// constants should be enabled, we unset the env var.
+		settings.Env = append(settings.Env, "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=false")
+	}
 
 	if c.goCoverDir != "" {
 		settings.Env = append(settings.Env, fmt.Sprintf("BAZEL_COVER_DIR=%s", c.goCoverDir))
@@ -2193,7 +2228,7 @@ func (c *clusterImpl) StartE(
 		settings.Env = append(settings.Env, "COCKROACH_INTERNAL_CHECK_CONSISTENCY_FATAL=true")
 	}
 
-	clusterSettingsOpts := c.configureClusterSettingOptions(c.clusterSettings, settings)
+	clusterSettingsOpts := c.configureClusterSettingOptions(l, c.clusterSettings, settings)
 
 	if err := roachprod.Start(ctx, l, c.MakeNodes(opts...), startOpts.RoachprodOpts, clusterSettingsOpts...); err != nil {
 		return err
@@ -2219,7 +2254,7 @@ func (c *clusterImpl) StartServiceForVirtualClusterE(
 	settings install.ClusterSettings,
 ) error {
 	l.Printf("starting virtual cluster")
-	clusterSettingsOpts := c.configureClusterSettingOptions(c.virtualClusterSettings, settings)
+	clusterSettingsOpts := c.configureClusterSettingOptions(l, c.virtualClusterSettings, settings)
 
 	// By default, we assume every node in the cluster is part of the
 	// storage cluster the virtual cluster needs to connect to. If the

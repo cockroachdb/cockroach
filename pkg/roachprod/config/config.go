@@ -162,6 +162,23 @@ func DefaultEnvVars() []string {
 		// in testing the upgrade logic that users would actually run when
 		// they upgrade from one release to another.
 		"COCKROACH_TESTING_FORCE_RELEASE_BRANCH=true",
+		// Disable metamorphic testing to reduce flakiness as most metamorphic
+		// constants are not fully tested for compatibility in roachtests.
+		// Passing this in when the cluster is started would suffice in terms
+		// of correctness, but the metamorphic framework logs constants during
+		// init. This leads to a lot of noise in the logs, even if metamorphic
+		// constants aren't used in the test itself. The framework will unset
+		// this env var if needed.
+		"COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true",
+		// By default, binaries compiled with the crdb_test flag have an 80%
+		// chance to enable metamorphic constants. In the context of roachtests,
+		// this makes it hard to tell if metamorphic constants are actually
+		// enabled without parsing the logs which can only be done after the
+		// fact and may fail if we can't fetch the logs. Instead, we enforce that
+		// cockroach-ea binaries always use metamorphic constants if eligible, and
+		// adjust the eligibility through the use of the COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING
+		// env var which roachprod/roachtests have more control over.
+		"COCKROACH_INTERNAL_METAMORPHIC_TESTING_PROBABILITY=1.0",
 	}
 }
 
