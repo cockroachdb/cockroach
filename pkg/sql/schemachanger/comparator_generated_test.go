@@ -203,6 +203,11 @@ func TestSchemaChangeComparator_ccl(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/ccl"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_cdc_eval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/cdc_eval"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_check_constraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/check_constraints"

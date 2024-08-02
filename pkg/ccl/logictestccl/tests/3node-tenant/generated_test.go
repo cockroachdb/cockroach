@@ -368,6 +368,13 @@ func TestTenantLogic_cast(
 	runLogicTest(t, "cast")
 }
 
+func TestTenantLogic_cdc_eval(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "cdc_eval")
+}
+
 func TestTenantLogic_check_constraints(
 	t *testing.T,
 ) {
@@ -2592,6 +2599,13 @@ func TestTenantLogic_zone_config(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "zone_config")
+}
+
+func TestTenantLogicCCL_cdc_eval(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "cdc_eval")
 }
 
 func TestTenantLogicCCL_cluster_locks_tenant(

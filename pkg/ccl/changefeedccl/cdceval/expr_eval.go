@@ -88,6 +88,7 @@ func NewEvaluator(
 	statementTS hlc.Timestamp,
 	withDiff bool,
 ) *Evaluator {
+	log.Infof(context.Background(), "NewEvaluator statementTS: %v", statementTS)
 	return &Evaluator{
 		sc:          sc,
 		execCfg:     execCfg,
@@ -167,6 +168,9 @@ func (e *Evaluator) Eval(
 func (e *familyEvaluator) eval(
 	ctx context.Context, updatedRow cdcevent.Row, prevRow cdcevent.Row,
 ) (projection cdcevent.Row, evalErr error) {
+	log.Infof(ctx, "eval: updatedRow: %v mvcc@%v schema@%v,\n      prevRow: %v mvcc@%v schema@%v",
+		updatedRow.DebugString(), updatedRow.MvccTimestamp, updatedRow.SchemaTS,
+		prevRow.DebugString(), prevRow.MvccTimestamp, prevRow.SchemaTS)
 	if updatedRow.FamilyID != e.targetFamilyID {
 		return cdcevent.Row{}, errors.AssertionFailedf(
 			"row family id (%d) differs from target id (%d)", updatedRow.FamilyID, e.targetFamilyID)
@@ -286,6 +290,7 @@ func (e *familyEvaluator) preparePlan(
 	// Perform cleanup of the previous plan if there is one.
 	e.performCleanup()
 
+	log.Infof(ctx, "preparePlan: statementTS: %v, schemaTS: %v, prevTS: %v", e.statementTS, e.currDesc.SchemaTS, e.prevDesc.SchemaTS)
 	err = withPlanner(ctx, e.execCfg, e.statementTS, e.user, e.currDesc.SchemaTS, e.sessionData,
 		func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error {
 			e.cleanup = cleanup

@@ -389,6 +389,7 @@ func getDescriptorsFromStoreForInterval(
 		}
 
 		// Export request returns descriptors in decreasing modification time.
+		log.Infof(ctx, "lease desc bounds [%v, %v)", lowerBound, upperBound)
 		res, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), batchRequestHeader, req)
 		if pErr != nil {
 			return nil, errors.Wrapf(pErr.GoError(), "error in retrieving descs between %s, %s",

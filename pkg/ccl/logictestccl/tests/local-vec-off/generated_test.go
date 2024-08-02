@@ -78,6 +78,13 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
+func TestCCLLogic_cdc_eval(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "cdc_eval")
+}
+
 func TestCCLLogic_fips_ready(
 	t *testing.T,
 ) {
