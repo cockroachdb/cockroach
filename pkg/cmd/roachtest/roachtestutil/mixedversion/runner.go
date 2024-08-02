@@ -135,7 +135,7 @@ var (
 	// for an internal query (i.e., performed by the framework) to
 	// complete. These queries are typically associated with gathering
 	// upgrade state data to be displayed during execution.
-	internalQueryTimeout = 10 * time.Second
+	internalQueryTimeout = 30 * time.Second
 )
 
 func newServiceRuntime(desc *ServiceDescriptor) *serviceRuntime {
@@ -531,16 +531,21 @@ func (tr *testRunner) loggerFor(step *singleStep) (*logger.Logger, error) {
 // cluster. We use the `atomic` package here as this function may be
 // called by two steps that are running concurrently.
 func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *serviceRuntime) error {
-	newBinaryVersions := make([]roachpb.Version, 0, len(tr.systemService.descriptor.Nodes))
-	for _, node := range service.descriptor.Nodes {
-		connectionCtx, cancel := context.WithTimeout(ctx, internalQueryTimeout)
-		defer cancel()
+	newBinaryVersions := make([]roachpb.Version, len(tr.systemService.descriptor.Nodes))
+	connectionCtx, cancel := context.WithTimeout(ctx, internalQueryTimeout)
+	defer cancel()
 
-		bv, err := clusterupgrade.BinaryVersion(connectionCtx, tr.conn(node, service.descriptor.Name))
-		if err != nil {
-			return fmt.Errorf("failed to get binary version for node %d: %w", node, err)
-		}
-		newBinaryVersions = append(newBinaryVersions, bv)
+	group := ctxgroup.WithContext(connectionCtx)
+	for j, node := range service.descriptor.Nodes {
+		group.GoCtx(func(ctx context.Context) error {
+			bv, err := clusterupgrade.BinaryVersion(ctx, tr.conn(node, service.descriptor.Name))
+			if err != nil {
+				return fmt.Errorf("failed to get binary version for node %d: %w", node, err)
+			}
+
+			newBinaryVersions[j] = bv
+			return nil
+		})
 	}
 
 	service.binaryVersions.Store(newBinaryVersions)
@@ -551,17 +556,21 @@ func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *servic
 // with the current view of the cluster version in each of the nodes
 // of the cluster.
 func (tr *testRunner) refreshClusterVersions(ctx context.Context, service *serviceRuntime) error {
-	newClusterVersions := make([]roachpb.Version, 0, len(service.descriptor.Nodes))
-	for _, node := range service.descriptor.Nodes {
-		connectionCtx, cancel := context.WithTimeout(ctx, internalQueryTimeout)
-		defer cancel()
+	newClusterVersions := make([]roachpb.Version, len(service.descriptor.Nodes))
+	connectionCtx, cancel := context.WithTimeout(ctx, internalQueryTimeout)
+	defer cancel()
 
-		cv, err := clusterupgrade.ClusterVersion(connectionCtx, tr.conn(node, service.descriptor.Name))
-		if err != nil {
-			return err
-		}
+	group := ctxgroup.WithContext(connectionCtx)
+	for j, node := range service.descriptor.Nodes {
+		group.GoCtx(func(ctx context.Context) error {
+			cv, err := clusterupgrade.ClusterVersion(ctx, tr.conn(node, service.descriptor.Name))
+			if err != nil {
+				return err
+			}
 
-		newClusterVersions = append(newClusterVersions, cv)
+			newClusterVersions[j] = cv
+			return nil
+		})
 	}
 
 	service.clusterVersions.Store(newClusterVersions)
