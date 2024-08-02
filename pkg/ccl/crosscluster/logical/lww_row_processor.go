@@ -258,6 +258,8 @@ func makeSQLProcessorFromQuerier(
 	}, nil
 }
 
+func (*sqlRowProcessor) Close(ctx context.Context) {}
+
 var errInjected = errors.New("injected synthetic error")
 
 func (srp *sqlRowProcessor) ProcessRow(
