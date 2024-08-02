@@ -222,6 +222,8 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
 	defer server.Stopper().Stop(ctx)
 
+	retryQueueSizeLimit.Override(ctx, &s.ClusterSettings().SV, 0)
+
 	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab")
 	keyPrefix = rowenc.MakeIndexKeyPrefix(s.Codec(), desc.GetID(), desc.GetPrimaryIndexID())
 	countPuts.Store(true)
@@ -951,8 +953,8 @@ func TestFlushErrorHandling(t *testing.T) {
 
 	lrw.bh = []BatchHandler{(mockBatchHandler(true))}
 
-	lrw.purgatory.byteLimit = func() int64 { return 0 }
-	// One failure immediately means a zero-byte purgatory is full.
+	lrw.purgatory.byteLimit = func() int64 { return 1 }
+	// One failure immediately means a 1-byte purgatory is full.
 	require.NoError(t, lrw.handleStreamBuffer(ctx, []streampb.StreamEvent_KV{skv("a")}))
 	require.Equal(t, int64(1), lrw.metrics.RetryQueueEvents.Value())
 	require.True(t, lrw.purgatory.full())
