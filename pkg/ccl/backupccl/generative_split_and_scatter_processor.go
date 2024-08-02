@@ -601,6 +601,23 @@ func runGenerativeSplitAndScatter(
 					}
 				}
 
+				if _, ok := flowCtx.NodeID.OptionalNodeID(); !ok {
+					// If a seperate process tenant is running restore, the nodeID
+					// returned by scatter does not map identically to a sqlInstanceID;
+					// thus, the processor must randomly choose a sqlInstanceID to route
+					// the chunk to.
+					//
+					// TODO(msbutler): it is unfortunate that all logic after scatter
+					// operates on a NodeID object. The logic should use SQLInstanceID's
+					// as these chunks are routed to DistSQL processors running on sql
+					// servers.
+					if len(spec.SQLInstanceIDs) > 0 {
+						chunkDestination = roachpb.NodeID(spec.SQLInstanceIDs[rand.Intn(len(spec.SQLInstanceIDs))])
+					} else {
+						chunkDestination = roachpb.NodeID(0)
+					}
+				}
+
 				sc := scatteredChunk{
 					destination: chunkDestination,
 					entries:     importSpanChunk.entries,
