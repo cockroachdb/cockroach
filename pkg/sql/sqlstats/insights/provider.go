@@ -29,12 +29,7 @@ func (p *Provider) Start(ctx context.Context, stopper *stop.Stopper) {
 }
 
 // Writer returns an object that observes statement and transaction executions.
-// Pass true for internal when called by the internal executor.
-func (p *Provider) Writer(internal bool) *ConcurrentBufferIngester {
-	// We ignore statements and transactions run by the internal executor.
-	if internal {
-		return nil
-	}
+func (p *Provider) Writer() *ConcurrentBufferIngester {
 	return p.ingester
 }
 
