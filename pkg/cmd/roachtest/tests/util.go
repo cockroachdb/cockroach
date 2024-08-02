@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -219,7 +220,14 @@ func setAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, en
 // test uploads cockroach using `t.Cockroach` (instead of calling
 // t.StandardCockroach or t.RuntimeAssertionsCockroach directly).
 func UsingRuntimeAssertions(t test.Test) bool {
-	return t.Cockroach() == t.RuntimeAssertionsCockroach()
+	switch t.Spec().(*registry.TestSpec).CockroachBinary {
+	case registry.StandardCockroach:
+		return false
+	case registry.RuntimeAssertionsCockroach:
+		return true
+	default:
+		return t.Cockroach() == t.RuntimeAssertionsCockroach()
+	}
 }
 
 // maybeUseMemoryBudget returns a StartOpts with the specified --max-sql-memory
