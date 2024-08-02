@@ -14,7 +14,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // TokenCounter is the interface for a token counter that can be used to deduct
@@ -68,4 +72,257 @@ type TokenWaitingHandle interface {
 	// available. True is returned if tokens are available, false otherwise. If
 	// no tokens are available, the caller can resume waiting using WaitChannel.
 	ConfirmHaveTokensAndUnblockNextWaiter() bool
+}
+
+// tokenCounterPerWorkClass is a helper struct for implementing tokenCounter.
+// tokens are protected by the mutex in tokenCounter. Operations on the
+// signalCh may not be protected by that mutex -- see the comment below.
+type tokenCounterPerWorkClass struct {
+	wc            admissionpb.WorkClass
+	tokens, limit kvflowcontrol.Tokens
+	// signalCh is used to wait on available tokens without holding a mutex.
+	//
+	// Requests first check for available tokens (by acquiring and releasing the
+	// mutex), and then wait if tokens for their work class are unavailable. The
+	// risk in such waiting after releasing the mutex is the following race:
+	// tokens become available after the waiter releases the mutex and before it
+	// starts waiting. We handle this race by ensuring that signalCh always has
+	// an entry if tokens are available:
+	//
+	// - Whenever tokens are returned, signalCh is signaled, waking up a single
+	//   waiting request. If the request finds no available tokens, it starts
+	//   waiting again.
+	// - Whenever a request gets admitted, it signals the next waiter if any.
+	//
+	// So at least one request that observed unavailable tokens will get
+	// unblocked, which will in turn unblock others. This turn by turn admission
+	// provides some throttling to over-admission since the goroutine scheduler
+	// needs to schedule the goroutine that got the entry for it to unblock
+	// another.
+	signalCh chan struct{}
+}
+
+func makeTokenCounterPerWorkClass(
+	wc admissionpb.WorkClass, limit kvflowcontrol.Tokens,
+) tokenCounterPerWorkClass {
+	return tokenCounterPerWorkClass{
+		wc:       wc,
+		tokens:   limit,
+		limit:    limit,
+		signalCh: make(chan struct{}, 1),
+	}
+}
+
+// adjustTokensLocked adjusts the tokens for the given work class by delta.
+func (twc *tokenCounterPerWorkClass) adjustTokensLocked(
+	ctx context.Context, delta kvflowcontrol.Tokens,
+) {
+	var unaccounted kvflowcontrol.Tokens
+	before := twc.tokens
+	twc.tokens += delta
+
+	if delta <= 0 {
+		// Nothing left to do, since we know tokens didn't increase.
+		return
+	}
+	if twc.tokens > twc.limit {
+		unaccounted = twc.tokens - twc.limit
+		twc.tokens = twc.limit
+	}
+	if before <= 0 && twc.tokens > 0 {
+		twc.signal()
+	}
+	if buildutil.CrdbTestBuild && unaccounted != 0 {
+		log.Fatalf(ctx, "unaccounted[%s]=%d delta=%d limit=%d",
+			twc.wc, unaccounted, delta, twc.limit)
+	}
+}
+
+func (twc *tokenCounterPerWorkClass) setLimitLocked(
+	ctx context.Context, limit kvflowcontrol.Tokens,
+) {
+	before := twc.limit
+	twc.limit = limit
+	twc.adjustTokensLocked(ctx, twc.limit-before)
+}
+
+func (twc *tokenCounterPerWorkClass) signal() {
+	select {
+	// Non-blocking channel write that ensures it's topped up to 1 entry.
+	case twc.signalCh <- struct{}{}:
+	default:
+	}
+}
+
+type tokensPerWorkClass struct {
+	regular, elastic kvflowcontrol.Tokens
+}
+
+// tokenCounter holds flow tokens for {regular,elastic} traffic over a
+// kvflowcontrol.Stream. It's used to synchronize handoff between threads
+// returning and waiting for flow tokens.
+type tokenCounter struct {
+	settings *cluster.Settings
+
+	mu struct {
+		syncutil.RWMutex
+
+		counters [admissionpb.NumWorkClasses]tokenCounterPerWorkClass
+	}
+}
+
+var _ TokenCounter = &tokenCounter{}
+
+func newTokenCounter(settings *cluster.Settings) *tokenCounter {
+	t := &tokenCounter{
+		settings: settings,
+	}
+	limit := tokensPerWorkClass{
+		regular: kvflowcontrol.Tokens(kvflowcontrol.RegularTokensPerStream.Get(&settings.SV)),
+		elastic: kvflowcontrol.Tokens(kvflowcontrol.ElasticTokensPerStream.Get(&settings.SV)),
+	}
+	t.mu.counters[admissionpb.RegularWorkClass] = makeTokenCounterPerWorkClass(
+		admissionpb.RegularWorkClass, limit.regular)
+	t.mu.counters[admissionpb.ElasticWorkClass] = makeTokenCounterPerWorkClass(
+		admissionpb.ElasticWorkClass, limit.elastic)
+
+	onChangeFunc := func(ctx context.Context) {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+
+		t.mu.counters[admissionpb.RegularWorkClass].setLimitLocked(
+			ctx, kvflowcontrol.Tokens(kvflowcontrol.RegularTokensPerStream.Get(&settings.SV)))
+		t.mu.counters[admissionpb.ElasticWorkClass].setLimitLocked(
+			ctx, kvflowcontrol.Tokens(kvflowcontrol.ElasticTokensPerStream.Get(&settings.SV)))
+	}
+
+	kvflowcontrol.RegularTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
+	kvflowcontrol.ElasticTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
+	return t
+}
+
+func (t *tokenCounter) tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.tokensLocked(wc)
+}
+
+func (b *tokenCounter) tokensLocked(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
+	return b.mu.counters[wc].tokens
+}
+
+// TokensAvailable returns true if tokens are available. If false, it returns
+// a handle that may be used for waiting for tokens to become available.
+func (t *tokenCounter) TokensAvailable(
+	wc admissionpb.WorkClass,
+) (available bool, handle TokenWaitingHandle) {
+	if t.tokens(wc) > 0 {
+		return true, nil
+	}
+	return false, waitHandle{wc: wc, b: t}
+}
+
+// TryDeduct attempts to deduct flow tokens for the given work class. If there
+// are no tokens available, 0 tokens are returned. When less than the requested
+// token count is available, partial tokens are returned corresponding to this
+// partial amount.
+func (t *tokenCounter) TryDeduct(
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+) kvflowcontrol.Tokens {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	tokensAvailable := t.tokensLocked(wc)
+	if tokensAvailable <= 0 {
+		return 0
+	}
+
+	adjust := min(tokensAvailable, tokens)
+	t.adjustLocked(ctx, wc, -adjust)
+	return adjust
+}
+
+// Deduct deducts (without blocking) flow tokens for the given work class. If
+// there are not enough available tokens, the token counter will go into debt
+// (negative available count) and still issue the requested number of tokens.
+func (t *tokenCounter) Deduct(
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+) {
+	t.adjust(ctx, wc, -tokens)
+}
+
+// Return returns flow tokens for the given work class.
+func (t *tokenCounter) Return(
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+) {
+	t.adjust(ctx, wc, tokens)
+}
+
+// waitHandle is a handle for waiting for tokens to become available from a
+// token counter.
+type waitHandle struct {
+	wc admissionpb.WorkClass
+	b  *tokenCounter
+}
+
+var _ TokenWaitingHandle = waitHandle{}
+
+// WaitChannel is the channel that will be signaled if tokens are possibly
+// available. If signaled, the caller must call
+// ConfirmHaveTokensAndUnblockNextWaiter. There is no guarantee of tokens being
+// available after this channel is signaled, just that tokens were available
+// recently. A typical usage pattern is:
+//
+//	for {
+//	  select {
+//	  case <-handle.WaitChannel():
+//	    if handle.ConfirmHaveTokensAndUnblockNextWaiter() {
+//	      break
+//	    }
+//	  }
+//	}
+//	tokenCounter.Deduct(...)
+//
+// There is a possibility for races, where multiple goroutines may be signaled
+// and deduct tokens, sending the counter into debt. These cases are
+// acceptable, as in aggregate the counter provides pacing over time.
+func (wh waitHandle) WaitChannel() <-chan struct{} {
+	return wh.b.mu.counters[wh.wc].signalCh
+}
+
+// ConfirmHaveTokensAndUnblockNextWaiter is called to confirm tokens are
+// available. True is returned if tokens are available, false otherwise. If no
+// tokens are available, the caller can resume waiting using WaitChannel.
+func (wh waitHandle) ConfirmHaveTokensAndUnblockNextWaiter() (haveTokens bool) {
+	haveTokens = wh.b.tokens(wh.wc) > 0
+	if haveTokens {
+		// Signal the next waiter if we have tokens available before returning.
+		wh.b.mu.counters[wh.wc].signal()
+	}
+	return haveTokens
+}
+
+// adjust the tokens for the given work class by delta. The adjustment is
+// performed atomically.
+func (t *tokenCounter) adjust(
+	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens,
+) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.adjustLocked(ctx, class, delta)
+}
+
+func (t *tokenCounter) adjustLocked(
+	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens,
+) {
+	switch class {
+	case admissionpb.RegularWorkClass:
+		t.mu.counters[admissionpb.RegularWorkClass].adjustTokensLocked(ctx, delta)
+		// Regular {deductions,returns} also affect elastic flow tokens.
+		t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta)
+	case admissionpb.ElasticWorkClass:
+		// Elastic {deductions,returns} only affect elastic flow tokens.
+		t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta)
+	}
 }
