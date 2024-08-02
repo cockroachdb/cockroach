@@ -87,6 +87,7 @@ type variations struct {
 	leaseType            registry.LeaseType
 	cleanRestart         bool
 	perturbation         perturbation
+	workload             workloadType
 	acceptableChange     float64
 
 	// These fields are set up at the start of the test run
@@ -130,10 +131,10 @@ func setupMetamorphic(p perturbation) variations {
 
 	v := variations{}
 	v.seed = seed
+	v.workload = kvWorkload{}
 	v.fillDuration = 10 * time.Minute
 	v.validationDuration = 5 * time.Minute
 	v.ratioOfMax = 0.5
-
 	v.splits = splitOptions[rng.Intn(len(splitOptions))]
 	v.maxBlockBytes = maxBlockBytes[rng.Intn(len(maxBlockBytes))]
 	v.perturbationDuration = durationOptions[rng.Intn(len(durationOptions))]
@@ -151,6 +152,7 @@ func setupMetamorphic(p perturbation) variations {
 // setupFull sets up the full test with a fixed set of parameters.
 func setupFull(p perturbation) variations {
 	v := variations{}
+	v.workload = kvWorkload{}
 	v.leaseType = registry.ExpirationLeases
 	v.maxBlockBytes = 4096
 	v.splits = 10000
@@ -171,6 +173,7 @@ func setupFull(p perturbation) variations {
 // setupDev sets up the test for local development.
 func setupDev(p perturbation) variations {
 	v := variations{}
+	v.workload = kvWorkload{}
 	v.leaseType = registry.ExpirationLeases
 	v.maxBlockBytes = 1024
 	v.splits = 1
@@ -371,10 +374,7 @@ func (a addNode) startPerturbation(
 	// on the 10s server.time_after_store_suspect setting which we set below
 	// plus 1 sec for the store to propagate its gossip information.
 	waitDuration(ctx, 11*time.Second)
-
-	if err := waitForRebalanceToStop(ctx, l, v.cluster); err != nil {
-		panic(err)
-	}
+	waitForRebalanceToStop(ctx, l, v.cluster)
 	return timeutil.Since(startTime)
 }
 
@@ -450,7 +450,7 @@ func prettyPrint(title string, stats map[string]trackedStat) string {
 // waitForRebalanceToStop polls the system.rangelog every second to see if there
 // have been any transfers in the last 5 seconds. It returns once the system
 // stops transferring replicas.
-func waitForRebalanceToStop(ctx context.Context, l *logger.Logger, c cluster.Cluster) error {
+func waitForRebalanceToStop(ctx context.Context, l *logger.Logger, c cluster.Cluster) {
 	db := c.Conn(ctx, l, 1)
 	defer db.Close()
 	q := `SELECT extract_duration(seconds FROM now()-timestamp) FROM system.rangelog WHERE "eventType" = 'add_voter' ORDER BY timestamp DESC LIMIT 1`
@@ -463,14 +463,14 @@ func waitForRebalanceToStop(ctx context.Context, l *logger.Logger, c cluster.Clu
 		if row := db.QueryRow(q); row != nil {
 			var secondsSinceLastEvent int
 			if err := row.Scan(&secondsSinceLastEvent); err != nil && !errors.Is(err, gosql.ErrNoRows) {
-				return err
+				panic(err)
 			}
 			if secondsSinceLastEvent > 5 {
-				return nil
+				return
 			}
 		}
 	}
-	return errors.New("retry should not have exited")
+	panic("retry should not have exited")
 }
 
 // runTest is the main entry point for all the tests. Its ste
@@ -482,7 +482,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 
 	// Track the three operations that we are sending in this test.
 	m := c.NewMonitor(ctx, v.stableNodes())
-	lm := newLatencyMonitor([]string{`read`, `write`, `follower-read`})
+	lm := newLatencyMonitor(v.workload.operations())
 
 	// Start the stable nodes and let the perturbation start the target node(s).
 	v.startNoBackup(ctx, t.L(), v.stableNodes())
@@ -503,7 +503,10 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 			t.Fatal(err)
 		}
 	}()
-	v.initWorkload(ctx, t.L())
+
+	// Wait for rebalancing to finish before starting to fill. This minimizes the time to finish.
+	waitForRebalanceToStop(ctx, t.L(), v.cluster)
+	require.NoError(t, v.workload.initWorkload(ctx, v))
 
 	// Start collecting latency measurements after the workload has been initialized.
 	m.Go(r.Listen)
@@ -523,7 +526,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 
 	// Start filling the system without a rate.
 	t.Status("T1: filling at full rate")
-	require.NoError(t, v.runWorkload(ctx, v.fillDuration, 0))
+	require.NoError(t, v.workload.runWorkload(ctx, v, v.fillDuration, 0))
 
 	// Capture the max rate near the last 1/4 of the fill process.
 	sampleWindow := v.fillDuration / 4
@@ -535,7 +538,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.L().Printf("stable rate for this cluster is %d per node", stableRate)
 	t.Status("T2: running workload at stable rate")
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
-		if err := v.runWorkload(ctx, 0, stableRate); !errors.Is(err, context.Canceled) {
+		if err := v.workload.runWorkload(ctx, v, 0, stableRate); !errors.Is(err, context.Canceled) {
 			return err
 		}
 		return nil
@@ -585,18 +588,13 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	cancelReporter()
 	cancelWorkload()
 	m.Wait()
-	if err := downloadProfiles(ctx, c, t.L(), t.ArtifactsDir()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, downloadProfiles(ctx, c, t.L(), t.ArtifactsDir()))
 
 	t.L().Printf("validating stats during the perturbation")
 	duringOK := v.isAcceptableChange(t.L(), baselineStats, perturbationStats)
 	t.L().Printf("validating stats after the perturbation")
 	afterOK := v.isAcceptableChange(t.L(), baselineStats, afterStats)
-
-	if !duringOK || !afterOK {
-		t.Fatal("unacceptable increase in latency from the perturbation")
-	}
+	require.True(t, duringOK && afterOK)
 }
 
 // Track all histograms for up to one hour in the past.
@@ -796,22 +794,27 @@ func (v variations) targetNodes() option.NodeListOption {
 	return v.cluster.Node(v.numNodes)
 }
 
-// TODO(baptist): Parameterize the workload to allow running TPCC.
-func (v variations) initWorkload(ctx context.Context, l *logger.Logger) {
+type workloadType interface {
+	operations() []string
+	initWorkload(ctx context.Context, v variations) error
+	runWorkload(ctx context.Context, v variations, duration time.Duration, maxRate int) error
+}
+
+type kvWorkload struct{}
+
+func (w kvWorkload) operations() []string {
+	return []string{"write", "read", "follower-read"}
+}
+
+func (w kvWorkload) initWorkload(ctx context.Context, v variations) error {
 	initCmd := fmt.Sprintf("./cockroach workload init kv --splits %d {pgurl:1}", v.splits)
-	v.cluster.Run(ctx, option.WithNodes(v.cluster.Node(1)), initCmd)
-
-	db := v.cluster.Conn(ctx, l, 1)
-	defer db.Close()
-
-	// Wait for rebalancing to finish before starting to fill. This minimizes the time to finish.
-	if err := waitForRebalanceToStop(ctx, l, v.cluster); err != nil {
-		panic(err)
-	}
+	return v.cluster.RunE(ctx, option.WithNodes(v.cluster.Node(1)), initCmd)
 }
 
 // Don't run a workload against the node we're going to shut down.
-func (v variations) runWorkload(ctx context.Context, duration time.Duration, maxRate int) error {
+func (w kvWorkload) runWorkload(
+	ctx context.Context, v variations, duration time.Duration, maxRate int,
+) error {
 	runCmd := fmt.Sprintf(
 		"./cockroach workload run kv --duration=%s --max-rate=%d --tolerate-errors --max-block-bytes=%d --read-percent=50 --follower-read-percent=50 --concurrency=500 --operation-receiver=%s:%d {pgurl%s}",
 		duration, maxRate, v.maxBlockBytes, v.roachtestAddr, v.histogramPort, v.stableNodes())
