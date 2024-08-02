@@ -3844,6 +3844,10 @@ func (m *sessionDataMutator) SetOptimizerUsePolymorphicParameterFix(val bool) {
 	m.data.OptimizerUsePolymorphicParameterFix = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseConditionalHoistFix(val bool) {
+	m.data.OptimizerUseConditionalHoistFix = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

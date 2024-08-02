@@ -2911,6 +2911,7 @@ optimizer_hoist_uncorrelated_equality_subqueries           on                  N
 optimizer_merge_joins_enabled                              on                  NULL      NULL        NULL        string
 optimizer_prove_implication_with_virtual_computed_columns  on                  NULL      NULL        NULL        string
 optimizer_push_offset_into_index_join                      on                  NULL      NULL        NULL        string
+optimizer_use_conditional_hoist_fix                        on                  NULL      NULL        NULL        string
 optimizer_use_forecasts                                    on                  NULL      NULL        NULL        string
 optimizer_use_histograms                                   on                  NULL      NULL        NULL        string
 optimizer_use_improved_computed_column_filters_derivation  on                  NULL      NULL        NULL        string
@@ -3100,6 +3101,7 @@ optimizer_hoist_uncorrelated_equality_subqueries           on                  N
 optimizer_merge_joins_enabled                              on                  NULL  user     NULL      on                  on
 optimizer_prove_implication_with_virtual_computed_columns  on                  NULL  user     NULL      on                  on
 optimizer_push_offset_into_index_join                      on                  NULL  user     NULL      on                  on
+optimizer_use_conditional_hoist_fix                        on                  NULL  user     NULL      on                  on
 optimizer_use_forecasts                                    on                  NULL  user     NULL      on                  on
 optimizer_use_histograms                                   on                  NULL  user     NULL      on                  on
 optimizer_use_improved_computed_column_filters_derivation  on                  NULL  user     NULL      on                  on
@@ -3288,8 +3290,8 @@ optimizer_hoist_uncorrelated_equality_subqueries           NULL    NULL     NULL
 optimizer_merge_joins_enabled                              NULL    NULL     NULL     NULL        NULL
 optimizer_prove_implication_with_virtual_computed_columns  NULL    NULL     NULL     NULL        NULL
 optimizer_push_offset_into_index_join                      NULL    NULL     NULL     NULL        NULL
+optimizer_use_conditional_hoist_fix                        NULL    NULL     NULL     NULL        NULL
 optimizer_use_forecasts                                    NULL    NULL     NULL     NULL        NULL
-optimizer_use_merged_partial_statistics                    NULL    NULL     NULL     NULL        NULL
 optimizer_use_histograms                                   NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_computed_column_filters_derivation  NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_disjunction_stats                   NULL    NULL     NULL     NULL        NULL
@@ -3301,6 +3303,7 @@ optimizer_use_improved_trigram_similarity_selectivity      NULL    NULL     NULL
 optimizer_use_improved_zigzag_join_costing                 NULL    NULL     NULL     NULL        NULL
 optimizer_use_limit_ordering_for_streaming_group_by        NULL    NULL     NULL     NULL        NULL
 optimizer_use_lock_op_for_serializable                     NULL    NULL     NULL     NULL        NULL
+optimizer_use_merged_partial_statistics                    NULL    NULL     NULL     NULL        NULL
 optimizer_use_multicol_stats                               NULL    NULL     NULL     NULL        NULL
 optimizer_use_not_visible_indexes                          NULL    NULL     NULL     NULL        NULL
 optimizer_use_polymorphic_parameter_fix                    NULL    NULL     NULL     NULL        NULL
