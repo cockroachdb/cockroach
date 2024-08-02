@@ -28,18 +28,15 @@ func registerLedger(r registry.Registry) {
 	// https://github.com/cockroachdb/cockroach/issues/66184
 	const azs = "us-central1-f,us-central1-b,us-central1-c"
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
-		Owner:            registry.OwnerKV,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(16), spec.WorkloadNode(), spec.WorkloadNodeCPU(16), spec.Geo(), spec.GCEZones(azs)),
-		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.Nightly),
+		Name:                       fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
+		Owner:                      registry.OwnerKV,
+		Benchmark:                  true,
+		Cluster:                    r.MakeClusterSpec(nodes+1, spec.CPU(16), spec.WorkloadNode(), spec.WorkloadNodeCPU(16), spec.Geo(), spec.GCEZones(azs)),
+		CompatibleClouds:           registry.OnlyGCE,
+		Suites:                     registry.Suites(registry.Nightly),
+		RequiresDeprecatedWorkload: true, // uses ledger
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNodes := c.Range(1, nodes/3)
-
-			// The ledger workload is not available in the cockroach binary,
-			// so we must use the deprecated workload.
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNode())
 
 			// Don't start a scheduled backup on this perf sensitive roachtest that reports to roachperf.
 			c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.CRDBNodes())

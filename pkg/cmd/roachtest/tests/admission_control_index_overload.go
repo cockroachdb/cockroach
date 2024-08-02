@@ -96,7 +96,7 @@ func registerIndexOverload(r registry.Registry) {
 			m.Go(func(ctx context.Context) error {
 				testDurationStr := " --duration=" + testDuration.String()
 				concurrency := ifLocal(c, "  --concurrency=8", " --concurrency=2048")
-				c.Run(ctx, option.WithNodes(c.CRDBNodes()),
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()),
 					"./cockroach workload run kv --read-percent=50 --max-rate=1000 --max-block-bytes=4096"+
 						testDurationStr+concurrency+fmt.Sprintf(" {pgurl%s}", c.CRDBNodes()),
 				)

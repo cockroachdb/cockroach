@@ -195,6 +195,12 @@ func (t *testImpl) StandardCockroach() string {
 }
 
 func (t *testImpl) DeprecatedWorkload() string {
+	// Discourage usage of the deprecated workload by gating it behind the
+	// 'RequiresDeprecatedWorkload' test spec. Tests should use 'cockroach
+	// workload' instead when possible.
+	if !t.spec.RequiresDeprecatedWorkload {
+		t.Fatal("Using deprecated workload but `RequiresDeprecatedWorkload` is not set in test spec.")
+	}
 	return t.deprecatedWorkload
 }
 
