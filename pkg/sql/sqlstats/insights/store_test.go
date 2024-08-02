@@ -50,12 +50,12 @@ func TestStore(t *testing.T) {
 	assertInsightStatementIDs(t, store, []uint64{16, 15})
 }
 
-func addInsight(store *lockingStore, statementIDs []uint64) {
+func addInsight(store *LockingStore, statementIDs []uint64) {
 	stmts := make([]*Statement, len(statementIDs))
 	for i, id := range statementIDs {
 		stmts[i] = &Statement{ID: clusterunique.ID{Uint128: uint128.FromInts(0, id)}}
 	}
-	store.AddInsight(&Insight{
+	store.addInsight(&Insight{
 		Transaction: &Transaction{
 			ID: uuid.MakeV4(),
 		},
@@ -63,7 +63,7 @@ func addInsight(store *lockingStore, statementIDs []uint64) {
 	})
 }
 
-func assertInsightStatementIDs(t *testing.T, store *lockingStore, expected []uint64) {
+func assertInsightStatementIDs(t *testing.T, store *LockingStore, expected []uint64) {
 	var actual []uint64
 	store.IterateInsights(context.Background(), func(ctx context.Context, insight *Insight) {
 		for _, s := range insight.Statements {
