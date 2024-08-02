@@ -6,9 +6,11 @@ go_library(
         "linux_parse.go",
         "monitor.go",
         "monitor_tracer.go",
+        "platform_darwin.go",
         "platform_default.go",
         "platform_linux.go",
         "stats.go",
+        "stats_collector.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/disk",
     visibility = ["//visibility:public"],
@@ -20,6 +22,14 @@ go_library(
         "@com_github_cockroachdb_pebble//vfs",
     ] + select({
         "@io_bazel_rules_go//go/platform:android": [
+            "//pkg/util/sysutil",
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "//pkg/util/sysutil",
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:ios": [
             "//pkg/util/sysutil",
             "@org_golang_x_sys//unix",
         ],
