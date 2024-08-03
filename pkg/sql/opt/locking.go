@@ -82,17 +82,18 @@ func (l Locking) Max(l2 Locking) Locking {
 	}
 }
 
-// IsLocking returns whether the receiver is configured to use a row-level
-// locking mode.
+// IsLocking returns whether the receiver is configured to use row-level
+// locking.
 func (l Locking) IsLocking() bool {
 	return l.Strength != tree.ForNone
 }
 
-// IsNonZeroLocking returns true if the locking properties somehow differ from
-// the zero value locking properties. This can mean a row-level locking mode is
-// set (i.e. l.Strength != tree.ForNone) or the SKIP LOCKED wait policy is in
-// use even if no locking mode is set (i.e. l.WaitPolicy ==
-// tree.LockWaitSkipLocked).
-func (l Locking) IsNonZeroLocking() bool {
-	return l != Locking{}
+// IsNoOp returns true if none of the locking properties are set. It differs
+// from IsLocking in that it considers all of the locking properties, instead of
+// only Strength. Currently, the only locking property that can be set when
+// Strength=ForNone is WaitPolicy=LockWaitSkipLocked. So we can say: IsNoOp
+// returns false if IsLocking returns true OR the SKIP LOCKED wait policy is in
+// effect.
+func (l Locking) IsNoOp() bool {
+	return l == Locking{}
 }

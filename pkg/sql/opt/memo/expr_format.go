@@ -1629,7 +1629,7 @@ func (f *ExprFmtCtx) formatLocking(tp treeprinter.Node, locking opt.Locking) {
 func (f *ExprFmtCtx) formatLockingWithPrefix(
 	tp treeprinter.Node, labelPrefix string, locking opt.Locking,
 ) {
-	if !locking.IsNonZeroLocking() {
+	if locking.IsNoOp() {
 		return
 	}
 	strength := ""
