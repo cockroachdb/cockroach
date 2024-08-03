@@ -25,7 +25,7 @@ import (
 const (
 	defaultForPastDays = 30
 	defaultFirstRunOn  = 20
-	defaultLastRunOn   = 4
+	defaultLastRunOn   = 7
 
 	account   = "lt53838.us-central1.gcp"
 	database  = "DATAMART_PROD"
@@ -50,7 +50,6 @@ type TestDetails struct {
 	Name                 string // test name
 	Selected             bool   // whether a test is Selected or not
 	AvgDurationInMillis  int64  // average duration of the test
-	TotalRuns            int    // total number of times the test has run successfully
 	LastFailureIsPreempt bool   // last failure is due to a VM preemption
 }
 
@@ -135,14 +134,12 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 		// 0. test name
 		// 1. whether a test is Selected or not
 		// 2. average duration of the test
-		// 3. total number of times the test has run successfully
-		// 4. last failure is due to an infra flake
+		// 3. last failure is due to an infra flake
 		testDetails := &TestDetails{
 			Name:                 testInfos[0],
 			Selected:             testInfos[1] != "no",
 			AvgDurationInMillis:  getDuration(testInfos[2]),
-			TotalRuns:            getTotalRuns(testInfos[3]),
-			LastFailureIsPreempt: testInfos[4] == "yes",
+			LastFailureIsPreempt: testInfos[3] == "yes",
 		}
 		if testDetails.Selected {
 			// selected for running
@@ -169,12 +166,6 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 func getDuration(durationStr string) int64 {
 	duration, _ := strconv.ParseInt(durationStr, 10, 64)
 	return duration
-}
-
-// getTotalRuns extracts the total runs from the snowflake query total_runs field
-func getTotalRuns(totalRunsStr string) int {
-	totalRuns, _ := strconv.ParseInt(totalRunsStr, 10, 64)
-	return int(totalRuns)
 }
 
 // getConnect makes connection to snowflake and returns the connection.
