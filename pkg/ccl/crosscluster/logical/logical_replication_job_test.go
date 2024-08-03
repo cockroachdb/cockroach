@@ -175,9 +175,10 @@ func (t fatalDLQ) Log(
 	_ int64,
 	_ streampb.StreamEvent_KV,
 	cdcEventRow cdcevent.Row,
+	reason error,
 	_ retryEligibility,
 ) error {
-	t.Fatalf("failed to apply row update: %s", cdcEventRow.DebugString())
+	t.Fatal(errors.Wrapf(reason, "failed to apply row update: %s", cdcEventRow.DebugString()))
 	return nil
 }
 
@@ -947,7 +948,12 @@ func (m *mockDLQ) Create(_ context.Context) error {
 }
 
 func (m *mockDLQ) Log(
-	_ context.Context, _ int64, _ streampb.StreamEvent_KV, _ cdcevent.Row, _ retryEligibility,
+	_ context.Context,
+	_ int64,
+	_ streampb.StreamEvent_KV,
+	_ cdcevent.Row,
+	_ error,
+	_ retryEligibility,
 ) error {
 	*m++
 	return nil

@@ -823,7 +823,7 @@ func (lrw *logicalReplicationWriterProcessor) dlq(
 	case errType:
 		lrw.metrics.DLQedDueToErrType.Inc(1)
 	}
-	return lrw.dlqClient.Log(ctx, lrw.spec.JobID, event, row, eligibility)
+	return lrw.dlqClient.Log(ctx, lrw.spec.JobID, event, row, applyErr, eligibility)
 }
 
 type batchStats struct {
