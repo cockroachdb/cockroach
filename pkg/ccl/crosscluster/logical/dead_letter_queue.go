@@ -87,7 +87,8 @@ type DeadLetterQueueClient interface {
 		ingestionJobID int64,
 		kv streampb.StreamEvent_KV,
 		cdcEventRow cdcevent.Row,
-		dlqReason retryEligibility,
+		reason error,
+		stoppedRetying retryEligibility,
 	) error
 }
 
@@ -103,6 +104,7 @@ func (dlq *loggingDeadLetterQueueClient) Log(
 	ingestionJobID int64,
 	kv streampb.StreamEvent_KV,
 	cdcEventRow cdcevent.Row,
+	reason error,
 	dlqReason retryEligibility,
 ) error {
 	if !cdcEventRow.IsInitialized() {
@@ -164,7 +166,8 @@ func (dlq *deadLetterQueueClient) Log(
 	ingestionJobID int64,
 	kv streampb.StreamEvent_KV,
 	cdcEventRow cdcevent.Row,
-	dlqReason retryEligibility,
+	reason error,
+	stoppedRetyingReason retryEligibility,
 ) error {
 	if !cdcEventRow.IsInitialized() {
 		return errors.New("cdc event row not initialized")
@@ -200,7 +203,7 @@ func (dlq *deadLetterQueueClient) Log(
 			fmt.Sprintf(insertRowStmtFallBack, dlqTableName),
 			ingestionJobID,
 			tableID,
-			dlqReason.String(),
+			fmt.Sprintf("%s (%s)", reason, stoppedRetyingReason),
 			mutationType.String(),
 			bytes,
 		); err != nil {
@@ -216,7 +219,7 @@ func (dlq *deadLetterQueueClient) Log(
 		fmt.Sprintf(insertBaseStmt, dlqTableName),
 		ingestionJobID,
 		tableID,
-		dlqReason.String(),
+		fmt.Sprintf("%s (%s)", reason, stoppedRetyingReason),
 		mutationType.String(),
 		bytes,
 		jsonRow,
