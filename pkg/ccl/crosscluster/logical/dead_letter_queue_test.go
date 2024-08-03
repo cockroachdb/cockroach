@@ -95,7 +95,7 @@ func TestLoggingDLQClient(t *testing.T) {
 			if tc.applyError == nil {
 				tc.applyError = errors.New("some error")
 			}
-			err := dlqClient.Log(ctx, tc.jobID, tc.kv, tc.cdcEventRow, tc.dlqReason)
+			err := dlqClient.Log(ctx, tc.jobID, tc.kv, tc.cdcEventRow, tc.applyError, tc.dlqReason)
 			if tc.expectedErrMsg == "" {
 				require.NoError(t, err)
 			} else {
@@ -296,7 +296,7 @@ func TestDLQClient(t *testing.T) {
 				cdcEventRow = cdcevent.Row{EventDescriptor: ed}
 			}
 
-			err := dlqClient.Log(ctx, tc.jobID, tc.kv, cdcEventRow, tc.dlqReason)
+			err := dlqClient.Log(ctx, tc.jobID, tc.kv, cdcEventRow, tc.applyError, tc.dlqReason)
 			if tc.expectedErrMsg == "" {
 				require.NoError(t, err)
 
@@ -327,7 +327,7 @@ func TestDLQClient(t *testing.T) {
 				expectedRow := dlqRow{
 					jobID:        tc.jobID,
 					tableID:      tableID,
-					dlqReason:    tc.dlqReason.String(),
+					dlqReason:    fmt.Sprintf("%s (%s)", tc.applyError.Error(), tc.dlqReason),
 					mutationType: tc.mutationType.String(),
 					kv:           bytes,
 				}
@@ -396,7 +396,7 @@ func TestDLQJSONQuery(t *testing.T) {
 		ctx, kv, cdcevent.CurrentRow, row.Timestamp(), false)
 
 	require.NoError(t, err)
-	require.NoError(t, dlqClient.Log(ctx, 1, streampb.StreamEvent_KV{KeyValue: kv}, updatedRow, noSpace))
+	require.NoError(t, dlqClient.Log(ctx, 1, streampb.StreamEvent_KV{KeyValue: kv}, updatedRow, errInjected, noSpace))
 
 	dlqtableName := tableName.toDLQTableName(tableID)
 

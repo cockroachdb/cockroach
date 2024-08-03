@@ -166,9 +166,27 @@ func TestLogicalStreamIngestionJobNameResolution(t *testing.T) {
 	}
 }
 
+type fatalDLQ struct{ *testing.T }
+
+func (fatalDLQ) Create(ctx context.Context) error { return nil }
+
+func (t fatalDLQ) Log(
+	_ context.Context,
+	_ int64,
+	_ streampb.StreamEvent_KV,
+	cdcEventRow cdcevent.Row,
+	reason error,
+	_ retryEligibility,
+) error {
+	t.Fatal(errors.Wrapf(reason, "failed to apply row update: %s", cdcEventRow.DebugString()))
+	return nil
+}
+
 func TestLogicalStreamIngestionJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	defer TestingSetDLQ(fatalDLQ{t})()
 
 	ctx := context.Background()
 	// keyPrefix will be set later, but before countPuts is set.
@@ -221,6 +239,8 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
 	defer server.Stopper().Stop(ctx)
+
+	retryQueueSizeLimit.Override(ctx, &s.ClusterSettings().SV, 0)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab")
 	keyPrefix = rowenc.MakeIndexKeyPrefix(s.Codec(), desc.GetID(), desc.GetPrimaryIndexID())
@@ -928,7 +948,12 @@ func (m *mockDLQ) Create(_ context.Context) error {
 }
 
 func (m *mockDLQ) Log(
-	_ context.Context, _ int64, _ streampb.StreamEvent_KV, _ cdcevent.Row, _ retryEligibility,
+	_ context.Context,
+	_ int64,
+	_ streampb.StreamEvent_KV,
+	_ cdcevent.Row,
+	_ error,
+	_ retryEligibility,
 ) error {
 	*m++
 	return nil
@@ -951,8 +976,8 @@ func TestFlushErrorHandling(t *testing.T) {
 
 	lrw.bh = []BatchHandler{(mockBatchHandler(true))}
 
-	lrw.purgatory.byteLimit = func() int64 { return 0 }
-	// One failure immediately means a zero-byte purgatory is full.
+	lrw.purgatory.byteLimit = func() int64 { return 1 }
+	// One failure immediately means a 1-byte purgatory is full.
 	require.NoError(t, lrw.handleStreamBuffer(ctx, []streampb.StreamEvent_KV{skv("a")}))
 	require.Equal(t, int64(1), lrw.metrics.RetryQueueEvents.Value())
 	require.True(t, lrw.purgatory.full())

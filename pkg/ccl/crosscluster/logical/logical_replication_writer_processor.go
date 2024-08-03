@@ -515,7 +515,7 @@ func (lrw *logicalReplicationWriterProcessor) handleStreamBuffer(
 	ctx context.Context, kvs []streampb.StreamEvent_KV,
 ) error {
 	const notRetry = false
-	unapplied, unappliedBytes, err := lrw.flushBuffer(ctx, kvs, notRetry, retryAllowed)
+	unapplied, unappliedBytes, err := lrw.flushBuffer(ctx, kvs, notRetry, lrw.purgatory.Enabled())
 	if err != nil {
 		return err
 	}
@@ -841,7 +841,7 @@ func (lrw *logicalReplicationWriterProcessor) dlq(
 	case errType:
 		lrw.metrics.DLQedDueToErrType.Inc(1)
 	}
-	return lrw.dlqClient.Log(ctx, lrw.spec.JobID, event, row, eligibility)
+	return lrw.dlqClient.Log(ctx, lrw.spec.JobID, event, row, applyErr, eligibility)
 }
 
 type batchStats struct {

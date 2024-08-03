@@ -87,7 +87,8 @@ type DeadLetterQueueClient interface {
 		ingestionJobID int64,
 		kv streampb.StreamEvent_KV,
 		cdcEventRow cdcevent.Row,
-		dlqReason retryEligibility,
+		reason error,
+		stoppedRetryReason retryEligibility,
 	) error
 }
 
@@ -103,7 +104,8 @@ func (dlq *loggingDeadLetterQueueClient) Log(
 	ingestionJobID int64,
 	kv streampb.StreamEvent_KV,
 	cdcEventRow cdcevent.Row,
-	dlqReason retryEligibility,
+	reason error,
+	stoppedRetryReason retryEligibility,
 ) error {
 	if !cdcEventRow.IsInitialized() {
 		return errors.New("cdc event row not initialized")
@@ -124,11 +126,11 @@ func (dlq *loggingDeadLetterQueueClient) Log(
 
 	log.Infof(ctx, `ingestion_job_id: %d,  
 		table_id: %d, 
-		dlq_reason: %s, 
+		dlq_reason: (%s) %s,
 		mutation_type: %s,  
 		key_value_bytes: %v, 
 		incoming_row: %s`,
-		ingestionJobID, tableID, dlqReason.String(), mutationType.String(), bytes, cdcEventRow.DebugString())
+		ingestionJobID, tableID, reason.Error(), stoppedRetryReason.String(), mutationType.String(), bytes, cdcEventRow.DebugString())
 	return nil
 }
 
@@ -164,7 +166,8 @@ func (dlq *deadLetterQueueClient) Log(
 	ingestionJobID int64,
 	kv streampb.StreamEvent_KV,
 	cdcEventRow cdcevent.Row,
-	dlqReason retryEligibility,
+	reason error,
+	stoppedRetyingReason retryEligibility,
 ) error {
 	if !cdcEventRow.IsInitialized() {
 		return errors.New("cdc event row not initialized")
@@ -200,7 +203,7 @@ func (dlq *deadLetterQueueClient) Log(
 			fmt.Sprintf(insertRowStmtFallBack, dlqTableName),
 			ingestionJobID,
 			tableID,
-			dlqReason.String(),
+			fmt.Sprintf("%s (%s)", reason, stoppedRetyingReason),
 			mutationType.String(),
 			bytes,
 		); err != nil {
@@ -216,7 +219,7 @@ func (dlq *deadLetterQueueClient) Log(
 		fmt.Sprintf(insertBaseStmt, dlqTableName),
 		ingestionJobID,
 		tableID,
-		dlqReason.String(),
+		fmt.Sprintf("%s (%s)", reason, stoppedRetyingReason),
 		mutationType.String(),
 		bytes,
 		jsonRow,
@@ -229,10 +232,23 @@ func (dlq *deadLetterQueueClient) Log(
 func InitDeadLetterQueueClient(
 	ie isql.Executor, tableIDToName map[int32]fullyQualifiedTableName,
 ) DeadLetterQueueClient {
+	if testingDLQ != nil {
+		return testingDLQ
+	}
 	return &deadLetterQueueClient{
 		ie:            ie,
 		tableIDToName: tableIDToName,
 	}
+}
+
+var testingDLQ DeadLetterQueueClient
+
+// TestingSetDLQ sets the DLQ to the passed implementation, globally, until the
+// returned reversion function is called.
+func TestingSetDLQ(d DeadLetterQueueClient) func() {
+	v := testingDLQ
+	testingDLQ = d
+	return func() { testingDLQ = v }
 }
 
 func InitLoggingDeadLetterQueueClient() DeadLetterQueueClient {
