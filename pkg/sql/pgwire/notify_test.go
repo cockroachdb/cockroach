@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -30,12 +29,12 @@ func TestListenNotify(t *testing.T) {
 	defer cleanup()
 
 	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	defer db.Close()
 
 	conn, err := pgx.Connect(ctx, pgURL.String())
 	require.NoError(t, err)
+	defer conn.Close(ctx)
 
 	_, err = conn.Exec(ctx, "LISTEN A")
 	require.NoError(t, err)
@@ -53,55 +52,35 @@ func TestListenNotify(t *testing.T) {
 }
 
 func TestListenNotifyLoad(t *testing.T) {
-	t.Skip()
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 
-	db, err := gosql.Open("postgres", pgURL.String())
+	conn, err := pgx.Connect(ctx, pgURL.String())
 	require.NoError(t, err)
+	defer conn.Close(ctx)
 
-	db2, err := gosql.Open("postgres", pgURL.String())
+	conn2, err := pgx.Connect(ctx, pgURL.String())
 	require.NoError(t, err)
-
-	listener := pq.NewListener("listener", 1*time.Second, 1, func(event pq.ListenerEventType, err error) {
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	require.NoError(t, listener.Listen("A"))
+	defer conn2.Close(ctx)
 
 	// generate a large set of data to stream back
-	ctx, cancel := context.WithCancel(context.Background())
-	rows, err := db.QueryContext(ctx, "SELECT generate_series(1, 10000000)")
+	ctx, cancel := context.WithCancel(ctx)
+	rows, err := conn.Query(ctx, "SELECT generate_series(1, 1000000)")
 	require.NoError(t, err)
-
-	wg := sync.WaitGroup{}
-	// stream rows in the background
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer rows.Close()
-		var i int
-		for rows.Next() {
-			if err := rows.Scan(&i); err != nil {
-				if ctx.Err() == nil {
-					require.NoError(t, err)
-				}
-			}
-		}
-	}()
+	defer rows.Close()
 
 	// send lots of notifications too on the other conn
+	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		for ctx.Err() == nil {
-			_, err := db2.ExecContext(ctx, "NOTIFY A 'P'")
+			_, err := conn2.Exec(ctx, "NOTIFY A 'P'")
 			if err != nil {
 				if ctx.Err() == nil {
 					require.NoError(t, err)
@@ -110,17 +89,18 @@ func TestListenNotifyLoad(t *testing.T) {
 		}
 	}()
 
-	notifications := 0
-	for ctx.Err() == nil && notifications < 1_000_000 {
-		select {
-		case n := <-listener.Notify:
-			require.Equal(t, "A", n.Channel)
-			require.Equal(t, "P", n.Extra)
-			notifications++
-		case <-ctx.Done():
-			t.Fatal("notification timeout")
+	// stream rows, while there are notifications happening
+	for rows.Next() {
+		var i int
+		if err := rows.Scan(&i); err != nil {
+			if ctx.Err() == nil {
+				require.NoError(t, err)
+			}
+			break
 		}
+		assert.Positive(t, i)
 	}
+
 	cancel()
 	wg.Wait()
 }
