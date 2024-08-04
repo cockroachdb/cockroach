@@ -78,14 +78,6 @@ var (
 		128<<20,
 		settings.WithPublic)
 
-	splitKeysOnTimestamps = settings.RegisterBoolSetting(
-		settings.ApplicationLevel,
-		"bulkio.backup.split_keys_on_timestamps",
-		"split backup data on timestamps when writing revision history",
-		true,
-		settings.WithName("bulkio.backup.split_keys_on_timestamps.enabled"),
-	)
-
 	preSplitExports = settings.RegisterBoolSetting(
 		settings.ApplicationLevel,
 		"bulkio.backup.presplit_request_spans.enabled",
@@ -509,19 +501,13 @@ func runBackupProcessor(
 				for _, span := range spans {
 					resumed := false
 					for len(span.span.Key) != 0 {
-						splitMidKey := splitKeysOnTimestamps.Get(&clusterSettings.SV)
-						// If we started splitting already, we must continue until we reach the end
-						// of split span.
-						if !span.firstKeyTS.IsEmpty() {
-							splitMidKey = true
-						}
 						req := &kvpb.ExportRequest{
 							RequestHeader:          kvpb.RequestHeaderFromSpan(span.span),
 							ResumeKeyTS:            span.firstKeyTS,
 							StartTime:              span.start,
 							MVCCFilter:             spec.MVCCFilter,
 							TargetFileSize:         batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
-							SplitMidKey:            splitMidKey,
+							SplitMidKey:            true,
 							IncludeMVCCValueHeader: spec.IncludeMVCCValueHeader,
 						}
 
