@@ -87,6 +87,7 @@ func (cm *channelMux) RunBatch(ctx context.Context) {
 	defer cm.mu.Unlock()
 
 	// fill up buf with up to batchSize messages
+	cm.batchBuf = cm.batchBuf[:0]
 fill:
 	for len(cm.batchBuf) < batchSize {
 		select {
@@ -99,6 +100,9 @@ fill:
 		}
 	}
 
+	if log.V(2) {
+		log.Infof(ctx, "running batch for %s: %d messages", cm, len(cm.batchBuf))
+	}
 	for _, n := range cm.batchBuf {
 		for _, s := range cm.senders {
 			// TODO:
@@ -170,6 +174,9 @@ func (r *ListenerRegistry) AddListener(ctx context.Context, id ListenerID, chann
 			ch:      make(chan pgnotification.Notification, channelQueueSize.Get(&r.settings.SV)),
 		}
 	}
+	if log.V(2) {
+		log.Infof(ctx, "adding listener %d to %s", id, channel)
+	}
 	r.listenersMu.channels[channel].AddSender(id, sender)
 }
 
@@ -177,6 +184,9 @@ func (r *ListenerRegistry) RemoveListener(ctx context.Context, id ListenerID, ch
 	r.listenersMu.Lock()
 	defer r.listenersMu.Unlock()
 
+	if log.V(2) {
+		log.Infof(ctx, "removing listener %d from %s", id, channel)
+	}
 	if cm, ok := r.listenersMu.channels[channel]; ok {
 		cm.RemoveSender(id)
 		if len(cm.senders) == 0 {
@@ -204,6 +214,9 @@ func (r *ListenerRegistry) Notify(ctx context.Context, channel string, payload s
 	if cm, ok := r.listenersMu.channels[channel]; ok {
 		select {
 		case cm.ch <- pgnotification.Notification{Channel: channel, Payload: payload, PID: pid}:
+			if log.V(2) {
+				log.Infof(ctx, "sent notification %+v", pgnotification.Notification{Channel: channel, Payload: payload, PID: pid})
+			}
 		default:
 			log.Warningf(ctx, "dropping notification on channel %s", channel)
 		}
@@ -286,6 +299,7 @@ func (r *ListenerRegistry) startRangefeed(ctx context.Context) {
 	// run the rangefeed in a goroutine, retrying forever
 	err = r.stopper.RunAsyncTask(ctx, "listener_registry_rangefeed", func(ctx context.Context) {
 		for {
+			log.Infof(ctx, "starting rangefeed")
 			if err := r.sender.RangeFeed(ctx, spans, startTs, ch); err != nil {
 				log.Warningf(ctx, "notifications rangefeed failed: %v", err)
 				if ctx.Err() != nil {
@@ -306,6 +320,10 @@ func (r *ListenerRegistry) startRangefeed(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case msg := <-ch:
+				if log.V(2) {
+					log.Infof(ctx, "received rangefeed msg: %+v", msg)
+				}
+
 				if msg.Error != nil {
 					// ?
 					continue
