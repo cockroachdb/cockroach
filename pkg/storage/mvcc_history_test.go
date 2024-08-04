@@ -860,7 +860,6 @@ var commands = map[string]cmd{
 	"gc_clear_range":        {typDataUpdate, cmdGCClearRange},
 	"gc_points_clear_range": {typDataUpdate, cmdGCPointsClearRange},
 	"increment":             {typDataUpdate, cmdIncrement},
-	"initput":               {typDataUpdate, cmdInitPut},
 	"merge":                 {typDataUpdate, cmdMerge},
 	"put":                   {typDataUpdate, cmdPut},
 	"put_blind_inline":      {typDataUpdate, cmdPutBlindInline},
@@ -1317,38 +1316,6 @@ func cmdCPut(e *evalCtx) error {
 		}
 		if !acq.Empty() {
 			e.results.buf.Printf("cput: lock acquisition = %v\n", acq)
-		}
-		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
-		}
-		return nil
-	})
-}
-
-func cmdInitPut(e *evalCtx) error {
-	txn := e.getTxn(optional)
-	ts := e.getTs(txn)
-	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
-
-	key := e.getKey()
-	val := e.getVal()
-	failOnTombstones := e.hasArg("failOnTombstones")
-	resolve, resolveStatus := e.getResolve()
-
-	return e.withWriter("initput", func(rw storage.ReadWriter) error {
-		opts := storage.MVCCWriteOptions{
-			Txn:                            txn,
-			LocalTimestamp:                 localTs,
-			Stats:                          e.ms,
-			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
-			MaxLockConflicts:               e.getMaxLockConflicts(),
-		}
-		acq, err := storage.MVCCInitPut(e.ctx, rw, key, ts, val, failOnTombstones, opts)
-		if err != nil {
-			return err
-		}
-		if !acq.Empty() {
-			e.results.buf.Printf("initput: lock acquisition = %v\n", acq)
 		}
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)

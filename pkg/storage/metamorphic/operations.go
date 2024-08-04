@@ -959,33 +959,6 @@ var opGenerators = []opGenerator{
 		weight: 50,
 	},
 	{
-		name: "mvcc_init_put",
-		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
-			writer := readWriterID(args[0])
-			txn := txnID(args[1])
-			key := m.txnKeyGenerator.parse(args[2])
-			value := roachpb.MakeValueFromBytes(m.valueGenerator.parse(args[3]))
-
-			// Track this write in the txn generator. This ensures the batch will be
-			// committed before the transaction is committed
-			m.txnGenerator.trackTransactionalWrite(writer, txn, key.Key, nil)
-			return &mvccInitPutOp{
-				m:      m,
-				writer: writer,
-				key:    key.Key,
-				value:  value,
-				txn:    txn,
-			}
-		},
-		operands: []operandType{
-			operandReadWriter,
-			operandTransaction,
-			operandUnusedMVCCKey,
-			operandValue,
-		},
-		weight: 50,
-	},
-	{
 		name: "mvcc_check_for_acquire_lock",
 		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
 			writer := readWriterID(args[0])
