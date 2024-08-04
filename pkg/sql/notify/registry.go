@@ -143,7 +143,7 @@ func NewRegistry(
 	clock *hlc.Clock,
 	ie queryRowExer,
 ) *ListenerRegistry {
-	return &ListenerRegistry{
+	r := &ListenerRegistry{
 		settings:   settings,
 		stopper:    stopper,
 		sender:     sender,
@@ -151,6 +151,8 @@ func NewRegistry(
 		ie:         ie,
 		timeSource: timeutil.DefaultTimeSource{},
 	}
+	r.listenersMu.channels = make(map[string]*channelMux)
+	return r
 }
 
 func (r *ListenerRegistry) AddListener(ctx context.Context, id ListenerID, channel string, sender NotificationSender) {
