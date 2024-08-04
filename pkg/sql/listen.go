@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 type listenNode struct {
@@ -25,6 +26,11 @@ func (ln *listenNode) Close(_ context.Context)             {}
 func (ln *listenNode) Next(params runParams) (bool, error) { return false, nil }
 func (ln *listenNode) Values() tree.Datums                 { return nil }
 func (ln *listenNode) startExec(params runParams) error {
+	// TODO: how do we make this respect transaction semantics? only applied on commit if in a
+	if !params.extendedEvalCtx.TxnImplicit {
+		return unimplemented.New("listen", "cannot be used inside a transaction")
+	}
+
 	registry := params.p.execCfg.PGListenerRegistry
 	sessionID := params.extendedEvalCtx.SessionID
 	registry.AddListener(params.ctx, notify.ListenerID(sessionID), ln.n.ChannelName.String(), params.p.notificationSender)
