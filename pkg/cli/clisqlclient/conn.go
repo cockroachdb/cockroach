@@ -17,6 +17,7 @@ import (
 	"io"
 	"net"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 
@@ -174,6 +175,10 @@ func (c *sqlConn) SetAlwaysInferResultTypes(b bool) func() {
 	}
 }
 
+func (c *sqlConn) handleNotification(notification *pgconn.Notification) {
+	fmt.Fprintf(os.Stdout, "%+v\n", notification)
+}
+
 // EnsureConn (re-)establishes the connection to the server.
 func (c *sqlConn) EnsureConn(ctx context.Context) error {
 	if c.conn != nil {
@@ -192,6 +197,10 @@ func (c *sqlConn) EnsureConn(ctx context.Context) error {
 	base.OnNotice = func(_ *pgconn.PgConn, notice *pgconn.Notice) {
 		c.handleNotice(notice)
 	}
+	base.OnNotification = func(_ *pgconn.PgConn, notif *pgconn.Notification) {
+		c.handleNotification(notif)
+	}
+
 	// The default pgx dialer uses a KeepAlive of 5 minutes, which we don't want.
 	dialer := &net.Dialer{}
 	dialer.Timeout = 0
