@@ -1727,6 +1727,8 @@ func (s *SQLServer) preStart(
 	)
 	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
 
+	s.execCfg.PGListenerRegistry.Start(ctx)
+
 	// Report a warning if the server is being shut down via the stopper
 	// before it was gracefully drained. This warning may be innocuous
 	// in tests where there is no use of the test server/cluster after
