@@ -440,6 +440,7 @@ go_library(
         "//pkg/sql/lexbase",
         "//pkg/sql/memsize",
         "//pkg/sql/mutations",
+        "//pkg/sql/notify",
         "//pkg/sql/oidext",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",

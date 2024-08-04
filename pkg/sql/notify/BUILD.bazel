@@ -1,0 +1,8 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "notify",
+    srcs = ["notify.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/notify",
+    visibility = ["//visibility:public"],
+)

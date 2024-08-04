@@ -1946,6 +1946,7 @@ GO_TARGETS = [
     "//pkg/sql/logictest:logictest_test",
     "//pkg/sql/memsize:memsize",
     "//pkg/sql/mutations:mutations",
+    "//pkg/sql/notify:notify",
     "//pkg/sql/oidext:oidext",
     "//pkg/sql/oidext:oidext_test",
     "//pkg/sql/opt/bench:bench",
