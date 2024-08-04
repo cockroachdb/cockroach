@@ -1347,7 +1347,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.SpanStatsConsumer = spanStatsConsumer
 	}
 
-	execCfg.PGListenerRegistry = notify.NewRegistry(cfg.Settings, cfg.stopper, cfg.distSender, cfg.clock, cfg.circularInternalExecutor)
+	execCfg.PGListenerRegistry = notify.NewRegistry(cfg.Settings, cfg.stopper, cfg.distSender, cfg.clock, cfg.circularInternalExecutor, codec)
 
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,

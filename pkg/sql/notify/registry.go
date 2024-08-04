@@ -131,6 +131,7 @@ type ListenerRegistry struct {
 	sender   *kvcoord.DistSender
 	clock    *hlc.Clock
 	ie       queryRowExer
+	codec    keys.SQLCodec
 
 	timeSource timeutil.TimeSource
 
@@ -146,6 +147,7 @@ func NewRegistry(
 	sender *kvcoord.DistSender,
 	clock *hlc.Clock,
 	ie queryRowExer,
+	codec keys.SQLCodec,
 ) *ListenerRegistry {
 	r := &ListenerRegistry{
 		settings:   settings,
@@ -153,6 +155,7 @@ func NewRegistry(
 		sender:     sender,
 		clock:      clock,
 		ie:         ie,
+		codec:      codec,
 		timeSource: timeutil.DefaultTimeSource{},
 	}
 	r.listenersMu.channels = make(map[string]*channelMux)
@@ -291,8 +294,7 @@ func (r *ListenerRegistry) startRangefeed(ctx context.Context) {
 		return
 	}
 	oid := tree.MustBeDOid(res[0])
-	// TODO: work for tenants, not just system tenant
-	prefix := keys.SystemSQLCodec.TablePrefix(uint32(oid.Oid))
+	prefix := r.codec.TablePrefix(uint32(oid.Oid))
 	spans := []roachpb.Span{{Key: prefix, EndKey: prefix.PrefixEnd()}}
 	ch := make(chan kvcoord.RangeFeedMessage, 1024)
 	startTs := r.clock.Now()

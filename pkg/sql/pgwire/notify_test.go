@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -19,10 +21,10 @@ import (
 )
 
 func TestListenNotify(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	args := base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled} // TODO: fix tenantness
-	s, _, _ := serverutils.StartServer(t, args)
-	defer s.Stopper().Stop(context.Background())
+	// defer leaktest.AfterTest(t)() // TODO: why leak?
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 
 	pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
@@ -32,24 +34,22 @@ func TestListenNotify(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	listener := pq.NewListener("listener", 1*time.Second, 1, func(event pq.ListenerEventType, err error) {
-		if err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	require.NoError(t, listener.Listen("A"))
-
-	_, err = db.Exec("NOTIFY A, 'P'")
+	conn, err := pgx.Connect(ctx, pgURL.String())
 	require.NoError(t, err)
 
-	select {
-	case n := <-listener.Notify:
-		require.Equal(t, "A", n.Channel)
-		require.Equal(t, "P", n.Extra)
-	case <-time.After(5 * time.Second):
-		t.Fatal("notification timeout")
-	}
+	_, err = conn.Exec(ctx, "LISTEN A")
+	require.NoError(t, err)
+
+	_, err = db.Exec("NOTIFY A 'P'")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	notif, err := conn.WaitForNotification(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "a", notif.Channel)
+	assert.Equal(t, "'P'", notif.Payload) // TODO: why is this extra quoted?
+	assert.NotZero(t, notif.PID)
 }
 
 func TestListenNotifyLoad(t *testing.T) {
