@@ -100,8 +100,8 @@ fill:
 		}
 	}
 
-	if log.V(2) {
-		log.Infof(ctx, "running batch for %s: %d messages", cm, len(cm.batchBuf))
+	if log.V(2) && len(cm.batchBuf) > 0 {
+		log.Infof(ctx, "running batch: %d messages", len(cm.batchBuf))
 	}
 	for _, n := range cm.batchBuf {
 		for _, s := range cm.senders {
@@ -291,6 +291,7 @@ func (r *ListenerRegistry) startRangefeed(ctx context.Context) {
 		return
 	}
 	oid := tree.MustBeDOid(res[0])
+	// TODO: work for tenants, not just system tenant
 	prefix := keys.SystemSQLCodec.TablePrefix(uint32(oid.Oid))
 	spans := []roachpb.Span{{Key: prefix, EndKey: prefix.PrefixEnd()}}
 	ch := make(chan kvcoord.RangeFeedMessage, 1024)

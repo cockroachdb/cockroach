@@ -107,6 +107,7 @@ go_test(
         "encoding_test.go",
         "helpers_test.go",
         "main_test.go",
+        "notify_test.go",
         "pgtest_test.go",
         "pgwire_test.go",
         "types_test.go",
