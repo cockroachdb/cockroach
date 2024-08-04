@@ -13,14 +13,26 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+type listenNode struct {
+	n *tree.Listen
+}
+
+func (ln *listenNode) Close(_ context.Context)             {}
+func (ln *listenNode) Next(params runParams) (bool, error) { return false, nil }
+func (ln *listenNode) Values() tree.Datums                 { return nil }
+func (ln *listenNode) startExec(params runParams) error {
+	registry := params.p.execCfg.PGListenerRegistry
+	sessionID := params.extendedEvalCtx.SessionID
+	registry.AddListener(params.ctx, notify.ListenerID(sessionID), ln.n.ChannelName.String(), params.p.notificationSender)
+	return nil
+}
+
+var _ planNode = &listenNode{}
+
 func (p *planner) Listen(ctx context.Context, n *tree.Listen) (planNode, error) {
-	// TODO: run an EXPERIMENTAL CREATE CHANGEFEED plan/stmt basically with a different sort of sink that hooks up to this guy
-
-	// Dummy implementation.
-	dummyNotificationListens[n.ChannelName.String()] = struct{}{}
-
-	return newZeroNode(nil), nil
+	return &listenNode{n: n}, nil
 }

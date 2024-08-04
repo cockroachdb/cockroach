@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -276,7 +277,7 @@ type planner struct {
 	// ditto? idk.
 	// hooked up to the client comm. this is like a sink.
 	// TODO: this has to be thread safe wrt the conn and statements executing on it.
-	notificationSender notificationSender
+	notificationSender notify.NotificationSender
 
 	queryCacheSession querycache.Session
 

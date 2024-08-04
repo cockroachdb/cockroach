@@ -273,7 +273,7 @@ func (c *conn) bufferNotice(ctx context.Context, noticeErr pgnotice.Notice) erro
 
 // TODO: only send at end of txn, if we're in one. what level do we do this at?
 // TODO: synchronize with command execution results writing with `bufferRows`. Currently this is just racey.
-func (c *conn) BufferNotification(notif pgnotification.Notification) error {
+func (c *conn) SendNotification(notif pgnotification.Notification) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgNotificationResponse)
 	c.msgBuilder.putInt32(notif.PID)
 	c.msgBuilder.writeTerminatedString(notif.Channel)

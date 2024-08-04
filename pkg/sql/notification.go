@@ -10,39 +10,29 @@
 
 package sql
 
-import (
-	"context"
+// // Notifications is the cluster setting that allows users
+// // to enable notifications.
+// var Notifications = settings.RegisterBoolSetting(
+// 	settings.ApplicationLevel,
+// 	"sql.notifications.enabled",
+// 	"enable notifications in the server/client protocol being sent",
+// 	true,
+// 	settings.WithPublic)
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotification"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-)
+// type notificationSender interface {
+// 	SendNotification(pgnotification.Notification) error
+// }
 
-// Notifications is the cluster setting that allows users
-// to enable notifications.
-var Notifications = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.notifications.enabled",
-	"enable notifications in the server/client protocol being sent",
-	true,
-	settings.WithPublic)
-
-type notificationSender interface {
-	// BufferNotification buffers the given notification to be flushed to the
-	// client before the connection is closed.
-	BufferNotification(pgnotification.Notification) error
-}
-
-// BufferClientNotice implements the eval.ClientNotificationSender interface.
-func (p *planner) BufferClientNotification(ctx context.Context, notification pgnotification.Notification) {
-	if log.V(2) {
-		log.Infof(ctx, "buffered notification: %+v", notification)
-	}
-	if !Notifications.Get(&p.ExecCfg().Settings.SV) {
-		return
-	}
-	if err := p.notificationSender.BufferNotification(notification); err != nil {
-		// This is just an artifact of the dummy impl, probably.
-		log.Errorf(ctx, "buffering notification: %v", err)
-	}
-}
+// // SendClientNotice implements the eval.ClientNotificationSender interface.
+// func (p *planner) SendClientNotification(ctx context.Context, notification pgnotification.Notification) {
+// 	if log.V(2) {
+// 		log.Infof(ctx, "buffered notification: %+v", notification)
+// 	}
+// 	if !Notifications.Get(&p.ExecCfg().Settings.SV) {
+// 		return
+// 	}
+// 	if err := p.notificationSender.SendNotification(notification); err != nil {
+// 		// This is just an artifact of the dummy impl, probably.
+// 		log.Errorf(ctx, "buffering notification: %v", err)
+// 	}
+// }

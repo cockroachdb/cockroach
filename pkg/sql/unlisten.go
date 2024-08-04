@@ -13,10 +13,26 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+type unlistenNode struct {
+	n *tree.Unlisten
+}
+
+func (un *unlistenNode) Close(_ context.Context)             {}
+func (un *unlistenNode) Next(params runParams) (bool, error) { return false, nil }
+func (un *unlistenNode) Values() tree.Datums                 { return nil }
+func (un *unlistenNode) startExec(params runParams) error {
+	registry := params.p.execCfg.PGListenerRegistry
+	sessionID := params.extendedEvalCtx.SessionID
+	registry.RemoveListener(params.ctx, notify.ListenerID(sessionID), un.n.ChannelName.String())
+	return nil
+}
+
+var _ planNode = &unlistenNode{}
+
 func (p *planner) Unlisten(ctx context.Context, n *tree.Unlisten) (planNode, error) {
-	delete(dummyNotificationListens, n.ChannelName.String())
-	return newZeroNode(nil /* columns */), nil
+	return &unlistenNode{n: n}, nil
 }

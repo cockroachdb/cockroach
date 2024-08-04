@@ -1697,7 +1697,7 @@ func (icc *internalClientComm) CreateDrainResult(pos CmdPos) DrainResult {
 }
 
 // BufferNotification is part of the ClientComm interface.
-func (icc *internalClientComm) BufferNotification(pgnotification.Notification) error {
+func (icc *internalClientComm) SendNotification(pgnotification.Notification) error {
 	panic("unimplemented")
 }
 
