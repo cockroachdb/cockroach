@@ -27,7 +27,11 @@ func (un *unlistenNode) Values() tree.Datums                 { return nil }
 func (un *unlistenNode) startExec(params runParams) error {
 	registry := params.p.execCfg.PGListenerRegistry
 	sessionID := params.extendedEvalCtx.SessionID
-	registry.RemoveListener(params.ctx, notify.ListenerID(sessionID), un.n.ChannelName.String())
+	if un.n.Star {
+		registry.RemoveAllListeners(params.ctx, notify.ListenerID(sessionID))
+	} else {
+		registry.RemoveListener(params.ctx, notify.ListenerID(sessionID), un.n.ChannelName.String())
+	}
 	return nil
 }
 

@@ -183,6 +183,18 @@ func (r *ListenerRegistry) RemoveListener(ctx context.Context, id ListenerID, ch
 	}
 }
 
+func (r *ListenerRegistry) RemoveAllListeners(ctx context.Context, id ListenerID) {
+	r.listenersMu.Lock()
+	defer r.listenersMu.Unlock()
+
+	for channel, cm := range r.listenersMu.channels {
+		cm.RemoveSender(id)
+		if len(cm.senders) == 0 {
+			delete(r.listenersMu.channels, channel)
+		}
+	}
+}
+
 func (r *ListenerRegistry) Notify(ctx context.Context, channel string, payload string, pid int32) {
 	r.listenersMu.Lock()
 	defer r.listenersMu.Unlock()
