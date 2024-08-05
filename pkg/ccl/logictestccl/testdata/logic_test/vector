@@ -1,5 +1,8 @@
 # LogicTest: !local-mixed-23.2
 
+statement ok
+CREATE EXTENSION vector
+
 query F
 SELECT '[1,2,3]'::vector <-> '[4,5,6]'::vector
 ----
