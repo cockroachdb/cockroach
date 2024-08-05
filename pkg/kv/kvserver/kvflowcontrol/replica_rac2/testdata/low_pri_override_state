@@ -1,0 +1,138 @@
+get-effective-priority index=10 pri=NormalPri
+----
+pri: NormalPri
+leader-term: 0
+
+side-channel leader-term=3 first=5 last=10 low-pri
+----
+leader-term: 3
+intervals:
+ [   5,   10] => true
+
+# Same term. Cannot overwrite existing state for [8, 10].
+side-channel leader-term=3 first=8 last=15
+----
+leader-term: 3
+intervals:
+ [   5,   10] => true
+ [  11,   15] => false
+
+# Higher term. Overwrites part of existing state.
+side-channel leader-term=4 first=15 last=20 low-pri
+----
+leader-term: 4
+intervals:
+ [   5,   10] => true
+ [  11,   14] => false
+ [  15,   20] => true
+
+get-effective-priority index=4 pri=HighPri
+----
+pri: HighPri
+leader-term: 4
+intervals:
+ [   5,   10] => true
+ [  11,   14] => false
+ [  15,   20] => true
+
+get-effective-priority index=6 pri=AboveNormalPri
+----
+pri: LowPri
+leader-term: 4
+intervals:
+ [   7,   10] => true
+ [  11,   14] => false
+ [  15,   20] => true
+
+get-effective-priority index=10 pri=NormalPri
+----
+pri: LowPri
+leader-term: 4
+intervals:
+ [  11,   14] => false
+ [  15,   20] => true
+
+get-effective-priority index=11 pri=HighPri
+----
+pri: HighPri
+leader-term: 4
+intervals:
+ [  12,   14] => false
+ [  15,   20] => true
+
+get-effective-priority index=13 pri=AboveNormalPri
+----
+pri: AboveNormalPri
+leader-term: 4
+intervals:
+ [  14,   14] => false
+ [  15,   20] => true
+
+get-effective-priority index=15 pri=HighPri
+----
+pri: LowPri
+leader-term: 4
+intervals:
+ [  16,   20] => true
+
+# Higher term, overwrites existing state.
+side-channel leader-term=5 first=16 last=23
+----
+leader-term: 5
+intervals:
+ [  16,   23] => false
+
+# Same term. Extends interval.
+side-channel leader-term=5 first=22 last=25
+----
+leader-term: 5
+intervals:
+ [  16,   25] => false
+
+# Higher term.
+side-channel leader-term=6 first=26 last=30 low-pri
+----
+leader-term: 6
+intervals:
+ [  16,   25] => false
+ [  26,   30] => true
+
+# Same term. Gap in intervals.
+side-channel leader-term=6 first=35 last=40 low-pri
+----
+leader-term: 6
+intervals:
+ [  16,   25] => false
+ [  26,   30] => true
+ [  35,   40] => true
+
+get-effective-priority index=32 pri=NormalPri
+----
+pri: NormalPri
+leader-term: 6
+intervals:
+ [  35,   40] => true
+
+get-effective-priority index=40 pri=HighPri
+----
+pri: LowPri
+leader-term: 6
+
+# Old term. Ignored.
+side-channel leader-term=5 first=35 last=40 low-pri
+----
+leader-term: 6
+
+# Existing term.
+side-channel leader-term=6 first=35 last=40 low-pri
+----
+leader-term: 6
+intervals:
+ [  35,   40] => true
+
+# Existing term. Old message is ignored.
+side-channel leader-term=6 first=30 last=39
+----
+leader-term: 6
+intervals:
+ [  35,   40] => true
