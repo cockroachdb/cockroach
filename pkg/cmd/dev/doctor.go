@@ -253,10 +253,13 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 			if d.checkUsingConfig(cfg.workspace, "dev") {
 				return "In --remote mode, you cannot use the `dev` build configuration."
 			}
+			if !d.checkLinePresenceInBazelRcUser(cfg.workspace, "build:engflow --jobs=200") {
+				return fmt.Sprintf("Make sure the following line is in %s/.bazelrc.user: build:engflow --jobs=200", cfg.workspace)
+			}
 			return ""
 		},
 		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
-			cfg.maybePromptForAutofixPermission("Do you want me to update your .bazelrc.user file for you? I will set the crosslinux and engflow configs and remove any usage of the dev config if you have any.")
+			cfg.maybePromptForAutofixPermission("Do you want me to update your .bazelrc.user file for you? I will set the crosslinux and engflow configs, specify the number of jobs to use, and remove any usage of the dev config if you have any.")
 			if !cfg.haveAutofixPermission {
 				return fmt.Errorf("do not have permission to update .bazelrc.user")
 			}
@@ -274,6 +277,12 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 			}
 			if d.checkUsingConfig(cfg.workspace, "dev") {
 				err := d.removeAllInFile(filepath.Join(cfg.workspace, ".bazelrc.user"), "build --config=dev")
+				if err != nil {
+					return err
+				}
+			}
+			if !d.checkLinePresenceInBazelRcUser(cfg.workspace, "build:engflow --jobs=200") {
+				err := d.addLineToBazelRcUser(cfg.workspace, "build:engflow --jobs=200")
 				if err != nil {
 					return err
 				}
