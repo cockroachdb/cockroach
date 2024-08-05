@@ -579,6 +579,9 @@ statement ok
 SET optimizer_use_lock_op_for_serializable = true
 
 statement ok
+SET enable_durable_locking_for_serializable = true
+
+statement ok
 BEGIN ISOLATION LEVEL SERIALIZABLE
 
 # Lock the first row.
@@ -606,6 +609,9 @@ COMMIT;
 statement ok
 SET optimizer_use_lock_op_for_serializable = true
 
+statement ok
+SET enable_durable_locking_for_serializable = true
+
 query III
 SELECT * FROM xyz WHERE z = 100 ORDER BY x FOR UPDATE SKIP LOCKED
 ----
@@ -619,7 +625,13 @@ COMMIT
 statement ok
 RESET optimizer_use_lock_op_for_serializable
 
+statement ok
+RESET enable_durable_locking_for_serializable
+
 user root
 
 statement ok
 RESET optimizer_use_lock_op_for_serializable
+
+statement ok
+RESET enable_durable_locking_for_serializable
