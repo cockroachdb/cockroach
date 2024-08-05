@@ -108,10 +108,10 @@ var DefaultEstimatedCPUModel = EstimatedCPUModel{
 	}{
 		PayloadSize: []float64{256, 1024, 4 * 1024, 16 * 1024, 64 * 1024, 256 * 1024},
 		CPUPerByte: []EstimatedCPU{
-			1.0 / 3 / 1024 / 1024,
-			1.0 / 5 / 1024 / 1024,
-			1.0 / 9 / 1024 / 1024,
-			1.0 / 27 / 1024 / 1024,
+			1.0 / 4 / 1024 / 1024,
+			1.0 / 6 / 1024 / 1024,
+			1.0 / 9.5 / 1024 / 1024,
+			1.0 / 32 / 1024 / 1024,
 			1.0 / 62 / 1024 / 1024,
 			1.0 / 106 / 1024 / 1024,
 		},
@@ -122,7 +122,7 @@ var DefaultEstimatedCPUModel = EstimatedCPUModel{
 	}{
 		RatePerNode: []float64{100, 200, 400, 800, 1600, 3200, 6400, 12800},
 		CPUPerBatch: []EstimatedCPU{
-			1.0 / 700, 1.0 / 900, 1.0 / 1100, 1.0 / 1300, 1.0 / 1700, 1.0 / 2200, 1.0 / 2700, 1.0 / 3150,
+			1.0 / 700, 1.0 / 900, 1.0 / 1100, 1.0 / 1300, 1.0 / 1700, 1.0 / 2200, 1.0 / 2700, 1.0 / 3400,
 		},
 	},
 	WriteRequestCost: struct {
@@ -152,7 +152,7 @@ var DefaultEstimatedCPUModel = EstimatedCPUModel{
 		Amortization float64
 	}{
 		Amount:       0.65,
-		Amortization: 6,
+		Amortization: 2,
 	},
 }
 
