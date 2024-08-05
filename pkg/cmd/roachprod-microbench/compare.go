@@ -100,12 +100,12 @@ func (c *compare) readMetrics() (map[string]*model.MetricMap, error) {
 
 		// Read the previous and current results. If either is missing, we'll just
 		// skip it.
-		if err := processReportFile(results, "old", pkg,
+		if err := processReportFile(results, "baseline", pkg,
 			filepath.Join(c.oldDir, getReportLogName(reportLogName, pkg))); err != nil {
 			return nil, err
 
 		}
-		if err := processReportFile(results, "new", pkg,
+		if err := processReportFile(results, "experiment", pkg,
 			filepath.Join(c.newDir, getReportLogName(reportLogName, pkg))); err != nil {
 			log.Printf("failed to add report for %s: %s", pkg, err)
 			return nil, err
@@ -185,7 +185,7 @@ func (c *compare) publishToGoogleSheets(
 			sheetName = fmt.Sprintf("%s (%s)", sheetName, c.sheetDesc)
 		}
 
-		url, err := c.service.CreateSheet(c.ctx, sheetName, comparisonResults, "old", "new")
+		url, err := c.service.CreateSheet(c.ctx, sheetName, comparisonResults, "baseline", "experiment")
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create sheet for %s", pkgGroup)
 		}

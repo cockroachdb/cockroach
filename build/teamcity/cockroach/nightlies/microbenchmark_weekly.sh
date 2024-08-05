@@ -92,8 +92,8 @@ done
 
 # Execute microbenchmarks
 ./bin/roachprod-microbench run "$ROACHPROD_CLUSTER" \
-  --binaries "${sha_arr[0]}" \
-  --compare-binaries "${sha_arr[1]}" \
+  --binaries experiment="${sha_arr[0]}" \
+  --binaries baseline="${sha_arr[1]}" \
   --output-dir="$output_dir" \
   --iterations "$BENCH_ITERATIONS" \
   --shell="$BENCH_SHELL" \
@@ -112,8 +112,9 @@ if [ -d "$output_dir/0" ] && [ "$(ls -A "$output_dir/0")" ] \
   if [ -n "${TRIGGERED_BUILD:-}" ]; then
     slack_token="${MICROBENCH_SLACK_TOKEN}"
   fi
+  # Sheet description is in the form: `baseline` to `experiment`
   sheet_description="${name_arr[1]} -> ${name_arr[0]}"
-  ./bin/roachprod-microbench compare "$output_dir/0" "$output_dir/1" \
+  ./bin/roachprod-microbench compare "$output_dir/experiment" "$output_dir/baseline" \
     ${slack_token:+--slack-token="$slack_token"} \
     --sheet-desc="$sheet_description" 2>&1 | tee "$output_dir/sheets.txt"
 else

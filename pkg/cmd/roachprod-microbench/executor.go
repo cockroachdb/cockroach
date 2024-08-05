@@ -18,7 +18,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -30,12 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/maps"
 )
 
 type executorConfig struct {
 	cluster           string
-	binaries          string
-	compareBinaries   string
+	binaries          map[string]string
 	excludeList       []string
 	ignorePackageList []string
 	outputDir         string
@@ -51,7 +50,6 @@ type executorConfig struct {
 
 type executor struct {
 	executorConfig
-	remoteBinariesList     []string
 	excludeBenchmarksRegex [][]*regexp.Regexp
 	ignorePackages         map[string]struct{}
 	runOptions             install.RunOptions
@@ -63,9 +61,9 @@ type benchmark struct {
 	name string
 }
 
-type benchmarkIndexed struct {
+type benchmarkKey struct {
 	benchmark
-	index int
+	key string
 }
 
 type benchmarkExtractionResult struct {
@@ -109,11 +107,6 @@ func newExecutor(config executorConfig) (*executor, error) {
 		})
 	}
 
-	remoteBinariesList := []string{config.binaries}
-	if config.compareBinaries != "" {
-		remoteBinariesList = append(remoteBinariesList, config.compareBinaries)
-	}
-
 	if config.iterations < 1 {
 		return nil, errors.New("iterations must be greater than 0")
 	}
@@ -126,7 +119,6 @@ func newExecutor(config executorConfig) (*executor, error) {
 	return &executor{
 		executorConfig:         config,
 		excludeBenchmarksRegex: excludeBenchmarks,
-		remoteBinariesList:     remoteBinariesList,
 		ignorePackages:         ignorePackages,
 		runOptions:             runOptions,
 		log:                    l,
@@ -135,7 +127,7 @@ func newExecutor(config executorConfig) (*executor, error) {
 
 func defaultExecutorConfig() executorConfig {
 	return executorConfig{
-		binaries:     "new",
+		binaries:     map[string]string{"experiment": "experiment"},
 		outputDir:    "artifacts/roachprod-microbench",
 		timeout:      "10m",
 		shellCommand: "COCKROACH_RANDOM_SEED=1",
@@ -155,7 +147,7 @@ func (e *executor) listBenchmarks(
 	// Generate commands for listing benchmarks.
 	commands := make([][]cluster.RemoteCommand, 0)
 	for _, pkg := range packages {
-		for _, bin := range e.remoteBinariesList {
+		for _, bin := range e.binaries {
 			remoteBinDir := fmt.Sprintf("%s/%s/bin", bin, pkg)
 			// The command will not fail if the directory does not exist.
 			command := cluster.RemoteCommand{
@@ -226,11 +218,11 @@ func (e *executor) listBenchmarks(
 	for k, v := range benchmarkCounts {
 		// Some packages override TestMain to run the tests twice or more thus
 		// appearing more than once in the listing logic.
-		if v >= len(e.remoteBinariesList) {
+		if v >= len(e.binaries) {
 			packageCounts[k.pkg]++
 			benchmarks = append(benchmarks, k)
 		} else {
-			e.log.Printf("Ignoring benchmark %s/%s, missing from %d binaries", k.pkg, k.name, len(e.remoteBinariesList)-v)
+			e.log.Printf("Ignoring benchmark %s/%s, missing from %d binaries", k.pkg, k.name, len(e.binaries)-v)
 		}
 	}
 
@@ -297,7 +289,7 @@ func (e *executor) executeBenchmarks() error {
 
 	// List packages containing benchmarks on the remote cluster for the first
 	// remote binaries' directory.
-	remotePackageDir := e.remoteBinariesList[0]
+	remotePackageDir := maps.Values(e.binaries)[0]
 	remotePackages, err := e.listRemotePackages(muteLogger, remotePackageDir)
 	if err != nil {
 		return err
@@ -321,23 +313,23 @@ func (e *executor) executeBenchmarks() error {
 		return errors.New("no packages containing benchmarks found")
 	}
 
-	// Create reports for each binary.
-	// Currently, we only support comparing two binaries at most.
-	reporters := make([]*report, 0)
+	// Create reports for each key, binary combination.
+	reporters := make(map[string]*report)
 	defer func() {
 		for _, report := range reporters {
 			report.closeReports()
 		}
 	}()
-	for index := range e.remoteBinariesList {
+	for key := range e.binaries {
 		report := &report{}
-		dir := path.Join(e.outputDir, strconv.Itoa(index))
+		// Use the binary key as the report output directory name.
+		dir := path.Join(e.outputDir, key)
 		err = os.MkdirAll(dir, os.ModePerm)
 		if err != nil {
 			return err
 		}
 		err = report.createReports(e.log, dir, validPackages)
-		reporters = append(reporters, report)
+		reporters[key] = report
 		if err != nil {
 			return err
 		}
@@ -357,11 +349,11 @@ func (e *executor) executeBenchmarks() error {
 		commandGroup := make([]cluster.RemoteCommand, 0)
 		// Weave the commands between binaries and iterations.
 		for i := 0; i < e.iterations; i++ {
-			for binIndex, bin := range e.remoteBinariesList {
+			for key, bin := range e.binaries {
 				shellCommand := fmt.Sprintf(`"cd %s/%s/bin && %s"`, bin, bench.pkg, runCommand)
 				command := cluster.RemoteCommand{
 					Args:     []string{"sh", "-c", shellCommand},
-					Metadata: benchmarkIndexed{bench, binIndex},
+					Metadata: benchmarkKey{bench, key},
 				}
 				commandGroup = append(commandGroup, command)
 			}
@@ -389,8 +381,8 @@ func (e *executor) executeBenchmarks() error {
 			fmt.Print(".")
 		}
 		extractResults := extractBenchmarkResults(response.Stdout)
-		benchmarkResponse := response.Metadata.(benchmarkIndexed)
-		report := reporters[benchmarkResponse.index]
+		benchmarkResponse := response.Metadata.(benchmarkKey)
+		report := reporters[benchmarkResponse.key]
 		for _, benchmarkResult := range extractResults.results {
 			if _, writeErr := report.benchmarkOutput[benchmarkResponse.pkg].WriteString(
 				fmt.Sprintf("%s\n", strings.Join(benchmarkResult, " "))); writeErr != nil {
