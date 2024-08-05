@@ -391,26 +391,32 @@ func (d decommission) startPerturbation(
 	ctx context.Context, l *logger.Logger, v variations,
 ) time.Duration {
 	startTime := timeutil.Now()
-	l.Printf("draining target node")
-	drainCmd := fmt.Sprintf(
-		"./cockroach node drain --self --certs-dir=%s --port={pgport:%d}",
-		install.CockroachNodeCertsDir,
-		v.targetNodes(),
-	)
-	v.cluster.Run(ctx, option.WithNodes(v.targetNodes()), drainCmd)
+	// TODO(baptist): If we want to support multiple decommissions in parallel,
+	// run drain and decommission in separate goroutine.
+	l.Printf("draining target nodes")
+	for _, node := range v.targetNodes() {
+		drainCmd := fmt.Sprintf(
+			"./cockroach node drain --self --certs-dir=%s --port={pgport:%d}",
+			install.CockroachNodeCertsDir,
+			node,
+		)
+		v.cluster.Run(ctx, option.WithNodes(v.cluster.Node(node)), drainCmd)
+	}
 
-	// Wait for all the other nodes to see the drain.
+	// Wait for all the other nodes to see the drain over gossip.
 	time.Sleep(10 * time.Second)
 
-	l.Printf("decommissioning node")
-	decommissionCmd := fmt.Sprintf(
-		"./cockroach node decommission --self --certs-dir=%s --port={pgport:%d}",
-		install.CockroachNodeCertsDir,
-		v.targetNodes(),
-	)
-	v.cluster.Run(ctx, option.WithNodes(v.targetNodes()), decommissionCmd)
+	l.Printf("decommissioning nodes")
+	for _, node := range v.targetNodes() {
+		decommissionCmd := fmt.Sprintf(
+			"./cockroach node decommission --self --certs-dir=%s --port={pgport:%d}",
+			install.CockroachNodeCertsDir,
+			node,
+		)
+		v.cluster.Run(ctx, option.WithNodes(v.cluster.Node(node)), decommissionCmd)
+	}
 
-	l.Printf("stopping decommissioned node")
+	l.Printf("stopping decommissioned nodes")
 	v.cluster.Stop(ctx, l, option.DefaultStopOpts(), v.targetNodes())
 	return timeutil.Since(startTime)
 }
