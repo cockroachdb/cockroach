@@ -97,7 +97,7 @@ func registerYCSB(r registry.Registry) {
 				args += " " + envFlags
 			}
 			cmd := fmt.Sprintf(
-				"./cockroach workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+
+				"./workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+
 					" --splits=%d --histograms="+t.PerfArtifactsDir()+"/stats.json"+args+
 					" {pgurl%s}",
 				wl, conc, len(c.CRDBNodes()), c.CRDBNodes())
@@ -123,8 +123,9 @@ func registerYCSB(r registry.Registry) {
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runYCSB(ctx, t, c, wl, cpus, ycsbOptions{})
 				},
-				CompatibleClouds: registry.AllClouds,
-				Suites:           registry.Suites(registry.Nightly),
+				CompatibleClouds:           registry.AllClouds,
+				Suites:                     registry.Suites(registry.Nightly),
+				RequiresDeprecatedWorkload: true, // test only to see if using cockroach workload causes a regression
 			})
 
 			if wl == "A" {
