@@ -95,7 +95,6 @@ func newKafkaSinkClientV2(
 
 	recordResize := func(numRecords int64) {}
 	if m := mb(requiresResourceAccounting); m != nil { // `m` can be nil in tests.
-		baseOpts = append(baseOpts, kgo.WithHooks(&kgoMetricsAdapter{throttling: m.getKafkaThrottlingMetrics(settings)}))
 		recordResize = func(numRecords int64) {
 			m.recordInternalRetry(numRecords, true)
 		}
@@ -369,7 +368,7 @@ func makeKafkaSinkV2(
 	}
 
 	return makeBatchingSink(ctx, sinkTypeKafka, client, time.Duration(batchCfg.Frequency), retryOpts,
-		parallelism, topicNamer, pacerFactory, timeSource, mb(true), settings), nil
+		parallelism, topicNamer, pacerFactory, timeSource, mb(true)), nil
 }
 
 func buildKgoConfig(
@@ -468,9 +467,7 @@ func buildKgoConfig(
 		opts = append(opts, kgo.MaxBufferedRecords(sinkCfg.Flush.MaxMessages))
 	}
 
-	if sinkCfg.ClientID != "" {
-		opts = append(opts, kgo.ClientID(sinkCfg.ClientID))
-	}
+	opts = append(opts, kgo.ClientID(`CockroachDB`))
 
 	switch strings.ToUpper(sinkCfg.RequiredAcks) {
 	case ``, `ONE`, `1`: // This is our default.

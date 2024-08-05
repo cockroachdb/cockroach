@@ -82,6 +82,7 @@ func TestKafkaSinkClientV2_Resolved(t *testing.T) {
 	matchers := make([]any, 0, 6)
 	for _, topic := range []string{"t1", "t2", "t3"} {
 		for _, partition := range []int32{0, 1} {
+			topic, partition := topic, partition
 			matchers = append(matchers, fnMatcher(func(arg any) bool {
 				return arg.(*kgo.Record).Topic == topic && arg.(*kgo.Record).Partition == partition
 			}))
@@ -125,7 +126,7 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 		defer fx.close()
 
 		buf := fx.sink.MakeBatchBuffer("t")
-		for i := range 100 {
+		for i := 0; i < 100; i++ {
 			buf.Append([]byte("k1"), []byte(strconv.Itoa(i)), attributes{})
 		}
 		payload, err := buf.Close()
@@ -289,15 +290,6 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 			name: "default",
 		},
 		{
-			name: "client id",
-			jsonConfig: map[string]any{
-				"ClientID": "test",
-			},
-			expectedOpts: map[string]any{
-				"ClientID": "test",
-			},
-		},
-		{
 			name: "compression",
 			jsonConfig: map[string]any{
 				"Compression": "lz4",
@@ -331,7 +323,6 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 		{
 			name: "lots of options",
 			jsonConfig: map[string]any{
-				"ClientID":     "test",
 				"Compression":  "gzip",
 				"RequiredAcks": "ALL",
 				"Version":      "0.8.2.2",
@@ -343,7 +334,6 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 				},
 			},
 			expectedOpts: map[string]any{
-				"ClientID":                 "test",
 				"ProducerBatchCompression": []kgo.CompressionCodec{kgo.GzipCompression()},
 				"RequiredAcks":             kgo.AllISRAcks(),
 				"MaxVersions":              kversion.V0_8_2(),
