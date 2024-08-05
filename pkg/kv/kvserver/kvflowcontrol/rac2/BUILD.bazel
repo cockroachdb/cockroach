@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "rac2",
+    srcs = [
+        "range_controller.go",
+        "store_stream.go",
+        "token_counter.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/roachpb",
+        "//pkg/util/admission/admissionpb",
+    ],
+)
