@@ -10,8 +10,13 @@
 
 package insights
 
+import "github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+
 // TestingKnobs provides hooks and testingKnobs for unit tests.
 type TestingKnobs struct {
+	// OnSessionClear is a callback that is triggered when the locking
+	// registry clears a session entry.
+	OnSessionClear func(sessionID clusterunique.ID)
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
