@@ -15,6 +15,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
@@ -449,6 +450,51 @@ func (f *replicaFlowControlIntegrationImpl) clearState(ctx context.Context) {
 }
 
 // ===================== RACv2 =====================
+
+// Interface needed by kvserver package.
+type replicaRACv2IntegrationInterface interface {
+	admittedLogEntry(
+		ctx context.Context, pri kvflowcontrolpb.RaftPriority, index uint64,
+	)
+	kvadmission.RangeControllerProvider
+	enqueuePiggybackedAdmitted(msg raftpb.Message)
+	processPiggybackedAdmitted(ctx context.Context) bool
+	processRangeControllerSchedulerEvent(ctx context.Context)
+
+	onDestroyRaftMuLocked(ctx context.Context)
+	onDescChangedLocked(
+		ctx context.Context, desc *roachpb.RangeDescriptor,
+	)
+	tryUpdateLeaseholderRaftMuLocked(
+		ctx context.Context, replicaID roachpb.ReplicaID,
+	)
+	// NB: must be called even if there was no Ready.
+	handleRaftEventRaftMuLocked(ctx context.Context, entries []raftpb.Entry)
+
+	admitRaftEntryRaftMuLocked(
+		ctx context.Context,
+		queue acWorkQueue,
+		tenantID roachpb.TenantID,
+		storeID roachpb.StoreID,
+		rangeID roachpb.RangeID,
+		entry raftpb.Entry,
+	)
+
+	// May be wrong. May only be mu locked.
+	sideChannelForInheritedPriorityLocked(
+		first, last uint64, inheritedPri uint8,
+	)
+	// May be wrong. May be nothing locked.
+	tryUpdateLeaderRaftMuLocked(
+		ctx context.Context, leaderID roachpb.ReplicaID, force bool,
+	)
+}
+
+/*
+	r.raftMu.racV2Integration = replicaRACv2Integration{
+		replica: r, admittedPiggybacker: r.store.cfg.RACv2AdmittedPiggybacker}
+	r.raftMu.racV2Integration.mu.enqueuedPiggybackedResponses = make(map[roachpb.ReplicaID]raftpb.Message)
+*/
 
 // replicaRACv2Integration encapsulated the per-Replica state for integrating
 // with RACv2. It exists on both the leader and followers, and is a field in
