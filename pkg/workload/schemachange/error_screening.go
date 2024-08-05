@@ -109,9 +109,13 @@ func (og *operationGenerator) fnExists(
 }
 
 func (og *operationGenerator) tableHasDependencies(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, includeFKs bool,
 ) (bool, error) {
-	return og.scanBool(ctx, tx, `
+	fkFilter := ""
+	if !includeFKs {
+		fkFilter = "AND fd.dependedonby_type != 'fk'"
+	}
+	q := fmt.Sprintf(`
 	SELECT EXISTS(
         SELECT fd.descriptor_name
           FROM crdb_internal.forward_dependencies AS fd
@@ -125,8 +129,10 @@ func (og *operationGenerator) tableHasDependencies(
                 )
            AND fd.descriptor_id != fd.dependedonby_id
            AND fd.dependedonby_type != 'sequence'
+           %s
        )
-	`, tableName.Object(), tableName.Schema())
+	`, fkFilter)
+	return og.scanBool(ctx, tx, q, tableName.Object(), tableName.Schema())
 }
 
 func (og *operationGenerator) columnIsDependedOn(
