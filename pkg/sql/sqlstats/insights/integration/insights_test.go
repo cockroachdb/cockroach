@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -956,4 +957,45 @@ func TestInsightsIndexRecommendationIntegration(t *testing.T) {
 
 		return nil
 	}, 1*time.Second)
+}
+
+// TestInsightsClearsPerSessionMemory ensures that memory allocated
+// for a session is freed when that session is closed.
+func TestInsightsClearsPerSessionMemory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(ctx)
+	s := ts.ApplicationLayer()
+	conn1 := sqlutils.MakeSQLRunner(s.SQLConn(t))
+	conn2 := sqlutils.MakeSQLRunner(s.SQLConn(t))
+	insightsProvider := s.SQLServer().(*sql.Server).GetInsightsProvider()
+
+	var sessionID1 string
+	conn1.QueryRow(t, "SHOW session_id").Scan(&sessionID1)
+
+	// Start a transaction and cancel the session - ensure that the memory is freed.
+	conn1.Exec(t, "BEGIN")
+	for i := 0; i < 5; i++ {
+		conn1.Exec(t, "SELECT 1")
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		sessions := insightsProvider.ActiveSessions()
+		if len(sessions) == 0 || sessions[0].String() != sessionID1 {
+			return errors.New("sessionID1 not found in insights")
+		}
+		return nil
+	})
+
+	conn2.Exec(t, "CANCEL SESSION $1", sessionID1)
+
+	testutils.SucceedsSoon(t, func() error {
+		if len(insightsProvider.ActiveSessions()) > 0 {
+			return errors.New("expected no active sessions")
+		}
+		return nil
+	})
 }

@@ -145,6 +145,8 @@ func (i *ConcurrentBufferIngester) ingest(events *eventBuffer) {
 			i.registry.ObserveStatement(e.sessionID, e.statement)
 		} else if e.transaction != nil {
 			i.registry.ObserveTransaction(e.sessionID, e.transaction)
+		} else if e.sessionID != (clusterunique.ID{}) {
+			i.registry.clearSession(e.sessionID)
 		}
 		events[idx] = event{}
 	}
@@ -174,6 +176,16 @@ func (i *ConcurrentBufferIngester) ObserveTransaction(
 		i.guard.eventBuffer[writerIdx] = event{
 			sessionID:   sessionID,
 			transaction: transaction,
+		}
+	})
+}
+
+// ClearSession sends a signal to the underlying registry to clear any cached
+// data associated with the given sessionID. This is an async operation.
+func (i *ConcurrentBufferIngester) ClearSession(sessionID clusterunique.ID) {
+	i.guard.AtomicWrite(func(writerIdx int64) {
+		i.guard.eventBuffer[writerIdx] = event{
+			sessionID: sessionID,
 		}
 	})
 }

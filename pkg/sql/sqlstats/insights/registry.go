@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
 )
 
@@ -23,24 +24,34 @@ import (
 // statement execution to determine which statements are outliers and
 // writes insights into the provided sink.
 type lockingRegistry struct {
-	statements map[clusterunique.ID]*statementBuf
-	detector   detector
-	causes     *causes
-	store      *LockingStore
+	mu struct {
+		syncutil.RWMutex
+
+		// statements can be accessed concurrently in testing.
+		statements map[clusterunique.ID]*statementBuf
+	}
+	detector detector
+	causes   *causes
+	store    *LockingStore
 }
 
 func (r *lockingRegistry) Clear() {
-	r.statements = make(map[clusterunique.ID]*statementBuf)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.statements = make(map[clusterunique.ID]*statementBuf)
 }
 
 func (r *lockingRegistry) ObserveStatement(sessionID clusterunique.ID, statement *Statement) {
 	if !r.enabled() {
 		return
 	}
-	b, ok := r.statements[sessionID]
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	b, ok := r.mu.statements[sessionID]
 	if !ok {
 		b = statementsBufPool.Get().(*statementBuf)
-		r.statements[sessionID] = b
+		r.mu.statements[sessionID] = b
 	}
 	b.append(statement)
 }
@@ -96,12 +107,14 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	if transaction.ID.String() == "00000000-0000-0000-0000-000000000000" {
 		return
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	statements, ok := func() (*statementBuf, bool) {
-		statements, ok := r.statements[sessionID]
+		statements, ok := r.mu.statements[sessionID]
 		if !ok {
 			return nil, false
 		}
-		delete(r.statements, sessionID)
+		delete(r.mu.statements, sessionID)
 		return statements, true
 	}()
 	if !ok {
@@ -188,6 +201,29 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	r.store.addInsight(insight)
 }
 
+// clearSession removes the session from the registry and releases the
+// associated statement buffer.
+func (r *lockingRegistry) clearSession(sessionID clusterunique.ID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if b, ok := r.mu.statements[sessionID]; ok {
+		delete(r.mu.statements, sessionID)
+		b.release()
+	}
+}
+
+// getTrackedSessions returns a list of all session IDs that are currently
+// being tracked by the registry. Used for testing.
+func (r *lockingRegistry) getTrackedSessions() []clusterunique.ID {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	sessions := make([]clusterunique.ID, 0, len(r.mu.statements))
+	for sessionID := range r.mu.statements {
+		sessions = append(sessions, sessionID)
+	}
+	return sessions
+}
+
 // TODO(todd):
 //
 //	Once we can handle sufficient throughput to live on the hot
@@ -199,10 +235,11 @@ func (r *lockingRegistry) enabled() bool {
 }
 
 func newRegistry(st *cluster.Settings, detector detector, store *LockingStore) *lockingRegistry {
-	return &lockingRegistry{
-		statements: make(map[clusterunique.ID]*statementBuf),
-		detector:   detector,
-		causes:     &causes{st: st},
-		store:      store,
+	r := &lockingRegistry{
+		detector: detector,
+		causes:   &causes{st: st},
+		store:    store,
 	}
+	r.mu.statements = make(map[clusterunique.ID]*statementBuf)
+	return r
 }

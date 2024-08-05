@@ -645,10 +645,10 @@ func (s *Server) GetIndexUsageStatsController() *idxusage.Controller {
 	return s.indexUsageStatsController
 }
 
-// GetInsightsReader returns the insights.Reader for the current sql.Server's
+// GetInsightsProvider returns the insights.Reader for the current sql.Server's
 // detected execution insights.
-func (s *Server) GetInsightsReader() *insights.LockingStore {
-	return s.insights.Store()
+func (s *Server) GetInsightsProvider() *insights.Provider {
+	return s.insights
 }
 
 // GetSQLStatsProvider returns the provider for the sqlstats subsystem.
@@ -1267,7 +1267,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	}
 
 	// Free any memory used by the stats collector.
-	ex.statsCollector.Free(ctx)
+	ex.statsCollector.Close(ctx, ex.planner.extendedEvalCtx.SessionID)
 
 	var payloadErr error
 	if closeType == normalClose {
