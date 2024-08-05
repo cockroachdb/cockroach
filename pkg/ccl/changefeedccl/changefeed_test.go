@@ -3664,63 +3664,56 @@ func TestChangefeedOutputTopics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		pgURL, cleanup := sqlutils.PGUrl(t, s.Server.SQLAddr(), t.Name(), url.User(username.RootUser))
-		defer cleanup()
-		pgBase, err := pq.NewConnector(pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		actual := "(no notice)"
-		connector := pq.ConnectorWithNoticeHandler(pgBase, func(n *pq.Error) {
-			actual = n.Message
-		})
+	cluster, _, cleanup := startTestCluster(t)
+	defer cleanup()
+	s := cluster.Server(1)
 
-		dbWithHandler := gosql.OpenDB(connector)
-		defer dbWithHandler.Close()
+	// Only pubsub v2 emits notices.
+	PubsubV2Enabled.Override(context.Background(), &s.ClusterSettings().SV, true)
 
-		sqlDB := sqlutils.MakeSQLRunner(dbWithHandler)
-
-		sqlDB.Exec(t, `CREATE TABLE ☃ (i INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO ☃ VALUES (0)`)
-
-		tg := newTeeGroup()
-		feedCh := make(chan *sarama.ProducerMessage, 1024)
-		wrapSink := func(snk Sink) Sink {
-			if KafkaV2Enabled.Get(&s.Server.ClusterSettings().SV) {
-				return &fakeKafkaSinkV2{
-					t:      t,
-					Sink:   snk,
-					feedCh: feedCh,
-				}
-			}
-			return &fakeKafkaSink{
-				Sink:   snk,
-				tg:     tg,
-				feedCh: feedCh,
-			}
-		}
-
-		jobFeed := newJobFeed(dbWithHandler, wrapSink)
-		jobFeed.jobID = jobspb.InvalidJobID
-
-		c := &kafkaFeed{
-			jobFeed:        jobFeed,
-			seenTrackerMap: make(map[string]struct{}),
-			source:         feedCh,
-			tg:             tg,
-		}
-		defer func() {
-			err = c.Close()
-			require.NoError(t, err)
-		}()
-		kafkaFeed := mustBeKafkaFeedFactory(f)
-		kafkaFeed.di.prepareJob(c.jobFeed)
-
-		sqlDB.Exec(t, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/'`)
-		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
+	pgURL, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanup()
+	pgBase, err := pq.NewConnector(pgURL.String())
+	if err != nil {
+		t.Fatal(err)
 	}
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	var actual string
+	connector := pq.ConnectorWithNoticeHandler(pgBase, func(n *pq.Error) {
+		actual = n.Message
+	})
+
+	dbWithHandler := gosql.OpenDB(connector)
+	defer dbWithHandler.Close()
+
+	sqlDB := sqlutils.MakeSQLRunner(dbWithHandler)
+
+	sqlDB.Exec(t, `CREATE TABLE ☃ (i INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO ☃ VALUES (0)`)
+
+	t.Run("kafka", func(t *testing.T) {
+		actual = "(no notice)"
+		f := makeKafkaFeedFactory(t, s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/'`)
+		defer closeFeed(t, testFeed)
+		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
+	})
+
+	t.Run("pubsub v2", func(t *testing.T) {
+		actual = "(no notice)"
+		f := makePubsubFeedFactory(s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'gcpubsub://does.not.matter/'`)
+		defer closeFeed(t, testFeed)
+		// Pubsub doesn't sanitize the topic name.
+		require.Equal(t, `changefeed will emit to topic ☃`, actual)
+	})
+
+	t.Run("webhooks does not emit anything", func(t *testing.T) {
+		actual = "(no notice)"
+		f := makePubsubFeedFactory(s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'webhook-https://does.not.matter/'`)
+		defer closeFeed(t, testFeed)
+		require.Equal(t, `(no notice)`, actual)
+	})
 }
 
 // requireErrorSoon polls for the test feed for an error and asserts that
