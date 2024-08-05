@@ -268,7 +268,7 @@ var opWeights = []int{
 	alterFunctionSetSchema:            1,
 	alterTableAddColumn:               1,
 	alterTableAddConstraintForeignKey: 1,
-	alterTableAddConstraintUnique:     0,
+	alterTableAddConstraintUnique:     1,
 	alterTableAlterColumnType:         0, // Disabled and tracked with #66662.
 	alterTableAlterPrimaryKey:         1,
 	alterTableDropColumn:              0, // Disabled and tracked with #127286.
@@ -283,7 +283,7 @@ var opWeights = []int{
 	alterTypeDropValue:                1,
 	commentOn:                         0, // Disabled and tracked with #128095.
 	createFunction:                    1,
-	createIndex:                       0, // Disabled and tracked with #127280.
+	createIndex:                       1,
 	createSchema:                      1,
 	createSequence:                    1,
 	createTable:                       10,
