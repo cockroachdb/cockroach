@@ -653,6 +653,11 @@ func (s *Server) GetInsightsReader() insights.Reader {
 	return s.insights.Reader()
 }
 
+// GetInsightsProvider returns the insights.Provider for the current sql.Server.
+func (s *Server) GetInsightsProvider() insights.Provider {
+	return s.insights
+}
+
 // GetSQLStatsProvider returns the provider for the sqlstats subsystem.
 func (s *Server) GetSQLStatsProvider() sqlstats.Provider {
 	return s.sqlStats

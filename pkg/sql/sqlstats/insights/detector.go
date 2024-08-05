@@ -91,6 +91,16 @@ func (d *anomalyDetector) isSlow(stmt *Statement) (decision bool) {
 	return
 }
 
+// Reset all state in the anomalyDetector.
+func (d *anomalyDetector) reset() {
+	d.metrics.Fingerprints.Dec(d.metrics.Fingerprints.Value())
+	d.metrics.Memory.Dec(d.metrics.Memory.Value())
+	d.store.Init()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.mu.index = make(map[appstatspb.StmtFingerprintID]*list.Element)
+}
+
 func (d *anomalyDetector) GetPercentileValues(id appstatspb.StmtFingerprintID) PercentileValues {
 	// Ensure that Query doesn't flush which allows us to take the read lock.
 	const shouldFlush = false

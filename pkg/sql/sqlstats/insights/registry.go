@@ -27,9 +27,8 @@ type lockingRegistry struct {
 	detector   detector
 	causes     *causes
 	sink       sink
+	st         *cluster.Settings
 }
-
-var _ Writer = (*lockingRegistry)(nil)
 
 func (r *lockingRegistry) Clear() {
 	r.statements = make(map[clusterunique.ID]*statementBuf)
@@ -194,7 +193,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 //	concept of "enabled" and let the detectors just decide for themselves
 //	internally.
 func (r *lockingRegistry) enabled() bool {
-	return r.detector.enabled()
+	return ExecutionInsightsCapacity.Get(&r.st.SV) > 0 && r.detector.enabled()
 }
 
 func newRegistry(st *cluster.Settings, detector detector, sink sink) *lockingRegistry {
@@ -203,5 +202,6 @@ func newRegistry(st *cluster.Settings, detector detector, sink sink) *lockingReg
 		detector:   detector,
 		causes:     &causes{st: st},
 		sink:       sink,
+		st:         st,
 	}
 }
