@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "replica_rac2",
+    srcs = ["admission.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/raft/raftpb",
+        "//pkg/util/buildutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
