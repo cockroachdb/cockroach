@@ -45,10 +45,11 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 		Timeout:          time.Hour,
 		Benchmark:        true,
 		CompatibleClouds: registry.AllClouds,
-		Suites:           registry.ManualOnly,
-		Cluster:          r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode()),
-		RequiresLicense:  true,
-		Leases:           registry.MetamorphicLeases,
+		// TODO(aaditya): change to weekly once the test stabilizes.
+		Suites:          registry.Suites(registry.Nightly),
+		Cluster:         r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode()),
+		RequiresLicense: true,
+		Leases:          registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount != 2 {
 				t.Fatalf("expected 2 nodes, found %d", c.Spec().NodeCount)
