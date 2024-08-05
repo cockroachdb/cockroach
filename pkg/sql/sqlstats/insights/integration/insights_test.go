@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
@@ -956,4 +957,45 @@ func TestInsightsIndexRecommendationIntegration(t *testing.T) {
 
 		return nil
 	}, 1*time.Second)
+}
+
+// TestInsightsClearsPerSessionMemory ensures that memory allocated
+// for a session is freed when that session is closed.
+func TestInsightsClearsPerSessionMemory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clearedSessionID := clusterunique.ID{}
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Insights: &insights.TestingKnobs{
+				OnSessionClear: func(sessionID clusterunique.ID) {
+					clearedSessionID = sessionID
+				},
+			},
+		},
+	})
+	defer ts.Stopper().Stop(ctx)
+	s := ts.ApplicationLayer()
+	conn1 := sqlutils.MakeSQLRunner(s.SQLConn(t))
+	conn2 := sqlutils.MakeSQLRunner(s.SQLConn(t))
+
+	var sessionID1 string
+	conn1.QueryRow(t, "SHOW session_id").Scan(&sessionID1)
+
+	// Start a transaction and cancel the session - ensure that the memory is freed.
+	conn1.Exec(t, "BEGIN")
+	for i := 0; i < 5; i++ {
+		conn1.Exec(t, "SELECT 1")
+	}
+
+	conn2.Exec(t, "CANCEL SESSION $1", sessionID1)
+
+	testutils.SucceedsSoon(t, func() error {
+		if clearedSessionID.String() != sessionID1 {
+			return fmt.Errorf("expected session id %s, found %s", sessionID1, clearedSessionID)
+		}
+		return nil
+	})
 }

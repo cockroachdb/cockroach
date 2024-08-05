@@ -186,6 +186,18 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	r.store.addInsight(insight)
 }
 
+// clearSession removes the session from the registry and releases the
+// associated statement buffer.
+func (r *lockingRegistry) clearSession(sessionID clusterunique.ID) {
+	if b, ok := r.statements[sessionID]; ok {
+		delete(r.statements, sessionID)
+		b.release()
+		if r.testingKnobs != nil && r.testingKnobs.OnSessionClear != nil {
+			r.testingKnobs.OnSessionClear(sessionID)
+		}
+	}
+}
+
 // TODO(todd):
 //
 //	Once we can handle sufficient throughput to live on the hot
