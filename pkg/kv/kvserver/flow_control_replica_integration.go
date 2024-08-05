@@ -903,7 +903,9 @@ func (rr2 *replicaRACv2Integration) admittedLogEntry(
 		// TODO(racV2-integration): performance optimization: this ready
 		// enqueueing is wasteful if this is synchronous within
 		// handeRaftReadyRaftMuLocked since we can't advance admitted until the
-		// persisted log advances.
+		// persisted log advances. If this is after what we know to be stable,
+		// don't bother enqueueing. That is, remember the return value from the
+		// last call to StableIndexRLocked().
 		//
 		// TODO(racV2-integration): We may not want to hold the mu while calling
 		// EnqueueRaftReady.
