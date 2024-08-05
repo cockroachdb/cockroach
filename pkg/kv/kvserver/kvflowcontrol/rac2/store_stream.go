@@ -14,17 +14,57 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // StreamTokenCounterProvider is the interface for retrieving token counters
 // for a given stream.
 //
-// TODO(kvoli): Consider de-interfacing if not necessary for testing.
-type StreamTokenCounterProvider interface {
-	// Eval returns the evaluation token counter for the given stream.
-	Eval(kvflowcontrol.Stream) TokenCounter
-	// Send returns the send token counter for the given stream.
-	Send(kvflowcontrol.Stream) TokenCounter
+// TODO(kvoli): Add stream deletion upon decommissioning a store.
+// TODO(kvoli): Check mutex performance against syncutil.Map.
+type StreamTokenCounterProvider struct {
+	settings *cluster.Settings
+
+	mu struct {
+		syncutil.Mutex
+		sendCounters, evalCounters map[kvflowcontrol.Stream]TokenCounter
+	}
+}
+
+// NewStreamTokenCounterProvider creates a new StreamTokenCounterProvider.
+func NewStreamTokenCounterProvider(settings *cluster.Settings) *StreamTokenCounterProvider {
+	return &StreamTokenCounterProvider{
+		settings: settings,
+	}
+}
+
+// Eval returns the evaluation token counter for the given stream.
+func (p *StreamTokenCounterProvider) Eval(stream kvflowcontrol.Stream) TokenCounter {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if t, ok := p.mu.evalCounters[stream]; ok {
+		return t
+	}
+
+	t := newTokenCounter(p.settings)
+	p.mu.evalCounters[stream] = t
+	return t
+}
+
+// Send returns the send token counter for the given stream.
+func (p *StreamTokenCounterProvider) Send(stream kvflowcontrol.Stream) TokenCounter {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if t, ok := p.mu.sendCounters[stream]; ok {
+		return t
+	}
+
+	t := newTokenCounter(p.settings)
+	p.mu.sendCounters[stream] = t
+	return t
 }
 
 // SendTokenWatcherHandleID is a unique identifier for a handle that is
