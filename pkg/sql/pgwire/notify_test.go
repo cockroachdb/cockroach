@@ -68,6 +68,9 @@ func TestListenNotifyLoad(t *testing.T) {
 	require.NoError(t, err)
 	defer conn2.Close(ctx)
 
+	_, err = conn.Exec(ctx, "LISTEN A")
+	require.NoError(t, err)
+
 	// generate a large set of data to stream back
 	ctx, cancel := context.WithCancel(ctx)
 	rows, err := conn.Query(ctx, "SELECT generate_series(1, 1000000)")
