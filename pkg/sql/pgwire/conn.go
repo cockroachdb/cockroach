@@ -271,8 +271,8 @@ func (c *conn) bufferNotice(ctx context.Context, noticeErr pgnotice.Notice) erro
 	return c.writeErrFields(ctx, noticeErr, &c.writerState.buf)
 }
 
-// TODO: only send at end of txn, if we're in one. what level do we do this at?
 // TODO: synchronize with command execution results writing with `bufferRows`. Currently this is just racey.
+// going to be annoying though as this guy's api is not super well defined.
 func (c *conn) SendNotification(notif pgnotification.Notification) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgNotificationResponse)
 	c.msgBuilder.putInt32(notif.PID)
