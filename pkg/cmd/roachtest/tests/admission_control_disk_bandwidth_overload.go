@@ -117,6 +117,49 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			// TODO(aaditya): Extend this test to also limit reads once we have a
 			// mechanism to pace read traffic in AC.
 
+			// Initialize the kv databases.
+			t.Status(fmt.Sprintf("initializing kv dataset (<%s)", 2*time.Minute))
+			url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
+			const foregroundDB = " --db='regular_kv'"
+			const backgroundDB = " --db='background_kv'"
+
+			c.Run(ctx, option.WithNodes(c.WorkloadNode()),
+				"./cockroach workload init kv --drop --insert-count=400 "+
+					"--max-block-bytes=4096 --min-block-bytes=4096"+foregroundDB+url)
+
+			c.Run(ctx, option.WithNodes(c.WorkloadNode()),
+				"./cockroach workload init kv --drop --insert-count=400 "+
+					"--max-block-bytes=4096 --min-block-bytes=4096"+backgroundDB+url)
+
+			// Run foreground kv workload, QoS="regular".
+			duration := 40 * time.Minute
+			m := c.NewMonitor(ctx, c.CRDBNodes())
+			m.Go(func(ctx context.Context) error {
+				t.Status(fmt.Sprintf("starting foreground kv workload thread (<%s)", time.Minute))
+				dur := " --duration=" + duration.String()
+				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
+				cmd := "./cockroach workload run kv --histograms=perf/stats.json --concurrency=2 " +
+					"--splits=1000 --read-percent=50 --min-block-bytes=4096 --max-block-bytes=4096 " +
+					"--txn-qos='regular' --tolerate-errors" + foregroundDB + dur + url
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
+				return nil
+			})
+
+			// Run background kv workload, QoS="background".
+			m.Go(func(ctx context.Context) error {
+				t.Status(fmt.Sprintf("starting background kv workload thread (<%s)", time.Minute))
+				dur := " --duration=" + duration.String()
+				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
+				cmd := "./cockroach workload run kv --histograms=perf/stats.json --concurrency=1024 " +
+					"--read-percent=0 --min-block-bytes=4096 --max-block-bytes=4096 " +
+					"--txn-qos='background' --tolerate-errors" + backgroundDB + dur + url
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
+				return nil
+			})
+
+			t.Status(fmt.Sprintf("waiting for workload to start and ramp up (<%s)", 10*time.Minute))
+			time.Sleep(10 * time.Minute)
+
 			db := c.Conn(ctx, t.L(), len(c.CRDBNodes()))
 			defer db.Close()
 
@@ -128,30 +171,8 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
 			}
 
-			duration := 30 * time.Minute
-			m := c.NewMonitor(ctx, c.CRDBNodes())
-			m.Go(func(ctx context.Context) error {
-				t.Status(fmt.Sprintf("starting foreground kv workload thread (<%s)", time.Minute))
-				dur := " --duration=" + duration.String()
-				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
-				cmd := "./cockroach workload run kv --init --histograms=perf/stats.json --concurrency=2 " +
-					"--splits=1000 --read-percent=50 --min-block-bytes=4096 --max-block-bytes=4096 " +
-					"--txn-qos='regular' --tolerate-errors" + dur + url
-				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
-				return nil
-			})
-
-			m.Go(func(ctx context.Context) error {
-				time.Sleep(1 * time.Minute)
-				t.Status(fmt.Sprintf("starting background kv workload thread (<%s)", time.Minute))
-				dur := " --duration=" + duration.String()
-				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
-				cmd := "./cockroach workload run kv --init --histograms=perf/stats.json --concurrency=1024 " +
-					"--splits=1000 --read-percent=0 --min-block-bytes=4096 --max-block-bytes=4096 " +
-					"--txn-qos='background' --tolerate-errors" + dur + url
-				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
-				return nil
-			})
+			t.Status(fmt.Sprintf("setting bandwidth limit, and waiting for it to take effect. (<%s)", 2*time.Minute))
+			time.Sleep(2 * time.Minute)
 
 			m.Go(func(ctx context.Context) error {
 				t.Status(fmt.Sprintf("starting monitoring thread (<%s)", time.Minute))
