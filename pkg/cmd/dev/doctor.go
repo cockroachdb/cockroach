@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/io/exec"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/spf13/cobra"
 )
 
@@ -607,7 +608,7 @@ func (d *dev) getDoctorStatus(ctx context.Context) (int, error) {
 // checkDoctorStatus returns an error iff the current doctor status is not the
 // latest.
 func (d *dev) checkDoctorStatus(ctx context.Context) error {
-	if d.knobs.skipDoctorCheck {
+	if buildutil.CrdbTestBuild {
 		return nil
 	}
 
