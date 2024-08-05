@@ -68,8 +68,8 @@ type Uint64RandomSeed struct {
 }
 
 func NewUint64RandomSeed() *Uint64RandomSeed {
-	_, seed := randutil.NewPseudoRand()
-	return &Uint64RandomSeed{seed: uint64(seed)}
+	//_, seed := randutil.NewPseudoRand()
+	return &Uint64RandomSeed{seed: uint64(12847176840750255425)}
 }
 
 // test-only

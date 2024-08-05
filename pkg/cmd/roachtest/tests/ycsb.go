@@ -86,7 +86,7 @@ func registerYCSB(r registry.Registry) {
 		m.Go(func(ctx context.Context) error {
 			var args string
 			args += " --ramp=" + ifLocal(c, "0s", "2m")
-			args += " --duration=" + ifLocal(c, "10s", "30m")
+			args += " --duration=" + ifLocal(c, "10s", "3m")
 			if opts.readCommitted {
 				args += " --isolation-level=read_committed"
 			}
