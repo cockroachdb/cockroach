@@ -449,10 +449,10 @@ func TestKafkaSinkClientV2_CompressionOpts(t *testing.T) {
 			expected: kgo.Lz4Compression(),
 		},
 		{
-			name:     "lz4 level 0", // This is the only level we're able to set currently. see https://github.com/twmb/franz-go/issues/778.
+			name:     "lz4 level 1024",
 			codec:    "LZ4",
-			level:    "0",
-			expected: kgo.Lz4Compression().WithLevel(0),
+			level:    "1024",
+			expected: kgo.Lz4Compression().WithLevel(1024),
 		},
 		{
 			name:     "zstd no level",
