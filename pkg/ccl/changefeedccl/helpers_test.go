@@ -551,6 +551,7 @@ type feedTestOptions struct {
 	disabledSinkTypes            []string
 	disableSyntheticTimestamps   bool
 	settings                     *cluster.Settings
+	additionalSystemPrivs        []string
 }
 
 type feedTestOption func(opts *feedTestOptions)
@@ -590,6 +591,13 @@ var feedTestEnterpriseSinks = func(opts *feedTestOptions) {
 
 var feedTestOmitSinks = func(sinkTypes ...string) feedTestOption {
 	return func(opts *feedTestOptions) { opts.disabledSinkTypes = append(opts.disabledSinkTypes, sinkTypes...) }
+}
+
+//lint:ignore U1000 unused
+var feedTestAdditionalSystemPrivs = func(privs ...string) feedTestOption {
+	return func(opts *feedTestOptions) {
+		opts.additionalSystemPrivs = append(opts.additionalSystemPrivs, privs...)
+	}
 }
 
 func (opts feedTestOptions) omitSinks(sinks ...string) feedTestOptions {
@@ -997,7 +1005,7 @@ func makeFeedFactoryWithOptions(
 				User:   url.UserPassword(u, pass[0]),
 				Host:   s.SQLAddr(), Path: "d"}, func() {}
 		}
-		sink, cleanup := getInitialSinkForSinklessFactory(t, db, pgURLForUserSinkless)
+		sink, cleanup := getInitialSinkForSinklessFactory(t, db, pgURLForUserSinkless, options)
 		root, cleanupRoot := pgURLForUserSinkless(username.RootUser)
 		f := makeSinklessFeedFactory(t, s, sink, root, pgURLForUserSinkless)
 		return f, func() {
@@ -1022,6 +1030,7 @@ func getInitialDBForEnterpriseFactory(
 		user := "EnterpriseFeedUser"
 		password := "hunter2"
 		createUserWithDefaultPrivilege(t, rootDB, user, password, "CHANGEFEED", "SELECT")
+		grantUserAdditionalSystemPrivileges(t, rootDB, user, opts.additionalSystemPrivs)
 		pgURL := url.URL{
 			Scheme: "postgres",
 			User:   url.UserPassword(user, password),
@@ -1038,16 +1047,17 @@ func getInitialDBForEnterpriseFactory(
 }
 
 func getInitialSinkForSinklessFactory(
-	t *testing.T, db *gosql.DB, sinkForUser sinkForUser,
+	t *testing.T, db *gosql.DB, sinkForUser sinkForUser, opts feedTestOptions,
 ) (url.URL, func()) {
 	// Instead of creating sinkless changefeeds on the root connection, we may choose to create
 	// them on a test user connection. This user should have the minimum privileges to create a changefeed,
 	// which means they default to having the SELECT privilege on all tables.
 	const percentNonRoot = 1
-	if rand.Float32() < percentNonRoot {
+	if !opts.forceRootUserConnection && rand.Float32() < percentNonRoot {
 		user := "SinklessFeedUser"
 		password := "hunter2"
 		createUserWithDefaultPrivilege(t, db, user, password, "SELECT")
+		grantUserAdditionalSystemPrivileges(t, db, user, opts.additionalSystemPrivs)
 		return sinkForUser(user, password)
 	}
 	return sinkForUser(username.RootUser)
@@ -1073,6 +1083,15 @@ func createUserWithDefaultPrivilege(
 		if err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func grantUserAdditionalSystemPrivileges(
+	t *testing.T, rootDB *gosql.DB, user string, privs []string,
+) {
+	for _, priv := range privs {
+		_, err := rootDB.Exec(fmt.Sprintf(`GRANT SYSTEM %s TO %s`, priv, user))
+		require.NoError(t, err)
 	}
 }
 
