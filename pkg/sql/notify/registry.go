@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -287,8 +288,10 @@ func (r *ListenerRegistry) startRangefeed(ctx context.Context) {
 	}
 
 	// get notifications table span
-	res, err := r.ie.QueryRowEx(ctx, "fetch-pg-notification-table-id", nil, sessiondata.NodeUserSessionDataOverride,
-		fmt.Sprintf(`SELECT 'system.%s'::regclass::oid`, catconstants.ListenNotifyQueueTableName))
+	res, err := startup.RunIdempotentWithRetryEx(ctx, r.stopper.ShouldQuiesce(), "fetch-pg-notification-table-id", func(ctx context.Context) (tree.Datums, error) {
+		return r.ie.QueryRowEx(ctx, "fetch-pg-notification-table-id", nil, sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(`SELECT 'system.%s'::regclass::oid`, catconstants.ListenNotifyQueueTableName))
+	})
 	if err != nil {
 		log.Warningf(ctx, "pg_notifications table missing?", err)
 		return
