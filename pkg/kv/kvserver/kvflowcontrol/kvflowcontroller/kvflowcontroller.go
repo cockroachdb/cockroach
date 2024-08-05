@@ -13,13 +13,11 @@ package kvflowcontroller
 import (
 	"cmp"
 	"context"
-	"fmt"
 	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -28,26 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-)
-
-// regularTokensPerStream determines the flow tokens available for regular work
-// on a per-stream basis.
-var regularTokensPerStream = settings.RegisterByteSizeSetting(
-	settings.SystemOnly,
-	"kvadmission.flow_controller.regular_tokens_per_stream",
-	"flow tokens available for regular work on a per-stream basis",
-	16<<20, // 16 MiB
-	validateTokenRange,
-)
-
-// elasticTokensPerStream determines the flow tokens available for elastic work
-// on a per-stream basis.
-var elasticTokensPerStream = settings.RegisterByteSizeSetting(
-	settings.SystemOnly,
-	"kvadmission.flow_controller.elastic_tokens_per_stream",
-	"flow tokens available for elastic work on a per-stream basis",
-	8<<20, // 8 MiB
-	validateTokenRange,
 )
 
 // Aliases to make the code below slightly easier to read.
@@ -89,8 +67,8 @@ func New(registry *metric.Registry, settings *cluster.Settings, clock *hlc.Clock
 		settings: settings,
 	}
 
-	regularTokens := kvflowcontrol.Tokens(regularTokensPerStream.Get(&settings.SV))
-	elasticTokens := kvflowcontrol.Tokens(elasticTokensPerStream.Get(&settings.SV))
+	regularTokens := kvflowcontrol.Tokens(kvflowcontrol.RegularTokensPerStream.Get(&settings.SV))
+	elasticTokens := kvflowcontrol.Tokens(kvflowcontrol.ElasticTokensPerStream.Get(&settings.SV))
 	c.mu.limit = tokensPerWorkClass{
 		regular: regularTokens,
 		elastic: elasticTokens,
@@ -101,8 +79,8 @@ func New(registry *metric.Registry, settings *cluster.Settings, clock *hlc.Clock
 
 		before := c.mu.limit
 		now := tokensPerWorkClass{
-			regular: kvflowcontrol.Tokens(regularTokensPerStream.Get(&settings.SV)),
-			elastic: kvflowcontrol.Tokens(elasticTokensPerStream.Get(&settings.SV)),
+			regular: kvflowcontrol.Tokens(kvflowcontrol.RegularTokensPerStream.Get(&settings.SV)),
+			elastic: kvflowcontrol.Tokens(kvflowcontrol.ElasticTokensPerStream.Get(&settings.SV)),
 		}
 		adjustment := tokensPerWorkClass{
 			regular: now.regular - before.regular,
@@ -135,8 +113,8 @@ func New(registry *metric.Registry, settings *cluster.Settings, clock *hlc.Clock
 			return true
 		})
 	}
-	regularTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
-	elasticTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
+	kvflowcontrol.RegularTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
+	kvflowcontrol.ElasticTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
 	c.metrics = newMetrics(c)
 	registry.AddMetricStruct(c.metrics)
 	return c
@@ -626,22 +604,6 @@ func (b *bucket) testingSignalChannel(wc admissionpb.WorkClass) {
 type tokensPerWorkClass struct {
 	regular, elastic kvflowcontrol.Tokens
 }
-
-const (
-	minTokensPerStream kvflowcontrol.Tokens = 1 << 20  // 1 MiB
-	maxTokensPerStream kvflowcontrol.Tokens = 64 << 20 // 64 MiB
-)
-
-var validateTokenRange = settings.WithValidateInt(func(b int64) error {
-	t := kvflowcontrol.Tokens(b)
-	if t < minTokensPerStream {
-		return fmt.Errorf("minimum flowed tokens allowed is %s, got %s", minTokensPerStream, t)
-	}
-	if t > maxTokensPerStream {
-		return fmt.Errorf("maximum flow tokens allowed is %s, got %s", maxTokensPerStream, t)
-	}
-	return nil
-})
 
 func (c *Controller) getTokensForStream(stream kvflowcontrol.Stream) tokensPerWorkClass {
 	ret := tokensPerWorkClass{}
