@@ -455,18 +455,17 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		nil, /* curMemoryBytesCount */
 		nil, /* maxMemoryBytesHist */
-		insightsProvider.Writer,
 		monitor,
 		nil, /* reportingSink */
 		nil, /* knobs */
-		insightsProvider.LatencyInformation(),
+		insightsProvider.Anomalies(),
 	)
 
 	appStats := sqlStats.GetApplicationStats("" /* appName */)
 	statsCollector := sslocal.NewStatsCollector(
 		st,
 		appStats,
-		insightsProvider.Writer(false /* internal */),
+		insightsProvider.Writer(),
 		sessionphase.NewTimes(),
 		sqlStats.GetCounters(),
 		false, /* underOuterTxn */
@@ -584,17 +583,16 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			sqlstats.MaxMemSQLStatsTxnFingerprints,
 			nil,
 			nil,
-			insightsProvider.Writer,
 			monitor,
 			nil,
 			nil,
-			insightsProvider.LatencyInformation(),
+			insightsProvider.Anomalies(),
 		)
 		appStats := sqlStats.GetApplicationStats("" /* appName */)
 		statsCollector := sslocal.NewStatsCollector(
 			st,
 			appStats,
-			insightsProvider.Writer(false /* internal */),
+			insightsProvider.Writer(),
 			sessionphase.NewTimes(),
 			sqlStats.GetCounters(),
 			false, /* underOuterTxn */
@@ -1735,11 +1733,10 @@ func TestSQLStats_ConsumeStats(t *testing.T) {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		nil, /* curMemoryBytesCount */
 		nil, /* maxMemoryBytesHist */
-		insightsProvider.Writer,
 		monitor,
 		nil, /* reportingSink */
 		nil, /* knobs */
-		insightsProvider.LatencyInformation(),
+		insightsProvider.Anomalies(),
 	)
 
 	stmtContainer, _, _ := ssmemstorage.NewTempContainerFromExistingStmtStats(testStmtData)

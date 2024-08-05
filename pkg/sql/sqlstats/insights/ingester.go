@@ -21,11 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
-// concurrentBufferIngester amortizes the locking cost of writing to an
+// ConcurrentBufferIngester amortizes the locking cost of writing to an
 // insights registry concurrently from multiple goroutines. To that end, it
 // contains nothing specific to the insights domain; it is merely a bit of
 // asynchronous plumbing, built around a contentionutils.ConcurrentBufferGuard.
-type concurrentBufferIngester struct {
+type ConcurrentBufferIngester struct {
 	guard struct {
 		*contentionutils.ConcurrentBufferGuard
 		eventBuffer *eventBuffer
@@ -47,9 +47,7 @@ type eventBufChPayload struct {
 	events        *eventBuffer
 }
 
-var _ Writer = (*concurrentBufferIngester)(nil)
-
-// concurrentBufferIngester buffers the "events" it sees (via ObserveStatement
+// ConcurrentBufferIngester buffers the "events" it sees (via ObserveStatement
 // and ObserveTransaction) and passes them along to the underlying registry
 // once its buffer is full. (Or once a timeout has passed, for low-traffic
 // clusters and tests.)
@@ -71,18 +69,18 @@ type event struct {
 	statement   *Statement
 }
 
-type BufferOpt func(i *concurrentBufferIngester)
+type BufferOpt func(i *ConcurrentBufferIngester)
 
-// WithoutTimedFlush prevents the concurrentBufferIngester from performing
+// WithoutTimedFlush prevents the ConcurrentBufferIngester from performing
 // timed flushes to the underlying registry. Generally only useful for
 // testing purposes.
 func WithoutTimedFlush() BufferOpt {
-	return func(i *concurrentBufferIngester) {
+	return func(i *ConcurrentBufferIngester) {
 		i.opts.noTimedFlush = true
 	}
 }
 
-func (i *concurrentBufferIngester) Start(
+func (i *ConcurrentBufferIngester) Start(
 	ctx context.Context, stopper *stop.Stopper, opts ...BufferOpt,
 ) {
 	for _, opt := range opts {
@@ -129,14 +127,14 @@ func (i *concurrentBufferIngester) Start(
 
 // Clear flushes the underlying buffer, and signals the underlying registry
 // to clear any remaining cached data afterward. This is an async operation.
-func (i *concurrentBufferIngester) Clear() {
+func (i *ConcurrentBufferIngester) Clear() {
 	i.guard.ForceSyncExec(func() {
 		// Our flush function defined on the guard is responsible for setting clearRegistry back to 0.
 		atomic.StoreUint32(&i.clearRegistry, 1)
 	})
 }
 
-func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
+func (i *ConcurrentBufferIngester) ingest(events *eventBuffer) {
 	for idx, e := range events {
 		// Because an eventBuffer is a fixed-size array, rather than a slice,
 		// we do not know how full it is until we hit a nil entry.
@@ -152,7 +150,7 @@ func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
 	}
 }
 
-func (i *concurrentBufferIngester) ObserveStatement(
+func (i *ConcurrentBufferIngester) ObserveStatement(
 	sessionID clusterunique.ID, statement *Statement,
 ) {
 	if !i.registry.enabled() {
@@ -166,7 +164,7 @@ func (i *concurrentBufferIngester) ObserveStatement(
 	})
 }
 
-func (i *concurrentBufferIngester) ObserveTransaction(
+func (i *ConcurrentBufferIngester) ObserveTransaction(
 	sessionID clusterunique.ID, transaction *Transaction,
 ) {
 	if !i.registry.enabled() {
@@ -180,8 +178,8 @@ func (i *concurrentBufferIngester) ObserveTransaction(
 	})
 }
 
-func newConcurrentBufferIngester(registry *lockingRegistry) *concurrentBufferIngester {
-	i := &concurrentBufferIngester{
+func newConcurrentBufferIngester(registry *lockingRegistry) *ConcurrentBufferIngester {
+	i := &ConcurrentBufferIngester{
 		// A channel size of 1 is sufficient to avoid unnecessarily
 		// synchronizing producer (our clients) and consumer (the underlying
 		// registry): moving from 0 to 1 here resulted in a 25% improvement

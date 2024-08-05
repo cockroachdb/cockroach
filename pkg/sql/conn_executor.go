@@ -337,7 +337,7 @@ type Server struct {
 	// reportedStatsController.
 	reportedStatsController *sslocal.Controller
 
-	insights insights.Provider
+	insights *insights.Provider
 
 	reCache           *tree.RegexpCache
 	toCharFormatCache *tochar.FormatCache
@@ -419,7 +419,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
 		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
-			insightsProvider.Writer(false /*internal*/).Clear()
+			insightsProvider.Writer().Clear()
 		}
 	})
 	reportedSQLStats := sslocal.New(
@@ -428,11 +428,10 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlstats.MaxMemReportedSQLStatsTxnFingerprints,
 		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryCurBytesCount,
 		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryMaxBytesHist,
-		insightsProvider.Writer,
 		pool,
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
-		insightsProvider.LatencyInformation(),
+		insightsProvider.Anomalies(),
 	)
 	reportedSQLStatsController := reportedSQLStats.GetController(cfg.SQLStatusServer)
 	memSQLStats := sslocal.New(
@@ -441,11 +440,10 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		serverMetrics.StatsMetrics.SQLStatsMemoryCurBytesCount,
 		serverMetrics.StatsMetrics.SQLStatsMemoryMaxBytesHist,
-		insightsProvider.Writer,
 		pool,
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
-		insightsProvider.LatencyInformation(),
+		insightsProvider.Anomalies(),
 	)
 	s := &Server{
 		cfg:                     cfg,
@@ -649,8 +647,8 @@ func (s *Server) GetIndexUsageStatsController() *idxusage.Controller {
 
 // GetInsightsReader returns the insights.Reader for the current sql.Server's
 // detected execution insights.
-func (s *Server) GetInsightsReader() insights.Reader {
-	return s.insights.Reader()
+func (s *Server) GetInsightsReader() *insights.LockingStore {
+	return s.insights.Store()
 }
 
 // GetSQLStatsProvider returns the provider for the sqlstats subsystem.
@@ -1138,10 +1136,16 @@ func (s *Server) newConnExecutor(
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
 
 	ex.applicationStats = applicationStats
+	// We ignore statements and transactions run by the internal executor by
+	// passing a nil writer.
+	var writer *insights.ConcurrentBufferIngester
+	if !ex.sessionData().Internal {
+		writer = ex.server.insights.Writer()
+	}
 	ex.statsCollector = sslocal.NewStatsCollector(
 		s.cfg.Settings,
 		applicationStats,
-		ex.server.insights.Writer(ex.sessionData().Internal),
+		writer,
 		ex.phaseTimes,
 		s.sqlStats.GetCounters(),
 		underOuterTxn,
