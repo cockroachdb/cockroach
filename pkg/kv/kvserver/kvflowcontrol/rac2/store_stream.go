@@ -14,17 +14,55 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // StreamTokenCounterProvider is the interface for retrieving token counters
 // for a given stream.
-//
-// TODO(kvoli): Consider de-interfacing if not necessary for testing.
-type StreamTokenCounterProvider interface {
-	// Eval returns the evaluation token counter for the given stream.
-	Eval(kvflowcontrol.Stream) TokenCounter
-	// Send returns the send token counter for the given stream.
-	Send(kvflowcontrol.Stream) TokenCounter
+type StreamTokenCounterProvider struct {
+	settings *cluster.Settings
+	clock    *hlc.Clock
+
+	mu struct {
+		syncutil.Mutex
+		sendCounters, evalCounters map[kvflowcontrol.Stream]TokenCounter
+	}
+}
+
+// NewStreamTokenCounterProvider creates a new StreamTokenCounterProvider.
+func NewStreamTokenCounterProvider(
+	settings *cluster.Settings, clock *hlc.Clock,
+) *StreamTokenCounterProvider {
+	return &StreamTokenCounterProvider{
+		settings: settings,
+		clock:    clock,
+	}
+}
+
+// Eval returns the evaluation token counter for the given stream.
+func (stcp *StreamTokenCounterProvider) Eval(stream kvflowcontrol.Stream) TokenCounter {
+	stcp.mu.Lock()
+	defer stcp.mu.Unlock()
+
+	if _, ok := stcp.mu.evalCounters[stream]; !ok {
+		stcp.mu.evalCounters[stream] = newTokenCounter(
+			stcp.settings, stcp.clock)
+	}
+	return stcp.mu.evalCounters[stream]
+}
+
+// Send returns the send token counter for the given stream.
+func (sstc *StreamTokenCounterProvider) Send(stream kvflowcontrol.Stream) TokenCounter {
+	sstc.mu.Lock()
+	defer sstc.mu.Unlock()
+
+	if _, ok := sstc.mu.sendCounters[stream]; !ok {
+		sstc.mu.sendCounters[stream] = newTokenCounter(
+			sstc.settings, sstc.clock)
+	}
+	return sstc.mu.sendCounters[stream]
 }
 
 // SendTokenWatcherHandleID is a unique identifier for a handle that is
