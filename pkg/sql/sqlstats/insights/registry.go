@@ -133,7 +133,10 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 
 	// Note that we'll record insights for every statement, not just for
 	// the slow ones.
-	insight := makeInsight(sessionID, transaction)
+	insight := &Insight{
+		Session:     Session{ID: sessionID},
+		Transaction: transaction,
+	}
 
 	if highContention {
 		insight.Transaction.Problems = addProblem(insight.Transaction.Problems, Problem_SlowExecution)
