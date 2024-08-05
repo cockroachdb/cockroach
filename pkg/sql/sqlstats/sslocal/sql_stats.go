@@ -50,8 +50,7 @@ type SQLStats struct {
 
 	knobs *sqlstats.TestingKnobs
 
-	insights           insights.WriterProvider
-	latencyInformation insights.LatencyInformation
+	anomalies *insights.AnomalyDetector
 }
 
 func newSQLStats(
@@ -60,11 +59,10 @@ func newSQLStats(
 	uniqueTxnFingerprintLimit *settings.IntSetting,
 	curMemBytesCount *metric.Gauge,
 	maxMemBytesHist metric.IHistogram,
-	insightsWriter insights.WriterProvider,
 	parentMon *mon.BytesMonitor,
 	flushTarget Sink,
 	knobs *sqlstats.TestingKnobs,
-	latencyInformation insights.LatencyInformation,
+	anomalies *insights.AnomalyDetector,
 ) *SQLStats {
 	monitor := mon.NewMonitor(mon.Options{
 		Name:       "SQLStats",
@@ -74,11 +72,10 @@ func newSQLStats(
 		LongLiving: true,
 	})
 	s := &SQLStats{
-		st:                 st,
-		flushTarget:        flushTarget,
-		knobs:              knobs,
-		insights:           insightsWriter,
-		latencyInformation: latencyInformation,
+		st:          st,
+		flushTarget: flushTarget,
+		knobs:       knobs,
+		anomalies:   anomalies,
 	}
 	s.atomic = ssmemstorage.NewSQLStatsAtomicCounters(
 		st,
@@ -121,7 +118,7 @@ func (s *SQLStats) getStatsForApplication(appName string) *ssmemstorage.Containe
 		s.mu.mon,
 		appName,
 		s.knobs,
-		s.latencyInformation,
+		s.anomalies,
 	)
 	s.mu.apps[appName] = a
 	return a

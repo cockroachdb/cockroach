@@ -55,7 +55,7 @@ func BenchmarkInsights(b *testing.B) {
 			numTransactionsPerSession := b.N / numSessions
 			var sessions sync.WaitGroup
 			sessions.Add(numSessions)
-			writer := provider.Writer(false /* internal */)
+			writer := provider.Writer()
 			statements := make([]insights.Statement, b.N)
 			transactions := make([]insights.Transaction, b.N)
 			for i := 0; i < numSessions; i++ {
