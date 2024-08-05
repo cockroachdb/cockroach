@@ -281,7 +281,7 @@ var opWeights = []int{
 	alterTableSetColumnDefault:        1,
 	alterTableSetColumnNotNull:        1,
 	alterTypeDropValue:                1,
-	commentOn:                         0, // Disabled and tracked with #128095.
+	commentOn:                         1,
 	createFunction:                    1,
 	createIndex:                       1,
 	createSchema:                      1,
