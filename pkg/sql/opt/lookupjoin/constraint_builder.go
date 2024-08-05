@@ -192,10 +192,11 @@ func (b *ConstraintBuilder) Build(
 	//
 	// This check doesn't guarantee that we will find lookup join key
 	// columns, but it avoids unnecessary work in most cases.
+	tabMeta := b.md.TableMeta(b.table)
 	firstIdxCol := b.table.IndexColumnID(index, 0)
 	if _, ok := rightEq.Find(firstIdxCol); !ok {
 		if _, ok := b.findComputedColJoinEquality(b.table, firstIdxCol, rightEqSet); !ok {
-			if !HasJoinFilterConstants(b.ctx, b.allFilters, firstIdxCol, b.evalCtx) {
+			if !HasJoinFilterConstants(b.ctx, tabMeta, b.allFilters, firstIdxCol, b.evalCtx) {
 				if _, ok := rightCmp.Find(firstIdxCol); !ok {
 					return Constraint{}, false
 				}
@@ -317,7 +318,9 @@ func (b *ConstraintBuilder) Build(
 		// constant values. We cannot use a NULL value because the lookup
 		// join implements logic equivalent to simple equality between
 		// columns (where NULL never equals anything).
-		foundVals, allIdx, ok := FindJoinFilterConstants(b.ctx, b.allFilters, idxCol, b.evalCtx)
+		foundVals, allIdx, ok := FindJoinFilterConstants(
+			b.ctx, tabMeta, b.allFilters, idxCol, b.evalCtx,
+		)
 
 		// If a single constant value was found, project it in the input
 		// and use it as an equality column.

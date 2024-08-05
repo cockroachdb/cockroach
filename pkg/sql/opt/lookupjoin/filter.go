@@ -22,14 +22,32 @@ import (
 // HasJoinFilterConstants returns true if the filter constrains the given column
 // to a constant, non-NULL value or set of constant, non-NULL values.
 func HasJoinFilterConstants(
-	ctx context.Context, filters memo.FiltersExpr, col opt.ColumnID, evalCtx *eval.Context,
+	ctx context.Context,
+	tabMeta *opt.TableMeta,
+	filters memo.FiltersExpr,
+	col opt.ColumnID,
+	evalCtx *eval.Context,
 ) bool {
-	for filterIdx := range filters {
-		props := filters[filterIdx].ScalarProps()
+	expr, isComputedCol := tabMeta.ComputedColExpr(col)
+	for i := range filters {
+		props := filters[i].ScalarProps()
 		if props.TightConstraints {
 			if ok := props.Constraints.HasSingleColumnNonNullConstValues(ctx, evalCtx, col); ok {
 				return true
 			}
+		}
+
+		// Check for an expression in the form "expr = const" if the column
+		// is a computed column.
+		if !isComputedCol {
+			continue
+		}
+		eq, ok := filters[i].Condition.(*memo.EqExpr)
+		if !ok {
+			continue
+		}
+		if eq.Left == expr && memo.CanExtractNonNullConstDatum(eq.Right) {
+			return true
 		}
 	}
 	return false
@@ -42,12 +60,17 @@ func HasJoinFilterConstants(
 // the number of returned values is chosen. Note that the returned constant
 // values do not contain NULL.
 func FindJoinFilterConstants(
-	ctx context.Context, filters memo.FiltersExpr, col opt.ColumnID, evalCtx *eval.Context,
+	ctx context.Context,
+	tabMeta *opt.TableMeta,
+	filters memo.FiltersExpr,
+	col opt.ColumnID,
+	evalCtx *eval.Context,
 ) (values tree.Datums, filterIdx int, ok bool) {
 	var bestValues tree.Datums
 	var bestFilterIdx int
-	for filterIdx := range filters {
-		props := filters[filterIdx].ScalarProps()
+	expr, isComputedCol := tabMeta.ComputedColExpr(col)
+	for i := range filters {
+		props := filters[i].ScalarProps()
 		if props.TightConstraints {
 			constVals, ok := props.Constraints.ExtractSingleColumnNonNullConstValues(ctx, evalCtx, col)
 			if !ok {
@@ -55,8 +78,24 @@ func FindJoinFilterConstants(
 			}
 			if bestValues == nil || len(bestValues) > len(constVals) {
 				bestValues = constVals
-				bestFilterIdx = filterIdx
+				bestFilterIdx = i
 			}
+		}
+
+		// Check for an expression in the form "expr = const" if the column
+		// is a computed column.
+		if !isComputedCol {
+			continue
+		}
+		eq, ok := filters[i].Condition.(*memo.EqExpr)
+		if !ok {
+			continue
+		}
+		if eq.Left == expr && memo.CanExtractNonNullConstDatum(eq.Right) {
+			d := memo.ExtractNonNullConstDatum(eq.Right)
+			bestValues = tree.Datums{d}
+			bestFilterIdx = i
+			break
 		}
 	}
 	if bestValues == nil {
