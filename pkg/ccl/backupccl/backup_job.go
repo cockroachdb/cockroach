@@ -313,8 +313,9 @@ func backup(
 			// Signal that an ExportRequest finished to update job progress.
 			for i := int32(0); i < progDetails.CompletedSpans; i++ {
 				requestFinishedCh <- struct{}{}
-				if execCtx.ExecCfg().TestingKnobs.AfterBackupChunk != nil {
-					execCtx.ExecCfg().TestingKnobs.AfterBackupChunk()
+				if execCtx.ExecCfg().BackupRestoreTestingKnobs != nil &&
+					execCtx.ExecCfg().BackupRestoreTestingKnobs.AfterBackupChunk != nil {
+					execCtx.ExecCfg().BackupRestoreTestingKnobs.AfterBackupChunk()
 				}
 			}
 
@@ -353,8 +354,9 @@ func backup(
 					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
 				}
 				lastCheckpoint = timeutil.Now()
-				if execCtx.ExecCfg().TestingKnobs.AfterBackupCheckpoint != nil {
-					execCtx.ExecCfg().TestingKnobs.AfterBackupCheckpoint()
+				if execCtx.ExecCfg().BackupRestoreTestingKnobs != nil &&
+					execCtx.ExecCfg().BackupRestoreTestingKnobs.AfterBackupCheckpoint != nil {
+					execCtx.ExecCfg().BackupRestoreTestingKnobs.AfterBackupCheckpoint()
 				}
 			}
 		}

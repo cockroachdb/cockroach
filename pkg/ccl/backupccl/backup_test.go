@@ -183,7 +183,7 @@ func TestBackupRestoreSingleNodeLocal(t *testing.T) {
 	// Set the testing knob so we count each time we write a checkpoint.
 	params := base.TestClusterArgs{}
 	knobs := base.TestingKnobs{
-		SQLExecutor: &sql.ExecutorTestingKnobs{
+		BackupRestore: &sql.BackupRestoreTestingKnobs{
 			AfterBackupChunk: func() {
 				chunks++
 			},
@@ -10209,7 +10209,7 @@ func TestBackupNoOverwriteCheckpoint(t *testing.T) {
 	// Set the testing knob so we count each time we write a checkpoint.
 	params := base.TestClusterArgs{}
 	knobs := base.TestingKnobs{
-		SQLExecutor: &sql.ExecutorTestingKnobs{
+		BackupRestore: &sql.BackupRestoreTestingKnobs{
 			AfterBackupCheckpoint: func() {
 				numCheckpointsWritten++
 			},
