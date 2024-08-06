@@ -502,12 +502,6 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //   - table: used to set the current table used by the command. This is used by
 //     the inject-stats command.
 //
-//   - stats-quality-prefix: must be used with the stats-quality command. If
-//     rewriteActualFlag=true, indicates that a table should be created with the
-//     given prefix for the output of each subexpression in the query. Otherwise,
-//     outputs the name of the table that would be created for each
-//     subexpression.
-//
 //   - ignore-tables: specifies the set of stats tables for which stats quality
 //     comparisons should not be outputted. Only used with the stats-quality
 //     command. Note that tables can always be added to the `ignore-tables` set
@@ -522,16 +516,6 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //   - import: the file path is relative to opttester/testfixtures;
 //
 //   - inject-stats: the file path is relative to the test file.
-//
-//   - join-limit: sets the value for SessionData.ReorderJoinsLimit, which
-//     indicates the number of joins at which the optimizer should stop
-//     attempting to reorder.
-//
-//   - prefer-lookup-joins-for-fks: sets SessionData.PreferLookupJoinsForFKs to
-//     true, causing foreign key operations to prefer lookup joins.
-//
-//   - null-ordered-last: sets SessionData.NullOrderedLast to true, which orders
-//     NULL values last in ascending order.
 //
 //   - cascade-levels: used to limit the depth of recursive cascades for
 //     build-cascades.
