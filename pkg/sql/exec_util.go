@@ -1633,13 +1633,6 @@ type ExecutorTestingKnobs struct {
 		txErr error,
 	)
 
-	// AfterBackupChunk is called after each chunk of a backup is completed.
-	AfterBackupChunk func()
-
-	// AfterBackupCheckpoint if set will be called after a BACKUP-CHECKPOINT
-	// is written.
-	AfterBackupCheckpoint func()
-
 	// OnRecordTxnFinish, if set, will be called as we record a transaction
 	// finishing.
 	OnRecordTxnFinish func(isInternal bool, phaseTimes *sessionphase.Times, stmt string, txnStats sqlstats.RecordedTxnStats)
@@ -1759,6 +1752,13 @@ func (*SchemaTelemetryTestingKnobs) ModuleTestingKnobs() {}
 //
 // TODO (msbutler): move these to backupccl
 type BackupRestoreTestingKnobs struct {
+	// AfterBackupChunk is called after each chunk of a backup is completed.
+	AfterBackupChunk func()
+
+	// AfterBackupCheckpoint if set will be called after a BACKUP-CHECKPOINT
+	// is written.
+	AfterBackupCheckpoint func()
+
 	// CaptureResolvedTableDescSpans allows for intercepting the spans which are
 	// resolved during backup planning, and will eventually be backed up during
 	// execution.
