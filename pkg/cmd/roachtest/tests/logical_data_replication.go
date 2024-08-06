@@ -62,6 +62,20 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 			},
 			run: TestLDROnNodeShutdown,
 		},
+		{
+			name: "ldr/kv0/workload=both/network_partition",
+			clusterSpec: multiClusterSpec{
+				leftNodes:  3,
+				rightNodes: 3,
+				clusterOpts: []spec.Option{
+					spec.CPU(8),
+					spec.WorkloadNode(),
+					spec.WorkloadNodeCPU(8),
+					spec.VolumeSize(100),
+				},
+			},
+			run: TestLDROnNetworkPartition,
+		},
 	}
 
 	for _, sp := range specs {
@@ -225,6 +239,62 @@ func TestLDROnNodeShutdown(
 	if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), nodeToStopR); err != nil {
 		t.Fatalf("Unable to shutdown node: %s", err)
 	}
+
+	monitor.Wait()
+	VerifyCorrectness(t, setup, leftJobID, rightJobID, 5*time.Minute)
+}
+
+// TestLDROnNetworkPartition aims to see what happens when both clusters
+// are separated from one another by a network partition. This test will
+// aim to keep the workload going on both sides and wait for reconciliation
+// once the network partition has completed
+func TestLDROnNetworkPartition(
+	ctx context.Context, t test.Test, c cluster.Cluster, setup multiClusterSetup,
+) {
+
+	duration := 10 * time.Minute
+	if c.IsLocal() {
+		duration = 3 * time.Minute
+	}
+
+	kvWorkload := replicateKV{
+		readPercent:             0,
+		debugRunDuration:        duration,
+		maxBlockBytes:           1024,
+		initRows:                1000,
+		initWithSplitAndScatter: true}
+
+	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, kvWorkload)
+
+	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
+	monitor.Go(func(ctx context.Context) error {
+		return c.RunE(ctx, option.WithNodes(setup.workloadNode), kvWorkload.sourceRunCmd("system", setup.CRDBNodes()))
+	})
+
+	// Let workload run for a bit before we kill a node
+	time.Sleep(kvWorkload.debugRunDuration / 10)
+
+	failNodesLength := len(setup.CRDBNodes()) / 2
+	nodesToFail, err := setup.CRDBNodes().SeededRandList(setup.rng, failNodesLength)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We're not using the entire blackholeFailer setup, so break the interface contract and use this directly
+	blackholeFailer := &blackholeFailer{t: t, c: c, input: true, output: true}
+	disconnectDuration := kvWorkload.debugRunDuration / 5
+	t.L().Printf("Disconnecting nodes %v", nodesToFail)
+	for _, nodeID := range nodesToFail {
+		blackholeFailer.FailPartial(ctx, nodeID, setup.CRDBNodes())
+	}
+
+	// Sleep while workload continues
+	t.L().Printf("Sleeping for %.2f minutes", disconnectDuration.Minutes())
+	time.Sleep(disconnectDuration)
+
+	// Re-enable
+	blackholeFailer.Cleanup(ctx)
+	t.L().Printf("Nodes reconnected. Waiting for workload to complete")
 
 	monitor.Wait()
 	VerifyCorrectness(t, setup, leftJobID, rightJobID, 5*time.Minute)
@@ -413,6 +483,7 @@ func setupLDR(
 func VerifyCorrectness(
 	t test.Test, setup multiClusterSetup, leftJobID, rightJobID int, waitTime time.Duration,
 ) {
+	t.L().Printf("Verifying left and right tables")
 	now := timeutil.Now()
 
 	waitForReplicatedTimeToReachTimestamp(t, leftJobID, setup.left.db, getLogicalDataReplicationJobInfo, waitTime, now)
