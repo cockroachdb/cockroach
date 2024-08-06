@@ -776,14 +776,12 @@ func (s *Server) ServeConn(
 
 	sArgs, err := finalizeClientParameters(ctx, preServeStatus.clientParameters, &st.SV)
 	if err != nil {
-		preServeStatus.Reserved.Close(ctx)
 		return s.sendErr(ctx, st, conn, err)
 	}
 
 	// Transfer the memory account into this tenant.
-	tenantReserved, err := s.tenantSpecificConnMonitor.TransferAccount(ctx, &preServeStatus.Reserved)
+	tenantReserved, err := s.tenantSpecificConnMonitor.TransferAccount(ctx, preServeStatus.Reserved)
 	if err != nil {
-		preServeStatus.Reserved.Close(ctx)
 		return s.sendErr(ctx, st, conn, err)
 	}
 
@@ -1014,7 +1012,7 @@ func (s *Server) serveImpl(
 	} else {
 		// sqlServer == nil means we are in a local test. In this case
 		// we only need the minimum to make pgx happy.
-		defer reserved.Close(ctx)
+		defer reserved.Clear(ctx)
 		var err error
 		for param, value := range testingStatusReportParams {
 			err = c.bufferParamStatus(param, value)

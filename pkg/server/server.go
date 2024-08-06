@@ -2293,6 +2293,7 @@ func (s *topLevelServer) AcceptInternalClients(ctx context.Context) error {
 					log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
 					return
 				}
+				defer status.ReleaseMemory(ctx)
 
 				if err := s.serverController.sqlMux(connCtx, conn, status); err != nil {
 					log.Ops.Errorf(connCtx, "serving internal SQL client conn: %s", err)
