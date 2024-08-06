@@ -75,7 +75,6 @@ func registerAlterPK(r registry.Registry) {
 			db := c.Conn(ctx, t.L(), c.CRDBNodes()[0])
 			defer db.Close()
 			cmds := []string{
-				`SET CLUSTER SETTING kv.transaction.internal.max_auto_retries = 10000`,
 				`USE bank;`,
 				`ALTER TABLE bank ALTER COLUMN balance SET NOT NULL;`,
 				`ALTER TABLE bank ALTER PRIMARY KEY USING COLUMNS (id, balance)`,
