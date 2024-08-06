@@ -50,6 +50,7 @@ var isResponseMsg = [...]bool{
 	pb.MsgPreVoteResp:       true,
 	pb.MsgStorageAppendResp: true,
 	pb.MsgStorageApplyResp:  true,
+	pb.MsgFortifyLeaderResp: true,
 }
 
 func isMsgInArray(msgt pb.MessageType, arr []bool) bool {

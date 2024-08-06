@@ -42,6 +42,9 @@ func (r *replicaRLockedStoreLiveness) SupportFor(replicaID raftpb.PeerID) (raftp
 	if !ok {
 		return 0, false
 	}
+	if r.store.storeLiveness == nil {
+		return 0, false
+	}
 	epoch, ok := r.store.storeLiveness.SupportFor(storeID)
 	if !ok {
 		return 0, false

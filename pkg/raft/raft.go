@@ -353,6 +353,10 @@ type raft struct {
 
 	// the leader id
 	lead pb.PeerID
+	// leadEpoch, if set, corresponds to the StoreLiveness epoch that this peer
+	// has supported the leader in. It's unset if the peer hasn't supported the
+	// current leader.
+	//
 	// TODO(arul): This should be populated when responding to a MsgFortify.
 	leadEpoch pb.Epoch
 	// leadTransferee is id of the leader transfer target when its value is not zero.
@@ -669,6 +673,17 @@ func (r *raft) sendHeartbeat(to pb.PeerID) {
 	pr.SentCommit(commit)
 }
 
+// sendFortify sends a fortification RPC to the supplied follower.
+func (r *raft) sendFortify(to pb.PeerID) {
+	if to == r.id {
+		// We handle the case where the leader is trying to fortify itself specially.
+		// Doing so avoids a self-addressed message.
+		// TODO(arul): do this handling.
+		return
+	}
+	r.send(pb.Message{To: to, Type: pb.MsgFortifyLeader})
+}
+
 // bcastAppend sends RPC, with entries to all peers that are not up-to-date
 // according to the progress recorded in r.trk.
 func (r *raft) bcastAppend() {
@@ -687,6 +702,15 @@ func (r *raft) bcastHeartbeat() {
 			return
 		}
 		r.sendHeartbeat(id)
+	})
+}
+
+// bcastFortify sends an RPC to fortify the leader to all peers (including the leader itself).
+func (r *raft) bcastFortify() {
+	runtimeAssert(r.state == StateLeader, "only leaders can fortify")
+
+	r.trk.Visit(func(id pb.PeerID, _ *tracker.Progress) {
+		r.sendFortify(id)
 	})
 }
 
@@ -1326,6 +1350,8 @@ func stepLeader(r *raft, m pb.Message) error {
 
 	case pb.MsgForgetLeader:
 		return nil // noop on leader
+	case pb.MsgFortifyLeaderResp:
+		r.handleFortifyResp(m)
 	}
 
 	// All other message types require a progress for m.From (pr).
@@ -1620,6 +1646,7 @@ func stepCandidate(r *raft, m pb.Message) error {
 			} else {
 				r.becomeLeader()
 				r.bcastAppend()
+				r.bcastFortify()
 			}
 		case quorum.VoteLost:
 			// pb.MsgPreVoteResp contains future term of pre-candidate
@@ -1628,6 +1655,9 @@ func stepCandidate(r *raft, m pb.Message) error {
 		}
 	case pb.MsgTimeoutNow:
 		r.logger.Debugf("%x [term %d state %v] ignored MsgTimeoutNow from %x", r.id, r.Term, r.state, m.From)
+	case pb.MsgFortifyLeader:
+		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
+		r.handleFortify(m)
 	}
 	return nil
 }
@@ -1685,6 +1715,8 @@ func stepFollower(r *raft, m pb.Message) error {
 		// know we are not recovering from a partition so there is no need for the
 		// extra round trip.
 		r.hup(campaignTransfer)
+	case pb.MsgFortifyLeader:
+		r.handleFortify(m)
 	}
 	return nil
 }
@@ -1827,6 +1859,20 @@ func (r *raft) handleSnapshot(m pb.Message) {
 			r.id, r.raftLog.committed, id.index, id.term)
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed})
 	}
+}
+
+func (r *raft) handleFortify(m pb.Message) {
+	// TODO(arul): currently a no-op; implement.
+	r.send(pb.Message{
+		To:     m.From,
+		Type:   pb.MsgFortifyLeaderResp,
+		Reject: true,
+	})
+}
+
+func (r *raft) handleFortifyResp(m pb.Message) {
+	runtimeAssert(r.state == StateLeader, "only leaders should be handling fortification responses")
+	runtimeAssert(m.Reject, "TODO(arul): implement")
 }
 
 // restore recovers the state machine from a snapshot. It restores the log and the
@@ -2071,5 +2117,13 @@ func (r *raft) reduceUncommittedSize(s entryPayloadSize) {
 		r.uncommittedSize = 0
 	} else {
 		r.uncommittedSize -= s
+	}
+}
+
+// runtimeAssert panics with the supplied message if the condition does not hold
+// true.
+func runtimeAssert(condition bool, msg string) {
+	if !condition {
+		panic(msg)
 	}
 }
