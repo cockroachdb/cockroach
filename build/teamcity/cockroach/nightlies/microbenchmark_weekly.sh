@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
 # This script runs microbenchmarks across a roachprod cluster. It will build microbenchmark binaries
-# for the given revisions if they do not already exist in the BUILDS_BUCKET. It will then create a
+# for the given revisions if they do not already exist in the BENCH_BUCKET. It will then create a
 # roachprod cluster, stage the binaries on the cluster, and run the microbenchmarks.
 # Parameters (and suggested defaults):
 #   BENCH_REVISION: revision to build and run benchmarks against (default: master)
 #   BENCH_COMPARE_REVISION: revision to compare against (default: latest release branch)
-#   BUILDS_BUCKET: GCS bucket to store the built binaries
+#   BENCH_BUCKET: GCS bucket to store the built binaries and compare cache (default: cockroach-microbench)
 #   BENCH_PACKAGE: package to build and run benchmarks against (default: ./pkg/...)
 #   BENCH_ITERATIONS: number of iterations to run each microbenchmark (default: 10)
 #   GCE_NODE_COUNT: number of nodes to use in the roachprod cluster (default: 12)
@@ -27,6 +27,18 @@ source "$dir/teamcity-support.sh"  # For $root
 source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 output_dir="./artifacts/microbench"
 exit_status=0
+
+# Set up credentials
+google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
+log_into_gcloud
+export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
+export ROACHPROD_USER=teamcity
+export ROACHPROD_CLUSTER=teamcity-microbench-${TC_BUILD_ID}
+generate_ssh_key
+
+# Sanatize the package name for use in paths
+SANITIZED_BENCH_PACKAGE=${BENCH_PACKAGE//\//-}
+export SANITIZED_BENCH_PACKAGE=${SANITIZED_BENCH_PACKAGE/.../all}
 
 # Build rochprod and roachprod-microbench
 run_bazel <<'EOF'
@@ -61,17 +73,21 @@ for rev in "${revisions[@]}"; do
   sha_arr+=("$sha")
 done
 
+# Check if the baseline cache exists and copy it to the output directory.
+baseline_cache_path="gs://$BENCH_BUCKET/cache/$GCE_MACHINE_TYPE/$SANITIZED_BENCH_PACKAGE/${sha_arr[1]}"
+if gsutil ls "$baseline_cache_path" &>/dev/null; then
+  mkdir -p "$output_dir/baseline"
+  gsutil -mq cp -r "$baseline_cache_path/*" "$output_dir/baseline"
+  echo "Baseline cache found for ${name_arr[1]}. Using it for comparison."
+  unset "sha_arr[-1]"
+fi
+
 # Builds binaries for the given SHAs.
-BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e GOOGLE_EPHEMERAL_CREDENTIALS -e BENCH_PACKAGE -e BUILDS_BUCKET" \
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e GOOGLE_EPHEMERAL_CREDENTIALS -e SANITIZED_BENCH_PACKAGE -e BENCH_PACKAGE -e BENCH_BUCKET" \
   run_bazel build/teamcity/cockroach/nightlies/microbenchmark_build_support.sh "${sha_arr[@]}"
 
-# Set up credentials (needs to be done after the build phase)
-google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
+# Log into gcloud again (previous credentials are no longer available at this point)
 log_into_gcloud
-export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
-export ROACHPROD_USER=teamcity
-export ROACHPROD_CLUSTER=teamcity-microbench-${TC_BUILD_ID}
-generate_ssh_key
 
 # Create roachprod cluster
 ./bin/roachprod create "$ROACHPROD_CLUSTER" -n "$GCE_NODE_COUNT" \
@@ -87,13 +103,13 @@ generate_ssh_key
 for sha in "${sha_arr[@]}"; do
   archive_name=${BENCH_PACKAGE//\//-}
   archive_name="$sha-${archive_name/.../all}.tar.gz"
-  ./bin/roachprod-microbench stage --quiet "$ROACHPROD_CLUSTER" "gs://$BUILDS_BUCKET/builds/$archive_name" "$sha"
+  ./bin/roachprod-microbench stage --quiet "$ROACHPROD_CLUSTER" "gs://$BENCH_BUCKET/builds/$archive_name" "$sha"
 done
 
 # Execute microbenchmarks
 ./bin/roachprod-microbench run "$ROACHPROD_CLUSTER" \
   --binaries experiment="${sha_arr[0]}" \
-  --binaries baseline="${sha_arr[1]}" \
+  ${sha_arr[1]:+--binaries baseline="${sha_arr[1]}"} \
   --output-dir="$output_dir" \
   --iterations "$BENCH_ITERATIONS" \
   --shell="$BENCH_SHELL" \
@@ -104,10 +120,15 @@ done
   -- "$TEST_ARGS" \
   || exit_status=$?
 
+# Push baseline to cache if we ran both benchmarks
+if [[ ${#sha_arr[@]} -gt 1 ]]; then
+  gsutil -mq cp -r "$output_dir/baseline" "$baseline_cache_path"
+fi
 
-# Compare the results, if both sets of benchmarks were run
-if [ -d "$output_dir/0" ] && [ "$(ls -A "$output_dir/0")" ] \
-&& [ -d "$output_dir/1" ] && [ "$(ls -A "$output_dir/1")" ]; then
+# Compare the results, if both sets of benchmarks were run.
+# These should exists if the benchmarks were run successfully.
+if [ -d "$output_dir/experiment" ] && [ "$(ls -A "$output_dir/experiment")" ] \
+&& [ -d "$output_dir/baseline" ] && [ "$(ls -A "$output_dir/baseline")" ]; then
   # Set up slack token only if the build was triggered by TeamCity (not a manual run)
   if [ -n "${TRIGGERED_BUILD:-}" ]; then
     slack_token="${MICROBENCH_SLACK_TOKEN}"

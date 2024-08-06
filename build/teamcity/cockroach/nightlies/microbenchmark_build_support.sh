@@ -19,9 +19,8 @@ function check_gcs_path_exists() {
 # Build and copy binaries, for the given SHA, to GCS bucket
 function build_and_upload_binaries() {
   local sha=$1
-  archive_name=${BENCH_PACKAGE//\//-}
-  archive_name="$sha-${archive_name/.../all}.tar.gz"
-  if check_gcs_path_exists "gs://$BUILDS_BUCKET/builds/$archive_name"; then
+  archive_name="$sha-${SANITIZED_BENCH_PACKAGE}.tar.gz"
+  if check_gcs_path_exists "gs://$BENCH_BUCKET/builds/$archive_name"; then
     echo "Build for $sha already exists. Skipping..."
     return
   fi
@@ -57,7 +56,7 @@ EOF
   out_dir=$(mktemp -d)
   tar -chf - -C "$stage_dir" . | ./bin/roachprod-microbench compress > "$out_dir/$archive_name"
   rm -rf "$stage_dir"
-  gsutil -q -m cp "$out_dir/$archive_name" "gs://$BUILDS_BUCKET/builds/$archive_name"
+  gsutil -q -m cp "$out_dir/$archive_name" "gs://$BENCH_BUCKET/builds/$archive_name"
   rm -rf "$out_dir"
 }
 
