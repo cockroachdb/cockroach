@@ -242,7 +242,7 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 	originalMatchedRule := o.matchedRule
 	defer func() { o.matchedRule = originalMatchedRule }()
 	o.matchedRule = func(r opt.RuleName) bool {
-		if r == opt.GenerateParameterizedJoin {
+		if r.IsGeneric() {
 			return false
 		}
 		if originalMatchedRule != nil {

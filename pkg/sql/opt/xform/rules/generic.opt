@@ -27,7 +27,7 @@
 # 	    |                        /     \                      |
 # 	  Scan t             Values ($1)   Scan t              Values ($1)
 #
-[GenerateParameterizedJoin, Explore]
+[GenerateParameterizedJoin, Explore, Generic]
 (Select
     $scan:(Scan $scanPrivate:*) & (IsCanonicalScan $scanPrivate)
     $filters:* &

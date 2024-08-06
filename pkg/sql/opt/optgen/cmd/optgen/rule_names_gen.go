@@ -43,6 +43,9 @@ func (g *ruleNamesGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	fmt.Fprintf(g.w, "  // NumRuleNames tracks the total count of rule names.\n")
 	fmt.Fprintf(g.w, "  NumRuleNames\n")
 	fmt.Fprintf(g.w, ")\n\n")
+
+	clear(g.unique)
+	g.genIsGeneric()
 }
 
 func (g *ruleNamesGen) genRuleNameEnumByTag(tag string) {
@@ -63,4 +66,36 @@ func (g *ruleNamesGen) genRuleNameEnumByTag(tag string) {
 		fmt.Fprintf(g.w, "  %s\n", rule.Name)
 	}
 	fmt.Fprintf(g.w, "\n")
+}
+
+func (g *ruleNamesGen) genIsGeneric() {
+	fmt.Fprintf(g.w, "// IsGeneric returns true if r is tagged as a Generic rule.\n")
+	fmt.Fprintf(g.w, "func (r RuleName) IsGeneric() bool {\n")
+	fmt.Fprintf(g.w, "  switch r {\n")
+	for _, rule := range g.compiled.Rules {
+		if !rule.Tags.Contains("Generic") {
+			continue
+		}
+
+		// Only include each unique rule name once, not once per operator.
+		if _, ok := g.unique[rule.Name]; ok {
+			continue
+		}
+		g.unique[rule.Name] = struct{}{}
+
+		if len(g.unique) == 1 {
+			fmt.Fprintf(g.w, "  case ")
+		} else {
+			fmt.Fprintf(g.w, ", ")
+		}
+		fmt.Fprintf(g.w, "%s", rule.Name)
+	}
+	if len(g.unique) > 0 {
+		fmt.Fprintf(g.w, ":\n")
+		fmt.Fprintf(g.w, "    return true\n")
+	}
+	fmt.Fprintf(g.w, "  default:\n")
+	fmt.Fprintf(g.w, "    return false\n")
+	fmt.Fprintf(g.w, "  }\n")
+	fmt.Fprintf(g.w, "}\n\n")
 }
