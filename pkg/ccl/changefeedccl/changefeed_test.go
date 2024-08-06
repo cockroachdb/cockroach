@@ -315,11 +315,11 @@ func TestChangefeedProgressMetrics(t *testing.T) {
 		cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 			registry := s.Server.JobRegistry().(*jobs.Registry)
 			metrics := registry.MetricsStruct().Changefeed.(*Metrics)
-			defaultSLI, err := metrics.getSLIMetrics(defaultSLIScope)
+			defaultSLI, err := metrics.getSLIMetrics(defaultSLIScope, "")
 			require.NoError(t, err)
-			sliA, err := metrics.getSLIMetrics("scope_a")
+			sliA, err := metrics.getSLIMetrics("scope_a", "")
 			require.NoError(t, err)
-			sliB, err := metrics.getSLIMetrics("scope_b")
+			sliB, err := metrics.getSLIMetrics("scope_b", "")
 			require.NoError(t, err)
 
 			defaultSLI.mu.checkpoint[5] = hlc.Timestamp{WallTime: 1}
@@ -364,7 +364,7 @@ func TestChangefeedProgressMetrics(t *testing.T) {
 		cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 			registry := s.Server.JobRegistry().(*jobs.Registry)
 			metrics := registry.MetricsStruct().Changefeed.(*Metrics)
-			sliA, err := metrics.getSLIMetrics("scope_a")
+			sliA, err := metrics.getSLIMetrics("scope_a", "")
 			require.NoError(t, err)
 
 			unregisteredID := int64(999)
@@ -402,7 +402,7 @@ func TestChangefeedProgressMetrics(t *testing.T) {
 
 			registry := s.Server.JobRegistry().(*jobs.Registry)
 			metrics := registry.MetricsStruct().Changefeed.(*Metrics)
-			sliA, err := metrics.getSLIMetrics("label_a")
+			sliA, err := metrics.getSLIMetrics("label_a", "")
 			require.NoError(t, err)
 
 			// Verify that aggregator_progress has recurring updates
@@ -432,7 +432,7 @@ func TestChangefeedProgressMetrics(t *testing.T) {
 				})
 			}
 
-			sliB, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics("label_b")
+			sliB, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics("label_b", "")
 			require.Equal(t, int64(0), sliB.AggregatorProgress.Value())
 			fooB := feed(t, f, `CREATE CHANGEFEED FOR foo WITH metrics_label='label_b', resolved='100ms'`)
 			defer closeFeed(t, fooB)
@@ -549,7 +549,7 @@ func TestChangefeedSendError(t *testing.T) {
 
 		// Changefeed should've been retried due to the SendError
 		registry := s.Server.JobRegistry().(*jobs.Registry)
-		sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope)
+		sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope, "")
 		require.NoError(t, err)
 		retryCounter := sli.ErrorRetries
 		testutils.SucceedsSoon(t, func() error {
@@ -1297,10 +1297,10 @@ func TestChangefeedLaggingRangesMetrics(t *testing.T) {
 		)
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
-		sli1, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics("t1")
+		sli1, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics("t1", "")
 		require.NoError(t, err)
 		laggingRangesTier1 := sli1.LaggingRanges
-		sli2, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics("t2")
+		sli2, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics("t2", "")
 		require.NoError(t, err)
 		laggingRangesTier2 := sli2.LaggingRanges
 
@@ -1372,7 +1372,7 @@ func TestChangefeedBackfillObservability(t *testing.T) {
 
 		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
 		registry := s.Server.JobRegistry().(*jobs.Registry)
-		sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope)
+		sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope, "")
 		require.NoError(t, err)
 		pendingRanges := sli.BackfillPendingRanges
 
@@ -4670,7 +4670,7 @@ func TestChangefeedRetryableError(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 
-		sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope)
+		sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope, "")
 		require.NoError(t, err)
 		retryCounter := sli.ErrorRetries
 		testutils.SucceedsSoon(t, func() error {
@@ -9122,7 +9122,7 @@ func TestCloudstorageBufferedBytesMetric(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
-		defaultSLI, err := metrics.getSLIMetrics(defaultSLIScope)
+		defaultSLI, err := metrics.getSLIMetrics(defaultSLIScope, "")
 		require.NoError(t, err)
 
 		knobs := s.TestingKnobs.
