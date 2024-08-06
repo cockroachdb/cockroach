@@ -937,8 +937,8 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
 	// retain significant figures of 2.
-	b := aggmetric.MakeBuilder("scope")
-	emittedMessagesBuilder := aggmetric.MakeBuilder("scope", "message_type")
+	b := aggmetric.MakeBuilder("scope", "remote")
+	emittedMessagesBuilder := aggmetric.MakeBuilder("scope", "message_type", "remote")
 	a := &AggMetrics{
 		ErrorRetries:    b.Counter(metaChangefeedErrorRetries),
 		EmittedMessages: emittedMessagesBuilder.Counter(metaChangefeedEmittedMessages),
@@ -1026,7 +1026,7 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		}),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
-	_, err := a.getOrCreateScope(defaultSLIScope)
+	_, err := a.getOrCreateScope(defaultSLIScope, "")
 	if err != nil {
 		// defaultSLIScope must always exist.
 		panic(err)
@@ -1034,7 +1034,7 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 	return a
 }
 
-func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
+func (a *AggMetrics) getOrCreateScope(scope string, remote string) (*sliMetrics, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -1062,35 +1062,35 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	}
 
 	sm := &sliMetrics{
-		EmittedRowMessages:          a.EmittedMessages.AddChild(scope, "row"),
-		EmittedResolvedMessages:     a.EmittedMessages.AddChild(scope, "resolved"),
-		EmittedBatchSizes:           a.EmittedBatchSizes.AddChild(scope),
-		FilteredMessages:            a.FilteredMessages.AddChild(scope),
-		MessageSize:                 a.MessageSize.AddChild(scope),
-		EmittedBytes:                a.EmittedBytes.AddChild(scope),
-		FlushedBytes:                a.FlushedBytes.AddChild(scope),
-		BatchHistNanos:              a.BatchHistNanos.AddChild(scope),
-		Flushes:                     a.Flushes.AddChild(scope),
-		FlushHistNanos:              a.FlushHistNanos.AddChild(scope),
-		SizeBasedFlushes:            a.SizeBasedFlushes.AddChild(scope),
-		ParallelIOPendingQueueNanos: a.ParallelIOPendingQueueNanos.AddChild(scope),
-		ParallelIOPendingRows:       a.ParallelIOPendingRows.AddChild(scope),
-		ParallelIOResultQueueNanos:  a.ParallelIOResultQueueNanos.AddChild(scope),
-		ParallelIOInFlightKeys:      a.ParallelIOInFlightKeys.AddChild(scope),
-		SinkIOInflight:              a.SinkIOInflight.AddChild(scope),
-		CommitLatency:               a.CommitLatency.AddChild(scope),
-		ErrorRetries:                a.ErrorRetries.AddChild(scope),
-		AdmitLatency:                a.AdmitLatency.AddChild(scope),
-		BackfillCount:               a.BackfillCount.AddChild(scope),
-		BackfillPendingRanges:       a.BackfillPendingRanges.AddChild(scope),
-		RunningCount:                a.RunningCount.AddChild(scope),
-		BatchReductionCount:         a.BatchReductionCount.AddChild(scope),
-		InternalRetryMessageCount:   a.InternalRetryMessageCount.AddChild(scope),
-		SchemaRegistryRetries:       a.SchemaRegistryRetries.AddChild(scope),
-		SchemaRegistrations:         a.SchemaRegistrations.AddChild(scope),
-		LaggingRanges:               a.LaggingRanges.AddChild(scope),
-		CloudstorageBufferedBytes:   a.CloudstorageBufferedBytes.AddChild(scope),
-		KafkaThrottlingNanos:        a.KafkaThrottlingNanos.AddChild(scope),
+		EmittedRowMessages:          a.EmittedMessages.AddChild(scope, "row", remote),
+		EmittedResolvedMessages:     a.EmittedMessages.AddChild(scope, "resolved", remote),
+		EmittedBatchSizes:           a.EmittedBatchSizes.AddChild(scope, remote),
+		FilteredMessages:            a.FilteredMessages.AddChild(scope, remote),
+		MessageSize:                 a.MessageSize.AddChild(scope, remote),
+		EmittedBytes:                a.EmittedBytes.AddChild(scope, remote),
+		FlushedBytes:                a.FlushedBytes.AddChild(scope, remote),
+		BatchHistNanos:              a.BatchHistNanos.AddChild(scope, remote),
+		Flushes:                     a.Flushes.AddChild(scope, remote),
+		FlushHistNanos:              a.FlushHistNanos.AddChild(scope, remote),
+		SizeBasedFlushes:            a.SizeBasedFlushes.AddChild(scope, remote),
+		ParallelIOPendingQueueNanos: a.ParallelIOPendingQueueNanos.AddChild(scope, remote),
+		ParallelIOPendingRows:       a.ParallelIOPendingRows.AddChild(scope, remote),
+		ParallelIOResultQueueNanos:  a.ParallelIOResultQueueNanos.AddChild(scope, remote),
+		ParallelIOInFlightKeys:      a.ParallelIOInFlightKeys.AddChild(scope, remote),
+		SinkIOInflight:              a.SinkIOInflight.AddChild(scope, remote),
+		CommitLatency:               a.CommitLatency.AddChild(scope, remote),
+		ErrorRetries:                a.ErrorRetries.AddChild(scope, remote),
+		AdmitLatency:                a.AdmitLatency.AddChild(scope, remote),
+		BackfillCount:               a.BackfillCount.AddChild(scope, remote),
+		BackfillPendingRanges:       a.BackfillPendingRanges.AddChild(scope, remote),
+		RunningCount:                a.RunningCount.AddChild(scope, remote),
+		BatchReductionCount:         a.BatchReductionCount.AddChild(scope, remote),
+		InternalRetryMessageCount:   a.InternalRetryMessageCount.AddChild(scope, remote),
+		SchemaRegistryRetries:       a.SchemaRegistryRetries.AddChild(scope, remote),
+		SchemaRegistrations:         a.SchemaRegistrations.AddChild(scope, remote),
+		LaggingRanges:               a.LaggingRanges.AddChild(scope, remote),
+		CloudstorageBufferedBytes:   a.CloudstorageBufferedBytes.AddChild(scope, remote),
+		KafkaThrottlingNanos:        a.KafkaThrottlingNanos.AddChild(scope, remote),
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)
@@ -1113,8 +1113,8 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 			return minTs
 		}
 	}
-	sm.AggregatorProgress = a.AggregatorProgress.AddFunctionalChild(minTimestampGetter(sm.mu.resolved), scope)
-	sm.CheckpointProgress = a.CheckpointProgress.AddFunctionalChild(minTimestampGetter(sm.mu.checkpoint), scope)
+	sm.AggregatorProgress = a.AggregatorProgress.AddFunctionalChild(minTimestampGetter(sm.mu.resolved), scope, remote)
+	sm.CheckpointProgress = a.CheckpointProgress.AddFunctionalChild(minTimestampGetter(sm.mu.checkpoint), scope, remote)
 
 	a.mu.sliMetrics[scope] = sm
 	return sm, nil
@@ -1180,8 +1180,8 @@ type Metrics struct {
 func (*Metrics) MetricStruct() {}
 
 // getSLIMetrics returns SLIMeterics associated with the specified scope.
-func (m *Metrics) getSLIMetrics(scope string) (*sliMetrics, error) {
-	return m.AggMetrics.getOrCreateScope(scope)
+func (m *Metrics) getSLIMetrics(scope string, remote string) (*sliMetrics, error) {
+	return m.AggMetrics.getOrCreateScope(scope, remote)
 }
 
 // MakeMetrics makes the metrics for changefeed monitoring.
