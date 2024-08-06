@@ -109,8 +109,7 @@ func makeRunCommand() *cobra.Command {
 		},
 		RunE: runCmdFunc,
 	}
-	cmd.Flags().StringVar(&config.binaries, "binaries", config.binaries, "remote path of the test binaries")
-	cmd.Flags().StringVar(&config.compareBinaries, "compare-binaries", "", "run additional binaries on this remote path and compare the results")
+	cmd.Flags().StringToStringVar(&config.binaries, "binaries", config.binaries, "local output name and remote path of the test binaries to run (ex., experiment=<sha1>,baseline=<sha2>")
 	cmd.Flags().StringVar(&config.outputDir, "output-dir", config.outputDir, "output directory for run log and microbenchmark results")
 	cmd.Flags().StringVar(&config.timeout, "timeout", config.timeout, "timeout for each benchmark e.g. 10m")
 	cmd.Flags().StringVar(&config.shellCommand, "shell", config.shellCommand, "additional shell command to run on node before benchmark execution")
@@ -161,7 +160,7 @@ func makeCompareCommand() *cobra.Command {
 			return err
 		}
 
-		comparisonResult := c.createComparisons(metricMaps, "old", "new")
+		comparisonResult := c.createComparisons(metricMaps, "baseline", "experiment")
 
 		var links map[string]string
 		if config.publishGoogleSheet {
