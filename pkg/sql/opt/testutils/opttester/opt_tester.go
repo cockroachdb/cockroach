@@ -168,6 +168,9 @@ type Flags struct {
 	// memo/check_expr.go.
 	DisableCheckExpr bool
 
+	// Generic enables optimizations for generic query plans.
+	Generic bool
+
 	// ExploreTraceRule restricts the ExploreTrace output to only show the effects
 	// of a specific rule.
 	ExploreTraceRule opt.RuleName
@@ -476,6 +479,8 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //     norm disable=(NegateOr,NegateAnd)
 //
 //   - disable-check-expr: skips the assertions in memo/check_expr.go.
+//
+//   - generic: enables optimizations for generic query plans.
 //
 //   - rule: used with exploretrace; the value is the name of a rule. When
 //     specified, the exploretrace output is filtered to only show expression
@@ -986,6 +991,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 	case "disable-check-expr":
 		f.DisableCheckExpr = true
+
+	case "generic":
+		f.Generic = true
 
 	case "rule":
 		if len(arg.Vals) != 1 {
@@ -2323,15 +2331,19 @@ func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 // not nil, allows the caller to update the table metadata before optimizing.
 func (ot *OptTester) optimizeExpr(
 	o *xform.Optimizer, tables map[cat.StableID]cat.Table,
-) (opt.Expr, error) {
-	err := ot.buildExpr(o.Factory())
+) (root opt.Expr, err error) {
+	err = ot.buildExpr(o.Factory())
 	if err != nil {
 		return nil, err
 	}
 	if tables != nil {
 		o.Memo().Metadata().UpdateTableMeta(ot.ctx, &ot.evalCtx, tables)
 	}
-	root, err := o.Optimize()
+	if ot.Flags.Generic {
+		root, err = o.OptimizeGeneric()
+	} else {
+		root, err = o.Optimize()
+	}
 	if err != nil {
 		return nil, err
 	}

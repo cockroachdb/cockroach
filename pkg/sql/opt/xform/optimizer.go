@@ -239,6 +239,28 @@ func (o *Optimizer) Memo() *memo.Memo {
 // equivalent to the given expression. If there is a cost "tie", then any one
 // of the qualifying lowest cost expressions may be selected by the optimizer.
 func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
+	originalMatchedRule := o.matchedRule
+	defer func() { o.matchedRule = originalMatchedRule }()
+	o.matchedRule = func(r opt.RuleName) bool {
+		if r == opt.GenerateParameterizedJoin {
+			return false
+		}
+		if originalMatchedRule != nil {
+			// Respect the original callback, if one was set.
+			return originalMatchedRule(r)
+		}
+		return true
+	}
+	return o.optimize()
+}
+
+// OptimizeGeneric is similar to Optimize. It enables all exploration rules
+// designed specifically for optimization of generic query plans.
+func (o *Optimizer) OptimizeGeneric() (_ opt.Expr, err error) {
+	return o.optimize()
+}
+
+func (o *Optimizer) optimize() (_ opt.Expr, err error) {
 	log.VEventf(o.ctx, 1, "optimize start")
 	defer log.VEventf(o.ctx, 1, "optimize finish")
 	defer func() {
