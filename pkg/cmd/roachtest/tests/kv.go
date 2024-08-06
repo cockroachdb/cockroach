@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,8 +34,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
-
-const envKVFlags = "ROACHTEST_KV_FLAGS"
 
 func registerKV(r registry.Registry) {
 	type kvOptions struct {
@@ -140,7 +137,6 @@ func registerKV(r registry.Registry) {
 			if opts.duration == 0 {
 				opts.duration = 30 * time.Minute
 			}
-			duration := " --duration=" + ifLocal(c, "10s", opts.duration.String())
 			var readPercent string
 			if opts.spanReads {
 				// SFU makes sense only if we repeat writes to the same key. Here
@@ -170,11 +166,8 @@ func registerKV(r registry.Registry) {
 				sequential = " --sequential"
 			}
 
-			var envFlags string
-			if e := os.Getenv(envKVFlags); e != "" {
-				envFlags = " " + e
-			}
-
+			defaultDuration := ifLocal(c, "10s", opts.duration.String())
+			duration := getEnvWorkloadDurationValueOrDefault(defaultDuration)
 			url := fmt.Sprintf(" {pgurl:1-%d}", nodes)
 			if opts.sharedProcessMT {
 				url = fmt.Sprintf(" {pgurl:1-%d:%s}", nodes, appTenantName)
@@ -183,7 +176,7 @@ func registerKV(r registry.Registry) {
 				"./cockroach workload run kv --tolerate-errors --init --user=%s --password=%s", install.DefaultUser, install.DefaultPassword,
 			) +
 				histograms + concurrency + splits + duration + readPercent +
-				batchSize + blockSize + sequential + envFlags + url
+				batchSize + blockSize + sequential + url
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 			return nil
 		})

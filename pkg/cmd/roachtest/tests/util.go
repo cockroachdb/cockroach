@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -353,4 +354,21 @@ func getListenAddr(ctx context.Context) (string, error) {
 	}
 
 	return ip.Query, nil
+}
+
+// EnvWorkloadDurationFlag - environment variable to override
+// default run time duration of workload set in tests.
+// Usage: ROACHTEST_PERF_WORKLOAD_DURATION="5m".
+const EnvWorkloadDurationFlag = "ROACHTEST_PERF_WORKLOAD_DURATION"
+
+var workloadDurationRegex = regexp.MustCompile(`^\d+[mhsMHS]$`)
+
+// getEnvWorkloadDurationValueOrDefault validates EnvWorkloadDurationFlag and
+// returns value set if valid else returns default duration.
+func getEnvWorkloadDurationValueOrDefault(defaultDuration string) string {
+	envWorkloadDurationFlag := os.Getenv(EnvWorkloadDurationFlag)
+	if envWorkloadDurationFlag != "" && workloadDurationRegex.MatchString(envWorkloadDurationFlag) {
+		return " --duration=" + envWorkloadDurationFlag
+	}
+	return " --duration=" + defaultDuration
 }
