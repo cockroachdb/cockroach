@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -24,8 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
-
-const envYCSBFlags = "ROACHTEST_YCSB_FLAGS"
 
 func registerYCSB(r registry.Registry) {
 	workloads := []string{"A", "B", "C", "D", "E", "F"}
@@ -86,16 +83,15 @@ func registerYCSB(r registry.Registry) {
 		m.Go(func(ctx context.Context) error {
 			var args string
 			args += " --ramp=" + ifLocal(c, "0s", "2m")
-			args += " --duration=" + ifLocal(c, "10s", "30m")
 			if opts.readCommitted {
 				args += " --isolation-level=read_committed"
 			}
 			if opts.uniformDistribution {
 				args += " --request-distribution=uniform"
 			}
-			if envFlags := os.Getenv(envYCSBFlags); envFlags != "" {
-				args += " " + envFlags
-			}
+
+			defaultDuration := ifLocal(c, "10s", "30m")
+			args += getEnvWorkloadDurationValueOrDefault(defaultDuration)
 			cmd := fmt.Sprintf(
 				"./cockroach workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+
 					" --splits=%d --histograms="+t.PerfArtifactsDir()+"/stats.json"+args+
