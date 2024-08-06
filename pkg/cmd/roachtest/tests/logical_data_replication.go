@@ -32,6 +32,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type ycsbWorkload struct {
+	// workload is the YCSB workload letter e.g. a, b, ..., f.
+	workloadType string
+	// initRows is the number of records to pre-load into the user table.
+	initRows int
+	// waitDuration is the duration the workload should run for.
+	debugRunDuration time.Duration
+	// initSplits is the count of initial splits before resuming work
+	initSplits int
+}
+
+func (ycsb ycsbWorkload) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
+	cmd := roachtestutil.NewCommand(`./cockroach workload init ycsb`).
+		MaybeFlag(ycsb.initRows > 0, "insert-count", ycsb.initRows).
+		MaybeFlag(ycsb.initSplits > 0, "splits", 100).
+		Arg("{pgurl%s:%s}", nodes, tenantName)
+	return cmd.String()
+}
+
+func (ycsb ycsbWorkload) sourceRunCmd(tenantName string, nodes option.NodeListOption) string {
+	cmd := roachtestutil.NewCommand(`./cockroach workload run ycsb`).
+		Option("tolerate-errors").
+		Flag("workload", ycsb.workloadType).
+		MaybeFlag(ycsb.debugRunDuration > 0, "duration", ycsb.debugRunDuration).
+		Arg("{pgurl%s:%s}", nodes, tenantName)
+	return cmd.String()
+}
+
 func registerLogicalDataReplicationTests(r registry.Registry) {
 	specs := []ldrTestSpec{
 		{
@@ -47,6 +75,20 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 				},
 			},
 			run: TestLDRBasic,
+		},
+		{
+			name: "ldr/kv0/workload=both/update_heavy",
+			clusterSpec: multiClusterSpec{
+				leftNodes:  3,
+				rightNodes: 3,
+				clusterOpts: []spec.Option{
+					spec.CPU(8),
+					spec.WorkloadNode(),
+					spec.WorkloadNodeCPU(8),
+					spec.VolumeSize(100),
+				},
+			},
+			run: TestLDRUpdateHeavy,
 		},
 		{
 			name: "ldr/kv0/workload=both/shutdown_node",
@@ -106,14 +148,21 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 }
 
 func TestLDRBasic(ctx context.Context, t test.Test, c cluster.Cluster, setup multiClusterSetup) {
+	duration := 15 * time.Minute
+	if c.IsLocal() {
+		duration = 5 * time.Minute
+	}
+
 	kvWorkload := replicateKV{
 		readPercent:             0,
-		debugRunDuration:        15 * time.Minute,
+		debugRunDuration:        duration,
 		maxBlockBytes:           1024,
 		initRows:                1000,
 		initWithSplitAndScatter: true}
 
-	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, kvWorkload)
+	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, "kv", "kv", func(tenantName string, nodes option.NodeListOption) string {
+		return kvWorkload.sourceInitCmd(tenantName, nodes)
+	})
 
 	// Setup latency verifiers
 	maxExpectedLatency := 2 * time.Minute
@@ -154,7 +203,68 @@ func TestLDRBasic(ctx context.Context, t test.Test, c cluster.Cluster, setup mul
 	llv.assertValid(t)
 	rlv.assertValid(t)
 
-	VerifyCorrectness(t, setup, leftJobID, rightJobID, 2*time.Minute)
+	VerifyCorrectness(t, setup, leftJobID, rightJobID, 2*time.Minute, "kv", "kv")
+}
+
+func TestLDRUpdateHeavy(
+	ctx context.Context, t test.Test, c cluster.Cluster, setup multiClusterSetup,
+) {
+
+	duration := 10 * time.Minute
+	if c.IsLocal() {
+		duration = 3 * time.Minute
+	}
+
+	ycsb := ycsbWorkload{
+		workloadType:     "A",
+		debugRunDuration: duration,
+		initRows:         1000,
+		initSplits:       1000}
+
+	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, "ycsb", "usertable", func(tenantName string, nodes option.NodeListOption) string {
+		return ycsb.sourceInitCmd(tenantName, nodes)
+	})
+
+	// Setup latency verifiers
+	maxExpectedLatency := 4 * time.Minute
+	llv := makeLatencyVerifier("ldr-left", 0, maxExpectedLatency, t.L(),
+		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
+	defer llv.maybeLogLatencyHist()
+
+	rlv := makeLatencyVerifier("ldr-right", 0, maxExpectedLatency, t.L(),
+		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
+	defer rlv.maybeLogLatencyHist()
+
+	workloadDoneCh := make(chan struct{})
+	debugZipFetcher := &sync.Once{}
+
+	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
+	monitor.Go(func(ctx context.Context) error {
+		if err := llv.pollLatencyUntilJobSucceeds(ctx, setup.left.db, leftJobID, time.Second, workloadDoneCh); err != nil {
+			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
+			return err
+		}
+		return nil
+	})
+	monitor.Go(func(ctx context.Context) error {
+		if err := rlv.pollLatencyUntilJobSucceeds(ctx, setup.right.db, rightJobID, time.Second, workloadDoneCh); err != nil {
+			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
+			return err
+		}
+		return nil
+	})
+
+	monitor.Go(func(ctx context.Context) error {
+		defer close(workloadDoneCh)
+		return c.RunE(ctx, option.WithNodes(setup.workloadNode), ycsb.sourceRunCmd("system", setup.CRDBNodes()))
+	})
+
+	monitor.Wait()
+
+	llv.assertValid(t)
+	rlv.assertValid(t)
+
+	VerifyCorrectness(t, setup, leftJobID, rightJobID, 2*time.Minute, "ycsb", "usertable")
 }
 
 func TestLDROnNodeShutdown(
@@ -173,7 +283,9 @@ func TestLDROnNodeShutdown(
 		initRows:                1000,
 		initWithSplitAndScatter: true}
 
-	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, kvWorkload)
+	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, "kv", "kv", func(tenantName string, nodes option.NodeListOption) string {
+		return kvWorkload.sourceInitCmd(tenantName, nodes)
+	})
 
 	// Setup latency verifiers, remembering to account for latency spike from killing a node
 	maxExpectedLatency := 5 * time.Minute
@@ -241,7 +353,7 @@ func TestLDROnNodeShutdown(
 	}
 
 	monitor.Wait()
-	VerifyCorrectness(t, setup, leftJobID, rightJobID, 5*time.Minute)
+	VerifyCorrectness(t, setup, leftJobID, rightJobID, 5*time.Minute, "kv", "kv")
 }
 
 // TestLDROnNetworkPartition aims to see what happens when both clusters
@@ -251,7 +363,6 @@ func TestLDROnNodeShutdown(
 func TestLDROnNetworkPartition(
 	ctx context.Context, t test.Test, c cluster.Cluster, setup multiClusterSetup,
 ) {
-
 	duration := 10 * time.Minute
 	if c.IsLocal() {
 		duration = 3 * time.Minute
@@ -264,7 +375,9 @@ func TestLDROnNetworkPartition(
 		initRows:                1000,
 		initWithSplitAndScatter: true}
 
-	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, kvWorkload)
+	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, "kv", "kv", func(tenantName string, nodes option.NodeListOption) string {
+		return kvWorkload.sourceInitCmd(tenantName, nodes)
+	})
 
 	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
 	monitor.Go(func(ctx context.Context) error {
@@ -297,7 +410,7 @@ func TestLDROnNetworkPartition(
 	t.L().Printf("Nodes reconnected. Waiting for workload to complete")
 
 	monitor.Wait()
-	VerifyCorrectness(t, setup, leftJobID, rightJobID, 5*time.Minute)
+	VerifyCorrectness(t, setup, leftJobID, rightJobID, 5*time.Minute, "kv", "kv")
 }
 
 type ldrJobInfo struct {
@@ -442,23 +555,26 @@ func setupLDR(
 	t test.Test,
 	c cluster.Cluster,
 	setup multiClusterSetup,
-	kvWorkload replicateKV,
+	dbName string,
+	tableName string,
+	initCmd func(tenantName string, nodes option.NodeListOption) string,
 ) (int, int) {
 	c.Run(ctx,
 		option.WithNodes(setup.workloadNode),
-		kvWorkload.sourceInitCmd("system", setup.left.nodes))
+		initCmd("system", setup.left.nodes))
 	c.Run(ctx,
 		option.WithNodes(setup.workloadNode),
-		kvWorkload.sourceInitCmd("system", setup.right.nodes))
+		initCmd("system", setup.right.nodes))
 
 	// Setup LDR-specific columns
-	setup.left.sysSQL.Exec(t, "ALTER TABLE kv.kv ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL")
-	setup.right.sysSQL.Exec(t, "ALTER TABLE kv.kv ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL")
+	timestampQuery := fmt.Sprintf("ALTER TABLE %s.%s ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL", dbName, tableName)
+	setup.left.sysSQL.Exec(t, timestampQuery)
+	setup.right.sysSQL.Exec(t, timestampQuery)
 
 	startLDR := func(targetDB *sqlutils.SQLRunner, sourceURL string) int {
-		targetDB.Exec(t, "USE kv")
+		targetDB.Exec(t, fmt.Sprintf("USE %s", dbName))
 		r := targetDB.QueryRow(t,
-			"CREATE LOGICAL REPLICATION STREAM FROM TABLE kv ON $1 INTO TABLE kv",
+			fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %s ON $1 INTO TABLE %s", tableName, tableName),
 			sourceURL,
 		)
 		var jobID int
@@ -466,8 +582,8 @@ func setupLDR(
 		return jobID
 	}
 
-	leftJobID := startLDR(setup.left.sysSQL, setup.right.PgURLForDatabase("kv"))
-	rightJobID := startLDR(setup.right.sysSQL, setup.left.PgURLForDatabase("kv"))
+	leftJobID := startLDR(setup.left.sysSQL, setup.right.PgURLForDatabase(dbName))
+	rightJobID := startLDR(setup.right.sysSQL, setup.left.PgURLForDatabase(dbName))
 
 	// TODO(ssd): We wait for the replicated time to
 	// avoid starting the workload here until we
@@ -481,7 +597,11 @@ func setupLDR(
 }
 
 func VerifyCorrectness(
-	t test.Test, setup multiClusterSetup, leftJobID, rightJobID int, waitTime time.Duration,
+	t test.Test,
+	setup multiClusterSetup,
+	leftJobID, rightJobID int,
+	waitTime time.Duration,
+	dbName, tableName string,
 ) {
 	t.L().Printf("Verifying left and right tables")
 	now := timeutil.Now()
@@ -493,8 +613,9 @@ func VerifyCorrectness(
 	// this table while we are using in-row storage
 	// for crdb_internal_mvcc_timestamp.
 	var leftCount, rightCount int
-	setup.left.sysSQL.QueryRow(t, "SELECT count(1) FROM kv.kv").Scan(&leftCount)
-	setup.right.sysSQL.QueryRow(t, "SELECT count(1) FROM kv.kv").Scan(&rightCount)
+	selectQuery := fmt.Sprintf("SELECT count(1) FROM %s.%s", dbName, tableName)
+	setup.left.sysSQL.QueryRow(t, selectQuery).Scan(&leftCount)
+	setup.right.sysSQL.QueryRow(t, selectQuery).Scan(&rightCount)
 	require.Equal(t, leftCount, rightCount)
 }
 
