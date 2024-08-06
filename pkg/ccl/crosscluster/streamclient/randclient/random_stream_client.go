@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamclient
+package randclient
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -28,9 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -47,11 +50,6 @@ const (
 	// random stream client.
 	RandomStreamSchemaPlaceholder = "CREATE TABLE %s (k INT PRIMARY KEY, v INT)"
 
-	// RandomGenScheme is the URI scheme used to create a test load.
-	RandomGenScheme = "randomgen"
-	// ValueRangeKey controls the range of the randomly generated values produced
-	// by this workload. The workload will generate between 0 and this value.
-	ValueRangeKey = "VALUE_RANGE"
 	// EventFrequency is the frequency in nanoseconds that the stream will emit
 	// randomly generated KV events.
 	EventFrequency = "EVENT_FREQUENCY"
@@ -65,7 +63,9 @@ const (
 	// events.
 	DupProbability = "DUP_PROBABILITY"
 	// SSTProbability controls the probability with which we emit SST event.
-	SSTProbability = "SST_PROBABILITY"
+	SSTProbability  = "SST_PROBABILITY"
+	ErrProbability  = "ERROR_PROBABILITY"
+	ExistingTableID = "TABLE_ID"
 	// TenantID specifies the ID of the tenant we are ingesting data into. This
 	// allows the client to prefix the generated KVs with the appropriate tenant
 	// prefix.
@@ -82,6 +82,13 @@ const (
 	IngestionTablePrefix = "foo"
 )
 
+func init() {
+	streamclient.RandomGenClientBuilder = newRandomStreamClient
+	streamclient.GetRandomStreamClientSingletonForTesting = func() streamclient.RandomClient {
+		return randomStreamClientSingleton
+	}
+}
+
 // TODO(dt): just make interceptors a singleton, not the whole client.
 var randomStreamClientSingleton = func() *RandomStreamClient {
 	c := RandomStreamClient{}
@@ -90,47 +97,47 @@ var randomStreamClientSingleton = func() *RandomStreamClient {
 	return &c
 }()
 
-// GetRandomStreamClientSingletonForTesting returns the singleton instance of
-// the client. This is to be used in testing, when interceptors can be
-// registered on the client to observe events.
-func GetRandomStreamClientSingletonForTesting() *RandomStreamClient {
-	return randomStreamClientSingleton
-}
-
-// InterceptFn is a function that will intercept events emitted by
-// an InterceptableStreamClient
-type InterceptFn func(event crosscluster.Event, spec SubscriptionToken)
-
-// DialInterceptFn is a function that will intercept Dial calls made to an
-// InterceptableStreamClient
-type DialInterceptFn func(streamURL *url.URL) error
-
-// HeartbeatInterceptFn is a function that will intercept calls to a client's
-// Heartbeat.
-type HeartbeatInterceptFn func(timestamp hlc.Timestamp)
-
-// SSTableMakerFn is a function that generates RangeFeedSSTable event
-// with a given list of roachpb.KeyValue.
-type SSTableMakerFn func(keyValues []roachpb.KeyValue) kvpb.RangeFeedSSTable
-
 // randomStreamConfig specifies the variables that controls the rate and type of
 // events that the generated stream emits.
 type randomStreamConfig struct {
-	valueRange          int
 	eventFrequency      time.Duration
 	eventsPerCheckpoint int
 	numPartitions       int
 	dupProbability      float64
+	errorProbability    float64
 	sstProbability      float64
 
-	tenantID roachpb.TenantID
+	existingTableID catid.DescID
+	tenantID        roachpb.TenantID
 	// startTenant and endTenant extend checkpoint spans to the tenant span.
 	startTenant, endTenant bool
 }
 
+type randomEvent int
+
+const (
+	randomKV randomEvent = iota
+	randomSST
+	randomError
+)
+
+func (c randomStreamConfig) randomEvent(rng *rand.Rand) (randomEvent, error) {
+	if c.sstProbability+c.errorProbability > 1 {
+		return 0, errors.AssertionFailedf("misconfigured random stream")
+	}
+
+	prob := rng.Float64()
+	if c.sstProbability > 0 && prob < c.sstProbability {
+		return randomSST, nil
+	} else if c.errorProbability > 0 && prob < (c.sstProbability+c.errorProbability) {
+		return randomError, nil
+	} else {
+		return randomKV, nil
+	}
+}
+
 func parseRandomStreamConfig(streamURL *url.URL) (randomStreamConfig, error) {
 	c := randomStreamConfig{
-		valueRange:          100,
 		eventFrequency:      10 * time.Microsecond,
 		eventsPerCheckpoint: 30,
 		numPartitions:       1, // TODO(casper): increases this
@@ -140,13 +147,6 @@ func parseRandomStreamConfig(streamURL *url.URL) (randomStreamConfig, error) {
 	}
 
 	var err error
-	if valueRangeStr := streamURL.Query().Get(ValueRangeKey); valueRangeStr != "" {
-		c.valueRange, err = strconv.Atoi(valueRangeStr)
-		if err != nil {
-			return c, err
-		}
-	}
-
 	if eventFreqStr := streamURL.Query().Get(EventFrequency); eventFreqStr != "" {
 		eventFreq, err := strconv.Atoi(eventFreqStr)
 		c.eventFrequency = time.Duration(eventFreq)
@@ -164,6 +164,13 @@ func parseRandomStreamConfig(streamURL *url.URL) (randomStreamConfig, error) {
 
 	if sstProbabilityStr := streamURL.Query().Get(SSTProbability); sstProbabilityStr != "" {
 		c.sstProbability, err = strconv.ParseFloat(sstProbabilityStr, 32)
+		if err != nil {
+			return c, err
+		}
+	}
+
+	if errProbabilityStr := streamURL.Query().Get(ErrProbability); errProbabilityStr != "" {
+		c.errorProbability, err = strconv.ParseFloat(errProbabilityStr, 32)
 		if err != nil {
 			return c, err
 		}
@@ -206,21 +213,30 @@ func parseRandomStreamConfig(streamURL *url.URL) (randomStreamConfig, error) {
 		c.endTenant = b
 	}
 
+	if tableIDStr := streamURL.Query().Get(ExistingTableID); tableIDStr != "" {
+		id, err := strconv.Atoi(tableIDStr)
+		if err != nil {
+			return c, err
+		}
+		c.existingTableID = catid.DescID(id)
+	}
+
 	return c, nil
 }
 
 func (c randomStreamConfig) URL(table int, startsTenant, finishesTenant bool) string {
 	u := &url.URL{
-		Scheme: RandomGenScheme,
+		Scheme: streamclient.RandomGenScheme,
 		Host:   strconv.Itoa(table),
 	}
 	q := u.Query()
-	q.Add(ValueRangeKey, strconv.Itoa(c.valueRange))
 	q.Add(EventFrequency, strconv.Itoa(int(c.eventFrequency)))
 	q.Add(EventsPerCheckpoint, strconv.Itoa(c.eventsPerCheckpoint))
 	q.Add(NumPartitions, strconv.Itoa(c.numPartitions))
+	q.Add(ExistingTableID, strconv.Itoa(int(c.existingTableID)))
 	q.Add(DupProbability, fmt.Sprintf("%f", c.dupProbability))
 	q.Add(SSTProbability, fmt.Sprintf("%f", c.sstProbability))
+	q.Add(ErrProbability, fmt.Sprintf("%f", c.errorProbability))
 	q.Add(TenantSpanStart, strconv.FormatBool(startsTenant))
 	q.Add(TenantSpanEnd, strconv.FormatBool(finishesTenant))
 	q.Add(TenantID, strconv.Itoa(int(c.tenantID.ToUint64())))
@@ -232,23 +248,31 @@ type randomEventGenerator struct {
 	rng                        *rand.Rand
 	config                     randomStreamConfig
 	numEventsSinceLastResolved int
-	sstMaker                   SSTableMakerFn
+	sstMaker                   streamclient.SSTableMakerFn
 	codec                      keys.SQLCodec
-	tableDesc                  *tabledesc.Mutable
+	tableDesc                  catalog.TableDescriptor
 	systemKVs                  []roachpb.KeyValue
 }
 
 func newRandomEventGenerator(
-	rng *rand.Rand, partitionURL *url.URL, config randomStreamConfig, fn SSTableMakerFn,
+	rng *rand.Rand,
+	partitionURL *url.URL,
+	config randomStreamConfig,
+	fn streamclient.SSTableMakerFn,
+	tableDesc catalog.TableDescriptor,
 ) (*randomEventGenerator, error) {
 	var partitionTableID int
 	partitionTableID, err := strconv.Atoi(partitionURL.Host)
 	if err != nil {
 		return nil, err
 	}
-	tableDesc, systemKVs, err := getDescriptorAndNamespaceKVForTableID(config, descpb.ID(partitionTableID))
-	if err != nil {
-		return nil, err
+
+	var systemKVs []roachpb.KeyValue
+	if tableDesc == nil {
+		tableDesc, systemKVs, err = getDescriptorAndNamespaceKVForTableID(config, descpb.ID(partitionTableID))
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &randomEventGenerator{
 		rng:                        rng,
@@ -261,8 +285,7 @@ func newRandomEventGenerator(
 	}, nil
 }
 
-func (r *randomEventGenerator) generateNewEvent() crosscluster.Event {
-	var event crosscluster.Event
+func (r *randomEventGenerator) generateNewEvent() (crosscluster.Event, error) {
 	if r.numEventsSinceLastResolved == r.config.eventsPerCheckpoint {
 		sp := r.tableDesc.TableSpan(r.codec)
 		if r.config.startTenant {
@@ -275,33 +298,40 @@ func (r *randomEventGenerator) generateNewEvent() crosscluster.Event {
 		resolvedTime := timeutil.Now()
 		hlcResolvedTime := hlc.Timestamp{WallTime: resolvedTime.UnixNano()}
 		resolvedSpan := jobspb.ResolvedSpan{Span: sp, Timestamp: hlcResolvedTime}
-		event = crosscluster.MakeCheckpointEvent([]jobspb.ResolvedSpan{resolvedSpan})
 		r.numEventsSinceLastResolved = 0
-	} else {
-		// If there are system KVs to emit, prioritize those.
-		if len(r.systemKVs) > 0 {
-			systemKV := r.systemKVs[0]
-			systemKV.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			event = crosscluster.MakeKVEventFromKVs([]roachpb.KeyValue{systemKV})
-			r.systemKVs = r.systemKVs[1:]
-			return event
-		}
-
-		// Emit SST with given probability.
-		// TODO(casper): add support for DelRange.
-		if prob := r.rng.Float64(); prob < r.config.sstProbability {
-			size := 10 + r.rng.Intn(30)
-			keyVals := make([]roachpb.KeyValue, 0, size)
-			for i := 0; i < size; i++ {
-				keyVals = append(keyVals, makeRandomKey(r.rng, r.config, r.codec, r.tableDesc))
-			}
-			event = crosscluster.MakeSSTableEvent(r.sstMaker(keyVals))
-		} else {
-			event = crosscluster.MakeKVEventFromKVs([]roachpb.KeyValue{makeRandomKey(r.rng, r.config, r.codec, r.tableDesc)})
-		}
-		r.numEventsSinceLastResolved++
+		return crosscluster.MakeCheckpointEvent([]jobspb.ResolvedSpan{resolvedSpan}), nil
 	}
-	return event
+
+	// If there are system KVs to emit, prioritize those.
+	if len(r.systemKVs) > 0 {
+		systemKV := r.systemKVs[0]
+		systemKV.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		event := crosscluster.MakeKVEventFromKVs([]roachpb.KeyValue{systemKV})
+		r.systemKVs = r.systemKVs[1:]
+		return event, nil
+	}
+
+	eventType, err := r.config.randomEvent(r.rng)
+	if err != nil {
+		return nil, err
+	}
+	switch eventType {
+	case randomKV:
+		r.numEventsSinceLastResolved++
+		return crosscluster.MakeKVEventFromKVs([]roachpb.KeyValue{makeRandomKey(r.rng, r.config, r.codec, r.tableDesc)}), nil
+	case randomSST:
+		size := 10 + r.rng.Intn(30)
+		keyVals := make([]roachpb.KeyValue, 0, size)
+		for i := 0; i < size; i++ {
+			keyVals = append(keyVals, makeRandomKey(r.rng, r.config, r.codec, r.tableDesc))
+		}
+		return crosscluster.MakeSSTableEvent(r.sstMaker(keyVals)), nil
+	case randomError:
+		return nil, errors.Errorf("randomly ingested event")
+	default:
+		return nil, errors.AssertionFailedf("unknown event type: %d", eventType)
+	}
+
 }
 
 // RandomStreamClient is a temporary stream client implementation that generates
@@ -311,6 +341,7 @@ func (r *randomEventGenerator) generateNewEvent() crosscluster.Event {
 // URL. Each partition covers a single table span.
 type RandomStreamClient struct {
 	config    randomStreamConfig
+	tableDesc catalog.TableDescriptor
 	streamURL *url.URL
 
 	// mu is used to provide a threadsafe interface to interceptors.
@@ -319,28 +350,35 @@ type RandomStreamClient struct {
 
 		// interceptors can be registered to peek at every event generated by this
 		// client and which partition spec it was sent to.
-		interceptors          []InterceptFn
-		dialInterceptors      []DialInterceptFn
-		heartbeatInterceptors []HeartbeatInterceptFn
-		sstMaker              SSTableMakerFn
+		interceptors          []streamclient.InterceptFn
+		dialInterceptors      []streamclient.DialInterceptFn
+		heartbeatInterceptors []streamclient.HeartbeatInterceptFn
+		sstMaker              streamclient.SSTableMakerFn
 		tableID               int
 	}
 }
 
-var _ Client = &RandomStreamClient{}
+var _ streamclient.Client = &RandomStreamClient{}
 
 // newRandomStreamClient returns a stream client that generates a random set of
 // events on a table with an integer key and integer value for the table with
 // the given ID.
-func newRandomStreamClient(streamURL *url.URL) (Client, error) {
+func newRandomStreamClient(streamURL *url.URL, db descs.DB) (streamclient.Client, error) {
 	c := randomStreamClientSingleton
-
 	streamConfig, err := parseRandomStreamConfig(streamURL)
 	if err != nil {
 		return nil, err
 	}
 	c.config = streamConfig
 	c.streamURL = streamURL
+	if c.config.existingTableID > 0 {
+		if err := db.DescsTxn(context.Background(), func(ctx context.Context, txn descs.Txn) error {
+			c.tableDesc, err = txn.Descriptors().ByID(txn.KV()).Get().Table(ctx, c.config.existingTableID)
+			return err
+		}); err != nil {
+			return nil, err
+		}
+	}
 	return c, nil
 }
 
@@ -352,23 +390,15 @@ func (m *RandomStreamClient) getNextTableID() int {
 	return ret
 }
 
-func (m *RandomStreamClient) tableDescForID(tableID int) (*tabledesc.Mutable, error) {
-	partitionURI := m.config.URL(tableID, false, false)
-	partitionURL, err := url.Parse(partitionURI)
-	if err != nil {
-		return nil, err
+func (m *RandomStreamClient) tableDescForID(tableID int) (catalog.TableDescriptor, error) {
+	if m.config.existingTableID != 0 && (m.config.existingTableID != catid.DescID(tableID)) {
+		return nil, errors.AssertionFailedf("expected table ID %d requested", tableID)
+	} else if m.config.existingTableID != 0 {
+		return m.tableDesc, nil
+	} else {
+		tableDesc, _, err := getDescriptorAndNamespaceKVForTableID(m.config, descpb.ID(tableID))
+		return tableDesc, err
 	}
-	config, err := parseRandomStreamConfig(partitionURL)
-	if err != nil {
-		return nil, err
-	}
-	var partitionTableID int
-	partitionTableID, err = strconv.Atoi(partitionURL.Host)
-	if err != nil {
-		return nil, err
-	}
-	tableDesc, _, err := getDescriptorAndNamespaceKVForTableID(config, descpb.ID(partitionTableID))
-	return tableDesc, err
 }
 
 // Dial implements Client interface.
@@ -390,9 +420,9 @@ func (m *RandomStreamClient) Dial(ctx context.Context) error {
 // Plan implements the Client interface.
 func (m *RandomStreamClient) PlanPhysicalReplication(
 	ctx context.Context, _ streampb.StreamID,
-) (Topology, error) {
-	topology := Topology{
-		Partitions:     make([]PartitionInfo, 0, m.config.numPartitions),
+) (streamclient.Topology, error) {
+	topology := streamclient.Topology{
+		Partitions:     make([]streamclient.PartitionInfo, 0, m.config.numPartitions),
 		SourceTenantID: m.config.tenantID,
 	}
 	tenantSpan := keys.MakeTenantSpan(m.config.tenantID)
@@ -404,14 +434,14 @@ func (m *RandomStreamClient) PlanPhysicalReplication(
 		tableID := m.getNextTableID()
 		tableDesc, err := m.tableDescForID(tableID)
 		if err != nil {
-			return Topology{}, err
+			return streamclient.Topology{}, err
 		}
 
 		partitionURI := m.config.URL(tableID, i == 0, i == m.config.numPartitions-1)
 		log.Infof(ctx, "planning random stream partition %d for tenant %d: %q", i, m.config.tenantID, partitionURI)
 
 		topology.Partitions = append(topology.Partitions,
-			PartitionInfo{
+			streamclient.PartitionInfo{
 				ID:                strconv.Itoa(i),
 				SrcAddr:           crosscluster.PartitionAddress(partitionURI),
 				SubscriptionToken: []byte(partitionURI),
@@ -471,7 +501,7 @@ func getDescriptorAndNamespaceKVForTableID(
 
 	// Generate namespace entry.
 	codec := keys.MakeSQLCodec(config.tenantID)
-	k := rekey(config.tenantID, catalogkeys.EncodeNameKey(codec, testTable))
+	k := catalogkeys.EncodeNameKey(codec, testTable)
 	var value roachpb.Value
 	value.SetInt(int64(testTable.GetID()))
 	value.InitChecksum(k)
@@ -482,7 +512,6 @@ func getDescriptorAndNamespaceKVForTableID(
 
 	// Generate descriptor entry.
 	descKey := catalogkeys.MakeDescMetadataKey(codec, testTable.GetID())
-	descKey = rekey(config.tenantID, descKey)
 	descDesc := testTable.DescriptorProto()
 	var descValue roachpb.Value
 	if err := descValue.SetProto(descDesc); err != nil {
@@ -507,11 +536,11 @@ func (m *RandomStreamClient) Subscribe(
 	_ context.Context,
 	_ streampb.StreamID,
 	_, _ int32,
-	spec SubscriptionToken,
+	spec streamclient.SubscriptionToken,
 	initialScanTime hlc.Timestamp,
 	_ span.Frontier,
-	_ ...SubscribeOption,
-) (Subscription, error) {
+	_ ...streamclient.SubscribeOption,
+) (streamclient.Subscription, error) {
 	partitionURL, err := url.Parse(string(spec))
 	if err != nil {
 		return nil, err
@@ -534,23 +563,28 @@ func (m *RandomStreamClient) Subscribe(
 	reg, err := func() (*randomEventGenerator, error) {
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		return newRandomEventGenerator(rng, partitionURL, config, m.mu.sstMaker)
+		return newRandomEventGenerator(rng, partitionURL, config, m.mu.sstMaker, m.tableDesc)
 	}()
 	if err != nil {
 		return nil, err
 	}
 
 	receiveFn := func(ctx context.Context) error {
-		defer close(eventCh)
-
 		dataEventInterval := config.eventFrequency
 		var lastEventCopy crosscluster.Event
 		for {
 			var event crosscluster.Event
 			if lastEventCopy != nil && rng.Float64() < config.dupProbability {
+				log.VInfof(ctx, 2, "sending duplicate event")
 				event = duplicateEvent(lastEventCopy)
 			} else {
-				event = reg.generateNewEvent()
+				var err error
+				event, err = reg.generateNewEvent()
+				if err != nil {
+					log.VInfof(ctx, 2, "sending error: %v", err)
+					return err
+				}
+				log.VInfof(ctx, 2, "sending event: %v", event.Type())
 			}
 			lastEventCopy = duplicateEvent(event)
 
@@ -600,11 +634,14 @@ func (p *RandomStreamClient) PriorReplicationDetails(
 type randomStreamSubscription struct {
 	receiveFn func(ctx context.Context) error
 	eventCh   chan crosscluster.Event
+	err       error
 }
 
 // Subscribe implements the Subscription interface.
 func (r *randomStreamSubscription) Subscribe(ctx context.Context) error {
-	return r.receiveFn(ctx)
+	defer close(r.eventCh)
+	r.err = r.receiveFn(ctx)
+	return r.err
 }
 
 // Events implements the Subscription interface.
@@ -614,61 +651,69 @@ func (r *randomStreamSubscription) Events() <-chan crosscluster.Event {
 
 // Err implements the Subscription interface.
 func (r *randomStreamSubscription) Err() error {
-	return nil
-}
-
-func rekey(tenantID roachpb.TenantID, k roachpb.Key) roachpb.Key {
-	// Strip old prefix.
-	tenantPrefix := keys.MakeTenantPrefix(tenantID)
-	noTenantPrefix, _, err := keys.DecodeTenantPrefix(k)
-	if err != nil {
-		panic(err)
-	}
-
-	// Prepend tenant prefix.
-	rekeyedKey := append(tenantPrefix, noTenantPrefix...)
-	return rekeyedKey
+	return r.err
 }
 
 func makeRandomKey(
-	r *rand.Rand, config randomStreamConfig, codec keys.SQLCodec, tableDesc *tabledesc.Mutable,
+	r *rand.Rand, config randomStreamConfig, codec keys.SQLCodec, tableDesc catalog.TableDescriptor,
 ) roachpb.KeyValue {
-	// Create a key holding a random integer.
-	keyDatum := tree.NewDInt(tree.DInt(r.Intn(config.valueRange)))
-
-	index := tableDesc.GetPrimaryIndex()
-	// Create the ColumnID to index in datums slice map needed by
-	// MakeIndexKeyPrefix.
-	var colIDToRowIndex catalog.TableColMap
-	colIDToRowIndex.Set(index.GetKeyColumnID(0), 0)
-
-	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc.GetID(), index.GetID())
-	k, _, err := rowenc.EncodeIndexKey(tableDesc, index, colIDToRowIndex, tree.Datums{keyDatum}, keyPrefix)
+	datums, err := randDatumsForTable(r, tableDesc)
 	if err != nil {
 		panic(err)
 	}
-	k = keys.MakeFamilyKey(k, uint32(tableDesc.Families[0].ID))
-
-	k = rekey(config.tenantID, k)
-
-	// Create a value holding a random integer.
-	valueDatum := tree.NewDInt(tree.DInt(r.Intn(config.valueRange)))
-	valueBuf, err := valueside.Encode(
-		[]byte(nil), valueside.MakeColumnIDDelta(0, tableDesc.Columns[1].ID), valueDatum, []byte(nil))
+	kv, err := encodeKV(codec, tableDesc, datums)
 	if err != nil {
 		panic(err)
 	}
-	var v roachpb.Value
-	v.SetTuple(valueBuf)
-	v.ClearChecksum()
-	v.InitChecksum(k)
 
-	v.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	kv.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	return kv
+}
 
-	return roachpb.KeyValue{
-		Key:   k,
-		Value: v,
+func encodeKV(
+	codec keys.SQLCodec, descr catalog.TableDescriptor, datums []tree.Datum,
+) (roachpb.KeyValue, error) {
+	primary := descr.GetPrimaryIndex()
+	var colMap catalog.TableColMap
+	for i := range datums {
+		col, err := catalog.MustFindColumnByID(descr, descpb.ColumnID(i+1))
+		if err != nil {
+			return roachpb.KeyValue{}, err
+		}
+		colMap.Set(col.GetID(), col.Ordinal())
 	}
+
+	const includeEmpty = true
+	indexEntries, err := rowenc.EncodePrimaryIndex(codec, descr, primary,
+		colMap, datums, includeEmpty)
+	if err != nil {
+		return roachpb.KeyValue{}, err
+	}
+	for i := range indexEntries {
+		indexEntries[i].Value.InitChecksum(indexEntries[i].Key)
+	}
+	return roachpb.KeyValue{Key: indexEntries[0].Key, Value: indexEntries[0].Value}, nil
+}
+
+func randDatumsForTable(rng *rand.Rand, td catalog.TableDescriptor) ([]tree.Datum, error) {
+	if td.NumFamilies() != 1 {
+		return nil, errors.AssertionFailedf("random client does not support multi-column-family tables")
+	}
+
+	columns := td.PublicColumns()
+	datums := make([]tree.Datum, 0, len(columns))
+	for _, c := range columns {
+		if c.IsComputed() {
+			return nil, errors.Errorf("unable to generate random datums for table with computed column %q", c.GetName())
+		}
+		if c.GetName() == "crdb_replication_origin_timestamp" {
+			datums = append(datums, tree.DNull)
+		} else {
+			datums = append(datums,
+				randgen.RandDatum(rng, c.GetType(), c.IsNullable()))
+		}
+	}
+	return datums, nil
 }
 
 func duplicateEvent(event crosscluster.Event) crosscluster.Event {
@@ -698,14 +743,14 @@ func duplicateEvent(event crosscluster.Event) crosscluster.Event {
 			WriteTS: sst.WriteTS,
 		})
 	default:
-		panic("unsopported event type")
+		panic("unsupported event type")
 	}
 	return dup
 }
 
 // RegisterInterception registers a interceptor to be called after
 // an event is emitted from the client.
-func (m *RandomStreamClient) RegisterInterception(fn InterceptFn) {
+func (m *RandomStreamClient) RegisterInterception(fn streamclient.InterceptFn) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.interceptors = append(m.mu.interceptors, fn)
@@ -713,7 +758,7 @@ func (m *RandomStreamClient) RegisterInterception(fn InterceptFn) {
 
 // RegisterDialInterception registers a interceptor to be called
 // whenever Dial is called on the client.
-func (m *RandomStreamClient) RegisterDialInterception(fn DialInterceptFn) {
+func (m *RandomStreamClient) RegisterDialInterception(fn streamclient.DialInterceptFn) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.dialInterceptors = append(m.mu.dialInterceptors, fn)
@@ -721,7 +766,7 @@ func (m *RandomStreamClient) RegisterDialInterception(fn DialInterceptFn) {
 
 // RegisterHeartbeatInterception registers an interceptor to be called
 // whenever Heartbeat is called on the client.
-func (m *RandomStreamClient) RegisterHeartbeatInterception(fn HeartbeatInterceptFn) {
+func (m *RandomStreamClient) RegisterHeartbeatInterception(fn streamclient.HeartbeatInterceptFn) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.heartbeatInterceptors = append(m.mu.heartbeatInterceptors, fn)
@@ -729,7 +774,7 @@ func (m *RandomStreamClient) RegisterHeartbeatInterception(fn HeartbeatIntercept
 
 // RegisterSSTableGenerator registers a functor to be called
 // whenever an SSTable event is to be generated.
-func (m *RandomStreamClient) RegisterSSTableGenerator(fn SSTableMakerFn) {
+func (m *RandomStreamClient) RegisterSSTableGenerator(fn streamclient.SSTableMakerFn) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.sstMaker = fn
@@ -745,14 +790,53 @@ func (m *RandomStreamClient) ClearInterceptors() {
 	m.mu.sstMaker = nil
 }
 
-func (p *RandomStreamClient) PlanLogicalReplication(
+func (m *RandomStreamClient) PlanLogicalReplication(
 	ctx context.Context, req streampb.LogicalReplicationPlanRequest,
-) (LogicalReplicationPlan, error) {
-	return LogicalReplicationPlan{}, errors.AssertionFailedf("unimplemented")
+) (streamclient.LogicalReplicationPlan, error) {
+	if m.config.numPartitions != 1 {
+		return streamclient.LogicalReplicationPlan{}, errors.AssertionFailedf("random client only supports logical replication with 1 partition")
+	}
+
+	topology := streamclient.Topology{
+		Partitions:     make([]streamclient.PartitionInfo, 0, m.config.numPartitions),
+		SourceTenantID: m.config.tenantID,
+	}
+
+	srcCodec := keys.MakeSQLCodec(m.config.tenantID)
+	tableSpan := m.tableDesc.TableSpan(srcCodec)
+	partitionURI := m.config.URL(int(m.tableDesc.GetID()), false, false)
+	topology.Partitions = append(topology.Partitions,
+		streamclient.PartitionInfo{
+			ID:                strconv.Itoa(1),
+			SrcAddr:           crosscluster.PartitionAddress(partitionURI),
+			SubscriptionToken: []byte(partitionURI),
+			Spans:             []roachpb.Span{m.tableDesc.TableSpan(srcCodec)},
+		})
+	return streamclient.LogicalReplicationPlan{
+		Topology:    topology,
+		SourceSpans: []roachpb.Span{tableSpan},
+		DescriptorMap: map[int32]descpb.TableDescriptor{
+			int32(m.tableDesc.GetID()): *m.tableDesc.TableDesc(),
+		},
+	}, nil
 }
 
-func (p *RandomStreamClient) CreateForTables(
+func (m *RandomStreamClient) CreateForTables(
 	ctx context.Context, req *streampb.ReplicationProducerRequest,
 ) (*streampb.ReplicationProducerSpec, error) {
-	return nil, errors.AssertionFailedf("unimplemented")
+	if len(req.TableNames) > 1 {
+		return nil, errors.AssertionFailedf("random stream only supports 1 table")
+	}
+	if m.tableDesc == nil {
+		return nil, errors.AssertionFailedf("random stream not configured for logical streaming")
+	}
+	return &streampb.ReplicationProducerSpec{
+		StreamID:             streampb.StreamID(1),
+		ReplicationStartTime: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
+		TableDescriptors: map[string]descpb.TableDescriptor{
+			req.TableNames[0]: *m.tableDesc.TableDesc(),
+		},
+	}, nil
 }
+
+func (m *RandomStreamClient) URL() string { return m.streamURL.String() }
