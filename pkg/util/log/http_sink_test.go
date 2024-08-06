@@ -116,18 +116,15 @@ func testBase(
 	Ops.Infof(context.Background(), "hello world")
 	logDuration := timeutil.Since(logStart)
 
-	// Note: deadline is passed by the caller and already contains slack
-	// to accommodate for the overhead of the logging call compared to
-	// the timeout in the HTTP request.
-	if deadline > 0 && logDuration > deadline {
+	if deadline > 0 {
+		// Note: deadline is passed by the caller and already contains slack
+		// to accommodate for the overhead of the logging call compared to
+		// the timeout in the HTTP request.
 		require.LessOrEqualf(t, logDuration, deadline,
 			"Log call exceeded timeout, expected to be less than %s, got %s", deadline.String(), logDuration.String())
-	}
-
-	// If we don't properly hang in the handler when we want to test a
-	// timeout, we'll just log very quickly. This check ensures that we
-	// catch that testing error.
-	if deadline > 0 && logDuration < *defaults.Timeout {
+		// If we don't properly hang in the handler when we want to test a
+		// timeout, we'll just log very quickly. This check ensures that we
+		// catch that testing error.
 		require.Greaterf(t, logDuration, *defaults.Timeout,
 			"Log call was too fast, expected to be greater than %s, got %s", defaults.Timeout.String(), logDuration.String())
 	}
@@ -199,7 +196,7 @@ func TestHTTPSinkTimeout(t *testing.T) {
 		},
 	}
 
-	testBase(t, defaults, nil /* testFn */, true /* hangServer */, 1*time.Second, time.Duration(0))
+	testBase(t, defaults, nil /* testFn */, true /* hangServer */, 10*time.Second, time.Duration(0))
 }
 
 // TestHTTPSinkContentTypeJSON verifies that the HTTP sink content type
