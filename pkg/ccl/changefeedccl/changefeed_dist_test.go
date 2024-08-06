@@ -404,6 +404,7 @@ func newRangeDistributionTester(
 	// Use manual replication only.
 	tc.ToggleReplicateQueues(false)
 
+	t.Logf("creating and splitting table into single-key ranges")
 	sqlDB.ExecMultiple(t,
 		"CREATE TABLE x (id INT PRIMARY KEY)",
 		"INSERT INTO x SELECT generate_series(0, 63)",
@@ -417,6 +418,7 @@ func newRangeDistributionTester(
 		if i != 0 {
 			nodeID = int(math.Floor(math.Log2(float64(i)))) + 1
 		}
+		t.Logf("relocating range for %d to store %d", i, nodeID)
 		cmd := fmt.Sprintf(`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], %d)`,
 			nodeID, i,
 		)
