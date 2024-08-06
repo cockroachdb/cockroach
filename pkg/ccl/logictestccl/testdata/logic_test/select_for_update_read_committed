@@ -573,7 +573,7 @@ statement ok
 GRANT ALL ON xyz TO testuser
 
 statement ok
-INSERT INTO xyz VALUES (1, 10, 100), (2, 10, 100)
+INSERT INTO xyz VALUES (1, 10, 100), (2, 10, 200), (3, 30, 100)
 
 user testuser
 
@@ -603,7 +603,7 @@ BEGIN ISOLATION LEVEL READ COMMITTED;
 SELECT * FROM xyz@xyz_y_idx WHERE y = 10 ORDER BY y, x LIMIT 1 FOR UPDATE SKIP LOCKED;
 COMMIT;
 ----
-2  10  100
+2  10  200
 
 # The unlocked reads in SKIP LOCKED should not block on locks, either, even
 # under serializable isolation.
@@ -617,7 +617,7 @@ SET enable_durable_locking_for_serializable = true
 query III
 SELECT * FROM xyz WHERE z = 100 ORDER BY x FOR UPDATE SKIP LOCKED
 ----
-2  10  100
+3  30  100
 
 user testuser
 
