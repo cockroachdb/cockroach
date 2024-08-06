@@ -21,7 +21,6 @@ import {
   MetricProps,
 } from "src/views/shared/components/metricQuery";
 
-
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 type TSQueryResult = protos.cockroach.ts.tspb.TimeSeriesQueryResponse.IResult;
 
@@ -90,6 +89,96 @@ export function formatMetricData(
   return formattedData;
 }
 
+function hoverTooltipPlugin(formatter: (v: number) => string) {
+  const shiftX = 10;
+  const shiftY = 10;
+  let tooltipLeftOffset = 0;
+  let tooltipTopOffset = 0;
+
+  const tooltip = document.createElement("div");
+  tooltip.className = "u-tooltip";
+
+  let seriesIdx: number = null;
+  let dataIdx: number = null;
+  let over: HTMLDivElement;
+  let tooltipVisible = false;
+
+  function showTooltip() {
+    if (!tooltipVisible) {
+      tooltip.style.display = "block";
+      over.style.cursor = "pointer";
+      tooltipVisible = true;
+    }
+  }
+
+  function hideTooltip() {
+    if (tooltipVisible) {
+      tooltip.style.display = "none";
+      over.style.cursor = null;
+      tooltipVisible = false;
+    }
+  }
+
+  function setTooltip(u: uPlot) {
+    showTooltip();
+
+    // `yAxis` is used instead of `y` here because that's below in the
+    // `uPlot` config as the custom scale that we define.n
+    let top = u.valToPos(u.data[seriesIdx][dataIdx], "yAxis");
+    let lft = u.valToPos(u.data[0][dataIdx], "x");
+
+    tooltip.style.top = tooltipTopOffset + top + shiftX + "px";
+    tooltip.style.left = tooltipLeftOffset + lft + shiftY + "px";
+    tooltip.innerHTML = `<div class="u-label">${u.series[seriesIdx].label}</div>: ${formatter(u.data[seriesIdx][dataIdx])}`;
+
+    // TODO(davidh): can this be simplified? Typescript makes this a bit of a mess.
+    let stroke = u.series[seriesIdx].stroke;
+    if (typeof stroke === "function" && stroke.length === 0) {
+      tooltip.style.borderColor = stroke(u, seriesIdx) as string;
+    } else if (typeof stroke === "string") {
+      tooltip.style.borderColor = stroke;
+    }
+    tooltip.style.borderWidth = "2px";
+  }
+
+  return {
+    hooks: {
+      ready: [
+        (u: uPlot) => {
+          over = u.over;
+          tooltipLeftOffset = parseFloat(over.style.left);
+          tooltipTopOffset = parseFloat(over.style.top);
+          u.root.querySelector(".u-wrap").appendChild(tooltip);
+        },
+      ],
+      setCursor: [
+        (u: uPlot) => {
+          let c = u.cursor;
+
+          if (dataIdx !== c.idx) {
+            dataIdx = c.idx;
+
+            if (seriesIdx != null) setTooltip(u);
+          }
+        },
+      ],
+      setSeries: [
+        (u: uPlot, sidx: number) => {
+          if (seriesIdx !== sidx) {
+            // if (u.series[sidx]?.show) {
+            //   seriesIdx = sidx;
+            // }
+            seriesIdx = sidx;
+
+            if (sidx == null) hideTooltip();
+            else if (dataIdx !== null) setTooltip(u);
+          }
+        },
+      ],
+    },
+  };
+}
+
 // configureUPlotLineChart constructs the uplot Options object based on
 // information about the metrics, axis, and data that we'd like to plot.
 // Most of the settings are defined as functions instead of static values
@@ -100,10 +189,10 @@ export function configureUPlotLineChart(
   metrics: React.ReactElement<MetricProps>[],
   axis: React.ReactElement<AxisProps>,
   data: TSResponse,
+  userPlugins: uPlot.Options["plugins"],
   setMetricsFixedWindow: (startMillis: number, endMillis: number) => void,
   getLatestXAxisDomain: () => AxisDomain,
   getLatestYAxisDomain: () => AxisDomain,
-  legendAsTooltip: boolean,
 ): uPlot.Options {
   const formattedRaw = formatMetricData(metrics, data);
   // Copy palette over since we mutate it in the `series` function
@@ -116,70 +205,23 @@ export function configureUPlotLineChart(
     ...formattedRaw.filter(r => !!r.color).map(r => r.color),
   );
 
-  const tooltipPlugin = () => {
-    return {
-      hooks: {
-        init: (self: uPlot) => {
-          const over: HTMLElement = self.root.querySelector(".u-over");
-          const legend: HTMLElement = self.root.querySelector(".u-legend");
-
-          // apply class to stick a legend to the bottom of a chart if it has more than 10 series
-          if (self.series.length > 10) {
-            legend.classList.add("u-legend--place-bottom");
-          }
-
-          // Show/hide legend when we enter/exit the bounds of the graph
-          over.onmouseenter = () => {
-            legend.style.display = "block";
-          };
-
-          // persistLegend determines if legend should continue showing even when mouse
-          // hovers away.
-          let persistLegend = false;
-
-          over.addEventListener("click", () => {
-            persistLegend = !persistLegend;
-          });
-
-          over.onmouseleave = () => {
-            if (!persistLegend) {
-              legend.style.display = "none";
-            }
-          };
-        },
-        setCursor: (self: uPlot) => {
-          // Place legend to the right of the mouse pointer
-          const legend: HTMLElement = self.root.querySelector(".u-legend");
-          if (self.cursor.left > 0 && self.cursor.top > 0) {
-            // TODO(davidh): This placement is not aware of the viewport edges
-            legend.style.left = self.cursor.left + 100 + "px";
-            legend.style.top = self.cursor.top - 10 + "px";
-          }
-        },
-      },
-    };
-  };
+  const plugins = userPlugins.concat([
+    hoverTooltipPlugin(getLatestYAxisDomain().guideFormat),
+  ]);
 
   // Please see https://github.com/leeoniya/uPlot/tree/master/docs for
   // information on how to construct this object.
   return {
     width: 947,
     height: 300,
-    // TODO(davidh): Enable sync-ed guidelines once legend is redesigned
-    // currently, if you enable this with a hovering legend, the FPS
-    // gets quite choppy on large clusters.
-    // cursor: {
-    //   sync: {
-    //     // graphs with matching keys will get their guidelines
-    //     // sync-ed so we just use the same key for the page
-    //     key: "sync-everything",
-    //   },
-    // },
     cursor: {
       lock: true,
+      focus: {
+        prox: 5,
+      },
     },
     legend: {
-      show: true,
+      show: false,
 
       // This setting sets the default legend behavior to isolate
       // a series when it's clicked in the legend.
@@ -253,7 +295,7 @@ export function configureUPlotLineChart(
         range: () => getLatestYAxisDomain().extent,
       },
     },
-    plugins: legendAsTooltip ? [tooltipPlugin()] : null,
+    plugins,
     hooks: {
       // setSelect is a hook that fires when a selection is made on the graph
       // by dragging a range to zoom.

@@ -21,7 +21,7 @@ import {
   TimeWindow,
   WithTimezone,
 } from "@cockroachlabs/cluster-ui";
-import { Tooltip } from "antd";
+import { Tooltip, Collapse } from "antd";
 import filter from "lodash/filter";
 import flatMap from "lodash/flatMap";
 import Long from "long";
@@ -42,6 +42,9 @@ import {
   formatMetricData,
   formattedSeries,
 } from "src/views/cluster/util/graphs";
+import SortableLegend, {
+  SeriesInfo,
+} from "src/views/cluster/util/sortableLegend";
 import { MonitoringIcon } from "src/views/shared/components/icons/monitoring";
 import {
   Axis,
@@ -67,7 +70,6 @@ export interface OwnProps extends MetricsDataComponentProps {
   hoverOff?: typeof hoverOff;
   hoverState?: HoverState;
   preCalcGraphSize?: boolean;
-  legendAsTooltip?: boolean;
   showMetricsInTooltip?: boolean;
 }
 
@@ -168,10 +170,21 @@ export function fillGaps(
 // Once we receive updates to props, we push new data to the
 // uPlot object.
 // InternalLinegraph is exported for testing.
-export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
+export class InternalLineGraph extends React.Component<
+  LineGraphProps,
+  {
+    seriesInfo: SeriesInfo[];
+  }
+> {
+  debouncedSetLegend: NodeJS.Timeout;
+
   constructor(props: LineGraphProps) {
     super(props);
+    this.debouncedSetLegend = null;
 
+    this.state = {
+      seriesInfo: [],
+    };
     this.setNewTimeRange = this.setNewTimeRange.bind(this);
   }
 
@@ -293,6 +306,71 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
     return hasData;
   };
 
+  setSeriesInfoForLegend = (u = this.u, recomputeMinMax = false): void => {
+    if (!u.series) {
+      return;
+    }
+    this.setState(prevState => {
+      const seriesInfo: SeriesInfo[] = [];
+      u.series.forEach((s, index) => {
+        if (index === 0) return;
+        // seriesInfo excludes the x-axis series.
+        const seriesData = u.data[index] as number[];
+        const stroke: string =
+          typeof s.stroke === "function"
+            ? (s.stroke(u, index) as string)
+            : (s.stroke as string);
+
+        const lastValue =
+          seriesData?.length > u.cursor.idx && u.cursor.idx !== null
+            ? seriesData[u.cursor.idx]
+            : null;
+
+        const sIdx = index - 1;
+        const min = recomputeMinMax
+          ? Math.min(...seriesData)
+          : prevState.seriesInfo[sIdx]?.min?.raw;
+        const max = recomputeMinMax
+          ? Math.max(...seriesData)
+          : prevState.seriesInfo[sIdx]?.max?.raw;
+        let formattedVal: string | number = lastValue;
+        let formattedMin: string | number = min;
+        let formattedMax: string | number = max;
+        if (typeof s.value === "function") {
+          formattedVal = lastValue
+            ? s.value(u, lastValue, index, u.cursor.idx)
+            : "--";
+          formattedMin = min
+            ? s.value(u, min, index, u.series[index].idxs[0])
+            : "--";
+          formattedMax = max
+            ? s.value(u, max, index, u.series[index].idxs[1])
+            : "--";
+        }
+        seriesInfo.push({
+          index,
+          label: s.label,
+          stroke,
+          value: {
+            raw: lastValue,
+            formatted: formattedVal,
+          },
+          max: {
+            raw: max,
+            formatted: formattedMax,
+          },
+          min: {
+            raw: min,
+            formatted: formattedMin,
+          },
+          show: s.show,
+        });
+      });
+
+      return { seriesInfo };
+    });
+  };
+
   componentDidUpdate(prevProps: Readonly<LineGraphProps>) {
     if (
       !this.props.data?.results ||
@@ -352,14 +430,27 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
       // Updates existing plot with new points
       this.u.setData(uPlotData);
     } else {
+      const debounceSetSeries = () => {
+        clearTimeout(this.debouncedSetLegend);
+        this.debouncedSetLegend = setTimeout(() => {
+          this.setSeriesInfoForLegend();
+        }, 300);
+      };
+      const setSeriesInfoPlugin: uPlot.Plugin = {
+        hooks: {
+          init: u => this.setSeriesInfoForLegend(u, true),
+          setData: u => this.setSeriesInfoForLegend(u, true),
+          setLegend: debounceSetSeries,
+        },
+      };
       const options = configureUPlotLineChart(
-        metrics,
-        axis,
+        metrics,,
         data,
+        axis
+        [setSeriesInfoPlugin],
         this.setNewTimeRange,
         () => this.xAxisDomain,
         () => this.yAxisDomain,
-        this.props.legendAsTooltip,
       );
 
       if (this.u) {
@@ -384,7 +475,6 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
       data,
       tenantSource,
       preCalcGraphSize,
-      legendAsTooltip,
       showMetricsInTooltip,
     } = this.props;
     let tt = tooltip;
@@ -439,7 +529,6 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
         </div>
       );
     }
-    const legendClassName = legendAsTooltip ? "linegraph-tooltip" : "linegraph";
     return (
       <Visualization
         title={title}
@@ -448,8 +537,20 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
         loading={!data}
         preCalcGraphSize={preCalcGraphSize}
       >
-        <div className={legendClassName}>
+        <div className="linegraph">
           <div ref={this.el} />
+          <Collapse
+            defaultActiveKey={["legend"]}
+            items={[
+              {
+                key: "legend",
+                label: "Legend",
+                children: (
+                  <SortableLegend u={this.u} series={this.state.seriesInfo} />
+                ),
+              },
+            ]}
+          ></Collapse>
         </div>
       </Visualization>
     );
