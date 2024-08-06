@@ -75,7 +75,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 			10,
 			clusterSpec...,
 		),
-		CompatibleClouds: registry.AllClouds,
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
 		Timeout:          testTimeout,
 		RequiresLicense:  true,
