@@ -49,6 +49,8 @@ type kafkaSinkClientV2 struct {
 	canTryResizing bool
 	recordResize   func(numRecords int64)
 
+	topicsForConnectionCheck []string
+
 	// we need to fetch and keep track of this ourselves since kgo doesnt expose metadata to us
 	metadataMu struct {
 		syncutil.Mutex
@@ -68,6 +70,7 @@ func newKafkaSinkClientV2(
 	settings *cluster.Settings,
 	knobs kafkaSinkV2Knobs,
 	mb metricsRecorderBuilder,
+	topicsForConnectionCheck []string,
 ) (*kafkaSinkClientV2, error) {
 
 	baseOpts := []kgo.Opt{
@@ -119,12 +122,13 @@ func newKafkaSinkClientV2(
 	}
 
 	c := &kafkaSinkClientV2{
-		client:         client,
-		adminClient:    adminClient,
-		knobs:          knobs,
-		batchCfg:       batchCfg,
-		canTryResizing: changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
-		recordResize:   recordResize,
+		client:                   client,
+		adminClient:              adminClient,
+		knobs:                    knobs,
+		batchCfg:                 batchCfg,
+		canTryResizing:           changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
+		recordResize:             recordResize,
+		topicsForConnectionCheck: topicsForConnectionCheck,
 	}
 	c.metadataMu.allTopicPartitions = make(map[string][]int32)
 
@@ -213,6 +217,11 @@ func (k *kafkaSinkClientV2) FlushResolvedPayload(
 
 func (k *kafkaSinkClientV2) CheckConnection(ctx context.Context) error {
 	return k.maybeUpdateTopicPartitions(ctx, func(cb func(topic string) error) error {
+		for _, topic := range k.topicsForConnectionCheck {
+			if err := cb(topic); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 }
@@ -237,6 +246,8 @@ func (k *kafkaSinkClientV2) maybeUpdateTopicPartitions(
 	if len(topics) == len(k.metadataMu.allTopicPartitions) && timeutil.Since(k.metadataMu.lastMetadataRefresh) < metadataRefreshMinDuration {
 		return nil
 	}
+
+	log.Infof(ctx, `updating kafka metadata for topics: %+v`, topics)
 
 	topicDetails, err := k.adminClient.ListTopics(ctx, topics...)
 	if err != nil {
@@ -364,7 +375,8 @@ func makeKafkaSinkV2(
 			`unknown kafka sink query parameters: %s`, strings.Join(unknownParams, ", "))
 	}
 
-	client, err := newKafkaSinkClientV2(ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb)
+	topicsForConnectionCheck := topicNamer.DisplayNamesSlice()
+	client, err := newKafkaSinkClientV2(ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb, topicsForConnectionCheck)
 	if err != nil {
 		return nil, err
 	}
