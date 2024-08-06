@@ -891,11 +891,11 @@ func validateSink(
 ) error {
 	metrics := p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 	scope, _ := opts.GetMetricScope()
-	sli, err := metrics.getSLIMetrics(scope)
+	u, err := url.Parse(details.SinkURI)
 	if err != nil {
 		return err
 	}
-	u, err := url.Parse(details.SinkURI)
+	sli, err := metrics.getSLIMetrics(scope, p.ExtendedEvalContext().CidrLookup.LookupURI(details.SinkURI))
 	if err != nil {
 		return err
 	}
@@ -1296,7 +1296,8 @@ func (b *changefeedResumer) resumeWithRetries(
 		lastRunStatusUpdate = b.setJobRunningStatus(ctx, lastRunStatusUpdate, "transient error: %s", flowErr)
 
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
-			sli, err := metrics.getSLIMetrics(details.Opts[changefeedbase.OptMetricsScope])
+			networkTag := execCfg.CidrLookup.LookupURI(details.SinkURI)
+			sli, err := metrics.getSLIMetrics(details.Opts[changefeedbase.OptMetricsScope], networkTag)
 			if err != nil {
 				return err
 			}

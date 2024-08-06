@@ -172,7 +172,7 @@ func TestConfluentSchemaRegistryRetryMetrics(t *testing.T) {
 	regServer := cdctest.StartErrorTestSchemaRegistry(409)
 	defer regServer.Close()
 
-	sliMetrics, err := MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics).AggMetrics.getOrCreateScope("")
+	sliMetrics, err := MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics).AggMetrics.getOrCreateScope("", "")
 	require.NoError(t, err)
 
 	t.Run("ping works when all is well", func(t *testing.T) {
