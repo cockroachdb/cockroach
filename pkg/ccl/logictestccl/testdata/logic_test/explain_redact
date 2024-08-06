@@ -339,3 +339,68 @@ memo (optimized, ~7KB, required=[presentation: info:5] [distribution: test])
  └── G7: (const ‹×›)
 scan q
  └── constraint: /1: ‹×›
+
+# Regression test for #128282: check EXPLAIN (OPT, REDACT) of various CREATE
+# statements.
+
+statement ok
+CREATE TABLE t128282 (col STRING)
+
+query T
+EXPLAIN (OPT, REDACT) CREATE FUNCTION f() RETURNS STRING LANGUAGE SQL AS $$ SELECT * FROM t128282 WHERE col = 'secret' $$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │     RETURNS STRING
+ │     LANGUAGE SQL
+ │     AS $$SELECT t128282.col FROM test.public.t128282 WHERE col = ‹×›;$$
+ └── dependencies
+      └── t128282 [columns: col]
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) CREATE FUNCTION f() RETURNS STRING LANGUAGE SQL AS $$ SELECT * FROM t128282 WHERE col = 'secret' $$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │     RETURNS STRING
+ │     LANGUAGE SQL
+ │     AS $$SELECT t128282.col FROM test.public.t128282 WHERE col = ‹×›;$$
+ ├── dependencies
+ │    └── t128282 [columns: col]
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 0.01
+ └── distribution: test
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) CREATE FUNCTION f() RETURNS STRING LANGUAGE SQL AS $$ SELECT * FROM t128282 WHERE col = 'secret' $$
+----
+memo (optimized, ~7KB, required=[presentation: info:5] [distribution: test])
+ ├── G1: (explain G2 [distribution: test])
+ │    └── [presentation: info:5] [distribution: test]
+ │         ├── best: (explain G2="[distribution: test]" [distribution: test])
+ │         └── cost: 0.03
+ └── G2: (create-function &{‹×› ‹×›
+     ‹×›
+     ‹×›
+     ‹×› [{‹×› ‹×› map[‹×›:0 ‹×›:1 ‹×›:2 ‹×›:3] false 0}] ‹×›})
+      ├── [distribution: test]
+      │    ├── best: (create-function &{‹×› ‹×›
+      │    │   ‹×›
+      │    │   ‹×›
+      │    │   ‹×› [{‹×› ‹×› map[‹×›:0 ‹×›:1 ‹×›:2 ‹×›:3] false 0}] ‹×›})
+      │    └── cost: 0.01
+      └── []
+           ├── best: (create-function &{‹×› ‹×›
+           │   ‹×›
+           │   ‹×›
+           │   ‹×› [{‹×› ‹×› map[‹×›:0 ‹×›:1 ‹×›:2 ‹×›:3] false 0}] ‹×›})
+           └── cost: 0.01
+create-function
+ ├── CREATE FUNCTION f()
+ │     RETURNS STRING
+ │     LANGUAGE SQL
+ │     AS $$SELECT t128282.col FROM test.public.t128282 WHERE col = ‹×›;$$
+ └── dependencies
+      └── t128282 [columns: col]
