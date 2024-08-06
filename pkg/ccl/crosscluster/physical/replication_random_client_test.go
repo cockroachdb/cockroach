@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient/randclient"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // To start tenants.
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -61,12 +62,11 @@ func getReplicatedTime(ingestionJobID int, sqlDB *gosql.DB) (hlc.Timestamp, erro
 }
 
 func getTestRandomClientURI(tenantID roachpb.TenantID, tenantName roachpb.TenantName) string {
-	valueRange := 100
 	kvsPerResolved := 200
 	kvFrequency := 50 * time.Nanosecond
 	numPartitions := 2
 	dupProbability := 0.2
-	return makeTestStreamURI(valueRange, kvsPerResolved, numPartitions, kvFrequency,
+	return makeTestStreamURI(kvsPerResolved, numPartitions, kvFrequency,
 		dupProbability, tenantID, tenantName)
 }
 

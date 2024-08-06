@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient/randclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -40,10 +41,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -564,6 +567,61 @@ func TestRandomTables(t *testing.T) {
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
 
 	compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
+}
+
+func TestRandomStream(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	eventCount := 1000
+	testState := struct {
+		syncutil.Mutex
+		count int
+		done  chan struct{}
+	}{
+		done: make(chan struct{}),
+	}
+
+	streamingKnobs := &sql.StreamingTestingKnobs{
+		DistSQLRetryPolicy: &retry.Options{
+			InitialBackoff: time.Microsecond,
+			MaxBackoff:     2 * time.Microsecond,
+		},
+		RunAfterReceivingEvent: func(_ context.Context) error {
+			testState.Lock()
+			defer testState.Unlock()
+			testState.count++
+			if testState.count == eventCount {
+				close(testState.done)
+			}
+			return nil
+		},
+	}
+	clusterArgs := testClusterBaseClusterArgs
+	clusterArgs.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
+		StreamingTestingKnobs: streamingKnobs,
+	}
+	clusterArgs.ServerArgs.Knobs.Streaming = streamingKnobs
+
+	ctx := context.Background()
+	tc, s, runnerA, _ := setupLogicalTestServer(t, ctx, clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+
+	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab")
+	// We use a low events per checkpoint since we want to
+	// generate errors at many different code locations.
+	uri := fmt.Sprintf("randomgen://?TABLE_ID=%d&SST_PROBABILITY=0&ERROR_PROBABILITY=0.10&EVENTS_PER_CHECKPOINT=5", desc.GetID())
+
+	streamStartStmt := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab"
+	runnerA.Exec(t, streamStartStmt, uri)
+	t.Logf("waiting for %d events", eventCount)
+	select {
+	case <-testState.done:
+	case <-time.After(testutils.SucceedsSoonDuration()):
+		t.Logf("%s", string(allstacks.Get()))
+		t.Fatal("timed out waiting for events")
+	}
+
 }
 
 // TestPreviouslyInterestingTables tests some schemas from previous failed runs of TestRandomTables.
