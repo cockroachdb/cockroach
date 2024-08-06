@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -96,6 +97,7 @@ func makeApplierQuerier(
 	ctx context.Context,
 	settings *cluster.Settings,
 	tableConfigs map[descpb.ID]sqlProcessorTableConfig,
+	jobID jobspb.JobID,
 	ie isql.Executor,
 ) *applierQuerier {
 	return &applierQuerier{
@@ -105,9 +107,9 @@ func makeApplierQuerier(
 			applierQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
 		},
 		settings:    settings,
-		ieoInsert:   getIEOverride(replicatedInsertOpName),
-		ieoDelete:   getIEOverride(replicatedDeleteOpName),
-		ieoApplyUDF: getIEOverride(replicatedApplyUDFOpName),
+		ieoInsert:   getIEOverride(replicatedInsertOpName, jobID),
+		ieoDelete:   getIEOverride(replicatedDeleteOpName, jobID),
+		ieoApplyUDF: getIEOverride(replicatedApplyUDFOpName, jobID),
 	}
 }
 
@@ -115,9 +117,10 @@ func makeUDFApplierProcessor(
 	ctx context.Context,
 	settings *cluster.Settings,
 	tableDescs map[descpb.ID]sqlProcessorTableConfig,
+	jobID jobspb.JobID,
 	ie isql.Executor,
 ) (*sqlRowProcessor, error) {
-	aq := makeApplierQuerier(ctx, settings, tableDescs, ie)
+	aq := makeApplierQuerier(ctx, settings, tableDescs, jobID, ie)
 	return makeSQLProcessorFromQuerier(ctx, settings, tableDescs, ie, aq)
 }
 
