@@ -29,7 +29,7 @@ WHERE v = $1
 ----
 
 feature-list
-sql.plan.type.*
+sql.plan.type.force-custom
 ----
 
 exec
@@ -63,6 +63,10 @@ feature-usage
 SELECT * FROM kv WHERE v = 100
 ----
 
+feature-list
+sql.plan.type.force-generic
+----
+
 exec
 SET plan_cache_mode = force_generic_plan
 ----
@@ -90,11 +94,19 @@ exec
 SET plan_cache_mode = auto
 ----
 
+feature-list
+sql.plan.type.auto-generic
+----
+
 # If the placeholder fast-path is used, the plan is always generic.
 feature-usage
 EXECUTE p_pk(100)
 ----
 sql.plan.type.auto-generic
+
+feature-list
+sql.plan.type.auto-custom
+----
 
 # The first five executions of p_join have custom plans while establishing an
 # average cost. One of the custom executions occurred above.
@@ -117,6 +129,11 @@ feature-usage
 EXECUTE p_join(5)
 ----
 sql.plan.type.auto-custom
+
+
+feature-list
+sql.plan.type.auto-generic
+----
 
 # The sixth execution uses a generic plan.
 feature-usage
