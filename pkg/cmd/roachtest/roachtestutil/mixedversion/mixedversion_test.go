@@ -11,6 +11,7 @@
 package mixedversion
 
 import (
+	_ "embed"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v2"
 )
 
 // testPredecessorMapping is a test-only artificial mapping from
@@ -39,6 +41,22 @@ var testPredecessorMapping = map[string]*clusterupgrade.Version{
 	"24.2": clusterupgrade.MustParseVersion("v24.1.1"),
 	"24.3": clusterupgrade.MustParseVersion("v24.2.2"),
 }
+
+//go:embed testdata/test_releases.yaml
+var rawTestReleaseData []byte
+
+// testReleaseData contains a mapping like the one in
+// `cockroach_releases.yaml`, but hardcoded in these tests so that we
+// are able to test the `randomPredecessor` function.
+var testReleaseData = func() map[string]release.Series {
+	var result map[string]release.Series
+	err := yaml.UnmarshalStrict(rawTestReleaseData, &result)
+	if err != nil {
+		panic(fmt.Errorf("invalid test_releases.yaml: %w", err))
+	}
+
+	return result
+}()
 
 func Test_assertValidTest(t *testing.T) {
 	var fatalErr error
@@ -76,7 +94,7 @@ func Test_assertValidTest(t *testing.T) {
 	mvt := newTest(MinUpgrades(10))
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
-	require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (4) must be greater than minUpgrades (10)")
+	require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (3) must be greater than minUpgrades (10)")
 
 	mvt = newTest(MaxUpgrades(0))
 	assertValidTest(mvt, fatalFunc())
@@ -110,6 +128,15 @@ func Test_assertValidTest(t *testing.T) {
 	require.Error(t, fatalErr)
 	require.Equal(t,
 		"mixedversion.NewTest: invalid test options: no deployment modes enabled",
+		fatalErr.Error(),
+	)
+
+	// an invalid deployment mode is chosen
+	mvt = newTest(EnabledDeploymentModes(SystemOnlyDeployment, "my-deployment"))
+	assertValidTest(mvt, fatalFunc())
+	require.Error(t, fatalErr)
+	require.Equal(t,
+		`mixedversion.NewTest: invalid test options: unknown deployment mode "my-deployment"`,
 		fatalErr.Error(),
 	)
 
@@ -173,8 +200,8 @@ func Test_choosePreviousReleases(t *testing.T) {
 			}
 
 			mvt := newTest(opts...)
-			mvt.predecessorFunc = func(_ *rand.Rand, v *clusterupgrade.Version) (*clusterupgrade.Version, error) {
-				return testPredecessorMapping[release.VersionSeries(&v.Version)], tc.predecessorErr
+			mvt.predecessorFunc = func(_ *rand.Rand, v, _ *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+				return testPredecessorMapping[v.Series()], tc.predecessorErr
 			}
 			mvt._arch = &tc.arch
 
@@ -209,6 +236,71 @@ func TestTest_plan(t *testing.T) {
 		"error %q (%T) is not ErrorWithOwnership", err.Error(), err,
 	)
 	require.Equal(t, registry.OwnerTestEng, errWithOwnership.Owner)
+}
+
+func Test_randomPredecessor(t *testing.T) {
+	testCases := []struct {
+		name                string
+		v                   string
+		minSupported        string
+		expectedPredecessor string
+		expectedError       string
+	}{
+		{
+			name:                "minSupported is from a different release series as predecessor",
+			v:                   "v23.2.0",
+			minSupported:        "v24.1.0",
+			expectedPredecessor: "v23.1.15",
+		},
+		{
+			name:                "minSupported is same release series as predecessor, but patch is 0",
+			v:                   "v23.2.0",
+			minSupported:        "v23.1.0",
+			expectedPredecessor: "v23.1.15",
+		},
+		{
+			name:                "minSupported is same release series as predecessor and patch is not 0",
+			v:                   "v23.2.0",
+			minSupported:        "v23.1.8",
+			expectedPredecessor: "v23.1.23",
+		},
+		{
+			name:                "latest predecessor is pre-release, but minimum supported is also the same version",
+			v:                   "v24.3.0-alpha.00000000",
+			minSupported:        "v24.2.0-beta.1",
+			expectedPredecessor: "v24.2.0-beta.1",
+		},
+		{
+			name:          "latest predecessor is pre-release and minimum supported is not release yet",
+			v:             "v24.3.0-alpha.00000000",
+			minSupported:  "v24.2.0",
+			expectedError: "latest release for 24.2 (v24.2.0-beta.1) is not sufficient for minimum supported version (v24.2.0)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var pred *clusterupgrade.Version
+			var err error
+			_ = release.WithReleaseData(testReleaseData, func() error {
+				pred, err = randomPredecessor(
+					newRand(),
+					clusterupgrade.MustParseVersion(tc.v),
+					clusterupgrade.MustParseVersion(tc.minSupported),
+				)
+
+				return err
+			})
+
+			if tc.expectedError != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectedError)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, clusterupgrade.MustParseVersion(tc.expectedPredecessor), pred)
+			}
+		})
+	}
 }
 
 // withTestBuildVersion overwrites the `TestBuildVersion` variable in

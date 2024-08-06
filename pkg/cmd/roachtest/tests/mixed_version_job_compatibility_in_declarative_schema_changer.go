@@ -59,6 +59,12 @@ func setShortJobIntervalsStep(
 func setShortGCTTLInSystemZoneConfig(
 	ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
 ) error {
+	if err := setTenantSetting(
+		l, r, h, "sql.virtual_cluster.feature_access.zone_configs.enabled", true,
+	); err != nil {
+		return err
+	}
+
 	return h.Exec(r, "ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 1;")
 }
 

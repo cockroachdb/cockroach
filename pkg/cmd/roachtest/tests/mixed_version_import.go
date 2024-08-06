@@ -43,7 +43,13 @@ func registerImportMixedVersions(r registry.Registry) {
 func runImportMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster, warehouses int) {
 	// NB: We rely on the testing framework to choose a random predecessor to
 	// upgrade from.
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All())
+	mvt := mixedversion.NewTest(
+		ctx, t, t.L(), c, c.All(),
+		// We test only upgrades from 23.2 in this test because it uses
+		// the `workload fixtures import` command, which is only supported
+		// reliably multi-tenant mode starting from that version.
+		mixedversion.MinimumSupportedVersion("v23.2.0"),
+	)
 	runImport := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 		if err := h.Exec(r, "DROP DATABASE IF EXISTS tpcc CASCADE;"); err != nil {
 			return err
