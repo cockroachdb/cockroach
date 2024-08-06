@@ -129,9 +129,14 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 		// that's less than the max allowed. Verify at the end
 		// of the test that this happens at some point.
 		if lv.maxSeenSteadyEveryN.ShouldLog() {
-			lv.setTestStatus(fmt.Sprintf(
+			update := fmt.Sprintf(
 				"%s: end-to-end latency %s not yet below target steady latency %s",
-				lv.name, latency.Truncate(time.Millisecond), lv.targetSteadyLatency.Truncate(time.Millisecond)))
+				lv.name, latency.Truncate(time.Millisecond), lv.targetSteadyLatency.Truncate(time.Millisecond))
+			if lv.setTestStatus != nil {
+				lv.setTestStatus(update)
+			} else {
+				lv.logger.Printf(update)
+			}
 		}
 		return
 	}
@@ -142,9 +147,14 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 		lv.maxSeenSteadyLatency = latency
 	}
 	if lv.maxSeenSteadyEveryN.ShouldLog() {
-		lv.setTestStatus(fmt.Sprintf(
+		update := fmt.Sprintf(
 			"%s: end-to-end steady latency %s; max steady latency so far %s; highwater %s",
-			lv.name, latency.Truncate(time.Millisecond), lv.maxSeenSteadyLatency.Truncate(time.Millisecond), highwaterTime))
+			lv.name, latency.Truncate(time.Millisecond), lv.maxSeenSteadyLatency.Truncate(time.Millisecond), highwaterTime)
+		if lv.setTestStatus != nil {
+			lv.setTestStatus(update)
+		} else {
+			lv.logger.Printf(update)
+		}
 	}
 }
 

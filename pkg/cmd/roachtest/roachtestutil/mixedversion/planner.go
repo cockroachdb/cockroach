@@ -471,9 +471,10 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 	setupContext := p.nonUpgradeContext(initialVersion, SystemSetupStage)
 	return append(steps,
 		p.newSingleStepWithContext(setupContext, startStep{
-			version:  initialVersion,
-			rt:       p.rt,
-			settings: p.clusterSettingsForSystem(),
+			version:    initialVersion,
+			rt:         p.rt,
+			initTarget: p.currentContext.System.Descriptor.Nodes[0],
+			settings:   p.clusterSettingsForSystem(),
 		}),
 		p.newSingleStepWithContext(setupContext, waitForStableClusterVersionStep{
 			nodes:              p.currentContext.System.Descriptor.Nodes,
@@ -498,8 +499,9 @@ func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 	// necessary.
 	steps := []testStep{
 		p.newSingleStepWithContext(setupContext, startSharedProcessVirtualClusterStep{
-			name:     p.tenantName(),
-			settings: p.clusterSettingsForTenant(),
+			name:       p.tenantName(),
+			initTarget: p.currentContext.Tenant.Descriptor.Nodes[0],
+			settings:   p.clusterSettingsForTenant(),
 		}),
 		p.newSingleStepWithContext(setupContext, waitForStableClusterVersionStep{
 			nodes:              p.currentContext.Tenant.Descriptor.Nodes,
@@ -646,8 +648,12 @@ func (p *testPlanner) changeVersionSteps(
 	for j, node := range previousVersionNodes {
 		steps = append(steps, p.newSingleStep(
 			restartWithNewBinaryStep{
-				version: to, node: node, rt: p.rt, settings: p.clusterSettingsForSystem(),
+				version:              to,
+				node:                 node,
+				rt:                   p.rt,
+				settings:             p.clusterSettingsForSystem(),
 				sharedProcessStarted: virtualClusterSetup,
+				initTarget:           p.currentContext.System.Descriptor.Nodes[0],
 			},
 		))
 		for _, s := range p.services() {
