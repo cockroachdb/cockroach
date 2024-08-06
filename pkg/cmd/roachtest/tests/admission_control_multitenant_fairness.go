@@ -307,6 +307,10 @@ func runMultiTenantFairness(
 		defer vcdb.Close()
 
 		_, err := vcdb.ExecContext(ctx, "USE kv")
+		// Retry once, since this can fail sometimes due the cluster running hot.
+		if err != nil {
+			_, err = vcdb.ExecContext(ctx, "USE kv")
+		}
 		require.NoError(t, err)
 
 		// TODO(aaditya): We no longer have the ability to filter for stats by
