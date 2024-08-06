@@ -109,7 +109,7 @@ func registerYCSB(r registry.Registry) {
 				Name:      name,
 				Owner:     registry.OwnerTestEng,
 				Benchmark: true,
-				Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.WorkloadNode()),
+				Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(cpus)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runYCSB(ctx, t, c, wl, cpus, false /* readCommitted */, false /* rangeTombstone */)
 				},
