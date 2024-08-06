@@ -235,7 +235,7 @@ func newConnector(cfg ConnectorConfig, addrs []string) *connector {
 }
 
 // TestConnectorGossipSubscription tests connector's roles as a
-// kvcoord.NodeDescStore and as a config.SystemConfigProvider.
+// kvclient.NodeDescStore and as a config.SystemConfigProvider.
 func TestConnectorGossipSubscription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -307,7 +307,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	// Ensure that ClusterID was updated.
 	require.Equal(t, clusterID, rpcContext.StorageClusterID.Get())
 
-	// Test kvcoord.NodeDescStore impl. Wait for full update first.
+	// Test kvclient.NodeDescStore impl. Wait for full update first.
 	waitForNodeDesc(t, c, 2)
 	desc, err := c.GetNodeDescriptor(1)
 	require.Equal(t, node1, desc)
@@ -344,7 +344,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	gossipSubC <- gossipEventForNodeDesc(node1Up)
 	gossipSubC <- gossipEventForNodeDesc(node3)
 
-	// Test kvcoord.NodeDescStore impl. Wait for full update first.
+	// Test kvclient.NodeDescStore impl. Wait for full update first.
 	waitForNodeDesc(t, c, 3)
 	desc, err = c.GetNodeDescriptor(1)
 	require.Equal(t, node1Up, desc)
@@ -547,7 +547,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	})
 	require.NoError(t, <-startedC)
 
-	// Test kvcoord.NodeDescStore impl. Wait for full update first.
+	// Test kvclient.NodeDescStore impl. Wait for full update first.
 	waitForNodeDesc(t, c, 2)
 	desc, err := c.GetNodeDescriptor(1)
 	require.Equal(t, node1, desc)

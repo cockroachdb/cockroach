@@ -14,7 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -95,7 +97,11 @@ type TenantSideKVInterceptor interface {
 	// If the context (or a parent context) was created using
 	// WithTenantCostControlExemption, the method is a no-op.
 	OnResponseWait(
-		ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
+		ctx context.Context,
+		request *kvpb.BatchRequest,
+		response *kvpb.BatchResponse,
+		targetRange *roachpb.RangeDescriptor,
+		targetReplica *roachpb.ReplicaDescriptor,
 	) error
 }
 

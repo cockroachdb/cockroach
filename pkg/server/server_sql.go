@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatskvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -298,7 +299,7 @@ type sqlServerArgs struct {
 	rpcContext *rpc.Context
 
 	// Used by DistSQLPlanner.
-	nodeDescs kvcoord.NodeDescStore
+	nodeDescs kvclient.NodeDescStore
 
 	// Used by the executor config.
 	systemConfigWatcher *systemconfigwatcher.Cache

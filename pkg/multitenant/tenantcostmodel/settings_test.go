@@ -152,13 +152,18 @@ func TestEstimatedCPUSetting(t *testing.T) {
 			}(),
 		},
 		{
+			name:    "mismatched ReadRequestCost field lengths",
+			jsonStr: `{"ReadRequestCost": {"BatchSize": [], "CPUPerRequest": [1]}}`,
+			err:     "estimated_cpu model lookup arrays cannot have different lengths",
+		},
+		{
 			name:    "mismatched ReadBytesCost field lengths",
 			jsonStr: `{"ReadBytesCost": {"PayloadSize": [1], "CPUPerByte": [1, 2]}}`,
 			err:     "estimated_cpu model lookup arrays cannot have different lengths",
 		},
 		{
 			name:    "mismatched WriteBatchCost field lengths",
-			jsonStr: `{"WriteBatchCost": {"RatePerNode": [1, 2], "CPUPerBatch": [1]}}`,
+			jsonStr: `{"WriteBatchCost": {"RatePerNode": [1, 2], "CPUPerRequest": [1]}}`,
 			err:     "estimated_cpu model lookup arrays cannot have different lengths",
 		},
 		{
