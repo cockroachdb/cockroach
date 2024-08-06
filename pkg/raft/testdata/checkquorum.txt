@@ -182,18 +182,23 @@ stabilize
   Messages:
   2->1 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
   2->3 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
+  2->1 MsgFortifyLeader Term:3 Log:0/0
+  2->3 MsgFortifyLeader Term:3 Log:0/0
 > 1 receiving messages
   2->1 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
+  2->1 MsgFortifyLeader Term:3 Log:0/0
 > 3 receiving messages
   2->3 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
   INFO 3 [term: 1] received a MsgApp message with higher term from 2 [term: 3]
   INFO 3 became follower at term 3
+  2->3 MsgFortifyLeader Term:3 Log:0/0
 > 1 handling Ready
   Ready MustSync=true:
   HardState Term:3 Vote:2 Commit:11 Lead:2
   Entries:
   3/12 EntryNormal ""
   Messages:
+  1->2 MsgFortifyLeaderResp Term:3 Log:0/0 Rejected (Hint: 0)
   1->2 MsgAppResp Term:3 Log:0/12
 > 3 handling Ready
   Ready MustSync=true:
@@ -201,9 +206,12 @@ stabilize
   Entries:
   3/12 EntryNormal ""
   Messages:
+  3->2 MsgFortifyLeaderResp Term:3 Log:0/0 Rejected (Hint: 0)
   3->2 MsgAppResp Term:3 Log:0/12
 > 2 receiving messages
+  1->2 MsgFortifyLeaderResp Term:3 Log:0/0 Rejected (Hint: 0)
   1->2 MsgAppResp Term:3 Log:0/12
+  3->2 MsgFortifyLeaderResp Term:3 Log:0/0 Rejected (Hint: 0)
   3->2 MsgAppResp Term:3 Log:0/12
 > 2 handling Ready
   Ready MustSync=false:

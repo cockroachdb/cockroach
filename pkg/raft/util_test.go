@@ -96,7 +96,8 @@ func TestIsLocalMsg(t *testing.T) {
 		{pb.MsgStorageAppendResp, true},
 		{pb.MsgStorageApply, true},
 		{pb.MsgStorageApplyResp, true},
-		{pb.MsgForgetLeader, false},
+		{pb.MsgFortifyLeader, false},
+		{pb.MsgFortifyLeaderResp, false},
 	}
 
 	for _, tt := range tests {
@@ -133,6 +134,8 @@ func TestIsResponseMsg(t *testing.T) {
 		{pb.MsgStorageApply, false},
 		{pb.MsgStorageApplyResp, true},
 		{pb.MsgForgetLeader, false},
+		{pb.MsgFortifyLeader, false},
+		{pb.MsgFortifyLeaderResp, true},
 	}
 
 	for i, tt := range tests {

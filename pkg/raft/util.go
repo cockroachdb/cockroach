@@ -49,6 +49,7 @@ var isResponseMsg = [...]bool{
 	pb.MsgPreVoteResp:       true,
 	pb.MsgStorageAppendResp: true,
 	pb.MsgStorageApplyResp:  true,
+	pb.MsgFortifyLeaderResp: true,
 }
 
 func isMsgInArray(msgt pb.MessageType, arr []bool) bool {
@@ -311,6 +312,14 @@ func assertConfStatesEquivalent(l Logger, cs1, cs2 pb.ConfState) {
 		return
 	}
 	l.Panic(err)
+}
+
+// Assert panics with the supplied message if the condition does not hold
+// true.
+func Assert(condition bool, msg string) {
+	if !condition {
+		panic(msg)
+	}
 }
 
 // extend appends vals to the given dst slice. It differs from the standard
