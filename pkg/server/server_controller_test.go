@@ -15,9 +15,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,7 +71,7 @@ func TestSQLErrorUponInvalidTenant(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DisableDefaultTestTenant: true,
 	})
 	defer s.Stopper().Stop(ctx)
@@ -82,4 +84,17 @@ func TestSQLErrorUponInvalidTenant(t *testing.T) {
 
 	err = db.Ping()
 	require.Regexp(t, `service unavailable for target tenant \(nonexistent\)`, err.Error())
+
+	// Regression test for CRDB-40449; make sure pre-conn memory is freed.
+	testutils.SucceedsSoon(t, func() error {
+		var usedPreConnMemory int
+		err = sqlDB.QueryRow("select used from crdb_internal.node_memory_monitors where name='pre-conn'").Scan(&usedPreConnMemory)
+		if err != nil {
+			return err
+		}
+		if usedPreConnMemory != 0 {
+			return errors.Errorf("expected 0 bytes used, got %d", usedPreConnMemory)
+		}
+		return nil
+	})
 }
