@@ -418,6 +418,16 @@ CREATE INDEX ON opclasses(c blah_ops)
 statement error pgcode 42704 operator class "blah_ops" does not exist
 CREATE INVERTED INDEX ON opclasses(c blah_ops)
 
+# Make sure that we don't permit a descending column for the last column of an
+# inverted index.
+statement error pgcode 0A000 the last column in an inverted index cannot have the DESC option
+CREATE INVERTED INDEX ON opclasses(c DESC)
+
+# Make sure that we don't permit a descending column for the last column of an
+# inverted index.
+statement ok
+CREATE INVERTED INDEX ON opclasses(a DESC, c)
+
 subtest create_index_on_materialized_view
 
 statement ok
@@ -440,26 +450,31 @@ CREATE INDEX ON v ((b>0));
 # Repro of issue found in #124511 when using the declarative schema changer.
 # Using utf8 character in column name that is included in STORED() clause is not
 # being seen as a duplicate of an existing index.
+# This also tests to make sure mixed-case names are handled correctly.
 subtest create_index_with_utf8_col_names
 
 statement ok
 CREATE TABLE tab_w0_7 (
    "col\u000b7ͪ%q_w0_10" UUID,
    c2 STRING,
-   PRIMARY KEY(c2, "col\u000b7ͪ%q_w0_10")
+   "MixedCase" INT,
+   PRIMARY KEY(c2, "col\u000b7ͪ%q_w0_10", "MixedCase")
 );
 
-statement error index ".*" already contains column ".*".*
+statement error index ".*" already contains column ".*q_w0_10".*
 CREATE INDEX tab_w0_7_i1 on tab_w0_7 (c2) STORING ("col\u000b7ͪ%q_w0_10");
 
-statement error index ".*" already contains column ".*".*
+statement error index ".*" already contains column ".*q_w0_10".*
 CREATE INDEX tab_w0_7_i1 on tab_w0_7 ("col\u000b7ͪ%q_w0_10") STORING ("col\u000b7ͪ%q_w0_10");
+
+statement error index ".*" already contains column "MixedCase".*
+CREATE INDEX tab_w0_7_i1 on tab_w0_7 (c2) STORING ("MixedCase");
 
 statement ok
 DROP TABLE tab_w0_7;
 
 # Repro of issue found in #124511 when using the declarative schema changer. We
-# need to block when attempting to include a virtual column in a STORED()
+# need to block when attempting to include a virtual column in a STORING()
 # clause.
 subtest create_index_with_stored_virtual_col
 
@@ -475,3 +490,22 @@ CREATE INDEX tab1_i1 ON tab1 (c3) STORING (c2);
 
 statement ok
 DROP TABLE tab1;
+
+# Make sure the IF NOT EXISTS clause short-circuits if the index already exists.
+subtest create_index_if_not_exists_short_circuits
+
+statement ok
+CREATE TABLE tbl_ifne (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE INDEX idx ON tbl_ifne (b)
+
+statement error index "invalid_idx" already contains column "a".*
+CREATE INDEX invalid_idx ON tbl_ifne (b) STORING (a)
+
+# With IF NOT EXISTS, the statement never runs, so this succeeds.
+statement ok
+CREATE INDEX IF NOT EXISTS idx ON tbl_ifne (b) STORING (a)
+
+statement ok
+DROP TABLE tbl_ifne CASCADE
