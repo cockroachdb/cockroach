@@ -525,7 +525,7 @@ ALTER TABLE a CONFIGURE ZONE DISCARD
 # verify zone config changes are logged
 ##################
 skipif config 3node-tenant-default-configs
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 query IT
 SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
@@ -540,7 +540,7 @@ ORDER BY "timestamp", info
 1  {"EventType": "set_zone_config", "Options": ["range_max_bytes = 67108865", "range_min_bytes = 16777216"], "Statement": "ALTER DATABASE test CONFIGURE ZONE USING range_max_bytes = 67108865, range_min_bytes = 16777216", "Tag": "CONFIGURE ZONE", "Target": "DATABASE test", "User": "root"}
 1  {"EventType": "set_zone_config", "Options": ["range_max_bytes = 67108865", "range_min_bytes = 16777216"], "Statement": "ALTER TABLE test.public.a CONFIGURE ZONE USING range_max_bytes = 67108865, range_min_bytes = 16777216", "Tag": "CONFIGURE ZONE", "Target": "TABLE test.public.a", "User": "root"}
 
-onlyif config local-mixed-23.2
+onlyif config local-mixed-24.1
 query IT
 SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog

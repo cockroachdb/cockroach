@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-23.2
+# LogicTest: cockroach-go-testserver-24.1
 
 # Ensure that a backup of a tenant can restore into an new version.  
 # 
@@ -10,8 +10,14 @@
 statement ok
 CREATE VIRTUAL CLUSTER foo
 
+query TI
+SELECT name, id FROM [SHOW TENANTS] ORDER BY id
+----
+system 1
+foo 3
+
 statement ok
-BACKUP TENANT 2 INTO 'userfile:///1/example'
+BACKUP TENANT 3 INTO 'userfile:///1/example'
 
 upgrade 0
 
@@ -20,11 +26,11 @@ upgrade 1
 upgrade 2
 
 statement ok
-RESTORE TENANT 2 FROM LATEST IN 'userfile:///1/example' with tenant_name = 'baz'
+RESTORE TENANT 3 FROM LATEST IN 'userfile:///1/example' with tenant_name = 'baz'
 
 query TI nodeidx=0
 SELECT name, id FROM [SHOW TENANTS] ORDER BY id
 ----
 system 1
-foo 2
-baz 3
+foo 3
+baz 4

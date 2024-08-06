@@ -314,27 +314,27 @@ statement error COMMENT ON TYPE is only implemented in the declarative schema ch
 COMMENT ON TYPE roach_dwellings IS 'First-CRDB-comment-on-types';
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_dwellings IS 'First-CRDB-comment-on-types';
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_legs IS 'Second-CRDB-comment-on-types';
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_dwellings IS 'First-CRDB-comment-on-types-again';
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_legs IS 'Second-CRDB-comment-on-types-again';
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 query IIIT colnames,rowsort
 SELECT * FROM SYSTEM.COMMENTS;
 ----
@@ -344,17 +344,17 @@ type  object_id  sub_id  comment
 7     114        0       Second-CRDB-comment-on-types-again
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_dwellings IS NULL;
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_legs IS NULL;
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 query IIIT colnames
 SELECT * FROM SYSTEM.COMMENTS;
 ----

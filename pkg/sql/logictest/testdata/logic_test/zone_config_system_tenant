@@ -21,7 +21,6 @@ CREATE TABLE a(id INT PRIMARY KEY)
 statement error OSS binaries do not include enterprise features
 ALTER TABLE a CONFIGURE ZONE USING global_reads = true
 
-skipif config local-mixed-23.2
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
@@ -195,8 +194,8 @@ ORDER BY start_key
 /Table/106  14400
 /Table/107  14400
 /Table/110  90001
-/Table/111  1
-/Table/112  1
+/Table/111  90001
+/Table/112  14400
 
 subtest transactional_schemachanges
 

@@ -1033,11 +1033,6 @@ func TestSchemaChangeComparator_mixed_version_can_login(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_can_login"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
-func TestSchemaChangeComparator_mixed_version_sequence_per_node_cache(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_sequence_per_node_cache"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
 func TestSchemaChangeComparator_mixed_version_upgrade_preserve_ttl(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_upgrade_preserve_ttl"

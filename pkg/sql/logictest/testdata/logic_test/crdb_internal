@@ -572,7 +572,6 @@ INSERT INTO system.zones (id, config) VALUES
   ($testdb_foo_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
   ($schema_bar_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
 
-skipif config local-mixed-23.2
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----

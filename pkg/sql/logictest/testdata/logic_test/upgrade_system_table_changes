@@ -1,21 +1,23 @@
-# LogicTest: cockroach-go-testserver-23.2
+# LogicTest: cockroach-go-testserver-24.1
 
 query T
 select crdb_internal.active_version()
 ----
-{"internal": 0, "major": 23, "minor": 2, "patch": 0}
+{"internal": 0, "major": 24, "minor": 1, "patch": 0}
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE system.public.lease]
 ----
 CREATE TABLE public.lease (
-  "descID" INT8 NOT NULL,
+  desc_id INT8 NOT NULL,
   version INT8 NOT NULL,
-  "nodeID" INT8 NOT NULL,
-  expiration TIMESTAMP NOT NULL,
+  sql_instance_id INT8 NOT NULL,
+  session_id BYTES NOT NULL,
   crdb_region BYTES NOT NULL,
-  CONSTRAINT "primary" PRIMARY KEY (crdb_region ASC, "descID" ASC, version ASC, expiration ASC, "nodeID" ASC)
-)
+  CONSTRAINT "primary" PRIMARY KEY (crdb_region ASC, desc_id ASC, version ASC, session_id ASC)
+) WITH (exclude_data_from_backup = true);
+ALTER TABLE system.public.lease CONFIGURE ZONE USING
+  gc.ttlseconds = 600
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE system.public.replication_constraint_stats]
@@ -29,11 +31,9 @@ CREATE TABLE public.replication_constraint_stats (
   violation_start TIMESTAMPTZ NULL,
   violating_ranges INT8 NOT NULL,
   CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC, type ASC, config ASC)
-);
+) WITH (exclude_data_from_backup = true);
 ALTER TABLE system.public.replication_constraint_stats CONFIGURE ZONE USING
-  gc.ttlseconds = 600,
-  constraints = '[]',
-  lease_preferences = '[]'
+  gc.ttlseconds = 600
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE system.public.replication_stats]
@@ -47,11 +47,9 @@ CREATE TABLE public.replication_stats (
   under_replicated_ranges INT8 NOT NULL,
   over_replicated_ranges INT8 NOT NULL,
   CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC)
-);
+) WITH (exclude_data_from_backup = true);
 ALTER TABLE system.public.replication_stats CONFIGURE ZONE USING
-  gc.ttlseconds = 600,
-  constraints = '[]',
-  lease_preferences = '[]'
+  gc.ttlseconds = 600
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE system.public.tenant_usage]
@@ -70,11 +68,9 @@ CREATE TABLE public.tenant_usage (
   instance_seq INT8 NULL,
   instance_shares FLOAT8 NULL,
   CONSTRAINT "primary" PRIMARY KEY (tenant_id ASC, instance_id ASC)
-);
+) WITH (exclude_data_from_backup = true);
 ALTER TABLE system.public.tenant_usage CONFIGURE ZONE USING
-  gc.ttlseconds = 7200,
-  constraints = '[]',
-  lease_preferences = '[]'
+  gc.ttlseconds = 7200
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE system.public.span_configurations]
@@ -85,7 +81,7 @@ CREATE TABLE public.span_configurations (
   config BYTES NOT NULL,
   CONSTRAINT "primary" PRIMARY KEY (start_key ASC),
   CONSTRAINT check_bounds CHECK (start_key < end_key)
-)
+) WITH (exclude_data_from_backup = true)
 
 upgrade all
 
