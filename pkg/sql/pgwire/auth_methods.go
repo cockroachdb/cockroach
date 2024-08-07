@@ -803,8 +803,17 @@ func authJwtToken(
 	return b, nil
 }
 
-// LDAPVerifier is an interface for `ldapauthccl` pkg to add ldap login support.
-type LDAPVerifier interface {
+// LDAPManager is an interface for `ldapauthccl` pkg to add ldap login(authN)
+// and groups sync(authZ) support.
+//
+// TODO(souravcrl): Add an independent function FetchLDAPDN() to obtain the
+// distinguished name in authMethod call itself for
+// https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/pgwire/auth.go#L115.
+// We should set the ReplacementIdentity to be this DN in authLDAP before
+// setting the authenticator, so we have this value as our systemIdentity for
+// performing both authN and authZ later. This would require systemIdentity to
+// support DN also as a type apart from username.SQLUsername
+type LDAPManager interface {
 	// ValidateLDAPLogin validates whether the password supplied could be used to
 	// bind to ldap server with a distinguished name obtained from performing a
 	// search operation using options provided in the hba conf and supplied sql
@@ -814,16 +823,25 @@ type LDAPVerifier interface {
 		_ string,
 		_ *hba.Entry,
 		_ *identmap.Conf,
-	) (detailedErrorMsg redact.RedactableString, authError error)
+	) (retrievedUserDN *ldap.DN, detailedErrorMsg redact.RedactableString, authError error)
+	// FetchLDAPGroups retrieves ldap groups for the supplied ldap user
+	// DN(provided as a sql user here being the "externally-defined" system
+	// identity) performing a group search with the options provided in the hba
+	// conf and filtering for the groups which have the user DN as its member.
+	FetchLDAPGroups(_ context.Context, _ *cluster.Settings,
+		_ username.SQLUsername,
+		_ *hba.Entry,
+		_ *identmap.Conf,
+	) (ldapGroups []string, detailedErrorMsg redact.RedactableString, authError error)
 }
 
-// ldapVerifier is a singleton global pgwire object which gets initialized from
+// ldapManager is a singleton global pgwire object which gets initialized from
 // authLDAP method whenever an LDAP auth attempt happens. It depends on ldapccl
 // module to be imported properly to override its default ConfigureLDAPAuth
 // constructor.
-var ldapVerifier = struct {
+var ldapManager = struct {
 	sync.Once
-	v LDAPVerifier
+	m LDAPManager
 }{}
 
 type noLDAPConfigured struct{}
@@ -835,18 +853,24 @@ func (c *noLDAPConfigured) ValidateLDAPLogin(
 	_ string,
 	_ *hba.Entry,
 	_ *identmap.Conf,
-) (detailedErrorMsg redact.RedactableString, authError error) {
-	return "", errors.New("LDAP based authentication requires CCL features")
+) (retrievedUserDN *ldap.DN, detailedErrorMsg redact.RedactableString, authError error) {
+	return nil, "", errors.New("LDAP based authentication requires CCL features")
+}
+
+func (c *noLDAPConfigured) FetchLDAPGroups(
+	_ context.Context, _ *cluster.Settings, _ username.SQLUsername, _ *hba.Entry, _ *identmap.Conf,
+) (ldapGroups []string, detailedErrorMsg redact.RedactableString, authError error) {
+	return ldapGroups, "", errors.New("LDAP based authorization requires CCL features")
 }
 
 // ConfigureLDAPAuth is a hook for the `ldapauthccl` library to add LDAP login
-// support. It's called to setup the LDAPVerifier just as it is needed.
+// support. It's called to setup the LDAPManager just as it is needed.
 var ConfigureLDAPAuth = func(
 	serverCtx context.Context,
 	ambientCtx log.AmbientContext,
 	st *cluster.Settings,
 	clusterUUID uuid.UUID,
-) LDAPVerifier {
+) LDAPManager {
 	return &noLDAPConfigured{}
 }
 
@@ -860,9 +884,9 @@ func authLDAP(
 	entry *hba.Entry,
 	identMap *identmap.Conf,
 ) (*AuthBehaviors, error) {
-	ldapVerifier.Do(func() {
-		if ldapVerifier.v == nil {
-			ldapVerifier.v = ConfigureLDAPAuth(sCtx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
+	ldapManager.Do(func() {
+		if ldapManager.m == nil {
+			ldapManager.m = ConfigureLDAPAuth(sCtx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
 		}
 	})
 
@@ -898,13 +922,20 @@ func authLDAP(
 		if len(ldapPwd) == 0 {
 			return security.NewErrPasswordUserAuthFailed(user)
 		}
-		if detailedErrors, authError := ldapVerifier.v.ValidateLDAPLogin(ctx, execCfg.Settings, user, ldapPwd, entry, identMap); authError != nil {
+		if retrievedUserDN, detailedErrors, authError := ldapManager.m.ValidateLDAPLogin(ctx, execCfg.Settings, user, ldapPwd, entry, identMap); authError != nil {
 			errForLog := authError
 			if detailedErrors != "" {
 				errForLog = errors.Join(errForLog, errors.Newf("%s", detailedErrors))
 			}
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, errForLog)
 			return authError
+		} else {
+			// The DN of user from LDAP server is set as the system identity which can then be used for authZ requests.
+			externalUserDN, err := username.MakeSQLUsernameFromUserInput(retrievedUserDN.String(), username.PurposeValidation)
+			if err != nil {
+				log.Warningf(ctx, "cannot create sql user for retrieved DN from LDAP server: %+v", err)
+			}
+			c.SetSystemIdentity(externalUserDN)
 		}
 		return nil
 	})
