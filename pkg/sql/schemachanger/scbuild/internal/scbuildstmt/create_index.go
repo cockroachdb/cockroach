@@ -11,7 +11,6 @@
 package scbuildstmt
 
 import (
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -747,7 +746,8 @@ func maybeCreateAndAddShardCol(
 	backing := addColumn(b, spec, n)
 	// Create a new check constraint for the hash sharded index column.
 	checkConstraintBucketValues := strings.Builder{}
-	checkConstraintBucketValues.WriteString(fmt.Sprintf("%q IN (", shardColName))
+	checkConstraintBucketValues.WriteString(tree.NameString(shardColName))
+	checkConstraintBucketValues.WriteString(" IN (")
 	for bucket := 0; bucket < shardBuckets; bucket++ {
 		checkConstraintBucketValues.WriteString(strconv.Itoa(bucket))
 		if bucket != shardBuckets-1 {
