@@ -398,6 +398,8 @@ type Request struct {
 	// existing lock in order to perform a non-locking read on a key.
 	LockTimeout time.Duration
 
+	DeadlockTimeout time.Duration
+
 	// The maximum length of a lock wait-queue that the request is willing
 	// to enter and wait in. Used to provide a release valve and ensure some
 	// level of quality-of-service under severe per-key contention. If set

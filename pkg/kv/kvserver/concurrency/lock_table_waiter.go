@@ -202,6 +202,9 @@ func (w *lockTableWaiterImpl) WaitOn(
 				delay := time.Duration(math.MaxInt64)
 				if deadlockOrLivenessPush {
 					delay = LockTableDeadlockOrLivenessDetectionPushDelay.Get(&w.st.SV)
+					if req.DeadlockTimeout != 0 {
+						delay = req.DeadlockTimeout
+					}
 				}
 				if timeoutPush {
 					// Only reset the lock timeout deadline if this is the first time
