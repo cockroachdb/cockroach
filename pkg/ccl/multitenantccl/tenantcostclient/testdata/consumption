@@ -29,6 +29,7 @@ tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 # With no usage, consumption gets reported only every 40s. Advance by 30s here
 # since we're at the 10s mark.
@@ -87,6 +88,7 @@ tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 usage
 ----
@@ -142,6 +144,7 @@ tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 # Test write operation consumption.
 write bytes=1024
@@ -188,6 +191,7 @@ tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 # Test CPU consumption.
 advance wait=true
@@ -243,6 +247,7 @@ tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 # Test multiple operations together.
 write bytes=4096
@@ -281,6 +286,7 @@ tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 advance
 30s
@@ -322,6 +328,7 @@ tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 # Test larger amount of CPU usage that exceeds 100 RUs. The consumption report
 # should be sent after only 10s. In addition, the CPU usage should only be
@@ -370,6 +377,7 @@ tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 # Test egress.
 pgwire-egress
@@ -416,6 +424,7 @@ tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 # Test multiple requests in the same batch.
 write count=2 bytes=1024
@@ -464,6 +473,7 @@ tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 # Test a small amount of CPU usage in a tick that has no read/write operations.
 # Anything under 30ms (3% of one CPU) should be ignored.
@@ -523,6 +533,7 @@ tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 # Now ensure that 30ms meets the threshold and is reported.
 cpu
@@ -575,6 +586,7 @@ tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 # Ensure RUs are updated for egress and ingress.
 external-egress bytes=1024000
@@ -624,6 +636,7 @@ tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 # Read the same amount of bytes as the first subtest. Should have an increase
 # of ~21 RUs compared to the first test.
@@ -670,6 +683,7 @@ tenant.sql_usage.cross_region_network_ru: 20.97
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 # This write is expected to consume an extra ~20.5 RUs from network cost usage,
 # due to 2 cross-region replicas.
@@ -716,6 +730,7 @@ tenant.sql_usage.cross_region_network_ru: 41.55
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 # Test multiple requests in the same batch.
 write count=2 bytes=1024 localities=cross-region
@@ -764,6 +779,7 @@ tenant.sql_usage.cross_region_network_ru: 63.54
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0
 
 # Test write batch across zones in same region (replicas=3).
 write count=1 bytes=1024 localities=cross-zone
@@ -809,3 +825,4 @@ tenant.sql_usage.cross_region_network_ru: 63.54
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
 tenant.sql_usage.estimated_replication_bytes: 0
+tenant.sql_usage.provisioned_vcpus: 0

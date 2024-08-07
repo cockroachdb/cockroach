@@ -124,6 +124,12 @@ var (
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaProvisionedVcpus = metric.Metadata{
+		Name:        "tenant.sql_usage.provisioned_vcpus",
+		Help:        "Number of vcpus available to the virtual cluster",
+		Measurement: "Count",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // metrics manage the metrics used by the tenant cost client.
@@ -145,6 +151,7 @@ type metrics struct {
 	TotalEstimatedKVCPUSeconds  *metric.CounterFloat64
 	TotalEstimatedCPUSeconds    *metric.CounterFloat64
 	EstimatedReplicationBytes   *aggmetric.AggCounter
+	ProvisionedVcpus            *metric.Gauge
 
 	// cachedPathMetrics stores a cache of network paths to the metrics which
 	// have been initialized. Having this layer of caching prevents us from
@@ -197,6 +204,7 @@ func (m *metrics) Init(locality roachpb.Locality) {
 	m.TotalCrossRegionNetworkRU = metric.NewCounterFloat64(metaTotalCrossRegionNetworkRU)
 	m.TotalEstimatedKVCPUSeconds = metric.NewCounterFloat64(metaTotalEstimatedKVCPUSeconds)
 	m.TotalEstimatedCPUSeconds = metric.NewCounterFloat64(metaTotalEstimatedCPUSeconds)
+	m.ProvisionedVcpus = metric.NewGauge(metaProvisionedVcpus)
 
 	// Metric labels for KV replication traffic will be derived from the SQL
 	// server's locality. e.g. {"from_region", "from_az", "to_region", "to_az"}.

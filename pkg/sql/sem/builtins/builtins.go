@@ -6967,15 +6967,11 @@ Parameters:` + randgencfg.ConfigDoc,
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
-			// NOTE: as_of and as_of_consumed_tokens are not used and can be
-			// deprecated.
 			Types: tree.ParamTypes{
 				{Name: "tenant_name", Typ: types.String},
 				{Name: "available_tokens", Typ: types.Float},
 				{Name: "refill_rate", Typ: types.Float},
 				{Name: "max_burst_tokens", Typ: types.Float},
-				{Name: "as_of", Typ: types.Timestamp},
-				{Name: "as_of_consumed_tokens", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
