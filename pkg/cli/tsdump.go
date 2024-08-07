@@ -51,6 +51,7 @@ var debugTimeSeriesDumpOpts = struct {
 	yaml         string
 	targetURL    string
 	ddApiKey     string
+	ddSite       string
 	httpToken    string
 }{
 	format:       tsDumpText,
@@ -59,6 +60,21 @@ var debugTimeSeriesDumpOpts = struct {
 	clusterLabel: "",
 	yaml:         "/tmp/tsdump.yaml",
 }
+
+var (
+	// each site in datadog has a different host name. ddSiteToHostMap
+	// holds the mapping of site name to the host name.
+	ddSiteToHostMap = map[string]string{
+		"us1":     "api.datadoghq.com",
+		"us3":     "api.us3.datadoghq.com",
+		"us5":     "api.us5.datadoghq.com",
+		"eu1":     "api.datadoghq.eu",
+		"ap1":     "api.ap1.datadoghq.com",
+		"us1-fed": "api.ddog-gov.com",
+	}
+
+	targetURLFormat = "https://%s/api/v2/series"
+)
 
 var debugTimeSeriesDumpCmd = &cobra.Command{
 	Use:   "tsdump",
@@ -83,6 +99,13 @@ will then convert it to the --format requested in the current invocation.
 		if len(args) > 0 {
 			convertFile = args[0]
 		}
+
+		// validate the datadog site name & generate target url for datadog upload
+		host, ok := ddSiteToHostMap[debugTimeSeriesDumpOpts.ddSite]
+		if !ok {
+			return fmt.Errorf("unsupported datadog site '%s'", debugTimeSeriesDumpOpts.ddSite)
+		}
+		targetURL := fmt.Sprintf(targetURLFormat, host)
 
 		var w tsWriter
 		switch debugTimeSeriesDumpOpts.format {
@@ -110,7 +133,7 @@ will then convert it to the --format requested in the current invocation.
 		case tsDumpDatadog:
 			w = makeDatadogWriter(
 				ctx,
-				"https://api.datadoghq.com/api/v2/series",
+				targetURL,
 				false, /* init */
 				debugTimeSeriesDumpOpts.ddApiKey,
 				100, /* threshold */
@@ -119,7 +142,7 @@ will then convert it to the --format requested in the current invocation.
 		case tsDumpDatadogInit:
 			w = makeDatadogWriter(
 				ctx,
-				"https://api.datadoghq.com/api/v2/series",
+				targetURL,
 				true, /* init */
 				debugTimeSeriesDumpOpts.ddApiKey,
 				100, /* threshold */
