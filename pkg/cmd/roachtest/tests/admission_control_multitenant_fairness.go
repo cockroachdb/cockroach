@@ -186,7 +186,7 @@ func runMultiTenantFairness(
 
 		t.L().Printf("virtual cluster %q started on n%d", name, node[0])
 		_, err := systemConn.ExecContext(
-			ctx, fmt.Sprintf("SELECT crdb_internal.update_tenant_resource_limits('%s', 1000000000, 10000, 1000000, now(), 0)", name),
+			ctx, fmt.Sprintf("SELECT crdb_internal.update_tenant_resource_limits('%s', 1000000000, 10000, 1000000)", name),
 		)
 		require.NoError(t, err)
 

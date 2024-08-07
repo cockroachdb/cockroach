@@ -255,7 +255,7 @@ query error tenant resource limits require a CCL binary
 SELECT crdb_internal.update_tenant_resource_limits(10, 1000, 100, 0, now(), 0)
 
 query error tenant resource limits require a CCL binary
-SELECT crdb_internal.update_tenant_resource_limits('tenant-number-ten', 1000, 100, 0, now(), 0)
+SELECT crdb_internal.update_tenant_resource_limits('tenant-number-ten', 1000, 100, 0)
 
 user testuser
 
