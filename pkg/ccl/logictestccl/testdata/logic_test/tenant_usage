@@ -32,7 +32,7 @@ statement ok
 CREATE TENANT 'apptenant'
 
 statement ok
-SELECT crdb_internal.update_tenant_resource_limits('apptenant', 1000, 100, 0, now(), 0)
+SELECT crdb_internal.update_tenant_resource_limits('apptenant', 1000, 100, 0)
 
 user testuser
 
