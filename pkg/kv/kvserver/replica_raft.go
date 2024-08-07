@@ -1701,10 +1701,10 @@ func (r *Replica) sendRaftMessages(
 				}
 
 			case raftpb.MsgAppResp:
-				// A successful (non-reject) MsgAppResp contains one piece of
-				// information: the highest log index. Raft currently queues up
-				// one MsgAppResp per incoming MsgApp, and we may process
-				// multiple messages in one handleRaftReady call (because
+				// A successful (non-reject) MsgAppResp contains two pieces of
+				// information: the highest log index and the commit index. Raft
+				// currently queues up one MsgAppResp per incoming MsgApp, and we may
+				// process multiple messages in one handleRaftReady call (because
 				// multiple messages may arrive while we're blocked syncing to
 				// disk). If we get redundant MsgAppResps, drop all but the
 				// last (we've seen that too many MsgAppResps can overflow
