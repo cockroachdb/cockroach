@@ -200,6 +200,10 @@ const (
 	numOpTypes int = iota
 )
 
+func isDMLOpType(t opType) bool {
+	return t == insertRow || t == selectStmt || t == validate
+}
+
 var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, error){
 	// Non-DDL
 	insertRow:  (*operationGenerator).insertRow,

@@ -182,7 +182,7 @@ func (og *operationGenerator) getSupportedDeclarativeOp(
 // stochastic attempts and if verbosity is >= 2 the unsuccessful attempts are
 // recorded in `log` to help with debugging of the workload.
 func (og *operationGenerator) randOp(
-	ctx context.Context, tx pgx.Tx, useDeclarativeSchemaChanger bool,
+	ctx context.Context, tx pgx.Tx, useDeclarativeSchemaChanger, allowDML bool,
 ) (stmt *opStmt, err error) {
 	for {
 		var op opType
@@ -195,6 +195,10 @@ func (og *operationGenerator) randOp(
 		} else {
 			op = opType(og.params.ops.Int())
 		}
+		if !allowDML && isDMLOpType(op) {
+			continue
+		}
+
 		og.resetOpState(useDeclarativeSchemaChanger)
 		stmt, err = opFuncs[op](og, ctx, tx)
 		if err != nil {
