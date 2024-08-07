@@ -34,6 +34,7 @@ const (
 	OwnerServer             Owner = `server` // not currently staffed
 	OwnerSQLFoundations     Owner = `sql-foundations`
 	OwnerMigrations         Owner = `migrations`
+	OwnerProdSecEng         Owner = `prodsec-eng`
 	OwnerReleaseEng         Owner = `release-eng`
 	OwnerSQLQueries         Owner = `sql-queries`
 	OwnerStorage            Owner = `storage`
