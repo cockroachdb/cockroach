@@ -615,7 +615,7 @@ INSERT INTO t2_64101 VALUES(ARRAY['b'])
 statement ok
 ALTER TYPE typ_64101 DROP VALUE 'c'
 
-statement error could not remove enum value "a" as it is being used by "t1_64101" in row: bob"b='a'
+statement error could not remove enum value "a" as it is being used by "t1_64101" in row: "bob""b"='a'
 ALTER TYPE typ_64101 DROP VALUE 'a'
 
 statement error could not remove enum value "b" as it is being used by table "test.public.t2_64101"

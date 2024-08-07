@@ -16,7 +16,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -59,7 +58,7 @@ func (og *operationGenerator) sequenceExists(
 }
 
 func (og *operationGenerator) columnExistsOnTable(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
 ) (bool, error) {
 	return og.scanBool(ctx, tx, `SELECT EXISTS (
 	SELECT column_name
@@ -136,7 +135,7 @@ func (og *operationGenerator) tableHasDependencies(
 }
 
 func (og *operationGenerator) columnIsDependedOn(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
 ) (bool, error) {
 	// To see if a column is depended on, the ordinal_position of the column is looked up in
 	// information_schema.columns. Then, this position is used to see if that column has view dependencies
@@ -188,7 +187,7 @@ func (og *operationGenerator) columnIsDependedOn(
 
 // colIsRefByComputed determines if a column is referenced by a computed column.
 func (og *operationGenerator) colIsRefByComputed(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
 ) (bool, error) {
 	return og.scanBool(ctx, tx, `SELECT EXISTS(
     SELECT
@@ -207,7 +206,7 @@ func (og *operationGenerator) colIsRefByComputed(
 }
 
 func (og *operationGenerator) columnIsDependedOnByView(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
 ) (bool, error) {
 	return og.scanBool(ctx, tx, `SELECT EXISTS(
 		SELECT source.column_id
@@ -244,7 +243,7 @@ func (og *operationGenerator) columnIsDependedOnByView(
 }
 
 func (og *operationGenerator) colIsPrimaryKey(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
 ) (bool, error) {
 	primaryColumns, err := og.scanStringArray(ctx, tx,
 		`
@@ -268,10 +267,7 @@ SELECT array_agg(column_name)
 	}
 
 	for _, primaryColumn := range primaryColumns {
-		// primaryColumn will be double-quoted only if it had any special
-		// characters, so compare against both the quoted	and the unquoted
-		// name.
-		if primaryColumn == columnName || primaryColumn == lexbase.EscapeSQLIdent(columnName) {
+		if tree.Name(primaryColumn) == columnName {
 			return true, nil
 		}
 	}
@@ -351,7 +347,7 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 	ctx context.Context,
 	tx pgx.Tx,
 	tableName *tree.TableName,
-	nonGeneratedColNames []string,
+	nonGeneratedColNames []tree.Name,
 	colInfos []column,
 	row []string,
 ) (
@@ -366,7 +362,7 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 		}
 	}()
 	// Put values to be inserted into a column name to value map to simplify lookups.
-	columnsToValues := map[string]string{}
+	columnsToValues := map[tree.Name]string{}
 	for i := 0; i < len(nonGeneratedColNames); i++ {
 		columnsToValues[nonGeneratedColNames[i]] = row[i]
 	}
@@ -406,7 +402,7 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 			}
 			query.WriteString(value)
 			queryEvalOrderCheck.WriteString(nonNullValue)
-			cols.WriteString(colName)
+			cols.WriteString(colName.String())
 			colIdx++
 		}
 
@@ -426,7 +422,7 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 				}
 				query.WriteString(col)
 				queryEvalOrderCheck.WriteString(col)
-				cols.WriteString(colInfo.name)
+				cols.WriteString(colInfo.name.String())
 				colIdx++
 			}
 		}
@@ -496,7 +492,7 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 
 // generateColumn generates values for columns that are generated.
 func (og *operationGenerator) generateColumn(
-	ctx context.Context, tx pgx.Tx, colInfo column, columnsToValues map[string]string,
+	ctx context.Context, tx pgx.Tx, colInfo column, columnsToValues map[tree.Name]string,
 ) (string, error) {
 	if !colInfo.generated {
 		return "", errors.AssertionFailedf("column is not generated: %v", colInfo.name)
@@ -521,7 +517,7 @@ func (og *operationGenerator) generateColumn(
 			cols.WriteString(",")
 		}
 		query.WriteString(value)
-		cols.WriteString(colName)
+		cols.WriteString(colName.String())
 		colIdx++
 	}
 	query.WriteString(")) AS t(")
@@ -648,9 +644,16 @@ func (og *operationGenerator) scanStringArray(
 // The column names must already be quoted/escaped if necessary when this
 // function is called.
 func (og *operationGenerator) canApplyUniqueConstraint(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columns []string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columns []tree.Name,
 ) (bool, error) {
-	columnNames := strings.Join(columns, ", ")
+	var columnNamesBuilder strings.Builder
+	for i, c := range columns {
+		if i > 0 {
+			columnNamesBuilder.WriteString(", ")
+		}
+		columnNamesBuilder.WriteString(c.String())
+	}
+	columnNames := columnNamesBuilder.String()
 
 	// If a row contains NULL in each of the columns relevant to a unique constraint,
 	// then the row will always be unique to other rows with respect to the constraint
@@ -660,7 +663,7 @@ func (og *operationGenerator) canApplyUniqueConstraint(
 	// verified easily using a SELECT DISTINCT statement.
 	whereNotNullClause := strings.Builder{}
 	for idx, column := range columns {
-		whereNotNullClause.WriteString(fmt.Sprintf("%s IS NOT NULL ", column))
+		whereNotNullClause.WriteString(fmt.Sprintf("%s IS NOT NULL ", column.String()))
 		if idx != len(columns)-1 {
 			whereNotNullClause.WriteString("OR ")
 		}
@@ -686,13 +689,13 @@ func (og *operationGenerator) canApplyUniqueConstraint(
 }
 
 func (og *operationGenerator) columnContainsNull(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
 ) (bool, error) {
 	return og.scanBool(ctx, tx, fmt.Sprintf(`SELECT EXISTS (
 		SELECT %s
 		  FROM %s
 	   WHERE %s IS NULL
-	)`, lexbase.EscapeSQLIdent(columnName), tableName.String(), lexbase.EscapeSQLIdent(columnName)))
+	)`, columnName.String(), tableName.String(), columnName.String()))
 }
 
 func (og *operationGenerator) constraintIsPrimary(
@@ -711,7 +714,7 @@ func (og *operationGenerator) constraintIsPrimary(
 
 // Checks if a column has a single unique constraint.
 func (og *operationGenerator) columnHasSingleUniqueConstraint(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
 ) (bool, error) {
 	// Rowid will always be unique, though the index is hidden.
 	if columnName == "rowid" {
@@ -753,7 +756,7 @@ func (og *operationGenerator) constraintIsUnique(
 }
 
 func (og *operationGenerator) columnIsStoredComputed(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
 ) (bool, error) {
 	// Note that we COALESCE because the column may not exist.
 	return og.scanBool(ctx, tx, `
@@ -770,7 +773,7 @@ SELECT COALESCE(
 }
 
 func (og *operationGenerator) columnIsVirtualComputed(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
 ) (bool, error) {
 	// Note that we COALESCE because the column may not exist.
 	return og.scanBool(ctx, tx, `
@@ -834,7 +837,7 @@ SELECT count(*) FROM %s
 		  LEFT JOIN %s as t2
 				     ON t1.%s = t2.%s
 			WHERE t2.%s IS NOT NULL
-`, childTable.String(), parentTable.String(), tree.NameString(childColumn.name), tree.NameString(parentColumn.name), tree.NameString(parentColumn.name))
+`, childTable.String(), parentTable.String(), childColumn.name.String(), parentColumn.name.String(), parentColumn.name.String())
 
 	numJoinRows, err := og.scanInt(ctx, tx, q)
 	if err != nil {
@@ -875,7 +878,7 @@ func (og *operationGenerator) violatesFkConstraints(
 	ctx context.Context,
 	tx pgx.Tx,
 	tableName *tree.TableName,
-	nonGeneratedColNames []string,
+	nonGeneratedColNames []tree.Name,
 	rows [][]string,
 ) (bool, error) {
 	// TODO(annie): readd the join on active constraints once #120702 is resolved.
@@ -884,7 +887,7 @@ func (og *operationGenerator) violatesFkConstraints(
 	// not the case with table/schema names; thus, only column names are quote_ident'ed to ensure that they get
 	// referenced properly.
 	fkConstraints, err := og.scanStringArrayRows(ctx, tx, fmt.Sprintf(`
-		SELECT array[parent.table_schema, parent.table_name, quote_ident(parent.column_name), quote_ident(child.column_name)]
+		SELECT array[parent.table_schema, parent.table_name, parent.column_name, child.column_name]
 		  FROM (
 		        SELECT conname, conkey, confkey, conrelid, confrelid
 		          FROM pg_constraint
@@ -918,7 +921,7 @@ func (og *operationGenerator) violatesFkConstraints(
 
 	// Maps a column name to its index. This way, the value of a column in a row can be looked up
 	// using row[colToIndexMap["columnName"]] = "valueForColumn"
-	columnNameToIndexMap := map[string]int{}
+	columnNameToIndexMap := map[tree.Name]int{}
 
 	for i, name := range nonGeneratedColNames {
 		columnNameToIndexMap[name] = i
@@ -926,13 +929,13 @@ func (og *operationGenerator) violatesFkConstraints(
 
 	for _, row := range rows {
 		for _, constraint := range fkConstraints {
-			parentTableSchema := constraint[0]
-			parentTableName := constraint[1]
-			parentColumnName := constraint[2]
-			childColumnName := constraint[3]
+			parentTableSchema := tree.Name(constraint[0])
+			parentTableName := tree.Name(constraint[1])
+			parentColumnName := tree.Name(constraint[2])
+			childColumnName := tree.Name(constraint[3])
 
 			// If self referential, there cannot be a violation.
-			parentAndChildAreSame := parentTableSchema == tableName.Schema() && parentTableName == tableName.Object()
+			parentAndChildAreSame := parentTableSchema == tableName.SchemaName && parentTableName == tableName.ObjectName
 			if parentAndChildAreSame && parentColumnName == childColumnName {
 				continue
 			}
@@ -957,8 +960,8 @@ func (og *operationGenerator) violatesFkConstraints(
 func (og *operationGenerator) violatesFkConstraintsHelper(
 	ctx context.Context,
 	tx pgx.Tx,
-	columnNameToIndexMap map[string]int,
-	parentTableSchema, parentTableName, parentColumn, childColumn string,
+	columnNameToIndexMap map[tree.Name]int,
+	parentTableSchema, parentTableName, parentColumn, childColumn tree.Name,
 	childTableName *tree.TableName,
 	parentAndChildAreSameTable bool,
 	rowToInsert []string,
@@ -998,7 +1001,7 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 			var parentValueInSameInsert string
 			if parentColInfo.generated {
 				// If the parent column is a computed column, spend time to generate the value.
-				columnsToValues := map[string]string{}
+				columnsToValues := map[tree.Name]string{}
 				for name, idx := range columnNameToIndexMap {
 					columnsToValues[name] = rowToInsert[idx]
 				}
@@ -1031,12 +1034,12 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	    SELECT %s count(*) = 0 from %s.%s
 	    WHERE %s = (%s)
 	`,
-		checkSharedParentChildRows, parentTableSchema, parentTableName, parentColumn, childValue)
+		checkSharedParentChildRows, parentTableSchema.String(), parentTableName.String(), parentColumn.String(), childValue)
 	return og.scanBool(ctx, tx, q)
 }
 
 func (og *operationGenerator) columnIsInDroppingIndex(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
 ) (bool, error) {
 	return og.scanBool(ctx, tx, `
 SELECT EXISTS(
@@ -1096,7 +1099,7 @@ SELECT true
 }
 
 func (og *operationGenerator) columnNotNullConstraintInMutation(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
 ) (bool, error) {
 	return og.scanBool(ctx, tx, `
   WITH `+descriptorsAndConstraintMutationsCTE+`,
@@ -1272,7 +1275,7 @@ SELECT
 // supplied table is not REGIONAL BY ROW.
 func (og *operationGenerator) getRegionColumn(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
-) (string, error) {
+) (tree.Name, error) {
 	isTableRegionalByRow, err := og.tableIsRegionalByRow(ctx, tx, tableName)
 	if err != nil {
 		return "", err
@@ -1310,7 +1313,7 @@ FROM
 		return "", err
 	}
 
-	return regionCol, nil
+	return tree.Name(regionCol), nil
 }
 
 // tableIsRegionalByRow checks whether the given table is a REGIONAL BY ROW table.
