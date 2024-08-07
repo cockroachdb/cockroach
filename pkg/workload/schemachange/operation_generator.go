@@ -1645,10 +1645,18 @@ func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) 
 		return nil, err
 	}
 
+	blockDropComputedColDefaultNotSupported, err := isClusterVersionLessThan(ctx,
+		tx,
+		clusterversion.V24_2.Version())
+	if err != nil {
+		return nil, err
+	}
+
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
-		{code: pgcode.Syntax, condition: colIsVirtualComputed || colIsStoredComputed},
+		{code: pgcode.Syntax, condition: !blockDropComputedColDefaultNotSupported &&
+			colIsVirtualComputed || colIsStoredComputed},
 	})
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT`, tableName,
 		lexbase.EscapeSQLIdent(columnName))
@@ -2297,6 +2305,12 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 				tableName, lexbase.EscapeSQLIdent(columnForDefault.name)), pgcode.UndefinedColumn), nil
 	}
 
+	blockSetComputedColDefaultNotSupported, err := isClusterVersionLessThan(ctx,
+		tx,
+		clusterversion.V24_2.Version())
+	if err != nil {
+		return nil, err
+	}
 	datumTyp := columnForDefault.typ
 	// Optionally change the incorrect type to potentially create errors.
 	if og.produceError() {
@@ -2308,7 +2322,7 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 			errCode := pgcode.UndefinedObject // Error: type 'IrrelevantType'::<newTypeName> does not exist.
 			// Setting default on generated column short-circuits and returns a syntax
 			// error.
-			if columnForDefault.generated {
+			if !blockSetComputedColDefaultNotSupported && columnForDefault.generated {
 				errCode = pgcode.Syntax
 			}
 			return makeOpStmtForSingleError(OpStmtDDL,
@@ -2325,8 +2339,15 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 		stmt.expectedExecErrors.add(pgcode.DatatypeMismatch)
 	}
 	// Generated columns cannot have default values.
-	if columnForDefault.generated {
+	if !blockSetComputedColDefaultNotSupported && columnForDefault.generated {
 		stmt.expectedExecErrors.add(pgcode.Syntax)
+	}
+
+	if blockSetComputedColDefaultNotSupported && columnForDefault.generated {
+		// Setting a NULL default on a computed column is a no-op.
+		if defaultDatum != tree.DNull {
+			stmt.expectedExecErrors.add(pgcode.UndefinedObject)
+		}
 	}
 
 	strDefault := tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)
