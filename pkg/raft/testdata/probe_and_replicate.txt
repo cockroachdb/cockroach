@@ -489,9 +489,9 @@ stabilize 1 2
   Ready MustSync=true:
   HardState Term:8 Vote:1 Commit:18 Lead:1
   Messages:
-  2->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 19)
+  2->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 19) Commit:18
 > 1 receiving messages
-  2->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 19)
+  2->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 19) Commit:18
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
@@ -510,9 +510,9 @@ stabilize 1 2
   6/20 EntryNormal "prop_6_20"
   8/21 EntryNormal ""
   Messages:
-  2->1 MsgAppResp Term:8 Log:0/21
+  2->1 MsgAppResp Term:8 Log:0/21 Commit:18
 > 1 receiving messages
-  2->1 MsgAppResp Term:8 Log:0/21
+  2->1 MsgAppResp Term:8 Log:0/21 Commit:18
 
 stabilize 1 3
 ----
@@ -522,9 +522,9 @@ stabilize 1 3
   Ready MustSync=true:
   HardState Term:8 Vote:1 Commit:14 Lead:1
   Messages:
-  3->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 14)
+  3->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 14) Commit:14
 > 1 receiving messages
-  3->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 14)
+  3->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 14) Commit:14
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
@@ -564,9 +564,9 @@ stabilize 1 3
   5/17 EntryNormal "prop_5_17"
   6/18 EntryNormal ""
   Messages:
-  3->1 MsgAppResp Term:8 Log:0/21
+  3->1 MsgAppResp Term:8 Log:0/21 Commit:18
 > 1 receiving messages
-  3->1 MsgAppResp Term:8 Log:0/21
+  3->1 MsgAppResp Term:8 Log:0/21 Commit:18
 
 stabilize 1 4
 ----
@@ -580,9 +580,9 @@ stabilize 1 4
   Entries:
   8/21 EntryNormal ""
   Messages:
-  4->1 MsgAppResp Term:8 Log:0/21
+  4->1 MsgAppResp Term:8 Log:0/21 Commit:18
 > 1 receiving messages
-  4->1 MsgAppResp Term:8 Log:0/21
+  4->1 MsgAppResp Term:8 Log:0/21 Commit:18
 > 1 handling Ready
   Ready MustSync=false:
   HardState Term:8 Vote:1 Commit:21 Lead:1
@@ -604,9 +604,9 @@ stabilize 1 4
   6/20 EntryNormal "prop_6_20"
   8/21 EntryNormal ""
   Messages:
-  4->1 MsgAppResp Term:8 Log:0/21
+  4->1 MsgAppResp Term:8 Log:0/21 Commit:21
 > 1 receiving messages
-  4->1 MsgAppResp Term:8 Log:0/21
+  4->1 MsgAppResp Term:8 Log:0/21 Commit:21
 
 stabilize 1 5
 ----
@@ -616,9 +616,9 @@ stabilize 1 5
   Ready MustSync=true:
   HardState Term:8 Commit:18 Lead:1
   Messages:
-  5->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 18)
+  5->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 18) Commit:18
 > 1 receiving messages
-  5->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 18)
+  5->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 18) Commit:18
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
@@ -647,9 +647,9 @@ stabilize 1 5
   6/20 EntryNormal "prop_6_20"
   8/21 EntryNormal ""
   Messages:
-  5->1 MsgAppResp Term:8 Log:0/21
+  5->1 MsgAppResp Term:8 Log:0/21 Commit:21
 > 1 receiving messages
-  5->1 MsgAppResp Term:8 Log:0/21
+  5->1 MsgAppResp Term:8 Log:0/21 Commit:21
 
 stabilize 1 6
 ----
@@ -659,9 +659,9 @@ stabilize 1 6
   Ready MustSync=true:
   HardState Term:8 Vote:1 Commit:15 Lead:1
   Messages:
-  6->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 17)
+  6->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 17) Commit:15
 > 1 receiving messages
-  6->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 17)
+  6->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 17) Commit:15
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
@@ -702,9 +702,9 @@ stabilize 1 6
   6/20 EntryNormal "prop_6_20"
   8/21 EntryNormal ""
   Messages:
-  6->1 MsgAppResp Term:8 Log:0/21
+  6->1 MsgAppResp Term:8 Log:0/21 Commit:21
 > 1 receiving messages
-  6->1 MsgAppResp Term:8 Log:0/21
+  6->1 MsgAppResp Term:8 Log:0/21 Commit:21
 
 stabilize 1 7
 ----
@@ -714,9 +714,9 @@ stabilize 1 7
   Ready MustSync=true:
   HardState Term:8 Vote:1 Commit:13 Lead:1
   Messages:
-  7->1 MsgAppResp Term:8 Log:3/20 Rejected (Hint: 20)
+  7->1 MsgAppResp Term:8 Log:3/20 Rejected (Hint: 20) Commit:13
 > 1 receiving messages
-  7->1 MsgAppResp Term:8 Log:3/20 Rejected (Hint: 20)
+  7->1 MsgAppResp Term:8 Log:3/20 Rejected (Hint: 20) Commit:13
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
@@ -765,6 +765,6 @@ stabilize 1 7
   6/20 EntryNormal "prop_6_20"
   8/21 EntryNormal ""
   Messages:
-  7->1 MsgAppResp Term:8 Log:0/21
+  7->1 MsgAppResp Term:8 Log:0/21 Commit:21
 > 1 receiving messages
-  7->1 MsgAppResp Term:8 Log:0/21
+  7->1 MsgAppResp Term:8 Log:0/21 Commit:21
