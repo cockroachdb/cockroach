@@ -17,6 +17,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -52,6 +53,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
@@ -3658,16 +3662,45 @@ func TestLeaseDescriptorRangeFeedFailure(t *testing.T) {
 	lease.LeaseMonitorRangeFeedResetTime.Override(ctx, &settings.SV, 10*time.Second)
 	// Expire leases to make this test run faster.
 	lease.LeaseDuration.Override(ctx, &settings.SV, 0)
-	srv := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+	var srv serverutils.TestClusterInterface
+	var enableAfterStageKnob atomic.Bool
+	var rangeFeedResetChan chan struct{}
+	srv = serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings: settings,
-		}})
+			Knobs: base.TestingKnobs{
+				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+					BeforeStage: func(p scplan.Plan, stageIdx int) error {
+						// Once this stage completes, we can "resume" the range feed,
+						// so the update is detected.
+						if p.Params.ExecutionPhase == scop.PostCommitPhase &&
+							enableAfterStageKnob.Load() &&
+							strings.Contains(p.Statements[0].Statement, "ADD COLUMN") {
+							rangeFeedResetChan = srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(true)
+						}
+						return nil
+					},
+					AfterStage: func(p scplan.Plan, stageIdx int) error {
+						// Once this stage completes, we can "resume" the range feed,
+						// so the update is detected.
+						if p.Params.ExecutionPhase == scop.PostCommitPhase &&
+							enableAfterStageKnob.Load() &&
+							strings.Contains(p.Statements[0].Statement, "ADD COLUMN") {
+							<-rangeFeedResetChan
+							srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(false)
+							enableAfterStageKnob.Swap(false)
+						}
+						return nil
+					},
+				},
+			},
+		},
+	})
 	defer srv.Stopper().Stop(ctx)
 	firstConn := sqlutils.MakeSQLRunner(srv.ServerConn(0))
 	secondConn := sqlutils.MakeSQLRunner(srv.ServerConn(1))
 	// On node 1 intentionally disable the rangefeed, so that the watch dog
 	// detects a problem.
-	srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(true)
 	defer srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(false)
 	firstConn.Exec(t, "CREATE TABLE t1(n int)")
 	require.NoError(t, srv.WaitForFullReplication())
@@ -3677,6 +3710,7 @@ func TestLeaseDescriptorRangeFeedFailure(t *testing.T) {
 	// This schema change will wait for the connection on
 	// node 1 to release the lease. Because the rangefeed is
 	// disabled it will never know about the new version.
+	enableAfterStageKnob.Store(true)
 	firstConn.Exec(t, "ALTER TABLE t1 ADD COLUMN j INT DEFAULT 64")
 	_, err = tx.Exec("INSERT INTO t1 VALUES (32)")
 	if err != nil {
