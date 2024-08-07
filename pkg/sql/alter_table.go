@@ -1298,7 +1298,8 @@ func labeledRowValues(cols []catalog.Column, values tree.Datums) string {
 		if i != 0 {
 			s.WriteString(`, `)
 		}
-		s.WriteString(cols[i].GetName())
+		colName := cols[i].ColName()
+		s.WriteString(colName.String())
 		s.WriteString(`=`)
 		s.WriteString(values[i].String())
 	}
