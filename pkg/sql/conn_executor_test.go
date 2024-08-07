@@ -1337,7 +1337,7 @@ CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 		}
 		err = txn.Commit()
 		require.NoError(t, err)
-		locked(func() { require.True(t, fs.Expiration().EqOrdering(mu.txnDeadline)) })
+		locked(func() { require.Equal(t, fs.Expiration(), mu.txnDeadline) })
 	})
 
 	t.Run("lease_deadline_overrides_session_expiry", func(t *testing.T) {

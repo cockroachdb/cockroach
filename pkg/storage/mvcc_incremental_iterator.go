@@ -915,7 +915,7 @@ func (i *MVCCIncrementalIterator) assertInvariants() error {
 	// i.meta should match the underlying iterator's key.
 	if hasPoint, _ := i.iter.HasPointAndRange(); hasPoint {
 		metaTS := i.meta.Timestamp.ToTimestamp()
-		if iterKey.Timestamp.IsSet() && !metaTS.EqOrdering(iterKey.Timestamp) {
+		if iterKey.Timestamp.IsSet() && metaTS != iterKey.Timestamp {
 			return errors.AssertionFailedf("i.meta.Timestamp %s differs from i.iter.UnsafeKey %s",
 				metaTS, iterKey)
 		}

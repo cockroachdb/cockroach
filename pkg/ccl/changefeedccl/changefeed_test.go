@@ -2128,7 +2128,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	// (this is mostly due to racy updates sent from aggregators to the frontier.
 	// However, the checkpoint timestamp should be at least at the cursor.
 	progress := loadProgress()
-	require.True(t, progress.GetHighWater().IsEmpty() || progress.GetHighWater().EqOrdering(cursor),
+	require.True(t, progress.GetHighWater().IsEmpty() || *progress.GetHighWater() == cursor,
 		"expected empty highwater or %s,  found %s", cursor, progress.GetHighWater())
 	require.NotNil(t, progress.GetChangefeed().Checkpoint)
 	require.Less(t, 0, len(progress.GetChangefeed().Checkpoint.Spans))
@@ -7513,7 +7513,7 @@ func TestChangefeedEndTimeWithCursor(t *testing.T) {
 		// event with end_time timestamp.  That is: verify frontier.Frontier() is at end_time.
 		expectedFrontier := endTime.Prev()
 		testutils.SucceedsWithin(t, func() error {
-			if expectedFrontier.EqOrdering(frontier.Frontier()) {
+			if expectedFrontier == frontier.Frontier() {
 				return nil
 			}
 			return errors.Newf("still waiting for frontier to reach %s, current %s",
