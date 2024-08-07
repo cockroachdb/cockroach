@@ -42,7 +42,11 @@ func registerImportMixedVersions(r registry.Registry) {
 func runImportMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster, warehouses int) {
 	// NB: We rely on the testing framework to choose a random predecessor to
 	// upgrade from.
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All())
+	mvt := mixedversion.NewTest(
+		ctx, t, t.L(), c, c.All(),
+		// Multi-tenant mode for this test only works on 23.2+
+		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
+	)
 	runImport := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 		if err := h.Exec(r, "DROP DATABASE IF EXISTS tpcc CASCADE;"); err != nil {
 			return err
