@@ -117,14 +117,14 @@ stabilize 3
   HardState Term:1 Commit:11 Lead:1
   Snapshot Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
-  3->1 MsgAppResp Term:1 Log:0/11
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
 
 # The MsgAppResp lets the leader move the follower back to replicating state.
 # Leader sends another MsgAppResp, to communicate the updated commit index.
 stabilize 1
 ----
 > 1 receiving messages
-  3->1 MsgAppResp Term:1 Log:0/11
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
   DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=11 next=12 paused pendingSnap=11]
 
 status 1
