@@ -474,7 +474,8 @@ func (w *schemaChangeWorker) runInTxn(
 			break
 		}
 
-		op, err := w.opGen.randOp(ctx, tx, useDeclarativeSchemaChanger)
+		// Only allow DML for single-statement transactions.
+		op, err := w.opGen.randOp(ctx, tx, useDeclarativeSchemaChanger, opsNum == 1)
 		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
 			pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 			return errors.Mark(err, errRunInTxnRbkSentinel)
