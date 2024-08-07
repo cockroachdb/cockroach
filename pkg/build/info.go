@@ -114,7 +114,12 @@ func BinaryVersion() string {
 // N.B. new public-facing doc URLs are expected to be up beginning with the "alpha.1" prerelease. Otherwise, "dev" will
 // cause the url mapper to redirect to the latest stable release.
 func VersionForURLs() string {
+	// Prerelease versions >= "alpha.1"
 	if parsedVersionTxt.PreRelease() >= "alpha.1" {
+		return fmt.Sprintf("v%d.%d", parsedVersionTxt.Major(), parsedVersionTxt.Minor())
+	}
+	// Production release versions
+	if parsedVersionTxt.PreRelease() == "" {
 		return fmt.Sprintf("v%d.%d", parsedVersionTxt.Major(), parsedVersionTxt.Minor())
 	}
 	return "dev"
