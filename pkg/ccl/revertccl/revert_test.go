@@ -181,15 +181,18 @@ func TestRevertGCThreshold(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	codec := srv.ApplicationLayer().Codec()
 
-	req := &kvpb.RevertRangeRequest{
+	req1 := kvpb.RevertRangeRequest{
 		RequestHeader: kvpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(codec), EndKey: codec.TenantEndKey()},
 		TargetTime:    hlc.Timestamp{WallTime: -1},
 	}
-	_, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
+	req2 := req1
+	req2.IgnoreGcThreshold = true
+
+	_, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), &req1)
 	if !testutils.IsPError(pErr, "must be after replica GC threshold") {
 		t.Fatalf(`expected "must be after replica GC threshold" error got: %+v`, pErr)
 	}
-	req.IgnoreGcThreshold = true
-	_, pErr = kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
+
+	_, pErr = kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), &req2)
 	require.Nil(t, pErr)
 }
