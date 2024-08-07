@@ -61,6 +61,10 @@ type ManagerTestingKnobs struct {
 	// DisableRangeFeedCheckpoint is used to disable rangefeed checkpoints.
 	DisableRangeFeedCheckpoint bool
 
+	// RangeFeedReset channel is closed to indicate that the range feed
+	// has been reset.
+	RangeFeedResetChannel chan struct{}
+
 	LeaseStoreTestingKnobs StorageTestingKnobs
 }
 
