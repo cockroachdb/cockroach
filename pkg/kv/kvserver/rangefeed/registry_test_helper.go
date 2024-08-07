@@ -94,7 +94,8 @@ func (s *testStream) BlockSend() func() {
 	s.mu.Lock()
 	var once sync.Once
 	return func() {
-		once.Do(s.mu.Unlock) // safe to call multiple times, e.g. defer and explicit
+		// safe to call multiple times, e.g. defer and explicit
+		once.Do(s.mu.Unlock) //nolint:deferunlockcheck
 	}
 }
 
@@ -239,7 +240,8 @@ func (s *testBufferedStream) BlockSend() func() {
 	s.mu.Lock()
 	var once sync.Once
 	return func() {
-		once.Do(s.mu.Unlock) // safe to call multiple times, e.g. defer and explicit
+		// safe to call multiple times, e.g. defer and explicit
+		once.Do(s.mu.Unlock) //nolint:deferunlockcheck
 	}
 }
 
