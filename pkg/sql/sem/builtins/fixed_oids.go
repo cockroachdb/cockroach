@@ -2364,7 +2364,7 @@ var builtinOidsArray = []string{
 	2394: `array_cat_agg(arg1: varbit[]) -> varbit[]`,
 	2395: `array_cat_agg(arg1: anyenum[]) -> anyenum[]`,
 	2396: `array_cat_agg(arg1: tuple[]) -> tuple[]`,
-	2397: `crdb_internal.update_tenant_resource_limits(tenant_name: string, available_tokens: float, refill_rate: float, max_burst_tokens: float, as_of: timestamp, as_of_consumed_tokens: float) -> int`,
+	2397: `crdb_internal.update_tenant_resource_limits(tenant_name: string, available_tokens: float, refill_rate: float, max_burst_tokens: float) -> int`,
 	2398: `to_tsquery(text: string) -> tsquery`,
 	2399: `to_tsvector(text: string) -> tsvector`,
 	2400: `phraseto_tsquery(text: string) -> tsquery`,

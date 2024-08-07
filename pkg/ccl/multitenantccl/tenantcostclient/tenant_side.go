@@ -36,20 +36,18 @@ import (
 	"github.com/cockroachdb/errors/errorspb"
 )
 
-// EstimatedNodesSetting is the number of nodes assumed to be in the virtual
-// cluster, for the purpose of calculating estimated CPU. This is independent of
-// the number of nodes in the underlying host cluster, so that estimated CPU
-// will not change when host cluster hardware changes. If zero, then the
-// estimated CPU model will not be used by this tenant (e.g. because it's an
-// on-demand tenant). This is a float in order to make its effect on estimated
-// CPU a smooth function rather than a series of "steps".
-var EstimatedNodesSetting = settings.RegisterFloatSetting(
+// ProvisionedVcpusSetting is the number of estimated vCPUs that are available
+// for the virtual cluster to use. This is independent of the number of nodes or
+// vCPUs per node in the underlying host cluster, so that estimated CPU will not
+// change when host cluster hardware changes. If zero, then the estimated CPU
+// model will not be used by this tenant (e.g. because it's an on-demand
+// tenant).
+var ProvisionedVcpusSetting = settings.RegisterIntSetting(
 	settings.SystemVisible,
-	"tenant_cost_control.estimated_nodes",
-	"number of nodes assumed to be in the virtual cluster, for the purpose "+
-		"of calculating estimated CPU",
+	"tenant_cost_control.provisioned_vcpus",
+	"number of vcpus available to the virtual cluster",
 	0,
-	settings.NonNegativeFloat,
+	settings.NonNegativeInt,
 )
 
 // InitialRequestSetting is exported for testing purposes.
@@ -122,6 +120,12 @@ const bufferTokens = 5000
 // magnitude as request units.
 const tokensPerCPUSecond = 1000
 
+// provisionedVcpusPerNode is the number of vCPUs per node, as used in the
+// estimated CPU model. While virtual clusters do not have physical vCPUs or
+// physical nodes, the model predicts CPU usage in a physical cluster, so assume
+// that the modeled physical cluster has 8 vCPUs per node.
+const provisionedVcpusPerNode = 8
+
 func newTenantSideCostController(
 	st *cluster.Settings,
 	tenantID roachpb.TenantID,
@@ -168,9 +172,26 @@ func newTenantSideCostController(
 	tenantcostmodel.SetOnChange(&st.SV, func(ctx context.Context) {
 		storeModels()
 	})
-
-	// Set initial models.
 	storeModels()
+
+	vcpusChanged := func() {
+		vcpus := ProvisionedVcpusSetting.Get(&st.SV)
+		var nodeCount float64
+		if vcpus > 0 {
+			// Divide the number of vCPUs in the virtual cluster by 8 to derive
+			// the number of nodes to use when estimated CPU (min 3 nodes).
+			nodeCount = math.Max(float64(vcpus)/provisionedVcpusPerNode, 3)
+		}
+		c.provisionedNodes.Store(math.Float64bits(nodeCount))
+
+		// Update the metric to reflect the new number of provisioned vCPUs.
+		c.metrics.ProvisionedVcpus.Update(vcpus)
+	}
+
+	ProvisionedVcpusSetting.SetOnChange(&st.SV, func(ctx context.Context) {
+		vcpusChanged()
+	})
+	vcpusChanged()
 
 	return c, nil
 }
@@ -267,6 +288,12 @@ type tenantSideCostController struct {
 	// responseChan is used to receive results from token bucket requests, which
 	// are run in a separate goroutine. A nil response indicates an error.
 	responseChan chan *kvpb.TokenBucketResponse
+
+	// provisionedNodes is the number of nodes assumed to be in the virtual
+	// cluster, for the purpose of calculating estimated CPU. It is calculated
+	// from the estimated_vcpus setting. It is a Uint64-encoded float64 value and
+	// is always 0 for the RU model.
+	provisionedNodes atomic.Uint64
 
 	// run contains the state that is updated by the main loop. It doesn't need a
 	// mutex since the main loop runs on a single goroutine.
@@ -372,7 +399,7 @@ func (c *tenantSideCostController) Start(
 }
 
 func (c *tenantSideCostController) useRequestUnitModel() bool {
-	return EstimatedNodesSetting.Get(&c.settings.SV) == 0
+	return c.provisionedNodes.Load() == 0
 }
 
 func (c *tenantSideCostController) initRunState(ctx context.Context) {
@@ -817,7 +844,7 @@ func (c *tenantSideCostController) OnResponseWait(
 	var batchInfo tenantcostmodel.BatchInfo
 	var tokens float64
 	replicas := int64(len(targetRange.Replicas().Descriptors()))
-	nodeCount := EstimatedNodesSetting.Get(&c.settings.SV)
+	nodeCount := math.Float64frombits(c.provisionedNodes.Load())
 	if nodeCount == 0 {
 		// Calculate RU consumption for the operation.
 		ruModel := c.ruModel.Load()
