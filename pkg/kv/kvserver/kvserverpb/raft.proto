@@ -96,6 +96,10 @@ message RaftMessageRequest {
   // that were admitted below raft.
   repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedRaftLogEntries admitted_raft_log_entries = 11 [(gogoproto.nullable) = false];
 
+  // LowPriorityOverride is used in RACv2, and is only set if Message is a
+  // MsgApp. When true, it specifies that the priority of the Entries in the
+  // Message are overridden to be raftpb.LowPri.
+  bool low_priority_override = 12;
   reserved 10;
 }
 
