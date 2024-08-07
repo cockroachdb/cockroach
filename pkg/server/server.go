@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
@@ -574,9 +575,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		/* deterministic */ false,
 	)
 
+	storesForRACv2 := kvserver.MakeStoresForRACv2(stores)
 	storesForFlowControl := kvserver.MakeStoresForFlowControl(stores)
 	kvflowTokenDispatch := kvflowdispatch.New(nodeRegistry, storesForFlowControl, nodeIDContainer)
-	admittedEntryAdaptor := newAdmittedLogEntryAdaptor(kvflowTokenDispatch)
+	var onLogEntryAdmitted admission.OnLogEntryAdmitted
+	if kvflowconnectedstream.UseRACv2 {
+		onLogEntryAdmitted = storesForRACv2
+	} else {
+		onLogEntryAdmitted = newAdmittedLogEntryAdaptor(kvflowTokenDispatch)
+	}
 	admissionKnobs, ok := cfg.TestingKnobs.AdmissionControl.(*admission.TestingKnobs)
 	if !ok {
 		admissionKnobs = &admission.TestingKnobs{}
@@ -586,7 +593,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		st,
 		admissionOptions,
 		nodeRegistry,
-		admittedEntryAdaptor,
+		onLogEntryAdmitted,
 		admissionKnobs,
 	)
 	db.SQLKVResponseAdmissionQ = gcoords.Regular.GetWorkQueue(admission.SQLKVResponseWork)
@@ -605,6 +612,19 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		storesFlowControl        kvserver.StoresForFlowControl
 		kvFlowHandleMetrics      *kvflowhandle.Metrics
 	}
+	var racV2 struct {
+		streamsTokenCounter kvflowconnectedstream.StoreStreamsTokenCounter
+		sendTokensWatcher   kvflowconnectedstream.StoreStreamSendTokensWatcher
+		admittedPiggybacker kvserver.AdmittedPiggybackStateManager
+		flowControlMetrics  *kvflowconnectedstream.FlowControlMetrics
+	}
+	racV2.flowControlMetrics = kvflowconnectedstream.NewMetrics()
+	racV2.streamsTokenCounter = kvflowconnectedstream.NewStoreStreamsTokenCounter(st, clock, racV2.flowControlMetrics)
+	racV2.flowControlMetrics.Init(racV2.streamsTokenCounter, storesForRACv2, clock)
+	racV2.sendTokensWatcher = kvflowconnectedstream.NewStoreStreamSendTokensWatcher(stopper)
+	racV2.admittedPiggybacker = kvserver.NewAdmittedPiggybackStateManager()
+	nodeRegistry.AddMetricStruct(racV2.flowControlMetrics)
+
 	admissionControl.schedulerLatencyListener = gcoords.Elastic.SchedulerLatencyListener
 	admissionControl.kvflowController = kvflowcontroller.New(nodeRegistry, st, clock)
 	admissionControl.kvflowTokenDispatch = kvflowTokenDispatch
@@ -616,6 +636,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		gcoords.Stores,
 		admissionControl.kvflowController,
 		admissionControl.storesFlowControl,
+		storesForRACv2,
 		cfg.Settings,
 	)
 	admissionControl.kvFlowHandleMetrics = kvflowhandle.NewMetrics(nodeRegistry)
@@ -637,6 +658,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		admissionControl.kvflowTokenDispatch,
 		admissionControl.storesFlowControl,
 		admissionControl.storesFlowControl,
+		racV2.admittedPiggybacker,
+		storesForRACv2,
 		raftTransportKnobs,
 	)
 	nodeRegistry.AddMetricStruct(raftTransport.Metrics())
@@ -872,6 +895,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowController:             admissionControl.kvflowController,
 		KVFlowHandles:                admissionControl.storesFlowControl,
 		KVFlowHandleMetrics:          admissionControl.kvFlowHandleMetrics,
+		RACv2StreamsTokenCounter:     racV2.streamsTokenCounter,
+		RACv2SendTokensWatcher:       racV2.sendTokensWatcher,
+		RACv2AdmittedPiggybacker:     racV2.admittedPiggybacker,
+		RACv2Metrics:                 racV2.flowControlMetrics,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
 		RangeCount:                   &atomic.Int64{},
 	}

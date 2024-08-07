@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -182,6 +183,9 @@ type Controller interface {
 	// AdmitRaftEntry informs admission control of a raft log entry being
 	// written to storage.
 	AdmitRaftEntry(context.Context, roachpb.TenantID, roachpb.StoreID, roachpb.RangeID, raftpb.Entry)
+	AdmitRaftEntryV1OrV2(
+		ctx context.Context, tenantID roachpb.TenantID, storeID roachpb.StoreID, rangeID roachpb.RangeID,
+		entry raftpb.Entry, meta kvflowcontrolpb.RaftAdmissionMeta, isSideloaded bool)
 }
 
 // TenantWeightProvider can be periodically asked to provide the tenant
@@ -214,8 +218,11 @@ type controllerImpl struct {
 	kvAdmissionQ               *admission.WorkQueue
 	storeGrantCoords           *admission.StoreGrantCoordinators
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator
-	kvflowController           kvflowcontrol.Controller
-	kvflowHandles              kvflowcontrol.Handles
+	// RACv1
+	kvflowController kvflowcontrol.Controller
+	kvflowHandles    kvflowcontrol.Handles
+	// RACv2
+	storesForRACv2 StoresForEvalRACv2
 
 	settings *cluster.Settings
 	every    log.EveryN
@@ -251,6 +258,14 @@ func (h *Handle) AnnotateCtx(ctx context.Context) context.Context {
 	return ctx
 }
 
+type StoresForEvalRACv2 interface {
+	Lookup(rangeID roachpb.RangeID) RangeControllerProvider
+}
+
+type RangeControllerProvider interface {
+	RangeController() kvflowconnectedstream.RangeController
+}
+
 // MakeController returns a Controller. All three parameters must together be
 // nil or non-nil.
 func MakeController(
@@ -260,6 +275,7 @@ func MakeController(
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	kvflowController kvflowcontrol.Controller,
 	kvflowHandles kvflowcontrol.Handles,
+	storesForRACv2 StoresForEvalRACv2,
 	settings *cluster.Settings,
 ) Controller {
 	return &controllerImpl{
@@ -269,6 +285,7 @@ func MakeController(
 		elasticCPUGrantCoordinator: elasticCPUGrantCoordinator,
 		kvflowController:           kvflowController,
 		kvflowHandles:              kvflowHandles,
+		storesForRACv2:             storesForRACv2,
 		settings:                   settings,
 		every:                      log.Every(10 * time.Second),
 	}
@@ -334,25 +351,47 @@ func (n *controllerImpl) AdmitKVWork(
 		var admitted bool
 		attemptFlowControl := kvflowcontrol.Enabled.Get(&n.settings.SV)
 		if attemptFlowControl && !bypassAdmission {
-			kvflowHandle, found := n.kvflowHandles.Lookup(ba.RangeID)
-			if !found {
-				return Handle{}, nil
-			}
-			var err error
-			admitted, err = kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime))
-			if err != nil {
-				return Handle{}, err
-			} else if admitted {
-				// NB: It's possible for us to be waiting for available flow tokens
-				// for a different set of streams that the ones we'll eventually
-				// deduct tokens from, if the range experiences a split between now
-				// and the point of deduction. That's ok, there's no strong
-				// synchronization needed between these two points.
-				ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
-					AdmissionPriority:   int32(admissionInfo.Priority),
-					AdmissionCreateTime: admissionInfo.CreateTime,
-					AdmissionOriginNode: n.nodeID.Get(),
+			if !kvflowconnectedstream.UseRACv2 {
+				kvflowHandle, found := n.kvflowHandles.Lookup(ba.RangeID)
+				if !found {
+					return Handle{}, nil
 				}
+				var err error
+				admitted, err = kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime))
+				if err != nil {
+					return Handle{}, err
+				} else if admitted {
+					// NB: It's possible for us to be waiting for available flow tokens
+					// for a different set of streams that the ones we'll eventually
+					// deduct tokens from, if the range experiences a split between now
+					// and the point of deduction. That's ok, there's no strong
+					// synchronization needed between these two points.
+					ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
+						AdmissionPriority:   int32(admissionInfo.Priority),
+						AdmissionCreateTime: admissionInfo.CreateTime,
+						AdmissionOriginNode: n.nodeID.Get(),
+					}
+				}
+			} else {
+				rcp := n.storesForRACv2.Lookup(ba.RangeID)
+				if rcp == nil {
+					return Handle{}, nil
+				}
+				rc := rcp.RangeController()
+				if rc != nil {
+					err := rc.WaitForEval(ctx, admissionInfo.Priority)
+					if err != nil {
+						return Handle{}, err
+					}
+					ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
+						AdmissionPriority:   int32(kvflowcontrolpb.AdmissionPriorityToRaftPriority(admissionInfo.Priority)),
+						AdmissionCreateTime: admissionInfo.CreateTime,
+						AdmissionOriginNode: n.nodeID.Get(),
+					}
+					admitted = true
+				}
+				// Else, must not be leader
+				// Will do above-raft, leaseholder-only AC.
 			}
 		}
 		// If flow control is disabled or if work bypasses flow control, we still
@@ -571,6 +610,7 @@ func (n *controllerImpl) FollowerStoreWriteBytes(
 }
 
 // AdmitRaftEntry implements the Controller interface.
+// Only for RACv1
 func (n *controllerImpl) AdmitRaftEntry(
 	ctx context.Context,
 	tenantID roachpb.TenantID,
@@ -578,7 +618,7 @@ func (n *controllerImpl) AdmitRaftEntry(
 	rangeID roachpb.RangeID,
 	entry raftpb.Entry,
 ) {
-	typ, err := raftlog.EncodingOf(entry)
+	typ, _, err := raftlog.EncodingOf(entry)
 	if err != nil {
 		log.Errorf(ctx, "unable to determine raft command encoding: %v", err)
 		return
@@ -591,7 +631,19 @@ func (n *controllerImpl) AdmitRaftEntry(
 		log.Errorf(ctx, "unable to decode raft command admission data: %v", err)
 		return
 	}
+	n.AdmitRaftEntryV1OrV2(ctx, tenantID, storeID, rangeID, entry, meta, typ.IsSideloaded())
+}
 
+// AdmitRaftEntryV1OrV2 is shared code for either RACv1 or RACv2.
+func (n *controllerImpl) AdmitRaftEntryV1OrV2(
+	ctx context.Context,
+	tenantID roachpb.TenantID,
+	storeID roachpb.StoreID,
+	rangeID roachpb.RangeID,
+	entry raftpb.Entry,
+	meta kvflowcontrolpb.RaftAdmissionMeta,
+	isSideloaded bool,
+) {
 	if log.V(1) {
 		log.Infof(ctx, "decoded raft admission meta below-raft: pri=%s create-time=%d proposer=n%s receiver=[n%d,s%s] tenant=t%d tokens≈%d sideloaded=%t raft-entry=%d/%d",
 			admissionpb.WorkPriority(meta.AdmissionPriority),
@@ -601,7 +653,7 @@ func (n *controllerImpl) AdmitRaftEntry(
 			storeID,
 			tenantID.ToUint64(),
 			kvflowcontrol.Tokens(len(entry.Data)),
-			typ.IsSideloaded(),
+			isSideloaded,
 			entry.Term,
 			entry.Index,
 		)
@@ -631,7 +683,7 @@ func (n *controllerImpl) AdmitRaftEntry(
 			Term:  entry.Term,
 			Index: entry.Index,
 		},
-		Ingested: typ.IsSideloaded(),
+		Ingested: isSideloaded,
 	}
 
 	handle, err := storeAdmissionQ.Admit(ctx, admission.StoreWriteWorkInfo{

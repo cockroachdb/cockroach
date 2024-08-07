@@ -11,6 +11,7 @@
 package raftlog
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -74,7 +75,7 @@ func BenchmarkRaftAdmissionMetaOverhead(b *testing.B) {
 				func(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						// 1. Encode the raft command prefix.
-						EncodeRaftCommandPrefix(encodingBuf[:RaftCommandPrefixLen], entryEnc, "deadbeef")
+						EncodeRaftCommandPrefix(encodingBuf[:RaftCommandPrefixLen], entryEnc, "deadbeef", 0)
 
 						// 2. If using below-raft admission, encode the raft
 						// metadata right after the command prefix.
@@ -103,5 +104,41 @@ func BenchmarkRaftAdmissionMetaOverhead(b *testing.B) {
 				},
 			)
 		}
+	}
+}
+
+func TestRaftAdmissionMetaEncoding(t *testing.T) {
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	const bytes = 1000
+
+	for _, usesRACv2 := range []bool{true, false} {
+		var raftAdmissionMeta *kvflowcontrolpb.RaftAdmissionMeta
+		cmdIDKey := MakeCmdIDKey()
+		raftCmd := mkRaftCommand(100, int(bytes), int(bytes+200))
+
+		if usesRACv2 {
+			raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
+				AdmissionPriority:   1,
+				AdmissionCreateTime: 18581258253,
+				AdmissionOriginNode: 1,
+			}
+			raftCmd.AdmissionOriginNode = raftAdmissionMeta.AdmissionOriginNode
+			raftCmd.AdmissionCreateTime = raftAdmissionMeta.AdmissionCreateTime
+			raftCmd.AdmissionPriority = raftAdmissionMeta.AdmissionPriority
+		}
+
+		t.Run(fmt.Sprintf("usesRACv2=%b", usesRACv2),
+			func(t *testing.T) {
+				encodingBuf, err := EncodeCommand(ctx, raftCmd, cmdIDKey, raftAdmissionMeta, usesRACv2)
+				require.NoError(t, err)
+				if usesRACv2 {
+					meta, err := DecodeRaftAdmissionMeta(encodingBuf)
+					require.NoError(t, err)
+					require.Equal(t, meta, *raftAdmissionMeta)
+				}
+			},
+		)
 	}
 }

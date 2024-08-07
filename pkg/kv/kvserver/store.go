@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -403,6 +404,7 @@ func newRaftConfig(
 		MaxSizePerMsg:               storeCfg.RaftMaxSizePerMsg,
 		MaxInflightMsgs:             storeCfg.RaftMaxInflightMsgs,
 		MaxInflightBytes:            storeCfg.RaftMaxInflightBytes,
+		EnableLazyAppends:           storeCfg.RaftEnableLazyAppends,
 		Storage:                     strg,
 		Logger:                      logger,
 		StoreLiveness:               storeLiveness,
@@ -1274,6 +1276,12 @@ type StoreConfig struct {
 	// KVFlowHandleMetrics is a shared metrics struct for all
 	// kvflowcontrol.Handles.
 	KVFlowHandleMetrics *kvflowhandle.Metrics
+
+	// RACv2
+	RACv2StreamsTokenCounter kvflowconnectedstream.StoreStreamsTokenCounter
+	RACv2SendTokensWatcher   kvflowconnectedstream.StoreStreamSendTokensWatcher
+	RACv2Metrics             *kvflowconnectedstream.FlowControlMetrics
+	RACv2AdmittedPiggybacker AdmittedPiggybackStateManager
 
 	// SchedulerLatencyListener listens in on scheduling latencies, information
 	// that's then used to adjust various admission control components (like how

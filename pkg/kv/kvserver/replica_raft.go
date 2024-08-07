@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -405,7 +406,7 @@ func (r *Replica) propose(
 	if !p.useReplicationAdmissionControl() {
 		raftAdmissionMeta = nil
 	}
-	data, err := raftlog.EncodeCommand(ctx, p.command, p.idKey, raftAdmissionMeta)
+	data, err := raftlog.EncodeCommand(ctx, p.command, p.idKey, raftAdmissionMeta, kvflowconnectedstream.UseRACv2)
 	if err != nil {
 		return kvpb.NewError(err)
 	}
@@ -580,8 +581,11 @@ var errRemoved = errors.New("replica removed")
 // stepRaftGroup calls Step on the replica's RawNode with the provided request's
 // message. Before doing so, it assures that the replica is unquiesced and ready
 // to handle the request.
+//
+// TODO(racV2-integration): are we guaranteed that raftMu is always held?
 func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
-	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+	var leaderID roachpb.ReplicaID
+	err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		// We're processing an incoming raft message (from a batch that may
 		// include MsgVotes), so don't campaign if we wake up our raft
 		// group.
@@ -629,6 +633,31 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 			if term := raftGroup.BasicStatus().Term; term > req.Message.Term {
 				req.Message.Term = term
 			}
+		case raftpb.MsgApp:
+			n := len(req.Message.Entries)
+			if n > 0 {
+				// TODO(racV2-integration): this side channel is a hack. The Step call
+				// below can silently ignore old messages, but we have no way of doing
+				// so here. So we could incorrectly specify inherited priority values
+				// that are bogus. It won't affect liveness or safety, but will affect
+				// performance isolation.
+				//
+				// TODO(racV2-raft): Originally we were planning to tweak the encoded
+				// entry in the follower to the inherited priority. But The follower
+				// may become the leader in the future, and so the priority should
+				// always be the original priority. All we need is a way to plumb the
+				// inherited priority locally through RawNode.Step for a MsgApp.
+				//
+				// Should we change the Entry proto to include a RaftPriority field?
+				// It will be slightly cleaner in that the original priority will
+				// already be parsed. But does it solve our inherited priority
+				// problem? -- we could change the Entry proto before calling Step in
+				// the follower, however now the inherited priority will be persisted.
+				firstIndex := req.Message.Entries[0].Index
+				lastIndex := req.Message.Entries[n-1].Index
+				inheritedPri := uint8(req.InheritedRaftPriority)
+				r.raftMu.racV2Integration.sideChannelForInheritedPriority(firstIndex, lastIndex, inheritedPri)
+			}
 		}
 		err := raftGroup.Step(req.Message)
 		if errors.Is(err, raft.ErrProposalDropped) {
@@ -639,8 +668,15 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 			// https://github.com/cockroachdb/cockroach/issues/21849
 			err = nil
 		}
+		st := r.raftBasicStatusRLocked()
+		leaderID = roachpb.ReplicaID(st.Lead)
 		return false /* unquiesceAndWakeLeader */, err
 	})
+	if err != nil {
+		return err
+	}
+	r.raftMu.racV2Integration.tryUpdateLeader(r.raftCtx, leaderID, false)
+	return nil
 }
 
 type handleSnapshotStats struct {
@@ -811,6 +847,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
+	var readyEntries []raftpb.Entry
 	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		r.deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(ctx, raftGroup)
 
@@ -828,6 +865,20 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// in raft. This will also eliminate the "side channel" plumbing hack with
 			// this bytesAccount.
 			syncRd := raftGroup.Ready()
+			if kvflowconnectedstream.UseRACv2 {
+				if n := len(syncRd.Entries); n > 0 && leaderID == r.replicaID {
+					// TODO(racv2): Handle Next advancing between here and
+					// HandleRaftEvent on the range controller and remove this assertion.
+					info := raftGroup.GetProgress(raftpb.PeerID(leaderID))
+					if syncRd.Entries[n-1].Index+1 != info.Next {
+						// Leader is operating in push mode, so Next should have advanced.
+						log.Warningf(ctx, "%v", errors.AssertionFailedf(
+							"last entry index %d + 1 != %d Next at leader [match=%d]",
+							syncRd.Entries[n-1].Index, info.Next, info.Match))
+					}
+				}
+				readyEntries = syncRd.Entries
+			}
 			// We apply committed entries during this handleRaftReady, so it is ok to
 			// release the corresponding memory tokens at the end of this func. Next
 			// time we enter this function, the account will be empty again.
@@ -854,7 +905,13 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	})
 	r.mu.applyingEntries = hasMsg(msgStorageApply)
 	pausedFollowers := r.mu.pausedFollowers
+	leaseholderReplicaID := r.mu.state.Lease.Replica.ReplicaID
 	r.mu.Unlock()
+	r.raftMu.racV2Integration.tryUpdateLeaseholder(ctx, leaseholderReplicaID)
+	if kvflowconnectedstream.UseRACv2 {
+		// NB: must be called even if there was no Ready.
+		r.raftMu.racV2Integration.handleRaftEvent(ctx, readyEntries)
+	}
 	if errors.Is(err, errRemoved) {
 		// If we've been removed then just return.
 		return stats, nil
@@ -1063,9 +1120,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 					if len(entry.Data) == 0 {
 						continue // nothing to do
 					}
-					r.store.cfg.KVAdmissionController.AdmitRaftEntry(
-						ctx, tenantID, r.StoreID(), r.RangeID, entry,
-					)
+					if kvflowconnectedstream.UseRACv2 {
+						r.raftMu.racV2Integration.admitRaftEntry(ctx, r.store.cfg.KVAdmissionController,
+							tenantID, r.StoreID(), r.RangeID, entry)
+					} else {
+						r.store.cfg.KVAdmissionController.AdmitRaftEntry(
+							ctx, tenantID, r.StoreID(), r.RangeID, entry,
+						)
+					}
 				}
 			}
 
@@ -1628,6 +1690,8 @@ func (r *replicaSyncCallback) OnLogSync(
 //
 // When calling this method, the raftMu may be held, but it does not need to be.
 // The Replica mu must not be held.
+//
+// NB: RACv2 never uses this to send MsgApps that contain entries.
 func (r *Replica) sendRaftMessages(
 	ctx context.Context,
 	messages []raftpb.Message,
@@ -1725,12 +1789,12 @@ func (r *Replica) sendRaftMessages(
 			}
 
 			if !drop {
-				r.sendRaftMessage(ctx, message)
+				r.sendRaftMessage(ctx, message, 0)
 			}
 		}
 	}
 	if lastAppResp.Index > 0 {
-		r.sendRaftMessage(ctx, lastAppResp)
+		r.sendRaftMessage(ctx, lastAppResp, 0)
 	}
 }
 
@@ -1794,7 +1858,9 @@ func (r *Replica) deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(
 //
 // When calling this method, the raftMu may be held, but it does not need to be.
 // The Replica mu must not be held.
-func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
+//
+// inheritedPri is relevant iff the msg is a MsgApp.
+func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message, inheritedPri uint8) {
 	lastToReplica, lastFromReplica := r.getLastReplicaDescriptors()
 
 	r.mu.RLock()
@@ -1848,6 +1914,9 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		FromReplica:   fromReplica,
 		Message:       msg,
 		RangeStartKey: startKey, // usually nil
+	}
+	if msg.Type == raftpb.MsgApp {
+		req.InheritedRaftPriority = uint32(inheritedPri)
 	}
 	if !r.sendRaftMessageRequest(ctx, req) {
 		r.mu.Lock()

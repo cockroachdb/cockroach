@@ -13,9 +13,14 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -219,4 +224,108 @@ func (l NoopStoresFlowControlIntegration) Inspect() []roachpb.RangeID {
 func (NoopStoresFlowControlIntegration) OnRaftTransportDisconnected(
 	context.Context, ...roachpb.StoreID,
 ) {
+}
+
+// RACv2
+
+// StoresForRACv2 implements various methods to route to the relevant range's
+// replicaRACv2Integration.
+type StoresForRACv2 interface {
+	kvadmission.StoresForEvalRACv2
+	admission.OnLogEntryAdmitted
+	PiggybackedAdmittedProcessor
+	kvflowconnectedstream.SendQueuesSizeCounter
+}
+
+// PiggybackedAdmittedProcessor routes to the relevant range's
+// replicaRACv2Integration.
+type PiggybackedAdmittedProcessor interface {
+	ProcessAdmittedForRangeRACv2(msgs []kvflowcontrolpb.AdmittedForRangeRACv2)
+}
+
+func MakeStoresForRACv2(stores *Stores) StoresForRACv2 {
+	return (*storesForRACv2)(stores)
+}
+
+type storesForRACv2 Stores
+
+var _ kvadmission.StoresForEvalRACv2 = &storesForRACv2{}
+
+var _ kvflowconnectedstream.SendQueuesSizeCounter = &storesForRACv2{}
+
+// Lookup implements kvadmission.StoresForEvalRACv2.
+func (ss *storesForRACv2) Lookup(rangeID roachpb.RangeID) kvadmission.RangeControllerProvider {
+	return ss.lookup(rangeID)
+}
+
+// ProcessAdmittedForRangeRACv2 implements PiggybackedAdmittedProcessor.
+func (ss *storesForRACv2) ProcessAdmittedForRangeRACv2(
+	msgs []kvflowcontrolpb.AdmittedForRangeRACv2,
+) {
+	ls := (*Stores)(ss)
+	for _, m := range msgs {
+		s, err := ls.GetStore(m.LeaderStoreID)
+		if err != nil {
+			log.Errorf(context.TODO(), "store %s not found", m.LeaderStoreID)
+			continue
+		}
+		repl := s.GetReplicaIfExists(m.RangeID)
+		if repl == nil {
+			continue
+		}
+		repl.raftMu.racV2Integration.enqueuePiggybackedAdmitted(m.Msg)
+		s.scheduler.EnqueueRACv2PiggybackAdmitted(m.RangeID)
+	}
+}
+
+func (ss *storesForRACv2) lookup(rangeID roachpb.RangeID) *replicaRACv2Integration {
+	ls := (*Stores)(ss)
+	var rr *replicaRACv2Integration
+	if err := ls.VisitStores(func(s *Store) error {
+		if rr != nil {
+			return nil
+		}
+		repl := s.GetReplicaIfExists(rangeID)
+		if repl == nil {
+			return nil
+		}
+		rr = &repl.raftMu.racV2Integration
+		return nil
+	}); err != nil {
+		panic("")
+	}
+	return rr
+}
+
+func (ss *storesForRACv2) SendQueuesSize() kvflowcontrol.Tokens {
+	ls := (*Stores)(ss)
+	var size kvflowcontrol.Tokens
+	if err := ls.VisitStores(func(s *Store) error {
+		s.VisitReplicas(func(r *Replica) (wantMore bool) {
+			if rc := r.raftMu.racV2Integration.RangeController(); rc != nil {
+				size += rc.SendQueueSize()
+			}
+			return true
+		})
+		return nil
+	}); err != nil {
+		panic("")
+	}
+	return size
+}
+
+// AdmittedLogEntry implements admission.OnLogEntryAdmitted.
+func (ss *storesForRACv2) AdmittedLogEntry(
+	ctx context.Context,
+	_ roachpb.NodeID,
+	pri admissionpb.WorkPriority,
+	_ roachpb.StoreID,
+	rangeID roachpb.RangeID,
+	pos admission.LogPosition,
+) {
+	rr := ss.lookup(rangeID)
+	if rr != nil {
+		rr.admittedLogEntry(ctx, kvflowcontrolpb.AdmissionPriorityToRaftPriority(pri), pos.Index)
+	}
+	// Else range does not have a replica on this store, so ignore.
 }

@@ -16,8 +16,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 var _ raftTransportForFlowControl = &RaftTransport{}
@@ -127,4 +130,96 @@ var _ RaftTransportDisconnectListener = NoopRaftTransportDisconnectListener{}
 func (n NoopRaftTransportDisconnectListener) OnRaftTransportDisconnected(
 	ctx context.Context, storeIDs ...roachpb.StoreID,
 ) {
+}
+
+// RACv2
+
+// AdmittedPiggybackStateManager manages the state for piggybacking
+// MsgAppResps that specifically try to advance Admitted.
+type AdmittedPiggybackStateManager interface {
+	// AddMsgForRange is called with a MsgAppResp that should be piggybacked on
+	// RaftMessageRequests flowing to leaderNodeID. The leaderStoreID and
+	// rangeID are for demultiplexing once the message reached the leaderNodeID.
+	//
+	// m must be a MsgAppResp.
+	//
+	// Keeps for each rangeID the latest m. There shouldn't be multiple replicas
+	// for a range at this node, so that is sufficient. Also, keys these by leaderNodeID,
+	// so can be grabbed to piggyback to that range.
+	AddMsgForRange(
+		rangeID roachpb.RangeID, leaderNodeID roachpb.NodeID, leaderStoreID roachpb.StoreID, m raftpb.Message)
+	// PopMsgsForNode is used by RaftTransport to grab messages to piggyback
+	// when it is sending a message to nodeID.
+	PopMsgsForNode(nodeID roachpb.NodeID, maxBytes int64) (msgs []kvflowcontrolpb.AdmittedForRangeRACv2, remainingMsgs int)
+	// NodesWithMsgs is used to periodically drop msgs from disconnected nodes.
+	// See RaftTransport.dropFlowTokensForDisconnectedNodes.
+	NodesWithMsgs() []roachpb.NodeID
+}
+
+func NewAdmittedPiggybackStateManager() AdmittedPiggybackStateManager {
+	ap := &admittedPiggybackStateManager{}
+	ap.mu.msgsForNode = make(map[roachpb.NodeID]map[roachpb.RangeID]kvflowcontrolpb.AdmittedForRangeRACv2)
+	return ap
+}
+
+type admittedPiggybackStateManager struct {
+	mu struct {
+		syncutil.Mutex
+		msgsForNode map[roachpb.NodeID]map[roachpb.RangeID]kvflowcontrolpb.AdmittedForRangeRACv2
+	}
+}
+
+func (ap *admittedPiggybackStateManager) AddMsgForRange(
+	rangeID roachpb.RangeID,
+	leaderNodeID roachpb.NodeID,
+	leaderStoreID roachpb.StoreID,
+	m raftpb.Message,
+) {
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	perRangeMap, ok := ap.mu.msgsForNode[leaderNodeID]
+	if !ok {
+		perRangeMap = map[roachpb.RangeID]kvflowcontrolpb.AdmittedForRangeRACv2{}
+		ap.mu.msgsForNode[leaderNodeID] = perRangeMap
+	}
+	perRangeMap[rangeID] = kvflowcontrolpb.AdmittedForRangeRACv2{
+		LeaderStoreID: leaderStoreID,
+		RangeID:       rangeID,
+		Msg:           m,
+	}
+}
+
+// Made-up number.
+const admittedForRangeRACv2SizeBytes = 60
+
+func (ap *admittedPiggybackStateManager) PopMsgsForNode(
+	nodeID roachpb.NodeID, maxBytes int64,
+) (msgs []kvflowcontrolpb.AdmittedForRangeRACv2, remainingMsgs int) {
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	perRangeMap, ok := ap.mu.msgsForNode[nodeID]
+	if !ok || len(perRangeMap) == 0 {
+		return nil, 0
+	}
+	maxEntries := maxBytes / admittedForRangeRACv2SizeBytes
+	for rangeID, msg := range perRangeMap {
+		msgs = append(msgs, msg)
+		delete(perRangeMap, rangeID)
+		if int64(len(msgs)) > maxEntries {
+			return msgs, len(perRangeMap)
+		}
+	}
+	return msgs, 0
+}
+
+func (ap *admittedPiggybackStateManager) NodesWithMsgs() []roachpb.NodeID {
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	var nodes []roachpb.NodeID
+	for nodeID, perRangeMap := range ap.mu.msgsForNode {
+		if len(perRangeMap) > 0 {
+			nodes = append(nodes, nodeID)
+		}
+	}
+	return nodes
 }

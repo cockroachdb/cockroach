@@ -295,7 +295,7 @@ var (
 	// defaultRaftMaxInflightMsgs specifies how many "inflight" MsgApps a leader
 	// will send to a given follower without hearing a response.
 	defaultRaftMaxInflightMsgs = envutil.EnvOrDefaultInt(
-		"COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 128)
+		"COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 10000000)
 
 	// defaultRaftMaxInflightBytes specifies the maximum aggregate byte size of
 	// Raft log entries that a leader will send to a follower without hearing
@@ -314,7 +314,7 @@ var (
 	// Per the bandwidth-delay product, this will limit per-range throughput to
 	// 64 MB/s at 500 ms RTT, 320 MB/s at 100 ms RTT, and 3.2 GB/s at 10 ms RTT.
 	defaultRaftMaxInflightBytes = envutil.EnvOrDefaultBytes(
-		"COCKROACH_RAFT_MAX_INFLIGHT_BYTES", 32<<20 /* 32 MB */)
+		"COCKROACH_RAFT_MAX_INFLIGHT_BYTES", 0)
 )
 
 // Config is embedded by server.Config. A base config is not meant to be used
@@ -617,6 +617,10 @@ type RaftConfig struct {
 	// to 2.5 MB/s. See Little's law to understand the maths behind.
 	RaftMaxInflightBytes uint64
 
+	// RaftEnableLazyAppends enables the lazy MsgApp behaviour. Most MsgApp
+	// messages (containing log entries) will be triggered by Replication AC v2.
+	RaftEnableLazyAppends bool
+
 	// Splitting a range which has a replica needing a snapshot results in two
 	// ranges in that state. The delay configured here slows down splits when in
 	// that situation (limiting to those splits not run through the split
@@ -662,7 +666,7 @@ func (cfg *RaftConfig) SetDefaults() {
 	if cfg.RaftProposalQuota == 0 {
 		// By default, set this to a fraction of RaftLogMaxSize. See the comment
 		// on the field for the tradeoffs of setting this higher or lower.
-		cfg.RaftProposalQuota = cfg.RaftLogTruncationThreshold / 2
+		cfg.RaftProposalQuota = 1 << 30
 	}
 	if cfg.RaftMaxUncommittedEntriesSize == 0 {
 		// By default, set this to twice the RaftProposalQuota. The logic here
@@ -690,6 +694,8 @@ func (cfg *RaftConfig) SetDefaults() {
 	); cfg.RaftMaxInflightBytes < other {
 		cfg.RaftMaxInflightBytes = other
 	}
+
+	cfg.RaftEnableLazyAppends = true
 
 	if cfg.RaftDelaySplitToSuppressSnapshot == 0 {
 		// Use a generous delay to make sure even a backed up Raft snapshot queue is

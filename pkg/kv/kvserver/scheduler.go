@@ -122,6 +122,8 @@ type raftProcessor interface {
 	// Process a raft tick for the specified range.
 	// Return true if the range should be queued for ready processing.
 	processTick(context.Context, roachpb.RangeID) bool
+	processRACv2RangeController(ctx context.Context, id roachpb.RangeID)
+	processRACv2PiggybackedAdmitted(ctx context.Context, id roachpb.RangeID) bool
 }
 
 type raftScheduleFlags int
@@ -131,6 +133,8 @@ const (
 	stateRaftReady
 	stateRaftRequest
 	stateRaftTick
+	stateRACv2RangeController
+	stateRACv2PiggybackedAdmitted
 )
 
 type raftScheduleState struct {
@@ -409,8 +413,19 @@ func (ss *raftSchedulerShard) worker(
 				}
 			}
 		}
+		if state.flags&stateRACv2PiggybackedAdmitted != 0 {
+			// processRACv2PiggybackedAdmitted returns true if the range should
+			// perform ready processing. Do not reorder this below the call to
+			// processReady.
+			if processor.processRACv2PiggybackedAdmitted(ctx, id) {
+				state.flags |= stateRaftReady
+			}
+		}
 		if state.flags&stateRaftReady != 0 {
 			processor.processReady(id)
+		}
+		if state.flags&stateRACv2RangeController != 0 {
+			processor.processRACv2RangeController(ctx, id)
 		}
 
 		ss.Lock()
@@ -549,6 +564,21 @@ func (s *raftScheduler) EnqueueRaftTicks(batch *raftSchedulerBatch) {
 	s.enqueueBatch(stateRaftTick, batch)
 }
 
+func (s *raftScheduler) EnqueueRACv2RangeController(id roachpb.RangeID) {
+	s.enqueue1(stateRACv2RangeController, id)
+}
+
+func (s *raftScheduler) EnqueueRACv2PiggybackAdmitted(id roachpb.RangeID) {
+	s.enqueue1(stateRACv2PiggybackedAdmitted, id)
+}
+
 func nowNanos() int64 {
 	return timeutil.Now().UnixNano()
+}
+
+type racV2Scheduler raftScheduler
+
+// ScheduleControllerEvent implements kvflowconnectedstream.Scheduler.
+func (s *racV2Scheduler) ScheduleControllerEvent(rangeID roachpb.RangeID) {
+	(*raftScheduler)(s).EnqueueRACv2RangeController(rangeID)
 }

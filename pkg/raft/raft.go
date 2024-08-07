@@ -210,6 +210,14 @@ type Config struct {
 	// throughput limit of 10 MB/s for this group. With RTT of 400ms, this drops
 	// to 2.5 MB/s. See Little's law to understand the maths behind.
 	MaxInflightBytes uint64
+	// EnableLazyAppends makes raft hold off constructing log append messages in
+	// response to Step() calls, for the StateReplicate followers. The messages
+	// can be triggered via a separate RawNode.SendAppend method.
+	//
+	// This way, the application has better control when raft may call Storage
+	// methods and allocate memory for entries and messages. This provides flow
+	// control for leader->follower log replication streams.
+	EnableLazyAppends bool
 
 	// CheckQuorum specifies if the leader should check quorum activity. Leader
 	// steps down when quorum is not active for an electionTimeout.
@@ -328,6 +336,7 @@ type raft struct {
 	config          quorum.Config
 	trk             tracker.ProgressTracker
 	electionTracker tracker.ElectionTracker
+	adm             tracker.Admitted
 
 	state StateType
 
@@ -350,6 +359,10 @@ type raft struct {
 	// Messages in this list have the type MsgAppResp, MsgVoteResp, or
 	// MsgPreVoteResp. See the comment in raft.send for details.
 	msgsAfterAppend []pb.Message
+	// enableLazyAppends delays append message construction and sending until the
+	// RawNode is explicitly requested to do so. This provides control over the
+	// follower replication flows.
+	enableLazyAppends bool
 
 	// the leader id
 	lead pb.PeerID
@@ -421,6 +434,7 @@ func newRaft(c *Config) *raft {
 		raftLog:                     raftlog,
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
+		enableLazyAppends:           c.EnableLazyAppends,
 		electionTimeout:             c.ElectionTick,
 		heartbeatTimeout:            c.HeartbeatTick,
 		logger:                      c.Logger,
@@ -514,6 +528,10 @@ func (r *raft) send(m pb.Message) {
 			m.Term = r.Term
 		}
 	}
+	if m.Type == pb.MsgAppResp && !m.Reject {
+		m.Admitted = make([]uint64, len(r.adm.Marks))
+		copy(m.Admitted, r.adm.Marks[:])
+	}
 	if m.Type == pb.MsgAppResp || m.Type == pb.MsgVoteResp || m.Type == pb.MsgPreVoteResp {
 		// If async storage writes are enabled, messages added to the msgs slice
 		// are allowed to be sent out before unstable state (e.g. log entry
@@ -583,10 +601,19 @@ func (r *raft) send(m pb.Message) {
 // if the follower log and commit index are up-to-date, the flow is paused (for
 // reasons like in-flight limits), or the message could not be constructed.
 func (r *raft) maybeSendAppend(to pb.PeerID) bool {
-	pr := r.trk.Progress(to)
+	return r.maybeSendAppendImpl(to, r.enableLazyAppends)
+}
 
+// maybeSendAppendImpl is the same as maybeSendAppend, but it supports the lazy
+// mode for StateReplicate, in which appends are not sent.
+func (r *raft) maybeSendAppendImpl(to pb.PeerID, lazy bool) bool {
+	pr := r.trk.Progress(to)
 	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
-	if !pr.ShouldSendMsgApp(last, commit) {
+	msgAppType := pr.ShouldSendMsgApp(last, commit)
+	if msgAppType == tracker.MsgAppNone {
+		return false
+	}
+	if lazy && pr.State == tracker.StateReplicate && msgAppType == tracker.MsgAppWithEntries {
 		return false
 	}
 
@@ -599,7 +626,7 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 	}
 
 	var entries []pb.Entry
-	if pr.CanSendEntries(last) {
+	if msgAppType == tracker.MsgAppWithEntries {
 		if entries, err = r.raftLog.entries(pr.Next, r.maxMsgSize); err != nil {
 			// Send a snapshot if we failed to get the entries.
 			return r.maybeSendSnapshot(to, pr)
@@ -619,6 +646,60 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 	pr.SentEntries(len(entries), uint64(payloadsSize(entries)))
 	pr.SentCommit(commit)
 	return true
+}
+
+// TODO(pav-kv): integrate with maybeSendAppend.
+func (r *raft) nextMsgApp(
+	to pb.PeerID, lo, hi uint64, maxSize entryEncodingSize,
+) (pb.Message, error) {
+	if !r.enableLazyAppends {
+		return pb.Message{}, errors.New("Config.EnableLazyAppends is unset")
+	} else if r.state != StateLeader {
+		return pb.Message{}, errors.New("the node is not the leader")
+	} else if to == r.id {
+		return pb.Message{}, errors.New("leader can't send MsgApp to itself")
+	}
+	pr := r.trk.Progress(to)
+	if pr == nil {
+		return pb.Message{}, fmt.Errorf("peer %d not found", to)
+	}
+
+	if s := pr.State; s != tracker.StateReplicate {
+		return pb.Message{}, fmt.Errorf("peer %d state %s is not StateReplicate", to, s)
+	} else if lo != pr.Next {
+		return pb.Message{}, fmt.Errorf("peer %d next is %d, expected %d", to, pr.Next, lo)
+	}
+
+	prevIndex := pr.Next - 1
+	prevTerm, err := r.raftLog.term(prevIndex)
+	if err != nil {
+		if !r.maybeSendSnapshot(to, pr) {
+			return pb.Message{}, errors.Join(fmt.Errorf("failed to enter StateSnapshot"), err)
+		}
+		return pb.Message{}, err // ErrCompacted or ErrUnavailable
+	}
+	entries, err := r.raftLog.slice(pr.Next, hi, maxSize)
+	if err != nil {
+		if !r.maybeSendSnapshot(to, pr) {
+			return pb.Message{}, errors.Join(fmt.Errorf("failed to enter StateSnapshot"), err)
+		}
+		return pb.Message{}, err // ErrCompacted
+	}
+
+	msg := pb.Message{
+		From:    r.id,
+		To:      to,
+		Type:    pb.MsgApp,
+		Index:   prevIndex,
+		Term:    r.Term,
+		LogTerm: prevTerm,
+		Entries: entries,
+		Commit:  r.raftLog.committed,
+		Match:   pr.Match,
+	}
+	pr.SentEntries(len(entries), uint64(payloadsSize(entries)))
+	pr.SentCommit(msg.Commit)
+	return msg, nil
 }
 
 // maybeSendSnapshot fetches a snapshot from Storage, and sends it to the given
@@ -720,9 +801,10 @@ func (r *raft) appliedTo(index uint64, size entryEncodingSize) {
 }
 
 func (r *raft) appliedSnap(snap *pb.Snapshot) {
-	index := snap.Metadata.Index
-	r.raftLog.stableSnapTo(index)
-	r.appliedTo(index, 0 /* size */)
+	id := entryID{term: snap.Metadata.Term, index: snap.Metadata.Index}
+	r.raftLog.stableSnapTo(id)
+	r.appliedTo(id.index, 0 /* size */)
+	r.adm.OnSnapshot(id.index)
 }
 
 // maybeCommit attempts to advance the commit index. Returns true if the commit
@@ -775,6 +857,7 @@ func (r *raft) reset(term uint64) {
 			pr.Match = r.raftLog.lastIndex()
 		}
 	})
+	r.adm.OnTermBump()
 
 	r.pendingConfIndex = 0
 	r.uncommittedSize = 0
@@ -1340,6 +1423,9 @@ func stepLeader(r *raft, m pb.Message) error {
 		// an MsgAppResp to acknowledge the appended entries in the last Ready.
 
 		pr.RecentActive = true
+		if len(m.Admitted) == len(pr.Admitted) {
+			pr.SetAdmitted([4]uint64(m.Admitted))
+		}
 
 		if m.Reject {
 			// RejectHint is the suggested next base entry for appending (i.e.

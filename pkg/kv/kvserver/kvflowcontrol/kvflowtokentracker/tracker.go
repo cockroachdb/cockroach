@@ -36,8 +36,8 @@ type Tracker struct {
 	// instead. Do this as part of #104154.
 	trackedM map[admissionpb.WorkPriority][]tracked
 
-	// lowerBound tracks on a per-stream basis the log position below which
-	// we ignore token deductions.
+	// lowerBound tracks on a per-stream basis the log position equal to or
+	// below which we ignore token deductions.
 	lowerBound kvflowcontrolpb.RaftLogPosition
 
 	stream kvflowcontrol.Stream // used for logging only
