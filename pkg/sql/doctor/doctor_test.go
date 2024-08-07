@@ -573,6 +573,7 @@ func TestExamineJobs(t *testing.T) {
 					Status: jobs.StatusPaused,
 				},
 			},
+			valid: true,
 			expected: `Examining 3 jobs...
 job 100: running schema change GC refers to missing table descriptor(s) [3]; existing descriptors that still need to be dropped [2]; job safe to delete: false.
 job 200: pause-requested schema change GC refers to missing table descriptor(s) [3]; existing descriptors that still need to be dropped []; job safe to delete: true.
