@@ -91,9 +91,9 @@ stabilize 1 2
   HardState Term:1 Commit:4 Lead:1 LeadEpoch:0
   Snapshot Index:4 Term:1 ConfState:Voters:[1 2] VotersOutgoing:[1] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
-  2->1 MsgAppResp Term:1 Log:0/4
+  2->1 MsgAppResp Term:1 Log:0/4 Commit:4
 > 1 receiving messages
-  2->1 MsgAppResp Term:1 Log:0/4
+  2->1 MsgAppResp Term:1 Log:0/4 Commit:4
   DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 2 [StateSnapshot match=4 next=5 paused pendingSnap=4]
 
 # Check that we're not allowed to change membership again while in the joint state.
@@ -129,11 +129,11 @@ stabilize
   1/5 EntryNormal ""
   1/6 EntryConfChangeV2
   Messages:
-  2->1 MsgAppResp Term:1 Log:0/5
-  2->1 MsgAppResp Term:1 Log:0/6
+  2->1 MsgAppResp Term:1 Log:0/5 Commit:4
+  2->1 MsgAppResp Term:1 Log:0/6 Commit:4
 > 1 receiving messages
-  2->1 MsgAppResp Term:1 Log:0/5
-  2->1 MsgAppResp Term:1 Log:0/6
+  2->1 MsgAppResp Term:1 Log:0/5 Commit:4
+  2->1 MsgAppResp Term:1 Log:0/6 Commit:4
 > 1 handling Ready
   Ready MustSync=false:
   HardState Term:1 Vote:1 Commit:6 Lead:1 LeadEpoch:1
@@ -154,12 +154,12 @@ stabilize
   1/5 EntryNormal ""
   1/6 EntryConfChangeV2
   Messages:
-  2->1 MsgAppResp Term:1 Log:0/6
-  2->1 MsgAppResp Term:1 Log:0/6
+  2->1 MsgAppResp Term:1 Log:0/6 Commit:5
+  2->1 MsgAppResp Term:1 Log:0/6 Commit:6
   INFO 2 switched to configuration voters=(1 2)
 > 1 receiving messages
-  2->1 MsgAppResp Term:1 Log:0/6
-  2->1 MsgAppResp Term:1 Log:0/6
+  2->1 MsgAppResp Term:1 Log:0/6 Commit:5
+  2->1 MsgAppResp Term:1 Log:0/6 Commit:6
 
 # Check that trying to transition out again won't do anything.
 propose-conf-change 1
@@ -182,9 +182,9 @@ stabilize
   Entries:
   1/7 EntryNormal ""
   Messages:
-  2->1 MsgAppResp Term:1 Log:0/7
+  2->1 MsgAppResp Term:1 Log:0/7 Commit:6
 > 1 receiving messages
-  2->1 MsgAppResp Term:1 Log:0/7
+  2->1 MsgAppResp Term:1 Log:0/7 Commit:6
 > 1 handling Ready
   Ready MustSync=false:
   HardState Term:1 Vote:1 Commit:7 Lead:1 LeadEpoch:1
@@ -200,6 +200,6 @@ stabilize
   CommittedEntries:
   1/7 EntryNormal ""
   Messages:
-  2->1 MsgAppResp Term:1 Log:0/7
+  2->1 MsgAppResp Term:1 Log:0/7 Commit:7
 > 1 receiving messages
-  2->1 MsgAppResp Term:1 Log:0/7
+  2->1 MsgAppResp Term:1 Log:0/7 Commit:7
