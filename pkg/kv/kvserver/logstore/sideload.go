@@ -88,7 +88,7 @@ func MaybeSideloadEntries(
 ) {
 	var output []raftpb.Entry
 	for i := range input {
-		typ, err := raftlog.EncodingOf(input[i])
+		typ, pri, err := raftlog.EncodingOf(input[i])
 		if err != nil {
 			return nil, 0, 0, 0, err
 		}
@@ -130,7 +130,7 @@ func MaybeSideloadEntries(
 		// TODO(tbg): this should be supported by a method as well.
 		{
 			data := make([]byte, raftlog.RaftCommandPrefixLen+e.Cmd.Size())
-			raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], typ, e.ID)
+			raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], typ, e.ID, pri)
 			_, err := protoutil.MarshalToSizedBuffer(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 			if err != nil {
 				return nil, 0, 0, 0, errors.Wrap(err, "while marshaling stripped sideloaded command")
@@ -171,7 +171,7 @@ func MaybeInlineSideloadedRaftCommand(
 	sideloaded SideloadStorage,
 	entryCache *raftentry.Cache,
 ) (*raftpb.Entry, error) {
-	typ, err := raftlog.EncodingOf(ent)
+	typ, pri, err := raftlog.EncodingOf(ent)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +223,7 @@ func MaybeInlineSideloadedRaftCommand(
 	// the EntryEncoding.
 	{
 		data := make([]byte, raftlog.RaftCommandPrefixLen+e.Cmd.Size())
-		raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], typ, e.ID)
+		raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], typ, e.ID, pri)
 		_, err := protoutil.MarshalToSizedBuffer(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 		if err != nil {
 			return nil, err
@@ -238,7 +238,7 @@ func MaybeInlineSideloadedRaftCommand(
 // requires unmarshalling the raft command, so this assertion should be kept out
 // of performance critical paths.
 func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) {
-	typ, err := raftlog.EncodingOf(*ent)
+	typ, _, err := raftlog.EncodingOf(*ent)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
