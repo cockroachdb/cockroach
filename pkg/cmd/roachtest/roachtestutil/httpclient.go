@@ -174,7 +174,7 @@ func getSessionIDOnSingleNode(
 	ctx context.Context, c cluster.Cluster, l *logger.Logger, node option.NodeListOption,
 ) (string, error) {
 	loginCmd := fmt.Sprintf(
-		"%s auth-session login root --port={pgport%s} --certs-dir ./certs --format raw",
+		"%s auth-session login root --port={pgport%s} --certs-dir ./certs --only-cookie",
 		test.DefaultCockroachPath, node,
 	)
 	res, err := c.RunWithDetailsSingleNode(ctx, l, node, loginCmd)
@@ -182,17 +182,7 @@ func getSessionIDOnSingleNode(
 		return "", errors.Wrap(err, "failed to authenticate")
 	}
 
-	var sessionCookie string
-	for _, line := range strings.Split(res.Stdout, "\n") {
-		if strings.HasPrefix(line, "session=") {
-			sessionCookie = line
-		}
-	}
-	if sessionCookie == "" {
-		return "", fmt.Errorf("failed to find session cookie in `login` output")
-	}
-
-	return sessionCookie, nil
+	return res.Stdout, nil
 }
 
 func getSessionID(
