@@ -95,7 +95,7 @@ func (c *Segment) Clone() Segment {
 // commutative and idempotent.
 func (c *Segment) Merge(o Segment) {
 	// Forward the low water mark.
-	if !c.LowWater.EqOrdering(o.LowWater) {
+	if c.LowWater != o.LowWater {
 		if c.LowWater.Less(o.LowWater) {
 			// c.LowWater < o.LowWater, filter c.ReadSpans.
 			c.ReadSpans = filterSpans(c.ReadSpans, o.LowWater)

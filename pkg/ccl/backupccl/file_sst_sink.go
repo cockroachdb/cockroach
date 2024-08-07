@@ -283,8 +283,8 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) (roachpb.Key
 	} else if len(s.flushedFiles) > 0 {
 		last := s.flushedFiles[len(s.flushedFiles)-1]
 		extend = last.Span.EndKey.Equal(span.Key) &&
-			last.EndTime.EqOrdering(resp.metadata.EndTime) &&
-			last.StartTime.EqOrdering(resp.metadata.StartTime) &&
+			last.EndTime == resp.metadata.EndTime &&
+			last.StartTime == resp.metadata.StartTime &&
 			last.EntryCounts.DataSize < fileSpanByteLimit
 	}
 
