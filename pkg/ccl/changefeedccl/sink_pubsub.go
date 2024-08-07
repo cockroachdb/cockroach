@@ -497,10 +497,16 @@ func (p *deprecatedGcpPubsubClient) openTopic(topicName string) (*pubsub.Topic, 
 }
 
 func (p *deprecatedGcpPubsubClient) closeTopics() {
+	if p.client == nil {
+		return
+	}
 	_ = p.forEachTopic(func(_ string, t *pubsub.Topic) error {
 		t.Stop()
 		return nil
 	})
+	// Close the client to release resources held by the client to avoid memory
+	// leaks.
+	_ = p.client.Close()
 }
 
 // sendMessage sends a message to the topic

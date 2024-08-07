@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -30,6 +31,10 @@ import (
 // Connections route to the correct sink.
 type externalConnectionKafkaSink struct {
 	sink Sink
+	// ignoreDialError causes this wrapper to ignore errors calling its inner
+	// sink's Dial() method. This can happen for a few reasons, such as giving
+	// it a bad address for testing purposes.
+	ignoreDialError bool
 }
 
 func (e *externalConnectionKafkaSink) getConcreteType() sinkType {
@@ -38,7 +43,16 @@ func (e *externalConnectionKafkaSink) getConcreteType() sinkType {
 
 // Dial implements the Sink interface.
 func (e *externalConnectionKafkaSink) Dial() error {
-	if _, ok := e.sink.(*kafkaSink); !ok {
+	switch sink := e.sink.(type) {
+	case *kafkaSink:
+		if err := sink.Dial(); err != nil && !e.ignoreDialError {
+			return err
+		}
+	case *batchingSink:
+		if err := sink.Dial(); err != nil && !e.ignoreDialError {
+			return err
+		}
+	default:
 		return errors.Newf("unexpected sink type %T; expected a kafka sink", e.sink)
 	}
 	return nil
@@ -46,7 +60,7 @@ func (e *externalConnectionKafkaSink) Dial() error {
 
 // Close implements the Sink interface.
 func (e *externalConnectionKafkaSink) Close() error {
-	return nil
+	return e.sink.Close()
 }
 
 // EmitRow implements the Sink interface.
@@ -87,7 +101,7 @@ func TestChangefeedExternalConnections(t *testing.T) {
 		if _, ok := s.(*externalConnectionKafkaSink); ok {
 			return s
 		}
-		return &externalConnectionKafkaSink{sink: s}
+		return &externalConnectionKafkaSink{sink: s, ignoreDialError: true}
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -96,6 +110,11 @@ func TestChangefeedExternalConnections(t *testing.T) {
 	enableEnterprise()
 	unknownParams := func(sink string, params ...string) string {
 		return fmt.Sprintf(`unknown %s sink query parameters: [%s]`, sink, strings.Join(params, ", "))
+	}
+
+	// TODO(#127536): We disabled testing the Kafka V2 sink here, since it doesnt support MSK yet. Re-enable it.
+	if KafkaV2Enabled.Get(&s.Server.ClusterSettings().SV) {
+		skip.WithIssue(t, 127536, "Kafka V2 sink does not support MSK yet")
 	}
 
 	for _, tc := range []struct {
