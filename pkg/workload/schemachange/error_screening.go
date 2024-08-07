@@ -399,6 +399,11 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 	potentialErrCodes codesWithConditions,
 	err error,
 ) {
+	defer func() {
+		if len(expectedErrCodes) > 0 {
+			isInvalidInsert = true
+		}
+	}()
 	// Put values to be inserted into a column name to value map to simplify lookups.
 	columnsToValues := map[string]string{}
 	for i := 0; i < len(nonGeneratedColNames); i++ {
@@ -520,25 +525,9 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 		if !colInfo.generated {
 			continue
 		}
-		err = validateExpression(colInfo.generatedExpression, colInfo.typ.SQLString(), colInfo.nullable, false)
+		err = validateExpression(colInfo.generatedExpression, colInfo.typ.SQLString(), colInfo.nullable, true)
 		if err != nil {
 			return false, nil, nil, err
-		}
-	}
-	// Any bad generated expression means we don't have to bother with indexes next,
-	// since we expect the insert to fail earlier.
-	if expectedErrCodes == nil {
-		// Validate unique constraint expressions that are backed by indexes.
-		constraints, err := getUniqueConstraintsForTable(ctx, tx, tableName.String())
-		if err != nil {
-			return false, nil, nil, og.checkAndAdjustForUnknownSchemaErrors(err)
-		}
-
-		for _, constraint := range constraints {
-			err = validateExpression(constraint, "STRING", true, true)
-			if err != nil {
-				return false, nil, nil, err
-			}
 		}
 	}
 	return len(expectedErrCodes) > 0, expectedErrCodes, potentialErrCodes, nil
