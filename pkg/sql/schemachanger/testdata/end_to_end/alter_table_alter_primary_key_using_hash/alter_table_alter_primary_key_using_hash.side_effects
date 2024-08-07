@@ -792,7 +792,7 @@ upsert descriptor #104
   -  checks: []
   +  checks:
   +  - constraintId: 2
-  +    expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
+  +    expr: crdb_internal_j_shard_3 IN (0,1,2)
   +    fromHashShardedColumn: true
   +    name: check_crdb_internal_j_shard_3
   +    validity: Validating
@@ -879,7 +879,7 @@ upsert descriptor #104
   +  - constraint:
   +      check:
   +        constraintId: 2
-  +        expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
+  +        expr: crdb_internal_j_shard_3 IN (0,1,2)
   +        fromHashShardedColumn: true
   +        name: crdb_internal_constraint_2_name_placeholder
   +        validity: Validating
@@ -999,7 +999,7 @@ upsert descriptor #104
   -  - constraint:
   -      check:
   -        constraintId: 2
-  -        expr: '"crdb_internal_j_shard_3" IN (0,1,2)'
+  -        expr: crdb_internal_j_shard_3 IN (0,1,2)
   -        fromHashShardedColumn: true
   -        name: crdb_internal_constraint_2_name_placeholder
   -        validity: Validating
