@@ -1,15 +1,11 @@
 debug doctor examine zipdir testdata/doctor/debugzip-wth
 ----
 debug doctor examine zipdir testdata/doctor/debugzip 21.1-52
-WARNING: errors occurred during the production of system.jobs.txt, contents may be missing or incomplete.
-Examining 37 descriptors and 42 namespace entries...
-  ParentID  52, ParentSchemaID 29: relation "users" (53): referenced database ID 52: referenced descriptor not found
-  ParentID  52, ParentSchemaID 29: relation "vehicles" (54): referenced database ID 52: referenced descriptor not found
-  ParentID  52, ParentSchemaID 29: relation "rides" (55): referenced database ID 52: referenced descriptor not found
-  ParentID  52, ParentSchemaID 29: relation "vehicle_location_histories" (56): referenced database ID 52: referenced descriptor not found
-  ParentID  52, ParentSchemaID 29: relation "promo_codes" (57): referenced database ID 52: referenced descriptor not found
-  ParentID  52, ParentSchemaID 29: relation "user_promo_codes" (58): referenced database ID 52: referenced descriptor not found
-  ParentID   0, ParentSchemaID  0: namespace entry "movr" (52): referenced schema ID 52: referenced descriptor not found
-Examining 2 jobs...
-job 587337426984566785: running schema change GC refers to missing table descriptor(s) [59]; existing descriptors that still need to be dropped []; job safe to delete: true.
+Examining 62 descriptors and 58 namespace entries...
+  ParentID   1, ParentSchemaID 29: relation "users" (4): expected matching namespace entry, found none
+  ParentID   1, ParentSchemaID 29: relation "ui" (14): expected matching namespace entry, found none
+  ParentID   1, ParentSchemaID 29: relation "web_sessions" (19): expected matching namespace entry, found none
+  ParentID 102, ParentSchemaID  0: schema "public" (103): expected matching namespace entry, found none
+  ParentID 100, ParentSchemaID 101: relation "t" (104): expected matching namespace entry, found none
+Examining 54 jobs...
 ERROR: validation failed
