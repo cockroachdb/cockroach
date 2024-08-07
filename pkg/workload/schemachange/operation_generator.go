@@ -2871,19 +2871,16 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 
 	// Only evaluate these if we know that the inserted values are sane, since
 	// we will need to evaluate generated expressions below.
-	uniqueConstraintViolation := false
+	hasUniqueConstraints := false
 	fkViolation := false
 	if !anyInvalidInserts {
-		// Verify if the new row will violate unique constraints by checking the constraints and
-		// existing rows in the database.
-		var generatedErrors codesWithConditions
-		uniqueConstraintViolation, generatedErrors, err = og.valuesViolateUniqueConstraints(ctx, tx, tableName, nonGeneratedColNames, allColumns, rows)
+		// Verify if the new row may violate unique constraints by checking the
+		// constraints in the database.
+		constraints, err := getUniqueConstraintsForTable(ctx, tx, tableName.String())
 		if err != nil {
 			return nil, err
 		}
-		if !uniqueConstraintViolation {
-			stmt.expectedExecErrors.addAll(generatedErrors)
-		}
+		hasUniqueConstraints = len(constraints) > 0
 		// Verify if the new row will violate fk constraints by checking the constraints and rows
 		// in the database.
 		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, nonGeneratedColNames, rows)
@@ -2892,10 +2889,8 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		}
 	}
 
-	stmt.expectedExecErrors.addAll(codesWithConditions{
-		{code: pgcode.UniqueViolation, condition: uniqueConstraintViolation},
-	})
 	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UniqueViolation, condition: hasUniqueConstraints},
 		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
 	})
 	og.expectedCommitErrors.addAll(codesWithConditions{
