@@ -110,7 +110,7 @@ will then convert it to the --format requested in the current invocation.
 		case tsDumpDatadog:
 			w = makeDatadogWriter(
 				ctx,
-				"https://api.datadoghq.com/api/v2/series",
+				"https://api.us5.datadoghq.com/api/v2/series",
 				false, /* init */
 				debugTimeSeriesDumpOpts.ddApiKey,
 				100, /* threshold */
@@ -119,7 +119,7 @@ will then convert it to the --format requested in the current invocation.
 		case tsDumpDatadogInit:
 			w = makeDatadogWriter(
 				ctx,
-				"https://api.datadoghq.com/api/v2/series",
+				"https://api.us5.datadoghq.com/api/v2/series",
 				true, /* init */
 				debugTimeSeriesDumpOpts.ddApiKey,
 				100, /* threshold */
