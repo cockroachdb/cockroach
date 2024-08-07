@@ -829,7 +829,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 		}
 
 		// ts == read_ts
-		if p.curUnsafeKey.Timestamp.EqOrdering(p.ts) {
+		if p.curUnsafeKey.Timestamp == p.ts {
 			if p.failOnMoreRecent {
 				// 2. Our txn's read timestamp is equal to the most recent
 				// version's timestamp and the scanner has been configured to

@@ -699,7 +699,7 @@ func (h frontierHeap) Len() int { return len(h) }
 
 // Less implements heap.Interface.
 func (h frontierHeap) Less(i, j int) bool {
-	if h[i].ts.EqOrdering(h[j].ts) {
+	if h[i].ts == h[j].ts {
 		return h[i].Start.Compare(h[j].Start) < 0
 	}
 	return h[i].ts.Less(h[j].ts)

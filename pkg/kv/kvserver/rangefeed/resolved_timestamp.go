@@ -280,7 +280,7 @@ func (rts *resolvedTimestamp) recompute(ctx context.Context) bool {
 func (rts *resolvedTimestamp) assertNoChange(ctx context.Context) {
 	before := rts.resolvedTS
 	changed := rts.recompute(ctx)
-	if changed || !before.EqOrdering(rts.resolvedTS) {
+	if changed || before != rts.resolvedTS {
 		log.Fatalf(ctx, "unexpected resolved timestamp change on recomputation, "+
 			"was %s, recomputed as %s", before, rts.resolvedTS)
 	}
@@ -374,7 +374,7 @@ func (h unresolvedTxnHeap) Less(i, j int) bool {
 	// container/heap constructs a min-heap by default, so prioritize the txn
 	// with the smaller timestamp. Break ties by comparing IDs to establish a
 	// total order.
-	if h[i].timestamp.EqOrdering(h[j].timestamp) {
+	if h[i].timestamp == h[j].timestamp {
 		return bytes.Compare(h[i].txnID.GetBytes(), h[j].txnID.GetBytes()) < 0
 	}
 	return h[i].timestamp.Less(h[j].timestamp)

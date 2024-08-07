@@ -60,7 +60,7 @@ func (h llrbFrontierHeap) Len() int { return len(h) }
 
 // Less implements heap.Interface.
 func (h llrbFrontierHeap) Less(i, j int) bool {
-	if h[i].ts.EqOrdering(h[j].ts) {
+	if h[i].ts == h[j].ts {
 		return h[i].span.Key.Compare(h[j].span.Key) < 0
 	}
 	return h[i].ts.Less(h[j].ts)

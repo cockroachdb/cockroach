@@ -1439,7 +1439,7 @@ func MVCCGetForKnownTimestampWithNoIntent(
 	if val == nil {
 		return nil, enginepb.MVCCValueHeader{}, errors.Errorf("value missing for key %v", key)
 	}
-	if !val.Timestamp.EqOrdering(timestamp) {
+	if val.Timestamp != timestamp {
 		return nil, enginepb.MVCCValueHeader{}, errors.Errorf(
 			"expected timestamp %v and found %v for key %v", timestamp, val.Timestamp, key)
 	}
