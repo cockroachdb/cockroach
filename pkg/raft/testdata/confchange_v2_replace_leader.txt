@@ -65,16 +65,16 @@ stabilize
   Entries:
   1/4 EntryConfChangeV2 r1 v4
   Messages:
-  2->1 MsgAppResp Term:1 Log:0/4
+  2->1 MsgAppResp Term:1 Log:0/4 Commit:3
 > 3 handling Ready
   Ready MustSync=true:
   Entries:
   1/4 EntryConfChangeV2 r1 v4
   Messages:
-  3->1 MsgAppResp Term:1 Log:0/4
+  3->1 MsgAppResp Term:1 Log:0/4 Commit:3
 > 1 receiving messages
-  2->1 MsgAppResp Term:1 Log:0/4
-  3->1 MsgAppResp Term:1 Log:0/4
+  2->1 MsgAppResp Term:1 Log:0/4 Commit:3
+  3->1 MsgAppResp Term:1 Log:0/4 Commit:3
 > 1 handling Ready
   Ready MustSync=false:
   HardState Term:1 Vote:1 Commit:4 Lead:1
@@ -98,7 +98,7 @@ stabilize
   CommittedEntries:
   1/4 EntryConfChangeV2 r1 v4
   Messages:
-  2->1 MsgAppResp Term:1 Log:0/4
+  2->1 MsgAppResp Term:1 Log:0/4 Commit:4
   INFO 2 switched to configuration voters=(2 3 4)&&(1 2 3)
 > 3 handling Ready
   Ready MustSync=false:
@@ -106,11 +106,11 @@ stabilize
   CommittedEntries:
   1/4 EntryConfChangeV2 r1 v4
   Messages:
-  3->1 MsgAppResp Term:1 Log:0/4
+  3->1 MsgAppResp Term:1 Log:0/4 Commit:4
   INFO 3 switched to configuration voters=(2 3 4)&&(1 2 3)
 > 1 receiving messages
-  2->1 MsgAppResp Term:1 Log:0/4
-  3->1 MsgAppResp Term:1 Log:0/4
+  2->1 MsgAppResp Term:1 Log:0/4 Commit:4
+  3->1 MsgAppResp Term:1 Log:0/4 Commit:4
 > 4 receiving messages
   1->4 MsgApp Term:1 Log:1/3 Commit:4 Entries:[1/4 EntryConfChangeV2 r1 v4]
   INFO 4 [term: 0] received a MsgApp message with higher term from 1 [term: 1]
@@ -139,9 +139,9 @@ stabilize
   HardState Term:1 Commit:4 Lead:1
   Snapshot Index:4 Term:1 ConfState:Voters:[2 3 4] VotersOutgoing:[1 2 3] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
-  4->1 MsgAppResp Term:1 Log:0/4
+  4->1 MsgAppResp Term:1 Log:0/4 Commit:4
 > 1 receiving messages
-  4->1 MsgAppResp Term:1 Log:0/4
+  4->1 MsgAppResp Term:1 Log:0/4 Commit:4
 
 
 # Transfer leadership while in the joint config.
@@ -252,7 +252,7 @@ stabilize
   2/5 EntryNormal ""
   Messages:
   1->4 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
-  1->4 MsgAppResp Term:2 Log:0/5
+  1->4 MsgAppResp Term:2 Log:0/5 Commit:4
 > 2 handling Ready
   Ready MustSync=true:
   HardState Term:2 Vote:4 Commit:4 Lead:4
@@ -260,7 +260,7 @@ stabilize
   2/5 EntryNormal ""
   Messages:
   2->4 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
-  2->4 MsgAppResp Term:2 Log:0/5
+  2->4 MsgAppResp Term:2 Log:0/5 Commit:4
 > 3 handling Ready
   Ready MustSync=true:
   HardState Term:2 Vote:4 Commit:4 Lead:4
@@ -268,14 +268,14 @@ stabilize
   2/5 EntryNormal ""
   Messages:
   3->4 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
-  3->4 MsgAppResp Term:2 Log:0/5
+  3->4 MsgAppResp Term:2 Log:0/5 Commit:4
 > 4 receiving messages
   1->4 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
-  1->4 MsgAppResp Term:2 Log:0/5
+  1->4 MsgAppResp Term:2 Log:0/5 Commit:4
   2->4 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
-  2->4 MsgAppResp Term:2 Log:0/5
+  2->4 MsgAppResp Term:2 Log:0/5 Commit:4
   3->4 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
-  3->4 MsgAppResp Term:2 Log:0/5
+  3->4 MsgAppResp Term:2 Log:0/5 Commit:4
 > 4 handling Ready
   Ready MustSync=false:
   HardState Term:2 Vote:4 Commit:5 Lead:4
@@ -297,25 +297,25 @@ stabilize
   CommittedEntries:
   2/5 EntryNormal ""
   Messages:
-  1->4 MsgAppResp Term:2 Log:0/5
+  1->4 MsgAppResp Term:2 Log:0/5 Commit:5
 > 2 handling Ready
   Ready MustSync=false:
   HardState Term:2 Vote:4 Commit:5 Lead:4
   CommittedEntries:
   2/5 EntryNormal ""
   Messages:
-  2->4 MsgAppResp Term:2 Log:0/5
+  2->4 MsgAppResp Term:2 Log:0/5 Commit:5
 > 3 handling Ready
   Ready MustSync=false:
   HardState Term:2 Vote:4 Commit:5 Lead:4
   CommittedEntries:
   2/5 EntryNormal ""
   Messages:
-  3->4 MsgAppResp Term:2 Log:0/5
+  3->4 MsgAppResp Term:2 Log:0/5 Commit:5
 > 4 receiving messages
-  1->4 MsgAppResp Term:2 Log:0/5
-  2->4 MsgAppResp Term:2 Log:0/5
-  3->4 MsgAppResp Term:2 Log:0/5
+  1->4 MsgAppResp Term:2 Log:0/5 Commit:5
+  2->4 MsgAppResp Term:2 Log:0/5 Commit:5
+  3->4 MsgAppResp Term:2 Log:0/5 Commit:5
 
 # Leadership transfer succeeded.
 raft-state
@@ -352,23 +352,23 @@ stabilize
   Entries:
   2/6 EntryConfChangeV2
   Messages:
-  1->4 MsgAppResp Term:2 Log:0/6
+  1->4 MsgAppResp Term:2 Log:0/6 Commit:5
 > 2 handling Ready
   Ready MustSync=true:
   Entries:
   2/6 EntryConfChangeV2
   Messages:
-  2->4 MsgAppResp Term:2 Log:0/6
+  2->4 MsgAppResp Term:2 Log:0/6 Commit:5
 > 3 handling Ready
   Ready MustSync=true:
   Entries:
   2/6 EntryConfChangeV2
   Messages:
-  3->4 MsgAppResp Term:2 Log:0/6
+  3->4 MsgAppResp Term:2 Log:0/6 Commit:5
 > 4 receiving messages
-  1->4 MsgAppResp Term:2 Log:0/6
-  2->4 MsgAppResp Term:2 Log:0/6
-  3->4 MsgAppResp Term:2 Log:0/6
+  1->4 MsgAppResp Term:2 Log:0/6 Commit:5
+  2->4 MsgAppResp Term:2 Log:0/6 Commit:5
+  3->4 MsgAppResp Term:2 Log:0/6 Commit:5
 > 4 handling Ready
   Ready MustSync=false:
   HardState Term:2 Vote:4 Commit:6 Lead:4
@@ -391,7 +391,7 @@ stabilize
   CommittedEntries:
   2/6 EntryConfChangeV2
   Messages:
-  1->4 MsgAppResp Term:2 Log:0/6
+  1->4 MsgAppResp Term:2 Log:0/6 Commit:6
   INFO 1 switched to configuration voters=(2 3 4)
 > 2 handling Ready
   Ready MustSync=false:
@@ -399,7 +399,7 @@ stabilize
   CommittedEntries:
   2/6 EntryConfChangeV2
   Messages:
-  2->4 MsgAppResp Term:2 Log:0/6
+  2->4 MsgAppResp Term:2 Log:0/6 Commit:6
   INFO 2 switched to configuration voters=(2 3 4)
 > 3 handling Ready
   Ready MustSync=false:
@@ -407,13 +407,13 @@ stabilize
   CommittedEntries:
   2/6 EntryConfChangeV2
   Messages:
-  3->4 MsgAppResp Term:2 Log:0/6
+  3->4 MsgAppResp Term:2 Log:0/6 Commit:6
   INFO 3 switched to configuration voters=(2 3 4)
 > 4 receiving messages
-  1->4 MsgAppResp Term:2 Log:0/6
+  1->4 MsgAppResp Term:2 Log:0/6 Commit:6
   raft: cannot step as peer not found
-  2->4 MsgAppResp Term:2 Log:0/6
-  3->4 MsgAppResp Term:2 Log:0/6
+  2->4 MsgAppResp Term:2 Log:0/6 Commit:6
+  3->4 MsgAppResp Term:2 Log:0/6 Commit:6
 
 # n1 is out of the configuration.
 raft-state

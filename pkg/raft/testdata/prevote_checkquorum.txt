@@ -155,7 +155,7 @@ stabilize
   2/12 EntryNormal ""
   Messages:
   1->3 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
-  1->3 MsgAppResp Term:2 Log:0/12
+  1->3 MsgAppResp Term:2 Log:0/12 Commit:11
 > 2 handling Ready
   Ready MustSync=true:
   HardState Term:2 Vote:3 Commit:11 Lead:3
@@ -163,12 +163,12 @@ stabilize
   2/12 EntryNormal ""
   Messages:
   2->3 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
-  2->3 MsgAppResp Term:2 Log:0/12
+  2->3 MsgAppResp Term:2 Log:0/12 Commit:11
 > 3 receiving messages
   1->3 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
-  1->3 MsgAppResp Term:2 Log:0/12
+  1->3 MsgAppResp Term:2 Log:0/12 Commit:11
   2->3 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
-  2->3 MsgAppResp Term:2 Log:0/12
+  2->3 MsgAppResp Term:2 Log:0/12 Commit:11
 > 3 handling Ready
   Ready MustSync=false:
   HardState Term:2 Vote:3 Commit:12 Lead:3
@@ -187,17 +187,17 @@ stabilize
   CommittedEntries:
   2/12 EntryNormal ""
   Messages:
-  1->3 MsgAppResp Term:2 Log:0/12
+  1->3 MsgAppResp Term:2 Log:0/12 Commit:12
 > 2 handling Ready
   Ready MustSync=false:
   HardState Term:2 Vote:3 Commit:12 Lead:3
   CommittedEntries:
   2/12 EntryNormal ""
   Messages:
-  2->3 MsgAppResp Term:2 Log:0/12
+  2->3 MsgAppResp Term:2 Log:0/12 Commit:12
 > 3 receiving messages
-  1->3 MsgAppResp Term:2 Log:0/12
-  2->3 MsgAppResp Term:2 Log:0/12
+  1->3 MsgAppResp Term:2 Log:0/12 Commit:12
+  2->3 MsgAppResp Term:2 Log:0/12 Commit:12
 
 # Node 3 is now the leader. Even though the leader is active, nodes 1 and 2 can
 # still win a prevote and election if they both explicitly campaign, since the
@@ -321,7 +321,7 @@ stabilize
   3/13 EntryNormal ""
   Messages:
   1->2 MsgFortifyLeaderResp Term:3 Log:0/0 Rejected (Hint: 0)
-  1->2 MsgAppResp Term:3 Log:0/13
+  1->2 MsgAppResp Term:3 Log:0/13 Commit:12
 > 3 handling Ready
   Ready MustSync=true:
   State:StateFollower
@@ -330,12 +330,12 @@ stabilize
   3/13 EntryNormal ""
   Messages:
   3->2 MsgFortifyLeaderResp Term:3 Log:0/0 Rejected (Hint: 0)
-  3->2 MsgAppResp Term:3 Log:0/13
+  3->2 MsgAppResp Term:3 Log:0/13 Commit:12
 > 2 receiving messages
   1->2 MsgFortifyLeaderResp Term:3 Log:0/0 Rejected (Hint: 0)
-  1->2 MsgAppResp Term:3 Log:0/13
+  1->2 MsgAppResp Term:3 Log:0/13 Commit:12
   3->2 MsgFortifyLeaderResp Term:3 Log:0/0 Rejected (Hint: 0)
-  3->2 MsgAppResp Term:3 Log:0/13
+  3->2 MsgAppResp Term:3 Log:0/13 Commit:12
 > 2 handling Ready
   Ready MustSync=false:
   HardState Term:3 Vote:2 Commit:13 Lead:2
@@ -354,14 +354,14 @@ stabilize
   CommittedEntries:
   3/13 EntryNormal ""
   Messages:
-  1->2 MsgAppResp Term:3 Log:0/13
+  1->2 MsgAppResp Term:3 Log:0/13 Commit:13
 > 3 handling Ready
   Ready MustSync=false:
   HardState Term:3 Commit:13 Lead:2
   CommittedEntries:
   3/13 EntryNormal ""
   Messages:
-  3->2 MsgAppResp Term:3 Log:0/13
+  3->2 MsgAppResp Term:3 Log:0/13 Commit:13
 > 2 receiving messages
-  1->2 MsgAppResp Term:3 Log:0/13
-  3->2 MsgAppResp Term:3 Log:0/13
+  1->2 MsgAppResp Term:3 Log:0/13 Commit:13
+  3->2 MsgAppResp Term:3 Log:0/13 Commit:13
