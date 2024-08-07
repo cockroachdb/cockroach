@@ -1110,17 +1110,19 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	// When an index exists, but `IF NOT EXISTS` is used, then
 	// the index will not be created and the op will complete without errors.
 	if !(indexExists && def.IfNotExists) {
+		stmt.potentialExecErrors.addAll(codesWithConditions{
+			// If there is data in the table such that a unique index cannot be created,
+			// a pgcode.UniqueViolation will occur and will be wrapped in a
+			// pgcode.TransactionCommittedWithSchemaChangeFailure. The schemachange worker
+			// is expected to parse for the underlying error.
+			{code: pgcode.UniqueViolation, condition: !uniqueViolationWillNotOccur},
+		})
 		stmt.expectedExecErrors.addAll(codesWithConditions{
 			{code: pgcode.DuplicateRelation, condition: indexExists},
 			// Inverted indexes do not support stored columns.
 			{code: pgcode.InvalidSQLStatementName, condition: len(def.Storing) > 0 && def.Inverted},
 			// Inverted indexes cannot be unique.
 			{code: pgcode.InvalidSQLStatementName, condition: def.Unique && def.Inverted},
-			// If there is data in the table such that a unique index cannot be created,
-			// a pgcode.UniqueViolation will occur and will be wrapped in a
-			// pgcode.TransactionCommittedWithSchemaChangeFailure. The schemachange worker
-			// is expected to parse for the underlying error.
-			{code: pgcode.UniqueViolation, condition: !uniqueViolationWillNotOccur},
 			{code: pgcode.InvalidSQLStatementName, condition: def.Inverted && len(def.Storing) > 0},
 			{code: pgcode.DuplicateColumn, condition: duplicateStore},
 			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
@@ -2413,7 +2415,7 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 			return nil, err
 		}
 		if colContainsNull {
-			og.candidateExpectedCommitErrors.add(pgcode.CheckViolation)
+			og.candidateExpectedCommitErrors.add(pgcode.NotNullViolation)
 		}
 	}
 
@@ -2892,11 +2894,14 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		if err != nil {
 			return nil, err
 		}
+
 	}
 
 	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UniqueViolation, condition: hasUniqueConstraints},
 		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
+		{code: pgcode.NotNullViolation, condition: true},
+		{code: pgcode.CheckViolation, condition: true},
 	})
 	og.expectedCommitErrors.addAll(codesWithConditions{
 		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
