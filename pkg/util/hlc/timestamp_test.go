@@ -56,22 +56,6 @@ func TestCompare(t *testing.T) {
 	}
 }
 
-func TestEqOrdering(t *testing.T) {
-	a := Timestamp{}
-	b := Timestamp{}
-	if !a.EqOrdering(b) {
-		t.Errorf("expected %+v == %+v", a, b)
-	}
-	b = makeTS(1, 0)
-	if a.EqOrdering(b) {
-		t.Errorf("expected %+v != %+v", a, b)
-	}
-	a = makeTS(1, 1)
-	if a.EqOrdering(b) {
-		t.Errorf("expected %+v != %+v", b, a)
-	}
-}
-
 func TestLess(t *testing.T) {
 	a := Timestamp{}
 	b := Timestamp{}

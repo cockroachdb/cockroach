@@ -461,7 +461,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	filters := config.Opts.GetFilters()
 	cfg := ca.FlowCtx.Cfg
 
-	initialScanOnly := config.EndTime.EqOrdering(initialHighWater)
+	initialScanOnly := config.EndTime == initialHighWater
 	var sf schemafeed.SchemaFeed
 
 	if schemaChange.Policy == changefeedbase.OptSchemaChangePolicyIgnore || initialScanOnly {

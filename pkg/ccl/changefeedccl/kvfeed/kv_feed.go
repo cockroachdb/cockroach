@@ -330,7 +330,7 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 
 	for i := 0; ; i++ {
 		initialScan := i == 0
-		initialScanOnly := f.endTime.EqOrdering(f.initialHighWater)
+		initialScanOnly := f.endTime == f.initialHighWater
 		scannedSpans, scannedTS, err := f.scanIfShould(ctx, initialScan, initialScanOnly, rangeFeedResumeFrontier.Frontier())
 		if err != nil {
 			return err
@@ -754,7 +754,7 @@ func copyFromSourceToDestUntilTableEvent(
 					return false, false, err
 				}
 
-				return skipEvent, frontier.Frontier().EqOrdering(boundaryResolvedTimestamp), nil
+				return skipEvent, frontier.Frontier() == boundaryResolvedTimestamp, nil
 			case kvevent.TypeFlush:
 				// TypeFlush events have a timestamp of zero and should have already
 				// been processed by the timestamp check above. We include this here

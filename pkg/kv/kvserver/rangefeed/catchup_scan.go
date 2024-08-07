@@ -266,7 +266,7 @@ func (i *CatchUpIterator) CatchUpScan(
 			} else if !ok {
 				return errors.Errorf("expected provisional value for intent")
 			}
-			if !meta.Timestamp.ToTimestamp().EqOrdering(i.UnsafeKey().Timestamp) {
+			if meta.Timestamp.ToTimestamp() != i.UnsafeKey().Timestamp {
 				return errors.Errorf("expected provisional value for intent with ts %s, found %s",
 					meta.Timestamp, i.UnsafeKey().Timestamp)
 			}
