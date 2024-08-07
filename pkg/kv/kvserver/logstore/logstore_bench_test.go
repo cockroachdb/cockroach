@@ -87,7 +87,8 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 		Term:  1,
 		Index: 1,
 		Type:  raftpb.EntryNormal,
-		Data:  raftlog.EncodeCommandBytes(raftlog.EntryEncodingStandardWithoutAC, "deadbeef", data),
+		Data: raftlog.EncodeCommandBytes(
+			raftlog.EntryEncodingStandardWithoutAC, "deadbeef", data, 0 /* pri */),
 	})
 	stats := &AppendStats{}
 
