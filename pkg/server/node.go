@@ -870,7 +870,7 @@ func (n *Node) addStore(ctx context.Context, store *kvserver.Store) {
 		log.Fatal(ctx, "attempting to add a store without a version")
 	}
 	store.TODOEngine().RegisterDiskSlowCallback(func(info pebble.DiskSlowInfo) {
-		n.onStoreDiskSlow(ctx, store.StoreID(), info)
+		n.onStoreDiskSlow(n.AnnotateCtx(context.Background()), store.StoreID(), info)
 	})
 	n.stores.AddStore(store)
 	n.recorder.AddStore(store)
