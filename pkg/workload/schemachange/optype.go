@@ -299,7 +299,7 @@ var opWeights = []int{
 	dropView:                          1,
 	renameIndex:                       1,
 	renameSequence:                    1,
-	renameTable:                       0, // Disabled and tracked with #127980.
+	renameTable:                       1,
 	renameView:                        1,
 }
 
