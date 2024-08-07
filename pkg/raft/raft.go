@@ -858,7 +858,8 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 	//  if r.maybeCommit() {
 	//  	r.bcastAppend()
 	//  }
-	r.send(pb.Message{To: r.id, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex()})
+	r.send(pb.Message{To: r.id, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex(),
+		Commit: r.raftLog.committed})
 	return true
 }
 
@@ -1765,7 +1766,8 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 	}
 
 	if a.prev.index < r.raftLog.committed {
-		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed})
+		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed,
+			Commit: r.raftLog.committed})
 		return
 	}
 	if r.raftLog.maybeAppend(a) {
@@ -1775,7 +1777,8 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		// the commit index even if the MsgApp is stale.
 		lastIndex := a.lastIndex()
 		r.raftLog.commitTo(logMark{term: m.Term, index: min(m.Commit, lastIndex)})
-		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: lastIndex})
+		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: lastIndex,
+			Commit: r.raftLog.committed})
 		return
 	}
 	r.logger.Debugf("%x [logterm: %d, index: %d] rejected MsgApp [logterm: %d, index: %d] from %x",
@@ -1800,9 +1803,12 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 	hintIndex := min(m.Index, r.raftLog.lastIndex())
 	hintIndex, hintTerm := r.raftLog.findConflictByTerm(hintIndex, m.LogTerm)
 	r.send(pb.Message{
-		To:         m.From,
-		Type:       pb.MsgAppResp,
-		Index:      m.Index,
+		To:    m.From,
+		Type:  pb.MsgAppResp,
+		Index: m.Index,
+		// This helps the leader track the follower's commit index. This flow is
+		// independent from accepted/rejected log appends.
+		Commit:     r.raftLog.committed,
 		Reject:     true,
 		RejectHint: hintIndex,
 		LogTerm:    hintTerm,
@@ -1873,11 +1879,13 @@ func (r *raft) handleSnapshot(m pb.Message) {
 	if r.restore(s) {
 		r.logger.Infof("%x [commit: %d] restored snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, id.index, id.term)
-		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex()})
+		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex(),
+			Commit: r.raftLog.committed})
 	} else {
 		r.logger.Infof("%x [commit: %d] ignored snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, id.index, id.term)
-		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed})
+		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed,
+			Commit: r.raftLog.committed})
 	}
 }
 
