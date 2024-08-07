@@ -39,9 +39,14 @@ select
   test_name,
   case when
          -- mark as selected if
-         failure_count > 0 or -- the test has failed at least once in the past "forPastDays" days
-         first_run > dateadd(DAY, ?, ts.t) or -- recently added test - test has not run for more than "firstRunOn" days
-         last_run < dateadd(DAY, ?, ts.t) or -- the test has not been run for last "lastRunOn" days
+          -- the test has failed at least once in the past "forPastDays" days
+          -- recently added test - test has not run for more than "firstRunOn" days
+          -- the test has not been run for last "lastRunOn" days
+          -- the last failure was VM preemption
+         failure_count > 0 or
+         first_run > dateadd(DAY, ?, ts.t) or
+         last_run < dateadd(DAY, ?, ts.t) or
+         recent_details like '%VMs preempted during the test run%' or
           -- last_status='UNKNOWN' can be for the following scenarios:
            -- test is run in the past, but added to skip by the test writer
             -- In this scenario, we want to select the test as we do not know when user may mark it to not skipped
