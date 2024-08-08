@@ -85,11 +85,14 @@ func (n NodeListOption) SeededRandList(rand *rand.Rand, size int) (NodeListOptio
 
 	nodes := make(map[int]struct{}, size)
 	for range size {
-		node := n[rand.Intn(len(n))]
-		for _, ok := nodes[node]; ok; {
-			node = n[rand.Intn(len(n))]
+		for {
+			node := n[rand.Intn(len(n))]
+			_, ok := nodes[node]
+			if !ok {
+				nodes[node] = struct{}{}
+				break
+			}
 		}
-		nodes[node] = struct{}{}
 	}
 
 	result := make(NodeListOption, 0, size)
