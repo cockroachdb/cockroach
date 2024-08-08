@@ -14,6 +14,7 @@ package kvflowcontrol
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
@@ -80,6 +81,42 @@ func (m ModeT) SafeFormat(p redact.SafePrinter, verb rune) {
 	}
 	p.Print("unknown-mode")
 }
+
+// RegularTokensPerStream determines the flow tokens available for regular work
+// on a per-stream basis.
+var RegularTokensPerStream = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_controller.regular_tokens_per_stream",
+	"flow tokens available for regular work on a per-stream basis",
+	16<<20, // 16 MiB
+	validateTokenRange,
+)
+
+// ElasticTokensPerStream determines the flow tokens available for elastic work
+// on a per-stream basis.
+var ElasticTokensPerStream = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_controller.elastic_tokens_per_stream",
+	"flow tokens available for elastic work on a per-stream basis",
+	8<<20, // 8 MiB
+	validateTokenRange,
+)
+
+const (
+	minTokensPerStream Tokens = 1 << 20  // 1 MiB
+	maxTokensPerStream Tokens = 64 << 20 // 64 MiB
+)
+
+var validateTokenRange = settings.WithValidateInt(func(b int64) error {
+	t := Tokens(b)
+	if t < minTokensPerStream {
+		return fmt.Errorf("minimum flowed tokens allowed is %s, got %s", minTokensPerStream, t)
+	}
+	if t > maxTokensPerStream {
+		return fmt.Errorf("maximum flow tokens allowed is %s, got %s", maxTokensPerStream, t)
+	}
+	return nil
+})
 
 // Stream models the stream over which we replicate data traffic, the
 // transmission for which we regulate using flow control. It's segmented by the
