@@ -300,6 +300,7 @@ var versionTable = [numKeys]roachpb.Version{
 	VBootstrapTenant: {Major: 0, Minor: 0, Internal: 4},
 	VBootstrapMax:    {Major: 0, Minor: 0, Internal: 424242},
 
+	// TODO(radu): rename gates < MinSupported to TODO_Delete.
 	V23_1: {Major: 23, Minor: 1, Internal: 0},
 
 	V23_2: {Major: 23, Minor: 2, Internal: 0},
@@ -344,7 +345,7 @@ var versionTable = [numKeys]roachpb.Version{
 const Latest Key = numKeys - 1
 
 // MinSupported is the minimum logical cluster version supported by this branch.
-const MinSupported Key = V23_2
+const MinSupported Key = V24_1
 
 // PreviousRelease is the logical cluster version of the previous release.
 //

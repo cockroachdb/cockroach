@@ -271,19 +271,19 @@ func (desc *immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulato
 	}
 }
 
-// The SystemDatabaseSchemaBootstrapVersion for each release does not match the
-// final cluster version for that release; instead it matches the internal
-// version for the last upgrade which modified the system schema.
+// Prior to 24.2, the SystemDatabaseSchemaBootstrapVersion for each release does
+// not match the final cluster version for that release; instead it matches the
+// internal version for the last upgrade which modified the system schema. This
+// constant holds the schema version for the clusterversion.MinSupported
+// release; it is the value of SystemDatabaseSchemaBootstrapVersion in the
+// corresponding branch.
 //
-// The code only consults this map with clusterversion.MinSupported. Entries in
-// this map can be removed once they are older than clusterversion.MinSupported.
+// Note that the version here should never have a dev offset.
 //
-// These versions must not include dev offsets.
-var systemDatabaseSchemaVersions = map[clusterversion.Key]roachpb.Version{
-	// Unfortunately, due to an incomplete upgrade step, the system database
-	// schema version on 23.2 is either 23.1-20 or 23.1-32, depending on whether
-	// cluster was upgraded from 23.1 or created on 23.2 (respectively).
-	clusterversion.V23_2: {Major: 23, Minor: 1, Internal: 20},
+// TODO(radu): when we no longer support 24.1, this mechanism should not be
+// necessary anymore (in 24.2+ we do a final bump to the release version).
+var minSupportedDatabaseSchemaVersion = roachpb.Version{
+	Major: 23, Minor: 2, Internal: 14, // V24_1_SessionBasedLeasingUpgradeDescriptor
 }
 
 func (desc *immutable) maybeValidateSystemDatabaseSchemaVersion(
@@ -302,22 +302,10 @@ func (desc *immutable) maybeValidateSystemDatabaseSchemaVersion(
 		))
 	}
 
-	for release, sysSchemaVer := range systemDatabaseSchemaVersions {
-		if sv == sysSchemaVer {
-			sv = release.Version()
-			break
-		}
-	}
-
-	minSupportedVersion, ok := systemDatabaseSchemaVersions[clusterversion.MinSupported]
-	if !ok {
-		panic(errors.AssertionFailedf("MinSupported not in systemDatabaseSchemaVersions map"))
-	}
-
-	if sv.Less(minSupportedVersion) {
+	if sv.Less(minSupportedDatabaseSchemaVersion) {
 		vea.Report(errors.AssertionFailedf(
 			`attempting to set system database schema version to version lower than the minimum supported version (%#v): %#v`,
-			minSupportedVersion,
+			minSupportedDatabaseSchemaVersion,
 			sv,
 		))
 	}

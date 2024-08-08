@@ -2631,7 +2631,6 @@ BEGIN
 END;
 $$ LANGUAGE PLpgSQL;
 
-skipif config local-mixed-23.2
 statement error pgcode 0A000 unimplemented: wildcard return type is not yet supported in this context
 CREATE FUNCTION f2(b BOOL) RETURNS RECORD AS $$
 BEGIN
