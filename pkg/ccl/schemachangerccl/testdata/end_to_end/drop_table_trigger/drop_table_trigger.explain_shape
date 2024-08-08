@@ -1,0 +1,8 @@
+/* setup */
+CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t FOR EACH ROW EXECUTE FUNCTION f();
+
+/* test */
+EXPLAIN (DDL, SHAPE) DROP TABLE defaultdb.t;
+----
+Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
+ └── execute 2 system table mutations transactions
