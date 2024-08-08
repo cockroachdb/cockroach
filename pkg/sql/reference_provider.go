@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 type tableDescReferences []descpb.TableDescriptor_Reference
@@ -123,17 +124,27 @@ func (f *referenceProviderFactory) NewReferenceProvider(
 	if err := optBld.Build(); err != nil {
 		return nil, err
 	}
-	// For the time being this is only used for CREATE FUNCTION. We need to handle
-	// CREATE VIEW when it's needed.
-	createFnExpr := optFactory.Memo().RootExpr().(*memo.CreateFunctionExpr)
-	tableReferences, typeReferences, functionReferences, err := toPlanDependencies(createFnExpr.Deps, createFnExpr.TypeDeps, createFnExpr.FuncDeps)
+	var (
+		err      error
+		planDeps planDependencies
+		typeDeps typeDependencies
+		funcDeps functionDependencies
+	)
+	switch t := optFactory.Memo().RootExpr().(type) {
+	case *memo.CreateFunctionExpr:
+		planDeps, typeDeps, funcDeps, err = toPlanDependencies(t.Deps, t.TypeDeps, t.FuncDeps)
+	case *memo.CreateTriggerExpr:
+		planDeps, typeDeps, funcDeps, err = toPlanDependencies(t.Deps, t.TypeDeps, t.FuncDeps)
+	default:
+		return nil, errors.AssertionFailedf("unexpected root expression: %s", t.(memo.RelExpr).Op())
+	}
 	if err != nil {
 		return nil, err
 	}
 
 	ret := newReferenceProvider()
 
-	for descID, refs := range tableReferences {
+	for descID, refs := range planDeps {
 		ret.allRelationIDs.Add(descID)
 		if refs.desc.IsView() {
 			ret.viewReferences[descID] = append(ret.viewReferences[descID], refs.deps...)
@@ -144,7 +155,7 @@ func (f *referenceProviderFactory) NewReferenceProvider(
 		}
 	}
 
-	for typeID := range typeReferences {
+	for typeID := range typeDeps {
 		desc, err := f.p.descCollection.ByID(f.p.txn).WithoutNonPublic().Get().Desc(ctx, typeID)
 		if err != nil {
 			return nil, err
@@ -157,7 +168,7 @@ func (f *referenceProviderFactory) NewReferenceProvider(
 		}
 	}
 
-	for functionID := range functionReferences {
+	for functionID := range funcDeps {
 		ret.referencedFunctions.Add(functionID)
 	}
 	return ret, nil
