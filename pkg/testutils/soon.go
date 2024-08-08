@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -82,7 +83,7 @@ func SucceedsWithinError(fn func() error, duration time.Duration) error {
 }
 
 func SucceedsSoonDuration() time.Duration {
-	if util.RaceEnabled {
+	if util.RaceEnabled || syncutil.DeadlockEnabled {
 		return RaceSucceedsSoonDuration
 	}
 	return DefaultSucceedsSoonDuration
