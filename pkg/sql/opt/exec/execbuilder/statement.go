@@ -84,6 +84,13 @@ func (b *Builder) buildCreateFunction(
 	return execPlan{root: root}, colOrdMap{}, err
 }
 
+func (b *Builder) buildCreateTrigger(
+	ct *memo.CreateTriggerExpr,
+) (_ execPlan, outputCols colOrdMap, err error) {
+	root, err := b.factory.ConstructCreateTrigger(ct.Syntax)
+	return execPlan{root: root}, colOrdMap{}, err
+}
+
 func (b *Builder) buildExplainOpt(
 	explain *memo.ExplainExpr,
 ) (_ execPlan, outputCols colOrdMap, err error) {

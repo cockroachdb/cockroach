@@ -33,6 +33,12 @@ type View interface {
 	// IsSystemView returns true if this view is a system view (like
 	// crdb_internal.ranges).
 	IsSystemView() bool
+
+	// TriggerCount returns the number of triggers present on the view.
+	TriggerCount() int
+
+	// Trigger returns the ith trigger, where i < TriggerCount.
+	Trigger(i int) Trigger
 }
 
 // FormatView nicely formats a catalog view using a treeprinter for debugging
