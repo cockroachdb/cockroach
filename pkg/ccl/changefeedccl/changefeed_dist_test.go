@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -362,6 +363,7 @@ func newRangeDistributionTester(
 
 	const nodes = 8
 	args := base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
 		ServerArgsPerNode: map[int]base.TestServerArgs{},
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestTenantProbabilistic,
@@ -393,7 +395,7 @@ func newRangeDistributionTester(
 
 	start := timeutil.Now()
 	tc := testcluster.StartTestCluster(t, nodes, args)
-	t.Logf("starting the test cluster took %s", timeutil.Since(start))
+	t.Logf("%s: starting the test cluster took %s", timeutil.Now().Format(time.DateTime), timeutil.Since(start))
 
 	lastNode := tc.Server(len(tc.Servers) - 1).ApplicationLayer()
 	sqlDB := sqlutils.MakeSQLRunner(lastNode.SQLConn(t))
@@ -405,24 +407,20 @@ func newRangeDistributionTester(
 		systemDB.Exec(t, `ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
 	}
 
-	// Use manual replication only.
-	start = timeutil.Now()
-	tc.ToggleReplicateQueues(false)
-	t.Logf("toggling replicate queues off took %s", timeutil.Since(start))
-
-	t.Logf("creating and splitting table into single-key ranges")
+	t.Logf("%s: creating and inserting rows into table", timeutil.Now().Format(time.DateTime))
 	start = timeutil.Now()
 	sqlDB.ExecMultiple(t,
 		"CREATE TABLE x (id INT PRIMARY KEY)",
 		"INSERT INTO x SELECT generate_series(0, 63)",
 	)
-	t.Logf("creating and inserting into table took %s", timeutil.Since(start))
+	t.Logf("%s: creating and inserting rows into table took %s", timeutil.Now().Format(time.DateTime), timeutil.Since(start))
 
+	t.Logf("%s: splitting table into single-key ranges", timeutil.Now().Format(time.DateTime))
 	start = timeutil.Now()
 	sqlDB.Exec(t,
 		"ALTER TABLE x SPLIT AT SELECT id FROM x WHERE id > 0",
 	)
-	t.Logf("spitting the table took %s", timeutil.Since(start))
+	t.Logf("%s: spitting the table took %s", timeutil.Now().Format(time.DateTime), timeutil.Since(start))
 
 	// Distribute the leases exponentially across the first 5 nodes.
 	for i := 0; i < 64; i += 1 {
@@ -431,14 +429,13 @@ func newRangeDistributionTester(
 		if i != 0 {
 			nodeID = int(math.Floor(math.Log2(float64(i)))) + 1
 		}
-		t.Logf("relocating range for %d to store %d", i, nodeID)
-		cmd := fmt.Sprintf(`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], %d)`,
-			nodeID, i,
-		)
+		t.Logf("%s: relocating range for %d to store %d", timeutil.Now().Format(time.DateTime), i, nodeID)
+		cmd := fmt.Sprintf(`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], %d)`, nodeID, i)
 		// Relocate can fail with errors like `change replicas... descriptor changed` thus the SucceedsSoon.
 		start := timeutil.Now()
 		sqlDB.ExecSucceedsSoon(t, cmd)
-		t.Logf("relocating range for %d to store %d took %s", i, nodeID, timeutil.Since(start))
+		t.Logf("%s: relocating range for %d to store %d took %s",
+			timeutil.Now().Format(time.DateTime), i, nodeID, timeutil.Since(start))
 	}
 
 	return &rangeDistributionTester{
