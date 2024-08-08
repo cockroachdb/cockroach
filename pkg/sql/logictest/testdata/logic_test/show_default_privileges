@@ -189,6 +189,7 @@ root  false          tables       bar      CREATE          false
 root  false          tables       bar      DELETE          false
 root  false          tables       bar      DROP            false
 root  false          tables       bar      INSERT          false
+root  false          tables       bar      TRIGGER         false
 root  false          tables       bar      UPDATE          false
 root  false          tables       bar      ZONECONFIG      false
 root  false          tables       foo      BACKUP          false
@@ -197,6 +198,7 @@ root  false          tables       foo      CREATE          false
 root  false          tables       foo      DELETE          false
 root  false          tables       foo      DROP            false
 root  false          tables       foo      INSERT          false
+root  false          tables       foo      TRIGGER         false
 root  false          tables       foo      UPDATE          false
 root  false          tables       foo      ZONECONFIG      false
 root  false          types        root     ALL             true
