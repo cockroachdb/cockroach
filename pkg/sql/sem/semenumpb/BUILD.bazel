@@ -4,7 +4,10 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 
 proto_library(
     name = "semenumpb_proto",
-    srcs = ["constraint.proto"],
+    srcs = [
+        "constraint.proto",
+        "trigger.proto",
+    ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
@@ -21,7 +24,7 @@ go_proto_library(
 
 go_library(
     name = "semenumpb",
-    srcs = ["constraint.go"],
+    srcs = ["enum.go"],
     embed = [":semenumpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb",
     visibility = ["//visibility:public"],

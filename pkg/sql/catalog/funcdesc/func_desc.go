@@ -325,9 +325,10 @@ func (desc *immutable) validateInboundFunctionRef(
 			backrefFunctionDesc.GetName(), backrefFunctionDesc.GetID())
 	}
 	// Validate all other references are unset.
-	if ref.ColumnIDs != nil || ref.IndexIDs != nil || ref.ConstraintIDs != nil {
-		return errors.AssertionFailedf("function reference has invalid references (%v, %v %v)",
-			ref.ColumnIDs, ref.IndexIDs, ref.ConstraintIDs)
+	if ref.ColumnIDs != nil || ref.IndexIDs != nil ||
+		ref.ConstraintIDs != nil || ref.TriggerIDs != nil {
+		return errors.AssertionFailedf("function reference has invalid references (%v, %v %v, %v)",
+			ref.ColumnIDs, ref.IndexIDs, ref.ConstraintIDs, ref.TriggerIDs)
 	}
 	// Validate a reference exists to this function.
 	for _, refID := range backrefFunctionDesc.GetDependsOnFunctions() {
@@ -402,6 +403,24 @@ func (desc *immutable) validateInboundTableRef(
 		return errors.AssertionFailedf(
 			"constraint %d in depended-on-by relation %q (%d) does not have reference to function %q (%d)",
 			cstID, backRefTbl.GetName(), backRefTbl.GetID(), desc.GetName(), desc.GetID(),
+		)
+	}
+
+	for _, triggerID := range by.TriggerIDs {
+		if catalog.FindTriggerByID(backRefTbl, triggerID) == nil {
+			return errors.AssertionFailedf(
+				"depended-on-by relation %q (%d) does not have a trigger with ID %d",
+				backRefTbl.GetName(), by.ID, triggerID,
+			)
+		}
+		fnIDs := backRefTbl.GetAllReferencedFunctionIDsInTrigger(triggerID)
+		if fnIDs.Contains(desc.GetID()) {
+			foundInTable = true
+			continue
+		}
+		return errors.AssertionFailedf(
+			"trigger %d in depended-on-by relation %q (%d) does not have reference to function %q (%d)",
+			triggerID, backRefTbl.GetName(), backRefTbl.GetID(), desc.GetName(), desc.GetID(),
 		)
 	}
 	if foundInTable {
@@ -722,6 +741,52 @@ func (desc *Mutable) RemoveColumnReference(id descpb.ID, colID descpb.ColumnID) 
 	}
 }
 
+// AddTriggerReference adds back reference to a constraint to the function.
+func (desc *Mutable) AddTriggerReference(id descpb.ID, triggerID descpb.TriggerID) error {
+	for _, dep := range desc.DependsOn {
+		if dep == id {
+			return pgerror.Newf(pgcode.InvalidFunctionDefinition,
+				"cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
+			)
+		}
+	}
+	defer sort.Slice(desc.DependedOnBy, func(i, j int) bool {
+		return desc.DependedOnBy[i].ID < desc.DependedOnBy[j].ID
+	})
+	for i := range desc.DependedOnBy {
+		if desc.DependedOnBy[i].ID == id {
+			for _, prevID := range desc.DependedOnBy[i].TriggerIDs {
+				if prevID == triggerID {
+					return nil
+				}
+			}
+			desc.DependedOnBy[i].TriggerIDs = append(desc.DependedOnBy[i].TriggerIDs, triggerID)
+			return nil
+		}
+	}
+	desc.DependedOnBy = append(desc.DependedOnBy,
+		descpb.FunctionDescriptor_Reference{ID: id, TriggerIDs: []descpb.TriggerID{triggerID}},
+	)
+	return nil
+}
+
+// RemoveTriggerReference removes back reference to a constraint from the
+// function.
+func (desc *Mutable) RemoveTriggerReference(id descpb.ID, triggerID descpb.TriggerID) {
+	for i := range desc.DependedOnBy {
+		if desc.DependedOnBy[i].ID == id {
+			dep := &desc.DependedOnBy[i]
+			for j := range dep.TriggerIDs {
+				if dep.TriggerIDs[j] == triggerID {
+					dep.TriggerIDs = append(dep.TriggerIDs[:j], dep.TriggerIDs[j+1:]...)
+					desc.maybeRemoveTableReference(id)
+					return
+				}
+			}
+		}
+	}
+}
+
 // maybeRemoveTableReference removes a table's references from the function if
 // the column, index and constraint references are all empty. This function is
 // only used internally when removing an individual column, index or constraint
@@ -729,7 +794,8 @@ func (desc *Mutable) RemoveColumnReference(id descpb.ID, colID descpb.ColumnID) 
 func (desc *Mutable) maybeRemoveTableReference(id descpb.ID) {
 	var ret []descpb.FunctionDescriptor_Reference
 	for _, ref := range desc.DependedOnBy {
-		if ref.ID == id && len(ref.ColumnIDs) == 0 && len(ref.IndexIDs) == 0 && len(ref.ConstraintIDs) == 0 {
+		if ref.ID == id && len(ref.ColumnIDs) == 0 && len(ref.IndexIDs) == 0 &&
+			len(ref.ConstraintIDs) == 0 && len(ref.TriggerIDs) == 0 {
 			continue
 		}
 		ret = append(ret, ref)
