@@ -81,31 +81,46 @@ func TableDescs(
 			return err
 		}
 
-		// Remap type IDs and sequence IDs in all serialized expressions within the TableDescriptor.
+		// Drop triggers if referenced tables, types, or routines not found.
+		dropTriggerMissingDeps(table, descriptorRewrites)
+
+		// Remap type IDs and sequence IDs in all serialized expressions within the
+		// TableDescriptor.
 		// TODO (rohany): This needs tests once partial indexes are ready.
 		if err := tabledesc.ForEachExprStringInTableDesc(table,
 			func(expr *string, typ catalog.DescExprType) error {
-				if typ != catalog.SQLExpr {
-					// TODO(drewk): handle this case.
-					return nil
-				}
-				newExpr, err := rewriteTypesInExpr(*expr, descriptorRewrites)
-				if err != nil {
-					return err
-				}
-				*expr = newExpr
+				switch typ {
+				case catalog.SQLExpr:
+					newExpr, err := rewriteTypesInExpr(*expr, descriptorRewrites)
+					if err != nil {
+						return err
+					}
+					*expr = newExpr
 
-				newExpr, err = rewriteSequencesInExpr(*expr, descriptorRewrites)
-				if err != nil {
-					return err
-				}
-				*expr = newExpr
+					newExpr, err = rewriteSequencesInExpr(*expr, descriptorRewrites)
+					if err != nil {
+						return err
+					}
+					*expr = newExpr
 
-				newExpr, err = rewriteFunctionsInExpr(*expr, descriptorRewrites)
-				if err != nil {
-					return err
+					newExpr, err = rewriteFunctionsInExpr(*expr, descriptorRewrites)
+					if err != nil {
+						return err
+					}
+					*expr = newExpr
+				case catalog.SQLStmt, catalog.PLpgSQLStmt:
+					lang := catpb.Function_SQL
+					if typ == catalog.PLpgSQLStmt {
+						lang = catpb.Function_PLPGSQL
+					}
+					newExpr, err := rewriteRoutineBody(descriptorRewrites, *expr, overrideDB, lang)
+					if err != nil {
+						return err
+					}
+					*expr = newExpr
+				default:
+					return errors.AssertionFailedf("unexpected expression type")
 				}
-				*expr = newExpr
 				return nil
 			},
 		); err != nil {
@@ -295,6 +310,51 @@ func TableDescs(
 					return err
 				}
 			}
+		}
+
+		for idx := range table.Triggers {
+			trigger := &table.Triggers[idx]
+
+			// Rewrite trigger function reference.
+			if triggerFnRewrite, ok := descriptorRewrites[trigger.FuncID]; ok {
+				trigger.FuncID = triggerFnRewrite.ID
+			} else {
+				return errors.AssertionFailedf(
+					"cannot restore trigger %s on table %q because referenced function %d was not found",
+					trigger.Name, table.Name, trigger.FuncID,
+				)
+			}
+
+			// Rewrite forward-references.
+			rewriteIDs := func(ids []descpb.ID, refName string) (newIDs []descpb.ID, err error) {
+				newIDs = make([]descpb.ID, len(ids))
+				for i, id := range ids {
+					if depRewrite, ok := descriptorRewrites[id]; ok {
+						newIDs[i] = depRewrite.ID
+					} else {
+						return nil, errors.AssertionFailedf(
+							"cannot restore trigger %s on table %q because referenced %s %d was not found",
+							trigger.Name, table.Name, refName, id,
+						)
+					}
+				}
+				return newIDs, nil
+			}
+			newDependsOn, err := rewriteIDs(trigger.DependsOn, "relation")
+			if err != nil {
+				return err
+			}
+			newDependsOnTypes, err := rewriteIDs(trigger.DependsOnTypes, "type")
+			if err != nil {
+				return err
+			}
+			newDependsOnRoutines, err := rewriteIDs(trigger.DependsOnRoutines, "routine")
+			if err != nil {
+				return err
+			}
+			trigger.DependsOn = newDependsOn
+			trigger.DependsOnTypes = newDependsOnTypes
+			trigger.DependsOnRoutines = newDependsOnRoutines
 		}
 	}
 
@@ -601,6 +661,30 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites jobspb.DescRewriteMap) 
 	}
 
 	return nil
+}
+
+// rewriteRoutineBody rewrites a set of SQL or PL/pgSQL statements.
+func rewriteRoutineBody(
+	descriptorRewrites jobspb.DescRewriteMap,
+	fnBody, overrideDB string,
+	fnLang catpb.Function_Language,
+) (string, error) {
+	if overrideDB != "" {
+		dbNameReplaced, err := rewriteFunctionBodyDBNames(fnBody, overrideDB, fnLang)
+		if err != nil {
+			return "", err
+		}
+		fnBody = dbNameReplaced
+	}
+	fnBody, err := rewriteSequencesInFunction(fnBody, descriptorRewrites, fnLang)
+	if err != nil {
+		return "", err
+	}
+	fnBody, err = rewriteTypesInRoutine(fnBody, descriptorRewrites, fnLang)
+	if err != nil {
+		return "", err
+	}
+	return fnBody, nil
 }
 
 // MaybeClearSchemaChangerStateInDescs goes over all mutable descriptors and
@@ -963,6 +1047,27 @@ func dropColumnExpressionsMissingDeps(
 	return nil
 }
 
+func dropTriggerMissingDeps(table *tabledesc.Mutable, descriptorRewrites jobspb.DescRewriteMap) {
+	foundAllDeps := func(ids []descpb.ID) bool {
+		for _, id := range ids {
+			if _, ok := descriptorRewrites[id]; !ok {
+				return false
+			}
+		}
+		return true
+	}
+	newTriggers := make([]descpb.TriggerDescriptor, 0, len(table.Triggers))
+	for i := range table.Triggers {
+		trigger := &table.Triggers[i]
+		if !foundAllDeps(trigger.DependsOn) || !foundAllDeps(trigger.DependsOnTypes) ||
+			!foundAllDeps(trigger.DependsOnRoutines) {
+			continue
+		}
+		newTriggers = append(newTriggers, *trigger)
+	}
+	table.Triggers = newTriggers
+}
+
 // DatabaseDescs rewrites all ID's in the input slice of DatabaseDescriptors
 // using the input ID rewrite mapping. The function elides remapping offline schemas,
 // since they will not get restored into the cluster.
@@ -1030,23 +1135,13 @@ func FunctionDescs(
 		fnDesc.ParentID = fnRewrite.ParentID
 
 		// Rewrite function body.
-		fnBody := fnDesc.FunctionBody
-		if overrideDB != "" {
-			dbNameReplaced, err := rewriteFunctionBodyDBNames(fnBody, overrideDB, fnDesc.Lang)
-			if err != nil {
-				return err
-			}
-			fnBody = dbNameReplaced
-		}
-		fnBody, err := rewriteSequencesInFunction(fnBody, descriptorRewrites, fnDesc.Lang)
+		var err error
+		fnDesc.FunctionBody, err = rewriteRoutineBody(
+			descriptorRewrites, fnDesc.FunctionBody, overrideDB, fnDesc.Lang,
+		)
 		if err != nil {
 			return err
 		}
-		fnBody, err = rewriteTypesInRoutine(fnBody, descriptorRewrites, fnDesc.Lang)
-		if err != nil {
-			return err
-		}
-		fnDesc.FunctionBody = fnBody
 
 		// Rewrite type IDs.
 		for _, param := range fnDesc.Params {
