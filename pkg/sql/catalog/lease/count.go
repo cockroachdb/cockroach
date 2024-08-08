@@ -86,7 +86,8 @@ func countLeasesWithDetail(
 		systemDBVersion = &v
 	}
 	leasingDescIsSessionBased := systemDBVersion != nil &&
-		systemDBVersion.AtLeast(clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor.Version())
+		clusterversion.RemoveDevOffset(*systemDBVersion).AtLeast(
+			clusterversion.RemoveDevOffset(clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor.Version()))
 	leasingMode := readSessionBasedLeasingMode(ctx, settings)
 	whereClauses := make([][]string, 2)
 	containsSystemDatabase := false
@@ -116,13 +117,11 @@ func countLeasesWithDetail(
 		// expiry based descriptor synthetically.
 		if leasingDescIsSessionBased {
 			syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable_V23_2())
-			whereClauseIdx = append(whereClauseIdx, 0)
-			usesOldSchema = append(usesOldSchema, true)
 		} else {
 			syntheticDescriptors = append(syntheticDescriptors, nil)
-			whereClauseIdx = append(whereClauseIdx, 1)
-			usesOldSchema = append(usesOldSchema, false)
 		}
+		whereClauseIdx = append(whereClauseIdx, 0)
+		usesOldSchema = append(usesOldSchema, true)
 	}
 	if leasingMode >= SessionBasedDrain {
 		// The leasing descriptor is not yet session based, so inject the session
