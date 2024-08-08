@@ -103,6 +103,11 @@ func (r *referenceProvider) ReferencedTypes() catalog.DescriptorIDSet {
 	return r.referencedTypes
 }
 
+// ReferencedRoutines implements scbuildstmt.ReferenceProvider
+func (r *referenceProvider) ReferencedRoutines() catalog.DescriptorIDSet {
+	return r.referencedFunctions
+}
+
 type referenceProviderFactory struct {
 	p *planner
 }
