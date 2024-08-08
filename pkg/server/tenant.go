@@ -896,6 +896,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			"cluster":   clusterID.String(),
 			"instance":  instanceID.String(),
 			"server_id": fmt.Sprintf("%s-%s", clusterID.Short(), instanceID.String()),
+			"tenant_id": s.rpcContext.TenantID.String(),
 		})
 	})
 
