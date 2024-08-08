@@ -5459,10 +5459,6 @@ trigger_event:
   {
     $$.val = &tree.TriggerEvent{EventType: tree.TriggerEventTruncate}
   }
-| UPSERT
-  {
-    $$.val = &tree.TriggerEvent{EventType: tree.TriggerEventUpsert}
-  }
 
 opt_trigger_transition_list:
   REFERENCING trigger_transition_list

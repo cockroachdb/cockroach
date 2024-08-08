@@ -3260,7 +3260,6 @@ trigger_event ::=
 	| 'UPDATE'
 	| 'UPDATE' 'OF' name_list
 	| 'TRUNCATE'
-	| 'UPSERT'
 
 trigger_transition_list ::=
 	( trigger_transition ) ( ( trigger_transition ) )*
