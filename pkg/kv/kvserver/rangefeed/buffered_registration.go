@@ -304,3 +304,13 @@ func (br *bufferedRegistration) detachCatchUpIter() *CatchUpIterator {
 	br.mu.catchUpIter = nil
 	return catchUpIter
 }
+
+// Test only.
+func (br *bufferedRegistration) lenOfBuf() int {
+	return len(br.buf)
+}
+
+// Test only.
+func (br *bufferedRegistration) capOfBuf() int {
+	return cap(br.buf)
+}
