@@ -49,6 +49,7 @@ var isResponseMsg = [...]bool{
 	pb.MsgPreVoteResp:       true,
 	pb.MsgStorageAppendResp: true,
 	pb.MsgStorageApplyResp:  true,
+	pb.MsgFortifyLeaderResp: true,
 }
 
 func isMsgInArray(msgt pb.MessageType, arr []bool) bool {
@@ -163,6 +164,12 @@ func describeMessageWithIndent(indent string, m pb.Message, f EntryFormatter) st
 	}
 	if m.Vote != 0 {
 		fmt.Fprintf(&buf, " Vote:%d", m.Vote)
+	}
+	if m.Lead != 0 {
+		fmt.Fprintf(&buf, " Lead:%d", m.Lead)
+	}
+	if m.LeadEpoch != 0 {
+		fmt.Fprintf(&buf, " LeadEpoch:%d", m.LeadEpoch)
 	}
 	if ln := len(m.Entries); ln == 1 {
 		fmt.Fprintf(&buf, " Entries:[%s]", DescribeEntry(m.Entries[0], f))
@@ -305,6 +312,14 @@ func assertConfStatesEquivalent(l Logger, cs1, cs2 pb.ConfState) {
 		return
 	}
 	l.Panic(err)
+}
+
+// assertTrue panics with the supplied message if the condition does not hold
+// true.
+func assertTrue(condition bool, msg string) {
+	if !condition {
+		panic(msg)
+	}
 }
 
 // extend appends vals to the given dst slice. It differs from the standard
