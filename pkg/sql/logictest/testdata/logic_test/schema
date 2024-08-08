@@ -1353,4 +1353,99 @@ SELECT database_name, schema_name, grantee, privilege_type FROM [SHOW GRANTS ON 
 ----
 should_not_have_create  public  public  USAGE
 
+statement ok
+RESET CLUSTER SETTING sql.auth.public_schema_create_privilege.enabled
+
+subtest end
+
+# Regression test for #126244: during Memo staleness checking, check object
+# resolution before privileges, to avoid spurious privilege errors.
+subtest check_privileges_after_resolution
+
+statement ok
+create database foo;
+
+statement ok
+create database bar;
+
+statement ok
+create user foo_user;
+
+statement ok
+create user bar_user;
+
+statement ok
+create ROLE foo_role;
+
+statement ok
+create ROLE bar_role;
+
+statement ok
+use foo;
+
+statement ok
+CREATE TABLE baz (
+  id   int NOT NULL,
+  name varchar NOT NULL,
+  PRIMARY KEY (id)
+);
+
+statement ok
+CREATE FUNCTION qux() RETURNS void LANGUAGE SQL AS $$
+    SELECT * FROM baz;
+$$;
+
+statement ok
+ALTER TABLE baz OWNER TO foo_role;
+
+statement ok
+use bar;
+
+statement ok
+CREATE TABLE baz (
+  id   int NOT NULL,
+  name varchar NOT NULL,
+  PRIMARY KEY (id)
+);
+
+statement ok
+CREATE FUNCTION qux() RETURNS void LANGUAGE SQL AS $$
+    SELECT * FROM baz;
+$$;
+
+statement ok
+ALTER TABLE baz OWNER TO bar_role;
+
+statement ok
+GRANT foo_role TO foo_user;
+
+statement ok
+GRANT bar_role TO bar_user;
+
+statement ok
+use foo;
+set role foo_user;
+
+query IT rowsort
+select * from baz;
+----
+
+query T
+SELECT qux();
+----
+NULL
+
+statement ok
+use bar;
+set role bar_user;
+
+query IT rowsort
+select * from baz;
+----
+
+query T
+SELECT qux();
+----
+NULL
+
 subtest end
