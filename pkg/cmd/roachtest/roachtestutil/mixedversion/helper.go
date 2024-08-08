@@ -169,6 +169,10 @@ func (h *Helper) IsMultitenant() bool {
 	return h.Tenant != nil
 }
 
+func (h *Helper) DeploymentMode() DeploymentMode {
+	return h.runner.plan.deploymentMode
+}
+
 func (h *Helper) DefaultService() *Service {
 	if h.Tenant != nil {
 		return h.Tenant
