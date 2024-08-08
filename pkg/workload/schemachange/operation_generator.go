@@ -1394,6 +1394,12 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*op
 			if err != nil {
 				return nil, err
 			}
+			// Table has no columns, so use an internal one here.
+			usingInternalColumn := false
+			if len(columnNamesForTable) == 0 {
+				columnNamesForTable = []string{"crdb_internal_mvcc_timestamp"}
+				usingInternalColumn = true
+			}
 			columnNamesForTable = columnNamesForTable[:1+og.randIntn(len(columnNamesForTable))]
 
 			for j := range columnNamesForTable {
@@ -1401,7 +1407,11 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*op
 					TableName:  tableName.(*tree.TableName).ToUnresolvedObjectName(),
 					ColumnName: tree.Name(columnNamesForTable[j]),
 				}
-				selectStatement.Exprs = append(selectStatement.Exprs, tree.SelectExpr{Expr: &colItem})
+				selectExpr := tree.SelectExpr{Expr: &colItem}
+				if usingInternalColumn {
+					selectExpr.As = tree.UnrestrictedName(fmt.Sprintf("%s_%d", colItem.TableName.Object(), j))
+				}
+				selectStatement.Exprs = append(selectStatement.Exprs, selectExpr)
 
 				if _, exists := uniqueColumnNames[columnNamesForTable[j]]; exists {
 					duplicateColumns = true
@@ -1523,6 +1533,10 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (*opStm
 			if err != nil {
 				return nil, err
 			}
+			// Table has no columns, so use an internal one here.
+			if len(columnNamesForTable) == 0 {
+				columnNamesForTable = []string{"crdb_internal_mvcc_timestamp"}
+			}
 			columnNamesForTable = columnNamesForTable[:1+og.randIntn(len(columnNamesForTable))]
 
 			for j := range columnNamesForTable {
@@ -1610,7 +1624,11 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 	if err != nil {
 		return nil, err
 	}
-	columnIsInDroppingIndex, err := og.columnIsInDroppingIndex(ctx, tx, tableName, columnName)
+	columnRemovalWillDropFKBackingIndexes, err := og.columnRemovalWillDropFKBackingIndexes(ctx, tx, tableName, columnName)
+	if err != nil {
+		return nil, err
+	}
+	columnIsInAddingOrDroppingIndex, err := og.columnIsInAddingOrDroppingIndex(ctx, tx, tableName, columnName)
 	if err != nil {
 		return nil, err
 	}
@@ -1625,10 +1643,10 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
-		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInDroppingIndex},
+		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInAddingOrDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey || colIsRefByComputed},
-		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
+		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn || columnRemovalWillDropFKBackingIndexes},
 		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 	})
 	// TODO(#126967): We need to add a check for the column being in an expression
@@ -3795,10 +3813,6 @@ FROM [SHOW COLUMNS FROM %s];
 	og.params.rng.Shuffle(len(columnNames), func(i, j int) {
 		columnNames[i], columnNames[j] = columnNames[j], columnNames[i]
 	})
-
-	if len(columnNames) <= 0 {
-		return nil, errors.Errorf("table %s has no columns", tableName)
-	}
 	return columnNames, nil
 }
 
