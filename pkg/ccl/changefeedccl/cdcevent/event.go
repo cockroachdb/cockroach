@@ -279,6 +279,7 @@ func NewEventDescriptor(
 	keyOnly bool,
 	schemaTS hlc.Timestamp,
 ) (*EventDescriptor, error) {
+	log.Infof(context.Background(), "NewEventDescriptor schemaTS: %v, descV: %v", schemaTS, desc.GetVersion())
 	sd := EventDescriptor{
 		Metadata: Metadata{
 			TableID:          desc.GetID(),
@@ -462,11 +463,13 @@ func getEventDescriptorCached(
 	if v, ok := cache.Get(idVer); ok {
 		ed := v.(*EventDescriptor)
 		if catalog.UserDefinedTypeColsHaveSameVersion(ed.td, desc) {
+			log.Infof(context.Background(), "getEventDescriptorCached: cached event desc schemaTS: %v, descV: %v", ed.SchemaTS, ed.Version)
 			return ed, nil
 		}
 	}
 
 	ed, err := NewEventDescriptor(desc, family, includeVirtual, keyOnly, schemaTS)
+	log.Infof(context.Background(), "getEventDescriptorCached: new event desc schemaTS: %v, descV: %v", ed.SchemaTS, ed.Version)
 	if err != nil {
 		return nil, err
 	}

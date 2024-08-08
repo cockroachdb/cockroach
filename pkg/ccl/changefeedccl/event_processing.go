@@ -223,6 +223,8 @@ func newKVEventToRowConsumer(
 ) (_ *kvEventToRowConsumer, err error) {
 	includeVirtual := details.Opts.IncludeVirtual()
 	keyOnly := details.Opts.KeyOnly()
+
+	log.Infof(context.Background(), "NewKVEventToRowConsumer cursor: %v", cursor)
 	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, details.Targets, includeVirtual, keyOnly)
 	if err != nil {
 		return nil, err

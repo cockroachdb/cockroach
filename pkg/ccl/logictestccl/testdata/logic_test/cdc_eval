@@ -1,0 +1,51 @@
+statement ok
+SET CLUSTER SETTING kv.rangefeed.enabled = true
+
+statement ok
+alter range default configure zone using gc.ttlseconds = 1;
+
+statement ok
+alter database system configure zone using gc.ttlseconds = 1;
+
+statement ok
+create table s (k int primary key, v int, family (k,v));
+
+statement ok
+create table t (k int primary key, v int, family (k,v));
+
+statement ok
+INSERT INTO t values (1,1);
+
+statement ok
+INSERT INTO s values (1,1);
+
+statement ok
+CREATE CHANGEFEED INTO 'null:///50ms' WITH OPTIONS (initial_scan = 'no', schema_change_policy = 'nobackfill') AS SELECT (cdc_prev).v, v FROM t WHERE v != (cdc_prev).v
+
+query T
+select status from [show changefeed jobs]
+----
+running
+
+statement ok
+UPDATE t SET v = 4 WHERE k = 1;
+
+statement ok
+alter table s add constraint fkey foreign key (v) references t (k) on delete set null on update cascade;
+
+statement ok
+select pg_sleep(3);
+
+statement ok
+UPDATE t SET v = 4 WHERE k = 1;
+
+statement ok
+UPDATE t SET v = 6 WHERE k = 1;
+
+statement ok
+select pg_sleep(10);
+
+query T
+select status from [show changefeed jobs]
+----
+running

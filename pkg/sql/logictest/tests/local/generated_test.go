@@ -344,6 +344,13 @@ func TestLogic_ccl(
 	runLogicTest(t, "ccl")
 }
 
+func TestLogic_cdc_eval(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "cdc_eval")
+}
+
 func TestLogic_check_constraints(
 	t *testing.T,
 ) {

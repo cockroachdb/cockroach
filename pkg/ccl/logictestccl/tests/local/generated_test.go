@@ -106,6 +106,13 @@ func TestCCLLogic_case_sensitive_names(
 	runCCLLogicTest(t, "case_sensitive_names")
 }
 
+func TestCCLLogic_cdc_eval(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "cdc_eval")
+}
+
 func TestCCLLogic_changefeed(
 	t *testing.T,
 ) {
