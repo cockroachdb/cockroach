@@ -282,7 +282,6 @@ CREATE FUNCTION identity1(n INT) RETURNS INT LANGUAGE SQL AS $$
   SELECT n;
 $$
 
-skipif config local-mixed-23.2
 statement ok
 CREATE FUNCTION identity2(n INT) RETURNS INT LANGUAGE SQL AS $$
   SELECT identity1(n);
@@ -297,7 +296,6 @@ SELECT identity1(2);
 ----
 2
 
-skipif config local-mixed-23.2
 query I
 SELECT identity2(2);
 ----

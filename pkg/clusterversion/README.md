@@ -185,7 +185,8 @@ avoid large changes on `master` which might cause merge conflicts for backports.
 
 - [ ] Update `pkg/build/version.txt` to the new version (e.g. `v24.2.0-alpha.00000000`)
 
-- [ ] Add mixed version logictest config for the replaced version (`local-mixed-24.1`)
+- [ ] Add mixed version logictest config for the replaced version
+      (`local-mixed-24.1`). Make sure the new config is part of `DefaultConfigNames`.
 
 - [ ] Update the scplan rules in `pkg/sql/schemachanger/internal/rules`:
   - copy the contents of `current` into a new release directory for the previous version

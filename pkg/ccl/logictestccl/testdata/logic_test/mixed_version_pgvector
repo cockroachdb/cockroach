@@ -1,21 +1,21 @@
-# LogicTest: cockroach-go-testserver-23.2
+# LogicTest: cockroach-go-testserver-24.1
 
 # Verify that all nodes are running the previous version.
 
 query T nodeidx=0
 SELECT crdb_internal.node_executable_version()
 ----
-23.2
+24.1
 
 query T nodeidx=1
 SELECT crdb_internal.node_executable_version()
 ----
-23.2
+24.1
 
 query T nodeidx=2
 SELECT crdb_internal.node_executable_version()
 ----
-23.2
+24.1
 
 statement error syntax error
 CREATE TABLE t (v VECTOR(1))
