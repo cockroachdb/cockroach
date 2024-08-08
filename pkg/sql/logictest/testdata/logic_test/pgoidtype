@@ -699,13 +699,11 @@ statement ok
 CREATE TABLE t118273 (x REGROLE PRIMARY KEY, y REGROLE);
 INSERT INTO t118273 VALUES (0, 0);
 
-skipif config local-mixed-23.1 local-mixed-23.2
 query TT
 SELECT * FROM t118273;
 ----
 -  -
 
-skipif config local-mixed-23.1 local-mixed-23.2
 query TT
 SELECT 0::REGROLE, 0::REGROLE::TEXT;
 ----

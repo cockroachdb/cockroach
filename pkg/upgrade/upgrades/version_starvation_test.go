@@ -53,7 +53,7 @@ func TestLeasingClusterVersionStarvation(t *testing.T) {
 				},
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					ClusterVersionOverride:         clusterversion.V23_2.Version(),
+					ClusterVersionOverride:         clusterversion.MinSupported.Version(),
 				},
 			},
 		},
@@ -104,7 +104,7 @@ func TestLeasingClusterVersionStarvation(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		db,
-		clusterversion.V24_1,
+		clusterversion.Latest,
 		nil,
 		false,
 	)

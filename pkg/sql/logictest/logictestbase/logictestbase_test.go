@@ -17,10 +17,12 @@ import (
 )
 
 func TestLogicTestMixedVersionConfigs(t *testing.T) {
-	// Verify there is a mixed-version config for each supported release.
+	// Verify there is a mixed-version config for each supported release in the
+	// default set.
 	for _, v := range clusterversion.SupportedPreviousReleases() {
 		t.Run(v.String(), func(t *testing.T) {
-			for _, c := range LogicTestConfigs {
+			for _, cIdx := range DefaultConfig {
+				c := LogicTestConfigs[cIdx]
 				if c.DisableUpgrade && c.BootstrapVersion == v {
 					return
 				}

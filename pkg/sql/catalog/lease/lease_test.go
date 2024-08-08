@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -3008,7 +3007,7 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 	// Disable tenants for this test since on-going upgrades will interfere
 	// with the knobs used.
 	params.DefaultTestTenant = base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs
-	params.Settings = cluster.MakeTestingClusterSettingsWithVersions(clusterversion.V23_2.Version(),
+	params.Settings = cluster.MakeTestingClusterSettingsWithVersions(clusterversion.MinSupported.Version(),
 		clusterversion.MinSupported.Version(),
 		false)
 	// Set the lease duration such that the next lease acquisition will
@@ -3041,7 +3040,7 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 		},
 	}
 	params.Knobs.Server = &server.TestingKnobs{
-		ClusterVersionOverride:         clusterversion.V23_2.Version(),
+		ClusterVersionOverride:         clusterversion.MinSupported.Version(),
 		DisableAutomaticVersionUpgrade: make(chan struct{}),
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -3915,80 +3914,6 @@ func TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails(t *tes
 	})
 }
 
-// TestSessionLeasingTable validates that we can use an internal table
-// to read new system.leases table format (which will use synthetic
-// descriptors). Additionally, basic sanity checking with dual writes,
-// enabled, since rows should appear in both tables
-func TestSessionLeasingTable(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.Latest.Version(), clusterversion.MinSupported.Version(), false)
-	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &st.SV, lease.SessionBasedDualWrite)
-	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Settings:          st,
-		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
-		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				ClusterVersionOverride:         clusterversion.V23_2.Version(),
-				DisableAutomaticVersionUpgrade: make(chan struct{}),
-			},
-		},
-	})
-	defer srv.Stopper().Stop(ctx)
-	runner := sqlutils.MakeSQLRunner(sqlDB)
-
-	idb := srv.InternalDB().(isql.DB)
-	executor := idb.Executor()
-	// Insert using a synthetic descriptor.
-	err := executor.WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable()}, func() error {
-		_, err := executor.Exec(ctx, "add-rows-for-test", nil,
-			"INSERT INTO system.lease VALUES (1, -1, 1, 'some session id', 'region')")
-		return err
-	})
-	require.NoError(t, err)
-	// Validate the new crdb_internal function can read the contents back.
-	res := runner.QueryStr(t, "SELECT * FROM crdb_internal.kv_session_based_leases WHERE crdb_region='region';")
-	require.Equal(t, [][]string{{"1", "-1", "1", "some session id", "region"}}, res)
-	// Validate that we wrote rows from the leasing mechanism in both tables.
-	res = runner.QueryStr(t, `
-WITH
-	joined_count
-		AS (
-			SELECT
-				count(*) AS common_count
-			FROM
-				crdb_internal.kv_session_based_leases AS s,
-				system.lease AS l
-			WHERE
-				l."descID" = s.desc_id
-				AND l.version = s.version
-				AND l."nodeID" = s.sql_instance_id
-		),
-	system_count_tbl
-		AS (
-			SELECT
-				count(*) AS system_count
-			FROM
-				system.lease
-		),
-	kv_session_count_tbl
-		AS (
-			SELECT
-				count(*) - 1 AS kv_session_count -- subract one row added above
-			FROM
-				crdb_internal.kv_session_based_leases
-		)
-SELECT
-	common_count = kv_session_count,
-	common_count = system_count
-FROM
-	joined_count, system_count_tbl, kv_session_count_tbl;
-`)
-	require.Equal(t, [][]string{{"true", "true"}}, res)
-}
-
 // TestLongLeaseWaitMetrics validates metrics that can be used to detect if
 // the lease manager is stuck waiting for old versions to expire. These are added
 // to help us diagnose if the session based leasing migration runs into issues.
@@ -4007,7 +3932,7 @@ func TestLongLeaseWaitMetrics(t *testing.T) {
 		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				ClusterVersionOverride:         clusterversion.V23_2.Version(),
+				ClusterVersionOverride:         clusterversion.MinSupported.Version(),
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 			},
 		},

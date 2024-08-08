@@ -4276,18 +4276,16 @@ custom_typ
 subtest obj_description_with_comment_on_type
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.2
 statement ok
 CREATE TYPE roach_dwellings AS ENUM ('roach_motel','roach_kitchen','roach_bathroom','roach_house');
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roach_dwellings IS 'roach_penthouse coming soon';
 
 # This select statement tests the underlying statement run with \dT
 skipif config local-legacy-schema-changer
-skipif config local-mixed-23.2
 query TTT colnames
 SELECT n.nspname AS "Schema",
          pg_catalog.format_type(t.oid, NULL) AS "Name",

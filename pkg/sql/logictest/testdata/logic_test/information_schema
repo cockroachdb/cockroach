@@ -1147,7 +1147,7 @@ table_constraints
 table_columns
 
 # Check that the metadata is reported properly.
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 query TTTTT colnames
 SELECT table_catalog, table_schema, table_name, table_type, is_insertable_into
 FROM system.information_schema.tables ORDER BY table_name, table_schema
@@ -1582,7 +1582,7 @@ SET DATABASE = test
 ## information_schema.check_constraints
 ## information_schema.constraint_column_usage
 
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 query TTTTTTTTT colnames
 SELECT *
 FROM system.information_schema.table_constraints
@@ -1929,7 +1929,7 @@ NULL                   NULL                  UTF8                UCS            
 NULL                   NULL                  UTF8                UCS                   UTF8         test                     NULL                    NULL
 
 
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -2195,145 +2195,7 @@ system              public             check_sampling_probability               
 system              public             check_singleton                                                                                                 ((singleton))
 system              public             single_row                                                                                                      ((singleton))
 
-onlyif config local-mixed-23.2
-query TTTTTTT colnames
-SELECT *
-FROM system.information_schema.constraint_column_usage
-ORDER BY TABLE_NAME, COLUMN_NAME, CONSTRAINT_NAME
-----
-table_catalog  table_schema  table_name                       column_name                                                                                               constraint_catalog  constraint_schema  constraint_name
-system         public        comments                         object_id                                                                                                 system              public             primary
-system         public        comments                         sub_id                                                                                                    system              public             primary
-system         public        comments                         type                                                                                                      system              public             primary
-system         public        database_role_settings           database_id                                                                                               system              public             database_role_settings_database_id_role_id_key
-system         public        database_role_settings           database_id                                                                                               system              public             primary
-system         public        database_role_settings           role_id                                                                                                   system              public             database_role_settings_database_id_role_id_key
-system         public        database_role_settings           role_name                                                                                                 system              public             primary
-system         public        descriptor                       id                                                                                                        system              public             primary
-system         public        descriptor_id_seq                value                                                                                                     system              public             primary
-system         public        eventlog                         timestamp                                                                                                 system              public             primary
-system         public        eventlog                         uniqueID                                                                                                  system              public             primary
-system         public        external_connections             connection_name                                                                                           system              public             primary
-system         public        job_info                         info_key                                                                                                  system              public             primary
-system         public        job_info                         job_id                                                                                                    system              public             primary
-system         public        job_info                         written                                                                                                   system              public             primary
-system         public        jobs                             id                                                                                                        system              public             primary
-system         public        join_tokens                      id                                                                                                        system              public             primary
-system         public        lease                            crdb_region                                                                                               system              public             primary
-system         public        lease                            descID                                                                                                    system              public             primary
-system         public        lease                            expiration                                                                                                system              public             primary
-system         public        lease                            nodeID                                                                                                    system              public             primary
-system         public        lease                            version                                                                                                   system              public             primary
-system         public        locations                        localityKey                                                                                               system              public             primary
-system         public        locations                        localityValue                                                                                             system              public             primary
-system         public        migrations                       internal                                                                                                  system              public             primary
-system         public        migrations                       major                                                                                                     system              public             primary
-system         public        migrations                       minor                                                                                                     system              public             primary
-system         public        migrations                       patch                                                                                                     system              public             primary
-system         public        mvcc_statistics                  crdb_internal_created_at_database_id_index_id_table_id_shard_16                                           system              public             check_crdb_internal_created_at_database_id_index_id_table_id_shard_16
-system         public        mvcc_statistics                  crdb_internal_created_at_database_id_index_id_table_id_shard_16                                           system              public             mvcc_statistics_pkey
-system         public        mvcc_statistics                  created_at                                                                                                system              public             mvcc_statistics_pkey
-system         public        mvcc_statistics                  database_id                                                                                               system              public             mvcc_statistics_pkey
-system         public        mvcc_statistics                  index_id                                                                                                  system              public             mvcc_statistics_pkey
-system         public        mvcc_statistics                  table_id                                                                                                  system              public             mvcc_statistics_pkey
-system         public        namespace                        name                                                                                                      system              public             primary
-system         public        namespace                        parentID                                                                                                  system              public             primary
-system         public        namespace                        parentSchemaID                                                                                            system              public             primary
-system         public        privileges                       path                                                                                                      system              public             primary
-system         public        privileges                       path                                                                                                      system              public             privileges_path_user_id_key
-system         public        privileges                       path                                                                                                      system              public             privileges_path_username_key
-system         public        privileges                       user_id                                                                                                   system              public             privileges_path_user_id_key
-system         public        privileges                       username                                                                                                  system              public             primary
-system         public        privileges                       username                                                                                                  system              public             privileges_path_username_key
-system         public        protected_ts_meta                singleton                                                                                                 system              public             check_singleton
-system         public        protected_ts_meta                singleton                                                                                                 system              public             primary
-system         public        protected_ts_records             id                                                                                                        system              public             primary
-system         public        rangelog                         timestamp                                                                                                 system              public             primary
-system         public        rangelog                         uniqueID                                                                                                  system              public             primary
-system         public        region_liveness                  crdb_region                                                                                               system              public             region_liveness_pkey
-system         public        replication_constraint_stats     config                                                                                                    system              public             primary
-system         public        replication_constraint_stats     subzone_id                                                                                                system              public             primary
-system         public        replication_constraint_stats     type                                                                                                      system              public             primary
-system         public        replication_constraint_stats     zone_id                                                                                                   system              public             primary
-system         public        replication_critical_localities  locality                                                                                                  system              public             primary
-system         public        replication_critical_localities  subzone_id                                                                                                system              public             primary
-system         public        replication_critical_localities  zone_id                                                                                                   system              public             primary
-system         public        replication_stats                subzone_id                                                                                                system              public             primary
-system         public        replication_stats                zone_id                                                                                                   system              public             primary
-system         public        reports_meta                     id                                                                                                        system              public             primary
-system         public        role_id_seq                      value                                                                                                     system              public             primary
-system         public        role_members                     member                                                                                                    system              public             primary
-system         public        role_members                     member_id                                                                                                 system              public             role_members_role_id_member_id_key
-system         public        role_members                     role                                                                                                      system              public             primary
-system         public        role_members                     role_id                                                                                                   system              public             role_members_role_id_member_id_key
-system         public        role_options                     option                                                                                                    system              public             primary
-system         public        role_options                     username                                                                                                  system              public             primary
-system         public        scheduled_jobs                   schedule_id                                                                                               system              public             primary
-system         public        settings                         name                                                                                                      system              public             primary
-system         public        span_configurations              end_key                                                                                                   system              public             check_bounds
-system         public        span_configurations              start_key                                                                                                 system              public             check_bounds
-system         public        span_configurations              start_key                                                                                                 system              public             primary
-system         public        span_stats_buckets               id                                                                                                        system              public             primary
-system         public        span_stats_samples               id                                                                                                        system              public             primary
-system         public        span_stats_samples               sample_time                                                                                               system              public             samples_sample_time_idx
-system         public        span_stats_tenant_boundaries     tenant_id                                                                                                 system              public             primary
-system         public        span_stats_unique_keys           id                                                                                                        system              public             primary
-system         public        span_stats_unique_keys           key_bytes                                                                                                 system              public             unique_keys_key_bytes_idx
-system         public        sql_instances                    crdb_region                                                                                               system              public             primary
-system         public        sql_instances                    id                                                                                                        system              public             primary
-system         public        sqlliveness                      crdb_region                                                                                               system              public             primary
-system         public        sqlliveness                      session_id                                                                                                system              public             primary
-system         public        statement_activity               aggregated_ts                                                                                             system              public             primary
-system         public        statement_activity               app_name                                                                                                  system              public             primary
-system         public        statement_activity               fingerprint_id                                                                                            system              public             primary
-system         public        statement_activity               plan_hash                                                                                                 system              public             primary
-system         public        statement_activity               transaction_fingerprint_id                                                                                system              public             primary
-system         public        statement_bundle_chunks          id                                                                                                        system              public             primary
-system         public        statement_diagnostics            id                                                                                                        system              public             primary
-system         public        statement_diagnostics_requests   id                                                                                                        system              public             primary
-system         public        statement_diagnostics_requests   sampling_probability                                                                                      system              public             check_sampling_probability
-system         public        statement_execution_insights     crdb_internal_end_time_start_time_shard_16                                                                system              public             check_crdb_internal_end_time_start_time_shard_16
-system         public        statement_execution_insights     statement_id                                                                                              system              public             primary
-system         public        statement_execution_insights     transaction_id                                                                                            system              public             primary
-system         public        statement_statistics             aggregated_ts                                                                                             system              public             primary
-system         public        statement_statistics             app_name                                                                                                  system              public             primary
-system         public        statement_statistics             crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8  system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8
-system         public        statement_statistics             crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8  system              public             primary
-system         public        statement_statistics             fingerprint_id                                                                                            system              public             primary
-system         public        statement_statistics             node_id                                                                                                   system              public             primary
-system         public        statement_statistics             plan_hash                                                                                                 system              public             primary
-system         public        statement_statistics             transaction_fingerprint_id                                                                                system              public             primary
-system         public        table_statistics                 statisticID                                                                                               system              public             primary
-system         public        table_statistics                 tableID                                                                                                   system              public             primary
-system         public        task_payloads                    id                                                                                                        system              public             primary
-system         public        tenant_id_seq                    value                                                                                                     system              public             primary
-system         public        tenant_settings                  name                                                                                                      system              public             primary
-system         public        tenant_settings                  tenant_id                                                                                                 system              public             primary
-system         public        tenant_tasks                     issuer                                                                                                    system              public             primary
-system         public        tenant_tasks                     task_id                                                                                                   system              public             primary
-system         public        tenant_tasks                     tenant_id                                                                                                 system              public             primary
-system         public        tenant_usage                     instance_id                                                                                               system              public             primary
-system         public        tenant_usage                     tenant_id                                                                                                 system              public             primary
-system         public        tenants                          id                                                                                                        system              public             primary
-system         public        tenants                          name                                                                                                      system              public             tenants_name_idx
-system         public        transaction_activity             aggregated_ts                                                                                             system              public             primary
-system         public        transaction_activity             app_name                                                                                                  system              public             primary
-system         public        transaction_activity             fingerprint_id                                                                                            system              public             primary
-system         public        transaction_execution_insights   crdb_internal_end_time_start_time_shard_16                                                                system              public             check_crdb_internal_end_time_start_time_shard_16
-system         public        transaction_execution_insights   transaction_id                                                                                            system              public             primary
-system         public        transaction_statistics           aggregated_ts                                                                                             system              public             primary
-system         public        transaction_statistics           app_name                                                                                                  system              public             primary
-system         public        transaction_statistics           crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8                                       system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8
-system         public        transaction_statistics           crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8                                       system              public             primary
-system         public        transaction_statistics           fingerprint_id                                                                                            system              public             primary
-system         public        transaction_statistics           node_id                                                                                                   system              public             primary
-system         public        ui                               key                                                                                                       system              public             primary
-system         public        users                            user_id                                                                                                   system              public             users_user_id_idx
-system         public        users                            username                                                                                                  system              public             primary
-system         public        web_sessions                     id                                                                                                        system              public             primary
-system         public        zones                            id                                                                                                        system              public             primary
-
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 query TTTTTTT colnames
 SELECT *
 FROM system.information_schema.constraint_column_usage
@@ -2472,17 +2334,156 @@ system         public        users                            username          
 system         public        web_sessions                     id                                                                                                        system              public             primary
 system         public        zones                            id                                                                                                        system              public             primary
 
-onlyif config local-mixed-23.2
+skipif config local-mixed-24.1
+query TTTTTTT colnames
+SELECT *
+FROM system.information_schema.constraint_column_usage
+ORDER BY TABLE_NAME, COLUMN_NAME, CONSTRAINT_NAME
+----
+table_catalog  table_schema  table_name                       column_name                                                                                               constraint_catalog  constraint_schema  constraint_name
+system         public        comments                         object_id                                                                                                 system              public             primary
+system         public        comments                         sub_id                                                                                                    system              public             primary
+system         public        comments                         type                                                                                                      system              public             primary
+system         public        database_role_settings           database_id                                                                                               system              public             database_role_settings_database_id_role_id_key
+system         public        database_role_settings           database_id                                                                                               system              public             primary
+system         public        database_role_settings           role_id                                                                                                   system              public             database_role_settings_database_id_role_id_key
+system         public        database_role_settings           role_name                                                                                                 system              public             primary
+system         public        descriptor                       id                                                                                                        system              public             primary
+system         public        descriptor_id_seq                value                                                                                                     system              public             primary
+system         public        eventlog                         timestamp                                                                                                 system              public             primary
+system         public        eventlog                         uniqueID                                                                                                  system              public             primary
+system         public        external_connections             connection_name                                                                                           system              public             primary
+system         public        job_info                         info_key                                                                                                  system              public             primary
+system         public        job_info                         job_id                                                                                                    system              public             primary
+system         public        job_info                         written                                                                                                   system              public             primary
+system         public        jobs                             id                                                                                                        system              public             primary
+system         public        join_tokens                      id                                                                                                        system              public             primary
+system         public        lease                            crdb_region                                                                                               system              public             primary
+system         public        lease                            desc_id                                                                                                   system              public             primary
+system         public        lease                            session_id                                                                                                system              public             primary
+system         public        lease                            version                                                                                                   system              public             primary
+system         public        locations                        localityKey                                                                                               system              public             primary
+system         public        locations                        localityValue                                                                                             system              public             primary
+system         public        migrations                       internal                                                                                                  system              public             primary
+system         public        migrations                       major                                                                                                     system              public             primary
+system         public        migrations                       minor                                                                                                     system              public             primary
+system         public        migrations                       patch                                                                                                     system              public             primary
+system         public        mvcc_statistics                  crdb_internal_created_at_database_id_index_id_table_id_shard_16                                           system              public             check_crdb_internal_created_at_database_id_index_id_table_id_shard_16
+system         public        mvcc_statistics                  crdb_internal_created_at_database_id_index_id_table_id_shard_16                                           system              public             mvcc_statistics_pkey
+system         public        mvcc_statistics                  created_at                                                                                                system              public             mvcc_statistics_pkey
+system         public        mvcc_statistics                  database_id                                                                                               system              public             mvcc_statistics_pkey
+system         public        mvcc_statistics                  index_id                                                                                                  system              public             mvcc_statistics_pkey
+system         public        mvcc_statistics                  table_id                                                                                                  system              public             mvcc_statistics_pkey
+system         public        namespace                        name                                                                                                      system              public             primary
+system         public        namespace                        parentID                                                                                                  system              public             primary
+system         public        namespace                        parentSchemaID                                                                                            system              public             primary
+system         public        privileges                       path                                                                                                      system              public             primary
+system         public        privileges                       path                                                                                                      system              public             privileges_path_user_id_key
+system         public        privileges                       path                                                                                                      system              public             privileges_path_username_key
+system         public        privileges                       user_id                                                                                                   system              public             privileges_path_user_id_key
+system         public        privileges                       username                                                                                                  system              public             primary
+system         public        privileges                       username                                                                                                  system              public             privileges_path_username_key
+system         public        protected_ts_meta                singleton                                                                                                 system              public             check_singleton
+system         public        protected_ts_meta                singleton                                                                                                 system              public             primary
+system         public        protected_ts_records             id                                                                                                        system              public             primary
+system         public        rangelog                         timestamp                                                                                                 system              public             primary
+system         public        rangelog                         uniqueID                                                                                                  system              public             primary
+system         public        region_liveness                  crdb_region                                                                                               system              public             region_liveness_pkey
+system         public        replication_constraint_stats     config                                                                                                    system              public             primary
+system         public        replication_constraint_stats     subzone_id                                                                                                system              public             primary
+system         public        replication_constraint_stats     type                                                                                                      system              public             primary
+system         public        replication_constraint_stats     zone_id                                                                                                   system              public             primary
+system         public        replication_critical_localities  locality                                                                                                  system              public             primary
+system         public        replication_critical_localities  subzone_id                                                                                                system              public             primary
+system         public        replication_critical_localities  zone_id                                                                                                   system              public             primary
+system         public        replication_stats                subzone_id                                                                                                system              public             primary
+system         public        replication_stats                zone_id                                                                                                   system              public             primary
+system         public        reports_meta                     id                                                                                                        system              public             primary
+system         public        role_id_seq                      value                                                                                                     system              public             primary
+system         public        role_members                     member                                                                                                    system              public             primary
+system         public        role_members                     member_id                                                                                                 system              public             role_members_role_id_member_id_key
+system         public        role_members                     role                                                                                                      system              public             primary
+system         public        role_members                     role_id                                                                                                   system              public             role_members_role_id_member_id_key
+system         public        role_options                     option                                                                                                    system              public             primary
+system         public        role_options                     username                                                                                                  system              public             primary
+system         public        scheduled_jobs                   schedule_id                                                                                               system              public             primary
+system         public        settings                         name                                                                                                      system              public             primary
+system         public        span_configurations              end_key                                                                                                   system              public             check_bounds
+system         public        span_configurations              start_key                                                                                                 system              public             check_bounds
+system         public        span_configurations              start_key                                                                                                 system              public             primary
+system         public        span_count                       singleton                                                                                                 system              public             primary
+system         public        span_count                       singleton                                                                                                 system              public             single_row
+system         public        span_stats_buckets               id                                                                                                        system              public             primary
+system         public        span_stats_samples               id                                                                                                        system              public             primary
+system         public        span_stats_samples               sample_time                                                                                               system              public             samples_sample_time_idx
+system         public        span_stats_tenant_boundaries     tenant_id                                                                                                 system              public             primary
+system         public        span_stats_unique_keys           id                                                                                                        system              public             primary
+system         public        span_stats_unique_keys           key_bytes                                                                                                 system              public             unique_keys_key_bytes_idx
+system         public        sql_instances                    crdb_region                                                                                               system              public             primary
+system         public        sql_instances                    id                                                                                                        system              public             primary
+system         public        sqlliveness                      crdb_region                                                                                               system              public             primary
+system         public        sqlliveness                      session_id                                                                                                system              public             primary
+system         public        statement_activity               aggregated_ts                                                                                             system              public             primary
+system         public        statement_activity               app_name                                                                                                  system              public             primary
+system         public        statement_activity               fingerprint_id                                                                                            system              public             primary
+system         public        statement_activity               plan_hash                                                                                                 system              public             primary
+system         public        statement_activity               transaction_fingerprint_id                                                                                system              public             primary
+system         public        statement_bundle_chunks          id                                                                                                        system              public             primary
+system         public        statement_diagnostics            id                                                                                                        system              public             primary
+system         public        statement_diagnostics_requests   id                                                                                                        system              public             primary
+system         public        statement_diagnostics_requests   sampling_probability                                                                                      system              public             check_sampling_probability
+system         public        statement_execution_insights     crdb_internal_end_time_start_time_shard_16                                                                system              public             check_crdb_internal_end_time_start_time_shard_16
+system         public        statement_execution_insights     statement_id                                                                                              system              public             primary
+system         public        statement_execution_insights     transaction_id                                                                                            system              public             primary
+system         public        statement_statistics             aggregated_ts                                                                                             system              public             primary
+system         public        statement_statistics             app_name                                                                                                  system              public             primary
+system         public        statement_statistics             crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8  system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8
+system         public        statement_statistics             crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8  system              public             primary
+system         public        statement_statistics             fingerprint_id                                                                                            system              public             primary
+system         public        statement_statistics             node_id                                                                                                   system              public             primary
+system         public        statement_statistics             plan_hash                                                                                                 system              public             primary
+system         public        statement_statistics             transaction_fingerprint_id                                                                                system              public             primary
+system         public        table_statistics                 statisticID                                                                                               system              public             primary
+system         public        table_statistics                 tableID                                                                                                   system              public             primary
+system         public        task_payloads                    id                                                                                                        system              public             primary
+system         public        tenant_id_seq                    value                                                                                                     system              public             primary
+system         public        tenant_settings                  name                                                                                                      system              public             primary
+system         public        tenant_settings                  tenant_id                                                                                                 system              public             primary
+system         public        tenant_tasks                     issuer                                                                                                    system              public             primary
+system         public        tenant_tasks                     task_id                                                                                                   system              public             primary
+system         public        tenant_tasks                     tenant_id                                                                                                 system              public             primary
+system         public        tenant_usage                     instance_id                                                                                               system              public             primary
+system         public        tenant_usage                     tenant_id                                                                                                 system              public             primary
+system         public        tenants                          id                                                                                                        system              public             primary
+system         public        tenants                          name                                                                                                      system              public             tenants_name_idx
+system         public        transaction_activity             aggregated_ts                                                                                             system              public             primary
+system         public        transaction_activity             app_name                                                                                                  system              public             primary
+system         public        transaction_activity             fingerprint_id                                                                                            system              public             primary
+system         public        transaction_execution_insights   crdb_internal_end_time_start_time_shard_16                                                                system              public             check_crdb_internal_end_time_start_time_shard_16
+system         public        transaction_execution_insights   transaction_id                                                                                            system              public             primary
+system         public        transaction_statistics           aggregated_ts                                                                                             system              public             primary
+system         public        transaction_statistics           app_name                                                                                                  system              public             primary
+system         public        transaction_statistics           crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8                                       system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8
+system         public        transaction_statistics           crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8                                       system              public             primary
+system         public        transaction_statistics           fingerprint_id                                                                                            system              public             primary
+system         public        transaction_statistics           node_id                                                                                                   system              public             primary
+system         public        ui                               key                                                                                                       system              public             primary
+system         public        users                            user_id                                                                                                   system              public             users_user_id_idx
+system         public        users                            username                                                                                                  system              public             primary
+system         public        web_sessions                     id                                                                                                        system              public             primary
+system         public        zones                            id                                                                                                        system              public             primary
+
+skipif config local-mixed-24.1
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
 ORDER BY CONSTRAINT_CATALOG, CONSTRAINT_NAME
 ----
 constraint_catalog  constraint_schema  constraint_name                                                                                                 check_clause
-system              public             29_11_1_not_null                                                                                                descID IS NOT NULL
+system              public             29_11_1_not_null                                                                                                desc_id IS NOT NULL
 system              public             29_11_2_not_null                                                                                                version IS NOT NULL
-system              public             29_11_3_not_null                                                                                                nodeID IS NOT NULL
-system              public             29_11_4_not_null                                                                                                expiration IS NOT NULL
+system              public             29_11_3_not_null                                                                                                sql_instance_id IS NOT NULL
+system              public             29_11_4_not_null                                                                                                session_id IS NOT NULL
 system              public             29_11_5_not_null                                                                                                crdb_region IS NOT NULL
 system              public             29_12_1_not_null                                                                                                timestamp IS NOT NULL
 system              public             29_12_2_not_null                                                                                                eventType IS NOT NULL
@@ -2566,6 +2567,7 @@ system              public             29_33_2_not_null                         
 system              public             29_33_4_not_null                                                                                                user_id IS NOT NULL
 system              public             29_34_1_not_null                                                                                                id IS NOT NULL
 system              public             29_34_3_not_null                                                                                                data IS NOT NULL
+system              public             29_35_11_not_null                                                                                               redacted IS NOT NULL
 system              public             29_35_1_not_null                                                                                                id IS NOT NULL
 system              public             29_35_2_not_null                                                                                                completed IS NOT NULL
 system              public             29_35_3_not_null                                                                                                statement_fingerprint IS NOT NULL
@@ -2632,93 +2634,95 @@ system              public             29_50_2_not_null                         
 system              public             29_50_3_not_null                                                                                                value IS NOT NULL
 system              public             29_50_4_not_null                                                                                                last_updated IS NOT NULL
 system              public             29_50_5_not_null                                                                                                value_type IS NOT NULL
-system              public             29_51_1_not_null                                                                                                username IS NOT NULL
-system              public             29_51_2_not_null                                                                                                path IS NOT NULL
-system              public             29_51_3_not_null                                                                                                privileges IS NOT NULL
-system              public             29_51_4_not_null                                                                                                grant_options IS NOT NULL
-system              public             29_51_5_not_null                                                                                                user_id IS NOT NULL
-system              public             29_52_1_not_null                                                                                                connection_name IS NOT NULL
-system              public             29_52_2_not_null                                                                                                created IS NOT NULL
-system              public             29_52_3_not_null                                                                                                updated IS NOT NULL
-system              public             29_52_4_not_null                                                                                                connection_type IS NOT NULL
-system              public             29_52_5_not_null                                                                                                connection_details IS NOT NULL
-system              public             29_52_6_not_null                                                                                                owner IS NOT NULL
-system              public             29_52_7_not_null                                                                                                owner_id IS NOT NULL
-system              public             29_53_1_not_null                                                                                                job_id IS NOT NULL
-system              public             29_53_2_not_null                                                                                                info_key IS NOT NULL
-system              public             29_53_3_not_null                                                                                                written IS NOT NULL
-system              public             29_54_1_not_null                                                                                                id IS NOT NULL
+system              public             29_51_1_not_null                                                                                                singleton IS NOT NULL
+system              public             29_51_2_not_null                                                                                                span_count IS NOT NULL
+system              public             29_52_1_not_null                                                                                                username IS NOT NULL
+system              public             29_52_2_not_null                                                                                                path IS NOT NULL
+system              public             29_52_3_not_null                                                                                                privileges IS NOT NULL
+system              public             29_52_4_not_null                                                                                                grant_options IS NOT NULL
+system              public             29_52_5_not_null                                                                                                user_id IS NOT NULL
+system              public             29_53_1_not_null                                                                                                connection_name IS NOT NULL
+system              public             29_53_2_not_null                                                                                                created IS NOT NULL
+system              public             29_53_3_not_null                                                                                                updated IS NOT NULL
+system              public             29_53_4_not_null                                                                                                connection_type IS NOT NULL
+system              public             29_53_5_not_null                                                                                                connection_details IS NOT NULL
+system              public             29_53_6_not_null                                                                                                owner IS NOT NULL
+system              public             29_53_7_not_null                                                                                                owner_id IS NOT NULL
+system              public             29_54_1_not_null                                                                                                job_id IS NOT NULL
+system              public             29_54_2_not_null                                                                                                info_key IS NOT NULL
+system              public             29_54_3_not_null                                                                                                written IS NOT NULL
 system              public             29_55_1_not_null                                                                                                id IS NOT NULL
-system              public             29_55_2_not_null                                                                                                sample_id IS NOT NULL
-system              public             29_55_3_not_null                                                                                                start_key_id IS NOT NULL
-system              public             29_55_4_not_null                                                                                                end_key_id IS NOT NULL
-system              public             29_55_5_not_null                                                                                                requests IS NOT NULL
 system              public             29_56_1_not_null                                                                                                id IS NOT NULL
-system              public             29_56_2_not_null                                                                                                sample_time IS NOT NULL
-system              public             29_57_1_not_null                                                                                                tenant_id IS NOT NULL
-system              public             29_57_2_not_null                                                                                                boundaries IS NOT NULL
-system              public             29_58_1_not_null                                                                                                id IS NOT NULL
-system              public             29_58_2_not_null                                                                                                created IS NOT NULL
-system              public             29_58_3_not_null                                                                                                owner IS NOT NULL
-system              public             29_58_4_not_null                                                                                                owner_id IS NOT NULL
-system              public             29_58_5_not_null                                                                                                min_version IS NOT NULL
-system              public             29_58_7_not_null                                                                                                type IS NOT NULL
-system              public             29_58_8_not_null                                                                                                value IS NOT NULL
-system              public             29_59_1_not_null                                                                                                tenant_id IS NOT NULL
-system              public             29_59_2_not_null                                                                                                issuer IS NOT NULL
-system              public             29_59_3_not_null                                                                                                task_id IS NOT NULL
-system              public             29_59_4_not_null                                                                                                created IS NOT NULL
-system              public             29_59_5_not_null                                                                                                payload_id IS NOT NULL
-system              public             29_59_6_not_null                                                                                                owner IS NOT NULL
-system              public             29_59_7_not_null                                                                                                owner_id IS NOT NULL
+system              public             29_56_2_not_null                                                                                                sample_id IS NOT NULL
+system              public             29_56_3_not_null                                                                                                start_key_id IS NOT NULL
+system              public             29_56_4_not_null                                                                                                end_key_id IS NOT NULL
+system              public             29_56_5_not_null                                                                                                requests IS NOT NULL
+system              public             29_57_1_not_null                                                                                                id IS NOT NULL
+system              public             29_57_2_not_null                                                                                                sample_time IS NOT NULL
+system              public             29_58_1_not_null                                                                                                tenant_id IS NOT NULL
+system              public             29_58_2_not_null                                                                                                boundaries IS NOT NULL
+system              public             29_59_1_not_null                                                                                                id IS NOT NULL
+system              public             29_59_2_not_null                                                                                                created IS NOT NULL
+system              public             29_59_3_not_null                                                                                                owner IS NOT NULL
+system              public             29_59_4_not_null                                                                                                owner_id IS NOT NULL
+system              public             29_59_5_not_null                                                                                                min_version IS NOT NULL
+system              public             29_59_7_not_null                                                                                                type IS NOT NULL
+system              public             29_59_8_not_null                                                                                                value IS NOT NULL
 system              public             29_5_1_not_null                                                                                                 id IS NOT NULL
-system              public             29_60_10_not_null                                                                                               index_recommendations IS NOT NULL
-system              public             29_60_11_not_null                                                                                               execution_count IS NOT NULL
-system              public             29_60_12_not_null                                                                                               execution_total_seconds IS NOT NULL
-system              public             29_60_13_not_null                                                                                               execution_total_cluster_seconds IS NOT NULL
-system              public             29_60_14_not_null                                                                                               contention_time_avg_seconds IS NOT NULL
-system              public             29_60_15_not_null                                                                                               cpu_sql_avg_nanos IS NOT NULL
-system              public             29_60_16_not_null                                                                                               service_latency_avg_seconds IS NOT NULL
-system              public             29_60_17_not_null                                                                                               service_latency_p99_seconds IS NOT NULL
-system              public             29_60_1_not_null                                                                                                aggregated_ts IS NOT NULL
-system              public             29_60_2_not_null                                                                                                fingerprint_id IS NOT NULL
-system              public             29_60_3_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
-system              public             29_60_4_not_null                                                                                                plan_hash IS NOT NULL
-system              public             29_60_5_not_null                                                                                                app_name IS NOT NULL
-system              public             29_60_6_not_null                                                                                                agg_interval IS NOT NULL
-system              public             29_60_7_not_null                                                                                                metadata IS NOT NULL
-system              public             29_60_8_not_null                                                                                                statistics IS NOT NULL
-system              public             29_60_9_not_null                                                                                                plan IS NOT NULL
-system              public             29_61_10_not_null                                                                                               execution_total_cluster_seconds IS NOT NULL
-system              public             29_61_11_not_null                                                                                               contention_time_avg_seconds IS NOT NULL
-system              public             29_61_12_not_null                                                                                               cpu_sql_avg_nanos IS NOT NULL
-system              public             29_61_13_not_null                                                                                               service_latency_avg_seconds IS NOT NULL
-system              public             29_61_14_not_null                                                                                               service_latency_p99_seconds IS NOT NULL
+system              public             29_60_1_not_null                                                                                                tenant_id IS NOT NULL
+system              public             29_60_2_not_null                                                                                                issuer IS NOT NULL
+system              public             29_60_3_not_null                                                                                                task_id IS NOT NULL
+system              public             29_60_4_not_null                                                                                                created IS NOT NULL
+system              public             29_60_5_not_null                                                                                                payload_id IS NOT NULL
+system              public             29_60_6_not_null                                                                                                owner IS NOT NULL
+system              public             29_60_7_not_null                                                                                                owner_id IS NOT NULL
+system              public             29_61_10_not_null                                                                                               index_recommendations IS NOT NULL
+system              public             29_61_11_not_null                                                                                               execution_count IS NOT NULL
+system              public             29_61_12_not_null                                                                                               execution_total_seconds IS NOT NULL
+system              public             29_61_13_not_null                                                                                               execution_total_cluster_seconds IS NOT NULL
+system              public             29_61_14_not_null                                                                                               contention_time_avg_seconds IS NOT NULL
+system              public             29_61_15_not_null                                                                                               cpu_sql_avg_nanos IS NOT NULL
+system              public             29_61_16_not_null                                                                                               service_latency_avg_seconds IS NOT NULL
+system              public             29_61_17_not_null                                                                                               service_latency_p99_seconds IS NOT NULL
 system              public             29_61_1_not_null                                                                                                aggregated_ts IS NOT NULL
 system              public             29_61_2_not_null                                                                                                fingerprint_id IS NOT NULL
-system              public             29_61_3_not_null                                                                                                app_name IS NOT NULL
-system              public             29_61_4_not_null                                                                                                agg_interval IS NOT NULL
-system              public             29_61_5_not_null                                                                                                metadata IS NOT NULL
-system              public             29_61_6_not_null                                                                                                statistics IS NOT NULL
-system              public             29_61_7_not_null                                                                                                query IS NOT NULL
-system              public             29_61_8_not_null                                                                                                execution_count IS NOT NULL
-system              public             29_61_9_not_null                                                                                                execution_total_seconds IS NOT NULL
-system              public             29_62_1_not_null                                                                                                value IS NOT NULL
-system              public             29_63_1_not_null                                                                                                created_at IS NOT NULL
-system              public             29_63_2_not_null                                                                                                database_id IS NOT NULL
-system              public             29_63_3_not_null                                                                                                table_id IS NOT NULL
-system              public             29_63_4_not_null                                                                                                index_id IS NOT NULL
-system              public             29_63_5_not_null                                                                                                statistics IS NOT NULL
-system              public             29_64_1_not_null                                                                                                transaction_id IS NOT NULL
-system              public             29_64_22_not_null                                                                                               created IS NOT NULL
-system              public             29_64_2_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
-system              public             29_64_5_not_null                                                                                                session_id IS NOT NULL
-system              public             29_65_1_not_null                                                                                                session_id IS NOT NULL
-system              public             29_65_28_not_null                                                                                               created IS NOT NULL
-system              public             29_65_2_not_null                                                                                                transaction_id IS NOT NULL
-system              public             29_65_3_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
-system              public             29_65_4_not_null                                                                                                statement_id IS NOT NULL
-system              public             29_65_5_not_null                                                                                                statement_fingerprint_id IS NOT NULL
+system              public             29_61_3_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
+system              public             29_61_4_not_null                                                                                                plan_hash IS NOT NULL
+system              public             29_61_5_not_null                                                                                                app_name IS NOT NULL
+system              public             29_61_6_not_null                                                                                                agg_interval IS NOT NULL
+system              public             29_61_7_not_null                                                                                                metadata IS NOT NULL
+system              public             29_61_8_not_null                                                                                                statistics IS NOT NULL
+system              public             29_61_9_not_null                                                                                                plan IS NOT NULL
+system              public             29_62_10_not_null                                                                                               execution_total_cluster_seconds IS NOT NULL
+system              public             29_62_11_not_null                                                                                               contention_time_avg_seconds IS NOT NULL
+system              public             29_62_12_not_null                                                                                               cpu_sql_avg_nanos IS NOT NULL
+system              public             29_62_13_not_null                                                                                               service_latency_avg_seconds IS NOT NULL
+system              public             29_62_14_not_null                                                                                               service_latency_p99_seconds IS NOT NULL
+system              public             29_62_1_not_null                                                                                                aggregated_ts IS NOT NULL
+system              public             29_62_2_not_null                                                                                                fingerprint_id IS NOT NULL
+system              public             29_62_3_not_null                                                                                                app_name IS NOT NULL
+system              public             29_62_4_not_null                                                                                                agg_interval IS NOT NULL
+system              public             29_62_5_not_null                                                                                                metadata IS NOT NULL
+system              public             29_62_6_not_null                                                                                                statistics IS NOT NULL
+system              public             29_62_7_not_null                                                                                                query IS NOT NULL
+system              public             29_62_8_not_null                                                                                                execution_count IS NOT NULL
+system              public             29_62_9_not_null                                                                                                execution_total_seconds IS NOT NULL
+system              public             29_63_1_not_null                                                                                                value IS NOT NULL
+system              public             29_64_1_not_null                                                                                                created_at IS NOT NULL
+system              public             29_64_2_not_null                                                                                                database_id IS NOT NULL
+system              public             29_64_3_not_null                                                                                                table_id IS NOT NULL
+system              public             29_64_4_not_null                                                                                                index_id IS NOT NULL
+system              public             29_64_5_not_null                                                                                                statistics IS NOT NULL
+system              public             29_65_1_not_null                                                                                                transaction_id IS NOT NULL
+system              public             29_65_22_not_null                                                                                               created IS NOT NULL
+system              public             29_65_2_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
+system              public             29_65_5_not_null                                                                                                session_id IS NOT NULL
+system              public             29_66_1_not_null                                                                                                session_id IS NOT NULL
+system              public             29_66_28_not_null                                                                                               created IS NOT NULL
+system              public             29_66_2_not_null                                                                                                transaction_id IS NOT NULL
+system              public             29_66_3_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
+system              public             29_66_4_not_null                                                                                                statement_id IS NOT NULL
+system              public             29_66_5_not_null                                                                                                statement_fingerprint_id IS NOT NULL
 system              public             29_6_1_not_null                                                                                                 name IS NOT NULL
 system              public             29_6_2_not_null                                                                                                 value IS NOT NULL
 system              public             29_6_3_not_null                                                                                                 lastUpdated IS NOT NULL
@@ -2733,6 +2737,7 @@ system              public             check_crdb_internal_end_time_start_time_s
 system              public             check_crdb_internal_end_time_start_time_shard_16                                                                ((crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
 system              public             check_sampling_probability                                                                                      ((sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8))
 system              public             check_singleton                                                                                                 ((singleton))
+system              public             single_row                                                                                                      ((singleton))
 
 statement ok
 CREATE DATABASE constraint_db
@@ -2824,7 +2829,7 @@ select data_type, column_default from information_schema.columns where table_nam
 data_type  column_default
 smallint   0
 
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 query TTTTI colnames
 SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
 FROM system.information_schema.columns
@@ -3822,7 +3827,7 @@ root      other_db       public              ALL             YES
 
 ## information_schema.table_privileges and information_schema.role_table_grants
 
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 # root can see everything
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.table_privileges ORDER BY table_schema, table_name, table_schema, grantee, privilege_type
@@ -4532,7 +4537,7 @@ NULL     root     system         public              zones                      
 NULL     root     system         public              zones                                        SELECT          YES           YES
 NULL     root     system         public              zones                                        UPDATE          YES           NO
 
-skipif config local-mixed-23.2
+skipif config local-mixed-24.1
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.role_table_grants
 ----
