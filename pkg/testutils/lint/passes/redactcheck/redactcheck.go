@@ -197,7 +197,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"ConstraintType": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb": {
-						"ForeignKeyAction": {},
+						"ForeignKeyAction":  {},
+						"TriggerActionTime": {},
+						"TriggerEventType":  {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph": {
 						"RuleName": {},
@@ -209,6 +211,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"FamilyID":       {},
 						"IndexID":        {},
 						"PGAttributeNum": {},
+						"TriggerID":      {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sem/tree": {
 						"IsolationLevel": {},

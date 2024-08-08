@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2024 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -19,19 +19,22 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb";
 
 import "gogoproto/gogo.proto";
 
-// ForeignKeyAction describes the action which should be taken when a foreign
-// key constraint reference is acted upon.
-enum ForeignKeyAction {
-  NO_ACTION = 0;
-  RESTRICT = 1;
-  SET_NULL = 2;
-  SET_DEFAULT = 3;
-  CASCADE = 4;
+// TriggerActionTime describes the timing of a trigger: before, after, or
+// instead of the event.
+enum TriggerActionTime {
+  ACTION_UNKNOWN = 0;
+  BEFORE = 1;
+  AFTER = 2;
+  INSTEAD_OF = 3;
 }
 
-// Match is the algorithm used to compare composite keys.
-enum Match {
-  SIMPLE = 0;
-  FULL = 1;
-  PARTIAL = 2; // Note: not actually supported, but we reserve the value for future use.
+// TriggerEventType describes the event that will cause a trigger to fire:
+// insert, update, delete, truncate, or upsert.
+enum TriggerEventType {
+  EVENT_UNKNOWN = 0;
+  INSERT = 1;
+  UPDATE = 2;
+  DELETE = 3;
+  TRUNCATE = 4;
+  UPSERT = 5;
 }

@@ -409,6 +409,24 @@ func (desc *immutable) validateInboundTableRef(
 			cstID, backRefTbl.GetName(), backRefTbl.GetID(), desc.GetName(), desc.GetID(),
 		)
 	}
+
+	for _, triggerID := range by.TriggerIDs {
+		if catalog.FindTriggerByID(backRefTbl, triggerID) == nil {
+			return errors.AssertionFailedf(
+				"depended-on-by relation %q (%d) does not have a trigger with ID %d",
+				backRefTbl.GetName(), by.ID, triggerID,
+			)
+		}
+		fnIDs := backRefTbl.GetAllReferencedFunctionIDsInTrigger(triggerID)
+		if fnIDs.Contains(desc.GetID()) {
+			foundInTable = true
+			continue
+		}
+		return errors.AssertionFailedf(
+			"trigger %d in depended-on-by relation %q (%d) does not have reference to function %q (%d)",
+			triggerID, backRefTbl.GetName(), backRefTbl.GetID(), desc.GetName(), desc.GetID(),
+		)
+	}
 	if foundInTable {
 		return nil
 	}
@@ -705,6 +723,52 @@ func (desc *Mutable) RemoveColumnReference(id descpb.ID, colID descpb.ColumnID) 
 			desc.DependedOnBy[i].ColumnIDs = ids.Ordered()
 			desc.maybeRemoveTableReference(id)
 			return
+		}
+	}
+}
+
+// AddTriggerReference adds back reference to a constraint to the function.
+func (desc *Mutable) AddTriggerReference(id descpb.ID, triggerID descpb.TriggerID) error {
+	for _, dep := range desc.DependsOn {
+		if dep == id {
+			return pgerror.Newf(pgcode.InvalidFunctionDefinition,
+				"cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
+			)
+		}
+	}
+	defer sort.Slice(desc.DependedOnBy, func(i, j int) bool {
+		return desc.DependedOnBy[i].ID < desc.DependedOnBy[j].ID
+	})
+	for i := range desc.DependedOnBy {
+		if desc.DependedOnBy[i].ID == id {
+			for _, prevID := range desc.DependedOnBy[i].TriggerIDs {
+				if prevID == triggerID {
+					return nil
+				}
+			}
+			desc.DependedOnBy[i].TriggerIDs = append(desc.DependedOnBy[i].TriggerIDs, triggerID)
+			return nil
+		}
+	}
+	desc.DependedOnBy = append(desc.DependedOnBy,
+		descpb.FunctionDescriptor_Reference{ID: id, TriggerIDs: []descpb.TriggerID{triggerID}},
+	)
+	return nil
+}
+
+// RemoveTriggerReference removes back reference to a constraint from the
+// function.
+func (desc *Mutable) RemoveTriggerReference(id descpb.ID, triggerID descpb.TriggerID) {
+	for i := range desc.DependedOnBy {
+		if desc.DependedOnBy[i].ID == id {
+			dep := &desc.DependedOnBy[i]
+			for j := range dep.TriggerIDs {
+				if dep.TriggerIDs[j] == triggerID {
+					dep.TriggerIDs = append(dep.TriggerIDs[:j], dep.TriggerIDs[j+1:]...)
+					desc.maybeRemoveTableReference(id)
+					return
+				}
+			}
 		}
 	}
 }
