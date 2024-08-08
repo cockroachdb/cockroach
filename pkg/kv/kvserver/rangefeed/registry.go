@@ -78,6 +78,9 @@ type registration interface {
 	// getUnreg returns the unregisterFn call back of the registration. It should
 	// be called when being unregistered from processor.
 	getUnreg() func()
+	// Test only: alternative we could encapsulate these two methods in a separate test interface methods
+	lenOfBuf() int
+	capOfBuf() int
 }
 
 // baseRegistration is a common base for all registration types. It is intended

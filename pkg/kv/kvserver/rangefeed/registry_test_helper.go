@@ -137,11 +137,6 @@ func (s *testStream) WaitForError(t *testing.T) error {
 	}
 }
 
-type testBufferedRegistration struct {
-	*bufferedRegistration
-	*testStream
-}
-
 func makeCatchUpIterator(
 	iter storage.SimpleMVCCIterator, span roachpb.Span, startTime hlc.Timestamp,
 ) *CatchUpIterator {
@@ -155,62 +150,120 @@ func makeCatchUpIterator(
 	}
 }
 
-func newTestRegistration(
-	span roachpb.Span,
-	ts hlc.Timestamp,
-	catchup storage.SimpleMVCCIterator,
-	withDiff bool,
-	withFiltering bool,
-	withOmitRemote bool,
-) *testBufferedRegistration {
-	s := newTestStream()
-	r := newBufferedRegistration(
-		span,
-		ts,
-		makeCatchUpIterator(catchup, span, ts),
-		withDiff,
-		withFiltering,
-		withOmitRemote,
+type registrationOption func(*testRegistrationConfig)
+
+func withStream(s *testStream) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.stream = s
+	}
+}
+
+func withCatchUpIter(iter storage.SimpleMVCCIterator) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.catchup = iter
+	}
+}
+
+func withDiff(opt bool) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.withDiff = opt
+	}
+}
+
+func withFiltering(opt bool) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.withFiltering = true
+	}
+}
+
+func withRMetrics(metrics *Metrics) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.metrics = metrics
+	}
+}
+
+func withOmitRemote(opt bool) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.withOmitRemote = true
+	}
+}
+
+func withUnbufferedRegistration(opt bool) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.useUnbufferedRegistration = opt
+	}
+}
+
+func withRSpan(span roachpb.Span) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.span = span
+	}
+}
+
+func withStartTs(ts hlc.Timestamp) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.ts = ts
+	}
+}
+
+type registrationType bool
+
+const (
+	buffered   registrationType = false
+	unbuffered                  = true
+)
+
+var registrationTestTypes = []registrationType{buffered, unbuffered}
+
+type testRegistrationConfig struct {
+	span                      roachpb.Span
+	ts                        hlc.Timestamp
+	catchup                   storage.SimpleMVCCIterator
+	withDiff                  bool
+	withFiltering             bool
+	withOmitRemote            bool
+	useUnbufferedRegistration bool
+	stream                    *testStream
+	metrics                   *Metrics
+}
+
+func newTestRegistration(opts ...registrationOption) registration {
+	cfg := testRegistrationConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	if cfg.stream == nil {
+		cfg.stream = newTestStream()
+	}
+	if cfg.metrics == nil {
+		cfg.metrics = NewMetrics()
+	}
+	if cfg.useUnbufferedRegistration {
+		return newUnbufferedRegistration(
+			cfg.span,
+			cfg.ts,
+			makeCatchUpIterator(cfg.catchup, cfg.span, cfg.ts),
+			cfg.withDiff,
+			cfg.withFiltering,
+			cfg.withOmitRemote,
+			5,
+			cfg.metrics,
+			cfg.stream,
+			func() {},
+		)
+	}
+
+	return newBufferedRegistration(
+		cfg.span,
+		cfg.ts,
+		makeCatchUpIterator(cfg.catchup, cfg.span, cfg.ts),
+		cfg.withDiff,
+		cfg.withFiltering,
+		cfg.withOmitRemote,
 		5,
 		false, /* blockWhenFull */
-		NewMetrics(),
-		s,
+		cfg.metrics,
+		cfg.stream,
 		func() {},
 	)
-	return &testBufferedRegistration{
-		bufferedRegistration: r,
-		testStream:           s,
-	}
-}
-
-type testUnbufferedRegistration struct {
-	*unbufferedRegistration
-	*testStream
-}
-
-func newTestUnbufferedRegistration(
-	span roachpb.Span,
-	ts hlc.Timestamp,
-	catchup storage.SimpleMVCCIterator,
-	withDiff bool,
-	withFiltering bool,
-	withOmitRemote bool,
-) *testUnbufferedRegistration {
-	s := newTestStream()
-	r := newUnbufferedRegistration(
-		span,
-		ts,
-		makeCatchUpIterator(catchup, span, ts),
-		withDiff,
-		withFiltering,
-		withOmitRemote,
-		5,
-		NewMetrics(),
-		s,
-		func() {},
-	)
-	return &testUnbufferedRegistration{
-		unbufferedRegistration: r,
-		testStream:             s,
-	}
 }

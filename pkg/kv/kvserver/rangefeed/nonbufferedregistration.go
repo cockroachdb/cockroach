@@ -45,10 +45,23 @@ type unbufferedRegistration struct {
 		// Once set, cannot unset.
 		disconnected bool
 		catchUpIter  *CatchUpIterator
+		caughtUp     bool
 	}
 }
 
-var _ registration = &bufferedRegistration{}
+func (ubr *unbufferedRegistration) lenOfBuf() int {
+	ubr.mu.Lock()
+	defer ubr.mu.Unlock()
+	return len(ubr.mu.catchUpBuf)
+}
+
+func (ubr *unbufferedRegistration) capOfBuf() int {
+	ubr.mu.Lock()
+	defer ubr.mu.Unlock()
+	return cap(ubr.mu.catchUpBuf)
+}
+
+var _ registration = &unbufferedRegistration{}
 
 func newUnbufferedRegistration(
 	span roachpb.Span,
@@ -111,6 +124,7 @@ func (ubr *unbufferedRegistration) publish(
 		// event in catch up buffer first.
 		select {
 		case ubr.mu.catchUpBuf <- e:
+			ubr.mu.caughtUp = false
 		default:
 			// Dropping events.
 			ubr.mu.catchUpOverflowed = true
@@ -222,6 +236,7 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 
 	// success
 	ubr.mu.catchUpBuf = nil
+	ubr.mu.caughtUp = true
 	return nil
 }
 
@@ -247,6 +262,7 @@ func (ubr *unbufferedRegistration) discardCatchUpBufferWithRMu() {
 	}()
 
 	ubr.mu.catchUpBuf = nil
+	ubr.mu.caughtUp = true
 }
 
 func (ubr *unbufferedRegistration) maybeRunCatchUpScan(ctx context.Context) error {
