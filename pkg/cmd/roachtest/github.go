@@ -82,14 +82,29 @@ func generateHelpCommand(
 	}
 }
 
-func failuresAsErrorWithOwnership(failures []failure) *registry.ErrorWithOwnership {
-	var transientError rperrors.TransientError
+func failuresAsErrorWithOwnership(
+	failures []failure, isRuntimeAssertionsBuild bool,
+) *registry.ErrorWithOwnership {
 	var err registry.ErrorWithOwnership
+	var transientError rperrors.TransientError
 	if failuresMatchingError(failures, &transientError) {
 		err = registry.ErrorWithOwner(
 			registry.OwnerTestEng, transientError,
 			registry.WithTitleOverride(transientError.Cause),
 			registry.InfraFlake,
+		)
+
+		return &err
+	}
+
+	// Temporarily route all runtime assertion timeouts to test-eng while
+	// we gauge the frequency they occur and adjust test timeouts accordingly.
+	// TODO(darryl): once we are more confident in the stability of runtime
+	// assertions we can remove this.
+	var timeoutError registry.TimeoutError
+	if isRuntimeAssertionsBuild && failuresMatchingError(failures, &timeoutError) {
+		err = registry.ErrorWithOwner(
+			registry.OwnerTestEng, timeoutError,
 		)
 
 		return &err
@@ -161,6 +176,7 @@ func (g *githubIssues) createPostRequest(
 	failures []failure,
 	message string,
 	sideEyeTimeoutSnapshotURL string,
+	runtimeAssertionsBuild bool,
 	metamorphicBuild bool,
 	coverageBuild bool,
 ) (issues.PostRequest, error) {
@@ -191,7 +207,7 @@ func (g *githubIssues) createPostRequest(
 	// If we find a failure that was labeled as a roachprod transient
 	// error, redirect that to Test Eng with the corresponding label as
 	// title override.
-	errWithOwner := failuresAsErrorWithOwnership(failures)
+	errWithOwner := failuresAsErrorWithOwnership(failures, runtimeAssertionsBuild)
 	if errWithOwner != nil {
 		handleErrorWithOwnership(*errWithOwner)
 	}
@@ -199,6 +215,7 @@ func (g *githubIssues) createPostRequest(
 	// Issues posted from roachtest are identifiable as such, and they are also release blockers
 	// (this label may be removed by a human upon closer investigation).
 	const infraFlakeLabel = "X-infra-flake"
+	const runtimeAssertionsLabel = "B-runtime-assertions-enabled"
 	const metamorphicLabel = "B-metamorphic-enabled"
 	const coverageLabel = "B-coverage-enabled"
 	labels := []string{"O-roachtest"}
@@ -208,9 +225,12 @@ func (g *githubIssues) createPostRequest(
 		labels = append(labels, issues.TestFailureLabel)
 		if !spec.NonReleaseBlocker {
 			// TODO(radu): remove this check once these build types are stabilized.
-			if !metamorphicBuild && !coverageBuild {
+			if !metamorphicBuild && !coverageBuild && !runtimeAssertionsBuild {
 				labels = append(labels, issues.ReleaseBlockerLabel)
 			}
+		}
+		if runtimeAssertionsBuild {
+			labels = append(labels, runtimeAssertionsLabel)
 		}
 		if metamorphicBuild {
 			labels = append(labels, metamorphicLabel)
@@ -247,11 +267,12 @@ func (g *githubIssues) createPostRequest(
 	artifacts := fmt.Sprintf("/%s", testName)
 
 	clusterParams := map[string]string{
-		roachtestPrefix("cloud"):            roachtestflags.Cloud.String(),
-		roachtestPrefix("cpu"):              fmt.Sprintf("%d", spec.Cluster.CPUs),
-		roachtestPrefix("ssd"):              fmt.Sprintf("%d", spec.Cluster.SSDs),
-		roachtestPrefix("metamorphicBuild"): fmt.Sprintf("%t", metamorphicBuild),
-		roachtestPrefix("coverageBuild"):    fmt.Sprintf("%t", coverageBuild),
+		roachtestPrefix("cloud"):                  roachtestflags.Cloud.String(),
+		roachtestPrefix("cpu"):                    fmt.Sprintf("%d", spec.Cluster.CPUs),
+		roachtestPrefix("ssd"):                    fmt.Sprintf("%d", spec.Cluster.SSDs),
+		roachtestPrefix("runtimeAssertionsBuild"): fmt.Sprintf("%t", runtimeAssertionsBuild),
+		roachtestPrefix("metamorphicBuild"):       fmt.Sprintf("%t", metamorphicBuild),
+		roachtestPrefix("coverageBuild"):          fmt.Sprintf("%t", coverageBuild),
 	}
 	// Emit CPU architecture only if it was specified; otherwise, it's captured below, assuming cluster was created.
 	if spec.Cluster.Arch != "" {
@@ -292,6 +313,12 @@ func (g *githubIssues) createPostRequest(
 				"non-metamorphic run, there should be a similar issue without the "+metamorphicLabel+" label. If there "+
 				"isn't one, it is possible that this failure is caused by a metamorphic constant.")
 	}
+	if runtimeAssertionsBuild {
+		topLevelNotes = append(topLevelNotes,
+			"This build has runtime assertions enabled. If the same failure was hit in a "+
+				"non-cockroachEA run, there should be a similar issue without the "+runtimeAssertionsLabel+" label. If there "+
+				"isn't one, it is possible that this failure hit an assertion or is related to the assertions overhead.")
+	}
 
 	sideEyeMsg := ""
 	if sideEyeTimeoutSnapshotURL != "" {
@@ -305,7 +332,7 @@ func (g *githubIssues) createPostRequest(
 		TestName:        issueName,
 		Labels:          labels,
 		// Keep issues separate unless the if these labels don't match.
-		AdoptIssueLabelMatchSet: []string{infraFlakeLabel, coverageLabel, metamorphicLabel},
+		AdoptIssueLabelMatchSet: []string{infraFlakeLabel, coverageLabel, metamorphicLabel, runtimeAssertionsLabel},
 		TopLevelNotes:           topLevelNotes,
 		Message:                 issueMessage,
 		Artifacts:               artifacts,
@@ -325,19 +352,20 @@ func (g *githubIssues) MaybePost(
 		return nil, nil
 	}
 
-	var metamorphicBuild bool
+	var runtimeAssertionsBuild bool
 	switch t.spec.CockroachBinary {
 	case registry.StandardCockroach:
-		metamorphicBuild = false
+		runtimeAssertionsBuild = false
 	case registry.RuntimeAssertionsCockroach:
-		metamorphicBuild = true
+		runtimeAssertionsBuild = true
 	default:
-		metamorphicBuild = tests.UsingRuntimeAssertions(t)
+		runtimeAssertionsBuild = tests.UsingRuntimeAssertions(t)
 	}
 	postRequest, err := g.createPostRequest(
 		t.Name(), t.start, t.end, t.spec, t.failures(),
 		message, sideEyeTimeoutSnapshotURL,
-		metamorphicBuild, t.goCoverEnabled)
+		runtimeAssertionsBuild, t.metamorphicConstantsEnabled, t.goCoverEnabled)
+
 	if err != nil {
 		return nil, err
 	}
