@@ -1,3 +1,5 @@
+# LogicTest: !local-mixed-24.1 !local-mixed-24.2 !local-legacy-schema-changer
+
 # ==============================================================================
 # Trigger functions cannot be directly invoked.
 # ==============================================================================
@@ -451,5 +453,848 @@ $$
 
 statement ok
 DROP FUNCTION f;
+
+# ==============================================================================
+# Test invalid target tables, views, and functions.
+# ==============================================================================
+
+subtest invalid_targets
+
+statement ok
+CREATE TABLE xy (x INT, y INT);
+
+statement ok
+CREATE VIEW v AS SELECT * FROM xy;
+
+statement ok
+CREATE MATERIALIZED VIEW mv AS SELECT * FROM xy;
+
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'foo!';
+    RETURN NULL;
+  END;
+$$;
+
+# Nonexistent table.
+statement error pgcode 42P01 pq: relation "nonexistent" does not exist
+CREATE TRIGGER foo AFTER INSERT ON nonexistent FOR EACH ROW EXECUTE FUNCTION f();
+
+# System tables cannot have triggers.
+statement error pgcode 42501 pq: user root does not have TRIGGER privilege on relation jobs
+CREATE TRIGGER foo BEFORE UPDATE ON system.jobs EXECUTE FUNCTION f();
+
+# Virtual tables cannot have triggers.
+statement error pgcode 42501 pq: user root does not have TRIGGER privilege on relation pg_roles
+CREATE TRIGGER foo BEFORE UPDATE ON pg_catalog.pg_roles EXECUTE FUNCTION f();
+
+# Materialized views cannot have triggers.
+statement error pgcode 42809 pq: relation "mv" cannot have triggers\nDETAIL: This operation is not supported for materialized views.
+CREATE TRIGGER foo AFTER DELETE ON mv FOR EACH ROW EXECUTE FUNCTION f();
+
+# Nonexistent function.
+statement error pgcode 42883 pq: unknown function: nonexistent()
+CREATE TRIGGER foo BEFORE UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION nonexistent();
+
+statement ok
+CREATE FUNCTION not_trigger() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+# The function must be a trigger function.
+statement error pgcode 42P17 pq: function not_trigger must return type trigger
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION not_trigger();
+
+# ==============================================================================
+# Test invalid trigger options.
+# ==============================================================================
+
+subtest options
+
+statement error pgcode 42809 pq: "xy" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
+CREATE TRIGGER foo INSTEAD OF INSERT ON xy EXECUTE FUNCTION f();
+
+statement error pgcode 42809 pq: "xy" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
+CREATE TRIGGER foo INSTEAD OF UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 42809 pq: "v" is a view\nDETAIL: Views cannot have row-level BEFORE or AFTER triggers.
+CREATE TRIGGER foo BEFORE UPDATE ON v FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 42809 pq: "v" is a view\nDETAIL: Views cannot have row-level BEFORE or AFTER triggers.
+CREATE TRIGGER foo AFTER INSERT ON v FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 42809 pq: "v" is a view\nDETAIL: Views cannot have TRUNCATE triggers.
+CREATE TRIGGER foo INSTEAD OF TRUNCATE ON v EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: INSTEAD OF triggers must be FOR EACH ROW
+CREATE TRIGGER foo INSTEAD OF INSERT ON v FOR EACH STATEMENT EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: INSTEAD OF triggers cannot have WHEN conditions
+CREATE TRIGGER foo INSTEAD OF INSERT ON v FOR EACH ROW WHEN (1 = 1) EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: INSTEAD OF triggers cannot have column lists
+CREATE TRIGGER foo INSTEAD OF UPDATE OF x, y ON v FOR EACH ROW EXECUTE FUNCTION f();
+
+# Only UPDATE triggers can have column lists.
+statement error pgcode 42601 pq: at or near "of": syntax error
+CREATE TRIGGER foo BEFORE INSERT OF x, y ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: NEW TABLE can only be specified for an INSERT or UPDATE trigger
+CREATE TRIGGER foo AFTER DELETE ON xy REFERENCING NEW TABLE AS nt EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: OLD TABLE can only be specified for a DELETE or UPDATE trigger
+CREATE TRIGGER foo AFTER INSERT ON xy REFERENCING OLD TABLE AS ot EXECUTE FUNCTION f();
+
+statement error pgcode 42601 pq: cannot specify NEW more than once
+CREATE TRIGGER foo AFTER UPDATE ON xy REFERENCING NEW TABLE AS nt NEW TABLE AS nt2 EXECUTE FUNCTION f();
+
+statement error pgcode 42601 pq: cannot specify OLD more than once
+CREATE TRIGGER foo AFTER UPDATE ON xy REFERENCING OLD TABLE AS ot OLD TABLE AS ot2 EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: ROW variable naming in the REFERENCING clause is not supported
+CREATE TRIGGER foo AFTER UPDATE ON xy REFERENCING OLD ROW AS ot EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: OLD TABLE name and NEW TABLE name cannot be the same
+CREATE TRIGGER foo AFTER UPDATE ON xy REFERENCING OLD TABLE AS nt NEW TABLE AS nt EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: transition table name can only be specified for an AFTER trigger
+CREATE TRIGGER foo BEFORE UPDATE ON xy REFERENCING NEW TABLE AS nt EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: TRUNCATE triggers cannot specify transition tables
+CREATE TRIGGER foo AFTER TRUNCATE ON xy REFERENCING NEW TABLE AS nt EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: transition tables cannot be specified for triggers with more than one event
+CREATE TRIGGER foo AFTER INSERT OR UPDATE ON xy REFERENCING NEW TABLE AS nt EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: transition tables cannot be specified for triggers with column lists
+CREATE TRIGGER foo AFTER UPDATE OF x ON xy REFERENCING NEW TABLE AS nt EXECUTE FUNCTION f();
+
+# ==============================================================================
+# Test invalid trigger WHEN clause.
+# ==============================================================================
+
+subtest when_clause
+
+# The WHEN clause must be of type BOOL.
+statement error pgcode 42804 pq: argument of WHEN must be type bool, not type int
+CREATE TRIGGER foo AFTER INSERT ON xy WHEN (1) EXECUTE FUNCTION f();
+
+# The WHEN clause cannot reference table columns.
+statement error pgcode 42703 pq: column "x" does not exist
+CREATE TRIGGER foo AFTER INSERT ON xy WHEN (x = 1) EXECUTE FUNCTION f();
+
+# The WHEN clause cannot contain a subquery.
+statement error pgcode 0A000 pq: subqueries are not allowed in WHEN
+CREATE TRIGGER foo AFTER INSERT ON xy WHEN (SELECT 1) EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: statement trigger's WHEN condition cannot reference column values
+CREATE TRIGGER foo AFTER INSERT ON xy WHEN (NEW IS NULL) EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: statement trigger's WHEN condition cannot reference column values
+CREATE TRIGGER foo AFTER INSERT ON xy WHEN (OLD IS NULL) EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: DELETE trigger's WHEN condition cannot reference NEW values
+CREATE TRIGGER foo AFTER DELETE ON xy FOR EACH ROW WHEN (NEW IS NULL) EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: INSERT trigger's WHEN condition cannot reference OLD values
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW WHEN (OLD IS NULL) EXECUTE FUNCTION f();
+
+# ==============================================================================
+# Test early binding/validation on trigger creation.
+# ==============================================================================
+
+subtest early_binding
+
+# SQL statements and expressions within a trigger function are lazily validated.
+# This means that trigger function creation will catch syntax errors in SQL, but
+# not other types of errors.
+#
+# Case with a nonexistent table.
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER AS $$
+  BEGIN
+    INSERT INTO nonexistent VALUES (1, 2);
+    RETURN NULL;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P01 pq: relation "nonexistent" does not exist
+CREATE TRIGGER foo BEFORE INSERT ON xy EXECUTE FUNCTION g();
+
+statement ok
+DROP FUNCTION g;
+CREATE FUNCTION g() RETURNS TRIGGER AS $$
+  BEGIN
+    IF (SELECT count(*) FROM nonexistent) > 0 THEN
+      RETURN NULL;
+    ELSE
+      RETURN NEW;
+    END IF;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P01 pq: relation "nonexistent" does not exist
+CREATE TRIGGER foo AFTER UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+# Case with a nonexistent function reference.
+statement ok
+DROP FUNCTION g;
+CREATE FUNCTION g() RETURNS TRIGGER AS $$
+  BEGIN
+    RAISE NOTICE '%', f_nonexistent();
+    RETURN NEW;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42883 pq: unknown function: f_nonexistent()
+CREATE TRIGGER foo AFTER DELETE ON xy EXECUTE FUNCTION g();
+
+# Case with a nonexistent type reference.
+statement ok
+DROP FUNCTION g;
+CREATE FUNCTION g() RETURNS TRIGGER AS $$
+  BEGIN
+    RETURN ROW(1, 2)::typ_nonexistent;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42704 pq: type "typ_nonexistent" does not exist
+CREATE TRIGGER foo BEFORE INSERT ON xy EXECUTE FUNCTION g();
+
+# Incorrect type in a SQL expression.
+statement ok
+DROP FUNCTION g;
+CREATE FUNCTION g() RETURNS TRIGGER AS $$
+  BEGIN
+    IF 'not a bool' THEN
+      RETURN NEW;
+    ELSE
+      RETURN NULL;
+    END IF;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22P02 pq: could not parse "not a bool" as type bool: invalid bool value
+CREATE TRIGGER foo AFTER UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+# Disallowed SQL statement.
+statement ok
+DROP FUNCTION g;
+CREATE FUNCTION g() RETURNS TRIGGER AS $$
+  BEGIN
+    CREATE TABLE foo (x INT, y INT);
+    RETURN NEW;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: CREATE TABLE usage inside a function definition
+CREATE TRIGGER foo AFTER DELETE ON xy EXECUTE FUNCTION g();
+
+statement ok
+DROP FUNCTION g;
+
+# Incorrect function volatility.
+statement ok
+CREATE TABLE t (a INT, b INT);
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL IMMUTABLE AS $$
+  BEGIN
+    SELECT count(*) FROM t;
+    RETURN NEW;
+  END;
+$$;
+
+statement error pgcode 22023 pq: referencing relations is not allowed in immutable function
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+DROP FUNCTION g();
+DROP TABLE t;
+
+# ==============================================================================
+# Test duplicate and nonexistent triggers as CREATE/DROP targets.
+# ==============================================================================
+
+subtest duplicate_nonexistent
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 42710 pq: trigger "foo" for relation "xy" already exists
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+# It is possible to create another trigger with a different name.
+statement ok
+CREATE TRIGGER bar AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER bar ON xy;
+
+# Dropping a nonexistent trigger is an error.
+statement error pgcode 42704 pq: trigger "foo" of relation "xy" does not exist
+DROP TRIGGER foo ON xy;
+
+# The IF EXISTS syntax allows dropping a nonexistent trigger without error.
+statement ok
+DROP TRIGGER IF EXISTS foo ON xy;
+
+# ==============================================================================
+# Test dependency tracking for a relation reference.
+# ==============================================================================
+
+subtest relation_dependency
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO t VALUES (1, 2);
+    RETURN NULL;
+  END;
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement error pgcode 2BP01 pq: cannot drop table t because other objects depend on it
+DROP TABLE t;
+
+statement error pgcode 2BP01 pq: cannot drop function "g" because other objects \(\[test.public.xy\]\) still depend on it
+DROP FUNCTION g;
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TABLE t;
+
+# Now, the trigger function refers to a nonexistent relation, so the trigger
+# cannot be created.
+statement error pgcode 42P01 pq: relation "t" does not exist
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+DROP FUNCTION g;
+
+# ==============================================================================
+# Test dependency tracking for a user-defined type reference.
+# ==============================================================================
+
+subtest type_dependency
+
+statement ok
+CREATE TYPE typ AS (x INT, y INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    a typ;
+  BEGIN
+    RETURN a;
+  END;
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement error pgcode 2BP01 pq: cannot drop type "typ" because other objects \(\[test.public.xy\]\) still depend on it
+DROP TYPE typ;
+
+statement error pgcode 2BP01 pq: cannot drop function "g" because other objects \(\[test.public.xy\]\) still depend on it
+DROP FUNCTION g;
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TYPE typ;
+
+# Now, the trigger function refers to a nonexistent type, so the trigger
+# cannot be created.
+statement error pgcode 42704 pq: type "typ" does not exist
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+DROP FUNCTION g;
+
+# ==============================================================================
+# Test dependency tracking for a routine reference.
+# ==============================================================================
+
+subtest routine_dependency
+
+statement ok
+CREATE FUNCTION g() RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+CREATE FUNCTION g2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', g();
+    RETURN NULL;
+  END;
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g2();
+
+statement error pgcode 2BP01 pq: cannot drop function "g" because other objects \(\[test.public.xy\]\) still depend on it
+DROP FUNCTION g;
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+# Now, the trigger function refers to a nonexistent routine, so the trigger
+# cannot be created.
+statement error pgcode 42883 pq: unknown function: g()
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g2();
+
+statement ok
+DROP FUNCTION g2;
+
+# ==============================================================================
+# Test renaming referenced objects.
+# ==============================================================================
+
+subtest renaming
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+
+statement ok
+CREATE SEQUENCE s;
+
+statement ok
+CREATE TYPE typ AS (x INT, y INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+CREATE FUNCTION trigger_func() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    a typ;
+  BEGIN
+    RAISE NOTICE '%, %', g(), nextval('s');
+    INSERT INTO t VALUES (1, 2);
+    RETURN a;
+  END;
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION trigger_func();
+
+# Relations are referenced by name, so renaming the table is not allowed.
+statement error pgcode 2BP01 cannot rename relation "t" because view "xy" depends on it
+ALTER TABLE t RENAME TO t2;
+
+# Sequences are remapped to their IDs, so renaming is allowed.
+statement ok
+ALTER SEQUENCE s RENAME TO s2;
+
+# Types are remapped to their IDs, so renaming is allowed.
+statement ok
+ALTER TYPE typ RENAME TO typ2;
+
+# Routines are referenced by name, so renaming is not allowed.
+statement ok
+ALTER FUNCTION g RENAME TO g2;
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION trigger_func;
+DROP FUNCTION g2;
+DROP TYPE typ2;
+DROP SEQUENCE s2;
+DROP TABLE t;
+
+# ==============================================================================
+# Test privilege checks.
+# ==============================================================================
+
+subtest privileges
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+statement ok
+REVOKE EXECUTE ON FUNCTION g() FROM PUBLIC;
+
+user testuser
+
+# Trigger creation requires the TRIGGER privilege on the target table.
+statement error pgcode 42501 pq: user testuser does not have TRIGGER privilege on relation t
+CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
+
+user root
+
+statement ok
+GRANT TRIGGER ON TABLE t TO testuser;
+
+user testuser
+
+# Trigger creation requires the EXECUTE privilege on the trigger function.
+statement error pgcode 42501 pq: user testuser does not have EXECUTE privilege on function g
+CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
+
+user root
+
+statement ok
+GRANT EXECUTE ON FUNCTION g TO testuser;
+
+user testuser
+
+# With TRIGGER on the table and EXECUTE on the function, the user can create
+# a trigger. The user does not have to own the table or function.
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
+
+# The user can only drop the trigger if they own the table.
+statement error pgcode 42501 pq: must be owner of relation t
+DROP TRIGGER foo ON t;
+
+user root
+
+statement ok
+ALTER TABLE t OWNER TO testuser;
+
+statement ok
+REVOKE ALL ON TABLE t FROM testuser;
+REVOKE ALL ON FUNCTION g FROM testuser;
+
+user testuser
+
+# Now the user can drop the trigger, despite having no privileges on either the
+# function or the table.
+statement ok
+DROP TRIGGER foo ON t;
+
+user root
+
+statement ok
+DROP FUNCTION g;
+DROP TABLE t;
+
+# ==============================================================================
+# Test cascading drops with a trigger.
+# ==============================================================================
+
+subtest cascade
+
+statement ok
+CREATE DATABASE db;
+
+statement ok
+USE db;
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END; $$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+USE test;
+
+statement ok
+DROP DATABASE db CASCADE;
+
+statement ok
+CREATE SCHEMA s;
+
+statement ok
+CREATE TABLE s.t (a INT, b INT);
+
+statement ok
+CREATE FUNCTION s.g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END; $$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON s.t FOR EACH ROW EXECUTE FUNCTION s.g();
+
+statement ok
+DROP SCHEMA s CASCADE;
+
+# ==============================================================================
+# Test references across schemas and databases.
+# ==============================================================================
+
+subtest cross_schema_database
+
+statement ok
+CREATE SCHEMA s;
+
+statement ok
+CREATE DATABASE db;
+
+statement ok
+CREATE TABLE s.xy (x INT, y INT);
+
+statement ok
+CREATE FUNCTION s.f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'bar!';
+    RETURN NULL;
+  END;
+$$;
+
+statement ok
+CREATE TYPE s.typ AS (x INT, y INT);
+
+statement ok
+USE db;
+
+statement ok
+CREATE TABLE xy (x INT, y INT);
+
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'baz!';
+    RETURN NULL;
+  END;
+$$;
+
+statement ok
+CREATE TYPE typ AS (x INT, y INT);
+
+statement ok
+USE test;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON s.xy FOR EACH ROW EXECUTE FUNCTION s.f();
+
+statement ok
+DROP TRIGGER foo ON s.xy;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION s.f();
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON s.xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement ok
+DROP TRIGGER foo ON s.xy;
+
+statement error pgcode 0A000 pq: cross-database function references not allowed
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION db.public.f();
+
+statement error pgcode 0A000 pq: unimplemented: cross-db references not supported
+CREATE TRIGGER foo AFTER INSERT ON db.public.xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: unimplemented: cross-db references not supported
+CREATE TRIGGER foo AFTER INSERT ON db.public.xy FOR EACH ROW EXECUTE FUNCTION db.public.f();
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO db.xy VALUES (1, 2);
+    RETURN NULL;
+  END;
+$$;
+
+statement error pgcode 0A000 pq: dependent relation xy cannot be from another database
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', pg_typeof(ROW(1, 2)::db.typ);
+    RETURN NULL;
+  END;
+$$;
+
+statement error pgcode 0A000 pq: cross database type references are not supported: db.public.typ
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DROP SCHEMA s CASCADE;
+
+statement ok
+DROP DATABASE db CASCADE;
+
+# ==============================================================================
+# Test cyclical table references.
+# ==============================================================================
+
+subtest cyclical
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    cnt INT := 0;
+  BEGIN
+    SELECT count(*) INTO cnt FROM t;
+    IF cnt < 10 THEN
+      INSERT INTO t VALUES (1, 2);
+    END IF;
+    RAISE NOTICE 'HERE';
+    RETURN NULL;
+  END;
+$$;
+
+# NOTE: the trigger is both attached to table "t", and references it via the
+# trigger function. This should not prevent dropping the trigger or table.
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+DROP TRIGGER foo ON t;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+DROP TABLE t;
+
+statement ok
+DROP FUNCTION g;
+
+# ==============================================================================
+# Test changing search path.
+# ==============================================================================
+
+subtest search_path
+
+let $xy_oid
+SELECT oid FROM pg_class WHERE relname = 'xy';
+
+statement ok
+CREATE PROCEDURE show_triggers() LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foo JSON;
+    name JSON;
+    body JSON;
+    curs REFCURSOR;
+  BEGIN
+    SELECT
+      crdb_internal.pb_to_json(
+        'cockroach.sql.sqlbase.Descriptor',
+        descriptor,
+        false
+      ) INTO foo
+    FROM
+      system.descriptor
+    WHERE id = $xy_oid;
+    foo := foo->'table'->'triggers';
+    OPEN curs FOR SELECT value->'name', value->'funcBody' FROM jsonb_array_elements(foo);
+    LOOP
+      FETCH curs INTO name, body;
+      IF name IS NULL THEN
+        EXIT;
+      END IF;
+      RAISE NOTICE '%->%', name, split_part(split_part(body::TEXT, ' ', 7), ')', 1);
+    END LOOP;
+  END;
+$$;
+
+statement ok
+CREATE SCHEMA s;
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+
+statement ok
+CREATE TABLE s.t (a INT, b INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', (SELECT max(a) FROM t);
+    RETURN NULL;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+# The trigger function body stored with the trigger should reference the table
+# on the public schema.
+query T noticetrace
+CALL show_triggers();
+----
+NOTICE: "foo"->test.public.t
+
+statement ok
+SET search_path = s,public;
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+# The first trigger should still reference the table on the public schema, but
+# the second should reference the table on schema "s".
+query T noticetrace
+CALL show_triggers();
+----
+NOTICE: "foo"->test.public.t
+NOTICE: "bar"->test.s.t
+
+# The trigger function is still unqualified.
+query TT
+SHOW CREATE FUNCTION g;
+----
+g  CREATE FUNCTION public.g()
+     RETURNS TRIGGER
+     VOLATILE
+     NOT LEAKPROOF
+     CALLED ON NULL INPUT
+     LANGUAGE plpgsql
+     SECURITY INVOKER
+     AS $$
+     BEGIN
+     RAISE NOTICE '%', (SELECT max(a) FROM t);
+     RETURN NULL;
+     END;
+   $$
+
+statement ok
+RESET search_path;
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER bar ON xy;
+
+statement ok
+DROP SCHEMA s CASCADE;
+DROP TABLE t;
+DROP FUNCTION g;
+
+# ==============================================================================
+# Test unsupported syntax.
+# ==============================================================================
+
+subtest unsupported
+
+statement error pgcode 0A000 pq: unimplemented: CREATE OR REPLACE TRIGGER is not supported
+CREATE OR REPLACE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: unimplemented: cascade dropping triggers
+DROP TRIGGER foo ON xy CASCADE;
 
 subtest end

@@ -229,7 +229,7 @@ func getResultColumns(
 
 	case createTableOp, createTableAsOp, createViewOp, controlJobsOp, controlSchedulesOp,
 		cancelQueriesOp, cancelSessionsOp, createStatisticsOp, errorIfRowsOp, deleteRangeOp,
-		createFunctionOp, callOp:
+		createFunctionOp, createTriggerOp, callOp:
 		// These operations produce no columns.
 		return nil, nil
 

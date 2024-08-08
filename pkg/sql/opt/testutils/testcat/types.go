@@ -8,6 +8,8 @@ package testcat
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -77,6 +79,31 @@ func (tc *Catalog) ResolveType(
 }
 
 // ResolveTypeByOID is part of the cat.Catalog interface.
-func (tc *Catalog) ResolveTypeByOID(context.Context, oid.Oid) (*types.T, error) {
-	return nil, errors.Newf("ResolveTypeByOID not supported in the test catalog")
+func (tc *Catalog) ResolveTypeByOID(ctx context.Context, typID oid.Oid) (*types.T, error) {
+	// First look for a matching user-defined enum type.
+	for _, typ := range tc.enumTypes {
+		if typ.Oid() == typID {
+			return typ, nil
+		}
+	}
+	// Otherwise look for a matching implicit record type.
+	for _, ds := range tc.testSchema.dataSources {
+		if tab, ok := ds.(*Table); ok {
+			implicitTypID := typedesc.TableIDToImplicitTypeOID(descpb.ID(tab.ID()))
+			if implicitTypID != typID {
+				continue
+			}
+			contents := make([]*types.T, 0, tab.ColumnCount())
+			labels := make([]string, 0, tab.ColumnCount())
+			for i, n := 0, tab.ColumnCount(); i < n; i++ {
+				col := tab.Column(i)
+				if col.Kind() == cat.Ordinary {
+					contents = append(contents, col.DatumType())
+					labels = append(labels, string(col.ColName()))
+				}
+			}
+			return types.MakeLabeledTuple(contents, labels), nil
+		}
+	}
+	return nil, errors.Newf("type %d does not exist", typID)
 }

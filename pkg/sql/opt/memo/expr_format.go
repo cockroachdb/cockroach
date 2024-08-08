@@ -754,6 +754,10 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		tp.Child(tree.AsStringWithFlags(t.Syntax, fmtFlags))
 		f.formatDependencies(tp, t.Deps, t.TypeDeps)
 
+	case *CreateTriggerExpr:
+		tp.Child(t.Syntax.String())
+		f.formatDependencies(tp, t.Deps, t.TypeDeps)
+
 	case *CreateStatisticsExpr:
 		tp.Child(t.Syntax.String())
 

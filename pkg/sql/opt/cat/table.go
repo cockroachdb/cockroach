@@ -175,6 +175,12 @@ type Table interface {
 	// IsHypothetical returns true if this is a hypothetical table (used when
 	// searching for index recommendations).
 	IsHypothetical() bool
+
+	// TriggerCount returns the number of triggers present on the table.
+	TriggerCount() int
+
+	// Trigger returns the ith trigger, where i < TriggerCount.
+	Trigger(i int) Trigger
 }
 
 // CheckConstraint represents a check constraint on a table. Check constraints
