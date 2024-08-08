@@ -2783,3 +2783,6 @@ func (tid *TenantID) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return unmarshal(tid)
 	}
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (LeaseAcquisitionType) SafeValue() {}
