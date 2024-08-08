@@ -98,7 +98,7 @@ var RangefeedUseBufferedSender = settings.RegisterBoolSetting(
 	"kv.rangefeed.buffered_sender.enabled",
 	"use buffered sender for all range feeds instead of buffering events "+
 		"separately per client per range",
-	metamorphic.ConstantWithTestBool("kv_rangefeed_buffered_sender_enabled", false),
+	false,
 )
 
 // RangefeedSchedulerDisabled is a kill switch for scheduler based rangefeed
