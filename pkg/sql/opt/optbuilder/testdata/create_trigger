@@ -1,0 +1,72 @@
+exec-ddl
+CREATE TABLE xy (x INT, y INT);
+----
+
+exec-ddl
+CREATE TABLE ab (a INT, b INT);
+----
+
+exec-ddl
+CREATE TYPE typ AS ENUM ('a', 'b');
+----
+
+exec-ddl
+CREATE FUNCTION f_basic() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+----
+
+# TODO(#128150): Display the dependency on f_basic().
+build
+CREATE TRIGGER tr BEFORE INSERT OR UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION f_basic();
+----
+create-trigger
+ ├── CREATE TRIGGER tr BEFORE INSERT OR UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION f_basic()
+ └── no dependencies
+
+build
+CREATE TRIGGER foo AFTER DELETE ON xy REFERENCING OLD TABLE AS foo WHEN (1 = 1) EXECUTE FUNCTION f_basic();
+----
+create-trigger
+ ├── CREATE TRIGGER foo AFTER DELETE ON xy REFERENCING OLD TABLE AS foo FOR EACH STATEMENT WHEN (1 = 1) EXECUTE FUNCTION f_basic()
+ └── no dependencies
+
+build
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f_basic();
+----
+create-trigger
+ ├── CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f_basic()
+ └── no dependencies
+
+exec-ddl
+CREATE FUNCTION f_typ() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    a typ;
+  BEGIN
+    RETURN a;
+  END;
+$$;
+----
+
+build
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f_typ();
+----
+create-trigger
+ ├── CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f_typ()
+ └── dependencies
+      └── typ
+
+exec-ddl
+CREATE FUNCTION f_relation() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO ab VALUES (1, 2);
+    RETURN NULL;
+  END;
+$$;
+----
+
+build
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f_relation();
+----
+create-trigger
+ ├── CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f_relation()
+ └── dependencies
+      └── ab [columns: a b]
