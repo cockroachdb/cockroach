@@ -44,15 +44,6 @@ type TableRegistryConfig struct {
 	// table when redaction is required.
 	// NB: this field is optional, and takes precedence over nonSensitiveCols.
 	customQueryRedacted string
-
-	// customQueryUnredactedFallback is an alternative query that will be
-	// attempted if `customQueryUnredacted` does not return within the
-	// timeout or fails. If empty it will be ignored.
-	customQueryUnredactedFallback string
-	// customQueryRedactedFallback is an alternative query that will be
-	// attempted if `customQueryRedacted` does not return within the
-	// timeout or fails. If empty it will be ignored.
-	customQueryRedactedFallback string
 }
 
 // DebugZipTableRegistry is a registry of `crdb_internal` and `system` tables
@@ -69,35 +60,26 @@ type TableRegistryConfig struct {
 // may be a way to avoid having to completely omit entire columns.
 type DebugZipTableRegistry map[string]TableRegistryConfig
 
-// TableQuery holds two sql query strings together that are used to
-// dump tables when generating a debug zip. `query` is the primary
-// query to run, and `fallback` is one to try if the primary fails or
-// times out.
-type TableQuery struct {
-	query    string
-	fallback string
-}
-
 // QueryForTable produces the appropriate query for `debug zip` for the given
 // table to use, taking redaction into account. If the provided tableName does
 // not exist in the registry, or no redacted config exists in the registry for
 // the tableName, an error is returned.
-func (r DebugZipTableRegistry) QueryForTable(tableName string, redact bool) (TableQuery, error) {
+func (r DebugZipTableRegistry) QueryForTable(tableName string, redact bool) (string, error) {
 	tableConfig, ok := r[tableName]
 	if !ok {
-		return TableQuery{}, errors.Newf("no entry found in table registry for: %s", tableName)
+		return "", errors.Newf("no entry found in table registry for: %s", tableName)
 	}
 	if !redact {
 		if tableConfig.customQueryUnredacted != "" {
-			return TableQuery{tableConfig.customQueryUnredacted, tableConfig.customQueryUnredactedFallback}, nil
+			return tableConfig.customQueryUnredacted, nil
 		}
-		return TableQuery{fmt.Sprintf("TABLE %s", tableName), ""}, nil
+		return fmt.Sprintf("TABLE %s", tableName), nil
 	}
 	if tableConfig.customQueryRedacted != "" {
-		return TableQuery{tableConfig.customQueryRedacted, tableConfig.customQueryRedactedFallback}, nil
+		return tableConfig.customQueryRedacted, nil
 	}
 	if len(tableConfig.nonSensitiveCols) == 0 {
-		return TableQuery{}, errors.Newf("requested redacted query for table %s, but no non-sensitive columns defined", tableName)
+		return "", errors.Newf("requested redacted query for table %s, but no non-sensitive columns defined", tableName)
 	}
 	var colsString strings.Builder
 	for i, colName := range tableConfig.nonSensitiveCols {
@@ -107,7 +89,7 @@ func (r DebugZipTableRegistry) QueryForTable(tableName string, redact bool) (Tab
 			colsString.WriteString(", ")
 		}
 	}
-	return TableQuery{fmt.Sprintf("SELECT %s FROM %s", colsString.String(), tableName), ""}, nil
+	return fmt.Sprintf("SELECT %s FROM %s", colsString.String(), tableName), nil
 }
 
 // GetTables returns all the table names within the registry. Useful for
@@ -548,20 +530,6 @@ WHERE ss.transaction_fingerprint_id != '\x0000000000000000' AND s.fingerprint_id
 GROUP BY collection_ts, contention_duration, waiting_txn_id, waiting_txn_fingerprint_id, blocking_txn_id,
          blocking_txn_fingerprint_id, waiting_stmt_fingerprint_id, contending_pretty_key, s.metadata ->> 'query',
          index_name, table_name, database_name
-`,
-		customQueryUnredactedFallback: `
-SELECT collection_ts,
-       contention_duration,
-       waiting_txn_id,
-       waiting_txn_fingerprint_id,
-       waiting_stmt_fingerprint_id,
-       blocking_txn_id,
-       blocking_txn_fingerprint_id,
-       contending_pretty_key,
-       index_name,
-       table_name,
-       database_name
-FROM crdb_internal.transaction_contention_events
 `,
 		// `contending_key` column contains the contended key, which may
 		// contain sensitive row-level data. So, we will only fetch if the
