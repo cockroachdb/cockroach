@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -1225,7 +1226,7 @@ func (r *testRunner) runTest(
 		// Only include tests with a Run function in the summary output.
 		if s.Run != nil {
 			if t.Failed() {
-				errWithOwner := failuresAsErrorWithOwnership(t.failures())
+				errWithOwner := failuresAsErrorWithOwnership(t.failures(), tests.UsingRuntimeAssertions(t))
 				if errWithOwner == nil || !errWithOwner.InfraFlake {
 					r.status.fail[t] = struct{}{}
 				}
@@ -1309,7 +1310,7 @@ func (r *testRunner) runTest(
 	case <-time.After(timeout):
 		// NB: We're adding the timeout failure intentionally without cancelling the context
 		// to capture as much state as possible during artifact collection.
-		t.addFailure(0, "test timed out (%s)", timeout)
+		t.addFailure(0, "", registry.TimeoutFailure(timeout))
 		// We suppress other failures from being surfaced to the top as the timeout is always going
 		// to be the main error and subsequent errors (i.e. context cancelled) add noise.
 		t.suppressFailures()

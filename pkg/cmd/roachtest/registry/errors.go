@@ -13,6 +13,7 @@ package registry
 import (
 	"errors"
 	"fmt"
+	"time"
 )
 
 type (
@@ -64,4 +65,17 @@ func ErrorWithOwner(owner Owner, err error, opts ...errorOption) ErrorWithOwners
 	}
 
 	return result
+}
+
+// TimeoutError denotes a failure due to a test timing out.
+type TimeoutError struct {
+	timeout time.Duration
+}
+
+func TimeoutFailure(timeout time.Duration) TimeoutError {
+	return TimeoutError{timeout: timeout}
+}
+
+func (te TimeoutError) Error() string {
+	return fmt.Sprintf("test timed out (%s)", te.timeout)
 }
