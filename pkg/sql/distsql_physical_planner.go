@@ -673,6 +673,15 @@ func checkSupportForPlanNode(
 		case n.isFull:
 			// This is a full scan.
 			return shouldDistribute, nil
+		case n.hardLimit != 0 || n.softLimit != 0:
+			// might not be beneficial to distribute in these cases
+			return canDistribute, nil
+			/*
+				case len(n.spans) > 100:
+					// not sure this makes sense
+					// finalize with row count protects us?
+					return shouldDistribute, nil
+			*/
 		default:
 			// Although we don't yet recommend distributing plans where soft limits
 			// propagate to scan nodes because we don't have infrastructure to only
@@ -680,7 +689,14 @@ func checkSupportForPlanNode(
 			// to scan nodes has been added in 20.1 release, so to keep the
 			// previous behavior we continue to ignore the soft limits for now.
 			// TODO(yuzefovich): pay attention to the soft limits.
-			return canDistribute, nil
+			//
+			// this needs to be shouldDistribute when we want to auto-distribute
+			// when?
+			// if spans > some number?
+			// need to make sure there's no limit or soft limit
+			// (not guaranteed to be a benefit in those cases)
+			// finalzewithrowcount protects us?
+			return shouldDistribute, nil
 		}
 
 	case *sortNode:
@@ -762,6 +778,12 @@ func checkSupportForPlanNode(
 		return shouldDistribute, nil
 	case *cdcValuesNode:
 		return cannotDistribute, planNodeNotSupportedErr
+	case *explainPlanNode:
+		rec, err := checkSupportForPlanNode(n.plan.WrappedPlan.(*planComponents).main.planNode, distSQLVisitor)
+		if err != nil {
+			return cannotDistribute, err
+		}
+		return rec.compose(canDistribute), err
 
 	default:
 		// also do this when verbose tracing

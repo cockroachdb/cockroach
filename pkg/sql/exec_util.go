@@ -1940,6 +1940,7 @@ func getPlanDistribution(
 		// Don't use distSQL for this request.
 		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
 		if distSQLMode == sessiondatapb.DistSQLAlways {
+			fmt.Println(err)
 		}
 		return physicalplan.LocalPlan, err
 	}
