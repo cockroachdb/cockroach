@@ -137,26 +137,9 @@ func (s *testStream) WaitForError(t *testing.T) error {
 	}
 }
 
-type testRegistration interface {
-	registration
-	bufferedEventsLen() int
-	isBufferedRegistration() bool
-}
-
-var _ testRegistration = (*testBufferedRegistration)(nil)
-var _ testRegistration = (*testUnbufferedRegistration)(nil)
-
 type testBufferedRegistration struct {
 	*bufferedRegistration
 	*testStream
-}
-
-func (t *testBufferedRegistration) isBufferedRegistration() bool {
-	return true
-}
-
-func (t *testBufferedRegistration) bufferedEventsLen() int {
-	return len(t.buf)
 }
 
 func makeCatchUpIterator(
@@ -203,16 +186,6 @@ func newTestRegistration(
 type testUnbufferedRegistration struct {
 	*unbufferedRegistration
 	*testStream
-}
-
-func (r *testUnbufferedRegistration) isBufferedRegistration() bool {
-	return false
-}
-
-func (r *testUnbufferedRegistration) bufferedEventsLen() int {
-	r.unbufferedRegistration.mu.Lock()
-	defer r.unbufferedRegistration.mu.Unlock()
-	return len(r.unbufferedRegistration.mu.catchUpBuf)
 }
 
 func newTestUnbufferedRegistration(

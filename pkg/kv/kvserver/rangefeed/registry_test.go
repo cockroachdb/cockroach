@@ -41,7 +41,9 @@ func TestRegistrationBasic(t *testing.T) {
 			false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
 		noCatchupReg.publish(ctx, ev1, nil /* alloc */)
 		noCatchupReg.publish(ctx, ev2, nil /* alloc */)
-		require.Equal(t, len(noCatchupReg.buf), 2)
+		if noCatchupReg, ok := noCatchupReg.(*testUnbufferedRegistration); ok {
+			require.Equal(t, noCatchupReg.buf, 2)
+		}
 		go noCatchupReg.runOutputLoop(ctx, 0)
 		require.NoError(t, noCatchupReg.waitForCaughtUp(ctx))
 		require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, noCatchupReg.Events())
