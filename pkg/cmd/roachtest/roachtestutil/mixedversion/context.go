@@ -125,6 +125,10 @@ func (sc *ServiceContext) changeVersion(node int, v *clusterupgrade.Version) err
 	return nil
 }
 
+func (sc *ServiceContext) IsSystem() bool {
+	return sc.Descriptor.Name == install.SystemInterfaceName
+}
+
 // NodeVersion returns the release version the given `node` is
 // currently running. Returns an error if the node is not valid (i.e.,
 // the underlying service is not deployed on the node passed).
@@ -265,25 +269,6 @@ func (c *Context) DefaultService() *ServiceContext {
 	}
 
 	return c.Tenant
-}
-
-// SetFinalizing sets the `Finalizing` field on all services
-// available.
-func (c *Context) SetFinalizing(b bool) {
-	c.forEachService(func(s *ServiceContext) { s.Finalizing = b })
-}
-
-// SetStage is a helper function to set the upgrade stage on all
-// services available.
-func (c *Context) SetStage(stage UpgradeStage) {
-	c.forEachService(func(s *ServiceContext) { s.Stage = stage })
-}
-
-func (c *Context) forEachService(f func(*ServiceContext)) {
-	f(c.System)
-	if c.Tenant != nil {
-		f(c.Tenant)
-	}
 }
 
 // clone copies the caller Context and returns the copy.
