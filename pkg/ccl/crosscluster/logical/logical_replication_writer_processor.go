@@ -146,6 +146,7 @@ func newLogicalReplicationWriterProcessor(
 
 		rp, err := makeSQLProcessor(
 			ctx, flowCtx.Cfg.Settings, tableConfigs,
+			jobspb.JobID(spec.JobID),
 			// Initialize the executor with a fresh session data - this will
 			// avoid creating a new copy on each executor usage.
 			flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
