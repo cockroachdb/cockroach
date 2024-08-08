@@ -60,6 +60,14 @@ func (b *Builder) buildUDF(
 		}
 	}
 
+	// Trigger functions cannot be directly invoked.
+	if f.ResolvedType().Identical(types.Trigger) {
+		// Note: Postgres also uses the "0A000" error code.
+		panic(pgerror.New(pgcode.FeatureNotSupported,
+			"trigger functions can only be called as triggers",
+		))
+	}
+
 	// Build the routine.
 	routine := b.buildRoutine(f, def, inScope, outScope, colRefs)
 

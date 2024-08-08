@@ -6110,7 +6110,7 @@ disable_plan_gists                                         off
 disallow_full_table_scans                                  off
 distsql_plan_gateway_bias                                  2
 enable_auto_rehoming                                       off
-enable_create_stats_using_extremes                         off
+enable_create_stats_using_extremes                         on
 enable_create_stats_using_extremes_bool_enum               off
 enable_durable_locking_for_serializable                    off
 enable_experimental_alter_column_type_general              off
@@ -6172,6 +6172,7 @@ optimizer_hoist_uncorrelated_equality_subqueries           on
 optimizer_merge_joins_enabled                              on
 optimizer_prove_implication_with_virtual_computed_columns  on
 optimizer_push_offset_into_index_join                      on
+optimizer_use_conditional_hoist_fix                        on
 optimizer_use_forecasts                                    on
 optimizer_use_histograms                                   on
 optimizer_use_improved_computed_column_filters_derivation  on

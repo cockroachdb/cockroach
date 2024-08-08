@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 )
@@ -266,6 +267,78 @@ func TestWriteProbe(t *testing.T) {
 		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
 		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
 		require.Zero(t, p.Metrics().WriteProbeFailures.Count())
+	})
+}
+
+func TestReturnLeaseholderInfo(t *testing.T) {
+
+	ctx := context.Background()
+
+	t.Run("leaseholder information is returned correctly", func(t *testing.T) {
+
+		// Mock recording with 2 spans. Line "[n1] node received request" contains the leaseholder information.
+		var mockRecording tracingpb.Recording = []tracingpb.RecordedSpan{
+			{
+				TraceID:      001,
+				SpanID:       002,
+				ParentSpanID: 003,
+				Operation:    "test probe 1",
+				TagGroups:    nil,
+				StartTime:    time.Now(),
+				Duration:     1,
+				Logs: []tracingpb.LogRecord{{Time: time.Now(), Message: "querying next range at /Table/9"},
+					{Time: time.Now(), Message: "key: /Table/9, desc: r13:‹/Table/{9-11}› [(n1,s1):1, next=2, gen=0]"},
+					{Time: time.Now(), Message: "r13: sending batch ‹1 Get› to (n1,s1):1"},
+					{Time: time.Now(), Message: "sending request to ‹localhost:26257›"}},
+			},
+			{
+				TraceID:      004,
+				SpanID:       005,
+				ParentSpanID: 006,
+				Operation:    "test probe 2",
+				TagGroups:    nil,
+				StartTime:    time.Now(),
+				Duration:     2,
+				Logs: []tracingpb.LogRecord{{Time: time.Now(), Message: "[n1] node received request: ‹1 Get›"},
+					{Time: time.Now(), Message: "[n1,s1,r13/1:‹/Table/{9-11}›] read-only path"},
+					{Time: time.Now(), Message: "[n1] node sending response"}},
+			},
+		}
+
+		m := &mock{t: t, read: true}
+		p := initTestProber(ctx, m)
+		// Expected leaseholder information is node 1.
+		require.Equal(t, "1", p.returnLeaseholderInfo(mockRecording))
+	})
+
+	t.Run("traces do not contain leaseholder information", func(t *testing.T) {
+		// Mock recording without any leaseholder information.
+		var mockRecording tracingpb.Recording = []tracingpb.RecordedSpan{
+			{
+				TraceID:      001,
+				SpanID:       002,
+				ParentSpanID: 003,
+				Operation:    "test probe 1",
+				TagGroups:    nil,
+				StartTime:    time.Now(),
+				Duration:     1,
+				Logs: []tracingpb.LogRecord{{Time: time.Now(), Message: "querying next range at /Table/9"},
+					{Time: time.Now(), Message: "key: /Table/9, desc: r13:‹/Table/{9-11}› [(n1,s1):1, next=2, gen=0]"},
+					{Time: time.Now(), Message: "r13: sending batch ‹1 Get› to (n1,s1):1"},
+					{Time: time.Now(), Message: "sending request to ‹localhost:26257›"}},
+				RecordingMode:              0,
+				StructuredRecords:          nil,
+				GoroutineID:                0,
+				Finished:                   false,
+				StructuredRecordsSizeBytes: 0,
+				ChildrenMetadata:           nil,
+			},
+		}
+
+		m := &mock{t: t, read: true}
+		p := initTestProber(ctx, m)
+		// Since no leaseholder information is present, the function is expected to return an empty string.
+		require.Equal(t, "", p.returnLeaseholderInfo(mockRecording))
 	})
 }
 

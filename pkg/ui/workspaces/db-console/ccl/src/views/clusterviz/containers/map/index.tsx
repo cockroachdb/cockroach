@@ -6,23 +6,23 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import React from "react";
-import { RouteComponentProps, withRouter } from "react-router-dom";
-import { connect } from "react-redux";
-import cn from "classnames";
 import { Loading } from "@cockroachlabs/cluster-ui";
+import cn from "classnames";
+import React from "react";
+import { connect } from "react-redux";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 
+import { Dropdown } from "src/components/dropdown";
+import { refreshCluster } from "src/redux/apiReducers";
+import { selectEnterpriseEnabled } from "src/redux/license";
+import { AdminUIState } from "src/redux/state";
+import { parseLocalityRoute } from "src/util/localities";
+import { parseSplatParams } from "src/util/parseSplatParams";
+import TimeScaleDropdown from "src/views/cluster/containers/timeScaleDropdownWithSearchParams";
 import { Breadcrumbs } from "src/views/clusterviz/containers/map/breadcrumbs";
 import NeedEnterpriseLicense from "src/views/clusterviz/containers/map/needEnterpriseLicense";
 import NodeCanvasContainer from "src/views/clusterviz/containers/map/nodeCanvasContainer";
-import TimeScaleDropdown from "src/views/cluster/containers/timeScaleDropdownWithSearchParams";
 import swapByLicense from "src/views/shared/containers/licenseSwap";
-import { parseLocalityRoute } from "src/util/localities";
-import { AdminUIState } from "src/redux/state";
-import { selectEnterpriseEnabled } from "src/redux/license";
-import { Dropdown } from "src/components/dropdown";
-import { parseSplatParams } from "src/util/parseSplatParams";
-import { refreshCluster } from "src/redux/apiReducers";
 
 const NodeCanvasContent = swapByLicense(
   NeedEnterpriseLicense,

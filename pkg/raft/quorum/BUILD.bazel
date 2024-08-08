@@ -4,6 +4,7 @@ load("//build:STRINGER.bzl", "stringer")
 go_library(
     name = "quorum",
     srcs = [
+        "config.go",
         "joint.go",
         "majority.go",
         "quorum.go",

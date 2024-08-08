@@ -27,7 +27,10 @@ export function jobToVisual(job: Job): JobStatusVisual {
   if (job.type === "CHANGEFEED") {
     return JobStatusVisual.BadgeOnly;
   }
-  if (job.type === "REPLICATION STREAM PRODUCER") {
+  if (
+    job.type === "REPLICATION STREAM PRODUCER" ||
+    job.type === "LOGICAL REPLICATION INGESTION"
+  ) {
     return JobStatusVisual.BadgeOnly;
   }
   if (job.type === "REPLICATION STREAM INGESTION") {
@@ -202,8 +205,13 @@ export const typeOptions = [
   },
   {
     value: JobType.REPLICATION_STREAM_PRODUCER.toString(),
-    name: "Physical Replication Producer",
+    name: "Replication Producer",
     key: jobTypeKeys[JobType.REPLICATION_STREAM_PRODUCER],
+  },
+  {
+    value: JobType.LOGICAL_REPLICATION.toString(),
+    name: "Logical Replication Ingestion",
+    key: jobTypeKeys[JobType.LOGICAL_REPLICATION],
   },
   {
     value: JobType.AUTO_SPAN_CONFIG_RECONCILIATION.toString(),

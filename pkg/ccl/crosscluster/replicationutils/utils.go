@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -322,4 +323,27 @@ func TestingGetPTSFromReplicationJob(
 	require.NoError(t, err)
 
 	return ptsRecord.Timestamp
+}
+
+func WaitForPTSProtection(
+	t *testing.T,
+	ctx context.Context,
+	sqlRunner *sqlutils.SQLRunner,
+	srv serverutils.ApplicationLayerInterface,
+	producerJobID int,
+	minTime hlc.Timestamp,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		protected := TestingGetPTSFromReplicationJob(t, ctx, sqlRunner, srv, producerJobID)
+		if protected.Less(minTime) {
+			return errors.Newf("pts %s is less than min time %s", protected, minTime)
+		}
+		return nil
+	})
+}
+
+func GetLatestProducerJobID(t *testing.T, sqlRunner *sqlutils.SQLRunner) int {
+	var producerJobID int
+	sqlRunner.QueryRow(t, "SELECT id FROM system.jobs WHERE job_type = 'REPLICATION STREAM PRODUCER' ORDER BY created DESC LIMIT 1").Scan(&producerJobID)
+	return producerJobID
 }

@@ -48,3 +48,18 @@ type Comparison struct {
 	Delta          float64
 	FormattedDelta string
 }
+
+// ComparisonResult holds the comparison results for a specific metric.
+type ComparisonResult struct {
+	Metric      *Metric
+	Comparisons []*ComparisonDetail
+}
+
+// ComparisonDetail holds the details of a single comparison.
+type ComparisonDetail struct {
+	BenchmarkName string
+	Comparison    *Comparison
+}
+
+// ComparisonResultsMap holds the comparison results for all package groups.
+type ComparisonResultsMap map[string][]*ComparisonResult

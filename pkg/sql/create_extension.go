@@ -47,7 +47,8 @@ func (n *createExtensionNode) startExec(params runParams) error {
 		"pg_trgm",
 		"fuzzystrmatch",
 		"pgcrypto",
-		"uuid-ossp":
+		"uuid-ossp",
+		"vector":
 		telemetry.Inc(sqltelemetry.CreateExtensionCounter(string(n.CreateExtension.Name)))
 		return nil
 	case "postgis_raster",

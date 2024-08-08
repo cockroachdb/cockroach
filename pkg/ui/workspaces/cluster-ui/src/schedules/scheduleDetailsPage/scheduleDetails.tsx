@@ -9,21 +9,21 @@
 // licenses/APL.txt.
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Col, Row } from "antd";
+import classNames from "classnames/bind";
 import Long from "long";
 import React, { useEffect } from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
-import classNames from "classnames/bind";
 
 import { Schedule } from "src/api/schedulesApi";
 import { Button } from "src/button";
+import { commonStyles } from "src/common";
 import { Loading } from "src/loading";
+import scheduleStyles from "src/schedules/schedules.module.scss";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-import { DATE_FORMAT_24_TZ, idAttr, getMatchParamByName } from "src/util";
-import { commonStyles } from "src/common";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
-import scheduleStyles from "src/schedules/schedules.module.scss";
+import { DATE_FORMAT_24_TZ, idAttr, getMatchParamByName } from "src/util";
 
 import { Timestamp } from "../../timestamp";
 

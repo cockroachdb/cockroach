@@ -159,7 +159,7 @@ func testNonleaderStartElection(t *testing.T, state StateType) {
 
 	assert.Equal(t, uint64(2), r.Term)
 	assert.Equal(t, StateCandidate, r.state)
-	assert.True(t, r.trk.Votes[r.id])
+	assert.True(t, r.electionTracker.TestingGetVotes()[r.id])
 
 	msgs := r.readMessages()
 	sort.Sort(messageSlice(msgs))
@@ -799,7 +799,7 @@ func commitNoopEntry(r *raft, s *MemoryStorage) {
 	r.readMessages()
 	s.Append(r.raftLog.nextUnstableEnts())
 	r.raftLog.appliedTo(r.raftLog.committed, 0 /* size */)
-	r.raftLog.stableTo(r.raftLog.lastEntryID())
+	r.raftLog.stableTo(r.raftLog.unstable.mark())
 }
 
 func acceptAndReply(m pb.Message) pb.Message {

@@ -970,7 +970,7 @@ func ResolveFK(
 		if s, t := originCols[i], referencedCols[i]; !s.GetType().Identical(t.GetType()) {
 			notice := pgnotice.Newf(
 				"type of foreign key column %q (%s) is not identical to referenced column %q.%q (%s)",
-				s.ColName(), s.GetType().String(), target.Name, t.GetName(), t.GetType().String())
+				s.ColName(), s.GetType().SQLString(), target.Name, t.GetName(), t.GetType().SQLString())
 			evalCtx.ClientNoticeSender.BufferClientNotice(ctx, notice)
 		}
 	}

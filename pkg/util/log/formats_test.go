@@ -66,7 +66,7 @@ func TestFormatRedaction(t *testing.T) {
 							// Validate and apply the config.
 							require.NoError(t, config.Validate(&sc.logDir))
 							TestingResetActive()
-							cleanupFn, err := ApplyConfig(config, FileSinkMetrics{}, nil /* fatalOnLogStall */)
+							cleanupFn, err := ApplyConfig(config, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 							require.NoError(t, err)
 							defer cleanupFn()
 

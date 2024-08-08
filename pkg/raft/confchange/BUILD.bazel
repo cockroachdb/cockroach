@@ -25,6 +25,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":confchange"],
     deps = [
+        "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
         "@com_github_cockroachdb_datadriven//:datadriven",

@@ -26,9 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -39,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 )
 
 var (
@@ -119,7 +122,7 @@ func (r *logicalReplicationResumer) ingest(
 	)
 
 	client, err := streamclient.NewStreamClient(ctx,
-		crosscluster.StreamAddress(payload.TargetClusterConnStr),
+		crosscluster.StreamAddress(payload.SourceClusterConnStr),
 		jobExecCtx.ExecCfg().InternalDB,
 		streamclient.WithStreamID(streampb.StreamID(streamID)),
 		streamclient.WithLogical(),
@@ -311,15 +314,59 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 		return nil, nil, nil, err
 	}
 
-	dstToSrcDescMap := make(map[int32]descpb.TableDescriptor)
-	tableIDs := make([]int32, len(p.payload.ReplicationPairs))
-	for i, pair := range p.payload.ReplicationPairs {
-		dstToSrcDescMap[pair.DstDescriptorID] = plan.DescriptorMap[pair.SrcDescriptorID]
-		tableIDs[i] = pair.DstDescriptorID
+	var defaultFnOID oid.Oid
+	if defaultFnID := p.payload.DefaultConflictResolution.FunctionId; defaultFnID != 0 {
+		defaultFnOID = catid.FuncIDToOID(catid.DescID(defaultFnID))
 	}
 
-	dlqClient := InitDeadLetterQueueClient(p.jobExecCtx.ExecCfg().InternalDB.Executor())
-	if err := dlqClient.Create(ctx, tableIDs); err != nil {
+	tableIDToName := make(map[int32]fullyQualifiedTableName)
+	tablesMd := make(map[int32]execinfrapb.TableReplicationMetadata)
+	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
+		for _, pair := range p.payload.ReplicationPairs {
+			srcTableDesc := plan.DescriptorMap[pair.SrcDescriptorID]
+
+			// Look up fully qualified destination table name
+			dstTableDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, descpb.ID(pair.DstDescriptorID))
+			if err != nil {
+				return errors.Wrapf(err, "failed to look up table descriptor %d", pair.DstDescriptorID)
+			}
+			dbDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, dstTableDesc.GetParentID())
+			if err != nil {
+				return errors.Wrapf(err, "failed to look up database descriptor for table %d", pair.DstDescriptorID)
+			}
+			scDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Schema(ctx, dstTableDesc.GetParentSchemaID())
+			if err != nil {
+				return errors.Wrapf(err, "failed to look up schema descriptor for table %d", pair.DstDescriptorID)
+			}
+
+			var fnOID oid.Oid
+			if pair.DstFunctionID != 0 {
+				fnOID = catid.FuncIDToOID(catid.DescID(pair.DstFunctionID))
+			} else if defaultFnOID != 0 {
+				fnOID = defaultFnOID
+			}
+
+			tablesMd[pair.DstDescriptorID] = execinfrapb.TableReplicationMetadata{
+				SourceDescriptor:              srcTableDesc,
+				DestinationParentDatabaseName: dbDesc.GetName(),
+				DestinationParentSchemaName:   scDesc.GetName(),
+				DestinationTableName:          dstTableDesc.GetName(),
+				DestinationFunctionOID:        uint32(fnOID),
+			}
+			tableIDToName[pair.DstDescriptorID] = fullyQualifiedTableName{
+				database: dbDesc.GetName(),
+				schema:   scDesc.GetName(),
+				table:    dstTableDesc.GetName(),
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, nil, nil, err
+	}
+
+	// TODO(azhu): add a flag to avoid recreating dlq tables during replanning
+	dlqClient := InitDeadLetterQueueClient(p.jobExecCtx.ExecCfg().InternalDB.Executor(), tableIDToName)
+	if err := dlqClient.Create(ctx); err != nil {
 		return nil, nil, nil, errors.Wrap(err, "failed to create dead letter queue")
 	}
 
@@ -344,13 +391,13 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 	}
 
 	specs, err := constructLogicalReplicationWriterSpecs(ctx,
-		crosscluster.StreamAddress(p.payload.TargetClusterConnStr),
+		crosscluster.StreamAddress(p.payload.SourceClusterConnStr),
 		plan.Topology,
 		destNodeLocalities,
 		p.payload.ReplicationStartTime,
 		p.progress.ReplicatedTime,
 		p.progress.Checkpoint,
-		dstToSrcDescMap,
+		tablesMd,
 		p.jobID,
 		streampb.StreamID(p.payload.StreamID))
 	if err != nil {
@@ -468,6 +515,11 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 			return nil
 		}); err != nil {
 		return err
+	}
+	select {
+	case rh.frontierUpdates <- replicatedTime:
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 
 	rh.metrics.ReplicatedTimeSeconds.Update(replicatedTime.GoTime().Unix())

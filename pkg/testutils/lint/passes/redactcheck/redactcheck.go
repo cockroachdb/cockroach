@@ -65,6 +65,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"SettingName": {},
 						"ValueOrigin": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/logical": {
+						"processorType": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/cli/exit": {
 						"Code": {},
 					},
@@ -138,6 +141,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					},
 					"github.com/cockroachdb/cockroach/pkg/raft/raftpb": {
 						"PeerID": {},
+						"Epoch":  {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/repstream/streampb": {
 						"StreamID": {},

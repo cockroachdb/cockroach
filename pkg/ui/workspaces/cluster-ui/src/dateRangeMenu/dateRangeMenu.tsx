@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useContext, useState } from "react";
-import { Alert, DatePicker as AntDatePicker } from "antd";
 import ArrowLeftOutlined from "@ant-design/icons/ArrowLeftOutlined";
+import { Time as TimeIcon, ErrorCircleFilled } from "@cockroachlabs/icons";
+import { Alert, DatePicker as AntDatePicker } from "antd";
+import classNames from "classnames/bind";
 import moment, { Moment } from "moment-timezone";
 import momentGenerateConfig from "rc-picker/lib/generate/moment";
-import classNames from "classnames/bind";
-import { Time as TimeIcon, ErrorCircleFilled } from "@cockroachlabs/icons";
+import React, { useContext, useState } from "react";
 
 import { Button } from "src/button";
 import { Text, TextTypes } from "src/text";

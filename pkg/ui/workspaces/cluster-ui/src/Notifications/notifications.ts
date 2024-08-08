@@ -10,8 +10,8 @@
 
 // This is a placeholder for real implementation (likely in Redux?) of notifications
 
-import { notificationTypes, NotificationProps } from "../Notifications";
 import { NotificationMessageProps } from "../NotificationMessage";
+import { notificationTypes, NotificationProps } from "../Notifications";
 
 export const generateNotificationProps = (
   notifications: Array<NotificationProps>,

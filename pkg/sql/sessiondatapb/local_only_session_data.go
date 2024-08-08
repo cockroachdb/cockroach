@@ -133,14 +133,20 @@ const (
 	// can impact performance negatively.
 	SerialUsesSQLSequences SerialNormalizationMode = 2
 	// SerialUsesCachedSQLSequences is identical to SerialUsesSQLSequences with
-	// the exception that nodes can cache sequence values. This significantly
+	// the exception that sessions can cache sequence values. This significantly
 	// reduces contention and distributed calls to kv, which results in better
 	// performance. Gaps between sequences may be larger as a result of cached
 	// values being lost to errors and/or node failures.
 	SerialUsesCachedSQLSequences SerialNormalizationMode = 3
 	// SerialUsesUnorderedRowID means use INT NOT NULL DEFAULT unordered_unique_rowid().
-	SerialUsesUnorderedRowID         SerialNormalizationMode = 4
+	SerialUsesUnorderedRowID SerialNormalizationMode = 4
+	// SerialUsesCachedNodeSQLSequences is identical to
+	// SerialUsesCachedSQLSequences, except the sequence values are cached per
+	// node instead of per session.
 	SerialUsesCachedNodeSQLSequences SerialNormalizationMode = 5
+	// maxSerialNormalizationMode should always be one larger than the last
+	// public value.
+	maxSerialNormalizationMode = 6
 )
 
 func (m SerialNormalizationMode) String() string {
@@ -155,6 +161,8 @@ func (m SerialNormalizationMode) String() string {
 		return "sql_sequence"
 	case SerialUsesCachedSQLSequences:
 		return "sql_sequence_cached"
+	case SerialUsesCachedNodeSQLSequences:
+		return "sql_sequence_cached_node"
 	default:
 		return fmt.Sprintf("invalid (%d)", m)
 	}

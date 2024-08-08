@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-type lockingStore struct {
+type LockingStore struct {
 	// stmtCount keeps track of the number of statement insights
 	// that have been observed in the underlying cache.
 	stmtCount atomic.Int64
@@ -30,14 +30,14 @@ type lockingStore struct {
 	}
 }
 
-func (s *lockingStore) AddInsight(insight *Insight) {
+func (s *LockingStore) addInsight(insight *Insight) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.stmtCount.Add(int64(len(insight.Statements)))
 	s.mu.insights.Add(insight.Transaction.ID, insight)
 }
 
-func (s *lockingStore) IterateInsights(
+func (s *LockingStore) IterateInsights(
 	ctx context.Context, visitor func(context.Context, *Insight),
 ) {
 	s.mu.RLock()
@@ -47,11 +47,8 @@ func (s *lockingStore) IterateInsights(
 	})
 }
 
-var _ Reader = &lockingStore{}
-var _ sink = &lockingStore{}
-
-func newStore(st *cluster.Settings) *lockingStore {
-	s := &lockingStore{}
+func newStore(st *cluster.Settings) *LockingStore {
+	s := &LockingStore{}
 	config := cache.Config{
 		Policy: cache.CacheFIFO,
 		ShouldEvict: func(size int, key, value interface{}) bool {

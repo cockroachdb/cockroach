@@ -1439,7 +1439,7 @@ func MVCCGetForKnownTimestampWithNoIntent(
 	if val == nil {
 		return nil, enginepb.MVCCValueHeader{}, errors.Errorf("value missing for key %v", key)
 	}
-	if !val.Timestamp.EqOrdering(timestamp) {
+	if val.Timestamp != timestamp {
 		return nil, enginepb.MVCCValueHeader{}, errors.Errorf(
 			"expected timestamp %v and found %v for key %v", timestamp, val.Timestamp, key)
 	}
@@ -2671,6 +2671,9 @@ func mvccPutInternal(
 	versionValue.OmitInRangefeeds = opts.OmitInRangefeeds
 	versionValue.ImportEpoch = opts.ImportEpoch
 	versionValue.OriginID = opts.OriginID
+	if opts.OriginTimestamp.IsSet() {
+		versionValue.OriginTimestamp = opts.OriginTimestamp
+	}
 
 	if buildutil.CrdbTestBuild {
 		if seq, seqOK := kvnemesisutil.FromContext(ctx); seqOK {
@@ -4622,6 +4625,7 @@ type MVCCWriteOptions struct {
 	OmitInRangefeeds               bool
 	ImportEpoch                    uint32
 	OriginID                       uint32
+	OriginTimestamp                hlc.Timestamp
 	// MaxLockConflicts is a maximum number of conflicting locks collected before
 	// returning LockConflictError. Even single-key writes can encounter multiple
 	// conflicting shared locks, so the limit is important to bound the number of

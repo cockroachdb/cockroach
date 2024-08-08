@@ -42,8 +42,9 @@ type StatsCollector struct {
 	// this value will be 0.
 	stmtFingerprintID appstatspb.StmtFingerprintID
 
-	// Allows StatsCollector to send statement and transaction stats to the insights system.
-	insightsWriter insights.Writer
+	// Allows StatsCollector to send statement and transaction stats to the
+	// insights system. Set to nil to disable persistence of insights.
+	insightsWriter *insights.ConcurrentBufferIngester
 
 	// phaseTimes tracks session-level phase times.
 	phaseTimes *sessionphase.Times
@@ -78,7 +79,7 @@ type StatsCollector struct {
 func NewStatsCollector(
 	st *cluster.Settings,
 	appStats sqlstats.ApplicationStats,
-	insights insights.Writer,
+	insights *insights.ConcurrentBufferIngester,
 	phaseTime *sessionphase.Times,
 	uniqueServerCounts *ssmemstorage.SQLStatsAtomicCounters,
 	underOuterTxn bool,
@@ -273,7 +274,7 @@ func (s *StatsCollector) ObserveStatement(
 	}
 	if s.knobs != nil && s.knobs.InsightsWriterStmtInterceptor != nil {
 		s.knobs.InsightsWriterStmtInterceptor(value.SessionID, &insight)
-	} else {
+	} else if s.insightsWriter != nil {
 		s.insightsWriter.ObserveStatement(value.SessionID, &insight)
 	}
 }
@@ -332,7 +333,7 @@ func (s *StatsCollector) ObserveTransaction(
 	}
 	if s.knobs != nil && s.knobs.InsightsWriterTxnInterceptor != nil {
 		s.knobs.InsightsWriterTxnInterceptor(ctx, value.SessionID, &insight)
-	} else {
+	} else if s.insightsWriter != nil {
 		s.insightsWriter.ObserveTransaction(value.SessionID, &insight)
 	}
 }

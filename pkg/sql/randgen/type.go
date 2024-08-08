@@ -44,7 +44,7 @@ func init() {
 			// Temporarily don't include this.
 			// TODO(msirek): Remove this exclusion once
 			// https://github.com/cockroachdb/cockroach/issues/55791 is fixed.
-		case oid.T_unknown, oid.T_anyelement:
+		case oid.T_unknown, oid.T_anyelement, oid.T_trigger:
 			// Don't include these.
 		case oid.T_anyarray, oid.T_oidvector, oid.T_int2vector:
 			// Include these.

@@ -2174,11 +2174,11 @@ func TestStoreSkipLockedTSCache(t *testing.T) {
 			// Verify the timestamp cache has been set for "a" and "c", but not for "b".
 			t2TS := makeTS(t2.UnixNano(), 0)
 			rTS, _ := store.tsCache.GetMax(ctx, roachpb.Key("a"), nil)
-			require.True(t, rTS.EqOrdering(t2TS))
+			require.Equal(t, t2TS, rTS)
 			rTS, _ = store.tsCache.GetMax(ctx, roachpb.Key("b"), nil)
 			require.True(t, rTS.Less(t2TS))
 			rTS, _ = store.tsCache.GetMax(ctx, roachpb.Key("c"), nil)
-			require.True(t, rTS.EqOrdering(t2TS))
+			require.Equal(t, t2TS, rTS)
 		})
 	}
 }

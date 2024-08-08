@@ -58,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
-	"golang.org/x/sys/unix"
 )
 
 // MalformedClusterNameError is returned when the cluster name passed to Create is invalid.
@@ -769,8 +768,7 @@ func Start(
 	if err = c.Start(ctx, l, startOpts); err != nil {
 		return err
 	}
-	updatePrometheusTargets(ctx, l, c)
-	return nil
+	return UpdateTargets(ctx, l, clusterName, clusterSettingsOpts...)
 }
 
 // UpdateTargets updates prometheus target configurations for a cluster.
@@ -783,16 +781,27 @@ func UpdateTargets(
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	c, err := newCluster(l, clusterName, clusterSettingsOpts...)
-	if err != nil {
-		return err
-	}
-	updatePrometheusTargets(ctx, l, c)
-	return nil
+	return updatePrometheusTargets(ctx, l, clusterName, clusterSettingsOpts...)
 }
 
 // updatePrometheusTargets updates the prometheus instance cluster config. Any error is logged and ignored.
-func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.SyncedCluster) {
+func updatePrometheusTargets(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	clusterSettingsOpts ...install.ClusterSettingOption,
+) error {
+	// The cluster name should be used without the node suffix.
+	// This ensures that we update the target with details of all nodes.
+	// Also, no error checks are needed. The cluster name can be
+	// either <cluster_name> or <cluster_name>:<node_number>
+	// But, in both the cases, the value at index 0 after split is the cluster name.
+	cn := strings.Split(clusterName, ":")
+	c, err := newCluster(l, cn[0], clusterSettingsOpts...)
+	if err != nil {
+		return err
+	}
+
 	nodeIPPorts := make(map[int]*promhelperclient.NodeInfo)
 	nodeIPPortsMutex := syncutil.RWMutex{}
 	var wg sync.WaitGroup
@@ -823,6 +832,7 @@ func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.S
 			l.Errorf("creating cluster config failed for the ip:ports %v: %v", nodeIPPorts, err)
 		}
 	}
+	return nil
 }
 
 // regionRegEx is the regex to extract the region label from zone available as vm property
@@ -1008,7 +1018,7 @@ func DistributeCerts(ctx context.Context, l *logger.Logger, clusterName string) 
 	if err != nil {
 		return err
 	}
-	return c.DistributeCerts(ctx, l)
+	return c.DistributeCerts(ctx, l, false)
 }
 
 // Put copies a local file to the nodes in a cluster.
@@ -1631,7 +1641,9 @@ func Create(
 	return SetupSSH(ctx, l, clusterName)
 }
 
-func Grow(ctx context.Context, l *logger.Logger, clusterName string, numNodes int) error {
+func Grow(
+	ctx context.Context, l *logger.Logger, clusterName string, secure bool, numNodes int,
+) error {
 	if numNodes <= 0 || numNodes >= 1000 {
 		// Upper limit is just for safety.
 		return fmt.Errorf("number of nodes must be in [1..999]")
@@ -1646,12 +1658,31 @@ func Grow(ctx context.Context, l *logger.Logger, clusterName string, numNodes in
 	if err != nil {
 		return err
 	}
-	if c.IsLocal() {
-		// If this is used externally with roachtest then we need to reload the
-		// clusters before returning.
-		return LoadClusters()
+	switch {
+	case c.IsLocal():
+		// If this local cluster is used externally with roachtest then we need to
+		// reload the clusters before returning.
+		err = LoadClusters()
+	default:
+		err = SetupSSH(ctx, l, clusterName)
 	}
-	return SetupSSH(ctx, l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if secure {
+		// Grab the cluster from the cache again to ensure we have the latest
+		// information.
+		c, err = getClusterFromCache(l, clusterName)
+		if err != nil {
+			return err
+		}
+		err = c.DistributeCerts(ctx, l, true)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func Shrink(ctx context.Context, l *logger.Logger, clusterName string, numNodes int) error {
@@ -2695,11 +2726,6 @@ func CreateLoadBalancer(
 	// cluster's certificate.
 	if secure {
 		err = c.RedistributeNodeCert(ctx, l)
-		if err != nil {
-			return err
-		}
-		// Send a SIGHUP to the nodes to reload the certificates.
-		err = c.Signal(ctx, l, int(unix.SIGHUP))
 		if err != nil {
 			return err
 		}

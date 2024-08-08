@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -109,10 +108,6 @@ func exceptAmbiguous(err error) bool { // true if ambiguous result
 
 func exceptDelRangeUsingTombstoneStraddlesRangeBoundary(err error) bool {
 	return errors.Is(err, errDelRangeUsingTombstoneStraddlesRangeBoundary)
-}
-
-func exceptSharedLockPromotionError(err error) bool { // true if lock promotion error
-	return errors.Is(err, &concurrency.LockPromotionError{})
 }
 
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {

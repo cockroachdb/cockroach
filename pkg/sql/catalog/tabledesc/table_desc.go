@@ -691,3 +691,8 @@ func (desc *wrapper) IsPrimaryKeySwapMutation(m *descpb.DescriptorMutation) bool
 	}
 	return false
 }
+
+// ExternalRowData implements the TableDescriptor interface.
+func (desc *wrapper) ExternalRowData() *descpb.ExternalRowData {
+	return desc.External
+}

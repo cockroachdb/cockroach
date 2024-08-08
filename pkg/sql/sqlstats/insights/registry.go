@@ -26,10 +26,8 @@ type lockingRegistry struct {
 	statements map[clusterunique.ID]*statementBuf
 	detector   detector
 	causes     *causes
-	sink       sink
+	store      *LockingStore
 }
-
-var _ Writer = (*lockingRegistry)(nil)
 
 func (r *lockingRegistry) Clear() {
 	r.statements = make(map[clusterunique.ID]*statementBuf)
@@ -184,7 +182,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 		transaction.LastErrorCode = lastStmtErrCode
 	}
 
-	r.sink.AddInsight(insight)
+	r.store.addInsight(insight)
 }
 
 // TODO(todd):
@@ -197,11 +195,11 @@ func (r *lockingRegistry) enabled() bool {
 	return r.detector.enabled()
 }
 
-func newRegistry(st *cluster.Settings, detector detector, sink sink) *lockingRegistry {
+func newRegistry(st *cluster.Settings, detector detector, store *LockingStore) *lockingRegistry {
 	return &lockingRegistry{
 		statements: make(map[clusterunique.ID]*statementBuf),
 		detector:   detector,
 		causes:     &causes{st: st},
-		sink:       sink,
+		store:      store,
 	}
 }

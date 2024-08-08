@@ -20,6 +20,7 @@ package raft
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -29,7 +30,7 @@ import (
 // The Progress is only populated on the leader.
 type Status struct {
 	BasicStatus
-	Config           tracker.Config
+	Config           quorum.Config
 	Progress         map[pb.PeerID]tracker.Progress
 	LeadSupportUntil hlc.Timestamp
 }
@@ -80,7 +81,7 @@ func withProgress(r *raft, visitor func(id pb.PeerID, typ ProgressType, pr track
 }
 
 func getProgressCopy(r *raft) map[pb.PeerID]tracker.Progress {
-	m := make(map[pb.PeerID]tracker.Progress, len(r.trk.Progress))
+	m := make(map[pb.PeerID]tracker.Progress, r.trk.Len())
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 		p := *pr
 		p.Inflights = pr.Inflights.Clone()
@@ -99,6 +100,23 @@ func getBasicStatus(r *raft) BasicStatus {
 	s.HardState = r.hardState()
 	s.SoftState = r.softState()
 	s.Applied = r.raftLog.applied
+	if s.RaftState == StateFollower && s.Lead == r.id {
+		// A raft leader's term ends when it is shut down. It'll rejoin its peers as
+		// a follower when it comes back up, but its Lead and Term field may still
+		// correspond to its pre-restart leadership term. We expect this to quickly
+		// be updated when it hears from the new leader, if one was elected in its
+		// absence, or when it campaigns.
+		//
+		// The layers above raft (in particular kvserver) do not handle the case
+		// where a raft node's state is StateFollower but its lead field points to
+		// itself. They expect the Lead field to correspond to the current leader,
+		// which we know we are not. For their benefit, we overwrite the Lead field
+		// to None.
+		//
+		// TODO(arul): the layers above should not conflate Lead with current
+		// leader. Fix that and get rid of this overwrite.
+		s.HardState.Lead = None
+	}
 	return s
 }
 
@@ -109,7 +127,7 @@ func getStatus(r *raft) Status {
 	if s.RaftState == StateLeader {
 		s.Progress = getProgressCopy(r)
 	}
-	s.Config = r.trk.Config.Clone()
+	s.Config = r.config.Clone()
 	// NOTE: we assign to LeadSupportUntil even if RaftState is not currently
 	// StateLeader. The replica may have been the leader and stepped down to a
 	// follower before its lead support ran out.
@@ -124,7 +142,7 @@ func getSparseStatus(r *raft) SparseStatus {
 	var s SparseStatus
 	s.BasicStatus = getBasicStatus(r)
 	if s.RaftState == StateLeader {
-		s.Progress = make(map[pb.PeerID]tracker.Progress, len(r.trk.Progress))
+		s.Progress = make(map[pb.PeerID]tracker.Progress, r.trk.Len())
 		withProgress(r, func(id pb.PeerID, _ ProgressType, pr tracker.Progress) {
 			s.Progress[id] = pr
 		})

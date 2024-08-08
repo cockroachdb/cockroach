@@ -132,8 +132,10 @@ type hashAggregator struct {
 	}
 
 	// inputTrackingState tracks all the input tuples which is needed in order
-	// to fallback to the external hash aggregator.
+	// to fall back to the external hash aggregator.
 	inputTrackingState struct {
+		// tuples can be nil when input tuples tracking is not needed, or when
+		// the queue has been closed.
 		tuples            *colexecutils.SpillingQueue
 		zeroBatchEnqueued bool
 	}
@@ -190,8 +192,8 @@ func randomizeHashAggregatorMaxBuffered() {
 // The input specifications to this function are the same as that of the
 // NewOrderedAggregator function.
 // newSpillingQueueArgs - when non-nil - specifies the arguments to
-// instantiate a SpillingQueue with which will be used to keep all of the
-// input tuples in case the in-memory hash aggregator needs to fallback to
+// instantiate a SpillingQueue with which will be used to keep all the
+// input tuples in case the in-memory hash aggregator needs to fall back to
 // the disk-backed operator. Pass in nil in order to not track all input
 // tuples.
 func NewHashAggregator(
@@ -455,12 +457,10 @@ func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 	}
 }
 
-func (op *hashAggregator) ExportBuffered(input colexecop.Operator) coldata.Batch {
-	if op.ht != nil {
-		// This is the first call to ExportBuffered - release the hash table
-		// since we no longer need it.
-		op.ht.Release()
-		op.ht = nil
+func (op *hashAggregator) ExportBuffered(colexecop.Operator) coldata.Batch {
+	if op.inputTrackingState.tuples == nil {
+		// All tuples have been exported.
+		return coldata.ZeroBatch
 	}
 	if !op.inputTrackingState.zeroBatchEnqueued {
 		// Per the contract of the spilling queue, we need to append a
@@ -473,6 +473,40 @@ func (op *hashAggregator) ExportBuffered(input colexecop.Operator) coldata.Batch
 		colexecerror.InternalError(err)
 	}
 	return batch
+}
+
+// ReleaseBeforeExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (op *hashAggregator) ReleaseBeforeExport() {
+	if op.ht == nil {
+		// Resources have already been released.
+		return
+	}
+	// The hash table is tracked by its own allocator.
+	op.ht.Release()
+	defer op.hashAlloc.allocator.ReleaseAll()
+	// We only need to keep a handful of fields that will be used to export
+	// buffered tuples and to properly close the resources. None of these
+	// resources are tracked by the allocator, so releasing all the memory in
+	// the defer above is ok.
+	*op = hashAggregator{
+		InitHelper:         op.InitHelper,
+		inputTrackingState: op.inputTrackingState,
+		toClose:            op.toClose,
+	}
+}
+
+// ReleaseAfterExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (op *hashAggregator) ReleaseAfterExport(colexecop.Operator) {
+	if op.inputTrackingState.tuples == nil {
+		// Resources have already been released.
+		return
+	}
+	if err := op.inputTrackingState.tuples.Close(op.Ctx); err != nil {
+		colexecerror.InternalError(err)
+	}
+	op.inputTrackingState.tuples = nil
 }
 
 func (op *hashAggregator) Reset(ctx context.Context) {

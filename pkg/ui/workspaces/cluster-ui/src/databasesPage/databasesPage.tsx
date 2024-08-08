@@ -8,18 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { RouteComponentProps } from "react-router-dom";
+import { InlineAlert } from "@cockroachlabs/ui-components";
 import { Tooltip } from "antd";
 import classNames from "classnames/bind";
 import merge from "lodash/merge";
-import { InlineAlert } from "@cockroachlabs/ui-components";
+import React from "react";
+import { RouteComponentProps } from "react-router-dom";
 
 import { Anchor } from "src/anchor";
 import { StackIcon } from "src/icon/stackIcon";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { Pagination } from "src/pagination";
 import { BooleanSetting } from "src/settings/booleanSetting";
-import { PageConfig, PageConfigItem } from "src/pageConfig";
 import {
   ColumnDescriptor,
   handleSortSettingFromQueryString,
@@ -28,22 +28,10 @@ import {
   SortSetting,
 } from "src/sortedtable";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
+import { UIConfigState } from "src/store";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import { syncHistory, tableStatsClusterSetting, unique } from "src/util";
-import { UIConfigState } from "src/store";
 
-import booleanSettingStyles from "../settings/booleanSetting.module.scss";
-import LoadingError from "../sqlActivity/errorComponent";
-import { Loading } from "../loading";
-import { Search } from "../search";
-import {
-  calculateActiveFilters,
-  defaultFilters,
-  Filter,
-  Filters,
-  handleFiltersFromQueryString,
-} from "../queryFilter";
-import { TableStatistics } from "../tableStatistics";
 import {
   DatabaseSpanStatsRow,
   DatabaseTablesResponse,
@@ -51,14 +39,26 @@ import {
   SqlApiQueryResponse,
   SqlExecutionErrorMessage,
 } from "../api";
-import { checkInfoAvailable } from "../databases";
+import { LoadingCell } from "../databases";
+import { Loading } from "../loading";
+import {
+  calculateActiveFilters,
+  defaultFilters,
+  Filter,
+  Filters,
+  handleFiltersFromQueryString,
+} from "../queryFilter";
+import { Search } from "../search";
+import booleanSettingStyles from "../settings/booleanSetting.module.scss";
+import LoadingError from "../sqlActivity/errorComponent";
+import { TableStatistics } from "../tableStatistics";
 
+import styles from "./databasesPage.module.scss";
 import {
   DatabaseNameCell,
   IndexRecCell,
   DiskSizeCell,
 } from "./databaseTableCells";
-import styles from "./databasesPage.module.scss";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -562,12 +562,16 @@ export class DatabasesPage extends React.Component<
             Tables
           </Tooltip>
         ),
-        cell: database =>
-          checkInfoAvailable(
-            database.detailsRequestError,
-            database.tables?.error,
-            database.tables?.tables?.length,
-          ),
+        cell: database => (
+          <LoadingCell
+            requestError={database.detailsRequestError}
+            queryError={database.tables?.error}
+            loading={database.detailsLoading}
+            errorClassName={cx("databases-table__cell-error")}
+          >
+            {database.tables?.tables?.length}
+          </LoadingCell>
+        ),
         sort: database => database.tables?.tables.length ?? 0,
         className: cx("databases-table__col-table-count"),
         name: "tableCount",
@@ -581,12 +585,16 @@ export class DatabasesPage extends React.Component<
             Range Count
           </Tooltip>
         ),
-        cell: database =>
-          checkInfoAvailable(
-            database.spanStatsRequestError,
-            database.spanStats?.error,
-            database.spanStats?.range_count,
-          ),
+        cell: database => (
+          <LoadingCell
+            requestError={database.spanStatsRequestError}
+            queryError={database.spanStats?.error}
+            loading={database.spanStatsLoading}
+            errorClassName={cx("databases-table__cell-error")}
+          >
+            {database.spanStats?.range_count}
+          </LoadingCell>
+        ),
         sort: database => database.spanStats?.range_count,
         className: cx("databases-table__col-range-count"),
         name: "rangeCount",
@@ -600,12 +608,15 @@ export class DatabasesPage extends React.Component<
             {this.props.isTenant ? "Regions" : "Regions/Nodes"}
           </Tooltip>
         ),
-        cell: database =>
-          checkInfoAvailable(
-            database.detailsRequestError,
-            null,
-            database.nodesByRegionString ? database.nodesByRegionString : null,
-          ),
+        cell: database => (
+          <LoadingCell
+            requestError={database.detailsRequestError}
+            loading={database.detailsLoading}
+            errorClassName={cx("databases-table__cell-error")}
+          >
+            {database.nodesByRegionString ? database.nodesByRegionString : null}
+          </LoadingCell>
+        ),
         sort: database => database.nodesByRegionString,
         className: cx("databases-table__col-node-regions"),
         name: "nodeRegions",

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -62,15 +63,21 @@ func newTxnKVFetcher(
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
+	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 ) *txnKVFetcher {
 	var sendFn sendFunc
 	var batchRequestsIssued int64
-	// Avoid the heap allocation by allocating sendFn specifically in the if.
 	if bsHeader == nil {
-		sendFn = makeTxnKVFetcherDefaultSendFunc(txn, &batchRequestsIssued)
+		sendFn = makeSendFunc(txn, ext, &batchRequestsIssued)
 	} else {
 		negotiated := false
 		sendFn = func(ctx context.Context, ba *kvpb.BatchRequest) (br *kvpb.BatchResponse, _ error) {
+			if ext != nil {
+				return nil, unimplemented.New(
+					"bounded-staleness-on-stand-by",                                     /* feature */
+					"bounded staleness reads on ExternalRowData is not implemented yet", /* msg */
+				)
+			}
 			log.VEventf(ctx, 2, "kv fetcher (bounded staleness): sending a batch with %d requests", len(ba.Requests))
 			ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
 			var pErr *kvpb.Error
@@ -131,10 +138,11 @@ func NewDirectKVBatchFetcher(
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
+	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 ) KVBatchFetcher {
 	f := newTxnKVFetcher(
 		txn, bsHeader, reverse, lockStrength, lockWaitPolicy, lockDurability,
-		lockTimeout, acc, forceProductionKVBatchSize,
+		lockTimeout, acc, forceProductionKVBatchSize, ext,
 	)
 	f.scanFormat = kvpb.COL_BATCH_RESPONSE
 	f.indexFetchSpec = spec
@@ -157,10 +165,11 @@ func NewKVFetcher(
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
+	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 ) *KVFetcher {
 	return newKVFetcher(newTxnKVFetcher(
 		txn, bsHeader, reverse, lockStrength, lockWaitPolicy, lockDurability,
-		lockTimeout, acc, forceProductionKVBatchSize,
+		lockTimeout, acc, forceProductionKVBatchSize, ext,
 	))
 }
 
@@ -184,20 +193,22 @@ func NewStreamingKVFetcher(
 	maxKeysPerRow int,
 	diskBuffer kvstreamer.ResultDiskBuffer,
 	kvFetcherMemAcc *mon.BoundAccount,
+	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 ) *KVFetcher {
 	var kvPairsRead int64
 	var batchRequestsIssued int64
+	sendFn := makeSendFunc(txn, ext, &batchRequestsIssued)
 	streamer := kvstreamer.NewStreamer(
 		distSender,
 		stopper,
 		txn,
+		sendFn,
 		st,
 		sd,
 		GetWaitPolicy(lockWaitPolicy),
 		streamerBudgetLimit,
 		streamerBudgetAcc,
 		&kvPairsRead,
-		&batchRequestsIssued,
 		GetKeyLockingStrength(lockStrength),
 		GetKeyLockingDurability(lockDurability),
 	)

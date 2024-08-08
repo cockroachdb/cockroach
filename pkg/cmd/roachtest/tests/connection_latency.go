@@ -34,6 +34,8 @@ const (
 func runConnectionLatencyTest(
 	ctx context.Context, t test.Test, c cluster.Cluster, numNodes int, numZones int, password bool,
 ) {
+	// The connection latency workload is not available in the cockroach binary,
+	// so we must use the deprecated workload.
 	err := c.PutE(ctx, t.L(), t.DeprecatedWorkload(), "./workload")
 	require.NoError(t, err)
 
@@ -107,9 +109,10 @@ func registerConnectionLatencyTest(r registry.Registry) {
 		Owner:     registry.OwnerSQLFoundations,
 		Benchmark: true,
 		// Add one more node for load node.
-		Cluster:          r.MakeClusterSpec(numNodes+1, spec.GCEZones(regionUsCentral)),
-		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.Nightly),
+		Cluster:                    r.MakeClusterSpec(numNodes+1, spec.WorkloadNode(), spec.GCEZones(regionUsCentral)),
+		CompatibleClouds:           registry.OnlyGCE,
+		Suites:                     registry.Suites(registry.Nightly),
+		RequiresDeprecatedWorkload: true, // uses connectionlatency
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numNodes, 1, false /*password*/)
 		},
@@ -122,24 +125,26 @@ func registerConnectionLatencyTest(r registry.Registry) {
 	loadNodes := numZones
 
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("connection_latency/nodes=%d/multiregion/certs", numMultiRegionNodes),
-		Owner:            registry.OwnerSQLFoundations,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.GCEZones(geoZonesStr)),
-		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.Nightly),
+		Name:                       fmt.Sprintf("connection_latency/nodes=%d/multiregion/certs", numMultiRegionNodes),
+		Owner:                      registry.OwnerSQLFoundations,
+		Benchmark:                  true,
+		Cluster:                    r.MakeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.GCEZones(geoZonesStr)),
+		CompatibleClouds:           registry.OnlyGCE,
+		Suites:                     registry.Suites(registry.Nightly),
+		RequiresDeprecatedWorkload: true, // uses connectionlatency
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones, false /*password*/)
 		},
 	})
 
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("connection_latency/nodes=%d/multiregion/password", numMultiRegionNodes),
-		Owner:            registry.OwnerSQLFoundations,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.GCEZones(geoZonesStr)),
-		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.Nightly),
+		Name:                       fmt.Sprintf("connection_latency/nodes=%d/multiregion/password", numMultiRegionNodes),
+		Owner:                      registry.OwnerSQLFoundations,
+		Benchmark:                  true,
+		Cluster:                    r.MakeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.GCEZones(geoZonesStr)),
+		CompatibleClouds:           registry.OnlyGCE,
+		Suites:                     registry.Suites(registry.Nightly),
+		RequiresDeprecatedWorkload: true, // uses connectionlatency
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones, true /*password*/)
 		},

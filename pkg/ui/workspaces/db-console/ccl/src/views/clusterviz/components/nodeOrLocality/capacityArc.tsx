@@ -6,9 +6,14 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import React from "react";
 import { util } from "@cockroachlabs/cluster-ui";
+import React from "react";
 
+import {
+  NodeArcPercentageTooltip,
+  NodeArcUsedCapacityTooltip,
+  NodeArcTotalCapacityTooltip,
+} from "src/views/clusterviz/components/nodeOrLocality/tooltips";
 import * as PathMath from "src/views/clusterviz/util/pathmath";
 import {
   BACKGROUND_BLUE,
@@ -16,11 +21,6 @@ import {
   LIGHT_TEXT_BLUE,
   MAIN_BLUE,
 } from "src/views/shared/colors";
-import {
-  NodeArcPercentageTooltip,
-  NodeArcUsedCapacityTooltip,
-  NodeArcTotalCapacityTooltip,
-} from "src/views/clusterviz/components/nodeOrLocality/tooltips";
 
 const ARC_INNER_RADIUS = 56;
 const ARC_WIDTH = 6;

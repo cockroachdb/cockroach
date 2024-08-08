@@ -10,13 +10,13 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { PayloadAction } from "@reduxjs/toolkit";
+import { expectSaga } from "redux-saga-test-plan";
+import * as matchers from "redux-saga-test-plan/matchers";
 import {
   EffectProviders,
   StaticProvider,
   throwError,
 } from "redux-saga-test-plan/providers";
-import * as matchers from "redux-saga-test-plan/matchers";
-import { expectSaga } from "redux-saga-test-plan";
 
 import { indexUnusedDuration } from "src/util/constants";
 
@@ -63,7 +63,25 @@ describe("DatabaseDetails sagas", () => {
           },
         ],
       },
-      tablesResp: { tables: ["yet", "another", "table"] },
+      tablesResp: {
+        tables: [
+          {
+            schema: "schema",
+            table: "table",
+            qualifiedNameWithSchemaAndTable: `"schema"."table"`,
+          },
+          {
+            schema: "schema2",
+            table: "table2",
+            qualifiedNameWithSchemaAndTable: `"schema"."table"`,
+          },
+          {
+            table: "tabble",
+            schema: "schema",
+            qualifiedNameWithSchemaAndTable: `"schema2j"."table2"`,
+          },
+        ],
+      },
       zoneConfigResp: {
         zone_config: new ZoneConfig({
           inherited_constraints: true,

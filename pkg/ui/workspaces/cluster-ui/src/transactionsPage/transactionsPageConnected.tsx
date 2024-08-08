@@ -12,43 +12,28 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 
+import { SqlStatsSortType, StatementsRequest } from "src/api/statementsApi";
 import { AppState, uiConfigActions } from "src/store";
 import { actions as nodesActions } from "src/store/nodes";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { actions as txnStatsActions } from "src/store/transactionStats";
-import { SqlStatsSortType, StatementsRequest } from "src/api/statementsApi";
 
-import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
-import { nodeRegionsByIDSelector } from "../store/nodes";
-import {
-  selectTxnsPageLimit,
-  selectTxnsPageReqSort,
-  selectTimeScale,
-} from "../store/utils/selectors";
+import { Filters } from "../queryFilter";
+import { actions as analyticsActions } from "../store/analytics";
 import {
   actions as localStorageActions,
   updateTxnsPageLimitAction,
   updateTxnsPageReqSortAction,
 } from "../store/localStorage";
-import { Filters } from "../queryFilter";
-import { actions as analyticsActions } from "../store/analytics";
+import { nodeRegionsByIDSelector } from "../store/nodes";
+import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
+import {
+  selectTxnsPageLimit,
+  selectTxnsPageReqSort,
+  selectTimeScale,
+} from "../store/utils/selectors";
 import { TimeScale } from "../timeScaleDropdown";
 
-import {
-  selectTxnColumns,
-  selectSortSetting,
-  selectFilters,
-  selectSearch,
-  selectRequestTime,
-} from "./transactionsPage.selectors";
-import {
-  TransactionsPageStateProps,
-  TransactionsPageDispatchProps,
-} from "./transactionsPage";
-import {
-  TransactionsPageRoot,
-  TransactionsPageRootProps,
-} from "./transactionsPageRoot";
 import {
   mapStateToActiveTransactionsPageProps,
   mapDispatchToActiveTransactionsPageProps,
@@ -57,6 +42,21 @@ import {
   ActiveTransactionsViewStateProps,
   ActiveTransactionsViewDispatchProps,
 } from "./activeTransactionsView";
+import {
+  TransactionsPageStateProps,
+  TransactionsPageDispatchProps,
+} from "./transactionsPage";
+import {
+  selectTxnColumns,
+  selectSortSetting,
+  selectFilters,
+  selectSearch,
+  selectRequestTime,
+} from "./transactionsPage.selectors";
+import {
+  TransactionsPageRoot,
+  TransactionsPageRootProps,
+} from "./transactionsPageRoot";
 
 type StateProps = {
   fingerprintsPageProps: TransactionsPageStateProps & RouteComponentProps;

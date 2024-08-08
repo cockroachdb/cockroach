@@ -1,0 +1,68 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j CHAR(10) NOT NULL);
+----
+...
++object {100 101 t} -> 104
+
+/* test */
+ALTER TABLE t ALTER COLUMN j SET DATA TYPE CHAR(15);
+ALTER TABLE t ALTER COLUMN j SET DATA TYPE CHAR(25);
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.alter_column_type
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert descriptor #104
+  ...
+         oid: 1042
+         visibleType: 8
+  -      width: 10
+  +      width: 15
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.alter_column_type
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert descriptor #104
+  ...
+         oid: 1042
+         visibleType: 8
+  -      width: 15
+  +      width: 25
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 1 MutationType op
+upsert descriptor #104
+  ...
+         oid: 1042
+         visibleType: 8
+  -      width: 10
+  +      width: 25
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

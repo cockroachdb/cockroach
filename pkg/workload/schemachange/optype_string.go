@@ -39,20 +39,21 @@ func _() {
 	_ = x[alterTableSetColumnNotNull-28]
 	_ = x[alterTypeDropValue-29]
 	_ = x[createTypeEnum-30]
-	_ = x[createIndex-31]
-	_ = x[createSchema-32]
-	_ = x[createSequence-33]
-	_ = x[createTable-34]
-	_ = x[createTableAs-35]
-	_ = x[createView-36]
-	_ = x[createFunction-37]
-	_ = x[commentOn-38]
-	_ = x[dropFunction-39]
-	_ = x[dropIndex-40]
-	_ = x[dropSchema-41]
-	_ = x[dropSequence-42]
-	_ = x[dropTable-43]
-	_ = x[dropView-44]
+	_ = x[createTypeComposite-31]
+	_ = x[createIndex-32]
+	_ = x[createSchema-33]
+	_ = x[createSequence-34]
+	_ = x[createTable-35]
+	_ = x[createTableAs-36]
+	_ = x[createView-37]
+	_ = x[createFunction-38]
+	_ = x[commentOn-39]
+	_ = x[dropFunction-40]
+	_ = x[dropIndex-41]
+	_ = x[dropSchema-42]
+	_ = x[dropSequence-43]
+	_ = x[dropTable-44]
+	_ = x[dropView-45]
 }
 
 func (i opType) String() string {
@@ -119,6 +120,8 @@ func (i opType) String() string {
 		return "alterTypeDropValue"
 	case createTypeEnum:
 		return "createTypeEnum"
+	case createTypeComposite:
+		return "createTypeComposite"
 	case createIndex:
 		return "createIndex"
 	case createSchema:

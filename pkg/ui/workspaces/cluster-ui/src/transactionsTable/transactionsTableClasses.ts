@@ -10,9 +10,9 @@
 
 import classNames from "classnames/bind";
 
+import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";
 import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
 import statementsTableStyles from "src/statementsTable/statementsTableContent.module.scss";
-import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";
 
 const sortedTableCx = classNames.bind(sortedTableStyles);
 const statementsTableCx = classNames.bind(statementsTableStyles);

@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import * as React from "react";
 import cn from "classnames";
+import * as React from "react";
 
 import "./text.styl";
 

@@ -59,12 +59,14 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 		Owner:   registry.OwnerTestEng,
 		Cluster: r.MakeClusterSpec(
 			len(regions)*nodesPerRegion+1, // add one workload node
+			spec.WorkloadNode(),
 			spec.Geo(),
 			spec.GCEZones(strings.Join(zones, ",")),
 		),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		CompatibleClouds:  registry.OnlyGCE,
 		Suites:            registry.Suites(registry.Weekly),
+		Randomized:        true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			partitionConfig := fmt.Sprintf(
 				"--regions=%s --partitions=%d",

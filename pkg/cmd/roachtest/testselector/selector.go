@@ -18,6 +18,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	sf "github.com/snowflakedb/gosnowflake"
 )
 
@@ -49,22 +50,24 @@ type TestDetails struct {
 	Name                 string // test name
 	Selected             bool   // whether a test is Selected or not
 	AvgDurationInMillis  int64  // average duration of the test
-	TotalRuns            int    // total number of times the test has run successfully
 	LastFailureIsPreempt bool   // last failure is due to a VM preemption
 }
 
 // SelectTestsReq is the request for CategoriseTests
 type SelectTestsReq struct {
-	ForPastDays, // number of days data to consider for test selection
-	FirstRunOn, // number of days to consider for the first time the test is run
-	LastRunOn, // number of days to consider for the last time the test is run
-	SelectFromSuccessPct int //percentage of tests to be Selected for running from the successful test list sorted by number of runs
-	Cloud, // the cloud where the tests were run
-	Suite string // the test suite for which the selection is done
+	ForPastDays          int // number of days data to consider for test selection
+	FirstRunOn           int // number of days to consider for the first time the test is run
+	LastRunOn            int // number of days to consider for the last time the test is run
+	SelectFromSuccessPct int // percentage of tests to be Selected for running from the successful test list sorted by number of runs
+
+	Cloud spec.Cloud // the cloud where the tests were run
+	Suite string     // the test suite for which the selection is done
 }
 
 // NewDefaultSelectTestsReq returns a new SelectTestsReq with default values populated
-func NewDefaultSelectTestsReq(selectFromSuccessPct int, cloud, suite string) *SelectTestsReq {
+func NewDefaultSelectTestsReq(
+	selectFromSuccessPct int, cloud spec.Cloud, suite string,
+) *SelectTestsReq {
 	return &SelectTestsReq{
 		ForPastDays:          defaultForPastDays,
 		FirstRunOn:           defaultFirstRunOn,
@@ -131,14 +134,12 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 		// 0. test name
 		// 1. whether a test is Selected or not
 		// 2. average duration of the test
-		// 3. total number of times the test has run successfully
-		// 4. last failure is due to an infra flake
+		// 3. last failure is due to an infra flake
 		testDetails := &TestDetails{
 			Name:                 testInfos[0],
 			Selected:             testInfos[1] != "no",
 			AvgDurationInMillis:  getDuration(testInfos[2]),
-			TotalRuns:            getTotalRuns(testInfos[3]),
-			LastFailureIsPreempt: testInfos[4] == "yes",
+			LastFailureIsPreempt: testInfos[3] == "yes",
 		}
 		if testDetails.Selected {
 			// selected for running
@@ -165,12 +166,6 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 func getDuration(durationStr string) int64 {
 	duration, _ := strconv.ParseInt(durationStr, 10, 64)
 	return duration
-}
-
-// getTotalRuns extracts the total runs from the snowflake query total_runs field
-func getTotalRuns(totalRunsStr string) int {
-	totalRuns, _ := strconv.ParseInt(totalRunsStr, 10, 64)
-	return int(totalRuns)
 }
 
 // getConnect makes connection to snowflake and returns the connection.

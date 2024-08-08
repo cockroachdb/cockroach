@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useMemo } from "react";
 import classNames from "classnames/bind";
+import React, { useMemo } from "react";
 
 import ErrorIcon from "assets/error-circle.svg";
 import InfoIcon from "assets/info-filled-circle.svg";

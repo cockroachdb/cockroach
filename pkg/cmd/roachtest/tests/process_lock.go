@@ -33,7 +33,7 @@ func registerProcessLock(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "process-lock",
 		Owner:            registry.OwnerStorage,
-		Cluster:          r.MakeClusterSpec(4, spec.ReuseNone()),
+		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.ReuseNone()),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		// Encryption is implemented within the virtual filesystem layer,
@@ -49,7 +49,7 @@ func registerProcessLock(r registry.Registry) {
 			startSettings.Env = append(startSettings.Env, "COCKROACH_AUTO_BALLAST=false")
 
 			t.Status("starting cluster")
-			c.Start(ctx, t.L(), startOpts, startSettings, c.Range(1, 3))
+			c.Start(ctx, t.L(), startOpts, startSettings, c.CRDBNodes())
 
 			// Wait for upreplication.
 			conn := c.Conn(ctx, t.L(), 2)
@@ -57,15 +57,15 @@ func registerProcessLock(r registry.Registry) {
 			require.NoError(t, conn.PingContext(ctx))
 			require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 
-			c.Run(ctx, option.WithNodes(c.Node(4)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+			c.Run(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 			seed := int64(1666467482296309000)
 			rng := randutil.NewTestRandWithSeed(seed)
 
 			t.Status("starting workload")
-			m := c.NewMonitor(ctx, c.Range(1, 3))
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
-				c.Run(ctx, option.WithNodes(c.Node(4)), fmt.Sprintf(`./cockroach workload run kv --read-percent 0 `+
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(`./cockroach workload run kv --read-percent 0 `+
 					`--duration %s --concurrency 512 --max-rate 4096 --tolerate-errors `+
 					` --min-block-bytes=1024 --max-block-bytes=1024 `+
 					`{pgurl:1-3}`, runDuration.String()))

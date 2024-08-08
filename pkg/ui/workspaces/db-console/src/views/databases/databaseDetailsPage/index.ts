@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { DatabaseDetailsPage } from "@cockroachlabs/cluster-ui";
 import { connect, ReactReduxContext } from "react-redux";
 import { withRouter } from "react-router-dom";
-import { DatabaseDetailsPage } from "@cockroachlabs/cluster-ui";
 
 import { mapStateToProps, mapDispatchToProps } from "./redux";
 

@@ -303,12 +303,7 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 		}
 		// Don't need to modify primary indexes for virtual columns.
 		if spec.colType.IsVirtual {
-			chain := getPrimaryIndexChain(b, spec.tbl.TableID)
-			if chain.finalSpec.primary != nil {
-				return chain.finalSpec.primary
-			} else {
-				return chain.oldSpec.primary
-			}
+			return getLatestPrimaryIndex(b, spec.tbl.TableID)
 		}
 
 		inflatedChain := getInflatedPrimaryIndexChain(b, spec.tbl.TableID)

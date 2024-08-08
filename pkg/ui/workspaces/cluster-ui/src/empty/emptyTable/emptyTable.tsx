@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import { Heading, Text } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
 import isString from "lodash/isString";
-import { Heading, Text } from "@cockroachlabs/ui-components";
+import React from "react";
 
 import styles from "./emptyTable.module.scss";
 

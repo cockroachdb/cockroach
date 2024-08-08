@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,17 +39,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
 	originTimestampColumnName = "crdb_replication_origin_timestamp"
-
-	lwwProcessor        = "last-write-wins"
-	udfApplierProcessor = "applier-udf"
 )
 
-// TODO(ssd): Thread through from job
-var udfName string
+type processorType string
+
+// SafeValue implements the redact.SafeValue interface.
+func (p processorType) SafeValue() {}
+
+var _ redact.SafeValue = defaultSQLProcessor
+
+const (
+	lwwProcessor        processorType = "last-write-wins"
+	udfApplierProcessor processorType = "applier-udf"
+)
+
 var defaultSQLProcessor = lwwProcessor
 
 // A sqlRowProcessor is a RowProcessor that handles rows using the
@@ -67,9 +76,9 @@ type sqlRowProcessor struct {
 // A querier handles rows for any table that has previously been added
 // to the querier using the passed isql.Txn and internal executor.
 type querier interface {
-	AddTable(int32, catalog.TableDescriptor) error
-	InsertRow(context.Context, isql.Txn, isql.Executor, cdcevent.Row, *cdcevent.Row, bool) (batchStats, error)
-	DeleteRow(context.Context, isql.Txn, isql.Executor, cdcevent.Row, *cdcevent.Row) (batchStats, error)
+	AddTable(targetDescID int32, tc sqlProcessorTableConfig) error
+	InsertRow(ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevRow *cdcevent.Row, likelyInsert bool) (batchStats, error)
+	DeleteRow(ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevRow *cdcevent.Row) (batchStats, error)
 	RequiresParsedBeforeRow() bool
 }
 
@@ -191,17 +200,22 @@ func (q *queryBuffer) ApplierQueryForRow(row cdcevent.Row) (queryBuilder, error)
 	return applierQueryBuilder, nil
 }
 
+type sqlProcessorTableConfig struct {
+	srcDesc catalog.TableDescriptor
+	dstOID  uint32
+}
+
 func makeSQLProcessor(
 	ctx context.Context,
 	settings *cluster.Settings,
-	tableDescs map[descpb.ID]catalog.TableDescriptor,
+	tableConfigs map[descpb.ID]sqlProcessorTableConfig,
 	ie isql.Executor,
 ) (*sqlRowProcessor, error) {
 	switch defaultSQLProcessor {
 	case lwwProcessor:
-		return makeSQLLastWriteWinsHandler(ctx, settings, tableDescs, ie)
+		return makeSQLLastWriteWinsHandler(ctx, settings, tableConfigs, ie)
 	case udfApplierProcessor:
-		return makeUDFApplierProcessor(ctx, settings, tableDescs, ie)
+		return makeUDFApplierProcessor(ctx, settings, tableConfigs, ie)
 	default:
 		return nil, errors.AssertionFailedf("unknown SQL processor: %s", defaultSQLProcessor)
 	}
@@ -210,16 +224,17 @@ func makeSQLProcessor(
 func makeSQLProcessorFromQuerier(
 	ctx context.Context,
 	settings *cluster.Settings,
-	tableDescs map[descpb.ID]catalog.TableDescriptor,
+	tableDescs map[descpb.ID]sqlProcessorTableConfig,
 	ie isql.Executor,
 	querier querier,
 ) (*sqlRowProcessor, error) {
 	cdcEventTargets := changefeedbase.Targets{}
 	tableDescsBySrcID := make(map[descpb.ID]catalog.TableDescriptor, len(tableDescs))
 
-	for descID, desc := range tableDescs {
+	for descID, tabConfig := range tableDescs {
+		desc := tabConfig.srcDesc
 		tableDescsBySrcID[desc.GetID()] = desc
-		if err := querier.AddTable(int32(descID), desc); err != nil {
+		if err := querier.AddTable(int32(descID), tabConfig); err != nil {
 			return nil, err
 		}
 		cdcEventTargets.Add(changefeedbase.Target{
@@ -298,8 +313,7 @@ func (srp *sqlRowProcessor) SetSyntheticFailurePercent(rate uint32) {
 
 var (
 	forceGenericPlan = sessiondatapb.PlanCacheModeForceGeneric
-	ieOverrides      = sessiondata.InternalExecutorOverride{
-		AttributeToUser: true,
+	ieOverrideBase   = sessiondata.InternalExecutorOverride{
 		// The OriginIDForLogicalDataReplication session variable will bind the
 		// origin ID 1 to each per-statement batch request header sent by the
 		// internal executor. This metadata will be plumbed to the MVCCValueHeader
@@ -325,7 +339,33 @@ var (
 		DisablePlanGists: true,
 		QualityOfService: &sessiondatapb.UserLowQoS,
 	}
+	// Have a separate override for each of the replicated queries.
+	ieOverrideOptimisticInsert, ieOverrideInsert, ieOverrideDelete sessiondata.InternalExecutorOverride
 )
+
+const (
+	replicatedOptimisticInsertOpName = "replicated-optimistic-insert"
+	replicatedInsertOpName           = "replicated-insert"
+	replicatedDeleteOpName           = "replicated-delete"
+	replicatedApplyUDFOpName         = "replicated-apply-udf"
+)
+
+func getIEOverride(opName string) sessiondata.InternalExecutorOverride {
+	o := ieOverrideBase
+	// We want the ingestion queries to show up on the SQL Activity page
+	// alongside with the foreground traffic by default. We can achieve this
+	// by using the same naming scheme as AttributeToUser feature of the IE
+	// override (effectively, we opt out of using the "external" metrics for
+	// the ingestion queries).
+	o.ApplicationName = catconstants.AttributedToUserInternalAppNamePrefix + "-" + opName
+	return o
+}
+
+func init() {
+	ieOverrideOptimisticInsert = getIEOverride(replicatedOptimisticInsertOpName)
+	ieOverrideInsert = getIEOverride(replicatedInsertOpName)
+	ieOverrideDelete = getIEOverride(replicatedDeleteOpName)
+}
 
 var tryOptimisticInsertEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
@@ -349,27 +389,32 @@ const (
 func makeSQLLastWriteWinsHandler(
 	ctx context.Context,
 	settings *cluster.Settings,
-	tableDescs map[descpb.ID]catalog.TableDescriptor,
+	tableConfigs map[descpb.ID]sqlProcessorTableConfig,
 	ie isql.Executor,
 ) (*sqlRowProcessor, error) {
+
+	needFallback := false
+	shouldUseFallback := make(map[catid.DescID]bool, len(tableConfigs))
+	for _, tc := range tableConfigs {
+		shouldUseFallback[tc.srcDesc.GetID()] = tc.dstOID != 0
+		needFallback = needFallback || tc.dstOID != 0
+	}
+
 	var fallbackQuerier querier
-	if udfName != "" {
-		var err error
-		fallbackQuerier, err = makeApplierQuerier(ctx, settings, tableDescs, ie)
-		if err != nil {
-			return nil, err
-		}
+	if needFallback {
+		fallbackQuerier = makeApplierQuerier(ctx, settings, tableConfigs, ie)
 	}
 
 	qb := queryBuffer{
-		deleteQueries: make(map[catid.DescID]queryBuilder, len(tableDescs)),
-		insertQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableDescs)),
+		deleteQueries: make(map[catid.DescID]queryBuilder, len(tableConfigs)),
+		insertQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
 	}
-	return makeSQLProcessorFromQuerier(ctx, settings, tableDescs, ie,
+	return makeSQLProcessorFromQuerier(ctx, settings, tableConfigs, ie,
 		&lwwQuerier{
-			settings:        settings,
-			queryBuffer:     qb,
-			fallbackQuerier: fallbackQuerier,
+			settings:          settings,
+			queryBuffer:       qb,
+			shouldUseFallback: shouldUseFallback,
+			fallbackQuerier:   fallbackQuerier,
 		})
 }
 
@@ -390,12 +435,15 @@ func makeSQLLastWriteWinsHandler(
 //
 // See the design document for possible solutions to both of these problems.
 type lwwQuerier struct {
-	settings        *cluster.Settings
-	queryBuffer     queryBuffer
-	fallbackQuerier querier
+	settings    *cluster.Settings
+	queryBuffer queryBuffer
+
+	shouldUseFallback map[catid.DescID]bool
+	fallbackQuerier   querier
 }
 
-func (lww *lwwQuerier) AddTable(targetDescID int32, td catalog.TableDescriptor) error {
+func (lww *lwwQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) error {
+	td := tc.srcDesc
 	var err error
 	lww.queryBuffer.insertQueries[td.GetID()], err = makeLWWInsertQueries(targetDescID, td)
 	if err != nil {
@@ -406,12 +454,19 @@ func (lww *lwwQuerier) AddTable(targetDescID int32, td catalog.TableDescriptor) 
 		return err
 	}
 
-	if lww.fallbackQuerier != nil {
-		if err := lww.fallbackQuerier.AddTable(targetDescID, td); err != nil {
+	if lww.shouldUseFallbackQuerier(td.GetID()) {
+		if err := lww.fallbackQuerier.AddTable(targetDescID, tc); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (lww *lwwQuerier) shouldUseFallbackQuerier(id catid.DescID) bool {
+	if lww.fallbackQuerier == nil {
+		return false
+	}
+	return lww.shouldUseFallback[id]
 }
 
 func (lww *lwwQuerier) RequiresParsedBeforeRow() bool {
@@ -441,7 +496,7 @@ func (lww *lwwQuerier) InsertRow(
 		return batchStats{}, err
 	}
 
-	fallbackSpecified := lww.fallbackQuerier != nil
+	fallbackSpecified := lww.shouldUseFallbackQuerier(row.TableID)
 	shouldTryOptimisticInsert := likelyInsert && tryOptimisticInsertEnabled.Get(&lww.settings.SV)
 	shouldTryOptimisticInsert = shouldTryOptimisticInsert || fallbackSpecified
 	var optimisticInsertConflicts int64
@@ -450,7 +505,7 @@ func (lww *lwwQuerier) InsertRow(
 		if err != nil {
 			return batchStats{}, err
 		}
-		if _, err = ie.ExecParsed(ctx, "replicated-optimistic-insert", kvTxn, ieOverrides, stmt, datums...); err != nil {
+		if _, err = ie.ExecParsed(ctx, replicatedOptimisticInsertOpName, kvTxn, ieOverrideOptimisticInsert, stmt, datums...); err != nil {
 			// If the optimistic insert failed with unique violation, we have to
 			// fall back to the pessimistic path. If we got a different error,
 			// then we bail completely.
@@ -478,7 +533,7 @@ func (lww *lwwQuerier) InsertRow(
 	if err != nil {
 		return batchStats{}, err
 	}
-	if _, err = ie.ExecParsed(ctx, "replicated-insert", kvTxn, ieOverrides, stmt, datums...); err != nil {
+	if _, err = ie.ExecParsed(ctx, replicatedInsertOpName, kvTxn, ieOverrideInsert, stmt, datums...); err != nil {
 		log.Warningf(ctx, "replicated insert failed (query: %s): %s", stmt.SQL, err.Error())
 		return batchStats{}, err
 	}
@@ -506,7 +561,7 @@ func (lww *lwwQuerier) DeleteRow(
 		return batchStats{}, err
 	}
 
-	if _, err := ie.ExecParsed(ctx, "replicated-delete", kvTxn, ieOverrides, stmt, datums...); err != nil {
+	if _, err := ie.ExecParsed(ctx, replicatedDeleteOpName, kvTxn, ieOverrideDelete, stmt, datums...); err != nil {
 		log.Warningf(ctx, "replicated delete failed (query: %s): %s", stmt.SQL, err.Error())
 		return batchStats{}, err
 	}

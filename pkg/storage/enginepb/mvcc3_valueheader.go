@@ -19,16 +19,30 @@ func (h MVCCValueHeader) IsEmpty() bool {
 }
 
 func (h *MVCCValueHeader) pure() MVCCValueHeaderPure {
-	return MVCCValueHeaderPure{
+	result := MVCCValueHeaderPure{
 		LocalTimestamp:   h.LocalTimestamp,
 		OmitInRangefeeds: h.OmitInRangefeeds,
 		ImportEpoch:      h.ImportEpoch,
 		OriginID:         h.OriginID,
 	}
+	if !h.OriginTimestamp.IsEmpty() {
+		result.OriginTimestamp = &h.OriginTimestamp
+	}
+	return result
 }
 
 func (h *MVCCValueHeader) crdbTest() MVCCValueHeaderCrdbTest {
-	return (MVCCValueHeaderCrdbTest)(*h)
+	result := MVCCValueHeaderCrdbTest{
+		KVNemesisSeq:     h.KVNemesisSeq,
+		LocalTimestamp:   h.LocalTimestamp,
+		OmitInRangefeeds: h.OmitInRangefeeds,
+		ImportEpoch:      h.ImportEpoch,
+		OriginID:         h.OriginID,
+	}
+	if !h.OriginTimestamp.IsEmpty() {
+		result.OriginTimestamp = &h.OriginTimestamp
+	}
+	return result
 }
 
 // Size implements protoutil.Message.

@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { expectSaga, testSaga } from "redux-saga-test-plan";
 import { takeEvery, takeLatest } from "redux-saga/effects";
+import { expectSaga, testSaga } from "redux-saga-test-plan";
 
 import { actions as stmtInsightActions } from "src/store/insights/statementInsights/statementInsights.reducer";
 import { actions as txnInsightActions } from "src/store/insights/transactionInsights/transactionInsights.reducer";
@@ -18,12 +18,12 @@ import { actions as txnStatsActions } from "src/store/transactionStats";
 
 import { defaultTimeScaleSelected } from "../../timeScaleDropdown";
 
+import { actions } from "./localStorage.reducer";
 import {
   localStorageSaga,
   updateLocalStorageItemSaga,
   updateTimeScale,
 } from "./localStorage.saga";
-import { actions } from "./localStorage.reducer";
 
 const ts = defaultTimeScaleSelected;
 

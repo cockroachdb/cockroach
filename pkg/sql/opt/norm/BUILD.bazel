@@ -14,6 +14,7 @@ go_library(
         "join_funcs.go",
         "limit_funcs.go",
         "list_sorter.go",
+        "lock_funcs.go",
         "mutation_funcs.go",
         "ordering_funcs.go",
         "project_builder.go",
@@ -118,7 +119,7 @@ genrule(
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ factory $(locations //pkg/sql/opt:ops) $(locations :rules)
     """,
-    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",

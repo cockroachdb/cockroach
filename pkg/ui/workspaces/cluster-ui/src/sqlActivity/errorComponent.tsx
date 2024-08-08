@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import classNames from "classnames/bind";
 import moment from "moment-timezone";
+import React from "react";
 
 import { isRequestError, RequestError } from "../util";
 

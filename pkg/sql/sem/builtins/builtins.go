@@ -6967,15 +6967,11 @@ Parameters:` + randgencfg.ConfigDoc,
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
-			// NOTE: as_of and as_of_consumed_tokens are not used and can be
-			// deprecated.
 			Types: tree.ParamTypes{
 				{Name: "tenant_name", Typ: types.String},
 				{Name: "available_tokens", Typ: types.Float},
 				{Name: "refill_rate", Typ: types.Float},
 				{Name: "max_burst_tokens", Typ: types.Float},
-				{Name: "as_of", Typ: types.Timestamp},
-				{Name: "as_of_consumed_tokens", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -8789,6 +8785,38 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				return tree.DVoidDatum, evalCtx.Planner.ExtendHistoryRetention(ctx, jobID)
 			},
 			Info:       `This function is used to extend the life of a cluster-wide PTS record`,
+			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.clear_query_plan_cache": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategorySystemRepair,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				evalCtx.Planner.ClearQueryPlanCache()
+				return tree.DVoidDatum, nil
+			},
+			Info:       `This function is used to clear the query plan cache on the gateway node`,
+			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.clear_table_stats_cache": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategorySystemRepair,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				evalCtx.Planner.ClearTableStatsCache()
+				return tree.DVoidDatum, nil
+			},
+			Info:       `This function is used to clear the table statistics cache on the gateway node`,
 			Volatility: volatility.Volatile,
 		},
 	),

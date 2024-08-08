@@ -768,6 +768,9 @@ type TableDescriptor interface {
 	// swap mutation or a secondary index used by the declarative schema changer
 	// for a primary index swap.
 	IsPrimaryKeySwapMutation(m *descpb.DescriptorMutation) bool
+	// ExternalRowData indicates where the row data for this object is stored if
+	// it is stored outside the span of the object.
+	ExternalRowData() *descpb.ExternalRowData
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.

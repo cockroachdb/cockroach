@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cli_test
+package cli
 
 import (
 	"os"
@@ -24,6 +24,10 @@ import (
 )
 
 func init() {
+	ResetTest()
+}
+
+func ResetTest() {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 }
 

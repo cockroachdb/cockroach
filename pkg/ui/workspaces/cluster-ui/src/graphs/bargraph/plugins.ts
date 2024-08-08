@@ -8,10 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import uPlot, { Plugin } from "uplot";
 import moment from "moment-timezone";
+import uPlot, { Plugin } from "uplot";
 
-import { AxisUnits } from "../utils/domain";
 import {
   Bytes,
   Duration,
@@ -20,6 +19,7 @@ import {
   FormatWithTimezone,
   DATE_WITH_SECONDS_FORMAT_24_TZ,
 } from "../../util";
+import { AxisUnits } from "../utils/domain";
 
 // Fallback color for series stroke if one is not defined.
 const DEFAULT_STROKE = "#7e89a9";

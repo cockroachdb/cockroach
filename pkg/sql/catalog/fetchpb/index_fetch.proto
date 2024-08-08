@@ -17,6 +17,7 @@ import "gogoproto/gogo.proto";
 import "sql/types/types.proto";
 import "sql/catalog/catenumpb/index.proto";
 import "geo/geopb/config.proto";
+import "util/hlc/timestamp.proto";
 
 // IndexFetchSpec contains the subset of information (from TableDescriptor and
 // IndexDescriptor) that is necessary to decode KVs into SQL keys and values.
@@ -111,7 +112,7 @@ message IndexFetchSpec {
   optional uint32 max_keys_per_row = 10 [(gogoproto.nullable) = false];
 
   // KeyPrefixLength is the length of the key prefix that encodes the table and
-  // index ID.
+  // index ID. It is used to speed up the decoding process.
   optional uint32 key_prefix_length = 11 [(gogoproto.nullable) = false];
 
   optional uint32 max_family_id = 12 [(gogoproto.nullable) = false,
@@ -131,4 +132,20 @@ message IndexFetchSpec {
   //
   // Any other column IDs present in the fetched KVs will be ignored.
   repeated Column fetched_columns = 15 [(gogoproto.nullable) = false];
+
+  message ExternalRowData {
+    optional util.hlc.Timestamp as_of = 1 [(gogoproto.nullable) = false];
+    // OldPrefix contains the original TenantPrefix + TableID prefix of the keys
+    // produced by SQL layer that need to be remapped to the external data.
+    optional bytes old_prefix = 2;
+    // NewPrefix contains the re-mapped TenantPrefix + TableID prefix of the
+    // keys that need to be used against the KV layer to fetch the external
+    // data.
+    optional bytes new_prefix = 3;
+  }
+  // External, if set, indicates where the row data for this object is stored if
+  // it is stored outside the span of the object.
+  optional ExternalRowData external  = 17 [(gogoproto.nullable) = true];
+
+  // NEXT ID 18.
 }

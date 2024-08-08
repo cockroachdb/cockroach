@@ -8,21 +8,21 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { util } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames";
 import d3 from "d3";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
-import { util } from "@cockroachlabs/cluster-ui";
 
 import spinner from "assets/spinner.gif";
-import { AdminUIState } from "src/redux/state";
-import { nodeSumsSelector } from "src/redux/nodes";
-import createChartComponent from "src/views/shared/util/d3-react";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
-import OverviewListAlerts from "src/views/shared/containers/alerts/overviewListAlerts";
+import { nodeSumsSelector } from "src/redux/nodes";
+import { AdminUIState } from "src/redux/state";
 import EmailSubscription from "src/views/dashboard/emailSubscription";
+import OverviewListAlerts from "src/views/shared/containers/alerts/overviewListAlerts";
+import createChartComponent from "src/views/shared/util/d3-react";
 
 import capacityChart from "./capacity";
 import "./cluster.styl";

@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, put, takeLatest } from "redux-saga/effects";
 import moment from "moment-timezone";
+import { all, call, put, takeLatest } from "redux-saga/effects";
 
 import { getDatabasesList } from "src/api";
 

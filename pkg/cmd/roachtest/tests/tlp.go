@@ -43,6 +43,7 @@ func registerTLP(r registry.Registry) {
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		NativeLibs:       registry.LibGEOS,
+		Randomized:       true,
 		Run:              runTLP,
 		ExtraLabels:      []string{"O-rsg"},
 	})
@@ -171,7 +172,7 @@ func runOneTLP(
 		// for a fraction of iterations after that to continually change the
 		// state of the database.
 		if i < 1000 || i%10 == 0 {
-			runMutationStatement(conn, mutSmither, logStmt)
+			runMutationStatement(conn, "", mutSmither, logStmt)
 			continue
 		}
 
@@ -183,7 +184,9 @@ func runOneTLP(
 
 // runMutationsStatement runs a random INSERT, UPDATE, or DELETE statement that
 // potentially modifies the state of the database.
-func runMutationStatement(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)) {
+func runMutationStatement(
+	conn *gosql.DB, connInfo string, smither *sqlsmith.Smither, logStmt func(string),
+) {
 	// Ignore panics from Generate.
 	defer func() {
 		if r := recover(); r != nil {
@@ -198,7 +201,7 @@ func runMutationStatement(conn *gosql.DB, smither *sqlsmith.Smither, logStmt fun
 	_ = runWithTimeout(func() error {
 		// Ignore errors. Log successful statements.
 		if _, err = conn.Exec(stmt); err == nil {
-			logStmt(stmt)
+			logStmt(connInfo + stmt)
 		}
 		return nil
 	})

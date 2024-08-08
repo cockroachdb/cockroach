@@ -343,7 +343,7 @@ func (r *testRunner) Run(
 			}
 			//  TODO(bhaskar): remove this once we have more usage details
 			//  and more convinced about using spot VMs for all the runs.
-			if roachtestflags.Cloud == spec.GCE &&
+			if (roachtestflags.Cloud == spec.GCE || roachtestflags.Cloud == spec.AWS) &&
 				tests[i].Benchmark &&
 				!tests[i].Suites.Contains(registry.Weekly) &&
 				!tests[i].IsLastFailurePreempt() &&
@@ -453,7 +453,7 @@ func (r *testRunner) Run(
 // N.B. currently this value is hardcoded per cloud provider.
 func numConcurrentClusterCreations() int {
 	var res int
-	if roachtestflags.Cloud == "aws" {
+	if roachtestflags.Cloud == spec.AWS {
 		// AWS has ridiculous API calls limits, so we're going to create one cluster
 		// at a time. Internally, roachprod has throttling for the calls required to
 		// create a single cluster.
@@ -730,6 +730,11 @@ func (r *testRunner) runWorker(
 			return err
 		}
 
+		// Verify that the deprecated workload is available if needed.
+		if testToRun.spec.RequiresDeprecatedWorkload && workload[arch] == "" {
+			return errors.Errorf("%s requires deprecated workload binary but one was not found", testToRun.spec.Name)
+		}
+
 		var clusterCreateErr error
 		var vmCreateOpts *vm.CreateOpts
 
@@ -855,6 +860,9 @@ func (r *testRunner) runWorker(
 			}
 			if setupErr == nil {
 				setupErr = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
+			}
+			if setupErr == nil {
+				setupErr = c.PutDeprecatedWorkload(ctx, l, t)
 			}
 
 			if setupErr != nil {

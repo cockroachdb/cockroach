@@ -12,6 +12,7 @@ package storage
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/replay"
 	"github.com/cockroachdb/pebble/sstable"
+	"github.com/cockroachdb/pebble/sstable/block"
 	"github.com/cockroachdb/pebble/vfs"
 	humanize "github.com/dustin/go-humanize"
 )
@@ -389,142 +391,182 @@ func ShouldUseEFOS(settings *settings.Values) bool {
 	return UseEFOS.Get(settings) || UseExciseForSnapshots.Get(settings)
 }
 
-// EngineKeyCompare compares cockroach keys, including the version (which
-// could be MVCC timestamps).
-func EngineKeyCompare(a, b []byte) int {
+// EngineSuffixCompare implements pebble.Comparer.CompareSuffixes. It compares
+// cockroach suffixes (which are composed of the version and a trailing sentinel
+// byte); the version can be an MVCC timestamp or a lock key.
+func EngineSuffixCompare(a, b []byte) int {
 	// NB: For performance, this routine manually splits the key into the
 	// user-key and version components rather than using DecodeEngineKey. In
 	// most situations, use DecodeEngineKey or GetKeyPartFromEngineKey or
 	// SplitMVCCKey instead of doing this.
-	aEnd := len(a) - 1
-	bEnd := len(b) - 1
-	if aEnd < 0 || bEnd < 0 {
-		// This should never happen unless there is some sort of corruption of
-		// the keys.
-		return bytes.Compare(a, b)
+	if len(a) == 0 || len(b) == 0 {
+		// Empty suffixes sort before non-empty suffixes.
+		return cmp.Compare(len(a), len(b))
+	}
+	return bytes.Compare(
+		normalizeEngineSuffixForCompare(b),
+		normalizeEngineSuffixForCompare(a),
+	)
+}
+
+func checkEngineKey(k []byte) {
+	if len(k) == 0 {
+		panic(errors.AssertionFailedf("empty key"))
+	}
+	if int(k[len(k)-1]) >= len(k) {
+		panic(errors.AssertionFailedf("malformed key sentinel byte: %x", k))
+	}
+}
+
+// EngineKeySplit implements pebble.Compare.Split. It returns the length of the
+// prefix (the key without the version part).
+func EngineKeySplit(k []byte) int {
+	// TODO(radu): Pebble sometimes passes empty "keys" and we have to tolerate
+	// them until we fix that.
+	if len(k) == 0 {
+		return 0
+	}
+	// NB: For performance, this routine manually splits the key rather than using
+	// SplitMVCCKey. In most situations, use SplitMVCCKey instead of doing this.
+	if buildutil.CrdbTestBuild {
+		checkEngineKey(k)
+	}
+	// Pebble requires that keys generated via a split be comparable with
+	// normal encoded engine keys. Encoded engine keys have a suffix
+	// indicating the number of bytes of version data. Engine keys without a
+	// version have a suffix of 0. We're careful in EncodeKey to make sure
+	// that the user-key always has a trailing 0. If there is no version this
+	// falls out naturally. If there is a version we prepend a 0 to the
+	// encoded version data.
+	suffixLen := int(k[len(k)-1])
+	return len(k) - suffixLen
+}
+
+// EngineKeyCompare compares cockroach keys, including the version (which
+// could be MVCC timestamps).
+func EngineKeyCompare(a, b []byte) int {
+	// TODO(radu): Pebble sometimes passes empty "keys" and we have to tolerate
+	// them until we fix that.
+	if len(a) == 0 || len(b) == 0 {
+		return cmp.Compare(len(a), len(b))
+	}
+	// NB: For performance, this routine manually splits the key into the
+	// user-key and version components rather than using DecodeEngineKey. In
+	// most situations, use DecodeEngineKey or GetKeyPartFromEngineKey or
+	// SplitMVCCKey instead of doing this.
+	if buildutil.CrdbTestBuild {
+		checkEngineKey(a)
+		checkEngineKey(b)
 	}
 
-	// Compute the index of the separator between the key and the version. If the
-	// separator is found to be at -1 for both keys, then we are comparing bare
-	// suffixes without a user key part. Pebble requires bare suffixes to be
-	// comparable with the same ordering as if they had a common user key.
-	aSep := aEnd - int(a[aEnd])
-	bSep := bEnd - int(b[bEnd])
-	if aSep == -1 && bSep == -1 {
-		aSep, bSep = 0, 0 // comparing bare suffixes
-	}
-	if aSep < 0 || bSep < 0 {
-		// This should never happen unless there is some sort of corruption of
-		// the keys.
-		return bytes.Compare(a, b)
-	}
+	aSuffixLen := int(a[len(a)-1])
+	aSuffixStart := len(a) - aSuffixLen
+	bSuffixLen := int(b[len(b)-1])
+	bSuffixStart := len(b) - bSuffixLen
 
 	// Compare the "user key" part of the key.
-	if c := bytes.Compare(a[:aSep], b[:bSep]); c != 0 {
+	if c := bytes.Compare(a[:aSuffixStart], b[:bSuffixStart]); c != 0 {
 		return c
 	}
-
-	// Compare the version part of the key. Note that when the version is a
-	// timestamp, the timestamp encoding causes byte comparison to be equivalent
-	// to timestamp comparison.
-	aVer := a[aSep:aEnd]
-	bVer := b[bSep:bEnd]
-	if len(aVer) == 0 {
-		if len(bVer) == 0 {
-			return 0
-		}
-		return -1
-	} else if len(bVer) == 0 {
-		return 1
+	if aSuffixLen == 0 || bSuffixLen == 0 {
+		// Empty suffixes come before non-empty suffixes.
+		return cmp.Compare(aSuffixLen, bSuffixLen)
 	}
-	aVer = normalizeEngineKeyVersionForCompare(aVer)
-	bVer = normalizeEngineKeyVersionForCompare(bVer)
-	return bytes.Compare(bVer, aVer)
+
+	return bytes.Compare(
+		normalizeEngineSuffixForCompare(b[bSuffixStart:]),
+		normalizeEngineSuffixForCompare(a[aSuffixStart:]),
+	)
 }
 
 // EngineKeyEqual checks for equality of cockroach keys, including the version
 // (which could be MVCC timestamps).
 func EngineKeyEqual(a, b []byte) bool {
+	// TODO(radu): Pebble sometimes passes empty "keys" and we have to tolerate
+	// them until we fix that.
+	if len(a) == 0 || len(b) == 0 {
+		return len(a) == len(b)
+	}
 	// NB: For performance, this routine manually splits the key into the
 	// user-key and version components rather than using DecodeEngineKey. In
 	// most situations, use DecodeEngineKey or GetKeyPartFromEngineKey or
 	// SplitMVCCKey instead of doing this.
-	aEnd := len(a) - 1
-	bEnd := len(b) - 1
-	if aEnd < 0 || bEnd < 0 {
-		// This should never happen unless there is some sort of corruption of
-		// the keys.
-		return bytes.Equal(a, b)
+	if buildutil.CrdbTestBuild {
+		checkEngineKey(a)
+		checkEngineKey(b)
 	}
 
-	// Last byte is the version length + 1 when there is a version,
-	// else it is 0.
-	aVerLen := int(a[aEnd])
-	bVerLen := int(b[bEnd])
+	aSuffixLen := int(a[len(a)-1])
+	aSuffixStart := len(a) - aSuffixLen
+	bSuffixLen := int(b[len(b)-1])
+	bSuffixStart := len(b) - bSuffixLen
 
-	// Fast-path. If the key version is empty or contains only a walltime
-	// component then normalizeEngineKeyVersionForCompare is a no-op, so we don't
-	// need to split the "user key" from the version suffix before comparing to
-	// compute equality. Instead, we can check for byte equality immediately.
+	// Fast-path: normalizeEngineSuffixForCompare doesn't strip off bytes when the
+	// length is withWall or withLockTableLen. In this case, as well as cases with
+	// no prefix, we can check for byte equality immediately.
 	const withWall = mvccEncodedTimeSentinelLen + mvccEncodedTimeWallLen
 	const withLockTableLen = mvccEncodedTimeSentinelLen + engineKeyVersionLockTableLen
-	if (aVerLen <= withWall && bVerLen <= withWall) || (aVerLen == withLockTableLen && bVerLen == withLockTableLen) {
-		return bytes.Equal(a, b)
-	}
-
-	// Compute the index of the separator between the key and the version. If the
-	// separator is found to be at -1 for both keys, then we are comparing bare
-	// suffixes without a user key part. Pebble requires bare suffixes to be
-	// comparable with the same ordering as if they had a common user key.
-	aSep := aEnd - aVerLen
-	bSep := bEnd - bVerLen
-	if aSep == -1 && bSep == -1 {
-		aSep, bSep = 0, 0 // comparing bare suffixes
-	}
-	if aSep < 0 || bSep < 0 {
-		// This should never happen unless there is some sort of corruption of
-		// the keys.
+	if (aSuffixLen <= withWall && bSuffixLen <= withWall) ||
+		(aSuffixLen == withLockTableLen && bSuffixLen == withLockTableLen) ||
+		aSuffixLen == 0 || bSuffixLen == 0 {
 		return bytes.Equal(a, b)
 	}
 
 	// Compare the "user key" part of the key.
-	if !bytes.Equal(a[:aSep], b[:bSep]) {
+	if !bytes.Equal(a[:aSuffixStart], b[:bSuffixStart]) {
 		return false
 	}
 
-	// Compare the version part of the key.
-	aVer := a[aSep:aEnd]
-	bVer := b[bSep:bEnd]
-	aVer = normalizeEngineKeyVersionForCompare(aVer)
-	bVer = normalizeEngineKeyVersionForCompare(bVer)
-	return bytes.Equal(aVer, bVer)
+	return bytes.Equal(
+		normalizeEngineSuffixForCompare(a[aSuffixStart:]),
+		normalizeEngineSuffixForCompare(b[bSuffixStart:]),
+	)
 }
 
 var zeroLogical [mvccEncodedTimeLogicalLen]byte
 
+// normalizeEngineSuffixForCompare takes a non-empty key suffix (including the
+// trailing sentinel byte) and returns a prefix of the buffer that should be
+// used for byte-wise comparison. It trims the trailing suffix length byte and
+// any other trailing bytes that need to be ignored (like a synthetic bit or
+// zero logical component).
+//
 //gcassert:inline
-func normalizeEngineKeyVersionForCompare(a []byte) []byte {
-	// In general, the version could also be a non-timestamp version, but we know
-	// that engineKeyVersionLockTableLen+mvccEncodedTimeSentinelLen is a different
-	// constant than the above, so there is no danger here of stripping parts from
-	// a non-timestamp version.
-	const withWall = mvccEncodedTimeSentinelLen + mvccEncodedTimeWallLen
-	const withLogical = withWall + mvccEncodedTimeLogicalLen
-	const withSynthetic = withLogical + mvccEncodedTimeSyntheticLen
-	if len(a) == withSynthetic {
+func normalizeEngineSuffixForCompare(a []byte) []byte {
+	// Check sentinel byte.
+	if buildutil.CrdbTestBuild && len(a) != int(a[len(a)-1]) {
+		panic(errors.AssertionFailedf("malformed suffix: %x", a))
+	}
+	// Strip off sentinel byte.
+	a = a[:len(a)-1]
+	switch len(a) {
+	case engineKeyVersionWallLogicalAndSyntheticTimeLen:
 		// Strip the synthetic bit component from the timestamp version. The
 		// presence of the synthetic bit does not affect key ordering or equality.
-		a = a[:withLogical]
-	}
-	if len(a) == withLogical {
+		a = a[:engineKeyVersionWallAndLogicalTimeLen]
+		fallthrough
+	case engineKeyVersionWallAndLogicalTimeLen:
 		// If the timestamp version contains a logical timestamp component that is
 		// zero, strip the component. encodeMVCCTimestampToBuf will typically omit
 		// the entire logical component in these cases as an optimization, but it
 		// does not guarantee to never include a zero logical component.
 		// Additionally, we can fall into this case after stripping off other
 		// components of the key version earlier on in this function.
-		if bytes.Equal(a[withWall:], zeroLogical[:]) {
-			a = a[:withWall]
+		if bytes.Equal(a[engineKeyVersionWallTimeLen:], zeroLogical[:]) {
+			a = a[:engineKeyVersionWallTimeLen]
+		}
+		fallthrough
+	case engineKeyVersionWallTimeLen:
+		// Nothing to do.
+
+	case engineKeyVersionLockTableLen:
+		// We rely on engineKeyVersionLockTableLen being different from the other
+		// lengths above to ensure that we don't strip parts from a non-timestamp
+		// version.
+
+	default:
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("version with unexpected length: %x", a))
 		}
 	}
 	return a
@@ -533,9 +575,10 @@ func normalizeEngineKeyVersionForCompare(a []byte) []byte {
 // EngineComparer is a pebble.Comparer object that implements MVCC-specific
 // comparator settings for use with Pebble.
 var EngineComparer = &pebble.Comparer{
-	Compare: EngineKeyCompare,
-
-	Equal: EngineKeyEqual,
+	Split:           EngineKeySplit,
+	CompareSuffixes: EngineSuffixCompare,
+	Compare:         EngineKeyCompare,
+	Equal:           EngineKeyEqual,
 
 	AbbreviatedKey: func(k []byte) uint64 {
 		key, ok := GetKeyPartFromEngineKey(k)
@@ -615,29 +658,6 @@ var EngineComparer = &pebble.Comparer{
 		return append(append(dst, a...), 0)
 	},
 
-	Split: func(k []byte) int {
-		keyLen := len(k)
-		if keyLen == 0 {
-			return 0
-		}
-		// Last byte is the version length + 1 when there is a version,
-		// else it is 0.
-		versionLen := int(k[keyLen-1])
-		// keyPartEnd points to the sentinel byte.
-		keyPartEnd := keyLen - 1 - versionLen
-		if keyPartEnd < 0 {
-			return keyLen
-		}
-		// Pebble requires that keys generated via a split be comparable with
-		// normal encoded engine keys. Encoded engine keys have a suffix
-		// indicating the number of bytes of version data. Engine keys without a
-		// version have a suffix of 0. We're careful in EncodeKey to make sure
-		// that the user-key always has a trailing 0. If there is no version this
-		// falls out naturally. If there is a version we prepend a 0 to the
-		// encoded version data.
-		return keyPartEnd + 1
-	},
-
 	Name: "cockroach_comparator",
 }
 
@@ -655,92 +675,59 @@ var MVCCMerger = &pebble.Merger{
 	},
 }
 
-var _ sstable.BlockIntervalSyntheticReplacer = MVCCBlockIntervalSyntheticReplacer{}
+var _ sstable.BlockIntervalSuffixReplacer = MVCCBlockIntervalSuffixReplacer{}
 
-type MVCCBlockIntervalSyntheticReplacer struct{}
+type MVCCBlockIntervalSuffixReplacer struct{}
 
-func (mbsr MVCCBlockIntervalSyntheticReplacer) AdjustIntervalWithSyntheticSuffix(
-	lower uint64, upper uint64, suffix []byte,
-) (adjustedLower uint64, adjustedUpper uint64, err error) {
-	synthDecoded, err := DecodeMVCCTimestampSuffix(suffix)
+func (MVCCBlockIntervalSuffixReplacer) ApplySuffixReplacement(
+	interval sstable.BlockInterval, newSuffix []byte,
+) (sstable.BlockInterval, error) {
+	synthDecoded, err := DecodeMVCCTimestampSuffix(newSuffix)
 	if err != nil {
-		return 0, 0, errors.AssertionFailedf("could not decode synthetic suffix")
+		return sstable.BlockInterval{}, errors.AssertionFailedf("could not decode synthetic suffix")
 	}
 	synthDecodedWalltime := uint64(synthDecoded.WallTime)
-	if upper >= synthDecodedWalltime {
-		return 0, 0, errors.AssertionFailedf("the synthetic suffix %d is less than or equal to the original upper bound %d", synthDecoded, upper)
-	}
 	// The returned bound includes the synthetic suffix, regardless of its logical
 	// component.
-	return synthDecodedWalltime, synthDecodedWalltime + 1, nil
+	return sstable.BlockInterval{Lower: synthDecodedWalltime, Upper: synthDecodedWalltime + 1}, nil
 }
 
-// pebbleDataBlockMVCCTimeIntervalPointCollector implements
-// pebble.DataBlockIntervalCollector for point keys.
-type pebbleDataBlockMVCCTimeIntervalPointCollector struct {
-	pebbleDataBlockMVCCTimeIntervalCollector
-}
+type pebbleIntervalMapper struct{}
 
-var _ sstable.DataBlockIntervalCollector = (*pebbleDataBlockMVCCTimeIntervalPointCollector)(nil)
+var _ sstable.IntervalMapper = pebbleIntervalMapper{}
 
-func (tc *pebbleDataBlockMVCCTimeIntervalPointCollector) Add(
-	key pebble.InternalKey, _ []byte,
-) error {
-	return tc.add(key.UserKey)
-}
-
-// pebbleDataBlockMVCCTimeIntervalRangeCollector implements
-// pebble.DataBlockIntervalCollector for range keys.
-type pebbleDataBlockMVCCTimeIntervalRangeCollector struct {
-	pebbleDataBlockMVCCTimeIntervalCollector
-}
-
-var _ sstable.DataBlockIntervalCollector = (*pebbleDataBlockMVCCTimeIntervalRangeCollector)(nil)
-
-func (tc *pebbleDataBlockMVCCTimeIntervalRangeCollector) Add(
+// MapPointKey is part of the sstable.IntervalMapper interface.
+func (pebbleIntervalMapper) MapPointKey(
 	key pebble.InternalKey, value []byte,
-) error {
-	// TODO(erikgrinaker): should reuse a buffer for keysDst, but keyspan.Key is
-	// not exported by Pebble.
-	span, err := rangekey.Decode(key, value, nil)
-	if err != nil {
-		return errors.Wrapf(err, "decoding range key at %s", key)
-	}
+) (sstable.BlockInterval, error) {
+	return mapSuffixToInterval(key.UserKey)
+}
+
+// MapRangeKey is part of the sstable.IntervalMapper interface.
+func (pebbleIntervalMapper) MapRangeKeys(span sstable.Span) (sstable.BlockInterval, error) {
+	var res sstable.BlockInterval
 	for _, k := range span.Keys {
-		if err := tc.add(k.Suffix); err != nil {
-			return errors.Wrapf(err, "recording suffix %x for range key at %s", k.Suffix, key)
+		i, err := mapSuffixToInterval(k.Suffix)
+		if err != nil {
+			return sstable.BlockInterval{}, err
 		}
+		res.UnionWith(i)
 	}
-	return nil
+	return res, nil
 }
 
-// pebbleDataBlockMVCCTimeIntervalCollector is a helper for a
-// pebble.DataBlockIntervalCollector that is used to construct a
-// pebble.BlockPropertyCollector. This provides per-block filtering, which
-// also gets aggregated to the sstable-level and filters out sstables. It must
-// only be used for MVCCKeyIterKind iterators, since it will ignore
-// blocks/sstables that contain intents (and any other key that is not a real
-// MVCC key).
-//
-// This is wrapped by structs for point or range key collection, which actually
-// implement pebble.DataBlockIntervalCollector.
-type pebbleDataBlockMVCCTimeIntervalCollector struct {
-	// min, max are the encoded timestamps.
-	min, max []byte
-}
-
-// add collects the given slice in the collector. The slice may be an entire
-// encoded MVCC key, or the bare suffix of an encoded key.
-func (tc *pebbleDataBlockMVCCTimeIntervalCollector) add(b []byte) error {
+// mapSuffixToInterval maps the suffix of a key to a timestamp interval.
+// The buffer can be an entire key or just the suffix.
+func mapSuffixToInterval(b []byte) (sstable.BlockInterval, error) {
 	if len(b) == 0 {
-		return nil
+		return sstable.BlockInterval{}, nil
 	}
 	// Last byte is the version length + 1 when there is a version,
 	// else it is 0.
 	versionLen := int(b[len(b)-1])
 	if versionLen == 0 {
 		// This is not an MVCC key that we can collect.
-		return nil
+		return sstable.BlockInterval{}, nil
 	}
 	// prefixPartEnd points to the sentinel byte, unless this is a bare suffix, in
 	// which case the index is -1.
@@ -748,7 +735,7 @@ func (tc *pebbleDataBlockMVCCTimeIntervalCollector) add(b []byte) error {
 	// Sanity check: the index should be >= -1. Additionally, if the index is >=
 	// 0, it should point to the sentinel byte, as this is a full EngineKey.
 	if prefixPartEnd < -1 || (prefixPartEnd >= 0 && b[prefixPartEnd] != sentinel) {
-		return errors.Errorf("invalid key %s", roachpb.Key(b).String())
+		return sstable.BlockInterval{}, errors.Errorf("invalid key %s", roachpb.Key(b).String())
 	}
 	// We don't need the last byte (the version length).
 	versionLen--
@@ -758,67 +745,10 @@ func (tc *pebbleDataBlockMVCCTimeIntervalCollector) add(b []byte) error {
 		versionLen == engineKeyVersionWallLogicalAndSyntheticTimeLen {
 		// INVARIANT: -1 <= prefixPartEnd < len(b) - 1.
 		// Version consists of the bytes after the sentinel and before the length.
-		b = b[prefixPartEnd+1 : len(b)-1]
-		// Lexicographic comparison on the encoded timestamps is equivalent to the
-		// comparison on decoded timestamps, so delay decoding.
-		if len(tc.min) == 0 || bytes.Compare(b, tc.min) < 0 {
-			tc.min = append(tc.min[:0], b...)
-		}
-		if len(tc.max) == 0 || bytes.Compare(b, tc.max) > 0 {
-			tc.max = append(tc.max[:0], b...)
-		}
+		ts := binary.BigEndian.Uint64(b[prefixPartEnd+1:])
+		return sstable.BlockInterval{Lower: ts, Upper: ts + 1}, nil
 	}
-	return nil
-}
-
-func decodeWallTime(ts []byte) uint64 {
-	return binary.BigEndian.Uint64(ts[0:engineKeyVersionWallTimeLen])
-}
-
-// FinishDataBlock is part of the sstable.DataBlockIntervalCollector interface.
-func (tc *pebbleDataBlockMVCCTimeIntervalCollector) FinishDataBlock() (
-	lower uint64,
-	upper uint64,
-	err error,
-) {
-	if len(tc.min) == 0 {
-		// No calls to Add that contained a timestamped key.
-		return 0, 0, nil
-	}
-	// Construct a [lower, upper) walltime that will contain all the
-	// hlc.Timestamps in this block.
-	lower = decodeWallTime(tc.min)
-	// Remember that we have to reset tc.min and tc.max to get ready for the
-	// next data block, as specified in the DataBlockIntervalCollector interface
-	// help and help too.
-	tc.min = tc.min[:0]
-	// The actual value encoded into walltime is an int64, so +1 will not
-	// overflow.
-	//
-	// Note that the timestamp with a wall time tc.max+1 and no logical component is
-	// a valid exclusive upper bound for timestamps with wall time tc.max and any
-	// logical component.
-	upper = decodeWallTime(tc.max) + 1
-	tc.max = tc.max[:0]
-	if lower >= upper {
-		return 0, 0,
-			errors.Errorf("corrupt timestamps lower %d >= upper %d", lower, upper)
-	}
-	return lower, upper, nil
-}
-
-// AddCollectedWithSuffixReplacement is part of the
-// sstable.DataBlockIntervalCollector interface.
-func (tc *pebbleDataBlockMVCCTimeIntervalCollector) AddCollectedWithSuffixReplacement(
-	oldLower, oldUpper uint64, oldSuffix, newSuffix []byte,
-) error {
-	return tc.add(newSuffix)
-}
-
-// SupportsSuffixReplacement is part of the sstable.DataBlockIntervalCollector
-// interface.
-func (tc *pebbleDataBlockMVCCTimeIntervalCollector) SupportsSuffixReplacement() bool {
-	return true
+	return sstable.BlockInterval{}, nil
 }
 
 const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
@@ -850,8 +780,8 @@ var PebbleBlockPropertyCollectors = []func() pebble.BlockPropertyCollector{
 	func() pebble.BlockPropertyCollector {
 		return sstable.NewBlockIntervalCollector(
 			mvccWallTimeIntervalCollector,
-			&pebbleDataBlockMVCCTimeIntervalPointCollector{},
-			&pebbleDataBlockMVCCTimeIntervalRangeCollector{},
+			pebbleIntervalMapper{},
+			MVCCBlockIntervalSuffixReplacer{},
 		)
 	},
 }
@@ -910,8 +840,8 @@ func DefaultPebbleOptions() *pebble.Options {
 	}
 	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
 	opts.Experimental.RequiredInPlaceValueBound = pebble.UserKeyPrefixBound{
-		Lower: keys.LocalRangeLockTablePrefix,
-		Upper: keys.LocalRangeLockTablePrefix.PrefixEnd(),
+		Lower: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix}),
+		Upper: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()}),
 	}
 
 	for i := 0; i < len(opts.Levels); i++ {
@@ -1165,8 +1095,8 @@ func (p *Pebble) Download(ctx context.Context, span roachpb.Span, copy bool) err
 		return nil
 	}
 	downloadSpan := pebble.DownloadSpan{
-		StartKey:               span.Key,
-		EndKey:                 span.EndKey,
+		StartKey:               EncodeMVCCKey(MVCCKey{Key: span.Key}),
+		EndKey:                 EncodeMVCCKey(MVCCKey{Key: span.EndKey}),
 		ViaBackingFileDownload: copy,
 	}
 	return p.db.Download(ctx, []pebble.DownloadSpan{downloadSpan})
@@ -1214,7 +1144,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	cfg.opts.Lock = cfg.env.DirectoryLock
 	cfg.opts.ErrorIfNotExists = cfg.mustExist
 	for i := range cfg.opts.Levels {
-		cfg.opts.Levels[i].Compression = func() sstable.Compression {
+		cfg.opts.Levels[i].Compression = func() block.Compression {
 			return getCompressionAlgorithm(ctx, cfg.settings, CompressionAlgorithmStorage)
 		}
 	}
@@ -2201,7 +2131,9 @@ func (p *Pebble) GetMetrics() Metrics {
 	p.batchCommitStats.Lock()
 	m.BatchCommitStats = p.batchCommitStats.AggregatedBatchCommitStats
 	p.batchCommitStats.Unlock()
-	m.DiskWriteStats = p.diskWriteStatsCollector.GetStats()
+	if p.diskWriteStatsCollector != nil {
+		m.DiskWriteStats = p.diskWriteStatsCollector.GetStats()
+	}
 	return m
 }
 
@@ -2402,8 +2334,11 @@ func (p *Pebble) PreIngestDelay(ctx context.Context) {
 
 // GetTableMetrics implements the Engine interface.
 func (p *Pebble) GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetricsInfo, error) {
-	tableInfo, err := p.db.SSTables(pebble.WithKeyRangeFilter(start, end), pebble.WithProperties(), pebble.WithApproximateSpanBytes())
-
+	filterOpt := pebble.WithKeyRangeFilter(
+		EncodeMVCCKey(MVCCKey{Key: start}),
+		EncodeMVCCKey(MVCCKey{Key: end}),
+	)
+	tableInfo, err := p.db.SSTables(filterOpt, pebble.WithProperties(), pebble.WithApproximateSpanBytes())
 	if err != nil {
 		return []enginepb.SSTableMetricsInfo{}, err
 	}

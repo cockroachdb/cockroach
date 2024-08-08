@@ -71,11 +71,12 @@ func registerCDCMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "cdc/mixed-versions",
 		Owner:            registry.OwnerCDC,
-		Cluster:          r.MakeClusterSpec(5, spec.GCEZones(teamcityAgentZone), spec.Arch(vm.ArchAMD64)),
+		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode(), spec.GCEZones(teamcityAgentZone), spec.Arch(vm.ArchAMD64)),
 		Timeout:          120 * time.Minute,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
+		Randomized:       true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCMixedVersions(ctx, t, c)
 		},
@@ -126,20 +127,13 @@ type cdcMixedVersionTester struct {
 	fprintV   *cdctest.FingerprintValidator
 }
 
-func newCDCMixedVersionTester(
-	ctx context.Context, t test.Test, c cluster.Cluster,
-) cdcMixedVersionTester {
-	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
-	lastNode := c.Node(c.Spec().NodeCount)
-
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", lastNode)
-
+func newCDCMixedVersionTester(ctx context.Context, c cluster.Cluster) cdcMixedVersionTester {
 	return cdcMixedVersionTester{
 		ctx:           ctx,
 		c:             c,
-		crdbNodes:     crdbNodes,
-		workloadNodes: lastNode,
-		kafkaNodes:    lastNode,
+		crdbNodes:     c.CRDBNodes(),
+		workloadNodes: c.WorkloadNode(),
+		kafkaNodes:    c.WorkloadNode(),
 		workloadInit:  make(chan struct{}),
 	}
 }
@@ -500,11 +494,13 @@ func canMixedVersionUseDeletedClusterSetting(
 }
 
 func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
-	tester := newCDCMixedVersionTester(ctx, t, c)
+	tester := newCDCMixedVersionTester(ctx, c)
 
-	// NB: We rely on the testing framework to choose a random predecessor
-	// to upgrade from.
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, tester.crdbNodes)
+	mvt := mixedversion.NewTest(
+		ctx, t, t.L(), c, tester.crdbNodes,
+		// Multi-tenant deployments are currently unsupported. See #127378.
+		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
+	)
 
 	cleanupKafka := tester.StartKafka(t, c)
 	defer cleanupKafka()

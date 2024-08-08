@@ -20,6 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient/randclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -39,10 +41,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -51,25 +55,141 @@ import (
 )
 
 var (
-	testClusterSettings = []string{
+	testClusterSystemSettings = []string{
 		"SET CLUSTER SETTING kv.rangefeed.enabled = true",
 		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'",
 		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'",
 		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'",
+	}
+	testClusterSettings = []string{
 		"SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'",
-
-		// TODO(ssd): Duplicate these over to logical_replication as well.
 		"SET CLUSTER SETTING physical_replication.producer.min_checkpoint_frequency='100ms'",
-		"SET CLUSTER SETTING physical_replication.consumer.heartbeat_frequency = '1s'",
-
+		"SET CLUSTER SETTING logical_replication.consumer.heartbeat_frequency = '1s'",
 		"SET CLUSTER SETTING logical_replication.consumer.job_checkpoint_frequency = '100ms'",
 	}
+
+	testClusterBaseClusterArgs = base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(127241),
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
 	lwwColumnAdd = "ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL"
 )
+
+func TestLogicalStreamIngestionJobNameResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	type testCase struct {
+		name                string
+		setup               func(*testing.T, *sqlutils.SQLRunner, *sqlutils.SQLRunner)
+		localStmtTableName  string
+		remoteStmtTableName string
+		expectedErr         string
+	}
+	cases := []testCase{
+		{
+			name: "table in schema",
+			setup: func(t *testing.T, dbA *sqlutils.SQLRunner, dbB *sqlutils.SQLRunner) {
+				dbA.Exec(t, `CREATE SCHEMA foo`)
+				createBasicTable(t, dbA, "foo.bar")
+				dbB.Exec(t, `CREATE SCHEMA foo`)
+				createBasicTable(t, dbB, "foo.bar")
+			},
+			localStmtTableName:  "foo.bar",
+			remoteStmtTableName: "foo.bar",
+		},
+		{
+			name: "table in schema with special characters",
+			setup: func(t *testing.T, dbA *sqlutils.SQLRunner, dbB *sqlutils.SQLRunner) {
+				dbA.Exec(t, `CREATE SCHEMA "foo-bar"`)
+				createBasicTable(t, dbA, `"foo-bar".bar`)
+				dbB.Exec(t, `CREATE SCHEMA "foo-bar"`)
+				createBasicTable(t, dbB, `"foo-bar".bar`)
+			},
+			localStmtTableName:  `"foo-bar".bar`,
+			remoteStmtTableName: `"foo-bar".bar`,
+		},
+		{
+			name: "table with special characters in schema with special characters",
+			setup: func(t *testing.T, dbA *sqlutils.SQLRunner, dbB *sqlutils.SQLRunner) {
+				dbA.Exec(t, `CREATE SCHEMA "foo-bar2"`)
+				createBasicTable(t, dbA, `"foo-bar2"."baz-bat"`)
+				dbB.Exec(t, `CREATE SCHEMA "foo-bar2"`)
+				createBasicTable(t, dbB, `"foo-bar2"."baz-bat"`)
+			},
+			localStmtTableName:  `"foo-bar2"."baz-bat"`,
+			remoteStmtTableName: `"foo-bar2"."baz-bat"`,
+		},
+		{
+			name: "table with periods in schema with periods",
+			setup: func(t *testing.T, dbA *sqlutils.SQLRunner, dbB *sqlutils.SQLRunner) {
+				dbA.Exec(t, `CREATE SCHEMA "foo.bar"`)
+				createBasicTable(t, dbA, `"foo.bar"."baz.bat"`)
+				dbB.Exec(t, `CREATE SCHEMA "foo.bar"`)
+				createBasicTable(t, dbB, `"foo.bar"."baz.bat"`)
+			},
+			localStmtTableName:  `"foo.bar"."baz.bat"`,
+			remoteStmtTableName: `"foo.bar"."baz.bat"`,
+		},
+		{
+			name: "table in public schema",
+			setup: func(t *testing.T, dbA *sqlutils.SQLRunner, dbB *sqlutils.SQLRunner) {
+				createBasicTable(t, dbA, "bar")
+				createBasicTable(t, dbB, "bar")
+			},
+			localStmtTableName:  "public.bar",
+			remoteStmtTableName: "public.bar",
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
+	defer server.Stopper().Stop(ctx)
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			c.setup(t, dbA, dbB)
+			query := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %s ON $1 INTO TABLE %s",
+				c.remoteStmtTableName, c.localStmtTableName)
+			if c.expectedErr != "" {
+				dbA.ExpectErr(t, c.expectedErr, query, dbBURL.String())
+			} else {
+				var unusedID int
+				dbA.QueryRow(t, query, dbBURL.String()).Scan(&unusedID)
+			}
+		})
+	}
+}
+
+type fatalDLQ struct{ *testing.T }
+
+func (fatalDLQ) Create(ctx context.Context) error { return nil }
+
+func (t fatalDLQ) Log(
+	_ context.Context,
+	_ int64,
+	_ streampb.StreamEvent_KV,
+	cdcEventRow cdcevent.Row,
+	reason error,
+	_ retryEligibility,
+) error {
+	t.Fatal(errors.Wrapf(reason, "failed to apply row update: %s", cdcEventRow.DebugString()))
+	return nil
+}
 
 func TestLogicalStreamIngestionJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	defer TestingSetDLQ(fatalDLQ{t})()
 
 	ctx := context.Background()
 	// keyPrefix will be set later, but before countPuts is set.
@@ -122,6 +242,8 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
 	defer server.Stopper().Stop(ctx)
+
+	retryQueueSizeLimit.Override(ctx, &s.ClusterSettings().SV, 0)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab")
 	keyPrefix = rowenc.MakeIndexKeyPrefix(s.Codec(), desc.GetID(), desc.GetPrimaryIndexID())
@@ -192,16 +314,7 @@ func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
-		},
-	}
-
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
 	defer server.Stopper().Stop(ctx)
 
 	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
@@ -263,6 +376,62 @@ func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
 	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRowsB)
 }
 
+// TestLogicalStreamIngestionAdvancePTS tests that the producer side pts advances
+// as the destination side frontier advances.
+func TestLogicalStreamIngestionAdvancePTS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
+	defer server.Stopper().Stop(ctx)
+
+	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
+	dbB.Exec(t, "INSERT INTO tab VALUES (1, 'goodbye')")
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	// Swap one of the URLs to external:// to verify this indirection works.
+	// TODO(dt): this create should support placeholder for URI.
+	dbB.Exec(t, "CREATE EXTERNAL CONNECTION a AS '"+dbAURL.String()+"'")
+	dbAURL = url.URL{
+		Scheme: "external",
+		Host:   "a",
+	}
+
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+
+	now := server.Server(0).Clock().Now()
+	t.Logf("waiting for replication job %d", jobAID)
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	// The ingestion job on cluster A has a pts on cluster B.
+	producerJobIDB := replicationutils.GetLatestProducerJobID(t, dbB)
+	replicationutils.WaitForPTSProtection(t, ctx, dbB, s, producerJobIDB, now)
+
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+	producerJobIDA := replicationutils.GetLatestProducerJobID(t, dbA)
+	replicationutils.WaitForPTSProtection(t, ctx, dbA, s, producerJobIDA, now)
+}
+
 func TestLogicalStreamIngestionErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -310,30 +479,11 @@ func TestLogicalStreamIngestionJobWithColumnFamilies(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
-		},
-	}
 
-	serverA := testcluster.StartTestCluster(t, 1, clusterArgs)
-	defer serverA.Stopper().Stop(ctx)
+	tc, s, serverASQL, serverBSQL := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
+	defer tc.Stopper().Stop(ctx)
 
-	serverB := testcluster.StartTestCluster(t, 1, clusterArgs)
-	defer serverB.Stopper().Stop(ctx)
-
-	serverASQL := sqlutils.MakeSQLRunner(serverA.Server(0).ApplicationLayer().SQLConn(t))
-	serverBSQL := sqlutils.MakeSQLRunner(serverB.Server(0).ApplicationLayer().SQLConn(t))
-
-	for _, s := range testClusterSettings {
-		serverASQL.Exec(t, s)
-		serverBSQL.Exec(t, s)
-	}
-
-	createStmt := `CREATE TABLE tab (
+	createStmt := `CREATE TABLE tab_with_cf (
 pk int primary key,
 payload string,
 v1 int as (pk + 9000) virtual,
@@ -344,60 +494,43 @@ family f2(other_payload, v2))
 `
 	serverASQL.Exec(t, createStmt)
 	serverBSQL.Exec(t, createStmt)
-	serverASQL.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
-	serverBSQL.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
+	serverASQL.Exec(t, "ALTER TABLE tab_with_cf "+lwwColumnAdd)
+	serverBSQL.Exec(t, "ALTER TABLE tab_with_cf "+lwwColumnAdd)
 
-	serverASQL.Exec(t, "INSERT INTO tab(pk, payload, other_payload) VALUES (1, 'hello', 'ruroh1')")
+	serverASQL.Exec(t, "INSERT INTO tab_with_cf(pk, payload, other_payload) VALUES (1, 'hello', 'ruroh1')")
 
-	serverAURL, cleanup := serverA.Server(0).ApplicationLayer().PGUrl(t)
+	serverAURL, cleanup := s.PGUrl(t)
+	serverAURL.Path = "a"
 	defer cleanup()
 
 	var jobBID jobspb.JobID
-	serverBSQL.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", serverAURL.String()).Scan(&jobBID)
+	serverBSQL.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab_with_cf ON $1 INTO TABLE tab_with_cf", serverAURL.String()).Scan(&jobBID)
 
-	WaitUntilReplicatedTime(t, serverA.Server(0).Clock().Now(), serverBSQL, jobBID)
-	serverASQL.Exec(t, "INSERT INTO tab(pk, payload, other_payload) VALUES (2, 'potato', 'ruroh2')")
-	serverASQL.Exec(t, "INSERT INTO tab(pk, payload, other_payload) VALUES (4, 'spud', 'shrub')")
-	serverASQL.Exec(t, "UPSERT INTO tab(pk, payload, other_payload) VALUES (1, 'hello, again', 'ruroh3')")
-	serverASQL.Exec(t, "DELETE FROM tab WHERE pk = 4")
+	WaitUntilReplicatedTime(t, s.Clock().Now(), serverBSQL, jobBID)
+	serverASQL.Exec(t, "INSERT INTO tab_with_cf(pk, payload, other_payload) VALUES (2, 'potato', 'ruroh2')")
+	serverASQL.Exec(t, "INSERT INTO tab_with_cf(pk, payload, other_payload) VALUES (4, 'spud', 'shrub')")
+	serverASQL.Exec(t, "UPSERT INTO tab_with_cf(pk, payload, other_payload) VALUES (1, 'hello, again', 'ruroh3')")
+	serverASQL.Exec(t, "DELETE FROM tab_with_cf WHERE pk = 4")
 
-	WaitUntilReplicatedTime(t, serverA.Server(0).Clock().Now(), serverBSQL, jobBID)
+	WaitUntilReplicatedTime(t, s.Clock().Now(), serverBSQL, jobBID)
 
 	expectedRows := [][]string{
 		{"1", "hello, again", "9001", "43", "ruroh3"},
 		{"2", "potato", "9002", "44", "ruroh2"},
 	}
-	serverBSQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)
-	serverASQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)
+	serverBSQL.CheckQueryResults(t, "SELECT * from tab_with_cf", expectedRows)
+	serverASQL.CheckQueryResults(t, "SELECT * from tab_with_cf", expectedRows)
 }
 
 func TestRandomTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	args := base.TestServerArgs{
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		},
-	}
 
 	ctx := context.Background()
-	srv, sqlDB, _ := serverutils.StartServer(t, args)
-	defer srv.Stopper().Stop(ctx)
-	s := srv.ApplicationLayer()
-
-	_, err := sqlDB.Exec("CREATE DATABASE a")
-	require.NoError(t, err)
-	_, err = sqlDB.Exec("CREATE DATABASE b")
-	require.NoError(t, err)
+	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
+	defer tc.Stopper().Stop(ctx)
 
 	sqlA := s.SQLConn(t, serverutils.DBName("a"))
-	runnerA := sqlutils.MakeSQLRunner(sqlA)
-	runnerB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
-
-	for _, s := range testClusterSettings {
-		runnerA.Exec(t, s)
-	}
 
 	tableName := "rand_table"
 	rng, _ := randutil.NewPseudoRand()
@@ -415,7 +548,7 @@ func TestRandomTables(t *testing.T) {
 	runnerB.Exec(t, stmt)
 
 	numInserts := 20
-	_, err = randgen.PopulateTableWithRandData(rng,
+	_, err := randgen.PopulateTableWithRandData(rng,
 		sqlA, tableName, numInserts, nil)
 	require.NoError(t, err)
 
@@ -436,38 +569,77 @@ func TestRandomTables(t *testing.T) {
 	compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
 }
 
+func TestRandomStream(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	eventCount := 1000
+	testState := struct {
+		syncutil.Mutex
+		count int
+		done  chan struct{}
+	}{
+		done: make(chan struct{}),
+	}
+
+	streamingKnobs := &sql.StreamingTestingKnobs{
+		DistSQLRetryPolicy: &retry.Options{
+			InitialBackoff: time.Microsecond,
+			MaxBackoff:     2 * time.Microsecond,
+		},
+		RunAfterReceivingEvent: func(_ context.Context) error {
+			testState.Lock()
+			defer testState.Unlock()
+			testState.count++
+			if testState.count == eventCount {
+				close(testState.done)
+			}
+			return nil
+		},
+	}
+	clusterArgs := testClusterBaseClusterArgs
+	clusterArgs.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
+		StreamingTestingKnobs: streamingKnobs,
+	}
+	clusterArgs.ServerArgs.Knobs.Streaming = streamingKnobs
+
+	ctx := context.Background()
+	tc, s, runnerA, _ := setupLogicalTestServer(t, ctx, clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+
+	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab")
+	// We use a low events per checkpoint since we want to
+	// generate errors at many different code locations.
+	uri := fmt.Sprintf("randomgen://?TABLE_ID=%d&SST_PROBABILITY=0&ERROR_PROBABILITY=0.10&EVENTS_PER_CHECKPOINT=5", desc.GetID())
+
+	streamStartStmt := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab"
+	runnerA.Exec(t, streamStartStmt, uri)
+	t.Logf("waiting for %d events", eventCount)
+	select {
+	case <-testState.done:
+	case <-time.After(testutils.SucceedsSoonDuration()):
+		t.Logf("%s", string(allstacks.Get()))
+		t.Fatal("timed out waiting for events")
+	}
+
+}
+
 // TestPreviouslyInterestingTables tests some schemas from previous failed runs of TestRandomTables.
 func TestPreviouslyInterestingTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	args := base.TestServerArgs{
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		},
-	}
 
 	ctx := context.Background()
-	srv, sqlDB, _ := serverutils.StartServer(t, args)
-	defer srv.Stopper().Stop(ctx)
-	s := srv.ApplicationLayer()
-
-	_, err := sqlDB.Exec("CREATE DATABASE a")
-	require.NoError(t, err)
-	_, err = sqlDB.Exec("CREATE DATABASE b")
-	require.NoError(t, err)
+	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
+	defer tc.Stopper().Stop(ctx)
 
 	sqlA := s.SQLConn(t, serverutils.DBName("a"))
-	runnerA := sqlutils.MakeSQLRunner(sqlA)
-	runnerB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
-
-	for _, s := range testClusterSettings {
-		runnerA.Exec(t, s)
-	}
 
 	type testCase struct {
 		name   string
 		schema string
+		useUDF bool
+		delete bool
 	}
 
 	testCases := []testCase{
@@ -479,6 +651,14 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 			name:   "comparison-invariant-to-different-covering-indexes",
 			schema: `CREATE TABLE rand_table (col1_0 DECIMAL, INDEX (col1_0) VISIBILITY 0.17, UNIQUE (col1_0 DESC), UNIQUE (col1_0 ASC), INDEX (col1_0 ASC), UNIQUE (col1_0 ASC))`,
 		},
+		{
+
+			// Single column tables previously had a bug
+			// with tuple parsing the UDF apply query.
+			name:   "single column table with udf",
+			schema: `CREATE TABLE rand_table (pk INT PRIMARY KEY)`,
+			useUDF: true,
+		},
 	}
 
 	baseTableName := "rand_table"
@@ -488,6 +668,13 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 	defer cleanup()
 	for i, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.useUDF {
+				defaultSQLProcessor = udfApplierProcessor
+				defer func() {
+					defaultSQLProcessor = lwwProcessor
+				}()
+			}
+
 			tableName := fmt.Sprintf("%s%d", baseTableName, i)
 			schemaStmt := strings.ReplaceAll(tc.schema, baseTableName, tableName)
 			addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
@@ -495,15 +682,30 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 			runnerB.Exec(t, schemaStmt)
 			runnerA.Exec(t, addCol)
 			runnerB.Exec(t, addCol)
-			_, err = randgen.PopulateTableWithRandData(rng,
+			if tc.useUDF {
+				runnerB.Exec(t, fmt.Sprintf(testingUDFAcceptProposedBase, tableName))
+			}
+			_, err := randgen.PopulateTableWithRandData(rng,
 				sqlA, tableName, numInserts, nil)
 			require.NoError(t, err)
-			streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
+
+			var streamStartStmt string
+			if tc.useUDF {
+				streamStartStmt = fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s WITH FUNCTION repl_apply FOR TABLE %[1]s", tableName)
+			} else {
+				streamStartStmt = fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
+			}
 			var jobBID jobspb.JobID
 			runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
 			t.Logf("waiting for replication job %d", jobBID)
 			WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
+
+			if tc.delete {
+				runnerA.Exec(t, fmt.Sprintf("DELETE FROM %s LIMIT 5", tableName))
+				WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
+			}
+
 			compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
 		})
 	}
@@ -689,6 +891,11 @@ func setupLogicalTestServer(
 	dbA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("a")))
 	dbB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
 
+	sysDB := sqlutils.MakeSQLRunner(server.Server(0).SystemLayer().SQLConn(t))
+	for _, s := range testClusterSystemSettings {
+		sysDB.Exec(t, s)
+	}
+
 	for _, s := range testClusterSettings {
 		dbA.Exec(t, s)
 	}
@@ -794,12 +1001,17 @@ func (m mockBatchHandler) SetSyntheticFailurePercent(_ uint32) {}
 
 type mockDLQ int
 
-func (m *mockDLQ) Create(_ context.Context, _ []int32) error {
+func (m *mockDLQ) Create(_ context.Context) error {
 	return nil
 }
 
 func (m *mockDLQ) Log(
-	_ context.Context, _ int64, _ streampb.StreamEvent_KV, _ cdcevent.Row, _ retryEligibility,
+	_ context.Context,
+	_ int64,
+	_ streampb.StreamEvent_KV,
+	_ cdcevent.Row,
+	_ error,
+	_ retryEligibility,
 ) error {
 	*m++
 	return nil
@@ -822,8 +1034,8 @@ func TestFlushErrorHandling(t *testing.T) {
 
 	lrw.bh = []BatchHandler{(mockBatchHandler(true))}
 
-	lrw.purgatory.byteLimit = func() int64 { return 0 }
-	// One failure immediately means a zero-byte purgatory is full.
+	lrw.purgatory.byteLimit = func() int64 { return 1 }
+	// One failure immediately means a 1-byte purgatory is full.
 	require.NoError(t, lrw.handleStreamBuffer(ctx, []streampb.StreamEvent_KV{skv("a")}))
 	require.Equal(t, int64(1), lrw.metrics.RetryQueueEvents.Value())
 	require.True(t, lrw.purgatory.full())
@@ -847,43 +1059,41 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlA, sqlB, cleanup := setupTwoDBUDFTestCluster(t)
-	defer cleanup()
+	ctx := context.Background()
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	})
+	defer server.Stopper().Stop(ctx)
 
-	// Set the default back to the lww resolver, but leave udfName set.
-	defaultSQLProcessor = lwwProcessor
-
-	dbA := sqlutils.MakeSQLRunner(sqlA)
-	dbB := sqlutils.MakeSQLRunner(sqlB)
-	createBasicTable(t, dbA, "tab")
-	createBasicTable(t, dbB, "tab")
 	lwwFunc := `CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tab, existing tab, prev tab, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL,proposed_mvcc_timestamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
-	RETURNS crdb_replication_applier_decision
+	RETURNS string
 	AS $$
 	BEGIN
 	IF existing_origin_timestamp IS NULL THEN
 	    IF existing_mvcc_timestamp < proposed_mvcc_timestamp THEN
 			SELECT crdb_internal.log('case 1');
-			RETURN ('accept_proposed', NULL);
+			RETURN 'accept_proposed';
 		ELSE
 			SELECT crdb_internal.log('case 2');
-			RETURN ('ignore_proposed', NULL);
+			RETURN 'ignore_proposed';
 		END IF;
 	ELSE
 		IF existing_origin_timestamp < proposed_mvcc_timestamp THEN
 			SELECT crdb_internal.log('case 3');
-			RETURN ('accept_proposed', NULL);
+			RETURN 'accept_proposed';
 		ELSE
 			SELECT crdb_internal.log('case 4');
-			RETURN ('ignore_proposed', NULL);
+			RETURN 'ignore_proposed';
 		END IF;
 	END IF;
 	END
 	$$ LANGUAGE plpgsql`
-	// TODO(ssd): We should make this type automatically for people or remove the `upsert_specified action so that we don't need it`
-	dbB.Exec(t, applierTypes)
 	dbB.Exec(t, lwwFunc)
-	dbA.Exec(t, applierTypes)
 	dbA.Exec(t, lwwFunc)
 
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
@@ -903,8 +1113,8 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 		jobAID jobspb.JobID
 		jobBID jobspb.JobID
 	)
-	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
-	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH FUNCTION repl_apply FOR TABLE tab", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH FUNCTION repl_apply FOR TABLE tab", dbAURL.String()).Scan(&jobBID)
 
 	now := s.Clock().Now()
 	t.Logf("waiting for replication job %d", jobAID)

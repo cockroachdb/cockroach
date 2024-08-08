@@ -44,7 +44,7 @@ func installSensitiveAccessLogFileSink(sc *log.TestLogScope, t *testing.T) func(
 	if err := cfg.Validate(&dir); err != nil {
 		t.Fatal(err)
 	}
-	cleanup, err := log.ApplyConfig(cfg, log.FileSinkMetrics{}, nil /* fatalOnLogStall */)
+	cleanup, err := log.ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,6 +12,7 @@ package mixedversion
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
@@ -171,10 +172,11 @@ func newContext(
 	tenant *ServiceDescriptor,
 ) *Context {
 	makeContext := func(name string, nodes option.NodeListOption) *ServiceContext {
+		sort.Ints(nodes)
 		return &ServiceContext{
 			Descriptor: &ServiceDescriptor{
-				Name:  install.SystemInterfaceName,
-				Nodes: systemNodes,
+				Name:  name,
+				Nodes: nodes,
 			},
 			Stage:       stage,
 			FromVersion: from,
@@ -206,7 +208,7 @@ func newInitialContext(
 	tenant *ServiceDescriptor,
 ) *Context {
 	return newContext(
-		initialRelease, initialRelease, ClusterSetupStage, systemNodes, tenant,
+		initialRelease, initialRelease, SystemSetupStage, systemNodes, tenant,
 	)
 }
 
@@ -265,12 +267,22 @@ func (c *Context) DefaultService() *ServiceContext {
 	return c.Tenant
 }
 
+// SetFinalizing sets the `Finalizing` field on all services
+// available.
+func (c *Context) SetFinalizing(b bool) {
+	c.forEachService(func(s *ServiceContext) { s.Finalizing = b })
+}
+
 // SetStage is a helper function to set the upgrade stage on all
 // services available.
 func (c *Context) SetStage(stage UpgradeStage) {
-	c.System.Stage = stage
+	c.forEachService(func(s *ServiceContext) { s.Stage = stage })
+}
+
+func (c *Context) forEachService(f func(*ServiceContext)) {
+	f(c.System)
 	if c.Tenant != nil {
-		c.Tenant.Stage = stage
+		f(c.Tenant)
 	}
 }
 

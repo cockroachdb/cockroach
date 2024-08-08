@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { History } from "history";
 import { Button, commonStyles } from "@cockroachlabs/cluster-ui";
 import { ArrowLeft } from "@cockroachlabs/icons";
+import { History } from "history";
+import React from "react";
 
 interface backProps {
   history: History;

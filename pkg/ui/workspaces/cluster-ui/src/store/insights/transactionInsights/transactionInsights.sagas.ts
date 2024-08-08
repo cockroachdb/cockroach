@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, put, takeLatest } from "redux-saga/effects";
 import { PayloadAction } from "@reduxjs/toolkit";
+import { all, call, put, takeLatest } from "redux-saga/effects";
 
 import { getTxnInsightsApi, TxnInsightsRequest } from "src/api/txnInsightsApi";
 
-import { actions as txnActions } from "../transactionInsights/transactionInsights.reducer";
 import { maybeError } from "../../../util";
+import { actions as txnActions } from "../transactionInsights/transactionInsights.reducer";
 
 export function* refreshTransactionInsightsSaga(
   action?: PayloadAction<TxnInsightsRequest>,

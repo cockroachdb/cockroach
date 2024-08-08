@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 import isError from "lodash/isError"
-import { Action } from "redux";
 import moment from "moment-timezone";
+import { Action } from "redux";
 
 import {
   CachedDataReducer,

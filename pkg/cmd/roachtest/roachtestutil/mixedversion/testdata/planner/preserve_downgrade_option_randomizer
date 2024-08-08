@@ -18,18 +18,19 @@ ok
 
 plan debug=true
 ----
+Seed:               12345
 Upgrades:           v21.2.29 → v22.1.8 → v22.2.3 → v23.1.10 → v23.2.4 → <current>
 Deployment mode:    system-only
 Mutators:           preserve_downgrade_option_randomizer
 Plan:
-├── install fixtures for version "v21.2.29" (1) [stage=cluster-setup]
-├── start cluster at version "v21.2.29" (2) [stage=cluster-setup]
-├── wait for system tenant on nodes :1-4 to reach cluster version '21.2' (3) [stage=cluster-setup]
+├── install fixtures for version "v21.2.29" (1) [stage=system-setup]
+├── start cluster at version "v21.2.29" (2) [stage=system-setup]
+├── wait for system tenant on nodes :1-4 to reach cluster version '21.2' (3) [stage=system-setup]
 ├── upgrade cluster from "v21.2.29" to "v22.1.8"
 │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (4) [stage=init]
 │   ├── upgrade nodes :1-4 from "v21.2.29" to "v22.1.8"
 │   │   ├── restart node 2 with binary version v22.1.8 (5) [stage=last-upgrade]
-│   │   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (6) [stage=last-upgrade]
+│   │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (6) [stage=last-upgrade]
 │   │   ├── restart node 4 with binary version v22.1.8 (7) [stage=last-upgrade]
 │   │   ├── wait for 5m0s (8) [stage=last-upgrade]
 │   │   ├── restart node 1 with binary version v22.1.8 (9) [stage=last-upgrade]
@@ -41,7 +42,7 @@ Plan:
 │   │   ├── restart node 4 with binary version v22.2.3 (13) [stage=last-upgrade]
 │   │   ├── restart node 1 with binary version v22.2.3 (14) [stage=last-upgrade]
 │   │   ├── restart node 2 with binary version v22.2.3 (15) [stage=last-upgrade]
-│   │   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (16) [stage=last-upgrade]
+│   │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (16) [stage=last-upgrade]
 │   │   └── restart node 3 with binary version v22.2.3 (17) [stage=last-upgrade]
 │   └── wait for system tenant on nodes :1-4 to reach cluster version '22.2' (18) [stage=running-upgrade-migrations,finalizing]
 ├── run "do something" (19) [stage=on-startup]
@@ -53,12 +54,12 @@ Plan:
 │   │   ├── run "my mixed-version feature" (23) [stage=last-upgrade]
 │   │   ├── restart node 4 with binary version v23.1.10 (24) [stage=last-upgrade]
 │   │   └── restart node 2 with binary version v23.1.10 (25) [stage=last-upgrade]
-│   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (26) [stage=running-upgrade-migrations,finalizing]
+│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (26) [stage=running-upgrade-migrations,finalizing]
 │   └── wait for system tenant on nodes :1-4 to reach cluster version '23.1' (27) [stage=running-upgrade-migrations,finalizing]
 ├── upgrade cluster from "v23.1.10" to "v23.2.4"
 │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (28) [stage=init]
 │   ├── upgrade nodes :1-4 from "v23.1.10" to "v23.2.4"
-│   │   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (29) [stage=last-upgrade]
+│   │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (29) [stage=last-upgrade]
 │   │   ├── restart node 3 with binary version v23.2.4 (30) [stage=last-upgrade]
 │   │   ├── restart node 4 with binary version v23.2.4 (31) [stage=last-upgrade]
 │   │   ├── run "my mixed-version feature" (32) [stage=last-upgrade]
@@ -84,6 +85,6 @@ Plan:
    │   ├── run "my mixed-version feature" (48) [stage=last-upgrade]
    │   ├── restart node 3 with binary version <current> (49) [stage=last-upgrade]
    │   ├── restart node 1 with binary version <current> (50) [stage=last-upgrade]
-   │   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (51) [stage=last-upgrade]
+   │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (51) [stage=last-upgrade]
    │   └── restart node 4 with binary version <current> (52) [stage=last-upgrade]
    └── wait for system tenant on nodes :1-4 to reach cluster version <current> (53) [stage=running-upgrade-migrations,finalizing]

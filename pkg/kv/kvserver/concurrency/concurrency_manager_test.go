@@ -63,7 +63,7 @@ import (
 // The input files use the following DSL:
 //
 // new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [iso=<level>] [priority=<priority>] [uncertainty-limit=<int>[,<int>]]
-// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority=<priority>] [inconsistent] [wait-policy=<policy>] [lock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
+// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority=<priority>] [inconsistent] [wait-policy=<policy>] [lock-timeout] [deadlock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
 //
 //	<proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
 //
@@ -190,6 +190,12 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				if d.HasArg("max-lock-wait-queue-length") {
 					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
 				}
+
+				var deadlockTimeout time.Duration
+				if d.HasArg("deadlock-timeout") {
+					d.ScanArgs(t, "deadlock-timeout", &deadlockTimeout)
+				}
+
 				ba := &kvpb.BatchRequest{}
 				pp := scanPoisonPolicy(t, d)
 
@@ -201,6 +207,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				ba.ReadConsistency = readConsistency
 				ba.WaitPolicy = waitPolicy
 				ba.LockTimeout = lockTimeout
+				ba.DeadlockTimeout = deadlockTimeout
 				ba.Requests = reqUnions
 				latchSpans, lockSpans := c.collectSpans(t, txn, ts, waitPolicy, reqs)
 
@@ -211,6 +218,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					ReadConsistency:        ba.ReadConsistency,
 					WaitPolicy:             ba.WaitPolicy,
 					LockTimeout:            ba.LockTimeout,
+					DeadlockTimeout:        ba.DeadlockTimeout,
 					Requests:               ba.Requests,
 					MaxLockWaitQueueLength: maxLockWaitQueueLength,
 					LatchSpans:             latchSpans,

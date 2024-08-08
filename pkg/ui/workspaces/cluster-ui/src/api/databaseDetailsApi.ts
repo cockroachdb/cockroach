@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment from "moment-timezone";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import moment from "moment-timezone";
 
 import { IndexUsageStatistic, recommendDropUnusedIndex } from "../insights";
 import { getLogger, indexUnusedDuration, maybeError } from "../util";
 
+import { Format, Identifier, QualifiedIdentifier } from "./safesql";
 import {
   combineQueryErrors,
   createSqlExecutionRequest,
@@ -30,7 +31,6 @@ import {
   SqlTxnResult,
   txnResultIsEmpty,
 } from "./sqlApi";
-import { Format, Identifier, QualifiedIdentifier } from "./safesql";
 import { fromHexString, withTimeout } from "./util";
 
 const { ZoneConfig } = cockroach.config.zonepb;
@@ -161,9 +161,21 @@ const getDatabaseGrantsQuery: DatabaseDetailsQuery<DatabaseGrantsRow> = {
   },
 };
 
+export type TableNameParts = {
+  // Raw unquoted, unescaped schema name.
+  schema: string;
+  // Raw unquoted, unescaped table name.
+  table: string;
+
+  // qualifiedNameWithSchemaAndTable is the qualifed
+  // table name containing escaped, quoted schema and
+  // table name parts.
+  qualifiedNameWithSchemaAndTable: string;
+};
+
 // Database Tables
 export type DatabaseTablesResponse = {
-  tables: string[];
+  tables: TableNameParts[];
 };
 
 type DatabaseTablesRow = {
@@ -197,7 +209,11 @@ const getDatabaseTablesQuery: DatabaseDetailsQuery<DatabaseTablesRow> = {
           row.table_schema,
           row.table_name,
         ]).sqlString();
-        return resp.tablesResp.tables.push(escTableName);
+        resp.tablesResp.tables.push({
+          schema: row.table_schema,
+          table: row.table_name,
+          qualifiedNameWithSchemaAndTable: escTableName,
+        });
       });
     }
     if (txnResult.error) {

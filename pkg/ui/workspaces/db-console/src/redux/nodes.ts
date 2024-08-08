@@ -8,9 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { util } from "@cockroachlabs/cluster-ui";
 import countBy from "lodash/countBy"
 import each from "lodash/each"
 import filter from "lodash/filter"
+import first from "lodash/first"
+import flow from "lodash/flow"
+import groupBy from "lodash/groupBy"
 import head from "lodash/head"
 import isArray from "lodash/isArray"
 import isEmpty from "lodash/isEmpty"
@@ -18,20 +22,16 @@ import isNil from "lodash/isNil"
 import isUndefined from "lodash/isUndefined"
 import keyBy from "lodash/keyBy"
 import map from "lodash/map"
-import uniqBy from "lodash/uniqBy"
-import uniq from "lodash/uniq"
-import first from "lodash/first"
 import sortBy from "lodash/sortBy"
-import groupBy from "lodash/groupBy"
-import flow from "lodash/flow"
+import uniq from "lodash/uniq"
+import uniqBy from "lodash/uniqBy"
 import { createSelector } from "reselect";
-import { util } from "@cockroachlabs/cluster-ui";
 
 import * as protos from "src/js/protos";
-import { Pick } from "src/util/pick";
-import { NoConnection } from "src/views/reports/containers/network";
-import { nullOfReturnType } from "src/util/types";
 import { cockroach } from "src/js/protos";
+import { Pick } from "src/util/pick";
+import { nullOfReturnType } from "src/util/types";
+import { NoConnection } from "src/views/reports/containers/network";
 
 import { AdminUIState } from "./state";
 
@@ -331,6 +331,7 @@ export function nodeCapacityStats(n: INodeStatus): CapacityStats {
 export function getDisplayName(
   node: INodeStatus | NoConnection,
   livenessStatus = LivenessStatus.NODE_STATUS_LIVE,
+  includeAddress = true,
 ) {
   const decommissionedString =
     livenessStatus === LivenessStatus.NODE_STATUS_DECOMMISSIONED
@@ -341,7 +342,11 @@ export function getDisplayName(
     return `${decommissionedString}(n${node.from.nodeID})`;
   }
   // as the only other type possible right now is INodeStatus we don't have a type guard for that
-  return `${decommissionedString}(n${node.desc.node_id}) ${node.desc.address.address_field}`;
+  if (includeAddress) {
+    return `${decommissionedString}(n${node.desc.node_id}) ${node.desc.address.address_field}`;
+  } else {
+    return `${decommissionedString}n${node.desc.node_id}`;
+  }
 }
 
 function isNoConnection(
@@ -368,6 +373,25 @@ export const nodeDisplayNameByIDSelector = createSelector(
         result[ns.desc.node_id] = getDisplayName(
           ns,
           livenessStatusByNodeID[ns.desc.node_id],
+          true,
+        );
+      });
+    }
+    return result;
+  },
+);
+
+export const nodeDisplayNameByIDSelectorWithoutAddress = createSelector(
+  partialNodeStatusesSelector,
+  livenessStatusByNodeIDSelector,
+  (nodeStatuses, livenessStatusByNodeID) => {
+    const result: { [key: string]: string } = {};
+    if (!isEmpty(nodeStatuses)) {
+      nodeStatuses.forEach(ns => {
+        result[ns.desc.node_id] = getDisplayName(
+          ns,
+          livenessStatusByNodeID[ns.desc.node_id],
+          false,
         );
       });
     }

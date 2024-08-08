@@ -9,12 +9,20 @@
 // licenses/APL.txt.
 
 import { Tooltip } from "@cockroachlabs/ui-components";
-import React from "react";
 import classNames from "classnames/bind";
+import React from "react";
 import { Link } from "react-router-dom";
 
-import { StatementLink } from "../statementsTable";
+import { Anchor } from "../anchor";
 import IdxRecAction from "../insights/indexActionBtn";
+import {
+  InsightExecEnum,
+  InsightRecommendation,
+  InsightType,
+} from "../insights/types";
+import { insightType } from "../insights/utils";
+import { ColumnDescriptor, SortedTable } from "../sortedtable";
+import { StatementLink } from "../statementsTable";
 import {
   clusterSettings,
   computeOrUseStmtSummary,
@@ -26,14 +34,6 @@ import {
   statementsRetries,
   stmtPerformanceRules,
 } from "../util";
-import { Anchor } from "../anchor";
-import { ColumnDescriptor, SortedTable } from "../sortedtable";
-import {
-  InsightExecEnum,
-  InsightRecommendation,
-  InsightType,
-} from "../insights/types";
-import { insightType } from "../insights/utils";
 
 import styles from "./insightsTable.module.scss";
 

@@ -115,7 +115,9 @@ type Datum interface {
 	AmbiguousFormat() bool
 
 	// Compare returns -1 if the receiver is less than other, 0 if receiver is
-	// equal to other and +1 if receiver is greater than 'other'.
+	// equal to other and +1 if receiver is greater than 'other'. Compare is safe
+	// to use with a nil eval.Context and results in default behavior, except for
+	// when comparing tree.Placeholder datums.
 	Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error)
 
 	// Prev returns the previous datum and true, if one exists, or nil and false.
@@ -5996,6 +5998,9 @@ func PGWireTypeSize(t *types.T) int {
 		return 12
 	}
 	if tOid == oid.T_date {
+		return 4
+	}
+	if tOid == oid.T_trigger {
 		return 4
 	}
 	if sz, variable := DatumTypeSize(t); !variable {

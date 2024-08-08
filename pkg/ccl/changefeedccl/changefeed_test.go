@@ -2128,7 +2128,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	// (this is mostly due to racy updates sent from aggregators to the frontier.
 	// However, the checkpoint timestamp should be at least at the cursor.
 	progress := loadProgress()
-	require.True(t, progress.GetHighWater().IsEmpty() || progress.GetHighWater().EqOrdering(cursor),
+	require.True(t, progress.GetHighWater().IsEmpty() || *progress.GetHighWater() == cursor,
 		"expected empty highwater or %s,  found %s", cursor, progress.GetHighWater())
 	require.NotNil(t, progress.GetChangefeed().Checkpoint)
 	require.Less(t, 0, len(progress.GetChangefeed().Checkpoint.Spans))
@@ -2216,7 +2216,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		}
 
 		// Setup changefeed job details, avoid relying on initial scan functionality
-		baseFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms', no_initial_scan`)
+		baseFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms', min_checkpoint_frequency='100ms', no_initial_scan`)
 		jobFeed := baseFeed.(cdctest.EnterpriseTestFeed)
 		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
 
@@ -2247,6 +2247,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			prog := loadProgress()
 			if p := prog.GetHighWater(); p != nil && !p.IsEmpty() {
+				t.Logf("highwater: %s", p)
 				return nil
 			}
 			return errors.New("waiting for highwater")
@@ -3663,56 +3664,56 @@ func TestChangefeedOutputTopics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		pgURL, cleanup := sqlutils.PGUrl(t, s.Server.SQLAddr(), t.Name(), url.User(username.RootUser))
-		defer cleanup()
-		pgBase, err := pq.NewConnector(pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		actual := "(no notice)"
-		connector := pq.ConnectorWithNoticeHandler(pgBase, func(n *pq.Error) {
-			actual = n.Message
-		})
+	cluster, _, cleanup := startTestCluster(t)
+	defer cleanup()
+	s := cluster.Server(1)
 
-		dbWithHandler := gosql.OpenDB(connector)
-		defer dbWithHandler.Close()
+	// Only pubsub v2 emits notices.
+	PubsubV2Enabled.Override(context.Background(), &s.ClusterSettings().SV, true)
 
-		sqlDB := sqlutils.MakeSQLRunner(dbWithHandler)
-
-		sqlDB.Exec(t, `CREATE TABLE ☃ (i INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO ☃ VALUES (0)`)
-
-		tg := newTeeGroup()
-		feedCh := make(chan *sarama.ProducerMessage, 1024)
-		wrapSink := func(s Sink) Sink {
-			return &fakeKafkaSink{
-				Sink:   s,
-				tg:     tg,
-				feedCh: feedCh,
-			}
-		}
-
-		jobFeed := newJobFeed(dbWithHandler, wrapSink)
-		jobFeed.jobID = jobspb.InvalidJobID
-
-		c := &kafkaFeed{
-			jobFeed:        jobFeed,
-			seenTrackerMap: make(map[string]struct{}),
-			source:         feedCh,
-			tg:             tg,
-		}
-		defer func() {
-			err = c.Close()
-			require.NoError(t, err)
-		}()
-		kafkaFeed := mustBeKafkaFeedFactory(f)
-		kafkaFeed.di.prepareJob(c.jobFeed)
-
-		sqlDB.Exec(t, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/'`)
-		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
+	pgURL, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanup()
+	pgBase, err := pq.NewConnector(pgURL.String())
+	if err != nil {
+		t.Fatal(err)
 	}
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	var actual string
+	connector := pq.ConnectorWithNoticeHandler(pgBase, func(n *pq.Error) {
+		actual = n.Message
+	})
+
+	dbWithHandler := gosql.OpenDB(connector)
+	defer dbWithHandler.Close()
+
+	sqlDB := sqlutils.MakeSQLRunner(dbWithHandler)
+
+	sqlDB.Exec(t, `CREATE TABLE ☃ (i INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO ☃ VALUES (0)`)
+
+	t.Run("kafka", func(t *testing.T) {
+		actual = "(no notice)"
+		f := makeKafkaFeedFactory(t, s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/'`)
+		defer closeFeed(t, testFeed)
+		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
+	})
+
+	t.Run("pubsub v2", func(t *testing.T) {
+		actual = "(no notice)"
+		f := makePubsubFeedFactory(s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'gcpubsub://does.not.matter/'`)
+		defer closeFeed(t, testFeed)
+		// Pubsub doesn't sanitize the topic name.
+		require.Equal(t, `changefeed will emit to topic ☃`, actual)
+	})
+
+	t.Run("webhooks does not emit anything", func(t *testing.T) {
+		actual = "(no notice)"
+		f := makePubsubFeedFactory(s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'webhook-https://does.not.matter/'`)
+		defer closeFeed(t, testFeed)
+		require.Equal(t, `(no notice)`, actual)
+	})
 }
 
 // requireErrorSoon polls for the test feed for an error and asserts that
@@ -3834,7 +3835,7 @@ func TestChangefeedRestartMultiNode(t *testing.T) {
 	db = cluster.ServerConn(feedServerID)
 	sqlDB = sqlutils.MakeSQLRunner(db)
 
-	f := makeKafkaFeedFactory(cluster, db)
+	f := makeKafkaFeedFactory(t, cluster, db)
 	feed := feed(t, f, "CREATE CHANGEFEED FOR test_tab WITH updated")
 	defer closeFeed(t, feed)
 	assertPayloadsStripTs(t, feed, []string{
@@ -3892,7 +3893,7 @@ func TestChangefeedStopPolicyMultiNode(t *testing.T) {
 	db = cluster.ServerConn(feedServerID)
 	sqlDB = sqlutils.MakeSQLRunner(db)
 
-	f := makeKafkaFeedFactory(cluster, db)
+	f := makeKafkaFeedFactory(t, cluster, db)
 	feed := feed(t, f, "CREATE CHANGEFEED FOR test_tab WITH schema_change_policy='stop'")
 	defer closeFeed(t, feed)
 	sqlDB.Exec(t, `INSERT INTO test_tab VALUES (1)`)
@@ -4011,7 +4012,7 @@ func TestChangefeedRBRAvroAddRegion(t *testing.T) {
 	cluster, db, cleanup := startTestCluster(t)
 	defer cleanup()
 
-	f := makeKafkaFeedFactory(cluster, db)
+	f := makeKafkaFeedFactory(t, cluster, db)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY)`)
 	waitForSchemaChange(t, sqlDB, `ALTER TABLE rbr SET LOCALITY REGIONAL BY ROW`)
@@ -5015,6 +5016,10 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.SucceedsSoonDuration = 5 * time.Second
 
+	// Another SQLDB that has a longer "SucceedsSoonDuration", because some tests will take longer to fail due to DNS resolution retries.
+	longTimeoutSQLDB := sqlutils.MakeSQLRunner(db)
+	longTimeoutSQLDB.SucceedsSoonDuration = 30 * time.Second
+
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 
@@ -5164,15 +5169,26 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `experimental-sql://d/?confluent_schema_registry=foo&weird=bar`,
 	)
 
-	// Check unavailable kafka.
-	sqlDB.ExpectErrWithTimeout(
-		t, `client has run out of available brokers`,
+	badHostErrRE := "client has run out of available brokers"
+	if KafkaV2Enabled.Get(&s.ClusterSettings().SV) {
+		badHostErrRE = "(unable to dial|unable to open connection to broker|lookup .* on .*: server misbehaving|connection refused)"
+	}
+
+	// Check unavailable kafka - bad dns.
+	longTimeoutSQLDB.ExpectErrWithTimeout(
+		t, badHostErrRE,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope'`,
 	)
 
-	// Test that a well-formed URI gets as far as unavailable kafka error.
+	// Check unavailable kafka - not running.
 	sqlDB.ExpectErrWithTimeout(
-		t, `client has run out of available brokers`,
+		t, badHostErrRE,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://localhost:9999'`,
+	)
+
+	// Test that a well-formed URI gets as far as unavailable kafka error.
+	longTimeoutSQLDB.ExpectErrWithTimeout(
+		t, badHostErrRE,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/?tls_enabled=true&insecure_tls_skip_verify=true&topic_name=foo'`,
 	)
 
@@ -5287,7 +5303,7 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=unsuppported`,
 	)
 	sqlDB.ExpectErrWithTimeout(
-		t, `client has run out of available brokers`,
+		t, badHostErrRE,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}'`,
 	)
 	sqlDB.ExpectErrWithTimeout(
@@ -5454,7 +5470,7 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
 		`kafka://nope`, `https://schemareg-nope/?ca_cert=!`,
 	)
-	sqlDB.ExpectErrWithTimeout(
+	longTimeoutSQLDB.ExpectErrWithTimeout(
 		t, `failed to parse certificate data`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
 		`kafka://nope`, `https://schemareg-nope/?ca_cert=Zm9v`,
@@ -5659,6 +5675,19 @@ func TestChangefeedPanicRecovery(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo(id, s) VALUES (0, 'hello'), (1, null)`)
 	}
 
+	waitForFeedErr := func(t *testing.T, feed cdctest.TestFeed, timeout time.Duration) error {
+		start := timeutil.Now()
+		for {
+			if time.Since(start) >= timeout {
+				t.Fatalf("feed did not return error before timeout of %s", timeout)
+			}
+			_, err := feed.Next()
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		prep(t, sqlDB)
@@ -5669,32 +5698,28 @@ func TestChangefeedPanicRecovery(t *testing.T) {
 	})
 
 	// Check that all panics while evaluating the WHERE clause in an expression are recovered from.
+	// NB: REPAIRCLUSTER is required to use crdb_internal.force_panic.
 	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		prep(t, sqlDB)
 		foo := feed(t, f,
 			`CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT 1 FROM foo WHERE crdb_internal.force_panic('wat') IS NULL`)
 		defer closeFeed(t, foo)
-		var err error
-		for err == nil {
-			_, err = foo.Next()
-		}
-		require.Error(t, err, "error while evaluating WHERE clause")
-	})
+		err := waitForFeedErr(t, foo, 2*time.Minute)
+		require.ErrorContains(t, err, "error evaluating CDC expression", "expected panic recovery while evaluating WHERE clause")
+	}, feedTestAdditionalSystemPrivs("REPAIRCLUSTER"))
 
 	// Check that all panics while evaluating the SELECT clause in an expression are recovered from.
+	// NB: REPAIRCLUSTER is required to use crdb_internal.force_panic.
 	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		prep(t, sqlDB)
 		foo := feed(t, f,
 			`CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT crdb_internal.force_panic('wat') FROM foo`)
 		defer closeFeed(t, foo)
-		var err error
-		for err == nil {
-			_, err = foo.Next()
-		}
-		require.Error(t, err, "error while evaluating SELECT clause")
-	})
+		err := waitForFeedErr(t, foo, 2*time.Minute)
+		require.ErrorContains(t, err, "error evaluating CDC expression", "expected panic recovery while evaluating SELECT clause")
+	}, feedTestAdditionalSystemPrivs("REPAIRCLUSTER"))
 }
 
 func TestChangefeedPauseUnpause(t *testing.T) {
@@ -7488,7 +7513,7 @@ func TestChangefeedEndTimeWithCursor(t *testing.T) {
 		// event with end_time timestamp.  That is: verify frontier.Frontier() is at end_time.
 		expectedFrontier := endTime.Prev()
 		testutils.SucceedsWithin(t, func() error {
-			if expectedFrontier.EqOrdering(frontier.Frontier()) {
+			if expectedFrontier == frontier.Frontier() {
 				return nil
 			}
 			return errors.Newf("still waiting for frontier to reach %s, current %s",
@@ -7614,6 +7639,9 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 						m, err := feed.Next()
 						if err != nil {
 							return err
+						}
+						if len(m.Resolved) > 0 {
+							continue
 						}
 						actualMessages = append(actualMessages, string(m.Value))
 					}
@@ -8520,6 +8548,11 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		if KafkaV2Enabled.Get(&s.Server.ClusterSettings().SV) {
+			// This is already covered for the v2 sink in another test: TestKafkaSinkClientV2_Resize
+			return
+		}
+
 		changefeedbase.BatchReductionRetryEnabled.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, true)
 

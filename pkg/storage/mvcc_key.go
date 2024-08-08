@@ -116,7 +116,7 @@ func (k MVCCKey) Less(l MVCCKey) bool {
 
 // Equal returns whether two keys are identical.
 func (k MVCCKey) Equal(l MVCCKey) bool {
-	return k.Key.Compare(l.Key) == 0 && k.Timestamp.EqOrdering(l.Timestamp)
+	return k.Key.Compare(l.Key) == 0 && k.Timestamp == l.Timestamp
 }
 
 // IsValue returns true iff the timestamp is non-zero.

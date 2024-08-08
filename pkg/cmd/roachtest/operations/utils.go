@@ -15,7 +15,10 @@ import (
 	gosql "database/sql"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -92,6 +95,48 @@ func pickRandomTable(
 		return ""
 	}
 	return tableNames[rng.Intn(len(tableNames))]
+}
+
+func drainNode(
+	ctx context.Context, o operation.Operation, c cluster.Cluster, node option.NodeListOption,
+) {
+	o.Status(fmt.Sprintf("draining node %s", node.NodeIDsString()))
+
+	addr, err := c.InternalAddr(ctx, o.L(), node)
+	if err != nil {
+		o.Fatal(err)
+	}
+
+	cmd := roachtestutil.NewCommand("./%s node drain", o.ClusterCockroach()).
+		WithEqualsSyntax().
+		Flag("host", addr[0]).
+		Flag("logtostderr", "INFO").
+		MaybeFlag(c.IsSecure(), "certs-dir", "certs").
+		MaybeOption(!c.IsSecure(), "insecure").
+		Option("self")
+
+	c.Run(ctx, option.WithNodes(node), cmd.String())
+}
+
+func decommissionNode(
+	ctx context.Context, o operation.Operation, c cluster.Cluster, node option.NodeListOption,
+) {
+	o.Status(fmt.Sprintf("decommissioning node %s", node.NodeIDsString()))
+
+	addr, err := c.InternalAddr(ctx, o.L(), node)
+	if err != nil {
+		o.Fatal(err)
+	}
+
+	cmd := roachtestutil.NewCommand("./%s node decommission", o.ClusterCockroach()).
+		WithEqualsSyntax().
+		Flag("host", addr[0]).
+		Flag("logtostderr", "INFO").
+		MaybeFlag(c.IsSecure(), "certs-dir", "certs").
+		MaybeOption(!c.IsSecure(), "insecure").
+		Option("self")
+
+	c.Run(ctx, option.WithNodes(node), cmd.String())
 }
 
 // Pick a random store in the node.

@@ -1129,12 +1129,14 @@ func restoreJobDescription(
 	intoDB string,
 	newDBName string,
 	kmsURIs []string,
+	resolvedSubdir string,
 ) (string, error) {
 	r := &tree.Restore{
 		DescriptorCoverage: restore.DescriptorCoverage,
 		AsOf:               restore.AsOf,
 		Targets:            restore.Targets,
 		From:               make([]tree.StringOrPlaceholderOptList, len(restore.From)),
+		Subdir:             tree.NewDString("/" + strings.TrimPrefix(resolvedSubdir, "/")),
 	}
 
 	var options tree.RestoreOptions
@@ -1157,7 +1159,9 @@ func restoreJobDescription(
 	}
 
 	ann := p.ExtendedEvalContext().Annotations
-	return tree.AsStringWithFQNames(r, ann), nil
+	return tree.AsStringWithFlags(
+		r, tree.FmtAlwaysQualifyNames|tree.FmtShowFullURIs, tree.FmtAnnotations(ann),
+	), nil
 }
 
 func restoreTypeCheck(
@@ -2035,12 +2039,6 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	var fromDescription [][]string
-	if len(from) == 1 {
-		fromDescription = [][]string{fullyResolvedBaseDirectory}
-	} else {
-		fromDescription = from
-	}
 
 	if restoreStmt.Options.ExperimentalOnline {
 		if err := checkBackupElidedPrefixForOnlineCompat(ctx, mainBackupManifests, descriptorRewrites); err != nil {
@@ -2052,12 +2050,13 @@ func doRestorePlan(
 		ctx,
 		p,
 		restoreStmt,
-		fromDescription,
-		fullyResolvedIncrementalsDirectory,
+		from,
+		incFrom,
 		restoreStmt.Options,
 		intoDB,
 		newDBName,
-		kms)
+		kms,
+		fullyResolvedSubdir)
 	if err != nil {
 		return err
 	}

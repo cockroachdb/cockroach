@@ -190,7 +190,7 @@ func CmdHelper(
 			if err := cfg.Validate(nil /* no default log directory */); err != nil {
 				return err
 			}
-			if _, err := log.ApplyConfig(cfg, log.FileSinkMetrics{}, nil /* fatalOnLogStall */); err != nil {
+			if _, err := log.ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */); err != nil {
 				return err
 			}
 		}
@@ -587,6 +587,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				}
 				continue
 			}
+			// Log the error so we get the stack trace.
+			log.Errorf(ctx, "%v", err)
 			return err
 
 		case <-ticker.C:

@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { Caution } from "@cockroachlabs/icons";
+import { Skeleton, Tooltip } from "antd";
 import React from "react";
-import { Tooltip } from "antd";
 
 import {
   isMaxSizeError,
@@ -240,34 +241,56 @@ export function buildIndexStatToRecommendationsMap(
   return recommendationsMap;
 }
 
-export function checkInfoAvailable(
-  requestError: Error,
-  queryError: Error,
-  cell: React.ReactNode,
-): React.ReactNode {
+interface LoadingCellProps {
+  requestError: Error;
+  queryError?: Error;
+  loading: boolean;
+  errorClassName: string;
+}
+
+export const LoadingCell: React.FunctionComponent<LoadingCellProps> = ({
+  loading,
+  requestError,
+  queryError,
+  errorClassName,
+  children,
+}) => {
+  if (loading) {
+    return (
+      <Skeleton loading={true} active={true} paragraph={false} title={true} />
+    );
+  }
+
   let tooltipMsg = "";
   if (requestError) {
     tooltipMsg = `Encountered a network error fetching data for this cell: ${requestError.name}`;
   } else if (queryError) {
     tooltipMsg = getQueryErrorMessage(queryError);
-  } else if (cell == null) {
-    tooltipMsg = "Empty result";
   }
+
+  let childrenOrNoData = <>{children}</>;
+  if (children == null) {
+    childrenOrNoData = <>{"No data"}</>;
+  }
+
   // If we encounter an error gathering data for this cell,
-  // render it "unavailable" with a tooltip message for the error.
+  // render a warning icon with a tooltip message for the error.
   if (tooltipMsg !== "") {
     return (
       <Tooltip
         overlayStyle={{ whiteSpace: "pre-line" }}
         placement="bottom"
         title={tooltipMsg}
+        className={errorClassName}
       >
-        (unavailable)
+        <Caution role={"status"} />
+        {childrenOrNoData}
       </Tooltip>
     );
+  } else {
+    return childrenOrNoData;
   }
-  return cell;
-}
+};
 
 export const getNetworkErrorMessage = (requestError: Error): string => {
   return `Encountered a network error: ${requestError.message}`;
@@ -297,22 +320,4 @@ const checkPrivilegeError = (
   }
   // If the error message includes any mention of privilege, consider it a privilege error.
   return err.message.includes("privilege");
-};
-
-// formatSQLTableName formats a SQL table name to a more readable format by
-// removing double quotes around the name parts if that 'part' does not contain
-// any spaces or periods.
-// e.g.
-//  "public"."table" -> public.table
-//  "public"."table" -> public.table
-//  "public"."table with space" -> public."table with space"
-//  "public"."table.with.period" -> public."table.with.period"
-export const formatSQLTableName = (tableName: string): string => {
-  return tableName.replace(/"([^"]+)"/g, (_, part) => {
-    // If it has a space or period keep it in quotes.
-    if (part.match(/[\s.]/)) {
-      return `"${part}"`;
-    }
-    return part;
-  });
 };

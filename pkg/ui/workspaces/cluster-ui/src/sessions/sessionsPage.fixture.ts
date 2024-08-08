@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { createMemoryHistory } from "history";
 import Long from "long";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { util } from "protobufjs";
 
 import {

@@ -74,8 +74,8 @@ func postSlackReport(pass, fail, skip map[*testImpl]struct{}) {
 
 	var prefix string
 	switch {
-	case roachtestflags.Cloud != "":
-		prefix = strings.ToUpper(roachtestflags.Cloud)
+	case roachtestflags.Cloud.IsSet():
+		prefix = strings.ToUpper(roachtestflags.Cloud.String())
 	default:
 		prefix = "GCE"
 	}

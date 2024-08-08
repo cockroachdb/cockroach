@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -181,7 +182,7 @@ func (og *operationGenerator) getSupportedDeclarativeOp(
 // stochastic attempts and if verbosity is >= 2 the unsuccessful attempts are
 // recorded in `log` to help with debugging of the workload.
 func (og *operationGenerator) randOp(
-	ctx context.Context, tx pgx.Tx, useDeclarativeSchemaChanger bool,
+	ctx context.Context, tx pgx.Tx, useDeclarativeSchemaChanger, allowDML bool,
 ) (stmt *opStmt, err error) {
 	for {
 		var op opType
@@ -194,6 +195,10 @@ func (og *operationGenerator) randOp(
 		} else {
 			op = opType(og.params.ops.Int())
 		}
+		if !allowDML && isDMLOpType(op) {
+			continue
+		}
+
 		og.resetOpState(useDeclarativeSchemaChanger)
 		stmt, err = opFuncs[op](og, ctx, tx)
 		if err != nil {
@@ -252,10 +257,14 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 	if err != nil {
 		return nil, err
 	}
+	var resolvableTypeReference tree.ResolvableTypeReference = typ
+	if typ == nil {
+		resolvableTypeReference = typName
+	}
 
 	def := &tree.ColumnTableDef{
-		Name: tree.Name(columnName),
-		Type: typName,
+		Name: columnName,
+		Type: resolvableTypeReference,
 	}
 	def.Nullable.Nullability = tree.Nullability(og.randIntn(1 + int(tree.SilentNull)))
 
@@ -288,6 +297,8 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 	if err != nil {
 		return nil, err
 	}
+	isJSONTyp := typ != nil && typ.Family() == types.ArrayFamily &&
+		typ.ArrayContents().Family() == types.JsonFamily
 	op := makeOpStmt(OpStmtDDL)
 	op.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.DuplicateColumn, condition: columnExistsOnTable},
@@ -299,8 +310,12 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 			code:      pgcode.FeatureNotSupported,
 			condition: def.Unique.IsUnique && typ != nil && !colinfo.ColumnTypeIsIndexable(typ),
 		},
+		// JSON arrays are not supported as a column type (#23468).
+		{
+			code: pgcode.FeatureNotSupported, condition: isJSONTyp,
+		},
 	})
-	op.sql = fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.Serialize(def))
+	op.sql = fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.AsString(def))
 	return op, nil
 }
 
@@ -334,20 +349,20 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 		return nil, err
 	}
 
-	constaintName := fmt.Sprintf("%s_%s_unique", tableName.Object(), columnForConstraint.name)
+	constraintName := fmt.Sprintf("%s_%s_unique", tableName.Object(), columnForConstraint.name)
 
 	columnExistsOnTable, err := og.columnExistsOnTable(ctx, tx, tableName, columnForConstraint.name)
 	if err != nil {
 		return nil, err
 	}
-	constraintExists, err := og.constraintExists(ctx, tx, constaintName)
+	constraintExists, err := og.constraintExists(ctx, tx, constraintName)
 	if err != nil {
 		return nil, err
 	}
 
 	canApplyConstraint := true
 	if columnExistsOnTable {
-		canApplyConstraint, err = og.canApplyUniqueConstraint(ctx, tx, tableName, []string{columnForConstraint.name})
+		canApplyConstraint, err = og.canApplyUniqueConstraint(ctx, tx, tableName, []tree.Name{columnForConstraint.name})
 		if err != nil {
 			return nil, err
 		}
@@ -369,7 +384,7 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedColumn, condition: !columnExistsOnTable},
-		{code: pgcode.DuplicateObject, condition: constraintExists},
+		{code: pgcode.DuplicateRelation, condition: constraintExists},
 		{code: pgcode.FeatureNotSupported, condition: columnExistsOnTable && !colinfo.ColumnTypeIsIndexable(columnForConstraint.typ)},
 		{pgcode.FeatureNotSupported, hasAlterPKSchemaChange},
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: databaseHasRegionChange && tableIsRegionalByRow},
@@ -379,7 +394,12 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 		og.candidateExpectedCommitErrors.add(pgcode.UniqueViolation)
 	}
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)`, tableName, constaintName, columnForConstraint.name)
+	stmt.sql = fmt.Sprintf(
+		`ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)`,
+		tableName.String(),
+		lexbase.EscapeSQLIdent(constraintName),
+		columnForConstraint.name.String(),
+	)
 	return stmt, nil
 }
 
@@ -452,7 +472,7 @@ func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx)
 			if columnForAs.typ.TypeMeta.Name != nil {
 				if columnForAs.typ.TypeMeta.Name.Basename() == tree.RegionEnum &&
 					!columnForAs.nullable {
-					ret += " AS " + columnForAs.name
+					ret += " AS " + columnForAs.name.String()
 					columnForAsUsed = true
 				}
 			}
@@ -466,7 +486,7 @@ func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx)
 					return "", err
 				}
 				for _, col := range columnNames {
-					if col.name == tree.RegionalByRowRegionDefaultCol &&
+					if col.name.String() == tree.RegionalByRowRegionDefaultCol &&
 						col.nullable {
 						stmt.expectedExecErrors.add(pgcode.InvalidTableDefinition)
 					}
@@ -836,8 +856,8 @@ func (og *operationGenerator) addForeignKeyConstraint(
 				ConstraintDef: &tree.ForeignKeyConstraintTableDef{
 					Name:     constraintName,
 					Table:    *parentTable,
-					FromCols: tree.NameList{tree.Name(childColumn.name)},
-					ToCols:   tree.NameList{tree.Name(parentColumn.name)},
+					FromCols: tree.NameList{childColumn.name},
+					ToCols:   tree.NameList{parentColumn.name},
 					Actions:  referenceActions,
 				},
 				ValidationBehavior: tree.ValidationDefault,
@@ -954,7 +974,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		Invisibility: invisibility,         // 5% NOT VISIBLE
 	}
 
-	regionColumn := ""
+	regionColumn := tree.Name("")
 	tableIsRegionalByRow, err := og.tableIsRegionalByRow(ctx, tx, tableName)
 	if err != nil {
 		return nil, err
@@ -969,12 +989,11 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	// Define columns on which to create an index. Check for types which cannot be indexed.
 	duplicateRegionColumn := false
 	nonIndexableType := false
+	lastColInvertedIndexIsDescending := false
+	pkColUsedInInvertedIndex := false
 	def.Columns = make(tree.IndexElemList, 1+og.randIntn(len(columnNames)))
-	if err != nil {
-		return nil, err
-	}
 	for i := range def.Columns {
-		def.Columns[i].Column = tree.Name(columnNames[i].name)
+		def.Columns[i].Column = columnNames[i].name
 		def.Columns[i].Direction = tree.Direction(og.randIntn(1 + int(tree.Descending)))
 
 		// When creating an index, the column being used as the region column
@@ -988,10 +1007,31 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			// We can have an inverted index on a set of columns if the last column
 			// is an inverted indexable type and the preceding columns are not.
 			invertedIndexableType := colinfo.ColumnTypeIsInvertedIndexable(columnNames[i].typ)
-			if (invertedIndexableType && i < len(def.Columns)-1) ||
+			indexableType := colinfo.ColumnTypeIsIndexable(columnNames[i].typ)
+			if (!indexableType && i < len(def.Columns)-1) ||
 				(!invertedIndexableType && i == len(def.Columns)-1) {
 				nonIndexableType = true
 			}
+			colUsedInPrimaryIdx, err := og.colIsPrimaryKey(ctx, tx, tableName, columnNames[i].name)
+			if err != nil {
+				return nil, err
+			}
+			if i == len(def.Columns)-1 {
+				// Strings need to use the gin_trgm_ops opclass if they are being used
+				// as the last column in an inverted index.
+				if columnNames[i].typ.Family() == types.StringFamily {
+					def.Columns[i].OpClass = "gin_trgm_ops"
+				}
+				// The last column cannot be descending or be present in the primary
+				// index.
+				if def.Columns[i].Direction == tree.Descending {
+					lastColInvertedIndexIsDescending = true
+				}
+				if colUsedInPrimaryIdx {
+					pkColUsedInInvertedIndex = true
+				}
+			}
+
 		} else {
 			if !colinfo.ColumnTypeIsIndexable(columnNames[i].typ) {
 				nonIndexableType = true
@@ -1003,13 +1043,13 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	// as stored columns.
 	stmt := makeOpStmt(OpStmtDDL)
 	duplicateStore := false
-	virtualComputedStored := false
+	isStoringVirtualComputed := false
 	regionColStored := false
 	columnNames = columnNames[len(def.Columns):]
 	if n := len(columnNames); n > 0 {
 		def.Storing = make(tree.NameList, og.randIntn(1+n))
 		for i := range def.Storing {
-			def.Storing[i] = tree.Name(columnNames[i].name)
+			def.Storing[i] = columnNames[i].name
 
 			// The region column can not be stored.
 			if tableIsRegionalByRow && columnNames[i].name == regionColumn {
@@ -1017,13 +1057,13 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			}
 
 			// Virtual computed columns are not allowed to be indexed
-			if columnNames[i].generated && !virtualComputedStored {
-				isStored, err := og.columnIsStoredComputed(ctx, tx, tableName, columnNames[i].name)
+			if columnNames[i].generated && !isStoringVirtualComputed {
+				isVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, tableName, columnNames[i].name)
 				if err != nil {
 					return nil, err
 				}
-				if !isStored {
-					virtualComputedStored = true
+				if isVirtualComputed {
+					isStoringVirtualComputed = true
 				}
 			}
 
@@ -1044,9 +1084,9 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	// Verify that a unique constraint can be added given the existing rows which may exist in the table.
 	uniqueViolationWillNotOccur := true
 	if def.Unique {
-		columns := []string{}
+		columns := []tree.Name{}
 		for _, col := range def.Columns {
-			columns = append(columns, string(col.Column))
+			columns = append(columns, col.Column)
 		}
 		uniqueViolationWillNotOccur, err = og.canApplyUniqueConstraint(ctx, tx, tableName, columns)
 		if err != nil {
@@ -1070,27 +1110,32 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	// When an index exists, but `IF NOT EXISTS` is used, then
 	// the index will not be created and the op will complete without errors.
 	if !(indexExists && def.IfNotExists) {
+		stmt.potentialExecErrors.addAll(codesWithConditions{
+			// If there is data in the table such that a unique index cannot be created,
+			// a pgcode.UniqueViolation will occur and will be wrapped in a
+			// pgcode.TransactionCommittedWithSchemaChangeFailure. The schemachange worker
+			// is expected to parse for the underlying error.
+			{code: pgcode.UniqueViolation, condition: !uniqueViolationWillNotOccur},
+		})
 		stmt.expectedExecErrors.addAll(codesWithConditions{
 			{code: pgcode.DuplicateRelation, condition: indexExists},
 			// Inverted indexes do not support stored columns.
 			{code: pgcode.InvalidSQLStatementName, condition: len(def.Storing) > 0 && def.Inverted},
 			// Inverted indexes cannot be unique.
 			{code: pgcode.InvalidSQLStatementName, condition: def.Unique && def.Inverted},
-			// If there is data in the table such that a unique index cannot be created,
-			// a pgcode.UniqueViolation will occur and will be wrapped in a
-			// pgcode.TransactionCommittedWithSchemaChangeFailure. The schemachange worker
-			// is expected to parse for the underlying error.
-			{code: pgcode.UniqueViolation, condition: !uniqueViolationWillNotOccur},
+			{code: pgcode.InvalidSQLStatementName, condition: def.Inverted && len(def.Storing) > 0},
 			{code: pgcode.DuplicateColumn, condition: duplicateStore},
 			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
 			{code: pgcode.FeatureNotSupported, condition: regionColStored},
 			{code: pgcode.FeatureNotSupported, condition: duplicateRegionColumn},
-			{code: pgcode.Uncategorized, condition: virtualComputedStored},
+			{code: pgcode.FeatureNotSupported, condition: isStoringVirtualComputed},
 			{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
+			{code: pgcode.FeatureNotSupported, condition: lastColInvertedIndexIsDescending},
+			{code: pgcode.FeatureNotSupported, condition: pkColUsedInInvertedIndex},
 		})
 	}
 
-	stmt.sql = tree.Serialize(def)
+	stmt.sql = tree.AsString(def)
 	return stmt, nil
 }
 
@@ -1164,7 +1209,7 @@ func (og *operationGenerator) createSequence(ctx context.Context, tx pgx.Tx) (*o
 				seqOptions,
 				tree.SequenceOption{
 					Name:          tree.SeqOptOwnedBy,
-					ColumnItemVal: &tree.ColumnItem{TableName: table.ToUnresolvedObjectName(), ColumnName: tree.Name(column)}},
+					ColumnItemVal: &tree.ColumnItem{TableName: table.ToUnresolvedObjectName(), ColumnName: column}},
 			)
 		}
 	}
@@ -1237,7 +1282,19 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 }
 
 func (og *operationGenerator) createEnum(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
-	typName, typeExists, err := og.randEnum(ctx, tx, og.pctExisting(false))
+	return og.createType(ctx, tx, true)
+}
+
+func (og *operationGenerator) createCompositeType(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	return og.createType(ctx, tx, false)
+}
+
+func (og *operationGenerator) createType(
+	ctx context.Context, tx pgx.Tx, isEnum bool,
+) (*opStmt, error) {
+
+	typName, typeExists, err := og.randTypeName(ctx, tx, og.pctExisting(false), isEnum)
+
 	if err != nil {
 		return nil, err
 	}
@@ -1250,9 +1307,18 @@ func (og *operationGenerator) createEnum(ctx context.Context, tx pgx.Tx) (*opStm
 		{code: pgcode.DuplicateObject, condition: typeExists},
 		{code: pgcode.InvalidSchemaName, condition: !schemaExists},
 	})
-	stmt := randgen.RandCreateType(og.params.rng, typName.Object(), "asdf")
-	stmt.(*tree.CreateType).TypeName = typName.ToUnresolvedObjectName()
-	opStmt.sql = tree.Serialize(stmt)
+
+	const letters = "abcdefghijklmnopqrstuvwxyz"
+	var statement tree.Statement
+
+	if isEnum {
+		statement = randgen.RandCreateEnumType(og.params.rng, typName.Object(), letters)
+	} else {
+		statement = randgen.RandCreateCompositeType(og.params.rng, typName.Object(), letters)
+	}
+
+	statement.(*tree.CreateType).TypeName = typName.ToUnresolvedObjectName()
+	opStmt.sql = tree.Serialize(statement)
 	return opStmt, nil
 }
 
@@ -1552,16 +1618,26 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 	if err != nil {
 		return nil, err
 	}
+	colIsRefByComputed, err := og.colIsRefByComputed(ctx, tx, tableName, columnName)
+	if err != nil {
+		return nil, err
+	}
 
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
-		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey},
+		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey || colIsRefByComputed},
 		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
 		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 	})
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN "%s"`, tableName, columnName)
+	// TODO(#126967): We need to add a check for the column being in an expression
+	// to an index. In the case where the expression does not already exist for
+	// us to use, we add an internal crdb_internal_idx_expr prefixed column to
+	// the table.
+	stmt.potentialExecErrors.add(pgcode.InvalidColumnReference)
+
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName.String(), columnName.String())
 	return stmt, nil
 }
 
@@ -1591,11 +1667,22 @@ func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) 
 	if err != nil {
 		return nil, err
 	}
-	stmt := makeOpStmt(OpStmtDDL)
-	if !columnExists {
-		stmt.expectedExecErrors.add(pgcode.UndefinedColumn)
+	colIsVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, tableName, columnName)
+	if err != nil {
+		return nil, err
 	}
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP DEFAULT`, tableName, columnName)
+	colIsStoredComputed, err := og.columnIsStoredComputed(ctx, tx, tableName, columnName)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	stmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UndefinedColumn, condition: !columnExists},
+		{code: pgcode.Syntax, condition: colIsVirtualComputed || colIsStoredComputed},
+	})
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT`,
+		tableName.String(), columnName.String())
 	return stmt, nil
 }
 
@@ -1640,7 +1727,8 @@ func (og *operationGenerator) dropColumnNotNull(ctx context.Context, tx pgx.Tx) 
 		{pgcode.UndefinedColumn, !columnExists},
 		{pgcode.InvalidTableDefinition, colIsPrimaryKey},
 	})
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP NOT NULL`, tableName, columnName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL`,
+		tableName.String(), columnName.String())
 	return stmt, nil
 }
 
@@ -1683,7 +1771,8 @@ func (og *operationGenerator) dropColumnStored(ctx context.Context, tx pgx.Tx) (
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 	})
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP STORED`, tableName, columnName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s DROP STORED`,
+		tableName.String(), columnName.String())
 	return stmt, nil
 }
 
@@ -1735,15 +1824,16 @@ func (og *operationGenerator) dropConstraint(ctx context.Context, tx pgx.Tx) (*o
 		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
 	}
 
-	constraintBeingDropped, err := og.constraintInDroppingState(ctx, tx, tableName, constraintName)
+	constraintAddingOrDropping, err := og.constraintInAddOrDropState(ctx, tx, tableName, constraintName)
 	if err != nil {
 		return nil, err
 	}
-	if constraintBeingDropped {
+	if constraintAddingOrDropping {
 		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
+		stmt.potentialExecErrors.add(pgcode.UndefinedObject)
 	}
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT "%s"`, tableName, constraintName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT %s`, tableName.String(), lexbase.EscapeSQLIdent(constraintName))
 	return stmt, nil
 }
 
@@ -1836,7 +1926,7 @@ func (og *operationGenerator) dropTable(ctx context.Context, tx pgx.Tx) (*opStmt
 	if err != nil {
 		return nil, err
 	}
-	tableHasDependencies, err := og.tableHasDependencies(ctx, tx, tableName)
+	tableHasDependencies, err := og.tableHasDependencies(ctx, tx, tableName, true /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}
@@ -1868,7 +1958,7 @@ func (og *operationGenerator) dropView(ctx context.Context, tx pgx.Tx) (*opStmt,
 	if err != nil {
 		return nil, err
 	}
-	viewHasDependencies, err := og.tableHasDependencies(ctx, tx, viewName)
+	viewHasDependencies, err := og.tableHasDependencies(ctx, tx, viewName, true /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}
@@ -1985,7 +2075,7 @@ func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opS
 	if err != nil {
 		return nil, err
 	}
-	columnIsDependedOn, err := og.columnIsDependedOn(ctx, tx, tableName, srcColumnName)
+	columnIsDependedOnByView, err := og.columnIsDependedOnByView(ctx, tx, tableName, srcColumnName)
 	if err != nil {
 		return nil, err
 	}
@@ -1994,11 +2084,11 @@ func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opS
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedColumn, !srcColumnExists},
 		{pgcode.DuplicateColumn, destColumnExists && srcColumnName != destColumnName},
-		{pgcode.DependentObjectsStillExist, columnIsDependedOn},
+		{pgcode.DependentObjectsStillExist, columnIsDependedOnByView},
 	})
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN "%s" TO "%s"`,
-		tableName, srcColumnName, destColumnName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN %s TO %s`,
+		tableName.String(), srcColumnName.String(), destColumnName.String())
 	return stmt, nil
 }
 
@@ -2135,7 +2225,7 @@ func (og *operationGenerator) renameTable(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
-	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcTableName)
+	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcTableName, false /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}
@@ -2185,7 +2275,7 @@ func (og *operationGenerator) renameView(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 
-	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcViewName)
+	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcViewName, true /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}
@@ -2237,7 +2327,7 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 	if !columnExists {
 		return makeOpStmtForSingleError(OpStmtDDL,
 			fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT "IrrelevantValue"`,
-				tableName, columnForDefault.name),
+				tableName.String(), columnForDefault.name.String()),
 			pgcode.UndefinedColumn), nil
 	}
 
@@ -2249,9 +2339,16 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 			return nil, err
 		}
 		if newTyp == nil {
+			errCode := pgcode.UndefinedObject // Error: type 'IrrelevantType'::<newTypeName> does not exist.
+			// Setting default on generated column short-circuits and returns a syntax
+			// error.
+			if columnForDefault.generated {
+				errCode = pgcode.Syntax
+			}
 			return makeOpStmtForSingleError(OpStmtDDL,
-				fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT 'IrrelevantValue':::%s`, tableName, columnForDefault.name, newTypeName.SQLString()),
-				pgcode.UndefinedColumn), nil
+				fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT 'IrrelevantValue':::%s`,
+					tableName.String(), columnForDefault.name.String(), newTypeName.SQLString()),
+				errCode), nil
 		}
 		datumTyp = newTyp
 	}
@@ -2261,13 +2358,14 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 	if (!datumTyp.Equivalent(columnForDefault.typ)) && defaultDatum != tree.DNull {
 		stmt.expectedExecErrors.add(pgcode.DatatypeMismatch)
 	}
-
 	// Generated columns cannot have default values.
 	if columnForDefault.generated {
-		stmt.expectedExecErrors.add(pgcode.InvalidTableDefinition)
+		stmt.expectedExecErrors.add(pgcode.Syntax)
 	}
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s`, tableName, columnForDefault.name, tree.AsStringWithFlags(defaultDatum, tree.FmtParsable))
+	strDefault := tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s`,
+		tableName.String(), columnForDefault.name.String(), strDefault)
 	return stmt, nil
 }
 
@@ -2317,7 +2415,7 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 			return nil, err
 		}
 		if colContainsNull {
-			og.candidateExpectedCommitErrors.add(pgcode.CheckViolation)
+			og.candidateExpectedCommitErrors.add(pgcode.NotNullViolation)
 		}
 	}
 
@@ -2325,7 +2423,8 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 	if err != nil {
 		return nil, err
 	}
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET NOT NULL`, tableName, columnName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET NOT NULL`,
+		tableName.String(), columnName.String())
 	return stmt, nil
 }
 
@@ -2393,8 +2492,8 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		{code: pgcode.DependentObjectsStillExist, condition: columnHasDependencies},
 	})
 
-	stmt.sql = fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE %s`,
-		setSessionVariableString, tableName, columnForTypeChange.name, newTypeName.SQLString())
+	stmt.sql = fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s`,
+		setSessionVariableString, tableName.String(), columnForTypeChange.name.String(), newTypeName.SQLString())
 	return stmt, nil
 }
 
@@ -2649,7 +2748,6 @@ func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt
 		onType = `UNION ALL
 	SELECT 'TYPE ' || quote_ident(schema) || '.' || quote_ident(name) FROM [SHOW TYPES]`
 	}
-
 	q := With([]CTE{
 		{"descriptors", descJSONQuery},
 		{"tables", tableDescQuery},
@@ -2721,7 +2819,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		}
 		nonGeneratedCols = truncated
 	}
-	nonGeneratedColNames := []string{}
+	nonGeneratedColNames := []tree.Name{}
 	rows := [][]string{}
 	for _, col := range nonGeneratedCols {
 		nonGeneratedColNames = append(nonGeneratedColNames, col.name)
@@ -2780,32 +2878,30 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 
 	// Only evaluate these if we know that the inserted values are sane, since
 	// we will need to evaluate generated expressions below.
-	uniqueConstraintViolation := false
+	hasUniqueConstraints := false
 	fkViolation := false
 	if !anyInvalidInserts {
-		// Verify if the new row will violate unique constraints by checking the constraints and
-		// existing rows in the database.
-		var generatedErrors codesWithConditions
-		uniqueConstraintViolation, generatedErrors, err = og.valuesViolateUniqueConstraints(ctx, tx, tableName, nonGeneratedColNames, allColumns, rows)
+		// Verify if the new row may violate unique constraints by checking the
+		// constraints in the database.
+		constraints, err := getUniqueConstraintsForTable(ctx, tx, tableName.String())
 		if err != nil {
 			return nil, err
 		}
-		if !uniqueConstraintViolation {
-			stmt.expectedExecErrors.addAll(generatedErrors)
-		}
+		hasUniqueConstraints = len(constraints) > 0
 		// Verify if the new row will violate fk constraints by checking the constraints and rows
 		// in the database.
 		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, nonGeneratedColNames, rows)
 		if err != nil {
 			return nil, err
 		}
+
 	}
 
-	stmt.expectedExecErrors.addAll(codesWithConditions{
-		{code: pgcode.UniqueViolation, condition: uniqueConstraintViolation},
-	})
 	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UniqueViolation, condition: hasUniqueConstraints},
 		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
+		{code: pgcode.NotNullViolation, condition: true},
+		{code: pgcode.CheckViolation, condition: true},
 	})
 	og.expectedCommitErrors.addAll(codesWithConditions{
 		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
@@ -2816,10 +2912,18 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		formattedRows = append(formattedRows, fmt.Sprintf("(%s)", strings.Join(row, ",")))
 	}
 
+	var escapedColNames strings.Builder
+	for i, colName := range nonGeneratedColNames {
+		if i > 0 {
+			escapedColNames.WriteString(", ")
+		}
+		escapedColNames.WriteString(colName.String())
+	}
+
 	stmt.sql = fmt.Sprintf(
 		`INSERT INTO %s (%s) VALUES %s`,
 		tableName,
-		strings.Join(nonGeneratedColNames, ","),
+		escapedColNames.String(),
 		strings.Join(formattedRows, ","),
 	)
 	return stmt, nil
@@ -3061,7 +3165,7 @@ func (og *operationGenerator) validate(ctx context.Context, tx pgx.Tx) (*opStmt,
 }
 
 type column struct {
-	name                string
+	name                tree.Name
 	typ                 *types.T
 	nullable            bool
 	generated           bool
@@ -3090,7 +3194,7 @@ func (og *operationGenerator) getTableColumns(
 												 c->>'id' AS ordinal
                     FROM columns_json
                  )
-  SELECT quote_ident(show_columns.column_name),
+  SELECT show_columns.column_name,
          show_columns.data_type,
          show_columns.is_nullable,
          columns.generation_expression IS NOT NULL AS is_generated,
@@ -3145,15 +3249,15 @@ func (og *operationGenerator) getTableColumns(
 
 func (og *operationGenerator) randColumn(
 	ctx context.Context, tx pgx.Tx, tableName tree.TableName, pctExisting int,
-) (string, error) {
+) (tree.Name, error) {
 	if err := og.setSeedInDB(ctx, tx); err != nil {
 		return "", err
 	}
 	if og.randIntn(100) >= pctExisting {
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
-		return fmt.Sprintf("col%s_%s",
-			strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNumSuffix()), nil
+		return tree.Name(fmt.Sprintf("col%s_%s",
+			strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNumSuffix())), nil
 	}
 	q := fmt.Sprintf(`
   SELECT column_name
@@ -3166,7 +3270,7 @@ ORDER BY random()
 	if err := tx.QueryRow(ctx, q).Scan(&name); err != nil {
 		return "", err
 	}
-	return name, nil
+	return tree.Name(name), nil
 }
 
 // randColumnWithMeta is implemented in the same way as randColumn with the exception that
@@ -3182,8 +3286,8 @@ func (og *operationGenerator) randColumnWithMeta(
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
 		return column{
-			name: fmt.Sprintf("col%s_%s",
-				strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNumSuffix()),
+			name: tree.Name(fmt.Sprintf("col%s_%s",
+				strings.TrimPrefix(tableName.Table(), "table"), og.newUniqueSeqNumSuffix())),
 		}, nil
 	}
 	q := fmt.Sprintf(`
@@ -3246,7 +3350,7 @@ func (og *operationGenerator) randChildColumnForFkRelation(
 	}
 
 	columnToReturn := column{
-		name:     columnName,
+		name:     tree.Name(columnName),
 		nullable: nullable == "YES",
 	}
 	table := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
@@ -3339,7 +3443,7 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 	}
 
 	columnToReturn := column{
-		name:     columnName,
+		name:     tree.Name(columnName),
 		nullable: nullable == "YES",
 	}
 	table := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
@@ -3476,9 +3580,16 @@ func (og *operationGenerator) randSequence(
 
 }
 
-func (og *operationGenerator) randEnum(
-	ctx context.Context, tx pgx.Tx, pctExisting int,
+func (og *operationGenerator) randTypeName(
+	ctx context.Context, tx pgx.Tx, pctExisting int, isEnum bool,
 ) (name *tree.TypeName, exists bool, _ error) {
+	var prefix string
+	if isEnum {
+		prefix = "enum_"
+	} else {
+		prefix = "composite_"
+	}
+
 	if og.randIntn(100) >= pctExisting {
 		// Most of the time, this case is for creating enums, so it
 		// is preferable that the schema exists
@@ -3486,16 +3597,17 @@ func (og *operationGenerator) randEnum(
 		if err != nil {
 			return nil, false, err
 		}
-		typeName := tree.MakeSchemaQualifiedTypeName(randSchema, fmt.Sprintf("enum_%s", og.newUniqueSeqNumSuffix()))
+		typeName := tree.MakeSchemaQualifiedTypeName(randSchema, fmt.Sprintf("%s%s", prefix, og.newUniqueSeqNumSuffix()))
 		return &typeName, false, nil
 	}
-	const q = `
-  SELECT schema, name
-    FROM [SHOW ENUMS]
-   WHERE name LIKE 'enum%'
-ORDER BY random()
-   LIMIT 1;
-`
+	var q = fmt.Sprintf(`
+		SELECT schema, name
+		    FROM [SHOW TYPES]
+		   WHERE name LIKE '%s'
+		ORDER BY random()
+		   LIMIT 1;
+		`, prefix+"%")
+
 	var schemaName string
 	var typName string
 	if err := tx.QueryRow(ctx, q).Scan(&schemaName, &typName); err != nil {
@@ -3695,7 +3807,7 @@ func (og *operationGenerator) randType(
 ) (*tree.TypeName, *types.T, error) {
 	if og.randIntn(100) <= og.params.enumPct {
 		// TODO(ajwerner): Support arrays of enums.
-		typName, exists, err := og.randEnum(ctx, tx, enumPctExisting)
+		typName, exists, err := og.randTypeName(ctx, tx, enumPctExisting, true)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -4406,7 +4518,7 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 			selectColumns.WriteString(", ")
 		}
 		selectColumns.WriteString(fmt.Sprintf("t%d.", tableIdx))
-		selectColumns.WriteString(col.name)
+		selectColumns.WriteString(col.name.String())
 		selectColumns.WriteString(" AS ")
 		selectColumns.WriteString(fmt.Sprintf("col%d", colIdx))
 	}

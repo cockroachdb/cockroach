@@ -8,11 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import { CaretDownOutlined, CaretRightOutlined } from "@ant-design/icons";
 import { Table as AntTable, ConfigProvider } from "antd";
 import classnames from "classnames/bind";
 import isArray from "lodash/isArray";
-import { CaretDownOutlined, CaretRightOutlined } from "@ant-design/icons";
+import React from "react";
 
 import styles from "./table.module.scss";
 

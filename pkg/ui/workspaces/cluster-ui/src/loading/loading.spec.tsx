@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import { Spinner, InlineAlert } from "@cockroachlabs/ui-components";
 import { assert } from "chai";
 import { mount } from "enzyme";
-import { Spinner, InlineAlert } from "@cockroachlabs/ui-components";
+import React from "react";
 
 import { Loading } from "./loading";
 

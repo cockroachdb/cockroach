@@ -123,25 +123,25 @@ func (p *Provider) CreateVolumeSnapshot(
 	l *logger.Logger, volume vm.Volume, vsco vm.VolumeSnapshotCreateOpts,
 ) (vm.VolumeSnapshot, error) {
 	// TODO(leon): implement
-	panic("unimplemented")
+	return vm.VolumeSnapshot{}, vm.UnimplementedError
 }
 
 func (p *Provider) ListVolumeSnapshots(
 	l *logger.Logger, vslo vm.VolumeSnapshotListOpts,
 ) ([]vm.VolumeSnapshot, error) {
-	panic("unimplemented")
+	return nil, vm.UnimplementedError
 }
 
 func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.VolumeSnapshot) error {
-	panic("unimplemented")
+	return vm.UnimplementedError
 }
 
 func (p *Provider) CreateVolume(*logger.Logger, vm.VolumeCreateOpts) (vm.Volume, error) {
-	panic("unimplemented")
+	return vm.Volume{}, vm.UnimplementedError
 }
 
-func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) error {
-	panic("unimplemented")
+func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, _ *vm.VM) error {
+	return vm.UnimplementedError
 }
 
 func (p *Provider) ListVolumes(l *logger.Logger, vm *vm.VM) ([]vm.Volume, error) {
@@ -149,23 +149,23 @@ func (p *Provider) ListVolumes(l *logger.Logger, vm *vm.VM) ([]vm.Volume, error)
 }
 
 func (p *Provider) AttachVolume(*logger.Logger, vm.Volume, *vm.VM) (string, error) {
-	panic("unimplemented")
+	return "", vm.UnimplementedError
 }
 
 func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) error {
-	panic("unimplemented")
+	return vm.UnimplementedError
 }
 
 func (p *Provider) Shrink(*logger.Logger, vm.List, string) error {
-	panic("unimplemented")
+	return vm.UnimplementedError
 }
 
 func (p *Provider) CreateLoadBalancer(*logger.Logger, vm.List, int) error {
-	panic("unimplemented")
+	return vm.UnimplementedError
 }
 
 func (p *Provider) DeleteLoadBalancer(*logger.Logger, vm.List, int) error {
-	panic("unimplemented")
+	return vm.UnimplementedError
 }
 
 func (p *Provider) ListLoadBalancers(*logger.Logger, vm.List) ([]vm.ServiceAddress, error) {

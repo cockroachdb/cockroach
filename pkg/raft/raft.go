@@ -325,7 +325,9 @@ type raft struct {
 	maxMsgSize         entryEncodingSize
 	maxUncommittedSize entryPayloadSize
 
-	trk tracker.ProgressTracker
+	config          quorum.Config
+	trk             tracker.ProgressTracker
+	electionTracker tracker.ElectionTracker
 
 	state StateType
 
@@ -351,6 +353,8 @@ type raft struct {
 
 	// the leader id
 	lead pb.PeerID
+	// TODO(arul): This should be populated when responding to a MsgFortify.
+	leadEpoch pb.Epoch
 	// leadTransferee is id of the leader transfer target when its value is not zero.
 	// Follow the procedure defined in raft thesis 3.10.
 	leadTransferee pb.PeerID
@@ -379,8 +383,10 @@ type raft struct {
 	// only leader keeps heartbeatElapsed.
 	heartbeatElapsed int
 
-	checkQuorum bool
-	preVote     bool
+	maxInflight      int
+	maxInflightBytes uint64
+	checkQuorum      bool
+	preVote          bool
 
 	heartbeatTimeout int
 	electionTimeout  int
@@ -415,10 +421,11 @@ func newRaft(c *Config) *raft {
 		raftLog:                     raftlog,
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
-		trk:                         tracker.MakeProgressTracker(c.MaxInflightMsgs, c.MaxInflightBytes),
 		electionTimeout:             c.ElectionTick,
 		heartbeatTimeout:            c.HeartbeatTick,
 		logger:                      c.Logger,
+		maxInflight:                 c.MaxInflightMsgs,
+		maxInflightBytes:            c.MaxInflightBytes,
 		checkQuorum:                 c.CheckQuorum,
 		preVote:                     c.PreVote,
 		disableProposalForwarding:   c.DisableProposalForwarding,
@@ -428,14 +435,19 @@ func newRaft(c *Config) *raft {
 	}
 	lastID := r.raftLog.lastEntryID()
 
-	cfg, trk, err := confchange.Restore(confchange.Changer{
-		Tracker:   r.trk,
-		LastIndex: lastID.index,
+	r.electionTracker = tracker.MakeVoteTracker(&r.config)
+
+	cfg, progressMap, err := confchange.Restore(confchange.Changer{
+		Config:           quorum.MakeEmptyConfig(),
+		ProgressMap:      tracker.MakeEmptyProgressMap(),
+		MaxInflight:      r.maxInflight,
+		MaxInflightBytes: r.maxInflightBytes,
+		LastIndex:        lastID.index,
 	}, cs)
 	if err != nil {
 		panic(err)
 	}
-	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, trk))
+	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, progressMap))
 
 	if !IsEmptyHardState(hs) {
 		r.loadState(hs)
@@ -443,7 +455,7 @@ func newRaft(c *Config) *raft {
 	if c.Applied > 0 {
 		raftlog.appliedTo(c.Applied, 0 /* size */)
 	}
-	r.becomeFollower(r.Term, None)
+	r.becomeFollower(r.Term, r.lead)
 
 	var nodesStrs []string
 	for _, n := range r.trk.VoterNodes() {
@@ -458,13 +470,15 @@ func newRaft(c *Config) *raft {
 
 func (r *raft) hasLeader() bool { return r.lead != None }
 
-func (r *raft) softState() SoftState { return SoftState{Lead: r.lead, RaftState: r.state} }
+func (r *raft) softState() SoftState { return SoftState{RaftState: r.state} }
 
 func (r *raft) hardState() pb.HardState {
 	return pb.HardState{
-		Term:   r.Term,
-		Vote:   r.Vote,
-		Commit: r.raftLog.committed,
+		Term:      r.Term,
+		Vote:      r.Vote,
+		Commit:    r.raftLog.committed,
+		Lead:      r.lead,
+		LeadEpoch: r.leadEpoch,
 	}
 }
 
@@ -569,7 +583,7 @@ func (r *raft) send(m pb.Message) {
 // if the follower log and commit index are up-to-date, the flow is paused (for
 // reasons like in-flight limits), or the message could not be constructed.
 func (r *raft) maybeSendAppend(to pb.PeerID) bool {
-	pr := r.trk.Progress[to]
+	pr := r.trk.Progress(to)
 
 	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
 	if !pr.ShouldSendMsgApp(last, commit) {
@@ -638,7 +652,7 @@ func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
 
 // sendHeartbeat sends a heartbeat RPC to the given peer.
 func (r *raft) sendHeartbeat(to pb.PeerID) {
-	pr := r.trk.Progress[to]
+	pr := r.trk.Progress(to)
 	// Attach the commit as min(to.matched, r.committed).
 	// When the leader sends out heartbeat message,
 	// the receiver(follower) might not be matched with the leader
@@ -681,7 +695,7 @@ func (r *raft) appliedTo(index uint64, size entryEncodingSize) {
 	newApplied := max(index, oldApplied)
 	r.raftLog.appliedTo(newApplied, size)
 
-	if r.trk.Config.AutoLeave && newApplied >= r.pendingConfIndex && r.state == StateLeader {
+	if r.config.AutoLeave && newApplied >= r.pendingConfIndex && r.state == StateLeader {
 		// If the current (and most recent, at least for this leader's term)
 		// configuration should be auto-left, initiate that now. We use a
 		// nil Data which unmarshals into an empty ConfChangeV2 and has the
@@ -698,9 +712,9 @@ func (r *raft) appliedTo(index uint64, size entryEncodingSize) {
 		// the joint configuration, or the leadership transfer will fail,
 		// and we will propose the config change on the next advance.
 		if err := r.Step(m); err != nil {
-			r.logger.Debugf("not initiating automatic transition out of joint configuration %s: %v", r.trk.Config, err)
+			r.logger.Debugf("not initiating automatic transition out of joint configuration %s: %v", r.config, err)
 		} else {
-			r.logger.Infof("initiating automatic transition out of joint configuration %s", r.trk.Config)
+			r.logger.Infof("initiating automatic transition out of joint configuration %s", r.config)
 		}
 	}
 }
@@ -739,6 +753,8 @@ func (r *raft) reset(term uint64) {
 		r.Term = term
 		r.Vote = None
 	}
+
+	// TODO(arul): we should only reset this if the term has changed.
 	r.lead = None
 
 	r.electionElapsed = 0
@@ -747,12 +763,12 @@ func (r *raft) reset(term uint64) {
 
 	r.abortLeaderTransfer()
 
-	r.trk.ResetVotes()
+	r.electionTracker.ResetVotes()
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 		*pr = tracker.Progress{
 			Match:     0,
 			Next:      r.raftLog.lastIndex() + 1,
-			Inflights: tracker.NewInflights(r.trk.MaxInflight, r.trk.MaxInflightBytes),
+			Inflights: tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
 			IsLearner: pr.IsLearner,
 		}
 		if id == r.id {
@@ -789,7 +805,7 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 	// On appending entries, the leader is effectively "sending" a MsgApp to its
 	// local "acceptor". Since we don't actually send this self-MsgApp, update the
 	// progress here as if it was sent.
-	r.trk.Progress[r.id].Next = app.lastIndex() + 1
+	r.trk.Progress(r.id).Next = app.lastIndex() + 1
 	// The leader needs to self-ack the entries just appended once they have
 	// been durably persisted (since it doesn't send an MsgApp to itself). This
 	// response message will be added to msgsAfterAppend and delivered back to
@@ -846,6 +862,11 @@ func (r *raft) tickHeartbeat() {
 	}
 }
 
+// TODO(arul): Consider removing the lead argument from this function. Instead,
+// for all the methods that want to set the leader explicitly (the ones that are
+// passing in m.From for this field), we can instead have them use an assignLead
+// function instead; in there, we can add safety checks to ensure we're not
+// overwriting the leader.
 func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
 	r.step = stepFollower
 	r.reset(term)
@@ -877,8 +898,12 @@ func (r *raft) becomePreCandidate() {
 	// but doesn't change anything else. In particular it does not increase
 	// r.Term or change r.Vote.
 	r.step = stepCandidate
-	r.trk.ResetVotes()
+	r.electionTracker.ResetVotes()
 	r.tick = r.tickElection
+	// TODO(arul): We're forgetting the raft leader here. From the perspective of
+	// leader leases, this is fine, because we wouldn't be here unless we'd
+	// revoked StoreLiveness support for the leader's store to begin with. It's
+	// a bit weird from the perspective of raft though. See if we can avoid this.
 	r.lead = None
 	r.state = StatePreCandidate
 	r.logger.Infof("%x became pre-candidate at term %d", r.id, r.Term)
@@ -898,7 +923,7 @@ func (r *raft) becomeLeader() {
 	// (perhaps after having received a snapshot as a result). The leader is
 	// trivially in this state. Note that r.reset() has initialized this
 	// progress with the last index already.
-	pr := r.trk.Progress[r.id]
+	pr := r.trk.Progress(r.id)
 	pr.BecomeReplicate()
 	// The leader always has RecentActive == true; MsgCheckQuorum makes sure to
 	// preserve this.
@@ -995,7 +1020,7 @@ func (r *raft) campaign(t CampaignType) {
 	}
 	var ids []pb.PeerID
 	{
-		idMap := r.trk.Voters.IDs()
+		idMap := r.config.Voters.IDs()
 		ids = make([]pb.PeerID, 0, len(idMap))
 		for id := range idMap {
 			ids = append(ids, id)
@@ -1033,8 +1058,8 @@ func (r *raft) poll(
 	} else {
 		r.logger.Infof("%x received %s rejection from %x at term %d", r.id, t, id, r.Term)
 	}
-	r.trk.RecordVote(id, v)
-	return r.trk.TallyVotes()
+	r.electionTracker.RecordVote(id, v)
+	return r.electionTracker.TallyVotes()
 }
 
 func (r *raft) Step(m pb.Message) error {
@@ -1108,19 +1133,6 @@ func (r *raft) Step(m pb.Message) error {
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
 				r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term)
 			r.send(pb.Message{To: m.From, Term: r.Term, Type: pb.MsgPreVoteResp, Reject: true})
-		} else if m.Type == pb.MsgStorageAppendResp {
-			if m.Snapshot != nil {
-				// Even if the snapshot applied under a different term, its application
-				// is still valid. Snapshots carry committed (term-independent) state.
-				r.appliedSnap(m.Snapshot)
-			}
-			if m.Index != 0 {
-				// Don't consider the appended log entries to be stable because they may
-				// have been overwritten in the unstable log during a later term. See
-				// the comment in newStorageAppendResp for more about this race.
-				r.logger.Infof("%x [term: %d] ignored entry appends from a %s message with lower term [term: %d]",
-					r.id, r.Term, m.Type, m.Term)
-			}
 		} else {
 			// ignore other cases
 			r.logger.Infof("%x [term: %d] ignored a %s message with lower term from %x [term: %d]",
@@ -1144,7 +1156,7 @@ func (r *raft) Step(m pb.Message) error {
 			r.appliedSnap(m.Snapshot)
 		}
 		if m.Index != 0 {
-			r.raftLog.stableTo(entryID{term: m.LogTerm, index: m.Index})
+			r.raftLog.stableTo(logMark{term: m.LogTerm, index: m.Index})
 		}
 
 	case pb.MsgStorageApplyResp:
@@ -1226,7 +1238,13 @@ func stepLeader(r *raft, m pb.Message) error {
 	case pb.MsgCheckQuorum:
 		if !r.trk.QuorumActive() {
 			r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
-			r.becomeFollower(r.Term, None)
+			// NB: Stepping down because of CheckQuorum is a special, in that we know
+			// the QSE is in the past. This means that the leader can safely call a
+			// new election or vote for a different peer without regressing the QSE.
+			// We don't need to/want to give this any special treatment -- instead, we
+			// handle this like the general step down case by simply remembering the
+			// term/lead information from our stint as the leader.
+			r.becomeFollower(r.Term, r.id)
 		}
 		// Mark everyone (but ourselves) as inactive in preparation for the next
 		// CheckQuorum.
@@ -1240,7 +1258,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		if len(m.Entries) == 0 {
 			r.logger.Panicf("%x stepped empty MsgProp", r.id)
 		}
-		if r.trk.Progress[r.id] == nil {
+		if r.trk.Progress(r.id) == nil {
 			// If we are not currently a member of the range (i.e. this node
 			// was removed from the configuration while serving as leader),
 			// drop any new proposals.
@@ -1275,7 +1293,7 @@ func stepLeader(r *raft, m pb.Message) error {
 				// [^1]: https://github.com/etcd-io/etcd/issues/7625#issuecomment-489232411
 				alreadyPending := r.pendingConfIndex > r.raftLog.applied
 
-				alreadyJoint := len(r.trk.Config.Voters[1]) > 0
+				alreadyJoint := len(r.config.Voters[1]) > 0
 				wantsLeaveJoint := len(cc.AsV2().Changes) == 0
 
 				var failedCheck string
@@ -1292,7 +1310,7 @@ func stepLeader(r *raft, m pb.Message) error {
 				//
 				// NB: !alreadyPending requirement is always respected, for safety.
 				if alreadyPending || (failedCheck != "" && !r.disableConfChangeValidation) {
-					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.trk.Config, failedCheck)
+					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.config, failedCheck)
 					m.Entries[i] = pb.Entry{Type: pb.EntryNormal}
 				} else {
 					r.pendingConfIndex = r.raftLog.lastIndex() + uint64(i) + 1
@@ -1311,7 +1329,7 @@ func stepLeader(r *raft, m pb.Message) error {
 	}
 
 	// All other message types require a progress for m.From (pr).
-	pr := r.trk.Progress[m.From]
+	pr := r.trk.Progress(m.From)
 	if pr == nil {
 		r.logger.Debugf("%x no progress available for %x", r.id, m.From)
 		return nil
@@ -1606,7 +1624,7 @@ func stepCandidate(r *raft, m pb.Message) error {
 		case quorum.VoteLost:
 			// pb.MsgPreVoteResp contains future term of pre-candidate
 			// m.Term > r.Term; reuse r.Term
-			r.becomeFollower(r.Term, None)
+			r.becomeFollower(r.Term, r.lead)
 		}
 	case pb.MsgTimeoutNow:
 		r.logger.Debugf("%x [term %d state %v] ignored MsgTimeoutNow from %x", r.id, r.Term, r.state, m.From)
@@ -1623,11 +1641,19 @@ func stepFollower(r *raft, m pb.Message) error {
 		} else if r.disableProposalForwarding {
 			r.logger.Infof("%x not forwarding to leader %x at term %d; dropping proposal", r.id, r.lead, r.Term)
 			return ErrProposalDropped
+		} else if r.lead == r.id {
+			r.logger.Infof("%x not forwarding to itself at term %d; dropping proposal", r.id, r.Term)
+			return ErrProposalDropped
 		}
 		m.To = r.lead
 		r.send(m)
 	case pb.MsgApp:
 		r.electionElapsed = 0
+		// TODO(arul): Once r.lead != None, we shouldn't need to update r.lead
+		// anymore within the course of a single term (in the context of which this
+		// function is always called). Instead, if r.lead != None, we should be able
+		// to assert that the leader hasn't changed within a given term. Maybe at
+		// the caller itself.
 		r.lead = m.From
 		r.handleAppendEntries(m)
 	case pb.MsgHeartbeat:
@@ -1641,6 +1667,9 @@ func stepFollower(r *raft, m pb.Message) error {
 	case pb.MsgTransferLeader:
 		if r.lead == None {
 			r.logger.Infof("%x no leader at term %d; dropping leader transfer msg", r.id, r.Term)
+			return nil
+		} else if r.lead == r.id {
+			r.logger.Infof("%x is itself the leader at term %d; dropping leader transfer msg", r.id, r.Term)
 			return nil
 		}
 		m.To = r.lead
@@ -1866,11 +1895,13 @@ func (r *raft) restore(s snapshot) bool {
 		return false
 	}
 
-	// Reset the configuration and add the (potentially updated) peers in anew.
-	r.trk = tracker.MakeProgressTracker(r.trk.MaxInflight, r.trk.MaxInflightBytes)
-	cfg, trk, err := confchange.Restore(confchange.Changer{
-		Tracker:   r.trk,
-		LastIndex: r.raftLog.lastIndex(),
+	cfg, progressMap, err := confchange.Restore(confchange.Changer{
+		// Reset the configuration and add the (potentially updated) peers in anew.
+		Config:           quorum.MakeEmptyConfig(),
+		ProgressMap:      tracker.MakeEmptyProgressMap(), // empty ProgressMap to go with our empty config
+		MaxInflight:      r.maxInflight,
+		MaxInflightBytes: r.maxInflightBytes,
+		LastIndex:        r.raftLog.lastIndex(),
 	}, cs)
 
 	if err != nil {
@@ -1879,7 +1910,7 @@ func (r *raft) restore(s snapshot) bool {
 		panic(fmt.Sprintf("unable to restore config %+v: %s", cs, err))
 	}
 
-	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, trk))
+	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, progressMap))
 
 	last := r.raftLog.lastEntryID()
 	r.logger.Infof("%x [commit: %d, lastindex: %d, lastterm: %d] restored snapshot [index: %d, term: %d]",
@@ -1890,15 +1921,18 @@ func (r *raft) restore(s snapshot) bool {
 // promotable indicates whether state machine can be promoted to leader,
 // which is true when its own id is in progress list.
 func (r *raft) promotable() bool {
-	pr := r.trk.Progress[r.id]
+	pr := r.trk.Progress(r.id)
 	return pr != nil && !pr.IsLearner && !r.raftLog.hasNextOrInProgressSnapshot()
 }
 
 func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
-	cfg, trk, err := func() (tracker.Config, tracker.ProgressMap, error) {
+	cfg, progressMap, err := func() (quorum.Config, tracker.ProgressMap, error) {
 		changer := confchange.Changer{
-			Tracker:   r.trk,
-			LastIndex: r.raftLog.lastIndex(),
+			Config:           r.config,
+			ProgressMap:      r.trk.MoveProgressMap(),
+			MaxInflight:      r.maxInflight,
+			MaxInflightBytes: r.maxInflightBytes,
+			LastIndex:        r.raftLog.lastIndex(),
 		}
 		if cc.LeaveJoint() {
 			return changer.LeaveJoint()
@@ -1913,7 +1947,7 @@ func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
 		panic(err)
 	}
 
-	return r.switchToConfig(cfg, trk)
+	return r.switchToConfig(cfg, progressMap)
 }
 
 // switchToConfig reconfigures this node to use the provided configuration. It
@@ -1922,19 +1956,19 @@ func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
 // requirements.
 //
 // The inputs usually result from restoring a ConfState or applying a ConfChange.
-func (r *raft) switchToConfig(cfg tracker.Config, trk tracker.ProgressMap) pb.ConfState {
-	r.trk.Config = cfg
-	r.trk.Progress = trk
+func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap) pb.ConfState {
+	r.config = cfg
+	r.trk = tracker.MakeProgressTracker(&r.config, progressMap)
 
-	r.logger.Infof("%x switched to configuration %s", r.id, r.trk.Config)
-	cs := r.trk.ConfState()
-	pr, ok := r.trk.Progress[r.id]
+	r.logger.Infof("%x switched to configuration %s", r.id, r.config)
+	cs := r.config.ConfState()
+	pr := r.trk.Progress(r.id)
 
 	// Update whether the node itself is a learner, resetting to false when the
 	// node is removed.
-	r.isLearner = ok && pr.IsLearner
+	r.isLearner = pr != nil && pr.IsLearner
 
-	if (!ok || r.isLearner) && r.state == StateLeader {
+	if (pr == nil || r.isLearner) && r.state == StateLeader {
 		// This node is leader and was removed or demoted, step down if requested.
 		//
 		// We prevent demotions at the time writing but hypothetically we handle
@@ -1944,7 +1978,9 @@ func (r *raft) switchToConfig(cfg tracker.Config, trk tracker.ProgressMap) pb.Co
 		// interruption). This might still drop some proposals but it's better than
 		// nothing.
 		if r.stepDownOnRemoval {
-			r.becomeFollower(r.Term, None)
+			// NB: Similar to the CheckQuorum step down case, we must remember our
+			// prior stint as leader, lest we regress the QSE.
+			r.becomeFollower(r.Term, r.lead)
 		}
 		return cs
 	}
@@ -1964,7 +2000,7 @@ func (r *raft) switchToConfig(cfg tracker.Config, trk tracker.ProgressMap) pb.Co
 	r.bcastAppend()
 
 	// If the leadTransferee was removed or demoted, abort the leadership transfer.
-	if _, tOK := r.trk.Config.Voters.IDs()[r.leadTransferee]; !tOK && r.leadTransferee != 0 {
+	if _, tOK := r.config.Voters.IDs()[r.leadTransferee]; !tOK && r.leadTransferee != 0 {
 		r.abortLeaderTransfer()
 	}
 
@@ -1978,6 +2014,8 @@ func (r *raft) loadState(state pb.HardState) {
 	r.raftLog.committed = state.Commit
 	r.Term = state.Term
 	r.Vote = state.Vote
+	r.lead = state.Lead
+	r.leadEpoch = state.LeadEpoch
 }
 
 // pastElectionTimeout returns true if r.electionElapsed is greater

@@ -10,8 +10,8 @@
 
 import React from "react";
 
-import * as docsURL from "src/util/docs";
 import { Anchor } from "src/components";
+import * as docsURL from "src/util/docs";
 
 export const CapacityGraphTooltip: React.FC<{ tooltipSelection?: string }> = ({
   tooltipSelection,

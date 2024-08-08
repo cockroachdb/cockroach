@@ -2853,7 +2853,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableCreateStatsUsingExtremes), nil
 		},
-		GlobalDefault: globalFalse,
+		GlobalDefault: globalTrue,
 	},
 
 	// CockroachDB extension.
@@ -3295,6 +3295,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`optimizer_use_conditional_hoist_fix`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_conditional_hoist_fix`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_conditional_hoist_fix", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseConditionalHoistFix(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseConditionalHoistFix), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
 	`optimizer_use_trigram_similarity_optimization`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_trigram_similarity_optimization`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
@@ -3534,11 +3551,11 @@ func init() {
 	}()
 }
 
-// SetSessionVariable sets a new value for session setting `varName` in the
+// TestingSetSessionVariable sets a new value for session setting `varName` in the
 // session settings owned by `evalCtx`, returning an error if not successful.
 // This function should only be used for testing. For general-purpose code,
 // please use SessionAccessor.SetSessionVar instead.
-func SetSessionVariable(
+func TestingSetSessionVariable(
 	ctx context.Context, evalCtx eval.Context, varName, varValue string,
 ) (err error) {
 	err = CheckSessionVariableValueValid(ctx, evalCtx.Settings, varName, varValue)
@@ -3546,7 +3563,6 @@ func SetSessionVariable(
 		return err
 	}
 	sdMutatorBase := sessionDataMutatorBase{
-		defaults: make(map[string]string),
 		settings: evalCtx.Settings,
 	}
 	sdMutator := sessionDataMutator{
@@ -3560,6 +3576,28 @@ func SetSessionVariable(
 	}
 
 	return sVar.Set(ctx, sdMutator, varValue)
+}
+
+// TestingResetSessionVariables resets all session settings in evalCtx to their
+// global default, if they have a global default.
+func TestingResetSessionVariables(ctx context.Context, evalCtx eval.Context) (err error) {
+	sdMutatorBase := sessionDataMutatorBase{
+		settings: evalCtx.Settings,
+	}
+	sdMutator := sessionDataMutator{
+		data:                        evalCtx.SessionData(),
+		sessionDataMutatorBase:      sdMutatorBase,
+		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
+	}
+	for _, v := range varGen {
+		if v.Set == nil || v.GlobalDefault == nil {
+			continue
+		}
+		if err := v.Set(ctx, sdMutator, v.GlobalDefault(&evalCtx.Settings.SV)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // makePostgresBoolGetStringValFn returns a function that evaluates and returns

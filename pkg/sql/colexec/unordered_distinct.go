@@ -133,6 +133,20 @@ func (op *UnorderedDistinct) ExportBuffered(colexecop.Operator) coldata.Batch {
 	return coldata.ZeroBatch
 }
 
+// ReleaseBeforeExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (op *UnorderedDistinct) ReleaseBeforeExport() {
+	// We need to hold onto the hash table to perform the filtering in the
+	// unorderedDistinctFilterer.
+}
+
+// ReleaseAfterExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (op *UnorderedDistinct) ReleaseAfterExport(colexecop.Operator) {
+	// We need to hold onto the hash table to perform the filtering in the
+	// unorderedDistinctFilterer.
+}
+
 // Reset resets the UnorderedDistinct.
 func (op *UnorderedDistinct) Reset(ctx context.Context) {
 	if r, ok := op.Input.(colexecop.Resetter); ok {

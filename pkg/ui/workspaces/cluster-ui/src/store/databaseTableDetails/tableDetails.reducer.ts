@@ -16,8 +16,8 @@ import {
   TableDetailsReqParams,
   TableDetailsResponse,
 } from "../../api";
-import { DOMAIN_NAME } from "../utils";
 import { generateTableID } from "../../util";
+import { DOMAIN_NAME } from "../utils";
 
 type TableDetailsWithKey = {
   tableDetailsResponse: SqlApiResponse<TableDetailsResponse>;

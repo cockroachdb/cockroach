@@ -14,14 +14,14 @@ import {
   SortSetting,
 } from "@cockroachlabs/cluster-ui";
 
+import { refreshLiveWorkload } from "src/redux/apiReducers";
+import { LocalSetting } from "src/redux/localsettings";
+import { AdminUIState } from "src/redux/state";
 import {
   selectActiveStatements,
   selectAppName,
   selectClusterLocksMaxApiSizeReached,
 } from "src/selectors";
-import { refreshLiveWorkload } from "src/redux/apiReducers";
-import { LocalSetting } from "src/redux/localsettings";
-import { AdminUIState } from "src/redux/state";
 
 import { autoRefreshLocalSetting } from "../transactions/activeTransactionsSelectors";
 

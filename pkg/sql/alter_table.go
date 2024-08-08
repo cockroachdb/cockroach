@@ -636,11 +636,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if columnName == catpb.TTLDefaultExpirationColumnName &&
 				tableDesc.HasRowLevelTTL() &&
 				tableDesc.GetRowLevelTTL().HasDurationExpr() {
-				return pgerror.Newf(
-					pgcode.InvalidTableDefinition,
-					`cannot alter column %s while ttl_expire_after is set`,
-					columnName,
-				)
+				return sqlerrors.NewAlterDependsOnDurationExprError("alter", "column", columnName, tn.Object())
 			}
 			// Apply mutations to copy of column descriptor.
 			if err := applyColumnMutation(params.ctx, tableDesc, col, t, params, n.n.Cmds, tn); err != nil {
@@ -947,6 +943,25 @@ func applyColumnMutation(
 		return AlterColumnType(ctx, tableDesc, col, t, params, cmds, tn)
 
 	case *tree.AlterTableSetDefault:
+		// If our column is computed, block mixing defaults in entirely.
+		// This check exists here instead of later on during validation because
+		// adding a null default to a computed column should also be blocked, but
+		// is undetectable later on since SET DEFAULT NUL means a nil default
+		// expression.
+		if col.IsComputed() {
+			// Block dropping a computed column "default" as well.
+			if t.Default == nil {
+				return pgerror.Newf(
+					pgcode.Syntax,
+					"column %q of relation %q is a computed column",
+					col.GetName(),
+					tn.ObjectName)
+			}
+			return pgerror.Newf(
+				pgcode.Syntax,
+				"computed column %q cannot also have a DEFAULT expression",
+				col.GetName())
+		}
 		if err := updateNonComputedColExpr(
 			params,
 			tableDesc,
@@ -1283,7 +1298,8 @@ func labeledRowValues(cols []catalog.Column, values tree.Datums) string {
 		if i != 0 {
 			s.WriteString(`, `)
 		}
-		s.WriteString(cols[i].GetName())
+		colName := cols[i].ColName()
+		s.WriteString(colName.String())
 		s.WriteString(`=`)
 		s.WriteString(values[i].String())
 	}
@@ -1587,11 +1603,45 @@ func insertJSONStatistic(
 		fullStatisticIDValue = s.FullStatisticID
 	}
 
-	_ /* rows */, err := txn.Exec(
-		ctx,
-		"insert-stats",
-		txn.KV(),
-		`INSERT INTO system.table_statistics (
+	if s.ID != 0 {
+		_ /* rows */, err := txn.Exec(
+			ctx,
+			"insert-stats",
+			txn.KV(),
+			`INSERT INTO system.table_statistics (
+					"statisticID",
+					"tableID",
+					"name",
+					"columnIDs",
+					"createdAt",
+					"rowCount",
+					"distinctCount",
+					"nullCount",
+					"avgSize",
+					histogram,
+					"partialPredicate",
+					"fullStatisticID"
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			s.ID,
+			tableID,
+			name,
+			columnIDs,
+			s.CreatedAt,
+			s.RowCount,
+			s.DistinctCount,
+			s.NullCount,
+			s.AvgSize,
+			histogram,
+			predicateValue,
+			fullStatisticIDValue,
+		)
+		return err
+	} else {
+		_ /* rows */, err := txn.Exec(
+			ctx,
+			"insert-stats",
+			txn.KV(),
+			`INSERT INTO system.table_statistics (
 					"tableID",
 					"name",
 					"columnIDs",
@@ -1604,19 +1654,20 @@ func insertJSONStatistic(
 					"partialPredicate",
 					"fullStatisticID"
 				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		tableID,
-		name,
-		columnIDs,
-		s.CreatedAt,
-		s.RowCount,
-		s.DistinctCount,
-		s.NullCount,
-		s.AvgSize,
-		histogram,
-		predicateValue,
-		fullStatisticIDValue,
-	)
-	return err
+			tableID,
+			name,
+			columnIDs,
+			s.CreatedAt,
+			s.RowCount,
+			s.DistinctCount,
+			s.NullCount,
+			s.AvgSize,
+			histogram,
+			predicateValue,
+			fullStatisticIDValue,
+		)
+		return err
+	}
 }
 
 // validateConstraintNameIsNotUsed checks that the name of the constraint we're
@@ -1690,7 +1741,7 @@ func validateConstraintNameIsNotUsed(
 			return true, nil
 		}
 		if idx.Dropped() {
-			return false, pgerror.Newf(pgcode.DuplicateObject, "constraint with name %q already exists and is being dropped, try again later", name)
+			return false, pgerror.Newf(pgcode.DuplicateRelation, "constraint with name %q already exists and is being dropped, try again later", name)
 		}
 		return false, pgerror.Newf(pgcode.DuplicateRelation, "constraint with name %q already exists", name)
 
@@ -1878,7 +1929,7 @@ func dropColumnImpl(
 	if err := schemaexpr.ValidateColumnHasNoDependents(tableDesc, colToDrop); err != nil {
 		return nil, err
 	}
-	if err := schemaexpr.ValidateTTLExpressionDoesNotDependOnColumn(tableDesc, rowLevelTTL, colToDrop); err != nil {
+	if err := schemaexpr.ValidateTTLExpressionDoesNotDependOnColumn(tableDesc, rowLevelTTL, colToDrop, tn, "drop"); err != nil {
 		return nil, err
 	}
 
@@ -1905,7 +1956,8 @@ func dropColumnImpl(
 
 			if colIDs.Contains(colToDrop.GetID()) {
 				containsThisColumn = true
-				return nil, sqlerrors.NewColumnReferencedByPartialIndex(string(colToDrop.ColName()), idx.GetName())
+				return nil, sqlerrors.ColumnReferencedByPartialIndex(
+					"drop", "column", string(colToDrop.ColName()), idx.GetName())
 			}
 		}
 		// Perform the DROP.
@@ -1948,7 +2000,8 @@ func dropColumnImpl(
 			}
 
 			if colIDs.Contains(colToDrop.GetID()) {
-				return nil, sqlerrors.NewColumnReferencedByPartialUniqueWithoutIndexConstraint(string(colToDrop.ColName()), uwoi.GetName())
+				return nil, sqlerrors.ColumnReferencedByPartialUniqueWithoutIndexConstraint(
+					"drop", "column", string(colToDrop.ColName()), uwoi.GetName())
 			}
 		}
 		if uwoi.Dropped() || !uwoi.CollectKeyColumnIDs().Contains(colToDrop.GetID()) {

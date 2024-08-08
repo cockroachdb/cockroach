@@ -134,8 +134,8 @@ func upToDateRaftStatus(repls []roachpb.ReplicaDescriptor) *raft.Status {
 	}
 	return &raft.Status{
 		BasicStatus: raft.BasicStatus{
-			HardState: raftpb.HardState{Commit: 100},
-			SoftState: raft.SoftState{Lead: 1, RaftState: raft.StateLeader},
+			HardState: raftpb.HardState{Commit: 100, Lead: 1},
+			SoftState: raft.SoftState{RaftState: raft.StateLeader},
 		},
 		Progress: prs,
 	}
@@ -8918,7 +8918,7 @@ func TestReplicaMetrics(t *testing.T) {
 		} else {
 			status.SoftState.RaftState = raft.StateFollower
 		}
-		status.SoftState.Lead = lead
+		status.HardState.Lead = lead
 		return status
 	}
 	desc := func(ids ...int) roachpb.RangeDescriptor {
@@ -10117,9 +10117,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 						HardState: raftpb.HardState{
 							Term:   5,
 							Commit: 10,
-						},
-						SoftState: raft.SoftState{
-							Lead: 1,
+							Lead:   1,
 						},
 					},
 				},
@@ -11481,7 +11479,9 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 		raftStatus: raft.BasicStatus{
 			SoftState: raft.SoftState{
 				RaftState: raft.StateFollower,
-				Lead:      2,
+			},
+			HardState: raftpb.HardState{
+				Lead: 2,
 			},
 		},
 		livenessMap: livenesspb.IsLiveMap{
@@ -11599,7 +11599,9 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 		raftStatus: raft.BasicStatus{
 			SoftState: raft.SoftState{
 				RaftState: raft.StateFollower,
-				Lead:      2,
+			},
+			HardState: raftpb.HardState{
+				Lead: 2,
 			},
 		},
 		livenessMap: livenesspb.IsLiveMap{
@@ -11710,7 +11712,9 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 		raftStatus: raft.BasicStatus{
 			SoftState: raft.SoftState{
 				RaftState: raft.StateFollower,
-				Lead:      2,
+			},
+			HardState: raftpb.HardState{
+				Lead: 2,
 			},
 		},
 		livenessMap: livenesspb.IsLiveMap{

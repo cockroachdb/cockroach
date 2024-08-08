@@ -324,7 +324,8 @@ func initBinariesAndLibraries() {
 	cockroachEAPath := roachtestflags.CockroachEAPath
 	workloadPath := roachtestflags.WorkloadPath
 	cockroach[defaultArch], _ = resolveBinary("cockroach", cockroachPath, defaultArch, true, false)
-	workload[defaultArch], _ = resolveBinary("workload", workloadPath, defaultArch, true, false)
+	// Let the test runner verify the workload binary exists if TestSpec.RequiresDeprecatedWorkload is true.
+	workload[defaultArch], _ = resolveBinary("workload", workloadPath, defaultArch, false, false)
 	cockroachEA[defaultArch], err = resolveBinary("cockroach-ea", cockroachEAPath, defaultArch, false, true)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-ea", defaultArch, err)
@@ -631,7 +632,7 @@ type nodeSelector interface {
 type clusterImpl struct {
 	name  string
 	tag   string
-	cloud string
+	cloud spec.Cloud
 	spec  spec.ClusterSpec
 	t     test.Test
 	f     roachtestutil.Fataler
@@ -936,8 +937,8 @@ func (f *clusterFactory) newCluster(
 		return nil, nil, err
 	}
 	if clusterCloud != spec.Local {
-		providerOptsContainer.SetProviderOpts(clusterCloud, providerOpts)
-		workloadProviderOptsContainer.SetProviderOpts(clusterCloud, workloadProviderOpts)
+		providerOptsContainer.SetProviderOpts(clusterCloud.String(), providerOpts)
+		workloadProviderOptsContainer.SetProviderOpts(clusterCloud.String(), workloadProviderOpts)
 	}
 
 	createFlagsOverride(&createVMOpts)
@@ -990,7 +991,9 @@ func (f *clusterFactory) newCluster(
 		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
 		createVMOpts.ClusterName = c.name
 		opts := []*cloud.ClusterCreateOpts{{Nodes: cfg.spec.NodeCount, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer}}
-		if cfg.spec.WorkloadNode {
+		// There can only be one local cluster so creating two sequentially overwrites the first.
+		// There isn't a point to creating a different sized vm for local clusters, so skip it.
+		if cfg.spec.WorkloadNode && !cfg.localCluster {
 			opts = []*cloud.ClusterCreateOpts{
 				{Nodes: cfg.spec.NodeCount - 1, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer},
 				{Nodes: 1, CreateOpts: createVMOpts, ProviderOptsContainer: workloadProviderOptsContainer},
@@ -1218,7 +1221,7 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, l *logger.Logger) error {
 		return nil
 	}
 
-	l.Printf("fetching logs\n")
+	l.Printf("fetching logs")
 	c.status("fetching logs")
 
 	// Don't hang forever if we can't fetch the logs.
@@ -1310,7 +1313,7 @@ func (c *clusterImpl) CopyRoachprodState(ctx context.Context) error {
 //
 // `COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob ./cockroach start-single-node --insecure --store=$(mktemp -d)`
 func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, l *logger.Logger) error {
-	l.Printf("fetching timeseries data\n")
+	l.Printf("fetching timeseries data")
 	return timeutil.RunWithTimeout(ctx, "fetch tsdata", 5*time.Minute, func(ctx context.Context) error {
 		node := 1
 		for ; node <= c.spec.NodeCount; node++ {
@@ -1396,7 +1399,7 @@ func (c *clusterImpl) FetchDebugZip(
 		return nil
 	}
 
-	l.Printf("fetching debug zip\n")
+	l.Printf("fetching debug zip")
 	c.status("fetching debug zip")
 
 	var nodes option.NodeListOption
@@ -1423,7 +1426,7 @@ func (c *clusterImpl) FetchDebugZip(
 			// `cockroach debug zip` does not support non root authentication.
 			nodePgUrl, err := c.InternalPGUrl(ctx, l, c.Node(node), roachprod.PGURLOptions{Auth: install.AuthRootCert})
 			if err != nil {
-				l.Printf("cluster.FetchDebugZip failed to retrieve PGUrl on node %d: %v", test.DefaultCockroachPath, node, err)
+				l.Printf("cluster.FetchDebugZip failed to retrieve PGUrl on node %d: %v", node, err)
 				continue
 			}
 
@@ -1489,7 +1492,7 @@ func (c *clusterImpl) FetchVMSpecs(ctx context.Context, l *logger.Logger) error 
 
 				err = os.WriteFile(dest, specJSON, 0644)
 				if err != nil {
-					l.Printf("Failed to write spec to file for %s\n", name)
+					l.Printf("Failed to write spec to file for %s", name)
 					continue
 				}
 			}
@@ -1617,7 +1620,7 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, l *logger.Logger) error {
 		return nil
 	}
 
-	l.Printf("fetching dmesg\n")
+	l.Printf("fetching dmesg")
 	c.status("fetching dmesg")
 
 	// Don't hang forever.
@@ -1668,7 +1671,7 @@ func (c *clusterImpl) FetchJournalctl(ctx context.Context, l *logger.Logger) err
 		return nil
 	}
 
-	l.Printf("fetching journalctl\n")
+	l.Printf("fetching journalctl")
 	c.status("fetching journalctl")
 
 	// Don't hang forever.
@@ -1723,11 +1726,11 @@ func (c *clusterImpl) FetchCores(ctx context.Context, l *logger.Logger) error {
 		// from having the cores, but we should push them straight into a temp
 		// bucket on S3 instead. OTOH, the ROI of this may be low; I don't know
 		// of a recent example where we've wanted the Core dumps.
-		l.Printf("skipped fetching cores\n")
+		l.Printf("skipped fetching cores")
 		return nil
 	}
 
-	l.Printf("fetching cores\n")
+	l.Printf("fetching cores")
 	c.status("fetching cores")
 
 	// Don't hang forever. The core files can be large, so we give a generous
@@ -1871,7 +1874,7 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 			}
 		}
 	} else {
-		l.Printf("skipping cluster wipe\n")
+		l.Printf("skipping cluster wipe")
 	}
 	c.r.unregisterCluster(c)
 	c.destroyState.mu.Lock()
@@ -1892,11 +1895,11 @@ func (c *clusterImpl) removeLabels(labels []string) error {
 func (c *clusterImpl) ListSnapshots(
 	ctx context.Context, vslo vm.VolumeSnapshotListOpts,
 ) ([]vm.VolumeSnapshot, error) {
-	return roachprod.ListSnapshots(ctx, c.l, c.Cloud(), vslo)
+	return roachprod.ListSnapshots(ctx, c.l, c.Cloud().String(), vslo)
 }
 
 func (c *clusterImpl) DeleteSnapshots(ctx context.Context, snapshots ...vm.VolumeSnapshot) error {
-	return roachprod.DeleteSnapshots(ctx, c.l, c.Cloud(), snapshots...)
+	return roachprod.DeleteSnapshots(ctx, c.l, c.Cloud().String(), snapshots...)
 }
 
 func (c *clusterImpl) CreateSnapshot(
@@ -2000,6 +2003,20 @@ func (c *clusterImpl) PutLibraries(
 		); err != nil {
 			return errors.Wrap(err, "cluster.PutLibraries")
 		}
+	}
+	return nil
+}
+
+// PutDeprecatedWorkload checks if the test requires the deprecated
+// workload and that it has a workload node provisioned. If it does,
+// then it auto-uploads the workload binary to the workload node.
+// If the test requires the binary but doesn't have a workload node,
+// it should handle uploading it in the test itself.
+func (c *clusterImpl) PutDeprecatedWorkload(
+	ctx context.Context, l *logger.Logger, t *testImpl,
+) error {
+	if t.spec.RequiresDeprecatedWorkload && t.spec.Cluster.WorkloadNode {
+		return c.PutE(ctx, l, t.DeprecatedWorkload(), test.DefaultDeprecatedWorkloadPath, c.WorkloadNode())
 	}
 	return nil
 }
@@ -2929,7 +2946,7 @@ func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
 	return c.name + r.String()
 }
 
-func (c *clusterImpl) Cloud() string {
+func (c *clusterImpl) Cloud() spec.Cloud {
 	return c.cloud
 }
 

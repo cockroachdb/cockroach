@@ -48,7 +48,7 @@ import (
 const defaultExpirationWindow = time.Hour * 24
 
 var streamMaxProcsPerPartition = settings.RegisterIntSetting(
-	settings.SystemOnly,
+	settings.ApplicationLevel,
 	"stream_replication.ingest_processor_parallelism",
 	"controls the maximum number of ingest processors to assign to each source-planned partition",
 	8,

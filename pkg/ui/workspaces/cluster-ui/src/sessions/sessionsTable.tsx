@@ -8,26 +8,26 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { Link } from "react-router-dom";
-import moment from "moment-timezone";
-import classNames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Icon, Tooltip } from "@cockroachlabs/ui-components";
+import classNames from "classnames/bind";
+import moment from "moment-timezone";
+import React from "react";
+import { Link } from "react-router-dom";
 
+import { Button } from "src/button/button";
+import {
+  Dropdown,
+  DropdownOption as DropdownItem,
+} from "src/dropdown/dropdown";
+import { CircleFilled } from "src/icon/circleFilled";
+import { ColumnDescriptor, SortedTable } from "src/sortedtable/sortedtable";
 import {
   DurationToMomentDuration,
   DurationToNumber,
   TimestampToMoment,
 } from "src/util/convert";
 import { BytesWithPrecision, Count, DATE_FORMAT } from "src/util/format";
-import { ColumnDescriptor, SortedTable } from "src/sortedtable/sortedtable";
-import { CircleFilled } from "src/icon/circleFilled";
-import {
-  Dropdown,
-  DropdownOption as DropdownItem,
-} from "src/dropdown/dropdown";
-import { Button } from "src/button/button";
 
 import {
   statisticsTableTitles,
@@ -36,9 +36,9 @@ import {
 import { Timestamp } from "../timestamp";
 import { computeOrUseStmtSummary, FixLong } from "../util";
 
+import styles from "./sessionsTable.module.scss";
 import { TerminateQueryModalRef } from "./terminateQueryModal";
 import { TerminateSessionModalRef } from "./terminateSessionModal";
-import styles from "./sessionsTable.module.scss";
 
 type ISession = cockroach.server.serverpb.ISession;
 type Status = cockroach.server.serverpb.Session.Status;

@@ -1631,7 +1631,9 @@ statement ok
 CREATE STATISTICS s FROM all_null
 
 query T
-SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
   FROM (
 SELECT json_array_elements(statistics) - 'created_at' AS stat
 FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
@@ -1654,6 +1656,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
         ],
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "s",
         "null_count": 0,
         "row_count": 1
@@ -1666,6 +1669,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
         "distinct_count": 1,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "s",
         "null_count": 1,
         "row_count": 1
@@ -1689,7 +1693,9 @@ statement ok
 CREATE STATISTICS s FROM greeting_stats
 
 query T
-SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
   FROM (
 SELECT json_array_elements(statistics) - 'created_at' AS stat
 FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
@@ -1712,6 +1718,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
         ],
         "histo_col_type": "test.public.greeting",
         "histo_version": 3,
+        "id": 0,
         "name": "s",
         "null_count": 0,
         "row_count": 1
@@ -1877,7 +1884,9 @@ SHOW HISTOGRAM $hist_id_1
 upper_bound  range_rows  distinct_range_rows  equal_rows
 
 query T
-SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
   FROM (SELECT json_array_elements(statistics) - 'created_at' AS stat
         FROM [SHOW STATISTICS USING JSON FOR TABLE tabula])
 ----
@@ -1890,6 +1899,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1902,6 +1912,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1914,6 +1925,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "distinct_count": 0,
         "histo_col_type": "",
+        "id": 0,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1926,6 +1938,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1973,7 +1986,9 @@ SHOW HISTOGRAM $hist_id_1
 upper_bound  range_rows  distinct_range_rows  equal_rows
 
 query T
-SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
   FROM (SELECT json_array_elements(statistics) - 'created_at' - 'avg_size' AS stat
         FROM [SHOW STATISTICS USING JSON FOR TABLE tabula])
 ----
@@ -1993,6 +2008,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "locke",
         "null_count": 0,
         "row_count": 1
@@ -2012,6 +2028,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "locke",
         "null_count": 0,
         "row_count": 1
@@ -2023,6 +2040,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "distinct_count": 1,
         "histo_col_type": "",
+        "id": 0,
         "name": "locke",
         "null_count": 0,
         "row_count": 1
@@ -2034,6 +2052,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         "distinct_count": 1,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "locke",
         "null_count": 1,
         "row_count": 1
@@ -2081,7 +2100,9 @@ NULL             {rowid}       0          0               0           true
 t1_ab            {a,b}         0          0               0           false
 
 query T
-SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
   FROM (
 SELECT json_array_elements(statistics) - 'created_at' AS stat
 FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
@@ -2096,6 +2117,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "null_count": 0,
         "row_count": 0
     },
@@ -2107,6 +2129,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "null_count": 0,
         "row_count": 0
     },
@@ -2118,6 +2141,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "null_count": 0,
         "row_count": 0
     },
@@ -2129,6 +2153,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         ],
         "distinct_count": 0,
         "histo_col_type": "",
+        "id": 0,
         "name": "t1_ab",
         "null_count": 0,
         "row_count": 0
@@ -2267,12 +2292,6 @@ INSERT INTO xy VALUES (-1, 9), (-2, 8), (5, 15), (6, 16)
 statement error pgcode 0A000 creating partial statistics with a WHERE clause is not yet supported
 CREATE STATISTICS abcd_a_partial ON a FROM abcd WHERE a > 1;
 
-statement error pgcode 0A000 creating partial statistics at extremes is not yet supported
-CREATE STATISTICS abcd_a_partial ON a FROM abcd USING EXTREMES;
-
-statement ok
-SET enable_create_stats_using_extremes = on
-
 statement ok
 CREATE STATISTICS abcd_a_partial ON a FROM abcd USING EXTREMES;
 
@@ -2363,6 +2382,18 @@ statistics_name  partial_predicate                                  row_count  n
 xy_x_partial     (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
 xy_x_partial_2   (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
 
+query T
+SELECT jsonb_pretty(stat->'name')
+FROM (
+  SELECT jsonb_array_elements(statistics) AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE xy]
+)
+WHERE stat->>'full_statistic_id' = '$statistics_id'
+ORDER BY stat->>'name';
+----
+"xy_x_partial"
+"xy_x_partial_2"
+
 # Test null values.
 statement ok
 CREATE TABLE a_null (a INT, INDEX (a));
@@ -2373,15 +2404,10 @@ INSERT INTO a_null VALUES (NULL), (1), (2);
 statement ok
 CREATE STATISTICS a_null_stat ON a FROM a_null;
 
-let $a_null_stats
-SHOW STATISTICS USING JSON FOR TABLE a_null
-
-# Inject statistics so that the current stats
-# cache is invalidated and creating partial
-# statistics has access to the latest full
-# statistic.
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
 statement ok
-ALTER TABLE a_null INJECT STATISTICS '$a_null_stats'
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement ok
 INSERT INTO a_null VALUES (NULL), (NULL), (NULL);
@@ -2416,15 +2442,10 @@ INSERT INTO d_desc VALUES (1, 10), (2, 20), (3, 30), (4, 40);
 statement ok
 CREATE STATISTICS sd ON a FROM d_desc;
 
-let $d_desc_stats
-SHOW STATISTICS USING JSON FOR TABLE d_desc;
-
-# Inject statistics so that the current stats
-# cache is invalidated and creating partial
-# statistics has access to the latest full
-# statistic.
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
 statement ok
-ALTER TABLE d_desc INJECT STATISTICS '$d_desc_stats'
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement ok
 INSERT INTO d_desc VALUES (0, 0), (5, 50);
@@ -2458,15 +2479,10 @@ INSERT INTO d_desc VALUES (NULL, NULL), (NULL, 2);
 statement ok
 CREATE STATISTICS sdn ON a FROM d_desc;
 
-let $d_desc_null_stats
-SHOW STATISTICS USING JSON FOR TABLE d_desc;
-
-# Inject statistics so that the current stats
-# cache is invalidated and creating partial
-# statistics has access to the latest full
-# statistic.
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
 statement ok
-ALTER TABLE d_desc INJECT STATISTICS '$d_desc_null_stats'
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement ok
 CREATE STATISTICS sdnp ON a FROM d_desc USING EXTREMES;
@@ -2481,6 +2497,15 @@ sdn              NULL                                               8          2
 sdnp             (a IS NULL) OR ((a < 0:::INT8) OR (a > 5:::INT8))  2          2
 
 # Verify errors.
+statement ok
+SET enable_create_stats_using_extremes = off
+
+statement error creating partial statistics at extremes is disabled
+CREATE STATISTICS abcd_defaults ON a FROM abcd USING EXTREMES;
+
+statement ok
+RESET enable_create_stats_using_extremes
+
 statement error pq: cannot process multiple partial statistics at once
 CREATE STATISTICS abcd_defaults FROM abcd USING EXTREMES;
 
@@ -2498,18 +2523,13 @@ INSERT INTO s VALUES ('c'), ('d'), ('e');
 statement ok
 CREATE STATISTICS str ON s FROM s;
 
-let $s_stats
-SHOW STATISTICS USING JSON FOR TABLE s;
-
 statement ok
 INSERT INTO s VALUES ('a'), ('b'), ('f');
 
-# Inject statistics so that the current stats
-# cache is invalidated and creating partial
-# statistics has access to the latest full
-# statistic.
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
 statement ok
-ALTER TABLE s INJECT STATISTICS '$s_stats'
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement ok
 CREATE STATISTICS s_partial ON s FROM s USING EXTREMES;
@@ -2533,15 +2553,10 @@ INSERT INTO j VALUES ('{"1":"10"}'), ('{"2":"20"}'),  ('{"3":"30"}');
 statement ok
 CREATE STATISTICS j_full ON j FROM j;
 
-let $j_stats
-SHOW STATISTICS USING JSON FOR TABLE j;
-
-# Inject statistics so that the current stats
-# cache is invalidated and creating partial
-# statistics has access to the latest full
-# statistic.
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
 statement ok
-ALTER TABLE j INJECT STATISTICS '$j_stats'
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement error pq: table j does not contain a non-partial forward index with j as a prefix column
 CREATE STATISTICS j_partial ON j FROM j USING EXTREMES;
@@ -2567,15 +2582,10 @@ INSERT INTO only_null VALUES (NULL), (NULL), (NULL);
 statement ok
 CREATE STATISTICS only_null_stat ON a FROM only_null;
 
-let $only_null_stat
-SHOW STATISTICS USING JSON FOR TABLE only_null;
-
-# Inject statistics so that the current stats
-# cache is invalidated and creating partial
-# statistics has access to the latest full
-# statistic.
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
 statement ok
-ALTER TABLE only_null INJECT STATISTICS '$only_null_stat';
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement error pq: only outer or NULL bounded buckets exist in the index, so partial stats cannot be collected
 CREATE STATISTICS only_null_partial ON a FROM only_null USING EXTREMES;
@@ -2585,9 +2595,6 @@ CREATE INDEX ON xy (y) WHERE y > 5;
 
 statement error pq: table xy does not contain a non-partial forward index with y as a prefix column
 CREATE STATISTICS xy_partial_idx ON y FROM xy USING EXTREMES;
-
-statement ok
-RESET enable_create_stats_using_extremes
 
 # Regression test for #100909. Ensure enum is hydrated in SHOW HISTOGRAM.
 statement ok
@@ -2867,9 +2874,6 @@ upper_bound            range_rows  distinct_range_rows  equal_rows
 
 # Test partial stats using extremes on indexed virtual computed columns.
 statement ok
-SET enable_create_stats_using_extremes = on
-
-statement ok
 INSERT INTO t68254 (a, b, c) VALUES (5, '5', '{"foo": {"bar": {"baz": 5}}}')
 
 statement ok
@@ -2916,6 +2920,9 @@ CREATE TABLE int_outer_buckets (a PRIMARY KEY) AS SELECT generate_series(0, 9999
 statement ok
 CREATE STATISTICS int_outer_buckets_full ON a FROM int_outer_buckets;
 
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
 let $hist_id_int_outer_buckets_full
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE int_outer_buckets] WHERE statistics_name = 'int_outer_buckets_full'
 
@@ -2953,6 +2960,11 @@ SET CLUSTER SETTING sql.stats.histogram_samples.count = 10050;
 statement ok
 CREATE STATISTICS int_outer_buckets_full ON a FROM int_outer_buckets;
 
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
 statement ok
 CREATE STATISTICS int_outer_buckets_partial ON a FROM int_outer_buckets USING EXTREMES;
 
@@ -2980,6 +2992,11 @@ INSERT INTO timestamp_outer_buckets VALUES
 
 statement ok
 CREATE STATISTICS timestamp_outer_buckets_full ON a FROM timestamp_outer_buckets;
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
 
 let $hist_id_timestamp_outer_buckets_full
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE timestamp_outer_buckets] WHERE statistics_name = 'timestamp_outer_buckets_full'
@@ -3091,6 +3108,11 @@ INSERT INTO bool_table VALUES (true), (false)
 statement ok
 CREATE STATISTICS bool_table_full ON a FROM bool_table
 
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
 statement error pgcode 0A000 creating partial statistics at extremes on bool and enum columns is disabled
 CREATE STATISTICS bool_table_partial ON a FROM bool_table USING EXTREMES;
 
@@ -3102,6 +3124,11 @@ INSERT INTO enum_table VALUES ('hello'), ('howdy'), ('hi')
 
 statement ok
 CREATE STATISTICS enum_table_full ON a FROM enum_table
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement error pgcode 0A000 creating partial statistics at extremes on bool and enum columns is disabled
 CREATE STATISTICS enum_table_full ON a FROM enum_table USING EXTREMES
@@ -3117,9 +3144,6 @@ CREATE STATISTICS enum_table_partial ON a FROM bool_table USING EXTREMES
 
 statement ok
 RESET enable_create_stats_using_extremes_bool_enum
-
-statement ok
-RESET enable_create_stats_using_extremes
 
 # Regression test for #118537. Do not create stats on non-public mutation
 # columns.

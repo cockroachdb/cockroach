@@ -9,14 +9,14 @@
 // licenses/APL.txt.
 
 import classNames from "classnames/bind";
-import Select from "react-select";
-import React from "react";
-import isNil from "lodash/isNil";
 import includes from "lodash/includes";
+import isNil from "lodash/isNil";
+import React from "react";
+import Select from "react-select";
 
-import { leftArrow, rightArrow } from "src/views/shared/components/icons";
-import { trustIcon } from "src/util/trust";
 import { CaretDown } from "src/components/icon/caretDown";
+import { trustIcon } from "src/util/trust";
+import { leftArrow, rightArrow } from "src/views/shared/components/icons";
 
 import styles from "./dropdown.module.styl";
 

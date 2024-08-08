@@ -7,13 +7,13 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import React from "react";
-import { Tooltip } from "@cockroachlabs/ui-components";
 import { Nodes, MagnifyingGlass } from "@cockroachlabs/icons";
+import { Tooltip } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
-import { Link } from "react-router-dom";
-import map from "lodash/map";
 import isEqual from "lodash/isEqual";
+import map from "lodash/map";
+import React from "react";
+import { Link } from "react-router-dom";
 
 import { Anchor } from "src/anchor";
 import { Schedule, Schedules } from "src/api/schedulesApi";
@@ -23,8 +23,8 @@ import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
 import { dropSchedules, pauseSchedules, resumeSchedules } from "src/util/docs";
 import { DATE_FORMAT } from "src/util/format";
 
-import styles from "../schedules.module.scss";
 import { Timestamp, Timezone } from "../../timestamp";
+import styles from "../schedules.module.scss";
 const cx = classNames.bind(styles);
 
 class SchedulesSortedTable extends SortedTable<Schedule> {}

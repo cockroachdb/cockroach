@@ -17,8 +17,8 @@ INFO 1 became candidate at term 1
 process-ready 1
 ----
 Ready MustSync=true:
-Lead:0 State:StateCandidate
-HardState Term:1 Vote:1 Commit:2
+State:StateCandidate
+HardState Term:1 Vote:1 Commit:2 Lead:0
 INFO 1 received MsgVoteResp from 1 at term 1
 INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
 INFO 1 became leader at term 1
@@ -42,7 +42,8 @@ INFO newRaft 3 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastter
 process-ready 1
 ----
 Ready MustSync=true:
-Lead:1 State:StateLeader
+State:StateLeader
+HardState Term:1 Vote:1 Commit:2 Lead:1
 Entries:
 1/3 EntryNormal ""
 1/4 EntryConfChangeV2 v2 v3
@@ -54,7 +55,7 @@ Entries:
 process-ready 1
 ----
 Ready MustSync=false:
-HardState Term:1 Vote:1 Commit:4
+HardState Term:1 Vote:1 Commit:4 Lead:1
 CommittedEntries:
 1/3 EntryNormal ""
 1/4 EntryConfChangeV2 v2 v3
@@ -86,8 +87,7 @@ stabilize 1 2
   DEBUG 2 [logterm: 0, index: 3] rejected MsgApp [logterm: 1, index: 3] from 1
 > 2 handling Ready
   Ready MustSync=true:
-  Lead:1 State:StateFollower
-  HardState Term:1 Commit:0
+  HardState Term:1 Commit:0 Lead:1
   Messages:
   2->1 MsgAppResp Term:1 Log:0/3 Rejected (Hint: 0)
 > 1 receiving messages
@@ -110,7 +110,7 @@ stabilize 1 2
   INFO 2 [commit: 4] restored snapshot [index: 4, term: 1]
 > 2 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Commit:4
+  HardState Term:1 Commit:4 Lead:1
   Snapshot Index:4 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[1] Learners:[] LearnersNext:[] AutoLeave:true
   Messages:
   2->1 MsgAppResp Term:1 Log:0/4
@@ -133,7 +133,7 @@ stabilize 1 2
   2->1 MsgAppResp Term:1 Log:0/5
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:5
+  HardState Term:1 Vote:1 Commit:5 Lead:1
   CommittedEntries:
   1/5 EntryConfChangeV2
   Messages:
@@ -143,7 +143,7 @@ stabilize 1 2
   1->2 MsgApp Term:1 Log:1/5 Commit:5
 > 2 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Commit:5
+  HardState Term:1 Commit:5 Lead:1
   CommittedEntries:
   1/5 EntryConfChangeV2
   Messages:
@@ -162,8 +162,7 @@ stabilize 1 3
   DEBUG 3 [logterm: 0, index: 3] rejected MsgApp [logterm: 1, index: 3] from 1
 > 3 handling Ready
   Ready MustSync=true:
-  Lead:1 State:StateFollower
-  HardState Term:1 Commit:0
+  HardState Term:1 Commit:0 Lead:1
   Messages:
   3->1 MsgAppResp Term:1 Log:0/3 Rejected (Hint: 0)
 > 1 receiving messages
@@ -186,7 +185,7 @@ stabilize 1 3
   INFO 3 [commit: 5] restored snapshot [index: 5, term: 1]
 > 3 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Commit:5
+  HardState Term:1 Commit:5 Lead:1
   Snapshot Index:5 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
   3->1 MsgAppResp Term:1 Log:0/5
@@ -268,7 +267,7 @@ stabilize 1
   3->1 MsgAppResp Term:1 Log:0/6
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:6
+  HardState Term:1 Vote:1 Commit:6 Lead:1
   CommittedEntries:
   1/6 EntryConfChangeV2 r2 r3
   Messages:
@@ -299,7 +298,7 @@ stabilize 2 3
   1->3 MsgApp Term:1 Log:1/8 Commit:6 Entries:[1/9 EntryConfChangeV2]
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Commit:6
+  HardState Term:1 Commit:6 Lead:1
   Entries:
   1/7 EntryNormal "foo"
   1/8 EntryNormal "bar"
@@ -314,7 +313,7 @@ stabilize 2 3
   INFO 2 switched to configuration voters=(1)&&(1 2 3) autoleave
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Commit:6
+  HardState Term:1 Commit:6 Lead:1
   Entries:
   1/7 EntryNormal "foo"
   1/8 EntryNormal "bar"
@@ -344,7 +343,7 @@ stabilize
   3->1 MsgAppResp Term:1 Log:0/9
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:9
+  HardState Term:1 Vote:1 Commit:9 Lead:1
   CommittedEntries:
   1/7 EntryNormal "foo"
   1/8 EntryNormal "bar"
@@ -367,7 +366,7 @@ stabilize
   1->3 MsgApp Term:1 Log:1/9 Commit:9
 > 2 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Commit:9
+  HardState Term:1 Commit:9 Lead:1
   CommittedEntries:
   1/7 EntryNormal "foo"
   1/8 EntryNormal "bar"
@@ -379,7 +378,7 @@ stabilize
   INFO 2 switched to configuration voters=(1)
 > 3 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Commit:9
+  HardState Term:1 Commit:9 Lead:1
   CommittedEntries:
   1/7 EntryNormal "foo"
   1/8 EntryNormal "bar"

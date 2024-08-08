@@ -23,9 +23,9 @@ import {
   StatementRawFormat,
 } from "src/api";
 
-import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
-import { AggregateStatistics } from "../statementsTable";
 import { INTERNAL_APP_NAME_PREFIX } from "../activeExecutions/activeStatementUtils";
+import { AggregateStatistics } from "../statementsTable";
+import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
 
 export type TableIndexStatsRequest =
   cockroach.server.serverpb.TableIndexStatsRequest;

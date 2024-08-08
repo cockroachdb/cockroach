@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { expectSaga } from "redux-saga-test-plan";
 import Analytics from "analytics-node";
+import { expectSaga } from "redux-saga-test-plan";
 
 import { signUpEmailSubscription } from "./customAnalyticsSagas";
 import { signUpForEmailSubscription } from "./customAnanlyticsActions";

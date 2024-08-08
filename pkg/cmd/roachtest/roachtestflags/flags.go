@@ -21,8 +21,8 @@ import (
 
 // This block defines all roachtest flags (for the list and run/bench commands).
 var (
-	Cloud string = spec.GCE
-	_            = registerListFlag(&Cloud, FlagInfo{
+	Cloud spec.Cloud = spec.GCE
+	_                = registerListFlag(&Cloud, FlagInfo{
 		Name: "cloud",
 		Usage: `List only tests compatible with the given cloud ("local", "gce",
 		        "aws", "azure", or "all")`,
@@ -109,10 +109,12 @@ var (
 		Usage: `Absolute path to cockroach binary to use`,
 	})
 
-	CockroachBinaryPath string = "cockroach"
-	_                          = registerRunOpsFlag(&CockroachBinaryPath, FlagInfo{
-		Name:  "cockroach-binary",
-		Usage: `Relative path to cockroach binary to use, on the cluster specified in --cluster`,
+	ConfigPath string
+	_          = registerRunOpsFlag(&ConfigPath, FlagInfo{
+		Name: "config",
+		Usage: `Path to a YAML config file containing the state of the cluster.
+						Used by operations to determine cluster settings, start options,
+						and the cluster spec.`,
 	})
 
 	CertsDir string
@@ -301,10 +303,28 @@ var (
 		Usage: `The port on which to serve the HTTP interface`,
 	})
 
-	DogstatsdAddr string = ""
-	_                    = registerRunOpsFlag(&DogstatsdAddr, FlagInfo{
-		Name:  "dogstatsd-addr",
-		Usage: `The address to which to connect to dogstatsd, to send Datadog events.`,
+	DatadogSite string = "us5.datadoghq.com"
+	_                  = registerRunOpsFlag(&DatadogSite, FlagInfo{
+		Name:  "datadog-site",
+		Usage: `Datadog site to communicate with (e.g., us5.datadoghq.com).`,
+	})
+
+	DatadogAPIKey string = ""
+	_                    = registerRunOpsFlag(&DatadogAPIKey, FlagInfo{
+		Name:  "datadog-api-key",
+		Usage: `Datadog API key to emit telemetry data to Datadog.`,
+	})
+
+	DatadogApplicationKey string = ""
+	_                            = registerRunOpsFlag(&DatadogApplicationKey, FlagInfo{
+		Name:  "datadog-app-key",
+		Usage: `Datadog application key to read telemetry data from Datadog.`,
+	})
+
+	DatadogTags string = ""
+	_                  = registerRunOpsFlag(&DatadogTags, FlagInfo{
+		Name:  "datadog-tags",
+		Usage: `A comma-separated list of tags to attach to telemetry data (e.g., key1:val1,key2:val2).`,
 	})
 
 	SideEyeApiToken string = ""

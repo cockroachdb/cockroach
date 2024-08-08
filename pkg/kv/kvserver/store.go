@@ -77,7 +77,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -900,7 +899,7 @@ type Store struct {
 	intentResolver      *intentresolver.IntentResolver
 	recoveryMgr         txnrecovery.Manager
 	storeLiveness       storeliveness.Fabric
-	syncWaiter          *logstore.SyncWaiterLoop
+	syncWaiters         []*logstore.SyncWaiterLoop
 	raftEntryCache      *raftentry.Cache
 	limiters            batcheval.Limiters
 	txnWaitMetrics      *txnwait.Metrics
@@ -1533,7 +1532,16 @@ func NewStore(
 		cfg.RaftSchedulerConcurrency, cfg.RaftSchedulerShardSize, cfg.RaftSchedulerConcurrencyPriority,
 		cfg.RaftElectionTimeoutTicks)
 
-	s.syncWaiter = logstore.NewSyncWaiterLoop()
+	// Run a log SyncWaiter loop for every 32 raft scheduler goroutines.
+	// Experiments on c5d.12xlarge instances (48 vCPUs, the largest single-socket
+	// instance AWS offers) show that with fewer SyncWaiters, raft log callback
+	// processing can become a bottleneck for write heavy workloads, which can
+	// drive about 100k raft log appends per second, per store.
+	numSyncWaiters := (cfg.RaftSchedulerConcurrency-1)/32 + 1 // ceil division
+	s.syncWaiters = make([]*logstore.SyncWaiterLoop, numSyncWaiters)
+	for i := range s.syncWaiters {
+		s.syncWaiters[i] = logstore.NewSyncWaiterLoop()
+	}
 
 	s.raftEntryCache = raftentry.NewCache(cfg.RaftEntryCacheSize)
 	s.metrics.registry.AddMetricStruct(s.raftEntryCache.Metrics())
@@ -3145,23 +3153,21 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
 // the provided stream and returns a future with an optional error when the rangefeed is
 // complete.
-func (s *Store) RangeFeed(
-	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink,
-) *future.ErrorFuture {
+func (s *Store) RangeFeed(args *kvpb.RangeFeedRequest, stream rangefeed.Stream) error {
 	if filter := s.TestingKnobs().TestingRangefeedFilter; filter != nil {
 		if pErr := filter(args, stream); pErr != nil {
-			return future.MakeCompletedErrorFuture(pErr.GoError())
+			return pErr.GoError()
 		}
 	}
 
 	if err := verifyKeys(args.Span.Key, args.Span.EndKey, true); err != nil {
-		return future.MakeCompletedErrorFuture(err)
+		return err
 	}
 
 	// Get range and add command to the range for execution.
 	repl, err := s.GetReplica(args.RangeID)
 	if err != nil {
-		return future.MakeCompletedErrorFuture(err)
+		return err
 	}
 	if !repl.IsInitialized() {
 		// (*Store).Send has an optimization for uninitialized replicas to send back
@@ -3169,7 +3175,7 @@ func (s *Store) RangeFeed(
 		// be found. RangeFeeds can always be served from followers and so don't
 		// otherwise return NotLeaseHolderError. For simplicity we also don't return
 		// one here.
-		return future.MakeCompletedErrorFuture(kvpb.NewRangeNotFoundError(args.RangeID, s.StoreID()))
+		return kvpb.NewRangeNotFoundError(args.RangeID, s.StoreID())
 	}
 
 	tenID, _ := repl.TenantID()

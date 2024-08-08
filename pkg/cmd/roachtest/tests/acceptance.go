@@ -35,7 +35,9 @@ func registerAcceptance(r registry.Registry) {
 		encryptionSupport  registry.EncryptionSupport
 		defaultLeases      bool
 		requiresLicense    bool
+		randomized         bool
 		nativeLibs         []string
+		workloadNode       bool
 		incompatibleClouds registry.CloudSet
 	}{
 		// NOTE: acceptance tests are lightweight tests that run as part
@@ -79,6 +81,7 @@ func registerAcceptance(r registry.Registry) {
 				fn:            runVersionUpgrade,
 				timeout:       2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
 				defaultLeases: true,
+				randomized:    true,
 				nativeLibs:    registry.LibGEOS,
 			},
 		},
@@ -88,6 +91,7 @@ func registerAcceptance(r registry.Registry) {
 				fn:                 runAcceptanceClusterReplication,
 				numNodes:           3,
 				incompatibleClouds: cloudsWithoutServiceRegistration,
+				workloadNode:       true,
 			},
 			{
 				name:               "multitenant",
@@ -102,6 +106,7 @@ func registerAcceptance(r registry.Registry) {
 				fn:            runValidateSystemSchemaAfterVersionUpgrade,
 				timeout:       30 * time.Minute,
 				defaultLeases: true,
+				randomized:    true,
 				numNodes:      1,
 			},
 			{
@@ -129,6 +134,10 @@ func registerAcceptance(r registry.Registry) {
 				extraOptions = append(extraOptions, spec.GCEZones(strings.Join(tc.nodeRegions, ",")))
 			}
 
+			if tc.workloadNode {
+				extraOptions = append(extraOptions, spec.WorkloadNode())
+			}
+
 			if tc.incompatibleClouds.IsInitialized() && tc.incompatibleClouds.Contains(spec.Local) {
 				panic(errors.AssertionFailedf(
 					"acceptance tests must be able to run on roachtest local, but %q is incompatible",
@@ -145,6 +154,7 @@ func registerAcceptance(r registry.Registry) {
 				Timeout:           10 * time.Minute,
 				CompatibleClouds:  registry.AllClouds.Remove(tc.incompatibleClouds),
 				Suites:            registry.Suites(registry.Nightly, registry.Quick, registry.Acceptance),
+				Randomized:        tc.randomized,
 				RequiresLicense:   tc.requiresLicense,
 			}
 

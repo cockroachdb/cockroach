@@ -8,24 +8,29 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { Link } from "react-router-dom";
-import { connect } from "react-redux";
-import moment, { Moment } from "moment-timezone";
-import { createSelector } from "reselect";
-import isUndefined from "lodash/isUndefined";
+import { Badge, BadgeProps, ColumnsConfig, SortSetting, Table, Timestamp, util, } from "@cockroachlabs/cluster-ui";
+import capitalize from "lodash/capitalize";
+import flow from "lodash/flow";
+import groupBy from "lodash/groupBy";
 import head from "lodash/head";
 import isEmpty from "lodash/isEmpty";
-import groupBy from "lodash/groupBy";
-import capitalize from "lodash/capitalize";
+import isUndefined from "lodash/isUndefined";
 import last from "lodash/last";
 import map from "lodash/map";
 import orderBy from "lodash/orderBy";
-import take from "lodash/take";
 import sum from "lodash/sum";
-import flow from "lodash/flow";
-import { Badge, BadgeProps, ColumnsConfig, SortSetting, Table, Timestamp, util, } from "@cockroachlabs/cluster-ui";
+import take from "lodash/take";
+import moment, { Moment } from "moment-timezone";
+import React from "react";
+import { connect } from "react-redux";
+import { Link } from "react-router-dom";
+import { createSelector } from "reselect";
 
+import { Text, TextTypes, Tooltip } from "src/components";
+import { cockroach } from "src/js/protos";
+import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
+import { LocalityTier } from "src/redux/localities";
+import { LocalSetting } from "src/redux/localsettings";
 import {
   LivenessStatus,
   nodeCapacityStats,
@@ -34,14 +39,9 @@ import {
   selectNodesSummaryValid,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { LocalSetting } from "src/redux/localsettings";
-import { INodeStatus, MetricConstants } from "src/util/proto";
-import { Text, TextTypes, Tooltip } from "src/components";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
-import { LocalityTier } from "src/redux/localities";
-import { cockroach } from "src/js/protos";
+import { INodeStatus, MetricConstants } from "src/util/proto";
 
 import TableSection from "./tableSection";
 import "./nodes.styl";

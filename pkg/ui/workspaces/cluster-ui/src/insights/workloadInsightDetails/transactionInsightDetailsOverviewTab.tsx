@@ -8,29 +8,34 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useContext, useState } from "react";
 import { Heading } from "@cockroachlabs/ui-components";
 import { Col, Row } from "antd";
 import classNames from "classnames/bind";
+import React, { useContext, useState } from "react";
 
+import { TxnInsightDetailsReqErrs } from "src/api";
+import { WaitTimeInsightsLabels } from "src/detailsPanels/waitTimeInsightsPanel";
+import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
+import {
+  InsightsSortedTable,
+  makeInsightsColumns,
+} from "src/insightsTable/insightsTable";
+import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
+import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
+import { NO_SAMPLES_FOUND } from "src/util";
 import {
   Count,
   DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
   Duration,
 } from "src/util/format";
-import { WaitTimeInsightsLabels } from "src/detailsPanels/waitTimeInsightsPanel";
-import { NO_SAMPLES_FOUND } from "src/util";
-import {
-  InsightsSortedTable,
-  makeInsightsColumns,
-} from "src/insightsTable/insightsTable";
-import { TxnInsightDetailsReqErrs } from "src/api";
-import { Loading } from "src/loading";
-import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
-import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
 
+import { CockroachCloudContext } from "../../contexts";
+import { SortSetting } from "../../sortedtable";
+import { TimeScale } from "../../timeScaleDropdown";
+import { Timestamp } from "../../timestamp";
+import { InsightsError } from "../insightsErrorComponent";
 import {
   ContentionDetails,
   ContentionEvent,
@@ -39,16 +44,11 @@ import {
   StmtInsightEvent,
   TxnInsightEvent,
 } from "../types";
-import { CockroachCloudContext } from "../../contexts";
-import { TransactionDetailsLink } from "../workloadInsights/util";
-import { TimeScale } from "../../timeScaleDropdown";
 import { getTxnInsightRecommendations } from "../utils";
-import { SortSetting } from "../../sortedtable";
-import { InsightsError } from "../insightsErrorComponent";
-import { Timestamp } from "../../timestamp";
+import { TransactionDetailsLink } from "../workloadInsights/util";
 
-import { WaitTimeDetailsTable } from "./insightDetailsTables";
 import { FailedInsightDetailsPanel } from "./failedInsightDetailsPanel";
+import { WaitTimeDetailsTable } from "./insightDetailsTables";
 
 const cx = classNames.bind(insightsDetailsStyles);
 const tableCx = classNames.bind(insightTableStyles);

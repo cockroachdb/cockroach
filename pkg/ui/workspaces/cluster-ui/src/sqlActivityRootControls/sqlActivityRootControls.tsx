@@ -11,12 +11,12 @@
 import React from "react";
 import { useHistory, useLocation } from "react-router-dom";
 
-import { viewAttr, tabAttr } from "src/util";
-import { queryByName } from "src/util/query";
 import {
   SelectWithDescription,
   Option,
 } from "src/selectWithDescription/selectWithDescription";
+import { viewAttr, tabAttr } from "src/util";
+import { queryByName } from "src/util/query";
 
 export type SQLActivityRootControlsProps = {
   options: Option[];

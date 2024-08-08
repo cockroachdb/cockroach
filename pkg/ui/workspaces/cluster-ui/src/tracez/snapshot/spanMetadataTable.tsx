@@ -7,16 +7,16 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
+import { Nodes } from "@cockroachlabs/icons";
+import { Tooltip } from "antd";
+import classNames from "classnames/bind";
 import moment from "moment-timezone";
 import React, { useState } from "react";
-import { Nodes } from "@cockroachlabs/icons";
-import classNames from "classnames/bind";
-import { Tooltip } from "antd";
 
 import { NamedOperationMetadata } from "src/api/tracezApi";
 import { EmptyTable } from "src/empty";
-import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
 import { CircleFilled } from "src/icon";
+import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
 
 import styles from "../snapshot.module.scss";
 

@@ -12,10 +12,9 @@ package scbuildstmt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 )
 
 func alterTableSetNotNull(
@@ -43,11 +42,7 @@ func alterColumnPreChecks(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, colum
 		_ scpb.Status, _ scpb.TargetStatus, e *scpb.RowLevelTTL,
 	) {
 		if columnName == catpb.TTLDefaultExpirationColumnName && e.HasDurationExpr() {
-			panic(pgerror.Newf(
-				pgcode.InvalidTableDefinition,
-				`cannot alter column %s while ttl_expire_after is set`,
-				columnName,
-			))
+			panic(sqlerrors.NewAlterDependsOnDurationExprError("alter", "column", columnName.String(), tn.Object()))
 		}
 	})
 }

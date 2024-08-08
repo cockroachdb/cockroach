@@ -184,7 +184,7 @@ func OpenFilesystemEnv(dir string, rw fs.RWMode) (*fs.Env, error) {
 			return nil, err
 		}
 	}
-	return fs.InitEnv(context.Background(), vfs.Default, dir, envConfig, nil /* statsCollector */)
+	return fs.InitEnv(context.Background(), vfs.Default, dir, envConfig, nil /* diskWriteStats */)
 }
 
 // OpenEngine opens the engine at 'dir'. Depending on the supplied options,
@@ -1124,12 +1124,6 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %+v", key, healthAlert))
-		} else if strings.HasPrefix(key, gossip.KeyDistSQLNodeVersionKeyPrefix) {
-			var version execinfrapb.DistSQLVersionGossipInfo
-			if err := protoutil.Unmarshal(bytes, &version); err != nil {
-				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
-			}
-			output = append(output, fmt.Sprintf("%q: %+v", key, version))
 		} else if strings.HasPrefix(key, gossip.KeyDistSQLDrainingPrefix) {
 			var drainingInfo execinfrapb.DistSQLDrainingInfo
 			if err := protoutil.Unmarshal(bytes, &drainingInfo); err != nil {
@@ -1615,6 +1609,8 @@ func init() {
 		"", "prometheus label for cluster name")
 	f.StringVar(&debugTimeSeriesDumpOpts.yaml, "yaml", debugTimeSeriesDumpOpts.yaml, "full path to create the tsdump.yaml with storeID: nodeID mappings (raw format only). This file is required when loading the raw tsdump for troubleshooting.")
 	f.StringVar(&debugTimeSeriesDumpOpts.targetURL, "target-url", "", "target URL to send openmetrics data over HTTP")
+	f.StringVar(&debugTimeSeriesDumpOpts.ddSite, "dd-site", "us5",
+		"Datadog site to use to send tsdump artifacts to datadog")
 	f.StringVar(&debugTimeSeriesDumpOpts.ddApiKey, "dd-api-key", "", "Datadog API key to use to send to the datadog formatter")
 	f.StringVar(&debugTimeSeriesDumpOpts.httpToken, "http-token", "", "HTTP header to use with the json export format")
 
@@ -1724,7 +1720,7 @@ func pebbleCryptoInitializer(ctx context.Context) {
 			if err := PopulateEnvConfigHook(dir, &envConfig); err != nil {
 				return nil, err
 			}
-			env, err := fs.InitEnv(ctx, vfs.Default, dir, envConfig, nil /* statsCollector */)
+			env, err := fs.InitEnv(ctx, vfs.Default, dir, envConfig, nil /* diskWriteStats */)
 			if err != nil {
 				return nil, err
 			}

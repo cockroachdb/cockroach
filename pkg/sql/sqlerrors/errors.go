@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -71,6 +72,24 @@ func NewTransactionCommittedError() error {
 // NewNonNullViolationError creates an error for a violation of a non-NULL constraint.
 func NewNonNullViolationError(columnName string) error {
 	return pgerror.Newf(pgcode.NotNullViolation, "null value in column %q violates not-null constraint", columnName)
+}
+
+func NewAlterColumnTypeColOwnsSequenceNotSupportedErr() error {
+	return unimplemented.NewWithIssuef(
+		48244, "ALTER COLUMN TYPE for a column that owns a sequence "+
+			"is currently not supported")
+}
+
+func NewAlterColumnTypeColWithConstraintNotSupportedErr() error {
+	return unimplemented.NewWithIssuef(
+		48288, "ALTER COLUMN TYPE for a column that has a constraint "+
+			"is currently not supported")
+}
+
+func NewAlterColumnTypeColInIndexNotSupportedErr() error {
+	return unimplemented.NewWithIssuef(
+		47636, "ALTER COLUMN TYPE requiring rewrite of on-disk "+
+			"data is currently not supported for columns that are part of an index")
 }
 
 // NewInvalidAssignmentCastError creates an error that is used when a mutation
@@ -291,6 +310,38 @@ func NewColumnReferencedByPrimaryKeyError(colName string) error {
 		"column %q is referenced by the primary key", colName)
 }
 
+// NewAlterDependsOnDurationExprError creates an error for attempting to alter
+// the internal column created for the duration expression. These are tables
+// that define the ttl_expire_after setting.
+func NewAlterDependsOnDurationExprError(op, objType, colName, tabName string) error {
+	return errors.WithHintf(
+		pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			`cannot %s %s %s while ttl_expire_after is set`,
+			redact.SafeString(op), redact.SafeString(objType), colName,
+		),
+		"use ALTER TABLE %s RESET (ttl) instead",
+		tabName,
+	)
+}
+
+// NewAlterDependsOnExpirationExprError creates an error for attempting to alter
+// the column that is referenced in the expiration expression.
+func NewAlterDependsOnExpirationExprError(
+	op, objType, colName, tabName, expirationExpr string,
+) error {
+	return errors.WithHintf(
+		pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			`cannot %s %s %q referenced by row-level TTL expiration expression %q`,
+			redact.SafeString(op), redact.SafeString(objType), colName,
+			expirationExpr,
+		),
+		"use ALTER TABLE %s SET (ttl_expiration_expression = ...) to change the expression",
+		tabName,
+	)
+}
+
 // NewColumnReferencedByComputedColumnError is returned when dropping a column
 // and that column being dropped is referenced by a computed column. Note that
 // the cockroach behavior where this error is returned does not match the
@@ -304,32 +355,34 @@ func NewColumnReferencedByComputedColumnError(droppingColumn, computedColumn str
 	)
 }
 
-// NewColumnReferencedByPartialIndex is returned when we drop a column that is
-// referenced in a partial index's predicate.
-func NewColumnReferencedByPartialIndex(droppingColumn, partialIndex string) error {
-	return errors.WithIssueLink(errors.WithHint(
+// ColumnReferencedByPartialIndex is returned when an attempt is made to
+// modify a column that is referenced in a partial index's predicate.
+func ColumnReferencedByPartialIndex(op, objType, column, partialIndex string) error {
+	return errors.WithIssueLink(errors.WithHintf(
 		pgerror.Newf(
 			pgcode.InvalidColumnReference,
-			"column %q cannot be dropped because it is referenced by partial index %q",
-			droppingColumn, partialIndex,
+			"cannot %s %s %q because it is referenced by partial index %q",
+			op, objType, column, partialIndex,
 		),
-		"drop the partial index first, then drop the column",
+		"drop the partial index first, then %s the %s",
+		op, objType,
 	), errors.IssueLink{IssueURL: build.MakeIssueURL(97372)})
 }
 
-// NewColumnReferencedByPartialUniqueWithoutIndexConstraint is almost the same as
-// NewColumnReferencedByPartialIndex except it's used when dropping column that is
+// ColumnReferencedByPartialUniqueWithoutIndexConstraint is almost the same as
+// ColumnReferencedByPartialIndex except it's used when altering a column that is
 // referenced in a partial unique without index constraint's predicate.
-func NewColumnReferencedByPartialUniqueWithoutIndexConstraint(
-	droppingColumn, partialUWIConstraint string,
+func ColumnReferencedByPartialUniqueWithoutIndexConstraint(
+	op, objType, column, partialUWIConstraint string,
 ) error {
-	return errors.WithIssueLink(errors.WithHint(
+	return errors.WithIssueLink(errors.WithHintf(
 		pgerror.Newf(
 			pgcode.InvalidColumnReference,
-			"column %q cannot be dropped because it is referenced by partial unique constraint %q",
-			droppingColumn, partialUWIConstraint,
+			"cannot %s %s %q because it is referenced by partial unique constraint %q",
+			op, objType, column, partialUWIConstraint,
 		),
-		"drop the unique constraint first, then drop the column",
+		"drop the unique constraint first, then %s the %s",
+		op, objType,
 	), errors.IssueLink{IssueURL: build.MakeIssueURL(97372)})
 }
 

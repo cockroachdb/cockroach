@@ -8,20 +8,20 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { storiesOf } from "@storybook/react";
+import * as H from "history";
 import random from "lodash/random";
 import uniq from "lodash/uniq";
-import * as H from "history";
 import moment from "moment-timezone";
+import React from "react";
 
+import { defaultFilters } from "src/queryFilter";
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import {
   randomName,
   randomRole,
   randomTablePrivilege,
 } from "src/storybook/fixtures";
-import { defaultFilters } from "src/queryFilter";
 import { indexUnusedDuration } from "src/util/constants";
 
 import {
@@ -118,7 +118,12 @@ function createTable(): DatabaseDetailsPageDataTable {
     loaded: true,
     requestError: null,
     queryError: undefined,
-    name: randomName(),
+    name: {
+      qualifiedNameWithSchemaAndTable: "public.table",
+      schema: "public",
+      table: "table",
+    },
+    qualifiedDisplayName: "public.table",
     details: {
       grants: {
         roles,

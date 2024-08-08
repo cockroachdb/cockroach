@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -267,13 +268,66 @@ type Provider struct {
 }
 
 func (p *Provider) SupportsSpotVMs() bool {
-	return false
+	return true
 }
 
 func (p *Provider) GetPreemptedSpotVMs(
 	l *logger.Logger, vms vm.List, since time.Time,
 ) ([]vm.PreemptedVM, error) {
-	return nil, nil
+	byRegion, err := regionMap(vms)
+	if err != nil {
+		return nil, err
+	}
+
+	var preemptedVMs []vm.PreemptedVM
+	for region, vmList := range byRegion {
+		args := []string{
+			"ec2", "describe-instances",
+			"--region", region,
+			"--instance-ids",
+		}
+		args = append(args, vmList.ProviderIDs()...)
+		var describeInstancesResponse DescribeInstancesOutput
+		err = p.runJSONCommand(l, args, &describeInstancesResponse)
+		if err != nil {
+			// if the describe-instances operation fails with the error InvalidInstanceID.NotFound,
+			// we assume that the instance has been preempted and describe-instances operation is attempted one hour after the instance termination
+			if strings.Contains(err.Error(), "InvalidInstanceID.NotFound") {
+				l.Errorf("WARNING: received NotFound error when trying to find preemptions: %v", err)
+				return vm.CreatePreemptedVMs(getInstanceIDsNotFound(err.Error())), nil
+			}
+			return nil, err
+		}
+
+		// https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/finding-an-interrupted-Spot-Instance.html
+		for _, r := range describeInstancesResponse.Reservations {
+			for _, instance := range r.Instances {
+				if instance.InstanceLifecycle == "spot" &&
+					instance.State.Name == "terminated" &&
+					instance.StateReason.Code == "Server.SpotInstanceTermination" {
+					preemptedVMs = append(preemptedVMs, vm.PreemptedVM{Name: instance.InstanceID})
+				}
+			}
+		}
+	}
+
+	return preemptedVMs, nil
+}
+
+// getInstanceIDsNotFound returns a list of instance IDs that were not found during the describe-instances command.
+//
+// Sample error message:
+//
+// ‹An error occurred (InvalidInstanceID.NotFound) when calling the DescribeInstances operation: The instance IDs 'i-02e9adfac0e5fa18f, i-0bc7869fda0299caa' do not exist›
+func getInstanceIDsNotFound(errorMsg string) []string {
+	// Regular expression pattern to find instance IDs between single quotes
+	re := regexp.MustCompile(`'([^']*)'`)
+	matches := re.FindStringSubmatch(errorMsg)
+	if len(matches) > 1 {
+		instanceIDsStr := matches[1]
+		return strings.Split(instanceIDsStr, ", ")
+	}
+	return nil
 }
 
 func (p *Provider) GetHostErrorVMs(
@@ -660,11 +714,11 @@ func (p *Provider) Create(
 }
 
 func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) error {
-	panic("unimplemented")
+	return vm.UnimplementedError
 }
 
 func (p *Provider) Shrink(*logger.Logger, vm.List, string) error {
-	panic("unimplemented")
+	return vm.UnimplementedError
 }
 
 // waitForIPs waits until AWS reports both internal and external IP addresses
@@ -982,6 +1036,10 @@ type DescribeInstancesOutput struct {
 				Code int
 				Name string
 			}
+			StateReason struct {
+				Code    string `json:"Code"`
+				Message string `json:"Message"`
+			} `json:"StateReason"`
 			RootDeviceName string
 
 			BlockDeviceMappings []struct {
@@ -1638,8 +1696,8 @@ func (p *Provider) CreateVolume(
 	return vol, err
 }
 
-func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) error {
-	panic("unimplemented")
+func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, _ *vm.VM) error {
+	return vm.UnimplementedError
 }
 
 func (p *Provider) ListVolumes(l *logger.Logger, vm *vm.VM) ([]vm.Volume, error) {
@@ -1693,19 +1751,19 @@ func (p *Provider) CreateVolumeSnapshot(
 func (p *Provider) ListVolumeSnapshots(
 	l *logger.Logger, vslo vm.VolumeSnapshotListOpts,
 ) ([]vm.VolumeSnapshot, error) {
-	panic("unimplemented")
+	return nil, vm.UnimplementedError
 }
 
 func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.VolumeSnapshot) error {
-	panic("unimplemented")
+	return vm.UnimplementedError
 }
 
 func (p *Provider) CreateLoadBalancer(*logger.Logger, vm.List, int) error {
-	panic("unimplemented")
+	return vm.UnimplementedError
 }
 
 func (p *Provider) DeleteLoadBalancer(*logger.Logger, vm.List, int) error {
-	panic("unimplemented")
+	return vm.UnimplementedError
 }
 
 func (p *Provider) ListLoadBalancers(*logger.Logger, vm.List) ([]vm.ServiceAddress, error) {

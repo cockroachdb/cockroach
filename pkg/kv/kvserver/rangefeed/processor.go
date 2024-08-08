@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -210,7 +209,6 @@ type Processor interface {
 		withOmitRemote bool,
 		stream Stream,
 		disconnectFn func(),
-		done *future.ErrorFuture,
 	) (bool, *Filter)
 	// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 	// the given span with the given error.
@@ -266,8 +264,8 @@ type LegacyProcessor struct {
 	reg registry
 	rts resolvedTimestamp
 
-	regC       chan registration
-	unregC     chan *registration
+	regC       chan *bufferedRegistration
+	unregC     chan *bufferedRegistration
 	lenReqC    chan struct{}
 	lenResC    chan int
 	filterReqC chan struct{}
@@ -351,8 +349,8 @@ func NewLegacyProcessor(cfg Config) *LegacyProcessor {
 		reg:    makeRegistry(cfg.Metrics),
 		rts:    makeResolvedTimestamp(cfg.Settings),
 
-		regC:       make(chan registration),
-		unregC:     make(chan *registration),
+		regC:       make(chan *bufferedRegistration),
+		unregC:     make(chan *bufferedRegistration),
 		lenReqC:    make(chan struct{}),
 		lenResC:    make(chan int),
 		filterReqC: make(chan struct{}),
@@ -443,7 +441,7 @@ func (p *LegacyProcessor) run(
 			}
 
 			// Add the new registration to the registry.
-			p.reg.Register(ctx, &r)
+			p.reg.Register(ctx, r)
 
 			// Publish an updated filter that includes the new registration.
 			p.filterResC <- p.reg.NewFilter()
@@ -459,7 +457,7 @@ func (p *LegacyProcessor) run(
 			runOutputLoop := func(ctx context.Context) {
 				r.runOutputLoop(ctx, p.RangeID)
 				select {
-				case p.unregC <- &r:
+				case p.unregC <- r:
 					if r.unreg != nil {
 						r.unreg()
 					}
@@ -468,7 +466,7 @@ func (p *LegacyProcessor) run(
 			}
 			if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
 				r.disconnect(kvpb.NewError(err))
-				p.reg.Unregister(ctx, &r)
+				p.reg.Unregister(ctx, r)
 			}
 
 		// Respond to unregistration requests; these come from registrations that
@@ -595,7 +593,6 @@ func (p *LegacyProcessor) Register(
 	withOmitRemote bool,
 	stream Stream,
 	disconnectFn func(),
-	done *future.ErrorFuture,
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
@@ -603,9 +600,9 @@ func (p *LegacyProcessor) Register(
 	p.syncEventC()
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
-	r := newRegistration(
+	r := newBufferedRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
+		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
 	)
 	select {
 	case p.regC <- r:

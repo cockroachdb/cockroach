@@ -8,15 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createSelector } from "reselect";
 import {
   DatabasesPageData,
   defaultFilters,
   Filters,
   deriveDatabaseDetailsMemoized,
 } from "@cockroachlabs/cluster-ui";
+import { createSelector } from "reselect";
 
-import { LocalSetting } from "src/redux/localsettings";
 import {
   refreshDatabases,
   refreshDatabaseDetails,
@@ -24,16 +23,17 @@ import {
   refreshSettings,
   refreshDatabaseDetailsSpanStats,
 } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
-import {
-  nodeRegionsByIDSelector,
-  selectIsMoreThanOneNode,
-} from "src/redux/nodes";
 import {
   selectAutomaticStatsCollectionEnabled,
   selectDropUnusedIndexDuration,
   selectIndexRecommendationsEnabled,
 } from "src/redux/clusterSettings";
+import { LocalSetting } from "src/redux/localsettings";
+import {
+  nodeRegionsByIDSelector,
+  selectIsMoreThanOneNode,
+} from "src/redux/nodes";
+import { AdminUIState } from "src/redux/state";
 
 const selectLoading = createSelector(
   (state: AdminUIState) => state.cachedData.databases,

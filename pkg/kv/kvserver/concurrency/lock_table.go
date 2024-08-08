@@ -4683,21 +4683,3 @@ func assert(condition bool, msg string) {
 		panic(msg)
 	}
 }
-
-// LockPromotionError is used to mark lock promotion errors.
-// TODO(arul): Once we've implemented lock promotion generally, we can remove
-// this machinery.
-type LockPromotionError struct{}
-
-func (e *LockPromotionError) Error() string {
-	return "lock promotion error"
-}
-
-// MarkLockPromotionError wraps the given error, if non-nil, as a
-// LockPromotionError.
-func MarkLockPromotionError(cause error) error {
-	if cause == nil {
-		return nil
-	}
-	return errors.Mark(cause, &LockPromotionError{})
-}

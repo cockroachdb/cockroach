@@ -459,6 +459,8 @@ message GenerativeSplitAndScatterSpec {
   optional bool exclusive_file_span_comparison = 22 [(gogoproto.nullable) = false];
   // MaxFileCount is the max number of files in an extending restore span entry.
   optional int64 max_file_count = 23[(gogoproto.nullable) = false];
+  // SQLInstanceIDs is a slice of SQL instance IDs available for dist restore.
+  repeated int32 sql_instance_ids = 24[(gogoproto.nullable) = false, (gogoproto.customname) = "SQLInstanceIDs"];
   reserved 19;
 }
 
@@ -478,6 +480,16 @@ message CloudStorageTestSpec {
   }
   optional Params params = 2 [(gogoproto.nullable) = false];
   // NEXT ID: 3;
+}
+
+message TableReplicationMetadata {
+  optional cockroach.sql.sqlbase.TableDescriptor source_descriptor = 1 [(gogoproto.nullable) = false];
+  optional string destination_parent_database_name = 2 [(gogoproto.nullable) = false];
+  optional string destination_parent_schema_name = 3 [(gogoproto.nullable) = false];
+  optional string destination_table_name = 4 [(gogoproto.nullable) = false];
+  // DestinationFunctionOID, if non-zero, is the OID of the
+  // user-defined function that should be used for the table.
+  optional uint32 destination_function_oid = 5 [(gogoproto.nullable) = false, (gogoproto.customname) = "DestinationFunctionOID"];
 }
 
 message LogicalReplicationWriterSpec {
@@ -511,7 +523,7 @@ message LogicalReplicationWriterSpec {
     // Checkpoint stores a set of resolved spans denoting completed progress.
     optional jobs.jobspb.StreamIngestionCheckpoint checkpoint = 7 [(gogoproto.nullable) = false];
 
-    // TableDescriptors is a map from destination table IDs to the source table
-    // descriptors.
-    map<int32, cockroach.sql.sqlbase.TableDescriptor> table_descriptors = 8 [(gogoproto.nullable) = false];
+    // TableReplicationMetadata is a map from destination table IDs to metadata
+    // containing source table descriptors and fully qualified destination table names.
+    map<int32, TableReplicationMetadata> table_metadata = 8 [(gogoproto.nullable) = false];
 }

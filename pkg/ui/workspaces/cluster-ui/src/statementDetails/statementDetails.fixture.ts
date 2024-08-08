@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment from "moment-timezone";
-import Long from "long";
 import { createMemoryHistory } from "history";
 import noop from "lodash/noop";
+import Long from "long";
+import moment from "moment-timezone";
 
 import { StatementDetailsResponse } from "../api";
 

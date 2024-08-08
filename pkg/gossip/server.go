@@ -141,8 +141,12 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 	errCh := make(chan error, 1)
 
+	// Maintain what were the recently sent high water stamps to avoid resending
+	// them.
+	lastSentHighWaterStamps := make(map[roachpb.NodeID]int64)
+
 	if err := s.stopper.RunAsyncTask(ctx, "gossip receiver", func(ctx context.Context) {
-		errCh <- s.gossipReceiver(ctx, &args, send, stream.Recv)
+		errCh <- s.gossipReceiver(ctx, &args, &lastSentHighWaterStamps, send, stream.Recv)
 	}); err != nil {
 		return err
 	}
@@ -177,9 +181,12 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 				ratchetHighWaterStamp(args.HighWaterStamps, i.NodeID, i.OrigStamp)
 			}
 
+			var diffStamps map[roachpb.NodeID]int64
+			lastSentHighWaterStamps, diffStamps =
+				s.mu.is.getHighWaterStampsWithDiff(lastSentHighWaterStamps)
 			*reply = Response{
 				NodeID:          s.NodeID.Get(),
-				HighWaterStamps: s.mu.is.getHighWaterStamps(),
+				HighWaterStamps: diffStamps,
 				Delta:           delta,
 			}
 
@@ -204,6 +211,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 func (s *server) gossipReceiver(
 	ctx context.Context,
 	argsPtr **Request,
+	lastSentHighWaterStampsPtr *map[roachpb.NodeID]int64,
 	senderFn func(*Response) error,
 	receiverFn func() (*Request, error),
 ) error {
@@ -315,9 +323,12 @@ func (s *server) gossipReceiver(
 		}
 		s.maybeTightenLocked()
 
+		var diffStamps map[roachpb.NodeID]int64
+		*lastSentHighWaterStampsPtr, diffStamps =
+			s.mu.is.getHighWaterStampsWithDiff(*lastSentHighWaterStampsPtr)
 		*reply = Response{
 			NodeID:          s.NodeID.Get(),
-			HighWaterStamps: s.mu.is.getHighWaterStamps(),
+			HighWaterStamps: diffStamps,
 		}
 
 		s.mu.Unlock()

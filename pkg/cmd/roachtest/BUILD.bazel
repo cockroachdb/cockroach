@@ -5,6 +5,7 @@ go_library(
     testonly = 1,
     srcs = [
         "cluster.go",
+        "dynamic_cluster.go",
         "github.go",
         "main.go",
         "monitor.go",
@@ -61,7 +62,8 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/version",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_datadog_datadog_go//statsd",
+        "@com_github_datadog_datadog_api_client_go_v2//api/datadog",
+        "@com_github_datadog_datadog_api_client_go_v2//api/datadogV1",
         "@com_github_dataexmachina_dev_side_eye_go//sideeyeclient",
         "@com_github_lib_pq//:pq",
         "@com_github_petermattis_goid//:goid",
@@ -70,6 +72,7 @@ go_library(
         "@com_github_prometheus_client_golang//prometheus/promhttp",
         "@com_github_slack_go_slack//:slack",
         "@com_github_spf13_cobra//:cobra",
+        "@in_gopkg_yaml_v2//:yaml_v2",
         "@org_golang_x_sync//errgroup",
     ],
 )

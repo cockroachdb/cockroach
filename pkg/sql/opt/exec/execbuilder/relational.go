@@ -150,8 +150,14 @@ func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols colOrd
 		b.flags.Set(exec.PlanFlagContainsMutation)
 		// Raise error if mutation op is part of a read-only transaction.
 		if b.evalCtx.TxnReadOnly {
-			return execPlan{}, colOrdMap{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
-				"cannot execute %s in a read-only transaction", b.statementTag(e))
+			switch tag := b.statementTag(e); tag {
+			// DISCARD can drop temp tables but is still allowed in read-only
+			// transactions for PG compatibility.
+			case "DISCARD ALL", "DISCARD":
+			default:
+				return execPlan{}, colOrdMap{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+					"cannot execute %s in a read-only transaction", tag)
+			}
 		}
 	}
 

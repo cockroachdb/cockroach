@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { connect } from "react-redux";
-import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   SchemaInsightEventFilters,
   SchemaInsightsView,
@@ -17,12 +15,16 @@ import {
   SchemaInsightsViewStateProps,
   SortSetting,
 } from "@cockroachlabs/cluster-ui";
+import { connect } from "react-redux";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import {
   refreshSchemaInsights,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
+import { selectDropUnusedIndexDuration } from "src/redux/clusterSettings";
 import { AdminUIState } from "src/redux/state";
+import { selectHasAdminRole } from "src/redux/user";
 import {
   schemaInsightsFiltersLocalSetting,
   schemaInsightsSortLocalSetting,
@@ -31,8 +33,6 @@ import {
   selectSchemaInsightsMaxApiReached,
   selectSchemaInsightsTypes,
 } from "src/views/insights/insightsSelectors";
-import { selectHasAdminRole } from "src/redux/user";
-import { selectDropUnusedIndexDuration } from "src/redux/clusterSettings";
 
 const mapStateToProps = (
   state: AdminUIState,

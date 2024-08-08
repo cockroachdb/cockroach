@@ -208,10 +208,9 @@ message HistoryRetentionProgress {
 }
 
 message LogicalReplicationDetails {
-  // ID of the protected timestamp record this job is managing.
-  string target_cluster_conn_str = 1 [
-    (gogoproto.customname) = "TargetClusterConnStr"
-  ];
+  // SourceClusterConnStr is the user-provided address of the source
+  // cluster.
+  string source_cluster_conn_str = 1;
 
   // TableNames is the original list of source table names given by the user.
   repeated string table_names = 2;
@@ -223,7 +222,7 @@ message LogicalReplicationDetails {
   message ReplicationPair {
     int32 src_descriptor_id = 1 [(gogoproto.customname) = "SrcDescriptorID"];
     int32 dst_descriptor_id = 2 [(gogoproto.customname) = "DstDescriptorID"];
-    int32 function_id = 3 [(gogoproto.customname) = "SrcFunctionID"];
+    int32 function_id = 3 [(gogoproto.customname) = "DstFunctionID"];
   }
   repeated ReplicationPair replication_pairs = 3 [(gogoproto.nullable) = false];
 
@@ -241,7 +240,7 @@ message LogicalReplicationDetails {
       (gogoproto.nullable) = false,
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
       (gogoproto.customname) = "SourceClusterID"];
-  
+
   message DefaultConflictResolution{
     enum DefaultConflictResolution {
       LWW = 0;

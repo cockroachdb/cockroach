@@ -100,29 +100,33 @@ case $1 in
 
     dd_site="us5.datadoghq.com"
 
-    # Single quotes around the shell expansion cause it to be processed on the
-    # remote host instead of the local host.
-    roachprod ssh ${cluster} -- DD_INSTALL_ONLY=true DD_API_KEY=${dd_api_key} bash -c '"$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script_agent7.sh)"'
-
-    # Disable the default integrations for the Datadog agent in preparation for
-    # its removal.
-    roachprod ssh ${cluster} -- 'sudo bash -c "for file in $(find /etc/datadog-agent/conf.d -type f -name conf.yaml.default); do mv ${file} ${file}.bak; done"'
-
-    roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/datadog.yaml > /dev/null << EOF
----
-api_key: ${dd_api_key}
-site: ${dd_site}
-hostname: \$(hostname)
-tags:
-# Datadog reserved tags.
-- env:development
-
-# Custom tags.
-- cluster:${cluster%:*}
-- team:drt
-EOF"
-
     case $cluster in
+      "drt-chaos")
+        roachprod ssh ${cluster} -- "sudo mkdir -p /etc/fluent-bit && sudo tee /etc/fluent-bit/config-override.yaml > /dev/null << EOF
+---
+pipeline:
+  inputs:
+  - name: tail
+    path: /var/log/audit/audit.log
+    tag: audit
+    key: message
+    storage.type: filesystem
+    alias: audit
+  outputs:
+  - name: datadog
+    match: audit
+    host: http-intake.logs.${dd_site}
+    tls: on
+    compress: gzip
+    apikey: ${dd_api_key}
+    dd_source: audit
+    dd_service: drt-cockroachdb
+    dd_tags: env:development,cluster:${cluster%:*},service:drt-cockroachdb,team:drt
+    alias: audit
+    storage.total_limit_size: 25MB
+EOF"
+        ;;
+
       "workload-chaos")
         roachprod ssh ${cluster} -- "sudo mkdir -p /etc/otelcol-contrib && sudo tee /etc/otelcol-contrib/config-override.yaml > /dev/null << EOF
 ---
@@ -249,7 +253,13 @@ EOF"
         ;;
     esac
 
-    roachprod ssh ${cluster} -- 'sudo systemctl enable datadog-agent && sudo systemctl restart datadog-agent'
+    # TODO: Move this into roachtest_ops.sh per
+    # https://github.com/cockroachdb/cockroach/pull/126530#discussion_r1668760594
+    roachprod ssh ${cluster} -- "sudo tee /etc/profile.d/99-datadog.sh > /dev/null << EOF
+export DD_SITE=${dd_site}
+export DD_API_KEY=${dd_api_key}
+export DD_TAGS=env:development,cluster${cluster%:*},team:drt,service:drt-cockroachdb
+EOF"
 
     roachprod opentelemetry-start ${cluster} \
       --datadog-api-key "${dd_api_key}" \
@@ -259,6 +269,13 @@ EOF"
       --datadog-api-key "${dd_api_key}" \
       --datadog-service drt-cockroachdb \
       --datadog-tags 'service:drt-cockroachdb,team:drt'
+
+    echo
+    echo "Updated ${cluster} configuration to send telemetry data to Datadog."
+    echo
+    echo "If this was the first time this script was run against ${cluster} then"
+    echo "CockroachDB must be restarted to reload its logging configuration."
+    echo
 
     exit 0
     ;;
@@ -525,14 +542,18 @@ EOF"
         $0 sql drt-ldr1:1 -- -e "CREATE DATABASE ycsb"
         $0 sql drt-ldr2:1 -- -e "CREATE DATABASE ycsb"
         
-        $0 ssh drt-ldr1:1 "./cockroach workload init ycsb --workload=A --insert-count=1000 {pgurl:1}"
-        $0 ssh drt-ldr2:1 "./cockroach workload init ycsb --workload=A --insert-count=1000 {pgurl:1}"
+        $0 ssh drt-ldr1:1 "./cockroach workload init ycsb --workload=A --insert-count=1000 --families=false {pgurl:1}"
+        $0 ssh drt-ldr2:1 "./cockroach workload init ycsb --workload=A --insert-count=1000 --families=false --insert-start=4511686018427387904 {pgurl:1}"
 
         # tell the clusters about eachother.
         ldr2="$(roachprod ssh drt-ldr2:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1} | sed 's,postgresql://postgres://,postgres://,' | sed 's/roachprod:cockroachdb/root/' | sed 's/defaultdb/ycsb/')"
         ldr1="$(roachprod ssh drt-ldr1:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1} | sed 's,postgresql://postgres://,postgres://,' | sed 's/roachprod:cockroachdb/root/' | sed 's/defaultdb/ycsb/')"
         $0 sql drt-ldr1:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ldr2' AS '${ldr2}'"
         $0 sql drt-ldr2:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ldr1' AS '${ldr1}'"
+
+        $0 sql drt-ldr1:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL;"
+        $0 sql drt-ldr2:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL;"
+
         roachprod sql drt-ldr1:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://drt-ldr2' INTO TABLE ycsb.public.usertable;"
         roachprod sql drt-ldr2:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://drt-ldr1' INTO TABLE ycsb.public.usertable;"
 
@@ -569,12 +590,9 @@ EOF"
 
         # Setup pgurls for worklooads to use.
         roachprod ssh workload-ldr:1 -- "
-        echo \"$(roachprod pgurl drt-ldr1 --secure | sed 's/=certs/=certs.ldr1/g' | sed "s/'//g" )\" > pgurls.ldr1.txt;
-        echo \"$(roachprod pgurl drt-ldr2 --secure | sed 's/=certs/=certs.ldr2/g' | sed "s/'//g" )\" > pgurls.ldr2.txt;
+        echo \"$(roachprod pgurl drt-ldr1 | sed 's/=certs/=certs.ldr1/g' | sed "s/'//g" )\" > pgurls.ldr1.txt;
+        echo \"$(roachprod pgurl drt-ldr2 | sed 's/=certs/=certs.ldr2/g' | sed "s/'//g" )\" > pgurls.ldr2.txt;
         ln -sf pgurls.ldr1.txt pgurls.txt"
-
-        # Set up a changefeed in one of the two clusters.
-        $0 sql drt-ldr1:1 -- -e "CREATE CHANGEFEED FOR TABLE ycsb.usertable INTO 'null://' WITH OPTIONS (initial_scan = 'no', resolved, updated, split_column_families)"
 
         # Setup the ycsb workload runner as a script invoked by systemd.
         # The runner cycles through all lettered ycsb workloads in a
@@ -582,61 +600,26 @@ EOF"
         roachprod ssh workload-ldr:1 -- 'cat - > ycsb_run_ldr1.sh << EOF
 #!/usr/bin/env bash
 
-while true; do
-  exec ./cockroach workload run ycsb \\
-    --concurrency=32 \\
-    --duration=2h \\
-    --max-rate 1000 \\
+exec ./cockroach workload run ycsb \\
+    --concurrency=100 \\
+    --max-rate 10000 \\
+    --insert-start=0 \\
+    --families=false \\
     --tolerate-errors \\
-    --workload='custom' --insert-freq=1.0 \\
+    --workload='custom' --read-freq=0.1 --read-modify-write-freq 0.1 --insert-freq 0.3 --scan-freq 0.1 --update-freq 0.2 --delete-freq 0.2 \\
     \$(cat /home/ubuntu/pgurls.ldr1.txt)
-
-  exec ./cockroach workload run ycsb \\
-    --concurrency=32 \\
-    --duration=2h \\
-    --max-rate 1000 \\
-    --tolerate-errors \\
-    --workload=A \\
-    \$(cat /home/ubuntu/pgurls.ldr1.txt)
-
-  exec ./cockroach workload run ycsb \\
-    --concurrency=32 \\
-    --duration=2h \\
-    --max-rate 1000 \\
-    --tolerate-errors \\
-    --workload='custom' --read-freq=0.4 --read-modify-write-freq 0.1 --insert-freq 0.2 --scan-freq 0.1 --update-freq 0.2 \\
-    \$(cat /home/ubuntu/pgurls.ldr1.txt)
-done
 EOF'
         roachprod ssh workload-ldr:1 -- 'cat - > ycsb_run_ldr2.sh << EOF
 #!/usr/bin/env bash
 
-while true; do
-
-  exec ./cockroach workload run ycsb \\
-    --concurrency=32 \\
-    --duration=2h \\
-    --max-rate 1000 \\
+exec ./cockroach workload run ycsb \\
+    --concurrency=100 \\
+    --max-rate 10000 \\
     --tolerate-errors \\
-    --workload='custom' --insert-freq=1.0 \\
+    --families=false \\
+    --insert-start=4611686018427387904 \\
+    --workload='custom' --read-freq=0.2 --read-modify-write-freq 0.1 --insert-freq 0.3 --scan-freq 0.1 --update-freq 0.1 --delete-freq 0.2 \\
     \$(cat /home/ubuntu/pgurls.ldr2.txt)
-
-  exec ./cockroach workload run ycsb \\
-    --concurrency=32 \\
-    --duration=2h \\
-    --max-rate 1000 \\
-    --tolerate-errors \\
-    --workload=A \\
-    \$(cat /home/ubuntu/pgurls.ldr2.txt)
-
-  exec ./cockroach workload run ycsb \\
-    --concurrency=32 \\
-    --duration=2h \\
-    --max-rate 1000 \\
-    --tolerate-errors \\
-    --workload='custom' --read-freq=0.4 --read-modify-write-freq 0.1 --insert-freq 0.2 --scan-freq 0.1 --update-freq 0.2 \\
-    \$(cat /home/ubuntu/pgurls.ldr2.txt)
-done
 EOF'
         roachprod ssh workload-ldr:1 -- "chmod +x ./ycsb_run_ldr1.sh;
 sudo tee /etc/systemd/system/ycsb_ldr1.service > /dev/null << EOF

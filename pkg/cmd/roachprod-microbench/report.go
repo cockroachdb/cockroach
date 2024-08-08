@@ -83,7 +83,7 @@ func (report *report) closeReports() {
 }
 
 func (report *report) writeBenchmarkErrorLogs(response cluster.RemoteResponse, tag string) error {
-	benchmarkResponse := response.Metadata.(benchmarkIndexed)
+	benchmarkResponse := response.Metadata.(benchmarkKey)
 	stdoutLogName := fmt.Sprintf("%s-%s-stdout.log", benchmarkResponse.name, tag)
 	stderrLogName := fmt.Sprintf("%s-%s-stderr.log", benchmarkResponse.name, tag)
 	report.log.Printf("Writing error logs for benchmark at %s, %s\n", stdoutLogName, stderrLogName)

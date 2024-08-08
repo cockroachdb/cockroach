@@ -13,10 +13,10 @@ import { Action } from "redux";
 import { ThunkAction } from "redux-thunk";
 import { createSelector } from "reselect";
 
-import { userLogin, userLogout } from "src/util/api";
+import { cockroach } from "src/js/protos";
 import { AdminUIState } from "src/redux/state";
 import { LOGIN_PAGE, LOGOUT_PAGE } from "src/routes/login";
-import { cockroach } from "src/js/protos";
+import { userLogin, userLogout } from "src/util/api";
 import { getDataFromServer } from "src/util/dataFromServer";
 
 import { clearTenantCookie } from "./cookies";

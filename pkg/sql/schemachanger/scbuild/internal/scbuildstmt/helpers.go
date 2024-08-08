@@ -1142,6 +1142,18 @@ func getPrimaryIndexChain(b BuildCtx, tableID catid.DescID) *primaryIndexChain {
 	return NewPrimaryIndexChain(b, old, inter1, inter2, final)
 }
 
+// getPrimaryIndexID finds and returns the PrimaryIndex. If there were changes
+// to the primary index in this transaction, it returns pointer to the modified
+// index.
+func getLatestPrimaryIndex(b BuildCtx, tableID catid.DescID) *scpb.PrimaryIndex {
+	chain := getPrimaryIndexChain(b, tableID)
+	if chain.finalSpec.primary != nil {
+		return chain.finalSpec.primary
+	} else {
+		return chain.oldSpec.primary
+	}
+}
+
 // addASwapInIndexByCloningFromSource adds a primary index `in` that is going
 // to swap out `out` yet `in`'s columns are cloned from `source`.
 //
@@ -1638,4 +1650,11 @@ func newTypeT(t *types.T) scpb.TypeT {
 		ClosedTypeIDs: typedesc.GetTypeDescriptorClosure(t).Ordered(),
 		TypeName:      t.SQLString(),
 	}
+}
+
+func retrieveColumnTypeElem(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) *scpb.ColumnType {
+	_, _, ret := scpb.FindColumnType(b.QueryByID(tableID).Filter(hasColumnIDAttrFilter(columnID)))
+	return ret
 }

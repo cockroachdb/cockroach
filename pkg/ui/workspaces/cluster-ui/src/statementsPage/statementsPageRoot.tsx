@@ -10,6 +10,7 @@
 
 import React from "react";
 
+import { Anchor } from "src/anchor";
 import { Option } from "src/selectWithDescription/selectWithDescription";
 import { SQLActivityRootControls } from "src/sqlActivityRootControls/sqlActivityRootControls";
 import {
@@ -17,7 +18,6 @@ import {
   StatementsPageProps,
 } from "src/statementsPage/statementsPage";
 import { statementsSql } from "src/util/docs";
-import { Anchor } from "src/anchor";
 
 import {
   ActiveStatementsView,

@@ -74,14 +74,14 @@ type eventStream struct {
 }
 
 var quantize = settings.RegisterDurationSettingWithExplicitUnit(
-	settings.SystemOnly,
+	settings.ApplicationLevel,
 	"physical_replication.producer.timestamp_granularity",
 	"the granularity at which replicated times are quantized to make tracking more efficient",
 	5*time.Second,
 )
 
 var emitMetadata = settings.RegisterBoolSetting(
-	settings.SystemOnly,
+	settings.ApplicationLevel,
 	"physical_replication.producer.emit_metadata.enabled",
 	"whether to emit metadata events",
 	true,
@@ -537,9 +537,6 @@ func streamPartition(
 	var spec streampb.StreamPartitionSpec
 	if err := protoutil.Unmarshal(opaqueSpec, &spec); err != nil {
 		return nil, errors.Wrapf(err, "invalid partition spec for stream %d", streamID)
-	}
-	if !evalCtx.SessionData().AvoidBuffering {
-		return nil, errors.New("partition streaming requires 'SET avoid_buffering = true' option")
 	}
 	if len(spec.Spans) == 0 {
 		return nil, errors.AssertionFailedf("expected at least one span, got none")

@@ -41,12 +41,11 @@ var (
 // SoftState provides state that is useful for logging and debugging.
 // The state is volatile and does not need to be persisted to the WAL.
 type SoftState struct {
-	Lead      pb.PeerID // must use atomic operations to access; keep 64-bit aligned.
 	RaftState StateType
 }
 
 func (a *SoftState) equal(b *SoftState) bool {
-	return a.Lead == b.Lead && a.RaftState == b.RaftState
+	return a.RaftState == b.RaftState
 }
 
 // Ready encapsulates the entries and messages that are ready to read,
@@ -112,7 +111,7 @@ type Ready struct {
 }
 
 func isHardStateEqual(a, b pb.HardState) bool {
-	return a.Term == b.Term && a.Vote == b.Vote && a.Commit == b.Commit
+	return a.Term == b.Term && a.Vote == b.Vote && a.Commit == b.Commit && a.Lead == b.Lead
 }
 
 // IsEmptyHardState returns true if the given HardState is empty.
@@ -378,13 +377,13 @@ func (n *node) run() {
 				close(pm.result)
 			}
 		case m := <-n.recvc:
-			if IsResponseMsg(m.Type) && !IsLocalMsgTarget(m.From) && r.trk.Progress[m.From] == nil {
+			if IsResponseMsg(m.Type) && !IsLocalMsgTarget(m.From) && r.trk.Progress(m.From) == nil {
 				// Filter out response message from unknown From.
 				break
 			}
 			r.Step(m)
 		case cc := <-n.confc:
-			_, okBefore := r.trk.Progress[r.id]
+			okBefore := r.trk.Progress(r.id) != nil
 			cs := r.applyConfChange(cc)
 			// If the node was removed, block incoming proposals. Note that we
 			// only do this if the node was in the config before. Nodes may be
@@ -395,7 +394,7 @@ func (n *node) run() {
 			// NB: propc is reset when the leader changes, which, if we learn
 			// about it, sort of implies that we got readded, maybe? This isn't
 			// very sound and likely has bugs.
-			if _, okAfter := r.trk.Progress[r.id]; okBefore && !okAfter {
+			if okAfter := r.trk.Progress(r.id) != nil; okBefore && !okAfter {
 				var found bool
 				for _, sl := range [][]pb.PeerID{cs.Voters, cs.VotersOutgoing} {
 					for _, id := range sl {

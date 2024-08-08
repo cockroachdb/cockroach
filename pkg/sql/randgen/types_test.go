@@ -35,7 +35,7 @@ loop:
 		case types.EncodedKeyFamily:
 			// It's not a real type.
 			continue loop
-		case types.UnknownFamily, types.AnyFamily:
+		case types.UnknownFamily, types.AnyFamily, types.TriggerFamily:
 			// These are not included on purpose.
 			continue loop
 		}

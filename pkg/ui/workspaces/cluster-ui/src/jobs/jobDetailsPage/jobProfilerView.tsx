@@ -8,28 +8,28 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Button, InlineAlert, Icon } from "@cockroachlabs/ui-components";
-import moment from "moment-timezone";
 import { Space } from "antd";
 import classNames from "classnames";
-import long from "long";
 import classnames from "classnames/bind";
+import long from "long";
+import moment from "moment-timezone";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 import { RequestState } from "src/api";
-import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
-import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
-import { EmptyTable } from "src/empty";
-import { useScheduleFunction } from "src/util/hooks";
-import { DownloadFile, DownloadFileRef } from "src/downloadFile";
 import {
   GetJobProfilerExecutionDetailRequest,
   GetJobProfilerExecutionDetailResponse,
   ListJobProfilerExecutionDetailsRequest,
   ListJobProfilerExecutionDetailsResponse,
 } from "src/api/jobProfilerApi";
+import { DownloadFile, DownloadFileRef } from "src/downloadFile";
+import { EmptyTable } from "src/empty";
+import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
+import { SummaryCard, SummaryCardItem } from "src/summaryCard";
+import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
+import { useScheduleFunction } from "src/util/hooks";
 
 import styles from "./jobProfilerView.module.scss";
 

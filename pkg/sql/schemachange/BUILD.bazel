@@ -10,9 +10,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachange",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/colinfo",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
     ],
 )

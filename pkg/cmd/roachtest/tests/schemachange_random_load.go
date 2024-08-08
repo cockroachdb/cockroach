@@ -40,10 +40,11 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 			spec.AWSZones("us-east-2b,us-west-1a,eu-west-1a"),
 		),
 		// TODO(radu): enable this test on AWS.
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Nightly),
-		Leases:           registry.MetamorphicLeases,
-		NativeLibs:       registry.LibGEOS,
+		CompatibleClouds:           registry.AllExceptAWS,
+		Suites:                     registry.Suites(registry.Nightly),
+		Leases:                     registry.MetamorphicLeases,
+		NativeLibs:                 registry.LibGEOS,
+		RequiresDeprecatedWorkload: true, // uses schemachange
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 5000
 			concurrency := 20
@@ -89,7 +90,6 @@ func runSchemaChangeRandomLoad(
 			t.Fatalf("found %d invalid objects", numInvalidObjects)
 		}
 	}
-
 	loadNode := c.Node(1)
 	roachNodes := c.Range(1, c.Spec().NodeCount)
 	t.Status("copying binaries")

@@ -8,18 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
+import React from "react";
 
+import { cockroach } from "src/js/protos";
 import LineGraph from "src/views/cluster/components/linegraph";
-import { Axis, Metric } from "src/views/shared/components/metricQuery";
 import {
   CircuitBreakerTrippedReplicasTooltip,
   LogicalBytesGraphTooltip,
   PausedFollowersTooltip,
   ReceiverSnapshotsQueuedTooltip,
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
-import { cockroach } from "src/js/protos";
+import { Axis, Metric } from "src/views/shared/components/metricQuery";
 
 import {
   GraphDashboardProps,
@@ -104,6 +104,33 @@ export default function (props: GraphDashboardProps) {
             sources={storeIDsForNode(storeIDsByNodeID, nid)}
           />
         ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Lease Types"
+      sources={storeSources}
+      tenantSource={tenantSource}
+      tooltip={`Details about the types of leases in use by ranges in the
+                system. A cluster is expected to have a mix of lease types.
+                In the node view, shows details about leases the node is
+                responsible for. In the cluster view, shows details about
+                leases all across the cluster.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="leases">
+        <Metric
+          name="cr.store.leases.expiration"
+          title="Expiration Leases"
+        />
+        <Metric
+          name="cr.store.leases.epoch"
+          title="Epoch Leases"
+        />
+        <Metric
+          name="cr.store.leases.leader"
+          title="Leader Leases"
+        />
       </Axis>
     </LineGraph>,
 

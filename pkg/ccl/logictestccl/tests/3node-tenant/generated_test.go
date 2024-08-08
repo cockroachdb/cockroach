@@ -2797,6 +2797,13 @@ func TestTenantLogicCCL_tenant_unsupported(
 	runCCLLogicTest(t, "tenant_unsupported")
 }
 
+func TestTenantLogicCCL_triggers(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "triggers")
+}
+
 func TestTenantLogicCCL_udf_params(
 	t *testing.T,
 ) {

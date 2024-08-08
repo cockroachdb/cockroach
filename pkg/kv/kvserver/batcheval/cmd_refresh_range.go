@@ -135,7 +135,7 @@ func refreshRange(
 				} else if !ok {
 					return errors.Errorf("expected provisional value for intent")
 				}
-				if !meta.Timestamp.ToTimestamp().EqOrdering(iter.UnsafeKey().Timestamp) {
+				if meta.Timestamp.ToTimestamp() != iter.UnsafeKey().Timestamp {
 					return errors.Errorf("expected provisional value for intent with ts %s, found %s",
 						meta.Timestamp, iter.UnsafeKey().Timestamp)
 				}

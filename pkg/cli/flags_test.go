@@ -867,6 +867,117 @@ func TestLocalityAdvAddrFlag(t *testing.T) {
 	}
 }
 
+func TestLocalityFileFlag(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
+
+	tmpDir, err := os.MkdirTemp("", "")
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// These files have leading and trailing whitespaces to test the logic where
+	// we trim those before parsing.
+
+	emptyLocalityFile, err := os.CreateTemp(tmpDir, "")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(emptyLocalityFile.Name(), []byte("  "), 0777))
+
+	invalidLocalityFile, err := os.CreateTemp(tmpDir, "")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(invalidLocalityFile.Name(), []byte("  invalid  "), 0777))
+
+	validLocalityFile, err := os.CreateTemp(tmpDir, "")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(validLocalityFile.Name(), []byte("  region=us-east1,az=1  \n"), 0777))
+
+	mtf := mtStartSQLCmd.Flags()
+	f := startCmd.Flags()
+	testData := []struct {
+		args        []string
+		expLocality roachpb.Locality
+		expError    string
+	}{
+		// Both flags are incompatible.
+		{
+			args:     []string{"start", "--locality=region=us-east1", "--locality-file=foo"},
+			expError: `--locality is incompatible with --locality-file`,
+		},
+		// File does not exist.
+		{
+			args:     []string{"start", "--locality-file=donotexist"},
+			expError: `invalid argument .* no such file or directory`,
+		},
+		// File is empty.
+		{
+			args:     []string{"start", fmt.Sprintf("--locality-file=%s", emptyLocalityFile.Name())},
+			expError: `invalid locality data "" .* can't have empty locality`,
+		},
+		// File is invalid.
+		{
+			args:     []string{"start", fmt.Sprintf("--locality-file=%s", invalidLocalityFile.Name())},
+			expError: `invalid locality data "invalid" .* tier must be in the form "key=value"`,
+		},
+		// mt start-sql with --locality-file and --tenant-id-file should defer.
+		{
+			args:        []string{"mt", "start-sql", "--tenant-id-file=tid", fmt.Sprintf("--locality-file=%s", validLocalityFile.Name())},
+			expLocality: roachpb.Locality{},
+		},
+		// mt start-sql with --locality-file.
+		{
+			args: []string{"mt", "start-sql", fmt.Sprintf("--locality-file=%s", validLocalityFile.Name())},
+			expLocality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "us-east1"},
+					{Key: "az", Value: "1"},
+				},
+			},
+		},
+		// Only --locality.
+		{
+			args: []string{"start", "--locality=region=us-central1"},
+			expLocality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "us-central1"},
+				},
+			},
+		},
+		// Only --locality-file.
+		{
+			args: []string{"start", fmt.Sprintf("--locality-file=%s", validLocalityFile.Name())},
+			expLocality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "us-east1"},
+					{Key: "az", Value: "1"},
+				},
+			},
+		},
+	}
+	for i, td := range testData {
+		t.Run(strings.Join(td.args, " "), func(t *testing.T) {
+			initCLIDefaults()
+			var err error
+			if td.args[0] == "start" {
+				require.NoError(t, f.Parse(td.args))
+				err = extraServerFlagInit(startCmd)
+			} else {
+				require.NoError(t, mtf.Parse(td.args))
+				err = extraServerFlagInit(mtStartSQLCmd)
+			}
+			if td.expError == "" {
+				require.NoError(t, err)
+				require.Equal(t, td.expLocality, serverCfg.Locality)
+			} else {
+				require.Regexp(t, td.expError, err.Error(),
+					"%d. expected '%s', but got '%s'. td.args was '%#v'.",
+					i, td.expError, err.Error(), td.args)
+			}
+		})
+	}
+}
+
 func TestServerJoinSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

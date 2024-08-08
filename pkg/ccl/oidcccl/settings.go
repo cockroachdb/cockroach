@@ -81,7 +81,7 @@ var OIDCAuthClientTimeout = settings.RegisterDurationSetting(
 	oidcAuthClientTimeoutSettingName,
 	"sets the client timeout for external calls made during OIDC authentication "+
 		"(e.g. authorization code flow, etc.)",
-	30*time.Second,
+	15*time.Second,
 	settings.NonNegativeDuration,
 	settings.WithPublic,
 )

@@ -343,3 +343,27 @@ $input
     $limitValue
     $limitOrdering
 )
+
+# PushLimitIntoLock pushes the Limit operator into its Lock input, as long as
+# the Lock does not use a SKIP LOCKED wait policy. This helps minimize the
+# number of rows locked.
+[PushLimitIntoLock, Normalize]
+(Limit
+    (Lock $input:* $private:*) & ^(LockUsesSkipLocked $private)
+    $limit:*
+    $ordering:*
+)
+=>
+(Lock (Limit $input $limit $ordering) $private)
+
+# PushOffsetIntoLock pushes the Offset operator into its Lock input, as long as
+# the Lock does not use a SKIP LOCKED wait policy. This helps minimize the
+# number of rows locked.
+[PushOffsetIntoLock, Normalize]
+(Offset
+    (Lock $input:* $private:*) & ^(LockUsesSkipLocked $private)
+    $offset:*
+    $ordering:*
+)
+=>
+(Lock (Offset $input $offset $ordering) $private)

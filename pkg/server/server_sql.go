@@ -718,7 +718,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// Set up the DistSQL temp engine.
 
 	useStoreSpec := cfg.TempStorageConfig.Spec
-	tempEngine, tempFS, err := storage.NewTempEngine(ctx, cfg.TempStorageConfig, useStoreSpec, cfg.DiskWriteStatsCollector)
+	tempEngine, tempFS, err := storage.NewTempEngine(ctx, cfg.TempStorageConfig, useStoreSpec, cfg.DiskWriteStats)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating temp storage")
 	}
@@ -1472,16 +1472,48 @@ func (s *SQLServer) preStart(
 	// NB: In the context of the system tenant, we may not have
 	// the version setting in SQL yet even though the in memory
 	// setting has been initialized in.
-	currentVersion := s.execCfg.Settings.Version.ActiveVersionOrEmpty(ctx).Version
-	if currentVersion.Equal(roachpb.Version{}) {
-		if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			v, err := s.settingsWatcher.GetClusterVersionFromStorage(ctx, txn)
-			if err != nil {
-				return err
+	initializeClusterVersion := func(ctx context.Context) error {
+		currentVersion := s.execCfg.Settings.Version.ActiveVersionOrEmpty(ctx).Version
+		if currentVersion.Equal(roachpb.Version{}) {
+			if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+				v, err := s.settingsWatcher.GetClusterVersionFromStorage(ctx, txn)
+				if err != nil {
+					return err
+				}
+				return clusterversion.Initialize(ctx, v.Version, &s.execCfg.Settings.SV)
+			}); err != nil {
+				return errors.Wrap(err, "initializing cluster version")
 			}
-			return clusterversion.Initialize(ctx, v.Version, &s.execCfg.Settings.SV)
-		}); err != nil {
-			return errors.Wrap(err, "initializing cluster version")
+		}
+
+		return nil
+	}
+
+	if s.execCfg.Codec.ForSystemTenant() {
+		if err := initializeClusterVersion(ctx); err != nil {
+			return err
+		}
+	} else {
+		// When initializing the cluster version for tenants, we retry if
+		// the error indicates that the KV authorizer hasn't seen our
+		// service-mode transition. This is possible because both the
+		// service controller and the authorizer receive tenant mode
+		// updates asynchronously via rangefeeds.
+		opts := retry.Options{MaxRetries: 5}
+		var nonRetryableErr error
+		err := opts.Do(ctx, func(ctx context.Context) error {
+			if err := initializeClusterVersion(ctx); err != nil {
+				if strings.Contains(err.Error(), `operation not allowed when in service mode "none"`) {
+					return err
+				}
+				nonRetryableErr = err
+			}
+
+			return nil
+		})
+
+		if err != nil || nonRetryableErr != nil {
+			return errors.CombineErrors(err, nonRetryableErr)
 		}
 	}
 
@@ -1604,7 +1636,7 @@ func (s *SQLServer) preStart(
 	// run.
 
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
-	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
+	s.leaseMgr.RunBackgroundLeasingTask(ctx)
 
 	if err := s.jobRegistry.Start(ctx, stopper); err != nil {
 		return err
@@ -1914,6 +1946,7 @@ func startServeSQL(
 					}
 					return
 				}
+				defer status.ReleaseMemory(ctx)
 
 				if err := serveConn(connCtx, conn, status); err != nil {
 					if logEvery.ShouldLog() {
@@ -1973,6 +2006,7 @@ func startServeSQL(
 						log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
 						return
 					}
+					defer status.ReleaseMemory(ctx)
 
 					if err := serveConn(connCtx, conn, status); err != nil {
 						log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)

@@ -61,8 +61,8 @@ INFO 2 [logterm: 1, index: 4] sent MsgVote request to 3 at term 2
 process-ready 2
 ----
 Ready MustSync=true:
-Lead:0 State:StateCandidate
-HardState Term:2 Vote:2 Commit:4
+State:StateCandidate
+HardState Term:2 Vote:2 Commit:4 Lead:0
 Messages:
 2->1 MsgVote Term:2 Log:1/4
 2->3 MsgVote Term:2 Log:1/4
@@ -82,8 +82,7 @@ stabilize 3
   INFO 3 [logterm: 1, index: 3, vote: 0] cast MsgVote for 2 [logterm: 1, index: 4] at term 2
 > 3 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateFollower
-  HardState Term:2 Vote:2 Commit:3
+  HardState Term:2 Vote:2 Commit:3 Lead:0
   Messages:
   3->2 MsgVoteResp Term:2 Log:0/0
 
@@ -96,7 +95,8 @@ stabilize 2 3
   INFO 2 became leader at term 2
 > 2 handling Ready
   Ready MustSync=true:
-  Lead:2 State:StateLeader
+  State:StateLeader
+  HardState Term:2 Vote:2 Commit:4 Lead:2
   Entries:
   2/5 EntryNormal ""
   Messages:
@@ -106,8 +106,8 @@ stabilize 2 3
   2->3 MsgApp Term:2 Log:1/4 Commit:4 Entries:[2/5 EntryNormal ""]
   DEBUG 3 [logterm: 0, index: 4] rejected MsgApp [logterm: 1, index: 4] from 2
 > 3 handling Ready
-  Ready MustSync=false:
-  Lead:2 State:StateFollower
+  Ready MustSync=true:
+  HardState Term:2 Vote:2 Commit:3 Lead:2
   Messages:
   3->2 MsgAppResp Term:2 Log:1/4 Rejected (Hint: 3)
 > 2 receiving messages
@@ -128,7 +128,7 @@ stabilize 2 3
   ]
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:2 Vote:2 Commit:4
+  HardState Term:2 Vote:2 Commit:4 Lead:2
   Entries:
   1/4 EntryConfChangeV2 v3
   2/5 EntryNormal ""
@@ -141,7 +141,7 @@ stabilize 2 3
   3->2 MsgAppResp Term:2 Log:0/5
 > 2 handling Ready
   Ready MustSync=false:
-  HardState Term:2 Vote:2 Commit:5
+  HardState Term:2 Vote:2 Commit:5 Lead:2
   CommittedEntries:
   2/5 EntryNormal ""
   Messages:
@@ -150,7 +150,7 @@ stabilize 2 3
   2->3 MsgApp Term:2 Log:2/5 Commit:5
 > 3 handling Ready
   Ready MustSync=false:
-  HardState Term:2 Vote:2 Commit:5
+  HardState Term:2 Vote:2 Commit:5 Lead:2
   CommittedEntries:
   2/5 EntryNormal ""
   Messages:

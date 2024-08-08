@@ -32,6 +32,7 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
+        "//pkg/util/buildutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/mon",

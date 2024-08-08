@@ -8,28 +8,30 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { SessionDetails, byteArrayToUuid } from "@cockroachlabs/cluster-ui";
+import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
-import { connect } from "react-redux";
-import { SessionDetails, byteArrayToUuid } from "@cockroachlabs/cluster-ui";
 
-import { getMatchParamByName } from "src/util/query";
-import { sessionAttr } from "src/util/constants";
-import { Pick } from "src/util/pick";
-import { AdminUIState } from "src/redux/state";
-import { SessionsResponseMessage } from "src/util/api";
 import {
   CachedDataReducerState,
   refreshLiveness,
   refreshNodes,
   refreshSessions,
 } from "src/redux/apiReducers";
-import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
+import {
+  nodeDisplayNameByIDSelectorWithoutAddress
+} from "src/redux/nodes";
 import {
   terminateQueryAction,
   terminateSessionAction,
 } from "src/redux/sessions/sessionsSagas";
+import { AdminUIState } from "src/redux/state";
 import { setTimeScale } from "src/redux/timeScale";
+import { SessionsResponseMessage } from "src/util/api";
+import { sessionAttr } from "src/util/constants";
+import { Pick } from "src/util/pick";
+import { getMatchParamByName } from "src/util/query";
 
 type SessionsState = Pick<AdminUIState, "cachedData", "sessions">;
 
@@ -54,7 +56,7 @@ export const selectSession = createSelector(
 const SessionDetailsPageConnected = withRouter(
   connect(
     (state: AdminUIState, props: RouteComponentProps) => ({
-      nodeNames: nodeDisplayNameByIDSelector(state),
+      nodeNames: nodeDisplayNameByIDSelectorWithoutAddress(state),
       session: selectSession(state, props),
       sessionError: state.cachedData.sessions.lastError,
     }),

@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 import join from "lodash/join";
-import sample from "lodash/sample";
 import random from "lodash/random";
+import sample from "lodash/sample";
 
 export function randomName(): string {
   // Add more! Have fun.

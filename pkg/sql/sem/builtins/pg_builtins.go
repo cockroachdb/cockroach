@@ -110,11 +110,16 @@ func init() {
 
 	// Make non-array type i/o builtins.
 	for _, typ := range types.OidToType {
-		// Skip most array types. We're doing them separately below.
 		switch typ.Oid() {
+		case oid.T_trigger:
+			// TRIGGER is not valid in any context apart from the return-type of a
+			// trigger function.
+			continue
 		case oid.T_int2vector, oid.T_oidvector:
+			// Handled separately below.
 		default:
 			if typ.Family() == types.ArrayFamily {
+				// Array types are handled separately below.
 				continue
 			}
 		}
@@ -246,6 +251,9 @@ func shouldMakeFromCastBuiltin(in *types.T) bool {
 	case in.Family() == types.IntFamily && in.Oid() != oid.T_int8:
 		return false
 	case in.Family() == types.FloatFamily && in.Oid() != oid.T_float8:
+		return false
+	case in.Family() == types.TriggerFamily:
+		// TRIGGER is not a valid cast target.
 		return false
 	}
 	return true

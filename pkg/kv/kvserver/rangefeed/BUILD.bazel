@@ -4,6 +4,7 @@ go_library(
     name = "rangefeed",
     srcs = [
         "budget.go",
+        "buffered_registration.go",
         "catchup_scan.go",
         "event_size.go",
         "filter.go",
@@ -37,7 +38,6 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/container/heap",
         "//pkg/util/envutil",
-        "//pkg/util/future",
         "//pkg/util/hlc",
         "//pkg/util/interval",
         "//pkg/util/log",
@@ -89,7 +89,6 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/storageutils",
         "//pkg/util/encoding",
-        "//pkg/util/future",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

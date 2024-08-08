@@ -95,6 +95,7 @@ const (
 	CreateIndexTag         = "CREATE INDEX"
 	CreateFunctionTag      = "CREATE FUNCTION"
 	CreateProcedureTag     = "CREATE PROCEDURE"
+	CreateTriggerTag       = "CREATE TRIGGER"
 	CreateSchemaTag        = "CREATE SCHEMA"
 	CreateSequenceTag      = "CREATE SEQUENCE"
 	CreateDatabaseTag      = "CREATE DATABASE"
@@ -108,6 +109,7 @@ const (
 	DropDatabaseTag        = "DROP DATABASE"
 	DropFunctionTag        = "DROP FUNCTION"
 	DropProcedureTag       = "DROP PROCEDURE"
+	DropTriggerTag         = "DROP TRIGGER"
 	DropIndexTag           = "DROP INDEX"
 	DropOwnedByTag         = "DROP OWNED BY"
 	DropSchemaTag          = "DROP SCHEMA"
@@ -2218,6 +2220,28 @@ func (n *DropRoutine) StatementTag() string {
 }
 
 // StatementReturnType implements the Statement interface.
+func (*CreateTrigger) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*CreateTrigger) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (n *CreateTrigger) StatementTag() string {
+	return CreateTriggerTag
+}
+
+// StatementReturnType implements the Statement interface.
+func (*DropTrigger) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*DropTrigger) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (n *DropTrigger) StatementTag() string {
+	return DropTriggerTag
+}
+
+// StatementReturnType implements the Statement interface.
 func (*AlterFunctionOptions) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -2359,6 +2383,7 @@ func (n *CreateChangefeed) String() string                    { return AsString(
 func (n *CreateDatabase) String() string                      { return AsString(n) }
 func (n *CreateExtension) String() string                     { return AsString(n) }
 func (n *CreateRoutine) String() string                       { return AsString(n) }
+func (n *CreateTrigger) String() string                       { return AsString(n) }
 func (n *CreateIndex) String() string                         { return AsString(n) }
 func (n *CreateLogicalReplicationStream) String() string      { return AsString(n) }
 func (n *CreateRole) String() string                          { return AsString(n) }
@@ -2374,6 +2399,7 @@ func (n *Delete) String() string                              { return AsString(
 func (n *DeclareCursor) String() string                       { return AsString(n) }
 func (n *DropDatabase) String() string                        { return AsString(n) }
 func (n *DropRoutine) String() string                         { return AsString(n) }
+func (n *DropTrigger) String() string                         { return AsString(n) }
 func (n *DropIndex) String() string                           { return AsString(n) }
 func (n *DropOwnedBy) String() string                         { return AsString(n) }
 func (n *DropSchema) String() string                          { return AsString(n) }

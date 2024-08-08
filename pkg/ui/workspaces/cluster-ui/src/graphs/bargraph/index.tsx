@@ -8,17 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useContext, useEffect, useRef } from "react";
 import classNames from "classnames/bind";
+import React, { useContext, useEffect, useRef } from "react";
 import uPlot, { AlignedData, Options } from "uplot";
 
-import { Visualization } from "../visualization";
+import { TimezoneContext } from "../../contexts";
 import {
   AxisUnits,
   calculateXAxisDomainBarChart,
   calculateYAxisDomain,
 } from "../utils/domain";
-import { TimezoneContext } from "../../contexts";
+import { Visualization } from "../visualization";
 
 import styles from "./bargraph.module.scss";
 import { getStackedBarOpts, stack } from "./bars";

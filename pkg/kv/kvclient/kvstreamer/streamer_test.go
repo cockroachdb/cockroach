@@ -54,17 +54,24 @@ func getStreamer(
 	if err != nil {
 		panic(err)
 	}
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState)
 	return kvstreamer.NewStreamer(
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.AppStopper(),
-		kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState),
+		leafTxn,
+		func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+			res, err := leafTxn.Send(ctx, ba)
+			if err != nil {
+				return nil, err.GoError()
+			}
+			return res, nil
+		},
 		cluster.MakeTestingClusterSettings(),
 		nil, /* sd */
 		lock.WaitPolicy(0),
 		limitBytes,
 		acc,
 		nil, /* kvPairsRead */
-		nil, /* batchRequestsIssued */
 		lock.None,
 		lock.Unreplicated,
 	)
@@ -116,13 +123,13 @@ func TestStreamerLimitations(t *testing.T) {
 				s.DistSenderI().(*kvcoord.DistSender),
 				s.AppStopper(),
 				kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID()),
+				nil, /* sendFn */
 				cluster.MakeTestingClusterSettings(),
 				nil, /* sd */
 				lock.WaitPolicy(0),
 				math.MaxInt64, /* limitBytes */
 				nil,           /* acc */
 				nil,           /* kvPairsRead */
-				nil,           /* batchRequestsIssued */
 				lock.None,
 				lock.Unreplicated,
 			)

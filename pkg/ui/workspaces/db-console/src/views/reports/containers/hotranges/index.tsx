@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Button } from "@cockroachlabs/ui-components";
+import moment from "moment-timezone";
 import React, { useCallback, useEffect, useState } from "react";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import moment from "moment-timezone";
-import { Button } from "@cockroachlabs/ui-components";
 
 import { cockroach } from "src/js/protos";
 import { getHotRanges } from "src/util/api";

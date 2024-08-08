@@ -8,22 +8,23 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import classNames from "classnames/bind";
-import { Menu, Dropdown } from "antd";
 import { CaretDown } from "@cockroachlabs/icons";
+import { Menu, Dropdown } from "antd";
+import classNames from "classnames/bind";
 import { MenuClickEventHandler } from "rc-menu/es/interface";
+import React from "react";
 
-import { PageConfig, PageConfigItem } from "src/pageConfig";
+import { SqlStatsSortOptions, SqlStatsSortType } from "src/api/statementsApi";
 import { Button } from "src/button";
 import { commonStyles } from "src/common";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
 import {
   TimeScale,
   timeScale1hMinOptions,
   TimeScaleDropdown,
 } from "src/timeScaleDropdown";
-import { SqlStatsSortOptions, SqlStatsSortType } from "src/api/statementsApi";
 
+import { applyBtn } from "../queryFilter/filterClasses";
 import {
   limitOptions,
   limitMoreOptions,
@@ -33,7 +34,6 @@ import {
   stmtRequestSortMoreOptions,
   txnRequestSortMoreOptions,
 } from "../util/sqlActivityConstants";
-import { applyBtn } from "../queryFilter/filterClasses";
 
 import styles from "./searchCriteria.module.scss";
 

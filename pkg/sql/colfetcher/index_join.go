@@ -565,6 +565,7 @@ func NewColIndexJoin(
 				flowCtx.Cfg.TempStorage, diskMonitor,
 			),
 			kvFetcherMemAcc,
+			spec.FetchSpec.External,
 		)
 	} else {
 		kvFetcher = row.NewKVFetcher(
@@ -577,6 +578,7 @@ func NewColIndexJoin(
 			flowCtx.EvalCtx.SessionData().LockTimeout,
 			kvFetcherMemAcc,
 			flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+			spec.FetchSpec.External,
 		)
 	}
 

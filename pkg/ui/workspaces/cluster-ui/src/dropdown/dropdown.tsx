@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import classnames from "classnames/bind";
 import { CaretDown } from "@cockroachlabs/icons";
+import classnames from "classnames/bind";
+import React from "react";
 
 import { Button, ButtonProps } from "src/button";
 

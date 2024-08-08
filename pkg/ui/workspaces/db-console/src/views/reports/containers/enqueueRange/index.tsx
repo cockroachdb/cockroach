@@ -8,16 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment-timezone";
 import React, { Fragment } from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import moment from "moment-timezone";
 
-import { enqueueRange } from "src/util/api";
 import { cockroach } from "src/js/protos";
+import { enqueueRange } from "src/util/api";
 import Print from "src/views/reports/containers/range/print";
-import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
+import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 
 import "./index.styl";
 

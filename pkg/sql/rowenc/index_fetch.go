@@ -36,7 +36,10 @@ func InitIndexFetchSpec(
 ) error {
 	oldFetchedCols := s.FetchedColumns
 	*s = fetchpb.IndexFetchSpec{
-		Version:             fetchpb.IndexFetchSpecVersionInitial,
+		Version: fetchpb.IndexFetchSpecVersionInitial,
+		// TODO: should we update TableID field according to ExternalRowData? If
+		// so, we will only need to re-map the tenant prefix. Also, what should
+		// be the value of tableoid system column?
 		TableID:             table.GetID(),
 		TableName:           table.GetName(),
 		IndexID:             index.GetID(),
@@ -53,6 +56,18 @@ func InitIndexFetchSpec(
 	s.KeyPrefixLength = uint32(len(codec.TenantPrefix()) +
 		encoding.EncodedLengthUvarintAscending(uint64(s.TableID)) +
 		encoding.EncodedLengthUvarintAscending(uint64(index.GetID())))
+
+	if ext := table.ExternalRowData(); ext != nil {
+		newCodec := keys.MakeSQLCodec(ext.TenantID)
+		oldPrefix := codec.TablePrefix(uint32(s.TableID))
+		newPrefix := newCodec.TablePrefix(uint32(ext.TableID))
+		s.KeyPrefixLength = uint32(len(newPrefix) + encoding.EncodedLengthUvarintAscending(uint64(index.GetID())))
+		s.External = &fetchpb.IndexFetchSpec_ExternalRowData{
+			AsOf:      ext.AsOf,
+			OldPrefix: oldPrefix,
+			NewPrefix: newPrefix,
+		}
+	}
 
 	s.FamilyDefaultColumns = table.FamilyDefaultColumns()
 

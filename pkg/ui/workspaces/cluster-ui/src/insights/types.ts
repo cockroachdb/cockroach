@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment, { Moment } from "moment-timezone";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import moment, { Moment } from "moment-timezone";
 
 import { Filters } from "../queryFilter";
 

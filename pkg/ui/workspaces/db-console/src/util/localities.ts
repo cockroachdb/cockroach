@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 import forEach from "lodash/forEach";
-import isNil from "lodash/isNil";
 import isEmpty from "lodash/isEmpty";
+import isNil from "lodash/isNil";
 import values from "lodash/values";
 
 import { LocalityTier, LocalityTree } from "src/redux/localities";

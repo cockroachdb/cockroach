@@ -8,28 +8,28 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import Long from "long";
+import moment from "moment-timezone";
 import { expectSaga } from "redux-saga-test-plan";
+import * as matchers from "redux-saga-test-plan/matchers";
 import {
   EffectProviders,
   StaticProvider,
   throwError,
 } from "redux-saga-test-plan/providers";
-import * as matchers from "redux-saga-test-plan/matchers";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import Long from "long";
-import moment from "moment-timezone";
 
-import { getCombinedStatements } from "src/api/statementsApi";
 import { resetSQLStats } from "src/api/sqlStatsApi";
+import { getCombinedStatements } from "src/api/statementsApi";
 
 import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
 
+import { actions, reducer, SQLStatsState } from "./sqlStats.reducer";
 import {
   refreshSQLStatsSaga,
   requestSQLStatsSaga,
   resetSQLStatsSaga,
 } from "./sqlStats.sagas";
-import { actions, reducer, SQLStatsState } from "./sqlStats.reducer";
 
 const lastUpdated = moment();
 

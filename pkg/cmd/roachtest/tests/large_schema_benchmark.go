@@ -44,6 +44,8 @@ func registerLargeSchemaBenchmarks(r registry.Registry) {
 func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiRegion bool) {
 	clusterSpec := []spec.Option{
 		spec.CPU(8),
+		spec.WorkloadNode(),
+		spec.WorkloadNodeCPU(8),
 		spec.VolumeSize(800),
 		spec.GCEVolumeType("pd-ssd"),
 		spec.GCEMachineType("n2-standard-8"),
@@ -73,7 +75,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 			10,
 			clusterSpec...,
 		),
-		CompatibleClouds: registry.AllClouds,
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
 		Timeout:          testTimeout,
 		RequiresLicense:  true,
@@ -120,11 +122,9 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 				numSchemasForDatabase = min(numSchemasForDatabase, MaxSchemasForDatabase)
 				databaseIdx += 1
 			}
-
 			// Create all the databases based on our lists of active vs inactive
 			// ones.
 			const inactiveDbListType = 1
-			var workloadNode option.NodeListOption
 			for dbListType, dbList := range [][]string{activeDBList, inactiveDBList} {
 				populateFileName := fmt.Sprintf("populate_%d", dbListType)
 				regionsArg := ""
@@ -154,8 +154,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						settings := install.MakeClusterSettings()
 						startOpts := option.DefaultStartOpts()
 						startOpts.RoachprodOpts.ScheduleBackups = false
-						crdbNodes := c.Range(1, c.Spec().NodeCount-1)
-						c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
+						c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 						conn := c.Conn(ctx, t.L(), 1)
 						defer conn.Close()
 						// Since we will be making a large number of databases / tables
@@ -164,15 +163,33 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						// completes in a reasonable amount of time.
 						_, err := conn.Exec("SET CLUSTER SETTING jobs.retention_time='1h'")
 						require.NoError(t, err)
+						// Create a user that will be used for authentication for the REST
+						// API calls.
+						_, err = conn.Exec("CREATE USER roachadmin password 'roacher'")
+						require.NoError(t, err)
+						_, err = conn.Exec("GRANT ADMIN to roachadmin")
+						require.NoError(t, err)
 					}
 				}
-				err := c.PutString(ctx, strings.Join(dbList, "\n"), populateFileName, 0755, c.Node(c.Spec().NodeCount))
+				err := c.PutString(ctx, strings.Join(dbList, "\n"), populateFileName, 0755, c.WorkloadNode())
 				require.NoError(t, err)
-				_, workloadNode = setupTPCC(ctx, t, t.L(), c, options)
+				setupTPCC(ctx, t, t.L(), c, options)
 			}
 			// Upload a file containing the ORM queries.
-			require.NoError(t, c.PutString(ctx, LargeSchemaOrmQueries, "ormQueries.sql", 0755, workloadNode))
+			require.NoError(t, c.PutString(ctx, LargeSchemaOrmQueries, "ormQueries.sql", 0755, c.WorkloadNode()))
 			mon := c.NewMonitor(ctx, c.All())
+			// Upload a file containing the web API calls we want to benchmark.
+			require.NoError(t, c.PutString(ctx,
+				LargeSchemaAPICalls,
+				"apiCalls",
+				0755,
+				c.WorkloadNode()))
+			// Get a list of web console URLs.
+			webConsoleURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Range(1, c.Spec().NodeCount-1))
+			require.NoError(t, err)
+			for urlIdx := range webConsoleURLs {
+				webConsoleURLs[urlIdx] = "http://" + webConsoleURLs[urlIdx]
+			}
 			// Next startup the workload for our list of databases from earlier.
 			for dbListType, dbList := range [][]string{activeDBList, inactiveDBList} {
 				dbList := dbList
@@ -193,7 +210,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						wlInstance = append(
 							wlInstance,
 							workloadInstance{
-								nodes:          c.Range(1, c.Spec().NodeCount-1),
+								nodes:          c.CRDBNodes(),
 								prometheusPort: 5050,
 							},
 						)
@@ -207,9 +224,13 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						DisableHistogram:  true, // We setup the flag above.
 						WorkloadInstances: wlInstance,
 						Duration:          time.Minute * 60,
-						ExtraRunArgs: fmt.Sprintf("--db-list-file=%s --txn-preamble-file=%s --conns=%d --workers=%d %s %s",
+						ExtraRunArgs: fmt.Sprintf("--db-list-file=%s --txn-preamble-file=%s --admin-urls=%q "+
+							"--console-api-file=apiCalls --console-api-username=%q --console-api-password=%q --conns=%d --workers=%d %s %s",
 							populateFileName,
 							"ormQueries.sql",
+							strings.Join(webConsoleURLs, ","),
+							"roachadmin",
+							"roacher",
 							numWorkers,
 							numWorkers,
 							waitEnabled,
@@ -239,4 +260,9 @@ const LargeSchemaOrmQueries = `
            ) as sp
         ON sp.nspoid = typnamespace 
      ORDER BY sp.r, pg_type.oid DESC;
+`
+
+// LargeSchemaAPICalls are calls into the consoles cluster API.
+const LargeSchemaAPICalls = `
+api/v2/databases/$targetDb/tables/
 `

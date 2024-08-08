@@ -39,7 +39,7 @@ genrule(
     cmd = """
         $(location //pkg/sql/lexbase/allkeywords) < $(location //pkg/sql/parser:sql.y) > $@
     """,
-    exec_tools = [
+    tools = [
         "//pkg/sql/lexbase/allkeywords",
     ],
     visibility = [
@@ -60,7 +60,7 @@ genrule(
      echo; \
      grep '^const [A-Z][_A-Z0-9]* ' $(location //pkg/sql/parser:sql-goyacc)) > $@
     """,
-    exec_tools = [
+    tools = [
         "//pkg/sql/parser:sql-goyacc",
     ],
     visibility = [

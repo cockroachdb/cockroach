@@ -106,7 +106,8 @@ func TestExecutionScheduling(t *testing.T) {
 			// command from the `commandMap`, in order to keep track of the remaining
 			// commands.
 			err := ExecuteRemoteCommands(
-				nil, execFunc, "test", commands, numNodes, false, func(response RemoteResponse) {
+				nil, execFunc, "test", commands, numNodes, false, install.DefaultRunOptions().WithRetryDisabled(),
+				func(response RemoteResponse) {
 					delete(commandMap, response.Args[0])
 				},
 			)

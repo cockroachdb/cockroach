@@ -8,9 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createMemoryHistory } from "history";
-import find from "lodash/find";
-import { bindActionCreators, Store } from "redux";
 import {
   DatabasesPageActions,
   DatabasesPageData,
@@ -19,10 +16,13 @@ import {
   api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { createMemoryHistory } from "history";
+import find from "lodash/find";
+import { bindActionCreators, Store } from "redux";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
-import * as fakeApi from "src/util/fakeApi";
 import { indexUnusedDuration } from "src/util/constants";
+import * as fakeApi from "src/util/fakeApi";
 
 import { mapDispatchToProps, mapStateToProps } from "./redux";
 
@@ -304,7 +304,18 @@ describe("Databases Page", function () {
       nodes: [1, 2, 3],
       spanStats: undefined,
       tables: {
-        tables: [`"public"."foo"`, `"public"."bar"`],
+        tables: [
+          {
+            schema: "public",
+            table: "foo",
+            qualifiedNameWithSchemaAndTable: `"public"."foo"`,
+          },
+          {
+            schema: "public",
+            table: "bar",
+            qualifiedNameWithSchemaAndTable: `"public"."bar"`,
+          },
+        ],
       },
       nodesByRegionString: "gcp-europe-west1(n3), gcp-us-east1(n1,n2)",
       numIndexRecommendations: 1,

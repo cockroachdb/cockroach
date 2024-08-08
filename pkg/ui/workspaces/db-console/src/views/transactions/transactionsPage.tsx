@@ -8,9 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { connect } from "react-redux";
-import { createSelector } from "reselect";
-import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   Filters,
   defaultFilters,
@@ -23,23 +20,26 @@ import {
   TransactionsPageRootProps,
   api,
 } from "@cockroachlabs/cluster-ui";
+import { connect } from "react-redux";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 import { bindActionCreators } from "redux";
+import { createSelector } from "reselect";
 
+import { trackApplySearchCriteriaAction } from "src/redux/analyticsActions";
 import {
   createSelectorForCachedDataField,
   refreshNodes,
   refreshTxns,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
+import { LocalSetting } from "src/redux/localsettings";
+import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { AdminUIState } from "src/redux/state";
+import { setGlobalTimeScaleAction } from "src/redux/statements";
+import { selectTimeScale } from "src/redux/timeScale";
 import { selectHasAdminRole } from "src/redux/user";
 import { PrintTime } from "src/views/reports/containers/range/print";
-import { nodeRegionsByIDSelector } from "src/redux/nodes";
-import { setGlobalTimeScaleAction } from "src/redux/statements";
-import { LocalSetting } from "src/redux/localsettings";
-import { selectTimeScale } from "src/redux/timeScale";
-import { trackApplySearchCriteriaAction } from "src/redux/analyticsActions";
 
 import {
   activeTransactionsPageActionCreators,

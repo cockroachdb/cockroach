@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import orderBy from "lodash/orderBy";
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import flow from "lodash/flow";
 import groupBy from "lodash/groupBy";
 import mapValues from "lodash/mapValues";
-import flow from "lodash/flow";
-import { createSelector } from "reselect";
-import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import orderBy from "lodash/orderBy";
 import moment from "moment-timezone";
+import { createSelector } from "reselect";
 
 import { AdminUIState } from "src/redux/state";
 

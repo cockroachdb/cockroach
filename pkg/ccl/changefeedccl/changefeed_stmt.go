@@ -355,12 +355,14 @@ func coreChangefeed(
 			err = knobs.HandleDistChangefeedError(err)
 		}
 
-		if err = changefeedbase.AsTerminalError(ctx, p.ExecCfg().LeaseManager, err); err != nil {
+		if err := changefeedbase.AsTerminalError(ctx, p.ExecCfg().LeaseManager, err); err != nil {
+			log.Infof(ctx, "core changefeed failed due to error: %s", err)
 			return err
 		}
 
 		// All other errors retry; but we'll use an up-to-date progress
 		// information which is saved in the localState.
+		log.Infof(ctx, "core changefeed retrying due to transient error: %s", err)
 	}
 	return ctx.Err() // retry loop exits when context cancels.
 }
@@ -999,7 +1001,7 @@ func changefeedJobDescription(
 		return "", err
 	}
 	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
-	return tree.AsString(c), nil
+	return tree.AsStringWithFlags(c, tree.FmtShowFullURIs), nil
 }
 
 func logSanitizedChangefeedDestination(ctx context.Context, destination string) {

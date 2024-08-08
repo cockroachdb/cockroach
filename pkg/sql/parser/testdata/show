@@ -359,6 +359,22 @@ SHOW SCHEMAS FROM a -- literals removed
 SHOW SCHEMAS FROM _ -- identifiers removed
 
 parse
+EXPLAIN SHOW SCHEMAS WITH COMMENT
+----
+EXPLAIN SHOW SCHEMAS WITH COMMENT
+EXPLAIN SHOW SCHEMAS WITH COMMENT -- fully parenthesized
+EXPLAIN SHOW SCHEMAS WITH COMMENT -- literals removed
+EXPLAIN SHOW SCHEMAS WITH COMMENT -- identifiers removed
+
+parse
+SHOW SCHEMAS FROM a WITH COMMENT
+----
+SHOW SCHEMAS FROM a WITH COMMENT
+SHOW SCHEMAS FROM a WITH COMMENT -- fully parenthesized
+SHOW SCHEMAS FROM a WITH COMMENT -- literals removed
+SHOW SCHEMAS FROM _ WITH COMMENT -- identifiers removed
+
+parse
 SHOW SEQUENCES
 ----
 SHOW SEQUENCES
@@ -2087,26 +2103,29 @@ SHOW VIRTUAL CLUSTER _ WITH REPLICATION STATUS, PRIOR REPLICATION DETAILS, CAPAB
 parse
 SHOW BACKUP 'family' IN ('string', 'placeholder', 'placeholder', 'placeholder', 'string', 'placeholder', 'string', 'placeholder') WITH incremental_location = 'nullif', privileges, debug_dump_metadata_sst
 ----
-SHOW BACKUP 'family' IN ('string', 'placeholder', 'placeholder', 'placeholder', 'string', 'placeholder', 'string', 'placeholder') WITH OPTIONS (incremental_location = 'nullif', privileges, debug_dump_metadata_sst) -- normalized!
-SHOW BACKUP ('family') IN (('string'), ('placeholder'), ('placeholder'), ('placeholder'), ('string'), ('placeholder'), ('string'), ('placeholder')) WITH OPTIONS (incremental_location = ('nullif'), privileges, debug_dump_metadata_sst) -- fully parenthesized
+SHOW BACKUP 'family' IN ('*****', '*****', '*****', '*****', '*****', '*****', '*****', '*****') WITH OPTIONS (incremental_location = '*****', privileges, debug_dump_metadata_sst) -- normalized!
+SHOW BACKUP ('family') IN (('*****'), ('*****'), ('*****'), ('*****'), ('*****'), ('*****'), ('*****'), ('*****')) WITH OPTIONS (incremental_location = ('*****'), privileges, debug_dump_metadata_sst) -- fully parenthesized
 SHOW BACKUP '_' IN ('_', '_', '_', '_', '_', '_', '_', '_') WITH OPTIONS (incremental_location = '_', privileges, debug_dump_metadata_sst) -- literals removed
-SHOW BACKUP 'family' IN ('string', 'placeholder', 'placeholder', 'placeholder', 'string', 'placeholder', 'string', 'placeholder') WITH OPTIONS (incremental_location = 'nullif', privileges, debug_dump_metadata_sst) -- identifiers removed
+SHOW BACKUP 'family' IN ('*****', '*****', '*****', '*****', '*****', '*****', '*****', '*****') WITH OPTIONS (incremental_location = '*****', privileges, debug_dump_metadata_sst) -- identifiers removed
+SHOW BACKUP 'family' IN ('string', 'placeholder', 'placeholder', 'placeholder', 'string', 'placeholder', 'string', 'placeholder') WITH OPTIONS (incremental_location = 'nullif', privileges, debug_dump_metadata_sst) -- passwords exposed
 
 parse
 SHOW BACKUP 'abc' WITH SKIP SIZE
 ----
-SHOW BACKUP 'abc' WITH OPTIONS (skip size) -- normalized!
-SHOW BACKUP ('abc') WITH OPTIONS (skip size) -- fully parenthesized
+SHOW BACKUP '*****' WITH OPTIONS (skip size) -- normalized!
+SHOW BACKUP ('*****') WITH OPTIONS (skip size) -- fully parenthesized
 SHOW BACKUP '_' WITH OPTIONS (skip size) -- literals removed
-SHOW BACKUP 'abc' WITH OPTIONS (skip size) -- identifiers removed
+SHOW BACKUP '*****' WITH OPTIONS (skip size) -- identifiers removed
+SHOW BACKUP 'abc' WITH OPTIONS (skip size) -- passwords exposed
 
 parse
 SHOW BACKUP 'abc' WITH NOWAIT
 ----
-SHOW BACKUP 'abc' WITH OPTIONS (skip size) -- normalized!
-SHOW BACKUP ('abc') WITH OPTIONS (skip size) -- fully parenthesized
+SHOW BACKUP '*****' WITH OPTIONS (skip size) -- normalized!
+SHOW BACKUP ('*****') WITH OPTIONS (skip size) -- fully parenthesized
 SHOW BACKUP '_' WITH OPTIONS (skip size) -- literals removed
-SHOW BACKUP 'abc' WITH OPTIONS (skip size) -- identifiers removed
+SHOW BACKUP '*****' WITH OPTIONS (skip size) -- identifiers removed
+SHOW BACKUP 'abc' WITH OPTIONS (skip size) -- passwords exposed
 
 parse
 SHOW DEFAULT SESSION VARIABLES FOR ROLE foo

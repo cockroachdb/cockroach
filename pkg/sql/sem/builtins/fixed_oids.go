@@ -2364,7 +2364,7 @@ var builtinOidsArray = []string{
 	2394: `array_cat_agg(arg1: varbit[]) -> varbit[]`,
 	2395: `array_cat_agg(arg1: anyenum[]) -> anyenum[]`,
 	2396: `array_cat_agg(arg1: tuple[]) -> tuple[]`,
-	2397: `crdb_internal.update_tenant_resource_limits(tenant_name: string, available_tokens: float, refill_rate: float, max_burst_tokens: float, as_of: timestamp, as_of_consumed_tokens: float) -> int`,
+	2397: `crdb_internal.update_tenant_resource_limits(tenant_name: string, available_tokens: float, refill_rate: float, max_burst_tokens: float) -> int`,
 	2398: `to_tsquery(text: string) -> tsquery`,
 	2399: `to_tsvector(text: string) -> tsvector`,
 	2400: `phraseto_tsquery(text: string) -> tsquery`,
@@ -2602,6 +2602,11 @@ var builtinOidsArray = []string{
 	2634: `vector_dims(vector: vector) -> int`,
 	2635: `vector_norm(vector: vector) -> float`,
 	2636: `crdb_internal.log(msg: string) -> void`,
+	2637: `crdb_internal.start_logical_replication_job(conn_str: string, table_names: string[]) -> int`,
+	2638: `crdb_internal.plan_logical_replication(req: bytes) -> bytes`,
+	2639: `crdb_internal.start_replication_stream_for_tables(req: bytes) -> bytes`,
+	2640: `crdb_internal.clear_query_plan_cache() -> void`,
+	2641: `crdb_internal.clear_table_stats_cache() -> void`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

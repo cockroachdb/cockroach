@@ -1367,6 +1367,8 @@ func (s *statusServer) LogFile(
 			}
 			if errors.Is(err, log.ErrMalformedLogEntry) {
 				resp.ParseErrors = append(resp.ParseErrors, err.Error())
+				//Append log generated from malformed line.
+				resp.Entries = append(resp.Entries, entry)
 				// Proceed decoding next entry, as we want to retrieve as much logs
 				// as possible.
 				continue
@@ -2411,13 +2413,14 @@ func (s *systemStatusServer) rangesHelper(
 		}
 
 		state := serverpb.RaftState{
-			ReplicaID:      uint64(raftStatus.ID),
-			HardState:      raftStatus.HardState,
-			Applied:        raftStatus.Applied,
-			Lead:           raftStatus.Lead,
-			State:          raftStatus.RaftState.String(),
-			Progress:       make(map[uint64]serverpb.RaftState_Progress),
-			LeadTransferee: raftStatus.LeadTransferee,
+			ReplicaID:        uint64(raftStatus.ID),
+			HardState:        raftStatus.HardState,
+			Applied:          raftStatus.Applied,
+			Lead:             raftStatus.Lead,
+			State:            raftStatus.RaftState.String(),
+			Progress:         make(map[uint64]serverpb.RaftState_Progress),
+			LeadTransferee:   raftStatus.LeadTransferee,
+			LeadSupportUntil: raftStatus.LeadSupportUntil,
 		}
 
 		for id, progress := range raftStatus.Progress {

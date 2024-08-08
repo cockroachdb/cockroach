@@ -290,6 +290,26 @@ func ParseTableName(sql string) (*tree.UnresolvedObjectName, error) {
 	return rename.Name, nil
 }
 
+// ParseFunctionName parses a function name. The function name must contain one
+// or more name parts, using the full input SQL syntax: each name
+// part containing special characters, or non-lowercase characters,
+// must be enclosed in double quote. The name may not be an invalid
+// function name (the caller is responsible for guaranteeing that only
+// valid function names are provided as input).
+func ParseFunctionName(sql string) (*tree.UnresolvedObjectName, error) {
+	// We wrap the name we want to parse into a dummy statement since our parser
+	// can only parse full statements.
+	stmt, err := ParseOne(fmt.Sprintf("ALTER FUNCTION %s RENAME TO x", sql))
+	if err != nil {
+		return nil, err
+	}
+	rename, ok := stmt.AST.(*tree.AlterRoutineRename)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected an ALTER FUNCTION statement, but found %T", stmt)
+	}
+	return rename.Function.FuncName.ToUnresolvedObjectName(), nil
+}
+
 // ParseTablePattern parses a table pattern. The table name must contain one
 // or more name parts, using the full input SQL syntax: each name
 // part containing special characters, or non-lowercase characters,
@@ -469,12 +489,11 @@ func arrayOf(
 	// If the reference is a statically known type, then return an array type,
 	// rather than an array type reference.
 	if typ, ok := tree.GetStaticallyKnownType(ref); ok {
-		// Do not allow type unknown[]. This is consistent with Postgres' behavior.
-		if typ.Family() == types.UnknownFamily {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "type unknown[] does not exist")
-		}
-		if typ.Family() == types.VoidFamily {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "type void[] does not exist")
+		switch typ.Family() {
+		case types.UnknownFamily, types.VoidFamily, types.TriggerFamily:
+			// Do not allow arrays of these types. This is consistent with Postgres'
+			// behavior.
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "type %s[] does not exist", typ.Name())
 		}
 		if err := types.CheckArrayElementType(typ); err != nil {
 			return nil, err

@@ -77,7 +77,7 @@ func setupZipDirWithProfiles(t *testing.T, inputs map[int][]uploadProfileReq) (s
 func TestUploadZipProfiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer testutils.TestingHook(&newUploadID, func() string {
+	defer testutils.TestingHook(&newUploadID, func(string) string {
 		return "123"
 	})()
 

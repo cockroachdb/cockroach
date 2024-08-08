@@ -10,6 +10,7 @@ package logical
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"time"
 
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
@@ -125,15 +126,26 @@ func newLogicalReplicationWriterProcessor(
 		}
 	}
 
-	tableDescs := make(map[descpb.ID]catalog.TableDescriptor)
-	for dstTableDescID, desc := range spec.TableDescriptors {
-		tableDescs[descpb.ID(dstTableDescID)] = tabledesc.NewBuilder(&desc).BuildImmutableTable()
+	tableConfigs := make(map[descpb.ID]sqlProcessorTableConfig)
+	tableIDToName := make(map[int32]fullyQualifiedTableName)
+	for tableID, md := range spec.TableMetadata {
+		desc := md.SourceDescriptor
+		tableConfigs[descpb.ID(tableID)] = sqlProcessorTableConfig{
+			srcDesc: tabledesc.NewBuilder(&desc).BuildImmutableTable(),
+			dstOID:  md.DestinationFunctionOID,
+		}
+
+		tableIDToName[tableID] = fullyQualifiedTableName{
+			database: md.DestinationParentDatabaseName,
+			schema:   md.DestinationParentSchemaName,
+			table:    md.DestinationTableName,
+		}
 	}
 	bhPool := make([]BatchHandler, maxWriterWorkers)
 	for i := range bhPool {
 
 		rp, err := makeSQLProcessor(
-			ctx, flowCtx.Cfg.Settings, tableDescs,
+			ctx, flowCtx.Cfg.Settings, tableConfigs,
 			// Initialize the executor with a fresh session data - this will
 			// avoid creating a new copy on each executor usage.
 			flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
@@ -152,8 +164,8 @@ func newLogicalReplicationWriterProcessor(
 	dlqDbExec := flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */)))
 
 	var numTablesWithSecondaryIndexes int
-	for _, td := range tableDescs {
-		if len(td.NonPrimaryIndexes()) > 0 {
+	for _, tc := range tableConfigs {
+		if len(tc.srcDesc.NonPrimaryIndexes()) > 0 {
 			numTablesWithSecondaryIndexes++
 		}
 	}
@@ -178,7 +190,7 @@ func newLogicalReplicationWriterProcessor(
 			// (Here we have access to the descriptor of the source table, but
 			// for now we assume that the source and the target descriptors are
 			// similar.)
-			if 2*numTablesWithSecondaryIndexes < len(tableDescs) && useImplicitTxns.Get(&flowCtx.Cfg.Settings.SV) {
+			if 2*numTablesWithSecondaryIndexes < len(tableConfigs) && useImplicitTxns.Get(&flowCtx.Cfg.Settings.SV) {
 				return 1
 			}
 			return int(flushBatchSize.Get(&flowCtx.Cfg.Settings.SV))
@@ -193,7 +205,7 @@ func newLogicalReplicationWriterProcessor(
 			StreamID:    streampb.StreamID(spec.StreamID),
 			ProcessorID: processorID,
 		},
-		dlqClient: InitDeadLetterQueueClient(dlqDbExec),
+		dlqClient: InitDeadLetterQueueClient(dlqDbExec, tableIDToName),
 		metrics:   flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
 	}
 	lrw.purgatory = purgatory{
@@ -227,17 +239,14 @@ func newLogicalReplicationWriterProcessor(
 //
 // A subscription's event stream is read by the consumeEvents loop.
 //
-// The consumeEvents loop builds a buffer of KVs that it then sends to
-// the flushLoop. We currently allow 1 in-flight flush.
-//
-//	client.Subscribe -> consumeEvents -> flushLoop -> Next()
+//	client.Subscribe -> consumeEvents -> Next()
 //
 // All errors are reported to Next() via errCh, with the first
 // error winning.
 //
 // Start implements the RowSource interface.
 func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
-	ctx = logtags.AddTag(ctx, "job", lrw.spec.JobID)
+	ctx = logtags.AddTag(logtags.AddTag(ctx, "job", lrw.spec.JobID), "part", lrw.spec.PartitionSpec.PartitionID)
 	streampb.RegisterActiveLogicalConsumerStatus(&lrw.debug)
 
 	ctx = lrw.StartInternal(ctx, logicalReplicationWriterProcessorName)
@@ -246,7 +255,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 
 	db := lrw.FlowCtx.Cfg.DB
 
-	log.Infof(ctx, "starting logical replication writer for partitions %v", lrw.spec.PartitionSpec)
+	log.Infof(ctx, "starting logical replication writer for partition %s", lrw.spec.PartitionSpec.PartitionID)
 
 	// Start the subscription for our partition.
 	partitionSpec := lrw.spec.PartitionSpec
@@ -328,24 +337,27 @@ func (lrw *logicalReplicationWriterProcessor) Next() (
 				rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(progressBytes))),
 			}
 			return row, nil
+		} else {
+			select {
+			case err := <-lrw.errCh:
+				lrw.MoveToDrainingAndLogError(err)
+				return nil, lrw.DrainHelper()
+			case <-time.After(10 * time.Second):
+				logcrash.ReportOrPanic(lrw.Ctx(), &lrw.FlowCtx.Cfg.Settings.SV,
+					"event channel closed but no error found on err channel after 10 seconds")
+				lrw.MoveToDrainingAndLogError(nil /* error */)
+				return nil, lrw.DrainHelper()
+			}
 		}
 	case err := <-lrw.errCh:
 		lrw.MoveToDrainingAndLogError(err)
-		return nil, lrw.DrainHelper()
-	}
-	select {
-	case err := <-lrw.errCh:
-		lrw.MoveToDrainingAndLogError(err)
-		return nil, lrw.DrainHelper()
-	default:
-		lrw.MoveToDrainingAndLogError(nil /* error */)
 		return nil, lrw.DrainHelper()
 	}
 }
 
 func (lrw *logicalReplicationWriterProcessor) MoveToDrainingAndLogError(err error) {
 	if err != nil {
-		log.Infof(lrw.Ctx(), "gracefully draining with error %s", err)
+		log.Infof(lrw.Ctx(), "gracefully draining with error: %s", err)
 	}
 	lrw.MoveToDraining(err)
 }
@@ -494,6 +506,12 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 	case lrw.checkpointCh <- resolvedSpans:
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-lrw.stopCh:
+		// we need to select on stopCh here because the reader
+		// of checkpointCh is the caller of Next(). But there
+		// might never be another Next() call since it may
+		// have exited based on an error.
+		return nil
 	}
 	lrw.metrics.CheckpointEvents.Inc(1)
 	return nil
@@ -504,7 +522,7 @@ func (lrw *logicalReplicationWriterProcessor) handleStreamBuffer(
 	ctx context.Context, kvs []streampb.StreamEvent_KV,
 ) error {
 	const notRetry = false
-	unapplied, unappliedBytes, err := lrw.flushBuffer(ctx, kvs, notRetry, retryAllowed)
+	unapplied, unappliedBytes, err := lrw.flushBuffer(ctx, kvs, notRetry, lrw.purgatory.Enabled())
 	if err != nil {
 		return err
 	}
@@ -675,6 +693,27 @@ func (r retryEligibility) String() string {
 	return "unknown"
 }
 
+type replicationMutationType int
+
+const (
+	insertMutation replicationMutationType = iota
+	deleteMutation
+	updateMutation
+)
+
+func (t replicationMutationType) String() string {
+	switch t {
+	case insertMutation:
+		return "insert"
+	case deleteMutation:
+		return "delete"
+	case updateMutation:
+		return "update"
+	default:
+		return fmt.Sprintf("Unrecognized replicationMutationType(%d)", int(t))
+	}
+}
+
 // flushChunk is the per-thread body of flushBuffer; see flushBuffer's contract.
 func (lrw *logicalReplicationWriterProcessor) flushChunk(
 	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV, canRetry retryEligibility,
@@ -809,7 +848,7 @@ func (lrw *logicalReplicationWriterProcessor) dlq(
 	case errType:
 		lrw.metrics.DLQedDueToErrType.Inc(1)
 	}
-	return lrw.dlqClient.Log(ctx, lrw.spec.JobID, event, row, eligibility)
+	return lrw.dlqClient.Log(ctx, lrw.spec.JobID, event, row, applyErr, eligibility)
 }
 
 type batchStats struct {

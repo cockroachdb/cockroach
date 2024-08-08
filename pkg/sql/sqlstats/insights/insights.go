@@ -11,15 +11,11 @@
 package insights
 
 import (
-	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	prometheus "github.com/prometheus/client_model/go"
 )
 
@@ -135,62 +131,18 @@ func NewMetrics() Metrics {
 	}
 }
 
-// Writer observes statement and transaction executions.
-type Writer interface {
-	// ObserveStatement notifies the registry of a statement execution.
-	ObserveStatement(sessionID clusterunique.ID, statement *Statement)
-
-	// ObserveTransaction notifies the registry of the end of a transaction.
-	ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction)
-
-	// Clear clears the underlying cache of its contents, with no guarantees around flush behavior.
-	// Data may simply be erased depending on the implementation.
-	Clear()
-}
-
-// WriterProvider offers a Writer.
-// Pass true for internal when called by the internal executor.
-type WriterProvider func(internal bool) Writer
-
-// Reader offers access to the currently retained set of insights.
-type Reader interface {
-	// IterateInsights calls visitor with each of the currently retained set of insights.
-	IterateInsights(context.Context, func(context.Context, *Insight))
-}
-
-type LatencyInformation interface {
-	GetPercentileValues(fingerprintID appstatspb.StmtFingerprintID) PercentileValues
-}
-
 type PercentileValues struct {
 	P50 float64
 	P90 float64
 	P99 float64
 }
 
-// Provider offers access to the insights subsystem.
-type Provider interface {
-	// Start launches the background tasks necessary for processing insights.
-	Start(ctx context.Context, stopper *stop.Stopper)
-
-	// Writer returns an object that observes statement and transaction executions.
-	// Pass true for internal when called by the internal executor.
-	Writer(internal bool) Writer
-
-	// Reader returns an object that offers read access to any detected insights.
-	Reader() Reader
-
-	// LatencyInformation returns an object that offers read access to latency information,
-	// such as percentiles.
-	LatencyInformation() LatencyInformation
-}
-
 // New builds a new Provider.
-func New(st *cluster.Settings, metrics Metrics) Provider {
+func New(st *cluster.Settings, metrics Metrics) *Provider {
 	store := newStore(st)
 	anomalyDetector := newAnomalyDetector(st, metrics)
 
-	return &defaultProvider{
+	return &Provider{
 		store: store,
 		ingester: newConcurrentBufferIngester(
 			newRegistry(st, &compositeDetector{detectors: []detector{

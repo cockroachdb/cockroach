@@ -2070,6 +2070,10 @@ func checkResultType(typ *types.T, fmtCode pgwirebase.FormatCode) error {
 	case types.AnyFamily:
 		// Placeholder case.
 		return errors.Errorf("could not determine data type of %s", typ)
+	case types.TriggerFamily:
+		// The TRIGGER datatype is only allowed as the return type of a trigger
+		// function.
+		return tree.CannotAcceptTriggerErr
 	default:
 		return errors.Errorf("unsupported result type: %s", typ)
 	}
@@ -3838,6 +3842,10 @@ func (m *sessionDataMutator) SetPlanCacheMode(val sessiondatapb.PlanCacheMode) {
 
 func (m *sessionDataMutator) SetOptimizerUsePolymorphicParameterFix(val bool) {
 	m.data.OptimizerUsePolymorphicParameterFix = val
+}
+
+func (m *sessionDataMutator) SetOptimizerUseConditionalHoistFix(val bool) {
+	m.data.OptimizerUseConditionalHoistFix = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

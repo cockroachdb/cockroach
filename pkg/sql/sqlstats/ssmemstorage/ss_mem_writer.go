@@ -140,7 +140,7 @@ func (s *Container) RecordStatement(
 
 	// Percentile latencies are only being sampled if the latency was above the
 	// AnomalyDetectionLatencyThreshold.
-	latencies := s.latencyInformation.GetPercentileValues(stmtFingerprintID)
+	latencies := s.anomalies.GetPercentileValues(stmtFingerprintID)
 	latencyInfo := appstatspb.LatencyInfo{
 		Min: value.ServiceLatencySec,
 		Max: value.ServiceLatencySec,

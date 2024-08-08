@@ -150,16 +150,6 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	cross := mustGetFlagString(cmd, crossFlag)
 	dockerArgs := mustGetFlagStringArray(cmd, dockerArgsFlag)
 
-	// Set up dev cache unless it's disabled via the environment variable or the
-	// testing knob.
-	skipCacheCheck := d.knobs.skipCacheCheckDuringBuild || d.os.Getenv("DEV_NO_REMOTE_CACHE") != ""
-	if !skipCacheCheck {
-		_, err := d.setUpCache(ctx)
-		if err != nil {
-			return err
-		}
-	}
-
 	args, buildTargets, err := d.getBasicBuildArgs(ctx, targets)
 	if err != nil {
 		return err

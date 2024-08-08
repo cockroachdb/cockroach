@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/pebble/sstable"
+	"github.com/cockroachdb/pebble/sstable/block"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,18 +78,38 @@ func makePebbleSST(t testing.TB, kvs []MVCCKeyValue, ingestion bool) []byte {
 func TestMakeIngestionWriterOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	type want struct {
+		format             sstable.TableFormat
+		disableValueBlocks bool
+	}
 	testCases := []struct {
 		name string
 		st   *cluster.Settings
-		want sstable.TableFormat
+		want want
 	}{
 		{
 			name: "with virtual sstables",
 			st: func() *cluster.Settings {
 				st := cluster.MakeTestingClusterSettings()
+				IngestionValueBlocksEnabled.Override(context.Background(), &st.SV, true)
 				return st
 			}(),
-			want: sstable.TableFormatPebblev4,
+			want: want{
+				format:             sstable.TableFormatPebblev4,
+				disableValueBlocks: false,
+			},
+		},
+		{
+			name: "disable value blocks",
+			st: func() *cluster.Settings {
+				st := cluster.MakeTestingClusterSettings()
+				IngestionValueBlocksEnabled.Override(context.Background(), &st.SV, false)
+				return st
+			}(),
+			want: want{
+				format:             sstable.TableFormatPebblev4,
+				disableValueBlocks: true,
+			},
 		},
 	}
 
@@ -96,7 +117,8 @@ func TestMakeIngestionWriterOptions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			opts := MakeIngestionWriterOptions(ctx, tc.st)
-			require.Equal(t, tc.want, opts.TableFormat)
+			require.Equal(t, tc.want.format, opts.TableFormat)
+			require.Equal(t, tc.want.disableValueBlocks, opts.DisableValueBlocks)
 		})
 	}
 }
@@ -170,14 +192,14 @@ func TestSSTWriterOption(t *testing.T) {
 			"with snappy compression",
 			makeCompressionWriterOpt(compressionAlgorithmSnappy),
 			func(t *testing.T, opts *sstable.WriterOptions) {
-				require.Equal(t, sstable.SnappyCompression, opts.Compression)
+				require.Equal(t, block.SnappyCompression, opts.Compression)
 			},
 		},
 		{
 			"with zstd compression",
 			makeCompressionWriterOpt(compressionAlgorithmZstd),
 			func(t *testing.T, opts *sstable.WriterOptions) {
-				require.Equal(t, sstable.ZstdCompression, opts.Compression)
+				require.Equal(t, block.ZstdCompression, opts.Compression)
 			},
 		},
 	}
