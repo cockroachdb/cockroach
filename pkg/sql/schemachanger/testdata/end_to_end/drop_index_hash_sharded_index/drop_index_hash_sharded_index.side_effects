@@ -28,7 +28,7 @@ write *eventpb.DropIndex to event log:
 ## StatementPhase stage 1 of 1 with 4 MutationType ops
 upsert descriptor #104
   ...
-       expr: '"crdb_internal_j_shard_16" IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)'
+       expr: crdb_internal_j_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
        fromHashShardedColumn: true
   -    name: check_crdb_internal_j_shard_16
   +    name: crdb_internal_constraint_2_name_placeholder
@@ -131,7 +131,7 @@ upsert descriptor #104
   +        columnIds:
   +        - 3
   +        constraintId: 2
-  +        expr: '"crdb_internal_j_shard_16" IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)'
+  +        expr: crdb_internal_j_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
   +        fromHashShardedColumn: true
   +        name: check_crdb_internal_j_shard_16
   +        validity: Dropping
@@ -156,7 +156,7 @@ persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 6 MutationType ops
 upsert descriptor #104
   ...
-       expr: '"crdb_internal_j_shard_16" IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)'
+       expr: crdb_internal_j_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
        fromHashShardedColumn: true
   -    name: check_crdb_internal_j_shard_16
   +    name: crdb_internal_constraint_2_name_placeholder
@@ -288,7 +288,7 @@ upsert descriptor #104
   +        columnIds:
   +        - 3
   +        constraintId: 2
-  +        expr: '"crdb_internal_j_shard_16" IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)'
+  +        expr: crdb_internal_j_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
   +        fromHashShardedColumn: true
   +        name: check_crdb_internal_j_shard_16
   +        validity: Dropping
@@ -322,7 +322,7 @@ upsert descriptor #104
   -  - columnIds:
   -    - 3
   -    constraintId: 2
-  -    expr: '"crdb_internal_j_shard_16" IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)'
+  -    expr: crdb_internal_j_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
   -    fromHashShardedColumn: true
   -    name: crdb_internal_constraint_2_name_placeholder
   -    validity: Dropping
@@ -392,7 +392,7 @@ upsert descriptor #104
   -        columnIds:
   -        - 3
   -        constraintId: 2
-  -        expr: '"crdb_internal_j_shard_16" IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)'
+  -        expr: crdb_internal_j_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
   -        fromHashShardedColumn: true
   -        name: check_crdb_internal_j_shard_16
   -        validity: Dropping
