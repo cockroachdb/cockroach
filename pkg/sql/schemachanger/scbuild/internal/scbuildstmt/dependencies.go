@@ -275,6 +275,10 @@ type TableHelpers interface {
 	// added to this table.
 	NextTableConstraintID(tableID catid.DescID) catid.ConstraintID
 
+	// NextTableTriggerID returns the ID that should be used for any new trigger
+	// added to this table.
+	NextTableTriggerID(tableID catid.DescID) catid.TriggerID
+
 	// NextTableTentativeIndexID returns the tentative ID, starting from
 	// scbuild.TABLE_TENTATIVE_IDS_START, that should be used for any new index added to
 	// this table.
@@ -316,6 +320,7 @@ type FunctionHelpers interface {
 	BuildReferenceProvider(stmt tree.Statement) ReferenceProvider
 	WrapFunctionBody(fnID descpb.ID, bodyStr string, lang catpb.Function_Language,
 		returnType tree.ResolvableTypeReference, provider ReferenceProvider) *scpb.FunctionBody
+	ReplaceSeqTypeNamesInStatements(queryStr string, lang catpb.Function_Language) string
 }
 
 type SchemaHelpers interface {
@@ -446,6 +451,8 @@ type ReferenceProvider interface {
 	ReferencedTypes() catalog.DescriptorIDSet
 	// ReferencedRelationIDs Returns all referenced relation IDs.
 	ReferencedRelationIDs() catalog.DescriptorIDSet
+	// ReferencedRoutines returns all referenced routine IDs.
+	ReferencedRoutines() catalog.DescriptorIDSet
 }
 
 // TemporarySchemaProvider provides functions needed to help support

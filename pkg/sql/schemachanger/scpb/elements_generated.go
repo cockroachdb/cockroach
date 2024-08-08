@@ -2452,6 +2452,339 @@ func (c *ElementCollection[E]) FilterTemporaryIndex() *ElementCollection[*Tempor
 	return (*ElementCollection[*TemporaryIndex])(ret)
 }
 
+func (e Trigger) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_Trigger) Element() Element {
+	return e.Trigger
+}
+
+// ForEachTrigger iterates over elements of type Trigger.
+// Deprecated
+func ForEachTrigger(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Trigger),
+) {
+  c.FilterTrigger().ForEach(fn)
+}
+
+// FindTrigger finds the first element of type Trigger.
+// Deprecated
+func FindTrigger(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *Trigger) {
+	if tc := c.FilterTrigger(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*Trigger)
+	}
+	return current, target, element
+}
+
+// TriggerElements filters elements of type Trigger.
+func (c *ElementCollection[E]) FilterTrigger() *ElementCollection[*Trigger] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*Trigger)
+		return ok
+	})
+	return (*ElementCollection[*Trigger])(ret)
+}
+
+func (e TriggerDeps) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TriggerDeps) Element() Element {
+	return e.TriggerDeps
+}
+
+// ForEachTriggerDeps iterates over elements of type TriggerDeps.
+// Deprecated
+func ForEachTriggerDeps(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerDeps),
+) {
+  c.FilterTriggerDeps().ForEach(fn)
+}
+
+// FindTriggerDeps finds the first element of type TriggerDeps.
+// Deprecated
+func FindTriggerDeps(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TriggerDeps) {
+	if tc := c.FilterTriggerDeps(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TriggerDeps)
+	}
+	return current, target, element
+}
+
+// TriggerDepsElements filters elements of type TriggerDeps.
+func (c *ElementCollection[E]) FilterTriggerDeps() *ElementCollection[*TriggerDeps] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TriggerDeps)
+		return ok
+	})
+	return (*ElementCollection[*TriggerDeps])(ret)
+}
+
+func (e TriggerEnabled) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TriggerEnabled) Element() Element {
+	return e.TriggerEnabled
+}
+
+// ForEachTriggerEnabled iterates over elements of type TriggerEnabled.
+// Deprecated
+func ForEachTriggerEnabled(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerEnabled),
+) {
+  c.FilterTriggerEnabled().ForEach(fn)
+}
+
+// FindTriggerEnabled finds the first element of type TriggerEnabled.
+// Deprecated
+func FindTriggerEnabled(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TriggerEnabled) {
+	if tc := c.FilterTriggerEnabled(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TriggerEnabled)
+	}
+	return current, target, element
+}
+
+// TriggerEnabledElements filters elements of type TriggerEnabled.
+func (c *ElementCollection[E]) FilterTriggerEnabled() *ElementCollection[*TriggerEnabled] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TriggerEnabled)
+		return ok
+	})
+	return (*ElementCollection[*TriggerEnabled])(ret)
+}
+
+func (e TriggerEvents) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TriggerEvents) Element() Element {
+	return e.TriggerEvents
+}
+
+// ForEachTriggerEvents iterates over elements of type TriggerEvents.
+// Deprecated
+func ForEachTriggerEvents(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerEvents),
+) {
+  c.FilterTriggerEvents().ForEach(fn)
+}
+
+// FindTriggerEvents finds the first element of type TriggerEvents.
+// Deprecated
+func FindTriggerEvents(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TriggerEvents) {
+	if tc := c.FilterTriggerEvents(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TriggerEvents)
+	}
+	return current, target, element
+}
+
+// TriggerEventsElements filters elements of type TriggerEvents.
+func (c *ElementCollection[E]) FilterTriggerEvents() *ElementCollection[*TriggerEvents] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TriggerEvents)
+		return ok
+	})
+	return (*ElementCollection[*TriggerEvents])(ret)
+}
+
+func (e TriggerFunctionCall) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TriggerFunctionCall) Element() Element {
+	return e.TriggerFunctionCall
+}
+
+// ForEachTriggerFunctionCall iterates over elements of type TriggerFunctionCall.
+// Deprecated
+func ForEachTriggerFunctionCall(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerFunctionCall),
+) {
+  c.FilterTriggerFunctionCall().ForEach(fn)
+}
+
+// FindTriggerFunctionCall finds the first element of type TriggerFunctionCall.
+// Deprecated
+func FindTriggerFunctionCall(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TriggerFunctionCall) {
+	if tc := c.FilterTriggerFunctionCall(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TriggerFunctionCall)
+	}
+	return current, target, element
+}
+
+// TriggerFunctionCallElements filters elements of type TriggerFunctionCall.
+func (c *ElementCollection[E]) FilterTriggerFunctionCall() *ElementCollection[*TriggerFunctionCall] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TriggerFunctionCall)
+		return ok
+	})
+	return (*ElementCollection[*TriggerFunctionCall])(ret)
+}
+
+func (e TriggerName) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TriggerName) Element() Element {
+	return e.TriggerName
+}
+
+// ForEachTriggerName iterates over elements of type TriggerName.
+// Deprecated
+func ForEachTriggerName(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerName),
+) {
+  c.FilterTriggerName().ForEach(fn)
+}
+
+// FindTriggerName finds the first element of type TriggerName.
+// Deprecated
+func FindTriggerName(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TriggerName) {
+	if tc := c.FilterTriggerName(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TriggerName)
+	}
+	return current, target, element
+}
+
+// TriggerNameElements filters elements of type TriggerName.
+func (c *ElementCollection[E]) FilterTriggerName() *ElementCollection[*TriggerName] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TriggerName)
+		return ok
+	})
+	return (*ElementCollection[*TriggerName])(ret)
+}
+
+func (e TriggerTiming) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TriggerTiming) Element() Element {
+	return e.TriggerTiming
+}
+
+// ForEachTriggerTiming iterates over elements of type TriggerTiming.
+// Deprecated
+func ForEachTriggerTiming(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerTiming),
+) {
+  c.FilterTriggerTiming().ForEach(fn)
+}
+
+// FindTriggerTiming finds the first element of type TriggerTiming.
+// Deprecated
+func FindTriggerTiming(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TriggerTiming) {
+	if tc := c.FilterTriggerTiming(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TriggerTiming)
+	}
+	return current, target, element
+}
+
+// TriggerTimingElements filters elements of type TriggerTiming.
+func (c *ElementCollection[E]) FilterTriggerTiming() *ElementCollection[*TriggerTiming] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TriggerTiming)
+		return ok
+	})
+	return (*ElementCollection[*TriggerTiming])(ret)
+}
+
+func (e TriggerTransition) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TriggerTransition) Element() Element {
+	return e.TriggerTransition
+}
+
+// ForEachTriggerTransition iterates over elements of type TriggerTransition.
+// Deprecated
+func ForEachTriggerTransition(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerTransition),
+) {
+  c.FilterTriggerTransition().ForEach(fn)
+}
+
+// FindTriggerTransition finds the first element of type TriggerTransition.
+// Deprecated
+func FindTriggerTransition(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TriggerTransition) {
+	if tc := c.FilterTriggerTransition(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TriggerTransition)
+	}
+	return current, target, element
+}
+
+// TriggerTransitionElements filters elements of type TriggerTransition.
+func (c *ElementCollection[E]) FilterTriggerTransition() *ElementCollection[*TriggerTransition] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TriggerTransition)
+		return ok
+	})
+	return (*ElementCollection[*TriggerTransition])(ret)
+}
+
+func (e TriggerWhen) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TriggerWhen) Element() Element {
+	return e.TriggerWhen
+}
+
+// ForEachTriggerWhen iterates over elements of type TriggerWhen.
+// Deprecated
+func ForEachTriggerWhen(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerWhen),
+) {
+  c.FilterTriggerWhen().ForEach(fn)
+}
+
+// FindTriggerWhen finds the first element of type TriggerWhen.
+// Deprecated
+func FindTriggerWhen(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TriggerWhen) {
+	if tc := c.FilterTriggerWhen(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TriggerWhen)
+	}
+	return current, target, element
+}
+
+// TriggerWhenElements filters elements of type TriggerWhen.
+func (c *ElementCollection[E]) FilterTriggerWhen() *ElementCollection[*TriggerWhen] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TriggerWhen)
+		return ok
+	})
+	return (*ElementCollection[*TriggerWhen])(ret)
+}
+
 func (e TypeComment) element() {}
 
 // Element implements ElementGetter.
@@ -2774,6 +3107,24 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_TableZoneConfig{ TableZoneConfig: t}
 		case *TemporaryIndex:
 			e.ElementOneOf = &ElementProto_TemporaryIndex{ TemporaryIndex: t}
+		case *Trigger:
+			e.ElementOneOf = &ElementProto_Trigger{ Trigger: t}
+		case *TriggerDeps:
+			e.ElementOneOf = &ElementProto_TriggerDeps{ TriggerDeps: t}
+		case *TriggerEnabled:
+			e.ElementOneOf = &ElementProto_TriggerEnabled{ TriggerEnabled: t}
+		case *TriggerEvents:
+			e.ElementOneOf = &ElementProto_TriggerEvents{ TriggerEvents: t}
+		case *TriggerFunctionCall:
+			e.ElementOneOf = &ElementProto_TriggerFunctionCall{ TriggerFunctionCall: t}
+		case *TriggerName:
+			e.ElementOneOf = &ElementProto_TriggerName{ TriggerName: t}
+		case *TriggerTiming:
+			e.ElementOneOf = &ElementProto_TriggerTiming{ TriggerTiming: t}
+		case *TriggerTransition:
+			e.ElementOneOf = &ElementProto_TriggerTransition{ TriggerTransition: t}
+		case *TriggerWhen:
+			e.ElementOneOf = &ElementProto_TriggerWhen{ TriggerWhen: t}
 		case *TypeComment:
 			e.ElementOneOf = &ElementProto_TypeComment{ TypeComment: t}
 		case *UniqueWithoutIndexConstraint:
@@ -2856,6 +3207,15 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_TableSchemaLocked)(nil)),
 	((*ElementProto_TableZoneConfig)(nil)),
 	((*ElementProto_TemporaryIndex)(nil)),
+	((*ElementProto_Trigger)(nil)),
+	((*ElementProto_TriggerDeps)(nil)),
+	((*ElementProto_TriggerEnabled)(nil)),
+	((*ElementProto_TriggerEvents)(nil)),
+	((*ElementProto_TriggerFunctionCall)(nil)),
+	((*ElementProto_TriggerName)(nil)),
+	((*ElementProto_TriggerTiming)(nil)),
+	((*ElementProto_TriggerTransition)(nil)),
+	((*ElementProto_TriggerWhen)(nil)),
 	((*ElementProto_TypeComment)(nil)),
 	((*ElementProto_UniqueWithoutIndexConstraint)(nil)),
 	((*ElementProto_UniqueWithoutIndexConstraintUnvalidated)(nil)),
@@ -2934,6 +3294,15 @@ func GetElementTypes() []interface{} {
 	((*TableSchemaLocked)(nil)),
 	((*TableZoneConfig)(nil)),
 	((*TemporaryIndex)(nil)),
+	((*Trigger)(nil)),
+	((*TriggerDeps)(nil)),
+	((*TriggerEnabled)(nil)),
+	((*TriggerEvents)(nil)),
+	((*TriggerFunctionCall)(nil)),
+	((*TriggerName)(nil)),
+	((*TriggerTiming)(nil)),
+	((*TriggerTransition)(nil)),
+	((*TriggerWhen)(nil)),
 	((*TypeComment)(nil)),
 	((*UniqueWithoutIndexConstraint)(nil)),
 	((*UniqueWithoutIndexConstraintUnvalidated)(nil)),

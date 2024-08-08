@@ -74,6 +74,8 @@ const (
 	// zone config element. Those two DatabaseZoneConfig nodes in the graph will
 	// have different SeqNum attribute.
 	SeqNum
+	// TriggerID is the ID of a trigger.
+	TriggerID
 
 	// TargetStatus is the target status of an element.
 	TargetStatus
@@ -236,6 +238,10 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.RowLevelTTL)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 	),
+	rel.EntityMapping(t((*scpb.Trigger)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(TriggerID, "TriggerID"),
+	),
 	// Multi-region elements.
 	rel.EntityMapping(t((*scpb.TableLocalityGlobal)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
@@ -316,6 +322,39 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
 		rel.EntityAttr(Name, "Name"),
+	),
+	// Trigger elements.
+	rel.EntityMapping(t((*scpb.TriggerName)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(TriggerID, "TriggerID"),
+	),
+	rel.EntityMapping(t((*scpb.TriggerEnabled)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(TriggerID, "TriggerID"),
+	),
+	rel.EntityMapping(t((*scpb.TriggerTiming)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(TriggerID, "TriggerID"),
+	),
+	rel.EntityMapping(t((*scpb.TriggerEvents)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(TriggerID, "TriggerID"),
+	),
+	rel.EntityMapping(t((*scpb.TriggerTransition)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(TriggerID, "TriggerID"),
+	),
+	rel.EntityMapping(t((*scpb.TriggerWhen)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(TriggerID, "TriggerID"),
+	),
+	rel.EntityMapping(t((*scpb.TriggerFunctionCall)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(TriggerID, "TriggerID"),
+	),
+	rel.EntityMapping(t((*scpb.TriggerDeps)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(TriggerID, "TriggerID"),
 	),
 	// Common elements.
 	rel.EntityMapping(t((*scpb.Namespace)(nil)),
