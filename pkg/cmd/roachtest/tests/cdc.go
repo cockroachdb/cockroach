@@ -313,7 +313,7 @@ func (ct *cdcTester) runTPCCWorkload(args tpccArgs) {
 	if !ct.t.SkipInit() {
 		ct.t.Status("installing TPCC workload")
 		tpcc.install(ct.ctx, ct.cluster)
-		if args.SchemaLockTables.enabled(globalEnthropy) == featureEnabled {
+		if args.SchemaLockTables.enabled(globalEntropy) == featureEnabled {
 			ct.t.Status(fmt.Sprintf("Setting schema_locked for %s", allTpccTargets))
 			ct.lockSchema(allTpccTargets)
 		}
@@ -432,18 +432,18 @@ var (
 	featureEnabled  featureState = 2
 )
 
-type enthropy struct {
+type entropy struct {
 	*rand.Rand
 }
 
-func (r *enthropy) Bool() bool {
+func (r *entropy) Bool() bool {
 	if r.Rand == nil {
 		return rand.Int()%2 == 0
 	}
 	return r.Rand.Int()%2 == 0
 }
 
-func (r *enthropy) Intn(n int) int {
+func (r *entropy) Intn(n int) int {
 	if r.Rand == nil {
 		return rand.Intn(n)
 	}
@@ -451,9 +451,9 @@ func (r *enthropy) Intn(n int) int {
 }
 
 var globalRand *rand.Rand
-var globalEnthropy enthropy
+var globalEntropy entropy
 
-func (f *featureFlag) enabled(r enthropy) featureState {
+func (f *featureFlag) enabled(r entropy) featureState {
 	if f.v != nil {
 		return *f.v
 	}
@@ -472,7 +472,7 @@ type enumFeatureFlag struct {
 }
 
 // enabled returns a valid string if the returned featureState is featureEnabled.
-func (f *enumFeatureFlag) enabled(r enthropy, choose func(enthropy) string) (string, featureState) {
+func (f *enumFeatureFlag) enabled(r entropy, choose func(entropy) string) (string, featureState) {
 	if f.v != nil {
 		return f.state, *f.v
 	}
@@ -2850,7 +2850,7 @@ type changefeedCreator struct {
 	options         map[string]string
 	extraArgs       []interface{}
 	flags           cdcFeatureFlags
-	rng             enthropy
+	rng             entropy
 	settingsApplied bool
 }
 
@@ -2869,7 +2869,7 @@ func newChangefeedCreator(
 		sinkURL:  sinkURL,
 		options:  make(map[string]string),
 		flags:    flags,
-		rng:      enthropy{Rand: r},
+		rng:      entropy{Rand: r},
 	}
 }
 
@@ -2892,7 +2892,7 @@ func (cfc *changefeedCreator) Args(args ...interface{}) *changefeedCreator {
 	return cfc
 }
 
-func chooseDistributionStrategy(r enthropy) string {
+func chooseDistributionStrategy(r entropy) string {
 	vals := changefeedccl.RangeDistributionStrategy.GetAvailableValues()
 	return vals[r.Intn(len(vals))]
 }
