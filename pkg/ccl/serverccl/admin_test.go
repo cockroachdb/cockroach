@@ -52,14 +52,7 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	// TODO(clust-obs): This test should work with just a single node,
 	// i.e. using serverutils.StartServer` instead of
 	// `StartCluster`.
-	testCluster := serverutils.StartCluster(t, 3,
-		base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				// The code below ought to work when this is omitted. This
-				// needs to be investigated further.
-				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(106897),
-			},
-		})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServer := testCluster.Server(0)
