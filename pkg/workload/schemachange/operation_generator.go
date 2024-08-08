@@ -1974,7 +1974,7 @@ func (og *operationGenerator) dropTable(ctx context.Context, tx pgx.Tx) (*opStmt
 	if err != nil {
 		return nil, err
 	}
-	tableHasDependencies, err := og.tableHasDependencies(ctx, tx, tableName)
+	tableHasDependencies, err := og.tableHasDependencies(ctx, tx, tableName, true /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}
@@ -2006,7 +2006,7 @@ func (og *operationGenerator) dropView(ctx context.Context, tx pgx.Tx) (*opStmt,
 	if err != nil {
 		return nil, err
 	}
-	viewHasDependencies, err := og.tableHasDependencies(ctx, tx, viewName)
+	viewHasDependencies, err := og.tableHasDependencies(ctx, tx, viewName, true /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}
@@ -2273,7 +2273,7 @@ func (og *operationGenerator) renameTable(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
-	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcTableName)
+	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcTableName, false /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}
@@ -2323,7 +2323,7 @@ func (og *operationGenerator) renameView(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 
-	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcViewName)
+	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcViewName, true /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}
