@@ -2783,3 +2783,10 @@ func (tid *TenantID) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return unmarshal(tid)
 	}
 }
+
+var _ redact.SafeFormatter = LeaseAcquisitionType(0)
+
+// Safeformat implements the redact.SafeFormatter interface.
+func (x LeaseAcquisitionType) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.SafeString(redact.SafeString(x.String()))
+}
