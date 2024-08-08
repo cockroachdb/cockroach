@@ -1415,6 +1415,30 @@ func (b *builderState) ResolveRoutine(
 	return b.QueryByID(fnID)
 }
 
+func (b *builderState) ResolveTrigger(
+	relationID catid.DescID, triggerName tree.Name, p scbuildstmt.ResolveParams,
+) scbuildstmt.ElementResultSet {
+	b.ensureDescriptor(relationID)
+	rel := b.descCache[relationID].desc.(catalog.TableDescriptor)
+	elts := b.QueryByID(rel.GetID())
+	var triggerID catid.TriggerID
+	elts.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		if t, ok := e.(*scpb.Trigger); ok {
+			triggerID = t.TriggerID
+		}
+	})
+	if triggerID == 0 {
+		if p.IsExistenceOptional {
+			return nil
+		}
+		panic(sqlerrors.NewUndefinedTriggerError(string(triggerName), rel.GetName()))
+	}
+	return elts.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+		id, _ := screl.Schema.GetAttribute(screl.TriggerID, e)
+		return id != nil && id.(catid.TriggerID) == triggerID
+	})
+}
+
 func (b *builderState) newCachedDesc(id descpb.ID) *cachedDesc {
 	return &cachedDesc{
 		desc:            b.readDescriptor(id),
