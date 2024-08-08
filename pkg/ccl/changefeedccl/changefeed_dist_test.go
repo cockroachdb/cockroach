@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -389,7 +390,10 @@ func newRangeDistributionTester(
 	}
 
 	ctx := context.Background()
+
+	start := timeutil.Now()
 	tc := testcluster.StartTestCluster(t, nodes, args)
+	t.Logf("starting the test cluster took %s", timeutil.Since(start))
 
 	lastNode := tc.Server(len(tc.Servers) - 1).ApplicationLayer()
 	sqlDB := sqlutils.MakeSQLRunner(lastNode.SQLConn(t))
@@ -402,14 +406,23 @@ func newRangeDistributionTester(
 	}
 
 	// Use manual replication only.
+	start = timeutil.Now()
 	tc.ToggleReplicateQueues(false)
+	t.Logf("toggling replicate queues off took %s", timeutil.Since(start))
 
 	t.Logf("creating and splitting table into single-key ranges")
+	start = timeutil.Now()
 	sqlDB.ExecMultiple(t,
 		"CREATE TABLE x (id INT PRIMARY KEY)",
 		"INSERT INTO x SELECT generate_series(0, 63)",
+	)
+	t.Logf("creating and inserting into table took %s", timeutil.Since(start))
+
+	start = timeutil.Now()
+	sqlDB.Exec(t,
 		"ALTER TABLE x SPLIT AT SELECT id FROM x WHERE id > 0",
 	)
+	t.Logf("spitting the table took %s", timeutil.Since(start))
 
 	// Distribute the leases exponentially across the first 5 nodes.
 	for i := 0; i < 64; i += 1 {
@@ -423,7 +436,9 @@ func newRangeDistributionTester(
 			nodeID, i,
 		)
 		// Relocate can fail with errors like `change replicas... descriptor changed` thus the SucceedsSoon.
+		start := timeutil.Now()
 		sqlDB.ExecSucceedsSoon(t, cmd)
+		t.Logf("relocating range for %d to store %d took %s", i, nodeID, timeutil.Since(start))
 	}
 
 	return &rangeDistributionTester{
