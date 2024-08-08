@@ -634,6 +634,11 @@ func (s *sinkSynchronizer) addFlush() {
 	}
 }
 
+type notifyFlushSinkWithTopics struct {
+	SinkWithTopics
+	notifyFlushSink
+}
+
 // notifyFlushSink keeps track of the number of emitted rows and timestamps,
 // and provides a way for the caller to block until some events have been emitted.
 type notifyFlushSink struct {
@@ -1746,7 +1751,7 @@ func (s *fakeKafkaSink) Topics() []string {
 // fakeKafkaSinkV2 is a sink that arranges for fake kafka client and producer
 // to be used.
 type fakeKafkaSinkV2 struct {
-	Sink
+	*batchingSink
 	// For compatibility with all the other fakeKafka test stuff, we convert kgo Records to sarama messages.
 	// TODO(#126991): clean this up when we remove the v1 sink.
 	feedCh      chan *sarama.ProducerMessage
@@ -1757,12 +1762,13 @@ type fakeKafkaSinkV2 struct {
 }
 
 var _ Sink = (*fakeKafkaSinkV2)(nil)
+var _ SinkWithTopics = (*fakeKafkaSinkV2)(nil)
 
 // Dial implements Sink interface. We use it to initialize the fake kafka sink,
 // since the test framework doesn't use constructors. We set up our mocks to
 // feed records into the channel that the wrapper can read from.
 func (s *fakeKafkaSinkV2) Dial() error {
-	bs := s.Sink.(*batchingSink)
+	bs := s.batchingSink
 	kc := bs.client.(*kafkaSinkClientV2)
 	s.ctrl = gomock.NewController(s.t)
 	s.client = mocks.NewMockKafkaClientV2(s.ctrl)
@@ -1803,10 +1809,6 @@ func (s *fakeKafkaSinkV2) Dial() error {
 	kc.adminClient = s.adminClient
 
 	return bs.Dial()
-}
-
-func (s *fakeKafkaSinkV2) Topics() []string {
-	return s.Sink.(*batchingSink).topicNamer.DisplayNamesSlice()
 }
 
 type kafkaFeedFactory struct {
@@ -1905,9 +1907,9 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 		// TODO(#126991): clean this up when we remove the v1 sink.
 		if KafkaV2Enabled.Get(&k.s.ClusterSettings().SV) {
 			return &fakeKafkaSinkV2{
-				Sink:   s,
-				feedCh: feedCh,
-				t:      k.t,
+				batchingSink: s.(*batchingSink),
+				feedCh:       feedCh,
+				t:            k.t,
 			}
 		}
 
@@ -2532,7 +2534,7 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 				mockClient, _ := pubsubv1.NewPublisherClient(context.Background(), option.WithGRPCConn(conn))
 				sinkClient.client = mockClient
 			}
-			return &notifyFlushSink{Sink: s, sync: ss}
+			return &notifyFlushSinkWithTopics{SinkWithTopics: s.(SinkWithTopics), notifyFlushSink: notifyFlushSink{Sink: s, sync: ss}}
 		} else if _, ok := s.(*deprecatedPubsubSink); ok {
 			return &deprecatedFakePubsubSink{
 				Sink:   s,
