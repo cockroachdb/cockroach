@@ -107,6 +107,8 @@ var (
 	_ execinfra.RowSource = &logicalReplicationWriterProcessor{}
 )
 
+const useKVWriter = false
+
 const logicalReplicationWriterProcessorName = "logical-replication-writer-processor"
 
 func newLogicalReplicationWriterProcessor(
@@ -143,15 +145,22 @@ func newLogicalReplicationWriterProcessor(
 	}
 	bhPool := make([]BatchHandler, maxWriterWorkers)
 	for i := range bhPool {
-
-		rp, err := makeSQLProcessor(
-			ctx, flowCtx.Cfg.Settings, tableConfigs,
-			// Initialize the executor with a fresh session data - this will
-			// avoid creating a new copy on each executor usage.
-			flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
-		)
-		if err != nil {
-			return nil, err
+		var rp RowProcessor
+		if useKVWriter {
+			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, tableConfigs)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			rp, err = makeSQLProcessor(
+				ctx, flowCtx.Cfg.Settings, tableConfigs,
+				// Initialize the executor with a fresh session data - this will
+				// avoid creating a new copy on each executor usage.
+				flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
+			)
+			if err != nil {
+				return nil, err
+			}
 		}
 		bhPool[i] = &txnBatch{
 			db:       flowCtx.Cfg.DB,
@@ -377,6 +386,10 @@ func (lrw *logicalReplicationWriterProcessor) close() {
 
 	if lrw.Closed {
 		return
+	}
+
+	for _, b := range lrw.bh {
+		b.Close(lrw.Ctx())
 	}
 
 	defer lrw.frontier.Release()
@@ -881,6 +894,7 @@ type BatchHandler interface {
 	HandleBatch(context.Context, []streampb.StreamEvent_KV) (batchStats, error)
 	GetLastRow() cdcevent.Row
 	SetSyntheticFailurePercent(uint32)
+	Close(context.Context)
 }
 
 // RowProcessor knows how to process a single row from an event stream.
@@ -891,6 +905,7 @@ type RowProcessor interface {
 	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue, roachpb.Value) (batchStats, error)
 	GetLastRow() cdcevent.Row
 	SetSyntheticFailurePercent(uint32)
+	Close(context.Context)
 }
 
 type txnBatch struct {
@@ -915,7 +930,7 @@ func (t *txnBatch) HandleBatch(
 
 	stats := batchStats{}
 	var err error
-	if len(batch) == 1 {
+	if len(batch) == 1 && !useKVWriter {
 		s, err := t.rp.ProcessRow(ctx, nil /* txn */, batch[0].KeyValue, batch[0].PrevValue)
 		if err != nil {
 			return stats, err
@@ -942,6 +957,10 @@ func (t *txnBatch) GetLastRow() cdcevent.Row {
 
 func (t *txnBatch) SetSyntheticFailurePercent(rate uint32) {
 	t.rp.SetSyntheticFailurePercent(rate)
+}
+
+func (t *txnBatch) Close(ctx context.Context) {
+	t.rp.Close(ctx)
 }
 
 func init() {
