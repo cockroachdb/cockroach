@@ -188,6 +188,8 @@ func (e *familyEvaluator) eval(
 		e.errCh = make(chan error, 1)
 		e.currDesc, e.prevDesc = updatedRow.EventDescriptor, prevRow.EventDescriptor
 
+		log.Infof(ctx, "cdc query planAndRun for currDesc: %s and prevDesc: %s",
+			e.currDesc.DebugString(), e.prevDesc.DebugString())
 		if err := e.planAndRun(ctx); err != nil {
 			return cdcevent.Row{}, err
 		}
@@ -305,7 +307,6 @@ func (e *familyEvaluator) preparePlan(
 					prevCol.GetType(), len(prevCol.GetType().InternalType.TupleContents))
 				opts = append(opts, sql.WithExtraColumn(prevCol))
 			}
-
 			plan, err = sql.PlanCDCExpression(ctx, execCtx, e.norm.SelectStatementForFamily(), opts...)
 			return err
 		})
