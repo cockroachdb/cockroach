@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package release_23_2
+package release_24_2
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -134,6 +134,24 @@ func init() {
 				to.Type((*scpb.IndexData)(nil)),
 				JoinOnIndexID(from, to, "table-id", "index-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_WRITE_ONLY, to, scpb.Status_PUBLIC),
+			}
+		},
+	)
+}
+
+// Rules to ensure for created objects the table data will be live after the
+// descriptor is public.
+func init() {
+	registerDepRule(
+		"table added right before data element",
+		scgraph.Precedence,
+		"table", "data",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isDescriptor),
+				to.TypeFilter(rulesVersionKey, isData),
+				JoinOnDescID(from, to, "table-id"),
+				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
 			}
 		},
 	)
