@@ -2014,9 +2014,14 @@ func registerCDC(r registry.Registry) {
 				// https://github.com/IBM/sarama/blob/fd84c2b0f0185100dbaec28ca4074289b35cc1b1/client.go#L1023-L1027
 				// which tells us what topics are being fetched for metadata. We expect
 				// to see logs for tpcc tables but not for random topics.
+				//
+				// We now also check for similar logs from the kafka v2 sink &
+				// kgo. There isn't a direct equivalent, however, so check a few
+				// things.
+				logSearchStr := `(client/metadata fetching metadata for|updating kafka metadata for topics|fetching metadata to learn its partitions|waiting for metadata for new topic)`
 				results, checkLogsErr := ct.cluster.RunWithDetails(ct.ctx, t.L(),
 					option.WithNodes(ct.cluster.Range(1, c.Spec().NodeCount-1)),
-					"grep \"client/metadata fetching metadata for\" logs/cockroach.log")
+					fmt.Sprintf(`grep -E "%s" logs/cockroach.log`, logSearchStr))
 				if checkLogsErr != nil {
 					t.Fatal(checkLogsErr)
 				}
@@ -2029,7 +2034,7 @@ func registerCDC(r registry.Registry) {
 					}
 
 					// We do not expect to see fetching metadata for all topics.
-					if strings.Contains(str, "all topics") {
+					if strings.Contains(str, "all topics") || strings.Contains(str, "updating kafka metadata for topics: []") {
 						return errors.New("did not expect to fetch metadata for all topics")
 					}
 					return nil
