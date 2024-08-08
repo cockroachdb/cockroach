@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package release_23_2
+package release_24_2
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -116,7 +116,7 @@ func init() {
 func init() {
 	registerDepRule(
 		"ensure columns are in increasing order",
-		scgraph.SameStagePrecedence,
+		scgraph.Precedence,
 		"later-column", "earlier-column",
 		func(from, to NodeVars) rel.Clauses {
 			status := rel.Var("status")
