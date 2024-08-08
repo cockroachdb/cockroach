@@ -579,7 +579,7 @@ message CreateFunction {
 message DropFunction {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-  // Name of the created function.
+  // Name of the dropped function.
   string function_name = 3  [(gogoproto.jsontag) = ",omitempty"];
 }
 
@@ -601,3 +601,14 @@ message AlterFunctionOptions {
   // Name of the affected function.
   string function_name = 3  [(gogoproto.jsontag) = ",omitempty"];
 }
+
+// CreateTrigger is recorded when a trigger is created.
+message CreateTrigger {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // Name of the trigger's table.
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // Name of the created trigger.
+  string trigger_name = 4  [(gogoproto.jsontag) = ",omitempty"];
+}
+

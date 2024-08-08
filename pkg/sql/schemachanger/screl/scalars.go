@@ -127,6 +127,10 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		return true
 	case *scpb.TypeComment, *scpb.DatabaseZoneConfig:
 		return version.IsActive(clusterversion.V24_2)
+	case *scpb.Trigger, *scpb.TriggerTiming, *scpb.TriggerEvents, *scpb.TriggerTransition,
+		*scpb.TriggerWhen, *scpb.TriggerFunctionCall, *scpb.TriggerDeps:
+		// TODO(drewk): switch to clusterversion.V24_3
+		return version.IsActive(clusterversion.V24_2)
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}
