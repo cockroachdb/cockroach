@@ -132,7 +132,7 @@ func registerYCSB(r registry.Registry) {
 					Name:      fmt.Sprintf("zfs/ycsb/%s/nodes=3/cpu=%d", wl, cpus),
 					Owner:     registry.OwnerStorage,
 					Benchmark: true,
-					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.WorkloadNode(), spec.SetFileSystem(spec.Zfs)),
+					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(cpus), spec.SetFileSystem(spec.Zfs)),
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, ycsbOptions{})
 					},
@@ -146,7 +146,7 @@ func registerYCSB(r registry.Registry) {
 					Name:      fmt.Sprintf("%s/isolation-level=read-committed", name),
 					Owner:     registry.OwnerTestEng,
 					Benchmark: true,
-					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.WorkloadNode()),
+					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(cpus)),
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, ycsbOptions{readCommitted: true})
 					},
@@ -160,7 +160,7 @@ func registerYCSB(r registry.Registry) {
 					Name:      fmt.Sprintf("%s/mvcc-range-keys=global", name),
 					Owner:     registry.OwnerTestEng,
 					Benchmark: true,
-					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.WorkloadNode()),
+					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(cpus)),
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, ycsbOptions{rangeTombstone: true})
 					},
@@ -179,7 +179,7 @@ func registerYCSB(r registry.Registry) {
 					Name:      fmt.Sprintf("%s/uniform", name),
 					Owner:     registry.OwnerTestEng,
 					Benchmark: true,
-					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.WorkloadNode()),
+					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(cpus)),
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, ycsbOptions{uniformDistribution: true})
 					},
