@@ -12,6 +12,7 @@ package mixedversion
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
@@ -171,6 +172,7 @@ func newContext(
 	tenant *ServiceDescriptor,
 ) *Context {
 	makeContext := func(name string, nodes option.NodeListOption) *ServiceContext {
+		sort.Ints(nodes)
 		return &ServiceContext{
 			Descriptor: &ServiceDescriptor{
 				Name:  name,
