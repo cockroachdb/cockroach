@@ -187,7 +187,7 @@ func (cmvt *cdcMixedVersionTester) waitAndValidate(
 		cmvt.timestampsResolved.Lock()
 		defer cmvt.timestampsResolved.Unlock()
 
-		cmvt.timestampsResolved.C = make(chan hlc.Timestamp)
+		cmvt.timestampsResolved.C = make(chan hlc.Timestamp, resolvedTimestampsPerState)
 	}()
 
 	var numResolved int
@@ -348,8 +348,10 @@ func (cmvt *cdcMixedVersionTester) timestampResolved(resolved hlc.Timestamp) {
 	cmvt.timestampsResolved.Lock()
 	defer cmvt.timestampsResolved.Unlock()
 
-	if cmvt.timestampsResolved.C != nil {
-		cmvt.timestampsResolved.C <- resolved
+	select {
+	case cmvt.timestampsResolved.C <- resolved:
+	default:
+		// If the channel is full or nil, we drop the resolved timestamp.
 	}
 }
 
