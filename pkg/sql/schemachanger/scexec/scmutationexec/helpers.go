@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -124,6 +125,22 @@ func (i *immediateVisitor) checkOutFunction(
 		return nil, catalog.WrapTypeDescRefErr(id, catalog.NewDescriptorTypeError(desc))
 	}
 	return mut, nil
+}
+
+func (i *immediateVisitor) checkOutTrigger(
+	ctx context.Context, tableID descpb.ID, triggerID catid.TriggerID,
+) (*descpb.TriggerDescriptor, error) {
+	tbl, err := i.checkOutTable(ctx, tableID)
+	if err != nil {
+		return nil, err
+	}
+	for idx := range tbl.Triggers {
+		if tbl.Triggers[idx].ID == triggerID {
+			return &tbl.Triggers[idx], nil
+		}
+	}
+	panic(errors.AssertionFailedf("failed to find trigger with ID %d in table %q (%d)",
+		triggerID, tbl.GetName(), tbl.GetID()))
 }
 
 func mutationStateChange(

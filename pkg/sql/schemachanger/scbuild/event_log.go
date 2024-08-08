@@ -131,7 +131,11 @@ func namespace(b buildCtx, id descpb.ID) (ns *scpb.Namespace) {
 }
 
 func fullyQualifiedName(b buildCtx, e scpb.Element) string {
-	ns := namespace(b, screl.GetDescID(e))
+	return fullyQualifiedNameFromID(b, screl.GetDescID(e))
+}
+
+func fullyQualifiedNameFromID(b buildCtx, id descpb.ID) string {
+	ns := namespace(b, id)
 	if ns.DatabaseID == descpb.InvalidID {
 		return ns.Name
 	}
@@ -449,6 +453,13 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 			}
 			return &eventpb.SetZoneConfig{
 				CommonZoneConfigDetails: zcDetails,
+			}
+		}
+	case *scpb.Trigger:
+		if pb.TargetStatus == scpb.Status_PUBLIC {
+			return &eventpb.CreateTrigger{
+				TableName:   fullyQualifiedNameFromID(b, e.TableID),
+				TriggerName: e.Name,
 			}
 		}
 	}

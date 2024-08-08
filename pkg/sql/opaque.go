@@ -172,6 +172,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.CreateIndex(ctx, n)
 	case *tree.CreateSchema:
 		return p.CreateSchema(ctx, n)
+	case *tree.CreateTrigger:
+		return p.CreateTrigger(ctx, n)
 	case *tree.CreateType:
 		return p.CreateType(ctx, n)
 	case *tree.CreateRole:
@@ -354,6 +356,7 @@ func init() {
 		&tree.CreateIndex{},
 		&tree.CreateSchema{},
 		&tree.CreateSequence{},
+		&tree.CreateTrigger{},
 		&tree.CreateType{},
 		&tree.CreateRole{},
 		&tree.Deallocate{},

@@ -489,6 +489,35 @@ func (b *builderState) NextTableConstraintID(tableID catid.DescID) (ret catid.Co
 	return ret
 }
 
+// NextTableTriggerID implements the scbuildstmt.TableHelpers interface.
+func (b *builderState) NextTableTriggerID(tableID catid.DescID) (ret catid.TriggerID) {
+	{
+		b.ensureDescriptor(tableID)
+		desc := b.descCache[tableID].desc
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			panic(errors.AssertionFailedf("Expected table descriptor for ID %d, instead got %s",
+				desc.GetID(), desc.DescriptorType()))
+		}
+		ret = tbl.GetNextTriggerID()
+		if ret == 0 {
+			ret = 1
+		}
+	}
+	// Consult all present element in case they have a larger TriggerID field.
+	b.QueryByID(tableID).ForEach(func(
+		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
+	) {
+		v, _ := screl.Schema.GetAttribute(screl.TriggerID, e)
+		if id, ok := v.(catid.TriggerID); ok {
+			if id < catid.TriggerID(scbuildstmt.TableTentativeIdsStart) && id >= ret {
+				ret = id + 1
+			}
+		}
+	})
+	return ret
+}
+
 // NextTableTentativeIndexID implements the scbuildstmt.TableHelpers interface.
 func (b *builderState) NextTableTentativeIndexID(tableID catid.DescID) (ret catid.IndexID) {
 	ret = catid.IndexID(scbuildstmt.TableTentativeIdsStart)
@@ -1017,6 +1046,9 @@ func (b *builderState) ResolveUserDefinedTypeType(
 	default:
 		panic(errors.AssertionFailedf("unknown type kind %s", typ.GetKind()))
 	}
+	if p.RequireOwnership {
+		b.mustOwn(typ.GetID())
+	}
 	return b.QueryByID(typ.GetID())
 }
 
@@ -1027,6 +1059,9 @@ func (b *builderState) ResolveRelation(
 	c := b.resolveRelation(name, p)
 	if c == nil {
 		return nil
+	}
+	if p.RequireOwnership {
+		b.mustOwn(c.desc.GetID())
 	}
 	return b.QueryByID(c.desc.GetID())
 }
@@ -1123,6 +1158,9 @@ func (b *builderState) ResolveTable(
 	if rel, ok := c.desc.(catalog.TableDescriptor); !ok || !rel.IsTable() {
 		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a table", c.desc.GetName()))
 	}
+	if p.RequireOwnership {
+		b.mustOwn(c.desc.GetID())
+	}
 	return b.QueryByID(c.desc.GetID())
 }
 
@@ -1151,6 +1189,9 @@ func (b *builderState) ResolveSequence(
 	if rel, ok := c.desc.(catalog.TableDescriptor); !ok || !rel.IsSequence() {
 		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a sequence", c.desc.GetName()))
 	}
+	if p.RequireOwnership {
+		b.mustOwn(c.desc.GetID())
+	}
 	return b.QueryByID(c.desc.GetID())
 }
 
@@ -1164,6 +1205,9 @@ func (b *builderState) ResolveView(
 	}
 	if rel, ok := c.desc.(catalog.TableDescriptor); !ok || !rel.IsView() {
 		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a view", c.desc.GetName()))
+	}
+	if p.RequireOwnership {
+		b.mustOwn(c.desc.GetID())
 	}
 	return b.QueryByID(c.desc.GetID())
 }
@@ -1364,7 +1408,9 @@ func (b *builderState) ResolveRoutine(
 	}
 
 	fnID := funcdesc.UserDefinedFunctionOIDToID(ol.Oid)
-	b.mustOwn(fnID)
+	if p.RequireOwnership {
+		b.mustOwn(fnID)
+	}
 	b.ensureDescriptor(fnID)
 	return b.QueryByID(fnID)
 }
@@ -1634,17 +1680,17 @@ func (b *builderState) WrapFunctionBody(
 		panic(err)
 	}
 
-	if err := refProvider.ForEachFunctionReference(func(id descpb.ID) error {
-		fnBody.UsesFunctionIDs = append(fnBody.UsesFunctionIDs,
-			id)
-		return nil
-	}); err != nil {
-		panic(err)
-	}
-
+	fnBody.UsesFunctionIDs = refProvider.ReferencedRoutines().Ordered()
 	fnBody.UsesSequenceIDs = refProvider.ReferencedSequences().Ordered()
 	fnBody.UsesTypeIDs = refProvider.ReferencedTypes().Ordered()
 	return fnBody
+}
+
+func (b *builderState) ReplaceSeqTypeNamesInStatements(
+	queryStr string, lang catpb.Function_Language,
+) string {
+	newQueryStr := b.replaceSeqNamesWithIDs(queryStr, lang)
+	return b.serializeUserDefinedTypes(newQueryStr, lang)
 }
 
 func (b *builderState) replaceSeqNamesWithIDs(

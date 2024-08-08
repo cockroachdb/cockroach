@@ -15,6 +15,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb
 import "sql/catalog/catenumpb/index.proto";
 import "sql/catalog/catpb/catalog.proto";
 import "sql/sem/semenumpb/constraint.proto";
+import "sql/sem/semenumpb/trigger.proto";
 import "sql/catalog/catpb/function.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
@@ -83,6 +84,7 @@ message ElementProto {
     TableData table_data = 131 [(gogoproto.customname) = "TableData", (gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
     TablePartitioning table_partitioning = 132 [(gogoproto.customname) = "TablePartitioning", (gogoproto.moretags) = "parent:\"Table\""];
     TableSchemaLocked table_schema_locked = 133 [(gogoproto.customname) = "TableSchemaLocked", (gogoproto.moretags) = "parent:\"Table\""];
+    Trigger trigger = 134 [(gogoproto.moretags) = "parent:\"Table, View\""];
 
     // Multi-region elements.
     TableLocalityGlobal table_locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -102,7 +104,6 @@ message ElementProto {
 
     // Sequence elements.
     SequenceOption sequence_option = 37 [(gogoproto.moretags) = "parent:\"Sequence\""];
-
 
     // Index elements.
     IndexName index_name = 40 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
@@ -153,7 +154,15 @@ message ElementProto {
     // Type elements.
     TypeComment type_comment = 180 [(gogoproto.moretags) = "parent:\"CompositeType,EnumType\""];
 
-    // Next element group start id: 200
+    // Trigger elements.
+    TriggerTiming trigger_timing = 200 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerEvents trigger_events = 201 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerTransition trigger_transition = 202 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerWhen trigger_when = 203 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerFunctionCall trigger_function_call = 204 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerDeps trigger_deps = 205 [(gogoproto.moretags) = "parent:\"Trigger\""];
+
+    // Next element group start id: 220
   }
 }
 
@@ -454,6 +463,60 @@ message ForeignKeyConstraintUnvalidated {
   cockroach.sql.sem.semenumpb.ForeignKeyAction on_update_action = 6 [(gogoproto.customname) = "OnUpdateAction"];
   cockroach.sql.sem.semenumpb.ForeignKeyAction on_delete_action = 7 [(gogoproto.customname) = "OnDeleteAction"];
   cockroach.sql.sem.semenumpb.Match composite_key_match_method = 8 [(gogoproto.customname) = "CompositeKeyMatchMethod"];
+}
+
+message Trigger {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  string name = 3;
+  bool enabled = 4;
+}
+
+message TriggerTiming {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  cockroach.sql.sem.semenumpb.TriggerActionTime action_time = 3;
+  bool for_each_row = 4;
+}
+
+message TriggerEvent {
+  cockroach.sql.sem.semenumpb.TriggerEventType type = 1;
+  repeated string column_names = 2;
+}
+
+message TriggerEvents {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  repeated TriggerEvent events = 3;
+}
+
+message TriggerTransition {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  string new_transition_alias = 3;
+  string old_transition_alias = 4;
+}
+
+message TriggerWhen {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  string when_expr = 3;
+}
+
+message TriggerFunctionCall {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  uint32 func_id = 3 [(gogoproto.customname) = "FuncID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];;
+  repeated string func_args = 4;
+  string func_body = 5;
+}
+
+message TriggerDeps {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  repeated uint32 uses_relation_ids = 3 [(gogoproto.customname) = "UsesRelationIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 uses_type_ids = 4 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 uses_routine_ids = 5 [(gogoproto.customname) = "UsesRoutineIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
 message EnumType {
