@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -86,7 +87,11 @@ func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	// All serialized expressions within a table descriptor are serialized
 	// with type annotations as IDs, so this visitor will collect them all.
 	visitor := &tree.TypeCollectorVisitor{OIDs: make(map[oid.Oid]struct{})}
-	_ = ForEachExprStringInTableDesc(desc, func(expr *string) error {
+	_ = ForEachExprStringInTableDesc(desc, func(expr *string, typ catalog.DescExprType) error {
+		if typ != catalog.SQLExpr {
+			// Skip trigger function bodies - they are handled below.
+			return nil
+		}
 		if parsedExpr, err := parser.ParseExpr(*expr); err == nil {
 			// ignore errors
 			tree.WalkExpr(visitor, parsedExpr)
@@ -113,7 +118,16 @@ func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	for _, ref := range desc.GetDependedOnBy() {
 		ids.Add(ref.ID)
 	}
-	// Add sequence dependencies
+	// Add trigger dependencies. NOTE: routine references are included above in
+	// the call to GetAllReferencedFunctionIDs().
+	for _, t := range desc.Triggers {
+		for _, id := range t.DependsOn {
+			ids.Add(id)
+		}
+		for _, id := range t.DependsOnTypes {
+			ids.Add(id)
+		}
+	}
 	return ids, nil
 }
 
@@ -212,6 +226,20 @@ func (desc *wrapper) ValidateForwardReferences(
 					indexI.GetName(),
 				))
 			}
+		}
+	}
+
+	// Check that relations, types, and routines referenced by triggers exist.
+	for i := range desc.Triggers {
+		trigger := &desc.Triggers[i]
+		for _, id := range trigger.DependsOn {
+			vea.Report(catalog.ValidateOutboundTableRef(id, vdg))
+		}
+		for _, id := range trigger.DependsOnTypes {
+			vea.Report(catalog.ValidateOutboundTypeRef(id, vdg))
+		}
+		for _, id := range trigger.DependsOnRoutines {
+			vea.Report(catalog.ValidateOutboundFunctionRef(id, vdg))
 		}
 	}
 }
@@ -799,6 +827,11 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		return
 	}
 
+	if err := desc.validateTriggers(); err != nil {
+		vea.Report(err)
+		return
+	}
+
 	if desc.IsVirtualTable() {
 		return
 	}
@@ -960,8 +993,15 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	}
 
 	// Check that all expression strings can be parsed.
-	_ = ForEachExprStringInTableDesc(desc, func(expr *string) error {
-		_, err := parser.ParseExpr(*expr)
+	_ = ForEachExprStringInTableDesc(desc, func(expr *string, typ catalog.DescExprType) (err error) {
+		switch typ {
+		case catalog.SQLExpr:
+			_, err = parser.ParseExpr(*expr)
+		case catalog.SQLStmt:
+			_, err = parser.Parse(*expr)
+		case catalog.PLpgSQLStmt:
+			_, err = plpgsqlparser.Parse(*expr)
+		}
 		vea.Report(err)
 		return nil
 	})
@@ -1285,6 +1325,101 @@ func (desc *wrapper) validateColumnFamilies(columnsByID map[descpb.ColumnID]cata
 			if _, ok := colIDToFamilyID[colID]; !ok {
 				return errors.Newf("column %q is not in any column family", col.GetName())
 			}
+		}
+	}
+	return nil
+}
+
+// validateTriggers validates that triggers are well-formed.
+func (desc *wrapper) validateTriggers() error {
+	var triggerIDs intsets.Fast
+	triggerNames := map[string]struct{}{}
+	for i := range desc.Triggers {
+		trigger := &desc.Triggers[i]
+
+		// Validate that the trigger's ID is valid.
+		if trigger.ID >= desc.NextTriggerID {
+			return errors.Newf(
+				"trigger %q has ID %d not less than NextTrigger value %d for table",
+				trigger.Name, trigger.ID, desc.NextTriggerID)
+		}
+		if triggerIDs.Contains(int(trigger.ID)) {
+			return errors.Newf("duplicate trigger ID: %d", trigger.ID)
+		}
+		triggerIDs.Add(int(trigger.ID))
+
+		// Verify that the trigger's name is valid.
+		if len(trigger.Name) == 0 {
+			return pgerror.Newf(pgcode.Syntax, "empty trigger name")
+		}
+		if _, ok := triggerNames[trigger.Name]; ok {
+			return errors.Newf("duplicate trigger name: %q", trigger.Name)
+		}
+		triggerNames[trigger.Name] = struct{}{}
+
+		// Verify that columns referenced by the trigger events are valid.
+		for _, ev := range trigger.Events {
+			if len(ev.ColumnNames) > 0 {
+				for _, colName := range ev.ColumnNames {
+					if catalog.FindColumnByTreeName(desc, tree.Name(colName)) == nil {
+						return errors.Newf("trigger %q contains unknown column \"%s\"", trigger.Name, colName)
+					}
+				}
+			}
+		}
+
+		// Verify that the WHEN expression and function body statements are valid.
+		if trigger.WhenExpr != "" {
+			_, err := parser.ParseExpr(trigger.WhenExpr)
+			if err != nil {
+				return err
+			}
+		}
+		_, err := plpgsqlparser.Parse(trigger.FuncBody)
+		if err != nil {
+			return err
+		}
+
+		// Verify that the trigger function ID is valid.
+		if trigger.FuncID == descpb.InvalidID {
+			return errors.Newf("invalid function id %d in trigger %q", trigger.FuncID, trigger.Name)
+		}
+		routineIDs := catalog.MakeDescriptorIDSet(trigger.DependsOnRoutines...)
+		if !routineIDs.Contains(trigger.FuncID) {
+			return errors.Newf("expected function id %d to be in depends-on-routines for trigger %q",
+				trigger.FuncID, trigger.Name)
+		}
+
+		// Verify that the trigger's references are valid. Note that the existence
+		// and status of the referenced objects are checked in
+		// ValidateForwardReferences for the table.
+		var seenIDs catalog.DescriptorIDSet
+		for idx, depID := range trigger.DependsOn {
+			if depID == descpb.InvalidID {
+				return errors.Newf("invalid relation id %d in depends-on references #%d", depID, idx)
+			}
+			if seenIDs.Contains(depID) {
+				return errors.Newf("relation id %d in depends-on references #%d is duplicated", depID, idx)
+			}
+			seenIDs.Add(depID)
+		}
+		for idx, typeID := range trigger.DependsOnTypes {
+			if typeID == descpb.InvalidID {
+				return errors.Newf("invalid type id %d in depends-on-types references #%d", typeID, idx)
+			}
+			if seenIDs.Contains(typeID) {
+				return errors.Newf("relation id %d in depends-on-type references #%d is duplicated", typeID, idx)
+			}
+			seenIDs.Add(typeID)
+		}
+		for idx, routineID := range trigger.DependsOnRoutines {
+			if routineID == descpb.InvalidID {
+				return errors.Newf("invalid routine id %d in depends-on-routine references #%d", routineID, idx)
+			}
+			if seenIDs.Contains(routineID) {
+				return errors.Newf("relation id %d in depends-on-routine references #%d is duplicated", routineID, idx)
+			}
+			seenIDs.Add(routineID)
 		}
 	}
 	return nil
