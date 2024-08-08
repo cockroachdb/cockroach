@@ -1610,6 +1610,12 @@ func (b *logicalPropsBuilder) buildCreateFunctionProps(
 	BuildSharedProps(cf, &rel.Shared, b.evalCtx)
 }
 
+func (b *logicalPropsBuilder) buildCreateTriggerProps(
+	ct *CreateTriggerExpr, rel *props.Relational,
+) {
+	BuildSharedProps(ct, &rel.Shared, b.evalCtx)
+}
+
 func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *props.Scalar) {
 	BuildSharedProps(item.Condition, &scalar.Shared, b.evalCtx)
 
