@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package release_23_2
+package release_24_2
 
 import (
 	"fmt"
@@ -72,10 +72,12 @@ func init() {
 			from.Node.AttrEq(screl.CurrentStatus, t.From()),
 			to.Node.AttrEq(screl.CurrentStatus, t.To()),
 			descriptorIsNotBeingDropped(from.El),
-			// Make sure to join a data element o confirm that data exists.
+			// Make sure to join a data element to confirm that data exists.
 			descriptorData.Type((*scpb.TableData)(nil)),
-			descriptorData.JoinTarget(),
+			descriptorData.JoinTargetNode(),
+			descriptorData.CurrentStatus(scpb.Status_PUBLIC),
 			descriptorData.DescIDEq(descID),
+			descriptorDataIsNotBeingAdded(descID),
 		}
 		if len(prePrevStatuses) > 0 {
 			clauses = append(clauses,

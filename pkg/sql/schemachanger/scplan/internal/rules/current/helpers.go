@@ -21,10 +21,12 @@ import (
 
 const (
 	// rulesVersion version of elements that can be appended to rel rule names.
-	rulesVersion = "-24.2"
+	rulesVersion = "-24.3"
 )
 
 // rulesVersionKey version of elements used by this rule set.
+// TODO(spilchen): Need to update the rulesVersionKey here to point to
+// clusterversion.V24_3 when that is available.
 var rulesVersionKey = clusterversion.V24_2
 
 // descriptorIsNotBeingDropped creates a clause which leads to the outer clause
