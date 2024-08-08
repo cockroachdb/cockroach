@@ -427,11 +427,9 @@ subtest nested_call
 statement ok
 CREATE PROCEDURE p_inner(OUT param INTEGER) AS $$ SELECT 1; $$ LANGUAGE SQL;
 
-skipif config local-mixed-23.2
 statement error pgcode 0A000 calling procedures with output arguments is not supported in SQL functions
 CREATE FUNCTION f() RETURNS INT AS $$ CALL p_inner(NULL); $$ LANGUAGE SQL;
 
-skipif config local-mixed-23.2
 statement error pgcode 0A000 calling procedures with output arguments is not supported in SQL functions
 CREATE PROCEDURE p_outer(OUT param INTEGER) AS $$ CALL p_inner(NULL); $$ LANGUAGE SQL;
 

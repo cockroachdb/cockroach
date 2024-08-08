@@ -116,11 +116,13 @@ func countLeasesWithDetail(
 		// expiry based descriptor synthetically.
 		if leasingDescIsSessionBased {
 			syntheticDescriptors = append(syntheticDescriptors, systemschema.LeaseTable_V23_2())
+			whereClauseIdx = append(whereClauseIdx, 0)
+			usesOldSchema = append(usesOldSchema, true)
 		} else {
 			syntheticDescriptors = append(syntheticDescriptors, nil)
+			whereClauseIdx = append(whereClauseIdx, 1)
+			usesOldSchema = append(usesOldSchema, false)
 		}
-		whereClauseIdx = append(whereClauseIdx, 0)
-		usesOldSchema = append(usesOldSchema, true)
 	}
 	if leasingMode >= SessionBasedDrain {
 		// The leasing descriptor is not yet session based, so inject the session

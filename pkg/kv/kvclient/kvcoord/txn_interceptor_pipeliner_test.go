@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -1648,71 +1647,6 @@ func TestTxnPipelinerDisableLockingReads(t *testing.T) {
 
 	// Enable pipelining. Should use async consensus.
 	pipelinedLockingReadsEnabled.Override(ctx, &tp.st.SV, true)
-
-	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		require.Len(t, ba.Requests, 1)
-		require.True(t, ba.AsyncConsensus)
-		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
-
-		br = ba.CreateReply()
-		br.Txn = ba.Txn
-		br.Responses[0].GetScan().Rows = []roachpb.KeyValue{{Key: keyA}, {Key: keyB}}
-		return br, nil
-	})
-
-	br, pErr = tp.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-	require.Equal(t, 2, tp.ifWrites.len())
-}
-
-// TestTxnPipelinerMixedVersionLockingReads tests that the txnPipeliner behaves
-// correctly if in a mixed-version cluster when locking reads are not supported.
-func TestTxnPipelinerMixedVersionLockingReads(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
-
-	// Start in a mixed-version cluster. Should NOT use async consensus.
-	tp.st = cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.Latest.Version(),
-		clusterversion.MinSupported.Version(),
-		false, // initializeVersion
-	)
-	require.NoError(t, clusterversion.Initialize(
-		ctx, clusterversion.MinSupported.Version(), &tp.st.SV))
-
-	txn := makeTxnProto()
-	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
-
-	ba := &kvpb.BatchRequest{}
-	ba.Header = kvpb.Header{Txn: &txn}
-	ba.Add(&kvpb.ScanRequest{
-		RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyC},
-		KeyLockingStrength:   lock.Exclusive,
-		KeyLockingDurability: lock.Replicated,
-	})
-
-	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		require.Len(t, ba.Requests, 1)
-		require.False(t, ba.AsyncConsensus)
-		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
-
-		br := ba.CreateReply()
-		br.Txn = ba.Txn
-		br.Responses[0].GetScan().Rows = []roachpb.KeyValue{{Key: keyA}, {Key: keyB}}
-		return br, nil
-	})
-
-	br, pErr := tp.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-	require.Equal(t, 0, tp.ifWrites.len())
-
-	// Upgrade to the latest version. Should use async consensus.
-	require.NoError(t, clusterversion.Initialize(
-		ctx, clusterversion.Latest.Version(), &tp.st.SV))
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)

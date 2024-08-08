@@ -91,28 +91,19 @@ func TestCreateTenantSystemTables(t *testing.T) {
 	// Upgrade the tenant cluster to v2.
 	tenantDB := tenant.SQLConn(t)
 
-	checkTable := func(tableName string, shouldExist bool) {
+	checkTable := func(tableName string) {
 		_, err = tenantDB.Exec(fmt.Sprintf("SELECT * FROM %s", tableName))
-		if shouldExist {
-			require.NoError(t, err, fmt.Sprintf("%s does not exist", tableName))
-		} else {
-			require.Error(t, err, fmt.Sprintf("%s exists", tableName))
-		}
+		require.NoError(t, err, fmt.Sprintf("%s does not exist", tableName))
 	}
 
-	checkTables := func(shouldExist bool) {
-		checkTable("system.tenants", shouldExist)
-		checkTable("system.tenant_settings", shouldExist)
-		checkTable("system.tenant_usage", shouldExist)
-		checkTable("system.span_configurations", shouldExist)
-		checkTable("system.task_payloads", shouldExist)
-		checkTable("system.tenant_tasks", shouldExist)
-		checkTable("system.tenant_id_seq", shouldExist)
-	}
-
-	checkTables(false /* shouldExist */)
 	upgrades.Upgrade(t, tenantDB, clusterversion.V24_2_TenantSystemTables, nil, false)
-	checkTables(true /* shouldExist */)
+	checkTable("system.tenants")
+	checkTable("system.tenant_settings")
+	checkTable("system.tenant_usage")
+	checkTable("system.span_configurations")
+	checkTable("system.task_payloads")
+	checkTable("system.tenant_tasks")
+	checkTable("system.tenant_id_seq")
 
 	// Check that the system and secondary tenant have the same tables in the
 	// system database.
