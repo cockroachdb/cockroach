@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -159,6 +160,63 @@ func (og *operationGenerator) columnIsDependedOn(
 			             FROM pg_catalog.pg_constraint
 			            WHERE confrelid = $1::REGCLASS
 			          )
+			 ) AS cons
+			 INNER JOIN (
+			   SELECT ordinal_position AS column_id
+			     FROM information_schema.columns
+			    WHERE table_schema = $2
+			      AND table_name = $3
+			      AND column_name = $4
+			  ) AS source ON source.column_id = cons.column_id
+)`, tableName.String(), tableName.Schema(), tableName.Object(), columnName)
+}
+
+// colIsRefByComputed determines if a column is referenced by a computed column.
+func (og *operationGenerator) colIsRefByComputed(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `SELECT EXISTS(
+    SELECT
+       attrelid::REGCLASS AS table_name,
+       attname AS column_name,
+       pg_get_expr(adbin, adrelid) AS computed_formula
+    FROM
+       pg_attribute
+    JOIN
+       pg_attrdef ON attrelid = adrelid AND attnum = adnum
+    WHERE
+       atthasdef
+       AND attrelid = $1::REGCLASS
+       AND pg_get_expr(adbin, adrelid) ILIKE '%%' || $2 || '%%'
+)`, tableName.String(), columnName)
+}
+
+func (og *operationGenerator) columnIsDependedOnByView(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `SELECT EXISTS(
+		SELECT source.column_id
+			FROM (
+			   SELECT DISTINCT column_id
+			     FROM (
+			           SELECT unnest(
+			                   string_to_array(
+			                    rtrim(
+			                     ltrim(
+			                      fd.dependedonby_details,
+			                      'Columns: ['
+			                     ),
+			                     ']'
+			                    ),
+			                    ' '
+			                   )::INT8[]
+			                  ) AS column_id
+			             FROM crdb_internal.forward_dependencies
+			                   AS fd
+			            WHERE fd.descriptor_id
+			                  = $1::REGCLASS
+                    AND fd.dependedonby_type != 'sequence'
+			            )
 			 ) AS cons
 			 INNER JOIN (
 			   SELECT ordinal_position AS column_id
@@ -521,7 +579,7 @@ WHERE
 		return err
 	}
 
-	allowed, err := og.scanBool(
+	isIndexDropping, err := og.scanBool(
 		ctx,
 		tx,
 		`
@@ -538,7 +596,7 @@ SELECT count(*) > 0
 	if err != nil {
 		return err
 	}
-	if !allowed {
+	if isIndexDropping {
 		return ErrSchemaChangesDisallowedDueToPkSwap
 	}
 	return nil
@@ -955,7 +1013,7 @@ func (og *operationGenerator) columnContainsNull(
 		SELECT %s
 		  FROM %s
 	   WHERE %s IS NULL
-	)`, columnName, tableName.String(), columnName))
+	)`, lexbase.EscapeSQLIdent(columnName), tableName.String(), lexbase.EscapeSQLIdent(columnName)))
 }
 
 func (og *operationGenerator) constraintIsPrimary(
