@@ -36,85 +36,90 @@ func TestRegistrationBasic(t *testing.T) {
 	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val})
 	ev2.MustSetValue(&kvpb.RangeFeedValue{Key: keyB, Value: val})
 
-	// Registration with no catchup scan specified.
-	noCatchupReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
-		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
-	noCatchupReg.publish(ctx, ev1, nil /* alloc */)
-	noCatchupReg.publish(ctx, ev2, nil /* alloc */)
-	require.Equal(t, len(noCatchupReg.buf), 2)
-	go noCatchupReg.runOutputLoop(ctx, 0)
-	require.NoError(t, noCatchupReg.waitForCaughtUp(ctx))
-	require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, noCatchupReg.Events())
-	noCatchupReg.disconnect(nil)
+	t.Run("registration with no catchup scan specified", func(t *testing.T) {
+		noCatchupReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
+			false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
+		noCatchupReg.publish(ctx, ev1, nil /* alloc */)
+		noCatchupReg.publish(ctx, ev2, nil /* alloc */)
+		require.Equal(t, len(noCatchupReg.buf), 2)
+		go noCatchupReg.runOutputLoop(ctx, 0)
+		require.NoError(t, noCatchupReg.waitForCaughtUp(ctx))
+		require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, noCatchupReg.Events())
+		noCatchupReg.disconnect(nil)
+	})
 
-	// Registration with catchup scan.
-	catchupReg := newTestRegistration(spBC, hlc.Timestamp{WallTime: 1},
-		newTestIterator([]storage.MVCCKeyValue{
-			makeKV("b", "val1", 10),
-			makeKV("bc", "val3", 11),
-			makeKV("bd", "val4", 9),
-		}, nil),
-		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
-	catchupReg.publish(ctx, ev1, nil /* alloc */)
-	catchupReg.publish(ctx, ev2, nil /* alloc */)
-	require.Equal(t, len(catchupReg.buf), 2)
-	go catchupReg.runOutputLoop(ctx, 0)
-	require.NoError(t, catchupReg.waitForCaughtUp(ctx))
-	events := catchupReg.Events()
-	require.Equal(t, 5, len(events))
-	require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, events[3:])
-	catchupReg.disconnect(nil)
+	t.Run("registration with catchup scan", func(t *testing.T) {
+		catchupReg := newTestRegistration(spBC, hlc.Timestamp{WallTime: 1},
+			newTestIterator([]storage.MVCCKeyValue{
+				makeKV("b", "val1", 10),
+				makeKV("bc", "val3", 11),
+				makeKV("bd", "val4", 9),
+			}, nil),
+			false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
+		catchupReg.publish(ctx, ev1, nil /* alloc */)
+		catchupReg.publish(ctx, ev2, nil /* alloc */)
+		require.Equal(t, len(catchupReg.buf), 2)
+		go catchupReg.runOutputLoop(ctx, 0)
+		require.NoError(t, catchupReg.waitForCaughtUp(ctx))
+		events := catchupReg.Events()
+		require.Equal(t, 5, len(events))
+		require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, events[3:])
+		catchupReg.disconnect(nil)
+	})
 
-	// EXIT CONDITIONS
-	// External Disconnect.
-	disconnectReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
-		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
-	disconnectReg.publish(ctx, ev1, nil /* alloc */)
-	disconnectReg.publish(ctx, ev2, nil /* alloc */)
-	go disconnectReg.runOutputLoop(ctx, 0)
-	require.NoError(t, disconnectReg.waitForCaughtUp(ctx))
-	discErr := kvpb.NewError(fmt.Errorf("disconnection error"))
-	disconnectReg.disconnect(discErr)
-	require.Equal(t, discErr.GoError(), disconnectReg.WaitForError(t))
-	require.Equal(t, 2, len(disconnectReg.Events()))
+	t.Run("external disconnect", func(t *testing.T) {
+		disconnectReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
+			false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
+		disconnectReg.publish(ctx, ev1, nil /* alloc */)
+		disconnectReg.publish(ctx, ev2, nil /* alloc */)
+		go disconnectReg.runOutputLoop(ctx, 0)
+		require.NoError(t, disconnectReg.waitForCaughtUp(ctx))
+		discErr := kvpb.NewError(fmt.Errorf("disconnection error"))
+		disconnectReg.disconnect(discErr)
+		require.Equal(t, discErr.GoError(), disconnectReg.WaitForError(t))
+		require.Equal(t, 2, len(disconnectReg.Events()))
 
-	// External Disconnect before output loop.
-	disconnectEarlyReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
-		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
-	disconnectEarlyReg.publish(ctx, ev1, nil /* alloc */)
-	disconnectEarlyReg.publish(ctx, ev2, nil /* alloc */)
-	disconnectEarlyReg.disconnect(discErr)
-	go disconnectEarlyReg.runOutputLoop(ctx, 0)
-	require.Equal(t, discErr.GoError(), disconnectEarlyReg.WaitForError(t))
-	require.Equal(t, 0, len(disconnectEarlyReg.Events()))
+		// External Disconnect before output loop.
+		disconnectEarlyReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
+			false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
+		disconnectEarlyReg.publish(ctx, ev1, nil /* alloc */)
+		disconnectEarlyReg.publish(ctx, ev2, nil /* alloc */)
+		disconnectEarlyReg.disconnect(discErr)
+		go disconnectEarlyReg.runOutputLoop(ctx, 0)
+		require.Equal(t, discErr.GoError(), disconnectEarlyReg.WaitForError(t))
+		require.Equal(t, 0, len(disconnectEarlyReg.Events()))
+	})
 
-	// Overflow.
-	overflowReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
-		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
-	for i := 0; i < cap(overflowReg.buf)+3; i++ {
-		overflowReg.publish(ctx, ev1, nil /* alloc */)
-	}
-	go overflowReg.runOutputLoop(ctx, 0)
-	require.Equal(t, newErrBufferCapacityExceeded().GoError(), overflowReg.WaitForError(t))
-	require.Equal(t, cap(overflowReg.buf), len(overflowReg.Events()))
+	t.Run("overflow", func(t *testing.T) {
+		overflowReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
+			false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
+		for i := 0; i < cap(overflowReg.buf)+3; i++ {
+			overflowReg.publish(ctx, ev1, nil /* alloc */)
+		}
+		go overflowReg.runOutputLoop(ctx, 0)
+		require.Equal(t, newErrBufferCapacityExceeded().GoError(), overflowReg.WaitForError(t))
+		require.Equal(t, cap(overflowReg.buf), len(overflowReg.Events()))
+	})
 
-	// Stream Error.
-	streamErrReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
-		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
-	streamErr := fmt.Errorf("stream error")
-	streamErrReg.SetSendErr(streamErr)
-	go streamErrReg.runOutputLoop(ctx, 0)
-	streamErrReg.publish(ctx, ev1, nil /* alloc */)
-	require.Equal(t, streamErr, streamErrReg.WaitForError(t))
+	t.Run("stream error", func(t *testing.T) {
+		streamErrReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
+			false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
+		streamErr := fmt.Errorf("stream error")
+		streamErrReg.SetSendErr(streamErr)
+		go streamErrReg.runOutputLoop(ctx, 0)
+		streamErrReg.publish(ctx, ev1, nil /* alloc */)
+		require.Equal(t, streamErr, streamErrReg.WaitForError(t))
+	})
 
-	// Stream Context Canceled.
-	streamCancelReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
-		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
+	t.Run("stream context canceled", func(t *testing.T) {
+		streamCancelReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
+			false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
 
-	streamCancelReg.Cancel()
-	go streamCancelReg.runOutputLoop(ctx, 0)
-	require.NoError(t, streamCancelReg.waitForCaughtUp(ctx))
-	require.Equal(t, streamCancelReg.stream.Context().Err(), streamCancelReg.WaitForError(t))
+		streamCancelReg.Cancel()
+		go streamCancelReg.runOutputLoop(ctx, 0)
+		require.NoError(t, streamCancelReg.waitForCaughtUp(ctx))
+		require.Equal(t, streamCancelReg.stream.Context().Err(), streamCancelReg.WaitForError(t))
+	})
 }
 
 func TestRegistrationCatchUpScan(t *testing.T) {
