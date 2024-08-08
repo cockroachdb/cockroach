@@ -1840,6 +1840,9 @@ type LeaseSequence uint64
 // SafeValue implements the redact.SafeValue interface.
 func (s LeaseSequence) SafeValue() {}
 
+// SafeValue implements the redact.SafeValue interface.
+func (LeaseAcquisitionType) SafeValue() {}
+
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {
