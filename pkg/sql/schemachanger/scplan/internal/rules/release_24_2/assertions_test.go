@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package release_23_2
+package release_24_2
 
 import (
 	"reflect"

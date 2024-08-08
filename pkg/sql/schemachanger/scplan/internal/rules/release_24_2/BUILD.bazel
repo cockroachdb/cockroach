@@ -1,13 +1,14 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "release_23_2",
+    name = "release_24_2",
     srcs = [
         "dep_add_column.go",
         "dep_add_constraint.go",
         "dep_add_index.go",
         "dep_add_index_and_column.go",
         "dep_add_index_and_constraint.go",
+        "dep_alter_column_type.go",
         "dep_create.go",
         "dep_create_function.go",
         "dep_drop_column.go",
@@ -21,7 +22,7 @@ go_library(
         "helpers.go",
         "registry.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_23_2",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_24_2",
     visibility = ["//pkg/sql/schemachanger/scplan:__subpackages__"],
     deps = [
         "//pkg/clusterversion",
@@ -37,13 +38,13 @@ go_library(
 )
 
 go_test(
-    name = "release_23_2_test",
+    name = "release_24_2_test",
     srcs = [
         "assertions_test.go",
         "rules_test.go",
     ],
     data = glob(["testdata/**"]),
-    embed = [":release_23_2"],
+    embed = [":release_24_2"],
     deps = [
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/schemachanger/rel",

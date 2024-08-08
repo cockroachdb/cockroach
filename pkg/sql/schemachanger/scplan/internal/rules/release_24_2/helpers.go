@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package release_23_2
+package release_24_2
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -21,11 +21,11 @@ import (
 
 const (
 	// rulesVersion version of elements that can be appended to rel rule names.
-	rulesVersion = "-23.2"
+	rulesVersion = "-24.2"
 )
 
 // rulesVersionKey version of elements used by this rule set.
-var rulesVersionKey = clusterversion.V23_2
+var rulesVersionKey = clusterversion.V24_2
 
 // descriptorIsNotBeingDropped creates a clause which leads to the outer clause
 // failing to unify if the passed element is part of a descriptor and
@@ -44,6 +44,30 @@ var descriptorIsNotBeingDropped = screl.Schema.DefNotJoin1(
 	},
 )
 
+// descriptorDataIsNotBeingAdded indicates if we are operating on a descriptor
+// that already exists and was not created in the current transaction. This is
+// determined by detecting if the data element is public, and not going from
+// absent to public which newly created descriptors will.
+var descriptorDataIsNotBeingAdded = screl.Schema.DefNotJoin1(
+	"descriptorIsDataNotBeingAdded"+rulesVersion, "descID", func(
+		descID rel.Var,
+	) rel.Clauses {
+		descriptorData := rules.MkNodeVars("descriptor-data")
+		prevDescriptorData := rules.MkNodeVars("prev-descriptor-data")
+		return rel.Clauses{
+			descriptorData.Type((*scpb.TableData)(nil)),
+			descriptorData.JoinTargetNode(),
+			descriptorData.CurrentStatus(scpb.Status_PUBLIC),
+			descriptorData.DescIDEq(descID),
+			prevDescriptorData.Type((*scpb.TableData)(nil)),
+			prevDescriptorData.JoinTargetNode(),
+			prevDescriptorData.CurrentStatus(scpb.Status_ABSENT),
+			prevDescriptorData.DescIDEq(descID),
+			prevDescriptorData.El.AttrEqVar(rel.Self, descriptorData.El),
+		}
+	},
+)
+
 // isDescriptor returns true for a descriptor-element, i.e. an element which
 // owns its corresponding descriptor.
 func isDescriptor(e scpb.Element) bool {
@@ -53,6 +77,12 @@ func isDescriptor(e scpb.Element) bool {
 		return true
 	}
 	return false
+}
+
+// IsDescriptor returns true for a descriptor-element, i.e. an element which
+// owns its corresponding descriptor. This is only used for exports
+func IsDescriptor(e scpb.Element) bool {
+	return isDescriptor(e)
 }
 
 func isSubjectTo2VersionInvariant(e scpb.Element) bool {
@@ -181,6 +211,13 @@ func isColumnDependent(e scpb.Element) bool {
 	return isColumnTypeDependent(e)
 }
 
+func isColumnNotNull(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ColumnNotNull:
+		return true
+	}
+	return false
+}
 func isColumnTypeDependent(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.SequenceOwner, *scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression:
@@ -253,7 +290,7 @@ func isConstraintDependent(e scpb.Element) bool {
 	return false
 }
 
-func isConstraintWithIndexName(e scpb.Element) bool {
+func isConstraintWithoutIndexName(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.ConstraintWithoutIndexName:
 		return true
