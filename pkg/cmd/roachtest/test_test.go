@@ -335,7 +335,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 	}
 
 	out := buf.String()
-	timeoutRE := regexp.MustCompile(`(?m)^.*test timed out \(.*\)$`)
+	timeoutRE := regexp.MustCompile(`(?m)^.*test timed out \(.*\)`)
 	if !timeoutRE.MatchString(out) {
 		t.Fatalf("unable to find \"timed out\" message:\n%s", out)
 	}
