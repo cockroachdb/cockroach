@@ -195,7 +195,7 @@ Messages:
 3->5 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 3->6 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 3->7 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
-3->AppendThread MsgStorageAppend Term:2 Log:2/12 Commit:11 Vote:3 Entries:[2/12 EntryNormal ""] Responses:[
+3->AppendThread MsgStorageAppend Term:2 Log:2/12 Commit:11 Vote:3 Lead:3 Entries:[2/12 EntryNormal ""] Responses:[
   3->3 MsgAppResp Term:2 Log:0/12
   AppendThread->3 MsgStorageAppendResp Term:0 Log:2/12
 ]
@@ -224,7 +224,7 @@ HardState Term:2 Commit:11 Lead:3
 Entries:
 2/12 EntryNormal ""
 Messages:
-1->AppendThread MsgStorageAppend Term:2 Log:2/12 Commit:11 Entries:[2/12 EntryNormal ""] Responses:[
+1->AppendThread MsgStorageAppend Term:2 Log:2/12 Commit:11 Lead:3 Entries:[2/12 EntryNormal ""] Responses:[
   1->3 MsgVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
   1->3 MsgAppResp Term:2 Log:0/12
   AppendThread->1 MsgStorageAppendResp Term:0 Log:2/12
@@ -351,7 +351,7 @@ Messages:
 4->5 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->6 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->7 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
-4->AppendThread MsgStorageAppend Term:3 Log:3/12 Commit:11 Vote:4 Entries:[3/12 EntryNormal ""] Responses:[
+4->AppendThread MsgStorageAppend Term:3 Log:3/12 Commit:11 Vote:4 Lead:4 Entries:[3/12 EntryNormal ""] Responses:[
   4->4 MsgAppResp Term:3 Log:0/12
   AppendThread->4 MsgStorageAppendResp Term:0 Log:3/12
 ]
@@ -394,7 +394,7 @@ Ready MustSync=true:
 HardState Term:3 Commit:11 Lead:4
 Messages:
 1->4 MsgHeartbeatResp Term:3 Log:0/0
-1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11
+1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Lead:4
 
 deliver-msgs 4
 ----
@@ -460,7 +460,7 @@ INFO mark (term,index)=(1,12) mismatched the last accepted term 3 in unstable lo
 process-append-thread 1
 ----
 Processing:
-1->AppendThread MsgStorageAppend Term:2 Log:2/12 Commit:11 Entries:[2/12 EntryNormal ""]
+1->AppendThread MsgStorageAppend Term:2 Log:2/12 Commit:11 Lead:3 Entries:[2/12 EntryNormal ""]
 Responses:
 1->3 MsgVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
 1->3 MsgAppResp Term:2 Log:0/12
@@ -479,7 +479,7 @@ INFO mark (term,index)=(2,12) mismatched the last accepted term 3 in unstable lo
 process-append-thread 1
 ----
 Processing:
-1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11
+1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Lead:4
 Responses:
 
 raft-log 1

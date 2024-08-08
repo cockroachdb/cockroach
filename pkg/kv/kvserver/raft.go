@@ -26,7 +26,7 @@ import (
 )
 
 // maxRaftMsgType is the maximum value in the raft.MessageType enum.
-const maxRaftMsgType = raftpb.MsgForgetLeader
+const maxRaftMsgType = raftpb.MsgFortifyLeaderResp
 
 func init() {
 	for v := range raftpb.MessageType_name {
