@@ -158,7 +158,8 @@ func validateTableDependenciesForOptions(
 			}
 		}
 
-		// Check that functions referenced in check constraints exist.
+		// Check that functions referenced in check constraints, column expressions,
+		// and triggers exist.
 		fnIDs, err := table.GetAllReferencedFunctionIDs()
 		if err != nil {
 			return err
