@@ -136,7 +136,7 @@ func TestCreatePostRequest(t *testing.T) {
 		clusterCreationFailed   bool
 		loadTeamsFailed         bool
 		localSSD                bool
-		metamorphicBuild        bool
+		runtimeAssertionsBuild  bool
 		coverageBuild           bool
 		extraLabels             []string
 		arch                    vm.CPUArch
@@ -159,22 +159,21 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedTeam:      "@cockroachdb/unowned",
 			expectedName:      testName,
 			expectedParams: prefixAll(map[string]string{
-				"cloud":            "gce",
-				"encrypted":        "false",
-				"fs":               "ext4",
-				"ssd":              "0",
-				"cpu":              "4",
-				"arch":             "amd64",
-				"localSSD":         "false",
-				"metamorphicBuild": "false",
-				"coverageBuild":    "false",
+				"cloud":                  "gce",
+				"encrypted":              "false",
+				"fs":                     "ext4",
+				"ssd":                    "0",
+				"cpu":                    "4",
+				"arch":                   "amd64",
+				"localSSD":               "false",
+				"runtimeAssertionsBuild": "false",
+				"coverageBuild":          "false",
 			}),
 		},
 		// 2.
 		{
-			localSSD:         true,
-			metamorphicBuild: true,
-			arch:             vm.ArchARM64,
+			localSSD: true,
+			arch:     vm.ArchARM64,
 			failures: []failure{
 				createFailure(errClusterProvisioningFailed(errors.New("gcloud error"))),
 			},
@@ -184,15 +183,15 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedName:          "cluster_creation",
 			expectedMessagePrefix: testName + " failed",
 			expectedParams: prefixAll(map[string]string{
-				"cloud":            "gce",
-				"encrypted":        "false",
-				"fs":               "ext4",
-				"ssd":              "0",
-				"cpu":              "4",
-				"arch":             "arm64",
-				"localSSD":         "true",
-				"metamorphicBuild": "true",
-				"coverageBuild":    "false",
+				"cloud":                  "gce",
+				"encrypted":              "false",
+				"fs":                     "ext4",
+				"ssd":                    "0",
+				"cpu":                    "4",
+				"arch":                   "arm64",
+				"localSSD":               "true",
+				"runtimeAssertionsBuild": "false",
+				"coverageBuild":          "false",
 			}),
 		},
 		// 3. Assert that release-blocker label doesn't exist when
@@ -208,11 +207,11 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedName:          "ssh_problem",
 			expectedMessagePrefix: testName + " failed",
 			expectedParams: prefixAll(map[string]string{
-				"cloud":            "gce",
-				"ssd":              "0",
-				"cpu":              "4",
-				"metamorphicBuild": "false",
-				"coverageBuild":    "false",
+				"cloud":                  "gce",
+				"ssd":                    "0",
+				"cpu":                    "4",
+				"runtimeAssertionsBuild": "false",
+				"coverageBuild":          "false",
 			}),
 		},
 		// 4. Simulate failure loading TEAMS.yaml
@@ -241,36 +240,36 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedTeam:   "@cockroachdb/unowned",
 			expectedName:   testName,
 			expectedParams: prefixAll(map[string]string{
-				"cloud":            "gce",
-				"encrypted":        "false",
-				"fs":               "ext4",
-				"ssd":              "0",
-				"cpu":              "4",
-				"arch":             "amd64",
-				"localSSD":         "false",
-				"metamorphicBuild": "false",
-				"coverageBuild":    "false",
+				"cloud":                  "gce",
+				"encrypted":              "false",
+				"fs":                     "ext4",
+				"ssd":                    "0",
+				"cpu":                    "4",
+				"arch":                   "amd64",
+				"localSSD":               "false",
+				"runtimeAssertionsBuild": "false",
+				"coverageBuild":          "false",
 			}),
 		},
-		// 7. Verify that release-blocker label is not applied on metamorphic builds
+		// 7. Verify that release-blocker label is not applied on runtime assertion builds
 		// (for now).
 		{
-			metamorphicBuild: true,
-			failures:         []failure{createFailure(errors.New("other"))},
-			expectedPost:     true,
-			expectedLabels:   []string{"C-test-failure", "B-metamorphic-enabled"},
-			expectedTeam:     "@cockroachdb/unowned",
-			expectedName:     testName,
+			runtimeAssertionsBuild: true,
+			failures:               []failure{createFailure(errors.New("other"))},
+			expectedPost:           true,
+			expectedLabels:         []string{"C-test-failure", "B-runtime-assertions-enabled"},
+			expectedTeam:           "@cockroachdb/unowned",
+			expectedName:           testName,
 			expectedParams: prefixAll(map[string]string{
-				"cloud":            "gce",
-				"encrypted":        "false",
-				"fs":               "ext4",
-				"ssd":              "0",
-				"cpu":              "4",
-				"arch":             "amd64",
-				"localSSD":         "false",
-				"metamorphicBuild": "true",
-				"coverageBuild":    "false",
+				"cloud":                  "gce",
+				"encrypted":              "false",
+				"fs":                     "ext4",
+				"ssd":                    "0",
+				"cpu":                    "4",
+				"arch":                   "amd64",
+				"localSSD":               "false",
+				"runtimeAssertionsBuild": "true",
+				"coverageBuild":          "false",
 			}),
 		},
 		// 8. Verify that release-blocker label is not applied on coverage builds (for
@@ -284,15 +283,15 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedName:   testName,
 			expectedLabels: []string{"C-test-failure", "B-coverage-enabled", "foo-label"},
 			expectedParams: prefixAll(map[string]string{
-				"cloud":            "gce",
-				"encrypted":        "false",
-				"fs":               "ext4",
-				"ssd":              "0",
-				"cpu":              "4",
-				"arch":             "amd64",
-				"localSSD":         "false",
-				"metamorphicBuild": "false",
-				"coverageBuild":    "true",
+				"cloud":                  "gce",
+				"encrypted":              "false",
+				"fs":                     "ext4",
+				"ssd":                    "0",
+				"cpu":                    "4",
+				"arch":                   "amd64",
+				"localSSD":               "false",
+				"runtimeAssertionsBuild": "false",
+				"coverageBuild":          "true",
 			}),
 		},
 		// 9. Errors with ownership that happen as a result of roachprod
@@ -386,7 +385,7 @@ func TestCreatePostRequest(t *testing.T) {
 
 			req, err := github.createPostRequest(
 				testName, ti.start, ti.end, testSpec, c.failures,
-				"message", c.metamorphicBuild, c.coverageBuild,
+				"message", c.runtimeAssertionsBuild, c.coverageBuild,
 			)
 			if c.loadTeamsFailed {
 				// Assert that if TEAMS.yaml cannot be loaded then function errors.
