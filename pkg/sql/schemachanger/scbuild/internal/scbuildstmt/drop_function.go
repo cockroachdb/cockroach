@@ -33,6 +33,7 @@ func DropFunction(b BuildCtx, n *tree.DropRoutine) {
 		elts := b.ResolveRoutine(&f, ResolveParams{
 			IsExistenceOptional: n.IfExists,
 			InDropContext:       true,
+			RequireOwnership:    true,
 		}, routineType)
 		_, _, fn := scpb.FindFunction(elts)
 		if fn == nil {

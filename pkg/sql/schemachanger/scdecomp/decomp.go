@@ -408,6 +408,10 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	for _, c := range tbl.OutboundForeignKeys() {
 		w.walkForeignKeyConstraint(tbl, c)
 	}
+	triggers := tbl.GetTriggers()
+	for i := range triggers {
+		w.walkTrigger(tbl, &triggers[i])
+	}
 
 	_ = tbl.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
 		w.backRefs.Add(dep.ID)
@@ -798,6 +802,70 @@ func (w *walkCtx) walkCheckConstraint(tbl catalog.TableDescriptor, c catalog.Che
 			Comment:      comment,
 		})
 	}
+}
+
+func (w *walkCtx) walkTrigger(tbl catalog.TableDescriptor, t *descpb.TriggerDescriptor) {
+	w.ev(scpb.Status_PUBLIC, &scpb.Trigger{
+		TableID:   tbl.GetID(),
+		TriggerID: t.ID,
+	})
+	w.ev(scpb.Status_PUBLIC, &scpb.TriggerName{
+		TableID:   tbl.GetID(),
+		TriggerID: t.ID,
+		Name:      t.Name,
+	})
+	w.ev(scpb.Status_PUBLIC, &scpb.TriggerEnabled{
+		TableID:   tbl.GetID(),
+		TriggerID: t.ID,
+		Enabled:   t.Enabled,
+	})
+	w.ev(scpb.Status_PUBLIC, &scpb.TriggerTiming{
+		TableID:    tbl.GetID(),
+		TriggerID:  t.ID,
+		ActionTime: t.ActionTime,
+		ForEachRow: t.ForEachRow,
+	})
+	events := make([]*scpb.TriggerEvent, 0, len(t.Events))
+	for _, event := range t.Events {
+		events = append(events, &scpb.TriggerEvent{
+			Type:        event.Type,
+			ColumnNames: event.ColumnNames,
+		})
+	}
+	w.ev(scpb.Status_PUBLIC, &scpb.TriggerEvents{
+		TableID:   tbl.GetID(),
+		TriggerID: t.ID,
+		Events:    events,
+	})
+	if t.NewTransitionAlias != "" || t.OldTransitionAlias != "" {
+		w.ev(scpb.Status_PUBLIC, &scpb.TriggerTransition{
+			TableID:            tbl.GetID(),
+			TriggerID:          t.ID,
+			NewTransitionAlias: t.NewTransitionAlias,
+			OldTransitionAlias: t.OldTransitionAlias,
+		})
+	}
+	if t.WhenExpr != "" {
+		w.ev(scpb.Status_PUBLIC, &scpb.TriggerWhen{
+			TableID:   tbl.GetID(),
+			TriggerID: t.ID,
+			WhenExpr:  t.WhenExpr,
+		})
+	}
+	w.ev(scpb.Status_PUBLIC, &scpb.TriggerFunctionCall{
+		TableID:   tbl.GetID(),
+		TriggerID: t.ID,
+		FuncID:    t.FuncID,
+		FuncBody:  t.FuncBody,
+		FuncArgs:  t.FuncArgs,
+	})
+	w.ev(scpb.Status_PUBLIC, &scpb.TriggerDeps{
+		TableID:         tbl.GetID(),
+		TriggerID:       t.ID,
+		UsesRelationIDs: t.DependsOn,
+		UsesTypeIDs:     t.DependsOnTypes,
+		UsesRoutineIDs:  t.DependsOnRoutines,
+	})
 }
 
 func (w *walkCtx) walkForeignKeyConstraint(

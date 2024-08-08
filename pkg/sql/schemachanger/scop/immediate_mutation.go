@@ -524,6 +524,70 @@ type RemoveColumnOnUpdateExpression struct {
 	ColumnID descpb.ColumnID
 }
 
+// AddTrigger adds a trigger to a table.
+type AddTrigger struct {
+	immediateMutationOp
+	Trigger scpb.Trigger
+}
+
+// SetTriggerName sets the name of a trigger.
+type SetTriggerName struct {
+	immediateMutationOp
+	Name scpb.TriggerName
+}
+
+// SetTriggerEnabled sets the "enabled" status of a trigger, which indicates
+// whether it will be executed in response to a triggering event.
+type SetTriggerEnabled struct {
+	immediateMutationOp
+	Enabled scpb.TriggerEnabled
+}
+
+// SetTriggerTiming sets the timing of a trigger, which indicates when it
+// executes in relation to the triggering event.
+type SetTriggerTiming struct {
+	immediateMutationOp
+	Timing scpb.TriggerTiming
+}
+
+// SetTriggerEvents sets the events for a trigger, which indicate the operations
+// that fire the trigger.
+type SetTriggerEvents struct {
+	immediateMutationOp
+	Events scpb.TriggerEvents
+}
+
+// SetTriggerTransition sets the transition alias(es) of a trigger.
+type SetTriggerTransition struct {
+	immediateMutationOp
+	Transition scpb.TriggerTransition
+}
+
+// SetTriggerWhen sets the WHEN condition of a trigger.
+type SetTriggerWhen struct {
+	immediateMutationOp
+	When scpb.TriggerWhen
+}
+
+// SetTriggerFunctionCall sets the trigger-function call for a trigger.
+type SetTriggerFunctionCall struct {
+	immediateMutationOp
+	FunctionCall scpb.TriggerFunctionCall
+}
+
+// SetTriggerForwardReferences sets the forward references to relations, types,
+// and routines for a trigger.
+type SetTriggerForwardReferences struct {
+	immediateMutationOp
+	Deps scpb.TriggerDeps
+}
+
+// RemoveTrigger is used to delete a trigger associated with a table.
+type RemoveTrigger struct {
+	immediateMutationOp
+	Trigger scpb.Trigger
+}
+
 // UpdateTableBackReferencesInTypes updates back references to a table
 // in the specified types.
 type UpdateTableBackReferencesInTypes struct {
@@ -608,6 +672,24 @@ type RemoveTableColumnBackReferencesInFunctions struct {
 	BackReferencedTableID  descpb.ID
 	BackReferencedColumnID descpb.ColumnID
 	FunctionIDs            []descpb.ID
+}
+
+// AddTriggerBackReferencesInRoutines adds back references to a trigger from
+// referenced functions.
+type AddTriggerBackReferencesInRoutines struct {
+	immediateMutationOp
+	BackReferencedTableID   descpb.ID
+	BackReferencedTriggerID descpb.TriggerID
+	RoutineIDs              []descpb.ID
+}
+
+// RemoveTriggerBackReferencesInRoutines removes back-references to a trigger
+// from referenced functions.
+type RemoveTriggerBackReferencesInRoutines struct {
+	immediateMutationOp
+	BackReferencedTableID   descpb.ID
+	BackReferencedTriggerID descpb.TriggerID
+	RoutineIDs              []descpb.ID
 }
 
 // SetColumnName renames a column.
@@ -853,6 +935,12 @@ type UpdateFunctionRelationReferences struct {
 	ViewReferences     []scpb.FunctionBody_ViewReference
 	SequenceIDs        []descpb.ID
 	FunctionReferences []descpb.ID
+}
+
+type UpdateTableBackReferencesInRelations struct {
+	immediateMutationOp
+	TableID     descpb.ID
+	RelationIDs []descpb.ID
 }
 
 type SetObjectParentID struct {

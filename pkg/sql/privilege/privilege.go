@@ -87,7 +87,7 @@ var (
 	ReadWriteData         = List{SELECT, INSERT, DELETE, UPDATE}
 	ReadWriteSequenceData = List{SELECT, UPDATE, USAGE}
 	DBPrivileges          = List{ALL, BACKUP, CONNECT, CREATE, DROP, RESTORE, ZONECONFIG}
-	TablePrivileges       = List{ALL, BACKUP, CHANGEFEED, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
+	TablePrivileges       = List{ALL, BACKUP, CHANGEFEED, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG, TRIGGER}
 	SchemaPrivileges      = List{ALL, CREATE, USAGE}
 	TypePrivileges        = List{ALL, USAGE}
 	RoutinePrivileges     = List{ALL, EXECUTE}
@@ -361,10 +361,11 @@ var privToACL = map[Kind]string{
 	USAGE:   "U",
 	CONNECT: "c",
 	EXECUTE: "X",
+	TRIGGER: "t",
 }
 
-// orderedPrivs is the list of privileges sorted in alphanumeric order based on the ACL character -> CUacdrwX
-var orderedPrivs = List{CREATE, USAGE, INSERT, CONNECT, DELETE, SELECT, UPDATE, EXECUTE}
+// orderedPrivs is the list of privileges sorted in alphanumeric order based on the ACL character -> CUacdrtwX
+var orderedPrivs = List{CREATE, USAGE, INSERT, CONNECT, DELETE, SELECT, TRIGGER, UPDATE, EXECUTE}
 
 // ListToACL converts a list of privileges to a list of Postgres
 // ACL items.

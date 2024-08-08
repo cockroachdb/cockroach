@@ -5,6 +5,8 @@
 
 package tree
 
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
+
 type CreateTrigger struct {
 	Replace     bool
 	Name        Name
@@ -14,8 +16,13 @@ type CreateTrigger struct {
 	Transitions []*TriggerTransition
 	ForEach     TriggerForEach
 	When        Expr
-	FuncName    ResolvableFunctionReference
+	FuncName    *UnresolvedName
 	FuncArgs    []string
+
+	// FuncBody is the body of the trigger function with fully-qualified names.
+	// TODO(#128536): Pass this information through `memo.CreateTriggerExpr`
+	// instead.
+	FuncBody string
 }
 
 var _ Statement = &CreateTrigger{}
@@ -55,7 +62,7 @@ func (node *CreateTrigger) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.When)
 	}
 	ctx.WriteString(" EXECUTE FUNCTION ")
-	ctx.FormatNode(&node.FuncName)
+	ctx.FormatNode(node.FuncName)
 	ctx.WriteString("(")
 	for i, arg := range node.FuncArgs {
 		if i > 0 {
@@ -69,14 +76,26 @@ func (node *CreateTrigger) Format(ctx *FmtCtx) {
 type TriggerActionTime uint8
 
 const (
-	TriggerActionTimeBefore TriggerActionTime = iota
+	TriggerActionTimeUnknown TriggerActionTime = iota
+	TriggerActionTimeBefore
 	TriggerActionTimeAfter
 	TriggerActionTimeInsteadOf
 )
 
+// TriggerActionTimeFromTree allows the conversion from a
+// semenumpb.TriggerActionTime to a tree.TriggerActionTime.
+var TriggerActionTimeFromTree = [...]semenumpb.TriggerActionTime{
+	TriggerActionTimeUnknown:   semenumpb.TriggerActionTime_ACTION_UNKNOWN,
+	TriggerActionTimeBefore:    semenumpb.TriggerActionTime_BEFORE,
+	TriggerActionTimeAfter:     semenumpb.TriggerActionTime_AFTER,
+	TriggerActionTimeInsteadOf: semenumpb.TriggerActionTime_INSTEAD_OF,
+}
+
 // Format implements the NodeFormatter interface.
 func (node *TriggerActionTime) Format(ctx *FmtCtx) {
 	switch *node {
+	case TriggerActionTimeUnknown:
+		ctx.WriteString("UNKNOWN")
 	case TriggerActionTimeBefore:
 		ctx.WriteString("BEFORE")
 	case TriggerActionTimeAfter:
@@ -89,16 +108,29 @@ func (node *TriggerActionTime) Format(ctx *FmtCtx) {
 type TriggerEventType uint8
 
 const (
-	TriggerEventInsert TriggerEventType = 1 << iota
+	TriggerEventTypeUnknown TriggerEventType = iota
+	TriggerEventInsert
 	TriggerEventUpdate
 	TriggerEventDelete
 	TriggerEventTruncate
-	TriggerEventUpsert
+	TriggerEventTypeMax = iota - 1
 )
+
+// TriggerEventTypeFromTree allows the conversion from a
+// tree.TriggerEventType to a semenumpb.TriggerEventType.
+var TriggerEventTypeFromTree = [...]semenumpb.TriggerEventType{
+	TriggerEventTypeUnknown: semenumpb.TriggerEventType_EVENT_UNKNOWN,
+	TriggerEventInsert:      semenumpb.TriggerEventType_INSERT,
+	TriggerEventUpdate:      semenumpb.TriggerEventType_UPDATE,
+	TriggerEventDelete:      semenumpb.TriggerEventType_DELETE,
+	TriggerEventTruncate:    semenumpb.TriggerEventType_TRUNCATE,
+}
 
 // Format implements the NodeFormatter interface.
 func (node *TriggerEventType) Format(ctx *FmtCtx) {
 	switch *node {
+	case TriggerEventTypeUnknown:
+		ctx.WriteString("UNKNOWN")
 	case TriggerEventInsert:
 		ctx.WriteString("INSERT")
 	case TriggerEventUpdate:
@@ -107,9 +139,24 @@ func (node *TriggerEventType) Format(ctx *FmtCtx) {
 		ctx.WriteString("DELETE")
 	case TriggerEventTruncate:
 		ctx.WriteString("TRUNCATE")
-	case TriggerEventUpsert:
-		ctx.WriteString("UPSERT")
 	}
+}
+
+// TriggerEventTypeSet is a set of TriggerEventType values, used to conveniently
+// check for the presence of a given event type in a trigger definition.
+type TriggerEventTypeSet uint8
+
+// Ensure that TriggerEventTypeSet can contain all TriggerEventTypes.
+const _ = TriggerEventTypeSet(1) << TriggerEventTypeMax
+
+// Add adds a TriggerEventType value to the set.
+func (s *TriggerEventTypeSet) Add(t TriggerEventType) {
+	*s |= 1 << t
+}
+
+// Contains returns true if the set contains the given TriggerEventType value.
+func (s TriggerEventTypeSet) Contains(t TriggerEventType) bool {
+	return s&(1<<t) != 0
 }
 
 type TriggerEvent struct {

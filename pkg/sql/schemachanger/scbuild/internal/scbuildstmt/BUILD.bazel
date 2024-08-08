@@ -20,6 +20,7 @@ go_library(
         "create_index.go",
         "create_schema.go",
         "create_sequence.go",
+        "create_trigger.go",
         "database_zone_config.go",
         "dependencies.go",
         "drop_database.go",
