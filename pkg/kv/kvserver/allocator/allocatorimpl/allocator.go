@@ -2249,7 +2249,7 @@ func (a *Allocator) IOOverloadOptions() IOOverloadOptions {
 	return IOOverloadOptions{
 		ReplicaEnforcementLevel:      ReplicaIOOverloadThresholdEnforcement.Get(&a.st.SV),
 		LeaseEnforcementLevel:        LeaseIOOverloadThresholdEnforcement.Get(&a.st.SV),
-		UseIOThresholdMax:            a.st.Version.IsActive(context.Background(), clusterversion.V24_1_GossipMaximumIOOverload),
+		UseIOThresholdMax:            a.st.Version.IsActive(context.Background(), clusterversion.TODO_Delete_V24_1_GossipMaximumIOOverload),
 		ReplicaIOOverloadThreshold:   ReplicaIOOverloadThreshold.Get(&a.st.SV),
 		LeaseIOOverloadThreshold:     LeaseIOOverloadThreshold.Get(&a.st.SV),
 		LeaseIOOverloadShedThreshold: LeaseIOOverloadShedThreshold.Get(&a.st.SV),
