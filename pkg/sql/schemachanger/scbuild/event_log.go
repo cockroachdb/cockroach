@@ -461,6 +461,11 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 				TableName:   fullyQualifiedNameFromID(b, e.TableID),
 				TriggerName: e.Name,
 			}
+		} else {
+			return &eventpb.DropTrigger{
+				TableName:   fullyQualifiedNameFromID(b, e.TableID),
+				TriggerName: e.Name,
+			}
 		}
 	}
 	if _, _, tbl := scpb.FindTable(b.QueryByID(screl.GetDescID(pb.Element()))); tbl != nil {

@@ -397,7 +397,6 @@ object Trigger
 Trigger :  TableID
 Trigger :  TriggerID
 Trigger :  Name
-Trigger :  Enabled
 
 object TriggerDeps
 
@@ -406,6 +405,12 @@ TriggerDeps :  TriggerID
 TriggerDeps : []UsesRelationIDs
 TriggerDeps : []UsesTypeIDs
 TriggerDeps : []UsesRoutineIDs
+
+object TriggerEnabled
+
+TriggerEnabled :  TableID
+TriggerEnabled :  TriggerID
+TriggerEnabled :  Enabled
 
 object TriggerEvents
 
@@ -575,6 +580,7 @@ View <|-- TemporaryIndex
 Table <|-- Trigger
 View <|-- Trigger
 Trigger <|-- TriggerDeps
+Trigger <|-- TriggerEnabled
 Trigger <|-- TriggerEvents
 Trigger <|-- TriggerFunctionCall
 Trigger <|-- TriggerTiming

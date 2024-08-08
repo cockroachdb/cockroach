@@ -19,8 +19,16 @@ func (i *immediateVisitor) AddTrigger(ctx context.Context, op scop.AddTrigger) e
 	tbl.Triggers = append(tbl.Triggers, descpb.TriggerDescriptor{
 		ID:      op.Trigger.TriggerID,
 		Name:    op.Trigger.Name,
-		Enabled: op.Trigger.Enabled,
 	})
+	return nil
+}
+
+func (i *immediateVisitor) SetTriggerEnabled(ctx context.Context, op scop.SetTriggerEnabled) error {
+	trigger, err := i.checkOutTrigger(ctx, op.Enabled.TableID, op.Enabled.TriggerID)
+	if err != nil {
+		return err
+	}
+	trigger.Enabled = op.Enabled.Enabled
 	return nil
 }
 

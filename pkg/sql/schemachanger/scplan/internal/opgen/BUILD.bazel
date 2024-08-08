@@ -71,6 +71,7 @@ go_library(
         "opgen_temporary_index.go",
         "opgen_trigger.go",
         "opgen_trigger_deps.go",
+        "opgen_trigger_enabled.go",
         "opgen_trigger_events.go",
         "opgen_trigger_function_call.go",
         "opgen_trigger_timing.go",

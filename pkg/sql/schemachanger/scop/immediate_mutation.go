@@ -535,6 +535,13 @@ type AddTrigger struct {
 	Trigger scpb.Trigger
 }
 
+// SetTriggerEnabled sets the "enabled" status of a trigger, which indicates
+// whether it will be executed in response to a triggering event.
+type SetTriggerEnabled struct {
+	immediateMutationOp
+	Enabled scpb.TriggerEnabled
+}
+
 // SetTriggerTiming sets the timing of a trigger, which indicates when it
 // executes in relation to the triggering event.
 type SetTriggerTiming struct {

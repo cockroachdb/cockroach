@@ -434,6 +434,9 @@ type NameResolver interface {
 
 	// ResolveConstraint retrieves a constraint by name and returns its elements.
 	ResolveConstraint(relationID catid.DescID, constraintName tree.Name, p ResolveParams) ElementResultSet
+
+	// ResolveTrigger retrieves a trigger by name and returns its elements.
+	ResolveTrigger(relationID catid.DescID, triggerName tree.Name, p ResolveParams) ElementResultSet
 }
 
 // ReferenceProvider provides all referenced objects with in current DDL

@@ -612,3 +612,12 @@ message CreateTrigger {
   string trigger_name = 4  [(gogoproto.jsontag) = ",omitempty"];
 }
 
+// DropTrigger is recorded when a trigger is dropped.
+message DropTrigger {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // Name of the trigger's table.
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // Name of the dropped trigger.
+  string trigger_name = 4  [(gogoproto.jsontag) = ",omitempty"];
+}

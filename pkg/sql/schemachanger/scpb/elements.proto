@@ -155,12 +155,13 @@ message ElementProto {
     TypeComment type_comment = 180 [(gogoproto.moretags) = "parent:\"CompositeType,EnumType\""];
 
     // Trigger elements.
-    TriggerTiming trigger_timing = 200 [(gogoproto.moretags) = "parent:\"Trigger\""];
-    TriggerEvents trigger_events = 201 [(gogoproto.moretags) = "parent:\"Trigger\""];
-    TriggerTransition trigger_transition = 202 [(gogoproto.moretags) = "parent:\"Trigger\""];
-    TriggerWhen trigger_when = 203 [(gogoproto.moretags) = "parent:\"Trigger\""];
-    TriggerFunctionCall trigger_function_call = 204 [(gogoproto.moretags) = "parent:\"Trigger\""];
-    TriggerDeps trigger_deps = 205 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerEnabled trigger_enabled = 200 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerTiming trigger_timing = 201 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerEvents trigger_events = 202 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerTransition trigger_transition = 203 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerWhen trigger_when = 204 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerFunctionCall trigger_function_call = 205 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerDeps trigger_deps = 206 [(gogoproto.moretags) = "parent:\"Trigger\""];
 
     // Next element group start id: 220
   }
@@ -469,7 +470,12 @@ message Trigger {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
   string name = 3;
-  bool enabled = 4;
+}
+
+message TriggerEnabled {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  bool enabled = 3;
 }
 
 message TriggerTiming {

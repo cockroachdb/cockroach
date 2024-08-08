@@ -2457,6 +2457,43 @@ func (c *ElementCollection[E]) FilterTriggerDeps() *ElementCollection[*TriggerDe
 	return (*ElementCollection[*TriggerDeps])(ret)
 }
 
+func (e TriggerEnabled) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TriggerEnabled) Element() Element {
+	return e.TriggerEnabled
+}
+
+// ForEachTriggerEnabled iterates over elements of type TriggerEnabled.
+// Deprecated
+func ForEachTriggerEnabled(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TriggerEnabled),
+) {
+  c.FilterTriggerEnabled().ForEach(fn)
+}
+
+// FindTriggerEnabled finds the first element of type TriggerEnabled.
+// Deprecated
+func FindTriggerEnabled(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TriggerEnabled) {
+	if tc := c.FilterTriggerEnabled(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TriggerEnabled)
+	}
+	return current, target, element
+}
+
+// TriggerEnabledElements filters elements of type TriggerEnabled.
+func (c *ElementCollection[E]) FilterTriggerEnabled() *ElementCollection[*TriggerEnabled] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TriggerEnabled)
+		return ok
+	})
+	return (*ElementCollection[*TriggerEnabled])(ret)
+}
+
 func (e TriggerEvents) element() {}
 
 // Element implements ElementGetter.
@@ -2964,6 +3001,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_Trigger{ Trigger: t}
 		case *TriggerDeps:
 			e.ElementOneOf = &ElementProto_TriggerDeps{ TriggerDeps: t}
+		case *TriggerEnabled:
+			e.ElementOneOf = &ElementProto_TriggerEnabled{ TriggerEnabled: t}
 		case *TriggerEvents:
 			e.ElementOneOf = &ElementProto_TriggerEvents{ TriggerEvents: t}
 		case *TriggerFunctionCall:
@@ -3056,6 +3095,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_TemporaryIndex)(nil)),
 	((*ElementProto_Trigger)(nil)),
 	((*ElementProto_TriggerDeps)(nil)),
+	((*ElementProto_TriggerEnabled)(nil)),
 	((*ElementProto_TriggerEvents)(nil)),
 	((*ElementProto_TriggerFunctionCall)(nil)),
 	((*ElementProto_TriggerTiming)(nil)),
@@ -3139,6 +3179,7 @@ func GetElementTypes() []interface{} {
 	((*TemporaryIndex)(nil)),
 	((*Trigger)(nil)),
 	((*TriggerDeps)(nil)),
+	((*TriggerEnabled)(nil)),
 	((*TriggerEvents)(nil)),
 	((*TriggerFunctionCall)(nil)),
 	((*TriggerTiming)(nil)),

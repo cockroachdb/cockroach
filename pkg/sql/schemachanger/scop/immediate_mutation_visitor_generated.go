@@ -87,6 +87,7 @@ type ImmediateMutationVisitor interface {
 	AddColumnOnUpdateExpression(context.Context, AddColumnOnUpdateExpression) error
 	RemoveColumnOnUpdateExpression(context.Context, RemoveColumnOnUpdateExpression) error
 	AddTrigger(context.Context, AddTrigger) error
+	SetTriggerEnabled(context.Context, SetTriggerEnabled) error
 	SetTriggerTiming(context.Context, SetTriggerTiming) error
 	SetTriggerEvents(context.Context, SetTriggerEvents) error
 	SetTriggerTransition(context.Context, SetTriggerTransition) error
@@ -476,6 +477,11 @@ func (op RemoveColumnOnUpdateExpression) Visit(ctx context.Context, v ImmediateM
 // Visit is part of the ImmediateMutationOp interface.
 func (op AddTrigger) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.AddTrigger(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetTriggerEnabled) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetTriggerEnabled(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.
