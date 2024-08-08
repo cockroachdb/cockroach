@@ -192,11 +192,20 @@ const (
 	LastUpgradeStage
 	RunningUpgradeMigrationsStage
 	AfterUpgradeFinalizedStage
+	UpgradingSystemStage
+	UpgradingTenantStage
 
 	mutationInsertBefore mutationOp = iota
 	mutationInsertAfter
 	mutationInsertConcurrent
 	mutationRemove
+
+	// spanConfigTenantLimit is the value assigned to the
+	// `spanconfig.tenant_limit` cluster setting, controling the number
+	// of spans that a separate-process tenant can create. The value of
+	// 50k chosen here matches Serverless deployments and helps tests
+	// that perform lots of schema changes.
+	spanConfigTenantLimit = 50000
 )
 
 // planMutators includes a list of all known `mutator`
@@ -254,31 +263,81 @@ var planMutators = []mutator{
 func (p *testPlanner) Plan() *TestPlan {
 	setup, testUpgrades := p.setupTest()
 
+	upgradeStepsForService := func(
+		service *ServiceContext, from, to *clusterupgrade.Version, virtualClusterSetup, scheduleHooks bool,
+	) []testStep {
+		if p.deploymentMode == SeparateProcessDeployment {
+			// Separate-process deployments are different because the two
+			// services involved (system and tenant) restart at different
+			// times (since they run separate binaries): the system (storage
+			// cluster) needs to upgrade to completion first, and only then
+			// the tenant is allowed to start upgrading.
+			//
+			// To allow for internal and external hooks to recognize this
+			// stage, we set update the service's stage accordingly below.
+			if service.IsSystem() {
+				p.currentContext.Tenant.Stage = UpgradingSystemStage
+			} else {
+				p.currentContext.System.Stage = UpgradingTenantStage
+			}
+		}
+
+		var steps []testStep
+		addSteps := func(ss []testStep) {
+			steps = append(steps, ss...)
+		}
+
+		addSteps(p.initUpgradeSteps(service, virtualClusterSetup))
+		if p.shouldRollback(to) {
+			// previous -> next
+			addSteps(p.upgradeSteps(
+				service, TemporaryUpgradeStage, from, to, scheduleHooks, virtualClusterSetup,
+			))
+			// next -> previous (rollback)
+			addSteps(p.downgradeSteps(
+				service, to, from, scheduleHooks, virtualClusterSetup,
+			))
+		}
+		// previous -> next
+		addSteps(p.upgradeSteps(
+			service, LastUpgradeStage, from, to, scheduleHooks, virtualClusterSetup,
+		))
+
+		// finalize -- i.e., run upgrade migrations.
+		addSteps(p.finalizeUpgradeSteps(service, from, to, scheduleHooks, virtualClusterSetup))
+
+		// run after upgrade steps, if any,
+		addSteps(p.afterUpgradeSteps(service, from, to, scheduleHooks))
+
+		return steps
+	}
+
 	planUpgrade := func(upgrade *upgradePlan, virtualClusterSetup, scheduleHooks bool) {
 		for _, s := range p.services() {
 			s.startUpgrade(upgrade.to)
 		}
-		upgrade.Add(p.initUpgradeSteps(virtualClusterSetup))
-		if p.shouldRollback(upgrade.to) {
-			// previous -> next
-			upgrade.Add(p.upgradeSteps(
-				TemporaryUpgradeStage, upgrade.from, upgrade.to, scheduleHooks, virtualClusterSetup,
-			))
-			// next -> previous (rollback)
-			upgrade.Add(p.downgradeSteps(
-				upgrade.to, upgrade.from, scheduleHooks, virtualClusterSetup,
-			))
+
+		systemUpgradeSteps := upgradeStepsForService(
+			p.currentContext.System, upgrade.from, upgrade.to, virtualClusterSetup, scheduleHooks,
+		)
+
+		if p.deploymentMode != SeparateProcessDeployment || !virtualClusterSetup {
+			upgrade.Add(systemUpgradeSteps)
+			return
 		}
-		// previous -> next
-		upgrade.Add(p.upgradeSteps(
-			LastUpgradeStage, upgrade.from, upgrade.to, scheduleHooks, virtualClusterSetup,
-		))
 
-		// finalize -- i.e., run upgrade migrations.
-		upgrade.Add(p.finalizeUpgradeSteps(upgrade.from, upgrade.to, scheduleHooks, virtualClusterSetup))
+		// At this point, we know we are in a separate-process deployment,
+		// and that the virtual cluster used during the test has been
+		// created and is running. Therefore, we need to do a rolling
+		// restart of the tenant binaries as well.
+		tenantUpgradeSteps := upgradeStepsForService(
+			p.currentContext.Tenant, upgrade.from, upgrade.to, virtualClusterSetup, scheduleHooks,
+		)
 
-		// run after upgrade steps, if any,
-		upgrade.Add(p.afterUpgradeSteps(upgrade.from, upgrade.to, scheduleHooks))
+		upgrade.Add([]testStep{
+			sequentialRunStep{label: upgradeStorageClusterLabel, steps: systemUpgradeSteps},
+			sequentialRunStep{label: upgradeTenantLabel, steps: tenantUpgradeSteps},
+		})
 	}
 
 	for _, upgrade := range setup.systemSetup.upgrades {
@@ -411,11 +470,16 @@ func (p *testPlanner) setupTest() (testSetup, []*upgradePlan) {
 	tenantBootstrapVersion := allUpgrades[0].from
 
 	if len(setupUpgrades) > 0 && p.isMultitenant() {
-		// If we are in a multi-tenant deployment and we have some setup
+		oldestSupported := OldestSupportedVersion
+		if p.deploymentMode == SharedProcessDeployment {
+			oldestSupported = OldestSupportedVersionSP
+		}
+
+		// If we are in a multitenant deployment and we have some setup
 		// upgrades to run, we find the first setup upgrade before which a
 		// tenant can be started.
 		firstSupportedUpgradeIdx := slices.IndexFunc(setupUpgrades, func(upgrade *upgradePlan) bool {
-			return upgrade.from.AtLeast(OldestSupportedVersionVC)
+			return upgrade.from.AtLeast(oldestSupported)
 		})
 
 		if firstSupportedUpgradeIdx == -1 {
@@ -446,6 +510,12 @@ func (p *testPlanner) setupTest() (testSetup, []*upgradePlan) {
 
 	var tenantSetup *serviceSetup
 	if p.isMultitenant() {
+		for _, n := range p.currentContext.Tenant.Descriptor.Nodes {
+			handleInternalError(
+				p.currentContext.Tenant.changeVersion(n, tenantBootstrapVersion),
+			)
+		}
+
 		tenantSetup = &serviceSetup{
 			steps:    p.tenantSetupSteps(tenantBootstrapVersion),
 			upgrades: upgradesAfterTenantSetup,
@@ -474,7 +544,7 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 			version:    initialVersion,
 			rt:         p.rt,
 			initTarget: p.currentContext.System.Descriptor.Nodes[0],
-			settings:   p.clusterSettingsForSystem(),
+			settings:   p.clusterSettingsForSystem(initialVersion),
 		}),
 		p.newSingleStepWithContext(setupContext, waitForStableClusterVersionStep{
 			nodes:              p.currentContext.System.Descriptor.Nodes,
@@ -490,30 +560,57 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 // passed is the version in which the tenant is created.
 func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 	setupContext := p.nonUpgradeContext(v, TenantSetupStage)
-	shouldGrantCapabilities := p.deploymentMode == SharedProcessDeployment &&
-		!v.AtLeast(TenantsAndSystemAlignedSettingsVersion)
+	shouldGrantCapabilities := p.deploymentMode == SeparateProcessDeployment ||
+		(p.deploymentMode == SharedProcessDeployment && !v.AtLeast(TenantsAndSystemAlignedSettingsVersion))
 
-	// In case we are starting a shared-process virtual cluster, create
-	// it, wait for the cluster version to match the expected version,
-	// set it as the default cluster, and give it all capabilities if
-	// necessary.
-	steps := []testStep{
-		p.newSingleStepWithContext(setupContext, startSharedProcessVirtualClusterStep{
+	var startStep singleStepProtocol
+	if p.deploymentMode == SharedProcessDeployment {
+		startStep = startSharedProcessVirtualClusterStep{
 			name:       p.tenantName(),
 			initTarget: p.currentContext.Tenant.Descriptor.Nodes[0],
-			settings:   p.clusterSettingsForTenant(),
-		}),
+			settings:   p.clusterSettingsForTenant(v),
+		}
+	} else {
+		startStep = startSeparateProcessVirtualClusterStep{
+			name:     p.tenantName(),
+			rt:       p.rt,
+			version:  v,
+			settings: p.clusterSettingsForTenant(v),
+		}
+	}
+
+	// We are creating a virtual cluster: we first create it, then wait
+	// for the cluster version to match the expected version, then set
+	// it as the default cluster, and finally give it all capabilities
+	// if necessary.
+	steps := []testStep{
+		p.newSingleStepWithContext(setupContext, startStep),
 		p.newSingleStepWithContext(setupContext, waitForStableClusterVersionStep{
 			nodes:              p.currentContext.Tenant.Descriptor.Nodes,
 			timeout:            p.options.upgradeTimeout,
 			desiredVersion:     versionToClusterVersion(v),
 			virtualClusterName: p.tenantName(),
 		}),
-		p.newSingleStepWithContext(setupContext, setClusterSettingStep{
+	}
+
+	// We only use the 'default tenant' cluster setting in
+	// shared-process deployments. For separate-process deployments, we
+	// rely on roachtest's `c.SetDefaultVirtualCluster`.
+	if p.deploymentMode == SharedProcessDeployment {
+		steps = append(steps, p.newSingleStepWithContext(setupContext, setClusterSettingStep{
 			name:               defaultTenantClusterSetting(v),
 			value:              p.tenantName(),
 			virtualClusterName: install.SystemInterfaceName,
-		}),
+		}))
+	}
+
+	if p.deploymentMode == SeparateProcessDeployment {
+		steps = append(steps, p.newSingleStepWithContext(setupContext, setClusterSettingStep{
+			name:               "spanconfig.tenant_limit",
+			value:              spanConfigTenantLimit,
+			virtualClusterName: p.tenantName(),
+			systemVisible:      true,
+		}))
 	}
 
 	if shouldGrantCapabilities {
@@ -540,9 +637,9 @@ func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 // startupSteps returns the list of steps that should be executed once
 // the test (as defined by user-provided functions) is ready to start.
 func (p *testPlanner) startupSteps(firstUpgradeVersion *clusterupgrade.Version) []testStep {
-	return p.hooks.StartupSteps(
-		p.nonUpgradeContext(firstUpgradeVersion, OnStartupStage), p.prng, p.isLocal,
-	)
+	return p.concurrently(startupLabel, p.hooks.StartupSteps(
+		p.nonUpgradeContext(firstUpgradeVersion, OnStartupStage), p.prng,
+	))
 }
 
 // testStartSteps are the user-provided steps that should run when the
@@ -551,17 +648,19 @@ func (p *testPlanner) startupSteps(firstUpgradeVersion *clusterupgrade.Version) 
 func (p *testPlanner) testStartSteps(firstUpgradeVersion *clusterupgrade.Version) []testStep {
 	return append(
 		p.startupSteps(firstUpgradeVersion),
-		p.hooks.BackgroundSteps(
-			p.nonUpgradeContext(firstUpgradeVersion, OnStartupStage), p.bgChans, p.prng, p.isLocal,
-		)...,
+		p.concurrently(backgroundLabel, p.hooks.BackgroundSteps(
+			p.nonUpgradeContext(firstUpgradeVersion, OnStartupStage), p.bgChans, p.prng,
+		))...,
 	)
 }
 
 // initUpgradeSteps returns the sequence of steps that should be
 // executed before we start changing binaries on nodes in the process
 // of upgrading/downgrading.
-func (p *testPlanner) initUpgradeSteps(virtualClusterSetup bool) []testStep {
-	p.currentContext.SetStage(InitUpgradeStage)
+func (p *testPlanner) initUpgradeSteps(
+	service *ServiceContext, virtualClusterSetup bool,
+) []testStep {
+	p.setStage(service, InitUpgradeStage)
 
 	preserveDowngradeForService := func(name string) *singleStep {
 		return p.newSingleStep(preserveDowngradeOptionStep{
@@ -569,16 +668,31 @@ func (p *testPlanner) initUpgradeSteps(virtualClusterSetup bool) []testStep {
 		})
 	}
 
-	steps := []testStep{preserveDowngradeForService(install.SystemInterfaceName)}
-
+	preserveDowngradeSystem := preserveDowngradeForService(install.SystemInterfaceName)
 	switch p.deploymentMode {
+	case SystemOnlyDeployment:
+		return []testStep{preserveDowngradeSystem}
+
 	case SharedProcessDeployment:
 		if virtualClusterSetup {
-			steps = append(steps, preserveDowngradeForService(p.tenantName()))
+			return []testStep{
+				preserveDowngradeSystem,
+				preserveDowngradeForService(p.tenantName()),
+			}
 		}
-	}
 
-	return steps
+		return []testStep{preserveDowngradeSystem}
+
+	case SeparateProcessDeployment:
+		if service.IsSystem() {
+			return []testStep{preserveDowngradeSystem}
+		}
+
+		return nil // nothing to do, separate-process servers don't auto-upgrade
+
+	default:
+		panic(unreachable)
+	}
 }
 
 // afterUpgradeSteps are the steps to be run once the nodes have been
@@ -586,12 +700,12 @@ func (p *testPlanner) initUpgradeSteps(virtualClusterSetup bool) []testStep {
 // the same and then run any after-finalization hooks the user may
 // have provided.
 func (p *testPlanner) afterUpgradeSteps(
-	fromVersion, toVersion *clusterupgrade.Version, scheduleHooks bool,
+	service *ServiceContext, fromVersion, toVersion *clusterupgrade.Version, scheduleHooks bool,
 ) []testStep {
-	p.currentContext.SetFinalizing(false)
-	p.currentContext.SetStage(AfterUpgradeFinalizedStage)
+	p.setFinalizing(service, false)
+	p.setStage(service, AfterUpgradeFinalizedStage)
 	if scheduleHooks {
-		return p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng, p.isLocal)
+		return p.concurrently(afterTestLabel, p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng))
 	}
 
 	// Currently, we only schedule user-provided hooks after the upgrade
@@ -600,21 +714,26 @@ func (p *testPlanner) afterUpgradeSteps(
 }
 
 func (p *testPlanner) upgradeSteps(
-	stage UpgradeStage, from, to *clusterupgrade.Version, scheduleHooks, virtualClusterSetup bool,
+	service *ServiceContext,
+	stage UpgradeStage,
+	from, to *clusterupgrade.Version,
+	scheduleHooks, virtualClusterSetup bool,
 ) []testStep {
-	p.currentContext.SetStage(stage)
-	nodes := p.currentContext.System.Descriptor.Nodes
+	p.setStage(service, stage)
+	nodes := service.Descriptor.Nodes
 	msg := fmt.Sprintf("upgrade nodes %v from %q to %q", nodes, from.String(), to.String())
-	return p.changeVersionSteps(from, to, msg, scheduleHooks, virtualClusterSetup)
+	return p.changeVersionSteps(service, from, to, msg, scheduleHooks, virtualClusterSetup)
 }
 
 func (p *testPlanner) downgradeSteps(
-	from, to *clusterupgrade.Version, scheduleHooks, virtualClusterSetup bool,
+	service *ServiceContext,
+	from, to *clusterupgrade.Version,
+	scheduleHooks, virtualClusterSetup bool,
 ) []testStep {
-	p.currentContext.SetStage(RollbackUpgradeStage)
+	p.setStage(service, RollbackUpgradeStage)
 	nodes := p.currentContext.System.Descriptor.Nodes
 	msg := fmt.Sprintf("downgrade nodes %v from %q to %q", nodes, from.String(), to.String())
-	return p.changeVersionSteps(from, to, msg, scheduleHooks, virtualClusterSetup)
+	return p.changeVersionSteps(service, from, to, msg, scheduleHooks, virtualClusterSetup)
 }
 
 // changeVersionSteps returns the sequence of steps to be performed
@@ -624,9 +743,12 @@ func (p *testPlanner) downgradeSteps(
 // mixed-version hooks will be scheduled randomly during the
 // upgrade/downgrade process.
 func (p *testPlanner) changeVersionSteps(
-	from, to *clusterupgrade.Version, label string, scheduleHooks, virtualClusterSetup bool,
+	service *ServiceContext,
+	from, to *clusterupgrade.Version,
+	label string,
+	scheduleHooks, virtualClusterSetup bool,
 ) []testStep {
-	nodes := p.currentContext.System.Descriptor.Nodes
+	nodes := service.Descriptor.Nodes
 	// copy system `Nodes` here so that shuffling won't mutate that array
 	previousVersionNodes := append(option.NodeListOption{}, nodes...)
 
@@ -646,22 +768,42 @@ func (p *testPlanner) changeVersionSteps(
 
 	var steps []testStep
 	for j, node := range previousVersionNodes {
-		steps = append(steps, p.newSingleStep(
-			restartWithNewBinaryStep{
-				version:              to,
-				node:                 node,
-				rt:                   p.rt,
-				settings:             p.clusterSettingsForSystem(),
-				sharedProcessStarted: virtualClusterSetup,
-				initTarget:           p.currentContext.System.Descriptor.Nodes[0],
-			},
-		))
-		for _, s := range p.services() {
+		var restartStep singleStepProtocol
+		if service.IsSystem() {
+			restartStep = restartWithNewBinaryStep{
+				version:        to,
+				node:           node,
+				rt:             p.rt,
+				settings:       p.clusterSettingsForSystem(to),
+				tenantRunning:  virtualClusterSetup,
+				deploymentMode: p.deploymentMode,
+				initTarget:     p.currentContext.System.Descriptor.Nodes[0],
+			}
+		} else {
+			restartStep = restartVirtualClusterStep{
+				version:        to,
+				node:           node,
+				virtualCluster: p.tenantName(),
+				rt:             p.rt,
+				settings:       p.clusterSettingsForTenant(to),
+			}
+		}
+
+		steps = append(steps, p.newSingleStep(restartStep))
+
+		affectedServices := p.services()
+		if p.deploymentMode == SeparateProcessDeployment {
+			affectedServices = []*ServiceContext{service}
+		}
+		for _, s := range affectedServices {
 			handleInternalError(s.changeVersion(node, to))
 		}
 
 		if scheduleHooks {
-			steps = append(steps, p.hooks.MixedVersionSteps(p.currentContext, p.prng, p.isLocal)...)
+			steps = append(
+				steps,
+				p.concurrently(mixedVersionLabel, p.hooks.MixedVersionSteps(p.currentContext, p.prng))...,
+			)
 		} else if j == waitIndex {
 			// If we are not scheduling user-provided hooks, we wait a short
 			// while in this state to allow some time for background
@@ -681,88 +823,119 @@ func (p *testPlanner) changeVersionSteps(
 // hooks while the cluster version is changing. At the end of this
 // process, we wait for all the migrations to finish running.
 func (p *testPlanner) finalizeUpgradeSteps(
-	fromVersion, toVersion *clusterupgrade.Version, scheduleHooks, virtualClusterSetup bool,
+	service *ServiceContext,
+	fromVersion, toVersion *clusterupgrade.Version,
+	scheduleHooks, virtualClusterSetup bool,
 ) []testStep {
-	p.currentContext.SetFinalizing(true)
-	p.currentContext.SetStage(RunningUpgradeMigrationsStage)
-	runSystemMigrations := p.newSingleStep(allowUpgradeStep{
-		virtualClusterName: install.SystemInterfaceName,
+	p.setFinalizing(service, true)
+	p.setStage(service, RunningUpgradeMigrationsStage)
+
+	allowAutoUpgrade := p.newSingleStep(allowUpgradeStep{
+		virtualClusterName: service.Descriptor.Name,
 	})
 
-	steps := []testStep{runSystemMigrations}
+	var steps []testStep
 
-	var mixedVersionStepsDuringTenantMigrations []testStep
-	if scheduleHooks {
-		mixedVersionSteps := p.hooks.MixedVersionSteps(p.currentContext, p.prng, p.isLocal)
-
-		switch p.deploymentMode {
-		case SystemOnlyDeployment:
-			steps = append(steps, mixedVersionSteps...)
-
-		case SharedProcessDeployment:
-			// If we are in a multi-tenant deployment, we run some
-			// mixed-version hooks while the system is finalizing, and the
-			// remaining hooks while the tenant is finalizing.
-			if len(mixedVersionSteps) > 0 {
-				idx := p.prng.Intn(len(mixedVersionSteps))
-
-				mixedVersionStepsDuringSystemMigrations := mixedVersionSteps[:idx]
-				steps = append(steps, mixedVersionStepsDuringSystemMigrations...)
-
-				mixedVersionStepsDuringTenantMigrations = mixedVersionSteps[idx:]
-			}
+	// runStepsWithTenantMigrations adds a step to `SET` the tenant's
+	// cluster version to the version we are upgrading to. In addition,
+	// if `scheduleHooks` is true, we choose a (possibly empty) subset
+	// of user-hooks to run concurrently with these migrations.
+	runStepsWithTenantMigrations := func() {
+		upgradeSteps := []testStep{
+			p.newSingleStep(setClusterVersionStep{
+				v:                  toVersion,
+				virtualClusterName: p.tenantName(),
+			}),
 		}
+
+		if scheduleHooks {
+			upgradeSteps = append(upgradeSteps, p.hooks.MixedVersionSteps(p.currentContext, p.prng)...)
+		}
+
+		steps = append(steps, p.concurrently(genericLabel, upgradeSteps)...)
+	}
+
+	// If the service being upgraded is the system service, we allow
+	// auto-upgrades since they are supported.
+	if service.IsSystem() {
+		steps = []testStep{allowAutoUpgrade}
+		if scheduleHooks {
+			steps = append(
+				steps,
+				p.concurrently(mixedVersionLabel, p.hooks.MixedVersionSteps(p.currentContext, p.prng))...,
+			)
+		}
+	} else {
+		// In separate-process deployments, we set the cluster setting
+		// explicitly, as auto-upgrades are not supported. We also run
+		// all steps selected to run during finalization at this stage.
+		runStepsWithTenantMigrations()
 	}
 
 	steps = append(steps, p.newSingleStep(
 		waitForStableClusterVersionStep{
-			nodes:              p.currentContext.System.Descriptor.Nodes,
+			nodes:              service.Descriptor.Nodes,
 			timeout:            p.options.upgradeTimeout,
 			desiredVersion:     versionToClusterVersion(toVersion),
-			virtualClusterName: install.SystemInterfaceName,
+			virtualClusterName: service.Descriptor.Name,
 		},
 	))
 
-	// At this point, we just upgraded the storage cluster; we might
-	// need to patch up the `system.tenant_settings` table in order for
-	// the tenant upgrade to work.
+	// If this is a system-only or separate-process deployment, we are
+	// done -- the `service` passed is upgraded at this point. However,
+	// for shared-process deployments, we also need to upgrade the
+	// underlying tenant.
+	if p.deploymentMode == SystemOnlyDeployment || p.deploymentMode == SeparateProcessDeployment {
+		return steps
+	}
+
+	// At this point, we need to upgrade the shared-process tenant. We
+	// might need to patch up the `system.tenant_settings` table first
+	// in order for the upgrade to work.
 	steps = append(steps, p.maybeDeleteAllTenantsVersionOverride(toVersion)...)
 
-	switch p.deploymentMode {
-	case SharedProcessDeployment:
-		if virtualClusterSetup {
+	if virtualClusterSetup {
+		steps = append(
+			steps,
+			p.newSingleStep(allowUpgradeStep{
+				virtualClusterName: p.tenantName(),
+			}),
+		)
+
+		// If we are upgrading to a version that does not support
+		// auto-upgrading after resetting a cluster setting, we need to
+		// "manually" run the migrations at this point.
+		if toVersion.AtLeast(tenantSupportsAutoUpgradeVersion) {
 			steps = append(
 				steps,
-				p.newSingleStep(allowUpgradeStep{
-					virtualClusterName: p.tenantName(),
-				}),
+				p.concurrently(mixedVersionLabel, p.hooks.MixedVersionSteps(p.currentContext, p.prng))...,
 			)
-
-			// If we are upgrading to a version that does not support
-			// auto-upgrading after resetting a cluster setting, we need to
-			// "manually" run the migrations at this point.
-			if !toVersion.AtLeast(tenantSupportsAutoUpgradeVersion) {
-				steps = append(steps,
-					p.newSingleStep(
-						setTenantClusterVersionStep{
-							virtualClusterName: p.tenantName(),
-							nodes:              p.currentContext.Tenant.Descriptor.Nodes,
-							targetVersion:      versionToClusterVersion(toVersion),
-						},
-					))
-			}
-
-			steps = append(steps, mixedVersionStepsDuringTenantMigrations...)
-			steps = append(steps, p.newSingleStep(waitForStableClusterVersionStep{
-				nodes:              p.currentContext.Tenant.Descriptor.Nodes,
-				timeout:            p.options.upgradeTimeout,
-				desiredVersion:     versionToClusterVersion(toVersion),
-				virtualClusterName: p.currentContext.Tenant.Descriptor.Name,
-			}))
+		} else {
+			runStepsWithTenantMigrations()
 		}
+
+		// Finally, we confirm that every node is aware of the new
+		// `version` cluster setting.
+		steps = append(steps, p.newSingleStep(waitForStableClusterVersionStep{
+			nodes:              p.currentContext.Tenant.Descriptor.Nodes,
+			timeout:            p.options.upgradeTimeout,
+			desiredVersion:     versionToClusterVersion(toVersion),
+			virtualClusterName: p.currentContext.Tenant.Descriptor.Name,
+		}))
 	}
 
 	return steps
+}
+
+// concurrently returns the same `steps` input if there is less than 1
+// step in the slice. Otherwise, it groups all steps into a
+// `concurrentRunStep` for parallel execution.
+func (p *testPlanner) concurrently(label string, steps []testStep) []testStep {
+	if len(steps) <= 1 {
+		return steps
+	}
+
+	return []testStep{newConcurrentRunStep(label, steps, p.prng, p.isLocal)}
 }
 
 // shouldRollback returns whether the test will attempt a rollback. If
@@ -781,17 +954,11 @@ func (p *testPlanner) shouldRollback(toVersion *clusterupgrade.Version) bool {
 
 // maybeDeleteAllTenantsVersionOverride will delete the bad 'version'
 // key from the system.tenant_settings table when necessary.
-// Specifically, doing this is necessary when we are in virtual
-// cluster deployment mode (shared or external process) and we just
-// upgraded to a version in the 23.1 release series older than
-// v23.1.9.
+// Specifically, doing this is necessary when we just upgraded to a
+// version in the 23.1 release series older than v23.1.9.
 func (p *testPlanner) maybeDeleteAllTenantsVersionOverride(
 	toVersion *clusterupgrade.Version,
 ) []testStep {
-	if p.deploymentMode == SystemOnlyDeployment {
-		return nil
-	}
-
 	if isAffected := toVersion.Series() == "23.1" && toVersion.Patch() <= 8; !isAffected {
 		return nil
 	}
@@ -827,6 +994,25 @@ func (p *testPlanner) serviceDescriptors() []*ServiceDescriptor {
 	return descriptors
 }
 
+func (p *testPlanner) setStage(service *ServiceContext, stage UpgradeStage) {
+	p.changeServiceProcess(service, func(s *ServiceContext) { s.Stage = stage })
+}
+
+func (p *testPlanner) setFinalizing(service *ServiceContext, b bool) {
+	p.changeServiceProcess(service, func(s *ServiceContext) { s.Finalizing = b })
+}
+
+func (p *testPlanner) changeServiceProcess(service *ServiceContext, fn func(*ServiceContext)) {
+	switch p.deploymentMode {
+	case SystemOnlyDeployment, SeparateProcessDeployment:
+		fn(service)
+
+	case SharedProcessDeployment:
+		fn(p.currentContext.System)
+		fn(p.currentContext.Tenant)
+	}
+}
+
 func (p *testPlanner) isMultitenant() bool {
 	return p.deploymentMode != SystemOnlyDeployment
 }
@@ -835,10 +1021,24 @@ func (p *testPlanner) tenantName() string {
 	return p.currentContext.Tenant.Descriptor.Name
 }
 
-func (p *testPlanner) clusterSettingsForSystem() []install.ClusterSettingOption {
+func (p *testPlanner) clusterSettingsForSystem(
+	v *clusterupgrade.Version,
+) []install.ClusterSettingOption {
 	cs := []install.ClusterSettingOption{}
 	cs = append(cs, defaultClusterSettings...)
 	cs = append(cs, p.options.settings...)
+
+	// 23.1 releases commonly suffer from a `use of Span after finish`
+	// error in separate-process deployments. We ignore these to reduce
+	// noise.
+	//
+	// TODO(testeng): remove this logic after 23.1 reaches EOL.
+	if v.Series() == "23.1" && p.deploymentMode == SeparateProcessDeployment {
+		cs = append(cs, install.EnvOption([]string{
+			"COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH=false",
+		}))
+	}
+
 	return cs
 }
 
@@ -851,8 +1051,10 @@ func (p *testPlanner) clusterSettingsForSystem() []install.ClusterSettingOption 
 // multiple versions into account. If really needed, we could provide
 // some option for the caller to indicate which options apply to
 // system vs tenant, but that's not necessary at the moment.
-func (p *testPlanner) clusterSettingsForTenant() []install.ClusterSettingOption {
-	settings := p.clusterSettingsForSystem()
+func (p *testPlanner) clusterSettingsForTenant(
+	v *clusterupgrade.Version,
+) []install.ClusterSettingOption {
+	settings := p.clusterSettingsForSystem(v)
 
 	var tenantSettings []install.ClusterSettingOption
 	for _, s := range settings {
@@ -1258,7 +1460,9 @@ func (plan *TestPlan) assignIDs() {
 	plan.mapSingleSteps(func(ss *singleStep, _ bool) []testStep {
 		stepID := nextID()
 		_, isStartSystem := ss.impl.(startStep)
-		_, isStartTenant := ss.impl.(startSharedProcessVirtualClusterStep)
+		_, isStartSharedProcess := ss.impl.(startSharedProcessVirtualClusterStep)
+		_, isStartSeparateProcess := ss.impl.(startSeparateProcessVirtualClusterStep)
+		isStartTenant := isStartSharedProcess || isStartSeparateProcess
 
 		if plan.startSystemID == 0 && isStartSystem {
 			plan.startSystemID = stepID
@@ -1413,7 +1617,12 @@ func (plan *TestPlan) prettyPrintStep(
 			if ss.context.Finalizing() {
 				finalizingStr = ",finalizing"
 			}
-			debugInfo = fmt.Sprintf(" [stage=%s%s]", ss.context.System.Stage, finalizingStr)
+
+			stageStr := ss.context.System.Stage.String()
+			if plan.deploymentMode != SystemOnlyDeployment {
+				stageStr = fmt.Sprintf("system:%s;tenant:%s", ss.context.System.Stage, ss.context.Tenant.Stage)
+			}
+			debugInfo = fmt.Sprintf(" [stage=%s%s]", stageStr, finalizingStr)
 		}
 
 		out.WriteString(fmt.Sprintf(
@@ -1446,7 +1655,7 @@ func treeBranchString(idx, sliceLen int) string {
 // that changes the default tenant on a cluster. The setting changed
 // its name from 23.1 to 23.2.
 func defaultTenantClusterSetting(v *clusterupgrade.Version) string {
-	if !v.AtLeast(OldestSupportedVersionVC) {
+	if !v.AtLeast(OldestSupportedVersionSP) {
 		handleInternalError(fmt.Errorf("defaultTenantClusterSetting called on version %s", v))
 	}
 
@@ -1479,6 +1688,10 @@ func (u UpgradeStage) String() string {
 		return "running-upgrade-migrations"
 	case AfterUpgradeFinalizedStage:
 		return "after-upgrade-finished"
+	case UpgradingSystemStage:
+		return "upgrading-system"
+	case UpgradingTenantStage:
+		return "upgrading-tenant"
 	default:
 		return fmt.Sprintf("invalid upgrade stage (%d)", u)
 	}

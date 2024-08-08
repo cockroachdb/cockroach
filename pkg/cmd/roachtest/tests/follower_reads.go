@@ -791,7 +791,9 @@ func verifyHighFollowerReadRatios(
 		adminNode = i
 		break
 	}
-	adminURLs, err := c.ExternalAdminUIAddr(ctx, l, c.Node(adminNode))
+	adminURLs, err := c.ExternalAdminUIAddr(
+		ctx, l, c.Node(adminNode), option.VirtualClusterName(install.SystemInterfaceName),
+	)
 	require.NoError(t, err)
 
 	url := "https://" + adminURLs[0] + "/ts/query"
@@ -902,7 +904,9 @@ func getFollowerReadCounts(ctx context.Context, t test.Test, c cluster.Cluster) 
 	followerReadCounts := make([]int, c.Spec().NodeCount)
 	getFollowerReadCount := func(ctx context.Context, node int) func() error {
 		return func() error {
-			adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(node))
+			adminUIAddrs, err := c.ExternalAdminUIAddr(
+				ctx, t.L(), c.Node(node), option.VirtualClusterName(install.SystemInterfaceName),
+			)
 			if err != nil {
 				return err
 			}
@@ -980,7 +984,16 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
 	topology := topologySpec{multiRegion: false}
-	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness)
+	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness,
+		// This test does not currently work with shared-process
+		// deployments (#129546), so we do not run it in separate-process
+		// mode either to reduce noise. We should reevaluate once the test
+		// works in shared-process.
+		mixedversion.EnabledDeploymentModes(
+			mixedversion.SystemOnlyDeployment,
+			mixedversion.SharedProcessDeployment,
+		),
+	)
 }
 
 // runFollowerReadsMixedVersionGlobalTableTest runs a multi-region follower-read
@@ -1000,6 +1013,14 @@ func runFollowerReadsMixedVersionGlobalTableTest(
 		// Use a longer upgrade timeout to give the migrations enough time to finish
 		// considering the cross-region latency.
 		mixedversion.UpgradeTimeout(60*time.Minute),
+		// This test does not currently work with shared-process
+		// deployments (#129167), so we do not run it in separate-process
+		// mode either to reduce noise. We should reevaluate once the test
+		// works in shared-process.
+		mixedversion.EnabledDeploymentModes(
+			mixedversion.SystemOnlyDeployment,
+			mixedversion.SharedProcessDeployment,
+		),
 	)
 }
 

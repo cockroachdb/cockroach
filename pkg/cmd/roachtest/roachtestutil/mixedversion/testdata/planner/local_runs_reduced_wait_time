@@ -33,7 +33,7 @@ Deployment mode:    system-only
 Plan:
 ├── install fixtures for version "v22.2.3" (1)
 ├── start cluster at version "v22.2.3" (2)
-├── wait for system tenant on nodes :1-4 to reach cluster version '22.2' (3)
+├── wait for all nodes (:1-4) to acknowledge cluster version '22.2' on system tenant (3)
 ├── upgrade cluster from "v22.2.3" to "v23.1.4"
 │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (4)
 │   ├── upgrade nodes :1-4 from "v22.2.3" to "v23.1.4"
@@ -43,7 +43,7 @@ Plan:
 │   │   ├── restart node 2 with binary version v23.1.4 (8)
 │   │   └── restart node 3 with binary version v23.1.4 (9)
 │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (10)
-│   └── wait for system tenant on nodes :1-4 to reach cluster version '23.1' (11)
+│   └── wait for all nodes (:1-4) to acknowledge cluster version '23.1' on system tenant (11)
 ├── run "initialize bank workload" (12)
 ├── start background hooks concurrently
 │   ├── run "bank workload", after 500ms delay (13)
@@ -73,7 +73,7 @@ Plan:
 │   │   ├── restart node 2 with binary version v23.2.0 (32)
 │   │   └── restart node 3 with binary version v23.2.0 (33)
 │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (34)
-│   ├── wait for system tenant on nodes :1-4 to reach cluster version '23.2' (35)
+│   ├── wait for all nodes (:1-4) to acknowledge cluster version '23.2' on system tenant (35)
 │   └── run "validate upgrade" (36)
 └── upgrade cluster from "v23.2.0" to "<current>"
    ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (37)
@@ -99,5 +99,5 @@ Plan:
    │   ├── restart node 2 with binary version <current> (54)
    │   └── restart node 1 with binary version <current> (55)
    ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (56)
-   ├── wait for system tenant on nodes :1-4 to reach cluster version <current> (57)
+   ├── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (57)
    └── run "validate upgrade" (58)

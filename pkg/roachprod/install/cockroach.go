@@ -1416,7 +1416,7 @@ func (c *SyncedCluster) upsertVirtualClusterMetadata(
 ) (int, error) {
 	runSQL := func(stmt string) (string, error) {
 		results, err := startOpts.StorageCluster.ExecSQL(
-			ctx, l, startOpts.StorageCluster.Nodes[:1], "", 0, DefaultAuthMode(), "", /* database */
+			ctx, l, startOpts.StorageCluster.Nodes[:1], SystemInterfaceName, 0, DefaultAuthMode(), "", /* database */
 			[]string{"--format", "csv", "-e", stmt})
 		if err != nil {
 			return "", err
