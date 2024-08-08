@@ -1333,7 +1333,11 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, l *logger.Logger)
 			sec = fmt.Sprintf("--certs-dir=%s", certs)
 		}
 		if err := c.RunE(
-			ctx, option.WithNodes(c.Node(node)), fmt.Sprintf("%s debug tsdump %s --port={pgport%s} --format=raw > tsdump.gob", test.DefaultCockroachPath, sec, c.Node(node)),
+			ctx, option.WithNodes(c.Node(node)),
+			fmt.Sprintf(
+				"%s debug tsdump %s --port={pgport%s:%s} --format=raw > tsdump.gob",
+				test.DefaultCockroachPath, sec, c.Node(node), install.SystemInterfaceName,
+			),
 		); err != nil {
 			return err
 		}
@@ -1416,8 +1420,14 @@ func (c *clusterImpl) FetchDebugZip(
 		// assumption that a down node will refuse the connection, so it won't
 		// waste our time.
 		for _, node := range nodes {
-			// `cockroach debug zip` does not support non root authentication.
-			nodePgUrl, err := c.InternalPGUrl(ctx, l, c.Node(node), roachprod.PGURLOptions{Auth: install.AuthRootCert})
+			pgURLOpts := roachprod.PGURLOptions{
+				// `cockroach debug zip` does not support non root authentication.
+				Auth: install.AuthRootCert,
+				// request the system tenant specifically in case the test
+				// changed the default virtual cluster.
+				VirtualClusterName: install.SystemInterfaceName,
+			}
+			nodePgUrl, err := c.InternalPGUrl(ctx, l, c.Node(node), pgURLOpts)
 			if err != nil {
 				l.Printf("cluster.FetchDebugZip failed to retrieve PGUrl on node %d: %v", node, err)
 				continue

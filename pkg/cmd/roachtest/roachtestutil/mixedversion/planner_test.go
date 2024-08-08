@@ -339,6 +339,17 @@ func newRand() *rand.Rand {
 
 func newTest(options ...CustomOption) *Test {
 	testOptions := defaultTestOptions()
+	defaultTestOverrides := []CustomOption{
+		// Enforce system-only deployments by default in tests; those that
+		// test multitenant deployments specifically should pass the
+		// `EnabledDeploymentModes` option explicitly.
+		EnabledDeploymentModes(SystemOnlyDeployment),
+	}
+
+	for _, fn := range defaultTestOverrides {
+		fn(&testOptions)
+	}
+
 	for _, fn := range options {
 		fn(&testOptions)
 	}

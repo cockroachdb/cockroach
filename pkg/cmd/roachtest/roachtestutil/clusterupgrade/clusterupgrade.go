@@ -368,19 +368,26 @@ func RestartNodesWithNewBinary(
 	rand.Shuffle(len(nodes), func(i, j int) {
 		nodes[i], nodes[j] = nodes[j], nodes[i]
 	})
+
+	// Stop the cockroach process gracefully in order to drain it properly.
+	// This makes the upgrade closer to how users do it in production, but
+	// it's also needed to eliminate flakiness. In particular, this will
+	// make sure that DistSQL draining information is dissipated through
+	// gossip so that other nodes running an older version don't consider
+	// this upgraded node for DistSQL plans (see #87154 for more details).
+	stopOptions := []option.StartStopOption{option.Graceful(gracePeriod)}
+
+	// If we are starting the cockroach process with a tag, we apply the
+	// same tag when stopping.
+	for _, s := range settings {
+		if t, ok := s.(install.TagOption); ok {
+			stopOptions = append(stopOptions, option.Tag(string(t)))
+		}
+	}
+
 	for _, node := range nodes {
 		l.Printf("restarting node %d into version %s", node, newVersion.String())
-		// Stop the cockroach process gracefully in order to drain it properly.
-		// This makes the upgrade closer to how users do it in production, but
-		// it's also needed to eliminate flakiness. In particular, this will
-		// make sure that DistSQL draining information is dissipated through
-		// gossip so that other nodes running an older version don't consider
-		// this upgraded node for DistSQL plans (see #87154 for more details).
-		// TODO(yuzefovich): ideally, we would also check that the drain was
-		// successful since if it wasn't, then we might see flakes too.
-		if err := c.StopE(
-			ctx, l, option.NewStopOpts(option.Graceful(gracePeriod)), c.Node(node),
-		); err != nil {
+		if err := c.StopE(ctx, l, option.NewStopOpts(stopOptions...), c.Node(node)); err != nil {
 			return err
 		}
 

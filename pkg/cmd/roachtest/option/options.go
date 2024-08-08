@@ -174,6 +174,17 @@ func SkipInit(opts interface{}) {
 	}
 }
 
+// Tag sets a process tag when stopping processes. Useful if we want
+// to kill a cockroach process that was started with `settings.TagOption`.
+func Tag(tag string) func(opts interface{}) {
+	return func(opts interface{}) {
+		switch opts := opts.(type) {
+		case *StopOpts:
+			opts.RoachprodOpts.ProcessTag = tag
+		}
+	}
+}
+
 // WithInitTarget allows the caller to configure which node is used as
 // `InitTarget` when starting cockroach. Specially useful when
 // starting clusters in a subset of VMs in the cluster that doesn't
