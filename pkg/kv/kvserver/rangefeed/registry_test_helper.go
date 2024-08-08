@@ -137,9 +137,26 @@ func (s *testStream) WaitForError(t *testing.T) error {
 	}
 }
 
-type testRegistration struct {
+type testRegistration interface {
+	registration
+	bufferedEventsLen() int
+	isBufferedRegistration() bool
+}
+
+var _ testRegistration = (*testBufferedRegistration)(nil)
+var _ testRegistration = (*testUnbufferedRegistration)(nil)
+
+type testBufferedRegistration struct {
 	*bufferedRegistration
 	*testStream
+}
+
+func (t *testBufferedRegistration) isBufferedRegistration() bool {
+	return true
+}
+
+func (t *testBufferedRegistration) bufferedEventsLen() int {
+	return len(t.buf)
 }
 
 func makeCatchUpIterator(
@@ -162,7 +179,7 @@ func newTestRegistration(
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
-) *testRegistration {
+) *testBufferedRegistration {
 	s := newTestStream()
 	r := newBufferedRegistration(
 		span,
@@ -177,115 +194,25 @@ func newTestRegistration(
 		s,
 		func() {},
 	)
-	return &testRegistration{
+	return &testBufferedRegistration{
 		bufferedRegistration: r,
 		testStream:           s,
 	}
 }
 
-type testBufferedStream struct {
-	ctx     context.Context
-	ctxDone func()
-	done    chan *kvpb.Error
-	cleanup func()
-	mu      struct {
-		syncutil.Mutex
-		sendErr error
-		events  []*kvpb.RangeFeedEvent
-	}
-}
-
-func newTestBufferedStream() *testBufferedStream {
-	ctx, done := context.WithCancel(context.Background())
-	return &testBufferedStream{ctx: ctx, ctxDone: done, done: make(chan *kvpb.Error, 1)}
-}
-
-func (s *testBufferedStream) Context() context.Context {
-	return s.ctx
-}
-
-func (s *testBufferedStream) Cancel() {
-	s.ctxDone()
-}
-
-func (s *testBufferedStream) SendIsThreadSafe() {}
-
-func (s *testBufferedStream) ShouldUseBufferedRegistration() bool { return true }
-
-func (s *testBufferedStream) Send(e *kvpb.RangeFeedEvent) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.mu.sendErr != nil {
-		return s.mu.sendErr
-	}
-	s.mu.events = append(s.mu.events, e)
-	return nil
-}
-
-func (s *testBufferedStream) SetSendErr(err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.sendErr = err
-}
-
-func (s *testBufferedStream) Events() []*kvpb.RangeFeedEvent {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	es := s.mu.events
-	s.mu.events = nil
-	return es
-}
-
-func (s *testBufferedStream) BlockSend() func() {
-	s.mu.Lock()
-	var once sync.Once
-	return func() {
-		// safe to call multiple times, e.g. defer and explicit
-		once.Do(s.mu.Unlock) //nolint:deferunlockcheck
-	}
-}
-
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
-// by sending the error to the done channel.
-func (s *testBufferedStream) Disconnect(err *kvpb.Error) {
-	s.done <- err
-	if s.cleanup != nil {
-		go s.cleanup()
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
-func (s *testBufferedStream) RegisterRangefeedCleanUp(cleanup func()) {
-	s.cleanup = cleanup
-}
-
-// Error returns the error that was sent to the done channel. It returns nil if
-// no error was sent yet.
-func (s *testBufferedStream) Error() error {
-	select {
-	case err := <-s.done:
-		return err.GoError()
-	default:
-		return nil
-	}
-}
-
-// WaitForError waits for the rangefeed to complete and returns the error sent
-// to the done channel. It fails the test if rangefeed cannot complete within 30
-// seconds.
-func (s *testBufferedStream) WaitForError(t *testing.T) error {
-	select {
-	case err := <-s.done:
-		return err.GoError()
-	case <-time.After(testutils.DefaultSucceedsSoonDuration):
-		t.Fatalf("time out waiting for rangefeed completion")
-		return nil
-	}
-}
-
 type testUnbufferedRegistration struct {
 	*unbufferedRegistration
-	*testBufferedStream
+	*testStream
+}
+
+func (r *testUnbufferedRegistration) isBufferedRegistration() bool {
+	return false
+}
+
+func (r *testUnbufferedRegistration) bufferedEventsLen() int {
+	r.unbufferedRegistration.mu.Lock()
+	defer r.unbufferedRegistration.mu.Unlock()
+	return len(r.unbufferedRegistration.mu.catchUpBuf)
 }
 
 func newTestUnbufferedRegistration(
@@ -296,7 +223,7 @@ func newTestUnbufferedRegistration(
 	withFiltering bool,
 	withOmitRemote bool,
 ) *testUnbufferedRegistration {
-	s := newTestBufferedStream()
+	s := newTestStream()
 	r := newUnbufferedRegistration(
 		span,
 		ts,
@@ -311,6 +238,6 @@ func newTestUnbufferedRegistration(
 	)
 	return &testUnbufferedRegistration{
 		unbufferedRegistration: r,
-		testBufferedStream:     s,
+		testStream:             s,
 	}
 }

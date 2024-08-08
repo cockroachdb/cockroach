@@ -13,10 +13,12 @@ package rangefeed
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -74,6 +76,7 @@ func newUnbufferedRegistration(
 	}
 	br.mu.Locker = &syncutil.Mutex{}
 	br.mu.catchUpIter = catchUpIter
+	br.mu.caughtUp = true
 	if br.mu.catchUpIter != nil {
 		br.mu.catchUpBuf = make(chan *sharedEvent, bufferSz)
 	}
@@ -273,5 +276,22 @@ func (ubr *unbufferedRegistration) detachCatchUpIter() *CatchUpIterator {
 func (ubr *unbufferedRegistration) drainAllocations(ctx context.Context) {}
 
 func (ubr *unbufferedRegistration) waitForCaughtUp(ctx context.Context) error {
-	panic("unimplemented: unbuffered registration does not support waitForCaughtUp")
+	opts := retry.Options{
+		InitialBackoff: 5 * time.Millisecond,
+		Multiplier:     2,
+		MaxBackoff:     10 * time.Second,
+		MaxRetries:     50,
+	}
+	for re := retry.StartWithCtx(ctx, opts); re.Next(); {
+		ubr.mu.Lock()
+		caughtUp := len(ubr.mu.catchUpBuf) == 0
+		ubr.mu.Unlock()
+		if caughtUp {
+			return nil
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return errors.Errorf("bufferedRegistration %v failed to empty in time", ubr.Range())
 }
