@@ -19,40 +19,46 @@ import (
 // but for the float64 type. If you'd like to implement additional methods,
 // consider checking out the expvar Float type for guidance:
 // https://golang.org/src/expvar/expvar.go?s=2188:2222#L69
-type AtomicFloat64 uint64
-
-// StoreFloat64 atomically stores a float64 value into the provided address.
-func StoreFloat64(addr *AtomicFloat64, val float64) {
-	atomic.StoreUint64((*uint64)(addr), math.Float64bits(val))
+type AtomicFloat64 struct {
+	val atomic.Uint64
 }
 
-// LoadFloat64 atomically loads tha float64 value from the provided address.
-func LoadFloat64(addr *AtomicFloat64) (val float64) {
-	return math.Float64frombits(atomic.LoadUint64((*uint64)(addr)))
+// Store atomically stores a float64 value.
+func (f *AtomicFloat64) Store(val float64) {
+	f.val.Store(math.Float64bits(val))
 }
 
-func AddFloat64(addr *AtomicFloat64, add float64) (val float64) {
+// Load atomically loads tha float64 value.
+func (f *AtomicFloat64) Load() float64 {
+	return math.Float64frombits(f.val.Load())
+}
+
+// Add atomically adds delta to the float64 value and returns the new value.
+func (f *AtomicFloat64) Add(delta float64) (new float64) {
 	for {
-		oldFloat := LoadFloat64(addr)
-		oldInt := math.Float64bits(oldFloat)
-		newFloat := oldFloat + add
+		oldInt := f.val.Load()
+		oldFloat := math.Float64frombits(oldInt)
+		newFloat := oldFloat + delta
 		newInt := math.Float64bits(newFloat)
-		if atomic.CompareAndSwapUint64((*uint64)(addr), oldInt, newInt) {
-			return
+		if f.val.CompareAndSwap(oldInt, newInt) {
+			return newFloat
 		}
 	}
 }
 
-func StoreFloat64IfHigher(addr *AtomicFloat64, new float64) (val float64) {
+// StoreIfHigher atomically stores the given value if it is higher than the
+// current value (in which case the given value is returned; otherwise the
+// existing value is returned).
+func (f *AtomicFloat64) StoreIfHigher(new float64) (val float64) {
+	newInt := math.Float64bits(new)
 	for {
-		oldFloat := LoadFloat64(addr)
+		oldInt := f.val.Load()
+		oldFloat := math.Float64frombits(oldInt)
 		if oldFloat > new {
-			return
+			return oldFloat
 		}
-		oldInt := math.Float64bits(oldFloat)
-		newInt := math.Float64bits(new)
-		if atomic.CompareAndSwapUint64((*uint64)(addr), oldInt, newInt) {
-			return
+		if f.val.CompareAndSwap(oldInt, newInt) {
+			return new
 		}
 	}
 }
