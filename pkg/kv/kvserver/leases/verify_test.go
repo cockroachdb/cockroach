@@ -166,10 +166,9 @@ func TestVerify(t *testing.T) {
 					in.RaftStatus.Lead = raft.None
 					return in
 				}(),
-				// Rejection if the leader is unknown. However, we don't know who to
-				// redirect to, so we don't include a hint.
-				expErr:      `\[NotLeaseHolderError\] refusing to acquire lease on follower`,
-				expRedirect: roachpb.ReplicaDescriptor{},
+				// No rejection if the leader is unknown. See comments in
+				// leases.verifyAcquisition.
+				expErr: ``,
 			},
 			{
 				name: "follower, unknown leader, 1x replication",
@@ -185,11 +184,11 @@ func TestVerify(t *testing.T) {
 				expErr: ``,
 			},
 			{
-				name: "follower, unknown leader, don't reject lease on leader unknown",
+				name: "follower, unknown leader, reject lease on leader unknown",
 				// Unknown leader.
 				st: func() Settings {
 					st := defaultSettings()
-					st.RejectLeaseOnLeaderUnknown = false
+					st.RejectLeaseOnLeaderUnknown = true
 					return st
 				}(),
 				input: func() VerifyInput {
@@ -197,8 +196,10 @@ func TestVerify(t *testing.T) {
 					in.RaftStatus.Lead = raft.None
 					return in
 				}(),
-				// No rejection if the leader is unknown due to the non-default setting.
-				expErr: ``,
+				// Rejection if the leader is unknown and the setting is set. However,
+				// we don't know who to redirect to, so we don't include a hint.
+				expErr:      `\[NotLeaseHolderError\] refusing to acquire lease on follower`,
+				expRedirect: roachpb.ReplicaDescriptor{},
 			},
 		})
 	})
