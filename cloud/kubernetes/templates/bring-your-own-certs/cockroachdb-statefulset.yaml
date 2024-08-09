@@ -30,12 +30,12 @@ metadata:
   labels:
     app: cockroachdb
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -48,9 +48,9 @@ roleRef:
   kind: Role
   name: cockroachdb
 subjects:
-- kind: ServiceAccount
-  name: cockroachdb
-  namespace: default
+  - kind: ServiceAccount
+    name: cockroachdb
+    namespace: default
 ---
 apiVersion: v1
 kind: Service
@@ -62,15 +62,15 @@ metadata:
     app: cockroachdb
 spec:
   ports:
-  # The main port, served by gRPC, serves Postgres-flavor SQL, internode
-  # traffic and the cli.
-  - port: 26257
-    targetPort: 26257
-    name: grpc
-  # The secondary port serves the UI as well as health and debug endpoints.
-  - port: 8080
-    targetPort: 8080
-    name: http
+    # The main port, served by gRPC, serves Postgres-flavor SQL, internode
+    # traffic and the cli.
+    - port: 26257
+      targetPort: 26257
+      name: grpc
+    # The secondary port serves the UI as well as health and debug endpoints.
+    - port: 8080
+      targetPort: 8080
+      name: http
   selector:
     app: cockroachdb
 ---
@@ -96,12 +96,12 @@ metadata:
     prometheus.io/port: "8080"
 spec:
   ports:
-  - port: 26257
-    targetPort: 26257
-    name: grpc
-  - port: 8080
-    targetPort: 8080
-    name: http
+    - port: 26257
+      targetPort: 26257
+      name: grpc
+    - port: 8080
+      targetPort: 8080
+      name: http
   # We want all pods in the StatefulSet to have their addresses published for
   # the sake of the other CockroachDB pods even before they're ready, since they
   # have to be able to talk to each other in order to become ready.
@@ -110,7 +110,7 @@ spec:
   selector:
     app: cockroachdb
 ---
-apiVersion: policy/v1beta1
+apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: cockroachdb-budget
@@ -141,104 +141,104 @@ spec:
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: app
-                  operator: In
-                  values:
-                  - cockroachdb
-              topologyKey: kubernetes.io/hostname
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - cockroachdb
+                topologyKey: kubernetes.io/hostname
       containers:
-      - name: cockroachdb
-        image: cockroachdb/cockroach:@VERSION@
-        imagePullPolicy: IfNotPresent
-        # TODO: Change these to appropriate values for the hardware that you're running. You can see
-        # the resources that can be allocated on each of your Kubernetes nodes by running:
-        #   kubectl describe nodes
-        # Note that requests and limits should have identical values.
-        resources:
-          requests:
-            cpu: "2"
-            memory: "8Gi"
-          limits:
-            cpu: "2"
-            memory: "8Gi" 
-        ports:
-        - containerPort: 26257
-          name: grpc
-        - containerPort: 8080
-          name: http
-# We recommend that you do not configure a liveness probe on a production environment, as this can impact the availability of production databases.
-#      livenessProbe:
-#        httpGet:
-#          path: "/health"
-#          port: http
-#          scheme: HTTPS
-#        initialDelaySeconds: 30
-#        periodSeconds: 5
-        readinessProbe:
-          httpGet:
-            path: "/health?ready=1"
-            port: http
-            scheme: HTTPS
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          failureThreshold: 2
-        volumeMounts:
-        - name: datadir
-          mountPath: /cockroach/cockroach-data
-        - name: certs
-          mountPath: /cockroach/cockroach-certs
-        env:
-        - name: COCKROACH_CHANNEL
-          value: kubernetes-secure
-        - name: GOMAXPROCS
-          valueFrom:
-            resourceFieldRef:
-              resource: limits.cpu
-              divisor: "1"
-        - name: MEMORY_LIMIT_MIB
-          valueFrom:
-            resourceFieldRef:
-              resource: limits.memory
-              divisor: "1Mi"
-        command:
-          - "/bin/bash"
-          - "-ecx"
-          # The use of qualified `hostname -f` is crucial:
-          # Other nodes aren't able to look up the unqualified hostname.
-          - exec
-            /cockroach/cockroach
-            start
-            --logtostderr
-            --certs-dir /cockroach/cockroach-certs
-            --advertise-host $(hostname -f)
-            --http-addr 0.0.0.0
-            --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb,cockroachdb-2.cockroachdb
-            --cache $(expr $MEMORY_LIMIT_MIB / 4)MiB
-            --max-sql-memory $(expr $MEMORY_LIMIT_MIB / 4)MiB
+        - name: cockroachdb
+          image: cockroachdb/cockroach:@VERSION@
+          imagePullPolicy: IfNotPresent
+          # TODO: Change these to appropriate values for the hardware that you're running. You can see
+          # the resources that can be allocated on each of your Kubernetes nodes by running:
+          #   kubectl describe nodes
+          # Note that requests and limits should have identical values.
+          resources:
+            requests:
+              cpu: "2"
+              memory: "8Gi"
+            limits:
+              cpu: "2"
+              memory: "8Gi"
+          ports:
+            - containerPort: 26257
+              name: grpc
+            - containerPort: 8080
+              name: http
+          # We recommend that you do not configure a liveness probe on a production environment, as this can impact the availability of production databases.
+          #      livenessProbe:
+          #        httpGet:
+          #          path: "/health"
+          #          port: http
+          #          scheme: HTTPS
+          #        initialDelaySeconds: 30
+          #        periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: "/health?ready=1"
+              port: http
+              scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 2
+          volumeMounts:
+            - name: datadir
+              mountPath: /cockroach/cockroach-data
+            - name: certs
+              mountPath: /cockroach/cockroach-certs
+          env:
+            - name: COCKROACH_CHANNEL
+              value: kubernetes-secure
+            - name: GOMAXPROCS
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.cpu
+                  divisor: "1"
+            - name: MEMORY_LIMIT_MIB
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.memory
+                  divisor: "1Mi"
+          command:
+            - "/bin/bash"
+            - "-ecx"
+            # The use of qualified `hostname -f` is crucial:
+            # Other nodes aren't able to look up the unqualified hostname.
+            - exec
+              /cockroach/cockroach
+              start
+              --logtostderr
+              --certs-dir /cockroach/cockroach-certs
+              --advertise-host $(hostname -f)
+              --http-addr 0.0.0.0
+              --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb,cockroachdb-2.cockroachdb
+              --cache $(expr $MEMORY_LIMIT_MIB / 4)MiB
+              --max-sql-memory $(expr $MEMORY_LIMIT_MIB / 4)MiB
       # No pre-stop hook is required, a SIGTERM plus some time is all that's
       # needed for graceful shutdown of a node.
       terminationGracePeriodSeconds: 60
       volumes:
-      - name: datadir
-        persistentVolumeClaim:
-          claimName: datadir
-      - name: certs
-        secret:
-          secretName: cockroachdb.node
-          defaultMode: 256
+        - name: datadir
+          persistentVolumeClaim:
+            claimName: datadir
+        - name: certs
+          secret:
+            secretName: cockroachdb.node
+            defaultMode: 256
   podManagementPolicy: Parallel
   updateStrategy:
     type: RollingUpdate
   volumeClaimTemplates:
-  - metadata:
-      name: datadir
-    spec:
-      accessModes:
-        - "ReadWriteOnce"
-      resources:
-        requests:
-          storage: 100Gi
+    - metadata:
+        name: datadir
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 100Gi

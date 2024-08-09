@@ -29,13 +29,13 @@ metadata:
   labels:
     app: cockroachdb
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - create
-  - get
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - create
+      - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -44,14 +44,14 @@ metadata:
   labels:
     app: cockroachdb
 rules:
-- apiGroups:
-  - certificates.k8s.io
-  resources:
-  - certificatesigningrequests
-  verbs:
-  - create
-  - get
-  - watch
+  - apiGroups:
+      - certificates.k8s.io
+    resources:
+      - certificatesigningrequests
+    verbs:
+      - create
+      - get
+      - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -64,9 +64,9 @@ roleRef:
   kind: Role
   name: cockroachdb
 subjects:
-- kind: ServiceAccount
-  name: cockroachdb
-  namespace: default
+  - kind: ServiceAccount
+    name: cockroachdb
+    namespace: default
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -79,9 +79,9 @@ roleRef:
   kind: ClusterRole
   name: cockroachdb
 subjects:
-- kind: ServiceAccount
-  name: cockroachdb
-  namespace: default
+  - kind: ServiceAccount
+    name: cockroachdb
+    namespace: default
 ---
 apiVersion: v1
 kind: Service
@@ -93,19 +93,19 @@ metadata:
     app: cockroachdb
 spec:
   ports:
-  # The main port, served by gRPC, serves Postgres-flavor SQL, internode
-  # traffic and the cli.
-  - port: 26257
-    targetPort: 26257
-    name: grpc
-  # The secondary port serves the UI as well as health and debug endpoints.
-  - port: 8080
-    targetPort: 8080
-    name: http
+    # The main port, served by gRPC, serves Postgres-flavor SQL, internode
+    # traffic and the cli.
+    - port: 26257
+      targetPort: 26257
+      name: grpc
+    # The secondary port serves the UI as well as health and debug endpoints.
+    - port: 8080
+      targetPort: 8080
+      name: http
   selector:
     app: cockroachdb
 ---
-apiVersion: policy/v1beta1
+apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: cockroachdb-budget
@@ -143,10 +143,10 @@ spec:
       #   kubectl taint node <node-name> app=cockroachdb:NoSchedule
       # If you don't set up any such taints, these tolerations will have no effect.
       tolerations:
-      - key: "app"
-        operator: "Equal"
-        value: "cockroachdb"
-        effect: "NoSchedule"
+        - key: "app"
+          operator: "Equal"
+          value: "cockroachdb"
+          effect: "NoSchedule"
       # NOTE: Running with `hostNetwork: true` means that CockroachDB will use
       # the host machines' IP address and hostname, and that nothing else on
       # the machines will be able to use the same ports.
@@ -155,30 +155,30 @@ spec:
       # it's started up for the first time. It has to exit successfully
       # before the pod's main containers are allowed to start.
       initContainers:
-      # The init-certs container sends a certificate signing request to the
-      # kubernetes cluster.
-      # You can see pending requests using: kubectl get csr
-      # CSRs can be approved using:         kubectl certificate approve <csr name>
-      #
-      # All addresses used to contact a node must be specified in the --addresses arg.
-      #
-      # In addition to the node certificate and key, the init-certs entrypoint will symlink
-      # the cluster CA to the certs directory.
-      - name: init-certs
-        image: cockroachdb/cockroach-k8s-request-cert:0.4
-        imagePullPolicy: IfNotPresent
-        command:
-        - "/bin/ash"
-        - "-ecx"
-        - "/request-cert -namespace=${POD_NAMESPACE} -certs-dir=/cockroach-certs -type=node -addresses=localhost,127.0.0.1,$(hostname),$(hostname -f),$(hostname -i),cockroachdb-public,cockroachdb-public.${POD_NAMESPACE}.svc.cluster.local,cockroachdb-public.${POD_NAMESPACE}.svc,cockroachdb-public.${POD_NAMESPACE} -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-        env:
-        - name: POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        volumeMounts:
-        - name: certs
-          mountPath: /cockroach-certs
+        # The init-certs container sends a certificate signing request to the
+        # kubernetes cluster.
+        # You can see pending requests using: kubectl get csr
+        # CSRs can be approved using:         kubectl certificate approve <csr name>
+        #
+        # All addresses used to contact a node must be specified in the --addresses arg.
+        #
+        # In addition to the node certificate and key, the init-certs entrypoint will symlink
+        # the cluster CA to the certs directory.
+        - name: init-certs
+          image: cockroachdb/cockroach-k8s-request-cert:0.4
+          imagePullPolicy: IfNotPresent
+          command:
+            - "/bin/ash"
+            - "-ecx"
+            - "/request-cert -namespace=${POD_NAMESPACE} -certs-dir=/cockroach-certs -type=node -addresses=localhost,127.0.0.1,$(hostname),$(hostname -f),$(hostname -i),cockroachdb-public,cockroachdb-public.${POD_NAMESPACE}.svc.cluster.local,cockroachdb-public.${POD_NAMESPACE}.svc,cockroachdb-public.${POD_NAMESPACE} -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: certs
+              mountPath: /cockroach-certs
       # NOTE: If you are running clients that generate heavy load, you may find
       # it useful to copy this anti-affinity policy into the client pods'
       # configurations as well to avoid running them on the same machines as
@@ -186,77 +186,77 @@ spec:
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: app
-                  operator: In
-                  values:
-                  - cockroachdb
-              topologyKey: kubernetes.io/hostname
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - cockroachdb
+                topologyKey: kubernetes.io/hostname
       containers:
-      - name: cockroachdb
-        image: cockroachdb/cockroach:@VERSION@
-        imagePullPolicy: IfNotPresent
-        # TODO: If you configured taints to give CockroachDB exclusive access to nodes, feel free
-        # to remove the requests and limits sections. If you didn't, you'll need to change these to
-        # appropriate values for the hardware that you're running. You can see the amount of
-        # allocatable resources on each of your Kubernetes nodes by running:
-        #   kubectl describe nodes
-        resources:
-          requests:
-            cpu: "16"
-            memory: "8Gi"
-          limits:
-            # NOTE: Unless you have enabled the non-default Static CPU Management Policy
-            # and are using an integer number of CPUs, we don't recommend setting a CPU limit.
-            # See:
-            #   https://kubernetes.io/docs/tasks/administer-cluster/cpu-management-policies/#static-policy
-            #   https://github.com/kubernetes/kubernetes/issues/51135
-            #cpu: "16"
-            memory: "8Gi"
-        ports:
-        - containerPort: 26257
-          hostPort: 26257
-          name: grpc
-        - containerPort: 8080
-          hostPort: 8080
-          name: http
-# We recommend that you do not configure a liveness probe on a production environment, as this can impact the availability of production databases.
-#       livenessProbe:
-#         httpGet:
-#           path: "/health"
-#           port: http
-#           scheme: HTTPS
-#         initialDelaySeconds: 30
-#         periodSeconds: 5
-        readinessProbe:
-          httpGet:
-            path: "/health?ready=1"
-            port: http
-            scheme: HTTPS
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          failureThreshold: 2
-        volumeMounts:
-        - name: datadir
-          mountPath: /cockroach/cockroach-data
-        - name: certs
-          mountPath: /cockroach/cockroach-certs
-        env:
-        - name: COCKROACH_CHANNEL
-          value: kubernetes-secure
-        command:
-          - "/bin/bash"
-          - "-ecx"
-          # TODO: Replace "YOUR_IP_ADDR1_HERE,YOUR_IP_ADDR2_HERE,YOUR_IP_ADDR3_HERE" with a list of a few of the IP addresses or hostnames of the machines on which CockroachDB will be running.
-          - "exec /cockroach/cockroach start --logtostderr --certs-dir /cockroach/cockroach-certs --http-addr 0.0.0.0 --cache 25% --max-sql-memory 25% --join=YOUR_IP_ADDR1_HERE,YOUR_IP_ADDR2_HERE,YOUR_IP_ADDR3_HERE"
+        - name: cockroachdb
+          image: cockroachdb/cockroach:@VERSION@
+          imagePullPolicy: IfNotPresent
+          # TODO: If you configured taints to give CockroachDB exclusive access to nodes, feel free
+          # to remove the requests and limits sections. If you didn't, you'll need to change these to
+          # appropriate values for the hardware that you're running. You can see the amount of
+          # allocatable resources on each of your Kubernetes nodes by running:
+          #   kubectl describe nodes
+          resources:
+            requests:
+              cpu: "16"
+              memory: "8Gi"
+            limits:
+              # NOTE: Unless you have enabled the non-default Static CPU Management Policy
+              # and are using an integer number of CPUs, we don't recommend setting a CPU limit.
+              # See:
+              #   https://kubernetes.io/docs/tasks/administer-cluster/cpu-management-policies/#static-policy
+              #   https://github.com/kubernetes/kubernetes/issues/51135
+              #cpu: "16"
+              memory: "8Gi"
+          ports:
+            - containerPort: 26257
+              hostPort: 26257
+              name: grpc
+            - containerPort: 8080
+              hostPort: 8080
+              name: http
+          # We recommend that you do not configure a liveness probe on a production environment, as this can impact the availability of production databases.
+          #       livenessProbe:
+          #         httpGet:
+          #           path: "/health"
+          #           port: http
+          #           scheme: HTTPS
+          #         initialDelaySeconds: 30
+          #         periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: "/health?ready=1"
+              port: http
+              scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 2
+          volumeMounts:
+            - name: datadir
+              mountPath: /cockroach/cockroach-data
+            - name: certs
+              mountPath: /cockroach/cockroach-certs
+          env:
+            - name: COCKROACH_CHANNEL
+              value: kubernetes-secure
+          command:
+            - "/bin/bash"
+            - "-ecx"
+            # TODO: Replace "YOUR_IP_ADDR1_HERE,YOUR_IP_ADDR2_HERE,YOUR_IP_ADDR3_HERE" with a list of a few of the IP addresses or hostnames of the machines on which CockroachDB will be running.
+            - "exec /cockroach/cockroach start --logtostderr --certs-dir /cockroach/cockroach-certs --http-addr 0.0.0.0 --cache 25% --max-sql-memory 25% --join=YOUR_IP_ADDR1_HERE,YOUR_IP_ADDR2_HERE,YOUR_IP_ADDR3_HERE"
       terminationGracePeriodSeconds: 60
       volumes:
-      - name: datadir
-        hostPath:
-          # TODO: Replace "YOUR_FILESYSTEM_PATH_HERE" with the path where you want CockroachDB's data stored on your Kubernetes nodes.
-          path: YOUR_FILESYSTEM_PATH_HERE
-      - name: certs
-        emptyDir: {}
+        - name: datadir
+          hostPath:
+            # TODO: Replace "YOUR_FILESYSTEM_PATH_HERE" with the path where you want CockroachDB's data stored on your Kubernetes nodes.
+            path: YOUR_FILESYSTEM_PATH_HERE
+        - name: certs
+          emptyDir: {}
