@@ -5,6 +5,7 @@ leader-term: 0
 
 side-channel leader-term=3 first=5 last=10 low-pri
 ----
+not-stale-term: true
 leader-term: 3
 intervals:
  [  5,  10] => true
@@ -12,6 +13,7 @@ intervals:
 # Same term. Cannot overwrite existing state for [8, 10].
 side-channel leader-term=3 first=8 last=15
 ----
+not-stale-term: true
 leader-term: 3
 intervals:
  [  5,  10] => true
@@ -20,6 +22,7 @@ intervals:
 # Higher term. Overwrites part of existing state.
 side-channel leader-term=4 first=15 last=20 low-pri
 ----
+not-stale-term: true
 leader-term: 4
 intervals:
  [  5,  10] => true
@@ -78,6 +81,7 @@ intervals:
 # Higher term, overwrites existing state.
 side-channel leader-term=5 first=16 last=23
 ----
+not-stale-term: true
 leader-term: 5
 intervals:
  [ 16,  23] => false
@@ -85,6 +89,7 @@ intervals:
 # Same term. Extends interval.
 side-channel leader-term=5 first=22 last=25
 ----
+not-stale-term: true
 leader-term: 5
 intervals:
  [ 16,  25] => false
@@ -92,6 +97,7 @@ intervals:
 # Higher term.
 side-channel leader-term=6 first=26 last=30 low-pri
 ----
+not-stale-term: true
 leader-term: 6
 intervals:
  [ 16,  25] => false
@@ -100,6 +106,7 @@ intervals:
 # Same term. Gap in intervals.
 side-channel leader-term=6 first=35 last=40 low-pri
 ----
+not-stale-term: true
 leader-term: 6
 intervals:
  [ 16,  25] => false
@@ -121,11 +128,13 @@ leader-term: 6
 # Old term. Ignored.
 side-channel leader-term=5 first=35 last=40 low-pri
 ----
+not-stale-term: false
 leader-term: 6
 
 # Existing term.
 side-channel leader-term=6 first=35 last=40 low-pri
 ----
+not-stale-term: true
 leader-term: 6
 intervals:
  [ 35,  40] => true
@@ -133,6 +142,30 @@ intervals:
 # Existing term. Old message is ignored.
 side-channel leader-term=6 first=30 last=39
 ----
+not-stale-term: true
 leader-term: 6
 intervals:
  [ 35,  40] => true
+
+# Existing term. Old message claiming v1 is ignored.
+side-channel-v1 leader-term=6
+----
+term-advanced: false
+leader-term: 6
+intervals:
+ [ 35,  40] => true
+
+
+# Old term. Message is ignored.
+side-channel-v1 leader-term=5
+----
+term-advanced: false
+leader-term: 6
+intervals:
+ [ 35,  40] => true
+
+# New term. Message claiming v1 is relevant.
+side-channel-v1 leader-term=7
+----
+term-advanced: true
+leader-term: 7
