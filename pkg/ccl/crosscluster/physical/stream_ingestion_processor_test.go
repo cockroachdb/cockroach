@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient/randclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -490,14 +491,14 @@ func assertEqualKVs(
 }
 
 func makeTestStreamURI(
-	valueRange, kvsPerResolved, numPartitions int,
+	kvsPerResolved, numPartitions int,
 	kvFrequency time.Duration,
 	dupProbability float64,
 	tenantID roachpb.TenantID,
 	tenantName roachpb.TenantName,
 ) string {
-	return streamclient.RandomGenScheme + ":///" + "?VALUE_RANGE=" + strconv.Itoa(valueRange) +
-		"&EVENT_FREQUENCY=" + strconv.Itoa(int(kvFrequency)) +
+	return streamclient.RandomGenScheme + ":///" +
+		"?EVENT_FREQUENCY=" + strconv.Itoa(int(kvFrequency)) +
 		"&KVS_PER_CHECKPOINT=" + strconv.Itoa(kvsPerResolved) +
 		"&NUM_PARTITIONS=" + strconv.Itoa(numPartitions) +
 		"&DUP_PROBABILITY=" + strconv.FormatFloat(dupProbability, 'f', -1, 32) +
@@ -535,7 +536,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	streamClient, err := streamclient.NewStreamClient(ctx, crosscluster.StreamAddress(streamAddr), nil)
 	require.NoError(t, err)
 
-	randomStreamClient, ok := streamClient.(*streamclient.RandomStreamClient)
+	randomStreamClient, ok := streamClient.(streamclient.RandomClient)
 	require.True(t, ok)
 	rps, err := randomStreamClient.CreateForTenant(ctx, tenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)

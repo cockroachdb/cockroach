@@ -9,6 +9,8 @@
 package crosscluster
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -37,6 +39,25 @@ const (
 	// SplitEvent indicates that the SplitKey field of an event holds a split key.
 	SplitEvent
 )
+
+func (e EventType) String() string {
+	switch e {
+	case KVEvent:
+		return "KVEvent"
+	case SSTableEvent:
+		return "SSTableEvent"
+	case DeleteRangeEvent:
+		return "DeleteRangeEvent"
+	case CheckpointEvent:
+		return "CheckpointEvent"
+	case SpanConfigEvent:
+		return "SpanConfigEvent"
+	case SplitEvent:
+		return "SplitEvent"
+	default:
+		return fmt.Sprintf("unknown event: %d", e)
+	}
+}
 
 // Event describes an event emitted by a cluster to cluster stream.  Its Type
 // field indicates which other fields are meaningful.

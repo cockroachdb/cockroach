@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
@@ -71,7 +72,7 @@ func getStreamAddresses(ctx context.Context, ingestionJob *jobs.Job) []string {
 }
 
 func connectToActiveClient(
-	ctx context.Context, ingestionJob *jobs.Job, db isql.DB, opts ...streamclient.Option,
+	ctx context.Context, ingestionJob *jobs.Job, db descs.DB, opts ...streamclient.Option,
 ) (streamclient.Client, error) {
 	streamAddresses := getStreamAddresses(ctx, ingestionJob)
 	client, err := streamclient.GetFirstActiveClient(ctx, streamAddresses, db, opts...)

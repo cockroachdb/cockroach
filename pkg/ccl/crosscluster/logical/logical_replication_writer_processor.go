@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
@@ -238,10 +239,7 @@ func newLogicalReplicationWriterProcessor(
 //
 // A subscription's event stream is read by the consumeEvents loop.
 //
-// The consumeEvents loop builds a buffer of KVs that it then sends to
-// the flushLoop. We currently allow 1 in-flight flush.
-//
-//	client.Subscribe -> consumeEvents -> flushLoop -> Next()
+//	client.Subscribe -> consumeEvents -> Next()
 //
 // All errors are reported to Next() via errCh, with the first
 // error winning.
@@ -339,24 +337,27 @@ func (lrw *logicalReplicationWriterProcessor) Next() (
 				rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(progressBytes))),
 			}
 			return row, nil
+		} else {
+			select {
+			case err := <-lrw.errCh:
+				lrw.MoveToDrainingAndLogError(err)
+				return nil, lrw.DrainHelper()
+			case <-time.After(10 * time.Second):
+				logcrash.ReportOrPanic(lrw.Ctx(), &lrw.FlowCtx.Cfg.Settings.SV,
+					"event channel closed but no error found on err channel after 10 seconds")
+				lrw.MoveToDrainingAndLogError(nil /* error */)
+				return nil, lrw.DrainHelper()
+			}
 		}
 	case err := <-lrw.errCh:
 		lrw.MoveToDrainingAndLogError(err)
-		return nil, lrw.DrainHelper()
-	}
-	select {
-	case err := <-lrw.errCh:
-		lrw.MoveToDrainingAndLogError(err)
-		return nil, lrw.DrainHelper()
-	default:
-		lrw.MoveToDrainingAndLogError(nil /* error */)
 		return nil, lrw.DrainHelper()
 	}
 }
 
 func (lrw *logicalReplicationWriterProcessor) MoveToDrainingAndLogError(err error) {
 	if err != nil {
-		log.Infof(lrw.Ctx(), "gracefully draining with error %s", err)
+		log.Infof(lrw.Ctx(), "gracefully draining with error: %s", err)
 	}
 	lrw.MoveToDraining(err)
 }
@@ -505,6 +506,12 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 	case lrw.checkpointCh <- resolvedSpans:
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-lrw.stopCh:
+		// we need to select on stopCh here because the reader
+		// of checkpointCh is the caller of Next(). But there
+		// might never be another Next() call since it may
+		// have exited based on an error.
+		return nil
 	}
 	lrw.metrics.CheckpointEvents.Inc(1)
 	return nil
