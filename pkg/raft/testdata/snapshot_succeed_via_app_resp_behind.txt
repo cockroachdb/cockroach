@@ -100,7 +100,7 @@ DEBUG 3 [logterm: 0, index: 10] rejected MsgApp [logterm: 1, index: 10] from 1
 process-ready 3
 ----
 Ready MustSync=true:
-HardState Term:1 Vote:1 Commit:5 Lead:1
+HardState Term:1 Vote:1 Commit:5 Lead:1 LeadEpoch:0
 Messages:
 3->1 MsgAppResp Term:1 Log:1/10 Rejected (Hint: 5)
 
@@ -144,7 +144,7 @@ stabilize 3
 ----
 > 3 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:11 Lead:1
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
   Snapshot Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
