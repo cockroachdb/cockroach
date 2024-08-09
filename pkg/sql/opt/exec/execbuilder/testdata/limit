@@ -517,11 +517,12 @@ EXPLAIN SELECT oid, typname FROM pg_type ORDER BY oid LIMIT 10
 distribution: local
 vectorized: true
 ·
-• limit
-│ count: 10
+• top-k
+│ order: +oid
+│ k: 10
 │
 └── • virtual table
-      table: pg_type@pg_type_oid_idx
+      table: pg_type@primary
 
 # A limit can be pushed into the scan of a virtual table without ORDER BY.
 query T
@@ -542,12 +543,15 @@ EXPLAIN SELECT oid, typname FROM pg_type WHERE OID BETWEEN 1 AND 1000 ORDER BY o
 distribution: local
 vectorized: true
 ·
-• limit
-│ count: 10
+• top-k
+│ order: +oid
+│ k: 10
 │
-└── • virtual table
-      table: pg_type@pg_type_oid_idx
-      spans: [/1 - /1000]
+└── • filter
+    │ filter: (oid >= 1) AND (oid <= 1000)
+    │
+    └── • virtual table
+          table: pg_type@primary
 
 # Regression test for #69685 - a limit cannot be pushed below a window function
 # if its order-by references the window function.

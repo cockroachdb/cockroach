@@ -45,7 +45,7 @@ ORDER BY name ASC;
 SELECT range_id, count(*) AS streams
     FROM crdb_internal.kv_flow_control_handles
 GROUP BY (range_id)
-ORDER BY streams DESC;
+ORDER BY 1, 2;
 
   range_id | stream_count  
 -----------+---------------
