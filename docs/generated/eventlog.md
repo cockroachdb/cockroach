@@ -176,6 +176,54 @@ after being offline.
 | `StartedAt` | The time when this node was last started. | no |
 | `LastUp` | The approximate last time the node was up before the last restart. | no |
 
+### `node_shutdown_connection_timeout`
+
+An event of type `node_shutdown_connection_timeout` is recorded when SQL connections remain open
+during shutdown, after waiting for the server.shutdown.connections.timeout
+to transpire.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Detail` | The detailed message, meant to be a human-understandable explanation. | no |
+| `ConnectionsRemaining` | The number of connections still open after waiting for the client to close them. | no |
+| `TimeoutMillis` | The amount of time the server waited for the client to close the connections, defined by server.shutdown.connections.timeout. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `NodeID` | The node ID where the event was originated. | no |
+| `StartedAt` | The time when this node was last started. | no |
+| `LastUp` | The approximate last time the node was up before the last restart. | no |
+
+### `node_shutdown_transaction_timeout`
+
+An event of type `node_shutdown_transaction_timeout` is recorded when SQL transactions remain open
+during shutdown, after waiting for the server.shutdown.transactions.timeout
+to transpire.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Detail` | The detailed message, meant to be a human-understandable explanation. | no |
+| `ConnectionsRemaining` | The number of connections still running SQL transactions after waiting for the client to end them. | no |
+| `TimeoutMillis` | The amount of time the server waited for the client to close the connections, defined by server.shutdown.transactions.timeout. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `NodeID` | The node ID where the event was originated. | no |
+| `StartedAt` | The time when this node was last started. | no |
+| `LastUp` | The approximate last time the node was up before the last restart. | no |
+
 ### `tenant_shared_service_start`
 
 An event of type `tenant_shared_service_start` is recorded when a tenant server

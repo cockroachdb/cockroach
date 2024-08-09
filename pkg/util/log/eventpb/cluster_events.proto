@@ -57,6 +57,34 @@ message NodeRestart {
   CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
 
+// NodeShutdownConnectionTimeout is recorded when SQL connections remain open
+// during shutdown, after waiting for the server.shutdown.connections.timeout
+// to transpire.
+message NodeShutdownConnectionTimeout {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The detailed message, meant to be a human-understandable explanation.
+  string detail = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.SafeString", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The number of connections still open after waiting for the client to close them.
+  uint64 connections_remaining = 4 [(gogoproto.jsontag) = ",includeempty"];
+  // The amount of time the server waited for the client to close the connections, defined by server.shutdown.connections.timeout.
+  uint64 timeout_millis = 5 [(gogoproto.jsontag) = ",includeempty"];
+}
+
+// NodeShutdownTransactionTimeout is recorded when SQL transactions remain open
+// during shutdown, after waiting for the server.shutdown.transactions.timeout
+// to transpire.
+message NodeShutdownTransactionTimeout {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonNodeEventDetails node = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The detailed message, meant to be a human-understandable explanation.
+  string detail = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.SafeString", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The number of connections still running SQL transactions after waiting for the client to end them.
+  uint64 connections_remaining = 4 [(gogoproto.jsontag) = ",includeempty"];
+  // The amount of time the server waited for the client to close the connections, defined by server.shutdown.transactions.timeout.
+  uint64 timeout_millis = 5 [(gogoproto.jsontag) = ",includeempty"];
+}
+
 
 // CommonNodeDecommissionDetails contains the fields common to all
 // node-level decommission/recommission events.
