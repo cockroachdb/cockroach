@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -98,6 +99,12 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 }
 
 func (n *alterSchemaNode) startExec(params runParams) error {
+	// Exit early with an error if the schema is undergoing a declarative schema
+	// change.
+	if catalog.HasConcurrentDeclarativeSchemaChange(n.desc) {
+		return scerrors.ConcurrentSchemaChangeError(n.desc)
+	}
+
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterSchemaRename:
 		newName := string(t.NewName)
