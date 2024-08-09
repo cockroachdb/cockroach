@@ -460,7 +460,7 @@ func TestRestartsStuckRangeFeeds(t *testing.T) {
 	closeFeed()
 
 	require.True(t, blockingClient.ctxCanceled)
-	require.EqualValues(t, 1, tc.Server(0).DistSenderI().(*kvcoord.DistSender).Metrics().RangefeedRestartStuck.Count())
+	require.EqualValues(t, 1, tc.Server(0).DistSenderI().(*kvcoord.DistSender).Metrics().Errors.Stuck.Count())
 }
 
 func TestRestartsStuckRangeFeedsSecondImplementation(t *testing.T) {
@@ -587,7 +587,7 @@ func TestRestartsStuckRangeFeedsSecondImplementation(t *testing.T) {
 	// NB: We  really expect exactly 1 but with a 1s timeout, it's not inconceivable that
 	// on a particularly slow CI machine some unrelated rangefeed could also catch the occasional
 	// retry.
-	require.NotZero(t, ds.Metrics().RangefeedRestartStuck.Count())
+	require.NotZero(t, ds.Metrics().Errors.Stuck.Count())
 }
 
 func TestMuxRangeCatchupScanQuotaReleased(t *testing.T) {
@@ -682,7 +682,7 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 		// Upon shutdown, make sure the metrics have correct values.
 		defer func() {
 			require.EqualValues(t, 0, metrics.RangefeedRanges.Value())
-			require.EqualValues(t, 0, metrics.RangefeedRestartStuck.Count())
+			require.EqualValues(t, 0, metrics.Errors.Stuck.Count())
 
 			// We injected numRangesToRetry transient errors during catchup scan.
 			// It is possible however, that we will observe key-mismatch error when restarting
@@ -691,8 +691,8 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 			// When iterating through the entire table span, we pick up correct version.
 			// However, if we attempt to re-resolve single range, we may get incorrect/old
 			// version that was cached.  Thus, we occasionally see additional transient restarts.
-			require.GreaterOrEqual(t, metrics.RangefeedErrorCatchup.Count(), numRangesToRetry)
-			require.GreaterOrEqual(t, metrics.RangefeedRestartRanges.Count(), numRangesToRetry)
+			require.GreaterOrEqual(t, metrics.Errors.RangefeedErrorCatchup.Count(), numRangesToRetry)
+			require.GreaterOrEqual(t, metrics.Errors.RangefeedRestartRanges.Count(), numRangesToRetry)
 
 			// Even though numCatchupToBlock ranges were blocked in the catchup scan phase,
 			// the counter should be 0 once rangefeed is done.
