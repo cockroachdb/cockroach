@@ -172,7 +172,7 @@ func withDiff(opt bool) registrationOption {
 
 func withFiltering(opt bool) registrationOption {
 	return func(cfg *testRegistrationConfig) {
-		cfg.withFiltering = true
+		cfg.withFiltering = opt
 	}
 }
 
@@ -184,7 +184,7 @@ func withRMetrics(metrics *Metrics) registrationOption {
 
 func withOmitRemote(opt bool) registrationOption {
 	return func(cfg *testRegistrationConfig) {
-		cfg.withOmitRemote = true
+		cfg.withOmitRemote = opt
 	}
 }
 
