@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -260,12 +260,17 @@ func (sq *splitQueue) processAttempt(
 	size := r.GetMVCCStats().Total()
 	maxBytes := r.GetMaxBytes(ctx)
 	if maxBytes > 0 && size > maxBytes {
+		reason := redact.Sprintf(
+			"%s above threshold size %s",
+			humanizeutil.IBytes(size),
+			humanizeutil.IBytes(maxBytes),
+		)
 		if _, err := r.adminSplitWithDescriptor(
 			ctx,
 			kvpb.AdminSplitRequest{},
 			desc,
 			false, /* delayable */
-			fmt.Sprintf("%s above threshold size %s", humanizeutil.IBytes(size), humanizeutil.IBytes(maxBytes)),
+			reason,
 			false, /* findFirstSafeSplitKey */
 		); err != nil {
 			return false, err
@@ -282,7 +287,7 @@ func (sq *splitQueue) processAttempt(
 		lbSplitSnap := r.loadBasedSplitter.Snapshot(ctx, now)
 		splitObj := lbSplitSnap.SplitObjective
 
-		reason := fmt.Sprintf(
+		reason := redact.Sprintf(
 			"load at key %s (%s %s, %.2f batches/sec, %.2f raft mutations/sec)",
 			splitByLoadKey,
 			splitObj,
