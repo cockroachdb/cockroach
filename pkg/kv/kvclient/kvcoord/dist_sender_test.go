@@ -4399,9 +4399,11 @@ func TestEvictMetaRange(t *testing.T) {
 				// 2) The SuggestedRange is not supplied and we have to an additional
 				//    lookup in meta1 to determine the correct meta2 range.
 
-				// Simulate a split.
+				// Simulate a split. This bumps the generation of the range descriptor.
 				testMeta2RangeDescriptor1.EndKey = splitKey
+				testMeta2RangeDescriptor1.Generation += 1
 				testMeta2RangeDescriptor2.StartKey = splitKey
+				testMeta2RangeDescriptor2.Generation += 1
 				isStale = false
 
 				reply := ba.CreateReply()
@@ -5561,6 +5563,97 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 			})
 		})
 	}
+}
+
+// Test a scenario where the first replica chosen on the list is not yet aware
+// of a split and therefore returns a RangeKeyMismatchError. The client should
+// find the additional replicas that are up-to-date before terminating. This
+// happens when a follower is closest to the leader, but is lagging.
+func TestDistSenderLaggingReplicaPostSplit(t *testing.T) {
+	// The tests are structured to test the following descriptors which simulate
+	// either a split or a merge depending on whether it is splitting from unsplitDesc to
+	// newDesc or oldDesc or merting back to unsplitDesc.
+	//
+	// |------------|---oldDesc(1)-----|
+	// |------ unsplitDesc(2) ---------|
+	// |------------|---newDesc(3)-----|
+	//
+	var unsplitDesc = roachpb.RangeDescriptor{
+		RangeID:    roachpb.RangeID(1),
+		Generation: 2,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			{NodeID: 2, StoreID: 2, ReplicaID: 2},
+		},
+	}
+	splitKey := keys.SystemPrefix
+	reqKey := splitKey.Next()
+
+	var newDesc = unsplitDesc
+	newDesc.Generation = 3
+	newDesc.StartKey = roachpb.RKey(splitKey)
+
+	var oldDesc = unsplitDesc
+	oldDesc.Generation = 1
+	oldDesc.StartKey = roachpb.RKey(splitKey)
+
+	// If the request is to store 1 (first replica), return a
+	// RangeKeyMismatchError with the unsplit descriptor. Store 2 always returns
+	// success.
+	var transportFn = func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+		br := ba.CreateReply()
+		if ba.Replica.StoreID == 1 {
+			br.Error = kvpb.NewError(kvpb.NewRangeKeyMismatchError(ctx, reqKey, reqKey, &unsplitDesc, nil))
+		}
+		return br, nil
+	}
+	ns := &mockNodeStore{nodes: []roachpb.NodeDescriptor{{NodeID: 1}, {NodeID: 2}}}
+
+	testutils.RunTrueAndFalse(t, "clientDescNew", func(t *testing.T, clientDescNew bool) {
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+
+		clientDesc := oldDesc
+		if clientDescNew {
+			clientDesc = newDesc
+		}
+
+		cfg := DistSenderConfig{
+			Stopper:          stopper,
+			AmbientCtx:       log.MakeTestingAmbientCtxWithNewTracer(),
+			NodeDescs:        ns,
+			TransportFactory: adaptSimpleTransport(transportFn),
+			RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
+				[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
+			) {
+				return []roachpb.RangeDescriptor{clientDesc}, nil, nil
+			}),
+			TestingKnobs: ClientTestingKnobs{DontReorderReplicas: true},
+			Settings:     cluster.MakeTestingClusterSettings(),
+		}
+		ds := NewDistSender(cfg)
+
+		tok, err := ds.rangeCache.LookupWithEvictionToken(ctx, roachpb.RKey(reqKey), rangecache.EvictionToken{}, false /* useReverseScan */)
+		require.NoError(t, err)
+		ba := &kvpb.BatchRequest{}
+		ba.Add(kvpb.NewGet(reqKey))
+		br, err := ds.sendToReplicas(ctx, ba, tok, false)
+		require.NoError(t, err)
+
+		if clientDescNew {
+			// The client descriptor is newer, the requests is attempted and
+			// succeeds on the second store.
+			require.Nil(t, br.Error)
+		} else {
+			// The client had a stale descriptor, exit early with a range
+			// mismatch error from the first store.
+			mismatchErr := &kvpb.RangeKeyMismatchError{}
+			require.ErrorAs(t, br.Error.GoError(), &mismatchErr)
+		}
+	})
 }
 
 // Test a scenario where the DistSender first updates the leaseholder in its
