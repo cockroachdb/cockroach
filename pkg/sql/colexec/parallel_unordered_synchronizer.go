@@ -73,11 +73,12 @@ type ParallelUnorderedSynchronizer struct {
 	// streamingMemAcc for the metadata.
 	metadataAccountedFor int64
 	inputs               []colexecargs.OpWithMetaInfo
-	inputCtxs            []context.Context
-	// cancelLocalInput stores context cancellation functions for each of the
-	// inputs. The functions are populated only if localPlan is true.
-	cancelLocalInput []context.CancelFunc
-	tracingSpans     []*tracing.Span
+	// cancelInputsOnDrain stores context cancellation functions for each of the
+	// inputs. The slice is only allocated and populated if eager cancellation
+	// on drain should be performed (see the comments in
+	// NewParallelUnorderedSynchronizer for more details).
+	cancelInputsOnDrain []context.CancelFunc
+	tracingSpans        []*tracing.Span
 	// readNextBatch is a slice of channels, where each channel corresponds to the
 	// input at the same index in inputs. It is used as a barrier for input
 	// goroutines to wait on until the Next goroutine signals that it is safe to
@@ -128,6 +129,21 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execopnode.
 	return s.inputs[nth].Root
 }
 
+// hasParallelUnorderedSync returns whether there is at least one parallel
+// unordered sync in the tree of operators rooted in op.
+func hasParallelUnorderedSync(op execopnode.OpNode) bool {
+	if _, ok := op.(*ParallelUnorderedSynchronizer); ok {
+		return true
+	}
+	const verbose = true
+	for i := 0; i < op.ChildCount(verbose); i++ {
+		if hasParallelUnorderedSync(op.Child(i, verbose)) {
+			return true
+		}
+	}
+	return false
+}
+
 // NewParallelUnorderedSynchronizer creates a new ParallelUnorderedSynchronizer.
 // On the first call to Next, len(inputs) goroutines are spawned to read each
 // input asynchronously (to not be limited by a slow input). These will
@@ -141,6 +157,38 @@ func NewParallelUnorderedSynchronizer(
 	inputs []colexecargs.OpWithMetaInfo,
 	wg *sync.WaitGroup,
 ) *ParallelUnorderedSynchronizer {
+	// Check whether the synchronizer should be allowed to eagerly cancel its
+	// inputs when it transitions into the draining state. This optimization is
+	// needed to support locality-optimized search feature.
+	//
+	// If the plan is distributed, there might be an inbox in the input tree,
+	// and the synchronizer cannot cancel the work eagerly because canceling the
+	// context would break the gRPC stream and make it impossible to fetch the
+	// remote metadata. Furthermore, it will result in the remote flow
+	// cancellation.
+	// TODO(yuzefovich): we could allow eager cancellation in the distributed
+	// plans too, but only of inputs that don't have inboxes in the input tree.
+	var allowEagerCancellationOnDrain bool
+	if flowCtx.Local {
+		// If the plan is local, then the only requirement for allowing eager
+		// cancellation on drain is that there are no other parallel unordered
+		// syncs in the input trees. This is needed since the "child" sync won't
+		// be able to distinguish the benign context cancellation error from a
+		// true query execution error, so it can "poison" the query execution if
+		// the child sync hasn't transitioned into the draining mode when we
+		// perform the eager cancellation.
+		allowEagerCancellationOnDrain = true
+		for _, input := range inputs {
+			if hasParallelUnorderedSync(input.Root) {
+				allowEagerCancellationOnDrain = false
+				break
+			}
+		}
+	}
+	var cancelInputs []context.CancelFunc
+	if allowEagerCancellationOnDrain {
+		cancelInputs = make([]context.CancelFunc, len(inputs))
+	}
 	readNextBatch := make([]chan struct{}, len(inputs))
 	for i := range readNextBatch {
 		// Buffer readNextBatch chans to allow for non-blocking writes. There will
@@ -148,18 +196,17 @@ func NewParallelUnorderedSynchronizer(
 		readNextBatch[i] = make(chan struct{}, 1)
 	}
 	return &ParallelUnorderedSynchronizer{
-		flowCtx:           flowCtx,
-		processorID:       processorID,
-		streamingMemAcc:   streamingMemAcc,
-		inputs:            inputs,
-		inputCtxs:         make([]context.Context, len(inputs)),
-		cancelLocalInput:  make([]context.CancelFunc, len(inputs)),
-		tracingSpans:      make([]*tracing.Span, len(inputs)),
-		readNextBatch:     readNextBatch,
-		batches:           make([]coldata.Batch, len(inputs)),
-		nextBatch:         make([]func(), len(inputs)),
-		externalWaitGroup: wg,
-		internalWaitGroup: &sync.WaitGroup{},
+		flowCtx:             flowCtx,
+		processorID:         processorID,
+		streamingMemAcc:     streamingMemAcc,
+		inputs:              inputs,
+		cancelInputsOnDrain: cancelInputs,
+		tracingSpans:        make([]*tracing.Span, len(inputs)),
+		readNextBatch:       readNextBatch,
+		batches:             make([]coldata.Batch, len(inputs)),
+		nextBatch:           make([]func(), len(inputs)),
+		externalWaitGroup:   wg,
+		internalWaitGroup:   &sync.WaitGroup{},
 		// batchCh is a buffered channel in order to offer non-blocking writes to
 		// input goroutines. During normal operation, this channel will have at most
 		// len(inputs) messages. However, during DrainMeta, inputs might need to
@@ -179,22 +226,14 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 		return
 	}
 	for i, input := range s.inputs {
-		s.inputCtxs[i], s.tracingSpans[i] = execinfra.ProcessorSpan(
+		var inputCtx context.Context
+		inputCtx, s.tracingSpans[i] = execinfra.ProcessorSpan(
 			s.Ctx, s.flowCtx, fmt.Sprintf("parallel unordered sync input %d", i), s.processorID,
 		)
-		if s.flowCtx.Local {
-			// If the plan is local, there are no colrpc.Inboxes in this input
-			// tree, and the synchronizer can cancel the current work eagerly
-			// when transitioning into draining.
-			//
-			// If the plan is distributed, there might be an inbox in the
-			// input tree, and the synchronizer cannot cancel the work eagerly
-			// because canceling the context would break the gRPC stream and
-			// make it impossible to fetch the remote metadata. Furthermore, it
-			// will result in the remote flow cancellation.
-			s.inputCtxs[i], s.cancelLocalInput[i] = context.WithCancel(s.inputCtxs[i])
+		if s.cancelInputsOnDrain != nil {
+			inputCtx, s.cancelInputsOnDrain[i] = context.WithCancel(inputCtx)
 		}
-		input.Root.Init(s.inputCtxs[i])
+		input.Root.Init(inputCtx)
 		s.nextBatch[i] = func(inputOp colexecop.Operator, inputIdx int) func() {
 			return func() {
 				s.batches[inputIdx] = inputOp.Next()
@@ -259,7 +298,7 @@ func (s *ParallelUnorderedSynchronizer) init() {
 				switch state {
 				case parallelUnorderedSynchronizerStateRunning:
 					if err := colexecerror.CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
-						if s.getState() == parallelUnorderedSynchronizerStateDraining && s.Ctx.Err() == nil && s.cancelLocalInput[inputIdx] != nil {
+						if s.getState() == parallelUnorderedSynchronizerStateDraining && s.Ctx.Err() == nil && s.cancelInputsOnDrain != nil {
 							// The synchronizer has just transitioned into the
 							// draining state and eagerly canceled work of this
 							// input. That cancellation is likely to manifest
@@ -419,10 +458,11 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 	if prevState == parallelUnorderedSynchronizerStateUninitialized {
 		s.init()
 	}
-	// Cancel all local inputs (we will still wait for all remote ones to
-	// return the next batch).
-	for _, cancelFunc := range s.cancelLocalInput {
+	// Cancel all inputs if eager cancellation is allowed.
+	for _, cancelFunc := range s.cancelInputsOnDrain {
 		if cancelFunc != nil {
+			// Note that if Init was never called, cancelFunc will be nil, in
+			// which case there is nothing to cancel.
 			cancelFunc()
 		}
 	}
