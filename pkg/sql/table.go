@@ -275,6 +275,11 @@ func (p *planner) writeSchemaChange(
 		return errors.Errorf("no schema changes allowed on table %q as it is being dropped",
 			tableDesc.Name)
 	}
+	// Exit early with an error if the table is undergoing a declarative schema
+	// change.
+	if catalog.HasConcurrentDeclarativeSchemaChange(tableDesc) {
+		return scerrors.ConcurrentSchemaChangeError(tableDesc)
+	}
 	if !tableDesc.IsNew() {
 		if err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc, mutationID); err != nil {
 			return err

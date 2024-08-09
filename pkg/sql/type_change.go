@@ -38,6 +38,7 @@ import (
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -107,6 +108,11 @@ func findTransitioningMembers(desc *typedesc.Mutable) ([][]byte, bool) {
 func (p *planner) writeTypeSchemaChange(
 	ctx context.Context, typeDesc *typedesc.Mutable, jobDesc string,
 ) error {
+	// Exit early with an error if the table is undergoing a declarative schema
+	// change.
+	if catalog.HasConcurrentDeclarativeSchemaChange(typeDesc) {
+		return scerrors.ConcurrentSchemaChangeError(typeDesc)
+	}
 	// Check if there is a cached specification for this type, otherwise create one.
 	record, recordExists := p.extendedEvalCtx.jobs.uniqueToCreate[typeDesc.ID]
 	transitioningMembers, beingDropped := findTransitioningMembers(typeDesc)
