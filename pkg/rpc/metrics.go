@@ -108,6 +108,13 @@ is reset to zero.
 `,
 		Measurement: "Latency",
 	}
+
+	metaConnectionBytesSent = metric.Metadata{
+		Name:        "rpc.connection.bytes_sent",
+		Unit:        metric.Unit_BYTES,
+		Help:        `Count of bytes sent to the remote destination via gRPC.`,
+		Measurement: "Bytes",
+	}
 )
 
 func makeMetrics() Metrics {
@@ -121,6 +128,7 @@ func makeMetrics() Metrics {
 		ConnectionHeartbeats:          aggmetric.NewCounter(metaConnectionHeartbeats, childLabels...),
 		ConnectionFailures:            aggmetric.NewCounter(metaConnectionFailures, childLabels...),
 		ConnectionAvgRoundTripLatency: aggmetric.NewGauge(metaConnectionAvgRoundTripLatency, childLabels...),
+		ConnectionBytesSent:           aggmetric.NewCounter(metaConnectionBytesSent, childLabels...),
 	}
 }
 
@@ -135,6 +143,7 @@ type Metrics struct {
 	ConnectionHeartbeats          *aggmetric.AggCounter
 	ConnectionFailures            *aggmetric.AggCounter
 	ConnectionAvgRoundTripLatency *aggmetric.AggGauge
+	ConnectionBytesSent           *aggmetric.AggCounter
 }
 
 // peerMetrics are metrics that are kept on a per-peer basis.
@@ -181,6 +190,9 @@ type peerMetrics struct {
 	ConnectionHeartbeats *aggmetric.Counter
 	// Updated before each loop around in breakerProbe.run.
 	ConnectionFailures *aggmetric.Counter
+
+	// Incremented after each write.
+	ConnectionBytesSent *aggmetric.Counter
 }
 
 func (m *Metrics) acquire(k peerKey) peerMetrics {
@@ -194,6 +206,7 @@ func (m *Metrics) acquire(k peerKey) peerMetrics {
 		ConnectionHeartbeats:   m.ConnectionHeartbeats.AddChild(labelVals...),
 		ConnectionFailures:     m.ConnectionFailures.AddChild(labelVals...),
 		AvgRoundTripLatency:    m.ConnectionAvgRoundTripLatency.AddChild(labelVals...),
+		ConnectionBytesSent:    m.ConnectionBytesSent.AddChild(labelVals...),
 
 		// We use a SimpleEWMA which uses the zero value to mean "uninitialized"
 		// and operates on a ~60s decay rate.
@@ -224,4 +237,5 @@ func (pm *peerMetrics) release() {
 	pm.ConnectionHeartbeats.Unlink()
 	pm.ConnectionFailures.Unlink()
 	pm.AvgRoundTripLatency.Unlink()
+	pm.ConnectionBytesSent.Unlink()
 }
