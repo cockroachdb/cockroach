@@ -104,7 +104,7 @@ func (c *replicaSplitConfig) NewLoadBasedSplitter(
 	case split.SplitCPU:
 		return split.NewWeightedFinder(startTime, c.randSource)
 	default:
-		panic(errors.AssertionFailedf("Unkown rebalance objective %d", obj))
+		panic(errors.AssertionFailedf("Unknown rebalance objective %d", obj))
 	}
 }
 
@@ -122,7 +122,7 @@ func (c *replicaSplitConfig) StatThreshold(obj split.SplitObjective) float64 {
 	case split.SplitCPU:
 		return float64(SplitByLoadCPUThreshold.Get(&c.st.SV))
 	default:
-		panic(errors.AssertionFailedf("Unkown rebalance objective %d", obj))
+		panic(errors.AssertionFailedf("Unknown rebalance objective %d", obj))
 	}
 }
 
