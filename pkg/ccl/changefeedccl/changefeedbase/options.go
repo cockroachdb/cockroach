@@ -106,6 +106,7 @@ const (
 	OptLaggingRangesPollingInterval       = `lagging_ranges_polling_interval`
 	OptIgnoreDisableChangefeedReplication = `ignore_disable_changefeed_replication`
 	OptEncodeJSONValueNullAsObject        = `encode_json_value_null_as_object`
+	OptExperimentalListenChannel          = `experimental_listen_channel` // TODO: can we not expose this somehow?
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -375,6 +376,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptLaggingRangesPollingInterval:       durationOption,
 	OptIgnoreDisableChangefeedReplication: flagOption,
 	OptEncodeJSONValueNullAsObject:        flagOption,
+	OptExperimentalListenChannel:          stringOption,
 }
 
 // CommonOptions is options common to all sinks
@@ -393,6 +395,9 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 
 // SQLValidOptions is options exclusive to SQL sink
 var SQLValidOptions map[string]struct{} = nil
+
+// SinklessValidOptions is options exclusive to sinkless feeds.
+var SinklessValidOptions map[string]struct{} = makeStringSet(OptExperimentalListenChannel)
 
 // KafkaValidOptions is options exclusive to Kafka sink
 var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig)
@@ -754,6 +759,7 @@ type CanHandle struct {
 	MultipleColumnFamilies bool
 	VirtualColumns         bool
 	RequiredColumns        []string
+	NotificationsTable     bool
 }
 
 // GetCanHandle returns a populated CanHandle.
@@ -766,6 +772,9 @@ func (s StatementOptions) GetCanHandle() CanHandle {
 	}
 	if s.IsSet(OptCustomKeyColumn) {
 		h.RequiredColumns = append(h.RequiredColumns, s.m[OptCustomKeyColumn])
+	}
+	if s.IsSet(OptExperimentalListenChannel) {
+		h.NotificationsTable = true
 	}
 	return h
 }

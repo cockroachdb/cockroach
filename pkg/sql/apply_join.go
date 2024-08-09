@@ -270,7 +270,7 @@ func runPlanInsidePlan(
 	ctx context.Context,
 	params runParams,
 	plan *planComponents,
-	resultWriter rowResultWriter,
+	resultWriter RowResultWriterI,
 	deferredRoutineSender eval.DeferredRoutineSender,
 	stmtForDistSQLDiagram string,
 ) error {

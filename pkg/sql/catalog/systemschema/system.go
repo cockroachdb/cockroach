@@ -120,6 +120,13 @@ CREATE TABLE system.tenants (
 	INDEX tenants_service_mode_idx (service_mode ASC)
 );`
 
+	ListenNotifyQueueTableSchema = `
+CREATE TABLE system.notifications (
+	channel STRING NOT NULL PRIMARY KEY,
+	payload STRING,
+	pid INT4 NOT NULL,
+);`
+
 	// RoleIDSequenceSchema starts at 100 so we have reserved IDs for special
 	// roles such as root and admin.
 	RoleIDSequenceSchema = `
@@ -499,8 +506,8 @@ CREATE TABLE system.scheduled_jobs (
 
  	 FAMILY sched (schedule_id, next_run, schedule_state),
  	 FAMILY other (
-       schedule_name, created, owner, schedule_expr, 
-       schedule_details, executor_type, execution_args 
+       schedule_name, created, owner, schedule_expr,
+       schedule_details, executor_type, execution_args
     )
 )`
 
@@ -966,11 +973,11 @@ CREATE TABLE system.job_info (
 	SpanStatsUniqueKeysTableSchema = `
 CREATE TABLE system.span_stats_unique_keys (
     -- Every key has a unique id. We can't use the value of the key itself
-	-- because we want the cost of storing the key to 
+	-- because we want the cost of storing the key to
 	-- amortize with repeated references. A UUID is 16 bytes,
 	-- but a roachpb.Key can be arbitrarily large.
 	id UUID DEFAULT gen_random_uuid(),
-	
+
 	-- key_bytes stores the raw bytes of a roachpb.Key.
 	key_bytes BYTES,
   	CONSTRAINT "primary" PRIMARY KEY (id),
@@ -984,17 +991,17 @@ CREATE TABLE system.span_stats_unique_keys (
 CREATE TABLE system.span_stats_buckets (
     -- Every bucket has a unique id.
 	id UUID DEFAULT gen_random_uuid(),
-	
+
 	-- The bucket belongs to sample_id
 	sample_id UUID NOT NULL,
-	
+
 	-- The uuid of this bucket's span's start key.
 	start_key_id UUID NOT NULL,
-	
+
 	-- The uuid of this bucket's span's start key.
 	end_key_id UUID NOT NULL,
-	
-	-- The number of KV requests destined for this span. 
+
+	-- The number of KV requests destined for this span.
 	requests INT NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id),
 	INDEX buckets_sample_id_idx (sample_id ASC),
@@ -1007,7 +1014,7 @@ CREATE TABLE system.span_stats_buckets (
 CREATE TABLE system.span_stats_samples (
     -- Every sample has a unique id.
 	id UUID DEFAULT gen_random_uuid(),
-	
+
 	-- sample_time represents the time the sample ended.
 	-- The sample's start time is therefore equal to sample_time - keyvissettings.SampleInterval.
 	sample_time TIMESTAMP NOT NULL DEFAULT now(),
@@ -1068,7 +1075,7 @@ CREATE TABLE system.mvcc_statistics (
 		user_priority                      STRING,
 		retries                            INT8,
 		last_retry_reason                  STRING,
-		problems                           INT[], 
+		problems                           INT[],
 		causes                             INT[],
 		stmt_execution_ids                 STRING[],
 		cpu_sql_nanos                      INT8,
@@ -1418,6 +1425,7 @@ func MakeSystemTables() []SystemTable {
 		SystemMVCCStatisticsTable,
 		StatementExecInsightsTable,
 		TransactionExecInsightsTable,
+		ListenNotifyQueueTable,
 	}
 }
 
@@ -4742,3 +4750,22 @@ var (
 
 // SpanConfigurationsTableName represents system.span_configurations.
 var SpanConfigurationsTableName = tree.NewTableNameWithSchema("system", catconstants.PublicSchemaName, tree.Name(catconstants.SpanConfigurationsTableName))
+
+var ListenNotifyQueueTable = makeSystemTable(
+	ListenNotifyQueueTableSchema,
+	systemTable(
+		catconstants.ListenNotifyQueueTableName,
+		descpb.InvalidID, // dynamically assigned table ID
+		[]descpb.ColumnDescriptor{
+			{Name: "channel", ID: 1, Type: types.String},
+			{Name: "payload", ID: 2, Type: types.String, Nullable: true},
+			{Name: "pid", ID: 3, Type: types.Int4},
+		},
+		[]descpb.ColumnFamilyDescriptor{{
+			Name:        "primary",
+			ID:          0,
+			ColumnNames: []string{"channel", "payload", "pid"},
+			ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+		}},
+		pk("channel"),
+	))

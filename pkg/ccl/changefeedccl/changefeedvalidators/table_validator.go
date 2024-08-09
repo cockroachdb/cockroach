@@ -38,7 +38,10 @@ func validateTable(
 	// changefeeds on system tables would be better served by e.g. better
 	// logging and monitoring features.
 	if catalog.IsSystemDescriptor(tableDesc) {
-		return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
+		// Make an exception for notifications.
+		if tableDesc.GetName() != "notifications" || !canHandle.NotificationsTable {
+			return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
+		}
 	}
 	if tableDesc.IsView() {
 		return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.GetName())

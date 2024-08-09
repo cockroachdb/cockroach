@@ -149,7 +149,7 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 	ctx, sp := tracing.ChildSpan(params.ctx, opName)
 	defer sp.Finish()
 	if err := runPlanInsidePlan(
-		ctx, params, newPlan.(*planComponents), rowResultWriter(n),
+		ctx, params, newPlan.(*planComponents), RowResultWriterI(n),
 		nil /* deferredRoutineSender */, "", /* stmtForDistSQLDiagram */
 	); err != nil {
 		return false, err
@@ -181,7 +181,7 @@ func (n *recursiveCTENode) Close(ctx context.Context) {
 
 // recursiveCTENode implements rowResultWriter and is used as the result writer
 // for each iteration.
-var _ rowResultWriter = (*recursiveCTENode)(nil)
+var _ RowResultWriterI = (*recursiveCTENode)(nil)
 
 // AddRow is part of the rowResultWriter interface.
 //

@@ -294,7 +294,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 		ctx, sp := tracing.ChildSpan(ctx, opName)
 		defer sp.Finish()
 
-		var w rowResultWriter
+		var w RowResultWriterI
 		openCursor := stmtIdx == 1 && g.expr.CursorDeclaration != nil
 		if isFinalPlan {
 			// The result of this statement is the routine's output.

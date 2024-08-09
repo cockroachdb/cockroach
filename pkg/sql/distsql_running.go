@@ -941,7 +941,7 @@ type DistSQLReceiver struct {
 	// These two interfaces refer to the same object, but batchWriter might be
 	// unset (resultWriter is always set). These are used to send the results
 	// to.
-	resultWriter rowResultWriter
+	resultWriter RowResultWriterI
 	batchWriter  batchResultWriter
 
 	// concurrentErrorCh is a buffered channel that allows for concurrent
@@ -1030,9 +1030,9 @@ type DistSQLReceiver struct {
 	}
 }
 
-// rowResultWriter is a subset of CommandResult to be used with the
+// RowResultWriterI is a subset of CommandResult to be used with the
 // DistSQLReceiver. It's implemented by RowResultWriter.
-type rowResultWriter interface {
+type RowResultWriterI interface {
 	// AddRow writes a result row.
 	// Note that the caller owns the row slice and might reuse it.
 	AddRow(ctx context.Context, row tree.Datums) error
@@ -1071,7 +1071,7 @@ var NewTenantNetworkEgressCounter func() TenantNetworkEgressCounter
 // MetadataCallbackWriter wraps a rowResultWriter to stream metadata in a
 // DistSQL flow. It executes a given callback when metadata is added.
 type MetadataCallbackWriter struct {
-	rowResultWriter
+	RowResultWriterI
 	fn func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error
 }
 
@@ -1084,10 +1084,10 @@ func (w *MetadataCallbackWriter) AddMeta(ctx context.Context, meta *execinfrapb.
 
 // NewMetadataCallbackWriter creates a new MetadataCallbackWriter.
 func NewMetadataCallbackWriter(
-	rowResultWriter rowResultWriter,
+	rowResultWriter RowResultWriterI,
 	metaFn func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error,
 ) *MetadataCallbackWriter {
-	return &MetadataCallbackWriter{rowResultWriter: rowResultWriter, fn: metaFn}
+	return &MetadataCallbackWriter{RowResultWriterI: rowResultWriter, fn: metaFn}
 }
 
 // NewMetadataOnlyMetadataCallbackWriter creates a new MetadataCallbackWriter
@@ -1109,7 +1109,7 @@ type errOnlyResultWriter struct {
 	err error
 }
 
-var _ rowResultWriter = &errOnlyResultWriter{}
+var _ RowResultWriterI = &errOnlyResultWriter{}
 var _ batchResultWriter = &errOnlyResultWriter{}
 
 func (w *errOnlyResultWriter) SetError(err error) {
@@ -1138,7 +1138,7 @@ type RowResultWriter struct {
 	err          error
 }
 
-var _ rowResultWriter = &RowResultWriter{}
+var _ RowResultWriterI = &RowResultWriter{}
 
 // NewRowResultWriter creates a new RowResultWriter.
 func NewRowResultWriter(rowContainer *rowContainerHelper) *RowResultWriter {
@@ -1176,7 +1176,7 @@ type CallbackResultWriter struct {
 	err          error
 }
 
-var _ rowResultWriter = &CallbackResultWriter{}
+var _ RowResultWriterI = &CallbackResultWriter{}
 
 // NewCallbackResultWriter creates a new CallbackResultWriter.
 func NewCallbackResultWriter(
@@ -1231,7 +1231,7 @@ type clockUpdater interface {
 // on errors. Nil if the flow overall doesn't run in a transaction.
 func MakeDistSQLReceiver(
 	ctx context.Context,
-	resultWriter rowResultWriter,
+	resultWriter RowResultWriterI,
 	stmtType tree.StatementReturnType,
 	rangeCache *rangecache.RangeCache,
 	txn *kv.Txn,
