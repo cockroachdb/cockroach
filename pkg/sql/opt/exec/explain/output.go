@@ -115,7 +115,7 @@ func (ob *OutputBuilder) AddField(key, value string) {
 // AddFlakyField adds an information field under the current node, hiding the
 // value depending on the given deflake flags.
 func (ob *OutputBuilder) AddFlakyField(flags DeflakeFlags, key, value string) {
-	if ob.flags.Deflake.Has(flags) {
+	if ob.flags.Deflake.HasAny(flags) {
 		value = "<hidden>"
 	}
 	ob.AddField(key, value)
@@ -290,7 +290,7 @@ func (ob *OutputBuilder) AddTopLevelField(key, value string) {
 // AddFlakyTopLevelField adds a top-level field, hiding the value depending on
 // the given deflake flags.
 func (ob *OutputBuilder) AddFlakyTopLevelField(flags DeflakeFlags, key, value string) {
-	if ob.flags.Deflake.Has(flags) {
+	if ob.flags.Deflake.HasAny(flags) {
 		value = "<hidden>"
 	}
 	ob.AddTopLevelField(key, value)
@@ -324,7 +324,7 @@ func (ob *OutputBuilder) AddPlanType(generic, optimized bool) {
 // AddPlanningTime adds a top-level planning time field. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddPlanningTime(delta time.Duration) {
-	if ob.flags.Deflake.Has(DeflakeVolatile) {
+	if ob.flags.Deflake.HasAny(DeflakeVolatile) {
 		delta = 10 * time.Microsecond
 	}
 	ob.AddTopLevelField("planning time", string(humanizeutil.Duration(delta)))
@@ -333,7 +333,7 @@ func (ob *OutputBuilder) AddPlanningTime(delta time.Duration) {
 // AddExecutionTime adds a top-level execution time field. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddExecutionTime(delta time.Duration) {
-	if ob.flags.Deflake.Has(DeflakeVolatile) {
+	if ob.flags.Deflake.HasAny(DeflakeVolatile) {
 		delta = 100 * time.Microsecond
 	}
 	ob.AddTopLevelField("execution time", string(humanizeutil.Duration(delta)))
@@ -342,7 +342,7 @@ func (ob *OutputBuilder) AddExecutionTime(delta time.Duration) {
 // AddClientTime adds a top-level client-level protocol time field. Cannot be
 // called while inside a node.
 func (ob *OutputBuilder) AddClientTime(delta time.Duration) {
-	if ob.flags.Deflake.Has(DeflakeVolatile) {
+	if ob.flags.Deflake.HasAny(DeflakeVolatile) {
 		delta = time.Microsecond
 	}
 	ob.AddTopLevelField("client time", string(humanizeutil.Duration(delta)))
@@ -401,7 +401,7 @@ func (ob *OutputBuilder) AddNetworkStats(messages, bytes int64) {
 // information entirely if we're redacting. Since disk spilling is rare we only
 // include this field is bytes is greater than zero.
 func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
-	if !ob.flags.Deflake.Has(DeflakeVolatile) && bytes > 0 {
+	if !ob.flags.Deflake.HasAny(DeflakeVolatile) && bytes > 0 {
 		ob.AddTopLevelField("max sql temp disk usage",
 			string(humanizeutil.IBytes(bytes)))
 	}
@@ -412,7 +412,7 @@ func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
 // independent of platform because the grunning library isn't currently
 // supported on all platforms.
 func (ob *OutputBuilder) AddCPUTime(cpuTime time.Duration) {
-	if !ob.flags.Deflake.Has(DeflakeVolatile) {
+	if !ob.flags.Deflake.HasAny(DeflakeVolatile) {
 		ob.AddTopLevelField("sql cpu time", string(humanizeutil.Duration(cpuTime)))
 	}
 }
