@@ -109,9 +109,9 @@ stabilize 2 3
   Ready MustSync=true:
   HardState Term:2 Vote:2 Commit:3 Lead:2
   Messages:
-  3->2 MsgAppResp Term:2 Log:1/4 Rejected (Hint: 3)
+  3->2 MsgAppResp Term:2 Log:1/4 Rejected (Hint: 3) Commit:3
 > 2 receiving messages
-  3->2 MsgAppResp Term:2 Log:1/4 Rejected (Hint: 3)
+  3->2 MsgAppResp Term:2 Log:1/4 Rejected (Hint: 3) Commit:3
   DEBUG 2 received MsgAppResp(rejected, hint: (index 3, term 1)) from 3 for index 4
   DEBUG 2 decreased progress of 3 to [StateProbe match=0 next=4]
 > 2 handling Ready
@@ -135,10 +135,10 @@ stabilize 2 3
   CommittedEntries:
   1/4 EntryConfChangeV2 v3
   Messages:
-  3->2 MsgAppResp Term:2 Log:0/5
+  3->2 MsgAppResp Term:2 Log:0/5 Commit:4
   INFO 3 switched to configuration voters=(1 2 3)
 > 2 receiving messages
-  3->2 MsgAppResp Term:2 Log:0/5
+  3->2 MsgAppResp Term:2 Log:0/5 Commit:4
 > 2 handling Ready
   Ready MustSync=false:
   HardState Term:2 Vote:2 Commit:5 Lead:2
@@ -154,6 +154,6 @@ stabilize 2 3
   CommittedEntries:
   2/5 EntryNormal ""
   Messages:
-  3->2 MsgAppResp Term:2 Log:0/5
+  3->2 MsgAppResp Term:2 Log:0/5 Commit:5
 > 2 receiving messages
-  3->2 MsgAppResp Term:2 Log:0/5
+  3->2 MsgAppResp Term:2 Log:0/5 Commit:5

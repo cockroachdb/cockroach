@@ -194,17 +194,17 @@ stabilize
   Entries:
   3/12 EntryNormal ""
   Messages:
-  1->2 MsgAppResp Term:3 Log:0/12
+  1->2 MsgAppResp Term:3 Log:0/12 Commit:11
 > 3 handling Ready
   Ready MustSync=true:
   HardState Term:3 Commit:11 Lead:2
   Entries:
   3/12 EntryNormal ""
   Messages:
-  3->2 MsgAppResp Term:3 Log:0/12
+  3->2 MsgAppResp Term:3 Log:0/12 Commit:11
 > 2 receiving messages
-  1->2 MsgAppResp Term:3 Log:0/12
-  3->2 MsgAppResp Term:3 Log:0/12
+  1->2 MsgAppResp Term:3 Log:0/12 Commit:11
+  3->2 MsgAppResp Term:3 Log:0/12 Commit:11
 > 2 handling Ready
   Ready MustSync=false:
   HardState Term:3 Vote:2 Commit:12 Lead:2
@@ -223,14 +223,14 @@ stabilize
   CommittedEntries:
   3/12 EntryNormal ""
   Messages:
-  1->2 MsgAppResp Term:3 Log:0/12
+  1->2 MsgAppResp Term:3 Log:0/12 Commit:12
 > 3 handling Ready
   Ready MustSync=false:
   HardState Term:3 Commit:12 Lead:2
   CommittedEntries:
   3/12 EntryNormal ""
   Messages:
-  3->2 MsgAppResp Term:3 Log:0/12
+  3->2 MsgAppResp Term:3 Log:0/12 Commit:12
 > 2 receiving messages
-  1->2 MsgAppResp Term:3 Log:0/12
-  3->2 MsgAppResp Term:3 Log:0/12
+  1->2 MsgAppResp Term:3 Log:0/12 Commit:12
+  3->2 MsgAppResp Term:3 Log:0/12 Commit:12

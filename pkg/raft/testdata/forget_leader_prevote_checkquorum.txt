@@ -185,7 +185,7 @@ stabilize 2
   Entries:
   2/13 EntryNormal "prop_1"
   Messages:
-  2->3 MsgAppResp Term:2 Log:0/13
+  2->3 MsgAppResp Term:2 Log:0/13 Commit:12
 
 forget-leader 2
 ----

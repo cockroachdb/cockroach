@@ -171,7 +171,7 @@ stabilize 3
 > 3 handling Ready
   Ready MustSync=false:
   Messages:
-  3->1 MsgAppResp Term:1 Log:1/14 Rejected (Hint: 11)
+  3->1 MsgAppResp Term:1 Log:1/14 Rejected (Hint: 11) Commit:11
 
 log-level none
 ----
