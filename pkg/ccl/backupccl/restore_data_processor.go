@@ -158,12 +158,13 @@ func newRestoreDataProcessor(
 			InputsToDrain: []execinfra.RowSource{input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				rd.ConsumerClosed()
+				meta := &execinfrapb.ProducerMetadata{}
 				if rd.agg != nil {
-					meta := bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
+					meta = bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
 						rd.FlowCtx.NodeID.SQLInstanceID(), rd.FlowCtx.ID, rd.agg)
-					return []execinfrapb.ProducerMetadata{*meta}
 				}
-				return nil
+				meta.BulkProcessorProgress = &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{Drained: true}
+				return []execinfrapb.ProducerMetadata{*meta}
 			},
 		}); err != nil {
 		return nil, err
