@@ -49,7 +49,7 @@ func TestAdapter(t *testing.T) {
 
 	// TODO(#119243): delete the cache in v24.2
 	t.Run("with pts cache", func(t *testing.T) {
-		version := clusterversion.V23_2.Version()
+		version := clusterversion.TODO_Delete_V23_2.Version()
 		adapter := NewAdapter(mc, ms, cluster.MakeTestingClusterSettingsWithVersions(version, version, true))
 		ctx := context.Background()
 

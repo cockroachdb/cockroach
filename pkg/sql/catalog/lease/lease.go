@@ -158,11 +158,11 @@ func readSessionBasedLeasingMode(
 	// mode we are executing in.
 	settingMode := LeaseEnableSessionBasedLeasing.Get(&settings.SV)
 	if settingMode == SessionBasedLeasingAuto {
-		if settings.Version.IsActive(ctx, clusterversion.V24_1_SessionBasedLeasingOnly) {
+		if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1_SessionBasedLeasingOnly) {
 			return SessionBasedOnly
-		} else if settings.Version.IsActive(ctx, clusterversion.V24_1_SessionBasedLeasingDrain) {
+		} else if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1_SessionBasedLeasingDrain) {
 			return SessionBasedDrain
-		} else if settings.Version.IsActive(ctx, clusterversion.V24_1_SessionBasedLeasingDualWrite) {
+		} else if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1_SessionBasedLeasingDualWrite) {
 			return SessionBasedDualWrite
 		} else {
 			return SessionBasedLeasingOff
