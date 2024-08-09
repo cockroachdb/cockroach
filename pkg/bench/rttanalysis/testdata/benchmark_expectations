@@ -67,6 +67,7 @@ exp,benchmark
 3,Jobs/jobs_page_default
 3,Jobs/jobs_page_latest_50
 3,Jobs/jobs_page_type_filtered
+1,Jobs/jobs_page_type_filtered_no_matches
 3,Jobs/jobs_page_type_filtered_no_matches
 8,Jobs/pause_job
 6,Jobs/resume_job
