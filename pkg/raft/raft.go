@@ -673,6 +673,22 @@ func (r *raft) sendHeartbeat(to pb.PeerID) {
 	pr.SentCommit(commit)
 }
 
+// sendFortify sends a fortification RPC to the given peer.
+func (r *raft) sendFortify(to pb.PeerID) {
+	if !r.storeLiveness.SupportFromEnabled() {
+		// The underlying store liveness fabric hasn't been enabled to allow the
+		// leader to request support from peers. No-op.
+		return
+	}
+	if to == r.id {
+		// We handle the case where the leader is trying to fortify itself specially.
+		// Doing so avoids a self-addressed message.
+		// TODO(arul): do this handling.
+		return
+	}
+	r.send(pb.Message{To: to, Type: pb.MsgFortifyLeader})
+}
+
 // bcastAppend sends RPC, with entries to all peers that are not up-to-date
 // according to the progress recorded in r.trk.
 func (r *raft) bcastAppend() {
@@ -694,12 +710,14 @@ func (r *raft) bcastHeartbeat() {
 	})
 }
 
-// bcastFortify sends an RPC to fortify the leader to all peers (including the leader itself).
+// bcastFortify sends an RPC to fortify the leader to all peers (including the
+// leader itself).
 func (r *raft) bcastFortify() {
 	assertTrue(r.state == StateLeader, "only leaders can fortify")
 
-	// TODO(arul): this needs to be hooked up to a version check. For now, treat
-	// it as a no-op.
+	r.trk.Visit(func(id pb.PeerID, _ *tracker.Progress) {
+		r.sendFortify(id)
+	})
 }
 
 func (r *raft) appliedTo(index uint64, size entryEncodingSize) {

@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -3892,6 +3893,7 @@ func newTestConfig(id pb.PeerID, election, heartbeat int, storage Storage) *Conf
 		Storage:         storage,
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
+		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 	}
 }
 

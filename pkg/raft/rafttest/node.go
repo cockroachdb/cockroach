@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 )
 
 type node struct {
@@ -52,6 +53,7 @@ func startNode(id raftpb.PeerID, peers []raft.Peer, iface iface) *node {
 		MaxSizePerMsg:             1024 * 1024,
 		MaxInflightMsgs:           256,
 		MaxUncommittedEntriesSize: 1 << 30,
+		StoreLiveness:             raftstoreliveness.AlwaysLive{},
 	}
 	rn := raft.StartNode(c, peers)
 	n := &node{
@@ -142,6 +144,7 @@ func (n *node) restart() {
 		MaxSizePerMsg:             1024 * 1024,
 		MaxInflightMsgs:           256,
 		MaxUncommittedEntriesSize: 1 << 30,
+		StoreLiveness:             raftstoreliveness.AlwaysLive{},
 	}
 	n.Node = raft.RestartNode(c)
 	n.start()

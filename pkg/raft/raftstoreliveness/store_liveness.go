@@ -68,3 +68,29 @@ type StoreLiveness interface {
 	// point in time.
 	SupportExpired(ts hlc.Timestamp) bool
 }
+
+// AlwaysLive is a mock implementation of StoreLiveness that treats all store
+// to store connections as live.
+type AlwaysLive struct{}
+
+var _ StoreLiveness = AlwaysLive{}
+
+// SupportFor implements the StoreLiveness interface.
+func (AlwaysLive) SupportFor(pb.PeerID) (pb.Epoch, bool) {
+	return pb.Epoch(1), true
+}
+
+// SupportFrom implements the StoreLiveness interface.
+func (AlwaysLive) SupportFrom(pb.PeerID) (pb.Epoch, hlc.Timestamp, bool) {
+	return pb.Epoch(1), hlc.MaxTimestamp, true
+}
+
+// SupportFromEnabled implements the StoreLiveness interface.
+func (AlwaysLive) SupportFromEnabled() bool {
+	return true
+}
+
+// SupportExpired implements the StoreLiveness interface.
+func (AlwaysLive) SupportExpired(hlc.Timestamp) bool {
+	return false
+}
