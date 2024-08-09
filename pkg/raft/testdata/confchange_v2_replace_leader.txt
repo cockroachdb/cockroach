@@ -230,14 +230,20 @@ stabilize
   Entries:
   2/5 EntryNormal ""
   Messages:
+  4->1 MsgFortifyLeader Term:2 Log:0/0
+  4->2 MsgFortifyLeader Term:2 Log:0/0
+  4->3 MsgFortifyLeader Term:2 Log:0/0
   4->1 MsgApp Term:2 Log:1/4 Commit:4 Entries:[2/5 EntryNormal ""]
   4->2 MsgApp Term:2 Log:1/4 Commit:4 Entries:[2/5 EntryNormal ""]
   4->3 MsgApp Term:2 Log:1/4 Commit:4 Entries:[2/5 EntryNormal ""]
 > 1 receiving messages
+  4->1 MsgFortifyLeader Term:2 Log:0/0
   4->1 MsgApp Term:2 Log:1/4 Commit:4 Entries:[2/5 EntryNormal ""]
 > 2 receiving messages
+  4->2 MsgFortifyLeader Term:2 Log:0/0
   4->2 MsgApp Term:2 Log:1/4 Commit:4 Entries:[2/5 EntryNormal ""]
 > 3 receiving messages
+  4->3 MsgFortifyLeader Term:2 Log:0/0
   4->3 MsgApp Term:2 Log:1/4 Commit:4 Entries:[2/5 EntryNormal ""]
 > 1 handling Ready
   Ready MustSync=true:
@@ -245,6 +251,7 @@ stabilize
   Entries:
   2/5 EntryNormal ""
   Messages:
+  1->4 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
   1->4 MsgAppResp Term:2 Log:0/5
 > 2 handling Ready
   Ready MustSync=true:
@@ -252,6 +259,7 @@ stabilize
   Entries:
   2/5 EntryNormal ""
   Messages:
+  2->4 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
   2->4 MsgAppResp Term:2 Log:0/5
 > 3 handling Ready
   Ready MustSync=true:
@@ -259,10 +267,14 @@ stabilize
   Entries:
   2/5 EntryNormal ""
   Messages:
+  3->4 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
   3->4 MsgAppResp Term:2 Log:0/5
 > 4 receiving messages
+  1->4 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
   1->4 MsgAppResp Term:2 Log:0/5
+  2->4 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
   2->4 MsgAppResp Term:2 Log:0/5
+  3->4 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
   3->4 MsgAppResp Term:2 Log:0/5
 > 4 handling Ready
   Ready MustSync=false:

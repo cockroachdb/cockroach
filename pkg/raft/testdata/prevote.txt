@@ -213,11 +213,15 @@ stabilize
   Entries:
   2/13 EntryNormal ""
   Messages:
+  2->1 MsgFortifyLeader Term:2 Log:0/0
+  2->3 MsgFortifyLeader Term:2 Log:0/0
   2->1 MsgApp Term:2 Log:1/12 Commit:12 Entries:[2/13 EntryNormal ""]
   2->3 MsgApp Term:2 Log:1/12 Commit:12 Entries:[2/13 EntryNormal ""]
 > 1 receiving messages
+  2->1 MsgFortifyLeader Term:2 Log:0/0
   2->1 MsgApp Term:2 Log:1/12 Commit:12 Entries:[2/13 EntryNormal ""]
 > 3 receiving messages
+  2->3 MsgFortifyLeader Term:2 Log:0/0
   2->3 MsgApp Term:2 Log:1/12 Commit:12 Entries:[2/13 EntryNormal ""]
 > 1 handling Ready
   Ready MustSync=true:
@@ -225,6 +229,7 @@ stabilize
   Entries:
   2/13 EntryNormal ""
   Messages:
+  1->2 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
   1->2 MsgAppResp Term:2 Log:0/13
 > 3 handling Ready
   Ready MustSync=true:
@@ -232,9 +237,12 @@ stabilize
   Entries:
   2/13 EntryNormal ""
   Messages:
+  3->2 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
   3->2 MsgAppResp Term:2 Log:0/13
 > 2 receiving messages
+  1->2 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
   1->2 MsgAppResp Term:2 Log:0/13
+  3->2 MsgFortifyLeaderResp Term:2 Log:0/0 Rejected (Hint: 0)
   3->2 MsgAppResp Term:2 Log:0/13
 > 2 handling Ready
   Ready MustSync=false:

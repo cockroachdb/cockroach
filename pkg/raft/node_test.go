@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -472,6 +473,7 @@ func TestNodeStart(t *testing.T) {
 		Storage:         storage,
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
+		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 	}
 	StartNode(c, []Peer{{ID: 1}})
 	ctx, cancel, n := newNodeTestHarness(context.Background(), t, c, Peer{ID: 1})
@@ -545,6 +547,7 @@ func TestNodeRestart(t *testing.T) {
 		Storage:         storage,
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
+		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 	}
 	n := RestartNode(c)
 	defer n.Stop()
@@ -593,6 +596,7 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 		Storage:         s,
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
+		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 	}
 	n := RestartNode(c)
 	defer n.Stop()
@@ -616,6 +620,7 @@ func TestNodeAdvance(t *testing.T) {
 		Storage:         storage,
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
+		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 	}
 	ctx, cancel, n := newNodeTestHarness(context.Background(), t, c)
 	defer cancel()
