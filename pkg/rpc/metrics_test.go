@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
@@ -37,9 +38,12 @@ func TestMetricsRelease(t *testing.T) {
 		return count
 	}
 
-	verifyAllFields := func(m Metrics, wantChildren int) (metricFields int) {
-		r := reflect.ValueOf(m)
+	verifyAllFields := func(m *Metrics, wantChildren int) (metricFields int) {
+		r := reflect.ValueOf(m).Elem()
 		for i, n := 0, r.NumField(); i < n; i++ {
+			if !r.Field(i).CanInterface() {
+				continue
+			}
 			field := r.Field(i).Interface()
 			metric, ok := field.(eacher)
 			if !ok { // skip all non-metric fields
@@ -51,16 +55,17 @@ func TestMetricsRelease(t *testing.T) {
 		return metricFields
 	}
 
-	m := makeMetrics()
+	const expectedCount = 11
+	m := makeMetrics(false, false, roachpb.Locality{})
 	// Verify that each metric doesn't have any children at first. Verify the
 	// number of metric fields, as a sanity check (to be modified if fields are
 	// added/deleted).
-	require.Equal(t, 8, verifyAllFields(m, 0))
+	require.Equal(t, expectedCount, verifyAllFields(m, 0))
 	// Verify that a new peer's metrics all get registered.
 	k := peerKey{NodeID: 5, TargetAddr: "192.168.0.1:1234", Class: DefaultClass}
-	pm := m.acquire(k)
-	require.Equal(t, 8, verifyAllFields(m, 1))
+	pm := m.acquire(k, roachpb.Locality{})
+	require.Equal(t, expectedCount, verifyAllFields(m, 1))
 	// Verify that all metrics are unlinked when the peer is released.
 	pm.release()
-	require.Equal(t, 8, verifyAllFields(m, 0))
+	require.Equal(t, expectedCount, verifyAllFields(m, 0))
 }

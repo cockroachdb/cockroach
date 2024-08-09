@@ -304,7 +304,7 @@ func TestTenantClusterFlow(t *testing.T) {
 		})
 		defer podConns[i].Close()
 		pod := pods[i]
-		conn, err := pod.RPCContext().GRPCDialPod(pod.RPCAddr(), pod.SQLInstanceID(), rpc.DefaultClass).Connect(ctx)
+		conn, err := pod.RPCContext().GRPCDialPod(pod.RPCAddr(), pod.SQLInstanceID(), pod.Locality(), rpc.DefaultClass).Connect(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
