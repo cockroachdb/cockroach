@@ -2875,7 +2875,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	rankingsByTenantAccumulator := NewTenantReplicaAccumulator(load.Queries)
 
 	// Query the current L0 sublevels and record the updated maximum to metrics.
-	l0SublevelsMax = int64(syncutil.LoadFloat64(&s.metrics.l0SublevelsWindowedMax))
+	l0SublevelsMax = int64(s.metrics.l0SublevelsWindowedMax.Load())
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		rangeCount++
 		if r.OwnsValidLease(ctx, now) {
