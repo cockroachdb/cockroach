@@ -685,7 +685,6 @@ func runBackupProcessor(
 								// on-disk anywhere yet.
 								metadata: backuppb.BackupManifest_File{
 									Span:                    file.Span,
-									Path:                    file.Path,
 									EntryCounts:             entryCounts,
 									LocalityKV:              destLocalityKV,
 									ApproximatePhysicalSize: uint64(len(file.SST)),
