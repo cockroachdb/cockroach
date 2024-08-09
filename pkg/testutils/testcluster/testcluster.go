@@ -1104,17 +1104,6 @@ func (tc *TestCluster) TransferRangeLeaseOrFatal(
 	}
 }
 
-// IncrClockForLeaseUpgrade run up the clock to force a lease renewal (and thus
-// the change in lease types).
-func (tc *TestCluster) IncrClockForLeaseUpgrade(
-	t serverutils.TestFataler, clock *hlc.HybridManualClock,
-) {
-	clock.Increment(
-		tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().RangeLeaseRenewalDuration().Nanoseconds() +
-			time.Second.Nanoseconds(),
-	)
-}
-
 // MaybeWaitForLeaseUpgrade waits until the lease held for the given range
 // descriptor is upgraded to an epoch-based one, but only if we expect the lease
 // to be upgraded.

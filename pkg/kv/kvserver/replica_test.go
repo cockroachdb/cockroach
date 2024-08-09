@@ -966,7 +966,8 @@ func TestReplicaLease(t *testing.T) {
 					ctx, tc.repl, allSpans(), false, /* requiresClosedTSOlderThanStorageSnap */
 				),
 				Args: &kvpb.RequestLeaseRequest{
-					Lease: lease,
+					Lease:     lease,
+					PrevLease: tc.repl.CurrentLeaseStatus(ctx).Lease,
 				},
 			}, &kvpb.RequestLeaseResponse{}); !testutils.IsError(err, "replica not found") {
 			t.Fatalf("unexpected error: %+v", err)
@@ -1311,7 +1312,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	st := tc.repl.CurrentLeaseStatus(ctx)
 	ba := &kvpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
-	ba.Add(&kvpb.RequestLeaseRequest{Lease: *lease})
+	ba.Add(&kvpb.RequestLeaseRequest{Lease: *lease, PrevLease: st.Lease})
 	_, tok := tc.repl.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
 	ch, _, _, _, pErr := tc.repl.evalAndPropose(ctx, ba, allSpansGuard(), &st, uncertainty.Interval{}, tok.Move(ctx))
 	if pErr == nil {
