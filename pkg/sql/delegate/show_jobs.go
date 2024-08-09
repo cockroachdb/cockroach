@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
+const ageFilter = `(finished IS NULL OR finished > now() - '12h':::interval)`
+
 func constructSelectQuery(n *tree.ShowJobs) string {
 	var baseQuery strings.Builder
 	baseQuery.WriteString(`SELECT job_id, job_type, `)
@@ -77,7 +79,7 @@ func constructSelectQuery(n *tree.ShowJobs) string {
 		// - first all the running jobs sorted in order of start time,
 		// - then all completed jobs sorted in order of completion time.
 		whereClause = fmt.Sprintf(
-			`WHERE %s AND (finished IS NULL OR finished > now() - '12h':::interval)`, typePredicate)
+			`WHERE %s AND %s`, typePredicate, ageFilter)
 		// The "ORDER BY" clause below exploits the fact that all
 		// running jobs have finished = NULL.
 		orderbyClause = `ORDER BY COALESCE(finished, now()) DESC, started DESC`
