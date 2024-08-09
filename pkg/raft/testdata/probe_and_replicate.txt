@@ -355,8 +355,8 @@ raft-log 7
 # Elect node 1 as leader and stabilize.
 campaign 1
 ----
-INFO 1 is starting a new election at term 7
 INFO 1 became candidate at term 8
+INFO 1 is starting a new election at term 8
 INFO 1 [logterm: 6, index: 20] sent MsgVote request to 2 at term 8
 INFO 1 [logterm: 6, index: 20] sent MsgVote request to 3 at term 8
 INFO 1 [logterm: 6, index: 20] sent MsgVote request to 4 at term 8

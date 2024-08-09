@@ -120,8 +120,8 @@ raft-state
 # ForgetLeader is a noop on candidates.
 campaign 3
 ----
-INFO 3 is starting a new election at term 1
 INFO 3 became candidate at term 2
+INFO 3 is starting a new election at term 2
 INFO 3 [logterm: 1, index: 11] sent MsgVote request to 1 at term 2
 INFO 3 [logterm: 1, index: 11] sent MsgVote request to 2 at term 2
 
@@ -175,8 +175,8 @@ INFO 2 forgetting leader 3 at term 2
 
 tick-heartbeat 2
 ----
-INFO 2 is starting a new election at term 2
 INFO 2 became candidate at term 3
+INFO 2 is starting a new election at term 3
 INFO 2 [logterm: 2, index: 12] sent MsgVote request to 1 at term 3
 INFO 2 [logterm: 2, index: 12] sent MsgVote request to 3 at term 3
 

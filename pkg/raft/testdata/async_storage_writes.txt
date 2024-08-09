@@ -15,8 +15,8 @@ INFO newRaft 3 [peers: [1,2,3], term: 0, commit: 10, applied: 10, lastindex: 10,
 
 campaign 1
 ----
-INFO 1 is starting a new election at term 0
 INFO 1 became candidate at term 1
+INFO 1 is starting a new election at term 1
 INFO 1 [logterm: 1, index: 10] sent MsgVote request to 2 at term 1
 INFO 1 [logterm: 1, index: 10] sent MsgVote request to 3 at term 1
 

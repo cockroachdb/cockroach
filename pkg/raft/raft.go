@@ -993,7 +993,6 @@ func (r *raft) hup(t CampaignType) {
 		return
 	}
 
-	r.logger.Infof("%x is starting a new election at term %d", r.id, r.Term)
 	r.campaign(t)
 }
 
@@ -1036,18 +1035,21 @@ func (r *raft) campaign(t CampaignType) {
 		// better safe than sorry.
 		r.logger.Warningf("%x is unpromotable; campaign() should have been called", r.id)
 	}
+	var pre string
 	var term uint64
 	var voteMsg pb.MessageType
 	if t == campaignPreElection {
+		pre = "pre-"
 		r.becomePreCandidate()
-		voteMsg = pb.MsgPreVote
 		// PreVote RPCs are sent for the next term before we've incremented r.Term.
 		term = r.Term + 1
+		voteMsg = pb.MsgPreVote
 	} else {
 		r.becomeCandidate()
-		voteMsg = pb.MsgVote
 		term = r.Term
+		voteMsg = pb.MsgVote
 	}
+	r.logger.Infof("%x is starting a new %selection at term %d", r.id, pre, term)
 	var ids []pb.PeerID
 	{
 		idMap := r.config.Voters.IDs()

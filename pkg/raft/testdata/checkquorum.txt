@@ -27,8 +27,8 @@ ok
 # Campaigning will fail when there is an active leader.
 campaign 2
 ----
-INFO 2 is starting a new election at term 1
 INFO 2 became candidate at term 2
+INFO 2 is starting a new election at term 2
 INFO 2 [logterm: 1, index: 11] sent MsgVote request to 1 at term 2
 INFO 2 [logterm: 1, index: 11] sent MsgVote request to 3 at term 2
 
@@ -134,8 +134,8 @@ stabilize
 # it won't grant votes.
 campaign 2
 ----
-INFO 2 is starting a new election at term 2
 INFO 2 became candidate at term 3
+INFO 2 is starting a new election at term 3
 INFO 2 [logterm: 1, index: 11] sent MsgVote request to 1 at term 3
 INFO 2 [logterm: 1, index: 11] sent MsgVote request to 3 at term 3
 
