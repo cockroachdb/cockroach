@@ -1718,9 +1718,13 @@ func (r *Replica) sendRaftMessages(
 				// Similar optimizations may be possible for other message types,
 				// although MsgAppResp is the only one that has been seen as a
 				// problem in practice.
-				if !message.Reject && message.Index > lastAppResp.Index {
-					lastAppResp = message
+				if !message.Reject {
 					drop = true
+					// NB: the first message "wins" the empty raftpb.Message{} here, so
+					// lastAppResp is always updated when we get here the first time.
+					if !msgAppRespBefore(&message, &lastAppResp) {
+						lastAppResp = message
+					}
 				}
 			}
 
@@ -1732,6 +1736,15 @@ func (r *Replica) sendRaftMessages(
 	if lastAppResp.Index > 0 {
 		r.sendRaftMessage(ctx, lastAppResp)
 	}
+}
+
+// msgAppRespBefore returns true if the first message is a MsgAppResp that could
+// only be sent before the second one. In raft, all log writes and MsgAppResp
+// messages, correspondingly, are ordered by (term, index).
+//
+// Both parameters must be non-reject MsgAppResp messages.
+func msgAppRespBefore(a, b *raftpb.Message) bool {
+	return a.Term < b.Term || a.Term == b.Term && a.Index < b.Index
 }
 
 // sendLocalRaftMsg sends a message to the local raft state machine.
