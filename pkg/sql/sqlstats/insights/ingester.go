@@ -40,7 +40,8 @@ type ConcurrentBufferIngester struct {
 	registry      *lockingRegistry
 	clearRegistry uint32
 
-	closeCh chan struct{}
+	closeCh      chan struct{}
+	testingKnobs *TestingKnobs
 }
 
 type eventBufChPayload struct {
@@ -158,6 +159,12 @@ func (i *ConcurrentBufferIngester) ObserveStatement(
 	if !i.registry.enabled() {
 		return
 	}
+
+	if i.testingKnobs != nil && i.testingKnobs.InsightsWriterStmtInterceptor != nil {
+		i.testingKnobs.InsightsWriterStmtInterceptor(sessionID, statement)
+		return
+	}
+
 	i.guard.AtomicWrite(func(writerIdx int64) {
 		i.guard.eventBuffer[writerIdx] = event{
 			sessionID: sessionID,
@@ -172,6 +179,12 @@ func (i *ConcurrentBufferIngester) ObserveTransaction(
 	if !i.registry.enabled() {
 		return
 	}
+
+	if i.testingKnobs != nil && i.testingKnobs.InsightsWriterTxnInterceptor != nil {
+		i.testingKnobs.InsightsWriterTxnInterceptor(sessionID, transaction)
+		return
+	}
+
 	i.guard.AtomicWrite(func(writerIdx int64) {
 		i.guard.eventBuffer[writerIdx] = event{
 			sessionID:   sessionID,

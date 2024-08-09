@@ -279,9 +279,7 @@ func (s *StatsCollector) ObserveStatement(
 		ErrorCode:            errorCode,
 		ErrorMsg:             errorMsg,
 	}
-	if s.knobs != nil && s.knobs.InsightsWriterStmtInterceptor != nil {
-		s.knobs.InsightsWriterStmtInterceptor(value.SessionID, &insight)
-	} else if s.insightsWriter != nil {
+	if s.insightsWriter != nil {
 		s.insightsWriter.ObserveStatement(value.SessionID, &insight)
 	}
 }
@@ -338,9 +336,7 @@ func (s *StatsCollector) ObserveTransaction(
 		LastErrorMsg:    errorMsg,
 		Status:          status,
 	}
-	if s.knobs != nil && s.knobs.InsightsWriterTxnInterceptor != nil {
-		s.knobs.InsightsWriterTxnInterceptor(ctx, value.SessionID, &insight)
-	} else if s.insightsWriter != nil {
+	if s.insightsWriter != nil {
 		s.insightsWriter.ObserveTransaction(value.SessionID, &insight)
 	}
 }

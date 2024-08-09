@@ -21,7 +21,6 @@ go_library(
         "//pkg/sql/execstats",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
-        "//pkg/sql/sqlstats/insights",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/util/log",
         "//pkg/util/metric",

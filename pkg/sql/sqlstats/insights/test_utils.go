@@ -17,6 +17,15 @@ type TestingKnobs struct {
 	// OnSessionClear is a callback that is triggered when the locking
 	// registry clears a session entry.
 	OnSessionClear func(sessionID clusterunique.ID)
+
+	// InsightsWriterTxnInterceptor is a callback that's triggered when a txn insight
+	// is observed by the ingester. The callback is called instead of writing the
+	// insight to the buffer.
+	InsightsWriterTxnInterceptor func(sessionID clusterunique.ID, transaction *Transaction)
+
+	// InsightsWriterStmtInterceptor is a callback that's triggered when a stmt insight
+	// is observed. The callback is called instead of writing the insight to the buffer.
+	InsightsWriterStmtInterceptor func(sessionID clusterunique.ID, statement *Statement)
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.

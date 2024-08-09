@@ -966,11 +966,13 @@ func TestInsightsClearsPerSessionMemory(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	sessionClosedCh := make(chan struct{})
 	clearedSessionID := clusterunique.ID{}
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Insights: &insights.TestingKnobs{
 				OnSessionClear: func(sessionID clusterunique.ID) {
+					defer close(sessionClosedCh)
 					clearedSessionID = sessionID
 				},
 			},
@@ -992,10 +994,6 @@ func TestInsightsClearsPerSessionMemory(t *testing.T) {
 
 	conn2.Exec(t, "CANCEL SESSION $1", sessionID1)
 
-	testutils.SucceedsSoon(t, func() error {
-		if clearedSessionID.String() != sessionID1 {
-			return fmt.Errorf("expected session id %s, found %s", sessionID1, clearedSessionID)
-		}
-		return nil
-	})
+	<-sessionClosedCh
+	require.Equal(t, clearedSessionID.String(), sessionID1)
 }

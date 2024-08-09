@@ -38,7 +38,7 @@ func TestRecordStatement(t *testing.T) {
 		sqlstats.TxnStatsEnable.Override(ctx, &settings.SV, false)
 		// Initialize knobs & mem container.
 		numStmtInsights := 0
-		knobs := &sqlstats.TestingKnobs{
+		knobs := &insights.TestingKnobs{
 			InsightsWriterStmtInterceptor: func(sessionID clusterunique.ID, statement *insights.Statement) {
 				numStmtInsights++
 			},
@@ -47,8 +47,8 @@ func TestRecordStatement(t *testing.T) {
 			nil, /* uniqueServerCount */
 			testMonitor(ctx, "test-mon", settings),
 			"test-app",
-			knobs,
-			insights.New(settings, insights.NewMetrics(), nil).Anomalies(),
+			nil,
+			insights.New(settings, insights.NewMetrics(), knobs).Anomalies(),
 		)
 		// Record a statement, ensure no insights are generated.
 		statsKey := appstatspb.StatementStatisticsKey{
@@ -72,8 +72,8 @@ func TestRecordTransaction(t *testing.T) {
 		sqlstats.TxnStatsEnable.Override(ctx, &settings.SV, false)
 		// Initialize knobs & mem container.
 		numTxnInsights := 0
-		knobs := &sqlstats.TestingKnobs{
-			InsightsWriterTxnInterceptor: func(ctx context.Context, sessionID clusterunique.ID, transaction *insights.Transaction) {
+		knobs := &insights.TestingKnobs{
+			InsightsWriterTxnInterceptor: func(sessionID clusterunique.ID, transaction *insights.Transaction) {
 				numTxnInsights++
 			},
 		}
@@ -81,8 +81,8 @@ func TestRecordTransaction(t *testing.T) {
 			nil, /* uniqueServerCount */
 			testMonitor(ctx, "test-mon", settings),
 			"test-app",
-			knobs,
-			insights.New(settings, insights.NewMetrics(), nil).Anomalies(),
+			nil,
+			insights.New(settings, insights.NewMetrics(), knobs).Anomalies(),
 		)
 		// Record a transaction, ensure no insights are generated.
 		require.NoError(t, memContainer.RecordTransaction(ctx, appstatspb.TransactionFingerprintID(123), sqlstats.RecordedTxnStats{}))
