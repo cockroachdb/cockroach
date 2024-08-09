@@ -3466,10 +3466,17 @@ func writeCreateTypeDescRow(
 	ctx context.Context,
 	db catalog.DatabaseDescriptor,
 	sc catalog.SchemaDescriptor,
-	resolver tree.TypeReferenceResolver,
+	p *planner,
 	typeDesc catalog.TypeDescriptor,
 	addRow func(...tree.Datum) error,
 ) (written bool, err error) {
+	var typeVariety tree.CreateTypeVariety
+	var typeList []tree.CompositeTypeElem
+	var enumLabels tree.EnumValueList
+	enumLabelsDatum := tree.NewDArray(types.String)
+	resolver := p.semaCtx.TypeResolver
+	descriptors := p.descCollection
+
 	if typeDesc.AsAliasTypeDescriptor() != nil {
 		// Alias types are created implicitly, so we don't have create
 		// statements for them.
@@ -3481,8 +3488,7 @@ func writeCreateTypeDescRow(
 			// statements for them.
 			return false, nil
 		}
-		var enumLabels tree.EnumValueList
-		enumLabelsDatum := tree.NewDArray(types.String)
+
 		for i := 0; i < e.NumEnumMembers(); i++ {
 			rep := e.GetMemberLogicalRepresentation(i)
 			enumLabels = append(enumLabels, tree.EnumValue(rep))
@@ -3490,31 +3496,9 @@ func writeCreateTypeDescRow(
 				return false, err
 			}
 		}
-		name, err := tree.NewUnresolvedObjectName(2, [3]string{e.GetName(), sc.GetName()}, 0)
-		if err != nil {
-			return false, err
-		}
-		node := &tree.CreateType{
-			Variety:    tree.Enum,
-			TypeName:   name,
-			EnumLabels: enumLabels,
-		}
-		return true, addRow(
-			tree.NewDInt(tree.DInt(db.GetID())),  // database_id
-			tree.NewDString(db.GetName()),        // database_name
-			tree.NewDString(sc.GetName()),        // schema_name
-			tree.NewDInt(tree.DInt(e.GetID())),   // descriptor_id
-			tree.NewDString(e.GetName()),         // descriptor_name
-			tree.NewDString(tree.AsString(node)), // create_statement
-			enumLabelsDatum,
-		)
-	}
-	if c := typeDesc.AsCompositeTypeDescriptor(); c != nil {
-		name, err := tree.NewUnresolvedObjectName(2, [3]string{c.GetName(), sc.GetName()}, 0)
-		if err != nil {
-			return false, err
-		}
-		typeList := make([]tree.CompositeTypeElem, c.NumElements())
+		typeVariety = tree.Enum
+	} else if c := typeDesc.AsCompositeTypeDescriptor(); c != nil {
+		typeList = make([]tree.CompositeTypeElem, c.NumElements())
 		for i := 0; i < c.NumElements(); i++ {
 			t := c.GetElementType(i)
 			if err := typedesc.EnsureTypeIsHydrated(
@@ -3525,22 +3509,39 @@ func writeCreateTypeDescRow(
 			typeList[i].Type = t
 			typeList[i].Label = tree.Name(c.GetElementLabel(i))
 		}
-		node := &tree.CreateType{
-			Variety:           tree.Composite,
-			TypeName:          name,
-			CompositeTypeList: typeList,
-		}
-		return true, addRow(
-			tree.NewDInt(tree.DInt(db.GetID())),  // database_id
-			tree.NewDString(db.GetName()),        // database_name
-			tree.NewDString(sc.GetName()),        // schema_name
-			tree.NewDInt(tree.DInt(c.GetID())),   // descriptor_id
-			tree.NewDString(c.GetName()),         // descriptor_name
-			tree.NewDString(tree.AsString(node)), // create_statement
-			tree.DNull,                           // enum_members
-		)
+		typeVariety = tree.Composite
+	} else {
+		return false, errors.AssertionFailedf("unknown type descriptor kind %s", typeDesc.GetKind())
 	}
-	return false, errors.AssertionFailedf("unknown type descriptor kind %s", typeDesc.GetKind())
+
+	name, err := tree.NewUnresolvedObjectName(2, [3]string{typeDesc.GetName(), sc.GetName()}, 0)
+	if err != nil {
+		return false, err
+	}
+	node := &tree.CreateType{
+		Variety:           typeVariety,
+		TypeName:          name,
+		CompositeTypeList: typeList,
+		EnumLabels:        enumLabels,
+	}
+
+	comment, ok := descriptors.GetTypeComment(typeDesc.GetID())
+
+	if !ok {
+		comment = ""
+	} else {
+		comment = fmt.Sprintf(";\nCOMMENT ON TYPE %s IS '%s'", name.String(), comment)
+	}
+
+	return true, addRow(
+		tree.NewDInt(tree.DInt(db.GetID())),          // database_id
+		tree.NewDString(db.GetName()),                // database_name
+		tree.NewDString(sc.GetName()),                // schema_name
+		tree.NewDInt(tree.DInt(typeDesc.GetID())),    // descriptor_id
+		tree.NewDString(typeDesc.GetName()),          // descriptor_name
+		tree.NewDString(tree.AsString(node)+comment), // create_statement
+		enumLabelsDatum,                              // empty for composite types
+	)
 }
 
 var crdbInternalCreateTypeStmtsTable = virtualSchemaTable{
@@ -3559,7 +3560,8 @@ CREATE TABLE crdb_internal.create_type_statements (
 `,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTypeDesc(ctx, p, db, func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typeDesc catalog.TypeDescriptor) error {
-			_, err := writeCreateTypeDescRow(ctx, db, sc, p.semaCtx.TypeResolver, typeDesc, addRow)
+			_, err := writeCreateTypeDescRow(ctx, db, sc, p, typeDesc, addRow)
+
 			return err
 		})
 	},
@@ -3577,7 +3579,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 				if err != nil || typDesc == nil {
 					return false, err
 				}
-				return writeCreateTypeDescRow(ctx, db, scName, p.semaCtx.TypeResolver, typDesc, addRow)
+				return writeCreateTypeDescRow(ctx, db, scName, p, typDesc, addRow)
 			},
 		},
 	},
