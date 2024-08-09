@@ -89,6 +89,7 @@ func DescribeHardState(hs pb.HardState) string {
 	}
 	fmt.Fprintf(&buf, " Commit:%d", hs.Commit)
 	fmt.Fprintf(&buf, " Lead:%d", hs.Lead)
+	fmt.Fprintf(&buf, " LeadEpoch:%d", hs.LeadEpoch)
 	return buf.String()
 }
 
