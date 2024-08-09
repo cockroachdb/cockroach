@@ -588,6 +588,7 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 		tokensMaxCapacity,
 		elasticTokensMaxCapacity,
 		diskBWTokenMaxCapacity,
+		io.diskBandwidthLimiter.state.estimatedWriteAmp,
 		remainingTicks == 1,
 	)
 	io.byteTokensUsed += tokensUsed
@@ -639,15 +640,15 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 		// Disk Bandwidth tokens.
 		io.aux.diskBW.intervalDiskLoadInfo = computeIntervalDiskLoadInfo(
 			cumDiskBW.bytesRead, cumDiskBW.bytesWritten, metrics.DiskStats)
-		diskTokensUsed := io.kvGranter.getDiskTokensUsedAndReset()
-		io.aux.diskBW.intervalLSMInfo = intervalLSMInfo{
-			incomingBytes:     int64(cumLSMIncomingBytes) - int64(cumDiskBW.incomingLSMBytes),
-			regularTokensUsed: diskTokensUsed[admissionpb.RegularWorkClass],
-			elasticTokensUsed: diskTokensUsed[admissionpb.ElasticWorkClass],
+		diskTokensRequested, diskTokensUsed := io.kvGranter.getDiskTokensUsedAndReset()
+		io.aux.diskBW.intervalUtilInfo = intervalUtilInfo{
+			actualTokensUsed: diskTokensUsed,
+			requestedTokens:  diskTokensRequested,
 		}
 		if metrics.DiskStats.ProvisionedBandwidth > 0 {
-			io.elasticDiskBWTokens = io.diskBandwidthLimiter.computeElasticTokens(ctx,
-				io.aux.diskBW.intervalDiskLoadInfo, io.aux.diskBW.intervalLSMInfo)
+			tokens := io.diskBandwidthLimiter.computeElasticTokens(ctx,
+				io.aux.diskBW.intervalDiskLoadInfo, io.aux.diskBW.intervalUtilInfo)
+			io.elasticDiskBWTokens = tokens.writeBWTokens
 			io.elasticDiskBWTokensAllocated = 0
 		}
 		if metrics.DiskStats.ProvisionedBandwidth == 0 ||
@@ -713,7 +714,7 @@ type adjustTokensAuxComputations struct {
 
 	diskBW struct {
 		intervalDiskLoadInfo intervalDiskLoadInfo
-		intervalLSMInfo      intervalLSMInfo
+		intervalUtilInfo     intervalUtilInfo
 	}
 }
 
@@ -1236,8 +1237,9 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 	if res.elasticDiskBWTokens != unlimitedTokens {
 		p.Printf("; elastic-disk-bw tokens %s (used %s, regular used %s): "+
 			"write model %.2fx+%s ingest model %.2fx+%s, ",
-			ib(res.elasticDiskBWTokens), ib(res.aux.diskBW.intervalLSMInfo.elasticTokensUsed),
-			ib(res.aux.diskBW.intervalLSMInfo.regularTokensUsed),
+			ib(res.elasticDiskBWTokens),
+			ib(res.aux.diskBW.intervalUtilInfo.actualTokensUsed[admissionpb.ElasticWorkClass].writeBWTokens),
+			ib(res.aux.diskBW.intervalUtilInfo.actualTokensUsed[admissionpb.RegularWorkClass].writeBWTokens),
 			res.l0WriteLM.multiplier, ib(res.l0WriteLM.constant),
 			res.ingestLM.multiplier, ib(res.ingestLM.constant))
 		p.Printf("disk bw read %s write %s provisioned %s",
