@@ -547,6 +547,17 @@ func TestRandomTables(t *testing.T) {
 	runnerA.Exec(t, stmt)
 	runnerB.Exec(t, stmt)
 
+	// TODO(ssd): We have to turn off randomized_anchor_key
+	// because this, in combination of optimizer difference that
+	// might prevent CommitInBatch, could result in the replicated
+	// transaction being too large to commit.
+	runnerA.Exec(t, "SET CLUSTER SETTING kv.transaction.randomized_anchor_key.enabled=false")
+
+	// Workaround for the behaviour described in #127321. This
+	// ensures that we are generating rows using similar
+	// optimization decisions to our replication process.
+	runnerA.Exec(t, "SET plan_cache_mode=force_generic_plan")
+
 	numInserts := 20
 	_, err := randgen.PopulateTableWithRandData(rng,
 		sqlA, tableName, numInserts, nil)
