@@ -30,4 +30,5 @@ go_library(
     embed = [":cloudpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/cloudpb",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/util/cidr"],
 )

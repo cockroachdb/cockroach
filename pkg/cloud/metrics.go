@@ -14,8 +14,12 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
@@ -30,14 +34,14 @@ type Metrics struct {
 	// OpenReaders is the number of currently open cloud readers.
 	OpenReaders *metric.Gauge
 	// ReadBytes counts the bytes read from cloud storage.
-	ReadBytes *metric.Counter
+	ReadBytes *aggmetric.AggCounter
 
 	// Writers counts the cloud storage writers opened.
 	CreatedWriters *metric.Counter
 	// OpenReaders is the number of currently open cloud writers.
 	OpenWriters *metric.Gauge
 	// WriteBytes counts the bytes written to cloud storage.
-	WriteBytes *metric.Counter
+	WriteBytes *aggmetric.AggCounter
 
 	// Listings counts the listing calls made to cloud storage.
 	Listings *metric.Counter
@@ -47,6 +51,18 @@ type Metrics struct {
 	// ConnsOpened, ConnsReused and TLSHandhakes track connection http info for cloud
 	// storage when collecting this info is enabled.
 	ConnsOpened, ConnsReused, TLSHandhakes *metric.Counter
+
+	cidrLookup *cidr.Lookup
+
+	mu struct {
+		syncutil.Mutex
+		containers map[cloudpb.MetricKey]containerMetrics
+	}
+}
+
+type containerMetrics struct {
+	WriteBytes *aggmetric.Counter
+	ReadBytes  *aggmetric.Counter
 }
 
 // MakeMetrics returns a new instance of Metrics.
@@ -128,19 +144,22 @@ func MakeMetrics() metric.Struct {
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
 	}
-	return &Metrics{
+	m := Metrics{
 		CreatedReaders: metric.NewCounter(cloudReaders),
 		OpenReaders:    metric.NewGauge(cloudOpenReaders),
-		ReadBytes:      metric.NewCounter(cloudReadBytes),
+		ReadBytes:      aggmetric.NewCounter(cloudReadBytes, "cloud", "container", "cidr"),
 		CreatedWriters: metric.NewCounter(cloudWriters),
 		OpenWriters:    metric.NewGauge(cloudOpenWriters),
-		WriteBytes:     metric.NewCounter(cloudWriteBytes),
+		WriteBytes:     aggmetric.NewCounter(cloudWriteBytes, "cloud", "container", "cidr"),
 		Listings:       metric.NewCounter(listings),
 		ListingResults: metric.NewCounter(listingResults),
 		ConnsOpened:    metric.NewCounter(connsOpened),
 		ConnsReused:    metric.NewCounter(connsReused),
 		TLSHandhakes:   metric.NewCounter(tlsHandhakes),
 	}
+	m.mu.containers = make(map[cloudpb.MetricKey]containerMetrics)
+
+	return &m
 }
 
 var _ metric.Struct = (*Metrics)(nil)
@@ -150,42 +169,61 @@ func (m *Metrics) MetricStruct() {}
 
 // Reader implements the ReadWriterInterceptor interface.
 func (m *Metrics) Reader(
-	_ context.Context, _ ExternalStorage, r ioctx.ReadCloserCtx,
+	_ context.Context, es ExternalStorage, r ioctx.ReadCloserCtx,
 ) ioctx.ReadCloserCtx {
 	if m == nil {
 		return r
 	}
 	m.CreatedReaders.Inc(1)
 	m.OpenReaders.Inc(1)
+
 	return &metricsReader{
 		inner: r,
 		m:     m,
+		cm:    m.makeContainerMetrics(es.Conf().GetMetricKey(m.cidrLookup)),
 	}
 }
 
 // Writer implements the ReadWriterInterceptor interface.
-func (m *Metrics) Writer(_ context.Context, _ ExternalStorage, w io.WriteCloser) io.WriteCloser {
+func (m *Metrics) Writer(_ context.Context, es ExternalStorage, w io.WriteCloser) io.WriteCloser {
 	if m == nil {
 		return w
 	}
 	m.CreatedWriters.Inc(1)
 	m.OpenWriters.Inc(1)
 	return &metricsWriter{
-		w: w,
-		m: m,
+		w:  w,
+		m:  m,
+		cm: m.makeContainerMetrics(es.Conf().GetMetricKey(m.cidrLookup)),
 	}
+}
+
+func (m *Metrics) makeContainerMetrics(k cloudpb.MetricKey) containerMetrics {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if ret, ok := m.mu.containers[k]; ok {
+		return ret
+	}
+
+	cm := containerMetrics{
+		WriteBytes: m.WriteBytes.AddChild(k.Endpoint, k.Container, k.Cidr),
+		ReadBytes:  m.ReadBytes.AddChild(k.Endpoint, k.Container, k.Cidr),
+	}
+	m.mu.containers[k] = cm
+	return cm
 }
 
 type metricsReader struct {
 	inner  ioctx.ReadCloserCtx
 	m      *Metrics
+	cm     containerMetrics
 	closed bool
 }
 
 // Read implements the ioctx.ReadCloserCtx interface.
 func (mr *metricsReader) Read(ctx context.Context, p []byte) (int, error) {
 	n, err := mr.inner.Read(ctx, p)
-	mr.m.ReadBytes.Inc(int64(n))
+	mr.cm.ReadBytes.Inc(int64(n))
 	return n, err
 }
 
@@ -202,13 +240,14 @@ func (mr *metricsReader) Close(ctx context.Context) error {
 type metricsWriter struct {
 	w      io.WriteCloser
 	m      *Metrics
+	cm     containerMetrics
 	closed bool
 }
 
 // Write implements the WriteCloser interface.
 func (mw *metricsWriter) Write(p []byte) (int, error) {
 	n, err := mw.w.Write(p)
-	mw.m.WriteBytes.Inc(int64(n))
+	mw.cm.WriteBytes.Inc(int64(n))
 	return n, err
 }
 

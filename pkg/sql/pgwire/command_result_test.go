@@ -40,6 +40,10 @@ func (conn *fakeConn) Write(b []byte) (n int, err error) {
 	return len(b), nil
 }
 
+func (conn *fakeConn) RemoteAddr() net.Addr {
+	return nil
+}
+
 func TestTruncateCommandResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

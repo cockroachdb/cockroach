@@ -319,7 +319,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	// dependency cycles.
 	ca.metrics = ca.FlowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 	scope, _ := opts.GetMetricScope()
-	ca.sliMetrics, err = ca.metrics.getSLIMetrics(scope)
+	ca.sliMetrics, err = ca.metrics.getSLIMetrics(scope, ca.FlowCtx.EvalCtx.CidrLookup.LookupURI(ca.spec.Feed.SinkURI))
 	if err != nil {
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -1192,7 +1192,8 @@ func newChangeFrontierProcessor(
 		return nil, err
 	}
 
-	sliMertics, err := flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptMetricsScope])
+	networkTag := flowCtx.EvalCtx.CidrLookup.LookupURI(cf.spec.Feed.SinkURI)
+	sliMertics, err := flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptMetricsScope], networkTag)
 	if err != nil {
 		return nil, err
 	}
@@ -1232,7 +1233,10 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	// but the oracle is only used when emitting row updates.
 	var nilOracle timestampLowerBoundOracle
 	var err error
-	sli, err := cf.metrics.getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptMetricsScope])
+	sli, err := cf.metrics.getSLIMetrics(
+		cf.spec.Feed.Opts[changefeedbase.OptMetricsScope],
+		cf.FlowCtx.EvalCtx.CidrLookup.LookupURI(cf.spec.Feed.SinkURI),
+	)
 	if err != nil {
 		cf.MoveToDraining(err)
 		return

@@ -91,6 +91,9 @@ func (c *AggCounter) AddChild(labelVals ...string) *Counter {
 // parent. When metrics are collected by prometheus, each of the children will
 // appear with a distinct label, however, when cockroach internally collects
 // metrics, only the parent is collected.
+//
+// TODO(baptist): Consider an interface which both metric.Counter and
+// aggmetric.Counter implement with Inc and Value methods.
 type Counter struct {
 	parent *AggCounter
 	labelValuesSlice

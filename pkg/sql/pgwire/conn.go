@@ -67,7 +67,7 @@ type conn struct {
 	cancelConn context.CancelFunc
 
 	sessionArgs sql.SessionArgs
-	metrics     *tenantSpecificMetrics
+	metrics     connMetrics
 
 	// startTime is the time when the connection attempt was first received
 	// by the server.
@@ -131,7 +131,7 @@ func (c *conn) sendError(ctx context.Context, err error) error {
 	// trying to send the client error. This is because clients that
 	// receive error payload are highly correlated with clients
 	// disconnecting abruptly.
-	_ /* err */ = c.writeErr(ctx, err, c.conn)
+	_ /* err */ = c.writeErr(ctx, err, c.conn, c.metrics.DestinationMetrics.BytesOutCount.Inc)
 	return err
 }
 
@@ -188,7 +188,7 @@ func (c *conn) processCommands(
 				retErr = pgerror.WithCandidateCode(retErr, pgcode.CrashShutdown)
 				// Add a prefix. This also adds a stack trace.
 				retErr = errors.Wrap(retErr, "caught fatal error")
-				_ = c.writeErr(ctx, retErr, &c.writerState.buf)
+				_ = c.writeErr(ctx, retErr, &c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc)
 				_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
 				c.stmtBuf.Close()
 			}
@@ -262,12 +262,12 @@ func (c *conn) bufferParamStatus(param, value string) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgParameterStatus)
 	c.msgBuilder.writeTerminatedString(param)
 	c.msgBuilder.writeTerminatedString(value)
-	return c.msgBuilder.finishMsg(&c.writerState.buf)
+	return c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc)
 }
 
 func (c *conn) bufferNotice(ctx context.Context, noticeErr pgnotice.Notice) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgNoticeResponse)
-	return c.writeErrFields(ctx, noticeErr, &c.writerState.buf)
+	return c.writeErrFields(ctx, noticeErr, &c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc)
 }
 
 func (c *conn) sendInitialConnData(
@@ -286,7 +286,7 @@ func (c *conn) sendInitialConnData(
 		sessionID,
 	)
 	if err != nil {
-		_ /* err */ = c.writeErr(ctx, err, c.conn)
+		_ /* err */ = c.writeErr(ctx, err, c.conn, c.metrics.DestinationMetrics.BytesOutCount.Inc)
 		return sql.ConnectionHandler{}, err
 	}
 
@@ -326,14 +326,14 @@ func (c *conn) bufferInitialReadyForQuery(queryCancelKey pgwirecancel.BackendKey
 	// Send our BackendKeyData to the client, so they can cancel the connection.
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgBackendKeyData)
 	c.msgBuilder.putInt64(int64(queryCancelKey))
-	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 		return err
 	}
 
 	// An initial ServerMsgReady message is part of the handshake.
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgReady)
 	c.msgBuilder.writeByte(byte(sql.IdleTxnBlock))
-	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 		return err
 	}
 	return nil
@@ -808,7 +808,7 @@ func (c *conn) BeginCopyIn(
 	for range columns {
 		c.msgBuilder.putInt16(int16(format))
 	}
-	return c.msgBuilder.finishMsg(c.conn)
+	return c.msgBuilder.finishMsg(c.conn, c.metrics.DestinationMetrics.BytesOutCount.Inc)
 }
 
 // Rd is part of the pgwirebase.Conn interface.
@@ -900,7 +900,7 @@ func (c *conn) bufferRow(ctx context.Context, row tree.Datums, r *commandResult)
 			c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
 		}
 	}
-	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 		return err
 	}
 	if err := c.maybeFlush(r.pos, r.bufferingDisabled); err != nil {
@@ -942,7 +942,7 @@ func (c *conn) bufferBatch(ctx context.Context, batch coldata.Batch, r *commandR
 					c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
 				}
 			}
-			if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+			if err := c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 				return err
 			}
 			if err := c.maybeFlush(r.pos, r.bufferingDisabled); err != nil {
@@ -964,7 +964,7 @@ var _ sql.TenantNetworkEgressCounter = &tenantEgressCounter{}
 
 func newTenantEgressCounter() sql.TenantNetworkEgressCounter {
 	counter := &tenantEgressCounter{}
-	counter.buf.init(nil /* byteCount */)
+	counter.buf.init()
 	return counter
 }
 
@@ -1028,28 +1028,28 @@ func (c *tenantEgressCounter) GetBatchNetworkEgress(
 func (c *conn) bufferReadyForQuery(txnStatus byte) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgReady)
 	c.msgBuilder.writeByte(txnStatus)
-	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferParseComplete() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgParseComplete)
-	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferBindComplete() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgBindComplete)
-	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferCloseComplete() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgCloseComplete)
-	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
@@ -1058,27 +1058,27 @@ func (c *conn) bufferCommandComplete(tag []byte) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgCommandComplete)
 	c.msgBuilder.write(tag)
 	c.msgBuilder.nullTerminate()
-	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferPortalSuspended() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgPortalSuspended)
-	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferErr(ctx context.Context, err error) {
-	if err := c.writeErr(ctx, err, &c.writerState.buf); err != nil {
+	if err := c.writeErr(ctx, err, &c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferEmptyQueryResponse() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgEmptyQuery)
-	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
@@ -1088,14 +1088,18 @@ type errWriter struct {
 	msgBuilder *writeBuffer
 }
 
-func (w *errWriter) writeErr(ctx context.Context, err error, out io.Writer) error {
+func (w *errWriter) writeErr(
+	ctx context.Context, err error, out io.Writer, metrics func(int64),
+) error {
 	// Record telemetry for the error.
 	sqltelemetry.RecordError(ctx, err, w.sv)
 	w.msgBuilder.initMsg(pgwirebase.ServerMsgErrorResponse)
-	return w.writeErrFields(ctx, err, out)
+	return w.writeErrFields(ctx, err, out, metrics)
 }
 
-func (w *errWriter) writeErrFields(ctx context.Context, err error, out io.Writer) error {
+func (w *errWriter) writeErrFields(
+	ctx context.Context, err error, out io.Writer, metrics func(int64),
+) error {
 	pgErr := pgerror.Flatten(err)
 
 	w.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
@@ -1144,7 +1148,7 @@ func (w *errWriter) writeErrFields(ctx context.Context, err error, out io.Writer
 	w.msgBuilder.writeTerminatedString(pgErr.Message)
 
 	w.msgBuilder.nullTerminate()
-	return w.msgBuilder.finishMsg(out)
+	return w.msgBuilder.finishMsg(out, metrics)
 }
 
 func (c *conn) bufferParamDesc(types []oid.Oid) {
@@ -1153,14 +1157,14 @@ func (c *conn) bufferParamDesc(types []oid.Oid) {
 	for _, t := range types {
 		c.msgBuilder.putInt32(int32(t))
 	}
-	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferNoDataMsg() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgNoData)
-	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
@@ -1172,7 +1176,7 @@ func (c *conn) bufferCopyOut(columns []colinfo.ResultColumn, format pgwirebase.F
 	for range columns {
 		c.msgBuilder.putInt16(int16(format))
 	}
-	return c.msgBuilder.finishMsg(&c.writerState.buf)
+	return c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc)
 }
 
 func (c *conn) bufferCopyData(copyData []byte, res *commandResult) error {
@@ -1180,7 +1184,7 @@ func (c *conn) bufferCopyData(copyData []byte, res *commandResult) error {
 	if _, err := c.msgBuilder.Write(copyData); err != nil {
 		return err
 	}
-	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 		return err
 	}
 	if err := c.maybeFlush(res.pos, res.bufferingDisabled); err != nil {
@@ -1192,7 +1196,7 @@ func (c *conn) bufferCopyData(copyData []byte, res *commandResult) error {
 
 func (c *conn) bufferCopyDone() error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyDoneCommand)
-	return c.msgBuilder.finishMsg(&c.writerState.buf)
+	return c.msgBuilder.finishMsg(&c.writerState.buf, c.metrics.DestinationMetrics.BytesInCount.Inc)
 }
 
 // writeRowDescription writes a row description to the given writer.
@@ -1226,7 +1230,7 @@ func (c *conn) writeRowDescription(
 			c.msgBuilder.putInt16(int16(formatCodes[i]))
 		}
 	}
-	if err := c.msgBuilder.finishMsg(w); err != nil {
+	if err := c.msgBuilder.finishMsg(w, c.metrics.DestinationMetrics.BytesOutCount.Inc); err != nil {
 		c.setErr(err)
 		return err
 	}
@@ -1432,14 +1436,14 @@ var _ pgwirebase.BufferedReader = &pgwireReader{}
 // Read is part of the pgwirebase.BufferedReader interface.
 func (r *pgwireReader) Read(p []byte) (int, error) {
 	n, err := r.conn.rd.Read(p)
-	r.conn.metrics.BytesInCount.Inc(int64(n))
+	r.conn.metrics.DestinationMetrics.BytesInCount.Inc(int64(n))
 	return n, err
 }
 
 // ReadString is part of the pgwirebase.BufferedReader interface.
 func (r *pgwireReader) ReadString(delim byte) (string, error) {
 	s, err := r.conn.rd.ReadString(delim)
-	r.conn.metrics.BytesInCount.Inc(int64(len(s)))
+	r.conn.metrics.DestinationMetrics.BytesInCount.Inc(int64(len(s)))
 	return s, err
 }
 
@@ -1447,7 +1451,7 @@ func (r *pgwireReader) ReadString(delim byte) (string, error) {
 func (r *pgwireReader) ReadByte() (byte, error) {
 	b, err := r.conn.rd.ReadByte()
 	if err == nil {
-		r.conn.metrics.BytesInCount.Inc(1)
+		r.conn.metrics.DestinationMetrics.BytesInCount.Inc(1)
 	}
 	return b, err
 }

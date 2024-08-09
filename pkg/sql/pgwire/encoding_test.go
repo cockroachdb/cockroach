@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/lib/pq/oid"
 )
 
@@ -133,7 +132,7 @@ func TestEncodings(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	tests := readEncodingTests(t)
-	buf := newWriteBuffer(metric.NewCounter(metric.Metadata{}))
+	buf := newWriteBuffer()
 
 	verifyLen := func(t *testing.T) []byte {
 		t.Helper()
@@ -358,7 +357,7 @@ func TestExoticNumericEncodings(t *testing.T) {
 
 func BenchmarkEncodings(b *testing.B) {
 	tests := readEncodingTests(b)
-	buf := newWriteBuffer(metric.NewCounter(metric.Metadata{}))
+	buf := newWriteBuffer()
 	conv, loc := makeTestingConvCfg()
 	ctx := context.Background()
 
