@@ -40,6 +40,8 @@ type ConcurrentBufferIngester struct {
 	registry      *lockingRegistry
 	running       uint64
 	clearRegistry uint32
+
+	closeCh chan struct{}
 }
 
 type eventBufChPayload struct {
@@ -101,6 +103,7 @@ func (i *ConcurrentBufferIngester) Start(
 				eventBufferPool.Put(payload.events)
 			case <-stopper.ShouldQuiesce():
 				atomic.StoreUint64(&i.running, 0)
+				close(i.closeCh)
 				return
 			}
 		}
@@ -188,6 +191,7 @@ func newConcurrentBufferIngester(registry *lockingRegistry) *ConcurrentBufferIng
 		// adjusting our carrying capacity.
 		eventBufferCh: make(chan eventBufChPayload, 1),
 		registry:      registry,
+		closeCh:       make(chan struct{}),
 	}
 
 	i.guard.eventBuffer = eventBufferPool.Get().(*eventBuffer)
@@ -202,11 +206,12 @@ func newConcurrentBufferIngester(registry *lockingRegistry) *ConcurrentBufferIng
 					atomic.StoreUint32(&i.clearRegistry, 0)
 				}()
 			}
-			if atomic.LoadUint64(&i.running) == 1 {
-				i.eventBufferCh <- eventBufChPayload{
-					clearRegistry: clearRegistry,
-					events:        i.guard.eventBuffer,
-				}
+			select {
+			case i.eventBufferCh <- eventBufChPayload{
+				clearRegistry: clearRegistry,
+				events:        i.guard.eventBuffer,
+			}:
+			case <-i.closeCh:
 			}
 			i.guard.eventBuffer = eventBufferPool.Get().(*eventBuffer)
 		},

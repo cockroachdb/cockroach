@@ -193,6 +193,8 @@ func TestIngester_Disabled(t *testing.T) {
 }
 
 func TestIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// We have seen some tests hanging in CI, implicating this ingester in
 	// their goroutine dumps. We reproduce what we think is happening here,
 	// observing high volumes of SQL traffic after our consumer has shut down.
@@ -245,4 +247,45 @@ func (s testEvent) TransactionID() uuid.UUID {
 
 func (s testEvent) StatementID() clusterunique.ID {
 	return clusterunique.ID{Uint128: uint128.FromInts(0, s.statementID)}
+}
+
+// We had an issue with the insights ingester flush task being blocked
+// forever on shutdown. This was because of a bug where the order of
+// operations during stopper quiescence could cause `ForceSync()` to be
+// triggered twice without an intervening ingest operation. The second
+// `ForceSync()` would block forever because the buffer channel has a
+// capacity of 1.
+func TestIngesterBlockedForceSync(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	st := cluster.MakeTestingClusterSettings()
+	registry := newRegistry(st, &fakeDetector{stubEnabled: true}, newStore(st))
+	ingester := newConcurrentBufferIngester(registry)
+
+	// We queue up a bunch of sync operations because it's unclear how
+	// many will proceed between the `Start()` and `Stop()` calls below.
+	ingester.guard.ForceSync()
+	extraSyncsFinished := false
+	go func() {
+		ingester.guard.ForceSync()
+		ingester.guard.ForceSync()
+		ingester.guard.ForceSync()
+		extraSyncsFinished = true
+	}()
+
+	ingester.Start(ctx, stopper, WithoutTimedFlush())
+	stopper.Stop(ctx)
+	<-stopper.IsStopped()
+
+	testutils.SucceedsSoon(t, func() error {
+		if !extraSyncsFinished {
+			return errors.New("sync not done")
+		}
+		return nil
+	})
 }
