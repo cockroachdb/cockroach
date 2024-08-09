@@ -282,23 +282,23 @@ func parseArgs(t *testing.T, d *datadriven.TestData) cmdArgs {
 var testStateCommands = map[string]func(
 	*testState, *testing.T, *datadriven.TestData, cmdArgs,
 ) string{
-	"read":             (*testState).read,
-	"write":            (*testState).write,
-	"await":            (*testState).await,
-	"not-completed":    (*testState).notCompleted,
-	"advance":          (*testState).advance,
-	"wait-for-event":   (*testState).waitForEvent,
-	"timers":           (*testState).timers,
-	"cpu":              (*testState).cpu,
-	"pgwire-egress":    (*testState).pgwireEgress,
-	"external-egress":  (*testState).externalEgress,
-	"external-ingress": (*testState).externalIngress,
-	"usage":            (*testState).usage,
-	"metrics":          (*testState).metrics,
-	"configure":        (*testState).configure,
-	"token-bucket":     (*testState).tokenBucket,
-	"unblock-request":  (*testState).unblockRequest,
-	"estimated-nodes":  (*testState).estimatedNodes,
+	"read":              (*testState).read,
+	"write":             (*testState).write,
+	"await":             (*testState).await,
+	"not-completed":     (*testState).notCompleted,
+	"advance":           (*testState).advance,
+	"wait-for-event":    (*testState).waitForEvent,
+	"timers":            (*testState).timers,
+	"cpu":               (*testState).cpu,
+	"pgwire-egress":     (*testState).pgwireEgress,
+	"external-egress":   (*testState).externalEgress,
+	"external-ingress":  (*testState).externalIngress,
+	"usage":             (*testState).usage,
+	"metrics":           (*testState).metrics,
+	"configure":         (*testState).configure,
+	"token-bucket":      (*testState).tokenBucket,
+	"unblock-request":   (*testState).unblockRequest,
+	"provisioned-vcpus": (*testState).provisionedVcpus,
 }
 
 // runOperation invokes the given operation function on a background goroutine.
@@ -485,10 +485,11 @@ func (ts *testState) unblockRequest(t *testing.T, _ *datadriven.TestData, _ cmdA
 	return ""
 }
 
-// estimatedNodes switches to the estimated CPU model.
-func (ts *testState) estimatedNodes(t *testing.T, _ *datadriven.TestData, args cmdArgs) string {
+// provisionedVcpus sets the number of vCPUs available to the virtual cluster,
+// for use in estimating CPU. If zero, the RU model is used instead.
+func (ts *testState) provisionedVcpus(t *testing.T, _ *datadriven.TestData, args cmdArgs) string {
 	ctx := context.Background()
-	tenantcostclient.EstimatedNodesSetting.Override(ctx, &ts.settings.SV, float64(args.count))
+	tenantcostclient.ProvisionedVcpusSetting.Override(ctx, &ts.settings.SV, args.count)
 	return ""
 }
 
@@ -623,6 +624,7 @@ func (ts *testState) metrics(*testing.T, *datadriven.TestData, cmdArgs) string {
 		"tenant.sql_usage.estimated_kv_cpu_seconds",
 		"tenant.sql_usage.estimated_cpu_seconds",
 		"tenant.sql_usage.estimated_replication_bytes",
+		"tenant.sql_usage.provisioned_vcpus",
 	}
 	var childMetrics string
 	state := make(map[string]interface{})
@@ -636,6 +638,8 @@ func (ts *testState) metrics(*testing.T, *datadriven.TestData, cmdArgs) string {
 		case metric.Iterable:
 			typ.Inspect(func(v interface{}) {
 				switch it := v.(type) {
+				case *metric.Gauge:
+					state[typ.GetName()] = it.Value()
 				case *metric.Counter:
 					state[typ.GetName()] = it.Count()
 				case *metric.CounterFloat64:
@@ -1130,7 +1134,7 @@ func TestConsumption(t *testing.T) {
 			for repeat := 0; repeat < 5; repeat++ {
 				if !useRUModel {
 					// Switch to estimated CPU model.
-					tenantcostclient.EstimatedNodesSetting.Override(context.Background(), &st.SV, 3)
+					tenantcostclient.ProvisionedVcpusSetting.Override(context.Background(), &st.SV, 12)
 				}
 
 				beforeWrite := testProvider.waitForConsumption(t)
