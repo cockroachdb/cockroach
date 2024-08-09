@@ -181,13 +181,14 @@ func Test_choosePreviousReleases(t *testing.T) {
 			numUpgrades:      6,
 			expectedReleases: []string{"22.2.14", "23.1.17", "23.2.4", "24.1.1", "24.2.2"},
 		},
-		{
-			name:              "skip-version upgrades",
-			arch:              vm.ArchAMD64,
-			numUpgrades:       3,
-			enableSkipVersion: true,
-			expectedReleases:  []string{"23.1.17", "23.2.4", "24.1.1"},
-		},
+		// TODO(radu): reenable when we actually support a skippable release.
+		//{
+		//	name:              "skip-version upgrades",
+		//	arch:              vm.ArchAMD64,
+		//	numUpgrades:       3,
+		//	enableSkipVersion: true,
+		//	expectedReleases:  []string{"23.1.17", "23.2.4", "24.1.1"},
+		//},
 	}
 
 	for _, tc := range testCases {
