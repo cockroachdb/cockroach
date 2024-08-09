@@ -53,7 +53,7 @@ $roachprod_microbench_dir/roachprod-microbench clean "$log_output_file_path" "$c
 
 # Push artifact if this is a base merge and skip comparison
 if $PUSH_STEP; then
-  gcloud storage cp "$cleaned_current_dir/$benchmark_file_name" "$storage_bucket_url/$GITHUB_REF/$GITHUB_SHA.log"
+  gcloud storage cp "$cleaned_current_dir/$benchmark_file_name" "$storage_bucket_url/$GITHUB_REF_NAME/$GITHUB_SHA.log"
   echo "Skipping comparison since this is a push step into the target branch"
   exit $success_exit_status
 fi
