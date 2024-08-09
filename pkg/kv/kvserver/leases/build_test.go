@@ -188,7 +188,7 @@ func defaultSettings() Settings {
 		UseExpirationLeases:               false,
 		TransferExpirationLeases:          true,
 		PreferLeaderLeasesOverEpochLeases: false,
-		RejectLeaseOnLeaderUnknown:        true,
+		RejectLeaseOnLeaderUnknown:        false,
 		ExpToEpochEquiv:                   true,
 		MinExpirationSupported:            true,
 		RangeLeaseDuration:                20,
