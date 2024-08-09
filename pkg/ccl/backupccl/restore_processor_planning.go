@@ -112,6 +112,10 @@ func distRestore(
 		}
 
 		numNodes := len(sqlInstanceIDs)
+		instanceIDs := make([]int32, numNodes)
+		for i, instanceID := range sqlInstanceIDs {
+			instanceIDs[i] = int32(instanceID)
+		}
 		p := planCtx.NewPhysicalPlan()
 
 		restoreDataSpec := execinfrapb.RestoreDataSpec{
@@ -190,6 +194,7 @@ func distRestore(
 			NumNodes:                 int64(numNodes),
 			UseFrontierCheckpointing: md.spanFilter.useFrontierCheckpointing,
 			JobID:                    int64(md.jobID),
+			SQLInstanceIDs:           instanceIDs,
 		}
 		if md.spanFilter.useFrontierCheckpointing {
 			spec.CheckpointedSpans = persistFrontier(md.spanFilter.checkpointFrontier, 0)
