@@ -6,7 +6,10 @@ apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     apt-transport-https \
     autoconf \
+    autoconf-archive \
+    automake \
     bison \
+    build-essential \
     bzip2 \
     ca-certificates \
     cmake \
@@ -15,18 +18,21 @@ apt-get update \
     flex \
     g++ \
     gawk \
+    gettext \
     git \
     gnupg2 \
     gperf \
     help2man \
     libncurses-dev \
     libssl-dev \
+    libtool \
     libtool-bin \
     libxml2-dev \
     make \
     patch \
     patchelf \
-    python \
+    python3 \
+    python-is-python3 \
     texinfo \
     xz-utils \
     unzip \
@@ -34,9 +40,24 @@ apt-get update \
     zlib1g-dev \
  && apt-get clean
 
+# The current version of texinfo, 7.1, has a bug (https://lists.gnu.org/archive/html/bug-texinfo/2024-05/msg00000.html).
+# This is silly, but now we have to install 7.1 and use it to build a new
+# version of texinfo, then uninstall the version from apt before installing the
+# custom version.
+git clone https://git.savannah.gnu.org/git/texinfo.git \
+ && pushd texinfo \
+ && git checkout master \
+ && ./autogen.sh \
+ && ./configure \
+ && make -j$(nproc) \
+ && DEBIAN_FRONTEND=noninteractive apt-get remove texinfo -y \
+ && make install \
+ && make TEXMF=/usr/share install-tex \
+ && popd
+
 mkdir crosstool-ng \
- && curl -fsSL http://crosstool-ng.org/download/crosstool-ng/crosstool-ng-1.24.0.tar.xz -o crosstool-ng.tar.xz \
- && echo '804ced838ea7fe3fac1e82f0061269de940c82b05d0de672e7d424af98f22d2d crosstool-ng.tar.xz' | sha256sum -c - \
+ && curl -fsSL http://crosstool-ng.org/download/crosstool-ng/crosstool-ng-1.26.0.tar.xz -o crosstool-ng.tar.xz \
+ && echo 'e8ce69c5c8ca8d904e6923ccf86c53576761b9cf219e2e69235b139c8e1b74fc crosstool-ng.tar.xz' | sha256sum -c - \
  && tar --strip-components=1 -C crosstool-ng -xJf crosstool-ng.tar.xz \
  && cd crosstool-ng \
  && ./configure --prefix /usr/local/ct-ng \
@@ -102,12 +123,6 @@ mkdir openssl \
  && cp -r include/openssl /x-tools/x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu/sysroot/usr/include && cd ..
 
 apt-get purge -y gcc g++ && apt-get autoremove -y
-
-apt-get update \
-  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    clang-10 \
-  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
-    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10
 
 # Bundle artifacts
 bundle() {
