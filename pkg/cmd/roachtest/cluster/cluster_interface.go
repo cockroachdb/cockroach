@@ -13,6 +13,7 @@ package cluster
 import (
 	"context"
 	gosql "database/sql"
+	"io"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
@@ -126,6 +127,13 @@ type Cluster interface {
 	// specify the nodes. See `install.RunOptions` for more details on the
 	// options.
 	RunE(ctx context.Context, options install.RunOptions, args ...string) error
+
+	// SpawnE spawns a command specified by `args` on the given nodes, specified
+	// via `RunOptions.Nodes`, and returns the stdout of the command executions
+	// and a channel for errors. Each stdout will be closed as its process
+	// completes, and the errs channel will be closed when all processes have
+	// completed.
+	SpawnE(ctx context.Context, options install.RunOptions, logger *logger.Logger, args ...string) (stdouts []io.Reader, errs chan error, err error)
 
 	// RunWithDetailsSingleNode is just like RunWithDetails but used when 1) operating
 	// on a single node AND 2) an error from roachprod itself would be treated the same way
