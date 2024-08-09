@@ -333,6 +333,7 @@ message RemoteProducerMetadata {
     optional bytes flow_id = 8 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "FlowID",
       (gogoproto.customtype) = "FlowID"];
+    optional bool drained = 9 [(gogoproto.nullable) = false];
   }
   // Metrics are unconditionally emitted by table readers.
   message Metrics {
