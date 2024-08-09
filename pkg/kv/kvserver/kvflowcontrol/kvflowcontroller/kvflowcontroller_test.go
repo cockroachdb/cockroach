@@ -302,8 +302,8 @@ func TestBucketSignalingBug(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	regularTokensPerStream.Override(ctx, &st.SV, 10)
-	elasticTokensPerStream.Override(ctx, &st.SV, 5)
+	kvflowcontrol.RegularTokensPerStream.Override(ctx, &st.SV, 10)
+	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &st.SV, 5)
 	kvflowcontrol.Mode.Override(ctx, &st.SV, kvflowcontrol.ApplyToAll)
 	controller := New(
 		metric.NewRegistry(),
@@ -411,8 +411,8 @@ func TestInspectController(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	elasticTokensPerStream.Override(ctx, &st.SV, 8<<20 /* 8 MiB */)
-	regularTokensPerStream.Override(ctx, &st.SV, 16<<20 /* 16 MiB */)
+	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &st.SV, 8<<20 /* 8 MiB */)
+	kvflowcontrol.RegularTokensPerStream.Override(ctx, &st.SV, 16<<20 /* 16 MiB */)
 	kvflowcontrol.Mode.Override(ctx, &st.SV, kvflowcontrol.ApplyToAll)
 	controller := New(metric.NewRegistry(), st, hlc.NewClockForTesting(nil))
 
@@ -472,8 +472,8 @@ func TestControllerLogging(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	const numTokens = 1 << 20 /* 1 MiB */
-	elasticTokensPerStream.Override(ctx, &st.SV, numTokens)
-	regularTokensPerStream.Override(ctx, &st.SV, numTokens)
+	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &st.SV, numTokens)
+	kvflowcontrol.RegularTokensPerStream.Override(ctx, &st.SV, numTokens)
 	kvflowcontrol.Mode.Override(ctx, &st.SV, kvflowcontrol.ApplyToAll)
 	controller := New(metric.NewRegistry(), st, hlc.NewClockForTesting(nil))
 
@@ -717,8 +717,8 @@ func BenchmarkController(b *testing.B) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	elasticTokensPerStream.Override(ctx, &st.SV, 8<<20 /* 8 MiB */)
-	regularTokensPerStream.Override(ctx, &st.SV, 16<<20 /* 16 MiB */)
+	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &st.SV, 8<<20 /* 8 MiB */)
+	kvflowcontrol.RegularTokensPerStream.Override(ctx, &st.SV, 16<<20 /* 16 MiB */)
 	controller := New(metric.NewRegistry(), st, hlc.NewClockForTesting(nil))
 
 	// Deduct some {regular,elastic} tokens from s1/t1 and verify that Inspect()
