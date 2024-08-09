@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // MajorityConfig is a set of IDs that uses majority quorums to make decisions.
@@ -128,41 +129,12 @@ func (c MajorityConfig) CommittedIndex(l AckedIndexer) Index {
 		return math.MaxUint64
 	}
 
-	// Use an on-stack slice to collect the committed indexes when n <= 7
-	// (otherwise we alloc). The alternative is to stash a slice on
-	// MajorityConfig, but this impairs usability (as is, MajorityConfig is just
-	// a map, and that's nice). The assumption is that running with a
-	// replication factor of >7 is rare, and in cases in which it happens
-	// performance is a lesser concern (additionally the performance
-	// implications of an allocation here are far from drastic).
-	var stk [7]uint64
-	var srt []uint64
-	if len(stk) >= n {
-		srt = stk[:n]
-	} else {
-		srt = make([]uint64, n)
-	}
-
-	{
-		// Fill the slice with the indexes observed. Any unused slots will be
-		// left as zero; these correspond to voters that may report in, but
-		// haven't yet. We fill from the right (since the zeroes will end up on
-		// the left after sorting below anyway).
-		i := n - 1
-		for id := range c {
-			if idx, ok := l.AckedIndex(id); ok {
-				srt[i] = uint64(idx)
-				i--
-			}
-		}
-	}
-	slices.Sort(srt)
-
-	// The smallest index into the array for which the value is acked by a
-	// quorum. In other words, from the end of the slice, move n/2+1 to the
-	// left (accounting for zero-indexing).
-	pos := n - (n/2 + 1)
-	return Index(srt[pos])
+	// The commit index is the smallest index that's been acked by all replicas in
+	// a quorum. For the majority config, we want the largest such index across
+	// all quorums. quorumSupportedElement will give us that.
+	return quorumSupportedElement(c, func(id pb.PeerID) (Index, bool) {
+		return l.AckedIndex(id)
+	})
 }
 
 // VoteResult takes a mapping of voters to yes/no (true/false) votes and returns
@@ -198,4 +170,85 @@ func (c MajorityConfig) VoteResult(votes map[pb.PeerID]bool) VoteResult {
 		return VotePending
 	}
 	return VoteLost
+}
+
+// ComputeQSE takes a mapping of support timestamps and returns the quorum
+// supported expiration (QSE)[*].
+//
+// [*] The QSE is defined as a leader’s maximum supported store liveness
+// expiration across all quorums, where the value for each quorum is the minimum
+// across replicas, from the perspective of an oracle.
+func (c MajorityConfig) ComputeQSE(supported map[pb.PeerID]hlc.Timestamp) hlc.Timestamp {
+	if len(c) == 0 {
+		// This plays well with joint quorums when one half is the zero
+		// MajorityConfig. In such cases, the joint config should behave like the
+		// other half.
+		return hlc.MaxTimestamp
+	}
+
+	// As per the definition of QSE above, quorumSupportedElement should give us
+	// what we need.
+	return quorumSupportedElement(c, func(id pb.PeerID) (hlc.Timestamp, bool) {
+		ts, ok := supported[id]
+		return ts, ok
+	})
+}
+
+// cmp is a thin interface that allows quorumSupportedElement to compare
+// elements.
+type cmp[T any] interface {
+	Compare(T) int
+}
+
+// quorumSupportedElement returns the maximum element that's supported across
+// all quorums in the supplied majority config. For a given quorum, the
+// supported value is the minimum across all replicas. Elements must be
+// comparable to each other.
+//
+// The supplied getElementForPeer function is used to collect elements for each
+// peer, by ID. Elements may not exist for all peers in the majority config; if
+// that's the case, a second boolean return value indicating whether the element
+// is found must be returned.
+func quorumSupportedElement[E cmp[E]](
+	c MajorityConfig, getElementForPeer func(id pb.PeerID) (E, bool),
+) E {
+	n := len(c)
+
+	// Use an on-stack slice whenever n <= 7 (otherwise we alloc). The assumption
+	// is that running with a replication factor of >7 is rare, and in cases in
+	// which it happens, performance is less of a concern (it's not like
+	// performance implications of an allocation here are drastic).
+	var stk [7]E
+	var srt []E
+	if len(stk) >= n {
+		srt = stk[:n]
+	} else {
+		srt = make([]E, n)
+	}
+
+	{
+		// Fill the slice with elements. Any unused slots will be left as zero/empty
+		// for our calculation. We fill from the right (since the zeros will end up
+		// on the left after sorting anyway).
+		i := n - 1
+		for id := range c {
+			if e, ok := getElementForPeer(id); ok {
+				srt[i] = e
+				i--
+			}
+		}
+	}
+
+	slices.SortFunc(srt, func(a, b E) int {
+		return a.Compare(b)
+	})
+
+	// We want the maximum element supported across all quorums, where the value
+	// for each quorum is the minimum across all replicas. For this, we can simply
+	// consider the quorum formed by picking the highest value elements and pick
+	// the minimum from this. In other words, from our sorted (in increasing
+	// order) array srt, we want to move n/2+1 to the left from the end
+	// (accounting for zero-indexing).
+	pos := n - (n/2 + 1)
+	return srt[pos]
 }

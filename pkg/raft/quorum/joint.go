@@ -17,7 +17,10 @@
 
 package quorum
 
-import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+import (
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
 
 // JointConfig is a configuration of two groups of (possibly overlapping)
 // majority configurations. Decisions require the support of both majorities.
@@ -77,4 +80,17 @@ func (c JointConfig) VoteResult(votes map[pb.PeerID]bool) VoteResult {
 	}
 	// One side won, the other one is pending, so the whole outcome is.
 	return VotePending
+}
+
+// ComputeQSE takes a mapping of support timestamps and returns the quorum
+// supported expiration (QSE)[*]. For joint quorums, this corresponds to the
+// minimum QSE across the two configs.
+//
+// [*] The QSE is defined as a leader’s maximum supported store liveness
+// expiration across all quorums, where the value for each quorum is the minimum
+// across replicas, from the perspective of an oracle.
+func (c JointConfig) ComputeQSE(supported map[pb.PeerID]hlc.Timestamp) hlc.Timestamp {
+	qse := c[0].ComputeQSE(supported)
+	qse.Backward(c[1].ComputeQSE(supported))
+	return qse
 }
