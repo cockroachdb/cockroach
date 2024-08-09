@@ -1035,6 +1035,8 @@ func (r *raft) campaign(t CampaignType) {
 		// better safe than sorry.
 		r.logger.Warningf("%x is unpromotable; campaign() should have been called", r.id)
 	}
+	// If already a (pre)candidate, the previous election attempt failed.
+	hung := r.state != StateFollower
 	var pre string
 	var term uint64
 	var voteMsg pb.MessageType
@@ -1049,7 +1051,11 @@ func (r *raft) campaign(t CampaignType) {
 		term = r.Term
 		voteMsg = pb.MsgVote
 	}
-	r.logger.Infof("%x is starting a new %selection at term %d", r.id, pre, term)
+	if hung {
+		r.logger.Warningf("%x is restarting a hung %selection at term %d", r.id, pre, term)
+	} else {
+		r.logger.Infof("%x is starting a new %selection at term %d", r.id, pre, term)
+	}
 	var ids []pb.PeerID
 	{
 		idMap := r.config.Voters.IDs()

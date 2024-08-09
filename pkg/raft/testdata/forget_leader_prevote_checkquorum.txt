@@ -138,7 +138,7 @@ stabilize 3
   INFO 3 received MsgPreVoteResp from 2 at term 1
   INFO 3 has received 2 MsgPreVoteResp votes and 0 vote rejections
   INFO 3 became candidate at term 2
-  INFO 3 is starting a new election at term 2
+  WARN 3 is restarting a hung election at term 2
   INFO 3 [logterm: 1, index: 11] sent MsgVote request to 1 at term 2
   INFO 3 [logterm: 1, index: 11] sent MsgVote request to 2 at term 2
 > 3 handling Ready
