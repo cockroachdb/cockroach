@@ -15,7 +15,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -153,7 +152,7 @@ func (ds *ServerImpl) setDraining(drain bool) error {
 	}
 	if g, ok := ds.ServerConfig.Gossip.Optional(MultiTenancyIssueNo); ok {
 		return g.AddInfoProto(
-			gossip.MakeDistSQLDrainingKey(base.SQLInstanceID(nodeID)),
+			gossip.MakeDistSQLDrainingKey(nodeID),
 			&execinfrapb.DistSQLDrainingInfo{
 				Draining: drain,
 			},
