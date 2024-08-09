@@ -102,11 +102,17 @@ func verifyAcquisition(ctx context.Context, st Settings, i VerifyInput) error {
 	// Thus, we do one of two things:
 	// - if the leader is known, we reject this proposal and make sure the request
 	// that needed the lease is redirected to the leaseholder;
-	// - if the leader is not known, we also reject the proposal, but we don't
-	// provide a hint about who the leaseholder is. This is because we don't know
-	// who the likely leaseholder is. However, we know it's not us and we don't
-	// want to block the request on our local replica establishing connectivity to
-	// its quorum. Better to allow the request's DistSender to try another replica.
+	// - if the leader is not known [^1], we don't do anything special here to
+	// terminate the proposal, but we know that Raft will reject it with a
+	// ErrProposalDropped. We'll eventually re-propose it once a leader is known,
+	// at which point it will either go through or be rejected based on whether it
+	// is this replica that became the leader.
+	//
+	// [^1]: however, if the leader is not known and RejectLeaseOnLeaderUnknown
+	// cluster setting is true, we reject the proposal.
+	// TODO(nathan): make this behaviour default. Right now, it is hidden behind
+	// an experimental cluster setting. See #120073 and #118435. We attempted to
+	// address this in #127082, but there was fallout, so we reverted that change.
 	//
 	// A special case is when the leader is known, but is ineligible to get the
 	// lease. In that case, we have no choice but to continue with the proposal.
