@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -110,6 +111,10 @@ type StmtBuf struct {
 		// the buffer.
 		lastPos CmdPos
 	}
+
+	// PipelineCount, if non-nil, is a gauge that measures how many commands are
+	// in all client-facing StmtBuf instances.
+	PipelineCount *metric.Gauge
 }
 
 // Command is an interface implemented by all commands pushed by pgwire into the
@@ -506,6 +511,9 @@ func (buf *StmtBuf) Push(ctx context.Context, cmd Command) error {
 	}
 	buf.mu.data.AddLast(cmd)
 	buf.mu.lastPos++
+	if buf.PipelineCount != nil {
+		buf.PipelineCount.Inc(1)
+	}
 
 	buf.mu.cond.Signal()
 	return nil
@@ -593,6 +601,9 @@ func (buf *StmtBuf) AdvanceOne() CmdPos {
 	defer buf.mu.Unlock()
 	prev := buf.mu.curPos
 	buf.mu.curPos++
+	if buf.PipelineCount != nil {
+		buf.PipelineCount.Dec(1)
+	}
 	return prev
 }
 
@@ -668,6 +679,9 @@ func (buf *StmtBuf) Rewind(ctx context.Context, pos CmdPos) {
 	defer buf.mu.Unlock()
 	if pos < buf.mu.startPos {
 		log.Fatalf(ctx, "attempting to rewind below buffer start")
+	}
+	if buf.PipelineCount != nil {
+		buf.PipelineCount.Inc(int64(buf.mu.curPos - pos))
 	}
 	buf.mu.curPos = pos
 }
