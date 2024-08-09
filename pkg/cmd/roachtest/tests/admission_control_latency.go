@@ -90,6 +90,7 @@ type variations struct {
 	perturbation         perturbation
 	workload             workloadType
 	acceptableChange     float64
+	cloud                registry.CloudSet
 
 	// These fields are set up at the start of the test run
 	cluster       cluster.Cluster
@@ -102,9 +103,10 @@ const NUM_REGIONS = 3
 var durationOptions = []time.Duration{10 * time.Second, 10 * time.Minute, 30 * time.Minute}
 var splitOptions = []int{1, 100, 10000}
 var maxBlockBytes = []int{1, 1024, 4096}
-var numNodes = []int{5, 12, 36}
+var numNodes = []int{5, 12, 30}
 var numVCPUs = []int{4, 8, 16, 32}
 var numDisks = []int{1, 2}
+var cloudSets = []registry.CloudSet{registry.OnlyAWS, registry.OnlyGCE, registry.OnlyAzure}
 
 var leases = []registry.LeaseType{
 	registry.EpochLeases,
@@ -145,6 +147,7 @@ func setupMetamorphic(p perturbation) variations {
 	v.disks = numDisks[rng.Intn(len(numDisks))]
 	v.partitionSite = rng.Intn(2) == 0
 	v.cleanRestart = rng.Intn(2) == 0
+	v.cloud = cloudSets[rng.Intn(len(cloudSets))]
 	v.perturbation = p
 	return v
 }
@@ -166,6 +169,7 @@ func setupFull(p perturbation) variations {
 	v.perturbationDuration = 10 * time.Minute
 	v.ratioOfMax = 0.5
 	v.cleanRestart = true
+	v.cloud = registry.OnlyGCE
 	v.perturbation = p
 	return v
 }
@@ -187,6 +191,7 @@ func setupDev(p perturbation) variations {
 	v.perturbationDuration = 30 * time.Second
 	v.ratioOfMax = 0.5
 	v.cleanRestart = true
+	v.cloud = registry.AllClouds
 	v.perturbation = p
 	return v
 }
@@ -245,7 +250,7 @@ func addMetamorphic(r registry.Registry, p perturbation, acceptableChange float6
 	// a given seed.
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/metamorphic/%s", reflect.TypeOf(p).Name()),
-		CompatibleClouds: registry.AllClouds,
+		CompatibleClouds: v.cloud,
 		Suites:           registry.Suites(registry.Nightly),
 		Owner:            registry.OwnerKV,
 		Cluster:          v.makeClusterSpec(),
@@ -259,7 +264,7 @@ func addFull(r registry.Registry, p perturbation, acceptableChange float64) {
 	v.acceptableChange = acceptableChange
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/full/%s", reflect.TypeOf(p).Name()),
-		CompatibleClouds: registry.OnlyGCE,
+		CompatibleClouds: v.cloud,
 		Suites:           registry.Suites(registry.Nightly),
 		Owner:            registry.OwnerKV,
 		Cluster:          v.makeClusterSpec(),
@@ -273,7 +278,7 @@ func addDev(r registry.Registry, p perturbation, acceptableChange float64) {
 	v.acceptableChange = acceptableChange
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/dev/%s", reflect.TypeOf(p).Name()),
-		CompatibleClouds: registry.AllClouds,
+		CompatibleClouds: v.cloud,
 		Suites:           registry.ManualOnly,
 		Owner:            registry.OwnerKV,
 		Cluster:          v.makeClusterSpec(),
