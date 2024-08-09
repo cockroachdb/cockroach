@@ -72,8 +72,8 @@ const (
 		schema_id,
 		tables.id AS table_id,
 		tables.name AS table_name,
-		tables.descriptor AS table_descriptor,
-		json_array_elements(descriptor->'columns') AS column
+		tables.descriptor->'table' AS table_descriptor,
+		json_array_elements(descriptor->'table'->'columns') AS col
 	FROM tables`
 
 	// enumDescsQuery returns the JSONified version of all enum descriptors in
