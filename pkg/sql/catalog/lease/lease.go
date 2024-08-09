@@ -489,6 +489,7 @@ func getDescriptorsFromStoreForInterval(
 func (m *Manager) readOlderVersionForTimestamp(
 	ctx context.Context, id descpb.ID, timestamp hlc.Timestamp,
 ) ([]historicalDescriptor, error) {
+	log.VInfof(ctx, 2, "reading older version for descriptor %d at timestamp %s", id, timestamp)
 	// Retrieve the endTimestamp for our query, which will be the first
 	// modification timestamp above our query timestamp.
 	t := m.findDescriptorState(id, false /*create*/)
