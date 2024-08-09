@@ -134,6 +134,13 @@ func TestCCLLogic_fips_ready(
 	runCCLLogicTest(t, "fips_ready")
 }
 
+func TestCCLLogic_generic(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "generic")
+}
+
 func TestCCLLogic_new_schema_changer(
 	t *testing.T,
 ) {

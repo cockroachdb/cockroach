@@ -147,6 +147,7 @@ define False {
 
 [Scalar]
 define Placeholder {
+    # Value is always a *tree.Placeholder.
     Value TypedExpr
 }
 

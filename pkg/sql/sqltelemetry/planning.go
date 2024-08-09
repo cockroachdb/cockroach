@@ -205,6 +205,22 @@ var CancelQueriesUseCounter = telemetry.GetCounterOnce("sql.session.cancel-queri
 // CANCEL SESSIONS is run.
 var CancelSessionsUseCounter = telemetry.GetCounterOnce("sql.session.cancel-sessions")
 
+// PlanTypeForceCustomCounter is to be incremented whenever a custom plan is
+// used when plan_cache_mode=force_custom_plan.
+var PlanTypeForceCustomCounter = telemetry.GetCounterOnce("sql.plan.type.force-custom")
+
+// PlanTypeForceGenericCounter is to be incremented whenever a generic plan is used
+// when plan_cache_mode=force_generic_plan.
+var PlanTypeForceGenericCounter = telemetry.GetCounterOnce("sql.plan.type.force-generic")
+
+// PlanTypeAutoCustomCounter is to be incremented whenever a generic plan is
+// used when plan_cache_mode=auto.
+var PlanTypeAutoCustomCounter = telemetry.GetCounterOnce("sql.plan.type.auto-custom")
+
+// PlanTypeAutoGenericCounter is to be incremented whenever a custom plan is
+// used when plan_cache_mode=auto.
+var PlanTypeAutoGenericCounter = telemetry.GetCounterOnce("sql.plan.type.auto-generic")
+
 // We can't parameterize these telemetry counters, so just make a bunch of
 // buckets for setting the join reorder limit since the range of reasonable
 // values for the join reorder limit is quite small.

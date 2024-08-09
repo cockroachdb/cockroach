@@ -162,7 +162,7 @@ message DataConversionConfig {
   util.timeutil.pgdate.DateStyle date_style = 4 [(gogoproto.nullable) = false];
 }
 
-// VectorizeExecMode controls if an when the Executor executes queries using
+// VectorizeExecMode controls if and when the Executor executes queries using
 // the columnar execution engine.
 enum VectorizeExecMode {
   option (gogoproto.goproto_enum_prefix) = false;
