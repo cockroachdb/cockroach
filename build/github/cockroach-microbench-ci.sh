@@ -17,7 +17,7 @@ threshold=${COMPARE_THRESHOLD:-0}
 success_exit_status=0
 error_exit_status=1
 
-gsutil mv gs://cockroach-microbench-ci//2558f3f3a1dab0907db3dafd510ec5bc2464073f.log gs://cockroach-microbench-ci/master/
+gsutil cp gs://cockroach-microbench-ci//2558f3f3a1dab0907db3dafd510ec5bc2464073f.log gs://cockroach-microbench-ci/master/2558f3f3a1dab0907db3dafd510ec5bc2464073f.log
 # Exit early if SKIP_COMPARISON is true and not a push step
 #if $SKIP_COMPARISON && ! $PUSH_STEP; then
 #  echo "Exiting since skip comparison is enabled and this is not a push step."
