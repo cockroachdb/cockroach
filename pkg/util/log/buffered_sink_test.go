@@ -169,7 +169,54 @@ func TestBufferSizeTriggerMultipleFlush(t *testing.T) {
 	select {
 	case <-flush2C:
 	case <-time.After(10 * time.Second):
-		t.Fatal("first flush didn't happen")
+		t.Fatal("second flush didn't happen")
+	}
+}
+
+func TestHasFlushedSuccessfully(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	closer := newBufferedSinkCloser()
+	defer func() { require.NoError(t, closer.Close(defaultCloserTimeout)) }()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mock := NewMockLogSink(ctrl)
+	bufferMaxSize := uint64(20)
+	triggerSize := uint64(10)
+	sink := newBufferedSink(mock, noMaxStaleness, triggerSize, bufferMaxSize, false /* crashOnAsyncFlushErr */, nil)
+	sink.Start(closer)
+
+	// Flush with an error, hasFlushedSuccessfully should be false.
+	flushC := make(chan struct{})
+	mock.EXPECT().output(gomock.Any(), gomock.Any()).Do(addArgs(func() { close(flushC) })).Return(errors.New("boom"))
+	require.NoError(t, sink.output([]byte("test"), sinkOutputOptions{extraFlush: true}))
+	select {
+	case <-flushC:
+		require.Equal(t, false, sink.hasFlushedSuccessfully.Load())
+	case <-time.After(10 * time.Second):
+		t.Fatalf("expected flush didn't happen")
+	}
+
+	// Flush successfully, should be true now.
+	flushC = make(chan struct{})
+	mock.EXPECT().output(gomock.Any(), gomock.Any()).Do(addArgs(func() { close(flushC) })).Return(nil)
+	require.NoError(t, sink.output([]byte("test"), sinkOutputOptions{extraFlush: true}))
+	select {
+	case <-flushC:
+		require.Equal(t, true, sink.hasFlushedSuccessfully.Load())
+	case <-time.After(10 * time.Second):
+		t.Fatalf("expected flush didn't happen")
+	}
+
+	// Flush with an error again, should still be true.
+	flushC = make(chan struct{})
+	mock.EXPECT().output(gomock.Any(), gomock.Any()).Do(addArgs(func() { close(flushC) })).Return(errors.New("boom"))
+	require.NoError(t, sink.output([]byte("test"), sinkOutputOptions{extraFlush: true}))
+	select {
+	case <-flushC:
+		require.Equal(t, true, sink.hasFlushedSuccessfully.Load())
+	case <-time.After(10 * time.Second):
+		t.Fatalf("expected flush didn't happen")
 	}
 }
 
