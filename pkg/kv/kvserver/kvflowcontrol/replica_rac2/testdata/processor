@@ -1,0 +1,211 @@
+reset
+----
+
+get-enabled-level
+----
+enabled-level: not-enabled
+
+on-destroy
+----
+ Replica.RaftMuAssertHeld
+
+reset
+----
+
+get-enabled-level
+----
+enabled-level: not-enabled
+
+set-enabled-level enabled-level=v1-encoding
+----
+
+get-enabled-level
+----
+enabled-level: v1-encoding
+
+set-raft-state leader=10 stable-index=20 next-unstable-index=25 leaseholder=10 admitted=[15,20,15,20]
+----
+Raft: leader: 10 leaseholder: 10 stable: 20 next-unstable: 25 my-term: 0 admitted: [15, 20, 15, 20]
+
+handle-raft-ready-and-admit
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+.....
+
+on-desc-changed  replicas=n11/s11/11
+----
+ Replica.RaftMuAssertHeld
+ Replica.MuAssertHeld
+ Replica.RaftNodeMuLocked
+
+handle-raft-ready-and-admit entries=v1/i25/t45/pri0/time2/len100 leader-term=50
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 20
+ RaftNode.LeaderLocked() = 10
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [15, 20, 15, 20]
+ Replica.MuUnlock
+.....
+AdmitRaftEntries:
+leader-using-v2: false
+
+side-channel v2 leader-term=50 first=25 last=25
+----
+ Replica.RaftMuAssertHeld
+
+handle-raft-ready-and-admit entries=v1/i25/t45/pri0/time2/len100 leader-term=50
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 20
+ RaftNode.LeaderLocked() = 10
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [15, 20, 15, 20]
+ Replica.MuUnlock
+ RaftNode.SetAdmittedLocked([20, 20, 20, 20]) = type: MsgAppResp from: 0 to: 0
+.....
+AdmitRaftEntries:
+ ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:107 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:25 Priority:LowPri}})
+leader-using-v2: true
+
+set-raft-state stable-index=25 leader=11
+----
+Raft: leader: 11 leaseholder: 10 stable: 25 next-unstable: 25 my-term: 0 admitted: [20, 20, 20, 20]
+
+handle-raft-ready-and-admit
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 25
+ RaftNode.LeaderLocked() = 11
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [20, 20, 20, 20]
+ Replica.MuUnlock
+ RaftNode.SetAdmittedLocked([24, 25, 25, 25]) = type: MsgAppResp from: 0 to: 0
+ Piggybacker.AddMsgAppRespForLeader(leader=(n11,s11,r3), msg=type: MsgAppResp from: 0 to: 0)
+.....
+
+side-channel v2 leader-term=50 first=26 last=26
+----
+ Replica.RaftMuAssertHeld
+
+handle-raft-ready-and-admit entries=v2/i26/t45/pri2/time2/len100 leader-term=50
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 25
+ RaftNode.LeaderLocked() = 11
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [24, 25, 25, 25]
+ Replica.MuUnlock
+.....
+AdmitRaftEntries:
+ ACWorkQueue.Admit({TenantID:4 Priority:user-high-pri CreateTime:2 RequestedCount:107 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:26 Priority:AboveNormalPri}})
+leader-using-v2: true
+
+handle-raft-ready-and-admit
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 25
+ RaftNode.LeaderLocked() = 11
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [24, 25, 25, 25]
+ Replica.MuUnlock
+.....
+
+set-raft-state stable-index=26
+----
+Raft: leader: 11 leaseholder: 10 stable: 26 next-unstable: 25 my-term: 0 admitted: [24, 25, 25, 25]
+
+admitted-log-entry replica-id=51 leader-term=50 index=25 pri=0
+----
+
+handle-raft-ready-and-admit
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 26
+ RaftNode.LeaderLocked() = 11
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [24, 25, 25, 25]
+ Replica.MuUnlock
+ RaftNode.SetAdmittedLocked([24, 26, 25, 26]) = type: MsgAppResp from: 0 to: 0
+ Piggybacker.AddMsgAppRespForLeader(leader=(n11,s11,r3), msg=type: MsgAppResp from: 0 to: 0)
+.....
+
+admitted-log-entry replica-id=5 leader-term=50 index=25 pri=0
+----
+ RaftScheduler.EnqueueRaftReady(rangeID=3)
+
+handle-raft-ready-and-admit
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 26
+ RaftNode.LeaderLocked() = 11
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [24, 26, 25, 26]
+ Replica.MuUnlock
+ RaftNode.SetAdmittedLocked([26, 26, 25, 26]) = type: MsgAppResp from: 0 to: 0
+ Piggybacker.AddMsgAppRespForLeader(leader=(n11,s11,r3), msg=type: MsgAppResp from: 0 to: 0)
+.....
+
+side-channel v2 leader-term=50 first=27 last=27 low-pri
+----
+ Replica.RaftMuAssertHeld
+
+handle-raft-ready-and-admit entries=v2/i27/t45/pri2/time2/len100 leader-term=50
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 26
+ RaftNode.LeaderLocked() = 11
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [26, 26, 25, 26]
+ Replica.MuUnlock
+.....
+AdmitRaftEntries:
+ ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:107 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:27 Priority:LowPri}})
+leader-using-v2: true
+
+admitted-log-entry replica-id=5 leader-term=50 index=27 pri=2
+----
+
+# TODO: this should be enqueueing admitted processing.
+admitted-log-entry replica-id=5 leader-term=50 index=26 pri=2
+----
+
+handle-raft-ready-and-admit
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 26
+ RaftNode.LeaderLocked() = 11
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [26, 26, 25, 26]
+ Replica.MuUnlock
+ RaftNode.SetAdmittedLocked([26, 26, 26, 26]) = type: MsgAppResp from: 0 to: 0
+ Piggybacker.AddMsgAppRespForLeader(leader=(n11,s11,r3), msg=type: MsgAppResp from: 0 to: 0)
+.....

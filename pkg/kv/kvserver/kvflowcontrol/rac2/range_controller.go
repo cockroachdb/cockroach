@@ -13,6 +13,7 @@ package rac2
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/redact"
@@ -58,7 +59,9 @@ type RangeController interface {
 
 // TODO(pav-kv): This struct is a placeholder for the interface or struct
 // containing raft entries. Replace this as part of #128019.
-type RaftEvent struct{}
+type RaftEvent struct {
+	Entries []raftpb.Entry
+}
 
 // NoReplicaID is a special value of roachpb.ReplicaID, which can never be a
 // valid ID.
