@@ -73,43 +73,42 @@ func (p *partitionedStreamClient) CreateForTenant(
 ) (streampb.ReplicationProducerSpec, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.CreateForTenant")
 	defer sp.Finish()
-	p.mu.Lock()
-	defer p.mu.Unlock()
 
 	if p.logical {
 		return streampb.ReplicationProducerSpec{}, errors.New("cannot create a tenant scoped stream with logical replication flag")
 	}
 
-	var row pgx.Row
-	if !req.ReplicationStartTime.IsEmpty() {
-		reqBytes, err := protoutil.Marshal(&req)
-		if err != nil {
-			return streampb.ReplicationProducerSpec{}, err
-		}
-		row = p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.start_replication_stream($1, $2)`, tenantName, reqBytes)
-	} else {
-		row = p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.start_replication_stream($1)`, tenantName)
-	}
-
 	var rawReplicationProducerSpec []byte
-	err := row.Scan(&rawReplicationProducerSpec)
-	if err != nil {
+	if err := p.withLockedConn(ctx, func(c *pgx.Conn) error {
+		var row pgx.Row
+		if !req.ReplicationStartTime.IsEmpty() {
+			reqBytes, err := protoutil.Marshal(&req)
+			if err != nil {
+				return err
+			}
+			row = c.QueryRow(ctx, `SELECT crdb_internal.start_replication_stream($1, $2)`, tenantName, reqBytes)
+		} else {
+			row = c.QueryRow(ctx, `SELECT crdb_internal.start_replication_stream($1)`, tenantName)
+		}
+
+		return row.Scan(&rawReplicationProducerSpec)
+	}); err != nil {
 		return streampb.ReplicationProducerSpec{}, errors.Wrapf(err, "error creating replication stream for tenant %s", tenantName)
 	}
+
 	var replicationProducerSpec streampb.ReplicationProducerSpec
 	if err := protoutil.Unmarshal(rawReplicationProducerSpec, &replicationProducerSpec); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
 
-	return replicationProducerSpec, err
+	return replicationProducerSpec, nil
 }
 
 // Dial implements Client interface.
 func (p *partitionedStreamClient) Dial(ctx context.Context) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	err := p.mu.srcConn.Ping(ctx)
-	return errors.Wrap(err, "failed to dial client")
+	return p.withLockedConn(ctx, func(c *pgx.Conn) error {
+		return errors.Wrap(p.mu.srcConn.Ping(ctx), "failed to dial client")
+	})
 }
 
 // Heartbeat implements Client interface.
@@ -119,15 +118,16 @@ func (p *partitionedStreamClient) Heartbeat(
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Heartbeat")
 	defer sp.Finish()
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	row := p.mu.srcConn.QueryRow(ctx,
-		`SELECT crdb_internal.replication_stream_progress($1, $2)`, streamID, consumed.String())
 	var rawStatus []byte
-	if err := row.Scan(&rawStatus); err != nil {
+	if err := p.withLockedConn(ctx, func(c *pgx.Conn) error {
+		row := c.QueryRow(ctx,
+			`SELECT crdb_internal.replication_stream_progress($1, $2)`, streamID, consumed.String())
+		return row.Scan(&rawStatus)
+	}); err != nil {
 		return streampb.StreamReplicationStatus{},
 			errors.Wrapf(err, "error sending heartbeat to replication stream %d", streamID)
 	}
+
 	var status streampb.StreamReplicationStatus
 	if err := protoutil.Unmarshal(rawStatus, &status); err != nil {
 		return streampb.StreamReplicationStatus{}, err
@@ -150,24 +150,23 @@ func (p *partitionedStreamClient) postgresURL(servingAddr string) (url.URL, erro
 func (p *partitionedStreamClient) PlanPhysicalReplication(
 	ctx context.Context, streamID streampb.StreamID,
 ) (Topology, error) {
-	var spec streampb.ReplicationStreamSpec
-	{
-		p.mu.Lock()
-		defer p.mu.Unlock()
-
-		if p.logical {
-			return Topology{}, errors.New("cannot plan physical replication with logical replication flag")
-		}
-
-		row := p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.replication_stream_spec($1)`, streamID)
-		var rawSpec []byte
-		if err := row.Scan(&rawSpec); err != nil {
-			return Topology{}, errors.Wrapf(err, "error planning replication stream %d", streamID)
-		}
-		if err := protoutil.Unmarshal(rawSpec, &spec); err != nil {
-			return Topology{}, err
-		}
+	if p.logical {
+		return Topology{}, errors.New("cannot plan physical replication with logical replication flag")
 	}
+
+	var rawSpec []byte
+	if err := p.withLockedConn(ctx, func(c *pgx.Conn) error {
+		row := c.QueryRow(ctx, `SELECT crdb_internal.replication_stream_spec($1)`, streamID)
+		return row.Scan(&rawSpec)
+	}); err != nil {
+		return Topology{}, errors.Wrapf(err, "error planning replication stream %d", streamID)
+	}
+
+	var spec streampb.ReplicationStreamSpec
+	if err := protoutil.Unmarshal(rawSpec, &spec); err != nil {
+		return Topology{}, err
+	}
+
 	return p.createTopology(spec)
 }
 
@@ -286,14 +285,31 @@ func (p *partitionedStreamClient) Complete(
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Complete")
 	defer sp.Finish()
 
+	return p.withLockedConn(ctx, func(c *pgx.Conn) error {
+		row := c.QueryRow(ctx,
+			`SELECT crdb_internal.complete_replication_stream($1, $2)`, streamID, successfulIngestion)
+		if err := row.Scan(&streamID); err != nil {
+			return errors.Wrapf(err, "error completing replication stream %d", streamID)
+		}
+		return nil
+	})
+}
+
+func (p *partitionedStreamClient) withLockedConn(ctx context.Context, f func(*pgx.Conn) error) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	row := p.mu.srcConn.QueryRow(ctx,
-		`SELECT crdb_internal.complete_replication_stream($1, $2)`, streamID, successfulIngestion)
-	if err := row.Scan(&streamID); err != nil {
-		return errors.Wrapf(err, "error completing replication stream %d", streamID)
+	if p.mu.srcConn.IsClosed() {
+		conn, err := pgx.ConnectConfig(ctx, p.pgxConfig)
+		if err != nil {
+			return err
+		}
+		if err := p.mu.srcConn.Ping(ctx); err != nil {
+			return err
+		}
+		p.mu.srcConn = conn
 	}
-	return nil
+
+	return f(p.mu.srcConn)
 }
 
 type LogicalReplicationPlan struct {
@@ -312,20 +328,19 @@ func (p *partitionedStreamClient) PlanLogicalReplication(
 		return LogicalReplicationPlan{}, errors.New("cannot plan logical replication without logical replication flag")
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	encodedReq, err := protoutil.Marshal(&req)
 	if err != nil {
 		return LogicalReplicationPlan{}, err
 	}
 
-	row := p.mu.srcConn.QueryRow(ctx,
-		fmt.Sprintf("SELECT * FROM crdb_internal.plan_logical_replication($1) AS OF SYSTEM TIME %s", req.PlanAsOf.AsOfSystemTime()),
-		encodedReq)
-
 	streamSpecBytes := []byte{}
-	if err := row.Scan(&streamSpecBytes); err != nil {
+	if err := p.withLockedConn(ctx, func(c *pgx.Conn) error {
+		row := c.QueryRow(ctx,
+			fmt.Sprintf("SELECT * FROM crdb_internal.plan_logical_replication($1) AS OF SYSTEM TIME %s",
+				req.PlanAsOf.AsOfSystemTime()),
+			encodedReq)
+		return row.Scan(&streamSpecBytes)
+	}); err != nil {
 		return LogicalReplicationPlan{}, err
 	}
 
@@ -366,11 +381,12 @@ func (p *partitionedStreamClient) CreateForTables(
 		return nil, err
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	r := p.mu.srcConn.QueryRow(ctx, "SELECT crdb_internal.start_replication_stream_for_tables($1)", reqBytes)
 	specBytes := []byte{}
-	if err := r.Scan(&specBytes); err != nil {
+
+	if err := p.withLockedConn(ctx, func(c *pgx.Conn) error {
+		r := c.QueryRow(ctx, "SELECT crdb_internal.start_replication_stream_for_tables($1)", reqBytes)
+		return r.Scan(&specBytes)
+	}); err != nil {
 		return nil, err
 	}
 
@@ -390,11 +406,11 @@ func (p *partitionedStreamClient) PriorReplicationDetails(
 
 	var id string
 	var fromID, activated gosql.NullString
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	row := p.mu.srcConn.QueryRow(ctx,
-		`SELECT crdb_internal.cluster_id()::string||':'||id::string, source_id, activation_time FROM [SHOW VIRTUAL CLUSTER $1 WITH PRIOR REPLICATION DETAILS]`, tenant)
-	if err := row.Scan(&id, &fromID, &activated); err != nil {
+	if err := p.withLockedConn(ctx, func(c *pgx.Conn) error {
+		row := c.QueryRow(ctx,
+			`SELECT crdb_internal.cluster_id()::string||':'||id::string, source_id, activation_time FROM [SHOW VIRTUAL CLUSTER $1 WITH PRIOR REPLICATION DETAILS]`, tenant)
+		return row.Scan(&id, &fromID, &activated)
+	}); err != nil {
 		return "", "", hlc.Timestamp{}, errors.Wrapf(err, "error querying prior replication details for %s", tenant)
 	}
 
