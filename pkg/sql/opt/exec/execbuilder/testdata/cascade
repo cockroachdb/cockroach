@@ -1047,6 +1047,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+plan type: custom
 rows decoded from KV: 9 (72 B, 18 KVs, 9 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>

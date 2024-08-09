@@ -206,18 +206,38 @@ project
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15,19,20)
-      │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    ├── project
       │    │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15)
-      │    │    │    │    │    │    │    ├── scan flavors
-      │    │    │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15
-      │    │    │    │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    │    │    │    └── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
-      │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── flavorid:7 = $2 [outer=(7), constraints=(/7: (/NULL - ]), fd=()-->(7)]
+      │    │    │    │    │    │    │    └── inner-join (lookup flavors)
+      │    │    │    │    │    │    │         ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 "$2":38!null
+      │    │    │    │    │    │    │         ├── key columns: [1] = [1]
+      │    │    │    │    │    │    │         ├── lookup columns are key
+      │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    │         ├── has-placeholder
+      │    │    │    │    │    │    │         ├── key: ()
+      │    │    │    │    │    │    │         ├── fd: ()-->(1-12,14,15,38), (38)==(7), (7)==(38)
+      │    │    │    │    │    │    │         ├── inner-join (lookup flavors@flavors_flavorid_key)
+      │    │    │    │    │    │    │         │    ├── columns: flavors.id:1!null flavorid:7!null "$2":38!null
+      │    │    │    │    │    │    │         │    ├── flags: disallow merge join
+      │    │    │    │    │    │    │         │    ├── key columns: [38] = [7]
+      │    │    │    │    │    │    │         │    ├── lookup columns are key
+      │    │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    │         │    ├── has-placeholder
+      │    │    │    │    │    │    │         │    ├── key: ()
+      │    │    │    │    │    │    │         │    ├── fd: ()-->(1,7,38), (38)==(7), (7)==(38)
+      │    │    │    │    │    │    │         │    ├── values
+      │    │    │    │    │    │    │         │    │    ├── columns: "$2":38
+      │    │    │    │    │    │    │         │    │    ├── cardinality: [1 - 1]
+      │    │    │    │    │    │    │         │    │    ├── has-placeholder
+      │    │    │    │    │    │    │         │    │    ├── key: ()
+      │    │    │    │    │    │    │         │    │    ├── fd: ()-->(38)
+      │    │    │    │    │    │    │         │    │    └── ($2,)
+      │    │    │    │    │    │    │         │    └── filters (true)
+      │    │    │    │    │    │    │         └── filters (true)
       │    │    │    │    │    │    └── filters
       │    │    │    │    │    │         └── project_id:20 = $1 [outer=(20), constraints=(/20: (/NULL - ]), fd=()-->(20)]
       │    │    │    │    │    └── projections
@@ -796,26 +816,38 @@ project
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-16,20-22)
-      │    │    │    │    │    │    ├── index-join instance_types
+      │    │    │    │    │    │    ├── project
       │    │    │    │    │    │    │    ├── columns: instance_types.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    │    ├── fd: ()-->(1-16)
-      │    │    │    │    │    │    │    └── select
-      │    │    │    │    │    │    │         ├── columns: instance_types.id:1!null name:2!null instance_types.deleted:13!null
+      │    │    │    │    │    │    │    └── inner-join (lookup instance_types)
+      │    │    │    │    │    │    │         ├── columns: instance_types.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 "$1":43!null "$4":44!null
+      │    │    │    │    │    │    │         ├── key columns: [1] = [1]
+      │    │    │    │    │    │    │         ├── lookup columns are key
       │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
       │    │    │    │    │    │    │         ├── has-placeholder
       │    │    │    │    │    │    │         ├── key: ()
-      │    │    │    │    │    │    │         ├── fd: ()-->(1,2,13)
-      │    │    │    │    │    │    │         ├── scan instance_types@instance_types_name_deleted_key
-      │    │    │    │    │    │    │         │    ├── columns: instance_types.id:1!null name:2!null instance_types.deleted:13
-      │    │    │    │    │    │    │         │    ├── constraint: /2/13: (/NULL - ]
-      │    │    │    │    │    │    │         │    ├── key: (1)
-      │    │    │    │    │    │    │         │    └── fd: (1)-->(2,13), (2,13)~~>(1)
-      │    │    │    │    │    │    │         └── filters
-      │    │    │    │    │    │    │              ├── instance_types.deleted:13 = $1 [outer=(13), constraints=(/13: (/NULL - ]), fd=()-->(13)]
-      │    │    │    │    │    │    │              └── name:2 = $4 [outer=(2), constraints=(/2: (/NULL - ]), fd=()-->(2)]
+      │    │    │    │    │    │    │         ├── fd: ()-->(1-16,43,44), (43)==(13), (2)==(44), (44)==(2), (13)==(43)
+      │    │    │    │    │    │    │         ├── inner-join (lookup instance_types@instance_types_name_deleted_key)
+      │    │    │    │    │    │    │         │    ├── columns: instance_types.id:1!null name:2!null instance_types.deleted:13!null "$1":43!null "$4":44!null
+      │    │    │    │    │    │    │         │    ├── flags: disallow merge join
+      │    │    │    │    │    │    │         │    ├── key columns: [44 43] = [2 13]
+      │    │    │    │    │    │    │         │    ├── lookup columns are key
+      │    │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    │         │    ├── has-placeholder
+      │    │    │    │    │    │    │         │    ├── key: ()
+      │    │    │    │    │    │    │         │    ├── fd: ()-->(1,2,13,43,44), (44)==(2), (13)==(43), (43)==(13), (2)==(44)
+      │    │    │    │    │    │    │         │    ├── values
+      │    │    │    │    │    │    │         │    │    ├── columns: "$1":43 "$4":44
+      │    │    │    │    │    │    │         │    │    ├── cardinality: [1 - 1]
+      │    │    │    │    │    │    │         │    │    ├── has-placeholder
+      │    │    │    │    │    │    │         │    │    ├── key: ()
+      │    │    │    │    │    │    │         │    │    ├── fd: ()-->(43,44)
+      │    │    │    │    │    │    │         │    │    └── ($1, $4)
+      │    │    │    │    │    │    │         │    └── filters (true)
+      │    │    │    │    │    │    │         └── filters (true)
       │    │    │    │    │    │    └── filters
       │    │    │    │    │    │         ├── instance_type_projects.deleted:22 = $2 [outer=(22), constraints=(/22: (/NULL - ]), fd=()-->(22)]
       │    │    │    │    │    │         └── project_id:21 = $3 [outer=(21), constraints=(/21: (/NULL - ]), fd=()-->(21)]
@@ -922,38 +954,70 @@ project
       │    │    │    │    ├── has-placeholder
       │    │    │    │    ├── key: ()
       │    │    │    │    ├── fd: ()-->(1-16,20,30)
-      │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: true:30 instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 instance_type_projects.instance_type_id:20
+      │    │    │    │    ├── left-join (merge)
+      │    │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 instance_type_projects.instance_type_id:20 true:30
+      │    │    │    │    │    ├── left ordering: +1
+      │    │    │    │    │    ├── right ordering: +20
       │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    ├── key: ()
       │    │    │    │    │    ├── fd: ()-->(1-16,20,30)
-      │    │    │    │    │    ├── left-join (lookup instance_type_projects@instance_type_projects_instance_type_id_project_id_deleted_key)
-      │    │    │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 instance_type_projects.instance_type_id:20 project_id:21 instance_type_projects.deleted:22
-      │    │    │    │    │    │    ├── key columns: [1] = [20]
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16
       │    │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
-      │    │    │    │    │    │    ├── fd: ()-->(1-16,20-22)
-      │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16
+      │    │    │    │    │    │    ├── fd: ()-->(1-16)
+      │    │    │    │    │    │    └── inner-join (lookup instance_types)
+      │    │    │    │    │    │         ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 "$4":43!null "$1":44!null
+      │    │    │    │    │    │         ├── flags: disallow merge join
+      │    │    │    │    │    │         ├── key columns: [43] = [1]
+      │    │    │    │    │    │         ├── lookup columns are key
+      │    │    │    │    │    │         ├── cardinality: [0 - 1]
+      │    │    │    │    │    │         ├── has-placeholder
+      │    │    │    │    │    │         ├── key: ()
+      │    │    │    │    │    │         ├── fd: ()-->(1-16,43,44), (43)==(1), (13)==(44), (44)==(13), (1)==(43)
+      │    │    │    │    │    │         ├── values
+      │    │    │    │    │    │         │    ├── columns: "$4":43 "$1":44
+      │    │    │    │    │    │         │    ├── cardinality: [1 - 1]
+      │    │    │    │    │    │         │    ├── has-placeholder
+      │    │    │    │    │    │         │    ├── key: ()
+      │    │    │    │    │    │         │    ├── fd: ()-->(43,44)
+      │    │    │    │    │    │         │    └── ($4, $1)
+      │    │    │    │    │    │         └── filters
+      │    │    │    │    │    │              └── instance_types.deleted:13 = "$1":44 [outer=(13,44), constraints=(/13: (/NULL - ]; /44: (/NULL - ]), fd=(13)==(44), (44)==(13)]
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: true:30!null instance_type_projects.instance_type_id:20!null
+      │    │    │    │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    ├── has-placeholder
+      │    │    │    │    │    │    ├── key: ()
+      │    │    │    │    │    │    ├── fd: ()-->(20,30)
+      │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:20!null project_id:21!null instance_type_projects.deleted:22!null
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    │    ├── key: ()
-      │    │    │    │    │    │    │    ├── fd: ()-->(1-16)
-      │    │    │    │    │    │    │    ├── scan instance_types
-      │    │    │    │    │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13 instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16
-      │    │    │    │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    │    │    │    └── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
-      │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         ├── instance_types.id:1 = $4 [outer=(1), constraints=(/1: (/NULL - ]), fd=()-->(1)]
-      │    │    │    │    │    │    │         └── instance_types.deleted:13 = $1 [outer=(13), constraints=(/13: (/NULL - ]), fd=()-->(13)]
-      │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         ├── instance_type_projects.deleted:22 = $2 [outer=(22), constraints=(/22: (/NULL - ]), fd=()-->(22)]
-      │    │    │    │    │    │         ├── project_id:21 = $3 [outer=(21), constraints=(/21: (/NULL - ]), fd=()-->(21)]
-      │    │    │    │    │    │         └── instance_type_projects.instance_type_id:20 = $4 [outer=(20), constraints=(/20: (/NULL - ]), fd=()-->(20)]
-      │    │    │    │    │    └── projections
-      │    │    │    │    │         └── CASE instance_type_projects.instance_type_id:20 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE true END [as=true:30, outer=(20)]
+      │    │    │    │    │    │    │    ├── fd: ()-->(20-22)
+      │    │    │    │    │    │    │    └── inner-join (lookup instance_type_projects@instance_type_projects_instance_type_id_project_id_deleted_key)
+      │    │    │    │    │    │    │         ├── columns: instance_type_projects.instance_type_id:20!null project_id:21!null instance_type_projects.deleted:22!null "$2":45!null "$3":46!null "$4":47!null
+      │    │    │    │    │    │    │         ├── flags: disallow merge join
+      │    │    │    │    │    │    │         ├── key columns: [47 46 45] = [20 21 22]
+      │    │    │    │    │    │    │         ├── lookup columns are key
+      │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    │         ├── has-placeholder
+      │    │    │    │    │    │    │         ├── key: ()
+      │    │    │    │    │    │    │         ├── fd: ()-->(20-22,45-47), (45)==(22), (21)==(46), (46)==(21), (20)==(47), (47)==(20), (22)==(45)
+      │    │    │    │    │    │    │         ├── values
+      │    │    │    │    │    │    │         │    ├── columns: "$2":45 "$3":46 "$4":47
+      │    │    │    │    │    │    │         │    ├── cardinality: [1 - 1]
+      │    │    │    │    │    │    │         │    ├── has-placeholder
+      │    │    │    │    │    │    │         │    ├── key: ()
+      │    │    │    │    │    │    │         │    ├── fd: ()-->(45-47)
+      │    │    │    │    │    │    │         │    └── ($2, $3, $4)
+      │    │    │    │    │    │    │         └── filters (true)
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── true [as=true:30]
+      │    │    │    │    │    └── filters (true)
       │    │    │    │    └── filters
       │    │    │    │         └── is_public:12 OR (true:30 IS NOT NULL) [outer=(12,30)]
       │    │    │    └── $5
@@ -1059,18 +1123,38 @@ project
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15,19,20)
-      │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    ├── project
       │    │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15)
-      │    │    │    │    │    │    │    ├── scan flavors
-      │    │    │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15
-      │    │    │    │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    │    │    │    └── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
-      │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── name:2 = $2 [outer=(2), constraints=(/2: (/NULL - ]), fd=()-->(2)]
+      │    │    │    │    │    │    │    └── inner-join (lookup flavors)
+      │    │    │    │    │    │    │         ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 "$2":38!null
+      │    │    │    │    │    │    │         ├── key columns: [1] = [1]
+      │    │    │    │    │    │    │         ├── lookup columns are key
+      │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    │         ├── has-placeholder
+      │    │    │    │    │    │    │         ├── key: ()
+      │    │    │    │    │    │    │         ├── fd: ()-->(1-12,14,15,38), (38)==(2), (2)==(38)
+      │    │    │    │    │    │    │         ├── inner-join (lookup flavors@flavors_name_key)
+      │    │    │    │    │    │    │         │    ├── columns: flavors.id:1!null name:2!null "$2":38!null
+      │    │    │    │    │    │    │         │    ├── flags: disallow merge join
+      │    │    │    │    │    │    │         │    ├── key columns: [38] = [2]
+      │    │    │    │    │    │    │         │    ├── lookup columns are key
+      │    │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    │         │    ├── has-placeholder
+      │    │    │    │    │    │    │         │    ├── key: ()
+      │    │    │    │    │    │    │         │    ├── fd: ()-->(1,2,38), (38)==(2), (2)==(38)
+      │    │    │    │    │    │    │         │    ├── values
+      │    │    │    │    │    │    │         │    │    ├── columns: "$2":38
+      │    │    │    │    │    │    │         │    │    ├── cardinality: [1 - 1]
+      │    │    │    │    │    │    │         │    │    ├── has-placeholder
+      │    │    │    │    │    │    │         │    │    ├── key: ()
+      │    │    │    │    │    │    │         │    │    ├── fd: ()-->(38)
+      │    │    │    │    │    │    │         │    │    └── ($2,)
+      │    │    │    │    │    │    │         │    └── filters (true)
+      │    │    │    │    │    │    │         └── filters (true)
       │    │    │    │    │    │    └── filters
       │    │    │    │    │    │         └── project_id:20 = $1 [outer=(20), constraints=(/20: (/NULL - ]), fd=()-->(20)]
       │    │    │    │    │    └── projections
@@ -1179,18 +1263,38 @@ project
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15,19,20)
-      │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    ├── project
       │    │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15)
-      │    │    │    │    │    │    │    ├── scan flavors
-      │    │    │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15
-      │    │    │    │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    │    │    │    └── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
-      │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── flavorid:7 = $2 [outer=(7), constraints=(/7: (/NULL - ]), fd=()-->(7)]
+      │    │    │    │    │    │    │    └── inner-join (lookup flavors)
+      │    │    │    │    │    │    │         ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 "$2":38!null
+      │    │    │    │    │    │    │         ├── key columns: [1] = [1]
+      │    │    │    │    │    │    │         ├── lookup columns are key
+      │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    │         ├── has-placeholder
+      │    │    │    │    │    │    │         ├── key: ()
+      │    │    │    │    │    │    │         ├── fd: ()-->(1-12,14,15,38), (38)==(7), (7)==(38)
+      │    │    │    │    │    │    │         ├── inner-join (lookup flavors@flavors_flavorid_key)
+      │    │    │    │    │    │    │         │    ├── columns: flavors.id:1!null flavorid:7!null "$2":38!null
+      │    │    │    │    │    │    │         │    ├── flags: disallow merge join
+      │    │    │    │    │    │    │         │    ├── key columns: [38] = [7]
+      │    │    │    │    │    │    │         │    ├── lookup columns are key
+      │    │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    │         │    ├── has-placeholder
+      │    │    │    │    │    │    │         │    ├── key: ()
+      │    │    │    │    │    │    │         │    ├── fd: ()-->(1,7,38), (38)==(7), (7)==(38)
+      │    │    │    │    │    │    │         │    ├── values
+      │    │    │    │    │    │    │         │    │    ├── columns: "$2":38
+      │    │    │    │    │    │    │         │    │    ├── cardinality: [1 - 1]
+      │    │    │    │    │    │    │         │    │    ├── has-placeholder
+      │    │    │    │    │    │    │         │    │    ├── key: ()
+      │    │    │    │    │    │    │         │    │    ├── fd: ()-->(38)
+      │    │    │    │    │    │    │         │    │    └── ($2,)
+      │    │    │    │    │    │    │         │    └── filters (true)
+      │    │    │    │    │    │    │         └── filters (true)
       │    │    │    │    │    │    └── filters
       │    │    │    │    │    │         └── project_id:20 = $1 [outer=(20), constraints=(/20: (/NULL - ]), fd=()-->(20)]
       │    │    │    │    │    └── projections
@@ -1611,26 +1715,38 @@ project
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-16,20-22)
-      │    │    │    │    │    │    ├── index-join instance_types
+      │    │    │    │    │    │    ├── project
       │    │    │    │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    │    ├── fd: ()-->(1-16)
-      │    │    │    │    │    │    │    └── select
-      │    │    │    │    │    │    │         ├── columns: instance_types.id:1!null flavorid:7!null instance_types.deleted:13!null
+      │    │    │    │    │    │    │    └── inner-join (lookup instance_types)
+      │    │    │    │    │    │    │         ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 "$1":43!null "$4":44!null
+      │    │    │    │    │    │    │         ├── key columns: [1] = [1]
+      │    │    │    │    │    │    │         ├── lookup columns are key
       │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
       │    │    │    │    │    │    │         ├── has-placeholder
       │    │    │    │    │    │    │         ├── key: ()
-      │    │    │    │    │    │    │         ├── fd: ()-->(1,7,13)
-      │    │    │    │    │    │    │         ├── scan instance_types@instance_types_flavorid_deleted_key
-      │    │    │    │    │    │    │         │    ├── columns: instance_types.id:1!null flavorid:7!null instance_types.deleted:13
-      │    │    │    │    │    │    │         │    ├── constraint: /7/13: (/NULL - ]
-      │    │    │    │    │    │    │         │    ├── key: (1)
-      │    │    │    │    │    │    │         │    └── fd: (1)-->(7,13), (7,13)~~>(1)
-      │    │    │    │    │    │    │         └── filters
-      │    │    │    │    │    │    │              ├── instance_types.deleted:13 = $1 [outer=(13), constraints=(/13: (/NULL - ]), fd=()-->(13)]
-      │    │    │    │    │    │    │              └── flavorid:7 = $4 [outer=(7), constraints=(/7: (/NULL - ]), fd=()-->(7)]
+      │    │    │    │    │    │    │         ├── fd: ()-->(1-16,43,44), (43)==(13), (7)==(44), (44)==(7), (13)==(43)
+      │    │    │    │    │    │    │         ├── inner-join (lookup instance_types@instance_types_flavorid_deleted_key)
+      │    │    │    │    │    │    │         │    ├── columns: instance_types.id:1!null flavorid:7!null instance_types.deleted:13!null "$1":43!null "$4":44!null
+      │    │    │    │    │    │    │         │    ├── flags: disallow merge join
+      │    │    │    │    │    │    │         │    ├── key columns: [44 43] = [7 13]
+      │    │    │    │    │    │    │         │    ├── lookup columns are key
+      │    │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    │         │    ├── has-placeholder
+      │    │    │    │    │    │    │         │    ├── key: ()
+      │    │    │    │    │    │    │         │    ├── fd: ()-->(1,7,13,43,44), (44)==(7), (13)==(43), (43)==(13), (7)==(44)
+      │    │    │    │    │    │    │         │    ├── values
+      │    │    │    │    │    │    │         │    │    ├── columns: "$1":43 "$4":44
+      │    │    │    │    │    │    │         │    │    ├── cardinality: [1 - 1]
+      │    │    │    │    │    │    │         │    │    ├── has-placeholder
+      │    │    │    │    │    │    │         │    │    ├── key: ()
+      │    │    │    │    │    │    │         │    │    ├── fd: ()-->(43,44)
+      │    │    │    │    │    │    │         │    │    └── ($1, $4)
+      │    │    │    │    │    │    │         │    └── filters (true)
+      │    │    │    │    │    │    │         └── filters (true)
       │    │    │    │    │    │    └── filters
       │    │    │    │    │    │         ├── instance_type_projects.deleted:22 = $2 [outer=(22), constraints=(/22: (/NULL - ]), fd=()-->(22)]
       │    │    │    │    │    │         └── project_id:21 = $3 [outer=(21), constraints=(/21: (/NULL - ]), fd=()-->(21)]
@@ -2350,26 +2466,38 @@ project
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(1-16,20-22)
-      │    │    │    │    │    │    ├── index-join instance_types
+      │    │    │    │    │    │    ├── project
       │    │    │    │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    │    ├── fd: ()-->(1-16)
-      │    │    │    │    │    │    │    └── select
-      │    │    │    │    │    │    │         ├── columns: instance_types.id:1!null flavorid:7!null instance_types.deleted:13!null
+      │    │    │    │    │    │    │    └── inner-join (lookup instance_types)
+      │    │    │    │    │    │    │         ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 "$1":43!null "$4":44!null
+      │    │    │    │    │    │    │         ├── key columns: [1] = [1]
+      │    │    │    │    │    │    │         ├── lookup columns are key
       │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
       │    │    │    │    │    │    │         ├── has-placeholder
       │    │    │    │    │    │    │         ├── key: ()
-      │    │    │    │    │    │    │         ├── fd: ()-->(1,7,13)
-      │    │    │    │    │    │    │         ├── scan instance_types@instance_types_flavorid_deleted_key
-      │    │    │    │    │    │    │         │    ├── columns: instance_types.id:1!null flavorid:7!null instance_types.deleted:13
-      │    │    │    │    │    │    │         │    ├── constraint: /7/13: (/NULL - ]
-      │    │    │    │    │    │    │         │    ├── key: (1)
-      │    │    │    │    │    │    │         │    └── fd: (1)-->(7,13), (7,13)~~>(1)
-      │    │    │    │    │    │    │         └── filters
-      │    │    │    │    │    │    │              ├── instance_types.deleted:13 = $1 [outer=(13), constraints=(/13: (/NULL - ]), fd=()-->(13)]
-      │    │    │    │    │    │    │              └── flavorid:7 = $4 [outer=(7), constraints=(/7: (/NULL - ]), fd=()-->(7)]
+      │    │    │    │    │    │    │         ├── fd: ()-->(1-16,43,44), (43)==(13), (7)==(44), (44)==(7), (13)==(43)
+      │    │    │    │    │    │    │         ├── inner-join (lookup instance_types@instance_types_flavorid_deleted_key)
+      │    │    │    │    │    │    │         │    ├── columns: instance_types.id:1!null flavorid:7!null instance_types.deleted:13!null "$1":43!null "$4":44!null
+      │    │    │    │    │    │    │         │    ├── flags: disallow merge join
+      │    │    │    │    │    │    │         │    ├── key columns: [44 43] = [7 13]
+      │    │    │    │    │    │    │         │    ├── lookup columns are key
+      │    │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    │         │    ├── has-placeholder
+      │    │    │    │    │    │    │         │    ├── key: ()
+      │    │    │    │    │    │    │         │    ├── fd: ()-->(1,7,13,43,44), (44)==(7), (13)==(43), (43)==(13), (7)==(44)
+      │    │    │    │    │    │    │         │    ├── values
+      │    │    │    │    │    │    │         │    │    ├── columns: "$1":43 "$4":44
+      │    │    │    │    │    │    │         │    │    ├── cardinality: [1 - 1]
+      │    │    │    │    │    │    │         │    │    ├── has-placeholder
+      │    │    │    │    │    │    │         │    │    ├── key: ()
+      │    │    │    │    │    │    │         │    │    ├── fd: ()-->(43,44)
+      │    │    │    │    │    │    │         │    │    └── ($1, $4)
+      │    │    │    │    │    │    │         │    └── filters (true)
+      │    │    │    │    │    │    │         └── filters (true)
       │    │    │    │    │    │    └── filters
       │    │    │    │    │    │         ├── instance_type_projects.deleted:22 = $2 [outer=(22), constraints=(/22: (/NULL - ]), fd=()-->(22)]
       │    │    │    │    │    │         └── project_id:21 = $3 [outer=(21), constraints=(/21: (/NULL - ]), fd=()-->(21)]
@@ -2467,36 +2595,69 @@ project
       │    │    │    │    ├── has-placeholder
       │    │    │    │    ├── key: ()
       │    │    │    │    ├── fd: ()-->(1-12,14,15,19,27)
-      │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: true:27 flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 flavor_projects.flavor_id:19
+      │    │    │    │    ├── left-join (merge)
+      │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 flavor_projects.flavor_id:19 true:27
+      │    │    │    │    │    ├── left ordering: +1
+      │    │    │    │    │    ├── right ordering: +19
       │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    ├── key: ()
       │    │    │    │    │    ├── fd: ()-->(1-12,14,15,19,27)
-      │    │    │    │    │    ├── left-join (lookup flavor_projects@flavor_projects_flavor_id_project_id_key)
-      │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 flavor_projects.flavor_id:19 project_id:20
-      │    │    │    │    │    │    ├── key columns: [1] = [19]
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15
       │    │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
-      │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15,19,20)
-      │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15
+      │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15)
+      │    │    │    │    │    │    └── inner-join (lookup flavors)
+      │    │    │    │    │    │         ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 "$2":38!null
+      │    │    │    │    │    │         ├── flags: disallow merge join
+      │    │    │    │    │    │         ├── key columns: [38] = [1]
+      │    │    │    │    │    │         ├── lookup columns are key
+      │    │    │    │    │    │         ├── cardinality: [0 - 1]
+      │    │    │    │    │    │         ├── has-placeholder
+      │    │    │    │    │    │         ├── key: ()
+      │    │    │    │    │    │         ├── fd: ()-->(1-12,14,15,38), (38)==(1), (1)==(38)
+      │    │    │    │    │    │         ├── values
+      │    │    │    │    │    │         │    ├── columns: "$2":38
+      │    │    │    │    │    │         │    ├── cardinality: [1 - 1]
+      │    │    │    │    │    │         │    ├── has-placeholder
+      │    │    │    │    │    │         │    ├── key: ()
+      │    │    │    │    │    │         │    ├── fd: ()-->(38)
+      │    │    │    │    │    │         │    └── ($2,)
+      │    │    │    │    │    │         └── filters (true)
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: true:27!null flavor_projects.flavor_id:19!null
+      │    │    │    │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    ├── has-placeholder
+      │    │    │    │    │    │    ├── key: ()
+      │    │    │    │    │    │    ├── fd: ()-->(19,27)
+      │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    ├── columns: flavor_projects.flavor_id:19!null project_id:20!null
       │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    │    ├── key: ()
-      │    │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15)
-      │    │    │    │    │    │    │    ├── scan flavors
-      │    │    │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15
-      │    │    │    │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    │    │    │    └── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
-      │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── flavors.id:1 = $2 [outer=(1), constraints=(/1: (/NULL - ]), fd=()-->(1)]
-      │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         ├── project_id:20 = $1 [outer=(20), constraints=(/20: (/NULL - ]), fd=()-->(20)]
-      │    │    │    │    │    │         └── flavor_projects.flavor_id:19 = $2 [outer=(19), constraints=(/19: (/NULL - ]), fd=()-->(19)]
-      │    │    │    │    │    └── projections
-      │    │    │    │    │         └── CASE flavor_projects.flavor_id:19 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE true END [as=true:27, outer=(19)]
+      │    │    │    │    │    │    │    ├── fd: ()-->(19,20)
+      │    │    │    │    │    │    │    └── inner-join (lookup flavor_projects@flavor_projects_flavor_id_project_id_key)
+      │    │    │    │    │    │    │         ├── columns: flavor_projects.flavor_id:19!null project_id:20!null "$1":39!null "$2":40!null
+      │    │    │    │    │    │    │         ├── flags: disallow merge join
+      │    │    │    │    │    │    │         ├── key columns: [40 39] = [19 20]
+      │    │    │    │    │    │    │         ├── lookup columns are key
+      │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
+      │    │    │    │    │    │    │         ├── has-placeholder
+      │    │    │    │    │    │    │         ├── key: ()
+      │    │    │    │    │    │    │         ├── fd: ()-->(19,20,39,40), (39)==(20), (19)==(40), (40)==(19), (20)==(39)
+      │    │    │    │    │    │    │         ├── values
+      │    │    │    │    │    │    │         │    ├── columns: "$1":39 "$2":40
+      │    │    │    │    │    │    │         │    ├── cardinality: [1 - 1]
+      │    │    │    │    │    │    │         │    ├── has-placeholder
+      │    │    │    │    │    │    │         │    ├── key: ()
+      │    │    │    │    │    │    │         │    ├── fd: ()-->(39,40)
+      │    │    │    │    │    │    │         │    └── ($1, $2)
+      │    │    │    │    │    │    │         └── filters (true)
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── true [as=true:27]
+      │    │    │    │    │    └── filters (true)
       │    │    │    │    └── filters
       │    │    │    │         └── is_public:12 OR (true:27 IS NOT NULL) [outer=(12,27)]
       │    │    │    └── $3
