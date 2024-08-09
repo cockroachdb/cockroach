@@ -108,14 +108,13 @@ func TestRegistrationBasic(t *testing.T) {
 	t.Run("overflow with unbuffered registration", func(t *testing.T) {
 		s := newTestStream()
 		catchupReg := newTestRegistration(
+			withStream(s),
 			withUnbufferedRegistration(true),
 			withRSpan(spBC), withStream(s),
 			withStartTs(hlc.Timestamp{WallTime: 1}),
-			withCatchUpIter(newTestIterator([]storage.MVCCKeyValue{
-				makeKV("b", "val1", 10),
-				makeKV("bc", "val3", 11),
-				makeKV("bd", "val4", 9),
-			}, nil))).(*unbufferedRegistration)
+			// Initialize a noop catch-up iterator to force catch up buffer to be used
+			// for events publish.
+			withCatchUpIter(newTestIterator([]storage.MVCCKeyValue{}, nil))).(*unbufferedRegistration)
 		// Safe to access without locking since catchupReg is not used elsewhere
 		// yet.
 		capOfBuf := cap(catchupReg.mu.catchUpBuf)
@@ -128,7 +127,7 @@ func TestRegistrationBasic(t *testing.T) {
 	})
 	t.Run("stream error", func(t *testing.T) {
 		s := newTestStream()
-		streamErrReg := newTestRegistration(withRSpan(spAB))
+		streamErrReg := newTestRegistration(withRSpan(spAB), withStream(s))
 		streamErr := fmt.Errorf("stream error")
 		s.SetSendErr(streamErr)
 		go streamErrReg.runOutputLoop(ctx, 0)
@@ -138,7 +137,7 @@ func TestRegistrationBasic(t *testing.T) {
 
 	t.Run("stream context canceled", func(t *testing.T) {
 		s := newTestStream()
-		streamCancelReg := newTestRegistration(withRSpan(spAB))
+		streamCancelReg := newTestRegistration(withRSpan(spAB), withStream(s))
 		s.Cancel()
 		go streamCancelReg.runOutputLoop(ctx, 0)
 		require.NoError(t, streamCancelReg.waitForCaughtUp(ctx))
@@ -295,9 +294,9 @@ func TestRegistryWithOmitOrigin(t *testing.T) {
 	reg := makeRegistry(NewMetrics())
 
 	sAC := newTestStream()
-	rAC := newTestRegistration(withRSpan(spAC))
+	rAC := newTestRegistration(withRSpan(spAC), withStream(sAC))
 	originFilteringStream := newTestStream()
-	originFiltering := newTestRegistration(withRSpan(spAC), withOmitRemote(true))
+	originFiltering := newTestRegistration(withRSpan(spAC), withOmitRemote(true), withStream(originFilteringStream))
 
 	go rAC.runOutputLoop(ctx, 0)
 	go originFiltering.runOutputLoop(ctx, 0)
