@@ -488,9 +488,6 @@ const databaseDetailQueries: DatabaseDetailsQuery<DatabaseDetailsRow>[] = [
   getDatabaseTablesQuery,
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
-  getDatabaseReplicasAndRegions,
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
   getDatabaseIndexUsageStats,
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
