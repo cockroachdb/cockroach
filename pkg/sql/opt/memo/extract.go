@@ -101,6 +101,69 @@ func ExtractConstDatum(e opt.Expr) tree.Datum {
 	panic(errors.AssertionFailedf("non-const expression: %+v", e))
 }
 
+// CanExtractNonNullConstDatum returns true if a constant datum can be created
+// from the given expression. Arrays are considered not-null constant values if
+// they contain only non-null constant values, but tuples are not due to their
+// surprising behavior in expressions when elements are NULL (see #48299). If
+// CanExtractNonNullConstDatum returns true, then ExtractNonNullConstDatum is
+// guaranteed to work as well.
+func CanExtractNonNullConstDatum(e opt.Expr) bool {
+	switch t := e.(type) {
+	case *TrueExpr, *FalseExpr:
+		return true
+
+	case *ConstExpr:
+		// Nulls should be NullExprs, not ConstExprs, as long as
+		// ConstructConstVal is used instead of ConstructConst. However, there
+		// currently some usages of ConstuctConst, so we check for a null datum
+		// in a ConstExpr just in case.
+		// TODO(mgartner): Unexport Factory.ConstructConst and change all usages
+		// of it to ConstructConstVal.
+		return t.Value != tree.DNull
+
+	case *ArrayExpr:
+		for _, elem := range t.Elems {
+			if !CanExtractNonNullConstDatum(elem) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// ExtractNonNullConstDatum returns the Datum that represents the value of an
+// expression with a constant value. An expression with a constant value is:
+//   - one that has a ConstValue tag, or
+//   - a tuple or array where all children are constant values.
+func ExtractNonNullConstDatum(e opt.Expr) tree.Datum {
+	switch t := e.(type) {
+	case *TrueExpr:
+		return tree.DBoolTrue
+
+	case *FalseExpr:
+		return tree.DBoolFalse
+
+	case *ConstExpr:
+		if t.Value == tree.DNull {
+			panic(errors.AssertionFailedf("null expression: %+v", e))
+		}
+		return t.Value
+
+	case *ArrayExpr:
+		elementType := t.Typ.ArrayContents()
+		a := tree.NewDArray(elementType)
+		a.Array = make(tree.Datums, len(t.Elems))
+		a.HasNulls = false
+		a.HasNonNulls = true
+		for i := range a.Array {
+			a.Array[i] = ExtractNonNullConstDatum(t.Elems[i])
+		}
+		return a
+	}
+	panic(errors.AssertionFailedf("non-const or null expression: %+v", e))
+}
+
 // ExtractAggFunc digs down into the given aggregate expression and returns the
 // aggregate function, skipping past any AggFilter or AggDistinct operators.
 func ExtractAggFunc(e opt.ScalarExpr) opt.ScalarExpr {
