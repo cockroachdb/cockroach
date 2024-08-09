@@ -999,6 +999,9 @@ type FunctionDescriptor interface {
 	// IsProcedure returns true if the descriptor represents a procedure. It
 	// returns false if the descriptor represents a user-defined function.
 	IsProcedure() bool
+
+	// GetSecurity returns
+	GetSecurity() catpb.FunctionRoutineSecurity
 }
 
 // FilterDroppedDescriptor returns an error if the descriptor state is DROP.
