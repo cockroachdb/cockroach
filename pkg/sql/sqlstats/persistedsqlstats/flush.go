@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // MaybeFlush flushes in-memory sql stats into a system table, returning true if the flush
@@ -170,7 +171,9 @@ func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, er
 	return isSizeLimitReached, nil
 }
 
-func (s *PersistedSQLStats) doFlush(ctx context.Context, workFn func() error, errMsg string) {
+func (s *PersistedSQLStats) doFlush(
+	ctx context.Context, workFn func() error, errMsg redact.RedactableString,
+) {
 	var err error
 	flushBegin := s.getTimeNow()
 
