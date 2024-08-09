@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -85,9 +84,6 @@ type Cache interface {
 
 // New returns a new timestamp cache with the supplied hybrid-logical clock.
 func New(clock *hlc.Clock) Cache {
-	if envutil.EnvOrDefaultBool("COCKROACH_USE_TREE_TSCACHE", false) {
-		return newTreeImpl(clock)
-	}
 	return newSklImpl(clock)
 }
 
