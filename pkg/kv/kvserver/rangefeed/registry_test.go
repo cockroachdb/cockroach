@@ -42,7 +42,7 @@ func TestRegistrationBasic(t *testing.T) {
 		noCatchupReg.publish(ctx, ev1, nil /* alloc */)
 		noCatchupReg.publish(ctx, ev2, nil /* alloc */)
 		if noCatchupReg, ok := noCatchupReg.(*bufferedRegistration); ok {
-			require.Equal(t, noCatchupReg.buf, 2)
+			require.Equal(t, len(noCatchupReg.buf), 2)
 		}
 		go noCatchupReg.runOutputLoop(ctx, 0)
 		require.NoError(t, noCatchupReg.waitForCaughtUp(ctx))
@@ -62,7 +62,7 @@ func TestRegistrationBasic(t *testing.T) {
 		catchupReg.publish(ctx, ev1, nil /* alloc */)
 		catchupReg.publish(ctx, ev2, nil /* alloc */)
 		if noCatchupReg, ok := catchupReg.(*bufferedRegistration); ok {
-			require.Equal(t, noCatchupReg.buf, 2)
+			require.Equal(t, len(noCatchupReg.buf), 2)
 		}
 		go catchupReg.runOutputLoop(ctx, 0)
 		require.NoError(t, catchupReg.waitForCaughtUp(ctx))
@@ -107,7 +107,9 @@ func TestRegistrationBasic(t *testing.T) {
 	})
 	t.Run("overflow with unbuffered registration", func(t *testing.T) {
 		s := newTestStream()
-		catchupReg := newTestRegistration(withRSpan(spBC), withStream(s),
+		catchupReg := newTestRegistration(
+			withUnbufferedRegistration(true),
+			withRSpan(spBC), withStream(s),
 			withStartTs(hlc.Timestamp{WallTime: 1}),
 			withCatchUpIter(newTestIterator([]storage.MVCCKeyValue{
 				makeKV("b", "val1", 10),
