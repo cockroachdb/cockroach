@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2024 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -16,7 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func (p *planner) Unlisten(ctx context.Context, n *tree.Unlisten) (planNode, error) {
-	delete(dummyNotificationListens, n.ChannelName.String())
-	return newZeroNode(nil /* columns */), nil
+func (p *planner) Listen(ctx context.Context, n *tree.Listen) (planNode, error) {
+	// TODO: run an EXPERIMENTAL CREATE CHANGEFEED plan/stmt basically with a different sort of sink that hooks up to this guy
+
+	// Dummy implementation.
+	dummyNotificationListens[n.ChannelName.String()] = struct{}{}
+
+	return newZeroNode(nil), nil
 }

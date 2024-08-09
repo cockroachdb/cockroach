@@ -222,6 +222,10 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.Grant(ctx, n)
 	case *tree.GrantRole:
 		return p.GrantRole(ctx, n)
+	case *tree.Listen:
+		return p.Listen(ctx, n)
+	case *tree.Notify:
+		return p.Notify(ctx, n)
 	case *tree.MoveCursor:
 		return p.FetchCursor(ctx, &n.CursorStmt)
 	case *tree.ReassignOwnedBy:
@@ -375,6 +379,8 @@ func init() {
 		&tree.FetchCursor{},
 		&tree.Grant{},
 		&tree.GrantRole{},
+		&tree.Listen{},
+		&tree.Notify{},
 		&tree.MoveCursor{},
 		&tree.ReassignOwnedBy{},
 		&tree.RefreshMaterializedView{},
