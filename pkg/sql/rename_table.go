@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -113,6 +114,12 @@ func (n *renameTableNode) startExec(params runParams) error {
 		ParentID:       tableDesc.GetParentID(),
 		ParentSchemaID: tableDesc.GetParentSchemaID(),
 		Name:           tableDesc.GetName(),
+	}
+
+	// Exit early with an error if the table is undergoing a declarative schema
+	// change.
+	if catalog.HasConcurrentDeclarativeSchemaChange(n.tableDesc) {
+		return scerrors.ConcurrentSchemaChangeError(n.tableDesc)
 	}
 
 	var targetDbDesc catalog.DatabaseDescriptor
