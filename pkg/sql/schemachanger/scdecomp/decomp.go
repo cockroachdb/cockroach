@@ -16,6 +16,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -441,6 +442,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 					&scpb.IndexZoneConfig{
 						TableID:       tbl.GetID(),
 						IndexID:       catid.IndexID(subZoneCfg.IndexID),
+						Subzones:      []zonepb.Subzone{subZoneCfg},
 						PartitionName: subZoneCfg.PartitionName,
 					})
 			}

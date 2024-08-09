@@ -84,7 +84,10 @@ type ImmediateMutationStateUpdater interface {
 	InitSequence(id descpb.ID, startVal int64)
 
 	// UpdateZoneConfig updates a zone config.
-	UpdateZoneConfig(id descpb.ID, zc zonepb.ZoneConfig)
+	UpdateZoneConfig(id descpb.ID, zc *zonepb.ZoneConfig)
+
+	// UpdateSubzoneConfig updates subzone zone configs.
+	UpdateSubzoneConfig(tableid descpb.ID, subzones []zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan)
 
 	// Reset schedules a reset of the in-txn catalog state
 	// to undo the modifications from earlier stages.

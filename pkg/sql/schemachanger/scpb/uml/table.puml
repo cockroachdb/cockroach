@@ -248,6 +248,9 @@ object IndexZoneConfig
 IndexZoneConfig :  TableID
 IndexZoneConfig :  IndexID
 IndexZoneConfig :  PartitionName
+IndexZoneConfig : []Subzones
+IndexZoneConfig : []SubzoneSpans
+IndexZoneConfig :  SeqNum
 
 object Namespace
 
