@@ -2464,19 +2464,19 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		{"columns", colDescQuery},
 	}, `
 		SELECT
-			json_array_length(table_descriptor->'mutation') > 0 AS table_undergoing_schema_change,
+			COALESCE(json_array_length(table_descriptor->'mutations'), 0) > 0 AS table_undergoing_schema_change,
 			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(table_name) AS table_name,
-			quote_ident("column"->>'name') AS column_name,
-			COALESCE(("column"->'nullable')::bool, false) AS is_nullable,
-			("column"->>'computedExpr' = '') AS is_computed,
-			(("column"->'type'->>'family') = ANY($1)) AS is_indexable,
-			(NOT EXISTS(
+			quote_ident(col->>'name') AS column_name,
+			COALESCE((col->'nullable')::bool, false) AS is_nullable,
+			(col->>'computeExpr' IS NOT NULL) AS is_computed,
+			COALESCE((col->'type'->>'family') = ANY($1), false) AS is_indexable,
+			(EXISTS(
 				SELECT *
 				FROM crdb_internal.table_indexes
 				JOIN crdb_internal.index_columns USING (descriptor_id)
 				WHERE table_indexes.is_inverted
 				AND table_indexes.descriptor_id = columns.table_id
-				AND index_columns.column_id = (columns."column"->'id')::int8
+				AND index_columns.column_id = (columns.col->'id')::int8
 			)) AS is_in_inverted_index,
 			(EXISTS(
 				SELECT *
@@ -2484,12 +2484,12 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 				JOIN crdb_internal.index_columns USING (descriptor_id)
 				WHERE table_indexes.is_unique
 				AND table_indexes.descriptor_id = columns.table_id
-				AND index_columns.column_id = (columns."column"->'id')::int8
+				AND index_columns.column_id = (columns.col->'id')::int8
 			)) AS is_unique
 		FROM columns
 		WHERE NOT (
-			COALESCE(("column"->'hidden')::bool, false)
-			OR  COALESCE(("column"->'inaccessible')::bool, false)
+			COALESCE((col->'hidden')::bool, false)
+			OR  COALESCE((col->'inaccessible')::bool, false)
 		)`)
 
 	columns, err := Collect(ctx, og, tx, pgx.RowToMap, q, indexableFamilies)
@@ -2530,18 +2530,22 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		table["unique_check"] = true
 
 		var b strings.Builder
-		fmt.Fprintf(&b, `SELECT * FROM VALUES (`)
-		for _, column := range table["columns"].([]map[string]any) {
+		columns := table["columns"].([]map[string]any)
+		fmt.Fprintf(&b, `SELECT * FROM (VALUES `)
+		for i, column := range columns {
 			// If this column is already known to be unique, don't bother checking
 			// it. This should only happen if there's a unique constraint on the
 			// column.
 			if column["is_unique"].(bool) {
-				fmt.Fprintf(&b, `(SELECT true)`)
+				fmt.Fprintf(&b, `((SELECT true))`)
 			} else {
-				fmt.Fprintf(&b, `(SELECT EXISTS(SELECT 1 FROM %s GROUP BY %s HAVING count(*) > 1))`, table["table_name"], column["column_name"])
+				fmt.Fprintf(&b, `((SELECT EXISTS(SELECT 1 FROM %s GROUP BY %s HAVING count(*) > 1)))`, table["table_name"], column["column_name"])
+			}
+			if i < len(columns)-1 {
+				fmt.Fprint(&b, `, `)
 			}
 		}
-		fmt.Fprintf(&b, `)`)
+		fmt.Fprintf(&b, `) as t (res)`)
 
 		results, err := Collect(ctx, og, tx, pgx.RowTo[bool], b.String())
 		if err != nil {
@@ -2554,16 +2558,13 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 
 		return nil
 	}
-
-	stmt, code, err := Generate[*tree.AlterTable](og.params.rng, og.produceError(), []GenerationCase{
+	generationCases := []GenerationCase{
 		// IF EXISTS should noop if the table doesn't exist.
 		{pgcode.SuccessfulCompletion, `ALTER TABLE IF EXISTS "NonExistentTable" ALTER PRIMARY KEY USING COLUMNS ("IrrelevantColumn")`},
 		// Targeting a table that doesn't exist should error out.
 		{pgcode.UndefinedTable, `ALTER TABLE "NonExistentTable" ALTER PRIMARY KEY USING COLUMNS ("IrrelevantColumn")`},
 		// Targeting a column that doesn't exist should error out.
 		{pgcode.UndefinedColumn, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ("NonExistentColumn") { end }`},
-		// NonUniqueColumns can't be used as PKs.
-		{pgcode.UniqueViolation, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique false | Nullable false | Generated false | Indexable true | InInvertedIndex false | Columns }) { end }`},
 		// NullableColumns can't be used as PKs.
 		{pgcode.InvalidSchemaDefinition, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable true | Generated false | Indexable true | InInvertedIndex false | Columns }) { end }`},
 		// UnindexableColumns can't be used as PKs.
@@ -2580,7 +2581,9 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		{pgcode.SuccessfulCompletion, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable true | InInvertedIndex false | Columns }) { end }`},
 		{pgcode.SuccessfulCompletion, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable true | InInvertedIndex false | Columns }) USING HASH { end }`},
 		// TODO(sql-foundations): Add support for hash parameters and storage parameters.
-	}, template.FuncMap{
+	}
+
+	stmt, code, err := Generate[*tree.AlterTable](og.params.rng, og.produceError(), generationCases, template.FuncMap{
 		"TableNotUnderGoingSchemaChange": func() (map[string]any, error) {
 			tbls := util.Filter(tables, func(table map[string]any) bool {
 				return !table["table_undergoing_schema_change"].(bool)
@@ -2613,9 +2616,9 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 			})
 			return table, nil
 		},
-		"Generated": func(unique bool, table map[string]any) map[string]any {
+		"Generated": func(generated bool, table map[string]any) map[string]any {
 			table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
-				return col["is_unique"].(bool) == unique
+				return col["is_computed"].(bool) == generated
 			})
 			return table
 		},
