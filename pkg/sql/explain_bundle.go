@@ -866,7 +866,8 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 		maybeAdjustTimeout := func(value string) (string, error) {
 			switch varName {
 			case "idle_in_session_timeout", "idle_in_transaction_session_timeout",
-				"idle_session_timeout", "lock_timeout", "statement_timeout", "transaction_timeout":
+				"idle_session_timeout", "lock_timeout", "deadlock_timeout",
+				"statement_timeout", "transaction_timeout":
 				// Defaults for timeout settings are of the duration type (i.e.
 				// "0s"), so we'll parse it to extract the number of
 				// milliseconds (which is what the session variable uses).

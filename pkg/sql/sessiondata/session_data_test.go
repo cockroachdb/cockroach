@@ -108,6 +108,8 @@ func TestUpdateSessionData(t *testing.T) {
 		{variable: "VectorizeMode", value: "on", localOnly: false, expectedSubstring: `vectorize_mode:on`},
 		// duration type.
 		{variable: "LockTimeout", value: "42s", localOnly: false, expectedSubstring: `lock_timeout:<seconds:42 >`},
+		// duration type.
+		{variable: "DeadlockTimeout", value: "42s", localOnly: false, expectedSubstring: `deadlock_timeout:<seconds:42 >`},
 		// This variable has a custom name, int64 type.
 		{variable: "OptimizerFKCascadesLimit", value: "123", localOnly: true, expectedSubstring: `optimizer_fk_cascades_limit:123`},
 		// bool type.

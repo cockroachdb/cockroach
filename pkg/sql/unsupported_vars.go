@@ -78,7 +78,7 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	"cpu_operator_cost",
 	"cpu_tuple_cost",
 	"cursor_tuple_fraction",
-	"deadlock_timeout",
+	//"deadlock_timeout",
 	"debug_deadlocks",
 	"debug_pretty_print",
 	"debug_print_parse",
