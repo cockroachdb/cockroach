@@ -230,6 +230,27 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Transaction Deadlocks"
+      isKvGraph={false}
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`The total number of transaction per second; typically, should be 0 ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="transaction deadlocks per second">
+        {map(nodeIDs, node => (
+          <Metric
+            key={node}
+            name="cr.store.txnwaitqueue.deadlocks_total"
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
+            sources={[node]}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Active Flows for Distributed SQL Statements"
       isKvGraph={false}
       tenantSource={tenantSource}
