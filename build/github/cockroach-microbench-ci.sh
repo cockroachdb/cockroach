@@ -53,8 +53,8 @@ $roachprod_microbench_dir/roachprod-microbench clean "$log_output_file_path" "$c
 
 # Push artifact if this is a base merge and skip comparison
 if $PUSH_STEP; then
-  gcloud storage cp "$cleaned_current_dir/$benchmark_file_name" "$storage_bucket_url/$GITHUB_HEAD_REF/$GITHUB_SHA.log"
-  echo "Skipping comparison since this is a base merge."
+  gcloud storage cp "$cleaned_current_dir/$benchmark_file_name" "$storage_bucket_url/$GITHUB_REF/$GITHUB_SHA.log"
+  echo "Skipping comparison since this is a push step into the target branch"
   exit $success_exit_status
 fi
 
@@ -64,7 +64,7 @@ if ! gcloud storage cp "$storage_bucket_url/$GITHUB_BASE_REF/$BASE_SHA.log" "$cl
   exit $success_exit_status
 fi
 
-if ! $roachprod_microbench_dir/roachprod-microbench compare "$cleaned_current_dir" "$cleaned_base_dir" --threshold "$threshold"; then
+if ! $roachprod_microbench_dir/roachprod-microbench compare "$cleaned_current_dir" "$cleaned_base_dir" --threshold="$threshold" --publish-sheets=false; then
   echo "There is an error during comparison. If it's a perf regression, please try to fix it. This won't block your change for merging currently."
   exit $error_exit_status
 fi
