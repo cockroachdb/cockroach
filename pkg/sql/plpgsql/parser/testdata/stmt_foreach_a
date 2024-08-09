@@ -11,14 +11,14 @@ BEGIN
 END
 ----
 ----
-at or near "x": syntax error: unimplemented: this syntax
+at or near "foreach": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 DECLARE
   s int8 := 0;
   x int;
 BEGIN
   FOREACH x IN ARRAY $1
-          ^
+  ^
 HINT: You have attempted to use a feature that is not yet implemented.
 
 Please check the public issue tracker to check whether this problem is
