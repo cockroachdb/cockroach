@@ -2033,3 +2033,25 @@ statement ok
 ALTER TABLE t_view_func_ref_123017 ALTER PRIMARY KEY USING COLUMNS (a);
 
 subtest end
+
+subtest special_characters
+
+statement ok
+CREATE TABLE table_w0_66 ( "Abc" INT4 PRIMARY KEY, "ab\f" INT2 NOT NULL, FAMILY ("Abc", "ab\f"));
+
+statement ok
+ALTER TABLE public.table_w0_66 ALTER PRIMARY KEY USING COLUMNS ("Abc", "ab\f") USING HASH;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE public.table_w0_66]
+----
+CREATE TABLE public.table_w0_66 (
+  "Abc" INT4 NOT NULL,
+  "ab\f" INT2 NOT NULL,
+  "crdb_internal_Abc_ab\f_shard_16" INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes("Abc", "ab\f"))), 16:::INT8)) VIRTUAL,
+  CONSTRAINT table_w0_66_pkey PRIMARY KEY ("Abc" ASC, "ab\f" ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX "table_w0_66_Abc_key" ("Abc" ASC),
+  FAMILY "fam_0_Abc_ab\f" ("Abc", "ab\f")
+)
+
+subtest end
