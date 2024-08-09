@@ -57,7 +57,6 @@ func newStore(st *cluster.Settings) *LockingStore {
 		OnEvicted: func(_, value interface{}) {
 			i := value.(*Insight)
 			s.stmtCount.Add(-int64(len(i.Statements)))
-			releaseInsight(i)
 		},
 	}
 

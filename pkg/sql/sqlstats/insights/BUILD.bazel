@@ -9,7 +9,6 @@ go_library(
         "detector.go",
         "ingester.go",
         "insights.go",
-        "pool.go",
         "provider.go",
         "registry.go",
         "store.go",

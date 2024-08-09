@@ -390,7 +390,7 @@ func (b *baseStatusServer) localExecutionInsights(
 ) (*serverpb.ListExecutionInsightsResponse, error) {
 	var response serverpb.ListExecutionInsightsResponse
 
-	reader := b.sqlServer.pgServer.SQLServer.GetInsightsReader()
+	reader := b.sqlServer.pgServer.SQLServer.GetInsightsProvider().Store()
 	reader.IterateInsights(ctx, func(ctx context.Context, insight *insights.Insight) {
 		if insight == nil {
 			return

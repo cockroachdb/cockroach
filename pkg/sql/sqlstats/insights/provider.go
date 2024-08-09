@@ -13,6 +13,7 @@ package insights
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -42,4 +43,10 @@ func (p *Provider) Store() *LockingStore {
 // such as percentiles.
 func (p *Provider) Anomalies() *AnomalyDetector {
 	return p.anomalyDetector
+}
+
+// ActiveSessions returns the IDs of all sessions that are currently being observed.
+// Used for testing.
+func (p *Provider) ActiveSessions() []clusterunique.ID {
+	return p.ingester.registry.getTrackedSessions()
 }

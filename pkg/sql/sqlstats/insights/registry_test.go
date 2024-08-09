@@ -403,9 +403,46 @@ func TestInsightsRegistry_Clear(t *testing.T) {
 		registry.ObserveStatement(sessionA.ID, statement)
 		registry.ObserveStatement(sessionB.ID, statement)
 		expLenStmts := 2
-		require.Len(t, registry.statements, expLenStmts)
+		// No need to acquire the lock here, as the registry is not attached to anything.
+		require.Len(t, registry.mu.statements, expLenStmts)
 		// Now clear the cache, assert it's cleared.
 		registry.Clear()
-		require.Empty(t, registry.statements)
+		require.Empty(t, registry.mu.statements)
 	})
+}
+
+func TestInsightsRegistry_ClearSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Initialize the registry.
+	st := cluster.MakeTestingClusterSettings()
+	store := newStore(st)
+	registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
+
+	// Create some test data.
+	sessionA := Session{ID: clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))}
+	sessionB := Session{ID: clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))}
+	statement := &Statement{
+		Status:           Statement_Completed,
+		ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
+		FingerprintID:    appstatspb.StmtFingerprintID(100),
+		LatencyInSeconds: 2,
+	}
+
+	// Record the test data, assert it's cached.
+	registry.ObserveStatement(sessionA.ID, statement)
+	registry.ObserveStatement(sessionB.ID, statement)
+	// No need to acquire the lock here, as the registry is not attached to anything.
+	require.Len(t, registry.mu.statements, 2)
+
+	// Clear the cache, assert it's cleared.
+	registry.clearSession(sessionA.ID)
+
+	// sessionA should be removed, sessionB should still be present.
+	b, ok := registry.mu.statements[sessionA.ID]
+	require.False(t, ok)
+	require.Nil(t, b)
+	require.Len(t, registry.mu.statements, 1)
+	require.NotEmpty(t, registry.mu.statements[sessionB.ID])
 }
