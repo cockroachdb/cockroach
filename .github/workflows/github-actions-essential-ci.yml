@@ -369,6 +369,7 @@ jobs:
           
           # Set the latest commit hash as an output variable
           echo "::set-output name=latest_commit::$LATEST_COMMIT"
+        if: ${{ github.event_name != 'push' }}
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
@@ -380,11 +381,11 @@ jobs:
         run: ./build/github/cockroach-microbench-ci.sh
         env:
           COMPARE_THRESHOLD: "5.00"
-          PUSH_STEP: ${{ github.event_name == 'push' }}
+          PUSH_STEP: ${{ github.event_name == 'push' && env.GITHUB_ACTIONS_BRANCH != 'staging' }}
           BASE_SHA: ${{ steps.get_latest_commit_target_branch.outputs.latest_commit }}
 
           # TODO(sambhav-jain-16): add Performance note check and use this flag. Currently set to false (https://github.com/cockroachdb/cockroach/issues/106661)
-          SKIP_COMPARISON: false
+          SKIP_COMPARISON: ${{ env.GITHUB_ACTIONS_BRANCH == 'staging' }}
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
