@@ -407,29 +407,50 @@ func ShrinkCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 	})
 }
 
-// DestroyCluster TODO(peter): document
-func DestroyCluster(l *logger.Logger, c *Cluster) error {
-	// check if any node is supported as promhelper cluster
+func DeletePromConfig(l *logger.Logger, c *Cluster) error {
+	var isCompatible bool
+	// Find if any node is supports prometheus scraping. If there isn't one,
+	// then return as there are no prom configs to delete.
 	for _, node := range c.VMs {
 		if _, ok := promhelperclient.SupportedPromProjects[node.Project]; ok &&
 			node.Provider == gce.ProviderName {
-			if err := promhelperclient.NewPromClient().DeleteClusterConfig(context.Background(),
-				c.Name, false, false /* insecure */, l); err != nil {
-				// TODO(bhaskar): Obtain secure cluster information.
-				// Cluster does not have the information on secure or not. So, we retry as insecure
-				// if delete fails with cluster as secure
-				if strings.Contains(err.Error(), "request failed with status 404") {
-					if err = promhelperclient.NewPromClient().DeleteClusterConfig(context.Background(),
-						c.Name, false, true /* insecure */, l); err != nil {
-						l.Errorf("Failed to delete the cluster config with cluster as insecure and secure: %v", err)
-					}
-				} else {
-					l.Errorf("Failed to delete the cluster config with cluster as secure: %v", err)
-				}
-			}
+			isCompatible = true
 			break
 		}
 	}
+	if !isCompatible {
+		return nil
+	}
+
+	// Deleting the cluster config should return within a few seconds but
+	// frequently hangs for up to two minutes. Put an upper bound on waiting
+	// and let the GC clean up the missed configs.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := promhelperclient.NewPromClient().DeleteClusterConfig(ctx,
+		c.Name, false, false /* insecure */, l); err != nil {
+		// TODO(bhaskar): Obtain secure cluster information.
+		// Cluster does not have the information on secure or not. So, we retry as insecure
+		// if delete fails with cluster as secure
+		if strings.Contains(err.Error(), "request failed with status 404") {
+			if err = promhelperclient.NewPromClient().DeleteClusterConfig(ctx,
+				c.Name, false, true /* insecure */, l); err != nil {
+				return errors.Wrapf(err, "Failed to delete the cluster config with cluster as insecure and secure")
+			}
+		} else {
+			return errors.Wrapf(err, "Failed to delete the cluster config with cluster as secure")
+		}
+	}
+	return nil
+}
+
+// DestroyCluster TODO(peter): document
+func DestroyCluster(l *logger.Logger, c *Cluster) error {
+	if promConfigErr := DeletePromConfig(l, c); promConfigErr != nil {
+		l.Printf("DestroyCluster:", promConfigErr)
+	}
+
 	// DNS entries are destroyed first to ensure that the GC job will not try
 	// and clean-up entries prematurely.
 	dnsErr := vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
