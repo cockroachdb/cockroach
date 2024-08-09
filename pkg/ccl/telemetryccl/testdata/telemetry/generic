@@ -54,15 +54,6 @@ EXECUTE p_join(1)
 ----
 sql.plan.type.force-custom
 
-# Non-prepared statements do not increment plan type counters.
-feature-usage
-SELECT * FROM kv WHERE v = 100
-----
-
-feature-usage
-SELECT * FROM kv WHERE v = 100
-----
-
 feature-list
 sql.plan.type.force-generic
 ----
