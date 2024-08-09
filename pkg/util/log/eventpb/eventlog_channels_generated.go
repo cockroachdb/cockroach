@@ -23,6 +23,12 @@ func (m *NodeRecommissioned) LoggingChannel() logpb.Channel { return logpb.Chann
 func (m *NodeRestart) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *NodeShutdownConnectionTimeout) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *NodeShutdownTransactionTimeout) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *TenantSharedServiceStart) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
