@@ -90,6 +90,8 @@ func TestClusterNameFlag(t *testing.T) {
 	}{
 		{"abc", ""},
 		{"a-b", ""},
+		{"a.b", ""},
+		{"ab.c", ""},
 		{"a123", ""},
 		{"", "cluster name cannot be empty"},
 		{fmt.Sprintf("%*s", 1000, "a"), "cluster name can contain at most 256 characters"},
