@@ -332,6 +332,14 @@ func (s *drainServer) runDrain(
 func (s *drainServer) drainInner(
 	ctx context.Context, reporter func(int, redact.SafeString), verbose bool,
 ) (err error) {
+	if s.sqlServer.sqlLivenessSessionID != "" {
+		// Set draining only if SQL instance was initialized
+		if err := s.sqlServer.sqlInstanceStorage.SetInstanceDraining(
+			ctx, s.sqlServer.sqlLivenessSessionID, s.sqlServer.SQLInstanceID()); err != nil {
+			return err
+		}
+	}
+
 	if s.serverCtl != nil {
 		// We are on a KV node, with a server controller.
 		//

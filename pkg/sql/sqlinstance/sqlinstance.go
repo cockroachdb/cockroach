@@ -37,6 +37,7 @@ type InstanceInfo struct {
 	SessionID       sqlliveness.SessionID
 	Locality        roachpb.Locality
 	BinaryVersion   roachpb.Version
+	IsDraining      bool
 }
 
 func (ii InstanceInfo) GetInstanceID() base.SQLInstanceID {
