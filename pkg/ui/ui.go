@@ -57,7 +57,8 @@ var _ = settings.RegisterEnumSetting(
 // Assets is used for embedded JS assets required for UI.
 // In case the binary is built without UI, it provides single index.html file with
 // the same content as indexHTML as a fallback.
-var Assets fs.FS
+var Assets func() fs.FS = NoAssets
+var NoAssets func() fs.FS = func() fs.FS { return nil }
 
 // HaveUI tells whether the admin UI has been linked into the binary.
 var HaveUI = false
@@ -146,10 +147,9 @@ func Handler(cfg Config) http.Handler {
 	// etags is used to provide a unique per-file checksum for each served file,
 	// which enables client-side caching using Cache-Control and ETag headers.
 	etags := make(map[string]string)
-
-	if HaveUI && Assets != nil {
+	if HaveUI && Assets() != nil {
 		// Only compute hashes for UI-enabled builds
-		err := httputil.ComputeEtags(Assets, etags)
+		err := httputil.ComputeEtags(Assets(), etags)
 		if err != nil {
 			log.Errorf(context.Background(), "Unable to compute asset hashes: %+v", err)
 		}
@@ -158,7 +158,7 @@ func Handler(cfg Config) http.Handler {
 	fileHandlerChain := httputil.EtagHandler(
 		etags,
 		http.FileServer(
-			http.FS(Assets),
+			http.FS(Assets()),
 		),
 	)
 	buildInfo := build.GetInfo()

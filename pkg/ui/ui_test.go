@@ -51,7 +51,7 @@ func TestUIHandlerDevelopment(t *testing.T) {
 
 	defer func() func() {
 		hold := Assets
-		Assets = &testFs{}
+		Assets = func() fs.FS { return &testFs{} }
 		return func() {
 			Assets = hold
 		}
