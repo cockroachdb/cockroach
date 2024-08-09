@@ -23,10 +23,11 @@ import (
 // statement execution to determine which statements are outliers and
 // writes insights into the provided sink.
 type lockingRegistry struct {
-	statements map[clusterunique.ID]*statementBuf
-	detector   detector
-	causes     *causes
-	store      *LockingStore
+	statements   map[clusterunique.ID]*statementBuf
+	detector     detector
+	causes       *causes
+	store        *LockingStore
+	testingKnobs *TestingKnobs
 }
 
 func (r *lockingRegistry) Clear() {
@@ -195,11 +196,14 @@ func (r *lockingRegistry) enabled() bool {
 	return r.detector.enabled()
 }
 
-func newRegistry(st *cluster.Settings, detector detector, store *LockingStore) *lockingRegistry {
+func newRegistry(
+	st *cluster.Settings, detector detector, store *LockingStore, knobs *TestingKnobs,
+) *lockingRegistry {
 	return &lockingRegistry{
-		statements: make(map[clusterunique.ID]*statementBuf),
-		detector:   detector,
-		causes:     &causes{st: st},
-		store:      store,
+		statements:   make(map[clusterunique.ID]*statementBuf),
+		detector:     detector,
+		causes:       &causes{st: st},
+		store:        store,
+		testingKnobs: knobs,
 	}
 }
