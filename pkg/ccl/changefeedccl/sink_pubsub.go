@@ -115,7 +115,7 @@ func makeDeprecatedPubsubSink(
 	knobs *TestingKnobs,
 ) (Sink, error) {
 
-	pubsubURL := sinkURL{URL: u, q: u.Query()}
+	pubsubURL := sinkURL{URL: u}
 	pubsubTopicName := pubsubURL.consumeParam(changefeedbase.SinkParamTopicName)
 
 	var formatType changefeedbase.FormatType

@@ -1010,7 +1010,7 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 	}
 	for _, param := range requiredSASLParams {
 		if dialConfig.saslEnabled {
-			if len(u.q[param]) == 0 {
+			if !u.contains(param) {
 				errStr := fmt.Sprintf(`%s must be provided when SASL is enabled`, param)
 				if dialConfig.saslMechanism != sarama.SASLTypePlaintext {
 					errStr += fmt.Sprintf(` using mechanism %s`, dialConfig.saslMechanism)
@@ -1018,7 +1018,7 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 				return kafkaDialConfig{}, errors.Errorf("%s", errStr)
 			}
 		} else {
-			if len(u.q[param]) > 0 {
+			if u.contains(param) {
 				return kafkaDialConfig{}, errors.Errorf(`%s must be enabled if %s is provided`,
 					changefeedbase.SinkParamSASLEnabled, param)
 			}
@@ -1030,7 +1030,7 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 			changefeedbase.SinkParamSASLTokenURL, changefeedbase.SinkParamSASLGrantType,
 			changefeedbase.SinkParamSASLScopes}
 		for _, param := range oauthParams {
-			if len(u.q[param]) > 0 {
+			if u.contains(param) {
 				return kafkaDialConfig{}, errors.Errorf(`%s is only a valid parameter for %s=%s`, param,
 					changefeedbase.SinkParamSASLMechanism, sarama.SASLTypeOAuth)
 			}
