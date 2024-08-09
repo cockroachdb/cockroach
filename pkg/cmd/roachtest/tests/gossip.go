@@ -138,6 +138,13 @@ SELECT node_id
 		nodes := c.All()
 		for j := 0; j < 10; j++ {
 			deadNode := nodes.RandNode()[0]
+			t.L().Printf("draining node %d", deadNode)
+			drainCmd := fmt.Sprintf(
+				"./cockroach node drain --self --certs-dir=%s --port={pgport:%d}",
+				install.CockroachNodeCertsDir,
+				deadNode,
+			)
+			c.Run(ctx, option.WithNodes(c.Node(deadNode)), drainCmd)
 			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(deadNode))
 			waitForGossip(deadNode)
 			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(deadNode))
