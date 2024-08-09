@@ -427,6 +427,9 @@ message GenerativeSplitAndScatterSpec {
   optional bool use_simple_import_spans = 19 [(gogoproto.nullable) = false];
   optional bool use_frontier_checkpointing = 20 [(gogoproto.nullable) = false];
   repeated jobs.jobspb.RestoreProgress.FrontierEntry checkpointed_spans = 21 [(gogoproto.nullable) = false];
+  // SQLInstanceIDs is a slice of SQL instance IDs available for dist restore.
+  // Set field ID to 24 to be forward compatible with future versions.
+  repeated int32 sql_instance_ids = 24[(gogoproto.nullable) = false, (gogoproto.customname) = "SQLInstanceIDs"];
 }
 
 
