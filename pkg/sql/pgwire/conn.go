@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotification"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -268,6 +269,26 @@ func (c *conn) bufferParamStatus(param, value string) error {
 func (c *conn) bufferNotice(ctx context.Context, noticeErr pgnotice.Notice) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgNoticeResponse)
 	return c.writeErrFields(ctx, noticeErr, &c.writerState.buf)
+}
+
+// TODO: synchronize with command execution results writing with `bufferRows`. Currently this is just racey.
+// going to be annoying though as this guy's api is not super well defined.
+func (c *conn) SendNotification(notif pgnotification.Notification) error {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgNotificationResponse)
+	c.msgBuilder.putInt32(notif.PID)
+	c.msgBuilder.writeTerminatedString(notif.Channel)
+	c.msgBuilder.writeTerminatedString(notif.Payload)
+	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+		return err
+	}
+
+	// Flush immediately. TODO: is this right?
+	_, err := c.writerState.buf.WriteTo(c.conn)
+	if err != nil {
+		c.setErr(err)
+		return err
+	}
+	return nil
 }
 
 func (c *conn) sendInitialConnData(

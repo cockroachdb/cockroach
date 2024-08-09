@@ -90,6 +90,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -1346,6 +1347,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.SpanStatsConsumer = spanStatsConsumer
 	}
 
+	execCfg.PGListenerRegistry = notify.NewRegistry(cfg.Settings, cfg.stopper, cfg.distSender, cfg.clock, cfg.circularInternalExecutor, codec)
+
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
 		cfg.internalDB,
@@ -1755,6 +1758,8 @@ func (s *SQLServer) preStart(
 		s.execCfg.CaptureIndexUsageStatsKnobs,
 	)
 	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
+
+	s.execCfg.PGListenerRegistry.Start(ctx)
 
 	// Report a warning if the server is being shut down via the stopper
 	// before it was gracefully drained. This warning may be innocuous

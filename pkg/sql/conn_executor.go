@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
@@ -2063,6 +2064,7 @@ func (ns *prepStmtNamespace) resetTo(
 // transaction event, resetExtraTxnState invokes corresponding callbacks.
 // The payload error is included for statistics recording.
 // (e.g. onTxnFinish() and onTxnRestart()).
+// TODO: drain in here?
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, payloadErr error) {
 	ex.extraTxnState.numDDL = 0
 	ex.extraTxnState.firstStmtExecuted = false
@@ -2231,6 +2233,8 @@ func (ex *connExecutor) run(
 			}
 		}
 	}()
+
+	defer ex.server.cfg.PGListenerRegistry.RemoveAllListeners(ctx, notify.ListenerID(ex.planner.extendedEvalCtx.SessionID))
 
 	for {
 		ex.curStmtAST = nil
@@ -3827,6 +3831,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 
 	p.sessionDataMutatorIterator = ex.dataMutatorIterator
 	p.noticeSender = nil
+	p.notificationSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 	p.sqlCursors = ex.getCursorAccessor()
 	p.storedProcTxnState = ex.getStoredProcTxnStateAccessor()
