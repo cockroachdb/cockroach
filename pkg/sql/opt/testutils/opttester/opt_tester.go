@@ -168,6 +168,9 @@ type Flags struct {
 	// memo/check_expr.go.
 	DisableCheckExpr bool
 
+	// Generic enables optimizations for generic query plans.
+	Generic bool
+
 	// ExploreTraceRule restricts the ExploreTrace output to only show the effects
 	// of a specific rule.
 	ExploreTraceRule opt.RuleName
@@ -477,6 +480,8 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //
 //   - disable-check-expr: skips the assertions in memo/check_expr.go.
 //
+//   - generic: enables optimizations for generic query plans.
+//
 //   - rule: used with exploretrace; the value is the name of a rule. When
 //     specified, the exploretrace output is filtered to only show expression
 //     changes due to that specific rule.
@@ -502,12 +507,6 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //   - table: used to set the current table used by the command. This is used by
 //     the inject-stats command.
 //
-//   - stats-quality-prefix: must be used with the stats-quality command. If
-//     rewriteActualFlag=true, indicates that a table should be created with the
-//     given prefix for the output of each subexpression in the query. Otherwise,
-//     outputs the name of the table that would be created for each
-//     subexpression.
-//
 //   - ignore-tables: specifies the set of stats tables for which stats quality
 //     comparisons should not be outputted. Only used with the stats-quality
 //     command. Note that tables can always be added to the `ignore-tables` set
@@ -522,16 +521,6 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //   - import: the file path is relative to opttester/testfixtures;
 //
 //   - inject-stats: the file path is relative to the test file.
-//
-//   - join-limit: sets the value for SessionData.ReorderJoinsLimit, which
-//     indicates the number of joins at which the optimizer should stop
-//     attempting to reorder.
-//
-//   - prefer-lookup-joins-for-fks: sets SessionData.PreferLookupJoinsForFKs to
-//     true, causing foreign key operations to prefer lookup joins.
-//
-//   - null-ordered-last: sets SessionData.NullOrderedLast to true, which orders
-//     NULL values last in ascending order.
 //
 //   - cascade-levels: used to limit the depth of recursive cascades for
 //     build-cascades.
@@ -1002,6 +991,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 	case "disable-check-expr":
 		f.DisableCheckExpr = true
+
+	case "generic":
+		f.Generic = true
 
 	case "rule":
 		if len(arg.Vals) != 1 {
@@ -2339,15 +2331,19 @@ func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 // not nil, allows the caller to update the table metadata before optimizing.
 func (ot *OptTester) optimizeExpr(
 	o *xform.Optimizer, tables map[cat.StableID]cat.Table,
-) (opt.Expr, error) {
-	err := ot.buildExpr(o.Factory())
+) (root opt.Expr, err error) {
+	err = ot.buildExpr(o.Factory())
 	if err != nil {
 		return nil, err
 	}
 	if tables != nil {
 		o.Memo().Metadata().UpdateTableMeta(ot.ctx, &ot.evalCtx, tables)
 	}
-	root, err := o.Optimize()
+	if ot.Flags.Generic {
+		root, err = o.OptimizeGeneric()
+	} else {
+		root, err = o.Optimize()
+	}
 	if err != nil {
 		return nil, err
 	}

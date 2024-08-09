@@ -515,7 +515,7 @@ func (opc *optPlanningCtx) buildReusableMemo(
 		// Build a generic query plan if the placeholder fast path failed and a
 		// generic plan was requested.
 		opc.log(ctx, "optimizing (generic)")
-		if _, err := opc.optimizer.Optimize(); err != nil {
+		if _, err := opc.optimizer.OptimizeGeneric(); err != nil {
 			return nil, memoTypeUnknown, err
 		}
 		opc.flags.Set(planFlagOptimized)
@@ -1032,7 +1032,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	// Save the normalized memo created by the optbuilder.
 	savedMemo := opc.optimizer.DetachMemo(ctx)
 
-	// Use the optimizer to fully normalize the memo. We need to do this before
+	// Use the optimizer to fully optimize the memo. We need to do this before
 	// finding index candidates because the *memo.SortExpr from the sort enforcer
 	// is only added to the memo in this step. The sort expression is required to
 	// determine certain index candidates.
