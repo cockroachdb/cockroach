@@ -915,6 +915,8 @@ type Manager struct {
 	descUpdateCh chan catalog.Descriptor
 	// descDelCh receives deleted descriptors from the range feed.
 	descDelCh chan descpb.ID
+	// rangefeedErrCh receives any terminal errors from the rangefeed.
+	rangefeedErrCh chan error
 }
 
 const leaseConcurrencyLimit = 5
@@ -1006,6 +1008,7 @@ func NewLeaseManager(
 	lm.draining.Store(false)
 	lm.descUpdateCh = make(chan catalog.Descriptor)
 	lm.descDelCh = make(chan descpb.ID)
+	lm.rangefeedErrCh = make(chan error)
 	return lm
 }
 
@@ -1437,7 +1440,6 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 				if evFunc := m.testingKnobs.TestingDescriptorRefreshedEvent; evFunc != nil {
 					evFunc(desc.DescriptorProto())
 				}
-
 			case <-s.ShouldQuiesce():
 				return
 			}
@@ -1513,6 +1515,13 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 		ctx, "lease", []roachpb.Span{descriptorTableSpan}, hlc.Timestamp{}, handleEvent,
 		rangefeed.WithSystemTablePriority(),
 		rangefeed.WithOnCheckpoint(handleCheckpoint),
+		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
+			select {
+			case m.rangefeedErrCh <- err:
+			case <-ctx.Done():
+			case <-m.stopper.ShouldQuiesce():
+			}
+		}),
 	)
 }
 
@@ -1610,6 +1619,10 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 				rangeFeedProgressWatchDogTimeout,
 					rangeFeedProgressWatchDogEnabled = m.getRangeFeedMonitorSettings()
 				rangeFeedProgressWatchDog.Reset(rangeFeedProgressWatchDogTimeout)
+			case err := <-m.rangefeedErrCh:
+				log.Warningf(ctx, "lease rangefeed failed with error: %s", err.Error())
+				m.handleRangeFeedError(ctx)
+				m.refreshSomeLeases(ctx, true /*refreshAll*/)
 			case <-refreshTimer.C:
 				refreshTimer.Read = true
 				refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
@@ -1655,12 +1668,23 @@ func (m *Manager) handleRangeFeedAvailability(ctx context.Context) {
 	// the range feed.
 	if timeutil.Since(m.mu.rangeFeedIsUnavailableAt) >=
 		LeaseMonitorRangeFeedResetTime.Get(&m.settings.SV) {
-		log.Warning(ctx, "attempting restart of leasing range feed")
-		// Attempt a range feed restart if it has been down too long.
-		m.watchForUpdates(ctx)
-		// Track when the last restart occurred.
-		m.mu.rangeFeedIsUnavailableAt = timeutil.Now()
+		m.restartLeasingRangeFeedLocked(ctx)
 	}
+}
+
+func (m *Manager) handleRangeFeedError(ctx context.Context) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.restartLeasingRangeFeedLocked(ctx)
+}
+
+func (m *Manager) restartLeasingRangeFeedLocked(ctx context.Context) {
+	log.Warning(ctx, "attempting restart of leasing range feed")
+	// Attempt a range feed restart if it has been down too long.
+	m.watchForUpdates(ctx)
+	// Track when the last restart occurred.
+	m.mu.rangeFeedIsUnavailableAt = timeutil.Now()
+	m.mu.rangeFeedCheckpoints = 0
 }
 
 // cleanupExpiredSessionLeases expires session based leases marked for removal,
@@ -1818,7 +1842,7 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 		// Read orphaned leases, and join against the internal session
 		// table in case we have dual written leases.
 		query := `
-SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.version), l.expiration, s."session_id", l.crdb_region, s.crdb_region FROM 
+SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.version), l.expiration, s."session_id", l.crdb_region, s.crdb_region FROM
 	 system.public.lease as l FULL OUTER JOIN "".crdb_internal.kv_session_based_leases as s ON l."nodeID"=s."sql_instance_id" AND
 	  l."descID"=s."desc_id" AND l.version=s.version
 		WHERE COALESCE(l."nodeID", s."sql_instance_id") =%d
