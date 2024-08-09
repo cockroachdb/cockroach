@@ -29,11 +29,11 @@ func TestNewEntry(t *testing.T) {
 		"empty entry": {data: nil, expectEmpty: true},
 		// Proposed by CRDB on unquiescence.
 		"empty payload": {
-			data:        EncodeCommandBytes(EntryEncodingStandardWithoutAC, "00000000", nil),
+			data:        EncodeCommandBytes(EntryEncodingStandardWithoutAC, "00000000", nil, 0),
 			expectEmpty: true,
 		},
 		"invalid": {
-			data:      EncodeCommandBytes(EntryEncodingStandardWithAC, "00000000", []byte("not a protobuf")),
+			data:      EncodeCommandBytes(EntryEncodingStandardWithAC, "00000000", []byte("not a protobuf"), 0),
 			expectErr: true,
 		},
 	}
@@ -45,6 +45,7 @@ func TestNewEntry(t *testing.T) {
 				Data:  tc.data,
 			})
 			if tc.expectErr {
+				t.Logf("%s", err)
 				require.Error(t, err)
 				return
 			}

@@ -405,7 +405,11 @@ func (r *Replica) propose(
 	if !p.useReplicationAdmissionControl() {
 		raftAdmissionMeta = nil
 	}
-	data, err := raftlog.EncodeCommand(ctx, p.command, p.idKey, raftAdmissionMeta)
+	data, err := raftlog.EncodeCommand(ctx, p.command, p.idKey,
+		raftlog.EncodeOptions{
+			RaftAdmissionMeta: raftAdmissionMeta,
+			EncodePriority:    false,
+		})
 	if err != nil {
 		return kvpb.NewError(err)
 	}

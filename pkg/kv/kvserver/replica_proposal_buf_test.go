@@ -321,7 +321,7 @@ func (pc proposalCreator) newProposal(ba *kvpb.BatchRequest) *ProposalData {
 }
 
 func (pc proposalCreator) encodeProposal(p *ProposalData) []byte {
-	b, err := raftlog.EncodeCommand(context.Background(), p.command, p.idKey, nil /* raftAdmissionMeta */)
+	b, err := raftlog.EncodeCommand(context.Background(), p.command, p.idKey, raftlog.EncodeOptions{})
 	if err != nil {
 		panic(err)
 	}
