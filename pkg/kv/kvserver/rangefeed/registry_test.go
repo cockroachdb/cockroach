@@ -149,7 +149,7 @@ func TestRegistrationBasic(t *testing.T) {
 func TestRegistrationCatchUpScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testutils.RunTrueAndFalse(t, "withFiltering", func(t *testing.T, filtering bool) {
+	testutils.RunTrueAndFalse(t, "filtering", func(t *testing.T, filtering bool) {
 		// Run a catch-up scan for a registration over a test
 		// iterator with the following keys.
 		txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
