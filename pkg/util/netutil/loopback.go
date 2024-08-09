@@ -14,6 +14,7 @@ import (
 	"context"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -56,15 +57,16 @@ func (l *LoopbackListener) Accept() (conn net.Conn, err error) {
 	case <-l.requests:
 	}
 	c1, c2 := net.Pipe()
+	a := bidi{c1, c2}
+	b := bidi{c2, c1}
 	select {
-	case l.conns <- c1:
-		return c2, nil
+	case l.conns <- a:
+		return b, nil
 	case <-l.stopper.ShouldQuiesce():
 	case <-l.active:
 	}
 	err = ErrLocalListenerClosed
-	err = errors.CombineErrors(err, c1.Close())
-	err = errors.CombineErrors(err, c2.Close())
+	err = errors.CombineErrors(err, a.Close())
 	return nil, err
 }
 
@@ -119,3 +121,22 @@ var _ net.Addr = loopbackAddr{}
 
 func (loopbackAddr) Network() string { return "pipe" }
 func (loopbackAddr) String() string  { return "loopback" }
+
+type bidi struct {
+	thisSide, otherSide net.Conn
+}
+
+var _ net.Conn = bidi{}
+
+func (b bidi) Read(p []byte) (n int, err error)  { return b.thisSide.Read(p) }
+func (b bidi) Write(p []byte) (n int, err error) { return b.thisSide.Write(p) }
+func (b bidi) Close() error {
+	err := b.thisSide.Close()
+	err = errors.CombineErrors(err, b.otherSide.Close())
+	return err
+}
+func (b bidi) LocalAddr() net.Addr                { return loopbackAddr{} }
+func (b bidi) RemoteAddr() net.Addr               { return loopbackAddr{} }
+func (b bidi) SetDeadline(t time.Time) error      { return b.thisSide.SetDeadline(t) }
+func (b bidi) SetReadDeadline(t time.Time) error  { return b.thisSide.SetReadDeadline(t) }
+func (b bidi) SetWriteDeadline(t time.Time) error { return b.thisSide.SetWriteDeadline(t) }
