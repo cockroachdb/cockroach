@@ -480,10 +480,19 @@ func WithTag(tag string) CustomOption {
 	}
 }
 
-// minSupportedSkipVersionUpgrade is the minimum version after which
-// "skip version" upgrades are supported (i.e., upgrading two major
-// releases in a single upgrade).
-var minSupportedSkipVersionUpgrade = clusterupgrade.MustParseVersion("v24.1.0")
+// numSkippableVersionsForUpgradeTo returns the number of major release versions
+// that can be skipped by default (i.e. without using the
+// COCKROACH_ALLOW_VERSION_SKIPPING flag) when upgrading to release v.
+//
+// A value of 0 means we can only upgrade from the direct predecessor release
+// (e.g. 24.1 -> v=24.2). A value of 1 means we can skip one release series
+// (e.g. 24.1 -> v=24.3).
+//
+// Historically, we did not support skipping versions until v24.3.0.
+func numSkippableVersionsForUpgradeTo(v *clusterupgrade.Version) int {
+	// TODO(radu): we should return 1 for v24.3.
+	return 0
+}
 
 func defaultTestOptions() testOptions {
 	return testOptions{
@@ -780,14 +789,13 @@ func (t *Test) choosePreviousReleases() ([]*clusterupgrade.Version, error) {
 		return v.AtLeast(minSupportedARM64Version)
 	}
 
-	var numSkips int
 	// possiblePredecessorsFor returns a list of possible predecessors
 	// for the given release `v`. If skip-version is enabled and
 	// supported, this function will return both the immediate
 	// predecessor along with the predecessor's predecessor. This is the
 	// function to change in case the rules around what upgrades are
 	// possible in CRDB change.
-	possiblePredecessorsFor := func(v *clusterupgrade.Version) ([]*clusterupgrade.Version, error) {
+	possiblePredecessorsFor := func(v *clusterupgrade.Version, includeSkipVersions bool) ([]*clusterupgrade.Version, error) {
 		pred, err := t.predecessorFunc(t.prng, v, t.options.minimumSupportedVersion)
 		if err != nil {
 			return nil, err
@@ -797,39 +805,21 @@ func (t *Test) choosePreviousReleases() ([]*clusterupgrade.Version, error) {
 			return nil, nil
 		}
 
-		// If skip-version upgrades are not enabled, the only possible
-		// predecessor is the immediate predecessor release. If the
-		// predecessor doesn't support skip versions, then its predecessor
-		// won't either. Don't attempt to find it.
-		if !skipVersions || !pred.AtLeast(minSupportedSkipVersionUpgrade) {
-			return []*clusterupgrade.Version{pred}, nil
-		}
-
-		predPred, err := t.predecessorFunc(t.prng, pred, t.options.minimumSupportedVersion)
-		if err != nil {
-			return nil, err
-		}
-
-		if predPred.AtLeast(minSupportedSkipVersionUpgrade) {
-			// If the predecessor's predecessor supports skip-version
-			// upgrades and we haven't performed a skip-version upgrade yet,
-			// do it. This logic makes sure that, when skip-version upgrades
-			// are enabled, it happens when upgrading to the current
-			// release, which is the most important upgrade to be tested on
-			// any release branch.
-			if numSkips == 0 {
-				numSkips++
-				return []*clusterupgrade.Version{predPred}, nil
+		result := []*clusterupgrade.Version{pred}
+		// Add older versions, if skipping is enabled and supported.
+		if includeSkipVersions {
+			for range numSkippableVersionsForUpgradeTo(v) {
+				prevPred, err := t.predecessorFunc(t.prng, result[len(result)-1], t.options.minimumSupportedVersion)
+				if err != nil {
+					return nil, err
+				}
+				if !isAvailable(prevPred) {
+					break
+				}
+				result = append(result, prevPred)
 			}
-
-			// If we already performed a skip-version upgrade on this test
-			// plan, we can choose to do another one or not.
-			return []*clusterupgrade.Version{pred, predPred}, nil
 		}
-
-		// If the predecessor is too old and does not support skip-version
-		// upgrades, it's the only possible predecessor.
-		return []*clusterupgrade.Version{pred}, nil
+		return result, nil
 	}
 
 	currentVersion := clusterupgrade.CurrentVersion()
@@ -837,7 +827,14 @@ func (t *Test) choosePreviousReleases() ([]*clusterupgrade.Version, error) {
 	numUpgrades := t.numUpgrades()
 
 	for j := 0; j < numUpgrades; j++ {
-		predecessors, err := possiblePredecessorsFor(currentVersion)
+		// When skip-version upgrades are enabled, we only do them when upgrading to
+		// the current release, which is the most important upgrade to be tested on
+		// any release branch.
+		//
+		// TODO(radu): enable skipping versions in earlier upgrade steps, perhaps
+		// with smaller probability. It is conceivable that a skipping version bug
+		// manifests in the following upgrade, in a chain like 24.1 -> 24.3 -> 25.1.
+		predecessors, err := possiblePredecessorsFor(currentVersion, skipVersions && j == 0)
 		if err != nil {
 			return nil, err
 		}
