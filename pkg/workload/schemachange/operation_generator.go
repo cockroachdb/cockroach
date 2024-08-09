@@ -3910,13 +3910,8 @@ func (og *operationGenerator) dropSchema(ctx context.Context, tx pgx.Tx) (*opStm
 	if err != nil {
 		return nil, err
 	}
-	crossReferences := false
 	crossSchemaFunctionReferences := false
 	if schemaExists {
-		crossReferences, err = og.schemaContainsTypesWithCrossSchemaReferences(ctx, tx, schemaName)
-		if err != nil {
-			return nil, err
-		}
 		crossSchemaFunctionReferences, err = og.schemaContainsHasReferredFunctions(ctx, tx, schemaName)
 		if err != nil {
 			return nil, err
@@ -3927,9 +3922,12 @@ func (og *operationGenerator) dropSchema(ctx context.Context, tx pgx.Tx) (*opStm
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedSchema, !schemaExists},
 		{pgcode.InvalidSchemaName, schemaName == catconstants.PublicSchemaName},
-		{pgcode.FeatureNotSupported, crossReferences && !og.useDeclarativeSchemaChanger},
 		{pgcode.DependentObjectsStillExist, crossSchemaFunctionReferences && !og.useDeclarativeSchemaChanger},
 	})
+	// TODO(spilchen): we need this if dropping a schema that has a type
+	// referenced in another schema. This can be removed once issue #51480 is
+	// addressed.
+	stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
 
 	stmt.sql = fmt.Sprintf(`DROP SCHEMA "%s" CASCADE`, schemaName)
 	return stmt, nil
