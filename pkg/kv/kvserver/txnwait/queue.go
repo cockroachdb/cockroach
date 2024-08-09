@@ -263,8 +263,9 @@ type TestingKnobs struct {
 //
 // Queue is thread safe.
 type Queue struct {
-	cfg Config
-	mu  struct {
+	cfg   Config
+	every log.EveryN // dictates logging for transaction aborts resulting from deadlock detection
+	mu    struct {
 		syncutil.RWMutex
 		txns    map[uuid.UUID]*pendingTxn
 		queries map[uuid.UUID]*waitingQueries
@@ -273,7 +274,10 @@ type Queue struct {
 
 // NewQueue instantiates a new Queue.
 func NewQueue(cfg Config) *Queue {
-	return &Queue{cfg: cfg}
+	return &Queue{
+		cfg:   cfg,
+		every: log.Every(1 * time.Second),
+	}
 }
 
 // Enable allows transactions to be enqueued and waiting pushers
@@ -754,9 +758,15 @@ func (q *Queue) waitForPush(
 				// Break the deadlock if the pusher has higher priority.
 				p1, p2 := pusheePriority, pusherPriority
 				if p1 < p2 || (p1 == p2 && bytes.Compare(req.PusheeTxn.ID.GetBytes(), req.PusherTxn.ID.GetBytes()) < 0) {
+					// NB: It's useful to have logs indicating the transactions involved
+					// in a deadlock, but we don't want these to be too spammy.
+					level := log.Level(1)
+					if q.every.ShouldLog() {
+						level = 0 // will behave like a log.Infof
+					}
 					log.VEventf(
 						ctx,
-						1,
+						level,
 						"%s breaking deadlock by force push of %s; dependencies=%s",
 						req.PusherTxn.ID.Short(),
 						req.PusheeTxn.ID.Short(),
