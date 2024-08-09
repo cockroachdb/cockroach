@@ -1335,7 +1335,7 @@ func (p *planner) maybeUpdateSystemDBSurvivalGoal(ctx context.Context) error {
 	// with region liveness support we no longer to inherit the stronger guarantees
 	// assigned to other databases. i.e. Previously if any database had survive region,
 	// the system database would be forced to inherit those stronger guarantees.
-	if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V24_1_SystemDatabaseSurvivability) {
+	if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1_SystemDatabaseSurvivability) {
 		return nil
 	}
 

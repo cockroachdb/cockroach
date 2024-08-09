@@ -531,7 +531,7 @@ func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba *kvpb.Batch
 			if !pipelinedLockingReadsEnabled.Get(&tp.st.SV) {
 				return false
 			}
-			if !tp.st.Version.IsActive(ctx, clusterversion.V24_1_ReplicatedLockPipelining) {
+			if !tp.st.Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1_ReplicatedLockPipelining) {
 				return false
 			}
 		}
