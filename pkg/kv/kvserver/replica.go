@@ -62,14 +62,6 @@ import (
 )
 
 const (
-	// configGossipTTL is the time-to-live for configuration maps.
-
-	// optimizePutThreshold is the minimum length of a contiguous run
-	// of batched puts or conditional puts, after which the constituent
-	// put operations will possibly be optimized by determining whether
-	// the key space being written is starting out empty.
-	optimizePutThreshold = 10
-
 	// Transaction names and operations used for range changes.
 	// Note that those names are used by tests to perform request filtering
 	// in absence of better criteria. If names are changed, tests should be

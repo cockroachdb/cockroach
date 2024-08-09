@@ -271,6 +271,13 @@ var allowDroppingLatchesBeforeEval = settings.RegisterBoolSetting(
 	true,
 )
 
+// optimizeLockTableScanThreshold is the minimum length of a contiguous run of
+// batched gets or scans, after which the constituent reads' lock table lookups
+// will possibly be optimized by performing a single lock table scan from the
+// batch's smallest key to its largest key. If the lock table scan finds no
+// conflicts, a lock table lookup for each read can be skipped.
+const optimizeLockTableScanThreshold = 10
+
 // canDropLatchesBeforeEval determines whether a given batch request can proceed
 // with evaluation without continuing to hold onto its latches[1] and if so,
 // whether the evaluation of the requests in the batch needs an intent
@@ -313,6 +320,55 @@ func (r *Replica) canDropLatchesBeforeEval(
 	log.VEventf(
 		ctx, 3, "can drop latches early for batch (%v); scanning lock table first to detect conflicts", ba,
 	)
+
+	// If the batch is large enough, perform a single lock table scan from the
+	// batch's smallest key to its largest key to check for conflicts. This is
+	// more efficient than scanning the lock table for each request in the batch.
+	// However, it may encounter false positive conflicts, in which case we fall
+	// back to scanning the lock table for each request in the batch.
+	// TODO(nvanbenschoten): add a test for this optimization.
+	if len(ba.Requests) >= optimizeLockTableScanThreshold {
+		// Compute the span of the batch.
+		// TODO(nvanbenschoten): is there really no utility function for this?
+		// keys.Range is close, but it also maps to RKeys, which we don't want.
+		from, to := roachpb.KeyMax, roachpb.KeyMin
+		for _, arg := range ba.Requests {
+			h := arg.GetInner().Header()
+			key, endKey := h.Key, h.EndKey
+			if key.Compare(from) < 0 {
+				// Key is smaller than `from`.
+				from = key
+			}
+			if key.Compare(to) >= 0 {
+				// Key.Next() is larger than `to`.
+				to = key.Next()
+			}
+			if len(endKey) == 0 {
+				continue
+			}
+			if to.Compare(endKey) < 0 {
+				// EndKey is larger than `to`.
+				to = endKey
+			}
+		}
+
+		locks, err := storage.ScanLocks(ctx, rw, from, to, 1 /* maxLocks */, 0 /* targetBytes */)
+		if err != nil {
+			return false, false, kvpb.NewError(err)
+		}
+		if len(locks) == 0 {
+			// No locks were found, so it is safe to drop latches early and proceed
+			// with evaluation.
+			return true, false, nil
+		}
+		// Locks were found within the batch's smallest and largest key. However,
+		// they may have been false positive conflicts, either because they weren't
+		// actually overlapping with any request in the batch, or because they
+		// weren't intent locks held by other transactions (e.g. they were shared
+		// locks or they were intents held by the same transaction). We fall back to
+		// scanning the lock table for each request in the batch to determine if any
+		// of the locks are actually conflicting intents.
+	}
 
 	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&r.store.cfg.Settings.SV)
 	targetLockConflictBytes := storage.TargetBytesPerLockConflictError.Get(&r.store.cfg.Settings.SV)

@@ -488,7 +488,12 @@ func TestBatchRange(t *testing.T) {
 		exp [2]string
 	}{
 		{
-			// Boring single request.
+			// Boring single point request.
+			req: [][2]string{{"a", ""}},
+			exp: [2]string{"a", "a\x00"},
+		},
+		{
+			// Boring single range request.
 			req: [][2]string{{"a", "b"}},
 			exp: [2]string{"a", "b"},
 		},
@@ -544,9 +549,12 @@ func TestBatchRange(t *testing.T) {
 	for i, c := range testCases {
 		var ba kvpb.BatchRequest
 		for _, pair := range c.req {
-			ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{
-				Key: roachpb.Key(pair[0]), EndKey: roachpb.Key(pair[1]),
-			}})
+			var key, endKey roachpb.Key
+			key = roachpb.Key(pair[0])
+			if pair[1] != "" {
+				endKey = roachpb.Key(pair[1])
+			}
+			ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: key, EndKey: endKey}})
 		}
 		if rs, err := Range(ba.Requests); err != nil {
 			t.Errorf("%d: %v", i, err)

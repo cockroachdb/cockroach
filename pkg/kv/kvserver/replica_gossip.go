@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// configGossipTTL is the time-to-live for configuration maps.
 const configGossipTTL = 0 // does not expire
 
 func (r *Replica) gossipFirstRange(ctx context.Context) {
