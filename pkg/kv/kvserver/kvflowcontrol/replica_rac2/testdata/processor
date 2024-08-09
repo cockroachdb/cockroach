@@ -1,0 +1,244 @@
+# NB: this replica is on n1, s2 and for range r3. The tenant-id is 4 and the
+# replica-id is 5.
+
+reset
+----
+
+# Not enabled to use v2 if become leader.
+get-enabled-level
+----
+enabled-level: not-enabled
+
+on-destroy
+----
+ Replica.RaftMuAssertHeld
+
+reset
+----
+
+get-enabled-level
+----
+enabled-level: not-enabled
+
+# Can use v1 encoding and v2 protocol, if become leader.
+set-enabled-level enabled-level=v1-encoding
+----
+
+get-enabled-level
+----
+enabled-level: v1-encoding
+
+# Since stable-index is 20, admitted is slightly behind. The leader and
+# leaseholder are both on replica-id 10.
+set-raft-state leader=10 stable-index=20 next-unstable-index=25 leaseholder=10 admitted=[15,20,15,20]
+----
+Raft: leader: 10 leaseholder: 10 stable: 20 next-unstable: 25 my-term: 0 admitted: [15, 20, 15, 20]
+
+# The processor has never been given a range-descriptor, so it will do nothing.
+handle-raft-ready-and-admit
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+.....
+
+# The processor is provided a range descriptor that does not include itself or
+# the leader. This is acceptable.
+on-desc-changed  replicas=n11/s11/11
+----
+ Replica.RaftMuAssertHeld
+ Replica.MuAssertHeld
+ Replica.RaftNodeMuLocked
+
+# handleRaftReady. It thinks the leader is using v1, so there is no
+# advancement of admitted, or submission of this entry for admission.
+handle-raft-ready-and-admit entries=v1/i25/t45/pri0/time2/len100 leader-term=50
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 20
+ RaftNode.LeaderLocked() = 10
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [15, 20, 15, 20]
+ Replica.MuUnlock
+.....
+AdmitRaftEntries:
+leader-using-v2: false
+
+# Told that the leader is using v2. And that [25,25] has no low-pri override.
+side-channel v2 leader-term=50 first=25 last=25
+----
+ Replica.RaftMuAssertHeld
+
+# The index 25 entry is v1 encoded, so by default it is low-pri. Admitted is
+# advanced to the stable-index, and this entry is submitted for admission.
+handle-raft-ready-and-admit entries=v1/i25/t45/pri0/time2/len100 leader-term=50
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 20
+ RaftNode.LeaderLocked() = 10
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [15, 20, 15, 20]
+ Replica.MuUnlock
+ RaftNode.SetAdmittedLocked([20, 20, 20, 20]) = type: MsgAppResp from: 0 to: 0
+.....
+AdmitRaftEntries:
+ ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:107 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:25 Priority:LowPri}})
+leader-using-v2: true
+
+# Stable index is advanced to 25.
+set-raft-state stable-index=25 leader=11
+----
+Raft: leader: 11 leaseholder: 10 stable: 25 next-unstable: 25 my-term: 0 admitted: [20, 20, 20, 20]
+
+# handleRaftReady with no entries. Since the leader is using v2, admitted is
+# advanced. admitted[low-pri] is 24 since there is an entry at 25 that is not
+# admitted. A MsgAppResp is handed to the piggybacker.
+handle-raft-ready-and-admit
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 25
+ RaftNode.LeaderLocked() = 11
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [20, 20, 20, 20]
+ Replica.MuUnlock
+ RaftNode.SetAdmittedLocked([24, 25, 25, 25]) = type: MsgAppResp from: 0 to: 0
+ Piggybacker.AddMsgAppRespForLeader(leader=(n11,s11,r3), msg=type: MsgAppResp from: 0 to: 0)
+.....
+
+# Side channel for entries [26, 26] with no low-pri override.
+side-channel v2 leader-term=50 first=26 last=26
+----
+ Replica.RaftMuAssertHeld
+
+# The index 26 entry uses v2 and is using pri=2, which is AboveNormalPri.
+handle-raft-ready-and-admit entries=v2/i26/t45/pri2/time2/len100 leader-term=50
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 25
+ RaftNode.LeaderLocked() = 11
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [24, 25, 25, 25]
+ Replica.MuUnlock
+.....
+AdmitRaftEntries:
+ ACWorkQueue.Admit({TenantID:4 Priority:user-high-pri CreateTime:2 RequestedCount:107 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:26 Priority:AboveNormalPri}})
+leader-using-v2: true
+
+# handleRaftReady is a noop.
+handle-raft-ready-and-admit
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 25
+ RaftNode.LeaderLocked() = 11
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [24, 25, 25, 25]
+ Replica.MuUnlock
+.....
+
+# Stable index is advanced, which should allow some priorities to advance
+# admitted, which will happen in the next handleRaftReady.
+set-raft-state stable-index=26
+----
+Raft: leader: 11 leaseholder: 10 stable: 26 next-unstable: 25 my-term: 0 admitted: [24, 25, 25, 25]
+
+# Bogus callback which does not match the replica-id, so ignored. index 25
+# (LowPri) is still not admitted.
+admitted-log-entry replica-id=51 leader-term=50 index=25 pri=0
+----
+
+# Some admitted indices are advanced, but LowPri and AboveNormalPri cannot
+# advance past the index 25 and index 26 entries respectively, that are
+# waiting for admission.
+handle-raft-ready-and-admit
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 26
+ RaftNode.LeaderLocked() = 11
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [24, 25, 25, 25]
+ Replica.MuUnlock
+ RaftNode.SetAdmittedLocked([24, 26, 25, 26]) = type: MsgAppResp from: 0 to: 0
+ Piggybacker.AddMsgAppRespForLeader(leader=(n11,s11,r3), msg=type: MsgAppResp from: 0 to: 0)
+.....
+
+# Callback is accurate and index 25 is admitted.
+admitted-log-entry replica-id=5 leader-term=50 index=25 pri=0
+----
+ RaftScheduler.EnqueueRaftReady(rangeID=3)
+
+# admitted advances for AboveNormalPri.
+handle-raft-ready-and-admit
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 26
+ RaftNode.LeaderLocked() = 11
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [24, 26, 25, 26]
+ Replica.MuUnlock
+ RaftNode.SetAdmittedLocked([26, 26, 25, 26]) = type: MsgAppResp from: 0 to: 0
+ Piggybacker.AddMsgAppRespForLeader(leader=(n11,s11,r3), msg=type: MsgAppResp from: 0 to: 0)
+.....
+
+# Side channel for entries [27,27] indicate a low-pri override.
+side-channel v2 leader-term=50 first=27 last=27 low-pri
+----
+ Replica.RaftMuAssertHeld
+
+# The index 27 entry is marked AboveNormalPri, but will be treated as LowPri.
+handle-raft-ready-and-admit entries=v2/i27/t45/pri2/time2/len100 leader-term=50
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 26
+ RaftNode.LeaderLocked() = 11
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [26, 26, 25, 26]
+ Replica.MuUnlock
+.....
+AdmitRaftEntries:
+ ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:107 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:27 Priority:LowPri}})
+leader-using-v2: true
+
+admitted-log-entry replica-id=5 leader-term=50 index=27 pri=2
+----
+
+# TODO: this should be enqueueing admitted processing.
+admitted-log-entry replica-id=5 leader-term=50 index=26 pri=2
+----
+
+handle-raft-ready-and-admit
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+ Replica.MuLock
+ RaftNode.NextUnstableIndexLocked() = 25
+ RaftNode.StableIndexLocked() = 26
+ RaftNode.LeaderLocked() = 11
+ Replica.LeaseholderMuLocked
+ RaftNode.GetAdmittedLocked) = [26, 26, 25, 26]
+ Replica.MuUnlock
+ RaftNode.SetAdmittedLocked([26, 26, 26, 26]) = type: MsgAppResp from: 0 to: 0
+ Piggybacker.AddMsgAppRespForLeader(leader=(n11,s11,r3), msg=type: MsgAppResp from: 0 to: 0)
+.....

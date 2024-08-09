@@ -2,26 +2,48 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "replica_rac2",
-    srcs = ["admission.go"],
+    srcs = [
+        "admission.go",
+        "processor.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvserver/kvflowcontrol/rac2",
+        "//pkg/kv/kvserver/raftlog",
         "//pkg/raft/raftpb",
+        "//pkg/roachpb",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
     name = "replica_rac2_test",
-    srcs = ["admission_test.go"],
+    srcs = [
+        "admission_test.go",
+        "processor_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":replica_rac2"],
     deps = [
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/kv/kvserver/kvflowcontrol/rac2",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/raftlog",
         "//pkg/raft/raftpb",
+        "//pkg/roachpb",
         "//pkg/testutils/datapathutils",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
     ],
 )
