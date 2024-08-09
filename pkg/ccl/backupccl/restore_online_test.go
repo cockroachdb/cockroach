@@ -82,10 +82,7 @@ func TestOnlineRestoreBasic(t *testing.T) {
 		assertMVCCOnlineRestore(t, rSQLDB, preRestoreTs)
 		assertOnlineRestoreWithRekeying(t, sqlDB, rSQLDB)
 
-		// Wait for the download job to complete.
-		var downloadJobID jobspb.JobID
-		rSQLDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%'`).Scan(&downloadJobID)
-		jobutils.WaitForJobToSucceed(t, rSQLDB, downloadJobID)
+		waitForLatestDownloadJobToSucceed(t, rSQLDB)
 
 		rSQLDB.CheckQueryResults(t, createStmt, createStmtRes)
 		sqlDB.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
@@ -107,12 +104,12 @@ func TestOnlineRestorePartitioned(t *testing.T) {
 	)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `BACKUP DATABASE data TO ('nodelocal://1/a?COCKROACH_LOCALITY=default', 
-		'nodelocal://1/b?COCKROACH_LOCALITY=dc%3Ddc2', 
+	sqlDB.Exec(t, `BACKUP DATABASE data TO ('nodelocal://1/a?COCKROACH_LOCALITY=default',
+		'nodelocal://1/b?COCKROACH_LOCALITY=dc%3Ddc2',
 		'nodelocal://1/c?COCKROACH_LOCALITY=dc%3Ddc3')`)
 
-	j := sqlDB.QueryStr(t, `RESTORE DATABASE data FROM ('nodelocal://1/a?COCKROACH_LOCALITY=default', 
-		'nodelocal://1/b?COCKROACH_LOCALITY=dc%3Ddc2', 
+	j := sqlDB.QueryStr(t, `RESTORE DATABASE data FROM ('nodelocal://1/a?COCKROACH_LOCALITY=default',
+		'nodelocal://1/b?COCKROACH_LOCALITY=dc%3Ddc2',
 		'nodelocal://1/c?COCKROACH_LOCALITY=dc%3Ddc3') WITH new_db_name='d2', EXPERIMENTAL DEFERRED COPY`)
 
 	srv.Servers[0].JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
@@ -209,14 +206,17 @@ func TestOnlineRestoreWaitForDownload(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 
 	sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, new_db_name=data2", externalStorage))
-
-	// Wait for the download job to complete.
-	var downloadJobID jobspb.JobID
-	sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`).Scan(&downloadJobID)
-	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
-
+	waitForLatestDownloadJobToSucceed(t, sqlDB)
 	sqlDB.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
 
+}
+
+func waitForLatestDownloadJobToSucceed(t *testing.T, sqlDB *sqlutils.SQLRunner) {
+	var downloadJobID jobspb.JobID
+	sqlDB.QueryRow(t,
+		`SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`,
+	).Scan(&downloadJobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
 }
 
 // TestOnlineRestoreTenant runs an online restore of a tenant and ensures the
