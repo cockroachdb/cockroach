@@ -253,7 +253,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":5,"Ordinal":1,"TableID":104}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":3,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
-      │         ├── AddCheckConstraint {"CheckExpr":"\"crdb_internal_j...","ConstraintID":2,"FromHashShardedColumn":true,"TableID":104,"Validity":2}
+      │         ├── AddCheckConstraint {"CheckExpr":"crdb_internal_j_...","ConstraintID":2,"FromHashShardedColumn":true,"TableID":104,"Validity":2}
       │         ├── SetConstraintName {"ConstraintID":2,"Name":"check_crdb_inter...","TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"Kind":1,"TableID":104}
