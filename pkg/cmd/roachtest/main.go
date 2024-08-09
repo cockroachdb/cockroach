@@ -11,17 +11,20 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"os"
 	"os/user"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/testselector"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/errors"
@@ -226,6 +229,14 @@ func testsToRun(
 		return nil, errors.Newf("%s", msg)
 	}
 
+	if roachtestflags.SelectiveTests {
+		fmt.Printf("selective Test enabled\n")
+		// the test categorization must be complete in 30 seconds
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		updateSpecForSelectiveTests(ctx, specs)
+	}
+
 	var notSkipped []registry.TestSpec
 	for _, s := range specs {
 		if s.Skip == "" || runSkipped {
@@ -261,6 +272,44 @@ func testsToRun(
 	}
 
 	return selectSpecs(notSkipped, selectProbability, true, print), nil
+}
+
+// updateSpecForSelectiveTests is responsible for updating the test spec skip and skip details
+// based on the test categorization criteria.
+func updateSpecForSelectiveTests(ctx context.Context, specs []registry.TestSpec) {
+	selectedTestsCount := 0
+	// run and select 20% of successful tests which gives a window of 6 days for all tests to run
+	selectedTests, err := testselector.CategoriseTests(ctx,
+		testselector.NewDefaultSelectTestsReq(20, roachtestflags.Cloud, roachtestflags.Suite))
+	if err != nil {
+		fmt.Printf("running all tests! error selecting tests: %v\n", err)
+		return
+	}
+	tdMap := make(map[string]*testselector.TestDetails)
+	for _, td := range selectedTests {
+		tdMap[td.Name] = td
+	}
+	for i := range specs {
+		if testShouldBeSkipped(tdMap, specs[i], roachtestflags.Suite) {
+			specs[i].Skip = "test selector"
+			specs[i].SkipDetails = "test skipped because it is stable and selective-tests is set."
+		} else {
+			selectedTestsCount++
+		}
+	}
+	fmt.Printf("%d out of %d tests selected for the run!\n", selectedTestsCount, len(specs))
+}
+
+// testShouldBeSkipped decides whether a test should be skipped based on test details and suite
+func testShouldBeSkipped(
+	testNamesToRun map[string]*testselector.TestDetails, test registry.TestSpec, suite string,
+) bool {
+	for test.TestSelectionOptOutSuites.IsInitialized() && test.TestSelectionOptOutSuites.Contains(suite) {
+		// test should not be skipped for this suite
+		return false
+	}
+	td, ok := testNamesToRun[test.Name]
+	return ok && test.Skip == "" && !td.Selected
 }
 
 // selectSpecs returns a random sample of the given test specs.
