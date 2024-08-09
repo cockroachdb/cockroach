@@ -3,15 +3,17 @@ Roachtest fixtures
 
 To regenerate these fixtures:
 
-1. Set `FIXTURE_VERSION` to the release or pre-release version you want to
-   generate fixtures for:
-```
-export FIXTURE_VERSION=v23.2.0-beta.1
-```
+1. Select the release or pre-release version you want to generate fixtures for.
+   This version must exist in the
+   [Releases](https://www.cockroachlabs.com/docs/releases) page. Typically, we want
+   the newest version for the relevant release; it cannot be an alpha release. For
+   example: `v24.2.0-rc.1`. Once selected, set `FIXTURE_VERSION` to the selected
+   version and check out that version:
 
-Note that this version must exist in the
-[Releases](https://www.cockroachlabs.com/docs/releases) page.
-
+```
+export FIXTURE_VERSION=v24.2.0-rc.1
+git checkout $FIXTURE_VERSION
+```
 
 2. Make clean builds of CRDB, roachtest, workload, roachprod. Note that
    roachtest needs to be run on amd64 (if you are using a Mac it's recommended to
@@ -23,11 +25,11 @@ Note that this version must exist in the
 ./bin/roachprod destroy local
 ```
 
-3. Run roachtest against the `FIXTURE_VERSION` binary and generate the updated
+3. Run `roachtest` against the `FIXTURE_VERSION` binary to generate the updated
    fixtures:
 
 ```
-./bin/roachtest run generate-fixtures --local --debug --cockroach ./cockroach tag:fixtures
+./bin/roachtest run generate-fixtures --local --debug --cockroach ./cockroach --suite fixtures
 ```
 
 This should produce an intentional failure, where you see something like:
@@ -46,4 +48,4 @@ done
 ```
 
 Follow the directions in the test failure output to copy the checkpoint files.
-Make sure the filenames are as expected and rename if necessary.
+Make sure the filenames are as expected (rename if necessary).
