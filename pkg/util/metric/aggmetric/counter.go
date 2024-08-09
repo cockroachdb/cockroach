@@ -44,9 +44,6 @@ func (c *AggCounter) GetName() string { return c.g.GetName() }
 // GetHelp is part of the metric.Iterable interface.
 func (c *AggCounter) GetHelp() string { return c.g.GetHelp() }
 
-// GetMeasurement is part of the metric.Iterable interface.
-func (c *AggCounter) GetMeasurement() string { return c.g.GetMeasurement() }
-
 // GetUnit is part of the metric.Iterable interface.
 func (c *AggCounter) GetUnit() metric.Unit { return c.g.GetUnit() }
 
@@ -152,9 +149,6 @@ func (c *AggCounterFloat64) GetName() string { return c.g.GetName() }
 
 // GetHelp is part of the metric.Iterable interface.
 func (c *AggCounterFloat64) GetHelp() string { return c.g.GetHelp() }
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (c *AggCounterFloat64) GetMeasurement() string { return c.g.GetMeasurement() }
 
 // GetUnit is part of the metric.Iterable interface.
 func (c *AggCounterFloat64) GetUnit() metric.Unit { return c.g.GetUnit() }
