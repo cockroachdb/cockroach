@@ -13,20 +13,20 @@
     "lint:fix": "eslint --fix './**/*.ts'"
   },
   "devDependencies": {
-    "@cockroachlabs/eslint-config": "0.1.11",
-    "@testing-library/cypress": "^8.0.2",
+    "@cockroachlabs/eslint-config": "1.0.7",
+    "@testing-library/cypress": "^8.0.7",
     "@types/node": "16",
-    "@typescript-eslint/parser": "2.34.0",
+    "@typescript-eslint/parser": "5.62.0",
     "cypress": "^10.3.0",
-    "eslint": "7.29.0",
-    "eslint-config-prettier": "^8.8.0",
-    "eslint-plugin-prettier": "3.4.1",
-    "eslint-plugin-react": "7.24.0",
-    "eslint-plugin-react-hooks": "4.2.0",
-    "prettier": "2.6.2",
+    "eslint": "8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "5.1.3",
+    "eslint-plugin-react": "7.34.1",
+    "eslint-plugin-react-hooks": "4.6.0",
+    "prettier": "3.2.5",
     "typescript": "5.1.6"
   },
   "dependencies": {
-    "@typescript-eslint/eslint-plugin": "4.29.1"
+    "@typescript-eslint/eslint-plugin": "5.62.0"
   }
 }
