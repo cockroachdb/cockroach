@@ -81,7 +81,14 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &ExecutorTestingKnobs{
+				DeterministicExplain: true,
+			},
+		},
+		Insecure: true,
+	})
 	defer srv.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(godb)
 	r.Exec(t, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE);
@@ -500,6 +507,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 
 	t.Run("plan-gist matching", func(t *testing.T) {
 		r.Exec(t, "CREATE TABLE gist (k INT PRIMARY KEY);")
+		r.Exec(t, "ANALYZE gist")
 		const fprint = `SELECT * FROM gist`
 
 		// Come up with a target gist.
@@ -516,15 +524,31 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				// Add a new line at the beginning for cleaner formatting in the
 				// test.
 				contents = "\n" + contents
-				// The gist appears to be somewhat non-deterministic (but its
-				// decoding stays the same), so we populate the expected
-				// contents based on the particular gist.
-				expected := fmt.Sprintf(`
--- plan is incomplete due to gist matching: %s
+				expected := `
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+maximum memory usage: <hidden>
+network usage: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 
 • scan
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  actual row count: 0
+  KV time: 0µs
+  KV contention time: 0µs
+  KV rows decoded: 0
+  KV bytes read: 0 B
+  KV gRPC calls: 0
+  estimated max memory allocated: 0 B
+  estimated row count: 1 (100% of the table; stats collected <hidden> ago)
   table: gist@gist_pkey
-  spans: FULL SCAN`, gist)
+  spans: FULL SCAN
+`
 				if contents != expected {
 					return errors.Newf("unexpected contents of plan.txn\nexpected:\n%s\ngot:\n%s", expected, contents)
 				}
