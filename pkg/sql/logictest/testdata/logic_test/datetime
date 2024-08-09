@@ -1707,11 +1707,10 @@ SET TIME ZONE 0
 
 subtest infinity_time
 
-# TODO(#41564): this should display "infinity", "-infinity".
 query TT
 SELECT 'infinity'::timestamp, '-infinity'::timestamptz
 ----
-294276-12-31 23:59:59.999999 +0000 +0000  -4713-11-24 00:00:00 +0000 +0000
+infinity  -infinity
 
 # Verify that parse_timestamp can be used in computed column expressions.
 statement ok
