@@ -4029,10 +4029,55 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			return advanceInfo{}, err
 		}
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionStartPostCommitJob, timeutil.Now())
-		if err := ex.server.cfg.JobRegistry.Run(
-			ex.ctxHolder.connCtx, ex.extraTxnState.jobs.created,
-		); err != nil {
-			handleErr(err)
+		// Resume the jobs that we just created.
+		if len(ex.extraTxnState.jobs.created) > 0 {
+			ex.server.cfg.JobRegistry.NotifyToResume(
+				ex.ctxHolder.connCtx, ex.extraTxnState.jobs.created...,
+			)
+		}
+		// Set up a context for waiting for the jobs, which can be cancelled if
+		// a statement timeout exists.
+		jobWaitCtx := ex.ctxHolder.ctx()
+		var queryTimedout atomic.Bool
+		if ex.sessionData().StmtTimeout > 0 {
+			timePassed := timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
+			if timePassed > ex.sessionData().StmtTimeout {
+				queryTimedout.Store(true)
+			} else {
+				var cancelFn context.CancelFunc
+				jobWaitCtx, cancelFn = context.WithCancel(jobWaitCtx)
+				queryTimeTicker := time.AfterFunc(ex.sessionData().StmtTimeout-timePassed, func() {
+					cancelFn()
+					queryTimedout.Store(true)
+				})
+				defer cancelFn()
+				defer queryTimeTicker.Stop()
+			}
+		}
+		if !queryTimedout.Load() && len(ex.extraTxnState.jobs.created) > 0 {
+			if err := ex.server.cfg.JobRegistry.WaitForJobs(jobWaitCtx,
+				ex.extraTxnState.jobs.created); err != nil {
+				if errors.Is(err, context.Canceled) && queryTimedout.Load() {
+					err = sqlerrors.QueryTimeoutError
+				}
+				handleErr(err)
+			}
+		}
+		// If the query timed out indicate that there are jobs left behind.
+		if queryTimedout.Load() {
+			jobList := strings.Builder{}
+			for i, j := range ex.extraTxnState.jobs.created {
+				if i > 0 {
+					jobList.WriteString(",")
+				}
+				jobList.WriteString(j.String())
+			}
+			if err := ex.planner.noticeSender.SendNotice(ex.ctxHolder.connCtx,
+				pgnotice.Newf("Statement has timed out, but created jobs "+
+					"will continue asynchronously in the background: %s",
+					jobList.String())); err != nil {
+				handleErr(err)
+			}
 		}
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, timeutil.Now())
 		if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(descIDsInJobs); err != nil {

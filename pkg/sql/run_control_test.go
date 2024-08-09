@@ -29,6 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -40,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/petermattis/goid"
 	"github.com/stretchr/testify/require"
 )
@@ -967,4 +972,70 @@ func TestTenantStatementTimeoutAdmissionQueueCancellation(t *testing.T) {
 	log.Infof(ctx, "unblocked blockers")
 	wg.Wait()
 	require.ErrorIs(t, ctx.Err(), context.Canceled)
+}
+
+// TestStatementTimeoutForSchemaChangeCommit confirms that waiting for the job
+// phase of the schema change respects statement timeout.
+func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	for _, implicitTxn := range []bool{true, false} {
+		t.Run(fmt.Sprintf("implicitTxn=%t", implicitTxn),
+			func(t *testing.T) {
+				numNodes := 1
+				var blockSchemaChange atomic.Bool
+				waitForTimeout := make(chan struct{})
+				tc := serverutils.StartCluster(t, numNodes,
+					base.TestClusterArgs{
+						ServerArgs: base.TestServerArgs{
+							Knobs: base.TestingKnobs{
+								SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+									AfterStage: func(p scplan.Plan, stageIdx int) error {
+										if blockSchemaChange.Load() && p.Params.ExecutionPhase == scop.PostCommitPhase {
+											<-waitForTimeout
+										}
+										return nil
+									},
+								},
+							},
+						},
+					})
+				defer tc.Stopper().Stop(ctx)
+
+				url, cleanup := tc.ApplicationLayer(0).PGUrl(t)
+				defer cleanup()
+				baseConn, err := pq.NewConnector(url.String())
+				require.NoError(t, err)
+				actualNotices := make([]string, 0)
+				connector := pq.ConnectorWithNoticeHandler(baseConn, func(n *pq.Error) {
+					actualNotices = append(actualNotices, n.Message)
+				})
+				dbWithHandler := gosql.OpenDB(connector)
+				defer dbWithHandler.Close()
+				conn := sqlutils.MakeSQLRunner(dbWithHandler)
+				conn.Exec(t, "CREATE TABLE t1 (n int primary key)")
+				conn.Exec(t, `SET statement_timeout = '30s'`)
+				require.NoError(t, err)
+				// Test implicit transactions first.
+				blockSchemaChange.Swap(true)
+				if implicitTxn {
+					_, err := conn.DB.ExecContext(ctx, "ALTER TABLE t1 ADD COLUMN j INT DEFAULT 32")
+					require.Errorf(t, err, sqlerrors.QueryTimeoutError.Error())
+					require.Equal(t, 1, len(actualNotices))
+					require.Regexp(t,
+						"Statement has timed out, but created jobs will continue asynchronously in the background: \\d+",
+						actualNotices[0])
+				} else {
+					txn := conn.Begin(t)
+					_, err := txn.Exec("ALTER TABLE t1 ADD COLUMN j INT DEFAULT 32")
+					require.NoError(t, err)
+					err = txn.Commit()
+					require.NoError(t, err)
+				}
+				close(waitForTimeout)
+				blockSchemaChange.Swap(false)
+			})
+	}
 }
