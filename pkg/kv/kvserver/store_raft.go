@@ -244,6 +244,7 @@ func (s *Store) uncoalesceBeats(
 			To:     raftpb.PeerID(beat.ToReplicaID),
 			Term:   uint64(beat.Term),
 			Commit: uint64(beat.Commit),
+			Match:  uint64(beat.Match),
 		}
 		beatReqs[i] = kvserverpb.RaftMessageRequest{
 			RangeID: beat.RangeID,
