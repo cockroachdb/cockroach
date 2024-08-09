@@ -312,7 +312,7 @@ func (c *compare) compareUsingThreshold(comparisonResultsMap model.ComparisonRes
 	if len(reportStrings) > 0 {
 		reportString := strings.Join(reportStrings, "\n\n")
 		return errors.Errorf("there are benchmark regressions of > %.2f%% in the following packages:\n\n%s",
-			c.threshold*100, reportString)
+			c.threshold, reportString)
 	}
 
 	return nil
