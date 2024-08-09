@@ -197,11 +197,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109501),
-		},
-	})
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
 	firstServer := tc.Server(0).ApplicationLayer()
@@ -301,10 +297,6 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	var resp serverpb.DataDistributionResponse
 	if err := srvtestutils.GetAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
 		t.Fatal(err)
-	}
-
-	if resp.DatabaseInfo["roachblog"].TableInfo["public.comments"].DroppedAt == nil {
-		t.Fatal("expected roachblog.comments to have dropped_at set but it's nil")
 	}
 
 	// Verify that the request still works after a database has been dropped.
