@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -111,6 +112,12 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	p := params.p
 	ctx := params.ctx
 	dbDesc := n.dbDesc
+
+	// Exit early with an error if the table is undergoing a declarative schema
+	// change.
+	if catalog.HasConcurrentDeclarativeSchemaChange(n.dbDesc) {
+		return scerrors.ConcurrentSchemaChangeError(n.dbDesc)
+	}
 
 	// Check if any other tables depend on tables in the database.
 	// Because our views and sequence defaults are currently just stored as
