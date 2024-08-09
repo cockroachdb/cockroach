@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -134,6 +136,68 @@ CREATE TYPE d.t AS ENUM();
 			t.Fatalf("expected namespace entries to be cleaned up for type desc %q", name)
 		}
 	}
+}
+
+// TestFailedTypeSchemaChangeIgnoresDrops when a type schema change notices
+// a dropped descriptor during a rollback that is treated as a non-retriable
+// error.
+func TestFailedTypeSchemaChangeIgnoresDrops(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := createTestServerParams()
+	startDrop := make(chan struct{})
+	dropFinished := make(chan struct{})
+	cancelled := atomic.Bool{}
+	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
+		RunBeforeExec: func() error {
+			if cancelled.Swap(true) == false {
+				// Kick off a DROP DATABASE job to clean up this descriptor.
+				close(startDrop)
+				<-dropFinished
+				// Fail this schema change so that the rollback logic executes.
+				return jobs.MarkAsPermanentJobError(errors.New("yikes"))
+			} else {
+				return nil
+			}
+		},
+	}
+	// Decrease the adopt loop interval so that retries happen quickly.
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	grp := ctxgroup.WithContext(ctx)
+	grp.Go(func() error {
+		defer close(dropFinished)
+		<-startDrop
+		conn, err := sqlDB.Conn(ctx)
+		if err != nil {
+			return err
+		}
+		_, err = conn.ExecContext(ctx, "SET use_declarative_schema_changer = 'off';")
+		if err != nil {
+			return err
+		}
+		_, err = conn.ExecContext(ctx, "DROP DATABASE d CASCADE")
+		return err
+	})
+
+	// Create a type.
+	_, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = 'off';
+CREATE DATABASE d;
+CREATE TYPE d.t AS ENUM('a', 'b', 'c');
+`)
+	require.NoError(t, err)
+
+	// The initial drop should fail.
+	_, err = sqlDB.Exec(`ALTER TYPE d.t DROP VALUE 'c'`)
+	testutils.IsError(err, "yikes")
+
+	require.NoError(t, grp.Wait())
 }
 
 func TestAddDropValuesInTransaction(t *testing.T) {
