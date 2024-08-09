@@ -263,7 +263,7 @@ func (cmvt *cdcMixedVersionTester) runKafkaConsumer(
 			if err != nil {
 				return errors.Wrap(err, "failed to parse timestamps from message")
 			}
-			cmvt.timestampResolved(resolved)
+			cmvt.timestampResolved(l, resolved)
 
 			if everyN.ShouldLog() {
 				l.Printf("latest resolved timestamp %s behind realtime", timeutil.Since(resolved.GoTime()).String())
@@ -330,12 +330,13 @@ func (cmvt *cdcMixedVersionTester) validate(
 
 // timestampsResolved updates the underlying channel if set (i.e., if
 // we are waiting for resolved timestamps events)
-func (cmvt *cdcMixedVersionTester) timestampResolved(resolved hlc.Timestamp) {
+func (cmvt *cdcMixedVersionTester) timestampResolved(l *logger.Logger, resolved hlc.Timestamp) {
 	cmvt.timestampsResolved.Lock()
 	defer cmvt.timestampsResolved.Unlock()
 
 	select {
 	case cmvt.timestampsResolved.C <- resolved:
+		l.Printf("sent resolved timestamp %s", resolved)
 	default:
 		// If the channel is full or nil, we drop the resolved timestamp.
 	}
