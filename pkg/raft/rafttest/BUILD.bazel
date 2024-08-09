@@ -35,6 +35,7 @@ go_library(
     deps = [
         "//pkg/raft",
         "//pkg/raft/raftpb",
+        "//pkg/raft/raftstoreliveness",
         "//pkg/raft/tracker",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",

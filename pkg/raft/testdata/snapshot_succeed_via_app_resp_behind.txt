@@ -107,6 +107,7 @@ Messages:
 # 3 receives and applies the snapshot, but doesn't respond with MsgAppResp yet.
 deliver-msgs 3
 ----
+1->3 MsgFortifyLeader Term:1 Log:0/0
 1->3 MsgSnap Term:1 Log:0/0
   Snapshot: Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 INFO log [committed=5, applied=5, applying=5, unstable.offset=6, unstable.offsetInProgress=6, len(unstable.Entries)=0] starts to restore snapshot [index: 11, term: 1]
@@ -146,11 +147,13 @@ stabilize 3
   HardState Term:1 Vote:1 Commit:11 Lead:1
   Snapshot Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
   3->1 MsgAppResp Term:1 Log:0/11
 
 stabilize 1
 ----
 > 1 receiving messages
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
   3->1 MsgAppResp Term:1 Log:0/11
   DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=11 next=13 paused pendingSnap=12]
 > 1 handling Ready
