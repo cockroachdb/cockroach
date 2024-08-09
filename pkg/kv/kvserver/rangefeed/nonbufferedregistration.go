@@ -300,7 +300,7 @@ func (ubr *unbufferedRegistration) waitForCaughtUp(ctx context.Context) error {
 	}
 	for re := retry.StartWithCtx(ctx, opts); re.Next(); {
 		ubr.mu.Lock()
-		caughtUp := len(ubr.mu.catchUpBuf) == 0
+		caughtUp := len(ubr.mu.catchUpBuf) == 0 && ubr.mu.caughtUp
 		ubr.mu.Unlock()
 		if caughtUp {
 			return nil
