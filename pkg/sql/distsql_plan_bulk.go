@@ -103,7 +103,7 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningTenant(
 	planCtx := dsp.NewPlanningCtxWithOracle(
 		ctx, evalCtx, nil /* planner */, nil /* txn */, FullDistribution, oracle, localityFilter,
 	)
-	pods, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
+	pods, err := dsp.GetAvailableInstances(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
