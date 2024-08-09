@@ -12,6 +12,7 @@ package keysutils
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -33,17 +34,17 @@ func MakePrettyScannerForNamedTables(
 	var tableParser, tenantParser keys.KeyParserFunc
 	if tenantID == roachpb.SystemTenantID {
 		tableParser = func(input string) (string, roachpb.Key) {
-			return parseTableKeysAsAscendingInts(input, tableNameToID, idxNameToID)
+			return parseTableKeysAsAscendingIntsOrStrings(input, tableNameToID, idxNameToID)
 		}
 	} else {
 		tenantParser = keys.GetTenantKeyParseFn(func(input string) (string, roachpb.Key) {
-			return parseTableKeysAsAscendingInts(input, tableNameToID, idxNameToID)
+			return parseTableKeysAsAscendingIntsOrStrings(input, tableNameToID, idxNameToID)
 		})
 	}
 	return keysutil.MakePrettyScanner(tableParser, tenantParser)
 }
 
-// parseTableKeysAsAscendingInts takes a pretty-printed key segment like
+// parseTableKeysAsAscendingIntsOrStrings takes a pretty-printed key segment like
 // "/<table name>/<index name>/1/2/3/...", a mapping of table names to ids and a
 // mapping of index names to ids and turns the part before "/... " into the key
 // corresponding to the respective index entry by encoding the ints as ascending
@@ -60,7 +61,7 @@ func MakePrettyScannerForNamedTables(
 // GetTenantKeyParseFn).
 //
 // The "/..." part is returned as the remainder (the first return value).
-func parseTableKeysAsAscendingInts(
+func parseTableKeysAsAscendingIntsOrStrings(
 	input string, tableNameToID map[string]int, idxNameToID map[string]int,
 ) (string, roachpb.Key) {
 	// Consume the table name.
@@ -73,7 +74,11 @@ func parseTableKeysAsAscendingInts(
 	tableName := input[:slashPos]
 	tableID, ok := tableNameToID[tableName]
 	if !ok {
-		panic(fmt.Sprintf("unknown table: %s", tableName))
+		i, err := strconv.Atoi(tableName)
+		if err != nil {
+			panic(fmt.Sprintf("unknown table: %s", tableName))
+		}
+		tableID = i
 	}
 	// We assume that the tenant prefix (if there was any) was already removed
 	// and included into the output by the caller, so we use the system codec
@@ -100,7 +105,11 @@ func parseTableKeysAsAscendingInts(
 	} else {
 		idxID, ok = idxNameToID[fmt.Sprintf("%s.%s", tableName, idxName)]
 		if !ok {
-			panic(fmt.Sprintf("unknown index: %s", idxName))
+			i, err := strconv.Atoi(idxName)
+			if err != nil {
+				panic(fmt.Sprintf("unknown index: %s", idxName))
+			}
+			idxID = i
 		}
 	}
 	output = encoding.EncodeUvarintAscending(output, uint64(idxID))
@@ -109,7 +118,7 @@ func parseTableKeysAsAscendingInts(
 	}
 
 	input = remainder
-	remainder, moreOutput := parseAscendingIntIndexKeys(input)
+	remainder, moreOutput := parseAscendingIntOrStringIndexKeys(input)
 	output = append(output, moreOutput...)
 	return remainder, output
 }
@@ -129,14 +138,20 @@ func mustShift(in string) (first, remainder string) {
 	return in[:1], in[1:]
 }
 
-// parseAscendingIntIndexKeys takes a pretty-printed key segment like
+// parseAscendingIntOrStringIndexKeys takes a pretty-printed key segment like
 // "/1/2/3/foo" and parses all the ints from the beginning turning them into a
 // key segment by encoding them as ascending varints. The part after the last
 // int is returned as the remainder (the first return value).
-func parseAscendingIntIndexKeys(input string) (string, roachpb.Key) {
+func parseAscendingIntOrStringIndexKeys(input string) (string, roachpb.Key) {
 	var key roachpb.Key
 	for {
-		remainder, k := parseAscendingIntIndexKey(input)
+		var remainder string
+		var k roachpb.Key
+		if len(input) > 1 && input[1] == '"' {
+			remainder, k = parseStringIndexKey(input)
+		} else {
+			remainder, k = parseAscendingIntIndexKey(input)
+		}
 		if k == nil {
 			// We've failed to parse anything.
 			return remainder, key
@@ -171,6 +186,45 @@ func parseAscendingIntIndexKey(input string) (string, roachpb.Key) {
 		// Can't decode the key.
 		return origInput, nil
 	}
+	remainder := input[slashPos:] // `/something/else` -> `/else`
+	key, err := keyside.Encode(nil, datum, encoding.Ascending)
+	if err != nil {
+		panic(err)
+	}
+	return remainder, key
+}
+
+// parseStringIndexKey parses one string out of a string looking like
+// `/"abc"[/...]" and encodes it to a key.
+func parseStringIndexKey(input string) (string, roachpb.Key) {
+	input = mustShiftSlash(input)
+	if input[0] != '"' {
+		panic("missing opening quote")
+	}
+	input = input[1:]
+	var start, closeQuote int
+	for {
+		closeQuote = start + strings.Index(input[start:], "\"")
+		if closeQuote < start {
+			panic("closing quote not found")
+		}
+		if closeQuote == 0 || input[closeQuote-1] != '\\' {
+			break
+		}
+		start = closeQuote + 1 // there was a \ before " so keep looking from " on.
+	}
+
+	slashPos := closeQuote + 1
+	if slashPos >= len(input) {
+		slashPos = len(input)
+	} else if input[slashPos] != '/' {
+		panic("closing quote not followed by slash")
+	}
+	indexValStr := input[:closeQuote]
+	if start > 0 {
+		indexValStr = strings.ReplaceAll(indexValStr, "\\\"", "\"")
+	}
+	datum := tree.NewDString(indexValStr)
 	remainder := input[slashPos:] // `/something/else` -> `/else`
 	key, err := keyside.Encode(nil, datum, encoding.Ascending)
 	if err != nil {
