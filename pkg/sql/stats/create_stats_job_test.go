@@ -393,13 +393,6 @@ func TestCreateStatsProgress(t *testing.T) {
 	skip.UnderRace(t, "the test is too sensitive to overload")
 	skip.UnderDeadlock(t, "the test is too sensitive to overload")
 
-	getLastCreateStatsJobID := func(t testing.TB, db *sqlutils.SQLRunner) jobspb.JobID {
-		var jobID jobspb.JobID
-		db.QueryRow(t, "SELECT id FROM system.jobs WHERE status = 'running' AND "+
-			"job_type = 'CREATE STATS' ORDER BY created DESC LIMIT 1").Scan(&jobID)
-		return jobID
-	}
-
 	var allowRequest chan struct{}
 	var allowRequestClosed bool
 	// Make sure that we unblock the test server in all scenarios with test
@@ -434,18 +427,6 @@ func TestCreateStatsProgress(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT 'd.t'::regclass::int`).Scan(&tID)
 	setTableID(tID)
 
-	getFractionCompleted := func(jobID jobspb.JobID) float32 {
-		var progress *jobspb.Progress
-		testutils.SucceedsSoon(t, func() error {
-			progress = jobutils.GetJobProgress(t, sqlDB, jobID)
-			if progress.Progress == nil {
-				return errors.Errorf("progress is nil. jobID: %d", jobID)
-			}
-			return nil
-		})
-		return progress.Progress.(*jobspb.Progress_FractionCompleted).FractionCompleted
-	}
-
 	const query = `CREATE STATISTICS s1 FROM d.t`
 
 	// Start a CREATE STATISTICS run and wait until it has scanned part of the
@@ -474,7 +455,7 @@ func TestCreateStatsProgress(t *testing.T) {
 
 	// Ensure that 0 progress has been recorded since there are no existing
 	// stats available to estimate progress.
-	fractionCompleted := getFractionCompleted(jobID)
+	fractionCompleted := getFractionCompleted(t, sqlDB, jobID)
 	if fractionCompleted != 0 {
 		t.Fatalf(
 			"create stats should not have recorded progress, but progress is %f",
@@ -491,7 +472,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	}
 
 	// Verify that full progress is now recorded.
-	fractionCompleted = getFractionCompleted(jobID)
+	fractionCompleted = getFractionCompleted(t, sqlDB, jobID)
 	if fractionCompleted != 1 {
 		t.Fatalf(
 			"create stats should have recorded full progress, but progress is %f",
@@ -528,7 +509,7 @@ func TestCreateStatsProgress(t *testing.T) {
 
 	// Ensure that partial progress has been recorded since there are existing
 	// stats available.
-	fractionCompleted = getFractionCompleted(jobID)
+	fractionCompleted = getFractionCompleted(t, sqlDB, jobID)
 	if fractionCompleted <= 0 || fractionCompleted > 0.99 {
 		t.Fatalf(
 			"create stats should have recorded partial progress, but progress is %f",
@@ -545,10 +526,136 @@ func TestCreateStatsProgress(t *testing.T) {
 	}
 
 	// Verify that full progress is now recorded.
-	fractionCompleted = getFractionCompleted(jobID)
+	fractionCompleted = getFractionCompleted(t, sqlDB, jobID)
 	if fractionCompleted != 1 {
 		t.Fatalf(
 			"create stats should have recorded full progress, but progress is %f",
+			fractionCompleted,
+		)
+	}
+}
+
+func TestCreateStatsUsingExtremesProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer func(oldProgressInterval time.Duration) {
+		rowexec.SampleAggregatorProgressInterval = oldProgressInterval
+	}(rowexec.SampleAggregatorProgressInterval)
+	rowexec.SampleAggregatorProgressInterval = time.Nanosecond
+
+	defer func(oldProgressInterval int) {
+		rowexec.SamplerProgressInterval = oldProgressInterval
+	}(rowexec.SamplerProgressInterval)
+	rowexec.SamplerProgressInterval = 1
+
+	skip.UnderRace(t, "the test is too sensitive to overload")
+	skip.UnderDeadlock(t, "the test is too sensitive to overload")
+
+	var allowRequest chan struct{}
+	var allowRequestClosed bool
+	// Make sure that we unblock the test server in all scenarios with test
+	// failures.
+	defer func() {
+		if !allowRequestClosed {
+			close(allowRequest)
+		}
+	}()
+	filter, setTableID := createStatsRequestFilter(&allowRequest)
+	var params base.TestServerArgs
+	params.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: filter,
+	}
+	params.Knobs.DistSQL = &execinfra.TestingKnobs{
+		// Force the stats job to iterate through the input rows instead of reading
+		// them all at once.
+		TableReaderBatchBytesLimit: 100,
+	}
+
+	ctx := context.Background()
+	srv, conn, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (a INT8 PRIMARY KEY, b INT8, INDEX(b))`)
+	sqlDB.Exec(t, `INSERT INTO d.t SELECT x, x from generate_series(1, 100) as g(x)`)
+	var tID descpb.ID
+	sqlDB.QueryRow(t, `SELECT 'd.t'::regclass::int`).Scan(&tID)
+	setTableID(tID)
+
+	const fullStatQuery = `CREATE STATISTICS s1 FROM d.t`
+
+	// Start a CREATE STATISTICS run.
+	allowRequest = make(chan struct{})
+	errCh := make(chan error)
+	go func() {
+		_, err := conn.Exec(fullStatQuery)
+		errCh <- err
+	}()
+
+	// Allow the job to complete and verify that the client didn't see anything
+	// amiss.
+	close(allowRequest)
+	allowRequestClosed = true
+	if err := <-errCh; err != nil {
+		t.Fatalf("create stats job should have completed: %s", err)
+	}
+
+	// Invalidate the stats cache so that we can be sure to get the latest stats.
+	s.ExecutorConfig().(sql.ExecutorConfig).TableStatsCache.InvalidateTableStats(ctx, tID)
+
+	sqlDB.Exec(t, `INSERT INTO d.t SELECT x, x from generate_series(101, 120) as g(x)`)
+
+	const partialStatQuery = `CREATE STATISTICS s2 FROM d.t USING EXTREMES`
+
+	// Start a CREATE STATISTICS USING EXTREMES run that will scan two indexes.
+	allowRequest = make(chan struct{})
+	allowRequestClosed = false
+	go func() {
+		_, err := conn.Exec(partialStatQuery)
+		errCh <- err
+	}()
+	allowRequest <- struct{}{}
+
+	// Fetch the new job ID since we know it's running now.
+	jobID := getLastCreateStatsJobID(t, sqlDB)
+
+	var fractionCompleted float32
+	var prevFractionCompleted float32
+
+	// Allow the job to progress until it finishes scanning both indexes.
+Loop:
+	for {
+		select {
+		case allowRequest <- struct{}{}:
+			// Ensure that job progress never regresses throughout both index scans.
+			fractionCompleted = getFractionCompleted(t, sqlDB, jobID)
+			if fractionCompleted < prevFractionCompleted {
+				close(errCh)
+				t.Fatalf("create partial stats job should not regress progress between indexes: %f -> %f", prevFractionCompleted, fractionCompleted)
+			}
+			prevFractionCompleted = fractionCompleted
+		case err := <-errCh:
+			if err == nil {
+				// Create partial stats job is now completed
+				break Loop
+			} else {
+				t.Fatalf("create partial stats job should have completed: %s", err)
+			}
+		}
+	}
+
+	close(allowRequest)
+	allowRequestClosed = true
+
+	// Verify that full progress is now recorded.
+	fractionCompleted = getFractionCompleted(t, sqlDB, jobID)
+	if fractionCompleted != 1 {
+		t.Fatalf(
+			"create partial stats should have recorded full progress, but progress is %f",
 			fractionCompleted,
 		)
 	}
@@ -616,4 +723,23 @@ func createStatsRequestFilter(
 		}
 		return nil
 	}, func(id descpb.ID) { tableToBlock.Store(id) }
+}
+
+func getLastCreateStatsJobID(t testing.TB, db *sqlutils.SQLRunner) jobspb.JobID {
+	var jobID jobspb.JobID
+	db.QueryRow(t, "SELECT id FROM system.jobs WHERE status = 'running' AND "+
+		"job_type = 'CREATE STATS' ORDER BY created DESC LIMIT 1").Scan(&jobID)
+	return jobID
+}
+
+func getFractionCompleted(t testing.TB, sqlDB *sqlutils.SQLRunner, jobID jobspb.JobID) float32 {
+	var progress *jobspb.Progress
+	testutils.SucceedsSoon(t, func() error {
+		progress = jobutils.GetJobProgress(t, sqlDB, jobID)
+		if progress.Progress == nil {
+			return errors.Errorf("progress is nil. jobID: %d", jobID)
+		}
+		return nil
+	})
+	return progress.Progress.(*jobspb.Progress_FractionCompleted).FractionCompleted
 }

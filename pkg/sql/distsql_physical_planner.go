@@ -3792,8 +3792,16 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 			if err != nil {
 				return nil, err
 			}
+			details := record.Details.(jobspb.CreateStatsDetails)
+
+			numIndexes := 1
+			if details.UsingExtremes {
+				// Partial stats collections scan a different index for each column.
+				numIndexes = len(details.ColumnStats)
+			}
 			plan, err = dsp.createPlanForCreateStats(
-				ctx, planCtx, planCtx.planner.SemaCtx(), 0 /* jobID */, record.Details.(jobspb.CreateStatsDetails),
+				ctx, planCtx, planCtx.planner.SemaCtx(), 0 /* jobID */, details,
+				numIndexes, 0, /* curIndex */
 			)
 		}
 
