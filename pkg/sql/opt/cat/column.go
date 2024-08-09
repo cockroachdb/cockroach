@@ -191,6 +191,24 @@ const (
 	Inverted
 )
 
+// String returns a string representation of the ColumnKind.
+func (k ColumnKind) String() string {
+	switch k {
+	case Ordinary:
+		return "ordinary"
+	case WriteOnly:
+		return "write-only"
+	case DeleteOnly:
+		return "delete-only"
+	case System:
+		return "system"
+	case Inverted:
+		return "inverted"
+	default:
+		return "unknown"
+	}
+}
+
 // ColumnVisibility controls if a column is visible for queries and if it is
 // part of the star expansion.
 type ColumnVisibility uint8
