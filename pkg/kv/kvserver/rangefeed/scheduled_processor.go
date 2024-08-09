@@ -316,16 +316,25 @@ func (p *ScheduledProcessor) Register(
 	p.syncEventC()
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
-	r := newBufferedRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
-	)
+	var r registration
+	if stream.ShouldUseBufferedRegistration() {
+		r = newBufferedRegistration(
+			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
+		)
+	} else {
+		log.Infof(context.Background(), "using unbuffered registrations for rangefeeds")
+		r = newUnbufferedRegistration(
+			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+			p.Config.EventChanCap, p.Metrics, stream, disconnectFn,
+		)
+	}
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
 		if p.stopping {
 			return nil
 		}
-		if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
+		if !p.Span.AsRawSpanWithNoLocals().Contains(r.getSpan()) {
 			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 		}
 
@@ -342,17 +351,39 @@ func (p *ScheduledProcessor) Register(
 		// once they observe the first checkpoint event.
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
+		// Unbuffered regisration doesn't have a long running dedicated goroutine,
+		// so it will register clean up callback with streammuxer to handle.
+		if nr, ok := r.(*unbufferedRegistration); ok {
+			stream.RegisterRangefeedCleanUp(func() {
+				nr.setDisconnectedIfNot()
+				// Invoke rangefeed clean up callback regardless of whether registration
+				// has been disconnected during the callback.
+				// What happens if p is stopped here already
+				//p.reg.Unregister(cstx, &r)
+				if p.unregisterClient(r) {
+					// unreg callback is set by replica to tear down processors that have
+					// zero registrations left and to update event filters.
+					if f := r.getUnreg(); f != nil {
+						f()
+					}
+				}
+			})
+		}
+
 		// Run an output loop for the registry.
 		runOutputLoop := func(ctx context.Context) {
 			r.runOutputLoop(ctx, p.RangeID)
-			if p.unregisterClient(r) {
-				// unreg callback is set by replica to tear down processors that have
-				// zero registrations left and to update event filters.
-				if r.unreg != nil {
-					r.unreg()
+			if _, ok := r.(*bufferedRegistration); ok {
+				if p.unregisterClient(r) {
+					// unreg callback is set by replica to tear down processors that have
+					// zero registrations left and to update event filters.
+					if f := r.getUnreg(); f != nil {
+						f()
+					}
 				}
 			}
 		}
+
 		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
 		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
 			// If we can't schedule internally, processor is already stopped which

@@ -1946,6 +1946,12 @@ func (s *perRangeEventSink) Context() context.Context {
 // declares its Send method to be thread-safe.
 func (s *perRangeEventSink) SendIsThreadSafe() {}
 
+// ShouldUseBufferedRegistration returns whether the processor should use
+// buffered registration.
+func (s *perRangeEventSink) ShouldUseBufferedRegistration() bool {
+	return s.wrapped.ShouldUseBufferedRegistration()
+}
+
 func (s *perRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	response := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
@@ -1961,6 +1967,10 @@ func (s *perRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
 // should not rely on immediate disconnection as cleanup takes place async.
 func (s *perRangeEventSink) Disconnect(err *kvpb.Error) {
 	s.wrapped.DisconnectStreamWithError(s.streamID, s.rangeID, err)
+}
+
+func (s *perRangeEventSink) RegisterRangefeedCleanUp(f func()) {
+	s.wrapped.RegisterRangefeedCleanUp(s.streamID, f)
 }
 
 // lockedMuxStream provides support for concurrent calls to Send. The underlying
@@ -1981,12 +1991,18 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 
 // MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
-	muxStream := &lockedMuxStream{wrapped: stream}
-
 	// All context created below should derive from this context, which is
 	// cancelled once MuxRangeFeed exits.
 	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
 	defer cancel()
+
+	var muxStream rangefeed.ServerStreamSender
+	if kvserver.RangefeedUseBufferedSender.Get(&n.storeCfg.Settings.SV) {
+		log.Fatalf(stream.Context(), "buffered sender unimplemented")
+	} else {
+		muxStream = &lockedMuxStream{wrapped: stream}
+	}
+
 	streamMuxer := rangefeed.NewStreamMuxer(muxStream, n.metrics)
 	if err := streamMuxer.Start(ctx, n.stopper); err != nil {
 		return err

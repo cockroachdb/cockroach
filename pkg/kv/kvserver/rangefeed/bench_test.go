@@ -192,9 +192,10 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 
 // noopStream is a stream that does nothing, except count events.
 type noopStream struct {
-	ctx    context.Context
-	events int
-	done   chan *kvpb.Error
+	ctx     context.Context
+	events  int
+	done    chan *kvpb.Error
+	cleanup func()
 }
 
 func (s *noopStream) Context() context.Context {
@@ -210,10 +211,20 @@ func (s *noopStream) Send(*kvpb.RangeFeedEvent) error {
 // in a single threaded environment in this test, ensuring thread-safety.
 func (s *noopStream) SendIsThreadSafe() {}
 
+func (s *noopStream) ShouldUseBufferedRegistration() bool { return true }
+
 // Disconnect implements the Stream interface. It mocks the disconnect behavior
 // by sending the error to the done channel.
 func (s *noopStream) Disconnect(error *kvpb.Error) {
 	s.done <- error
+	if s.cleanup != nil {
+		go s.cleanup()
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func (s *noopStream) RegisterRangefeedCleanUp(cleanup func()) {
+	s.cleanup = cleanup
 }
 
 // WaitForError waits for the rangefeed to complete and returns the error sent

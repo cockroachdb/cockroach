@@ -51,10 +51,11 @@ import (
 
 // testStream is a mock implementation of kvpb.RangeFeedEventSink.
 type testStream struct {
-	ctx    context.Context
-	cancel func()
-	done   chan *kvpb.Error
-	mu     struct {
+	ctx     context.Context
+	cancel  func()
+	done    chan *kvpb.Error
+	cleanup func()
+	mu      struct {
 		syncutil.Mutex
 		events []*kvpb.RangeFeedEvent
 	}
@@ -81,6 +82,8 @@ func (s *testStream) Cancel() {
 
 func (s *testStream) SendIsThreadSafe() {}
 
+func (s *testStream) ShouldUseBufferedRegistration() bool { return true }
+
 func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -98,6 +101,14 @@ func (s *testStream) Events() []*kvpb.RangeFeedEvent {
 // by sending the error to the done channel.
 func (s *testStream) Disconnect(error *kvpb.Error) {
 	s.done <- error
+	if s.cleanup != nil {
+		go s.cleanup()
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func (s *testStream) RegisterRangefeedCleanUp(cleanup func()) {
+	s.cleanup = cleanup
 }
 
 // WaitForError waits for the rangefeed to complete and returns the error sent

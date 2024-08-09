@@ -58,7 +58,7 @@ type bufferedRegistration struct {
 		// has been emptied.
 		overflowed bool
 		// Boolean indicating if all events have been output to stream. Used only
-		// for testing.
+		// for testing. TODO: find out why caught up is needed
 		caughtUp bool
 		// Management of the output loop goroutine, used to ensure proper teardown.
 		outputLoopCancelFn func()
@@ -303,4 +303,14 @@ func (br *bufferedRegistration) detachCatchUpIter() *CatchUpIterator {
 	catchUpIter := br.mu.catchUpIter
 	br.mu.catchUpIter = nil
 	return catchUpIter
+}
+
+// Test only.
+func (br *bufferedRegistration) lenOfBuf() int {
+	return len(br.buf)
+}
+
+// Test only.
+func (br *bufferedRegistration) capOfBuf() int {
+	return cap(br.buf)
 }
