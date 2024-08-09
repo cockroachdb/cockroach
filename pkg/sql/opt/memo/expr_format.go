@@ -722,10 +722,19 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *CreateTableExpr:
-		tp.Child(t.Syntax.String())
+		fmtFlags := tree.FmtSimple
+		if f.RedactableValues {
+			fmtFlags = tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
+		}
+		tp.Child(tree.AsStringWithFlags(t.Syntax, fmtFlags))
 
 	case *CreateViewExpr:
-		tp.Child(t.ViewQuery)
+		// Match the format flags used to create t.ViewQuery.
+		fmtFlags := tree.FmtParsable
+		if f.RedactableValues {
+			fmtFlags |= tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
+		}
+		tp.Child(tree.AsStringWithFlags(t.Syntax.AsSource, fmtFlags))
 
 		f.Buffer.Reset()
 		f.Buffer.WriteString("columns:")
@@ -737,7 +746,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		f.formatDependencies(tp, t.Deps, t.TypeDeps)
 
 	case *CreateFunctionExpr:
-		tp.Child(t.Syntax.String())
+		fmtFlags := tree.FmtSimple
+		if f.RedactableValues {
+			fmtFlags = tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
+		}
+		tp.Child(tree.AsStringWithFlags(t.Syntax, fmtFlags))
 		f.formatDependencies(tp, t.Deps, t.TypeDeps)
 
 	case *CreateStatisticsExpr:
