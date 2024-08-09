@@ -67,7 +67,7 @@ func WriteInitialClusterData(
 
 	nodeIDVal.SetInt(int64(kvstorage.FirstNodeID))
 	// The caller will initialize the stores with ids FirstStoreID, ..., FirstStoreID+numStores-1.
-	storeIDVal.SetInt(int64(kvstorage.FirstStoreID) + int64(numStores) - 1)
+	storeIDVal.SetInt(int64(kvstorage.FirstStoreID) + kvstorage.StoreIDIncrement*(int64(numStores)-1))
 	// The last range has id = len(splits) + 1
 	rangeIDVal.SetInt(int64(len(splits) + 1))
 
