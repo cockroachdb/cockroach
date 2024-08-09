@@ -166,7 +166,7 @@ SHOW CLUSTER SETTING diagnostics.reporting.enabled
 ----
 true
 
-user root 
+user root
 
 statement ok
 REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
@@ -435,3 +435,16 @@ query T noticetrace
 ALTER TENANT ALL RESET CLUSTER SETTING sql.trace.log_statement_execute
 ----
 NOTICE: "sql.trace.log_statement_execute" is now an alias for "sql.log.all_statements.enabled", the preferred setting name
+
+
+subtest show_renamed_setting_for_tenant
+
+skipif config 3node-tenant-default-configs
+statement ok
+ALTER TENANT "cluster-10" SET CLUSTER SETTING sql.explain_analyze.include_ru_estimation.enabled=false;
+
+skipif config 3node-tenant-default-configs
+query B
+SHOW CLUSTER SETTING sql.explain_analyze.include_ru_estimation.enabled FOR TENANT "cluster-10"
+----
+false
