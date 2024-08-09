@@ -64,64 +64,6 @@ var upgrades = []upgradebase.Upgrade{
 		bootstrapCluster,
 		upgrade.RestoreActionNotRequired("initialization runs before restore")),
 
-	newFirstUpgrade(clusterversion.V24_1Start.Version()),
-
-	upgrade.NewTenantUpgrade(
-		"hide unused payload and progress columns from system.jobs table",
-		clusterversion.V24_1_DropPayloadAndProgressFromSystemJobsTable.Version(),
-		upgrade.NoPrecondition,
-		hidePayloadProgressFromSystemJobs,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.jobs table"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"migrate old-style PTS records to the new style",
-		clusterversion.V24_1_MigrateOldStylePTSRecords.Version(),
-		upgrade.NoPrecondition,
-		migrateOldStylePTSRecords,
-		upgrade.RestoreActionNotRequired("restore does not restore the PTS table"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"stop writing expiration based leases to system.lease table (equivalent to experimental_use_session_based_leasing=drain)",
-		clusterversion.V24_1_SessionBasedLeasingDrain.Version(),
-		upgrade.NoPrecondition,
-		disableWritesForExpiryBasedLeases,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.lease table"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"only use session based leases  (equivalent to experimental_use_session_based_leasing=session)",
-		clusterversion.V24_1_SessionBasedLeasingOnly.Version(),
-		upgrade.NoPrecondition,
-		adoptUsingOnlySessionBasedLeases,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.lease table"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"update system.lease descriptor to be session base",
-		clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor.Version(),
-		upgrade.NoPrecondition,
-		upgradeSystemLeasesDescriptor,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.lease table"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"set survivability goal on MR system database; fix-up gc.ttl and exclude_data_from_backup",
-		clusterversion.V24_1_SystemDatabaseSurvivability.Version(),
-		upgrade.NoPrecondition,
-		alterSystemDatabaseSurvivalGoal,
-		upgrade.RestoreActionNotRequired("cluster restore does not preserve the multiregion configuration of the system database"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"add the span_counts table to the system tenant",
-		clusterversion.V24_1_AddSpanCounts.Version(),
-		upgrade.NoPrecondition,
-		addSpanCountTable,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
-	),
-
 	newFirstUpgrade(clusterversion.V24_2Start.Version()),
 
 	upgrade.NewTenantUpgrade(
