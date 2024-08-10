@@ -264,9 +264,16 @@ const (
 	// the `system.tenant_settings` row for the `version` setting.
 	V24_2_DeleteTenantSettingsVersion
 
-	// V24_2_LeaseMinTimestamp is the earlier version which supports the lease
+	// V24_2 is CockroachDB v24.2. It's used for all v24.2.x patch releases.
+	V24_2
+
+	// V24_3Start demarcates the start of cluster versions stepped through during
+	// the process of upgrading from 24.2 to 24.3.
+	V24_3Start
+
+	// V24_3_LeaseMinTimestamp is the earliest version which supports the lease
 	// minimum timestamp field.
-	V24_2_LeaseMinTimestamp
+	V24_3_LeaseMinTimestamp
 
 	// *************************************************
 	// Step (1) Add new versions above this comment.
@@ -331,7 +338,12 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_2_TenantSystemTables:          {Major: 24, Minor: 1, Internal: 6},
 	V24_2_TenantRates:                 {Major: 24, Minor: 1, Internal: 8},
 	V24_2_DeleteTenantSettingsVersion: {Major: 24, Minor: 1, Internal: 10},
-	V24_2_LeaseMinTimestamp:           {Major: 24, Minor: 1, Internal: 12},
+
+	V24_2: {Major: 24, Minor: 2, Internal: 0},
+
+	// v24.3 versions. Internal versions must be even.
+	V24_3Start:              {Major: 24, Minor: 2, Internal: 2},
+	V24_3_LeaseMinTimestamp: {Major: 24, Minor: 2, Internal: 4},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
@@ -350,15 +362,15 @@ const MinSupported Key = V24_1
 //
 // Note: this is always the last element of SupportedPreviousReleases(); it is
 // also provided as a constant for convenience.
-const PreviousRelease Key = V24_1
+const PreviousRelease Key = V24_2
 
-// V24_2 is a placeholder that will eventually be replaced by the actual 24.2
+// V24_3 is a placeholder that will eventually be replaced by the actual 24.3
 // version Key, but in the meantime it points to the latest Key. The placeholder
 // is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 24.2 and has completed all associated migrations; most
+// a cluster is running 24.3 and has completed all associated migrations; most
 // version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 24.2.
-const V24_2 = Latest
+// only need to check that the cluster has upgraded to 24.3.
+const V24_3 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only

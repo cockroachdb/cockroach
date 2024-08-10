@@ -98,6 +98,8 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionImplemented("bad row skipped when restoring system.tenant_settings"),
 	),
 
+	newFirstUpgrade(clusterversion.V24_3Start.Version()),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

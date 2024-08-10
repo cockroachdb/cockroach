@@ -79,7 +79,7 @@ func (r *replicaRLockedStoreLiveness) SupportFromEnabled() bool {
 	//
 	// TODO(nvanbenschoten): hook this up to a cluster setting to gradually roll
 	// out raft fortification.
-	return r.store.ClusterSettings().Version.IsActive(context.TODO(), clusterversion.V24_2_LeaseMinTimestamp)
+	return r.store.ClusterSettings().Version.IsActive(context.TODO(), clusterversion.V24_3_LeaseMinTimestamp)
 }
 
 // SupportExpired implements the raftstoreliveness.StoreLiveness interface.
