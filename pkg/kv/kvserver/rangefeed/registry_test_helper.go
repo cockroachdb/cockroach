@@ -64,7 +64,11 @@ func (s *testStream) Cancel() {
 
 func (s *testStream) SendIsThreadSafe() {}
 
-func (s *testStream) SendBuffered(e *kvpb.RangeFeedEvent, _ *SharedBudgetAllocation) error {
+type bufferedTestStream struct {
+	*testStream
+}
+
+func (s *bufferedTestStream) SendBuffered(e *kvpb.RangeFeedEvent, _ *SharedBudgetAllocation) error {
 	return s.Send(e)
 }
 
@@ -240,7 +244,7 @@ func newTestRegistration(s *testStream, opts ...registrationOption) registration
 			cfg.withOmitRemote,
 			5,
 			cfg.metrics,
-			s,
+			&bufferedTestStream{s},
 			func() {},
 		)
 	}
