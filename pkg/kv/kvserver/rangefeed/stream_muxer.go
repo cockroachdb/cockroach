@@ -27,11 +27,13 @@ type RangefeedMetricsRecorder interface {
 	UpdateMetricsOnRangefeedDisconnect()
 }
 
-type BufferedServerStreamSender struct {
+type BufferedServerStreamSenderAdapter struct {
 	ServerStreamSender
 }
 
-func (bs *BufferedServerStreamSender) SendBuffered(
+var _ ServerStreamSender = (*BufferedServerStreamSenderAdapter)(nil)
+
+func (bs *BufferedServerStreamSenderAdapter) SendBuffered(
 	*kvpb.MuxRangeFeedEvent, *SharedBudgetAllocation,
 ) error {
 	log.Fatalf(context.Background(), "unimplemented: buffered stream sender")
@@ -191,7 +193,7 @@ func (sm *StreamMuxer) SendIsThreadSafe() {}
 func (sm *StreamMuxer) SendBuffered(
 	e *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
 ) error {
-	return sm.sender.(*BufferedServerStreamSender).SendBuffered(e, alloc)
+	return sm.sender.(*BufferedServerStreamSenderAdapter).SendBuffered(e, alloc)
 }
 
 func (sm *StreamMuxer) Send(e *kvpb.MuxRangeFeedEvent) error {

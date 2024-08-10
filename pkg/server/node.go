@@ -1926,7 +1926,7 @@ func (n *Node) RangeLookup(
 }
 
 type bufferedPerRangeEventSinkAdapter struct {
-	perRangeEventSink
+	*perRangeEventSink
 }
 
 var _ kvpb.RangeFeedEventSink = (*bufferedPerRangeEventSinkAdapter)(nil)
@@ -2012,6 +2012,9 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 
 	var muxStream rangefeed.ServerStreamSender
 	if kvserver.RangefeedUseBufferedSender.Get(&n.storeCfg.Settings.SV) {
+		muxStream = &rangefeed.BufferedServerStreamSenderAdapter{
+			ServerStreamSender: &lockedMuxStream{wrapped: stream},
+		}
 		log.Fatalf(stream.Context(), "buffered sender unimplemented")
 	} else {
 		muxStream = &lockedMuxStream{wrapped: stream}
@@ -2051,12 +2054,22 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
 			streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
 
-			streamSink := &perRangeEventSink{
+			var streamSink rangefeed.Stream
+
+			sink := &perRangeEventSink{
 				ctx:      streamCtx,
 				rangeID:  req.RangeID,
 				streamID: req.StreamID,
 				wrapped:  streamMuxer,
 			}
+			if _, ok := muxStream.(*rangefeed.BufferedServerStreamSenderAdapter); ok {
+				streamSink = &bufferedPerRangeEventSinkAdapter{
+					perRangeEventSink: sink,
+				}
+			} else {
+				streamSink = sink
+			}
+
 			streamMuxer.AddStream(req.StreamID, req.RangeID, cancel)
 
 			// Rangefeed attempts to register rangefeed a request over the specified
