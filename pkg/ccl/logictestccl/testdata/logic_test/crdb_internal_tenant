@@ -406,7 +406,7 @@ select crdb_internal.get_vmodule()
 query T
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-24.2
+24.3
 
 query ITTT colnames,rowsort
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
@@ -494,7 +494,7 @@ select * from crdb_internal.gossip_alerts
 query T
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-24.2
+24.3
 
 user root
 
