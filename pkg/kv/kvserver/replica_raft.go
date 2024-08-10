@@ -577,10 +577,11 @@ func (r *Replica) isRaftLeaderRLocked() bool {
 
 var errRemoved = errors.New("replica removed")
 
-// stepRaftGroup calls Step on the replica's RawNode with the provided request's
-// message. Before doing so, it assures that the replica is unquiesced and ready
-// to handle the request.
-func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
+// stepRaftGroupRaftMuLocked calls Step on the replica's RawNode with the
+// provided request's message. Before doing so, it assures that the replica is
+// unquiesced and ready to handle the request.
+func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) error {
+	r.raftMu.AssertHeld()
 	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		// We're processing an incoming raft message (from a batch that may
 		// include MsgVotes), so don't campaign if we wake up our raft
