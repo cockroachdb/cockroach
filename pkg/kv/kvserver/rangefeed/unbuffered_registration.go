@@ -30,7 +30,7 @@ type unbufferedRegistration struct {
 	metrics *Metrics
 
 	// Output.
-	stream Stream
+	stream BufferedStream
 
 	mu struct {
 		sync.Locker
@@ -60,7 +60,7 @@ func newUnbufferedRegistration(
 	withOmitRemote bool,
 	bufferSz int,
 	metrics *Metrics,
-	stream Stream,
+	stream BufferedStream,
 	unregisterFn func(),
 ) *unbufferedRegistration {
 	br := &unbufferedRegistration{
@@ -123,7 +123,7 @@ func (ubr *unbufferedRegistration) publish(
 
 	if shouldSendToStream {
 		// not disconnected yet -> should send to underlying stream
-		if err := ubr.stream.Send(e.event); err != nil {
+		if err := ubr.stream.SendBuffered(e.event, e.alloc); err != nil {
 			ubr.disconnect(kvpb.NewError(err))
 		}
 	}
@@ -201,7 +201,7 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 		for {
 			select {
 			case e := <-ubr.mu.catchUpBuf:
-				if err := ubr.stream.Send(e.event); err != nil {
+				if err := ubr.stream.SendBuffered(e.event, e.alloc); err != nil {
 					return err
 				}
 				putPooledSharedEvent(e)

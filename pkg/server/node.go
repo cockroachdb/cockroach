@@ -1925,6 +1925,26 @@ func (n *Node) RangeLookup(
 	return resp, nil
 }
 
+type bufferedPerRangeEventSinkAdapter struct {
+	perRangeEventSink
+}
+
+var _ kvpb.RangeFeedEventSink = (*bufferedPerRangeEventSinkAdapter)(nil)
+var _ rangefeed.Stream = (*bufferedPerRangeEventSinkAdapter)(nil)
+var _ rangefeed.BufferedStream = (*bufferedPerRangeEventSinkAdapter)(nil)
+
+func (s *bufferedPerRangeEventSinkAdapter) SendBuffered(
+	event *kvpb.RangeFeedEvent, alloc *rangefeed.SharedBudgetAllocation,
+) error {
+	response := &kvpb.MuxRangeFeedEvent{
+		RangeFeedEvent: *event,
+		RangeID:        s.rangeID,
+		StreamID:       s.streamID,
+	}
+
+	return s.wrapped.SendBuffered(response, alloc)
+}
+
 // perRangeEventSink is an implementation of rangefeed.Stream which annotates
 // each response with rangeID and streamID. It is used by MuxRangeFeed.
 type perRangeEventSink struct {
@@ -1945,12 +1965,6 @@ func (s *perRangeEventSink) Context() context.Context {
 // Send method is thread-safe. Note that Send wraps rangefeed.StreamMuxer which
 // declares its Send method to be thread-safe.
 func (s *perRangeEventSink) SendIsThreadSafe() {}
-
-// ShouldUseBufferedRegistration returns whether the processor should use
-// buffered registration.
-func (s *perRangeEventSink) ShouldUseBufferedRegistration() bool {
-	return s.wrapped.ShouldUseBufferedRegistration()
-}
 
 func (s *perRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	response := &kvpb.MuxRangeFeedEvent{
