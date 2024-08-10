@@ -152,12 +152,6 @@ func makeCatchUpIterator(
 
 type registrationOption func(*testRegistrationConfig)
 
-func withStream(s *testStream) registrationOption {
-	return func(cfg *testRegistrationConfig) {
-		cfg.stream = s
-	}
-}
-
 func withCatchUpIter(iter storage.SimpleMVCCIterator) registrationOption {
 	return func(cfg *testRegistrationConfig) {
 		cfg.catchup = iter
@@ -188,9 +182,9 @@ func withOmitRemote(opt bool) registrationOption {
 	}
 }
 
-func withUnbufferedRegistration(opt bool) registrationOption {
+func withRegistrationType(regType registrationType) registrationOption {
 	return func(cfg *testRegistrationConfig) {
-		cfg.useUnbufferedRegistration = opt
+		cfg.useUnbufferedRegistration = bool(regType)
 	}
 }
 
@@ -223,17 +217,13 @@ type testRegistrationConfig struct {
 	withFiltering             bool
 	withOmitRemote            bool
 	useUnbufferedRegistration bool
-	stream                    *testStream
 	metrics                   *Metrics
 }
 
-func newTestRegistration(opts ...registrationOption) registration {
+func newTestRegistration(s *testStream, opts ...registrationOption) registration {
 	cfg := testRegistrationConfig{}
 	for _, opt := range opts {
 		opt(&cfg)
-	}
-	if cfg.stream == nil {
-		cfg.stream = newTestStream()
 	}
 	if cfg.metrics == nil {
 		cfg.metrics = NewMetrics()
@@ -248,7 +238,7 @@ func newTestRegistration(opts ...registrationOption) registration {
 			cfg.withOmitRemote,
 			5,
 			cfg.metrics,
-			cfg.stream,
+			s,
 			func() {},
 		)
 	}
@@ -263,7 +253,7 @@ func newTestRegistration(opts ...registrationOption) registration {
 		5,
 		false, /* blockWhenFull */
 		cfg.metrics,
-		cfg.stream,
+		s,
 		func() {},
 	)
 }

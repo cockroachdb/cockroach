@@ -49,18 +49,6 @@ type unbufferedRegistration struct {
 	}
 }
 
-func (ubr *unbufferedRegistration) lenOfBuf() int {
-	ubr.mu.Lock()
-	defer ubr.mu.Unlock()
-	return len(ubr.mu.catchUpBuf)
-}
-
-func (ubr *unbufferedRegistration) capOfBuf() int {
-	ubr.mu.Lock()
-	defer ubr.mu.Unlock()
-	return cap(ubr.mu.catchUpBuf)
-}
-
 var _ registration = &unbufferedRegistration{}
 
 func newUnbufferedRegistration(
