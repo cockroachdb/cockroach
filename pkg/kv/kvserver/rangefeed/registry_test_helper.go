@@ -64,6 +64,10 @@ func (s *testStream) Cancel() {
 
 func (s *testStream) SendIsThreadSafe() {}
 
+func (s *testStream) SendBuffered(e *kvpb.RangeFeedEvent, _ *SharedBudgetAllocation) error {
+	return s.Send(e)
+}
+
 func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

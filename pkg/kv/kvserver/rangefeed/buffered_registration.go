@@ -209,7 +209,7 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 		firstIteration = false
 		select {
 		case nextEvent := <-br.buf:
-			err := br.stream.Send(nextEvent.event, nextEvent.alloc)
+			err := br.stream.Send(nextEvent.event)
 			nextEvent.alloc.Release(ctx)
 			putPooledSharedEvent(nextEvent)
 			if err != nil {
