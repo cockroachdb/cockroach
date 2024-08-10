@@ -1640,8 +1640,6 @@ func (c *channelSink) Context() context.Context {
 
 func (c *channelSink) SendIsThreadSafe() {}
 
-func (c *channelSink) ShouldUseBufferedRegistration() bool { return true }
-
 func (c *channelSink) Send(e *kvpb.RangeFeedEvent) error {
 	select {
 	case c.ch <- e:

@@ -317,16 +317,16 @@ func (p *ScheduledProcessor) Register(
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	var r registration
-	if stream.ShouldUseBufferedRegistration() {
-		r = newBufferedRegistration(
-			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
-		)
-	} else {
+	if bs, ok := stream.(BufferedStream); ok {
 		log.Infof(context.Background(), "using unbuffered registrations for rangefeeds")
 		r = newUnbufferedRegistration(
 			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			p.Config.EventChanCap, p.Metrics, stream, disconnectFn,
+			p.Config.EventChanCap, p.Metrics, bs, disconnectFn,
+		)
+	} else {
+		r = newBufferedRegistration(
+			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
 		)
 	}
 

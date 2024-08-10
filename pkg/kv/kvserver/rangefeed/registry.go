@@ -22,6 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+type BufferedStream interface {
+	Stream
+	SendBuffered(*kvpb.RangeFeedEvent, *SharedBudgetAllocation) error
+}
+
 // Stream is a object capable of transmitting RangeFeedEvents.
 type Stream interface {
 	kvpb.RangeFeedEventSink
@@ -30,11 +35,6 @@ type Stream interface {
 	// registration mu, so it is important that this function doesn't block IO or
 	// try acquiring locks that could lead to deadlocks.
 	Disconnect(err *kvpb.Error)
-	// ShouldUseBufferedRegistration returns true if the processor should use
-	// buffered registrations. This method returns false when the underlying
-	// stream Send is buffered, making it unnecessary to buffer events in the
-	// registration.
-	ShouldUseBufferedRegistration() bool
 	RegisterRangefeedCleanUp(func())
 }
 

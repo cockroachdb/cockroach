@@ -27,10 +27,15 @@ type RangefeedMetricsRecorder interface {
 	UpdateMetricsOnRangefeedDisconnect()
 }
 
-// BufferedSender is an interface for declaring that the Send method is
-// buffered. This is currently not implemented by any structs.
-type BufferedSender interface {
-	SendIsBuffered()
+type BufferedServerStreamSender struct {
+	ServerStreamSender
+}
+
+func (bs *BufferedServerStreamSender) SendBuffered(
+	*kvpb.MuxRangeFeedEvent, *SharedBudgetAllocation,
+) error {
+	log.Fatalf(context.Background(), "unimplemented: buffered stream sender")
+	return nil
 }
 
 // ServerStreamSender forwards MuxRangefeedEvents from StreamMuxer to the
@@ -98,6 +103,10 @@ type ServerStreamSender interface {
 //		                              └─────────────────────────────────────────────────────────────────────────┘
 //		                                              registration.disconnect
 type StreamMuxer struct {
+	// Note that lockedMuxStream wraps the underlying grpc server stream, ensuring
+	// thread safety.
+	sender ServerStreamSender
+
 	// taskCancel is a function to cancel StreamMuxer.run spawned in the
 	// background. It is called by StreamMuxer.Stop. It is expected to be called
 	// after StreamMuxer.Start.
@@ -113,10 +122,6 @@ type StreamMuxer struct {
 	// an error to errCh. Other goroutines are expected to receive the same
 	// shutdown signal in this case and handle error appropriately.
 	errCh chan error
-
-	// Note that lockedMuxStream wraps the underlying grpc server stream, ensuring
-	// thread safety.
-	sender ServerStreamSender
 
 	// metrics is used to record rangefeed metrics for the node.
 	metrics RangefeedMetricsRecorder
@@ -183,15 +188,10 @@ func (sm *StreamMuxer) AddStream(
 // also declares its Send method to be thread-safe.
 func (sm *StreamMuxer) SendIsThreadSafe() {}
 
-// ShouldUseBufferedRegistration returns true if the underlying stream is an
-// unbuffered sender. This means that the registrations needs to buffer events
-// themselves (buffered registration should be used). If the method returns
-// false, underlying stream is a buffered sender that buffers events already,
-// making it unnecessary to buffer events at registration level (unbuffered
-// registration should be used).
-func (sm *StreamMuxer) ShouldUseBufferedRegistration() bool {
-	_, ok := sm.sender.(BufferedSender)
-	return !ok
+func (sm *StreamMuxer) SendBuffered(
+	e *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
+) error {
+	return sm.sender.(*BufferedServerStreamSender).SendBuffered(e, alloc)
 }
 
 func (sm *StreamMuxer) Send(e *kvpb.MuxRangeFeedEvent) error {
