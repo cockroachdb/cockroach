@@ -2893,7 +2893,7 @@ func (r *Replica) getSenderReplicas(
 // there is either an initialized[2] replica or a `ReplicaPlaceholder`[3] to
 // accept the snapshot by creating a placeholder if necessary. Finally, a *Raft
 // snapshot* message is manually handed to the replica's Raft node (by calling
-// `stepRaftGroup` + `handleRaftReadyRaftMuLocked`). During the application
+// `stepRaftGroupRaftMuLocked` + `handleRaftReadyRaftMuLocked`). During the application
 // process, several other SSTs may be created for direct ingestion. An SST for
 // the unreplicated range-ID local keys is created for the Raft entries, hard
 // state, and truncated state. An SST is created for deleting each subsumed
