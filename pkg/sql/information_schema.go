@@ -345,13 +345,10 @@ var informationSchemaCheckConstraints = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 	schema: vtable.InformationSchemaCheckConstraints,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			ctx context.Context,
-			db catalog.DatabaseDescriptor,
-			sc catalog.SchemaDescriptor,
-			table catalog.TableDescriptor,
-			tableLookup tableLookupFn,
-		) error {
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual} /* no constraints in virtual tables */
+		return forEachTableDesc(ctx, p, dbContext, opts, func(
+			ctx context.Context, descCtx tableDescContext) error {
+			db, sc, table := descCtx.database, descCtx.schema, descCtx.table
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(sc.GetName())
 			for _, ck := range table.EnforcedCheckConstraints() {
@@ -408,9 +405,10 @@ var informationSchemaColumnPrivileges = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 	schema: vtable.InformationSchemaColumnPrivileges,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
-			ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor,
-		) error {
+		opts := forEachTableDescOptions{virtualOpts: virtualMany}
+		return forEachTableDesc(ctx, p, dbContext, opts, func(
+			ctx context.Context, descCtx tableDescContext) error {
+			db, sc, table := descCtx.database, descCtx.schema, descCtx.table
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(sc.GetName())
 			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
@@ -453,10 +451,11 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 		if err != nil {
 			return err
 		}
-		// Get the collations for all comments of current database.
-		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
-			ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor,
-		) error {
+		opts := forEachTableDescOptions{virtualOpts: virtualMany}
+		return forEachTableDesc(ctx, p, dbContext, opts, func(
+			ctx context.Context, descCtx tableDescContext) error {
+			db, sc, table := descCtx.database, descCtx.schema, descCtx.table
+			// Get the collations for all comments of current database.
 			if table.IsSequence() {
 				return nil
 			}
@@ -619,8 +618,10 @@ var informationSchemaColumnUDTUsage = virtualSchemaTable{
 https://www.postgresql.org/docs/current/infoschema-column-udt-usage.html`,
 	schema: vtable.InformationSchemaColumnUDTUsage,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, hideVirtual,
-			func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual}
+		return forEachTableDesc(ctx, p, dbContext, opts,
+			func(ctx context.Context, descCtx tableDescContext) error {
+				db, sc, table := descCtx.database, descCtx.schema, descCtx.table
 				dbNameStr := tree.NewDString(db.GetName())
 				scNameStr := tree.NewDString(sc.GetName())
 				tbNameStr := tree.NewDString(table.GetName())
@@ -792,13 +793,10 @@ var informationSchemaConstraintColumnUsageTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-constraint-column-usage.html`,
 	schema: vtable.InformationSchemaConstraintColumnUsage,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			ctx context.Context,
-			db catalog.DatabaseDescriptor,
-			sc catalog.SchemaDescriptor,
-			table catalog.TableDescriptor,
-			tableLookup tableLookupFn,
-		) error {
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual} /* no constraints in virtual tables */
+		return forEachTableDesc(ctx, p, dbContext, opts, func(
+			ctx context.Context, descCtx tableDescContext) error {
+			db, sc, table, tableLookup := descCtx.database, descCtx.schema, descCtx.table, descCtx.tableLookup
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(sc.GetName())
 			for _, c := range table.AllConstraints() {
@@ -854,13 +852,10 @@ var informationSchemaKeyColumnUsageTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-key-column-usage.html`,
 	schema: vtable.InformationSchemaKeyColumnUsage,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			ctx context.Context,
-			db catalog.DatabaseDescriptor,
-			sc catalog.SchemaDescriptor,
-			table catalog.TableDescriptor,
-			tableLookup tableLookupFn,
-		) error {
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual} /* no constraints in virtual tables */
+		return forEachTableDesc(ctx, p, dbContext, opts, func(
+			ctx context.Context, descCtx tableDescContext) error {
+			db, sc, table := descCtx.database, descCtx.schema, descCtx.table
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(sc.GetName())
 			tbNameStr := tree.NewDString(table.GetName())
@@ -984,18 +979,15 @@ var informationSchemaReferentialConstraintsTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-referential-constraints.html`,
 	schema: vtable.InformationSchemaReferentialConstraints,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			ctx context.Context,
-			db catalog.DatabaseDescriptor,
-			sc catalog.SchemaDescriptor,
-			table catalog.TableDescriptor,
-			tableLookup tableLookupFn,
-		) error {
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual} /* no constraints in virtual tables */
+		return forEachTableDesc(ctx, p, dbContext, opts, func(
+			ctx context.Context, descCtx tableDescContext) error {
+			db, sc, table := descCtx.database, descCtx.schema, descCtx.table
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(sc.GetName())
 			tbNameStr := tree.NewDString(table.GetName())
 			for _, fk := range table.OutboundForeignKeys() {
-				refTable, err := tableLookup.getTableByID(fk.GetReferencedTableID())
+				refTable, err := descCtx.tableLookup.getTableByID(fk.GetReferencedTableID())
 				if err != nil {
 					return err
 				}
@@ -1308,8 +1300,10 @@ var informationSchemaSequences = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-sequences.html`,
 	schema: vtable.InformationSchemaSequences,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* no sequences in virtual schemas */
-			func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+		return forEachTableDesc(ctx, p, dbContext,
+			forEachTableDescOptions{virtualOpts: hideVirtual}, /* no sequences in virtual schemas */
+			func(ctx context.Context, descCtx tableDescContext) error {
+				db, sc, table := descCtx.database, descCtx.schema, descCtx.table
 				if !table.IsSequence() {
 					return nil
 				}
@@ -1348,8 +1342,10 @@ var informationSchemaStatisticsTable = virtualSchemaTable{
 ` + docs.URL("information-schema.html#statistics"),
 	schema: vtable.InformationSchemaStatistics,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables have no indexes */
-			func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+		return forEachTableDesc(ctx, p, dbContext,
+			forEachTableDescOptions{virtualOpts: hideVirtual}, /* virtual tables have no indexes */
+			func(ctx context.Context, descCtx tableDescContext) error {
+				db, sc, table := descCtx.database, descCtx.schema, descCtx.table
 				dbNameStr := tree.NewDString(db.GetName())
 				scNameStr := tree.NewDString(sc.GetName())
 				tbNameStr := tree.NewDString(table.GetName())
@@ -1458,14 +1454,10 @@ var informationSchemaTableConstraintTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-table-constraints.html`,
 	schema: vtable.InformationSchemaTableConstraint,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /* virtual tables have no constraints */
-			func(
-				ctx context.Context,
-				db catalog.DatabaseDescriptor,
-				sc catalog.SchemaDescriptor,
-				table catalog.TableDescriptor,
-				tableLookup tableLookupFn,
-			) error {
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual} /* virtual tables have no constraints */
+		return forEachTableDesc(ctx, p, dbContext, opts,
+			func(ctx context.Context, descCtx tableDescContext) error {
+				db, sc, table := descCtx.database, descCtx.schema, descCtx.table
 				dbNameStr := tree.NewDString(db.GetName())
 				scNameStr := tree.NewDString(sc.GetName())
 				tbNameStr := tree.NewDString(table.GetName())
@@ -1612,8 +1604,10 @@ func populateTablePrivileges(
 	dbContext catalog.DatabaseDescriptor,
 	addRow func(...tree.Datum) error,
 ) error {
-	return forEachTableDesc(ctx, p, dbContext, virtualMany,
-		func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+	opts := forEachTableDescOptions{virtualOpts: virtualMany}
+	return forEachTableDesc(ctx, p, dbContext, opts,
+		func(ctx context.Context, descCtx tableDescContext) error {
+			db, sc, table := descCtx.database, descCtx.schema, descCtx.table
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(sc.GetName())
 			tbNameStr := tree.NewDString(table.GetName())
@@ -1674,45 +1668,38 @@ var informationSchemaTablesTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 	schema: vtable.InformationSchemaTables,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, virtualMany, addTablesTableRow(addRow))
+		opts := forEachTableDescOptions{virtualOpts: virtualMany}
+		return forEachTableDesc(ctx, p, dbContext, opts,
+			func(
+				ctx context.Context, descCtx tableDescContext) error {
+				db, sc, table := descCtx.database, descCtx.schema, descCtx.table
+				if table.IsSequence() {
+					return nil
+				}
+				tableType := tableTypeBaseTable
+				insertable := yesString
+				if table.IsVirtualTable() {
+					tableType = tableTypeSystemView
+					insertable = noString
+				} else if table.IsView() {
+					tableType = tableTypeView
+					insertable = noString
+				} else if table.IsTemporary() {
+					tableType = tableTypeTemporary
+				}
+				dbNameStr := tree.NewDString(db.GetName())
+				scNameStr := tree.NewDString(sc.GetName())
+				tbNameStr := tree.NewDString(table.GetName())
+				return addRow(
+					dbNameStr,  // table_catalog
+					scNameStr,  // table_schema
+					tbNameStr,  // table_name
+					tableType,  // table_type
+					insertable, // is_insertable_into
+					tree.NewDInt(tree.DInt(table.GetVersion())), // version
+				)
+			})
 	},
-}
-
-func addTablesTableRow(
-	addRow func(...tree.Datum) error,
-) func(
-	ctx context.Context,
-	db catalog.DatabaseDescriptor,
-	sc catalog.SchemaDescriptor,
-	table catalog.TableDescriptor,
-) error {
-	return func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
-		if table.IsSequence() {
-			return nil
-		}
-		tableType := tableTypeBaseTable
-		insertable := yesString
-		if table.IsVirtualTable() {
-			tableType = tableTypeSystemView
-			insertable = noString
-		} else if table.IsView() {
-			tableType = tableTypeView
-			insertable = noString
-		} else if table.IsTemporary() {
-			tableType = tableTypeTemporary
-		}
-		dbNameStr := tree.NewDString(db.GetName())
-		scNameStr := tree.NewDString(sc.GetName())
-		tbNameStr := tree.NewDString(table.GetName())
-		return addRow(
-			dbNameStr,  // table_catalog
-			scNameStr,  // table_schema
-			tbNameStr,  // table_name
-			tableType,  // table_type
-			insertable, // is_insertable_into
-			tree.NewDInt(tree.DInt(table.GetVersion())), // version
-		)
-	}
 }
 
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-views.html
@@ -1723,8 +1710,10 @@ var informationSchemaViewsTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-views.html`,
 	schema: vtable.InformationSchemaViews,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas have no views */
-			func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual} /* virtual schemas have no views */
+		return forEachTableDesc(ctx, p, dbContext, opts,
+			func(ctx context.Context, descCtx tableDescContext) error {
+				db, sc, table := descCtx.database, descCtx.schema, descCtx.table
 				if !table.IsView() {
 					return nil
 				}
@@ -2610,6 +2599,29 @@ func forEachTypeDesc(
 	return nil
 }
 
+type virtualOpts int
+
+const (
+	// virtualMany iterates over virtual schemas in every catalog/database.
+	virtualMany virtualOpts = iota
+	// virtualCurrentDB iterates over virtual schemas in the current database.
+	virtualCurrentDB
+	// hideVirtual completely hides virtual schemas during iteration.
+	hideVirtual
+)
+
+type forEachTableDescOptions struct {
+	virtualOpts virtualOpts
+	allowAdding bool
+}
+
+type tableDescContext struct {
+	database    catalog.DatabaseDescriptor
+	schema      catalog.SchemaDescriptor
+	table       catalog.TableDescriptor
+	tableLookup tableLookupFn
+}
+
 // forEachTableDesc retrieves all table descriptors from the current
 // database and all system databases and iterates through them. For
 // each table, the function will call fn with its respective database
@@ -2626,102 +2638,8 @@ func forEachTableDesc(
 	ctx context.Context,
 	p *planner,
 	dbContext catalog.DatabaseDescriptor,
-	virtualOpts virtualOpts,
-	fn func(context.Context, catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TableDescriptor) error,
-) error {
-	return forEachTableDescWithTableLookup(ctx, p, dbContext, virtualOpts, func(
-		ctx context.Context,
-		db catalog.DatabaseDescriptor,
-		sc catalog.SchemaDescriptor,
-		table catalog.TableDescriptor,
-		_ tableLookupFn,
-	) error {
-		return fn(ctx, db, sc, table)
-	})
-}
-
-type virtualOpts int
-
-const (
-	// virtualMany iterates over virtual schemas in every catalog/database.
-	virtualMany virtualOpts = iota
-	// virtualCurrentDB iterates over virtual schemas in the current database.
-	virtualCurrentDB
-	// hideVirtual completely hides virtual schemas during iteration.
-	hideVirtual
-)
-
-// forEachTableDescAll does the same as forEachTableDesc but also
-// includes newly added non-public descriptors.
-func forEachTableDescAll(
-	ctx context.Context,
-	p *planner,
-	dbContext catalog.DatabaseDescriptor,
-	virtualOpts virtualOpts,
-	fn func(context.Context, catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TableDescriptor) error,
-) error {
-	return forEachTableDescAllWithTableLookup(ctx, p, dbContext, virtualOpts, func(
-		ctx context.Context,
-		db catalog.DatabaseDescriptor,
-		sc catalog.SchemaDescriptor,
-		table catalog.TableDescriptor,
-		_ tableLookupFn,
-	) error {
-		return fn(ctx, db, sc, table)
-	})
-}
-
-// forEachTableDescAllWithTableLookup is like forEachTableDescAll, but it also
-// provides a tableLookupFn like forEachTableDescWithTableLookup. If validate is
-// set to false descriptors will not be validated for existence or consistency
-// hence fn should be able to handle nil-s.
-func forEachTableDescAllWithTableLookup(
-	ctx context.Context,
-	p *planner,
-	dbContext catalog.DatabaseDescriptor,
-	virtualOpts virtualOpts,
-	fn func(context.Context, catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TableDescriptor, tableLookupFn) error,
-) error {
-	return forEachTableDescWithTableLookupInternal(
-		ctx, p, dbContext, virtualOpts, true /* allowAdding */, fn,
-	)
-}
-
-// forEachTableDescWithTableLookup acts like forEachTableDesc, except it also provides a
-// tableLookupFn when calling fn to allow callers to lookup fetched table descriptors
-// on demand. This is important for callers dealing with objects like foreign keys, where
-// the metadata for each object must be augmented by looking at the referenced table.
-//
-// The dbContext argument specifies in which database context we are
-// requesting the descriptors.  In context "" all descriptors are
-// visible, in non-empty contexts only the descriptors of that
-// database are visible.
-func forEachTableDescWithTableLookup(
-	ctx context.Context,
-	p *planner,
-	dbContext catalog.DatabaseDescriptor,
-	virtualOpts virtualOpts,
-	fn func(context.Context, catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TableDescriptor, tableLookupFn) error,
-) error {
-	return forEachTableDescWithTableLookupInternal(
-		ctx, p, dbContext, virtualOpts, false /* allowAdding */, fn,
-	)
-}
-
-// forEachTableDescWithTableLookupInternal is the logic that supports
-// forEachTableDescWithTableLookup.
-//
-// The allowAdding argument if true includes newly added tables that
-// are not yet public.
-// The validate argument if false turns off checking if the descriptor ids exist
-// and if they are valid.
-func forEachTableDescWithTableLookupInternal(
-	ctx context.Context,
-	p *planner,
-	dbContext catalog.DatabaseDescriptor,
-	virtualOpts virtualOpts,
-	allowAdding bool,
-	fn func(context.Context, catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TableDescriptor, tableLookupFn) error,
+	opts forEachTableDescOptions,
+	fn func(context.Context, tableDescContext) error,
 ) (err error) {
 	var all nstree.Catalog
 	if dbContext != nil && useIndexLookupForDescriptorsInDatabase.Get(&p.EvalContext().Settings.SV) {
@@ -2732,22 +2650,22 @@ func forEachTableDescWithTableLookupInternal(
 	if err != nil {
 		return err
 	}
-	return forEachTableDescWithTableLookupInternalFromDescriptors(
-		ctx, p, dbContext, virtualOpts, allowAdding, all, fn)
+	return forEachTableDescFromDescriptors(
+		ctx, p, dbContext, all, opts, fn)
 }
 
-func forEachTableDescWithTableLookupInternalFromDescriptors(
+func forEachTableDescFromDescriptors(
 	ctx context.Context,
 	p *planner,
 	dbContext catalog.DatabaseDescriptor,
-	virtualOpts virtualOpts,
-	allowAdding bool,
 	c nstree.Catalog,
-	fn func(context.Context, catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TableDescriptor, tableLookupFn) error,
+	opts forEachTableDescOptions,
+	fn func(context.Context, tableDescContext) error,
 ) error {
 	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext)
 
-	if virtualOpts == virtualMany || virtualOpts == virtualCurrentDB {
+	vOpts := opts.virtualOpts
+	if vOpts == virtualMany || vOpts == virtualCurrentDB {
 		// Virtual descriptors first.
 		vt := p.getVirtualTabler()
 		vEntries := vt.getSchemas()
@@ -2757,7 +2675,8 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 				virtSchemaEntry := vEntries[virtSchemaName]
 				for _, tName := range virtSchemaEntry.orderedDefNames {
 					te := virtSchemaEntry.defs[tName]
-					if err := fn(ctx, dbDesc, virtSchemaEntry.desc, te.desc, lCtx); err != nil {
+					if err := fn(ctx, tableDescContext{
+						dbDesc, virtSchemaEntry.desc, te.desc, lCtx}); err != nil {
 						return err
 					}
 				}
@@ -2765,7 +2684,7 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 			return nil
 		}
 
-		switch virtualOpts {
+		switch vOpts {
 		case virtualCurrentDB:
 			if err := iterate(dbContext); err != nil {
 				return err
@@ -2784,7 +2703,7 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
 		dbDesc, parentExists := lCtx.dbDescs[table.GetParentID()]
-		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, table, dbDesc, allowAdding)
+		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, table, dbDesc, opts.allowAdding)
 		if err != nil {
 			return err
 		}
@@ -2822,7 +2741,7 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 				}
 			}
 		}
-		if err := fn(ctx, dbDesc, sc, table, lCtx); err != nil {
+		if err := fn(ctx, tableDescContext{dbDesc, sc, table, lCtx}); err != nil {
 			return err
 		}
 	}
