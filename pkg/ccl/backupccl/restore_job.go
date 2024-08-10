@@ -317,7 +317,7 @@ func restore(
 		return emptyRowCount, err
 	}
 
-	on231 := clusterversion.V23_1.Version().LessEq(job.Payload().CreationClusterVersion)
+	on231 := clusterversion.TODO_Delete_V23_1.Version().LessEq(job.Payload().CreationClusterVersion)
 	restoreCheckpoint := job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
 	requiredSpans := dataToRestore.getSpans()
 	progressTracker, err := makeProgressTracker(

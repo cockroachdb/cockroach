@@ -463,7 +463,7 @@ func makePebbleWALFailoverOptsForDir(
 				//
 				// NB: We do not use settings.Version.IsActive because we do not have a
 				// guarantee that the cluster version has been initialized.
-				versionOK := settings.Version.ActiveVersionOrEmpty(context.TODO()).IsActive(clusterversion.V24_1Start)
+				versionOK := settings.Version.ActiveVersionOrEmpty(context.TODO()).IsActive(clusterversion.TODO_Delete_V24_1Start)
 				// WAL failover is a licensed feature.
 				licenseOK := base.CCLDistributionAndEnterpriseEnabled(settings)
 				if !licenseOK && cclWALFailoverLogEvery.ShouldLog() {

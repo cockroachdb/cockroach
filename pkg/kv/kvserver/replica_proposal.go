@@ -1023,7 +1023,7 @@ func (r *Replica) evaluateProposal(
 			// this check is used to inform raft about whether an expiration-based
 			// lease **can** be promoted to an epoch-based lease without a sequence
 			// change, not that it **is** being promoted without a sequence change.
-			isV24_1 := r.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1Start)
+			isV24_1 := r.ClusterSettings().Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1Start)
 			res.Replicated.IsLeaseRequestWithExpirationToEpochEquivalent = isV24_1
 		}
 		if ba.AppliesTimestampCache() {

@@ -515,7 +515,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	var userOnlyLeftStats enginepb.MVCCStats
 	var totalStats enginepb.MVCCStats
 	if EnableEstimatedMVCCStatsInSplit.Get(&r.store.ClusterSettings().SV) &&
-		r.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1_EstimatedMVCCStatsInSplit) &&
+		r.ClusterSettings().Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1_EstimatedMVCCStatsInSplit) &&
 		reason != manualAdminReason &&
 		!useEstimatedStatsForExternalBytes {
 		// If the stats contain estimates, re-compute them to prevent estimates

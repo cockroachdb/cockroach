@@ -740,7 +740,7 @@ func (r *Replica) leaseSettings(ctx context.Context) leases.Settings {
 		RejectLeaseOnLeaderUnknown:                RejectLeaseOnLeaderUnknown.Get(&r.store.ClusterSettings().SV),
 		DisableAboveRaftLeaseTransferSafetyChecks: r.store.cfg.TestingKnobs.DisableAboveRaftLeaseTransferSafetyChecks,
 		AllowLeaseProposalWhenNotLeader:           r.store.cfg.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader,
-		ExpToEpochEquiv:                           r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1Start),
+		ExpToEpochEquiv:                           r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1Start),
 		MinExpirationSupported:                    r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_2_LeaseMinTimestamp),
 		RangeLeaseDuration:                        r.store.cfg.RangeLeaseDuration,
 	}

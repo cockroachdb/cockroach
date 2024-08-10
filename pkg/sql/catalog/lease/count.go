@@ -87,7 +87,7 @@ func countLeasesWithDetail(
 	}
 	leasingDescIsSessionBased := systemDBVersion != nil &&
 		clusterversion.RemoveDevOffset(*systemDBVersion).AtLeast(
-			clusterversion.RemoveDevOffset(clusterversion.V24_1_SessionBasedLeasingUpgradeDescriptor.Version()))
+			clusterversion.RemoveDevOffset(clusterversion.TODO_Delete_V24_1_SessionBasedLeasingUpgradeDescriptor.Version()))
 	leasingMode := readSessionBasedLeasingMode(ctx, settings)
 	whereClauses := make([][]string, 2)
 	containsSystemDatabase := false
