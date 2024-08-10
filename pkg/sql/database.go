@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/errors"
 )
 
@@ -73,6 +74,11 @@ func (p *planner) renameDatabase(
 func (p *planner) writeNonDropDatabaseChange(
 	ctx context.Context, desc *dbdesc.Mutable, jobDesc string,
 ) error {
+	// Exit early with an error if the table is undergoing a declarative schema
+	// change.
+	if catalog.HasConcurrentDeclarativeSchemaChange(desc) {
+		return scerrors.ConcurrentSchemaChangeError(desc)
+	}
 	if err := p.createNonDropDatabaseChangeJob(ctx, desc.ID, jobDesc); err != nil {
 		return err
 	}
