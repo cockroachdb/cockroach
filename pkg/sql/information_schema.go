@@ -1781,7 +1781,7 @@ https://www.postgresql.org/docs/current/infoschema-collations.html`,
 // Postgres: https://www.postgresql.org/docs/current/infoschema-collation-character-set-applicab.html
 // MySQL:    https://dev.mysql.com/doc/refman/8.0/en/information-schema-collation-character-set-applicability-table.html
 var informationSchemaCollationCharacterSetApplicability = virtualSchemaTable{
-	comment: `identifies which character set the available collations are 
+	comment: `identifies which character set the available collations are
 applicable to. As UTF-8 is the only available encoding this table does not
 provide much useful information.
 https://www.postgresql.org/docs/current/infoschema-collation-character-set-applicab.html`,
@@ -2736,43 +2736,6 @@ func forEachTableDescWithTableLookupInternal(
 		ctx, p, dbContext, virtualOpts, allowAdding, all, fn)
 }
 
-func forEachTypeDescWithTableLookupInternalFromDescriptors(
-	ctx context.Context,
-	p *planner,
-	dbContext catalog.DatabaseDescriptor,
-	allowAdding bool,
-	c nstree.Catalog,
-	fn func(context.Context, catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TypeDescriptor, tableLookupFn) error,
-) error {
-	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext)
-
-	for _, typID := range lCtx.typIDs {
-		typDesc := lCtx.typDescs[typID]
-		if typDesc.Dropped() {
-			continue
-		}
-		dbDesc, err := lCtx.getDatabaseByID(typDesc.GetParentID())
-		if err != nil {
-			return err
-		}
-		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, typDesc, dbDesc, allowAdding)
-		if err != nil {
-			return err
-		}
-		if !canSeeDescriptor {
-			continue
-		}
-		sc, err := lCtx.getSchemaByID(typDesc.GetParentSchemaID())
-		if err != nil {
-			return err
-		}
-		if err := fn(ctx, dbDesc, sc, typDesc, lCtx); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func forEachTableDescWithTableLookupInternalFromDescriptors(
 	ctx context.Context,
 	p *planner,
@@ -2866,6 +2829,43 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 	return nil
 }
 
+func forEachTypeDescWithTableLookupInternalFromDescriptors(
+	ctx context.Context,
+	p *planner,
+	dbContext catalog.DatabaseDescriptor,
+	allowAdding bool,
+	c nstree.Catalog,
+	fn func(context.Context, catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TypeDescriptor, tableLookupFn) error,
+) error {
+	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext)
+
+	for _, typID := range lCtx.typIDs {
+		typDesc := lCtx.typDescs[typID]
+		if typDesc.Dropped() {
+			continue
+		}
+		dbDesc, err := lCtx.getDatabaseByID(typDesc.GetParentID())
+		if err != nil {
+			return err
+		}
+		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, typDesc, dbDesc, allowAdding)
+		if err != nil {
+			return err
+		}
+		if !canSeeDescriptor {
+			continue
+		}
+		sc, err := lCtx.getSchemaByID(typDesc.GetParentSchemaID())
+		if err != nil {
+			return err
+		}
+		if err := fn(ctx, dbDesc, sc, typDesc, lCtx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type roleOptions struct {
 	*tree.DJSON
 }
@@ -2924,7 +2924,7 @@ FROM
 	system.users AS u
 	LEFT JOIN system.role_options AS ro ON
 			ro.username = u.username
-  LEFT JOIN system.database_role_settings AS drs ON 
+  LEFT JOIN system.database_role_settings AS drs ON
 			drs.role_name = u.username AND drs.database_id = 0
 GROUP BY
 	u.username, "isRole", drs.settings;
