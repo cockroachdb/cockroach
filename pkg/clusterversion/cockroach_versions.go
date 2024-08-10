@@ -181,64 +181,64 @@ const (
 
 	VBootstrapMax
 
-	// V23_1 is CockroachDB v23.1. It's used for all v23.1.x patch releases.
-	V23_1
+	// TODO_Delete_V23_1 is CockroachDB v23.1. It's used for all v23.1.x patch releases.
+	TODO_Delete_V23_1
 
-	// V23_2 is CockroachDB v23.2. It's used for all v23.2.x patch releases.
-	V23_2
+	// TODO_Delete_V23_2 is CockroachDB v23.2. It's used for all v23.2.x patch releases.
+	TODO_Delete_V23_2
 
-	// V24_1Start demarcates the start of cluster versions stepped through during
+	// TODO_Delete_V24_1Start demarcates the start of cluster versions stepped through during
 	// the process of upgrading from 23.2 to 24.1.
-	V24_1Start
+	TODO_Delete_V24_1Start
 
-	// V24_1_DropPayloadAndProgressFromSystemJobsTable drop the unused payload and
+	// TODO_Delete_V24_1_DropPayloadAndProgressFromSystemJobsTable drop the unused payload and
 	// progress columns from system.jobs table.
-	V24_1_DropPayloadAndProgressFromSystemJobsTable
+	TODO_Delete_V24_1_DropPayloadAndProgressFromSystemJobsTable
 
-	// V24_1_MigrateOldStylePTSRecords  migrate old-style PTS records
+	// TODO_Delete_V24_1_MigrateOldStylePTSRecords  migrate old-style PTS records
 	// to the new style.
-	V24_1_MigrateOldStylePTSRecords
+	TODO_Delete_V24_1_MigrateOldStylePTSRecords
 
-	// V24_1_SessionBasedLeasingDualWrite both session based and expiry based leases
+	// TODO_Delete_V24_1_SessionBasedLeasingDualWrite both session based and expiry based leases
 	// are written to the system.lease table under different primary indexes.
-	V24_1_SessionBasedLeasingDualWrite
+	TODO_Delete_V24_1_SessionBasedLeasingDualWrite
 
-	// V24_1_SessionBasedLeasingDrain all leases are forcefully renewed, so that
+	// TODO_Delete_V24_1_SessionBasedLeasingDrain all leases are forcefully renewed, so that
 	// a session based equivalent exists.
-	V24_1_SessionBasedLeasingDrain
+	TODO_Delete_V24_1_SessionBasedLeasingDrain
 
-	// V24_1_SessionBasedLeasingOnly only session based leases are written to
+	// TODO_Delete_V24_1_SessionBasedLeasingOnly only session based leases are written to
 	// system.lease.
-	V24_1_SessionBasedLeasingOnly
+	TODO_Delete_V24_1_SessionBasedLeasingOnly
 
-	// V24_1_SessionBasedLeasingUpgradeDescriptor upgrades the leasing descriptor
+	// TODO_Delete_V24_1_SessionBasedLeasingUpgradeDescriptor upgrades the leasing descriptor
 	// to be only session based.
-	V24_1_SessionBasedLeasingUpgradeDescriptor
+	TODO_Delete_V24_1_SessionBasedLeasingUpgradeDescriptor
 
-	// V24_1_PebbleFormatSyntheticPrefixSuffix upgrades Pebble's format major version to
+	// TODO_Delete_V24_1_PebbleFormatSyntheticPrefixSuffix upgrades Pebble's format major version to
 	// FormatSyntheticPrefixSuffix, allowing use of virtual sstables in Pebble.
-	V24_1_PebbleFormatSyntheticPrefixSuffix
+	TODO_Delete_V24_1_PebbleFormatSyntheticPrefixSuffix
 
-	// V24_1_SystemDatabaseSurvivability sets the survival goal for the system
+	// TODO_Delete_V24_1_SystemDatabaseSurvivability sets the survival goal for the system
 	// database to be SURVIVE ZONE.
-	V24_1_SystemDatabaseSurvivability
+	TODO_Delete_V24_1_SystemDatabaseSurvivability
 
-	// V24_1_GossipMaximumIOOverload is the version at which stores begin
+	// TODO_Delete_V24_1_GossipMaximumIOOverload is the version at which stores begin
 	// populating the store capacity field IOThresholdMax. The field shouldn't be
 	// used for allocator decisions before then.
-	V24_1_GossipMaximumIOOverload
+	TODO_Delete_V24_1_GossipMaximumIOOverload
 
-	// V24_1_EstimatedMVCCStatsInSplit introduces MVCC stats estimates during range
+	// TODO_Delete_V24_1_EstimatedMVCCStatsInSplit introduces MVCC stats estimates during range
 	// splits.
-	V24_1_EstimatedMVCCStatsInSplit
+	TODO_Delete_V24_1_EstimatedMVCCStatsInSplit
 
-	// V24_1_ReplicatedLockPipelining allows exclusive and shared replicated locks
+	// TODO_Delete_V24_1_ReplicatedLockPipelining allows exclusive and shared replicated locks
 	// to be pipelined.
-	V24_1_ReplicatedLockPipelining
+	TODO_Delete_V24_1_ReplicatedLockPipelining
 
-	// V24_1_AddSpanCounts is the migration that added the span_counts table to
+	// TODO_Delete_V24_1_AddSpanCounts is the migration that added the span_counts table to
 	// the system tenant to ensure it is a superset of secondary tenants.
-	V24_1_AddSpanCounts
+	TODO_Delete_V24_1_AddSpanCounts
 
 	// V24_1 is CockroachDB v24.1. It's used for all v24.1.x patch releases.
 	V24_1
@@ -300,28 +300,27 @@ var versionTable = [numKeys]roachpb.Version{
 	VBootstrapTenant: {Major: 0, Minor: 0, Internal: 4},
 	VBootstrapMax:    {Major: 0, Minor: 0, Internal: 424242},
 
-	// TODO(radu): rename gates < MinSupported to TODO_Delete.
-	V23_1: {Major: 23, Minor: 1, Internal: 0},
+	TODO_Delete_V23_1: {Major: 23, Minor: 1, Internal: 0},
 
-	V23_2: {Major: 23, Minor: 2, Internal: 0},
+	TODO_Delete_V23_2: {Major: 23, Minor: 2, Internal: 0},
 
 	// v24.1 versions. Internal versions must be even.
-	V24_1Start: {Major: 23, Minor: 2, Internal: 2},
+	TODO_Delete_V24_1Start: {Major: 23, Minor: 2, Internal: 2},
 
-	V24_1_DropPayloadAndProgressFromSystemJobsTable: {Major: 23, Minor: 2, Internal: 4},
+	TODO_Delete_V24_1_DropPayloadAndProgressFromSystemJobsTable: {Major: 23, Minor: 2, Internal: 4},
 
-	V24_1_MigrateOldStylePTSRecords: {Major: 23, Minor: 2, Internal: 6},
+	TODO_Delete_V24_1_MigrateOldStylePTSRecords: {Major: 23, Minor: 2, Internal: 6},
 
-	V24_1_SessionBasedLeasingDualWrite:         {Major: 23, Minor: 2, Internal: 8},
-	V24_1_SessionBasedLeasingDrain:             {Major: 23, Minor: 2, Internal: 10},
-	V24_1_SessionBasedLeasingOnly:              {Major: 23, Minor: 2, Internal: 12},
-	V24_1_SessionBasedLeasingUpgradeDescriptor: {Major: 23, Minor: 2, Internal: 14},
-	V24_1_PebbleFormatSyntheticPrefixSuffix:    {Major: 23, Minor: 2, Internal: 16},
-	V24_1_SystemDatabaseSurvivability:          {Major: 23, Minor: 2, Internal: 18},
-	V24_1_GossipMaximumIOOverload:              {Major: 23, Minor: 2, Internal: 20},
-	V24_1_EstimatedMVCCStatsInSplit:            {Major: 23, Minor: 2, Internal: 22},
-	V24_1_ReplicatedLockPipelining:             {Major: 23, Minor: 2, Internal: 24},
-	V24_1_AddSpanCounts:                        {Major: 23, Minor: 2, Internal: 26},
+	TODO_Delete_V24_1_SessionBasedLeasingDualWrite:         {Major: 23, Minor: 2, Internal: 8},
+	TODO_Delete_V24_1_SessionBasedLeasingDrain:             {Major: 23, Minor: 2, Internal: 10},
+	TODO_Delete_V24_1_SessionBasedLeasingOnly:              {Major: 23, Minor: 2, Internal: 12},
+	TODO_Delete_V24_1_SessionBasedLeasingUpgradeDescriptor: {Major: 23, Minor: 2, Internal: 14},
+	TODO_Delete_V24_1_PebbleFormatSyntheticPrefixSuffix:    {Major: 23, Minor: 2, Internal: 16},
+	TODO_Delete_V24_1_SystemDatabaseSurvivability:          {Major: 23, Minor: 2, Internal: 18},
+	TODO_Delete_V24_1_GossipMaximumIOOverload:              {Major: 23, Minor: 2, Internal: 20},
+	TODO_Delete_V24_1_EstimatedMVCCStatsInSplit:            {Major: 23, Minor: 2, Internal: 22},
+	TODO_Delete_V24_1_ReplicatedLockPipelining:             {Major: 23, Minor: 2, Internal: 24},
+	TODO_Delete_V24_1_AddSpanCounts:                        {Major: 23, Minor: 2, Internal: 26},
 
 	V24_1: {Major: 24, Minor: 1, Internal: 0},
 

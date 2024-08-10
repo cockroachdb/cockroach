@@ -175,7 +175,7 @@ func (rts *resolvedTimestamp) consumeLogicalOp(
 		// https://github.com/cockroachdb/cockroach/issues/104309
 		//
 		// TODO(erikgrinaker): make this unconditionally fatal.
-		fatal := rts.settings.Version.IsActive(ctx, clusterversion.V24_1Start) &&
+		fatal := rts.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1Start) &&
 			!DisableCommitIntentTimestampAssertion
 		rts.assertOpAboveRTS(ctx, op, t.Timestamp, fatal)
 		return rts.intentQ.DecrRef(t.TxnID, t.Timestamp)
