@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "budget.go",
         "buffered_registration.go",
+        "buffered_stream.go",
         "catchup_scan.go",
         "event_size.go",
         "filter.go",
@@ -47,6 +48,7 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
+        "//pkg/util/queue",
         "//pkg/util/retry",
         "//pkg/util/stop",
         "//pkg/util/syncutil",

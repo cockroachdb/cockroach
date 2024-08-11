@@ -27,19 +27,6 @@ type RangefeedMetricsRecorder interface {
 	UpdateMetricsOnRangefeedDisconnect()
 }
 
-type BufferedServerStreamSenderAdapter struct {
-	ServerStreamSender
-}
-
-var _ ServerStreamSender = (*BufferedServerStreamSenderAdapter)(nil)
-
-func (bs *BufferedServerStreamSenderAdapter) SendBuffered(
-	*kvpb.MuxRangeFeedEvent, *SharedBudgetAllocation,
-) error {
-	log.Fatalf(context.Background(), "unimplemented: buffered stream sender")
-	return nil
-}
-
 // ServerStreamSender forwards MuxRangefeedEvents from StreamMuxer to the
 // underlying stream.
 type ServerStreamSender interface {
@@ -193,7 +180,7 @@ func (sm *StreamMuxer) SendIsThreadSafe() {}
 func (sm *StreamMuxer) SendBuffered(
 	e *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
 ) error {
-	return sm.sender.(*BufferedServerStreamSenderAdapter).SendBuffered(e, alloc)
+	return sm.sender.(*BufferedStreamSender).sendBuffered(e, alloc)
 }
 
 func (sm *StreamMuxer) Send(e *kvpb.MuxRangeFeedEvent) error {
@@ -303,7 +290,18 @@ func (sm *StreamMuxer) run(ctx context.Context, stopper *stop.Stopper) error {
 		case <-sm.notifyMuxError:
 			toSend := sm.detachMuxErrors()
 			for _, clientErr := range toSend {
-				if err := sm.sender.Send(clientErr); err != nil {
+				var err error
+				if bs, ok := sm.sender.(*BufferedStreamSender); ok {
+					// Use send buffered to make sure events sent to buffer already are
+					// still properly received on the client end.
+					err = bs.sendBuffered(clientErr, nil)
+				} else {
+					err = sm.sender.Send(clientErr)
+				}
+				if err != nil {
+					// Note that it is possible that we are shutting down without properly
+					// sending client errors back. But stream is expected to be torn down
+					// soon and client will handle accordingly.
 					log.Errorf(ctx,
 						"failed to send rangefeed completion error back to client due to broken stream: %v", err)
 					return err
@@ -348,24 +346,25 @@ func (sm *StreamMuxer) Error() chan error {
 func (sm *StreamMuxer) Stop() {
 	sm.taskCancel()
 	sm.wg.Wait()
-	sm.DisconnectAllWithErr(nil)
+	sm.disconnectAll()
 }
 
-func (sm *StreamMuxer) DisconnectAllWithErr(err error) {
+// We are not sending any error back in this case because stream is shutting down. We should think again
+func (sm *StreamMuxer) disconnectAll() {
 	sm.activeStreams.Range(func(streamID int64, info *streamInfo) bool {
 		info.cancel()
-		if err != nil {
-			ev := &kvpb.MuxRangeFeedEvent{
-				StreamID: streamID,
-				RangeID:  info.rangeID,
-			}
-			ev.SetValue(&kvpb.RangeFeedError{
-				Error: *kvpb.NewError(err),
-			})
-			// TODO(wenyihu6): check if we should handle this err and maybe do early
-			// return next iteration
-			_ = sm.sender.Send(ev)
-		}
+		//if err != nil {
+		//	ev := &kvpb.MuxRangeFeedEvent{
+		//		StreamID: streamID,
+		//		RangeID:  info.rangeID,
+		//	}
+		//	ev.SetValue(&kvpb.RangeFeedError{
+		//		Error: *kvpb.NewError(err),
+		//	})
+		//	// TODO(wenyihu6): check if we should handle this err and maybe do early
+		//	// return next iteration
+		//	_ = sm.sender.Send(ev)
+		//}
 		// Remove the stream from the activeStreams map.
 		sm.activeStreams.Delete(streamID)
 		sm.metrics.UpdateMetricsOnRangefeedDisconnect()

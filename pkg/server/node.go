@@ -1925,15 +1925,15 @@ func (n *Node) RangeLookup(
 	return resp, nil
 }
 
-type bufferedPerRangeEventSinkAdapter struct {
+type bufferedPerRangeEventSink struct {
 	*perRangeEventSink
 }
 
-var _ kvpb.RangeFeedEventSink = (*bufferedPerRangeEventSinkAdapter)(nil)
-var _ rangefeed.Stream = (*bufferedPerRangeEventSinkAdapter)(nil)
-var _ rangefeed.BufferedStream = (*bufferedPerRangeEventSinkAdapter)(nil)
+var _ kvpb.RangeFeedEventSink = (*bufferedPerRangeEventSink)(nil)
+var _ rangefeed.Stream = (*bufferedPerRangeEventSink)(nil)
+var _ rangefeed.BufferedStream = (*bufferedPerRangeEventSink)(nil)
 
-func (s *bufferedPerRangeEventSinkAdapter) SendBuffered(
+func (s *bufferedPerRangeEventSink) SendBuffered(
 	event *kvpb.RangeFeedEvent, alloc *rangefeed.SharedBudgetAllocation,
 ) error {
 	response := &kvpb.MuxRangeFeedEvent{
@@ -2011,13 +2011,17 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	defer cancel()
 
 	var muxStream rangefeed.ServerStreamSender
-	if kvserver.RangefeedUseBufferedSender.Get(&n.storeCfg.Settings.SV) {
-		muxStream = &rangefeed.BufferedServerStreamSenderAdapter{
-			ServerStreamSender: &lockedMuxStream{wrapped: stream},
+	var bufferedStream *rangefeed.BufferedStreamSender
+	useBufferedStream := kvserver.RangefeedUseBufferedSender.Get(&n.storeCfg.Settings.SV)
+	muxStream = &lockedMuxStream{wrapped: stream}
+	if useBufferedStream {
+		log.Info(context.Background(), "using buffered stream sender for rangefeed")
+		bufferedStream = rangefeed.NewBufferedStreamSender(muxStream)
+		if err := bufferedStream.Start(ctx, n.stopper); err != nil {
+			return err
 		}
-		log.Fatalf(stream.Context(), "buffered sender unimplemented")
-	} else {
-		muxStream = &lockedMuxStream{wrapped: stream}
+		defer bufferedStream.Stop()
+		muxStream = bufferedStream
 	}
 
 	streamMuxer := rangefeed.NewStreamMuxer(muxStream, n.metrics)
@@ -2029,6 +2033,8 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	for {
 		select {
 		case err := <-streamMuxer.Error():
+			return err
+		case err := <-bufferedStream.Error():
 			return err
 		case <-ctx.Done():
 			return ctx.Err()
@@ -2062,8 +2068,8 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 				streamID: req.StreamID,
 				wrapped:  streamMuxer,
 			}
-			if _, ok := muxStream.(*rangefeed.BufferedServerStreamSenderAdapter); ok {
-				streamSink = &bufferedPerRangeEventSinkAdapter{
+			if useBufferedStream {
+				streamSink = &bufferedPerRangeEventSink{
 					perRangeEventSink: sink,
 				}
 			} else {

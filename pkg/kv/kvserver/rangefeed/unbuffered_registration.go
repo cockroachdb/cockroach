@@ -122,7 +122,8 @@ func (ubr *unbufferedRegistration) publish(
 	}()
 
 	if shouldSendToStream {
-		// not disconnected yet -> should send to underlying stream
+		// not disconnected yet -> should send to underlying stream fine if
+		// disconnected right after this - okay to slip some events in
 		if err := ubr.stream.SendBuffered(e.event, e.alloc); err != nil {
 			ubr.disconnect(kvpb.NewError(err))
 		}
@@ -219,7 +220,7 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 
 	// Must disconnect first before setting catchUpBuf to nil.
 	if ubr.mu.catchUpOverflowed {
-		return newErrBufferCapacityExceeded().GoError()
+		return kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER)
 	}
 
 	// success
