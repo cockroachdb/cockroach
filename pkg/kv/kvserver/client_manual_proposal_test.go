@@ -195,7 +195,7 @@ LIMIT
 			}
 
 			idKey := raftlog.MakeCmdIDKey()
-			payload, err := raftlog.EncodeCommand(ctx, &raftCmd, idKey, nil)
+			payload, err := raftlog.EncodeCommand(ctx, &raftCmd, idKey, raftlog.EncodeOptions{})
 			require.NoError(t, err)
 			ents = append(ents, raftpb.Entry{
 				Term:  lastTerm,

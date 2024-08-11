@@ -16,27 +16,46 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
+
+// EncodeOptions provides additional information that may be need to be
+// encoded.
+type EncodeOptions struct {
+	// RaftAdmissionMeta is non-nil iff this entry should be encoded using an AC
+	// encoding.
+	RaftAdmissionMeta *kvflowcontrolpb.RaftAdmissionMeta
+	// When this entry should be encoded using an AC encoding, this specifies
+	// whether a WithACAndPriority encoding should be used.
+	EncodePriority bool
+}
 
 // EncodeCommand encodes the provided command into a slice.
 func EncodeCommand(
 	ctx context.Context,
 	command *kvserverpb.RaftCommand,
 	idKey kvserverbase.CmdIDKey,
-	raftAdmissionMeta *kvflowcontrolpb.RaftAdmissionMeta,
+	opts EncodeOptions,
 ) ([]byte, error) {
-	// Determine the encoding style for the Raft command.
-	prefix := true
-	entryEncoding := EntryEncodingStandardWithoutAC
-	if raftAdmissionMeta != nil {
-		entryEncoding = EntryEncodingStandardWithAC
-	}
+	// Defensive: zero out fields that are specified via opts.RaftAdmissionMeta,
+	// in case the caller happens to have accidentally set them. We will
+	// serialize both opts.RaftAdmissionMeta and the command, expecting a merge,
+	// since the tag numbers in RaftAdmissionMeta are a subset of those in the
+	// command, and we want the RaftAdmissionMeta values to be the ones that are
+	// decoded. This merge behavior relies on zero valued fields not being
+	// encoded.
+	command.AdmissionPriority = 0
+	command.AdmissionCreateTime = 0
+	command.AdmissionOriginNode = 0
+
+	// Determine whether the command has a prefix, and if yes, the encoding
+	// style for the Raft command.
+	var prefix bool
+	var entryEncoding EntryEncoding
 	if crt := command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
 		// needs to understand it; it cannot simply be an opaque command. To
@@ -45,17 +64,43 @@ func EncodeCommand(
 		// prefix because the command ID is stored in a field in
 		// raft.ConfChange.
 		prefix = false
-	} else if command.ReplicatedEvalResult.AddSSTable != nil {
-		entryEncoding = EntryEncodingSideloadedWithoutAC
-		if raftAdmissionMeta != nil {
-			entryEncoding = EntryEncodingSideloadedWithAC
-		}
-
-		if command.ReplicatedEvalResult.AddSSTable.Data == nil {
-			return nil, errors.Errorf("cannot sideload empty SSTable")
+	} else {
+		prefix = true
+		isAddSStable := command.ReplicatedEvalResult.AddSSTable != nil
+		if isAddSStable {
+			if command.ReplicatedEvalResult.AddSSTable.Data == nil {
+				return nil, errors.Errorf("cannot sideload empty SSTable")
+			}
+			entryEncoding = EntryEncodingSideloadedWithoutAC
+			if opts.RaftAdmissionMeta != nil {
+				if opts.EncodePriority {
+					entryEncoding = EntryEncodingSideloadedWithACAndPriority
+				} else {
+					entryEncoding = EntryEncodingSideloadedWithAC
+				}
+			}
+		} else {
+			entryEncoding = EntryEncodingStandardWithoutAC
+			if opts.RaftAdmissionMeta != nil {
+				if opts.EncodePriority {
+					entryEncoding = EntryEncodingStandardWithACAndPriority
+				} else {
+					entryEncoding = EntryEncodingStandardWithAC
+				}
+			}
 		}
 	}
-
+	// pri is only used for the WithACAndPriority encodings.
+	var pri raftpb.Priority
+	if entryEncoding == EntryEncodingStandardWithACAndPriority ||
+		entryEncoding == EntryEncodingSideloadedWithACAndPriority {
+		pri = raftpb.Priority(opts.RaftAdmissionMeta.AdmissionPriority)
+		if buildutil.CrdbTestBuild && (opts.RaftAdmissionMeta.AdmissionPriority > int32(raftpb.HighPri) ||
+			opts.RaftAdmissionMeta.AdmissionPriority < int32(raftpb.LowPri)) {
+			panic(errors.AssertionFailedf("priority %d is not a valid raftpb.Priority",
+				opts.RaftAdmissionMeta.AdmissionPriority))
+		}
+	}
 	// NB: If (significantly) re-working how raft commands are encoded, make the
 	// equivalent change in BenchmarkRaftAdmissionMetaOverhead.
 
@@ -65,52 +110,38 @@ func EncodeCommand(
 		preLen = RaftCommandPrefixLen
 	}
 	var admissionMetaLen int
-	if raftAdmissionMeta != nil {
+	if opts.RaftAdmissionMeta != nil {
 		// Encode admission metadata data at the start, right after the command
 		// prefix.
-		admissionMetaLen = raftAdmissionMeta.Size()
+		admissionMetaLen = opts.RaftAdmissionMeta.Size()
 	}
-
 	cmdLen := command.Size() + admissionMetaLen
 	// Allocate the data slice with enough capacity to eventually hold the two
 	// "footers" that are filled later.
 	needed := preLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
 	data := make([]byte, preLen, needed)
+
 	// Encode prefix with command ID, if necessary.
 	if prefix {
-		EncodeRaftCommandPrefix(data, entryEncoding, idKey)
+		EncodeRaftCommandPrefix(data, entryEncoding, idKey, pri)
 	}
 
 	// Encode the body of the command.
 	data = data[:preLen+cmdLen]
 	// Encode below-raft admission data, if any.
-	if raftAdmissionMeta != nil {
-		if !prefix {
-			return nil, errors.AssertionFailedf("expected to encode prefix for raft commands using replication admission control")
-		}
-		if buildutil.CrdbTestBuild {
-			if raftAdmissionMeta.AdmissionOriginNode == roachpb.NodeID(0) {
+	if opts.RaftAdmissionMeta != nil {
+		if buildutil.CrdbTestBuild && !opts.EncodePriority {
+			if opts.RaftAdmissionMeta.AdmissionOriginNode == roachpb.NodeID(0) {
 				return nil, errors.AssertionFailedf("missing origin node for flow token returns")
 			}
 		}
 		if _, err := protoutil.MarshalToSizedBuffer(
-			raftAdmissionMeta,
+			opts.RaftAdmissionMeta,
 			data[preLen:preLen+admissionMetaLen],
 		); err != nil {
 			return nil, err
 		}
-		log.VInfof(ctx, 1, "encoded raft admission meta: pri=%s create-time=%d proposer=n%s",
-			admissionpb.WorkPriority(raftAdmissionMeta.AdmissionPriority),
-			raftAdmissionMeta.AdmissionCreateTime,
-			raftAdmissionMeta.AdmissionOriginNode,
-		)
-		// Zero out what we've already encoded and marshaled to avoid re-marshaling
-		// again.
-		command.AdmissionPriority = 0
-		command.AdmissionCreateTime = 0
-		command.AdmissionOriginNode = 0
 	}
-
 	// Encode the rest of the command.
 	if _, err := protoutil.MarshalToSizedBuffer(command, data[preLen+admissionMetaLen:]); err != nil {
 		return nil, err

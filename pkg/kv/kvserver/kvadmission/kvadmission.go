@@ -578,7 +578,7 @@ func (n *controllerImpl) AdmitRaftEntry(
 	rangeID roachpb.RangeID,
 	entry raftpb.Entry,
 ) {
-	typ, err := raftlog.EncodingOf(entry)
+	typ, _, err := raftlog.EncodingOf(entry)
 	if err != nil {
 		log.Errorf(ctx, "unable to determine raft command encoding: %v", err)
 		return
