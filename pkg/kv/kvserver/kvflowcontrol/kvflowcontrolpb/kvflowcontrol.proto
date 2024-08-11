@@ -23,9 +23,15 @@ import "gogoproto/gogo.proto";
 // raftlog.EntryEncoding.
 //
 // [1]: The field tags and types must be kept identical with what's found there.
+//
+// RaftAdmissionMeta is used by both RACv1 and RACv2 encodings. RACv1 encoding
+// uses all the fields. RACv2 encoding uses only AdmissionPriority and
+// AdmissionCreateTime, and AdmissionPriority is set to the raftpb.Priority.
 message RaftAdmissionMeta {
-  // AdmissionPriority of the command (maps to admission.WorkPriority); used
-  // within a tenant below-raft for replication admission control.
+  // AdmissionPriority of the command.
+  // - RACv1: maps to admission.WorkPriority
+  // - RACv2: maps to raftpb.Priority
+  // Used within a tenant below-raft for replication admission control.
   int32 admission_priority = 18;
   // AdmissionCreateTime is equivalent to Time.UnixNano() at the creation time
   // of the request, or a parent request, for which this command is a part of.
@@ -34,7 +40,8 @@ message RaftAdmissionMeta {
   int64 admission_create_time = 19;
   // AdmissionOriginNode captures where this raft command originated. It's used
   // to inform said node of this raft command's (virtual) admission in order for
-  // it to release flow tokens for subsequent commands.
+  // it to release flow tokens for subsequent commands. Not used by RACv2
+  // encoding.
   int32 admission_origin_node = 20 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 
   // TODO(irfansharif): If the {marshaling,unmarshaling} performance overhead
