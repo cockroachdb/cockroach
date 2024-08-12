@@ -1655,11 +1655,11 @@ func checkBackupManifestVersionCompatability(
 				// the `ClusterVersion` field exists.
 				return errors.WithHint(errors.Newf("the backup is from a version older than our "+
 					"minimum restorable version %s", minimumRestoreableVersion),
-					"refer to our documentation about restoring across versions: https://www.cockroachlabs.com/docs/v22.2/restoring-backups-across-versions.html")
+					"refer to our documentation about restoring across versions: https://www.cockroachlabs.com/docs/stable/restoring-backups-across-versions.html")
 			}
 			return errors.WithHint(errors.Newf("backup from version %s is older than the "+
 				"minimum restorable version %s", v, minimumRestoreableVersion),
-				"refer to our documentation about restoring across versions: https://www.cockroachlabs.com/docs/v22.2/restoring-backups-across-versions.html")
+				"refer to our documentation about restoring across versions: https://www.cockroachlabs.com/docs/stable/restoring-backups-across-versions.html")
 		}
 	}
 
