@@ -44,21 +44,29 @@ import (
 //
 // Note that this currently only supports requests to CRDB clusters.
 type RoachtestHTTPClient struct {
-	client    *httputil.Client
-	sessionID string
-	cluster   cluster.Cluster
-	l         *logger.Logger
+	client             *httputil.Client
+	sessionID          string
+	cluster            cluster.Cluster
+	l                  *logger.Logger
+	virtualClusterName string
 	// Used for safely adding to the cookie jar.
 	mu syncutil.Mutex
 }
 
 type RoachtestHTTPOptions struct {
-	Timeout time.Duration
+	Timeout            time.Duration
+	VirtualClusterName string
 }
 
 func HTTPTimeout(timeout time.Duration) func(options *RoachtestHTTPOptions) {
 	return func(options *RoachtestHTTPOptions) {
 		options.Timeout = timeout
+	}
+}
+
+func VirtualCluster(name string) func(*RoachtestHTTPOptions) {
+	return func(options *RoachtestHTTPOptions) {
+		options.VirtualClusterName = name
 	}
 }
 
@@ -87,12 +95,13 @@ func DefaultHTTPClient(
 	if httpOptions.Timeout != 0 {
 		roachtestHTTP.client.Timeout = httpOptions.Timeout
 	}
+	roachtestHTTP.virtualClusterName = httpOptions.VirtualClusterName
 
 	return &roachtestHTTP
 }
 
 func (r *RoachtestHTTPClient) Get(ctx context.Context, url string) (*http.Response, error) {
-	if err := r.addCookie(ctx, url); err != nil {
+	if err := r.addCookies(ctx, url); err != nil {
 		return nil, err
 	}
 	return r.client.Get(ctx, url)
@@ -101,7 +110,7 @@ func (r *RoachtestHTTPClient) Get(ctx context.Context, url string) (*http.Respon
 func (r *RoachtestHTTPClient) GetJSON(
 	ctx context.Context, path string, response protoutil.Message,
 ) error {
-	if err := r.addCookie(ctx, path); err != nil {
+	if err := r.addCookies(ctx, path); err != nil {
 		return err
 	}
 	return httputil.GetJSON(*r.client.Client, path, response)
@@ -110,7 +119,7 @@ func (r *RoachtestHTTPClient) GetJSON(
 func (r *RoachtestHTTPClient) PostProtobuf(
 	ctx context.Context, path string, request, response protoutil.Message,
 ) error {
-	if err := r.addCookie(ctx, path); err != nil {
+	if err := r.addCookies(ctx, path); err != nil {
 		return err
 	}
 	return httputil.PostProtobuf(ctx, *r.client.Client, path, request, response)
@@ -123,32 +132,38 @@ func (r *RoachtestHTTPClient) ResetSession() {
 	r.sessionID = ""
 }
 
-func (r *RoachtestHTTPClient) addCookie(ctx context.Context, cookieUrl string) error {
+func (r *RoachtestHTTPClient) addCookies(ctx context.Context, cookieUrl string) error {
 	// If the cluster is not running in secure mode, don't try to add cookies.
 	if !r.cluster.IsSecure() {
 		return nil
 	}
 	// If we haven't extracted the sessionID yet, do so.
 	if r.sessionID == "" {
-		id, err := getSessionID(ctx, r.cluster, r.l, r.cluster.All())
+		id, err := getSessionID(ctx, r.cluster, r.l, r.cluster.All(), r.virtualClusterName)
 		if err != nil {
-			return errors.Wrapf(err, "roachtestutil.addCookie: unable to extract sessionID")
+			return errors.Wrapf(err, "roachtestutil.addCookies: unable to extract sessionID")
 		}
 		r.sessionID = id
 	}
 
 	name, value, found := strings.Cut(r.sessionID, "=")
 	if !found {
-		return errors.New("Cookie not formatted correctly")
+		return errors.Newf("cookie not formatted correctly: %q", r.sessionID)
 	}
 
 	url, err := url.Parse(cookieUrl)
 	if err != nil {
-		return errors.Wrapf(err, "roachtestutil.addCookie: unable to parse cookieUrl")
+		return errors.Wrapf(err, "roachtestutil.addCookies: unable to parse cookieUrl")
 	}
-	err = r.SetCookies(url, []*http.Cookie{{Name: name, Value: value}})
+
+	cookies := []*http.Cookie{{Name: name, Value: value}}
+	if r.virtualClusterName != "" {
+		cookies = append(cookies, &http.Cookie{Name: "tenant", Value: r.virtualClusterName})
+	}
+
+	err = r.SetCookies(url, cookies)
 	if err != nil {
-		return errors.Wrapf(err, "roachtestutil.addCookie: unable to set cookie")
+		return errors.Wrapf(err, "roachtestutil.addCookies: unable to set cookies")
 	}
 
 	return nil
@@ -171,43 +186,46 @@ func (r *RoachtestHTTPClient) SetCookies(u *url.URL, cookies []*http.Cookie) err
 }
 
 func getSessionIDOnSingleNode(
-	ctx context.Context, c cluster.Cluster, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context,
+	c cluster.Cluster,
+	l *logger.Logger,
+	node option.NodeListOption,
+	virtualClusterName string,
 ) (string, error) {
+	var virtualClusterSelector string
+	if virtualClusterName != "" {
+		virtualClusterSelector = fmt.Sprintf(":%s", virtualClusterName)
+	}
+
 	loginCmd := fmt.Sprintf(
-		"%s auth-session login root --port={pgport%s} --certs-dir ./certs --format raw",
-		test.DefaultCockroachPath, node,
+		"%s auth-session login root --url={pgurl%s%s} --certs-dir ./certs --only-cookie",
+		test.DefaultCockroachPath, node, virtualClusterSelector,
 	)
 	res, err := c.RunWithDetailsSingleNode(ctx, l, node, loginCmd)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to authenticate")
 	}
 
-	var sessionCookie string
-	for _, line := range strings.Split(res.Stdout, "\n") {
-		if strings.HasPrefix(line, "session=") {
-			sessionCookie = line
-		}
-	}
-	if sessionCookie == "" {
-		return "", fmt.Errorf("failed to find session cookie in `login` output")
-	}
-
-	return sessionCookie, nil
+	return res.Stdout, nil
 }
 
 func getSessionID(
-	ctx context.Context, c cluster.Cluster, l *logger.Logger, nodes option.NodeListOption,
+	ctx context.Context,
+	c cluster.Cluster,
+	l *logger.Logger,
+	nodes option.NodeListOption,
+	virtualClusterName string,
 ) (string, error) {
 	var err error
 	var cookie string
 	// The session ID should be the same for all nodes so stop after we successfully
 	// get it from one node.
 	for _, node := range nodes {
-		cookie, err = getSessionIDOnSingleNode(ctx, c, l, c.Node(node))
+		cookie, err = getSessionIDOnSingleNode(ctx, c, l, c.Node(node), virtualClusterName)
 		if err == nil {
 			break
 		}
-		l.Printf("%s auth session login failed on node %d: %v", test.DefaultCockroachPath, node, err)
+		l.Printf("%s auth-session login failed on node %d: %v", test.DefaultCockroachPath, node, err)
 	}
 	if err != nil {
 		return "", errors.Wrapf(err, "roachtestutil.GetSessionID")

@@ -35,7 +35,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgtype"
@@ -76,8 +78,33 @@ func registerFollowerReads(r registry.Registry) {
 					survival:          survival,
 					deadPrimaryRegion: insufficientQuorum,
 				}
-				data := initFollowerReadsDB(ctx, t, c, topology)
-				runFollowerReadsTest(ctx, t, c, topology, rc, data)
+				conns := struct {
+					mu      syncutil.Mutex
+					mapping map[int]*gosql.DB
+				}{
+					mapping: make(map[int]*gosql.DB),
+				}
+				connFunc := func(node int) *gosql.DB {
+					conns.mu.Lock()
+					defer conns.mu.Unlock()
+
+					if _, ok := conns.mapping[node]; !ok {
+						conn := c.Conn(ctx, t.L(), node)
+						conns.mapping[node] = conn
+					}
+
+					return conns.mapping[node]
+				}
+
+				defer func() {
+					for _, c := range conns.mapping {
+						c.Close()
+					}
+				}()
+
+				rng, _ := randutil.NewPseudoRand()
+				data := initFollowerReadsDB(ctx, t, t.L(), c, connFunc, connFunc, rng, topology)
+				runFollowerReadsTest(ctx, t, t.L(), c, rng, topology, rc, data)
 			},
 		})
 	}
@@ -183,7 +210,9 @@ type topologySpec struct {
 func runFollowerReadsTest(
 	ctx context.Context,
 	t test.Test,
+	l *logger.Logger,
 	c cluster.Cluster,
+	rng *rand.Rand,
 	topology topologySpec,
 	rc readConsistency,
 	data map[int]int64,
@@ -277,10 +306,7 @@ func runFollowerReadsTest(
 		),
 	)
 	if err != nil {
-		// 20.2 doesn't have this setting.
-		if !strings.Contains(err.Error(), "unknown cluster setting") {
-			t.Fatal(err)
-		}
+		t.Fatal(err)
 	}
 
 	// Read the follower read counts before issuing the follower reads to observe
@@ -295,7 +321,7 @@ func runFollowerReadsTest(
 	// Perform reads on each node and ensure we get the expected value. Do so for
 	// 15 seconds to give closed timestamps a chance to propagate and caches time
 	// to warm up.
-	t.L().Printf("warming up reads")
+	l.Printf("warming up reads")
 	g, gCtx := errgroup.WithContext(ctx)
 	k, v := chooseKV()
 	until := timeutil.Now().Add(15 * time.Second)
@@ -339,19 +365,19 @@ func runFollowerReadsTest(
 		if topology.deadPrimaryRegion && i <= 3 {
 			stopOpts := option.DefaultStopOpts()
 			stopOpts.RoachprodOpts.Sig = 9
-			c.Stop(ctx, t.L(), stopOpts, c.Node(i))
+			c.Stop(ctx, l, stopOpts, c.Node(i))
 			deadNodes[i] = struct{}{}
 		} else {
 			liveNodes[i] = struct{}{}
 		}
 	}
 
-	t.L().Printf("starting read load")
+	l.Printf("starting read load")
 	const loadDuration = 4 * time.Minute
 	timeoutCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	time.AfterFunc(loadDuration, func() {
-		t.L().Printf("stopping load")
+		l.Printf("stopping load")
 		cancel()
 	})
 	g, gCtx = errgroup.WithContext(timeoutCtx)
@@ -370,7 +396,7 @@ func runFollowerReadsTest(
 		t.Fatalf("error reading data: %v", err)
 	}
 	end := timeutil.Now()
-	t.L().Printf("load stopped")
+	l.Printf("load stopped")
 
 	// Depending on the test's topology, we expect a different set of nodes to
 	// perform follower reads.
@@ -400,7 +426,7 @@ func runFollowerReadsTest(
 			expectedLowRatioNodes = 1
 		}
 	}
-	verifyHighFollowerReadRatios(ctx, t, c, liveNodes, start, end, expectedLowRatioNodes)
+	verifyHighFollowerReadRatios(ctx, t, l, c, liveNodes, start, end, expectedLowRatioNodes)
 
 	if topology.multiRegion {
 		// Perform a ts query to verify that the SQL latencies were well below the
@@ -408,31 +434,44 @@ func runFollowerReadsTest(
 		//
 		// We don't do this for singleRegion since, in a single region, there's no
 		// low latency and high-latency regimes.
-		verifySQLLatency(ctx, t, c, liveNodes, start, end, maxLatencyThreshold)
+		verifySQLLatency(ctx, t, l, c, liveNodes, start, end, maxLatencyThreshold)
 	}
 
 	// Restart dead nodes, if necessary.
 	for i := range deadNodes {
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(i))
+		c.Start(ctx, l, option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(i))
 	}
 }
 
 // initFollowerReadsDB initializes a database for the follower reads test.
 // Returns the data inserted into the test table.
+//
+// The `connFunc` (and `systemConnFunc`) parameters capture how to
+// connect to the database in a test run. This allows us to use the
+// mixedersion helpers in mixed-version tests. We need to connect to
+// the system tenant to change relevant SystemOnly cluster settings,
+// and some mixed-version tests run in a multi-tenant deployment.
 func initFollowerReadsDB(
-	ctx context.Context, t test.Test, c cluster.Cluster, topology topologySpec,
+	ctx context.Context,
+	t test.Test,
+	l *logger.Logger,
+	c cluster.Cluster,
+	connectFunc, systemConnectFunc func(int) *gosql.DB,
+	rng *rand.Rand,
+	topology topologySpec,
 ) (data map[int]int64) {
-	db := c.Conn(ctx, t.L(), 1)
-	defer db.Close()
+	systemDB := systemConnectFunc(1)
+	db := connectFunc(1)
+
 	// Disable load based splitting and range merging because splits and merges
 	// interfere with follower reads. This test's workload regularly triggers load
 	// based splitting in the first phase creating small ranges which later
 	// in the test are merged. The merging tends to coincide with the final phase
 	// of the test which attempts to observe low latency reads leading to
 	// flakiness.
-	_, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'")
+	_, err := systemDB.ExecContext(ctx, "SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'")
 	require.NoError(t, err)
-	_, err = db.ExecContext(ctx, "SET CLUSTER SETTING kv.range_merge.queue_enabled = 'false'")
+	_, err = systemDB.ExecContext(ctx, "SET CLUSTER SETTING kv.range_merge.queue_enabled = 'false'")
 	require.NoError(t, err)
 
 	// Check the cluster regions.
@@ -480,7 +519,7 @@ func initFollowerReadsDB(
 	}
 
 	// Wait until the table has completed up-replication.
-	t.L().Printf("waiting for up-replication...")
+	l.Printf("waiting for up-replication...")
 	retryOpts := retry.Options{MaxBackoff: 15 * time.Second}
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		// Check that the table has the expected number and location of voting and
@@ -528,7 +567,7 @@ func initFollowerReadsDB(
 			ctx, q1, votersCount, nonVotersCount, pq.Array(votersSet), pq.Array(nonVotersSet),
 		).Scan(&ok, &voters, &nonVoters)
 		if errors.Is(err, gosql.ErrNoRows) {
-			t.L().Printf("up-replication not complete, missing range")
+			l.Printf("up-replication not complete, missing range")
 			continue
 		}
 		require.NoError(t, err)
@@ -537,9 +576,9 @@ func initFollowerReadsDB(
 			break
 		}
 
-		t.L().Printf("up-replication not complete, "+
-			"found voters = %v (want %d in set %v) and non_voters = %s (want %d in set %v)",
-			voters, votersCount, votersSet, nonVoters, votersCount, votersSet)
+		l.Printf("up-replication not complete, "+
+			"found voters = %v (want %d in set %v) and non_voters = %v (want %d in set %v)",
+			voters, votersCount, votersSet, nonVoters, nonVotersCount, nonVotersSet)
 	}
 
 	if topology.multiRegion {
@@ -596,7 +635,7 @@ func initFollowerReadsDB(
 					break
 				}
 
-				t.L().Printf("rebalancing not complete, expected %d at risk ranges, "+
+				l.Printf("rebalancing not complete, expected %d at risk ranges, "+
 					"found %d", expAtRisk, atRisk)
 			}
 		}
@@ -607,7 +646,7 @@ func initFollowerReadsDB(
 	sem := make(chan struct{}, concurrency)
 	data = make(map[int]int64)
 	insert := func(ctx context.Context, k int) func() error {
-		v := rand.Int63()
+		v := rng.Int63()
 		data[k] = v
 		return func() error {
 			sem <- struct{}{}
@@ -649,6 +688,7 @@ func computeFollowerReadDuration(ctx context.Context, db *gosql.DB) (time.Durati
 func verifySQLLatency(
 	ctx context.Context,
 	t test.Test,
+	l *logger.Logger,
 	c cluster.Cluster,
 	liveNodes map[int]struct{},
 	start, end time.Time,
@@ -660,13 +700,11 @@ func verifySQLLatency(
 		adminNode = i
 		break
 	}
-	adminURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(adminNode))
+	adminURLs, err := c.ExternalAdminUIAddr(ctx, l, c.Node(adminNode))
 	if err != nil {
 		t.Fatal(err)
 	}
-	// follower-reads/mixed-version runs on insecure mode, so we need http.
-	// Tests that do run on secure mode will redirect to https.
-	url := "http://" + adminURLs[0] + "/ts/query"
+	url := "https://" + adminURLs[0] + "/ts/query"
 	var sources []string
 	for i := range liveNodes {
 		sources = append(sources, strconv.Itoa(i))
@@ -682,7 +720,7 @@ func verifySQLLatency(
 			SourceAggregator: tspb.TimeSeriesQueryAggregator_MAX.Enum(),
 		}},
 	}
-	client := roachtestutil.DefaultHTTPClient(c, t.L())
+	client := roachtestutil.DefaultHTTPClient(c, l)
 	var response tspb.TimeSeriesQueryResponse
 	if err := client.PostProtobuf(ctx, url, &request, &response); err != nil {
 		t.Fatal(err)
@@ -714,6 +752,7 @@ func verifySQLLatency(
 func verifyHighFollowerReadRatios(
 	ctx context.Context,
 	t test.Test,
+	l *logger.Logger,
 	c cluster.Cluster,
 	liveNodes map[int]struct{},
 	start, end time.Time,
@@ -731,11 +770,10 @@ func verifyHighFollowerReadRatios(
 		adminNode = i
 		break
 	}
-	adminURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(adminNode))
+	adminURLs, err := c.ExternalAdminUIAddr(ctx, l, c.Node(adminNode))
 	require.NoError(t, err)
-	// follower-reads/mixed-version runs on insecure mode, so we need http.
-	// Tests that do run on secure mode will redirect to https.
-	url := "http://" + adminURLs[0] + "/ts/query"
+
+	url := "https://" + adminURLs[0] + "/ts/query"
 	request := tspb.TimeSeriesQueryRequest{
 		StartNanos: start.UnixNano(),
 		EndNanos:   end.UnixNano(),
@@ -755,7 +793,11 @@ func verifyHighFollowerReadRatios(
 			Derivative: tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
 		})
 	}
-	client := roachtestutil.DefaultHTTPClient(c, t.L())
+	// Make sure to connect to the system tenant in case this test
+	// is running on a multitenant deployment.
+	client := roachtestutil.DefaultHTTPClient(
+		c, l, roachtestutil.VirtualCluster(install.SystemInterfaceName),
+	)
 	var response tspb.TimeSeriesQueryResponse
 	if err := client.PostProtobuf(ctx, url, &request, &response); err != nil {
 		t.Fatal(err)
@@ -788,7 +830,7 @@ func verifyHighFollowerReadRatios(
 		}
 	}
 
-	t.L().Printf("interval stats: %s", intervalsToString(stats))
+	l.Printf("interval stats: %s", intervalsToString(stats))
 
 	// Now count how many intervals have more than the tolerated number of nodes
 	// with low follower read ratios.
@@ -843,10 +885,12 @@ func getFollowerReadCounts(ctx context.Context, t test.Test, c cluster.Cluster) 
 			if err != nil {
 				return err
 			}
-			// follower-reads/mixed-version runs on insecure mode, so we need http.
-			// Tests that do run on secure mode will redirect to https.
-			url := "http://" + adminUIAddrs[0] + "/_status/vars"
-			client := roachtestutil.DefaultHTTPClient(c, t.L())
+			url := "https://" + adminUIAddrs[0] + "/_status/vars"
+			// Make sure to connect to the system tenant in case this test
+			// is running on a multitenant deployment.
+			client := roachtestutil.DefaultHTTPClient(
+				c, t.L(), roachtestutil.VirtualCluster(install.SystemInterfaceName),
+			)
 			resp, err := client.Get(ctx, url)
 			if err != nil {
 				return err
@@ -948,21 +992,25 @@ func runFollowerReadsMixedVersionTest(
 	rc readConsistency,
 	opts ...mixedversion.CustomOption,
 ) {
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(),
-		append([]mixedversion.CustomOption{
-			// Multi-tenant deployments are currently unsupported. See #127378.
-			mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
-		}, opts...)...,
-	)
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), opts...)
 
 	var data map[int]int64
 	runInit := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-		data = initFollowerReadsDB(ctx, t, c, topology)
+		if topology.multiRegion &&
+			h.IsMultitenant() &&
+			!h.Context().FromVersion.AtLeast(mixedversion.TenantsAndSystemAlignedSettingsVersion) {
+			const setting = "sql.multi_region.allow_abstractions_for_secondary_tenants.enabled"
+			if err := setTenantSetting(l, r, h, setting, true); err != nil {
+				return errors.Wrapf(err, "setting %s", setting)
+			}
+		}
+
+		data = initFollowerReadsDB(ctx, t, l, c, h.Connect, h.System.Connect, r, topology)
 		return nil
 	}
 
 	runFollowerReads := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-		runFollowerReadsTest(ctx, t, c, topology, rc, data)
+		runFollowerReadsTest(ctx, t, l, c, r, topology, rc, data)
 		return nil
 	}
 
