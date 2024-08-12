@@ -19,6 +19,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/log",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 

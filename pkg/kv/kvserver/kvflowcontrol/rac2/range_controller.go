@@ -15,10 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/redact"
 )
 
 // RangeController provides flow control for replication traffic in KV, for a
 // range at the leader.
+//
+// None of the methods are called with Replica.mu held. The caller should
+// typically order its mutexes before Replica.mu.
 type RangeController interface {
 	// WaitForEval seeks admission to evaluate a request at the given priority.
 	// This blocks until there are positive tokens available for the request to
@@ -37,10 +41,11 @@ type RangeController interface {
 	//
 	// Requires replica.raftMu to be held.
 	HandleSchedulerEventRaftMuLocked(ctx context.Context) error
-	// SetReplicasLocked sets the replicas of the range.
+	// SetReplicasRaftMuLocked sets the replicas of the range. The caller will
+	// never mutate replicas, and neither should the callee.
 	//
-	// Requires replica.raftMu and replica.mu to be held.
-	SetReplicasLocked(ctx context.Context, replicas roachpb.ReplicaSet) error
+	// Requires replica.raftMu to be held.
+	SetReplicasRaftMuLocked(ctx context.Context, replicas ReplicaSet) error
 	// SetLeaseholderRaftMuLocked sets the leaseholder of the range.
 	//
 	// Requires raftMu to be held.
@@ -54,3 +59,29 @@ type RangeController interface {
 // TODO(pav-kv): This struct is a placeholder for the interface or struct
 // containing raft entries. Replace this as part of #128019.
 type RaftEvent struct{}
+
+// NoReplicaID is a special value of roachpb.ReplicaID, which can never be a
+// valid ID.
+const NoReplicaID roachpb.ReplicaID = 0
+
+// ReplicaSet is a map, unlike roachpb.ReplicaSet, for convenient lookup by
+// ReplicaID.
+type ReplicaSet map[roachpb.ReplicaID]roachpb.ReplicaDescriptor
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rs ReplicaSet) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("[")
+	i := 0
+	for _, desc := range rs {
+		if i > 0 {
+			w.Printf(",")
+		}
+		w.Printf("%v", desc)
+		i++
+	}
+	w.Printf("]")
+}
+
+func (rs ReplicaSet) String() string {
+	return redact.StringWithoutMarkers(rs)
+}

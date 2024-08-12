@@ -72,14 +72,11 @@ func (r *replicaRLockedStoreLiveness) SupportFromEnabled() bool {
 	// TODO(mira): this version check is incorrect. For one, it doesn't belong
 	// here. Instead, the version should be checked when deciding to enable
 	// StoreLiveness or not. Then, the check here should only check whether store
-	// liveness is enabled. The other incorrect bit about this version check is
-	// that it re-uses clusterversion.V24_2_LeaseMinTimestamp; we should instead
-	// introduce a new version (V24_3_StoreLivenessEnabled); this can only happen
-	// once https://github.com/cockroachdb/cockroach/pull/128616 lands.
+	// liveness is enabled.
 	//
 	// TODO(nvanbenschoten): hook this up to a cluster setting to gradually roll
 	// out raft fortification.
-	return r.store.ClusterSettings().Version.IsActive(context.TODO(), clusterversion.V24_2_LeaseMinTimestamp)
+	return r.store.ClusterSettings().Version.IsActive(context.TODO(), clusterversion.V24_3_StoreLivenessEnabled)
 }
 
 // SupportExpired implements the raftstoreliveness.StoreLiveness interface.
