@@ -107,6 +107,7 @@ var (
 	withSinkHeader = colinfo.ResultColumns{
 		{Name: "job_id", Typ: types.Int},
 	}
+	experimentalListenHeader = colinfo.ResultColumns{}
 )
 
 func changefeedTypeCheck(
@@ -142,6 +143,14 @@ func changefeedPlanHook(
 	}
 
 	exprEval := p.ExprEvaluator("CREATE CHANGEFEED")
+
+	rawOpts, err := exprEval.KVOptions(
+		ctx, changefeedStmt.Options, changefeedvalidators.CreateOptionValidations,
+	)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+
 	var sinkURI string
 	unspecifiedSink := changefeedStmt.SinkURI == nil
 	avoidBuffering := unspecifiedSink
@@ -155,7 +164,11 @@ func changefeedPlanHook(
 		// value BYTES)` and they correspond exactly to what would be emitted to
 		// a sink.
 		avoidBuffering = true
+		// if _, ok := rawOpts[changefeedbase.OptExperimentalListenChannel]; ok {
+		// 	header = experimentalListenHeader
+		// } else {
 		header = sinklessHeader
+		// }
 	} else {
 		var err error
 		sinkURI, err = exprEval.String(ctx, changefeedStmt.SinkURI)
@@ -163,13 +176,6 @@ func changefeedPlanHook(
 			return nil, nil, nil, false, changefeedbase.MarkTaggedError(err, changefeedbase.UserInput)
 		}
 		header = withSinkHeader
-	}
-
-	rawOpts, err := exprEval.KVOptions(
-		ctx, changefeedStmt.Options, changefeedvalidators.CreateOptionValidations,
-	)
-	if err != nil {
-		return nil, nil, nil, false, err
 	}
 
 	// rowFn impements sql.PlanHookRowFn
@@ -225,13 +231,28 @@ func changefeedPlanHook(
 			telemetry.Count(`changefeed.create.core`)
 			logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
 
-			err := coreChangefeed(ctx, p, details, progress, resultsCh)
-			// TODO(yevgeniy): This seems wrong -- core changefeeds always terminate
-			// with an error.  Perhaps rename this telemetry to indicate number of
-			// completed feeds.
-			telemetry.Count(`changefeed.core.error`)
-			return err
+			// Need to spawn this as async so we get results back without blocking.
+			// TODO: But how do we unlisten? including on session end?
+			if _, ok := rawOpts[changefeedbase.OptExperimentalListenChannel]; ok {
+				newCtx := context.WithoutCancel(ctx) // orphan the context so it doesn't immediately cancel
+				go func() {
+					err := coreChangefeed(newCtx, p, details, progress, resultsCh)
+					if err != nil {
+						log.Warningf(newCtx, "core notification changefeed failed: %s", err)
+					}
+				}()
+				return nil
+			} else {
+				err := coreChangefeed(ctx, p, details, progress, resultsCh)
+				// TODO(yevgeniy): This seems wrong -- core changefeeds always terminate
+				// with an error.  Perhaps rename this telemetry to indicate number of
+				// completed feeds.
+				telemetry.Count(`changefeed.core.error`)
+				return err
+			}
 		}
+
+		// TODO: probably want to do this PTS stuff too
 
 		// The below block creates the job and protects the data required for the
 		// changefeed to function from being garbage collected even if the
@@ -601,7 +622,7 @@ func createChangefeedJobRecord(
 			telemetrySink = `sinkless`
 		}
 		telemetry.Count(telemetryPath + `.sink.` + telemetrySink)
-		telemetry.Count(telemetryPath + `.format.` + string(encodingOpts.Format))
+		telemetry.Count(telemetryPath + `.format.` + string(encodingOpts.Format)) // TODO: add here?
 		telemetry.CountBucketed(telemetryPath+`.num_tables`, int64(len(tables)))
 	}
 

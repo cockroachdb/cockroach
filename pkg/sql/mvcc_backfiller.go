@@ -153,7 +153,7 @@ func (im *IndexBackfillerMergePlanner) plan(
 	}
 
 	return func(ctx context.Context) error {
-		cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
+		cbw := MetadataCallbackWriter{RowResultWriterI: &errOnlyResultWriter{}, fn: metaFn}
 		recv := MakeDistSQLReceiver(
 			ctx,
 			&cbw,
