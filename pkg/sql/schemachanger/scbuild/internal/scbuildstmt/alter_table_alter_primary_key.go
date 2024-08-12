@@ -71,7 +71,6 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 	fallBackIfShardedIndexExists(b, t, tbl.TableID)
 	fallBackIfPartitionedIndexExists(b, t, tbl.TableID)
 	fallBackIfRegionalByRowTable(b, t.n, tbl.TableID)
-	fallBackIfDescColInRowLevelTTLTables(b, tbl.TableID, t)
 	fallBackIfSubZoneConfigExists(b, t.n, tbl.TableID)
 
 	inflatedChain := getInflatedPrimaryIndexChain(b, tbl.TableID)
@@ -443,15 +442,6 @@ func fallBackIfRegionalByRowTable(b BuildCtx, t tree.NodeFormatter, tableID cati
 	if rbrElem != nil {
 		panic(scerrors.NotImplementedErrorf(t, "ALTER PRIMARY KEY on a REGIONAL BY ROW table "+
 			"is not yet supported."))
-	}
-}
-
-// fallBackIfDescColInRowLevelTTLTables panics with an unimplemented
-// error if the table is a (row-level-ttl table && (it has a descending
-// key column || it has any inbound/outbound FK constraint)).
-func fallBackIfDescColInRowLevelTTLTables(b BuildCtx, tableID catid.DescID, t alterPrimaryKeySpec) {
-	if _, _, rowLevelTTLElem := scpb.FindRowLevelTTL(b.QueryByID(tableID)); rowLevelTTLElem == nil {
-		return
 	}
 }
 
