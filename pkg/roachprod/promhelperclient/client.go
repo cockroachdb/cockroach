@@ -151,12 +151,11 @@ func (c *PromClient) DeleteClusterConfig(
 	if insecure {
 		url = fmt.Sprintf("%s?insecure=true", url)
 	}
-	l.Printf("invoking DELETE for URL: %s", url)
 	h := &http.Header{}
 	h.Set("Authorization", token)
 	response, err := c.httpDelete(ctx, url, h)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "DeleteClusterConfig: failed on url: %s", url)
 	}
 	if response.StatusCode != http.StatusNoContent {
 		defer func() { _ = response.Body.Close() }()
@@ -167,7 +166,7 @@ func (c *PromClient) DeleteClusterConfig(
 		if err != nil {
 			return err
 		}
-		return errors.Newf("request failed with status %d and error %s", response.StatusCode,
+		return errors.Newf("request failed with url %s status %d and error %s", url, response.StatusCode,
 			string(body))
 	}
 	return nil

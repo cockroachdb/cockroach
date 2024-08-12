@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/errors"
@@ -399,6 +400,7 @@ func ShrinkCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 
 // DestroyCluster TODO(peter): document
 func DestroyCluster(l *logger.Logger, c *Cluster) error {
+	stopSpinner := ui.NewDefaultSpinner(l, "Destroying Prometheus configs").Start()
 	// check if any node is supported as promhelper cluster
 	for _, node := range c.VMs {
 		if _, ok := promhelperclient.SupportedPromProjects[node.Project]; ok &&
@@ -420,11 +422,17 @@ func DestroyCluster(l *logger.Logger, c *Cluster) error {
 			break
 		}
 	}
+	stopSpinner()
+
 	// DNS entries are destroyed first to ensure that the GC job will not try
 	// and clean-up entries prematurely.
+	stopSpinner = ui.NewDefaultSpinner(l, "Destroying DNS entries").Start()
 	dnsErr := vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
 		return p.DeleteRecordsBySubdomain(context.Background(), c.Name)
 	})
+	stopSpinner()
+
+	stopSpinner = ui.NewDefaultSpinner(l, "Destroying VMs").Start()
 	// Allow both DNS and VM operations to run before returning any errors.
 	clusterErr := vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
 		// Enable a fast-path for providers that can destroy a cluster in one shot.
@@ -433,6 +441,7 @@ func DestroyCluster(l *logger.Logger, c *Cluster) error {
 		}
 		return p.Delete(l, vms)
 	})
+	stopSpinner()
 	return errors.CombineErrors(dnsErr, clusterErr)
 }
 
