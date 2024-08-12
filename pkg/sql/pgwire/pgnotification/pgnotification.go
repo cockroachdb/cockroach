@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2024 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,15 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package pgnotification
 
-import (
-	"context"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-)
-
-func (p *planner) Unlisten(ctx context.Context, n *tree.Unlisten) (planNode, error) {
-	delete(dummyNotificationListens, n.ChannelName.String())
-	return newZeroNode(nil /* columns */), nil
+type Notification struct {
+	Channel string
+	Payload string
+	PID     int32
 }

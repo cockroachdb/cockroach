@@ -98,6 +98,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionImplemented("bad row skipped when restoring system.tenant_settings"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"add new table for listen/notify queue",
+		clusterversion.V24_3_ListenNotifyQueue.Version(),
+		upgrade.NoPrecondition,
+		createListenNotifyQueyeTables,
+		upgrade.RestoreActionNotRequired("idk lol"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
