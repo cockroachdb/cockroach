@@ -291,7 +291,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	// Partial stats collections on multiple columns create different plans,
 	// so we only support one requested stat at a time here.
 	if len(reqStats) > 1 {
-		return nil, errors.AssertionFailedf("only one partial statistic can be requested at a time")
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot process multiple partial statistics at once")
 	}
 
 	reqStat := reqStats[0]
