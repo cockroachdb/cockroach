@@ -210,7 +210,7 @@ type StoreTestingKnobs struct {
 	// constructed and received, the follower will silently drop the snapshot
 	// without signaling an error to the sender, i.e. the leader. (To work around
 	// that, once could adjust the term for the message in that case in
-	// `(*Replica).stepRaftGroup` to prevent the message from getting dropped).
+	// `(*Replica).stepRaftGroupRaftMuLocked` to prevent the message from getting dropped).
 	//
 	// Another problem is that the snapshot may apply but fail to inform the
 	// leader of this fact. Once a Raft leader has determined that a follower
