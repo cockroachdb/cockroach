@@ -1461,6 +1461,10 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 	handleEvent := func(
 		ctx context.Context, ev *kvpb.RangeFeedValue,
 	) {
+		// Skip updates if rangefeeds are disabled.
+		if m.testingKnobs.DisableRangeFeedCheckpoint {
+			return
+		}
 		if len(ev.Value.RawBytes) == 0 {
 			id, err := m.Codec().DecodeDescMetadataID(ev.Key)
 			if err != nil {
@@ -1507,6 +1511,10 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 	if m.mu.rangeFeed != nil {
 		m.mu.rangeFeed.Close()
 		m.mu.rangeFeed = nil
+		if m.testingKnobs.RangeFeedResetChannel != nil {
+			close(m.testingKnobs.RangeFeedResetChannel)
+			m.testingKnobs.RangeFeedResetChannel = nil
+		}
 	}
 	// Ignore errors here because they indicate that the server is shutting down.
 	// Also note that the range feed automatically shuts down when the server
@@ -1548,7 +1556,7 @@ func (m *Manager) getRangeFeedMonitorSettings() (timeout time.Duration, monitori
 }
 
 // checkRangeFeedStatus ensures that the range feed is always checkpointing and
-// receiving data. On recovery we will always refresh all descriptors with the
+// receiving data. On recovery, we will always refresh all descriptors with the
 // assumption we have lost updates (especially if restarts have ocurred).
 func (m *Manager) checkRangeFeedStatus(ctx context.Context) (forceRefresh bool) {
 	m.mu.Lock()
@@ -2075,9 +2083,15 @@ func (w *waitStatsTracker) end() {
 
 // TestingSetDisableRangeFeedCheckpointFn sets the testing knob used to
 // disable rangefeed checkpoints.
-func (m *Manager) TestingSetDisableRangeFeedCheckpointFn(disable bool) {
+func (m *Manager) TestingSetDisableRangeFeedCheckpointFn(disable bool) chan struct{} {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.rangeFeedCheckpoints = 0
 	m.testingKnobs.DisableRangeFeedCheckpoint = disable
+	if disable {
+		m.testingKnobs.RangeFeedResetChannel = make(chan struct{})
+	} else {
+		m.testingKnobs.RangeFeedResetChannel = nil
+	}
+	return m.testingKnobs.RangeFeedResetChannel
 }
