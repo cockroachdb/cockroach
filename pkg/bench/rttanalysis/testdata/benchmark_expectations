@@ -106,6 +106,8 @@ exp,benchmark
 4,ORMQueries/pg_type
 133,ORMQueries/prisma_column_descriptions
 3,ORMQueries/prisma_column_descriptions_updated
+5,ORMQueries/prisma_types_16
+5,ORMQueries/prisma_types_4
 10,Revoke/revoke_all_on_1_table
 10,Revoke/revoke_all_on_2_tables
 10,Revoke/revoke_all_on_3_tables
