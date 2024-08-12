@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -68,6 +69,8 @@ type kvEventToRowConsumer struct {
 
 	metrics *sliMetrics
 	sv      *settings.Values
+
+	st *timers.ScopedTimers
 
 	// This pacer is used to incorporate event consumption to elastic CPU
 	// control. This helps ensure that event encoding/decoding does not throttle
@@ -421,6 +424,7 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 		}
 	}
 
+	stop := c.st.Encode.Start()
 	if c.encodingOpts.Format == changefeedbase.OptFormatParquet {
 		return c.encodeForParquet(
 			ctx, updatedRow, prevRow, topic, schemaTS, updatedRow.MvccTimestamp,
@@ -444,10 +448,14 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	// Since we're done processing/converting this event, and will not use much more
 	// than len(key)+len(bytes) worth of resources, adjust allocation to match.
 	alloc.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
+	stop()
 
-	if err := c.sink.EmitRow(
-		ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc,
-	); err != nil {
+	c.st.EmitRow.Time(func() {
+		err = c.sink.EmitRow(
+			ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc,
+		)
+	})
+	if err != nil {
 		return err
 	}
 	if log.V(3) {
