@@ -1050,27 +1050,6 @@ func (c *clusterImpl) setTest(t test.Test) {
 	c.l = t.L()
 }
 
-// StopCockroachGracefullyOnNode stops a running cockroach instance on the requested
-// node before a version upgrade.
-func (c *clusterImpl) StopCockroachGracefullyOnNode(
-	ctx context.Context, l *logger.Logger, node int,
-) error {
-	// A graceful shutdown is sending SIGTERM to the node, then waiting
-	// some reasonable amount of time, then sending a non-graceful SIGKILL.
-	gracefulOpts := option.DefaultStopOpts()
-	gracefulOpts.RoachprodOpts.Sig = 15 // SIGTERM
-	gracefulOpts.RoachprodOpts.Wait = true
-	gracefulOpts.RoachprodOpts.MaxWait = 60
-	if err := c.StopE(ctx, l, gracefulOpts, c.Node(node)); err != nil {
-		return err
-	}
-
-	// NB: we still call Stop to make sure the process is dead when we
-	// try to restart it (in case it takes longer than `MaxWait` for it
-	// to finish).
-	return c.StopE(ctx, l, option.DefaultStopOpts(), c.Node(node))
-}
-
 // Save marks the cluster as "saved" so that it doesn't get destroyed.
 func (c *clusterImpl) Save(ctx context.Context, msg string, l *logger.Logger) {
 	l.PrintfCtx(ctx, "saving cluster %s for debugging (--debug specified)", c)

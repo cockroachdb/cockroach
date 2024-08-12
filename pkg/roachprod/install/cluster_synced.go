@@ -478,6 +478,8 @@ func (c *SyncedCluster) kill(
 	maxWait int,
 	virtualClusterLabel string,
 ) error {
+	const timedOutMessage = "timed out"
+
 	if sig == 9 {
 		// `kill -9` without wait is never what a caller wants. See #77334.
 		wait = true
@@ -493,6 +495,7 @@ func (c *SyncedCluster) kill(
     while kill -0 ${pid}; do
       if [ %[2]d -gt 0 -a $waitcnt -gt %[2]d ]; then
          echo "${pid}: max %[2]d attempts reached, aborting wait" >>%[1]s/roachprod.log
+         echo "%[3]s"
          break
       fi
       kill -0 ${pid} >> %[1]s/roachprod.log 2>&1
@@ -505,6 +508,7 @@ func (c *SyncedCluster) kill(
   done`,
 					c.LogDir(node, "", 0), // [1]
 					maxWait,               // [2]
+					timedOutMessage,       // [3]
 				)
 			}
 
@@ -539,7 +543,19 @@ fi`,
 				waitCmd,                   // [6]
 			)
 
-			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("kill"))
+			res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("kill"))
+			if err != nil {
+				return res, err
+			}
+
+			if wait && strings.Contains(res.CombinedOut, timedOutMessage) {
+				return res, fmt.Errorf(
+					"timed out after %ds waiting for n%d to drain and shutdown",
+					maxWait, node,
+				)
+			}
+
+			return res, nil
 		})
 }
 

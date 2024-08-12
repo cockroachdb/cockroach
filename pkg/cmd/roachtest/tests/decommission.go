@@ -37,6 +37,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// shudownMaxWait is the default maximum duration (in seconds) that we
+// will wait for a graceful shutdown.
+const shutdownMaxWait = 300
+
 func registerDecommission(r registry.Registry) {
 	{
 		numNodes := 4
@@ -297,6 +301,8 @@ func runDecommission(
 		})
 	}
 
+	stopOpts := option.NewStopOpts(option.Graceful(shutdownMaxWait))
+
 	m.Go(func() error {
 		tBegin, whileDown := timeutil.Now(), true
 		node := nodes
@@ -322,7 +328,7 @@ func runDecommission(
 			}
 
 			if whileDown {
-				if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), node); err != nil {
+				if err := c.StopE(ctx, t.L(), stopOpts, c.Node(node)); err != nil {
 					return err
 				}
 			}
@@ -347,7 +353,7 @@ func runDecommission(
 			}
 
 			if !whileDown {
-				if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), node); err != nil {
+				if err := c.StopE(ctx, t.L(), stopOpts, c.Node(node)); err != nil {
 					return err
 				}
 			}
