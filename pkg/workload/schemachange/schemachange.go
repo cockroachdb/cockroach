@@ -456,12 +456,12 @@ func (w *schemaChangeWorker) runInTxn(
 ) error {
 	w.logger.startLog(w.id)
 	w.logger.writeLog("BEGIN")
-	opsNum := 1 + w.opGen.randIntn(w.maxOpsPerWorker)
-	if useDeclarativeSchemaChanger && opsNum > w.workload.declarativeSchemaMaxStmtsPerTxn {
-		opsNum = w.workload.declarativeSchemaMaxStmtsPerTxn
+	numOps := 1 + w.opGen.randIntn(w.maxOpsPerWorker)
+	if useDeclarativeSchemaChanger && numOps > w.workload.declarativeSchemaMaxStmtsPerTxn {
+		numOps = w.workload.declarativeSchemaMaxStmtsPerTxn
 	}
 
-	for i := 0; i < opsNum; i++ {
+	for i := 0; i < numOps; i++ {
 		// Terminating this loop early if there are expected commit errors prevents unexpected commit behavior from being
 		// hidden by subsequent operations. Consider the case where there are expected commit errors.
 		// It is possible that committing the transaction now will fail the workload because the error does not occur
@@ -474,8 +474,7 @@ func (w *schemaChangeWorker) runInTxn(
 			break
 		}
 
-		// Only allow DML for single-statement transactions.
-		op, err := w.opGen.randOp(ctx, tx, useDeclarativeSchemaChanger, opsNum == 1)
+		op, err := w.opGen.randOp(ctx, tx, useDeclarativeSchemaChanger, numOps)
 		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
 			pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 			return errors.Mark(err, errRunInTxnRbkSentinel)
