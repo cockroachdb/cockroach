@@ -552,6 +552,10 @@ func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *servic
 		})
 	}
 
+	if err := group.Wait(); err != nil {
+		return err
+	}
+
 	service.binaryVersions.Store(newBinaryVersions)
 	return nil
 }
@@ -569,12 +573,16 @@ func (tr *testRunner) refreshClusterVersions(ctx context.Context, service *servi
 		group.GoCtx(func(ctx context.Context) error {
 			cv, err := clusterupgrade.ClusterVersion(ctx, tr.conn(node, service.descriptor.Name))
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to get cluster version for node %d: %w", node, err)
 			}
 
 			newClusterVersions[j] = cv
 			return nil
 		})
+	}
+
+	if err := group.Wait(); err != nil {
+		return err
 	}
 
 	service.clusterVersions.Store(newClusterVersions)
