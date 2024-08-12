@@ -123,7 +123,7 @@ func (r *logicalReplicationResumer) ingest(
 
 	client, err := streamclient.GetFirstActiveClient(ctx,
 		append([]string{payload.SourceClusterConnStr}, progress.StreamAddresses...),
-		jobExecCtx.ExecCfg().InternalDB,
+		execCfg.InternalDB,
 		streamclient.WithStreamID(streampb.StreamID(streamID)),
 		streamclient.WithLogical(),
 	)
@@ -143,16 +143,8 @@ func (r *logicalReplicationResumer) ingest(
 		req.TableIDs = append(req.TableIDs, pair.SrcDescriptorID)
 	}
 
-	planner := makeLogicalReplicationPlanner(
-		req,
-		jobExecCtx,
-		client,
-		progress,
-		payload,
-		jobID,
-		replicatedTimeAtStart)
-
-	initialPlan, initialPlanCtx, planInfo, err := planner.generateInitialPlanWithInfo(ctx, distSQLPlanner)
+	planner := makeLogicalReplicationPlanner(jobExecCtx, r.job, client)
+	initialPlan, initialPlanCtx, planInfo, err := planner.generateInitialPlan(ctx, distSQLPlanner)
 	if err != nil {
 		return err
 	}
@@ -165,10 +157,27 @@ func (r *logicalReplicationResumer) ingest(
 		return err
 	}
 
+	// TODO(azhu): add a flag to avoid recreating dlq tables during replanning
+	dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB.Executor(), planInfo.tableIDsToNames)
+	if err := dlqClient.Create(ctx); err != nil {
+		return errors.Wrap(err, "failed to create dead letter queue")
+	}
+
+	frontier, err := span.MakeFrontierAt(replicatedTimeAtStart, planInfo.sourceSpans...)
+	if err != nil {
+		return err
+	}
+
+	for _, resolvedSpan := range progress.Checkpoint.ResolvedSpans {
+		if _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
+			return err
+		}
+	}
+
 	replanOracle := sql.ReplanOnCustomFunc(
 		getNodes,
 		func() float64 {
-			return crosscluster.LogicalReplanThreshold.Get(jobExecCtx.ExecCfg().SV())
+			return crosscluster.LogicalReplanThreshold.Get(execCfg.SV())
 		},
 	)
 
@@ -177,7 +186,7 @@ func (r *logicalReplicationResumer) ingest(
 		planner.generatePlan,
 		jobExecCtx,
 		replanOracle,
-		func() time.Duration { return crosscluster.LogicalReplanFrequency.Get(jobExecCtx.ExecCfg().SV()) },
+		func() time.Duration { return crosscluster.LogicalReplanFrequency.Get(execCfg.SV()) },
 	)
 	metrics := execCfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
 
@@ -205,7 +214,7 @@ func (r *logicalReplicationResumer) ingest(
 		}
 		rh := rowHandler{
 			replicatedTimeAtStart: replicatedTimeAtStart,
-			frontier:              planInfo.frontier,
+			frontier:              frontier,
 			metrics:               metrics,
 			settings:              &execCfg.Settings.SV,
 			job:                   r.job,
@@ -277,66 +286,80 @@ func getNodes(plan *sql.PhysicalPlan) (src, dst map[string]struct{}, nodeCount i
 // generated plan differs significantly from the initial plan, the entire
 // distSQL flow is shut down and a new initial plan will be created.
 type logicalReplicationPlanner struct {
-	req                   streampb.LogicalReplicationPlanRequest
-	jobExecCtx            sql.JobExecContext
-	client                streamclient.Client
-	progress              *jobspb.LogicalReplicationProgress
-	payload               jobspb.LogicalReplicationDetails
-	jobID                 jobspb.JobID
-	replicatedTimeAtStart hlc.Timestamp
+	job        *jobs.Job
+	jobExecCtx sql.JobExecContext
+	client     streamclient.Client
+}
+
+type logicalReplicationPlanInfo struct {
+	sourceSpans     []roachpb.Span
+	streamAddress   []string
+	tableIDsToNames map[int32]fullyQualifiedTableName
 }
 
 func makeLogicalReplicationPlanner(
-	req streampb.LogicalReplicationPlanRequest,
-	jobExecCtx sql.JobExecContext,
-	client streamclient.Client,
-	progress *jobspb.LogicalReplicationProgress,
-	payload jobspb.LogicalReplicationDetails,
-	jobID jobspb.JobID,
-	replicatedTimeAtStart hlc.Timestamp,
+	jobExecCtx sql.JobExecContext, job *jobs.Job, client streamclient.Client,
 ) logicalReplicationPlanner {
-
 	return logicalReplicationPlanner{
-		req:                   req,
-		jobExecCtx:            jobExecCtx,
-		client:                client,
-		progress:              progress,
-		payload:               payload,
-		jobID:                 jobID,
-		replicatedTimeAtStart: replicatedTimeAtStart,
+		job:        job,
+		jobExecCtx: jobExecCtx,
+		client:     client,
 	}
-}
-
-type planInfo struct {
-	frontier      span.Frontier
-	streamAddress []string
 }
 
 // generateInitialPlan generates a plan along with the information required to
 // initialize the job.
-func (p *logicalReplicationPlanner) generateInitialPlanWithInfo(
+func (p *logicalReplicationPlanner) generateInitialPlan(
 	ctx context.Context, dsp *sql.DistSQLPlanner,
-) (*sql.PhysicalPlan, *sql.PlanningCtx, planInfo, error) {
-	var (
-		execCfg = p.jobExecCtx.ExecCfg()
-		evalCtx = p.jobExecCtx.ExtendedEvalContext()
-		info    = planInfo{}
-	)
+) (*sql.PhysicalPlan, *sql.PlanningCtx, logicalReplicationPlanInfo, error) {
+	return p.generatePlanImpl(ctx, dsp)
+}
 
-	plan, err := p.client.PlanLogicalReplication(ctx, p.req)
+func (p *logicalReplicationPlanner) generatePlan(
+	ctx context.Context, dsp *sql.DistSQLPlanner,
+) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
+	plan, planCtx, _, err := p.generatePlanImpl(ctx, dsp)
+	return plan, planCtx, err
+}
+
+func (p *logicalReplicationPlanner) generatePlanImpl(
+	ctx context.Context, dsp *sql.DistSQLPlanner,
+) (*sql.PhysicalPlan, *sql.PlanningCtx, logicalReplicationPlanInfo, error) {
+	var (
+		execCfg  = p.jobExecCtx.ExecCfg()
+		evalCtx  = p.jobExecCtx.ExtendedEvalContext()
+		progress = p.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+		payload  = p.job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
+		info     = logicalReplicationPlanInfo{
+			tableIDsToNames: make(map[int32]fullyQualifiedTableName),
+		}
+	)
+	asOf := progress.ReplicatedTime
+	if asOf.IsEmpty() {
+		asOf = payload.ReplicationStartTime
+	}
+	req := streampb.LogicalReplicationPlanRequest{
+		PlanAsOf: asOf,
+	}
+	for _, pair := range payload.ReplicationPairs {
+		req.TableIDs = append(req.TableIDs, pair.SrcDescriptorID)
+	}
+
+	plan, err := p.client.PlanLogicalReplication(ctx, req)
 	if err != nil {
 		return nil, nil, info, err
 	}
+	info.sourceSpans = plan.SourceSpans
+	info.streamAddress = plan.Topology.StreamAddresses()
 
 	var defaultFnOID oid.Oid
-	if defaultFnID := p.payload.DefaultConflictResolution.FunctionId; defaultFnID != 0 {
+	if defaultFnID := payload.DefaultConflictResolution.FunctionId; defaultFnID != 0 {
 		defaultFnOID = catid.FuncIDToOID(catid.DescID(defaultFnID))
 	}
 
-	tableIDToName := make(map[int32]fullyQualifiedTableName)
 	tablesMd := make(map[int32]execinfrapb.TableReplicationMetadata)
 	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
-		for _, pair := range p.payload.ReplicationPairs {
+		for _, pair := range payload.ReplicationPairs {
 			srcTableDesc := plan.DescriptorMap[pair.SrcDescriptorID]
 
 			// Look up fully qualified destination table name
@@ -367,7 +390,7 @@ func (p *logicalReplicationPlanner) generateInitialPlanWithInfo(
 				DestinationTableName:          dstTableDesc.GetName(),
 				DestinationFunctionOID:        uint32(fnOID),
 			}
-			tableIDToName[pair.DstDescriptorID] = fullyQualifiedTableName{
+			info.tableIDsToNames[pair.DstDescriptorID] = fullyQualifiedTableName{
 				database: dbDesc.GetName(),
 				schema:   scDesc.GetName(),
 				table:    dstTableDesc.GetName(),
@@ -376,25 +399,6 @@ func (p *logicalReplicationPlanner) generateInitialPlanWithInfo(
 		return nil
 	}); err != nil {
 		return nil, nil, info, err
-	}
-
-	// TODO(azhu): add a flag to avoid recreating dlq tables during replanning
-	dlqClient := InitDeadLetterQueueClient(p.jobExecCtx.ExecCfg().InternalDB.Executor(), tableIDToName)
-	if err := dlqClient.Create(ctx); err != nil {
-		return nil, nil, info, errors.Wrap(err, "failed to create dead letter queue")
-	}
-
-	frontier, err := span.MakeFrontierAt(p.replicatedTimeAtStart, plan.SourceSpans...)
-	if err != nil {
-		return nil, nil, info, err
-	}
-	info.streamAddress = plan.Topology.StreamAddresses()
-	info.frontier = frontier
-
-	for _, resolvedSpan := range p.progress.Checkpoint.ResolvedSpans {
-		if _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
-			return nil, nil, info, err
-		}
 	}
 
 	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCfg)
@@ -407,15 +411,15 @@ func (p *logicalReplicationPlanner) generateInitialPlanWithInfo(
 	}
 
 	specs, err := constructLogicalReplicationWriterSpecs(ctx,
-		crosscluster.StreamAddress(p.payload.SourceClusterConnStr),
+		crosscluster.StreamAddress(payload.SourceClusterConnStr),
 		plan.Topology,
 		destNodeLocalities,
-		p.payload.ReplicationStartTime,
-		p.progress.ReplicatedTime,
-		p.progress.Checkpoint,
+		payload.ReplicationStartTime,
+		progress.ReplicatedTime,
+		progress.Checkpoint,
 		tablesMd,
-		p.jobID,
-		streampb.StreamID(p.payload.StreamID))
+		p.job.ID(),
+		streampb.StreamID(payload.StreamID))
 	if err != nil {
 		return nil, nil, info, err
 	}
@@ -454,13 +458,6 @@ func (p *logicalReplicationPlanner) generateInitialPlanWithInfo(
 	sql.FinalizePlan(ctx, planCtx, physicalPlan)
 
 	return physicalPlan, planCtx, info, nil
-}
-
-func (p *logicalReplicationPlanner) generatePlan(
-	ctx context.Context, dsp *sql.DistSQLPlanner,
-) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
-	plan, planCtx, _, err := p.generateInitialPlanWithInfo(ctx, dsp)
-	return plan, planCtx, err
 }
 
 // rowHandler is responsible for handling checkpoints sent by logical
