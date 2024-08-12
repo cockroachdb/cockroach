@@ -141,6 +141,7 @@ func TestCreatePostRequest(t *testing.T) {
 		extraLabels             []string
 		arch                    vm.CPUArch
 		failures                []failure
+		sideEyeURL              string
 		expectedPost            bool
 		expectedLabels          []string
 		expectedTeam            string
@@ -387,6 +388,16 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
+		// 16. Verify that a Side-Eye URL is rendered in the issue.
+		{
+			nonReleaseBlocker: true,
+			failures: []failure{
+				createFailure(errors.New("random"))},
+			expectedName:   testName,
+			expectedLabels: []string{"C-test-failure"},
+			expectedTeam:   "@cockroachdb/unowned",
+			sideEyeURL:     "https://app.side-eye.io/snapshots/1",
+		},
 	}
 
 	reg := makeTestRegistry()
@@ -435,7 +446,7 @@ func TestCreatePostRequest(t *testing.T) {
 
 			req, err := github.createPostRequest(
 				testName, ti.start, ti.end, testSpec, testCase.failures,
-				testCase.message, testCase.metamorphicBuild, testCase.coverageBuild,
+				testCase.message, testCase.sideEyeURL, testCase.metamorphicBuild, testCase.coverageBuild,
 			)
 			if testCase.loadTeamsFailed {
 				// Assert that if TEAMS.yaml cannot be loaded then function errors.
@@ -462,6 +473,10 @@ func TestCreatePostRequest(t *testing.T) {
 			require.Contains(t, req.MentionOnCreate, testCase.expectedTeam)
 			require.Equal(t, testCase.expectedName, req.TestName)
 			require.Contains(t, req.Message, testCase.expectedMessagePrefix)
+			if testCase.sideEyeURL != "" {
+				require.Equal(t, req.SideEyeSnapshotMsg, "A Side-Eye cluster snapshot was captured on timeout: ")
+				require.Equal(t, req.SideEyeSnapshotURL, testCase.sideEyeURL)
+			}
 		})
 	}
 }
