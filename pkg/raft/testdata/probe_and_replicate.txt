@@ -599,7 +599,7 @@ stabilize 1 4
   4->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:1
   4->1 MsgAppResp Term:8 Log:0/21 Commit:18
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   HardState Term:8 Vote:1 Commit:21 Lead:1 LeadEpoch:1
   CommittedEntries:
   6/19 EntryNormal "prop_6_19"
@@ -612,7 +612,7 @@ stabilize 1 4
 > 4 receiving messages
   1->4 MsgApp Term:8 Log:8/21 Commit:21
 > 4 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   HardState Term:8 Commit:21 Lead:1 LeadEpoch:1
   CommittedEntries:
   6/19 EntryNormal "prop_6_19"

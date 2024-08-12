@@ -185,7 +185,7 @@ func MustSync(st, prevst pb.HardState, entsnum int) bool {
 	// votedFor
 	// log entries[]
 	return entsnum != 0 || st.Vote != prevst.Vote || st.Term != prevst.Term ||
-		st.Lead != prevst.Lead || st.LeadEpoch != prevst.LeadEpoch
+		st.Lead != prevst.Lead || st.LeadEpoch != prevst.LeadEpoch || st.Commit != prevst.Commit
 }
 
 func needStorageAppendMsg(r *raft, rd Ready) bool {
