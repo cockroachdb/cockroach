@@ -24,6 +24,7 @@ go_library(
         "interaction_env_handler_set_randomized_election_timeout.go",
         "interaction_env_handler_stabilize.go",
         "interaction_env_handler_status.go",
+        "interaction_env_handler_store_liveness.go",
         "interaction_env_handler_tick.go",
         "interaction_env_handler_transfer_leadership.go",
         "interaction_env_logger.go",
@@ -37,7 +38,9 @@ go_library(
         "//pkg/raft/raftpb",
         "//pkg/raft/raftstoreliveness",
         "//pkg/raft/tracker",
+        "//pkg/util/hlc",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

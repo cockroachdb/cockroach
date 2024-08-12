@@ -126,6 +126,10 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 		}
 		cfg := cfg // fork the config stub
 		cfg.ID, cfg.Storage = id, s
+
+		env.Fabric.addNode()
+		cfg.StoreLiveness = newStoreLiveness(env.Fabric, id)
+
 		if env.Options.OnConfig != nil {
 			env.Options.OnConfig(&cfg)
 			if cfg.ID != id {

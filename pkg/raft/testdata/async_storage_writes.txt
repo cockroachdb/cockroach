@@ -84,7 +84,7 @@ stabilize
 > 1 handling Ready
   Ready MustSync=true:
   State:StateLeader
-  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
   Entries:
   1/11 EntryNormal ""
   Messages:
@@ -110,45 +110,47 @@ stabilize
   AppendThread->1 MsgStorageAppendResp Term:0 Log:1/11
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
   Entries:
   1/11 EntryNormal ""
   Messages:
-  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
   2->AppendThread MsgStorageAppend Term:1 Log:1/11 Commit:10 Vote:1 Lead:1 Entries:[1/11 EntryNormal ""] Responses:[
+    2->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
     2->1 MsgAppResp Term:1 Log:0/11
     AppendThread->2 MsgStorageAppendResp Term:0 Log:1/11
   ]
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
   Entries:
   1/11 EntryNormal ""
   Messages:
-  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
   3->AppendThread MsgStorageAppend Term:1 Log:1/11 Commit:10 Vote:1 Lead:1 Entries:[1/11 EntryNormal ""] Responses:[
+    3->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
     3->1 MsgAppResp Term:1 Log:0/11
     AppendThread->3 MsgStorageAppendResp Term:0 Log:1/11
   ]
 > 1 receiving messages
   1->1 MsgAppResp Term:1 Log:0/11
   AppendThread->1 MsgStorageAppendResp Term:0 Log:1/11
-  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
-  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
 > 2 processing append thread
   Processing:
   2->AppendThread MsgStorageAppend Term:1 Log:1/11 Commit:10 Vote:1 Lead:1 Entries:[1/11 EntryNormal ""]
   Responses:
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
   2->1 MsgAppResp Term:1 Log:0/11
   AppendThread->2 MsgStorageAppendResp Term:0 Log:1/11
 > 3 processing append thread
   Processing:
   3->AppendThread MsgStorageAppend Term:1 Log:1/11 Commit:10 Vote:1 Lead:1 Entries:[1/11 EntryNormal ""]
   Responses:
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
   3->1 MsgAppResp Term:1 Log:0/11
   AppendThread->3 MsgStorageAppendResp Term:0 Log:1/11
 > 1 receiving messages
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
   2->1 MsgAppResp Term:1 Log:0/11
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
   3->1 MsgAppResp Term:1 Log:0/11
 > 2 receiving messages
   AppendThread->2 MsgStorageAppendResp Term:0 Log:1/11
@@ -156,7 +158,7 @@ stabilize
   AppendThread->3 MsgStorageAppendResp Term:0 Log:1/11
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/11 EntryNormal ""
   Messages:
@@ -181,7 +183,7 @@ stabilize
   ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[1/11 EntryNormal ""]
 > 2 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/11 EntryNormal ""
   Messages:
@@ -193,7 +195,7 @@ stabilize
   ]
 > 3 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/11 EntryNormal ""
   Messages:
@@ -383,7 +385,7 @@ process-ready 1 2 3
 ----
 > 1 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:12 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:12 Lead:1 LeadEpoch:1
   Entries:
   1/14 EntryNormal "prop_3"
   CommittedEntries:
@@ -418,7 +420,7 @@ process-ready 1 2 3
   <empty Ready>
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:12 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:12 Lead:1 LeadEpoch:1
   Entries:
   1/14 EntryNormal "prop_3"
   CommittedEntries:
@@ -434,7 +436,7 @@ process-ready 1 2 3
   ]
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:12 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:12 Lead:1 LeadEpoch:1
   Entries:
   1/14 EntryNormal "prop_3"
   CommittedEntries:
@@ -487,7 +489,7 @@ process-ready 1 2 3
 ----
 > 1 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:13 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:13 Lead:1 LeadEpoch:1
   Entries:
   1/15 EntryNormal "prop_4"
   CommittedEntries:
@@ -522,7 +524,7 @@ process-ready 1 2 3
   <empty Ready>
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:13 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:13 Lead:1 LeadEpoch:1
   Entries:
   1/15 EntryNormal "prop_4"
   CommittedEntries:
@@ -538,7 +540,7 @@ process-ready 1 2 3
   ]
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:13 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:13 Lead:1 LeadEpoch:1
   Entries:
   1/15 EntryNormal "prop_4"
   CommittedEntries:
@@ -612,7 +614,7 @@ process-ready 1 2 3
 ----
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:14 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:14 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/14 EntryNormal "prop_3"
   Messages:
@@ -638,7 +640,7 @@ process-ready 1 2 3
   <empty Ready>
 > 2 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:14 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:14 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/14 EntryNormal "prop_3"
   Messages:
@@ -650,7 +652,7 @@ process-ready 1 2 3
   ]
 > 3 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:14 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:14 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/14 EntryNormal "prop_3"
   Messages:
@@ -720,7 +722,7 @@ process-ready 1 2 3
 ----
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:15 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:15 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/15 EntryNormal "prop_4"
   Messages:
@@ -746,7 +748,7 @@ process-ready 1 2 3
   <empty Ready>
 > 2 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:15 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:15 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/15 EntryNormal "prop_4"
   Messages:
@@ -758,7 +760,7 @@ process-ready 1 2 3
   ]
 > 3 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:15 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:15 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/15 EntryNormal "prop_4"
   Messages:
