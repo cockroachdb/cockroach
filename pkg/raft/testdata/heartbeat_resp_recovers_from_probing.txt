@@ -53,12 +53,12 @@ stabilize
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
-  1->2 MsgHeartbeat Term:1 Log:0/0 Commit:11
-  1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
+  1->2 MsgHeartbeat Term:1 Log:0/0
+  1->3 MsgHeartbeat Term:1 Log:0/0
 > 2 receiving messages
-  1->2 MsgHeartbeat Term:1 Log:0/0 Commit:11
+  1->2 MsgHeartbeat Term:1 Log:0/0
 > 3 receiving messages
-  1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
+  1->3 MsgHeartbeat Term:1 Log:0/0
 > 2 handling Ready
   Ready MustSync=false:
   Messages:

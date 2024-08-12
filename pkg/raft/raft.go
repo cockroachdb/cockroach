@@ -19,6 +19,7 @@ package raft
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -602,7 +603,9 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 	pr := r.trk.Progress(to)
 
 	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
-	if !pr.ShouldSendMsgApp(last, commit) {
+	advanceCommit := r.crdbVersion.IsActive(context.Background(),
+		clusterversion.V24_3_AdvanceCommitIndexViaMsgApps)
+	if !pr.ShouldSendMsgApp(last, commit, advanceCommit) {
 		return false
 	}
 
@@ -675,14 +678,25 @@ func (r *raft) sendHeartbeat(to pb.PeerID) {
 	// or it might not have all the committed entries.
 	// The leader MUST NOT forward the follower's commit to
 	// an unmatched index.
-	commit := min(pr.Match, r.raftLog.committed)
+	// NOTE: Starting from V24_3_AdvanceCommitIndexViaMsgApps, heartbeats do not
+	// advance the commit index. Instead, MsgApp are used for that purpose.
+	// TODO(iskettaneh): Remove the commit from the heartbeat message once no
+	// longer needed.
+	var commit uint64
+	if !r.crdbVersion.IsActive(context.Background(),
+		clusterversion.V24_3_AdvanceCommitIndexViaMsgApps) {
+		commit = min(pr.Match, r.raftLog.committed)
+	}
 	r.send(pb.Message{
 		To:     to,
 		Type:   pb.MsgHeartbeat,
 		Commit: commit,
 		Match:  pr.Match,
 	})
-	pr.SentCommit(commit)
+	if !r.crdbVersion.IsActive(context.Background(),
+		clusterversion.V24_3_AdvanceCommitIndexViaMsgApps) {
+		pr.SentCommit(commit)
+	}
 }
 
 // sendFortify sends a fortification RPC to the given peer.
@@ -1444,7 +1458,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		// an MsgAppResp to acknowledge the appended entries in the last Ready.
 
 		pr.RecentActive = true
-
+		pr.MaybeUpdateReceivedCommit(m.Commit)
 		if m.Reject {
 			// RejectHint is the suggested next base entry for appending (i.e.
 			// we try to append entry RejectHint+1 next), and LogTerm is the
@@ -1939,9 +1953,12 @@ func (r *raft) handleHeartbeat(m pb.Message) {
 	// commit index if accTerm >= m.Term.
 	// TODO(pav-kv): move this logic to raftLog.commitTo, once the accTerm has
 	// migrated to raftLog/unstable.
-	mark := logMark{term: m.Term, index: min(m.Commit, r.raftLog.lastIndex())}
-	if mark.term == r.raftLog.accTerm() {
-		r.raftLog.commitTo(mark)
+	// TODO(iskettaneh): Remove this logic once no longer needed.
+	if m.Commit != 0 {
+		mark := logMark{term: m.Term, index: min(m.Commit, r.raftLog.lastIndex())}
+		if mark.term == r.raftLog.accTerm() {
+			r.raftLog.commitTo(mark)
+		}
 	}
 	r.send(pb.Message{To: m.From, Type: pb.MsgHeartbeatResp})
 }

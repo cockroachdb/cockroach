@@ -138,6 +138,11 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 
 		env.Fabric.addNode()
 		cfg.StoreLiveness = newStoreLiveness(env.Fabric, id)
+		// If the node creating command hasn't specified the CRDB version, use the
+		// latest one.
+		if cfg.CRDBVersion == nil {
+			cfg.CRDBVersion = cluster.MakeTestingClusterSettings().Version
+		}
 
 		if env.Options.OnConfig != nil {
 			env.Options.OnConfig(&cfg)
