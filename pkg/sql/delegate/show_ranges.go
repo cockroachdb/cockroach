@@ -287,6 +287,12 @@ AND s.end_key > r.start_key`)
 			fmt.Fprintf(&buf, " AND s.index_id = %d", idx.ID())
 		}
 	}
+
+	// Exclude dropped tables from .crdb_internal.table_spans
+	if n.Source != tree.ShowRangesIndex && n.Options.Mode != tree.ExpandIndexes {
+		buf.WriteString(" AND s.dropped = false")
+	}
+
 	buf.WriteString("\n)") // end of ranges CTE.
 
 	// Now, enhance the result set so far with additional table/index
