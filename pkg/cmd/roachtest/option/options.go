@@ -112,6 +112,18 @@ func DefaultStopOpts() StopOpts {
 	return StopOpts{RoachprodOpts: roachprod.DefaultStopOpts()}
 }
 
+// NewStopOpts returns a StopOpts populated with default values when
+// called with no options. Pass customization functions to change the
+// stop options.
+func NewStopOpts(opts ...StartStopOption) StopOpts {
+	stopOpts := StopOpts{RoachprodOpts: roachprod.DefaultStopOpts()}
+	for _, opt := range opts {
+		opt(&stopOpts)
+	}
+
+	return stopOpts
+}
+
 // StopSharedVirtualClusterOpts creates StopOpts that can be used to
 // stop the shared process virtual cluster with the given name.
 func StopSharedVirtualClusterOpts(virtualClusterName string) StopOpts {
@@ -208,6 +220,18 @@ func NoBackupSchedule(opts interface{}) {
 	switch opts := opts.(type) {
 	case *StartOpts:
 		opts.RoachprodOpts.ScheduleBackups = false
+	}
+}
+
+// Graceful performs a graceful stop of the cockroach process.
+func Graceful(maxWaitSeconds int) func(interface{}) {
+	return func(opts interface{}) {
+		switch opts := opts.(type) {
+		case *StopOpts:
+			opts.RoachprodOpts.Sig = 15 // SIGTERM
+			opts.RoachprodOpts.Wait = true
+			opts.RoachprodOpts.MaxWait = maxWaitSeconds
+		}
 	}
 }
 
