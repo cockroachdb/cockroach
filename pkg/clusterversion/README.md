@@ -46,7 +46,7 @@ graph TD;
   master1("M.1: Bump min supported
            Latest = 23.2-x
            MinSupported = 23.2
-           version.txt = v24.1.0-alpha.00000000")
+           version.txt = v24.1.0-alpha.y")
             
   master1 --> master2
     
@@ -181,17 +181,20 @@ avoid large changes on `master` which might cause merge conflicts for backports.
 
 - [ ] Add version key constant for new release (e.g. `V24.2`), equal to `Latest`
 
-- [ ] Add start version (e.g. `V24.2Start` with version `24.2-2`)
+- [ ] Update `PreviousRelease` constant
+
+- [ ] Add start version (e.g. `V24.2Start` with version `24.1-2`)
 
 - [ ] Update `pkg/build/version.txt` to the new version (e.g. `v24.2.0-alpha.00000000`)
 
 - [ ] Add mixed version logictest config for the replaced version
       (`local-mixed-24.1`). Make sure the new config is part of `DefaultConfigNames`.
 
-- [ ] Update the scplan rules in `pkg/sql/schemachanger/internal/rules`:
+- [ ] Update the `scplan` rules in `pkg/sql/schemachanger/scplan/internal/rules`:
   - copy the contents of `current` into a new release directory for the previous version
     (e.g. `release_24_1`)
-  - rename the package name in all files, and update `current/helpers.go`
+  - change package name in all files (including `BUILD.bazel`), and update the
+    version in `current/helpers.go`
   - update `rulesForReleases` in `scplan/plan.go`
   - rewrite the test outputs: `./dev test pkg/sql/schemachanger/scplan/internal/rules/... --rewrite`
   - rewrite `TestDeclarativeRules` output: `./dev test pkg/cli -f DeclarativeRules --rewrite`
@@ -210,7 +213,8 @@ avoid large changes on `master` which might cause merge conflicts for backports.
   ```
   This will create a pair of files that need to be copied to
   `pkg/sql/catalog/bootstrap/data` on the `master` branch; it will also output
-  what code modifications need to be performed.
+  what code modifications need to be performed. Note that the BUILD.bazel will
+- also need to be modified to include the new embedded files under `embedsrcs`.
 
 - [ ] Update releases file:
   ```

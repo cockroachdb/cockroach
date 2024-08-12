@@ -10,8 +10,8 @@ upgrade all
 statement ok
 SET CLUSTER SETTING version = crdb_internal.node_executable_version()
 
-# Verify that the cluster is upgrading to 24.2.
+# Verify that the cluster is upgrading to 24.3.
 query T
 SELECT crdb_internal.release_series(version) FROM [SHOW CLUSTER SETTING version]
 ----
-24.2
+24.3
