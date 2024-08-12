@@ -24,11 +24,12 @@ import (
 // partition being consumed. Stream partitions are identified by unique
 // partition addresses.
 type MockStreamClient struct {
-	PartitionEvents map[string][]crosscluster.Event
-	DoneCh          chan struct{}
-	HeartbeatErr    error
-	HeartbeatStatus streampb.StreamReplicationStatus
-	OnHeartbeat     func() (streampb.StreamReplicationStatus, error)
+	PartitionEvents          map[string][]crosscluster.Event
+	DoneCh                   chan struct{}
+	HeartbeatErr             error
+	HeartbeatStatus          streampb.StreamReplicationStatus
+	OnHeartbeat              func() (streampb.StreamReplicationStatus, error)
+	OnPlanLogicalReplication func(streampb.LogicalReplicationPlanRequest) (LogicalReplicationPlan, error)
 }
 
 var _ Client = &MockStreamClient{}
@@ -134,9 +135,12 @@ func (m *MockStreamClient) PriorReplicationDetails(
 }
 
 func (p *MockStreamClient) PlanLogicalReplication(
-	ctx context.Context, req streampb.LogicalReplicationPlanRequest,
+	_ context.Context, req streampb.LogicalReplicationPlanRequest,
 ) (LogicalReplicationPlan, error) {
-	return LogicalReplicationPlan{}, errors.AssertionFailedf("unimplemented")
+	if p.OnPlanLogicalReplication != nil {
+		return p.OnPlanLogicalReplication(req)
+	}
+	return LogicalReplicationPlan{}, errors.AssertionFailedf("no onPlanLogicalReplication callback provided")
 }
 
 func (p *MockStreamClient) CreateForTables(
