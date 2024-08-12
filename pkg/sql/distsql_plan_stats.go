@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats/bounds"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -291,7 +292,10 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	// Partial stats collections on multiple columns create different plans,
 	// so we only support one requested stat at a time here.
 	if len(reqStats) > 1 {
-		return nil, errors.AssertionFailedf("only one partial statistic can be requested at a time")
+		return nil, unimplemented.NewWithIssue(
+			128904,
+			"cannot process multiple partial statistics requests at once",
+		)
 	}
 
 	reqStat := reqStats[0]
