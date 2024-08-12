@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	ast "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -305,16 +307,14 @@ func (b *plpgsqlBuilder) buildRootBlock(
 	return b.buildBlock(astBlock, s)
 }
 
-// buildBlock constructs an expression that returns the result of executing a
-// PL/pgSQL block, including variable declarations and exception handlers.
-//
-// buildBlock should only be used for non-root blocks.
-func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
+// newBlock creates a new non-root block and adds it to the stack. The caller
+// should use popBlock() to remove the block from the stack once it is out of
+// scope.
+func (b *plpgsqlBuilder) newBlock(astBlock *ast.Block) *plBlock {
 	if len(b.blocks) == 0 {
 		// There should always be a root block for the routine parameters.
 		panic(errors.AssertionFailedf("expected at least one PLpgSQL block"))
 	}
-	b.ensureScopeHasExpr(s)
 	block := b.pushBlock(plBlock{
 		label:     astBlock.Label,
 		vars:      make([]ast.Variable, 0, len(astBlock.Decls)),
@@ -322,7 +322,6 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 		constants: make(map[ast.Variable]struct{}),
 		cursors:   make(map[ast.Variable]ast.CursorDeclaration),
 	})
-	defer b.popBlock()
 	if len(astBlock.Exceptions) > 0 || b.hasExceptionHandler() {
 		// If the current block or some ancestor block has an exception handler, it
 		// is necessary to maintain the BlockState with a reference to the parent
@@ -332,9 +331,13 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 			block.state.Parent = parent.state
 		}
 	}
-	// First, handle the variable declarations.
-	for i := range astBlock.Decls {
-		switch dec := astBlock.Decls[i].(type) {
+	return block
+}
+
+// addDeclarations adds the given variable declarations to the current block.
+func (b *plpgsqlBuilder) addDeclarations(decls []ast.Statement, block *plBlock, s *scope) *scope {
+	for i := range decls {
+		switch dec := decls[i].(type) {
 		case *ast.Declaration:
 			if dec.NotNull {
 				panic(notNullVarErr)
@@ -374,10 +377,24 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 			block.cursors[dec.Name] = *dec
 		}
 	}
+	return s
+}
+
+// buildBlock constructs an expression that returns the result of executing a
+// PL/pgSQL block, including variable declarations and exception handlers.
+//
+// buildBlock should only be used for non-root blocks.
+func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
+	// Allocate a new block and add its declarations to the scope.
+	b.ensureScopeHasExpr(s)
+	block := b.newBlock(astBlock)
+	defer b.popBlock()
+	s = b.addDeclarations(astBlock.Decls, block, s)
+
+	// For a RECORD-returning routine, infer the concrete type by examining the
+	// RETURN statements. This has to happen after building the declaration
+	// block because RETURN statements can reference declared variables.
 	if b.returnType.Identical(types.AnyTuple) {
-		// For a RECORD-returning routine, infer the concrete type by examining the
-		// RETURN statements. This has to happen after building the declaration
-		// block because RETURN statements can reference declared variables.
 		recordVisitor := newRecordTypeVisitor(b.ob.ctx, b.ob.semaCtx, s, astBlock)
 		ast.Walk(recordVisitor, astBlock)
 		if rtyp := recordVisitor.typ; rtyp == nil || rtyp.Identical(types.AnyTuple) {
@@ -604,6 +621,22 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				}},
 			}
 			return b.buildPLpgSQLStatements(b.prependStmt(loop, stmts[i+1:]), s)
+
+		case *ast.ForLoop:
+			// Build a continuation that will resume execution after the loop.
+			exitCon := b.makeContinuationWithTyp("loop_exit", t.Label, continuationLoopExit)
+			b.appendPlpgSQLStmts(&exitCon, stmts[i+1:])
+			b.pushContinuation(exitCon)
+			defer b.popContinuation()
+			switch c := t.Control.(type) {
+			case *ast.IntForLoopControl:
+				// FOR target IN [ REVERSE ] expr .. expr [ BY expr ] LOOP ...
+				return b.handleIntForLoop(s, t, c)
+			default:
+				panic(errors.WithDetail(unsupportedPLStmtErr,
+					"query and cursor FOR loops are not yet supported",
+				))
+			}
 
 		case *ast.Exit:
 			if t.Condition != nil {
@@ -1028,6 +1061,136 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 	// loop exit continuations, which are only invoked by EXIT statements.
 	conTypes := continuationDefault | continuationLoopContinue | continuationBlockExit
 	return b.callContinuation(b.getContinuation(conTypes, unspecifiedLabel), s)
+}
+
+// handleIntForLoop constructs the plan for an integer FOR loop, which
+// increments a counter variable on each iteration. The loop body is executed
+// until the counter exceeds the upper bound.
+func (b *plpgsqlBuilder) handleIntForLoop(
+	s *scope, forLoop *ast.ForLoop, control *ast.IntForLoopControl,
+) *scope {
+	if len(forLoop.Target) != 1 {
+		panic(intForLoopTargetErr)
+	}
+	// Build an implicit block declaring:
+	//  * Constants for the lower and upper bounds, as well as the step size.
+	//  * Two variables: an internal counter that is incremented on each
+	//    iteration, and a user-visible target variable.
+	//
+	// The target variable is assigned the value of the counter variable on each
+	// iteration. Both variables are necessary because modifications to the target
+	// variable apply only to that iteration, and do not affect future iterations.
+	// Example:
+	//
+	//   CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+	//     BEGIN
+	//       FOR i IN 1..3 LOOP
+	//         i := i * 100;
+	//         RAISE NOTICE 'i: %', i;
+	//       END LOOP;
+	//       RETURN 0;
+	//     END
+	//   $$;
+	//
+	// The above function would produce results 100, 200, and 300, rather
+	// than exiting after the first iteration.
+	var decls []ast.Statement
+	addDecl := func(name string, typ *types.T, expr tree.Expr, constant bool) ast.Variable {
+		if expr == nil {
+			return ""
+		}
+		varName := ast.Variable(name)
+		decls = append(decls, &ast.Declaration{Var: varName, Typ: typ, Expr: expr, Constant: constant})
+		return varName
+	}
+	lowerVar := addDecl(b.makeIdentifier("_loop_lower"), types.Int, control.Lower, true /* constant */)
+	upperVar := addDecl(b.makeIdentifier("_loop_upper"), types.Int, control.Upper, true /* constant */)
+	stepSize := control.Step
+	if stepSize == nil {
+		// The default step size is 1.
+		stepSize = tree.NewDInt(1)
+	}
+	stepVar := addDecl(b.makeIdentifier("_loop_step"), types.Int, stepSize, true /* constant */)
+	lowerRef := tree.NewUnresolvedName(lowerVar.String())
+	upperRef := tree.NewUnresolvedName(upperVar.String())
+	stepRef := tree.NewUnresolvedName(stepVar.String())
+	counterVar := addDecl(b.makeIdentifier("_loop_counter"), types.Int, lowerRef, false /* constant */)
+	addDecl(forLoop.Target[0].String(), types.Int, lowerRef, false /* constant */)
+	counterRef := tree.NewUnresolvedName(counterVar.String())
+
+	block := b.newBlock(&ast.Block{Label: forLoop.Label})
+	defer b.popBlock()
+	s = b.addDeclarations(decls, block, s)
+
+	// Add runtime checks for the bounds and step size.
+	branches := make(memo.ScalarListExpr, 0, 4)
+	raiseErrArgs := make([]memo.ScalarListExpr, 0, 4)
+	const severity, detail, hint = "ERROR", "", ""
+	addCheck := func(message, code string, checkCond opt.ScalarExpr) {
+		raiseErrArgs = append(raiseErrArgs, b.makeConstRaiseArgs(severity, message, detail, hint, code))
+		branches = append(branches, checkCond)
+	}
+	addNullCheck := func(context string, varRef *tree.UnresolvedName) {
+		checkCond := b.buildPLpgSQLExpr(&tree.IsNullExpr{Expr: varRef}, types.Bool, s)
+		message := fmt.Sprintf("%s of FOR loop cannot be null", context)
+		addCheck(message, pgcode.NullValueNotAllowed.String(), checkCond)
+	}
+	addNullCheck("lower bound" /* context */, lowerRef)
+	addNullCheck("upper bound" /* context */, upperRef)
+	addNullCheck("BY value" /* context */, stepRef)
+	addCheck("BY value of FOR loop must be greater than zero", /* message */
+		pgcode.InvalidParameterValue.String(),
+		b.buildPLpgSQLExpr(&tree.ComparisonExpr{
+			Operator: treecmp.MakeComparisonOperator(treecmp.LE),
+			Left:     stepRef,
+			Right:    tree.DZero,
+		}, types.Bool, s))
+	b.addRuntimeCheck(s, branches, raiseErrArgs)
+
+	// The looping will be implemented by two continuations: one to execute the
+	// loop body, and one to increment the counter variable. The loop body and
+	// increment continuations will call each other recursively.
+	loopCon := b.makeContinuation("stmt_loop")
+	loopCon.def.IsRecursive = true
+	incrementCon := b.makeContinuationWithTyp("stmt_loop_inc", forLoop.Label, continuationLoopContinue)
+	incrementCon.def.IsRecursive = true
+
+	// Push the increment continuation so that the loop body can call into it.
+	b.pushContinuation(incrementCon)
+
+	// Now, build the loop body continuation. Build an IF statement that checks
+	// whether the counter variable has exceeded the upper bound, and executes the
+	// loop body if not.
+	cmpOp := treecmp.MakeComparisonOperator(treecmp.LE)
+	if control.Reverse {
+		cmpOp = treecmp.MakeComparisonOperator(treecmp.GE)
+	}
+	cond := &tree.ComparisonExpr{Operator: cmpOp, Left: counterRef, Right: control.Upper}
+	ifStmt := &ast.If{Condition: cond, ThenBody: forLoop.Body, ElseBody: []ast.Statement{&ast.Exit{}}}
+	b.appendPlpgSQLStmts(&loopCon, []ast.Statement{ifStmt})
+
+	// Pop the increment continuation. Push the loop body continuation so the
+	// increment continuation can call it recursively.
+	b.popContinuation()
+	b.pushContinuation(loopCon)
+
+	// Finally, build the increment continuation. Build an assignment that
+	// increments the counter variable, and then assigns the result to the
+	// target variable.
+	binOp := treebin.MakeBinaryOperator(treebin.Plus)
+	if control.Reverse {
+		binOp = treebin.MakeBinaryOperator(treebin.Minus)
+	}
+	inc := &tree.BinaryExpr{Operator: binOp, Left: counterRef, Right: stepRef}
+	counterAssignStmt := &ast.Assignment{Var: counterVar, Value: inc}
+	targetAssignStmt := &ast.Assignment{Var: forLoop.Target[0], Value: counterRef}
+	b.appendPlpgSQLStmts(&incrementCon, []ast.Statement{counterAssignStmt, targetAssignStmt})
+
+	// Notably, we call the loop body continuation here, rather than the
+	// increment continuation, because the counter should not be incremented
+	// until after the first iteration.
+	b.popContinuation()
+	return b.callContinuation(&loopCon, s)
 }
 
 // resolveOpenQuery finds and validates the query that is bound to cursor for
@@ -1535,7 +1698,6 @@ func (b *plpgsqlBuilder) buildEndOfFunctionRaise(con *continuation) {
 func (b *plpgsqlBuilder) addOneRowCheck(s *scope) {
 	// Add a ScalarGroupBy which passes through input columns, and also computes a
 	// row count.
-	originalCols := s.colSet()
 	aggs := make(memo.AggregationsExpr, 0, len(s.cols)+1)
 	for j := range s.cols {
 		// Create a pass-through aggregation. AnyNotNull works here because if there
@@ -1550,8 +1712,7 @@ func (b *plpgsqlBuilder) addOneRowCheck(s *scope) {
 	aggs = append(aggs, b.ob.factory.ConstructAggregationsItem(rowCountAgg, rowCountCol))
 	s.expr = b.ob.factory.ConstructScalarGroupBy(s.expr, aggs, &memo.GroupingPrivate{})
 
-	// Add a projections which checks the row count and
-	// calls crdb_internal.plpgsql_raise to throw an error if necessary.
+	// Add a runtime check for the row count.
 	tooFewRowsArgs := b.makeConstRaiseArgs(
 		"ERROR",                     /* severity */
 		"query returned no rows",    /* message */
@@ -1570,20 +1731,38 @@ func (b *plpgsqlBuilder) addOneRowCheck(s *scope) {
 	tooManyRowsFn := b.makePLpgSQLRaiseFn(tooManyRowsArgs)
 	rowCountVar := b.ob.factory.ConstructVariable(rowCountCol)
 	scalarOne := b.ob.factory.ConstructConstVal(tree.NewDInt(1), types.Int)
-	caseExpr := b.ob.factory.ConstructCase(
-		memo.TrueSingleton,
-		memo.ScalarListExpr{
-			b.ob.factory.ConstructWhen(b.ob.factory.ConstructLt(rowCountVar, scalarOne), tooFewRowsFn),
-			b.ob.factory.ConstructWhen(b.ob.factory.ConstructGt(rowCountVar, scalarOne), tooManyRowsFn),
-		},
-		b.ob.factory.ConstructNull(types.Int),
-	)
-	rowCheckColName := b.makeIdentifier("_plpgsql_row_count_check")
-	rowCheckCol := b.ob.factory.Metadata().AddColumn(rowCheckColName, types.Int)
-	projections := memo.ProjectionsExpr{b.ob.factory.ConstructProjectionsItem(caseExpr, rowCheckCol)}
-	s.expr = b.ob.factory.ConstructProject(s.expr, projections, originalCols)
+	branches := memo.ScalarListExpr{
+		b.ob.factory.ConstructWhen(b.ob.factory.ConstructLt(rowCountVar, scalarOne), tooFewRowsFn),
+		b.ob.factory.ConstructWhen(b.ob.factory.ConstructGt(rowCountVar, scalarOne), tooManyRowsFn),
+	}
+	b.addRuntimeCheck(s, branches, []memo.ScalarListExpr{tooFewRowsArgs, tooManyRowsArgs})
+}
 
-	// Add an optimization barrier to ensure that the row-count checks are not
+// addRuntimeCheck projects a column that implements a check that must happen at
+// runtime. The supplied boolean branch expressions and RAISE arguments will be
+// used to construct a CASE expression that raises an error if the corresponding
+// condition is true.
+func (b *plpgsqlBuilder) addRuntimeCheck(
+	s *scope, branches memo.ScalarListExpr, raiseErrArgs []memo.ScalarListExpr,
+) {
+	if len(branches) != len(raiseErrArgs) {
+		panic(errors.AssertionFailedf("mismatched branches and raiseErrArgs"))
+	}
+	originalCols := s.colSet()
+	caseWhens := make(memo.ScalarListExpr, len(branches))
+	for i := range branches {
+		raiseErrFn := b.makePLpgSQLRaiseFn(raiseErrArgs[i])
+		caseWhens[i] = b.ob.factory.ConstructWhen(branches[i], raiseErrFn)
+	}
+	caseExpr := b.ob.factory.ConstructCase(
+		memo.TrueSingleton, caseWhens, b.ob.factory.ConstructNull(types.Int),
+	)
+	runtimeCheckColName := b.makeIdentifier("_plpgsql_runtime_check")
+	runtimeCheckCol := b.ob.factory.Metadata().AddColumn(runtimeCheckColName, types.Int)
+	proj := memo.ProjectionsExpr{b.ob.factory.ConstructProjectionsItem(caseExpr, runtimeCheckCol)}
+	s.expr = b.ob.factory.ConstructProject(s.expr, proj, originalCols)
+
+	// Add an optimization barrier to ensure that the runtime checks are not
 	// eliminated by column-pruning. Then, remove the temporary columns from the
 	// output.
 	b.addBarrier(s)
@@ -2315,5 +2494,8 @@ var (
 	setTxnNotAfterControlStmtErr = errors.WithHint(
 		pgerror.New(pgcode.ActiveSQLTransaction, "SET TRANSACTION must be called before any query"),
 		"PL/pgSQL SET TRANSACTION statements must immediately follow COMMIT or ROLLBACK",
+	)
+	intForLoopTargetErr = pgerror.New(pgcode.Syntax,
+		"integer FOR loop must have only one target variable",
 	)
 )
