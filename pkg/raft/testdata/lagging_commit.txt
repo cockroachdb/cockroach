@@ -133,8 +133,8 @@ process-ready 1
 ----
 Ready MustSync=false:
 Messages:
-1->2 MsgHeartbeat Term:1 Log:0/0 Commit:13
-1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
+1->2 MsgHeartbeat Term:1 Log:0/0
+1->3 MsgHeartbeat Term:1 Log:0/0
 
 # Since the heartbeat message does not bump the follower's commit index, it will
 # take another roundtrip with the leader to update it. As such, the total time
@@ -149,7 +149,7 @@ Messages:
 stabilize 1 3
 ----
 > 3 receiving messages
-  1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
+  1->3 MsgHeartbeat Term:1 Log:0/0
 > 3 handling Ready
   Ready MustSync=false:
   Messages:

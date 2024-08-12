@@ -485,6 +485,7 @@ func (l *raftLog) matchTerm(id entryID) bool {
 	if err != nil {
 		return false
 	}
+
 	return t == id.term
 }
 

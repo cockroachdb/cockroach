@@ -767,11 +767,13 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 		highestApplied = rd.CommittedEntries[n-1].Index
 		rawNode.Advance(rd)
 		rawNode.Step(pb.Message{
-			Type:   pb.MsgHeartbeat,
-			To:     1,
-			From:   2, // illegal, but we get away with it
-			Term:   1,
-			Commit: 11,
+			Type:    pb.MsgApp,
+			To:      1,
+			From:    2, // illegal, but we get away with it
+			Term:    1,
+			LogTerm: 1,
+			Index:   11,
+			Commit:  11,
 		})
 	}
 }

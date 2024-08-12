@@ -663,14 +663,13 @@ func (r *raft) sendHeartbeat(to pb.PeerID) {
 	// or it might not have all the committed entries.
 	// The leader MUST NOT forward the follower's commit to
 	// an unmatched index.
-	commit := min(pr.Match, r.raftLog.committed)
+	//commit := min(pr.Match, r.raftLog.committed)
 	r.send(pb.Message{
-		To:     to,
-		Type:   pb.MsgHeartbeat,
-		Commit: commit,
-		Match:  pr.Match,
+		To:   to,
+		Type: pb.MsgHeartbeat,
+		//Commit: commit,
+		Match: pr.Match,
 	})
-	pr.SentCommit(commit)
 }
 
 // sendFortify sends a fortification RPC to the given peer.
@@ -1373,7 +1372,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		// an MsgAppResp to acknowledge the appended entries in the last Ready.
 
 		pr.RecentActive = true
-
+		pr.MaybeUpdateCommit(m.Commit)
 		if m.Reject {
 			// RejectHint is the suggested next base entry for appending (i.e.
 			// we try to append entry RejectHint+1 next), and LogTerm is the
@@ -1767,6 +1766,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 			Commit: r.raftLog.committed})
 		return
 	}
+
 	r.logger.Debugf("%x [logterm: %d, index: %d] rejected MsgApp [logterm: %d, index: %d] from %x",
 		r.id, r.raftLog.zeroTermOnOutOfBounds(r.raftLog.term(m.Index)), m.Index, m.LogTerm, m.Index, m.From)
 
@@ -1838,10 +1838,12 @@ func (r *raft) handleHeartbeat(m pb.Message) {
 	// commit index if accTerm >= m.Term.
 	// TODO(pav-kv): move this logic to raftLog.commitTo, once the accTerm has
 	// migrated to raftLog/unstable.
-	mark := logMark{term: m.Term, index: min(m.Commit, r.raftLog.lastIndex())}
-	if mark.term == r.raftLog.accTerm() {
-		r.raftLog.commitTo(mark)
-	}
+	//mark := logMark{term: m.Term, index: min(m.Commit, r.raftLog.lastIndex())}
+	//if mark.term == r.raftLog.accTerm() {
+	//	fmt.Printf("\nAdvanced the commit to %+v at follower:%+v\n", mark, m.To)
+	//	r.raftLog.commitTo(mark)
+	//}
+
 	r.send(pb.Message{To: m.From, Type: pb.MsgHeartbeatResp})
 }
 

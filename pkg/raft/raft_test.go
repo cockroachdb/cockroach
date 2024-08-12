@@ -1132,7 +1132,6 @@ func TestHandleMsgApp(t *testing.T) {
 	}
 }
 
-// TestHandleHeartbeat ensures that the follower commits to the commit in the message.
 func TestHandleHeartbeat(t *testing.T) {
 	commit := uint64(2)
 	tests := []struct {
@@ -1159,7 +1158,6 @@ func TestHandleHeartbeat(t *testing.T) {
 		sm.becomeFollower(init.term, 2)
 		sm.raftLog.commitTo(logMark{term: init.term, index: commit})
 		sm.handleHeartbeat(tt.m)
-		assert.Equal(t, tt.wCommit, sm.raftLog.committed, "#%d", i)
 		m := sm.readMessages()
 		require.Len(t, m, 1, "#%d", i)
 		assert.Equal(t, pb.MsgHeartbeatResp, m[0].Type, "#%d", i)
@@ -1190,9 +1188,10 @@ func TestHandleHeartbeatResp(t *testing.T) {
 
 	// Once we have an MsgAppResp, heartbeats no longer send MsgApp.
 	sm.Step(pb.Message{
-		From:  2,
-		Type:  pb.MsgAppResp,
-		Index: msgs[0].Index + uint64(len(msgs[0].Entries)),
+		From:   2,
+		Type:   pb.MsgAppResp,
+		Index:  msgs[0].Index + uint64(len(msgs[0].Entries)),
+		Commit: sm.raftLog.lastIndex(),
 	})
 	// Consume the message sent in response to MsgAppResp
 	sm.readMessages()
@@ -1976,20 +1975,10 @@ func TestBcastBeat(t *testing.T) {
 	msgs := sm.readMessages()
 	require.Len(t, msgs, 2)
 
-	wantCommitMap := map[pb.PeerID]uint64{
-		2: min(sm.raftLog.committed, sm.trk.Progress(2).Match),
-		3: min(sm.raftLog.committed, sm.trk.Progress(3).Match),
-	}
 	for i, m := range msgs {
 		require.Equal(t, pb.MsgHeartbeat, m.Type, "#%d", i)
 		require.Zero(t, m.Index, "#%d", i)
 		require.Zero(t, m.LogTerm, "#%d", i)
-
-		commit, ok := wantCommitMap[m.To]
-		require.True(t, ok, "#%d", i)
-		require.Equal(t, commit, m.Commit, "#%d", i)
-		delete(wantCommitMap, m.To)
-
 		require.Empty(t, m.Entries, "#%d", i)
 	}
 }

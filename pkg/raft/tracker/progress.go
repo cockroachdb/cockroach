@@ -56,6 +56,8 @@ type Progress struct {
 	// In StateSnapshot, sentCommit == PendingSnapshot == Next-1.
 	sentCommit uint64
 
+	receivedCommit uint64
+
 	// State defines how the leader should interact with the follower.
 	//
 	// When in StateProbe, leader sends at most one replication message
@@ -196,6 +198,10 @@ func (pr *Progress) CanBumpCommit(index uint64) bool {
 	return index > pr.sentCommit && pr.sentCommit < pr.Next-1
 }
 
+func (pr *Progress) IsFollowerCommitStale(index uint64) bool {
+	return (index > pr.receivedCommit && pr.receivedCommit < pr.Next-1)
+}
+
 // SentCommit updates the sentCommit.
 func (pr *Progress) SentCommit(commit uint64) {
 	pr.sentCommit = commit
@@ -211,6 +217,12 @@ func (pr *Progress) MaybeUpdate(n uint64) bool {
 	pr.Match = n
 	pr.Next = max(pr.Next, n+1) // invariant: Match < Next
 	return true
+}
+
+func (pr *Progress) MaybeUpdateCommit(n uint64) {
+	if n > pr.receivedCommit {
+		pr.receivedCommit = n
+	}
 }
 
 // MaybeDecrTo adjusts the Progress to the receipt of a MsgApp rejection. The
@@ -320,7 +332,11 @@ func (pr *Progress) ShouldSendMsgApp(last, commit uint64) bool {
 		//	- our commit index exceeds the in-flight commit index, and
 		//	- sending it can commit at least one of the follower's entries
 		//	  (including the ones still in flight to it).
-		return pr.CanBumpCommit(commit)
+		if pr.CanBumpCommit(commit) {
+			return true
+		}
+
+		return pr.IsFollowerCommitStale(commit) && !pr.MsgAppProbesPaused
 
 	case StateSnapshot:
 		return false
