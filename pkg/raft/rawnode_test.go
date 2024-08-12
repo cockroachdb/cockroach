@@ -521,7 +521,7 @@ func TestRawNodeStart(t *testing.T) {
 	}
 	want := Ready{
 		SoftState:        &SoftState{RaftState: StateLeader},
-		HardState:        pb.HardState{Term: 1, Commit: 3, Vote: 1, Lead: 1},
+		HardState:        pb.HardState{Term: 1, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
 		Entries:          nil, // emitted & checked in intermediate Ready cycle
 		CommittedEntries: entries,
 		MustSync:         false, // since we're only applying, not appending
