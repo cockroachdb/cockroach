@@ -55,26 +55,22 @@ type TestDetails struct {
 
 // SelectTestsReq is the request for CategoriseTests
 type SelectTestsReq struct {
-	ForPastDays          int // number of days data to consider for test selection
-	FirstRunOn           int // number of days to consider for the first time the test is run
-	LastRunOn            int // number of days to consider for the last time the test is run
-	SelectFromSuccessPct int // percentage of tests to be Selected for running from the successful test list sorted by number of runs
+	ForPastDays int // number of days data to consider for test selection
+	FirstRunOn  int // number of days to consider for the first time the test is run
+	LastRunOn   int // number of days to consider for the last time the test is run
 
 	Cloud spec.Cloud // the cloud where the tests were run
 	Suite string     // the test suite for which the selection is done
 }
 
 // NewDefaultSelectTestsReq returns a new SelectTestsReq with default values populated
-func NewDefaultSelectTestsReq(
-	selectFromSuccessPct int, cloud spec.Cloud, suite string,
-) *SelectTestsReq {
+func NewDefaultSelectTestsReq(cloud spec.Cloud, suite string) *SelectTestsReq {
 	return &SelectTestsReq{
-		ForPastDays:          defaultForPastDays,
-		FirstRunOn:           defaultFirstRunOn,
-		LastRunOn:            defaultLastRunOn,
-		SelectFromSuccessPct: selectFromSuccessPct,
-		Cloud:                cloud,
-		Suite:                suite,
+		ForPastDays: defaultForPastDays,
+		FirstRunOn:  defaultFirstRunOn,
+		LastRunOn:   defaultLastRunOn,
+		Cloud:       cloud,
+		Suite:       suite,
 	}
 }
 
@@ -118,11 +114,8 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 	for i := range colPointers {
 		colPointers[i] = &colContainer[i]
 	}
-	// selectedTestDetails are all the tests that are selected from snowflake query
-	selectedTestDetails := make([]*TestDetails, 0)
-	// skipped tests are maintained separately
-	// this helps in considering them for running based on further select criteria like selectFromSuccessPct
-	skippedTests := make([]*TestDetails, 0)
+	// allTestDetails are all the tests that are returned by the snowflake query
+	allTestDetails := make([]*TestDetails, 0)
 	for rows.Next() {
 		err = rows.Scan(colPointers...)
 		if err != nil {
@@ -141,25 +134,9 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 			AvgDurationInMillis:  getDuration(testInfos[2]),
 			LastFailureIsPreempt: testInfos[3] == "yes",
 		}
-		if testDetails.Selected {
-			// selected for running
-			selectedTestDetails = append(selectedTestDetails, testDetails)
-		} else {
-			// skipped based on query
-			skippedTests = append(skippedTests, testDetails)
-		}
+		allTestDetails = append(allTestDetails, testDetails)
 	}
-	if req.SelectFromSuccessPct > 0 && len(skippedTests) > 0 {
-		// need to select some tests from the skipped tests
-		numberOfTestsToSelect := len(skippedTests) * req.SelectFromSuccessPct / 100
-		// the tests are sorted by the number of runs. So, simply iterate over the list
-		// and select the first count of "numberOfTestsToSelect"
-		for i := 0; i < numberOfTestsToSelect; i++ {
-			skippedTests[i].Selected = true
-		}
-	}
-	// add all the test. The information can be used for further processing
-	return append(selectedTestDetails, skippedTests...), nil
+	return allTestDetails, nil
 }
 
 // getDuration extracts the duration from the snowflake query duration field

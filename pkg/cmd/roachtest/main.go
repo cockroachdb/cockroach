@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"os/user"
@@ -53,6 +54,10 @@ const (
 	// runnerLogsDir is the dir under the artifacts root where the test runner log
 	// and other runner-related logs (i.e. cluster creation logs) will be written.
 	runnerLogsDir = "_runner-logs"
+
+	// successfulTestsSelectPct is the percentage of tests that are to be selected
+	// from the list of successful tests returned by test selector
+	successfulTestsSelectPct = 35
 )
 
 func main() {
@@ -302,17 +307,52 @@ func testsToRun(
 // based on the test categorization criteria.
 func updateSpecForSelectiveTests(ctx context.Context, specs []registry.TestSpec) {
 	selectedTestsCount := 0
-	// run and select 35% of successful tests which gives a window of 3 days for all tests to run
-	selectedTests, err := testselector.CategoriseTests(ctx,
-		testselector.NewDefaultSelectTestsReq(35, roachtestflags.Cloud, roachtestflags.Suite))
+	allTests, err := testselector.CategoriseTests(ctx,
+		testselector.NewDefaultSelectTestsReq(roachtestflags.Cloud, roachtestflags.Suite))
 	if err != nil {
 		fmt.Printf("running all tests! error selecting tests: %v\n", err)
 		return
 	}
 	tdMap := make(map[string]*testselector.TestDetails)
-	for _, td := range selectedTests {
-		tdMap[td.Name] = td
+
+	// successfulTests are the tests considered by snowflake to not run, but, part of the testSpecs.
+	// So, it is an intersection of all tests that are part of the run and all tests that are returned
+	// by snowflake as successful.
+	// This is why we need the intersection:
+	// - testSpec contains all the tests that are currently considered as a part of the current run.
+	// - The list of tests returned by selector can contain tests may not be part of the test spec. This can
+	//   be because of tests getting decommissioned.
+	// Now, we want to take the tests common to both. These are the tests from which we need to select
+	// "successfulTestsSelectPct" percent tests to run.
+	successfulTests := make([]*testselector.TestDetails, 0)
+
+	// specMap maintains a map of all the tests that are part of the nightly run
+	// This is used to filter out tests from the test selector that are not part of the run
+	specMap := map[string]struct{}{}
+	for _, spec := range specs {
+		specMap[spec.Name] = struct{}{}
 	}
+	// this count is used for logging
+	sfSelectedTestCount := 0
+	for i := 0; i < len(allTests); i++ {
+		td := allTests[i]
+		tdMap[td.Name] = td
+		if td.Selected {
+			sfSelectedTestCount++
+		}
+		if _, ok := specMap[td.Name]; !td.Selected && ok {
+			// adding only the unselected tests that are part of the specs
+			// These are tests that have been running successfully
+			successfulTests = append(successfulTests, td)
+		}
+	}
+	fmt.Printf("%d tests selected from %d by snowflake query.\n", sfSelectedTestCount, len(allTests))
+	// numberOfTestsToSelect is the number of tests to be selected from the successfulTests based on percentage selection
+	numberOfTestsToSelect := int(math.Ceil(float64(len(successfulTests)*successfulTestsSelectPct) / 100))
+	for i := 0; i < numberOfTestsToSelect; i++ {
+		successfulTests[i].Selected = true
+	}
+	fmt.Printf("%d selected out of %d successful tests.\n", numberOfTestsToSelect, len(successfulTests))
 	for i := range specs {
 		if testShouldBeSkipped(tdMap, specs[i], roachtestflags.Suite) {
 			specs[i].Skip = "test selector"
