@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic/metamorphicutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -33,10 +34,13 @@ func IsMetamorphicBuild() bool {
 }
 
 const (
-	IsMetamorphicBuildProbability = 0.8
-	metamorphicValueProbability   = 0.75
-	metamorphicBoolProbability    = 0.5
+	buildProbabilityEnvVar             = "COCKROACH_INTERNAL_METAMORPHIC_TESTING_PROBABILITY"
+	defaultMetamorphicBuildProbability = 0.8
+	metamorphicValueProbability        = 0.75
+	metamorphicBoolProbability         = 0.5
 )
+
+var IsMetamorphicBuildProbability = envutil.EnvOrDefaultFloat64(buildProbabilityEnvVar, defaultMetamorphicBuildProbability)
 
 // ConstantWithTestValue should be used to initialize "magic constants" that
 // should be varied during test scenarios to check for bugs at boundary
