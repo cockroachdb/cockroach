@@ -518,19 +518,22 @@ func (r *raft) send(m pb.Message) {
 			m.Term = r.Term
 		}
 	}
-	if m.Type == pb.MsgAppResp || m.Type == pb.MsgVoteResp || m.Type == pb.MsgPreVoteResp {
+	if m.Type == pb.MsgAppResp || m.Type == pb.MsgVoteResp ||
+		m.Type == pb.MsgPreVoteResp || m.Type == pb.MsgFortifyLeaderResp {
 		// If async storage writes are enabled, messages added to the msgs slice
 		// are allowed to be sent out before unstable state (e.g. log entry
 		// writes and election votes) have been durably synced to the local
 		// disk.
 		//
-		// For most message types, this is not an issue. However, response
-		// messages that relate to "voting" on either leader election or log
-		// appends require durability before they can be sent. It would be
-		// incorrect to publish a vote in an election before that vote has been
-		// synced to stable storage locally. Similarly, it would be incorrect to
-		// acknowledge a log append to the leader before that entry has been
-		// synced to stable storage locally.
+		// For most message types, this is not an issue. However, response messages
+		// that relate to "voting" on either leader election or log appends or
+		// messages that relate to leader fortification require durability before
+		// they can be sent. It would be incorrect to publish a vote in an election
+		// before that vote has been synced to stable storage locally. Similarly, it
+		// would be incorrect to acknowledge a log append to the leader before that
+		// entry has been synced to stable storage locally. Similarly, it would also
+		// be incorrect to promise fortification support to a leader without durably
+		// persisting the leader's epoch being supported.
 		//
 		// Per the Raft thesis, section 3.8 Persisted state and server restarts:
 		//
@@ -683,7 +686,16 @@ func (r *raft) sendFortify(to pb.PeerID) {
 	if to == r.id {
 		// We handle the case where the leader is trying to fortify itself specially.
 		// Doing so avoids a self-addressed message.
-		// TODO(arul): do this handling.
+		epoch, live := r.storeLiveness.SupportFor(r.lead)
+		if live {
+			r.leadEpoch = epoch
+			// TODO(arul): For now, we're not recording any support on the leader. Do
+			// this once we implement handleFortifyResp correctly.
+		} else {
+			r.logger.Infof(
+				"%x leader at term %d does not support itself in the liveness fabric", r.id, r.Term,
+			)
+		}
 		return
 	}
 	r.send(pb.Message{To: to, Type: pb.MsgFortifyLeader})
@@ -1701,6 +1713,8 @@ func stepFollower(r *raft, m pb.Message) error {
 		r.lead = m.From
 		r.handleSnapshot(m)
 	case pb.MsgFortifyLeader:
+		r.electionElapsed = 0
+		r.lead = m.From
 		r.handleFortify(m)
 	case pb.MsgTransferLeader:
 		if r.lead == None {
@@ -1868,7 +1882,22 @@ func (r *raft) handleSnapshot(m pb.Message) {
 }
 
 func (r *raft) handleFortify(m pb.Message) {
-	// TODO(arul): currently a no-op; implement.
+	assertTrue(r.state == StateFollower, "leaders should locally fortify without sending a message")
+
+	epoch, live := r.storeLiveness.SupportFor(r.lead)
+	if !live {
+		// The leader isn't supported by this peer in its liveness fabric. Reject
+		// the fortification request.
+		r.send(pb.Message{
+			To:     m.From,
+			Type:   pb.MsgFortifyLeaderResp,
+			Reject: true,
+		})
+		return
+	}
+	r.leadEpoch = epoch
+	// TODO(arul): for now, we reject the fortification request because the leader
+	// hasn't been taught how to handle it.
 	r.send(pb.Message{
 		To:     m.From,
 		Type:   pb.MsgFortifyLeaderResp,

@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 )
 
 // Handle is the entrypoint for data-driven interaction testing. Commands and
@@ -192,6 +193,65 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		// Example:
 		// report-unreachable 1 2
 		err = env.handleReportUnreachable(t, d)
+	case "store-liveness":
+		// Prints the global store liveness state.
+		//
+		// Example:
+		// store-liveness
+		if env.Fabric == nil {
+			err = errors.Newf("empty liveness fabric")
+			break
+		}
+		_, err = env.Output.WriteString(env.Fabric.String())
+	case "bump-epoch":
+		// Bumps the epoch of a store. As a result, the store stops seeking support
+		// from all remote stores at the prior epoch. It instead (successfully)
+		// seeks support for the newer epoch.
+		//
+		// bump-epoch id
+		// Arguments are:
+		//    id - id of the store whose epoch is being bumped.
+		//
+		// Example:
+		// bump-epoch 1
+		err = env.handleBumpEpoch(t, d)
+
+	case "withdraw-support":
+		// Withdraw support for another store (for_store) from a store (from_store).
+		//
+		// Note that after invoking "withdraw-support", a test may establish support
+		// from from_store for for_store at a higher epoch by calling
+		// "grant-support".
+		//
+		// withdraw-support from_id for_id
+		// Arguments are:
+		//    from_id - id of the store who is withdrawing support.
+		//    for_id - id of the store for which support is being withdrawn.
+		//
+		// Example:
+		// withdraw-support 1 2
+		// Explanation:
+		// 1 (from_store) withdraws support for 2's (for_store) current epoch.
+		err = env.handleWithdrawSupport(t, d)
+
+	case "grant-support":
+		// Grant support for another store (for_store) by forcing for_store to bump
+		// its epoch and using it to seek support from from_store at this new epoch.
+		//
+		// Note that From_store should not be supporting for_store already; if it
+		// is, an error will be returned.
+		//
+		// grant-support from_id for_id
+		// Arguments are:
+		//    from_id - id of the store who is withdrawing support.
+		//    for_id - id of the store for which support is being withdrawn.
+		//
+		// Example:
+		// grant-support 1 2
+		// Explanation:
+		// 1 (from_store) grants support for 2 (for_store) at a higher epoch.
+		err = env.handleGrantSupport(t, d)
+
 	default:
 		err = fmt.Errorf("unknown command")
 	}
@@ -211,12 +271,16 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 }
 
 func firstAsInt(t *testing.T, d datadriven.TestData) int {
+	return nthAsInt(t, d, 0)
+}
+
+func nthAsInt(t *testing.T, d datadriven.TestData, n int) int {
 	t.Helper()
-	n, err := strconv.Atoi(d.CmdArgs[0].Key)
+	ret, err := strconv.Atoi(d.CmdArgs[n].Key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return n
+	return ret
 }
 
 func firstAsNodeIdx(t *testing.T, d datadriven.TestData) int {
