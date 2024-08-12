@@ -72,6 +72,8 @@ cockroachdb/security:
   label: T-cross-product-security
 cockroachdb/prodsec:
   label: T-cross-product-security
+cockroachdb/product-security:
+  label: T-product-security
 cockroachdb/disaster-recovery:
   triage_column_id: 3097123
   label: T-disaster-recovery
