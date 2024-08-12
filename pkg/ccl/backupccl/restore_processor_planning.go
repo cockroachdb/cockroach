@@ -121,9 +121,8 @@ func distRestore(
 			ValidateOnly: md.dataToRestore.isValidateOnly(),
 		}
 
-		// Plan SplitAndScatter in a round-robin fashion.
+		// Plan SplitAndScatter on the coordinator node.
 		splitAndScatterStageID := p.NewStageOnNodes(sqlInstanceIDs)
-		splitAndScatterProcs := make(map[base.SQLInstanceID]physicalplan.ProcessorIdx)
 
 		defaultStream := int32(0)
 		rangeRouterSpec := execinfrapb.OutputRouterSpec_RangeRouterSpec{
@@ -166,8 +165,6 @@ func distRestore(
 			chunkSize = 1
 		}
 
-		id := execCtx.ExecCfg().NodeInfo.NodeID.SQLInstanceID()
-
 		spec := &execinfrapb.GenerativeSplitAndScatterSpec{
 			TableRekeys:                 md.dataToRestore.getRekeys(),
 			TenantRekeys:                md.dataToRestore.getTenantRekeys(),
@@ -193,8 +190,8 @@ func distRestore(
 			spec.CheckpointedSpans = persistFrontier(md.spanFilter.checkpointFrontier, 0)
 		}
 
-		proc := physicalplan.Processor{
-			SQLInstanceID: id,
+		splitAndScatterProc := physicalplan.Processor{
+			SQLInstanceID: execCtx.ExecCfg().NodeInfo.NodeID.SQLInstanceID(),
 			Spec: execinfrapb.ProcessorSpec{
 				Core: execinfrapb.ProcessorCoreUnion{GenerativeSplitAndScatter: spec},
 				Post: execinfrapb.PostProcessSpec{},
@@ -208,8 +205,7 @@ func distRestore(
 				ResultTypes: splitAndScatterOutputTypes,
 			},
 		}
-		pIdx := p.AddProcessor(proc)
-		splitAndScatterProcs[id] = pIdx
+		splitAndScatterProcIdx := p.AddProcessor(splitAndScatterProc)
 
 		// Plan RestoreData.
 		restoreDataStageID := p.NewStageOnNodes(sqlInstanceIDs)
@@ -233,21 +229,17 @@ func distRestore(
 			p.ResultRouters = append(p.ResultRouters, pIdx)
 		}
 
-		for _, srcProc := range splitAndScatterProcs {
-			slot := 0
-			for _, destSQLInstanceID := range sqlInstanceIDs {
-				// Streams were added to the range router in the same order that the
-				// nodes appeared in `nodes`. Make sure that the `slot`s here are
-				// ordered the same way.
-				destProc := restoreDataProcs[destSQLInstanceID]
-				p.Streams = append(p.Streams, physicalplan.Stream{
-					SourceProcessor:  srcProc,
-					SourceRouterSlot: slot,
-					DestProcessor:    destProc,
-					DestInput:        0,
-				})
-				slot++
-			}
+		for slot, destSQLInstanceID := range sqlInstanceIDs {
+			// Streams were added to the range router in the same order that the
+			// nodes appeared in `nodes`. Make sure that the `slot`s here are
+			// ordered the same way.
+			destProc := restoreDataProcs[destSQLInstanceID]
+			p.Streams = append(p.Streams, physicalplan.Stream{
+				SourceProcessor:  splitAndScatterProcIdx,
+				SourceRouterSlot: slot,
+				DestProcessor:    destProc,
+				DestInput:        0,
+			})
 		}
 
 		sql.FinalizePlan(ctx, planCtx, p)
