@@ -7040,7 +7040,7 @@ func TestCheckpointFrequency(t *testing.T) {
 	ts := timeutil.NewManualTime(timeutil.Now())
 	js := newJobState(nil, /* job */
 		cluster.MakeTestingClusterSettings(),
-		MakeMetrics(time.Second).(*Metrics), ts,
+		MakeMetrics(time.Second, &cluster.MakeTestingClusterSettings().SV).(*Metrics), ts,
 	)
 
 	ctx := context.Background()

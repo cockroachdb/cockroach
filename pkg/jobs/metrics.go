@@ -17,6 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
@@ -249,12 +251,12 @@ var (
 func (Metrics) MetricStruct() {}
 
 // init initializes the metrics for job monitoring.
-func (m *Metrics) init(histogramWindowInterval time.Duration) {
+func (m *Metrics) init(histogramWindowInterval time.Duration, settings *cluster.Settings) {
 	if MakeRowLevelTTLMetricsHook != nil {
 		m.RowLevelTTL = MakeRowLevelTTLMetricsHook(histogramWindowInterval)
 	}
 	if MakeChangefeedMetricsHook != nil {
-		m.Changefeed = MakeChangefeedMetricsHook(histogramWindowInterval)
+		m.Changefeed = MakeChangefeedMetricsHook(histogramWindowInterval, &settings.SV)
 	}
 	if MakeStreamIngestMetricsHook != nil {
 		m.StreamIngest = MakeStreamIngestMetricsHook(histogramWindowInterval)
@@ -295,7 +297,7 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 
 // MakeChangefeedMetricsHook allows for registration of changefeed metrics from
 // ccl code.
-var MakeChangefeedMetricsHook func(time.Duration) metric.Struct
+var MakeChangefeedMetricsHook func(time.Duration, *settings.Values) metric.Struct
 
 // MakeChangefeedMemoryMetricsHook allows for registration of changefeed memory
 // metrics from ccl code.

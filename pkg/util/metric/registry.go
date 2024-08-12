@@ -146,6 +146,14 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 				const skipNil = true
 				r.addMetricValue(ctx, velem, telemName, skipNil, t)
 			}
+		case reflect.Map:
+			for mr := vfield.MapRange(); mr.Next(); {
+				kelem, velem := mr.Key(), mr.Value()
+				telemName := fmt.Sprintf("%s[%s]", tname, kelem)
+				// Permit elements in the map to be nil.
+				const skipNil = true
+				r.addMetricValue(ctx, velem, telemName, skipNil, t)
+			}
 		default:
 			// No metric fields should be nil.
 			const skipNil = false

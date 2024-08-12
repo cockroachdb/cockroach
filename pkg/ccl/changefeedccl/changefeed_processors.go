@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -107,6 +108,7 @@ type changeAggregator struct {
 	metrics                *Metrics
 	sliMetrics             *sliMetrics
 	sliMetricsID           int64
+	tims                   *timers.ScopedTimers
 	closeTelemetryRecorder func()
 	knobs                  TestingKnobs
 }
@@ -327,6 +329,8 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	}
 	ca.sliMetricsID = ca.sliMetrics.claimId()
 
+	ca.tims = ca.metrics.Timers.Scoped(timers.Scope(scope))
+
 	// TODO(jayant): add support for sinkless changefeeds using UUID
 	recorder := metricsRecorder(ca.sliMetrics)
 	if !ca.isSinkless() {
@@ -380,7 +384,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 	ca.eventConsumer, ca.sink, err = newEventConsumer(
 		ctx, ca.FlowCtx.Cfg, ca.spec, feed, ca.frontier, kvFeedHighWater,
-		ca.sink, ca.metrics, ca.sliMetrics, ca.knobs)
+		ca.sink, ca.metrics, ca.sliMetrics, ca.tims, ca.knobs)
 	if err != nil {
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -497,6 +501,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		SchemaChangePolicy:  schemaChange.Policy,
 		SchemaFeed:          sf,
 		Knobs:               ca.knobs.FeedKnobs,
+		Tims:                ca.tims,
 		MonitoringCfg:       monitoringCfg,
 	}, nil
 }
@@ -986,6 +991,7 @@ type changeFrontier struct {
 	// map (shared structure between all feeds within the same scope on the node).
 	metricsID    int
 	sliMetricsID int64
+	st           *timers.ScopedTimers
 
 	knobs TestingKnobs
 
@@ -1232,12 +1238,15 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	// but the oracle is only used when emitting row updates.
 	var nilOracle timestampLowerBoundOracle
 	var err error
-	sli, err := cf.metrics.getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptMetricsScope])
+	scope := cf.spec.Feed.Opts[changefeedbase.OptMetricsScope]
+	sli, err := cf.metrics.getSLIMetrics(scope)
 	if err != nil {
 		cf.MoveToDraining(err)
 		return
 	}
 	cf.sliMetrics = sli
+	cf.st = cf.metrics.Timers.Scoped(timers.Scope(scope))
+
 	cf.sink, err = getResolvedTimestampSink(ctx, cf.FlowCtx.Cfg, cf.spec.Feed, nilOracle,
 		cf.spec.User(), cf.spec.JobID, sli)
 
@@ -1644,6 +1653,8 @@ func (cf *changeFrontier) maybeCheckpointJob(
 func (cf *changeFrontier) checkpointJobProgress(
 	frontier hlc.Timestamp, checkpoint jobspb.ChangefeedProgress_Checkpoint,
 ) (bool, error) {
+	defer cf.st.For(timers.StageCheckpointJobProgress).StartTimer()()
+
 	if cf.knobs.RaiseRetryableError != nil {
 		if err := cf.knobs.RaiseRetryableError(); err != nil {
 			return false, changefeedbase.MarkRetryableError(

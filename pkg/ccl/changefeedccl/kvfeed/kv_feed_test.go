@@ -149,7 +149,7 @@ func TestKVFeed(t *testing.T) {
 			codec,
 			tf, sf, rangefeedFactory(ref.run), bufferFactory,
 			changefeedbase.Targets{},
-			TestingKnobs{})
+			nil, TestingKnobs{})
 		ctx, cancel := context.WithCancel(context.Background())
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
@@ -637,7 +637,7 @@ func TestCopyFromSourceToDestUntilTableEvent(t *testing.T) {
 			schemaFeed := &testSchemaFeed{tableEvents: tc.tableEvents}
 			endTime := tc.endTime
 
-			err = copyFromSourceToDestUntilTableEvent(ctx, dest, src, frontier, schemaFeed, endTime, TestingKnobs{})
+			err = copyFromSourceToDestUntilTableEvent(ctx, dest, src, frontier, schemaFeed, endTime, TestingKnobs{}, nil)
 			require.Equal(t, tc.expectedErr, err)
 			require.Empty(t, src.events)
 			require.Equal(t, tc.expectedEvents, dest.events)

@@ -14,6 +14,7 @@ go_library(
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/kvevent",
         "//pkg/ccl/changefeedccl/schemafeed",
+        "//pkg/ccl/changefeedccl/timers",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
