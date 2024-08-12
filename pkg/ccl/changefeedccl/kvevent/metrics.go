@@ -62,6 +62,14 @@ var (
 
 // Metrics is a metric.Struct for kvfeed metrics.
 type Metrics struct {
+	// RangefeedBufferMetrics tracks metrics for the buffer between the rangefeed and the kvfeed.
+	RangefeedBufferMetrics PerBufferMetrics
+	// AggregatorBufferMetrics tracks metrics for the buffer between the kvfeed and the sink.
+	AggregatorBufferMetrics PerBufferMetrics
+}
+
+type PerBufferMetrics struct {
+	BufferType               bufferType
 	BufferEntriesIn          *metric.Counter
 	BufferEntriesOut         *metric.Counter
 	BufferEntriesReleased    *metric.Counter
@@ -72,8 +80,25 @@ type Metrics struct {
 	BufferEntriesByType      [numEventTypes]*metric.Counter
 }
 
+var _ metric.Struct = (*PerBufferMetrics)(nil)
+
+func (PerBufferMetrics) MetricStruct() {}
+
+type bufferType string
+
+const (
+	rangefeedBuffer  bufferType = "rangefeed"
+	aggregatorBuffer bufferType = "aggregator"
+)
+
 // MakeMetrics constructs a Metrics struct with the provided histogram window.
 func MakeMetrics(histogramWindow time.Duration) Metrics {
+	// We don't want to rely on labels for this since tsdb doesn't support them, So make separate metrics for each buffer type.
+	metaForBuf := func(bufType bufferType, meta metric.Metadata) metric.Metadata {
+		meta.Name = fmt.Sprintf("%s.%s", meta.Name, bufType)
+		return meta
+	}
+
 	eventTypeMeta := func(et Type) metric.Metadata {
 		eventTypeName := func() string {
 			switch et {
@@ -93,17 +118,35 @@ func MakeMetrics(histogramWindow time.Duration) Metrics {
 		}
 	}
 	return Metrics{
-		BufferEntriesIn:          metric.NewCounter(metaChangefeedBufferEntriesIn),
-		BufferEntriesOut:         metric.NewCounter(metaChangefeedBufferEntriesOut),
-		BufferEntriesReleased:    metric.NewCounter(metaChangefeedBufferEntriesReleased),
-		BufferEntriesMemAcquired: metric.NewCounter(metaChangefeedBufferMemAcquired),
-		BufferEntriesMemReleased: metric.NewCounter(metaChangefeedBufferMemReleased),
-		BufferPushbackNanos:      metric.NewCounter(metaChangefeedBufferPushbackNanos),
-		AllocatedMem:             metric.NewGauge(metaChangefeedAllocatedMemory),
-		BufferEntriesByType: [numEventTypes]*metric.Counter{
-			metric.NewCounter(eventTypeMeta(TypeFlush)),
-			metric.NewCounter(eventTypeMeta(TypeKV)),
-			metric.NewCounter(eventTypeMeta(TypeResolved)),
+		RangefeedBufferMetrics: PerBufferMetrics{
+			BufferType:               rangefeedBuffer,
+			BufferEntriesIn:          metric.NewCounter(metaForBuf(rangefeedBuffer, metaChangefeedBufferEntriesIn)),
+			BufferEntriesOut:         metric.NewCounter(metaForBuf(rangefeedBuffer, metaChangefeedBufferEntriesOut)),
+			BufferEntriesReleased:    metric.NewCounter(metaForBuf(rangefeedBuffer, metaChangefeedBufferEntriesReleased)),
+			BufferEntriesMemAcquired: metric.NewCounter(metaForBuf(rangefeedBuffer, metaChangefeedBufferMemAcquired)),
+			BufferEntriesMemReleased: metric.NewCounter(metaForBuf(rangefeedBuffer, metaChangefeedBufferMemReleased)),
+			BufferPushbackNanos:      metric.NewCounter(metaForBuf(rangefeedBuffer, metaChangefeedBufferPushbackNanos)),
+			AllocatedMem:             metric.NewGauge(metaForBuf(rangefeedBuffer, metaChangefeedAllocatedMemory)),
+			BufferEntriesByType: [numEventTypes]*metric.Counter{
+				metric.NewCounter(metaForBuf(rangefeedBuffer, eventTypeMeta(TypeFlush))),
+				metric.NewCounter(metaForBuf(rangefeedBuffer, eventTypeMeta(TypeKV))),
+				metric.NewCounter(metaForBuf(rangefeedBuffer, eventTypeMeta(TypeResolved))),
+			},
+		},
+		AggregatorBufferMetrics: PerBufferMetrics{
+			BufferType:               aggregatorBuffer,
+			BufferEntriesIn:          metric.NewCounter(metaForBuf(aggregatorBuffer, metaChangefeedBufferEntriesIn)),
+			BufferEntriesOut:         metric.NewCounter(metaForBuf(aggregatorBuffer, metaChangefeedBufferEntriesOut)),
+			BufferEntriesReleased:    metric.NewCounter(metaForBuf(aggregatorBuffer, metaChangefeedBufferEntriesReleased)),
+			BufferEntriesMemAcquired: metric.NewCounter(metaForBuf(aggregatorBuffer, metaChangefeedBufferMemAcquired)),
+			BufferEntriesMemReleased: metric.NewCounter(metaForBuf(aggregatorBuffer, metaChangefeedBufferMemReleased)),
+			BufferPushbackNanos:      metric.NewCounter(metaForBuf(aggregatorBuffer, metaChangefeedBufferPushbackNanos)),
+			AllocatedMem:             metric.NewGauge(metaForBuf(aggregatorBuffer, metaChangefeedAllocatedMemory)),
+			BufferEntriesByType: [numEventTypes]*metric.Counter{
+				metric.NewCounter(metaForBuf(aggregatorBuffer, eventTypeMeta(TypeFlush))),
+				metric.NewCounter(metaForBuf(aggregatorBuffer, eventTypeMeta(TypeKV))),
+				metric.NewCounter(metaForBuf(aggregatorBuffer, eventTypeMeta(TypeResolved))),
+			},
 		},
 	}
 }
