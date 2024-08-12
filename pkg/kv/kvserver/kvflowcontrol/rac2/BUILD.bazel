@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "rac2",
     srcs = [
+        "priority.go",
         "range_controller.go",
         "store_stream.go",
         "token_counter.go",
@@ -11,6 +12,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
@@ -22,11 +24,15 @@ go_library(
 
 go_test(
     name = "rac2_test",
-    srcs = ["token_counter_test.go"],
+    srcs = [
+        "priority_test.go",
+        "token_counter_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":rac2"],
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/raft/raftpb",
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/leaktest",
