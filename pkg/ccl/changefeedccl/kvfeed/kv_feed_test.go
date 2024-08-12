@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -142,6 +143,7 @@ func TestKVFeed(t *testing.T) {
 		})
 		ref := rawEventFeed(tc.events)
 		tf := newRawTableFeed(tc.descs, tc.initialHighWater)
+		scopedTimers := timers.New(time.Minute, &settings.SV).Scoped("")
 		f := newKVFeed(buf, tc.spans, tc.checkpoint, hlc.Timestamp{},
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
 			tc.needsInitialScan, tc.withDiff, true, /* withFiltering */
@@ -149,7 +151,7 @@ func TestKVFeed(t *testing.T) {
 			codec,
 			tf, sf, rangefeedFactory(ref.run), bufferFactory,
 			changefeedbase.Targets{},
-			TestingKnobs{})
+			scopedTimers, TestingKnobs{})
 		ctx, cancel := context.WithCancel(context.Background())
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
@@ -637,7 +639,7 @@ func TestCopyFromSourceToDestUntilTableEvent(t *testing.T) {
 			schemaFeed := &testSchemaFeed{tableEvents: tc.tableEvents}
 			endTime := tc.endTime
 
-			err = copyFromSourceToDestUntilTableEvent(ctx, dest, src, frontier, schemaFeed, endTime, TestingKnobs{})
+			err = copyFromSourceToDestUntilTableEvent(ctx, dest, src, frontier, schemaFeed, endTime, TestingKnobs{}, nil)
 			require.Equal(t, tc.expectedErr, err)
 			require.Empty(t, src.events)
 			require.Equal(t, tc.expectedEvents, dest.events)

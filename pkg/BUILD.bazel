@@ -862,6 +862,7 @@ GO_TARGETS = [
     "//pkg/ccl/changefeedccl/schemafeed/schematestutils:schematestutils",
     "//pkg/ccl/changefeedccl/schemafeed:schemafeed",
     "//pkg/ccl/changefeedccl/schemafeed:schemafeed_test",
+    "//pkg/ccl/changefeedccl/timers:timers",
     "//pkg/ccl/changefeedccl:changefeedccl",
     "//pkg/ccl/changefeedccl:changefeedccl_test",
     "//pkg/ccl/cliccl/cliflagsccl:cliflagsccl",

@@ -17,8 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1153,6 +1155,7 @@ func (s *sliMetrics) getLaggingRangesCallback() func(int64) {
 // Metrics are for production monitoring of changefeeds.
 type Metrics struct {
 	AggMetrics                     *AggMetrics
+	Timers                         *timers.Timers // TODO: can we integrate this more so we can access a ScopedTimers from sliMetrics?
 	UsageMetrics                   *JobScopedUsageMetrics
 	KVFeedMetrics                  kvevent.Metrics
 	SchemaFeedMetrics              schemafeed.Metrics
@@ -1185,7 +1188,7 @@ func (m *Metrics) getSLIMetrics(scope string) (*sliMetrics, error) {
 }
 
 // MakeMetrics makes the metrics for changefeed monitoring.
-func MakeMetrics(histogramWindow time.Duration) metric.Struct {
+func MakeMetrics(histogramWindow time.Duration, settings *settings.Values) metric.Struct {
 	m := &Metrics{
 		AggMetrics:        newAggregateMetrics(histogramWindow),
 		UsageMetrics:      newJobScopedUsageMetrics(histogramWindow),
@@ -1218,6 +1221,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Mode:         metric.HistogramModePrometheus,
 		}),
 		ParallelConsumerInFlightEvents: metric.NewGauge(metaChangefeedEventConsumerInFlightEvents),
+		Timers:                         timers.New(histogramWindow, settings),
 	}
 
 	m.mu.resolved = make(map[int]hlc.Timestamp)
