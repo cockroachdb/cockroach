@@ -2720,6 +2720,543 @@ CREATE FUNCTION f(y ANYELEMENT) RETURNS ANYELEMENT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
+# Testing integer-range FOR loops.
+subtest integer_loop
+
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1..3 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RAISE NOTICE 'DONE';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 1
+NOTICE: i: 2
+NOTICE: i: 3
+NOTICE: DONE
+
+# EXIT and CONTINUE statements are allowed. The counter is incremented even
+# after a CONTINUE.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1..10 LOOP
+      IF i = 3 THEN
+        CONTINUE;
+      ELSIF i = 5 THEN
+        EXIT;
+      END IF;
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RAISE NOTICE 'DONE';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 1
+NOTICE: i: 2
+NOTICE: i: 4
+NOTICE: DONE
+
+# Exception handling is allowed.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1..3 LOOP
+      BEGIN
+        IF i = 2 THEN
+          RAISE division_by_zero;
+        END IF;
+        RAISE NOTICE 'i: %', i;
+      EXCEPTION WHEN division_by_zero THEN
+        RAISE NOTICE 'i: %: caught division by zero', i;
+      END;
+    END LOOP;
+    RAISE NOTICE 'DONE';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 1
+NOTICE: i: 2: caught division by zero
+NOTICE: i: 3
+NOTICE: DONE
+
+# Exception handling outside the loop.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1..3 LOOP
+        IF i = 2 THEN
+          RAISE division_by_zero;
+        END IF;
+        RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RAISE NOTICE 'DONE';
+    RETURN 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RAISE NOTICE 'caught division by zero';
+    RETURN 1;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 1
+NOTICE: caught division by zero
+
+# Modifications to the loop variable are local to that iteration, and do not
+# affect the loop or future iterations.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1..3 LOOP
+      i := i * 100;
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RAISE NOTICE 'DONE';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 100
+NOTICE: i: 200
+NOTICE: i: 300
+NOTICE: DONE
+
+# BY syntax allows changing the step size.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1..3 BY 2 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RAISE NOTICE 'DONE';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 1
+NOTICE: i: 3
+NOTICE: DONE
+
+# Case with larger step than the distance between the bounds.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1..3 BY 5 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RAISE NOTICE 'DONE';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 1
+NOTICE: DONE
+
+# Negative bounds are allowed.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN -3..3 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RAISE NOTICE 'DONE';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: -3
+NOTICE: i: -2
+NOTICE: i: -1
+NOTICE: i: 0
+NOTICE: i: 1
+NOTICE: i: 2
+NOTICE: i: 3
+NOTICE: DONE
+
+# The loop iterates one time for equal bounds.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1..1 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RAISE NOTICE 'DONE';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 1
+NOTICE: DONE
+
+# The loop iterates zero times for reversed bounds.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 2..1 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RAISE NOTICE 'DONE';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: DONE
+
+# REVERSE syntax allows changing the direction of the loop.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN REVERSE 3..1 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RAISE NOTICE 'DONE';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 3
+NOTICE: i: 2
+NOTICE: i: 1
+NOTICE: DONE
+
+# Reverse iteration with an explicit step.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN REVERSE 5..1 BY 2 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RAISE NOTICE 'DONE';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 5
+NOTICE: i: 3
+NOTICE: i: 1
+NOTICE: DONE
+
+# Reverse iteration with a negative bound.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN REVERSE 3..-3 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RAISE NOTICE 'DONE';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 3
+NOTICE: i: 2
+NOTICE: i: 1
+NOTICE: i: 0
+NOTICE: i: -1
+NOTICE: i: -2
+NOTICE: i: -3
+NOTICE: DONE
+
+# Reverse iteration with ascending bounds.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN REVERSE 1..3 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RAISE NOTICE 'DONE';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: DONE
+
+# Modifications to an existing variable persist after the loop finishes.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    a INT := 1;
+    b INT := 2;
+  BEGIN
+    FOR i IN 1..3 LOOP
+      RAISE NOTICE 'i: %', i;
+      a := a + a;
+      b := b * b;
+    END LOOP;
+    RAISE NOTICE 'DONE a: % b: %', a, b;
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 1
+NOTICE: i: 2
+NOTICE: i: 3
+NOTICE: DONE a: 8 b: 256
+
+# The bounds can be complex expressions rather than INT constants.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN (SELECT min(x) FROM xy)..(1 + (SELECT max(x) FROM xy)) LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RAISE NOTICE 'DONE';
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 1
+NOTICE: i: 2
+NOTICE: i: 3
+NOTICE: i: 4
+NOTICE: DONE
+
+statement ok
+DROP FUNCTION f;
+
+# The loop variable is no longer in scope after the loop.
+statement error pgcode 42703 pq: column "i" does not exist
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1..3 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RETURN i;
+  END
+$$;
+
+# The loop variable shadows a variable of the same name.
+statement error pgcode 0A000 pq: unimplemented: variable shadowing is not yet implemented
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    FOR i IN 1..3 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RETURN i;
+  END
+$$;
+
+# The loop variable cannot be referenced in the bounds.
+statement error pgcode 42703 pq: column "i" does not exist
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1..i+1 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RETURN 0;
+  END
+$$;
+
+# The loop variable cannot be referenced in the step.
+statement error pgcode 42703 pq: column "i" does not exist
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1..3 BY i LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RETURN 0;
+  END
+$$;
+
+statement error pgcode 42601 pq: integer FOR loop must have only one target variable
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i, j IN 1..3 LOOP
+      RAISE NOTICE 'i: % j: %', i, j;
+    END LOOP;
+    RETURN 0;
+  END
+$$;
+
+# Bounds (and step, if specified), must be non-NULL.
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN NULL..3 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RETURN 0;
+  END
+$$;
+
+statement error pgcode 22004 pq: lower bound of FOR loop cannot be null
+SELECT f();
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1..NULL LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RETURN 0;
+  END
+$$;
+
+statement error pgcode 22004 pq: upper bound of FOR loop cannot be null
+SELECT f();
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1..3 BY NULL LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RETURN 0;
+  END
+$$;
+
+statement error pgcode 22004 pq: BY value of FOR loop cannot be null
+SELECT f();
+
+# The step must be greater than zero.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1..3 BY 0 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RETURN 0;
+  END
+$$;
+
+statement error pgcode 22023 pq: BY value of FOR loop must be greater than zero
+SELECT f();
+
+# The bounds/step must be coercible to an integer.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1.1..3 LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i: 1
+NOTICE: i: 2
+NOTICE: i: 3
+
+statement error pgcode 22P02 pq: could not parse \"foo\" as type int: strconv.ParseInt: parsing \"foo\": invalid syntax
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN 1..'foo' LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RETURN 0;
+  END
+$$;
+
+# Case with parameterized bounds and step size.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(lower INT, upper INT, step INT) RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    FOR i IN lower..upper BY step LOOP
+      RAISE NOTICE 'i: %', i;
+    END LOOP;
+    RETURN 0;
+  END
+$$;
+
+query T noticetrace
+SELECT f(-1, 5, 2);
+----
+NOTICE: i: -1
+NOTICE: i: 1
+NOTICE: i: 3
+NOTICE: i: 5
+
+statement error pgcode 22004 pq: lower bound of FOR loop cannot be null
+SELECT f(NULL, 5, 2);
+
+statement error pgcode 22004 pq: upper bound of FOR loop cannot be null
+SELECT f(1, NULL, 2);
+
+statement error pgcode 22004 pq: BY value of FOR loop cannot be null
+SELECT f(1, 5, NULL);
+
+statement error pgcode 22023 pq: BY value of FOR loop must be greater than zero
+SELECT f(5, 1, -2);
+
 subtest end
 
 subtest security_definer

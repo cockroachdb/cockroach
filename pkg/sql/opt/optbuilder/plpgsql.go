@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	ast "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -250,7 +252,8 @@ type plBlock struct {
 	// vars is an ordered list of variables declared in a PL/pgSQL block.
 	//
 	// INVARIANT: the variables of a parent (ancestor) block *always* form a
-	// prefix of the variables of a child (descendant) block.
+	// prefix of the variables of a child (descendant) block when creating or
+	// calling a continuation.
 	vars []ast.Variable
 
 	// varTypes maps from the name of each variable in the scope to its type.
@@ -263,6 +266,21 @@ type plBlock struct {
 	// for bound cursor declarations, which allow a query to be associated with a
 	// cursor before it is opened.
 	cursors map[ast.Variable]ast.CursorDeclaration
+
+	// hiddenVars is an ordered list of *hidden* variables that were not declared
+	// by the user, but are used internally by the builder. Hidden variables are
+	// not visible to the user, and are identified by their metadata name. They
+	// can only be assigned to by directly calling assignToHiddenVariable().
+	//
+	// As an example, the internal counter variable for a FOR loop is a
+	// hidden variable.
+	//
+	// INVARIANT: the hidden variables of a given block *always* follow the
+	// variables when creating or calling a continuation.
+	hiddenVars []string
+
+	// hiddenVarTypes maps from each hidden variable in the scope to its type.
+	hiddenVarTypes map[string]*types.T
 
 	// hasExceptionHandler tracks whether this block has an exception handler.
 	hasExceptionHandler bool
@@ -322,16 +340,14 @@ func (b *plpgsqlBuilder) buildRootBlock(
 	return b.buildBlock(astBlock, s)
 }
 
-// buildBlock constructs an expression that returns the result of executing a
-// PL/pgSQL block, including variable declarations and exception handlers.
-//
-// buildBlock should only be used for non-root blocks.
-func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
+// pushNewBlock creates a new non-root block and adds it to the stack. The
+// caller should use popBlock() to remove the block from the stack once it is
+// out of scope.
+func (b *plpgsqlBuilder) pushNewBlock(astBlock *ast.Block) *plBlock {
 	if len(b.blocks) == 0 {
 		// There should always be a root block for the routine parameters.
 		panic(errors.AssertionFailedf("expected at least one PLpgSQL block"))
 	}
-	b.ensureScopeHasExpr(s)
 	block := b.pushBlock(plBlock{
 		label:     astBlock.Label,
 		vars:      make([]ast.Variable, 0, len(astBlock.Decls)),
@@ -339,7 +355,6 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 		constants: make(map[ast.Variable]struct{}),
 		cursors:   make(map[ast.Variable]ast.CursorDeclaration),
 	})
-	defer b.popBlock()
 	if len(astBlock.Exceptions) > 0 || b.hasExceptionHandler() {
 		// If the current block or some ancestor block has an exception handler, it
 		// is necessary to maintain the BlockState with a reference to the parent
@@ -349,9 +364,13 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 			block.state.Parent = parent.state
 		}
 	}
-	// First, handle the variable declarations.
-	for i := range astBlock.Decls {
-		switch dec := astBlock.Decls[i].(type) {
+	return block
+}
+
+// addDeclarations adds the given variable declarations to the given block.
+func (b *plpgsqlBuilder) addDeclarations(decls []ast.Statement, block *plBlock, s *scope) *scope {
+	for i := range decls {
+		switch dec := decls[i].(type) {
 		case *ast.Declaration:
 			if dec.NotNull {
 				panic(notNullVarErr)
@@ -395,10 +414,24 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 			block.cursors[dec.Name] = *dec
 		}
 	}
+	return s
+}
+
+// buildBlock constructs an expression that returns the result of executing a
+// PL/pgSQL block, including variable declarations and exception handlers.
+//
+// buildBlock should only be used for non-root blocks.
+func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
+	// Allocate a new block and add its declarations to the scope.
+	b.ensureScopeHasExpr(s)
+	block := b.pushNewBlock(astBlock)
+	defer b.popBlock()
+	s = b.addDeclarations(astBlock.Decls, block, s)
+
+	// For a RECORD-returning routine, infer the concrete type by examining the
+	// RETURN statements. This has to happen after building the declaration
+	// block because RETURN statements can reference declared variables.
 	if b.returnType.Identical(types.AnyTuple) {
-		// For a RECORD-returning routine, infer the concrete type by examining the
-		// RETURN statements. This has to happen after building the declaration
-		// block because RETURN statements can reference declared variables.
 		recordVisitor := newRecordTypeVisitor(b.ob.ctx, b.ob.semaCtx, s, astBlock)
 		ast.Walk(recordVisitor, astBlock)
 		if rtyp := recordVisitor.typ; rtyp == nil || rtyp.Identical(types.AnyTuple) {
@@ -625,6 +658,22 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				}},
 			}
 			return b.buildPLpgSQLStatements(b.prependStmt(loop, stmts[i+1:]), s)
+
+		case *ast.ForLoop:
+			// Build a continuation that will resume execution after the loop.
+			exitCon := b.makeContinuationWithTyp("loop_exit", t.Label, continuationLoopExit)
+			b.appendPlpgSQLStmts(&exitCon, stmts[i+1:])
+			b.pushContinuation(exitCon)
+			defer b.popContinuation()
+			switch c := t.Control.(type) {
+			case *ast.IntForLoopControl:
+				// FOR target IN [ REVERSE ] expr .. expr [ BY expr ] LOOP ...
+				return b.handleIntForLoop(s, t, c)
+			default:
+				panic(errors.WithDetail(unsupportedPLStmtErr,
+					"query and cursor FOR loops are not yet supported",
+				))
+			}
 
 		case *ast.Exit:
 			if t.Condition != nil {
@@ -1051,6 +1100,153 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 	return b.callContinuation(b.getContinuation(conTypes, unspecifiedLabel), s)
 }
 
+// handleIntForLoop constructs the plan for an integer FOR loop, which
+// increments a counter variable on each iteration. The loop body is executed
+// until the counter exceeds the upper bound.
+func (b *plpgsqlBuilder) handleIntForLoop(
+	s *scope, forLoop *ast.ForLoop, control *ast.IntForLoopControl,
+) *scope {
+	if len(forLoop.Target) != 1 {
+		panic(intForLoopTargetErr)
+	}
+	// Build an implicit block declaring:
+	//  * The loop target variable.
+	//  * Hidden variables for the lower and upper bounds, step size, an internal
+	//    counter that is incremented on each iteration.
+	//
+	// The target variable is assigned the value of the counter variable on each
+	// iteration. Both variables are necessary because modifications to the target
+	// variable apply only to that iteration, and do not affect future iterations.
+	// Example:
+	//
+	//   CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+	//     BEGIN
+	//       FOR i IN 1..3 LOOP
+	//         i := i * 100;
+	//         RAISE NOTICE 'i: %', i;
+	//       END LOOP;
+	//       RETURN 0;
+	//     END
+	//   $$;
+	//
+	// The above function would produce results 100, 200, and 300, rather
+	// than exiting after the first iteration.
+	b.pushNewBlock(&ast.Block{Label: forLoop.Label})
+	defer b.popBlock()
+	const (
+		lowerName   = "_loop_lower"
+		upperName   = "_loop_upper"
+		stepName    = "_loop_step"
+		counterName = "_loop_counter"
+	)
+	b.addHiddenVariable(lowerName, types.Int)
+	b.addHiddenVariable(upperName, types.Int)
+	b.addHiddenVariable(stepName, types.Int)
+	b.addHiddenVariable(counterName, types.Int)
+	b.addVariable(forLoop.Target[0], types.Int)
+
+	// Initialize the constant bounds and step size.
+	stepSize := control.Step
+	if stepSize == nil {
+		// The default step size is 1.
+		stepSize = tree.NewDInt(1)
+	}
+	s = b.assignToHiddenVariable(s, lowerName, control.Lower)
+	s = b.assignToHiddenVariable(s, upperName, control.Upper)
+	s = b.assignToHiddenVariable(s, stepName, stepSize)
+
+	// When referencing a hidden variable, make sure to check the correct scope,
+	// as different columns can represent the variable depending on context.
+	refHiddenVar := func(s *scope, name string) *scopeColumn {
+		return s.findAnonymousColumnWithMetadataName(name)
+	}
+
+	// Add runtime checks for the bounds and step size.
+	branches := make(memo.ScalarListExpr, 0, 4)
+	raiseErrArgs := make([]memo.ScalarListExpr, 0, 4)
+	const severity, detail, hint = "ERROR", "", ""
+	addCheck := func(message, code string, checkCond opt.ScalarExpr) {
+		raiseErrArgs = append(raiseErrArgs, b.makeConstRaiseArgs(severity, message, detail, hint, code))
+		branches = append(branches, checkCond)
+	}
+	addNullCheck := func(context string, varRef tree.Expr) {
+		checkCond := b.buildSQLExpr(&tree.IsNullExpr{Expr: varRef}, types.Bool, s)
+		message := fmt.Sprintf("%s of FOR loop cannot be null", context)
+		addCheck(message, pgcode.NullValueNotAllowed.String(), checkCond)
+	}
+	addNullCheck("lower bound" /* context */, refHiddenVar(s, lowerName))
+	addNullCheck("upper bound" /* context */, refHiddenVar(s, upperName))
+	addNullCheck("BY value" /* context */, refHiddenVar(s, stepName))
+	addCheck("BY value of FOR loop must be greater than zero", /* message */
+		pgcode.InvalidParameterValue.String(),
+		b.buildSQLExpr(&tree.ComparisonExpr{
+			Operator: treecmp.MakeComparisonOperator(treecmp.LE),
+			Left:     refHiddenVar(s, stepName),
+			Right:    tree.DZero,
+		}, types.Bool, s))
+	b.addRuntimeCheck(s, branches, raiseErrArgs)
+
+	// Initialize the loop counter target variables with the lower bound.
+	s = b.assignToHiddenVariable(s, counterName, refHiddenVar(s, lowerName))
+	s = b.addPLpgSQLAssign(s, forLoop.Target[0], refHiddenVar(s, lowerName), noIndirection)
+
+	// The looping will be implemented by two continuations: one to execute the
+	// loop body, and one to increment the counter variable. The loop body and
+	// increment continuations will call each other recursively.
+	loopCon := b.makeContinuation("stmt_loop")
+	loopCon.def.IsRecursive = true
+	incrementCon := b.makeContinuationWithTyp("stmt_loop_inc", forLoop.Label, continuationLoopContinue)
+	incrementCon.def.IsRecursive = true
+
+	// Push the increment continuation so that the loop body can call into it.
+	b.pushContinuation(incrementCon)
+
+	// Now, build the loop body continuation. Build an IF statement that checks
+	// whether the counter variable has exceeded the upper bound, and executes the
+	// loop body if not.
+	cmpOp := treecmp.MakeComparisonOperator(treecmp.LE)
+	if control.Reverse {
+		cmpOp = treecmp.MakeComparisonOperator(treecmp.GE)
+	}
+	cond := &tree.ComparisonExpr{
+		Operator: cmpOp,
+		Left:     refHiddenVar(loopCon.s, counterName),
+		Right:    refHiddenVar(loopCon.s, upperName),
+	}
+	ifStmt := &ast.If{Condition: cond, ThenBody: forLoop.Body, ElseBody: []ast.Statement{&ast.Exit{}}}
+	b.appendPlpgSQLStmts(&loopCon, []ast.Statement{ifStmt})
+
+	// Now that the loop body is built, pop the increment continuation.
+	b.popContinuation()
+
+	// Finally, build the increment continuation. Assign to the counter variable
+	// using the value of the step variable, and then assign the result to the
+	// target variable.
+	incScope := incrementCon.s.push()
+	b.ensureScopeHasExpr(incScope)
+	binOp := treebin.MakeBinaryOperator(treebin.Plus)
+	if control.Reverse {
+		binOp = treebin.MakeBinaryOperator(treebin.Minus)
+	}
+	inc := &tree.BinaryExpr{
+		Operator: binOp,
+		Left:     refHiddenVar(incScope, counterName),
+		Right:    refHiddenVar(incScope, stepName),
+	}
+	incScope = b.assignToHiddenVariable(incScope, counterName, inc)
+	incScope = b.addPLpgSQLAssign(
+		incScope, forLoop.Target[0], refHiddenVar(incScope, counterName), noIndirection,
+	)
+	// Call recursively into the loop body continuation.
+	incScope = b.callContinuation(&loopCon, incScope)
+	b.appendBodyStmt(&incrementCon, incScope)
+
+	// Notably, we call the loop body continuation here, rather than the
+	// increment continuation, because the counter should not be incremented
+	// until after the first iteration.
+	return b.callContinuation(&loopCon, s)
+}
+
 // resolveOpenQuery finds and validates the query that is bound to cursor for
 // the given OPEN statement.
 func (b *plpgsqlBuilder) resolveOpenQuery(open *ast.Open) tree.Statement {
@@ -1153,6 +1349,30 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(
 	} else {
 		scalar = b.buildSQLExpr(val, typ, inScope)
 	}
+	b.addBarrierIfVolatile(inScope, scalar)
+	b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
+	b.ob.constructProjectForScope(inScope, assignScope)
+	b.addBarrierIfVolatile(assignScope, scalar)
+	return assignScope
+}
+
+// assignToHiddenVariable is similar to addPLpgSQLAssign, but it assigns to a
+// hidden variable that is not visible to the user.
+func (b *plpgsqlBuilder) assignToHiddenVariable(inScope *scope, name string, val ast.Expr) *scope {
+	typ := b.resolveHiddenVariableForAssign(name)
+	assignScope := inScope.push()
+	for i := range inScope.cols {
+		col := &inScope.cols[i]
+		if col.name.MetadataName() == name {
+			// Allow the assignment to shadow previous values for this column.
+			continue
+		}
+		// If the column is not an outer column, add the column as a pass-through
+		// column from the previous scope.
+		assignScope.appendColumn(col)
+	}
+	colName := scopeColName("").WithMetadataName(name)
+	scalar := b.buildSQLExpr(val, typ, inScope)
 	b.addBarrierIfVolatile(inScope, scalar)
 	b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
 	b.ob.constructProjectForScope(inScope, assignScope)
@@ -1623,7 +1843,6 @@ func (b *plpgsqlBuilder) buildEndOfFunctionRaise(con *continuation) {
 func (b *plpgsqlBuilder) addOneRowCheck(s *scope) {
 	// Add a ScalarGroupBy which passes through input columns, and also computes a
 	// row count.
-	originalCols := s.colSet()
 	aggs := make(memo.AggregationsExpr, 0, len(s.cols)+1)
 	for j := range s.cols {
 		// Create a pass-through aggregation. AnyNotNull works here because if there
@@ -1638,8 +1857,7 @@ func (b *plpgsqlBuilder) addOneRowCheck(s *scope) {
 	aggs = append(aggs, b.ob.factory.ConstructAggregationsItem(rowCountAgg, rowCountCol))
 	s.expr = b.ob.factory.ConstructScalarGroupBy(s.expr, aggs, &memo.GroupingPrivate{})
 
-	// Add a projections which checks the row count and
-	// calls crdb_internal.plpgsql_raise to throw an error if necessary.
+	// Add a runtime check for the row count.
 	tooFewRowsArgs := b.makeConstRaiseArgs(
 		"ERROR",                     /* severity */
 		"query returned no rows",    /* message */
@@ -1654,24 +1872,40 @@ func (b *plpgsqlBuilder) addOneRowCheck(s *scope) {
 		"Make sure the query returns a single row, or use LIMIT 1.", /* hint */
 		pgcode.TooManyRows.String(),                                 /* code */
 	)
-	tooFewRowsFn := b.makePLpgSQLRaiseFn(tooFewRowsArgs)
-	tooManyRowsFn := b.makePLpgSQLRaiseFn(tooManyRowsArgs)
 	rowCountVar := b.ob.factory.ConstructVariable(rowCountCol)
 	scalarOne := b.ob.factory.ConstructConstVal(tree.NewDInt(1), types.Int)
-	caseExpr := b.ob.factory.ConstructCase(
-		memo.TrueSingleton,
-		memo.ScalarListExpr{
-			b.ob.factory.ConstructWhen(b.ob.factory.ConstructLt(rowCountVar, scalarOne), tooFewRowsFn),
-			b.ob.factory.ConstructWhen(b.ob.factory.ConstructGt(rowCountVar, scalarOne), tooManyRowsFn),
-		},
-		b.ob.factory.ConstructNull(types.Int),
-	)
-	rowCheckColName := b.makeIdentifier("_plpgsql_row_count_check")
-	rowCheckCol := b.ob.factory.Metadata().AddColumn(rowCheckColName, types.Int)
-	projections := memo.ProjectionsExpr{b.ob.factory.ConstructProjectionsItem(caseExpr, rowCheckCol)}
-	s.expr = b.ob.factory.ConstructProject(s.expr, projections, originalCols)
+	branches := memo.ScalarListExpr{
+		b.ob.factory.ConstructLt(rowCountVar, scalarOne),
+		b.ob.factory.ConstructGt(rowCountVar, scalarOne),
+	}
+	b.addRuntimeCheck(s, branches, []memo.ScalarListExpr{tooFewRowsArgs, tooManyRowsArgs})
+}
 
-	// Add an optimization barrier to ensure that the row-count checks are not
+// addRuntimeCheck projects a column that implements a check that must happen at
+// runtime. The supplied boolean branch expressions and RAISE arguments will be
+// used to construct a CASE expression that raises an error if the corresponding
+// condition is true.
+func (b *plpgsqlBuilder) addRuntimeCheck(
+	s *scope, branches memo.ScalarListExpr, raiseErrArgs []memo.ScalarListExpr,
+) {
+	if len(branches) != len(raiseErrArgs) {
+		panic(errors.AssertionFailedf("mismatched branches and raiseErrArgs"))
+	}
+	originalCols := s.colSet()
+	caseWhens := make(memo.ScalarListExpr, len(branches))
+	for i := range branches {
+		raiseErrFn := b.makePLpgSQLRaiseFn(raiseErrArgs[i])
+		caseWhens[i] = b.ob.factory.ConstructWhen(branches[i], raiseErrFn)
+	}
+	caseExpr := b.ob.factory.ConstructCase(
+		memo.TrueSingleton, caseWhens, b.ob.factory.ConstructNull(types.Int),
+	)
+	runtimeCheckColName := b.makeIdentifier("_plpgsql_runtime_check")
+	runtimeCheckCol := b.ob.factory.Metadata().AddColumn(runtimeCheckColName, types.Int)
+	proj := memo.ProjectionsExpr{b.ob.factory.ConstructProjectionsItem(caseExpr, runtimeCheckCol)}
+	s.expr = b.ob.factory.ConstructProject(s.expr, proj, originalCols)
+
+	// Add an optimization barrier to ensure that the runtime checks are not
 	// eliminated by column-pruning. Then, remove the temporary columns from the
 	// output.
 	b.ob.addBarrier(s)
@@ -1784,10 +2018,9 @@ func (b *plpgsqlBuilder) projectRecordVar(s *scope, name ast.Variable) *scope {
 // continuations will have more parameters than those of its parent.
 func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 	s := b.ob.allocScope()
-	params := make(opt.ColList, 0, b.variableCount())
-	addParam := func(name ast.Variable, typ *types.T) {
-		colName := scopeColName(name)
-		col := b.ob.synthesizeColumn(s, colName, typ, nil /* expr */, nil /* scalar */)
+	params := make(opt.ColList, 0, b.variableCount()+b.hiddenVariableCount())
+	addParam := func(name scopeColumnName, typ *types.T) {
+		col := b.ob.synthesizeColumn(s, name, typ, nil /* expr */, nil /* scalar */)
 		// TODO(mgartner): Lift the 100 parameter restriction for synthesized
 		// continuation UDFs.
 		col.setParamOrd(len(params))
@@ -1800,7 +2033,12 @@ func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 	for i := range b.blocks {
 		block := &b.blocks[i]
 		for _, name := range block.vars {
-			addParam(name, block.varTypes[name])
+			addParam(scopeColName(name), block.varTypes[name])
+		}
+		for _, name := range block.hiddenVars {
+			// Do not give the column constructed for a hidden variable a reference
+			// name, since hidden variables cannot be referenced by the user.
+			addParam(scopeColName("").WithMetadataName(name), block.hiddenVarTypes[name])
 		}
 	}
 	b.ensureScopeHasExpr(s)
@@ -1909,13 +2147,6 @@ func (b *plpgsqlBuilder) callContinuationWithTxnOp(
 
 func (b *plpgsqlBuilder) makeContinuationArgs(con *continuation, s *scope) memo.ScalarListExpr {
 	args := make(memo.ScalarListExpr, 0, len(con.def.Params))
-	addArg := func(name ast.Variable) {
-		_, source, _, err := s.FindSourceProvidingColumn(b.ob.ctx, name)
-		if err != nil {
-			panic(err)
-		}
-		args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
-	}
 	for i := range b.blocks {
 		if len(args) == len(con.def.Params) {
 			// A continuation has parameters for every variable that is in scope for
@@ -1931,7 +2162,18 @@ func (b *plpgsqlBuilder) makeContinuationArgs(con *continuation, s *scope) memo.
 		}
 		block := &b.blocks[i]
 		for _, name := range block.vars {
-			addArg(name)
+			_, source, _, err := s.FindSourceProvidingColumn(b.ob.ctx, name)
+			if err != nil {
+				panic(err)
+			}
+			args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
+		}
+		for _, name := range block.hiddenVars {
+			col := s.findAnonymousColumnWithMetadataName(name)
+			if col == nil {
+				panic(errors.AssertionFailedf("hidden variable %s not found", name))
+			}
+			args = append(args, b.ob.factory.ConstructVariable(col.id))
 		}
 	}
 	return args
@@ -2028,6 +2270,23 @@ func (b *plpgsqlBuilder) resolveVariableForAssign(name ast.Variable) *types.T {
 		return typ
 	}
 	panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", name))
+}
+
+// resolveHiddenVariableForAssign is similar to resolveVariableForAssign, but
+// applies to hidden variables, which are identified only by their name in the
+// query's metadata. It panics if the hidden variable is not found.
+func (b *plpgsqlBuilder) resolveHiddenVariableForAssign(name string) *types.T {
+	// Search the blocks in reverse order to ensure that more recent declarations
+	// are encountered first.
+	for i := len(b.blocks) - 1; i >= 0; i-- {
+		block := &b.blocks[i]
+		typ, ok := block.hiddenVarTypes[name]
+		if !ok {
+			continue
+		}
+		return typ
+	}
+	panic(errors.AssertionFailedf("hidden variable %s not found", name))
 }
 
 // projectTupleAsIntoTarget maps from the elements of a tuple column to the
@@ -2234,6 +2493,17 @@ func (b *plpgsqlBuilder) addVariable(name ast.Variable, typ *types.T) {
 	curBlock.varTypes[name] = typ
 }
 
+// addHiddenVariable adds a hidden variable with the given (metadata) name and
+// type to the current PL/pgSQL block scope.
+func (b *plpgsqlBuilder) addHiddenVariable(metadataName string, typ *types.T) {
+	curBlock := b.block()
+	curBlock.hiddenVars = append(curBlock.hiddenVars, metadataName)
+	if curBlock.hiddenVarTypes == nil {
+		curBlock.hiddenVarTypes = make(map[string]*types.T)
+	}
+	curBlock.hiddenVarTypes[metadataName] = typ
+}
+
 // block returns the block for the current PL/pgSQL block.
 func (b *plpgsqlBuilder) block() *plBlock {
 	return &b.blocks[len(b.blocks)-1]
@@ -2278,11 +2548,21 @@ func (b *plpgsqlBuilder) hasExceptionHandler() bool {
 }
 
 // variableCount returns the number of PL/pgSQL variables that are in scope for
-// the current block.
+// the current block. Note that this count does not include hidden variables.
 func (b *plpgsqlBuilder) variableCount() int {
 	var count int
 	for i := range b.blocks {
 		count += len(b.blocks[i].vars)
+	}
+	return count
+}
+
+// variableCountWithHidden returns the number of hidden variables that are in
+// scope for the current block.
+func (b *plpgsqlBuilder) hiddenVariableCount() int {
+	var count int
+	for i := range b.blocks {
+		count += len(b.blocks[i].hiddenVars)
 	}
 	return count
 }
@@ -2435,5 +2715,8 @@ var (
 	setTxnNotAfterControlStmtErr = errors.WithHint(
 		pgerror.New(pgcode.ActiveSQLTransaction, "SET TRANSACTION must be called before any query"),
 		"PL/pgSQL SET TRANSACTION statements must immediately follow COMMIT or ROLLBACK",
+	)
+	intForLoopTargetErr = pgerror.New(pgcode.Syntax,
+		"integer FOR loop must have only one target variable",
 	)
 )
