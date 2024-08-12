@@ -83,7 +83,7 @@ func TestBlockingBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	metrics := kvevent.MakeMetrics(time.Minute)
+	metrics := kvevent.MakeMetrics(time.Minute).AggregatorBufferMetricsWithCompat
 	ba, release := getBoundAccountWithBudget(4096)
 	defer release()
 
@@ -184,7 +184,7 @@ func TestBlockingBufferNotifiesConsumerWhenOutOfMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	metrics := kvevent.MakeMetrics(time.Minute)
+	metrics := kvevent.MakeMetrics(time.Minute).AggregatorBufferMetricsWithCompat
 	ba, release := getBoundAccountWithBudget(4096)
 	defer release()
 
