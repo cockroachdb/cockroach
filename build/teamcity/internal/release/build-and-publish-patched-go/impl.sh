@@ -15,7 +15,7 @@ apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     apt-transport-https \
     ca-certificates \
-    clang-10 \
+    clang-18 \
     cmake \
     curl \
     git \
@@ -25,8 +25,8 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     python3 \
     python3.8-venv
 
-update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
-    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10
+update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100 \
+    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-18
 
 curl -fsSL $GOLINUXLINK -o golang.tar.gz \
  && echo "$LINUXSHASUM  golang.tar.gz" | sha256sum -c - \
