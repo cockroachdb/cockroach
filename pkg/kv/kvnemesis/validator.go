@@ -225,10 +225,12 @@ func (o *observedWrite) isDelete() bool {
 }
 
 type observedRead struct {
-	Key        roachpb.Key
-	SkipLocked bool
-	Value      roachpb.Value
-	ValidTimes disjointTimeSpans
+	Key                roachpb.Key
+	SkipLocked         bool
+	Value              roachpb.Value
+	ValidTimes         disjointTimeSpans
+	AlwaysValid        bool
+	ToleratesWriteSkew bool
 }
 
 func (*observedRead) observedMarker() {}
@@ -437,6 +439,7 @@ func (v *validator) processOp(op Operation) {
 			// otherwise no lock would have been acquired on the non-existent key.
 			// Gets do not acquire gap locks.
 			observe = t.GuaranteedDurability && read.Value.IsPresent()
+			read.ToleratesWriteSkew = true
 		default:
 			panic("unexpected")
 		}
@@ -753,9 +756,10 @@ func (v *validator) processOp(op Operation) {
 			if t.GuaranteedDurability {
 				for _, kv := range t.Result.Values {
 					read := &observedRead{
-						Key:        kv.Key,
-						SkipLocked: t.SkipLocked,
-						Value:      roachpb.Value{RawBytes: kv.Value},
+						Key:                kv.Key,
+						SkipLocked:         t.SkipLocked,
+						Value:              roachpb.Value{RawBytes: kv.Value},
+						ToleratesWriteSkew: true,
 					}
 					v.curObservations = append(v.curObservations, read)
 				}
@@ -1113,14 +1117,14 @@ func (v *validator) checkAtomicCommitted(
 				}
 			}
 		case *observedRead:
-			// If v.observationFilter == observeLocking, this must be a locking read
-			// from a weak-isolation transaction. If this locking read is rolled back
-			// by a savepoint, there is no guarantee that the lock will be present
-			// after the savepoint rollback. Since the read is not part of a
-			// serializatble transaction and is no longer locking, it's valid at all
-			// times. Alternatively, we can remove the read from txnObservations.
-			if rollbackSp != nil && v.observationFilter == observeLocking {
-				o.ValidTimes = disjointTimeSpans{{Start: hlc.MinTimestamp, End: hlc.MaxTimestamp}}
+			// If o.ToleratesWriteSkew == true, this must be a locking read from a
+			// weak-isolation transaction. If this locking read is rolled back by a
+			// savepoint, there is no guarantee that the lock will be present after
+			// the savepoint rollback. Since the read is not part of a serializatble
+			// transaction and is no longer locking, it's valid at all times.
+			// Alternatively, we can remove the read from txnObservations.
+			if rollbackSp != nil && o.ToleratesWriteSkew {
+				o.AlwaysValid = true
 			}
 		case *observedSavepoint:
 			switch o.Type {
@@ -1194,9 +1198,9 @@ func (v *validator) checkAtomicCommitted(
 				}
 			}
 		case *observedRead:
-			// For rolled back locking reads from weak-isolation transactions, the
-			// ValidTimes are already set above.
-			if len(o.ValidTimes) == 0 {
+			if o.AlwaysValid {
+				o.ValidTimes = disjointTimeSpans{{Start: hlc.MinTimestamp, End: hlc.MaxTimestamp}}
+			} else {
 				o.ValidTimes = validReadTimes(batch, o.Key, o.Value.RawBytes, o.SkipLocked /* missingKeyValid */)
 			}
 		case *observedScan:
