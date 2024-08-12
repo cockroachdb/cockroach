@@ -3927,7 +3927,9 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 				}
 				return err
 			}
-			canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, tbl, db, false /* allowAdding */)
+			canSeeDescriptor, err := userCanSeeDescriptor(
+				ctx, p, tbl, db, false /* allowAdding */, false /* includeDropped */)
+
 			if err != nil {
 				return err
 			}
@@ -5236,7 +5238,8 @@ func populateVirtualIndexForTable(
 
 	// Don't include tables that aren't in the current database unless
 	// they're virtual, dropped tables, or ones that the user can't see.
-	canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, tableDesc, dbContext, true /*allowAdding*/)
+	canSeeDescriptor, err := userCanSeeDescriptor(
+		ctx, p, tableDesc, dbContext, true /*allowAdding*/, false /* includeDropped */)
 	if err != nil {
 		return false, err
 	}
