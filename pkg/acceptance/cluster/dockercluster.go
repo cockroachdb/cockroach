@@ -52,7 +52,9 @@ import (
 )
 
 const (
-	defaultImage  = "docker.io/library/ubuntu:focal-20210119"
+	// We use a docker image mirror to avoid pulling from 3rd party repos, which sometimes have reliability issues.
+	// See https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/3462594561/Docker+image+sync for the details.
+	defaultImage  = "us-east1-docker.pkg.dev/crl-docker-sync/docker-io/library/ubuntu:focal-20210119"
 	networkPrefix = "cockroachdb_acceptance"
 )
 

@@ -1,4 +1,6 @@
-FROM registry.access.redhat.com/ubi8/ubi-minimal
+# We use a docker image mirror to avoid pulling from 3rd party repos, which sometimes have reliability issues.
+# See https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/3462594561/Docker+image+sync for the details.
+FROM us-east1-docker.pkg.dev/crl-docker-sync/registry-access-redhat-com/ubi8/ubi-minimal
 ARG fips_enabled
 
 # For deployment, we need the following additionally installed:
