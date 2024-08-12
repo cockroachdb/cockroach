@@ -44,7 +44,7 @@ type ycsbWorkload struct {
 }
 
 func (ycsb ycsbWorkload) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
-	cmd := roachtestutil.NewCommand(`./cockroach workload init ycsb`).
+	cmd := roachtestutil.NewCommand(`./cockroach workload init ycsb --families=false`).
 		MaybeFlag(ycsb.initRows > 0, "insert-count", ycsb.initRows).
 		MaybeFlag(ycsb.initSplits > 0, "splits", ycsb.initSplits).
 		Arg("{pgurl%s:%s}", nodes, tenantName)
@@ -52,7 +52,7 @@ func (ycsb ycsbWorkload) sourceInitCmd(tenantName string, nodes option.NodeListO
 }
 
 func (ycsb ycsbWorkload) sourceRunCmd(tenantName string, nodes option.NodeListOption) string {
-	cmd := roachtestutil.NewCommand(`./cockroach workload run ycsb`).
+	cmd := roachtestutil.NewCommand(`./cockroach workload run ycsb --families=false`).
 		Option("tolerate-errors").
 		Flag("workload", ycsb.workloadType).
 		MaybeFlag(ycsb.debugRunDuration > 0, "duration", ycsb.debugRunDuration).
