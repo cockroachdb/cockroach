@@ -40,7 +40,6 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build",
-        "//pkg/clusterversion",
         "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv",

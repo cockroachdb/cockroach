@@ -181,65 +181,6 @@ const (
 
 	VBootstrapMax
 
-	// TODO_Delete_V23_1 is CockroachDB v23.1. It's used for all v23.1.x patch releases.
-	TODO_Delete_V23_1
-
-	// TODO_Delete_V23_2 is CockroachDB v23.2. It's used for all v23.2.x patch releases.
-	TODO_Delete_V23_2
-
-	// TODO_Delete_V24_1Start demarcates the start of cluster versions stepped through during
-	// the process of upgrading from 23.2 to 24.1.
-	TODO_Delete_V24_1Start
-
-	// TODO_Delete_V24_1_DropPayloadAndProgressFromSystemJobsTable drop the unused payload and
-	// progress columns from system.jobs table.
-	TODO_Delete_V24_1_DropPayloadAndProgressFromSystemJobsTable
-
-	// TODO_Delete_V24_1_MigrateOldStylePTSRecords  migrate old-style PTS records
-	// to the new style.
-	TODO_Delete_V24_1_MigrateOldStylePTSRecords
-
-	// TODO_Delete_V24_1_SessionBasedLeasingDualWrite both session based and expiry based leases
-	// are written to the system.lease table under different primary indexes.
-	TODO_Delete_V24_1_SessionBasedLeasingDualWrite
-
-	// TODO_Delete_V24_1_SessionBasedLeasingDrain all leases are forcefully renewed, so that
-	// a session based equivalent exists.
-	TODO_Delete_V24_1_SessionBasedLeasingDrain
-
-	// TODO_Delete_V24_1_SessionBasedLeasingOnly only session based leases are written to
-	// system.lease.
-	TODO_Delete_V24_1_SessionBasedLeasingOnly
-
-	// TODO_Delete_V24_1_SessionBasedLeasingUpgradeDescriptor upgrades the leasing descriptor
-	// to be only session based.
-	TODO_Delete_V24_1_SessionBasedLeasingUpgradeDescriptor
-
-	// TODO_Delete_V24_1_PebbleFormatSyntheticPrefixSuffix upgrades Pebble's format major version to
-	// FormatSyntheticPrefixSuffix, allowing use of virtual sstables in Pebble.
-	TODO_Delete_V24_1_PebbleFormatSyntheticPrefixSuffix
-
-	// TODO_Delete_V24_1_SystemDatabaseSurvivability sets the survival goal for the system
-	// database to be SURVIVE ZONE.
-	TODO_Delete_V24_1_SystemDatabaseSurvivability
-
-	// TODO_Delete_V24_1_GossipMaximumIOOverload is the version at which stores begin
-	// populating the store capacity field IOThresholdMax. The field shouldn't be
-	// used for allocator decisions before then.
-	TODO_Delete_V24_1_GossipMaximumIOOverload
-
-	// TODO_Delete_V24_1_EstimatedMVCCStatsInSplit introduces MVCC stats estimates during range
-	// splits.
-	TODO_Delete_V24_1_EstimatedMVCCStatsInSplit
-
-	// TODO_Delete_V24_1_ReplicatedLockPipelining allows exclusive and shared replicated locks
-	// to be pipelined.
-	TODO_Delete_V24_1_ReplicatedLockPipelining
-
-	// TODO_Delete_V24_1_AddSpanCounts is the migration that added the span_counts table to
-	// the system tenant to ensure it is a superset of secondary tenants.
-	TODO_Delete_V24_1_AddSpanCounts
-
 	// V24_1 is CockroachDB v24.1. It's used for all v24.1.x patch releases.
 	V24_1
 
@@ -310,28 +251,6 @@ var versionTable = [numKeys]roachpb.Version{
 	VBootstrapSystem: {Major: 0, Minor: 0, Internal: 2},
 	VBootstrapTenant: {Major: 0, Minor: 0, Internal: 4},
 	VBootstrapMax:    {Major: 0, Minor: 0, Internal: 424242},
-
-	TODO_Delete_V23_1: {Major: 23, Minor: 1, Internal: 0},
-
-	TODO_Delete_V23_2: {Major: 23, Minor: 2, Internal: 0},
-
-	// v24.1 versions. Internal versions must be even.
-	TODO_Delete_V24_1Start: {Major: 23, Minor: 2, Internal: 2},
-
-	TODO_Delete_V24_1_DropPayloadAndProgressFromSystemJobsTable: {Major: 23, Minor: 2, Internal: 4},
-
-	TODO_Delete_V24_1_MigrateOldStylePTSRecords: {Major: 23, Minor: 2, Internal: 6},
-
-	TODO_Delete_V24_1_SessionBasedLeasingDualWrite:         {Major: 23, Minor: 2, Internal: 8},
-	TODO_Delete_V24_1_SessionBasedLeasingDrain:             {Major: 23, Minor: 2, Internal: 10},
-	TODO_Delete_V24_1_SessionBasedLeasingOnly:              {Major: 23, Minor: 2, Internal: 12},
-	TODO_Delete_V24_1_SessionBasedLeasingUpgradeDescriptor: {Major: 23, Minor: 2, Internal: 14},
-	TODO_Delete_V24_1_PebbleFormatSyntheticPrefixSuffix:    {Major: 23, Minor: 2, Internal: 16},
-	TODO_Delete_V24_1_SystemDatabaseSurvivability:          {Major: 23, Minor: 2, Internal: 18},
-	TODO_Delete_V24_1_GossipMaximumIOOverload:              {Major: 23, Minor: 2, Internal: 20},
-	TODO_Delete_V24_1_EstimatedMVCCStatsInSplit:            {Major: 23, Minor: 2, Internal: 22},
-	TODO_Delete_V24_1_ReplicatedLockPipelining:             {Major: 23, Minor: 2, Internal: 24},
-	TODO_Delete_V24_1_AddSpanCounts:                        {Major: 23, Minor: 2, Internal: 26},
 
 	V24_1: {Major: 24, Minor: 1, Internal: 0},
 

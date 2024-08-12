@@ -193,10 +193,6 @@ func (p *planner) createDatabase(
 
 	}
 
-	if err := p.maybeUpdateSystemDBSurvivalGoal(ctx); err != nil {
-		return nil, false, err
-	}
-
 	return db, true, nil
 }
 
