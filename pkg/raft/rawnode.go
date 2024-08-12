@@ -188,7 +188,7 @@ func MustSync(st, prevst pb.HardState, entsnum int) bool {
 		// TODO(arul): The st.LeadEpoch != prevst.LeadEpoch condition is currently
 		// untested because we don't set r.leadEpoch yet. We'll do so when we
 		// introduce MsgFortifyResp. Test this then.
-		st.Lead != prevst.Lead || st.LeadEpoch != prevst.LeadEpoch
+		st.Lead != prevst.Lead || st.LeadEpoch != prevst.LeadEpoch || st.Commit != prevst.Commit
 }
 
 func needStorageAppendMsg(r *raft, rd Ready) bool {

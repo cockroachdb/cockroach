@@ -145,7 +145,7 @@ stabilize 2 3
 > 2 receiving messages
   3->2 MsgAppResp Term:2 Log:0/5 Commit:4
 > 2 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   HardState Term:2 Vote:2 Commit:5 Lead:2
   CommittedEntries:
   2/5 EntryNormal ""
@@ -154,7 +154,7 @@ stabilize 2 3
 > 3 receiving messages
   2->3 MsgApp Term:2 Log:2/5 Commit:5
 > 3 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   HardState Term:2 Vote:2 Commit:5 Lead:2
   CommittedEntries:
   2/5 EntryNormal ""
