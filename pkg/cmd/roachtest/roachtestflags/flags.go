@@ -94,6 +94,12 @@ var (
 		Usage: `Use selective tests to run based on previous test execution. this is considered only if the select-probability is 1.0`,
 	})
 
+	SuccessfulTestsSelectPct = 0.35
+	_                        = registerRunFlag(&SuccessfulTestsSelectPct, FlagInfo{
+		Name:  "successful-test-select-pct",
+		Usage: `The percent of test that should be selected from the tests that have been running successfully as per test selection. Default is 0.35`,
+	})
+
 	Username string = os.Getenv("ROACHPROD_USER")
 	_               = registerRunFlag(&Username, FlagInfo{
 		Name:      "user",
