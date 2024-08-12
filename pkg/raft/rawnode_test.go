@@ -524,7 +524,7 @@ func TestRawNodeStart(t *testing.T) {
 		HardState:        pb.HardState{Term: 1, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
 		Entries:          nil, // emitted & checked in intermediate Ready cycle
 		CommittedEntries: entries,
-		MustSync:         false, // since we're only applying, not appending
+		MustSync:         true, // because we are advancing the commit index
 	}
 
 	storage := NewMemoryStorage()
@@ -596,7 +596,7 @@ func TestRawNodeStart(t *testing.T) {
 	require.True(t, rawNode.HasReady())
 	rd = rawNode.Ready()
 	require.Empty(t, rd.Entries)
-	require.False(t, rd.MustSync)
+	require.True(t, rd.MustSync)
 	rawNode.Advance(rd)
 
 	rd.SoftState, want.SoftState = nil, nil
