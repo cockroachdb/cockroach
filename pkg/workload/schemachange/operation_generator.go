@@ -2785,6 +2785,8 @@ func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt
 	SELECT 'INDEX ' || quote_ident(schema_name) || '.' || quote_ident(table_name) || '@' || quote_ident("index"->>'name') FROM indexes
 		UNION ALL
 	SELECT 'CONSTRAINT ' || quote_ident("constraint"->>'name') || ' ON ' || quote_ident(schema_name) || '.' || quote_ident(table_name) FROM constraints
+    -- Avoid temporary CHECK constraints created while adding NOT NULL columns.
+    WHERE "constraint"->>'name' NOT LIKE '%%auto_not_null'
 		%s`, onType))
 
 	commentables, err := Collect(ctx, og, tx, pgx.RowTo[string], q)
