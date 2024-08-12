@@ -430,6 +430,20 @@ func lockTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) erro
 	return nil
 }
 
+func deadlockTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) error {
+	timeout, err := validateTimeoutVar(
+		m.data.GetIntervalStyle(),
+		s,
+		"deadlock_timeout",
+	)
+	if err != nil {
+		return err
+	}
+
+	m.SetDeadlockTimeout(timeout)
+	return nil
+}
+
 func idleInSessionTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) error {
 	timeout, err := validateTimeoutVar(
 		m.data.GetIntervalStyle(),

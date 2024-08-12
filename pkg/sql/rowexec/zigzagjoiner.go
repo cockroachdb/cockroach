@@ -472,6 +472,7 @@ func (z *zigzagJoiner) setupInfo(
 			LockWaitPolicy:             spec.LockingWaitPolicy,
 			LockDurability:             spec.LockingDurability,
 			LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
+			DeadlockTimeout:            flowCtx.EvalCtx.SessionData().DeadlockTimeout,
 			Alloc:                      &info.alloc,
 			MemMonitor:                 flowCtx.Mon,
 			Spec:                       &spec.FetchSpec,
