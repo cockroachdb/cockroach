@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "timers",
+    srcs = ["timers.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
+        "//pkg/util/timeutil",
+        "@com_github_prometheus_client_golang//prometheus",
+    ],
+)

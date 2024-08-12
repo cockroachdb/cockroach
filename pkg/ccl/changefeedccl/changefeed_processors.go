@@ -497,6 +497,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		SchemaChangePolicy:  schemaChange.Policy,
 		SchemaFeed:          sf,
 		Knobs:               ca.knobs.FeedKnobs,
+		ScopedTimers:        ca.sliMetrics.Timers,
 		MonitoringCfg:       monitoringCfg,
 	}, nil
 }
@@ -1232,12 +1233,14 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	// but the oracle is only used when emitting row updates.
 	var nilOracle timestampLowerBoundOracle
 	var err error
-	sli, err := cf.metrics.getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptMetricsScope])
+	scope := cf.spec.Feed.Opts[changefeedbase.OptMetricsScope]
+	sli, err := cf.metrics.getSLIMetrics(scope)
 	if err != nil {
 		cf.MoveToDraining(err)
 		return
 	}
 	cf.sliMetrics = sli
+
 	cf.sink, err = getResolvedTimestampSink(ctx, cf.FlowCtx.Cfg, cf.spec.Feed, nilOracle,
 		cf.spec.User(), cf.spec.JobID, sli)
 
@@ -1644,6 +1647,8 @@ func (cf *changeFrontier) maybeCheckpointJob(
 func (cf *changeFrontier) checkpointJobProgress(
 	frontier hlc.Timestamp, checkpoint jobspb.ChangefeedProgress_Checkpoint,
 ) (bool, error) {
+	defer cf.sliMetrics.Timers.CheckpointJobProgress.Start()()
+
 	if cf.knobs.RaiseRetryableError != nil {
 		if err := cf.knobs.RaiseRetryableError(); err != nil {
 			return false, changefeedbase.MarkRetryableError(

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -93,6 +94,8 @@ type Config struct {
 
 	// Knobs are kvfeed testing knobs.
 	Knobs TestingKnobs
+
+	ScopedTimers *timers.ScopedTimers
 }
 
 // Run will run the kvfeed. The feed runs synchronously and returns an
@@ -126,7 +129,7 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.InitialHighWater, cfg.EndTime,
 		cfg.Codec,
 		cfg.SchemaFeed,
-		sc, pff, bf, cfg.Targets, cfg.Knobs)
+		sc, pff, bf, cfg.Targets, cfg.ScopedTimers, cfg.Knobs)
 	f.onBackfillCallback = cfg.MonitoringCfg.OnBackfillCallback
 	f.rangeObserver = startLaggingRangesObserver(g, cfg.MonitoringCfg.LaggingRangesCallback,
 		cfg.MonitoringCfg.LaggingRangesPollingInterval, cfg.MonitoringCfg.LaggingRangesThreshold)
@@ -259,6 +262,7 @@ type kvFeed struct {
 	schemaChangePolicy changefeedbase.SchemaChangePolicy
 
 	targets changefeedbase.Targets
+	timers  *timers.ScopedTimers
 
 	// These dependencies are made available for test injection.
 	bufferFactory func() kvevent.Buffer
@@ -285,6 +289,7 @@ func newKVFeed(
 	pff physicalFeedFactory,
 	bf func() kvevent.Buffer,
 	targets changefeedbase.Targets,
+	ts *timers.ScopedTimers,
 	knobs TestingKnobs,
 ) *kvFeed {
 	return &kvFeed{
@@ -305,6 +310,7 @@ func newKVFeed(
 		physicalFeed:        pff,
 		bufferFactory:       bf,
 		targets:             targets,
+		timers:              ts,
 		knobs:               knobs,
 	}
 }
@@ -579,6 +585,7 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 		WithDiff:      f.withDiff,
 		WithFiltering: f.withFiltering,
 		Knobs:         f.knobs,
+		Timers:        f.timers,
 		RangeObserver: f.rangeObserver,
 	}
 
@@ -590,7 +597,7 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 	// until a table event (i.e. a column is added/dropped) has occurred, which
 	// signals another possible scan.
 	g.GoCtx(func(ctx context.Context) error {
-		return copyFromSourceToDestUntilTableEvent(ctx, f.writer, memBuf, resumeFrontier, f.tableFeed, f.endTime, f.knobs)
+		return copyFromSourceToDestUntilTableEvent(ctx, f.writer, memBuf, resumeFrontier, f.tableFeed, f.endTime, f.knobs, f.timers)
 	})
 	g.GoCtx(func(ctx context.Context) error {
 		return f.physicalFeed.Run(ctx, memBuf, physicalCfg)
@@ -673,6 +680,7 @@ func copyFromSourceToDestUntilTableEvent(
 	schemaFeed schemafeed.SchemaFeed,
 	endTime hlc.Timestamp,
 	knobs TestingKnobs,
+	st *timers.ScopedTimers,
 ) error {
 	// Initially, the only copy boundary is the end time if one is specified.
 	// Once we discover a table event (which is before the end time), that will
@@ -689,6 +697,7 @@ func copyFromSourceToDestUntilTableEvent(
 		// from rangefeed) and checks if a table event was encountered at or before
 		// said timestamp. If so, it replaces the copy boundary with the table event.
 		checkForTableEvent = func(ts hlc.Timestamp) error {
+			defer st.KVFeedWaitForTableEvent.Start()()
 			// There's no need to check for table events again if we already found one
 			// since that should already be the earliest one.
 			if _, ok := boundary.(*errTableEventReached); ok {
@@ -782,6 +791,8 @@ func copyFromSourceToDestUntilTableEvent(
 
 		// writeToDest writes an event to the dest.
 		writeToDest = func(e kvevent.Event) error {
+			defer st.KVFeedBuffer.Start()()
+
 			switch e.Type() {
 			case kvevent.TypeKV, kvevent.TypeFlush:
 				return dest.Add(ctx, e)
