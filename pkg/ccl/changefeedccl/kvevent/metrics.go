@@ -62,6 +62,82 @@ var (
 
 // Metrics is a metric.Struct for kvfeed metrics.
 type Metrics struct {
+	//rRangefeedBufferMetrics tracks metrics for the buffer between the rangefeed and the kvfeed.
+	RangefeedBufferMetrics PerBufferMetrics
+	// AggregatorBufferMetrics tracks metrics for the buffer between the kvfeed and the sink.
+	AggregatorBufferMetrics PerBufferMetrics
+
+	// RangefeedBufferMetricsWithCompat tracks metrics for the buffer between
+	// the rangefeed and the kvfeed, while forwarding the old metrics for compatibility.
+	// This should be the one used by the rangefeed.
+	RangefeedBufferMetricsWithCompat PerBufferMetricsWithCompat
+	// AggregatorBufferMetricsWithCompat tracks metrics for the buffer between
+	// the kvfeed and the sink, while forwarding the old metrics for compatibility.
+	// This should be the one used by the kvfeed.
+	AggregatorBufferMetricsWithCompat PerBufferMetricsWithCompat
+
+	// TODO(miles): remove the deprecated metrics and the above compat layer.
+
+	// DeprecatedBufferMetrics tracks the old metrics for both buffers.
+	DeprecatedBufferMetrics PerBufferMetrics
+}
+
+// PerBufferMetricsWithCompat is a compatibility layer between the new
+// per-buffer metrics and the old metrics. Note that it is not a metric.Struct.
+type PerBufferMetricsWithCompat struct {
+	BufferType               bufferType
+	BufferEntriesIn          *forwardingCounter
+	BufferEntriesOut         *forwardingCounter
+	BufferEntriesReleased    *forwardingCounter
+	BufferPushbackNanos      *forwardingCounter
+	BufferEntriesMemAcquired *forwardingCounter
+	BufferEntriesMemReleased *forwardingCounter
+	AllocatedMem             *forwardingGauge
+	BufferEntriesByType      [numEventTypes]*forwardingCounter
+}
+
+type forwardingCounter struct {
+	sinks []*metric.Counter
+}
+
+func (fc *forwardingCounter) Inc(n int64) {
+	for _, c := range fc.sinks {
+		c.Inc(n)
+	}
+}
+
+func (fc *forwardingCounter) Count() int64 {
+	if len(fc.sinks) == 0 {
+		return 0
+	}
+	return fc.sinks[0].Count()
+}
+
+type forwardingGauge struct {
+	sinks []*metric.Gauge
+}
+
+func (fc *forwardingGauge) Inc(n int64) {
+	for _, c := range fc.sinks {
+		c.Inc(n)
+	}
+}
+
+func (fc *forwardingGauge) Dec(n int64) {
+	for _, c := range fc.sinks {
+		c.Dec(n)
+	}
+}
+
+func (fc *forwardingGauge) Value() int64 {
+	if len(fc.sinks) == 0 {
+		return 0
+	}
+	return fc.sinks[0].Value()
+}
+
+type PerBufferMetrics struct {
+	BufferType               bufferType
 	BufferEntriesIn          *metric.Counter
 	BufferEntriesOut         *metric.Counter
 	BufferEntriesReleased    *metric.Counter
@@ -70,6 +146,30 @@ type Metrics struct {
 	BufferEntriesMemReleased *metric.Counter
 	AllocatedMem             *metric.Gauge
 	BufferEntriesByType      [numEventTypes]*metric.Counter
+}
+
+var _ metric.Struct = (*PerBufferMetrics)(nil)
+
+func (PerBufferMetrics) MetricStruct() {}
+
+type bufferType string
+
+const (
+	rangefeedBuffer  bufferType = "rangefeed"
+	aggregatorBuffer bufferType = "aggregator"
+)
+
+// We don't want to rely on labels for this since tsdb doesn't support them, So make separate metrics for each buffer type.
+// For backwards compatibility, give the "rangefeed" metrics the same name as the old versions.
+func (bt bufferType) alterMeta(meta metric.Metadata) metric.Metadata {
+	meta.Name = fmt.Sprintf("%s.%s", meta.Name, bt)
+	switch bt {
+	case rangefeedBuffer:
+		meta.Help = fmt.Sprintf("%s - between the rangefeed and the kvfeed", meta.Help)
+	case aggregatorBuffer:
+		meta.Help = fmt.Sprintf("%s - between the kvfeed and the sink", meta.Help)
+	}
+	return meta
 }
 
 // MakeMetrics constructs a Metrics struct with the provided histogram window.
@@ -92,20 +192,85 @@ func MakeMetrics(histogramWindow time.Duration) Metrics {
 			Unit:        metric.Unit_COUNT,
 		}
 	}
-	return Metrics{
-		BufferEntriesIn:          metric.NewCounter(metaChangefeedBufferEntriesIn),
-		BufferEntriesOut:         metric.NewCounter(metaChangefeedBufferEntriesOut),
-		BufferEntriesReleased:    metric.NewCounter(metaChangefeedBufferEntriesReleased),
-		BufferEntriesMemAcquired: metric.NewCounter(metaChangefeedBufferMemAcquired),
-		BufferEntriesMemReleased: metric.NewCounter(metaChangefeedBufferMemReleased),
-		BufferPushbackNanos:      metric.NewCounter(metaChangefeedBufferPushbackNanos),
-		AllocatedMem:             metric.NewGauge(metaChangefeedAllocatedMemory),
-		BufferEntriesByType: [numEventTypes]*metric.Counter{
-			metric.NewCounter(eventTypeMeta(TypeFlush)),
-			metric.NewCounter(eventTypeMeta(TypeKV)),
-			metric.NewCounter(eventTypeMeta(TypeResolved)),
+	m := Metrics{
+		RangefeedBufferMetrics: PerBufferMetrics{
+			BufferType:               rangefeedBuffer,
+			BufferEntriesIn:          metric.NewCounter(rangefeedBuffer.alterMeta(metaChangefeedBufferEntriesIn)),
+			BufferEntriesOut:         metric.NewCounter(rangefeedBuffer.alterMeta(metaChangefeedBufferEntriesOut)),
+			BufferEntriesReleased:    metric.NewCounter(rangefeedBuffer.alterMeta(metaChangefeedBufferEntriesReleased)),
+			BufferEntriesMemAcquired: metric.NewCounter(rangefeedBuffer.alterMeta(metaChangefeedBufferMemAcquired)),
+			BufferEntriesMemReleased: metric.NewCounter(rangefeedBuffer.alterMeta(metaChangefeedBufferMemReleased)),
+			BufferPushbackNanos:      metric.NewCounter(rangefeedBuffer.alterMeta(metaChangefeedBufferPushbackNanos)),
+			AllocatedMem:             metric.NewGauge(rangefeedBuffer.alterMeta(metaChangefeedAllocatedMemory)),
+			BufferEntriesByType: [numEventTypes]*metric.Counter{
+				metric.NewCounter(rangefeedBuffer.alterMeta(eventTypeMeta(TypeFlush))),
+				metric.NewCounter(rangefeedBuffer.alterMeta(eventTypeMeta(TypeKV))),
+				metric.NewCounter(rangefeedBuffer.alterMeta(eventTypeMeta(TypeResolved))),
+			},
+		},
+		AggregatorBufferMetrics: PerBufferMetrics{
+			BufferType:               aggregatorBuffer,
+			BufferEntriesIn:          metric.NewCounter(aggregatorBuffer.alterMeta(metaChangefeedBufferEntriesIn)),
+			BufferEntriesOut:         metric.NewCounter(aggregatorBuffer.alterMeta(metaChangefeedBufferEntriesOut)),
+			BufferEntriesReleased:    metric.NewCounter(aggregatorBuffer.alterMeta(metaChangefeedBufferEntriesReleased)),
+			BufferEntriesMemAcquired: metric.NewCounter(aggregatorBuffer.alterMeta(metaChangefeedBufferMemAcquired)),
+			BufferEntriesMemReleased: metric.NewCounter(aggregatorBuffer.alterMeta(metaChangefeedBufferMemReleased)),
+			BufferPushbackNanos:      metric.NewCounter(aggregatorBuffer.alterMeta(metaChangefeedBufferPushbackNanos)),
+			AllocatedMem:             metric.NewGauge(aggregatorBuffer.alterMeta(metaChangefeedAllocatedMemory)),
+			BufferEntriesByType: [numEventTypes]*metric.Counter{
+				metric.NewCounter(aggregatorBuffer.alterMeta(eventTypeMeta(TypeFlush))),
+				metric.NewCounter(aggregatorBuffer.alterMeta(eventTypeMeta(TypeKV))),
+				metric.NewCounter(aggregatorBuffer.alterMeta(eventTypeMeta(TypeResolved))),
+			},
+		},
+		DeprecatedBufferMetrics: PerBufferMetrics{
+			BufferType:               aggregatorBuffer,
+			BufferEntriesIn:          metric.NewCounter(metaChangefeedBufferEntriesIn),
+			BufferEntriesOut:         metric.NewCounter(metaChangefeedBufferEntriesOut),
+			BufferEntriesReleased:    metric.NewCounter(metaChangefeedBufferEntriesReleased),
+			BufferEntriesMemAcquired: metric.NewCounter(metaChangefeedBufferMemAcquired),
+			BufferEntriesMemReleased: metric.NewCounter(metaChangefeedBufferMemReleased),
+			BufferPushbackNanos:      metric.NewCounter(metaChangefeedBufferPushbackNanos),
+			AllocatedMem:             metric.NewGauge(metaChangefeedAllocatedMemory),
+			BufferEntriesByType: [numEventTypes]*metric.Counter{
+				metric.NewCounter(eventTypeMeta(TypeFlush)),
+				metric.NewCounter(eventTypeMeta(TypeKV)),
+				metric.NewCounter(eventTypeMeta(TypeResolved)),
+			},
 		},
 	}
+
+	m.AggregatorBufferMetricsWithCompat = PerBufferMetricsWithCompat{
+		BufferType:               aggregatorBuffer,
+		BufferEntriesIn:          &forwardingCounter{sinks: []*metric.Counter{m.AggregatorBufferMetrics.BufferEntriesIn, m.DeprecatedBufferMetrics.BufferEntriesIn}},
+		BufferEntriesOut:         &forwardingCounter{sinks: []*metric.Counter{m.AggregatorBufferMetrics.BufferEntriesOut, m.DeprecatedBufferMetrics.BufferEntriesOut}},
+		BufferEntriesReleased:    &forwardingCounter{sinks: []*metric.Counter{m.AggregatorBufferMetrics.BufferEntriesReleased, m.DeprecatedBufferMetrics.BufferEntriesReleased}},
+		BufferEntriesMemAcquired: &forwardingCounter{sinks: []*metric.Counter{m.AggregatorBufferMetrics.BufferEntriesMemAcquired, m.DeprecatedBufferMetrics.BufferEntriesMemAcquired}},
+		BufferEntriesMemReleased: &forwardingCounter{sinks: []*metric.Counter{m.AggregatorBufferMetrics.BufferEntriesMemReleased, m.DeprecatedBufferMetrics.BufferEntriesMemReleased}},
+		BufferPushbackNanos:      &forwardingCounter{sinks: []*metric.Counter{m.AggregatorBufferMetrics.BufferPushbackNanos, m.DeprecatedBufferMetrics.BufferPushbackNanos}},
+		AllocatedMem:             &forwardingGauge{sinks: []*metric.Gauge{m.AggregatorBufferMetrics.AllocatedMem, m.DeprecatedBufferMetrics.AllocatedMem}},
+		BufferEntriesByType: [numEventTypes]*forwardingCounter{
+			{sinks: []*metric.Counter{m.AggregatorBufferMetrics.BufferEntriesByType[0], m.DeprecatedBufferMetrics.BufferEntriesByType[0]}},
+			{sinks: []*metric.Counter{m.AggregatorBufferMetrics.BufferEntriesByType[1], m.DeprecatedBufferMetrics.BufferEntriesByType[1]}},
+			{sinks: []*metric.Counter{m.AggregatorBufferMetrics.BufferEntriesByType[2], m.DeprecatedBufferMetrics.BufferEntriesByType[2]}},
+		},
+	}
+	m.RangefeedBufferMetricsWithCompat = PerBufferMetricsWithCompat{
+		BufferType:               rangefeedBuffer,
+		BufferEntriesIn:          &forwardingCounter{sinks: []*metric.Counter{m.RangefeedBufferMetrics.BufferEntriesIn, m.DeprecatedBufferMetrics.BufferEntriesIn}},
+		BufferEntriesOut:         &forwardingCounter{sinks: []*metric.Counter{m.RangefeedBufferMetrics.BufferEntriesOut, m.DeprecatedBufferMetrics.BufferEntriesOut}},
+		BufferEntriesReleased:    &forwardingCounter{sinks: []*metric.Counter{m.RangefeedBufferMetrics.BufferEntriesReleased, m.DeprecatedBufferMetrics.BufferEntriesReleased}},
+		BufferEntriesMemAcquired: &forwardingCounter{sinks: []*metric.Counter{m.RangefeedBufferMetrics.BufferEntriesMemAcquired, m.DeprecatedBufferMetrics.BufferEntriesMemAcquired}},
+		BufferEntriesMemReleased: &forwardingCounter{sinks: []*metric.Counter{m.RangefeedBufferMetrics.BufferEntriesMemReleased, m.DeprecatedBufferMetrics.BufferEntriesMemReleased}},
+		BufferPushbackNanos:      &forwardingCounter{sinks: []*metric.Counter{m.RangefeedBufferMetrics.BufferPushbackNanos, m.DeprecatedBufferMetrics.BufferPushbackNanos}},
+		AllocatedMem:             &forwardingGauge{sinks: []*metric.Gauge{m.RangefeedBufferMetrics.AllocatedMem, m.DeprecatedBufferMetrics.AllocatedMem}},
+		BufferEntriesByType: [numEventTypes]*forwardingCounter{
+			{sinks: []*metric.Counter{m.RangefeedBufferMetrics.BufferEntriesByType[0], m.DeprecatedBufferMetrics.BufferEntriesByType[0]}},
+			{sinks: []*metric.Counter{m.RangefeedBufferMetrics.BufferEntriesByType[1], m.DeprecatedBufferMetrics.BufferEntriesByType[1]}},
+			{sinks: []*metric.Counter{m.RangefeedBufferMetrics.BufferEntriesByType[2], m.DeprecatedBufferMetrics.BufferEntriesByType[2]}},
+		},
+	}
+	return m
 }
 
 var _ (metric.Struct) = (*Metrics)(nil)
