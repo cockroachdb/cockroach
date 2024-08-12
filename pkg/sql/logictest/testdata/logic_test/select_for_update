@@ -539,9 +539,15 @@ CREATE TABLE t3 (
   u INT,
   INDEX (u),
   FAMILY (k, v, u)
-);
-INSERT INTO t3 VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3), (4, 4, 2);
-GRANT SELECT ON t3 TO testuser;
+)
+
+statement ok
+INSERT INTO t3 VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3), (4, 4, 2)
+
+statement ok
+GRANT SELECT ON t3 TO testuser
+
+statement ok
 GRANT UPDATE ON t3 TO testuser
 
 statement ok
