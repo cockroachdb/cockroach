@@ -48,6 +48,7 @@ const (
 	defaultImageProject = "ubuntu-os-cloud"
 	FIPSImageProject    = "ubuntu-os-pro-cloud"
 	ManagedLabel        = "managed"
+	MaxConcurrentVMOps  = 16
 )
 
 // providerInstance is the instance to be registered into vm.Providers by Init.
@@ -1198,18 +1199,24 @@ func (p *Provider) editLabels(
 	tagArgsString := strings.Join(tagArgs, ",")
 	commonArgs := []string{"--project", p.GetProject(), fmt.Sprintf("--labels=%s", tagArgsString)}
 
+	var g errgroup.Group
+	g.SetLimit(MaxConcurrentVMOps)
 	for _, v := range vms {
 		vmArgs := make([]string, len(cmdArgs))
 		copy(vmArgs, cmdArgs)
 
 		vmArgs = append(vmArgs, v.Name, "--zone", v.Zone)
 		vmArgs = append(vmArgs, commonArgs...)
-		cmd := exec.Command("gcloud", vmArgs...)
-		if b, err := cmd.CombinedOutput(); err != nil {
-			return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", vmArgs, string(b))
-		}
+
+		g.Go(func() error {
+			cmd := exec.Command("gcloud", vmArgs...)
+			if b, err := cmd.CombinedOutput(); err != nil {
+				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", vmArgs, string(b))
+			}
+			return nil
+		})
 	}
-	return nil
+	return g.Wait()
 }
 
 // AddLabels adds the given labels to the given VMs.
