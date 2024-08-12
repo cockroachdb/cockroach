@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGossipFirstRange(t *testing.T) {
@@ -186,8 +187,11 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	// beginning of the test, and to make sure they aren't closed on server
 	// shutdown. Then we can pass the listeners to the second invocation. Alas,
 	// this requires some refactoring that remains out of scope for now.
-	if err := tc.AddAndStartServerE(newServerArgs); err != nil && !testutils.IsError(err, `address already in use`) {
-		t.Fatal(err)
+	err := tc.AddAndStartServerE(newServerArgs)
+	if testutils.IsError(err, `address already in use`) {
+		skip.WithIssue(t, 114036, "could not start server due to port reuse:", err)
+	} else {
+		require.NoError(t, err)
 	}
 
 	tc.WaitForNStores(t, tc.NumServers(), tc.Server(1).GossipI().(*gossip.Gossip))
