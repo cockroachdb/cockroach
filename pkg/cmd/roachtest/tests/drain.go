@@ -311,8 +311,12 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 
 	logFile := filepath.Join("logs", "*.log")
 	err = c.RunE(ctx, c.Node(nodeToDrain),
-		"grep", "-q", "'proceeding to drain SQL connections'", logFile)
-	require.NoError(t, err, "warning is not logged in the log file")
+		"grep", "-q", "'draining SQL queries after waiting for server.shutdown.connections.timeout'", logFile)
+	require.NoError(t, err, "connection timeout warning is not logged in the log file")
+
+	err = c.RunE(ctx, c.Node(nodeToDrain),
+		"grep", "-q", "'forcibly closing SQL connections after waiting for server.shutdown.transactions.timeout'", logFile)
+	require.NoError(t, err, "transaction timeout warning is not logged in the log file")
 }
 
 // runClusterNotAtQuorum is to verify that draining works even when the cluster
