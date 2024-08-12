@@ -128,6 +128,10 @@ if [[ ${#build_sha_arr[@]} -gt 1 ]]; then
   gsutil -mq cp -r "$output_dir/baseline" "$baseline_cache_path"
 fi
 
+# Push experiment results to cache
+experiment_cache_path="gs://$BENCH_BUCKET/cache/$GCE_MACHINE_TYPE/$SANITIZED_BENCH_PACKAGE/${sha_arr[0]}"
+gsutil -mq cp -r "$output_dir/experiment" "$experiment_cache_path"
+
 # Compare the results, if both sets of benchmarks were run.
 # These should exist if the benchmarks were run successfully.
 if [ -d "$output_dir/experiment" ] && [ "$(ls -A "$output_dir/experiment")" ] \
