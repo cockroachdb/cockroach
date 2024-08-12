@@ -236,7 +236,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.node.admission.wait_durations.elastic-cpu-p99"
-              title={"KV write " + nodeDisplayName(nodeDisplayNameByID, nid)}
+              title={nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               downsampleMax
             />
