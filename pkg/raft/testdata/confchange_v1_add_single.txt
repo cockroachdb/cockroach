@@ -47,7 +47,7 @@ stabilize
   1/3 EntryNormal ""
   1/4 EntryConfChange v2
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:4 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/3 EntryNormal ""
@@ -86,7 +86,7 @@ stabilize
   INFO 2 [commit: 4, lastindex: 4, lastterm: 1] restored snapshot [index: 4, term: 1]
   INFO 2 [commit: 4] restored snapshot [index: 4, term: 1]
 > 2 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   HardState Term:1 Commit:4 Lead:1 LeadEpoch:0
   Snapshot Index:4 Term:1 ConfState:Voters:[1 2] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
