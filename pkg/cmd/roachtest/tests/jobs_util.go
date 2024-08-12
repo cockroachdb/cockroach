@@ -151,7 +151,9 @@ func executeNodeShutdown(
 		}
 	} else {
 		t.L().Printf(`stopping node gracefully %s`, target)
-		if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), cfg.shutdownNode); err != nil {
+		if err := c.StopE(
+			ctx, t.L(), option.NewStopOpts(option.Graceful(shutdownMaxWait)), c.Node(cfg.shutdownNode),
+		); err != nil {
 			return errors.Wrapf(err, "could not stop node %s", target)
 		}
 	}
