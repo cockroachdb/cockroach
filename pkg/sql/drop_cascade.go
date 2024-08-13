@@ -203,7 +203,7 @@ func (d *dropCascadeState) resolveCollectedObjects(
 			// knows how to handle function cascades.
 			var idsInOtherSchemas []descpb.ID
 			for _, dependedOnBy := range fn.DependedOnBy {
-				dependedOnByDesc, err := p.Descriptors().ByID(p.Txn()).Get().Desc(ctx, dependedOnBy.ID)
+				dependedOnByDesc, err := p.Descriptors().ByIDWithoutLeased(p.Txn()).Get().Desc(ctx, dependedOnBy.ID)
 				if err != nil {
 					return err
 				}

@@ -532,7 +532,7 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 		ctx context.Context, txn isql.Txn, col *descs.Collection,
 	) error {
-		immuts, err := col.ByID(txn.KV()).WithoutNonPublic().Get().Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
+		immuts, err := col.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
 		if err != nil {
 			return err
 		}

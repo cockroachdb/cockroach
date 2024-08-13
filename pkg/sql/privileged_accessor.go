@@ -79,7 +79,7 @@ func (p *planner) LookupZoneConfigByNamespaceID(
 
 // IsSystemTable implements tree.PrivilegedAccessor.
 func (p *planner) IsSystemTable(ctx context.Context, id int64) (bool, error) {
-	tbl, err := p.Descriptors().ByID(p.Txn()).Get().Table(ctx, catid.DescID(id))
+	tbl, err := p.Descriptors().ByIDWithoutLeased(p.Txn()).Get().Table(ctx, catid.DescID(id))
 	if err != nil {
 		return false, err
 	}

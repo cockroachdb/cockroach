@@ -133,7 +133,7 @@ func getIngestingPrivilegesForTableOrSchema(
 		// If we are not creating the database as part of this ingestion, the
 		// schemas and tables in the database should be given privileges based on
 		// the parent database's default privileges.
-		parentDB, err := descsCol.ByID(txn).Get().Database(ctx, desc.GetParentID())
+		parentDB, err := descsCol.ByIDWithoutLeased(txn).Get().Database(ctx, desc.GetParentID())
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
 		}
@@ -159,7 +159,7 @@ func getIngestingPrivilegesForTableOrSchema(
 			} else {
 				// If we are restoring into an existing schema, resolve it, and fetch
 				// its default privileges.
-				parentSchema, err := descsCol.ByID(txn).Get().Schema(ctx, desc.GetParentSchemaID())
+				parentSchema, err := descsCol.ByIDWithoutLeased(txn).Get().Schema(ctx, desc.GetParentSchemaID())
 				if err != nil {
 					return nil,
 						errors.Wrapf(err, "failed to lookup parent schema %d", errors.Safe(desc.GetParentSchemaID()))

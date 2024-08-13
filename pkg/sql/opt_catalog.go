@@ -466,7 +466,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	}
 
 	dbID := desc.GetParentID()
-	dbDesc, err := oc.planner.Descriptors().ByID(txn).WithoutNonPublic().Get().Database(ctx, dbID)
+	dbDesc, err := oc.planner.Descriptors().ByIDWithoutLeased(txn).WithoutNonPublic().Get().Database(ctx, dbID)
 	if err != nil {
 		return cat.DataSourceName{}, err
 	}
@@ -476,7 +476,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	if scID == keys.PublicSchemaID {
 		scName = catconstants.PublicSchemaName
 	} else {
-		scDesc, err := oc.planner.Descriptors().ByID(txn).WithoutNonPublic().Get().Schema(ctx, scID)
+		scDesc, err := oc.planner.Descriptors().ByIDWithoutLeased(txn).WithoutNonPublic().Get().Schema(ctx, scID)
 		if err != nil {
 			return cat.DataSourceName{}, err
 		}

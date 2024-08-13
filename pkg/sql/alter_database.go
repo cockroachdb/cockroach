@@ -523,7 +523,7 @@ func (p *planner) checkCanDropSystemDatabaseRegion(ctx context.Context, region t
 		return err
 	}
 	typeIDsToFetch := typeIDsToFetchSet.Ordered()
-	dbTypes, err := p.Descriptors().ByID(p.txn).Get().Descs(ctx, typeIDsToFetch)
+	dbTypes, err := p.Descriptors().ByIDWithoutLeased(p.txn).Get().Descs(ctx, typeIDsToFetch)
 	if err != nil {
 		return errors.Wrapf(err, "failed to fetch multi-region enums while attempting to drop"+
 			" system database region %s", &region)

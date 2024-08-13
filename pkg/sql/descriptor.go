@@ -63,7 +63,7 @@ func (p *planner) createDatabase(
 	if dbID, err := p.Descriptors().LookupDatabaseID(ctx, p.txn, dbName); err == nil && dbID != descpb.InvalidID {
 		if database.IfNotExists {
 			// Check if the database is in a dropping state
-			desc, err := p.Descriptors().ByID(p.txn).Get().Database(ctx, dbID)
+			desc, err := p.Descriptors().ByIDWithoutLeased(p.txn).Get().Database(ctx, dbID)
 			if err != nil {
 				return nil, false, err
 			}

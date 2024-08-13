@@ -395,7 +395,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 				tbls := localPlanner.curPlan.mem.Metadata().AllTables()
 				for _, table := range tbls {
 					descID := table.Table.ID()
-					tbl, err := localPlanner.descCollection.ByID(localPlanner.Txn()).Get().Table(ctx, catid.DescID(descID))
+					tbl, err := localPlanner.descCollection.ByIDWithoutLeased(localPlanner.Txn()).Get().Table(ctx, catid.DescID(descID))
 					if err != nil {
 						return
 					}
@@ -719,7 +719,7 @@ func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descr
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) (err error) {
-		desc, err = txn.Descriptors().ByID(txn.KV()).Get().Desc(ctx, sc.descID)
+		desc, err = txn.Descriptors().ByIDWithoutLeased(txn.KV()).Get().Desc(ctx, sc.descID)
 		return err
 	}); err != nil {
 		return nil, err
@@ -1056,7 +1056,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 // initialize the job running status.
 func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 	return sc.txn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		desc, err := txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, sc.descID)
+		desc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -1257,7 +1257,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 		if err != nil {
 			return err
 		}
-		dbDesc, err := txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, tbl.GetParentID())
+		dbDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, tbl.GetParentID())
 		if err != nil {
 			return err
 		}
@@ -1502,7 +1502,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			return err
 		}
 
-		dbDesc, err := txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, scTable.GetParentID())
+		dbDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, scTable.GetParentID())
 		if err != nil {
 			return err
 		}

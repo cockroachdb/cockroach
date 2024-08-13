@@ -127,12 +127,12 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 	var myTableDesc *tabledesc.Mutable
 	var myOtherTableDesc *tabledesc.Mutable
 	if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		myImm, err := col.ByID(txn.KV()).Get().Table(ctx, myTableID)
+		myImm, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, myTableID)
 		if err != nil {
 			return err
 		}
 		myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
-		myOtherImm, err := col.ByID(txn.KV()).Get().Table(ctx, myOtherTableID)
+		myOtherImm, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, myOtherTableID)
 		if err != nil {
 			return err
 		}
@@ -267,7 +267,7 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 	}
 
 	if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		myImm, err := col.ByID(txn.KV()).Get().Table(ctx, myTableID)
+		myImm, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, myTableID)
 		if err != nil {
 			if ttlTime != FUTURE && (dropItem == TABLE || dropItem == DATABASE) {
 				// We dropped the table, so expect it to not be found.
@@ -277,7 +277,7 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 			return err
 		}
 		myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
-		myOtherImm, err := col.ByID(txn.KV()).Get().Table(ctx, myOtherTableID)
+		myOtherImm, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, myOtherTableID)
 		if err != nil {
 			if ttlTime != FUTURE && dropItem == DATABASE {
 				// We dropped the entire database, so expect none of the tables to be found.

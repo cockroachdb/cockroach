@@ -744,7 +744,7 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 
 	// Validate no descriptor exists for this table
 	id := descpb.ID(descID)
-	desc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Table(ctx, id)
+	desc, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Table(ctx, id)
 	if err != nil && pgerror.GetPGCode(err) != pgcode.UndefinedTable {
 		return err
 	}
@@ -824,7 +824,7 @@ func (p *planner) UpsertDroppedRelationGCTTL(
 	}
 
 	// Fetch the descriptor and check that it's a dropped table.
-	tbl, err := p.Descriptors().ByID(p.txn).Get().Table(ctx, descpb.ID(id))
+	tbl, err := p.Descriptors().ByIDWithoutLeased(p.txn).Get().Table(ctx, descpb.ID(id))
 	if err != nil {
 		return err
 	}

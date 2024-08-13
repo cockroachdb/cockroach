@@ -375,7 +375,7 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 
 	internalDB := s.ApplicationLayer().InternalDB().(descs.DB)
 	err := internalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		systemDBDesc, err := txn.Descriptors().ByID(txn.KV()).Get().Database(ctx, keys.SystemDatabaseID)
+		systemDBDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).Get().Database(ctx, keys.SystemDatabaseID)
 		if err != nil {
 			return err
 		}
@@ -409,7 +409,7 @@ SELECT version = crdb_internal.node_executable_version()
 	// - reminder to bump SystemDatabaseSchemaBootstrapVersion.
 	// - ensure that upgrades have run and updated the system database version.
 	err = internalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		systemDBDesc, err := txn.Descriptors().ByID(txn.KV()).Get().Database(ctx, keys.SystemDatabaseID)
+		systemDBDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).Get().Database(ctx, keys.SystemDatabaseID)
 		if err != nil {
 			return err
 		}

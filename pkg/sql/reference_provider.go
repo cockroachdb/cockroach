@@ -140,7 +140,7 @@ func (f *referenceProviderFactory) NewReferenceProvider(
 	}
 
 	for typeID := range typeReferences {
-		desc, err := f.p.descCollection.ByID(f.p.txn).WithoutNonPublic().Get().Desc(ctx, typeID)
+		desc, err := f.p.descCollection.ByIDWithoutLeased(f.p.txn).WithoutNonPublic().Get().Desc(ctx, typeID)
 		if err != nil {
 			return nil, err
 		}

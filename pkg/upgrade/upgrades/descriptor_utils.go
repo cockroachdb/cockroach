@@ -39,7 +39,7 @@ func createSystemTable(
 	tableLocality tree.LocalityLevel,
 ) error {
 	return db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		dbDesc, err := txn.Descriptors().ByID(txn.KV()).Get().Database(ctx, keys.SystemDatabaseID)
+		dbDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).Get().Database(ctx, keys.SystemDatabaseID)
 		if err != nil {
 			return err
 		}

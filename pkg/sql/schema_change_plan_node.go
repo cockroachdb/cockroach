@@ -155,7 +155,7 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			if err := txn.KV().SetFixedTimestamp(ctx, now); err != nil {
 				return err
 			}
-			desc, err := txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Desc(ctx, descID)
+			desc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Desc(ctx, descID)
 			if err != nil {
 				return err
 			}
