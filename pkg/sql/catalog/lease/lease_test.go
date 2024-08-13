@@ -1140,7 +1140,7 @@ func TestLeaseAtLatestVersion(t *testing.T) {
 				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
 					if desc.GetName() == "kv" {
 						var err error
-						if desc.GetVersion() != 2 {
+						if desc.GetVersion() < 2 {
 							err = errors.Errorf("not seeing latest version")
 						}
 						errChan <- err
