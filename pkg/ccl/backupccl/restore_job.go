@@ -490,7 +490,10 @@ func restore(
 			}
 		}
 	}
-	tasks = append(tasks, countCompletedProcLoop)
+
+	if clusterversion.V24_3.Version().LessEq(job.Payload().CreationClusterVersion) && !details.ExperimentalOnline {
+		tasks = append(tasks, countCompletedProcLoop)
+	}
 
 	// tracingAggLoop is responsible for draining the channel on which processors
 	// in the DistSQL flow will send back their tracing aggregator stats. These
@@ -516,9 +519,6 @@ func restore(
 
 	runRestore := func(ctx context.Context) error {
 		if details.ExperimentalOnline {
-			// Let countCompletedProcLoop exit immediately such that online restore
-			// does not replan on lagging nodes.
-			close(procCompleteCh)
 			log.Warningf(ctx, "EXPERIMENTAL ONLINE RESTORE being used")
 			approxRows, approxDataSize, err := sendAddRemoteSSTs(
 				ctx,
@@ -541,17 +541,18 @@ func restore(
 			return errors.Wrap(err, "sending remote AddSSTable requests")
 		}
 		md := restoreJobMetadata{
-			jobID:              job.ID(),
-			dataToRestore:      dataToRestore,
-			restoreTime:        endTime,
-			encryption:         encryption,
-			kmsEnv:             kmsEnv,
-			uris:               details.URIs,
-			backupLocalityInfo: backupLocalityInfo,
-			spanFilter:         filter,
-			numImportSpans:     numImportSpans,
-			execLocality:       details.ExecutionLocality,
-			exclusiveEndKeys:   fsc.isExclusive(),
+			jobID:                  job.ID(),
+			dataToRestore:          dataToRestore,
+			restoreTime:            endTime,
+			encryption:             encryption,
+			kmsEnv:                 kmsEnv,
+			uris:                   details.URIs,
+			backupLocalityInfo:     backupLocalityInfo,
+			spanFilter:             filter,
+			numImportSpans:         numImportSpans,
+			execLocality:           details.ExecutionLocality,
+			exclusiveEndKeys:       fsc.isExclusive(),
+			creationClusterVersion: job.Payload().CreationClusterVersion,
 		}
 		return errors.Wrap(distRestore(
 			ctx,

@@ -34,17 +34,18 @@ import (
 )
 
 type restoreJobMetadata struct {
-	jobID              jobspb.JobID
-	dataToRestore      restorationData
-	restoreTime        hlc.Timestamp
-	encryption         *jobspb.BackupEncryptionOptions
-	kmsEnv             cloud.KMSEnv
-	uris               []string
-	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo
-	spanFilter         spanCoveringFilter
-	numImportSpans     int
-	execLocality       roachpb.Locality
-	exclusiveEndKeys   bool
+	jobID                  jobspb.JobID
+	dataToRestore          restorationData
+	restoreTime            hlc.Timestamp
+	encryption             *jobspb.BackupEncryptionOptions
+	kmsEnv                 cloud.KMSEnv
+	uris                   []string
+	backupLocalityInfo     []jobspb.RestoreDetails_BackupLocalityInfo
+	spanFilter             spanCoveringFilter
+	numImportSpans         int
+	execLocality           roachpb.Locality
+	exclusiveEndKeys       bool
+	creationClusterVersion roachpb.Version
 }
 
 // distRestore plans a 2 stage distSQL flow for a distributed restore. It
@@ -112,13 +113,14 @@ func distRestore(
 		p := planCtx.NewPhysicalPlan()
 
 		restoreDataSpec := execinfrapb.RestoreDataSpec{
-			JobID:        int64(md.jobID),
-			RestoreTime:  md.restoreTime,
-			Encryption:   fileEncryption,
-			TableRekeys:  md.dataToRestore.getRekeys(),
-			TenantRekeys: md.dataToRestore.getTenantRekeys(),
-			PKIDs:        md.dataToRestore.getPKIDs(),
-			ValidateOnly: md.dataToRestore.isValidateOnly(),
+			JobID:                  int64(md.jobID),
+			RestoreTime:            md.restoreTime,
+			Encryption:             fileEncryption,
+			TableRekeys:            md.dataToRestore.getRekeys(),
+			TenantRekeys:           md.dataToRestore.getTenantRekeys(),
+			PKIDs:                  md.dataToRestore.getPKIDs(),
+			ValidateOnly:           md.dataToRestore.isValidateOnly(),
+			CreationClusterVersion: md.creationClusterVersion,
 		}
 
 		// Plan SplitAndScatter on the coordinator node.

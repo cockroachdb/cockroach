@@ -22,6 +22,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb";
 import "jobs/jobspb/jobs.proto";
 import "roachpb/io-formats.proto";
 import "sql/catalog/descpb/structured.proto";
+import "roachpb/metadata.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/data.proto";
@@ -379,7 +380,12 @@ message RestoreDataSpec {
   reserved 7;
   optional bool validate_only = 8 [(gogoproto.nullable) = false];
   reserved 9;
-  // NEXT ID: 10.
+
+  // CreationClusterVersion is populated at creation time with the then-active
+  // cluster version, in case a job resuming later needs to use this information
+  // to migrate or update the job.
+  optional roachpb.Version creation_cluster_version = 10 [(gogoproto.nullable) = false];
+  // NEXT ID: 11.
 }
 
 // ExporterSpec is the specification for a processor that consumes rows and
