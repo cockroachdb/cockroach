@@ -98,7 +98,7 @@ func (q *Queue[T]) Dequeue() (e T, ok bool) {
 	return e, true
 }
 
-func (q *Queue[T]) purge() {
+func (q *Queue[T]) removeAll() {
 	for q.head != nil {
 		q.head = q.head.next
 		// The previous value of q.head will be garbage collected.
