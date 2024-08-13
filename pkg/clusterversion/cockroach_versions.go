@@ -279,6 +279,10 @@ const (
 	// of the StoreLiveness fabric.
 	V24_3_StoreLivenessEnabled
 
+	// V24_3_AddTimeseriesZoneConfig is the version that adds an explicit zone
+	// config for the timeseries range if one does not exist currently.
+	V24_3_AddTimeseriesZoneConfig
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -350,6 +354,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_3_Start: {Major: 24, Minor: 2, Internal: 2},
 
 	V24_3_StoreLivenessEnabled: {Major: 24, Minor: 2, Internal: 4},
+
+	V24_3_AddTimeseriesZoneConfig: {Major: 24, Minor: 2, Internal: 6},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
