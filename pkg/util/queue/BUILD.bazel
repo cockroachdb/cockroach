@@ -10,11 +10,13 @@ go_library(
 
 go_test(
     name = "queue_test",
-    srcs = ["queue_test.go"],
+    srcs = [
+        "helpers_test.go",
+        "queue_test.go",
+    ],
     embed = [":queue"],
     deps = [
         "//pkg/util/randutil",
-        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )
