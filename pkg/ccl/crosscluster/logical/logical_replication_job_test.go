@@ -149,7 +149,7 @@ func TestLogicalStreamIngestionJobNameResolution(t *testing.T) {
 		},
 	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
 	defer cleanupB()
@@ -240,7 +240,7 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 		},
 	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	retryQueueSizeLimit.Override(ctx, &s.ClusterSettings().SV, 0)
@@ -314,7 +314,7 @@ func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
@@ -392,7 +392,7 @@ func TestLogicalStreamIngestionAdvancePTS(t *testing.T) {
 		},
 	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
@@ -480,7 +480,7 @@ func TestLogicalStreamIngestionJobWithColumnFamilies(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, s, serverASQL, serverBSQL := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
+	tc, s, serverASQL, serverBSQL := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
 
 	createStmt := `CREATE TABLE tab_with_cf (
@@ -527,7 +527,7 @@ func TestRandomTables(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
+	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
 
 	sqlA := s.SQLConn(t, serverutils.DBName("a"))
@@ -604,7 +604,7 @@ func TestRandomStream(t *testing.T) {
 	clusterArgs.ServerArgs.Knobs.Streaming = streamingKnobs
 
 	ctx := context.Background()
-	tc, s, runnerA, _ := setupLogicalTestServer(t, ctx, clusterArgs)
+	tc, s, runnerA, _ := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab")
@@ -630,7 +630,7 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
+	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
 
 	sqlA := s.SQLConn(t, serverutils.DBName("a"))
@@ -757,7 +757,7 @@ func TestLogicalAutoReplan(t *testing.T) {
 		},
 	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	// Don't allow for replanning until the new nodes and scattered table have been created.
@@ -787,7 +787,7 @@ func TestLogicalAutoReplan(t *testing.T) {
 	t.Logf("New nodes added")
 
 	// Only need at least two nodes as leaseholders for test.
-	CreateScatteredTable(t, dbA, 2)
+	CreateScatteredTable(t, dbA, 2, "A")
 
 	// Configure the ingestion job to replan eagerly.
 	serverutils.SetClusterSetting(t, server, "logical_replication.replan_flow_threshold", 0.1)
@@ -805,6 +805,48 @@ func TestLogicalAutoReplan(t *testing.T) {
 	close(turnOffReplanning)
 
 	require.Greater(t, len(clientAddresses), 1)
+}
+
+// TestLogicalJobResiliency tests that the stream addresses from
+// the initial job plan are persisted in system.job_info. In the
+// case that the coordinator node is unavailable, a new node should
+// pick up the job and resume
+func TestLogicalJobResiliency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 3)
+	defer server.Stopper().Stop(ctx)
+
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	CreateScatteredTable(t, dbB, 2, "B")
+
+	var jobAID jobspb.JobID
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+
+	now := server.Server(0).Clock().Now()
+	t.Logf("waiting for replication job %d", jobAID)
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+
+	progress := jobutils.GetJobProgress(t, dbA, jobAID)
+	addresses := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.StreamAddresses
+
+	require.Greaterf(t, len(addresses), 1, "Less than 2 addresses were persisted in system.job_info")
 }
 
 func TestHeartbeatCancel(t *testing.T) {
@@ -836,7 +878,7 @@ func TestHeartbeatCancel(t *testing.T) {
 		},
 	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
 	serverutils.SetClusterSetting(t, server, "logical_replication.consumer.heartbeat_frequency", time.Second*1)
@@ -871,14 +913,14 @@ func TestHeartbeatCancel(t *testing.T) {
 }
 
 func setupLogicalTestServer(
-	t *testing.T, ctx context.Context, clusterArgs base.TestClusterArgs,
+	t *testing.T, ctx context.Context, clusterArgs base.TestClusterArgs, numNodes int,
 ) (
 	*testcluster.TestCluster,
 	serverutils.ApplicationLayerInterface,
 	*sqlutils.SQLRunner,
 	*sqlutils.SQLRunner,
 ) {
-	server := testcluster.StartTestCluster(t, 1, clusterArgs)
+	server := testcluster.StartTestCluster(t, numNodes, clusterArgs)
 	s := server.Server(0).ApplicationLayer()
 
 	_, err := server.Conns[0].Exec("SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'")
@@ -937,13 +979,13 @@ func compareReplicatedTables(
 	}
 }
 
-func CreateScatteredTable(t *testing.T, db *sqlutils.SQLRunner, numNodes int) {
+func CreateScatteredTable(t *testing.T, db *sqlutils.SQLRunner, numNodes int, dbName string) {
 	// Create a source table with multiple ranges spread across multiple nodes. We
 	// need around 50 or more ranges because there are already over 50 system
 	// ranges, so if we write just a few ranges those might all be on a single
 	// server, which will cause the test to flake.
 	numRanges := 50
-	rowsPerRange := 20
+	rowsPerRange := 40
 	db.Exec(t, "INSERT INTO tab (pk) SELECT * FROM generate_series(1, $1)",
 		numRanges*rowsPerRange)
 	db.Exec(t, "ALTER TABLE tab SPLIT AT (SELECT * FROM generate_series($1::INT, $2::INT, $3::INT))",
@@ -953,10 +995,12 @@ func CreateScatteredTable(t *testing.T, db *sqlutils.SQLRunner, numNodes int) {
 	if skip.Duress() {
 		timeout *= 5
 	}
+
 	testutils.SucceedsWithin(t, func() error {
 		var leaseHolderCount int
+		query := fmt.Sprintf("SELECT count(DISTINCT lease_holder) FROM [SHOW RANGES FROM DATABASE %s WITH DETAILS]", dbName)
 		db.QueryRow(t,
-			`SELECT count(DISTINCT lease_holder) FROM [SHOW RANGES FROM DATABASE A WITH DETAILS]`).
+			query).
 			Scan(&leaseHolderCount)
 		require.Greater(t, leaseHolderCount, 0)
 		if leaseHolderCount < numNodes {
@@ -1068,7 +1112,7 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
 		},
-	})
+	}, 1)
 	defer server.Stopper().Stop(ctx)
 
 	lwwFunc := `CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tab, existing tab, prev tab, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL,proposed_mvcc_timestamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)

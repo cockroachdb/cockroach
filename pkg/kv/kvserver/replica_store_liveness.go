@@ -12,13 +12,33 @@ package kvserver
 
 import (
 	"context"
+	"encoding/binary"
+	"fmt"
+	"hash/fnv"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
+
+var raftLeaderFortificationFractionEnabled = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.raft.leader_fortification.fraction_enabled",
+	"controls the fraction of ranges for which the raft leader fortification "+
+		"protocol is enabled. Leader fortification is needed for a range to use a "+
+		"Leader lease. Set to 0.0 to disable leader fortification and, by extension, "+
+		"Leader leases. Set to 1.0 to enable leader fortification for all ranges and, "+
+		"by extension, use Leader leases for all ranges which do not require "+
+		"expiration-based leases. Set to a value between 0.0 and 1.0 to gradually "+
+		"roll out Leader leases across the ranges in a cluster.",
+	envutil.EnvOrDefaultFloat64("COCKROACH_LEADER_FORTIFICATION_FRACTION_ENABLED", 0.0),
+	settings.FloatInRange(0.0, 1.0),
+	settings.WithPublic,
 )
 
 // replicaRLockedStoreLiveness implements the raftstoreliveness.StoreLiveness
@@ -73,10 +93,34 @@ func (r *replicaRLockedStoreLiveness) SupportFromEnabled() bool {
 	// here. Instead, the version should be checked when deciding to enable
 	// StoreLiveness or not. Then, the check here should only check whether store
 	// liveness is enabled.
-	//
-	// TODO(nvanbenschoten): hook this up to a cluster setting to gradually roll
-	// out raft fortification.
-	return r.store.ClusterSettings().Version.IsActive(context.TODO(), clusterversion.V24_3_StoreLivenessEnabled)
+	storeLivenessEnabled := r.store.ClusterSettings().Version.IsActive(context.TODO(), clusterversion.V24_3_StoreLivenessEnabled)
+	if !storeLivenessEnabled {
+		return false
+	}
+	fracEnabled := raftLeaderFortificationFractionEnabled.Get(&r.store.ClusterSettings().SV)
+	fortifyEnabled := raftFortificationEnabledForRangeID(fracEnabled, r.RangeID)
+	return fortifyEnabled
+}
+
+func raftFortificationEnabledForRangeID(fracEnabled float64, rangeID roachpb.RangeID) bool {
+	if fracEnabled < 0 || fracEnabled > 1 {
+		panic(fmt.Sprintf("unexpected fraction enabled value: %f", fracEnabled))
+	}
+	const percPrecision = 10_000                      // 0.01% precision
+	percEnabled := int64(percPrecision * fracEnabled) // [0, percPrecision]
+
+	// Compute a random, but stable hash of the range ID to determine whether this
+	// range should be fortifying its leader lease or not.
+	// NOTE: this looks expensive, but it compiles to zero allocations and takes
+	// about 4ns.
+	var b [8]byte
+	binary.LittleEndian.PutUint64(b[:], uint64(rangeID))
+	h := fnv.New64()
+	_, _ = h.Write(b[:])
+	hash := h.Sum64()
+	perc := int64(hash % percPrecision) // [0, percPrecision)
+
+	return perc < percEnabled
 }
 
 // SupportExpired implements the raftstoreliveness.StoreLiveness interface.
