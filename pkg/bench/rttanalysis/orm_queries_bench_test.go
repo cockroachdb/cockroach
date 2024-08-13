@@ -551,6 +551,188 @@ ORDER BY
 		},
 
 		{
+			Name: "prisma types 4",
+			Setup: func() string {
+				const count = 4
+				sb := strings.Builder{}
+				sb.WriteString(buildNTypes(count))
+				sb.WriteString("\n")
+				sb.WriteString(buildNTables(count))
+				sb.WriteString("\n")
+				for i := range count {
+					// Indexes also appear in pg_class, so creating some here will
+					// make the JOIN do more work.
+					sb.WriteString(fmt.Sprintf("CREATE INDEX idx%d ON tab%d (b);\n", i, i))
+				}
+				return sb.String()
+			}(),
+			Stmt: `
+SELECT
+  ns.nspname, t.oid, t.typname, t.typtype, t.typnotnull, t.elemtypoid
+FROM
+  (
+    SELECT
+      typ.oid,
+      typ.typnamespace,
+      typ.typname,
+      typ.typtype,
+      typ.typrelid,
+      typ.typnotnull,
+      typ.relkind,
+      elemtyp.oid AS elemtypoid,
+      elemtyp.typname AS elemtypname,
+      elemcls.relkind AS elemrelkind,
+      CASE WHEN elemproc.proname = 'array_recv' THEN 'a' ELSE elemtyp.typtype END AS elemtyptype
+    FROM
+      (
+        SELECT
+          typ.oid,
+          typnamespace,
+          typname,
+          typrelid,
+          typnotnull,
+          relkind,
+          typelem AS elemoid,
+          CASE WHEN proc.proname = 'array_recv' THEN 'a' ELSE typ.typtype END AS typtype,
+          CASE
+          WHEN proc.proname = 'array_recv' THEN typ.typelem
+          WHEN typ.typtype = 'r' THEN rngsubtype
+          WHEN typ.typtype = 'd' THEN typ.typbasetype
+          END
+            AS elemtypoid
+        FROM
+          pg_type AS typ
+          LEFT JOIN pg_class AS cls ON cls.oid = typ.typrelid
+          LEFT JOIN pg_proc AS proc ON proc.oid = typ.typreceive
+          LEFT JOIN pg_range ON pg_range.rngtypid = typ.oid
+      )
+        AS typ
+      LEFT JOIN pg_type AS elemtyp ON elemtyp.oid = elemtypoid
+      LEFT JOIN pg_class AS elemcls ON elemcls.oid = elemtyp.typrelid
+      LEFT JOIN pg_proc AS elemproc ON elemproc.oid = elemtyp.typreceive
+  )
+    AS t
+  JOIN pg_namespace AS ns ON ns.oid = typnamespace
+WHERE
+  typtype IN ('b':::STRING, 'r':::STRING, 'm':::STRING, 'e':::STRING, 'd':::STRING)
+  OR (typtype = 'c' AND relkind = 'c')
+  OR (typtype = 'p' AND typname IN ('record':::STRING:::NAME, 'void':::STRING:::NAME))
+  OR (
+      typtype = 'a'
+      AND (
+          elemtyptype IN ('b':::STRING, 'r':::STRING, 'm':::STRING, 'e':::STRING, 'd':::STRING)
+          OR (
+              elemtyptype = 'p'
+              AND elemtypname IN ('record':::STRING:::NAME, 'void':::STRING:::NAME)
+            )
+          OR (elemtyptype = 'c' AND elemrelkind = 'c')
+        )
+    )
+ORDER BY
+  CASE
+  WHEN typtype IN ('b':::STRING, 'e':::STRING, 'p':::STRING) THEN 0
+  WHEN typtype = 'r' THEN 1
+  WHEN typtype = 'm' THEN 2
+  WHEN typtype = 'c' THEN 3
+  WHEN typtype = 'd' AND elemtyptype != 'a' THEN 4
+  WHEN typtype = 'a' THEN 5
+  WHEN typtype = 'd' AND elemtyptype = 'a' THEN 6
+  END;
+`,
+		},
+
+		{
+			Name: "prisma types 16",
+			Setup: func() string {
+				const count = 16
+				sb := strings.Builder{}
+				sb.WriteString(buildNTypes(count))
+				sb.WriteString("\n")
+				sb.WriteString(buildNTables(count))
+				sb.WriteString("\n")
+				for i := range count {
+					// Indexes also appear in pg_class, so creating some here will
+					// make the JOIN do more work.
+					sb.WriteString(fmt.Sprintf("CREATE INDEX idx%d ON tab%d (b);\n", i, i))
+				}
+				return sb.String()
+			}(),
+			Stmt: `
+SELECT
+  ns.nspname, t.oid, t.typname, t.typtype, t.typnotnull, t.elemtypoid
+FROM
+  (
+    SELECT
+      typ.oid,
+      typ.typnamespace,
+      typ.typname,
+      typ.typtype,
+      typ.typrelid,
+      typ.typnotnull,
+      typ.relkind,
+      elemtyp.oid AS elemtypoid,
+      elemtyp.typname AS elemtypname,
+      elemcls.relkind AS elemrelkind,
+      CASE WHEN elemproc.proname = 'array_recv' THEN 'a' ELSE elemtyp.typtype END AS elemtyptype
+    FROM
+      (
+        SELECT
+          typ.oid,
+          typnamespace,
+          typname,
+          typrelid,
+          typnotnull,
+          relkind,
+          typelem AS elemoid,
+          CASE WHEN proc.proname = 'array_recv' THEN 'a' ELSE typ.typtype END AS typtype,
+          CASE
+          WHEN proc.proname = 'array_recv' THEN typ.typelem
+          WHEN typ.typtype = 'r' THEN rngsubtype
+          WHEN typ.typtype = 'd' THEN typ.typbasetype
+          END
+            AS elemtypoid
+        FROM
+          pg_type AS typ
+          LEFT JOIN pg_class AS cls ON cls.oid = typ.typrelid
+          LEFT JOIN pg_proc AS proc ON proc.oid = typ.typreceive
+          LEFT JOIN pg_range ON pg_range.rngtypid = typ.oid
+      )
+        AS typ
+      LEFT JOIN pg_type AS elemtyp ON elemtyp.oid = elemtypoid
+      LEFT JOIN pg_class AS elemcls ON elemcls.oid = elemtyp.typrelid
+      LEFT JOIN pg_proc AS elemproc ON elemproc.oid = elemtyp.typreceive
+  )
+    AS t
+  JOIN pg_namespace AS ns ON ns.oid = typnamespace
+WHERE
+  typtype IN ('b':::STRING, 'r':::STRING, 'm':::STRING, 'e':::STRING, 'd':::STRING)
+  OR (typtype = 'c' AND relkind = 'c')
+  OR (typtype = 'p' AND typname IN ('record':::STRING:::NAME, 'void':::STRING:::NAME))
+  OR (
+      typtype = 'a'
+      AND (
+          elemtyptype IN ('b':::STRING, 'r':::STRING, 'm':::STRING, 'e':::STRING, 'd':::STRING)
+          OR (
+              elemtyptype = 'p'
+              AND elemtypname IN ('record':::STRING:::NAME, 'void':::STRING:::NAME)
+            )
+          OR (elemtyptype = 'c' AND elemrelkind = 'c')
+        )
+    )
+ORDER BY
+  CASE
+  WHEN typtype IN ('b':::STRING, 'e':::STRING, 'p':::STRING) THEN 0
+  WHEN typtype = 'r' THEN 1
+  WHEN typtype = 'm' THEN 2
+  WHEN typtype = 'c' THEN 3
+  WHEN typtype = 'd' AND elemtyptype != 'a' THEN 4
+  WHEN typtype = 'a' THEN 5
+  WHEN typtype = 'd' AND elemtyptype = 'a' THEN 6
+  END;
+`,
+		},
+
+		{
 			Name:  "npgsql types",
 			Setup: buildNTables(8),
 			Stmt: `SELECT ns.nspname, t.oid, t.typname, t.typtype, t.typnotnull, t.elemtypoid
@@ -845,7 +1027,7 @@ ORDER BY
 func buildNTables(n int) string {
 	b := strings.Builder{}
 	for i := 0; i < n; i++ {
-		b.WriteString(fmt.Sprintf("CREATE TABLE t%d(a int primary key, b int);\n", i))
+		b.WriteString(fmt.Sprintf("CREATE TABLE tab%d(a int primary key, b int);\n", i))
 	}
 	return b.String()
 }
@@ -853,7 +1035,7 @@ func buildNTables(n int) string {
 func buildNTypes(n int) string {
 	b := strings.Builder{}
 	for i := 0; i < n; i++ {
-		b.WriteString(fmt.Sprintf("CREATE TYPE t%d AS (a int, b int);\n", i))
+		b.WriteString(fmt.Sprintf("CREATE TYPE typ%d AS (a int, b int);\n", i))
 	}
 	return b.String()
 }
