@@ -1255,6 +1255,30 @@ func (node *ShowTenant) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowLogicalReplicationJobsOptions represents the WITH clause in SHOW LOGICAL REPLICATION JOBS.
+type ShowLogicalReplicationJobsOptions struct {
+	WithDetails bool
+}
+
+// ShowLogicalReplicationJobs represents a SHOW LOGICAL REPLICATION JOBS statement.
+type ShowLogicalReplicationJobs struct {
+	ShowLogicalReplicationJobsOptions
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowLogicalReplicationJobs) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW LOGICAL REPLICATION JOBS")
+
+	withs := []string{}
+	if node.WithDetails {
+		withs = append(withs, "DETAILS")
+	}
+	if len(withs) > 0 {
+		ctx.WriteString(" WITH ")
+		ctx.WriteString(strings.Join(withs, ", "))
+	}
+}
+
 // ShowHistogram represents a SHOW HISTOGRAM statement.
 type ShowHistogram struct {
 	HistogramID int64
