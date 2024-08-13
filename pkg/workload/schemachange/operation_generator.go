@@ -1657,7 +1657,11 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 	// us to use, we add an internal crdb_internal_idx_expr prefixed column to
 	// the table.
 	stmt.potentialExecErrors.add(pgcode.InvalidColumnReference)
-
+	// For legacy schema changer its possible for create index operations to interfere if they
+	// are in progress.
+	if !og.useDeclarativeSchemaChanger {
+		stmt.potentialExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
+	}
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName.String(), columnName.String())
 	return stmt, nil
 }
