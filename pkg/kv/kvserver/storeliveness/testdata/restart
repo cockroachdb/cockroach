@@ -7,7 +7,8 @@ add-store node-id=2 store-id=2
 ----
 
 # -------------------------------------------------------------
-# Store (n1, s1) established support for and from (n2, s2).
+# Store (n1, s1) establishes support for and from (n2, s2).
+# Each store also withdraws support from the other.
 # -------------------------------------------------------------
 
 send-heartbeats now=100 liveness-interval=10s
@@ -17,27 +18,34 @@ heartbeats:
 
 handle-messages
   msg type=MsgHeartbeat from-node-id=2 from-store-id=2 epoch=2 expiration=200
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=1 expiration=110
 ----
 responses:
 {Type:MsgHeartbeatResp From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:2 Expiration:200.000000000,0}
 
-handle-messages
-  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=1 expiration=110
+withdraw-support now=201
 ----
+
+handle-messages
+  msg type=MsgHeartbeat from-node-id=2 from-store-id=2 epoch=3 expiration=300
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=2 expiration=0
+----
+responses:
+{Type:MsgHeartbeatResp From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:3 Expiration:300.000000000,0}
 
 debug-requester-state
 ----
 meta:
-{MaxEpoch:1 MaxRequested:110.000000000,0}
+{MaxEpoch:2 MaxRequested:110.000000000,0}
 support from:
-{Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:110.000000000,0}
+{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:0,0}
 
 debug-supporter-state
 ----
 meta:
-{MaxWithdrawn:0,0}
+{MaxWithdrawn:201.000000000,0}
 support for:
-{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:200.000000000,0}
+{Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:300.000000000,0}
 
 # -------------------------------------------------------------
 # Store (n1, s1) restarts.
@@ -49,15 +57,15 @@ restart
 debug-requester-state
 ----
 meta:
-{MaxEpoch:2 MaxRequested:110.000000000,0}
+{MaxEpoch:3 MaxRequested:110.000000000,0}
 support from:
 
 debug-supporter-state
 ----
 meta:
-{MaxWithdrawn:0,0}
+{MaxWithdrawn:201.000000000,0}
 support for:
-{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:200.000000000,0}
+{Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:300.000000000,0}
 
 # -------------------------------------------------------------
 # Store (n1, s1) sends heartbeats but it forgot about support
@@ -78,4 +86,4 @@ add-store node-id=2 store-id=2
 send-heartbeats now=200 liveness-interval=10s
 ----
 heartbeats:
-{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:2 Expiration:210.000000000,0}
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:3 Expiration:210.000000000,0}

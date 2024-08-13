@@ -11,9 +11,11 @@
 package storeliveness
 
 import (
+	"context"
 	"sync/atomic"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -105,10 +107,22 @@ func (ssh *supporterStateHandler) getSupportFor(id slpb.StoreIdent) slpb.Support
 
 // Functions for handling supporterState updates.
 
+// assertMeta ensures the meta in the inProgress view does not regress any of
+// the meta fields in the checkedIn view.
+func (ssfu *supporterStateForUpdate) assertMeta() {
+	assert(
+		ssfu.checkedIn.meta.MaxWithdrawn.LessEq(ssfu.inProgress.meta.MaxWithdrawn),
+		"max withdrawn regressed during update",
+	)
+}
+
 // getMeta returns the SupporterMeta from the inProgress view; if not present,
-// it falls back to the SupporterMeta from the checkedIn view.
+// it falls back to the SupporterMeta from the checkedIn view. If there are
+// fields in inProgress.meta that were not modified in this update, they will
+// contain the values from checkedIn.meta.
 func (ssfu *supporterStateForUpdate) getMeta() slpb.SupporterMeta {
 	if ssfu.inProgress.meta != (slpb.SupporterMeta{}) {
+		ssfu.assertMeta()
 		return ssfu.inProgress.meta
 	}
 	return ssfu.checkedIn.meta
@@ -132,6 +146,45 @@ func (ssfu *supporterStateForUpdate) getSupportFor(
 func (ssfu *supporterStateForUpdate) reset() {
 	ssfu.inProgress.meta = slpb.SupporterMeta{}
 	clear(ssfu.inProgress.supportFor)
+}
+
+// write writes the supporter meta and supportFor to disk if they changed in
+// this update.
+func (ssfu *supporterStateForUpdate) write(ctx context.Context, rw storage.ReadWriter) error {
+	if ssfu.inProgress.meta == (slpb.SupporterMeta{}) && len(ssfu.inProgress.supportFor) == 0 {
+		return nil
+	}
+	if ssfu.inProgress.meta != (slpb.SupporterMeta{}) {
+		ssfu.assertMeta()
+		if err := writeSupporterMeta(ctx, rw, ssfu.inProgress.meta); err != nil {
+			return err
+		}
+	}
+	for _, ss := range ssfu.inProgress.supportFor {
+		if err := writeSupportForState(ctx, rw, ss); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// read reads the supporter meta and supportFor from disk and populates them in
+// supporterStateHandler.supporterState.
+func (ssh *supporterStateHandler) read(ctx context.Context, r storage.Reader) error {
+	var err error
+	ssh.supporterState.meta, err = readSupporterMeta(ctx, r)
+	if err != nil {
+		return err
+	}
+	supportFor, err := readSupportForState(ctx, r)
+	if err != nil {
+		return err
+	}
+	ssh.supporterState.supportFor = make(map[slpb.StoreIdent]slpb.SupportState, len(supportFor))
+	for _, s := range supportFor {
+		ssh.supporterState.supportFor[s.Target] = s
+	}
+	return nil
 }
 
 // checkOutUpdate returns the supporterStateForUpdate referenced in
@@ -159,9 +212,8 @@ func (ssh *supporterStateHandler) checkInUpdate(ssfu *supporterStateForUpdate) {
 	ssh.mu.Lock()
 	defer ssh.mu.Unlock()
 	if ssfu.inProgress.meta != (slpb.SupporterMeta{}) {
-		if !ssfu.inProgress.meta.MaxWithdrawn.IsEmpty() {
-			ssfu.checkedIn.meta.MaxWithdrawn = ssfu.inProgress.meta.MaxWithdrawn
-		}
+		ssfu.assertMeta()
+		ssfu.checkedIn.meta = ssfu.inProgress.meta
 	}
 	for storeID, ss := range ssfu.inProgress.supportFor {
 		ssfu.checkedIn.supportFor[storeID] = ss
@@ -222,8 +274,9 @@ func (ssfu *supporterStateForUpdate) withdrawSupport(now hlc.ClockTimestamp) {
 		ssNew := maybeWithdrawSupport(ss, now)
 		if ss != ssNew {
 			ssfu.inProgress.supportFor[id] = ssNew
-			if ssfu.getMeta().MaxWithdrawn.Less(now) {
-				ssfu.inProgress.meta.MaxWithdrawn.Forward(now)
+			meta := ssfu.getMeta()
+			if meta.MaxWithdrawn.Forward(now) {
+				ssfu.inProgress.meta = meta
 			}
 		}
 	}

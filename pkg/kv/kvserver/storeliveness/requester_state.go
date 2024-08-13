@@ -11,10 +11,12 @@
 package storeliveness
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -63,7 +65,7 @@ type requesterStateHandler struct {
 func newRequesterStateHandler() *requesterStateHandler {
 	rsh := &requesterStateHandler{
 		requesterState: requesterState{
-			meta:        slpb.RequesterMeta{MaxEpoch: 1},
+			meta:        slpb.RequesterMeta{},
 			supportFrom: make(map[slpb.StoreIdent]slpb.SupportState),
 		},
 	}
@@ -134,10 +136,26 @@ func (rsh *requesterStateHandler) removeStore(id slpb.StoreIdent) {
 
 // Functions for handling requesterState updates.
 
+// assertMeta ensures the meta in the inProgress view does not regress any of
+// the meta fields in the checkedIn view.
+func (rsfu *requesterStateForUpdate) assertMeta() {
+	assert(
+		rsfu.checkedIn.meta.MaxEpoch <= rsfu.inProgress.meta.MaxEpoch,
+		"max epoch regressed during update",
+	)
+	assert(
+		rsfu.checkedIn.meta.MaxRequested.LessEq(rsfu.inProgress.meta.MaxRequested),
+		"max requested regressed during update",
+	)
+}
+
 // getMeta returns the RequesterMeta from the inProgress view; if not present,
-// it falls back to the RequesterMeta from the checkedIn view.
+// it falls back to the RequesterMeta from the checkedIn view. If there are
+// fields in inProgress.meta that were not modified in this update, they will
+// contain the values from checkedIn.meta.
 func (rsfu *requesterStateForUpdate) getMeta() slpb.RequesterMeta {
 	if rsfu.inProgress.meta != (slpb.RequesterMeta{}) {
+		rsfu.assertMeta()
 		return rsfu.inProgress.meta
 	}
 	return rsfu.checkedIn.meta
@@ -161,6 +179,29 @@ func (rsfu *requesterStateForUpdate) getSupportFrom(
 func (rsfu *requesterStateForUpdate) reset() {
 	rsfu.inProgress.meta = slpb.RequesterMeta{}
 	clear(rsfu.inProgress.supportFrom)
+}
+
+// write writes the requester meta to disk if it changed in this update.
+func (rsfu *requesterStateForUpdate) write(ctx context.Context, rw storage.ReadWriter) error {
+	if rsfu.inProgress.meta == (slpb.RequesterMeta{}) {
+		return nil
+	}
+	rsfu.assertMeta()
+	if err := writeRequesterMeta(ctx, rw, rsfu.inProgress.meta); err != nil {
+		return err
+	}
+	return nil
+}
+
+// read reads the requester meta from disk and populates it in
+// requesterStateHandler.requesterState.
+func (rsh *requesterStateHandler) read(ctx context.Context, r storage.Reader) error {
+	var err error
+	rsh.requesterState.meta, err = readRequesterMeta(ctx, r)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // checkOutUpdate returns the requesterStateForUpdate referenced in
@@ -188,12 +229,8 @@ func (rsh *requesterStateHandler) checkInUpdate(rsfu *requesterStateForUpdate) {
 	rsh.mu.Lock()
 	defer rsh.mu.Unlock()
 	if rsfu.inProgress.meta != (slpb.RequesterMeta{}) {
-		if !rsfu.inProgress.meta.MaxRequested.IsEmpty() {
-			rsfu.checkedIn.meta.MaxRequested = rsfu.inProgress.meta.MaxRequested
-		}
-		if rsfu.inProgress.meta.MaxEpoch != 0 {
-			rsfu.checkedIn.meta.MaxEpoch = rsfu.inProgress.meta.MaxEpoch
-		}
+		rsfu.assertMeta()
+		rsfu.checkedIn.meta = rsfu.inProgress.meta
 	}
 	for storeID, ss := range rsfu.inProgress.supportFrom {
 		rsfu.checkedIn.supportFrom[storeID] = ss
@@ -217,16 +254,15 @@ func (rsfu *requesterStateForUpdate) getHeartbeatsToSend(
 // liveness interval.
 func (rsfu *requesterStateForUpdate) updateMaxRequested(now hlc.Timestamp, interval time.Duration) {
 	newMaxRequested := now.Add(interval.Nanoseconds(), 0)
-	if rsfu.getMeta().MaxRequested.Less(newMaxRequested) {
-		rsfu.inProgress.meta.MaxRequested.Forward(newMaxRequested)
+	meta := rsfu.getMeta()
+	if meta.MaxRequested.Forward(newMaxRequested) {
+		// Update the entire meta struct to ensure MaxEpoch is not overwritten.
+		rsfu.inProgress.meta = meta
 	}
 }
 
 func (rsfu *requesterStateForUpdate) generateHeartbeats(from slpb.StoreIdent) []slpb.Message {
 	heartbeats := make([]slpb.Message, 0, len(rsfu.checkedIn.supportFrom))
-	// It's ok to read store IDs directly from rsfu.checkedIn.supportFrom since
-	// adding and removing stores is not allowed while there's an update in
-	// progress.
 	maxRequested := rsfu.getMeta().MaxRequested
 	// Assert that there are no updates in rsfu.inProgress.supportFrom to make
 	// sure we can iterate over rsfu.checkedIn.supportFrom in the loop below.
@@ -297,8 +333,10 @@ func handleHeartbeatResponse(
 
 // incrementMaxEpoch increments the inProgress view of MaxEpoch.
 func (rsfu *requesterStateForUpdate) incrementMaxEpoch() {
-	currentEpoch := rsfu.getMeta().MaxEpoch
-	rsfu.inProgress.meta.MaxEpoch = currentEpoch + 1
+	meta := rsfu.getMeta()
+	meta.MaxEpoch++
+	// Update the entire meta struct to ensure MaxRequested is not overwritten.
+	rsfu.inProgress.meta = meta
 }
 
 func assert(condition bool, msg string) {
