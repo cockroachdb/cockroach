@@ -356,7 +356,7 @@ func RestartNodesWithNewBinary(
 	newVersion *Version,
 	settings ...install.ClusterSettingOption,
 ) error {
-	const maxWait = 300 // 5 minutes
+	const maxWait = 10 // test time out
 
 	// NB: We could technically stage the binary on all nodes before
 	// restarting each one, but on Unix it's invalid to write to an
