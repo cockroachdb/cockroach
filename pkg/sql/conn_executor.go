@@ -4029,9 +4029,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			return advanceInfo{}, err
 		}
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionStartPostCommitJob, timeutil.Now())
-		if err := ex.server.cfg.JobRegistry.Run(
-			ex.ctxHolder.connCtx, ex.extraTxnState.jobs.created,
-		); err != nil {
+		if err := ex.waitForTxnJobs(); err != nil {
 			handleErr(err)
 		}
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, timeutil.Now())
@@ -4060,6 +4058,65 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			"unexpected event: %v", errors.Safe(advInfo.txnEvent))
 	}
 	return advInfo, nil
+}
+
+// waitForTxnJobs waits for any jobs created inside this txn
+// and respects the statement timeout for implicit transactions.
+func (ex *connExecutor) waitForTxnJobs() error {
+	var retErr error
+	if len(ex.extraTxnState.jobs.created) == 0 {
+		return nil
+	}
+	ex.server.cfg.JobRegistry.NotifyToResume(
+		ex.ctxHolder.connCtx, ex.extraTxnState.jobs.created...,
+	)
+	// Set up a context for waiting for the jobs, which can be cancelled if
+	// a statement timeout exists.
+	jobWaitCtx := ex.ctxHolder.ctx()
+	var queryTimedout atomic.Bool
+	if ex.sessionData().StmtTimeout > 0 {
+		timePassed := timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
+		if timePassed > ex.sessionData().StmtTimeout {
+			queryTimedout.Store(true)
+		} else {
+			var cancelFn context.CancelFunc
+			jobWaitCtx, cancelFn = context.WithCancel(jobWaitCtx)
+			queryTimeTicker := time.AfterFunc(ex.sessionData().StmtTimeout-timePassed, func() {
+				cancelFn()
+				queryTimedout.Store(true)
+			})
+			defer cancelFn()
+			defer queryTimeTicker.Stop()
+		}
+	}
+	if !queryTimedout.Load() && len(ex.extraTxnState.jobs.created) > 0 {
+		if err := ex.server.cfg.JobRegistry.WaitForJobs(jobWaitCtx,
+			ex.extraTxnState.jobs.created); err != nil {
+			if errors.Is(err, context.Canceled) && queryTimedout.Load() {
+				retErr = sqlerrors.QueryTimeoutError
+				err = nil
+			} else {
+				return err
+			}
+		}
+	}
+	// If the query timed out indicate that there are jobs left behind.
+	if queryTimedout.Load() {
+		jobList := strings.Builder{}
+		for i, j := range ex.extraTxnState.jobs.created {
+			if i > 0 {
+				jobList.WriteString(",")
+			}
+			jobList.WriteString(j.String())
+		}
+		if err := ex.planner.noticeSender.SendNotice(ex.ctxHolder.connCtx,
+			pgnotice.Newf("The statement has timed out, but the following "+
+				"background jobs have been created and will continue running: %s.",
+				jobList.String())); err != nil {
+			return err
+		}
+	}
+	return retErr
 }
 
 func (ex *connExecutor) maybeSetSQLLivenessSession() error {
