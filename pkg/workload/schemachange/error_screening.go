@@ -210,7 +210,7 @@ WITH
 						WHERE
 							column_name = $2
 							AND index_name
-								!= table_name || '_pkey'
+								NOT LIKE '%%_pkey' -- renames would keep the old table name
 					)
 		),
 	matching_indexes
