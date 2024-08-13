@@ -1476,6 +1476,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 		// timestamp is not covered by the new lease (though we try to protect
 		// against this in checkRequestTimeRLocked). So instead of assuming
 		// anything, we iterate and check again.
+		log.Eventf(ctx, "waiting for acquisition/transfer after status %+v", status)
 		pErr = func() (pErr *kvpb.Error) {
 			var slowTimer timeutil.Timer
 			defer slowTimer.Stop()
