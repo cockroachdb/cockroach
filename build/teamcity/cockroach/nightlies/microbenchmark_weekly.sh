@@ -26,6 +26,7 @@ dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
 source "$dir/teamcity-support.sh"  # For $root
 source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 output_dir="./artifacts/microbench"
+benchmarks_commit=$(git rev-parse HEAD)
 exit_status=0
 
 # Set up credentials
@@ -75,6 +76,7 @@ done
 
 # Check if the baseline cache exists and copy it to the output directory.
 baseline_cache_path="gs://$BENCH_BUCKET/cache/$GCE_MACHINE_TYPE/$SANITIZED_BENCH_PACKAGE/${sha_arr[1]}"
+baseline_commit=${sha_arr[1]}
 if gsutil ls "$baseline_cache_path" &>/dev/null; then
   mkdir -p "$output_dir/baseline"
   gsutil -mq cp -r "$baseline_cache_path/*" "$output_dir/baseline"
@@ -119,6 +121,26 @@ done
   --quiet \
   -- "$TEST_ARGS" \
   || exit_status=$?
+
+# Write metadata to a file for each set of benchmarks
+declare -A metadata
+metadata["run-time"]=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+metadata["baseline-commit"]=$baseline_commit
+metadata["benchmarks-commit"]=$benchmarks_commit
+metadata["machine"]=$GCE_MACHINE_TYPE
+metadata["goarch"]=amd64
+metadata["goos"]=linux
+metadata["repository"]=cockroach
+echo "" > "$output_dir/baseline/metadata.log"
+for key in "${!metadata[@]}"; do
+  echo "$key": "${metadata[$key]}" >> "$output_dir/baseline/metadata.log"
+done
+
+metadata["experiment-commit"]=${sha_arr[0]}
+metadata["experiment-commit-time"]=$(git show -s --format=%cI "${sha_arr[0]}")
+for key in "${!metadata[@]}"; do
+  echo "$key": "${metadata[$key]}" >> "$output_dir/experiment/metadata.log"
+done
 
 # Push baseline to cache if we ran both benchmarks
 if [[ ${#sha_arr[@]} -gt 1 ]]; then
