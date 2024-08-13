@@ -106,6 +106,15 @@ var ProvisionedBandwidth = settings.RegisterByteSizeSetting(
 	0,
 	settings.WithPublic)
 
+// ElasticBandwidthMaxUtil sets the max utilization for disk bandwidth for elastic traffic.
+var ElasticBandwidthMaxUtil = settings.RegisterFloatSetting(
+	settings.SystemOnly, "kvadmission.store.elastic_disk_bandwidth_max_util",
+	"sets the max utilization for disk bandwidth for elastic traffic",
+	0.9,
+	settings.NonNegativeFloatWithMaximum(1.0),
+	settings.FloatWithMinimum(0.05),
+)
+
 // FlowTokenDropInterval determines the frequency at which we check for pending
 // flow token dispatches to nodes we're no longer connected to, in order to drop
 // them.

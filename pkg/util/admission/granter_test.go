@@ -43,7 +43,7 @@ import (
 // continue-grant-chain work=<kind>
 // cpu-load runnable=<int> procs=<int> [infrequent=<bool>]
 // init-store-grant-coordinator
-// set-tokens io-tokens=<int> elastic-disk-bw-tokens=<int>
+// set-tokens io-tokens=<int> disk-bw-tokens=<int>
 func TestGranterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -234,7 +234,7 @@ func TestGranterBasic(t *testing.T) {
 			var elasticTokens int
 			var loop int
 			d.ScanArgs(t, "io-tokens", &ioTokens)
-			d.ScanArgs(t, "elastic-disk-bw-tokens", &elasticTokens)
+			d.ScanArgs(t, "disk-bw-tokens", &elasticTokens)
 			d.ScanArgs(t, "loop", &loop)
 
 			for loop > 0 {
@@ -242,8 +242,14 @@ func TestGranterBasic(t *testing.T) {
 				// We are not using a real ioLoadListener, and simply setting the
 				// tokens (the ioLoadListener has its own test).
 				coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
-					int64(ioTokens), int64(ioTokens), int64(elasticTokens),
-					int64(ioTokens*250), int64(ioTokens*250), int64(elasticTokens*250), false,
+					int64(ioTokens),
+					int64(ioTokens),
+					int64(elasticTokens),
+					int64(ioTokens*250),
+					int64(ioTokens*250),
+					int64(elasticTokens*250),
+					1.0,   // estimatedWriteAmp
+					false, // lastTick
 				)
 			}
 			coord.testingTryGrant()
@@ -273,9 +279,14 @@ func TestGranterBasic(t *testing.T) {
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
 			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
-				int64(ioTokens), int64(elasticIOTokens), int64(elasticTokens),
-				int64(ioTokens*burstMultiplier), int64(elasticIOTokens*burstMultiplier),
-				int64(elasticTokens*burstMultiplier), false,
+				int64(ioTokens),
+				int64(elasticIOTokens),
+				int64(elasticTokens),
+				int64(ioTokens*burstMultiplier),
+				int64(elasticIOTokens*burstMultiplier),
+				int64(elasticTokens*burstMultiplier),
+				1.0,   // estimatedWriteAmp
+				false, // lastTick
 			)
 			coord.testingTryGrant()
 			return flushAndReset()

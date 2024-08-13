@@ -194,7 +194,7 @@ type ioLoadListener struct {
 	statsInitialized bool
 	adjustTokensResult
 	perWorkTokenEstimator storePerWorkTokenEstimator
-	diskBandwidthLimiter  diskBandwidthLimiter
+	diskBandwidthLimiter  *diskBandwidthLimiter
 
 	l0CompactedBytes *metric.Counter
 	l0TokensProduced *metric.Counter
@@ -588,6 +588,7 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 		tokensMaxCapacity,
 		elasticTokensMaxCapacity,
 		diskBWTokenMaxCapacity,
+		io.diskBandwidthLimiter.state.estimatedWriteAmp,
 		remainingTicks == 1,
 	)
 	io.byteTokensUsed += tokensUsed
@@ -635,37 +636,38 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	)
 	io.adjustTokensResult = res
 	cumLSMIncomingBytes, cumLSMIngestedBytes := cumLSMWriteAndIngestedBytes(metrics.Metrics)
-	{
-		// Disk Bandwidth tokens.
-		io.aux.diskBW.intervalDiskLoadInfo = computeIntervalDiskLoadInfo(
-			cumDiskBW.bytesRead, cumDiskBW.bytesWritten, metrics.DiskStats)
-		diskTokensUsed := io.kvGranter.getDiskTokensUsedAndReset()
-		io.aux.diskBW.intervalLSMInfo = intervalLSMInfo{
-			incomingBytes:     int64(cumLSMIncomingBytes) - int64(cumDiskBW.incomingLSMBytes),
-			regularTokensUsed: diskTokensUsed[admissionpb.RegularWorkClass],
-			elasticTokensUsed: diskTokensUsed[admissionpb.ElasticWorkClass],
-		}
-		if metrics.DiskStats.ProvisionedBandwidth > 0 {
-			io.elasticDiskBWTokens = io.diskBandwidthLimiter.computeElasticTokens(ctx,
-				io.aux.diskBW.intervalDiskLoadInfo, io.aux.diskBW.intervalLSMInfo)
-			io.elasticDiskBWTokensAllocated = 0
-		}
-		if metrics.DiskStats.ProvisionedBandwidth == 0 ||
-			!DiskBandwidthTokensForElasticEnabled.Get(&io.settings.SV) {
-			io.elasticDiskBWTokens = unlimitedTokens
-		}
-		io.diskBW.bytesRead = metrics.DiskStats.BytesRead
-		io.diskBW.bytesWritten = metrics.DiskStats.BytesWritten
-		io.diskBW.incomingLSMBytes = cumLSMIncomingBytes
+
+	// Disk Bandwidth tokens.
+	io.aux.diskBW.intervalDiskLoadInfo = computeIntervalDiskLoadInfo(
+		cumDiskBW.bytesRead, cumDiskBW.bytesWritten, metrics.DiskStats)
+	diskTokensRequested, diskTokensUsed := io.kvGranter.getDiskTokensUsedAndReset()
+	io.aux.diskBW.intervalUtilInfo = intervalUtilInfo{
+		actualTokensUsed: diskTokensUsed,
+		requestedTokens:  diskTokensRequested,
 	}
+
+	if metrics.DiskStats.ProvisionedBandwidth > 0 {
+		tokens := io.diskBandwidthLimiter.computeElasticTokens(
+			io.aux.diskBW.intervalDiskLoadInfo, io.aux.diskBW.intervalUtilInfo)
+		io.elasticDiskBWTokens = tokens.writeBWTokens
+		io.elasticDiskBWTokensAllocated = 0
+	}
+	if metrics.DiskStats.ProvisionedBandwidth == 0 ||
+		!DiskBandwidthTokensForElasticEnabled.Get(&io.settings.SV) {
+		io.elasticDiskBWTokens = unlimitedTokens
+	}
+	io.diskBW.bytesRead = metrics.DiskStats.BytesRead
+	io.diskBW.bytesWritten = metrics.DiskStats.BytesWritten
+	io.diskBW.incomingLSMBytes = cumLSMIncomingBytes
+
 	io.perWorkTokenEstimator.updateEstimates(metrics.Levels[0], cumLSMIngestedBytes, sas)
 	io.copyAuxEtcFromPerWorkEstimator()
 	requestEstimates := io.perWorkTokenEstimator.getStoreRequestEstimatesAtAdmission()
 	io.kvRequester.setStoreRequestEstimates(requestEstimates)
 	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtDone()
 	io.kvGranter.setLinearModels(l0WriteLM, l0IngestLM, ingestLM)
-	if io.aux.doLogFlush || io.elasticDiskBWTokens != unlimitedTokens || log.V(1) {
-		log.Infof(ctx, "IO overload: %s", io.adjustTokensResult)
+	if io.aux.doLogFlush || io.diskBandwidthLimiter.state.diskBWUtil > 0.8 || log.V(1) {
+		log.Infof(ctx, "IO overload: %s; %s", io.adjustTokensResult, io.diskBandwidthLimiter)
 	}
 }
 
@@ -713,7 +715,7 @@ type adjustTokensAuxComputations struct {
 
 	diskBW struct {
 		intervalDiskLoadInfo intervalDiskLoadInfo
-		intervalLSMInfo      intervalLSMInfo
+		intervalUtilInfo     intervalUtilInfo
 	}
 }
 
@@ -1232,18 +1234,6 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 		p.Printf("elastic %s (rate %s/s) due to L0 growth", ib(m), ib(m/adjustmentInterval))
 	} else {
 		p.SafeString("all")
-	}
-	if res.elasticDiskBWTokens != unlimitedTokens {
-		p.Printf("; elastic-disk-bw tokens %s (used %s, regular used %s): "+
-			"write model %.2fx+%s ingest model %.2fx+%s, ",
-			ib(res.elasticDiskBWTokens), ib(res.aux.diskBW.intervalLSMInfo.elasticTokensUsed),
-			ib(res.aux.diskBW.intervalLSMInfo.regularTokensUsed),
-			res.l0WriteLM.multiplier, ib(res.l0WriteLM.constant),
-			res.ingestLM.multiplier, ib(res.ingestLM.constant))
-		p.Printf("disk bw read %s write %s provisioned %s",
-			ib(res.aux.diskBW.intervalDiskLoadInfo.readBandwidth),
-			ib(res.aux.diskBW.intervalDiskLoadInfo.writeBandwidth),
-			ib(res.aux.diskBW.intervalDiskLoadInfo.provisionedBandwidth))
 	}
 	p.Printf("; write stalls %d", res.aux.intWriteStalls)
 }

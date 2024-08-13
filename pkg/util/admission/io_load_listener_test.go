@@ -59,7 +59,7 @@ func TestIOLoadListener(t *testing.T) {
 					settings:              st,
 					kvRequester:           req,
 					perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
-					diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
+					diskBandwidthLimiter:  newDiskBandwidthLimiter(),
 					l0CompactedBytes:      metric.NewCounter(l0CompactedBytes),
 					l0TokensProduced:      metric.NewCounter(l0TokensProduced),
 				}
@@ -202,13 +202,19 @@ func TestIOLoadListener(t *testing.T) {
 					d.ScanArgs(t, "bytes-written", &bytesWritten)
 				}
 				if d.HasArg("disk-bw-tokens-used") {
-					var regularTokensUsed, elasticTokensUsed int
+					var regularTokensUsed, elasticTokensUsed int64
+					var regularTokensRequested, elasticTokensRequested int64
 					d.ScanArgs(t, "disk-bw-tokens-used", &regularTokensUsed, &elasticTokensUsed)
-					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularWorkClass] = int64(regularTokensUsed)
-					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticWorkClass] = int64(elasticTokensUsed)
+					d.ScanArgs(t, "disk-bw-tokens-requested", &regularTokensRequested, &elasticTokensRequested)
+					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularWorkClass] = diskTokens{writeBWTokens: regularTokensUsed}
+					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticWorkClass] = diskTokens{writeBWTokens: elasticTokensUsed}
+					kvGranter.diskBandwidthTokensRequested[admissionpb.RegularWorkClass] = diskTokens{writeBWTokens: regularTokensRequested}
+					kvGranter.diskBandwidthTokensRequested[admissionpb.ElasticWorkClass] = diskTokens{writeBWTokens: elasticTokensRequested}
 				} else {
-					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularWorkClass] = 0
-					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticWorkClass] = 0
+					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularWorkClass] = diskTokens{}
+					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticWorkClass] = diskTokens{}
+					kvGranter.diskBandwidthTokensRequested[admissionpb.RegularWorkClass] = diskTokens{}
+					kvGranter.diskBandwidthTokensRequested[admissionpb.ElasticWorkClass] = diskTokens{}
 				}
 				var printOnlyFirstTick bool
 				if d.HasArg("print-only-first-tick") {
@@ -368,7 +374,7 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		settings:              st,
 		kvRequester:           req,
 		perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
-		diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
+		diskBandwidthLimiter:  newDiskBandwidthLimiter(),
 		l0CompactedBytes:      metric.NewCounter(l0CompactedBytes),
 		l0TokensProduced:      metric.NewCounter(l0TokensProduced),
 	}
@@ -415,9 +421,10 @@ func (r *testRequesterForIOLL) setStoreRequestEstimates(estimates storeRequestEs
 }
 
 type testGranterWithIOTokens struct {
-	buf                     strings.Builder
-	allTokensUsed           bool
-	diskBandwidthTokensUsed [admissionpb.NumWorkClasses]int64
+	buf                          strings.Builder
+	allTokensUsed                bool
+	diskBandwidthTokensUsed      [admissionpb.NumWorkClasses]diskTokens
+	diskBandwidthTokensRequested [admissionpb.NumWorkClasses]diskTokens
 }
 
 var _ granterWithIOTokens = &testGranterWithIOTokens{}
@@ -429,16 +436,18 @@ func (g *testGranterWithIOTokens) setAvailableTokens(
 	maxIOTokens int64,
 	maxElasticIOTokens int64,
 	maxElasticDiskBandwidthTokens int64,
+	estimatedWriteAmp float64,
 	lastTick bool,
 ) (tokensUsed int64, tokensUsedByElasticWork int64) {
 	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s(elastic %s) "+
-		"elastic-disk-bw-tokens=%s max-byte-tokens=%s(elastic %s) max-disk-bw-tokens=%s lastTick=%t",
+		"elastic-disk-bw-tokens=%s max-byte-tokens=%s(elastic %s) max-disk-bw-tokens=%s write-amp=%.2f lastTick=%t",
 		tokensForTokenTickDurationToString(ioTokens),
 		tokensForTokenTickDurationToString(elasticIOTokens),
 		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens),
 		tokensForTokenTickDurationToString(maxIOTokens),
 		tokensForTokenTickDurationToString(maxElasticIOTokens),
 		tokensForTokenTickDurationToString(maxElasticDiskBandwidthTokens),
+		estimatedWriteAmp,
 		lastTick,
 	)
 	if g.allTokensUsed {
@@ -447,8 +456,11 @@ func (g *testGranterWithIOTokens) setAvailableTokens(
 	return 0, 0
 }
 
-func (g *testGranterWithIOTokens) getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64 {
-	return g.diskBandwidthTokensUsed
+func (g *testGranterWithIOTokens) getDiskTokensUsedAndReset() (
+	requestedTokens [admissionpb.NumWorkClasses]diskTokens,
+	usedTokens [admissionpb.NumWorkClasses]diskTokens,
+) {
+	return g.diskBandwidthTokensUsed, g.diskBandwidthTokensRequested
 }
 
 func (g *testGranterWithIOTokens) setLinearModels(
@@ -485,6 +497,7 @@ func (g *testGranterNonNegativeTokens) setAvailableTokens(
 	_ int64,
 	_ int64,
 	_ int64,
+	_ float64,
 	_ bool,
 ) (tokensUsed int64, tokensUsedByElasticWork int64) {
 	require.LessOrEqual(g.t, int64(0), ioTokens)
@@ -493,8 +506,11 @@ func (g *testGranterNonNegativeTokens) setAvailableTokens(
 	return 0, 0
 }
 
-func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64 {
-	return [admissionpb.NumWorkClasses]int64{}
+func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndReset() (
+	requestedTokens [admissionpb.NumWorkClasses]diskTokens,
+	usedTokens [admissionpb.NumWorkClasses]diskTokens,
+) {
+	return [admissionpb.NumWorkClasses]diskTokens{}, [admissionpb.NumWorkClasses]diskTokens{}
 }
 
 func (g *testGranterNonNegativeTokens) setLinearModels(
