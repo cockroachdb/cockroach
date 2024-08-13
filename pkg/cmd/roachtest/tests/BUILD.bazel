@@ -26,7 +26,6 @@ go_library(
         "alterpk.go",
         "asyncpg.go",
         "asyncpg_blocklist.go",
-        "autoupgrade.go",
         "awsdms.go",
         "backup.go",
         "backup_fixtures.go",

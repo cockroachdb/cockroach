@@ -22,7 +22,6 @@ func RegisterTests(r registry.Registry) {
 	registerAllocationBench(r)
 	registerAlterPK(r)
 	registerAsyncpg(r)
-	registerAutoUpgrade(r)
 	registerBackup(r)
 	registerBackupMixedVersion(r)
 	registerBackupNodeShutdown(r)
