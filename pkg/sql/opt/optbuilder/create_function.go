@@ -65,15 +65,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		case nil:
 			// No error.
 		case error:
-			if errors.Is(recErr, tree.ErrRoutineUndefined) {
-				panic(
-					errors.WithHint(
-						recErr,
-						"There is probably a typo in function name. Or the intention was to use a user-defined "+
-							"function in the function body, which is currently not supported.",
-					),
-				)
-			}
 			panic(recErr)
 		default:
 			panic(recErr)
