@@ -1330,7 +1330,11 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 						}
 						return pErr
 					}
-					log.VEventf(ctx, 2, "lease acquisition succeeded: %+v", status.Lease)
+					// NB: it would be mildly better to print the lease that was actually acquired.
+					// As is, one may wonder if the "current lease" is the one we tried to acquire
+					// above.
+					lease, _ := r.GetLease()
+					log.VEventf(ctx, 2, "lease acquisition succeeded: %+v", lease)
 					return nil
 				case <-brSig.C():
 					llHandle.Cancel()
