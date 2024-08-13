@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -199,14 +200,6 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	if l.currentRegion != nil {
 		region = l.currentRegion
 	}
-	id, err := slstorage.MakeSessionID(region, uuid.MakeV4())
-	if err != nil {
-		return nil, err
-	}
-
-	s := &session{
-		id: id,
-	}
 
 	opts := retry.Options{
 		InitialBackoff: 10 * time.Millisecond,
@@ -214,7 +207,21 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 		Multiplier:     1.5,
 	}
 	everySecond := log.Every(time.Second)
+	var err error
+	s := &session{}
+	var id sqlliveness.SessionID
+	createNewSession := true
 	for i, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
+		// Allocate a new session ID initially or if we hit
+		// an ambiguous result error.
+		if createNewSession {
+			id, err = slstorage.MakeSessionID(region, uuid.MakeV4())
+			if err != nil {
+				return nil, err
+			}
+			s.id = id
+			createNewSession = false
+		}
 		// If we fail to insert the session, then reset the start time
 		// and expiration, since otherwise there is a danger of inserting
 		// an expired session.
@@ -235,6 +242,11 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 			// of retrying.
 			if grpcutil.IsAuthError(err) {
 				break
+			}
+			// Previous insert was ambiguous, so select a new session ID,
+			// since there may be a row that exists.
+			if errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
+				createNewSession = true
 			}
 			continue
 		}
