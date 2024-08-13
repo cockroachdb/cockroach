@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "queue.go",
         "queue_test_helper.go",
+        "queue_with_fixed_chunk_size.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/queue",
     visibility = ["//visibility:public"],
@@ -19,6 +20,7 @@ go_test(
     srcs = ["queue_test.go"],
     embed = [":queue"],
     deps = [
+        "//pkg/testutils",
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//require",
     ],
