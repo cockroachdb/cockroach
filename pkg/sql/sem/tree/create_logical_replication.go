@@ -34,6 +34,7 @@ type LogicalReplicationOptions struct {
 	Cursor          Expr
 	Mode            Expr
 	DefaultFunction Expr
+	FilterRangefeed *DBool
 }
 
 var _ Statement = &CreateLogicalReplicationStream{}
@@ -124,6 +125,10 @@ func (lro *LogicalReplicationOptions) Format(ctx *FmtCtx) {
 			ctx.FormatNode(&k)
 		}
 	}
+	if lro.FilterRangefeed != nil && *lro.FilterRangefeed {
+		maybeAddSep()
+		ctx.WriteString("IGNORE_CDC_IGNORED_TTL_DELETES")
+	}
 }
 
 func (o *LogicalReplicationOptions) CombineWith(other *LogicalReplicationOptions) error {
@@ -163,6 +168,14 @@ func (o *LogicalReplicationOptions) CombineWith(other *LogicalReplicationOptions
 		}
 	}
 
+	if o.FilterRangefeed != nil {
+		if other.FilterRangefeed != nil {
+			return errors.New("IGNORE_TTL_DELETES option specified multiple times")
+		}
+	} else {
+		o.FilterRangefeed = other.FilterRangefeed
+	}
+
 	return nil
 }
 
@@ -172,5 +185,6 @@ func (o LogicalReplicationOptions) IsDefault() bool {
 	return o.Cursor == options.Cursor &&
 		o.Mode == options.Mode &&
 		o.DefaultFunction == options.DefaultFunction &&
-		o.UserFunctions == nil
+		o.UserFunctions == nil &&
+		o.FilterRangefeed == options.FilterRangefeed
 }
