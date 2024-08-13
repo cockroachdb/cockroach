@@ -423,20 +423,12 @@ func newRangeDistributionTester(
 	t.Logf("%s: spitting the table took %s", timeutil.Now().Format(time.DateTime), timeutil.Since(start))
 
 	// Distribute the leases exponentially across the first 5 nodes.
-	for i := 0; i < 64; i += 1 {
-		nodeID := 1
-		// Avoid log(0).
-		if i != 0 {
-			nodeID = int(math.Floor(math.Log2(float64(i)))) + 1
-		}
-		t.Logf("%s: relocating range for %d to store %d", timeutil.Now().Format(time.DateTime), i, nodeID)
-		cmd := fmt.Sprintf(`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], %d)`, nodeID, i)
-		// Relocate can fail with errors like `change replicas... descriptor changed` thus the SucceedsSoon.
-		start := timeutil.Now()
-		sqlDB.ExecSucceedsSoon(t, cmd)
-		t.Logf("%s: relocating range for %d to store %d took %s",
-			timeutil.Now().Format(time.DateTime), i, nodeID, timeutil.Since(start))
-	}
+	t.Logf("%s: relocating ranges in exponential distribution", timeutil.Now().Format(time.DateTime))
+	start = timeutil.Now()
+	// Relocate can fail with errors like `change replicas... descriptor changed` thus the SucceedsSoon.
+	sqlDB.ExecSucceedsSoon(t,
+		`ALTER TABLE x RELOCATE SELECT ARRAY[floor(log(greatest(1,id)::DECIMAL)/log(2::DECIMAL))::INT+1], id FROM x`)
+	t.Logf("%s: relocating ranges took %s", timeutil.Now().Format(time.DateTime), timeutil.Since(start))
 
 	return &rangeDistributionTester{
 		ctx:          ctx,
