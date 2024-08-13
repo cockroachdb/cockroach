@@ -33,6 +33,12 @@ type testQueueInterface interface {
 }
 
 var _ testQueueInterface = &Queue[*testQueueItem]{}
+var _ testQueueInterface = &QueueWithFixedChunkSize[*testQueueItem]{}
+
+func (q *QueueWithFixedChunkSize[T]) removeAll() {
+	q.RemoveAll(func(e T) {})
+}
+
 func (q *Queue[T]) removeAll() {
 	for q.head != nil {
 		q.head = q.head.next
@@ -46,10 +52,47 @@ func (q *Queue[T]) checkNil(t *testing.T) {
 	require.Nil(t, q.tail)
 }
 
+func (q *QueueWithFixedChunkSize[T]) checkNil(t *testing.T) {
+	require.Nil(t, q.head)
+	require.Nil(t, q.tail)
+}
+
 // checkInvariants checks the invariants of the queue.
 func (q *Queue[T]) checkInvariants(t *testing.T, _ int64) {
 	if q.head == nil && q.tail == nil {
 		require.True(t, q.Empty())
+	} else if q.head != nil && q.tail == nil {
+		t.Fatal("head is nil but tail is non-nil")
+	} else if q.head == nil && q.tail != nil {
+		t.Fatal("tail is nil but head is non-nil")
+	} else {
+		// The queue maintains an invariant that it contains no finished chunks.
+		require.False(t, q.head.finished())
+		require.False(t, q.tail.finished())
+
+		if q.head == q.tail {
+			require.Nil(t, q.head.next)
+		} else {
+			// q.tail is non-nil and not equal to q.head. There must be a non-empty
+			// chunk after q.head.
+			require.False(t, q.Empty())
+			if q.head.empty() {
+				require.False(t, q.head.next.empty())
+			}
+			// The q.tail is never empty in this case. The tail can only be empty
+			// when it is equal to q.head and q.head is empty.
+			require.False(t, q.tail.empty())
+		}
+	}
+}
+
+// checkInvariants checks the invariants of the queue. Same as the Queue[T]
+// version. Cannot avoid duplication due to the lack of generics.
+func (q *QueueWithFixedChunkSize[T]) checkInvariants(t *testing.T, eventCount int64) {
+	require.Equal(t, eventCount, q.Len())
+	if q.head == nil && q.tail == nil {
+		require.True(t, q.Empty())
+		require.Equal(t, q.eventCount, int64(0))
 	} else if q.head != nil && q.tail == nil {
 		t.Fatal("head is nil but tail is non-nil")
 	} else if q.head == nil && q.tail != nil {
@@ -164,10 +207,21 @@ func runQueueTest(t *testing.T, q testQueueInterface, eventCount int) {
 						eventCount--
 					}
 				} else {
-					q.removeAll()
-					q.checkNil(t)
-					eventCount = 0
-					q.checkInvariants(t, int64(0))
+					fixedQ, ok := q.(*QueueWithFixedChunkSize[*testQueueItem])
+					if op < 13 && !ok {
+						q.removeAll()
+						q.checkNil(t)
+						eventCount = 0
+						q.checkInvariants(t, int64(0))
+					} else {
+						actualSum := int64(0)
+						fixedQ.RemoveAll(func(e *testQueueItem) {
+							actualSum += e.i
+							eventCount--
+						})
+						fixedQ.checkNil(t)
+						require.Equal(t, sum, actualSum)
+					}
 				}
 			}
 		})
