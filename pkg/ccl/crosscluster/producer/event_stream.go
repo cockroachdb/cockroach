@@ -160,6 +160,9 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		// stream.
 		opts = append(opts, rangefeed.WithOriginIDsMatching(0))
 	}
+	if s.spec.WithFiltering {
+		opts = append(opts, rangefeed.WithFiltering(true))
+	}
 
 	initialTimestamp := s.spec.InitialScanTimestamp
 	s.frontier, err = span.MakeFrontier(s.spec.Spans...)

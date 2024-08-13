@@ -208,6 +208,8 @@ func createLogicalReplicationStreamPlanHook(
 			defaultConflictResolution = *cr
 		}
 
+		filterRangefeed := options.GetFilterRangefeed()
+
 		jr := jobs.Record{
 			JobID:       p.ExecCfg().JobRegistry.MakeJobID(),
 			Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", targetsDescription, streamAddress),
@@ -220,6 +222,7 @@ func createLogicalReplicationStreamPlanHook(
 				ReplicationPairs:          repPairs,
 				TableNames:                srcTableNames,
 				DefaultConflictResolution: defaultConflictResolution,
+				FilterRangefeed:           filterRangefeed,
 			},
 			Progress: progress,
 		}
@@ -248,6 +251,9 @@ func createLogicalReplicationStreamTypeCheck(
 			stmt.Options.DefaultFunction,
 			stmt.Options.Mode,
 		},
+		exprutil.Bools{
+			stmt.Options.FilterRangefeed,
+		},
 	}
 	if err := exprutil.TypeCheck(ctx, "LOGICAL REPLICATION STREAM", p.SemaCtx(),
 		toTypeCheck...,
@@ -263,7 +269,8 @@ type resolvedLogicalReplicationOptions struct {
 	mode            *string
 	defaultFunction *jobspb.LogicalReplicationDetails_DefaultConflictResolution
 	// Mapping of table name to function descriptor
-	userFunctions map[string]int32
+	userFunctions   map[string]int32
+	filterRangefeed bool
 }
 
 func evalLogicalReplicationOptions(
@@ -337,6 +344,12 @@ func evalLogicalReplicationOptions(
 			r.userFunctions[objName.String()] = descID
 		}
 	}
+
+	if options.FilterRangefeed == tree.DBoolTrue {
+		r.filterRangefeed = true
+	} else {
+		r.filterRangefeed = false
+	}
 	return r, nil
 }
 
@@ -387,4 +400,11 @@ func (r *resolvedLogicalReplicationOptions) GetUserFunctions() (map[string]int32
 		return map[string]int32{}, false
 	}
 	return r.userFunctions, true
+}
+
+func (r *resolvedLogicalReplicationOptions) GetFilterRangefeed() bool {
+	if r == nil {
+		return false
+	}
+	return r.filterRangefeed
 }

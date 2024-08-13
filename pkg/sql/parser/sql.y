@@ -974,7 +974,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %token <str> HAVING HASH HEADER HIGH HISTOGRAM HOLD HOUR
 
 %token <str> IDENTITY
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMEDIATELY IMMUTABLE IMPORT IN INCLUDE
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS IGNORE_CDC_IGNORED_TTL_DELETES ILIKE IMMEDIATE IMMEDIATELY IMMUTABLE IMPORT IN INCLUDE
 %token <str> INCLUDING INCLUDE_ALL_SECONDARY_TENANTS INCLUDE_ALL_VIRTUAL_CLUSTERS INCREMENT INCREMENTAL INCREMENTAL_LOCATION
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
@@ -4633,7 +4633,8 @@ create_stmt:
 //  < MODE = immediate | transactional > |
 //  < CURSOR = start_time > |
 //  < DEFAULT FUNCTION = lww | dlq | udf
-//  < FUNCTION 'udf' FOR TABLE local_name  , ... >
+//  < FUNCTION 'udf' FOR TABLE local_name  , ... > |
+//  < IGNORE_CDC_IGNORED_TTL_DELETES >
 // ]
 create_logical_replication_stream_stmt:
   CREATE LOGICAL REPLICATION STREAM FROM logical_replication_resources ON string_or_placeholder INTO logical_replication_resources opt_logical_replication_options
@@ -4730,6 +4731,10 @@ logical_replication_options:
 | FUNCTION db_object_name FOR TABLE db_object_name
   {
      $$.val = &tree.LogicalReplicationOptions{UserFunctions: map[tree.UnresolvedName]tree.RoutineName{*$5.unresolvedObjectName().ToUnresolvedName():$2.unresolvedObjectName().ToRoutineName()}}
+  }
+| IGNORE_CDC_IGNORED_TTL_DELETES
+  {
+    $$.val = &tree.LogicalReplicationOptions{FilterRangefeed: tree.MakeDBool(true)}
   }
 
 // %Help: CREATE VIRTUAL CLUSTER - create a new virtual cluster
@@ -17702,6 +17707,7 @@ unreserved_keyword:
 | NOWAIT
 | NULLS
 | IGNORE_FOREIGN_KEYS
+| IGNORE_CDC_IGNORED_TTL_DELETES
 | INSENSITIVE
 | OF
 | OFF
@@ -18129,6 +18135,7 @@ bare_label_keywords:
 | IFERROR
 | IFNULL
 | IGNORE_FOREIGN_KEYS
+| IGNORE_CDC_IGNORED_TTL_DELETES
 | ILIKE
 | IMMEDIATE
 | IMMEDIATELY
