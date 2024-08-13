@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -53,6 +54,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/stats"
 )
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
@@ -1473,6 +1475,22 @@ func (rpcCtx *Context) dialOptsNetworkCredentials() ([]grpc.DialOption, error) {
 	return dialOpts, nil
 }
 
+type statsTracker struct {
+	bytesSent *aggmetric.Counter
+}
+
+func (t *statsTracker) TagRPC(ctx context.Context, _ *stats.RPCTagInfo) context.Context { return ctx }
+
+func (t *statsTracker) HandleRPC(_ context.Context, s stats.RPCStats) {
+	if out, ok := s.(*stats.OutPayload); ok {
+		t.bytesSent.Inc(int64(out.WireLength))
+	}
+}
+
+func (t *statsTracker) TagConn(ctx context.Context, _ *stats.ConnTagInfo) context.Context { return ctx }
+
+func (t *statsTracker) HandleConn(ctx context.Context, stats stats.ConnStats) {}
+
 // dialOptsNetwork compute options used only for over-the-network RPC
 // connections.
 func (rpcCtx *Context) dialOptsNetwork(
@@ -1546,6 +1564,7 @@ func (rpcCtx *Context) dialOptsNetwork(
 			dialOpts = append(dialOpts, grpc.WithChainStreamInterceptor(testingStreamInterceptor))
 		}
 	}
+	dialOpts = append(dialOpts, grpc.WithStatsHandler(&statsTracker{}))
 
 	// Set up the dialer. Like for the stream client interceptor, we cannot
 	// do this earlier because it is sensitive to the actual target address,
