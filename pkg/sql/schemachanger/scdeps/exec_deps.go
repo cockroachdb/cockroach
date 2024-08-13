@@ -155,12 +155,12 @@ func (d *txnDeps) InsertTemporarySchema(schemaName string, id descpb.ID, databas
 func (d *txnDeps) MustReadImmutableDescriptors(
 	ctx context.Context, ids ...descpb.ID,
 ) ([]catalog.Descriptor, error) {
-	return d.descsCollection.ByID(d.txn.KV()).WithoutSynthetic().Get().Descs(ctx, ids)
+	return d.descsCollection.ByIDWithoutLeased(d.txn.KV()).WithoutSynthetic().Get().Descs(ctx, ids)
 }
 
 // GetFullyQualifiedName implements the scmutationexec.CatalogReader interface
 func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error) {
-	g := d.descsCollection.ByID(d.txn.KV()).WithoutSynthetic().Get()
+	g := d.descsCollection.ByIDWithoutLeased(d.txn.KV()).WithoutSynthetic().Get()
 	objectDesc, err := g.Desc(ctx, id)
 	if err != nil {
 		return "", err
@@ -338,7 +338,7 @@ func (d *txnDeps) CreatedJobs() []jobspb.JobID {
 func (d *txnDeps) GetResumeSpans(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
 ) ([]roachpb.Span, error) {
-	table, err := d.descsCollection.ByID(d.txn.KV()).WithoutNonPublic().WithoutSynthetic().Get().Table(ctx, tableID)
+	table, err := d.descsCollection.ByIDWithoutLeased(d.txn.KV()).WithoutNonPublic().WithoutSynthetic().Get().Table(ctx, tableID)
 	if err != nil {
 		return nil, err
 	}

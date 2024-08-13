@@ -756,7 +756,7 @@ func (sc *SchemaChanger) validateConstraints(
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
-		tableDesc, err = txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, sc.descID)
+		tableDesc, err = txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, sc.descID)
 		return err
 	}); err != nil {
 		return err
@@ -1397,7 +1397,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 ) (tableDesc catalog.TableDescriptor, err error) {
 	err = DescsTxn(ctx, sc.execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 		// Read table descriptor without holding a lease.
-		tableDesc, err = col.ByID(txn.KV()).Get().Table(ctx, sc.descID)
+		tableDesc, err = col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -1452,7 +1452,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(
 		ctx context.Context, txn descs.Txn,
 	) (err error) {
-		tableDesc, err = txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, sc.descID)
+		tableDesc, err = txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, sc.descID)
 		return err
 	}); err != nil {
 		return err
@@ -1588,7 +1588,7 @@ func ValidateConstraint(
 			)
 		case catconstants.ConstraintTypeFK:
 			fk := constraint.AsForeignKey()
-			targetTable, err := txn.Descriptors().ByID(txn.KV()).Get().Table(ctx, fk.GetReferencedTableID())
+			targetTable, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).Get().Table(ctx, fk.GetReferencedTableID())
 			if err != nil {
 				return err
 			}
@@ -2737,7 +2737,7 @@ func getTargetTablesAndFk(
 	if fk == nil {
 		return nil, nil, nil, errors.AssertionFailedf("foreign key %s does not exist", fkName)
 	}
-	targetTable, err = txn.Descriptors().ByID(txn.KV()).Get().Table(ctx, fk.ReferencedTableID)
+	targetTable, err = txn.Descriptors().ByIDWithoutLeased(txn.KV()).Get().Table(ctx, fk.ReferencedTableID)
 	if err != nil {
 		return nil, nil, nil, err
 	}

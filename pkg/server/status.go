@@ -2883,7 +2883,7 @@ func (s *systemStatusServer) HotRangesV2(
 						if err = s.sqlServer.distSQLServer.DB.DescsTxn(
 							ctx, func(ctx context.Context, txn descs.Txn) error {
 								col := txn.Descriptors()
-								desc, err := col.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
+								desc, err := col.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
 								if err != nil {
 									return errors.Wrapf(err, "cannot get table descriptor with tableID: %d, %s", tableID, r.Desc)
 								}
@@ -2901,13 +2901,13 @@ func (s *systemStatusServer) HotRangesV2(
 									}
 								}
 
-								if dbDesc, err := col.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, desc.GetParentID()); err != nil {
+								if dbDesc, err := col.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, desc.GetParentID()); err != nil {
 									log.Warningf(ctx, "cannot get database by descriptor ID: %s: %v", r.Desc, err)
 								} else {
 									dbName = dbDesc.GetName()
 								}
 
-								if schemaDesc, err := col.ByID(txn.KV()).WithoutNonPublic().Get().Schema(ctx, desc.GetParentSchemaID()); err != nil {
+								if schemaDesc, err := col.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, desc.GetParentSchemaID()); err != nil {
 									log.Warningf(ctx, "cannot get schema name for range descriptor: %s: %v", r.Desc, err)
 								} else {
 									schemaName = schemaDesc.GetName()

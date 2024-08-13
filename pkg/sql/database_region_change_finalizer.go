@@ -56,7 +56,7 @@ func newDatabaseRegionChangeFinalizer(
 
 	var regionalByRowTables []*tabledesc.Mutable
 	if err := func() error {
-		dbDesc, err := txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, dbID)
+		dbDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, dbID)
 		if err != nil {
 			return err
 		}
@@ -162,7 +162,7 @@ func (r *databaseRegionChangeFinalizer) updateGlobalTablesZoneConfig(
 
 	descsCol := r.localPlanner.Descriptors()
 
-	dbDesc, err := descsCol.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, r.dbID)
+	dbDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, r.dbID)
 	if err != nil {
 		return err
 	}

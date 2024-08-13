@@ -111,7 +111,7 @@ func (sr *schemaResolver) CurrentSearchPath() sessiondata.SearchPath {
 
 func (sr *schemaResolver) byIDGetterBuilder() descs.ByIDGetterBuilder {
 	if sr.skipDescriptorCache {
-		return sr.descCollection.ByID(sr.txn)
+		return sr.descCollection.ByIDWithoutLeased(sr.txn)
 	}
 	return sr.descCollection.ByIDWithLeased(sr.txn)
 }

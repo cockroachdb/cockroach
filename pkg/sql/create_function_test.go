@@ -261,7 +261,7 @@ $$;
 `)
 
 	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		funcDesc, err := col.ByID(txn.KV()).WithoutNonPublic().Get().Function(ctx, 112)
+		funcDesc, err := col.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 112)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
 

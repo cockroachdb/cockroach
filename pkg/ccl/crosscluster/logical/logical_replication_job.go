@@ -340,15 +340,15 @@ func (p *logicalReplicationPlanner) generateInitialPlanWithInfo(
 			srcTableDesc := plan.DescriptorMap[pair.SrcDescriptorID]
 
 			// Look up fully qualified destination table name
-			dstTableDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, descpb.ID(pair.DstDescriptorID))
+			dstTableDesc, err := descriptors.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, descpb.ID(pair.DstDescriptorID))
 			if err != nil {
 				return errors.Wrapf(err, "failed to look up table descriptor %d", pair.DstDescriptorID)
 			}
-			dbDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, dstTableDesc.GetParentID())
+			dbDesc, err := descriptors.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, dstTableDesc.GetParentID())
 			if err != nil {
 				return errors.Wrapf(err, "failed to look up database descriptor for table %d", pair.DstDescriptorID)
 			}
-			scDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Schema(ctx, dstTableDesc.GetParentSchemaID())
+			scDesc, err := descriptors.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, dstTableDesc.GetParentSchemaID())
 			if err != nil {
 				return errors.Wrapf(err, "failed to look up schema descriptor for table %d", pair.DstDescriptorID)
 			}

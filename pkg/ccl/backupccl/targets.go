@@ -493,7 +493,7 @@ func checkMultiRegionCompatible(
 		// For REGION BY TABLE IN <region> tables, allow the restore if the
 		// database has the region.
 		regionEnumID := database.GetRegionConfig().RegionEnumID
-		typeDesc, err := col.ByID(txn).Get().Type(ctx, regionEnumID)
+		typeDesc, err := col.ByIDWithoutLeased(txn).Get().Type(ctx, regionEnumID)
 		if err != nil {
 			return err
 		}

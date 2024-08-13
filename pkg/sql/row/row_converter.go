@@ -285,7 +285,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 		if err := txn.SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: evalCtx.TxnTimestamp.UnixNano()}); err != nil {
 			return err
 		}
-		seqs, err := descsCol.ByID(txn).Get().Descs(ctx, sequenceIDs.Ordered())
+		seqs, err := descsCol.ByIDWithoutLeased(txn).Get().Descs(ctx, sequenceIDs.Ordered())
 		if err != nil {
 			return err
 		}

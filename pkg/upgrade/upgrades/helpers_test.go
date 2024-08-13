@@ -163,7 +163,7 @@ func GetTable(
 	err := s.InternalDB().(descs.DB).DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) (err error) {
-		table, err = txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
+		table, err = txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
 		return err
 	})
 	require.NoError(t, err)

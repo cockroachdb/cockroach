@@ -98,7 +98,7 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	) error {
 		// Add a hack to not wait for one version on the descriptors.
 		defer txn.Descriptors().ReleaseAll(ctx)
-		defaultDB, err := txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, namesToID["defaultdb"])
+		defaultDB, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, namesToID["defaultdb"])
 		if err != nil {
 			return err
 		}

@@ -152,7 +152,7 @@ func readTableDescriptor(
 	if err := d.DB.DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) (err error) {
-		t, err = txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
+		t, err = txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
 		return err
 	}); err != nil {
 		return nil, err

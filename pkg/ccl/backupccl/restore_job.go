@@ -1366,7 +1366,7 @@ func createImportingDescriptors(
 			// to the new tables being restored.
 			for _, table := range mutableTables {
 				// Collect all types used by this table.
-				dbDesc, err := descsCol.ByID(txn.KV()).WithoutDropped().Get().Database(ctx, table.GetParentID())
+				dbDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutDropped().Get().Database(ctx, table.GetParentID())
 				if err != nil {
 					return err
 				}
@@ -1412,7 +1412,7 @@ func createImportingDescriptors(
 			if details.DescriptorCoverage != tree.AllDescriptors {
 				for _, table := range tableDescs {
 					if lc := table.GetLocalityConfig(); lc != nil {
-						desc, err := descsCol.ByID(txn.KV()).WithoutDropped().Get().Database(ctx, table.ParentID)
+						desc, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutDropped().Get().Database(ctx, table.ParentID)
 						if err != nil {
 							return err
 						}
@@ -3018,12 +3018,12 @@ func setGCTTLForDroppingTable(
 	log.VInfof(ctx, 2, "lowering TTL for table %q (%d)", tableToDrop.GetName(), tableToDrop.GetID())
 	// We get a mutable descriptor here because we are going to construct a
 	// synthetic descriptor collection in which they are online.
-	dbDesc, err := descsCol.ByID(txn.KV()).Get().Database(ctx, tableToDrop.GetParentID())
+	dbDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).Get().Database(ctx, tableToDrop.GetParentID())
 	if err != nil {
 		return err
 	}
 
-	schemaDesc, err := descsCol.ByID(txn.KV()).Get().Schema(ctx, tableToDrop.GetParentSchemaID())
+	schemaDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).Get().Schema(ctx, tableToDrop.GetParentSchemaID())
 	if err != nil {
 		return err
 	}
@@ -3090,7 +3090,7 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 			return typ, nil
 		}
 
-		dbDesc, err := descsCol.ByID(txn).WithoutDropped().Get().Database(ctx, tbl.GetParentID())
+		dbDesc, err := descsCol.ByIDWithoutLeased(txn).WithoutDropped().Get().Database(ctx, tbl.GetParentID())
 		if err != nil {
 			return err
 		}

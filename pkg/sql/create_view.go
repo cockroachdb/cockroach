@@ -108,7 +108,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			ids.Add(id)
 		}
 		// Lookup the dependent tables in bulk to minimize round-trips to KV.
-		if _, err := params.p.Descriptors().ByID(params.p.Txn()).WithoutNonPublic().WithoutSynthetic().Get().Descs(params.ctx, ids.Ordered()); err != nil {
+		if _, err := params.p.Descriptors().ByIDWithoutLeased(params.p.Txn()).WithoutNonPublic().WithoutSynthetic().Get().Descs(params.ctx, ids.Ordered()); err != nil {
 			return err
 		}
 		for id := range n.planDeps {
