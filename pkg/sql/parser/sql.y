@@ -881,6 +881,9 @@ func (u *sqlSymUnion) cteMaterializeClause() tree.CTEMaterializeClause {
 func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
     return u.val.(tree.ShowTenantOptions)
 }
+func (u *sqlSymUnion) showLogicalReplicationJobsOpts() tree.ShowLogicalReplicationJobsOptions {
+		return u.val.(tree.ShowLogicalReplicationJobsOptions)
+}
 func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
     return u.val.(tree.ShowCreateFormatOption)
 }
@@ -1357,6 +1360,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <tree.Statement> show_schedules_stmt
 %type <tree.Statement> show_full_scans_stmt
 %type <tree.Statement> show_completions_stmt
+%type <tree.Statement> show_logical_replication_jobs_stmt opt_show_logical_replication_jobs_options show_logical_replication_jobs_options
 
 %type <str> statements_or_queries
 
@@ -6656,6 +6660,41 @@ show_virtual_cluster_options:
     $$.val = o
   }
 
+// %Help: SHOW LOGICAL REPLICATION JOBS - display metadata about logical replication jobs
+// %Category: Experimental
+// %Text: SHOW LOGICAL REPLICATION JOBS [ WITH <options> ]
+//
+// Options:
+//     DETAILS
+show_logical_replication_jobs_stmt:
+	SHOW LOGICAL REPLICATION JOBS opt_show_logical_replication_jobs_options
+	{
+		/* SKIP DOC */
+		$$.val = &tree.ShowLogicalReplicationJobs{
+			ShowLogicalReplicationJobsOptions: $5.showLogicalReplicationJobsOpts(),
+		}
+	}
+| SHOW LOGICAL REPLICATION JOBS error // SHOW HELP: SHOW LOGICAL REPLICATION JOBS
+
+opt_show_logical_replication_jobs_options:
+  /* EMPTY */
+  {
+    /* SKIP DOC */
+    $$.val = tree.ShowLogicalReplicationJobsOptions{}
+  }
+| WITH show_logical_replication_jobs_options
+  {
+    /* SKIP DOC */
+    $$.val = $2.showLogicalReplicationJobsOpts()
+  }
+
+show_logical_replication_jobs_options:
+  DETAILS
+  {
+    /* SKIP DOC */
+    $$.val = tree.ShowLogicalReplicationJobsOptions{WithDetails: true}
+  }
+
 // %Help: PREPARE - prepare a statement for later execution
 // %Category: Misc
 // %Text: PREPARE <name> [ ( <types...> ) ] AS <query>
@@ -7809,6 +7848,7 @@ show_stmt:
 | show_create_schedules_stmt // EXTEND WITH HELP: SHOW CREATE SCHEDULES
 | show_create_external_connections_stmt // EXTEND WITH HELP: SHOW CREATE EXTERNAL CONNECTIONS
 | show_local_or_virtual_cluster_csettings_stmt // EXTEND WITH HELP: SHOW CLUSTER SETTING
+| show_logical_replication_jobs_stmt	// EXTEND WITH HELP: SHOW LOGICAL REPLICATION JOBS
 | show_databases_stmt        // EXTEND WITH HELP: SHOW DATABASES
 | show_enums_stmt            // EXTEND WITH HELP: SHOW ENUMS
 | show_external_connections_stmt // EXTEND WITH HELP: SHOW EXTERNAL CONNECTIONS
