@@ -98,14 +98,6 @@ func (q *Queue[T]) Dequeue() (e T, ok bool) {
 	return e, true
 }
 
-func (q *Queue[T]) removeAll() {
-	for q.head != nil {
-		q.head = q.head.next
-		// The previous value of q.head will be garbage collected.
-	}
-	q.tail = q.head
-}
-
 type queueChunk[T any] struct {
 	events     []T
 	head, tail int
