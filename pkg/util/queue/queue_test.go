@@ -113,7 +113,7 @@ func TestQueue(t *testing.T) {
 		checkInvariants(t, q)
 	}
 
-	q.purge()
+	q.removeAll()
 	require.Nil(t, q.head)
 	require.Nil(t, q.tail)
 }
