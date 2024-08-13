@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -3303,7 +3304,17 @@ func makeTableMetricsGenerator(
 	storeID := int32(tree.MustBeDInt(args[1]))
 	start := []byte(tree.MustBeDBytes(args[2]))
 	end := []byte(tree.MustBeDBytes(args[3]))
-
+	// We use the keys as-is if they are valid engine keys, otherwise we encode
+	// them as a version-less key. This preserves the ability to pass in
+	// manually constructed engine keys, but also allows for the common practice
+	// of passing in keys extracted from the ranges table. It's possible
+	// (although somewhat unlikely) for a user key to validate as an engine key.
+	if ek, ok := storage.DecodeEngineKey(start); !ok || ek.Validate() != nil {
+		start = storage.EncodeMVCCKey(storage.MVCCKey{Key: start})
+	}
+	if ek, ok := storage.DecodeEngineKey(end); !ok || ek.Validate() != nil {
+		end = storage.EncodeMVCCKey(storage.MVCCKey{Key: start})
+	}
 	return newTableMetricsIterator(evalCtx, nodeID, storeID, start, end), nil
 }
 
@@ -3408,6 +3419,17 @@ func makeStorageInternalKeysGenerator(
 	storeID := int32(tree.MustBeDInt(args[1]))
 	start := []byte(tree.MustBeDBytes(args[2]))
 	end := []byte(tree.MustBeDBytes(args[3]))
+	// We use the keys as-is if they are valid engine keys, otherwise we encode
+	// them as a version-less key. This preserves the ability to pass in
+	// manually constructed engine keys, but also allows for the common practice
+	// of passing in keys extracted from the ranges table. It's possible
+	// (although somewhat unlikely) for a user key to validate as an engine key.
+	if ek, ok := storage.DecodeEngineKey(start); !ok || ek.Validate() != nil {
+		start = storage.EncodeMVCCKey(storage.MVCCKey{Key: start})
+	}
+	if ek, ok := storage.DecodeEngineKey(end); !ok || ek.Validate() != nil {
+		end = storage.EncodeMVCCKey(storage.MVCCKey{Key: end})
+	}
 
 	var megabytesPerSecond int64
 	if len(args) > 4 {
