@@ -276,11 +276,14 @@ type granterWithIOTokens interface {
 	setAvailableTokens(
 		ioTokens int64, elasticIOTokens int64, elasticDiskBandwidthTokens int64,
 		ioTokensCapacity int64, elasticIOTokenCapacity int64, elasticDiskBandwidthTokensCapacity int64,
-		lastTick bool,
+		estimatedWriteAmp float64, lastTick bool,
 	) (tokensUsed int64, tokensUsedByElasticWork int64)
-	// getDiskTokensUsedAndReset returns the disk bandwidth tokens used
-	// since the last such call.
-	getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64
+	// getDiskTokensUsedAndReset returns the disk bandwidth tokens actually used
+	// and the tokens requested since the last such call.
+	getDiskTokensUsedAndReset() (
+		requestedTokens [admissionpb.NumWorkClasses]diskTokens,
+		usedTokens [admissionpb.NumWorkClasses]diskTokens,
+	)
 	// setLinearModels supplies the models to use when storeWriteDone or
 	// storeReplicatedWorkAdmittedLocked is called, to adjust token consumption.
 	// Note that these models are not used for token adjustment at admission
