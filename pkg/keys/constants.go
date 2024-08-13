@@ -219,6 +219,20 @@ var (
 	// is to allow a restarting node to discover approximately how long it has
 	// been down without needing to retrieve liveness records from the cluster.
 	localStoreLastUpSuffix = []byte("uptm")
+	// localStoreLivenessRequesterMeta stores the Store Liveness metadata
+	// corresponding to support requested by the local store. In particular,
+	// RequesterMeta stores the highest timestamp and highest epoch at which
+	// support has been requested.
+	localStoreLivenessRequesterMeta = []byte("slrm")
+	// localStoreLivenessSupporterMeta stores the Store Liveness metadata
+	// corresponding to support provided by the local store. In particular,
+	// SupporterMeta stores the highest timestamp at which support has been
+	// withdrawn.
+	localStoreLivenessSupporterMeta = []byte("slsm")
+	// localStoreLivenessSupportFor stores the Store Liveness support by the local
+	// store for a store in the cluster. It includes the epoch and expiration of
+	// support.
+	localStoreLivenessSupportFor = []byte("slsf")
 	// localRemovedLeakedRaftEntriesSuffix is DEPRECATED and remains to prevent
 	// reuse.
 	localRemovedLeakedRaftEntriesSuffix = []byte("dlre")
