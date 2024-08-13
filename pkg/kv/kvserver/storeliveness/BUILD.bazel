@@ -4,6 +4,7 @@ go_library(
     name = "storeliveness",
     srcs = [
         "fabric.go",
+        "persist.go",
         "requester_state.go",
         "supporter_state.go",
         "transport.go",
@@ -11,12 +12,15 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/keys",
         "//pkg/kv/kvserver/storeliveness/storelivenesspb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
+        "//pkg/storage",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
@@ -28,6 +32,7 @@ go_library(
 go_test(
     name = "storeliveness_test",
     srcs = [
+        "persist_test.go",
         "store_liveness_test.go",
         "transport_test.go",
     ],
@@ -40,6 +45,7 @@ go_test(
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/settings/cluster",
+        "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/util",

@@ -16,13 +16,10 @@ heartbeats:
 
 handle-messages
   msg type=MsgHeartbeat from-node-id=2 from-store-id=2 epoch=2 expiration=200
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=1 expiration=110
 ----
 responses:
 {Type:MsgHeartbeatResp From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:2 Expiration:200.000000000,0}
-
-handle-messages
-  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=1 expiration=110
-----
 
 support-from node-id=2 store-id=2
 ----

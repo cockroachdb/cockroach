@@ -20,6 +20,7 @@ import (
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -31,12 +32,18 @@ func TestStoreLiveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	storeID := slpb.StoreIdent{NodeID: roachpb.NodeID(1), StoreID: roachpb.StoreID(1)}
 
 	datadriven.Walk(
 		t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+			engine := storage.NewDefaultInMemForTesting()
+			defer engine.Close()
 			ss := newSupporterStateHandler()
 			rs := newRequesterStateHandler()
+			if err := onRestart(ctx, rs, ss, engine); err != nil {
+				t.Errorf("persisting data while restarting failed: %v", err)
+			}
 			datadriven.RunTest(
 				t, path, func(t *testing.T, d *datadriven.TestData) string {
 					switch d.Cmd {
@@ -70,6 +77,9 @@ func TestStoreLiveness(t *testing.T) {
 						}
 						rsfu := rs.checkOutUpdate()
 						heartbeats := rsfu.getHeartbeatsToSend(storeID, now, livenessInterval)
+						if err = rsfu.write(ctx, engine); err != nil {
+							t.Errorf("writing requester state failed: %v", err)
+						}
 						rs.checkInUpdate(rsfu)
 						return fmt.Sprintf("heartbeats:\n%s", printMsgs(heartbeats))
 
@@ -88,6 +98,12 @@ func TestStoreLiveness(t *testing.T) {
 								log.Errorf(context.Background(), "unexpected message type: %v", msg.Type)
 							}
 						}
+						if err := rsfu.write(ctx, engine); err != nil {
+							t.Errorf("writing requester state failed: %v", err)
+						}
+						if err := ssfu.write(ctx, engine); err != nil {
+							t.Errorf("writing supporter state failed: %v", err)
+						}
 						rs.checkInUpdate(rsfu)
 						ss.checkInUpdate(ssfu)
 						if len(responses) > 0 {
@@ -100,16 +116,18 @@ func TestStoreLiveness(t *testing.T) {
 						now := parseTimestamp(t, d, "now")
 						ssfu := ss.checkOutUpdate()
 						ssfu.withdrawSupport(hlc.ClockTimestamp(now))
+						if err := ssfu.write(ctx, engine); err != nil {
+							t.Errorf("writing supporter state failed: %v", err)
+						}
 						ss.checkInUpdate(ssfu)
 						return ""
 
 					case "restart":
-						// TODO(mira): wipe out all in-memory state properly, once we have
-						// real disk persistence.
-						rs.requesterState.supportFrom = make(map[slpb.StoreIdent]slpb.SupportState)
-						rsfu := rs.checkOutUpdate()
-						rsfu.incrementMaxEpoch()
-						rs.checkInUpdate(rsfu)
+						ss = newSupporterStateHandler()
+						rs = newRequesterStateHandler()
+						if err := onRestart(ctx, rs, ss, engine); err != nil {
+							t.Errorf("persisting data while restarting failed: %v", err)
+						}
 						return ""
 
 					case "debug-requester-state":
@@ -209,4 +227,23 @@ func parseMsgs(t *testing.T, d *datadriven.TestData, storeIdent slpb.StoreIdent)
 		msgs = append(msgs, msg)
 	}
 	return msgs
+}
+
+// TODO(mira): Move this to the SupportManager.
+func onRestart(
+	ctx context.Context, rs *requesterStateHandler, ss *supporterStateHandler, engine storage.Engine,
+) error {
+	if err := ss.read(ctx, engine); err != nil {
+		return err
+	}
+	if err := rs.read(ctx, engine); err != nil {
+		return err
+	}
+	rsfu := rs.checkOutUpdate()
+	rsfu.incrementMaxEpoch()
+	if err := rsfu.write(ctx, engine); err != nil {
+		return err
+	}
+	rs.checkInUpdate(rsfu)
+	return nil
 }

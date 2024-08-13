@@ -218,6 +218,9 @@ var _ = [...]interface{}{
 	StoreIdentKey,                    // "iden"
 	StoreUnsafeReplicaRecoveryKey,    // "loqr"
 	StoreNodeTombstoneKey,            // "ntmb"
+	StoreLivenessRequesterMetaKey,    // "slrm"
+	StoreLivenessSupportForKey,       // "slsf"
+	StoreLivenessSupporterMetaKey,    // "slsm"
 	StoreCachedSettingsKey,           // "stng"
 	StoreLastUpKey,                   // "uptm"
 
