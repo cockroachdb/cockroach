@@ -274,13 +274,13 @@ type granterWithIOTokens interface {
 	// negative, though that will be rare, since it is possible for tokens to be
 	// returned.
 	setAvailableTokens(
-		ioTokens int64, elasticIOTokens int64, elasticDiskBandwidthTokens int64,
-		ioTokensCapacity int64, elasticIOTokenCapacity int64, elasticDiskBandwidthTokensCapacity int64,
+		ioTokens int64, elasticIOTokens int64, elasticDiskWriteTokens int64,
+		ioTokensCapacity int64, elasticIOTokenCapacity int64, elasticDiskWriteTokensCapacity int64,
 		lastTick bool,
 	) (tokensUsed int64, tokensUsedByElasticWork int64)
-	// getDiskTokensUsedAndReset returns the disk bandwidth tokens used
-	// since the last such call.
-	getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64
+	// getDiskTokensUsedAndReset returns the disk bandwidth tokens used since the
+	// last such call.
+	getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]diskTokens
 	// setLinearModels supplies the models to use when storeWriteDone or
 	// storeReplicatedWorkAdmittedLocked is called, to adjust token consumption.
 	// Note that these models are not used for token adjustment at admission
@@ -288,7 +288,7 @@ type granterWithIOTokens interface {
 	// granter. This asymmetry is due to the need to use all the functionality
 	// of WorkQueue at admission time. See the long explanatory comment at the
 	// beginning of store_token_estimation.go, regarding token estimation.
-	setLinearModels(l0WriteLM, l0IngestLM, ingestLM tokensLinearModel)
+	setLinearModels(l0WriteLM, l0IngestLM, ingestLM, writeAmpLM tokensLinearModel)
 }
 
 // granterWithStoreReplicatedWorkAdmitted is used to abstract

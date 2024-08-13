@@ -85,6 +85,15 @@ var L0SubLevelCountOverloadThreshold = settings.RegisterIntSetting(
 	"when the L0 sub-level count exceeds this threshold, the store is considered overloaded",
 	l0SubLevelCountOverloadThreshold, settings.PositiveInt)
 
+// ElasticBandwidthMaxUtil sets the max utilization for disk bandwidth for elastic traffic.
+var ElasticBandwidthMaxUtil = settings.RegisterFloatSetting(
+	settings.SystemOnly, "kvadmission.store.elastic_disk_bandwidth_max_util",
+	"sets the max utilization for disk bandwidth for elastic traffic",
+	0.9,
+	settings.NonNegativeFloatWithMaximum(1.0),
+	settings.FloatWithMinimum(0.05),
+)
+
 // L0MinimumSizePerSubLevel is a minimum size threshold per sub-level, to
 // avoid over reliance on the sub-level count as a signal of overload. Pebble
 // sometimes has to do frequent flushes of the memtable due to ingesting
@@ -194,7 +203,7 @@ type ioLoadListener struct {
 	statsInitialized bool
 	adjustTokensResult
 	perWorkTokenEstimator storePerWorkTokenEstimator
-	diskBandwidthLimiter  diskBandwidthLimiter
+	diskBandwidthLimiter  *diskBandwidthLimiter
 
 	l0CompactedBytes *metric.Counter
 	l0TokensProduced *metric.Counter
@@ -210,9 +219,8 @@ type ioLoadListenerState struct {
 	cumFlushWriteThroughput pebble.ThroughputMetric
 	diskBW                  struct {
 		// Cumulative
-		bytesRead        uint64
-		bytesWritten     uint64
-		incomingLSMBytes uint64
+		bytesRead    uint64
+		bytesWritten uint64
 	}
 	cumCompactionStats           cumStoreCompactionStats
 	cumWALSecondaryWriteDuration time.Duration
@@ -247,8 +255,8 @@ type ioLoadListenerState struct {
 	// elasticDiskBWTokens represents the tokens to give out until the next call
 	// to adjustTokens. They are parceled out in small intervals.
 	// elasticDiskTokensAllocated represents what has been given out.
-	elasticDiskBWTokens          int64
-	elasticDiskBWTokensAllocated int64
+	elasticDiskWriteTokens          int64
+	elasticDiskWriteTokensAllocated int64
 }
 
 type cumStoreCompactionStats struct {
@@ -443,14 +451,11 @@ func (t *tokenAllocationTicker) stop() {
 	*t = tokenAllocationTicker{}
 }
 
-func cumLSMWriteAndIngestedBytes(
-	m *pebble.Metrics,
-) (writeAndIngestedBytes uint64, ingestedBytes uint64) {
+func cumLSMIngestedBytes(m *pebble.Metrics) (ingestedBytes uint64) {
 	for i := range m.Levels {
-		writeAndIngestedBytes += m.Levels[i].BytesIngested + m.Levels[i].BytesFlushed
 		ingestedBytes += m.Levels[i].BytesIngested
 	}
-	return writeAndIngestedBytes, ingestedBytes
+	return ingestedBytes
 }
 
 func replaceFlushThroughputBytesBySSTableWriteThroughput(m *pebble.Metrics) {
@@ -467,8 +472,9 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 	if !io.statsInitialized {
 		io.statsInitialized = true
 		sas := io.kvRequester.getStoreAdmissionStats()
-		cumLSMIncomingBytes, cumLSMIngestedBytes := cumLSMWriteAndIngestedBytes(metrics.Metrics)
-		io.perWorkTokenEstimator.updateEstimates(metrics.Levels[0], cumLSMIngestedBytes, sas)
+		cumIngestBytes := cumLSMIngestedBytes(metrics.Metrics)
+		io.perWorkTokenEstimator.updateEstimates(
+			metrics.Levels[0], cumIngestBytes, metrics.DiskStats.BytesWritten, sas)
 		io.adjustTokensResult = adjustTokensResult{
 			ioLoadListenerState: ioLoadListenerState{
 				cumL0AddedBytes:              m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested,
@@ -480,7 +486,7 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 				// No initial limit, i.e, the first interval is unlimited.
 				totalNumByteTokens:        unlimitedTokens,
 				totalNumElasticByteTokens: unlimitedTokens,
-				elasticDiskBWTokens:       unlimitedTokens,
+				elasticDiskWriteTokens:    unlimitedTokens,
 			},
 			aux: adjustTokensAuxComputations{},
 			ioThreshold: &admissionpb.IOThreshold{
@@ -494,7 +500,6 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 		}
 		io.diskBW.bytesRead = metrics.DiskStats.BytesRead
 		io.diskBW.bytesWritten = metrics.DiskStats.BytesWritten
-		io.diskBW.incomingLSMBytes = cumLSMIncomingBytes
 		io.copyAuxEtcFromPerWorkEstimator()
 
 		// Assume system starts off unloaded.
@@ -551,15 +556,15 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 		panic(errors.AssertionFailedf("toAllocateElasticByteTokens is negative %d",
 			toAllocateElasticByteTokens))
 	}
-	toAllocateElasticDiskBWTokens :=
+	toAllocateElasticDiskWriteTokens :=
 		allocateFunc(
-			io.elasticDiskBWTokens,
-			io.elasticDiskBWTokensAllocated,
+			io.elasticDiskWriteTokens,
+			io.elasticDiskWriteTokensAllocated,
 			remainingTicks,
 		)
-	if toAllocateElasticDiskBWTokens < 0 {
+	if toAllocateElasticDiskWriteTokens < 0 {
 		panic(errors.AssertionFailedf("toAllocateElasticDiskBWTokens is negative %d",
-			toAllocateElasticDiskBWTokens))
+			toAllocateElasticDiskWriteTokens))
 	}
 	// INVARIANT: toAllocate >= 0.
 	io.byteTokensAllocated += toAllocateByteTokens
@@ -571,7 +576,7 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 		panic(errors.AssertionFailedf(
 			"tokens allocated is negative %d", io.elasticByteTokensAllocated))
 	}
-	io.elasticDiskBWTokensAllocated += toAllocateElasticDiskBWTokens
+	io.elasticDiskWriteTokensAllocated += toAllocateElasticDiskWriteTokens
 
 	tokensMaxCapacity := allocateFunc(
 		io.totalNumByteTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
@@ -579,12 +584,12 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 	elasticTokensMaxCapacity := allocateFunc(
 		io.totalNumElasticByteTokens, 0, unloadedDuration.ticksInAdjustmentInterval())
 	diskBWTokenMaxCapacity := allocateFunc(
-		io.elasticDiskBWTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
+		io.elasticDiskWriteTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
 	)
 	tokensUsed, tokensUsedByElasticWork := io.kvGranter.setAvailableTokens(
 		toAllocateByteTokens,
 		toAllocateElasticByteTokens,
-		toAllocateElasticDiskBWTokens,
+		toAllocateElasticDiskWriteTokens,
 		tokensMaxCapacity,
 		elasticTokensMaxCapacity,
 		diskBWTokenMaxCapacity,
@@ -595,12 +600,13 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 }
 
 func computeIntervalDiskLoadInfo(
-	prevCumBytesRead uint64, prevCumBytesWritten uint64, diskStats DiskStats,
+	prevCumBytesRead uint64, prevCumBytesWritten uint64, diskStats DiskStats, elasticBWUtil float64,
 ) intervalDiskLoadInfo {
 	return intervalDiskLoadInfo{
-		readBandwidth:        int64((diskStats.BytesRead - prevCumBytesRead) / adjustmentInterval),
-		writeBandwidth:       int64((diskStats.BytesWritten - prevCumBytesWritten) / adjustmentInterval),
-		provisionedBandwidth: diskStats.ProvisionedBandwidth,
+		intReadBytes:            int64(diskStats.BytesRead - prevCumBytesRead),
+		intWriteBytes:           int64(diskStats.BytesWritten - prevCumBytesWritten),
+		intProvisionedDiskBytes: diskStats.ProvisionedBandwidth * adjustmentInterval,
+		elasticBandwidthMaxUtil: elasticBWUtil,
 	}
 }
 
@@ -616,7 +622,7 @@ func computeIntervalDiskLoadInfo(
 func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics) {
 	sas := io.kvRequester.getStoreAdmissionStats()
 	// Copy the cumulative disk bandwidth values for later use.
-	cumDiskBW := io.ioLoadListenerState.diskBW
+	cumDiskBW := io.diskBW
 	wt := metrics.Flush.WriteThroughput
 	wt.Subtract(io.cumFlushWriteThroughput)
 	if wt.Bytes < 0 {
@@ -634,38 +640,34 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 		MinFlushUtilizationFraction.Get(&io.settings.SV),
 	)
 	io.adjustTokensResult = res
-	cumLSMIncomingBytes, cumLSMIngestedBytes := cumLSMWriteAndIngestedBytes(metrics.Metrics)
-	{
-		// Disk Bandwidth tokens.
-		io.aux.diskBW.intervalDiskLoadInfo = computeIntervalDiskLoadInfo(
-			cumDiskBW.bytesRead, cumDiskBW.bytesWritten, metrics.DiskStats)
-		diskTokensUsed := io.kvGranter.getDiskTokensUsedAndReset()
-		io.aux.diskBW.intervalLSMInfo = intervalLSMInfo{
-			incomingBytes:     int64(cumLSMIncomingBytes) - int64(cumDiskBW.incomingLSMBytes),
-			regularTokensUsed: diskTokensUsed[admissionpb.RegularWorkClass],
-			elasticTokensUsed: diskTokensUsed[admissionpb.ElasticWorkClass],
-		}
-		if metrics.DiskStats.ProvisionedBandwidth > 0 {
-			io.elasticDiskBWTokens = io.diskBandwidthLimiter.computeElasticTokens(ctx,
-				io.aux.diskBW.intervalDiskLoadInfo, io.aux.diskBW.intervalLSMInfo)
-			io.elasticDiskBWTokensAllocated = 0
-		}
-		if metrics.DiskStats.ProvisionedBandwidth == 0 ||
-			!DiskBandwidthTokensForElasticEnabled.Get(&io.settings.SV) {
-			io.elasticDiskBWTokens = unlimitedTokens
-		}
-		io.diskBW.bytesRead = metrics.DiskStats.BytesRead
-		io.diskBW.bytesWritten = metrics.DiskStats.BytesWritten
-		io.diskBW.incomingLSMBytes = cumLSMIncomingBytes
+	cumIngestedBytes := cumLSMIngestedBytes(metrics.Metrics)
+
+	// Disk Bandwidth tokens.
+	elasticBWMaxUtil := ElasticBandwidthMaxUtil.Get(&io.settings.SV)
+	intDiskLoadInfo := computeIntervalDiskLoadInfo(
+		cumDiskBW.bytesRead, cumDiskBW.bytesWritten, metrics.DiskStats, elasticBWMaxUtil)
+	diskTokensUsed := io.kvGranter.getDiskTokensUsedAndReset()
+	if metrics.DiskStats.ProvisionedBandwidth > 0 {
+		tokens := io.diskBandwidthLimiter.computeElasticTokens(
+			intDiskLoadInfo, diskTokensUsed)
+		io.elasticDiskWriteTokens = tokens.writeByteTokens
+		io.elasticDiskWriteTokensAllocated = 0
 	}
-	io.perWorkTokenEstimator.updateEstimates(metrics.Levels[0], cumLSMIngestedBytes, sas)
+	if metrics.DiskStats.ProvisionedBandwidth == 0 ||
+		!DiskBandwidthTokensForElasticEnabled.Get(&io.settings.SV) {
+		io.elasticDiskWriteTokens = unlimitedTokens
+	}
+	io.diskBW.bytesRead = metrics.DiskStats.BytesRead
+	io.diskBW.bytesWritten = metrics.DiskStats.BytesWritten
+
+	io.perWorkTokenEstimator.updateEstimates(metrics.Levels[0], cumIngestedBytes, metrics.DiskStats.BytesWritten, sas)
 	io.copyAuxEtcFromPerWorkEstimator()
 	requestEstimates := io.perWorkTokenEstimator.getStoreRequestEstimatesAtAdmission()
 	io.kvRequester.setStoreRequestEstimates(requestEstimates)
-	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtDone()
-	io.kvGranter.setLinearModels(l0WriteLM, l0IngestLM, ingestLM)
-	if io.aux.doLogFlush || io.elasticDiskBWTokens != unlimitedTokens || log.V(1) {
-		log.Infof(ctx, "IO overload: %s", io.adjustTokensResult)
+	l0WriteLM, l0IngestLM, ingestLM, writeAmpLM := io.perWorkTokenEstimator.getModelsAtDone()
+	io.kvGranter.setLinearModels(l0WriteLM, l0IngestLM, ingestLM, writeAmpLM)
+	if io.aux.doLogFlush || io.diskBandwidthLimiter.state.diskBWUtil > 0.8 || log.V(1) {
+		log.Infof(ctx, "IO overload: %s; %s", io.adjustTokensResult, io.diskBandwidthLimiter)
 	}
 }
 
@@ -678,10 +680,11 @@ func (io *ioLoadListener) copyAuxEtcFromPerWorkEstimator() {
 	io.adjustTokensResult.aux.perWorkTokensAux = io.perWorkTokenEstimator.aux
 	requestEstimates := io.perWorkTokenEstimator.getStoreRequestEstimatesAtAdmission()
 	io.adjustTokensResult.requestEstimates = requestEstimates
-	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtDone()
+	l0WriteLM, l0IngestLM, ingestLM, writeAmpLM := io.perWorkTokenEstimator.getModelsAtDone()
 	io.adjustTokensResult.l0WriteLM = l0WriteLM
 	io.adjustTokensResult.l0IngestLM = l0IngestLM
 	io.adjustTokensResult.ingestLM = ingestLM
+	io.adjustTokensResult.writeAmpLM = writeAmpLM
 }
 
 type tokenKind int8
@@ -710,11 +713,6 @@ type adjustTokensAuxComputations struct {
 
 	perWorkTokensAux perWorkTokensAux
 	doLogFlush       bool
-
-	diskBW struct {
-		intervalDiskLoadInfo intervalDiskLoadInfo
-		intervalLSMInfo      intervalLSMInfo
-	}
 }
 
 // adjustTokensInner is used for computing tokens based on compaction and
@@ -1159,6 +1157,7 @@ type adjustTokensResult struct {
 	l0WriteLM        tokensLinearModel
 	l0IngestLM       tokensLinearModel
 	ingestLM         tokensLinearModel
+	writeAmpLM       tokensLinearModel
 	aux              adjustTokensAuxComputations
 	ioThreshold      *admissionpb.IOThreshold // never nil
 }
@@ -1186,6 +1185,10 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.Printf("%s acc-ingest (%s bypassed) + ",
 		ib(res.aux.perWorkTokensAux.intIngestedAccountedBytes),
 		ib(res.aux.perWorkTokensAux.intIngestedBypassedAccountedBytes))
+	// Adjusted LSM writes and disk writes that were used for w-amp estimation.
+	p.Printf("%s adjusted-LSM-writes + %s adjusted-disk-writes + ",
+		ib(res.aux.perWorkTokensAux.intAdjustedLSMWrites),
+		ib(res.aux.perWorkTokensAux.intAdjustedWriteBytes))
 	// The models we are fitting to compute tokens based on the reported size of
 	// the write and ingest.
 	p.Printf("write-model %.2fx+%s (smoothed %.2fx+%s) + ",
@@ -1196,6 +1199,10 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 		res.aux.perWorkTokensAux.intL0IngestedLinearModel.multiplier,
 		ib(res.aux.perWorkTokensAux.intL0IngestedLinearModel.constant),
 		res.l0IngestLM.multiplier, ib(res.l0IngestLM.constant))
+	p.Printf("write-amp-model %.2fx+%s (smoothed %.2fx+%s) + ",
+		res.aux.perWorkTokensAux.intWriteAmpLinearModel.multiplier,
+		ib(res.aux.perWorkTokensAux.intWriteAmpLinearModel.constant),
+		res.writeAmpLM.multiplier, ib(res.writeAmpLM.constant))
 	// The tokens used per request at admission time, when no size information
 	// is known.
 	p.Printf("at-admission-tokens %s, ", ib(res.requestEstimates.writeTokens))
@@ -1232,18 +1239,6 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 		p.Printf("elastic %s (rate %s/s) due to L0 growth", ib(m), ib(m/adjustmentInterval))
 	} else {
 		p.SafeString("all")
-	}
-	if res.elasticDiskBWTokens != unlimitedTokens {
-		p.Printf("; elastic-disk-bw tokens %s (used %s, regular used %s): "+
-			"write model %.2fx+%s ingest model %.2fx+%s, ",
-			ib(res.elasticDiskBWTokens), ib(res.aux.diskBW.intervalLSMInfo.elasticTokensUsed),
-			ib(res.aux.diskBW.intervalLSMInfo.regularTokensUsed),
-			res.l0WriteLM.multiplier, ib(res.l0WriteLM.constant),
-			res.ingestLM.multiplier, ib(res.ingestLM.constant))
-		p.Printf("disk bw read %s write %s provisioned %s",
-			ib(res.aux.diskBW.intervalDiskLoadInfo.readBandwidth),
-			ib(res.aux.diskBW.intervalDiskLoadInfo.writeBandwidth),
-			ib(res.aux.diskBW.intervalDiskLoadInfo.provisionedBandwidth))
 	}
 	p.Printf("; write stalls %d", res.aux.intWriteStalls)
 }
