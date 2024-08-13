@@ -13,17 +13,24 @@ package queue
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestQueue(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
-
 	chunkSize := rng.Intn(255) + 1
-	q, err := NewQueue[*testQueueItem](WithChunkSize[*testQueueItem](chunkSize))
-	require.NoError(t, err)
-	runQueueTest(t, q)
+	testutils.RunTrueAndFalse(t, "queue with fixed chunk size", func(t *testing.T, fixedChunkSize bool) {
+		if fixedChunkSize {
+			q := NewQueueWithFixedChunkSize[*testQueueItem]()
+			runQueueTest(t, q)
+		} else {
+			q, err := NewQueue[*testQueueItem](WithChunkSize[*testQueueItem](chunkSize))
+			require.NoError(t, err)
+			runQueueTest(t, q)
+		}
+	})
 }
 
 func TestChunkSize(t *testing.T) {
@@ -40,18 +47,21 @@ func TestChunkSize(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func BenchmarkQueue(b *testing.B) {
-	b.ReportAllocs()
+type testQueueInterfaceWithInt interface {
+	Enqueue(int)
+	Empty() bool
+	Dequeue() (int, bool)
+	removeAll()
+}
+
+func runBenchmarkRangefeed(b *testing.B, q testQueueInterfaceWithInt) {
 	rng, _ := randutil.NewTestRand()
-
-	q, err := NewQueue[int]()
-	require.NoError(b, err)
-
 	for i := 0; i < b.N; i++ {
 		for i := 0; i < b.N; i++ {
 			q.Enqueue(1)
 		}
 		q.removeAll()
+		_ = q.Empty()
 	}
 
 	for i := 0; i < b.N; i++ {
@@ -61,4 +71,16 @@ func BenchmarkQueue(b *testing.B) {
 			q.Dequeue()
 		}
 	}
+}
+
+func BenchmarkQueueWithFixedChunkSize(b *testing.B) {
+	b.ReportAllocs()
+	q := NewQueueWithFixedChunkSize[int]()
+	runBenchmarkRangefeed(b, q)
+}
+
+func BenchmarkQueue(b *testing.B) {
+	b.ReportAllocs()
+	q, _ := NewQueue[int]()
+	runBenchmarkRangefeed(b, q)
 }
