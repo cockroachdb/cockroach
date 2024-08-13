@@ -96,11 +96,15 @@ var ExpirationLeasesOnly = settings.RegisterBoolSetting(
 	settings.WithRetiredName("kv.expiration_leases_only.enabled"),
 )
 
-var PreferLeaderLeasesOverEpochLeases = settings.RegisterBoolSetting(
+var LeaderLeasesEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"kv.lease.prefer_leader_leases_over_epoch_leases.enabled",
-	"controls whether leader leases are preferred over epoch-based leases",
-	envutil.EnvOrDefaultBool("COCKROACH_LEADER_LEASES", false),
+	"kv.leases.leader_leases.enabled",
+	"controls whether leader leases are enabled for ranges which use the raft leader "+
+		"fortification protocol. The setting is private because most users should interact "+
+		"with kv.raft.leader_fortification.fraction_enabled instead. The setting is only "+
+		"available for rare cases where an operator wants to disable leader leases without "+
+		"disabling the raft leader fortification.",
+	true,
 )
 
 // ExpirationLeasesMaxReplicasPerNode converts from expiration back to epoch
@@ -733,10 +737,12 @@ func (r *Replica) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimest
 }
 
 func (r *Replica) leaseSettings(ctx context.Context) leases.Settings {
+	// TODO(nvanbenschoten): push a DesiredLeaseType option into leases.Settings.
+	desiredLeaseType := r.desiredLeaseTypeRLocked()
 	return leases.Settings{
-		UseExpirationLeases:                       r.shouldUseExpirationLeaseRLocked(),
+		UseExpirationLeases:                       desiredLeaseType == roachpb.LeaseExpiration,
+		PreferLeaderLeasesOverEpochLeases:         desiredLeaseType == roachpb.LeaseLeader,
 		TransferExpirationLeases:                  TransferExpirationLeasesFirstEnabled.Get(&r.store.ClusterSettings().SV),
-		PreferLeaderLeasesOverEpochLeases:         PreferLeaderLeasesOverEpochLeases.Get(&r.store.ClusterSettings().SV),
 		RejectLeaseOnLeaderUnknown:                RejectLeaseOnLeaderUnknown.Get(&r.store.ClusterSettings().SV),
 		DisableAboveRaftLeaseTransferSafetyChecks: r.store.cfg.TestingKnobs.DisableAboveRaftLeaseTransferSafetyChecks,
 		AllowLeaseProposalWhenNotLeader:           r.store.cfg.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader,
@@ -762,18 +768,41 @@ func (r *Replica) requiresExpirationLeaseRLocked() bool {
 }
 
 // shouldUseExpirationLeaseRLocked returns true if this range should be using an
-// expiration-based lease, either because it requires one or because
-// kv.expiration_leases_only.enabled is enabled and the number of ranges
-// (replicas) per node is fewer than kv.expiration_leases.max_replicas_per_node"
+// expiration-based lease.
 func (r *Replica) shouldUseExpirationLeaseRLocked() bool {
-	settingEnabled := ExpirationLeasesOnly.Get(&r.ClusterSettings().SV) && !DisableExpirationLeasesOnly
-	maxAllowedReplicas := ExpirationLeasesMaxReplicasPerNode.Get(&r.ClusterSettings().SV)
-	// Disable the setting if there are too many replicas.
-	if settingEnabled && maxAllowedReplicas > 0 && r.store.getNodeRangeCount() > maxAllowedReplicas {
-		settingEnabled = false
+	return r.desiredLeaseTypeRLocked() == roachpb.LeaseExpiration
+}
+
+// desiredLeaseTypeRLocked returns the desired lease type for this replica.
+func (r *Replica) desiredLeaseTypeRLocked() roachpb.LeaseType {
+	// Use an expiration-based lease if the range requires one or if the
+	// kv.expiration_leases_only.enabled setting is enabled and the number of ranges
+	// (replicas) per node is fewer than kv.expiration_leases.max_replicas_per_node.
+	expirationLeaseRequired := r.requiresExpirationLeaseRLocked()
+	expirationLeaseOnly := func() bool {
+		settingEnabled := ExpirationLeasesOnly.Get(&r.ClusterSettings().SV) && !DisableExpirationLeasesOnly
+		maxAllowedReplicas := ExpirationLeasesMaxReplicasPerNode.Get(&r.ClusterSettings().SV)
+		// Disable the setting if there are too many replicas.
+		if settingEnabled && maxAllowedReplicas > 0 && r.store.getNodeRangeCount() > maxAllowedReplicas {
+			settingEnabled = false
+		}
+		return settingEnabled
+	}()
+	if expirationLeaseRequired || expirationLeaseOnly {
+		return roachpb.LeaseExpiration
 	}
 
-	return settingEnabled || r.requiresExpirationLeaseRLocked()
+	// If we're not using expiration leases, we need to decide between
+	// LeaderLeases and LeaseEpoch. We use LeaderLeases if the range is using the
+	// raft fortification protocol and the cluster setting is enabled.
+	raftFortificationEnabled := (*replicaRLockedStoreLiveness)(r).SupportFromEnabled()
+	leaderLeasesEnabled := LeaderLeasesEnabled.Get(&r.store.ClusterSettings().SV)
+	if raftFortificationEnabled && leaderLeasesEnabled {
+		return roachpb.LeaseLeader
+	}
+
+	// Otherwise, use an epoch-based lease.
+	return roachpb.LeaseEpoch
 }
 
 // requestLeaseLocked executes a request to obtain or extend a lease
@@ -985,10 +1014,13 @@ func (r *Replica) RevokeLease(ctx context.Context, seq roachpb.LeaseSequence) {
 // lease's expiration (and stasis period).
 func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Timestamp) error {
 	var leaseRenewal time.Duration
-	if r.shouldUseExpirationLeaseRLocked() {
-		_, leaseRenewal = r.store.cfg.RangeLeaseDurations()
-	} else {
+	if r.desiredLeaseTypeRLocked() == roachpb.LeaseEpoch {
 		_, leaseRenewal = r.store.cfg.NodeLivenessDurations()
+	} else {
+		// TODO(mira): consider adding a RaftConfig.StoreLivenessDurations method
+		// when we integrate store liveness with the Store (#125064). Then use that
+		// here for Leader leases.
+		_, leaseRenewal = r.store.cfg.RangeLeaseDurations()
 	}
 	leaseRenewalMinusStasis := leaseRenewal - r.store.Clock().MaxOffset()
 	if leaseRenewalMinusStasis < 0 {
