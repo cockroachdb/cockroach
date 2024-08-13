@@ -111,7 +111,7 @@ type Ready struct {
 }
 
 func isHardStateEqual(a, b pb.HardState) bool {
-	return a.Term == b.Term && a.Vote == b.Vote && a.Commit == b.Commit && a.Lead == b.Lead
+	return a == b
 }
 
 // IsEmptyHardState returns true if the given HardState is empty.
