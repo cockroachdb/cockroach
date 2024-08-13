@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -3303,7 +3304,12 @@ func makeTableMetricsGenerator(
 	storeID := int32(tree.MustBeDInt(args[1]))
 	start := []byte(tree.MustBeDBytes(args[2]))
 	end := []byte(tree.MustBeDBytes(args[3]))
-
+	if _, ok := storage.DecodeEngineKey(start); !ok {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "invalid start engine key %q", start)
+	}
+	if _, ok := storage.DecodeEngineKey(end); !ok {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "invalid end engine key %q", end)
+	}
 	return newTableMetricsIterator(evalCtx, nodeID, storeID, start, end), nil
 }
 
@@ -3408,6 +3414,12 @@ func makeStorageInternalKeysGenerator(
 	storeID := int32(tree.MustBeDInt(args[1]))
 	start := []byte(tree.MustBeDBytes(args[2]))
 	end := []byte(tree.MustBeDBytes(args[3]))
+	if _, ok := storage.DecodeEngineKey(start); !ok {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "invalid start engine key %q", start)
+	}
+	if _, ok := storage.DecodeEngineKey(end); !ok {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "invalid end engine key %q", end)
+	}
 
 	var megabytesPerSecond int64
 	if len(args) > 4 {
