@@ -16,10 +16,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//lint:ignore U1000 unused
 func (q *QueueWithFixedChunkSize[T]) removeAll() {
 	q.RemoveAll(func(e T) {})
 }
 
+//lint:ignore U1000 unused
 func (q *Queue[T]) removeAll() {
 	for q.head != nil {
 		q.head = q.head.next
@@ -28,11 +30,13 @@ func (q *Queue[T]) removeAll() {
 	q.tail = q.head
 }
 
+//lint:ignore U1000 unused
 func (q *Queue[T]) checkNil(t *testing.T) {
 	require.Nil(t, q.head)
 	require.Nil(t, q.tail)
 }
 
+//lint:ignore U1000 unused
 func (q *QueueWithFixedChunkSize[T]) checkNil(t *testing.T) {
 	require.Nil(t, q.head)
 	require.Nil(t, q.tail)
@@ -40,14 +44,19 @@ func (q *QueueWithFixedChunkSize[T]) checkNil(t *testing.T) {
 
 // noop for Queue implementation since it doesn't track event count in the
 // queue.
+//
+//lint:ignore U1000 unused
 func (q *Queue[T]) checkEventCount(t *testing.T, _ int) {
 }
 
+//lint:ignore U1000 unused
 func (q *QueueWithFixedChunkSize[T]) checkEventCount(t *testing.T, count int) {
 	require.Equal(t, count, int(q.eventCount))
 }
 
 // checkInvariants checks the invariants of the queue.
+//
+//lint:ignore U1000 unused
 func (q *Queue[T]) checkInvariants(t *testing.T) {
 	if q.head == nil && q.tail == nil {
 		require.True(t, q.Empty())
@@ -78,6 +87,8 @@ func (q *Queue[T]) checkInvariants(t *testing.T) {
 
 // checkInvariants checks the invariants of the queue. Same as the Queue[T]
 // version. Cannot avoid duplication due to the lack of generics.
+//
+//lint:ignore U1000 unused
 func (q *QueueWithFixedChunkSize[T]) checkInvariants(t *testing.T) {
 	if q.head == nil && q.tail == nil {
 		require.True(t, q.Empty())
