@@ -139,7 +139,7 @@ type StartOpts struct {
 	StorageCluster         *SyncedCluster
 
 	// IsRestart allows skipping steps that are used during initial start like
-	// initialization and sequential node starts.
+	// initialization and sequential node starts and also reuses the previous start script.
 	IsRestart bool
 
 	// EnableFluentSink determines whether to enable the fluent-servers attribute
@@ -773,12 +773,15 @@ func (c *SyncedCluster) startNodeWithResult(
 	startScriptPath := StartScriptPath(startOpts.VirtualClusterName, startOpts.SQLInstance)
 	uploadCmd += fmt.Sprintf(`cat > %[1]s && chmod +x %[1]s`, startScriptPath)
 
-	var res = &RunResultDetails{}
-	uploadOpts := defaultCmdOpts("upload-start-script")
-	uploadOpts.stdin = strings.NewReader(startCmd)
-	res, err = c.runCmdOnSingleNode(ctx, l, node, uploadCmd, uploadOpts)
-	if err != nil || res.Err != nil {
-		return res, err
+	// if restart is passed as true we don't overwrite the previous start script
+	if !startOpts.IsRestart {
+		var res = &RunResultDetails{}
+		uploadOpts := defaultCmdOpts("upload-start-script")
+		uploadOpts.stdin = strings.NewReader(startCmd)
+		res, err = c.runCmdOnSingleNode(ctx, l, node, uploadCmd, uploadOpts)
+		if err != nil || res.Err != nil {
+			return res, err
+		}
 	}
 
 	var runScriptCmd string
