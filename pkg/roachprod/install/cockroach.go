@@ -140,7 +140,8 @@ type StartOpts struct {
 
 	// IsRestart allows skipping steps that are used during initial start like
 	// initialization and sequential node starts.
-	IsRestart bool
+	IsRestart              bool
+	OverwriteStartupScript bool
 
 	// EnableFluentSink determines whether to enable the fluent-servers attribute
 	// in the CockroachDB logging configuration.
@@ -773,12 +774,14 @@ func (c *SyncedCluster) startNodeWithResult(
 	startScriptPath := StartScriptPath(startOpts.VirtualClusterName, startOpts.SQLInstance)
 	uploadCmd += fmt.Sprintf(`cat > %[1]s && chmod +x %[1]s`, startScriptPath)
 
-	var res = &RunResultDetails{}
-	uploadOpts := defaultCmdOpts("upload-start-script")
-	uploadOpts.stdin = strings.NewReader(startCmd)
-	res, err = c.runCmdOnSingleNode(ctx, l, node, uploadCmd, uploadOpts)
-	if err != nil || res.Err != nil {
-		return res, err
+	if !startOpts.IsRestart || startOpts.OverwriteStartupScript {
+		var res = &RunResultDetails{}
+		uploadOpts := defaultCmdOpts("upload-start-script")
+		uploadOpts.stdin = strings.NewReader(startCmd)
+		res, err = c.runCmdOnSingleNode(ctx, l, node, uploadCmd, uploadOpts)
+		if err != nil || res.Err != nil {
+			return res, err
+		}
 	}
 
 	var runScriptCmd string

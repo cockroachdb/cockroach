@@ -243,6 +243,8 @@ func initFlags() {
 		"store-count", startOpts.StoreCount, "number of stores to start each node with")
 	startCmd.Flags().IntVar(&startOpts.AdminUIPort,
 		"admin-ui-port", startOpts.AdminUIPort, "port to serve the admin UI on")
+	startCmd.Flags().BoolVar(&startOpts.OverwriteStartupScript,
+		"overwrite-startup-script", startOpts.OverwriteStartupScript, "overwrites the previous startup script")
 
 	startInstanceCmd.Flags().StringVarP(&storageCluster, "storage-cluster", "S", "", "storage cluster")
 	_ = startInstanceCmd.MarkFlagRequired("storage-cluster")
