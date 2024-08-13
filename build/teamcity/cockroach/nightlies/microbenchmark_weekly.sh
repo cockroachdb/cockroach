@@ -26,6 +26,7 @@ dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
 source "$dir/teamcity-support.sh"  # For $root
 source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 output_dir="./artifacts/microbench"
+benchmarks_commit=$(git rev-parse HEAD)
 exit_status=0
 
 # Set up credentials
@@ -122,6 +123,26 @@ done
   --quiet \
   -- "$TEST_ARGS" \
   || exit_status=$?
+
+# Write metadata to a file for each set of benchmarks
+declare -A metadata
+metadata["run-time"]=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+metadata["baseline-commit"]=${sha_arr[1]}
+metadata["benchmarks-commit"]=$benchmarks_commit
+metadata["machine"]=$GCE_MACHINE_TYPE
+metadata["goarch"]=amd64
+metadata["goos"]=linux
+metadata["repository"]=cockroach
+echo "" > "$output_dir/baseline/metadata.log"
+for key in "${!metadata[@]}"; do
+  echo "$key": "${metadata[$key]}" >> "$output_dir/baseline/metadata.log"
+done
+
+metadata["experiment-commit"]=${sha_arr[0]}
+metadata["experiment-commit-time"]=$(git show -s --format=%cI "${sha_arr[0]}")
+for key in "${!metadata[@]}"; do
+  echo "$key": "${metadata[$key]}" >> "$output_dir/experiment/metadata.log"
+done
 
 # Push baseline to cache if we ran both benchmarks
 if [[ ${#build_sha_arr[@]} -gt 1 ]]; then
