@@ -684,6 +684,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 		}
 	}
 
+	var nextObjectID atomic.Int64
 	// A goroutine that repeatedly renames database `testdb` randomly.
 	g.GoCtx(repeatWorkWithInterval("rename-db-worker", renameDBInterval, func(sqlDB *gosql.DB) error {
 		if err := useLegacyOrDeclarative(); err != nil {
@@ -697,7 +698,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 			t.Logf("DROP DATABASE %v", dbName)
 			return createSchema()
 		}
-		newDBName := fmt.Sprintf("testdb_%v", rand.Intn(1000))
+		newDBName := fmt.Sprintf("testdb_%v", nextObjectID.Add(1))
 		if newDBName == dbName {
 			return nil
 		}
@@ -715,7 +716,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 			return err
 		}
 		drop := rand.Intn(2) == 0
-		newSCName := fmt.Sprintf("testsc_%v", rand.Intn(1000))
+		newSCName := fmt.Sprintf("testsc_%v", nextObjectID.Add(1))
 		if scName == newSCName {
 			return nil
 		}
@@ -745,7 +746,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 		if err := useLegacyOrDeclarative(); err != nil {
 			return err
 		}
-		newTblName := fmt.Sprintf("t_%v", rand.Intn(1000))
+		newTblName := fmt.Sprintf("t_%v", nextObjectID.Add(1))
 		drop := rand.Intn(2) == 0
 		var err error
 		if !drop {
@@ -774,7 +775,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 			return err
 		}
 		dbName, scName, tblName := dbName, scName, tblName
-		newColName := fmt.Sprintf("col_%v", rand.Intn(1000))
+		newColName := fmt.Sprintf("col_%v", nextObjectID.Add(1))
 
 		_, err := sqlDB.Exec(fmt.Sprintf("ALTER TABLE %v.%v.%v ADD COLUMN %v INT DEFAULT %v",
 			dbName, scName, tblName, newColName, rand.Intn(100)))
@@ -814,7 +815,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 
 	// A goroutine that creates secondary index on a randomly selected column.
 	g.GoCtx(repeatWorkWithInterval("create-index-worker", createIdxInterval, func(sqlDB *gosql.DB) error {
-		newIndexName := fmt.Sprintf("idx_%v", rand.Intn(1000))
+		newIndexName := fmt.Sprintf("idx_%v", nextObjectID.Add(1))
 
 		// Randomly pick a non-PK column to create an index on.
 		dbName, scName, tblName := dbName, scName, tblName
