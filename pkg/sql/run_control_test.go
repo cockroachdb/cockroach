@@ -980,6 +980,7 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	skip.UnderDuress(t, "sets a long timeout")
 
 	for _, implicitTxn := range []bool{true, false} {
 		t.Run(fmt.Sprintf("implicitTxn=%t", implicitTxn),
@@ -1016,7 +1017,7 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 				defer dbWithHandler.Close()
 				conn := sqlutils.MakeSQLRunner(dbWithHandler)
 				conn.Exec(t, "CREATE TABLE t1 (n int primary key)")
-				conn.Exec(t, `SET statement_timeout = '30s'`)
+				conn.Exec(t, `SET statement_timeout = '1s'`)
 				require.NoError(t, err)
 				// Test implicit transactions first.
 				blockSchemaChange.Swap(true)
