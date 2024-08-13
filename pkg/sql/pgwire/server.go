@@ -509,11 +509,24 @@ func (s *Server) WaitForSQLConnsToClose(
 	s.setRejectNewConnectionsLocked(true)
 	s.mu.Unlock()
 
+	connectionTimeoutEvent := &eventpb.NodeShutdownConnectionTimeout{
+		CommonNodeEventDetails: eventpb.CommonNodeEventDetails{
+			NodeID: int32(s.execCfg.NodeInfo.NodeID.SQLInstanceID()),
+		},
+		Detail:        redact.SafeString("draining SQL queries after waiting for server.shutdown.connections.timeout"),
+		TimeoutMillis: uint32(connectionWait.Milliseconds()),
+	}
+
 	if connectionWait == 0 {
+		numOpenConns := s.GetConnCancelMapLen()
+		if numOpenConns > 0 {
+			connectionTimeoutEvent.ConnectionsRemaining = uint32(numOpenConns)
+			log.StructuredEvent(ctx, connectionTimeoutEvent)
+		}
 		return nil
 	}
 
-	log.Ops.Info(ctx, "waiting for clients to close existing SQL connections")
+	log.Ops.Infof(ctx, "waiting for clients to close %d existing SQL connections", s.GetConnCancelMapLen())
 
 	timer := time.NewTimer(connectionWait)
 	defer timer.Stop()
@@ -524,11 +537,8 @@ func (s *Server) WaitForSQLConnsToClose(
 	select {
 	// Connection wait times out.
 	case <-time.After(connectionWait):
-		log.Ops.Warningf(ctx,
-			"%d connections remain after waiting %s; proceeding to drain SQL connections",
-			s.GetConnCancelMapLen(),
-			connectionWait,
-		)
+		connectionTimeoutEvent.ConnectionsRemaining = uint32(s.GetConnCancelMapLen())
+		log.StructuredEvent(ctx, connectionTimeoutEvent)
 	case <-allConnsDone:
 	case <-ctx.Done():
 		return ctx.Err()
@@ -629,7 +639,15 @@ func (s *Server) drainImpl(
 	// Wait for connections to finish up their queries for the duration of queryWait.
 	select {
 	case <-time.After(queryWait):
-		log.Ops.Warningf(ctx, "canceling all sessions after waiting %s", queryWait)
+		transactionTimeoutEvent := &eventpb.NodeShutdownTransactionTimeout{
+			CommonNodeEventDetails: eventpb.CommonNodeEventDetails{
+				NodeID: int32(s.execCfg.NodeInfo.NodeID.SQLInstanceID()),
+			},
+			Detail:               redact.SafeString("forcibly closing SQL connections after waiting for server.shutdown.transactions.timeout"),
+			ConnectionsRemaining: uint32(s.GetConnCancelMapLen()),
+			TimeoutMillis:        uint32(queryWait.Milliseconds()),
+		}
+		log.StructuredEvent(ctx, transactionTimeoutEvent)
 	case <-allConnsDone:
 	case <-ctx.Done():
 		return ctx.Err()

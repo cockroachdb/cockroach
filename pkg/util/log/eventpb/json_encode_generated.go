@@ -3539,6 +3539,74 @@ func (m *NodeRestart) AppendJSONFields(printComma bool, b redact.RedactableBytes
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *NodeShutdownConnectionTimeout) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonNodeEventDetails.AppendJSONFields(printComma, b)
+
+	if m.Detail != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Detail\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Detail)))
+		b = append(b, '"')
+	}
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"ConnectionsRemaining\":"...)
+	b = strconv.AppendUint(b, uint64(m.ConnectionsRemaining), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"TimeoutMillis\":"...)
+	b = strconv.AppendUint(b, uint64(m.TimeoutMillis), 10)
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *NodeShutdownTransactionTimeout) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonNodeEventDetails.AppendJSONFields(printComma, b)
+
+	if m.Detail != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Detail\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Detail)))
+		b = append(b, '"')
+	}
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"ConnectionsRemaining\":"...)
+	b = strconv.AppendUint(b, uint64(m.ConnectionsRemaining), 10)
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"TimeoutMillis\":"...)
+	b = strconv.AppendUint(b, uint64(m.TimeoutMillis), 10)
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *PasswordHashConverted) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
