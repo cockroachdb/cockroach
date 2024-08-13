@@ -10,6 +10,7 @@ go_library(
         "opgen_check_constraint_unvalidated.go",
         "opgen_column.go",
         "opgen_column_comment.go",
+        "opgen_column_compute_expression.go",
         "opgen_column_default_expression.go",
         "opgen_column_family.go",
         "opgen_column_name.go",

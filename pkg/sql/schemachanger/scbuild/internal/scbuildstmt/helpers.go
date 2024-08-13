@@ -242,6 +242,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 		case
 			*scpb.ColumnDefaultExpression,
 			*scpb.ColumnOnUpdateExpression,
+			*scpb.ColumnComputeExpression,
 			*scpb.CheckConstraint,
 			*scpb.CheckConstraintUnvalidated,
 			*scpb.ForeignKeyConstraint,
@@ -1657,4 +1658,12 @@ func retrieveColumnTypeElem(
 ) *scpb.ColumnType {
 	_, _, ret := scpb.FindColumnType(b.QueryByID(tableID).Filter(hasColumnIDAttrFilter(columnID)))
 	return ret
+}
+
+func retrieveColumnComputeExpression(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) (column *scpb.ColumnComputeExpression) {
+	return b.QueryByID(tableID).FilterColumnComputeExpression().Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnComputeExpression) bool {
+		return e.ColumnID == columnID
+	}).MustGetZeroOrOneElement()
 }
