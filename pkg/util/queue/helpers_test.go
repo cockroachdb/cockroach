@@ -41,11 +41,9 @@ func (q *QueueWithFixedChunkSize[T]) removeAll() {
 }
 
 func (q *Queue[T]) removeAll() {
-	for q.head != nil {
-		q.head = q.head.next
-		// The previous value of q.head will be garbage collected.
-	}
-	q.tail = q.head
+	// Reset the queue. Data will be garbage collected.
+	q.head = nil
+	q.tail = nil
 }
 
 func (q *Queue[T]) checkNil(t *testing.T) {
