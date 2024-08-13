@@ -501,7 +501,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 			}
 			if err != nil && !errors.Is(err, budgetClosedError) {
 				p.Metrics.RangeFeedBudgetExhausted.Inc(1)
-				p.sendStop(newErrBufferCapacityExceeded())
+				p.sendStop(newKvErrBufferCapacityExceeded)
 				return false
 			}
 			// Always release allocation pointer after sending as it is nil safe.
@@ -527,7 +527,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
 		case <-ctx.Done():
-			p.sendStop(newErrBufferCapacityExceeded())
+			p.sendStop(newKvErrBufferCapacityExceeded)
 			return false
 		}
 	} else {
@@ -556,7 +556,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 			case <-ctx.Done():
 				// Sending on the eventC channel would have blocked.
 				// Instead, tear down the processor and return immediately.
-				p.sendStop(newErrBufferCapacityExceeded())
+				p.sendStop(newKvErrBufferCapacityExceeded)
 				return false
 			}
 		}

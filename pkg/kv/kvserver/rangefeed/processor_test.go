@@ -922,7 +922,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		// were dropped due to rapid event consumption before the r1's outputLoop
 		// began consuming from its event buffer.
 		require.LessOrEqual(t, len(r1Stream.Events()), toFill)
-		require.Equal(t, newErrBufferCapacityExceeded().GoError(), r1Stream.WaitForError(t))
+		require.Equal(t, newErrBufferCapacityExceeded, r1Stream.WaitForError(t))
 		testutils.SucceedsSoon(t, func() error {
 			if act, exp := p.Len(), 1; exp != act {
 				return fmt.Errorf("processor had %d regs, wanted %d", act, exp)
@@ -985,7 +985,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 		unblock = nil
 		h.syncEventAndRegistrations()
 
-		require.Equal(t, newErrBufferCapacityExceeded().GoError(), r1Stream.WaitForError(t))
+		require.Equal(t, newErrBufferCapacityExceeded, r1Stream.WaitForError(t))
 		require.Equal(t, 0, p.Len(), "registration was not removed")
 		require.Equal(t, int64(1), m.RangeFeedBudgetExhausted.Count())
 	})

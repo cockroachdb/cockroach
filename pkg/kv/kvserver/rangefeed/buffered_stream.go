@@ -73,12 +73,12 @@ func (bs *BufferedStreamSender) sendBuffered(
 		return errors.New("stream sender is stopped")
 	}
 	if bs.queueMu.overflow {
-		return newErrBufferCapacityExceeded().GoError()
+		return newErrBufferCapacityExceeded
 	}
 
 	if bs.queueMu.buffer.Len() >= bs.queueMu.capacity {
 		bs.queueMu.overflow = true
-		return newErrBufferCapacityExceeded().GoError()
+		return newErrBufferCapacityExceeded
 	}
 
 	bs.queueMu.buffer.Enqueue(&sharedMuxEvent{event, alloc})
@@ -151,7 +151,7 @@ func (bs *BufferedStreamSender) RunOutputLoop(ctx context.Context, stopper *stop
 				}
 			}
 			if overflowed && remains == int64(0) {
-				return newErrBufferCapacityExceeded().GoError()
+				return newErrBufferCapacityExceeded
 			}
 		}
 	}
