@@ -11,10 +11,12 @@
 package storeliveness
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -63,7 +65,7 @@ type requesterStateHandler struct {
 func newRequesterStateHandler() *requesterStateHandler {
 	rsh := &requesterStateHandler{
 		requesterState: requesterState{
-			meta:        slpb.RequesterMeta{MaxEpoch: 1},
+			meta:        slpb.RequesterMeta{},
 			supportFrom: make(map[slpb.StoreIdent]slpb.SupportState),
 		},
 	}
@@ -135,12 +137,18 @@ func (rsh *requesterStateHandler) removeStore(id slpb.StoreIdent) {
 // Functions for handling requesterState updates.
 
 // getMeta returns the RequesterMeta from the inProgress view; if not present,
-// it falls back to the RequesterMeta from the checkedIn view.
+// it falls back to the RequesterMeta from the checkedIn view. This is done on a
+// per-field basis to ensure that fields present in the checkedIn view and not
+// present in the inProgress view are also returned.
 func (rsfu *requesterStateForUpdate) getMeta() slpb.RequesterMeta {
-	if rsfu.inProgress.meta != (slpb.RequesterMeta{}) {
-		return rsfu.inProgress.meta
+	meta := rsfu.checkedIn.meta
+	if rsfu.inProgress.meta.MaxEpoch != 0 {
+		meta.MaxEpoch = rsfu.inProgress.meta.MaxEpoch
 	}
-	return rsfu.checkedIn.meta
+	if !rsfu.inProgress.meta.MaxRequested.IsEmpty() {
+		meta.MaxRequested = rsfu.inProgress.meta.MaxRequested
+	}
+	return meta
 }
 
 // getSupportFrom returns the SupportState from the inProgress view; if not
@@ -161,6 +169,31 @@ func (rsfu *requesterStateForUpdate) getSupportFrom(
 func (rsfu *requesterStateForUpdate) reset() {
 	rsfu.inProgress.meta = slpb.RequesterMeta{}
 	clear(rsfu.inProgress.supportFrom)
+}
+
+// write writes the requester meta to disk if it changed in this update.
+func (rsfu *requesterStateForUpdate) write(ctx context.Context, rw storage.ReadWriter) error {
+	meta := rsfu.getMeta()
+	if meta != rsfu.checkedIn.meta {
+		if err := writeRequesterMeta(ctx, rw, meta); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// load reads the requester meta from disk and populates it in
+// requesterStateHandler.requesterState.
+func (rsh *requesterStateHandler) load(ctx context.Context, r storage.Reader) error {
+	rsh.mu.Lock()
+	defer rsh.mu.Unlock()
+	var err error
+	rsh.requesterState.meta, err = readRequesterMeta(ctx, r)
+	if err != nil {
+		return err
+	}
+	rsh.requesterState.supportFrom = make(map[slpb.StoreIdent]slpb.SupportState)
+	return nil
 }
 
 // checkOutUpdate returns the requesterStateForUpdate referenced in

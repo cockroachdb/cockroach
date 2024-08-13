@@ -11,9 +11,11 @@
 package storeliveness
 
 import (
+	"context"
 	"sync/atomic"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -106,12 +108,15 @@ func (ssh *supporterStateHandler) getSupportFor(id slpb.StoreIdent) slpb.Support
 // Functions for handling supporterState updates.
 
 // getMeta returns the SupporterMeta from the inProgress view; if not present,
-// it falls back to the SupporterMeta from the checkedIn view.
+// it falls back to the SupporterMeta from the checkedIn view. This is done on a
+// per-field basis to ensure that fields present in the checkedIn view and not
+// present in the inProgress view are also returned.
 func (ssfu *supporterStateForUpdate) getMeta() slpb.SupporterMeta {
-	if ssfu.inProgress.meta != (slpb.SupporterMeta{}) {
-		return ssfu.inProgress.meta
+	meta := ssfu.checkedIn.meta
+	if !ssfu.inProgress.meta.MaxWithdrawn.IsEmpty() {
+		meta.MaxWithdrawn = ssfu.inProgress.meta.MaxWithdrawn
 	}
-	return ssfu.checkedIn.meta
+	return meta
 }
 
 // getSupportFor returns the SupportState from the inProgress view; if not
@@ -132,6 +137,44 @@ func (ssfu *supporterStateForUpdate) getSupportFor(
 func (ssfu *supporterStateForUpdate) reset() {
 	ssfu.inProgress.meta = slpb.SupporterMeta{}
 	clear(ssfu.inProgress.supportFor)
+}
+
+// write writes the supporter meta and supportFor to disk if they changed in
+// this update.
+func (ssfu *supporterStateForUpdate) write(ctx context.Context, rw storage.ReadWriter) error {
+	meta := ssfu.getMeta()
+	if meta != ssfu.checkedIn.meta {
+		if err := writeSupporterMeta(ctx, rw, meta); err != nil {
+			return err
+		}
+	}
+	for _, ss := range ssfu.inProgress.supportFor {
+		if err := writeSupportForState(ctx, rw, ss); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// load reads the supporter meta and supportFor from disk and populates them in
+// supporterStateHandler.supporterState.
+func (ssh *supporterStateHandler) load(ctx context.Context, r storage.Reader) error {
+	ssh.mu.Lock()
+	defer ssh.mu.Unlock()
+	var err error
+	ssh.supporterState.meta, err = readSupporterMeta(ctx, r)
+	if err != nil {
+		return err
+	}
+	supportFor, err := readSupportForState(ctx, r)
+	if err != nil {
+		return err
+	}
+	ssh.supporterState.supportFor = make(map[slpb.StoreIdent]slpb.SupportState, len(supportFor))
+	for _, s := range supportFor {
+		ssh.supporterState.supportFor[s.Target] = s
+	}
+	return nil
 }
 
 // checkOutUpdate returns the supporterStateForUpdate referenced in
