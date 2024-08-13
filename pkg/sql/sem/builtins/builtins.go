@@ -75,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -5324,6 +5325,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Volatility: volatility.Stable,
 		},
 	),
+
 	"crdb_internal.redact_descriptor": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemInfo,
@@ -7022,6 +7024,13 @@ Parameters:` + randgencfg.ConfigDoc,
 				storeID := int32(tree.MustBeDInt(args[1]))
 				startKey := []byte(tree.MustBeDBytes(args[2]))
 				endKey := []byte(tree.MustBeDBytes(args[3]))
+
+				if ek, ok := storage.DecodeEngineKey(startKey); !ok || ek.Validate() != nil {
+					startKey = storage.EncodeMVCCKey(storage.MVCCKey{Key: startKey})
+				}
+				if ek, ok := storage.DecodeEngineKey(endKey); !ok || ek.Validate() != nil {
+					endKey = storage.EncodeMVCCKey(storage.MVCCKey{Key: endKey})
+				}
 				log.Infof(ctx, "crdb_internal.compact_engine_span called for nodeID=%d, storeID=%d, range[startKey=%s, endKey=%s]", nodeID, storeID, startKey, endKey)
 				if err := evalCtx.CompactEngineSpan(
 					ctx, nodeID, storeID, startKey, endKey); err != nil {

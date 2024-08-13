@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
@@ -2510,9 +2509,20 @@ func (p *Pebble) Compact() error {
 
 // CompactRange implements the Engine interface.
 func (p *Pebble) CompactRange(start, end roachpb.Key) error {
-	bufStart := EncodeMVCCKey(MVCCKey{start, hlc.Timestamp{}})
-	bufEnd := EncodeMVCCKey(MVCCKey{end, hlc.Timestamp{}})
-	return p.db.Compact(bufStart, bufEnd, true /* parallel */)
+	// TODO(jackson): Consider changing Engine.CompactRange's signature to take
+	// in EngineKeys so that it's unambiguous that the arguments have already
+	// been encoded as engine keys. We do need to encode these keys in protocol
+	// buffers when they're sent over the wire during the
+	// crdb_internal.compact_engine_span builtin. Maybe we should have a
+	// roachpb.Key equivalent for EngineKey so we don't lose that type
+	// information?
+	if ek, ok := DecodeEngineKey(start); !ok || ek.Validate() != nil {
+		return errors.Errorf("invalid start key: %q", start)
+	}
+	if ek, ok := DecodeEngineKey(end); !ok || ek.Validate() != nil {
+		return errors.Errorf("invalid end key: %q", end)
+	}
+	return p.db.Compact(start, end, true /* parallel */)
 }
 
 // RegisterFlushCompletedCallback implements the Engine interface.
