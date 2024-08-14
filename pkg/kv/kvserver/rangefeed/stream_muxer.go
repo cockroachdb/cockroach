@@ -197,7 +197,7 @@ func (sm *StreamMuxer) SendBuffered(
 	e *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
 ) error {
 	// Panics if sender is not a BufferedStreamSender. This is a programming
-	// error.
+	// error. Check memory accounting for sharedmux vs sharedevent.
 	return sm.sender.(*BufferedStreamSender).SendBuffered(e, alloc)
 }
 
