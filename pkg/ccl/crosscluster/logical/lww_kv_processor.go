@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -85,6 +86,8 @@ func newKVRowProcessor(
 	return p, nil
 }
 
+var originID1Options = &kvpb.WriteOptions{OriginID: 1}
+
 func (p *kvRowProcessor) ProcessRow(
 	ctx context.Context, txn isql.Txn, kv roachpb.KeyValue, prevValue roachpb.Value,
 ) (batchStats, error) {
@@ -126,6 +129,8 @@ func (p *kvRowProcessor) ProcessRow(
 	}
 
 	b := kvTxn.NewBatch()
+
+	b.Header.WriteOptions = originID1Options
 
 	if prevValue.IsPresent() {
 		prevRow, err := p.decoder.DecodeKV(ctx, roachpb.KeyValue{
