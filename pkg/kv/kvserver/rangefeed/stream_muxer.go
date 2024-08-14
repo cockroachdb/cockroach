@@ -199,7 +199,7 @@ func (sm *StreamMuxer) SendBuffered(
 	e *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
 ) error {
 	// Panics if sender is not a BufferedStreamSender. This is a programming
-	// error.
+	// error. Check memory accounting for sharedmux vs sharedevent.
 	return sm.sender.(*BufferedStreamSender).SendBuffered(e, alloc)
 }
 
@@ -313,10 +313,22 @@ func (sm *StreamMuxer) run(ctx context.Context, stopper *stop.Stopper) error {
 		case <-sm.notifyMuxError:
 			toSend := sm.detachMuxErrors()
 			for _, clientErr := range toSend {
-				if err := sm.sender.SendUnbuffered(clientErr); err != nil {
-					log.Errorf(ctx,
-						"failed to send rangefeed completion error back to client due to broken stream: %v", err)
-					return err
+				if bs, ok := sm.sender.(*BufferedStreamSender); ok {
+					// For BufferedStreamSender, use SendBuffered to ensure that errors
+					// are sent only after all other queued events have been sent to the
+					// client.
+					// TODO(wenyihu6): add tests for this
+					if err := bs.SendBuffered(clientErr, nil); err != nil {
+						log.Errorf(ctx,
+							"failed to send rangefeed completion error back to client due to broken stream: %v", err)
+						return err
+					}
+				} else {
+					if err := sm.sender.SendUnbuffered(clientErr); err != nil {
+						log.Errorf(ctx,
+							"failed to send rangefeed completion error back to client due to broken stream: %v", err)
+						return err
+					}
 				}
 			}
 		case <-sm.notifyRangefeedCleanUp:

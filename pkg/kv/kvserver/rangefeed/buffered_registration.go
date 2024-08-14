@@ -270,7 +270,8 @@ func (br *bufferedRegistration) maybeRunCatchUpScan(ctx context.Context) error {
 		catchUpIter.Close()
 		br.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
-
+	// Send to underlying stream directly. Note that we are not doing memory
+	// accounting for catch up scans.
 	return catchUpIter.CatchUpScan(ctx, br.stream.SendUnbuffered, br.withDiff, br.withFiltering, br.withOmitRemote)
 }
 

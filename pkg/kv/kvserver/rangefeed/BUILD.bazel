@@ -19,6 +19,7 @@ go_library(
         "stream_muxer.go",
         "task.go",
         "testutil.go",
+        "unbuffered_registration.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed",
     visibility = ["//visibility:public"],
