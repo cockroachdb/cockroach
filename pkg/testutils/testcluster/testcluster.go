@@ -471,6 +471,7 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 				_, e := ssrv.SystemLayer().RPCContext().GRPCDialNode(
 					dsrv.SystemLayer().AdvRPCAddr(),
 					stl.NodeID(),
+					roachpb.Locality{},
 					rpc.DefaultClass,
 				).Connect(context.TODO())
 				err = errors.CombineErrors(err, e)
@@ -1519,6 +1520,7 @@ func (tc *TestCluster) WaitForNodeStatuses(t serverutils.TestFataler) {
 		conn, err := srv.RPCContext().GRPCDialNode(
 			srv.AdvRPCAddr(),
 			tc.Server(0).StorageLayer().NodeID(),
+			roachpb.Locality{},
 			rpc.DefaultClass,
 		).Connect(context.TODO())
 		if err != nil {

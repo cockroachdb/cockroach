@@ -227,7 +227,8 @@ func (env *ddEnv) lookupServerWithSkip(nodeID roachpb.NodeID, skip int) *ddServe
 }
 
 func (env *ddEnv) dial(srv *ddServer, class ConnectionClass) *Connection {
-	return env.client.GRPCDialNode(srv.addr, srv.nodeID, class)
+	// TODO(baptist): Fix the locality for tests.
+	return env.client.GRPCDialNode(srv.addr, srv.nodeID, roachpb.Locality{}, class)
 }
 
 func (env *ddEnv) handleDial(to *ddServer, class ConnectionClass) {
