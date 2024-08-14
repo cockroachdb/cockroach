@@ -13,6 +13,7 @@ package cockroach.kv.kvserver.kvflowcontrol.kvflowcontrolpb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb";
 
 import "gogoproto/gogo.proto";
+import "raft/raftpb/raft.proto";
 
 // RaftAdmissionMeta contains information used by admission control for the
 // select raft commands that use replication admission control. It contains a
@@ -77,6 +78,8 @@ message RaftAdmissionMeta {
   // small write sizes). The ideas above are too complicated.
 }
 
+// AdmittedRaftLogEntries is only used by RACv1.
+//
 // AdmittedRaftLogEntries represents a set of raft log entries that were
 // admitted below raft. These are identified by:
 // - the range ID (there's one per raft group);
@@ -125,4 +128,24 @@ message RaftLogPosition {
 
   uint64 term = 1;
   uint64 index = 2;
+}
+
+// AdmittedResponseForRange is only used in RACv2. It contains a MsgAppResp
+// from a follower to a leader, that was generated to advance the admitted
+// vector for that follower, maintained by the leader.
+message AdmittedResponseForRange {
+  option (gogoproto.goproto_stringer) = false;
+
+  // LeaderStoreID is used to route the request when this message is received
+  // at the leader node.
+  uint64 leader_store_id = 1 [(gogoproto.customname) = "LeaderStoreID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+
+  // RangeID of the raft group to which the MsgAppResp is directed. Used for
+  // routing at the leader node.
+  int64 range_id = 2 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+
+  // Msg is the MsgAppResp containing the admitted vector.
+  raftpb.Message msg = 3 [(gogoproto.nullable) = false];
 }
