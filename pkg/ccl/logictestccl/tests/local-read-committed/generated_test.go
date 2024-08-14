@@ -331,6 +331,13 @@ func TestReadCommittedLogic_bit(
 	runLogicTest(t, "bit")
 }
 
+func TestReadCommittedLogic_bpchar(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "bpchar")
+}
+
 func TestReadCommittedLogic_builtin_function(
 	t *testing.T,
 ) {
