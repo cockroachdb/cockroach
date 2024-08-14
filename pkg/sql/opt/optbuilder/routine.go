@@ -431,7 +431,8 @@ func (b *Builder) buildRoutine(
 		var expr memo.RelExpr
 		var physProps *physical.Required
 		plBuilder := newPLpgSQLBuilder(
-			b, def.Name, stmt.AST.Label, colRefs, routineParams, f.ResolvedType(), isProc, outScope,
+			b, def.Name, stmt.AST.Label, colRefs, routineParams, f.ResolvedType(),
+			isProc, false /* lazilyEvalSQL */, outScope,
 		)
 		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		expr, physProps = b.finishBuildLastStmt(

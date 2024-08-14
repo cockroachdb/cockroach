@@ -130,6 +130,18 @@ import (
 // effects, such as pushing a volatile expression into a join or union.
 // See addBarrierIfVolatile for more information.
 //
+// +---------------------+
+// | Lazy SQL Evaluation |
+// +---------------------+
+//
+// Trigger functions do not analyze SQL statements embedded in the PL/pgSQL
+// until a trigger is created. This is necessary because the SQL statement
+// may reference columns in the table that the trigger is defined on, and
+// the table is not known until the trigger is created. This lazy evaluation
+// behavior is implemented by replacing SQL expressions with typed NULL values,
+// and SQL statements by a single-row VALUES operator with no columns. See also
+// the buildSQLExpr and buildSQLStatement methods.
+//
 // +-----------------+
 // | Further Reading |
 // +-----------------+
@@ -174,9 +186,10 @@ type plpgsqlBuilder struct {
 	// building their body statements.
 	outScope *scope
 
-	routineName  string
-	isProcedure  bool
-	identCounter int
+	routineName   string
+	isProcedure   bool
+	lazilyEvalSQL bool
+	identCounter  int
 }
 
 // routineParam is similar to tree.RoutineParam but stores the resolved type.
@@ -193,17 +206,19 @@ func newPLpgSQLBuilder(
 	routineParams []routineParam,
 	returnType *types.T,
 	isProcedure bool,
+	lazilyEvalSQL bool,
 	outScope *scope,
 ) *plpgsqlBuilder {
 	const initialBlocksCap = 2
 	b := &plpgsqlBuilder{
-		ob:          ob,
-		colRefs:     colRefs,
-		returnType:  returnType,
-		blocks:      make([]plBlock, 0, initialBlocksCap),
-		routineName: routineName,
-		isProcedure: isProcedure,
-		outScope:    outScope,
+		ob:            ob,
+		colRefs:       colRefs,
+		returnType:    returnType,
+		blocks:        make([]plBlock, 0, initialBlocksCap),
+		routineName:   routineName,
+		isProcedure:   isProcedure,
+		lazilyEvalSQL: lazilyEvalSQL,
+		outScope:      outScope,
 	}
 	// Build the initial block for the routine parameters, which are considered
 	// PL/pgSQL variables.
@@ -469,7 +484,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			}
 			// RETURN is handled by projecting a single column with the expression
 			// that is being returned.
-			returnScalar := b.buildPLpgSQLExpr(expr, b.returnType, s)
+			returnScalar := b.buildSQLExpr(expr, b.returnType, s)
 			b.addBarrierIfVolatile(s, returnScalar)
 			returnColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_return"))
 			returnScope := s.push()
@@ -536,12 +551,12 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 
 			// Build a scalar CASE statement that conditionally executes each branch
 			// of the IF statement as a subquery.
-			cond := b.buildPLpgSQLExpr(t.Condition, types.Bool, s)
+			cond := b.buildSQLExpr(t.Condition, types.Bool, s)
 			thenScalar := b.ob.factory.ConstructSubquery(thenScope.expr, &memo.SubqueryPrivate{})
 			whens := make(memo.ScalarListExpr, 0, len(t.ElseIfList)+1)
 			whens = append(whens, b.ob.factory.ConstructWhen(cond, thenScalar))
 			for j := range t.ElseIfList {
-				elsifCond := b.buildPLpgSQLExpr(t.ElseIfList[j].Condition, types.Bool, s)
+				elsifCond := b.buildSQLExpr(t.ElseIfList[j].Condition, types.Bool, s)
 				elsifScalar := b.ob.factory.ConstructSubquery(elsifScopes[j].expr, &memo.SubqueryPrivate{})
 				whens = append(whens, b.ob.factory.ConstructWhen(elsifCond, elsifScalar))
 			}
@@ -702,7 +717,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 
 			// Create a new continuation routine to handle executing a SQL statement.
 			execCon := b.makeContinuation("_stmt_exec")
-			stmtScope := b.ob.buildStmtAtRootWithScope(t.SqlStmt, nil /* desiredTypes */, execCon.s)
+			stmtScope := b.buildSQLStatement(t.SqlStmt, execCon.s)
 			if len(t.Target) == 0 {
 				// When there is no INTO target, build the SQL statement into a body
 				// statement that is only executed for its side effects.
@@ -799,7 +814,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				Scroll:     t.Scroll,
 				CursorSQL:  fmtCtx.CloseAndGetString(),
 			}
-			openScope := b.ob.buildStmtAtRootWithScope(query, nil /* desiredTypes */, openCon.s)
+			openScope := b.buildSQLStatement(query, openCon.s)
 			if openScope.expr.Relational().CanMutate {
 				// Cursors with mutations are invalid.
 				panic(cursorMutationErr)
@@ -1120,7 +1135,7 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(inScope *scope, ident ast.Variable, va
 	// volatile, add barriers before and after the projection to prevent optimizer
 	// rules from reordering or removing its side effects.
 	colName := scopeColName(ident)
-	scalar := b.buildPLpgSQLExpr(val, typ, inScope)
+	scalar := b.buildSQLExpr(val, typ, inScope)
 	b.addBarrierIfVolatile(inScope, scalar)
 	b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
 	b.ob.constructProjectForScope(inScope, assignScope)
@@ -1253,7 +1268,7 @@ func (b *plpgsqlBuilder) getRaiseArgs(s *scope, raise *ast.Raise) memo.ScalarLis
 		if isDup {
 			panic(pgerror.Newf(pgcode.Syntax, "RAISE option already specified: %s", name))
 		}
-		return b.buildPLpgSQLExpr(expr, types.String, s)
+		return b.buildSQLExpr(expr, types.String, s)
 	}
 	for _, option := range raise.Options {
 		optName := strings.ToUpper(option.OptType)
@@ -1345,7 +1360,7 @@ func (b *plpgsqlBuilder) makeRaiseFormatMessage(
 				}
 				// If the argument is NULL, postgres prints "<NULL>".
 				expr := &tree.CastExpr{Expr: args[argIdx], Type: types.String}
-				arg := b.buildPLpgSQLExpr(expr, types.String, s)
+				arg := b.buildSQLExpr(expr, types.String, s)
 				arg = b.ob.factory.ConstructCoalesce(memo.ScalarListExpr{arg, makeConstStr("<NULL>")})
 				addToResult(arg)
 				argIdx++
@@ -1495,7 +1510,7 @@ func (b *plpgsqlBuilder) handleEndOfFunction(inScope *scope) *scope {
 		}
 		returnScope := inScope.push()
 		colName := scopeColName("_implicit_return")
-		returnScalar := b.buildPLpgSQLExpr(returnExpr, b.returnType, inScope)
+		returnScalar := b.buildSQLExpr(returnExpr, b.returnType, inScope)
 		b.ob.synthesizeColumn(returnScope, colName, b.returnType, nil /* expr */, returnScalar)
 		b.ob.constructProjectForScope(inScope, returnScope)
 		return returnScope
@@ -1872,9 +1887,13 @@ func (b *plpgsqlBuilder) addBarrier(s *scope) {
 	s.expr = b.ob.factory.ConstructBarrier(s.expr)
 }
 
-// buildPLpgSQLExpr parses and builds the given SQL expression into a ScalarExpr
-// within the given scope.
-func (b *plpgsqlBuilder) buildPLpgSQLExpr(expr ast.Expr, typ *types.T, s *scope) opt.ScalarExpr {
+// buildSQLExpr type-checks and builds the given SQL expression into a
+// ScalarExpr within the given scope.
+func (b *plpgsqlBuilder) buildSQLExpr(expr ast.Expr, typ *types.T, s *scope) opt.ScalarExpr {
+	if b.lazilyEvalSQL {
+		// For lazy SQL evaluation, replace all expressions with NULL.
+		return memo.NullSingleton
+	}
 	expr, _ = tree.WalkExpr(s, expr)
 	typedExpr, err := expr.TypeCheck(b.ob.ctx, b.ob.semaCtx, typ)
 	if err != nil {
@@ -1882,6 +1901,19 @@ func (b *plpgsqlBuilder) buildPLpgSQLExpr(expr ast.Expr, typ *types.T, s *scope)
 	}
 	scalar := b.ob.buildScalar(typedExpr, s, nil, nil, b.colRefs)
 	return b.coerceType(scalar, typ)
+}
+
+// buildSQLStatement type-checks and builds the given SQL statement into a
+// RelExpr within the given scope.
+func (b *plpgsqlBuilder) buildSQLStatement(stmt tree.Statement, inScope *scope) (outScope *scope) {
+	if b.lazilyEvalSQL {
+		// For lazy SQL evaluation, replace all statements with a single row without
+		// any columns.
+		outScope = inScope.push()
+		outScope.expr = b.ob.factory.ConstructNoColsRow()
+		return outScope
+	}
+	return b.ob.buildStmtAtRootWithScope(stmt, nil /* desiredTypes */, inScope)
 }
 
 // coerceType implements PLpgSQL type-coercion behavior.

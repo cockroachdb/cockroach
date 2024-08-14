@@ -662,7 +662,7 @@ func (b *Builder) resolveDataSource(
 	tn *tree.TableName, priv privilege.Kind,
 ) (cat.DataSource, opt.MDDepName, cat.DataSourceName) {
 	var flags cat.Flags
-	if b.insideViewDef || b.insideFuncDef {
+	if b.insideViewDef || b.insideFuncDef || b.insideTriggerDef {
 		// Avoid taking descriptor leases when we're creating a view or a
 		// function.
 		flags.AvoidDescriptorCaches = true
@@ -690,7 +690,7 @@ func (b *Builder) resolveDataSourceRef(
 	ref *tree.TableRef, priv privilege.Kind,
 ) (cat.DataSource, opt.MDDepName) {
 	var flags cat.Flags
-	if b.insideViewDef || b.insideFuncDef {
+	if b.insideViewDef || b.insideFuncDef || b.insideTriggerDef {
 		// Avoid taking table leases when we're creating a view or a function.
 		flags.AvoidDescriptorCaches = true
 	}

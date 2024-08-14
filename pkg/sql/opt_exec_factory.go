@@ -33,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -1912,6 +1914,26 @@ func (ef *execFactory) ConstructCreateFunction(
 		typeDeps:     typeDepSet,
 		functionDeps: funcDepList,
 	}, nil
+}
+
+// ConstructCreateTrigger is part of the exec.Factory interface.
+func (ef *execFactory) ConstructCreateTrigger(ct *tree.CreateTrigger) (exec.Node, error) {
+	if err := checkSchemaChangeEnabled(
+		ef.ctx,
+		ef.planner.ExecCfg(),
+		"CREATE TRIGGER",
+	); err != nil {
+		return nil, err
+	}
+	plan, err := ef.planner.SchemaChange(ef.ctx, ct)
+	if err != nil {
+		return nil, err
+	}
+	if plan == nil {
+		return nil, pgerror.New(pgcode.FeatureNotSupported,
+			"CREATE TRIGGER is only implemented in the declarative schema changer")
+	}
+	return plan, nil
 }
 
 func toPlanDependencies(
