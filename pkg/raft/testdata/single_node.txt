@@ -10,8 +10,8 @@ INFO newRaft 1 [peers: [1], term: 0, commit: 3, applied: 3, lastindex: 3, lastte
 
 campaign 1
 ----
-INFO 1 is starting a new election at term 0
 INFO 1 became candidate at term 1
+INFO 1 is starting a new election at term 1
 
 stabilize
 ----

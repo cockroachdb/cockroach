@@ -26,8 +26,8 @@ ok
 # 2 should fail to campaign, leaving 1's leadership alone.
 campaign 2
 ----
-INFO 2 is starting a new election at term 1
 INFO 2 became pre-candidate at term 1
+INFO 2 is starting a new pre-election at term 2
 INFO 2 [logterm: 1, index: 11] sent MsgPreVote request to 1 at term 1
 INFO 2 [logterm: 1, index: 11] sent MsgPreVote request to 3 at term 1
 
@@ -61,8 +61,8 @@ ok
 
 campaign 3
 ----
-INFO 3 is starting a new election at term 1
 INFO 3 became pre-candidate at term 1
+INFO 3 is starting a new pre-election at term 2
 INFO 3 [logterm: 1, index: 11] sent MsgPreVote request to 1 at term 1
 INFO 3 [logterm: 1, index: 11] sent MsgPreVote request to 2 at term 1
 
@@ -98,6 +98,7 @@ stabilize
   INFO 3 received MsgPreVoteResp from 2 at term 1
   INFO 3 has received 2 MsgPreVoteResp votes and 0 vote rejections
   INFO 3 became candidate at term 2
+  WARN 3 is restarting a hung election at term 2
   INFO 3 [logterm: 1, index: 11] sent MsgVote request to 1 at term 2
   INFO 3 [logterm: 1, index: 11] sent MsgVote request to 2 at term 2
 > 3 handling Ready
@@ -209,8 +210,8 @@ stabilize
 # We first let 1 lose an election, as we'd otherwise get a tie.
 campaign 1
 ----
-INFO 1 is starting a new election at term 2
 INFO 1 became pre-candidate at term 2
+INFO 1 is starting a new pre-election at term 3
 INFO 1 [logterm: 2, index: 12] sent MsgPreVote request to 2 at term 2
 INFO 1 [logterm: 2, index: 12] sent MsgPreVote request to 3 at term 2
 
@@ -234,8 +235,8 @@ stabilize
 
 campaign 2
 ----
-INFO 2 is starting a new election at term 2
 INFO 2 became pre-candidate at term 2
+INFO 2 is starting a new pre-election at term 3
 INFO 2 [logterm: 2, index: 12] sent MsgPreVote request to 1 at term 2
 INFO 2 [logterm: 2, index: 12] sent MsgPreVote request to 3 at term 2
 
@@ -265,6 +266,7 @@ stabilize
   INFO 2 received MsgPreVoteResp from 1 at term 2
   INFO 2 has received 2 MsgPreVoteResp votes and 0 vote rejections
   INFO 2 became candidate at term 3
+  WARN 2 is restarting a hung election at term 3
   INFO 2 [logterm: 2, index: 12] sent MsgVote request to 1 at term 3
   INFO 2 [logterm: 2, index: 12] sent MsgVote request to 3 at term 3
 > 2 handling Ready

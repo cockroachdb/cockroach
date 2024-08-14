@@ -52,8 +52,8 @@ ok
 
 campaign 2
 ----
-INFO 2 is starting a new election at term 1
 INFO 2 became candidate at term 2
+INFO 2 is starting a new election at term 2
 INFO 2 [logterm: 1, index: 4] sent MsgVote request to 1 at term 2
 INFO 2 [logterm: 1, index: 4] sent MsgVote request to 3 at term 2
 

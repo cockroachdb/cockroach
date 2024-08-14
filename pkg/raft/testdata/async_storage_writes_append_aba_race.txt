@@ -73,8 +73,8 @@ Messages:
 
 campaign 3
 ----
-INFO 3 is starting a new election at term 1
 INFO 3 became candidate at term 2
+INFO 3 is starting a new election at term 2
 INFO 3 [logterm: 1, index: 11] sent MsgVote request to 1 at term 2
 INFO 3 [logterm: 1, index: 11] sent MsgVote request to 2 at term 2
 INFO 3 [logterm: 1, index: 11] sent MsgVote request to 4 at term 2
@@ -247,8 +247,8 @@ Messages:
 
 campaign 4
 ----
-INFO 4 is starting a new election at term 2
 INFO 4 became candidate at term 3
+INFO 4 is starting a new election at term 3
 INFO 4 [logterm: 1, index: 11] sent MsgVote request to 1 at term 3
 INFO 4 [logterm: 1, index: 11] sent MsgVote request to 2 at term 3
 INFO 4 [logterm: 1, index: 11] sent MsgVote request to 3 at term 3
