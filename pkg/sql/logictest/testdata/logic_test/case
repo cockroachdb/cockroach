@@ -48,3 +48,49 @@ SELECT CASE WHEN f = 0
 FROM a;
 
 subtest end
+
+# Regression test for #127889. CASE-like expressions should not impose type
+# widths of one branch on other branches.
+subtest regression_127889
+
+query T
+SELECT CASE WHEN true THEN 'foo'::TEXT ELSE 'b'::CHAR END
+----
+foo
+
+query T
+SELECT COALESCE(NULL::CHAR, 'bar'::CHAR(2))
+----
+ba
+
+query T
+SELECT IF(false, 'foo'::CHAR, 'bar'::CHAR(2))
+----
+ba
+
+query T
+SELECT CASE WHEN false THEN 'b'::CHAR ELSE 'foo'::TEXT END
+----
+foo
+
+query T
+SELECT (CASE WHEN false THEN 'b'::CHAR ELSE 'foo'::TEXT END)::CHAR
+----
+f
+
+query T
+SELECT (CASE WHEN false THEN 'b'::CHAR ELSE 'foo'::TEXT END)::BPCHAR
+----
+foo
+
+query R
+SELECT CASE WHEN true THEN 1.2345::DECIMAL(5, 4) ELSE NULL::DECIMAL(10, 2) END
+----
+1.2345
+
+query R
+SELECT CASE WHEN false THEN NULL::DECIMAL(10, 2) ELSE 1.2345::DECIMAL(5, 4) END
+----
+1.2345
+
+subtest end
