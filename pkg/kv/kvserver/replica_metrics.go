@@ -52,6 +52,7 @@ type ReplicaMetrics struct {
 	Underreplicated          bool
 	Overreplicated           bool
 	RaftLogTooLarge          bool
+	RangeTooLarge            bool
 	BehindCount              int64
 	PausedFollowerCount      int64
 	PendingRaftProposalCount int64
@@ -109,6 +110,8 @@ func (r *Replica) Metrics(
 		lockTableMetrics:         lockTableMetrics,
 		raftLogSize:              r.mu.raftLogSize,
 		raftLogSizeTrusted:       r.mu.raftLogSizeTrusted,
+		rangeSize:                r.mu.state.Stats.Total(),
+		rangeSplitSize:           r.mu.conf.RangeMaxBytes,
 		qpUsed:                   qpUsed,
 		qpCapacity:               qpCap,
 		paused:                   r.mu.pausedFollowers,
@@ -138,6 +141,8 @@ type calcReplicaMetricsInput struct {
 	lockTableMetrics         concurrency.LockTableMetrics
 	raftLogSize              int64
 	raftLogSizeTrusted       bool
+	rangeSize                int64
+	rangeSplitSize           int64
 	qpUsed, qpCapacity       int64 // quota pool used and capacity bytes
 	paused                   map[roachpb.ReplicaID]struct{}
 	pendingRaftProposalCount int64
@@ -164,8 +169,14 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		}
 	}
 
-	rangeCounter, unavailable, underreplicated, overreplicated := calcRangeCounter(
-		d.storeID, d.desc, d.leaseStatus, d.vitalityMap, d.conf.GetNumVoters(), d.conf.NumReplicas, d.clusterNodes)
+	const (
+		raftLogTooLargeMultiple = 4
+		rangeTooLargeMultiple   = 2
+	)
+	largeRangeThreshold := rangeTooLargeMultiple * d.rangeSplitSize
+	rangeCounter, unavailable, underreplicated, overreplicated, tooLarge := calcRangeCounter(
+		d.storeID, d.desc, d.leaseStatus, d.vitalityMap, d.conf.GetNumVoters(), d.conf.NumReplicas,
+		d.clusterNodes, largeRangeThreshold, d.rangeSize)
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
@@ -176,7 +187,6 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		leaderPausedFollowerCount = int64(len(d.paused))
 	}
 
-	const raftLogTooLargeMultiple = 4
 	return ReplicaMetrics{
 		Leader:                    leader,
 		LeaseValid:                validLease,
@@ -194,6 +204,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		Overreplicated:            overreplicated,
 		RaftLogTooLarge: d.raftLogSizeTrusted &&
 			d.raftLogSize > raftLogTooLargeMultiple*d.raftCfg.RaftLogTruncationThreshold,
+		RangeTooLarge:            tooLarge,
 		BehindCount:              leaderBehindCount,
 		PausedFollowerCount:      leaderPausedFollowerCount,
 		PendingRaftProposalCount: d.pendingRaftProposalCount,
@@ -217,9 +228,10 @@ func calcQuotaPoolPercentUsed(qpUsed, qpCapacity int64) int64 {
 
 // calcRangeCounter returns whether this replica is designated as the replica in
 // the range responsible for range-level metrics, whether the range doesn't have
-// a quorum of live voting replicas, and whether the range is currently
+// a quorum of live voting replicas, whether the range is currently
 // under-replicated (with regards to either the number of voting replicas or the
-// number of non-voting replicas).
+// number of non-voting replicas), and whether the range is considered too
+// large.
 //
 // Note: we compute an estimated range count across the cluster by counting the
 // leaseholder of each descriptor if it's live, otherwise the first live
@@ -232,7 +244,8 @@ func calcRangeCounter(
 	vitalityMap livenesspb.NodeVitalityMap,
 	numVoters, numReplicas int32,
 	clusterNodes int,
-) (rangeCounter, unavailable, underreplicated, overreplicated bool) {
+	rangeTooLargeThreshold, rangeSize int64,
+) (rangeCounter, unavailable, underreplicated, overreplicated, tooLarge bool) {
 	// If there is a live leaseholder (regardless of whether the lease is still
 	// valid) that leaseholder is responsible for range-level metrics.
 	if vitalityMap[leaseStatus.Lease.Replica.NodeID].IsLive(livenesspb.Metrics) {
@@ -267,6 +280,7 @@ func calcRangeCounter(
 		} else if neededVoters < liveVoters || neededNonVoters < liveNonVoters {
 			overreplicated = true
 		}
+		tooLarge = rangeSize > rangeTooLargeThreshold
 	}
 	return
 }
