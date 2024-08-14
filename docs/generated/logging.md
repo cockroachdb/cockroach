@@ -177,8 +177,3 @@ The `KV_DISTRIBUTION` channel is used to report data distribution events, such a
 replicas between stores in the cluster, or adding (removing) replicas to
 ranges.
 
-### `STRUCTURED_EVENTS`
-
-The `STRUCTURED_EVENTS` channel is used to send log events with messages containing structured
-JSON, which can be consumed externally to power o11y features.
-

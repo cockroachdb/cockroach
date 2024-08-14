@@ -98,7 +98,7 @@ func (e *KVStructuredLogInterceptor[K, V]) Intercept(entry []byte) {
 		e.testState.Fatal(err)
 	}
 
-	if logEntry.Channel != logpb.Channel_STRUCTURED_EVENTS {
+	if logEntry.Channel != logpb.Channel_DEV {
 		return
 	}
 
