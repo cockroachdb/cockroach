@@ -1991,7 +1991,15 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
 			streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
 
-			streamSink := rangefeed.NewPerRangeEventSink(streamCtx, req.RangeID, req.StreamID, streamMuxer)
+			var streamSink rangefeed.Stream
+			sink := rangefeed.NewPerRangeEventSink(streamCtx, req.RangeID, req.StreamID, streamMuxer)
+			if _, ok := muxStream.(*rangefeed.BufferedStreamSender); ok {
+				streamSink = &rangefeed.BufferedPerRangeEventSink{
+					PerRangeEventSink: sink,
+				}
+			} else {
+				streamSink = sink
+			}
 			streamMuxer.AddStream(req.StreamID, req.RangeID, cancel)
 
 			// Rangefeed attempts to register rangefeed a request over the specified
