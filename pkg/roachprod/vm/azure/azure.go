@@ -495,6 +495,10 @@ func (p *Provider) DeleteCluster(l *logger.Logger, name string) error {
 		}
 	}
 
+	if len(futures) == 0 {
+		return errors.Newf("DeleteCluster: Found no azure resource groups with tag cluster: %s", name)
+	}
+
 	if !p.SyncDelete {
 		return nil
 	}
