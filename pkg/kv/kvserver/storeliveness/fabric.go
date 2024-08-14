@@ -11,6 +11,8 @@
 package storeliveness
 
 import (
+	"context"
+
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -50,4 +52,5 @@ type Fabric interface {
 	// and S_local will initiate a heartbeat loop to S_remote in order to
 	// request support so that future calls to SupportFrom may succeed.
 	SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Timestamp, bool)
+	Enabled(ctx context.Context) bool
 }
