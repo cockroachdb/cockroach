@@ -492,6 +492,9 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     if (problems.raft_log_too_large) {
       results = concat(results, "Raft log too large");
     }
+    if (problems.range_too_large) {
+      results = concat(results, "Range too large");
+    }
     if (awaitingGC) {
       results = concat(results, "Awaiting GC");
     }
