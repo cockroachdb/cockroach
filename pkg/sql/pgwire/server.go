@@ -894,7 +894,7 @@ func (s *Server) newConn(
 	c.res.released = true
 	c.writerState.fi.buf = &c.writerState.buf
 	c.writerState.fi.lastFlushed = -1
-	c.msgBuilder.init(s.tenantMetrics.BytesOutCount)
+	c.msgBuilder.init(s.tenantMetrics.BytesOutCount.Inc)
 	c.errWriter.sv = sv
 	c.errWriter.msgBuilder = &c.msgBuilder
 	return c
@@ -1455,7 +1455,7 @@ func (s *Server) sendErr(
 ) error {
 	w := errWriter{
 		sv:         &st.SV,
-		msgBuilder: newWriteBuffer(s.tenantMetrics.BytesOutCount),
+		msgBuilder: newWriteBuffer(s.tenantMetrics.BytesOutCount.Inc),
 	}
 	// We could, but do not, report server-side network errors while
 	// trying to send the client error. This is because clients that

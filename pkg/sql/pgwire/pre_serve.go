@@ -230,7 +230,7 @@ func (s *PreServeConnHandler) sendErr(
 ) error {
 	w := errWriter{
 		sv:         &st.SV,
-		msgBuilder: newWriteBuffer(s.tenantIndependentMetrics.PreServeBytesOutCount),
+		msgBuilder: newWriteBuffer(s.tenantIndependentMetrics.PreServeBytesOutCount.Inc),
 	}
 	// We could, but do not, report server-side network errors while
 	// trying to send the client error. This is because clients that
