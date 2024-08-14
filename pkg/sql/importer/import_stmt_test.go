@@ -2093,7 +2093,7 @@ func TestFailedImportGC(t *testing.T) {
 	tableID := descpb.ID(dbID + 2)
 	var td catalog.TableDescriptor
 	if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
-		td, err = col.ByID(txn.KV()).Get().Table(ctx, tableID)
+		td, err = col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableID)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -6467,7 +6467,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		for _, schemaID := range schemaIDs {
 			// Expect that the schema descriptor is deleted.
 			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-				_, err := col.ByID(txn.KV()).Get().Schema(ctx, schemaID)
+				_, err := col.ByIDWithoutLeased(txn.KV()).Get().Schema(ctx, schemaID)
 				if pgerror.GetPGCode(err) == pgcode.InvalidSchemaName {
 					return nil
 				}
@@ -6483,7 +6483,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		for _, tableID := range tableIDs {
 			// Expect that the table descriptor is deleted.
 			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-				_, err := col.ByID(txn.KV()).Get().Table(ctx, tableID)
+				_, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableID)
 				if !testutils.IsError(err, "descriptor not found") {
 					return err
 				}

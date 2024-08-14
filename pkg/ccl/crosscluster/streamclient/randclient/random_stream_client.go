@@ -373,7 +373,7 @@ func newRandomStreamClient(streamURL *url.URL, db descs.DB) (streamclient.Client
 	c.streamURL = streamURL
 	if c.config.existingTableID > 0 {
 		if err := db.DescsTxn(context.Background(), func(ctx context.Context, txn descs.Txn) error {
-			c.tableDesc, err = txn.Descriptors().ByID(txn.KV()).Get().Table(ctx, c.config.existingTableID)
+			c.tableDesc, err = txn.Descriptors().ByIDWithoutLeased(txn.KV()).Get().Table(ctx, c.config.existingTableID)
 			return err
 		}); err != nil {
 			return nil, err

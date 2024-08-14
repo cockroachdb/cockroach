@@ -120,7 +120,7 @@ func (ex *connExecutor) descIDsInSchemaChangeJobs() (catalog.DescriptorIDSet, er
 		if descIDsInJobs.Contains(idVersion.ID) {
 			continue
 		}
-		desc, err := ex.extraTxnState.descCollection.ByID(ex.state.mu.txn).Get().Desc(ex.Ctx(), idVersion.ID)
+		desc, err := ex.extraTxnState.descCollection.ByIDWithoutLeased(ex.state.mu.txn).Get().Desc(ex.Ctx(), idVersion.ID)
 		if err != nil {
 			return catalog.DescriptorIDSet{}, err
 		}

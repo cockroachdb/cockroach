@@ -198,7 +198,7 @@ func (s *Tenant) LookupTableDescriptorByID(
 		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
-		desc, err = descsCol.ByID(txn.KV()).Get().Table(ctx, id)
+		desc, err = descsCol.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, id)
 		return err
 	}))
 	return desc

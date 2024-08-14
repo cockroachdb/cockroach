@@ -78,7 +78,13 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 
 			// TODO(aaditya): This function shares some of the logic with roachtestutil.DiskStaller. Consider merging the two.
 			setBandwidthLimit := func(nodes option.NodeListOption, rw string, bw int, max bool) error {
-				res, err := c.RunWithDetailsSingleNode(context.TODO(), t.L(), option.WithNodes(nodes[:1]), "lsblk | grep /mnt/data1 | awk '{print $2}'")
+				dataMount := "/mnt/data1"
+				if c.Cloud() == spec.Azure {
+					dataMount = "sda1"
+				}
+				res, err := c.RunWithDetailsSingleNode(context.TODO(), t.L(), option.WithNodes(nodes[:1]),
+					fmt.Sprintf("lsblk | grep %s | awk '{print $2}'", dataMount),
+				)
 				if err != nil {
 					t.Fatalf("error when determining block device: %s", err)
 				}

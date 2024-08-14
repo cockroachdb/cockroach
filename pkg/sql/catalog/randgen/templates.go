@@ -89,7 +89,7 @@ outer:
 	sort.Slice(sobjIDs, func(i, j int) bool { return sobjIDs[i] < sobjIDs[j] })
 
 	// Look up the descriptors from the IDs.
-	descs, err := g.ext.coll.ByID(g.ext.txn).WithoutNonPublic().Get().Descs(ctx, sobjIDs)
+	descs, err := g.ext.coll.ByIDWithoutLeased(g.ext.txn).WithoutNonPublic().Get().Descs(ctx, sobjIDs)
 	if err != nil {
 		panic(genError{errors.Wrap(err, "retrieving template descriptors")})
 	}

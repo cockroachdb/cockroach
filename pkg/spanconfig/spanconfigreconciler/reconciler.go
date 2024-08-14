@@ -685,7 +685,7 @@ func (r *incrementalReconciler) filterForMissingTableIDs(
 			continue // nothing to do
 		}
 
-		desc, err := descsCol.ByID(txn).Get().Desc(ctx, descriptorUpdate.ID)
+		desc, err := descsCol.ByIDWithoutLeased(txn).Get().Desc(ctx, descriptorUpdate.ID)
 
 		considerAsMissing := false
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {

@@ -218,7 +218,7 @@ func (t *typeSchemaChanger) getTypeDescFromStore(
 	if err := DescsTxn(ctx, t.execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		// Avoid GetImmutableTypeByID, downstream logic relies on
 		// catalog.ErrDescriptorNotFound.
-		desc, err := col.ByID(txn.KV()).Get().Desc(ctx, t.typeID)
+		desc, err := col.ByIDWithoutLeased(txn.KV()).Get().Desc(ctx, t.typeID)
 		if err != nil {
 			return err
 		}
@@ -994,7 +994,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromTable(
 		// be unset by default) when executing the query constructed above. This is
 		// because the enum value may be used in a view expression, which is
 		// name resolved in the context of the type's database.
-		dbDesc, err := descsCol.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, typeDesc.ParentID)
+		dbDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, typeDesc.ParentID)
 		const validationErr = "could not validate removal of enum value %q"
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
@@ -1048,7 +1048,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	member *descpb.TypeDescriptor_EnumMember,
 	descsCol *descs.Collection,
 ) error {
-	descGetter := descsCol.ByID(txn.KV()).WithoutNonPublic().Get()
+	descGetter := descsCol.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get()
 	for _, id := range typeDesc.ReferencingDescriptorIDs {
 		desc, err := descGetter.Desc(ctx, id)
 		if err != nil {
@@ -1270,7 +1270,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		}
 		query.WriteString(fmt.Sprintf(") WHERE unnest = %s", sqlPhysRep))
 
-		dbDesc, err := descsCol.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, arrayTypeDesc.GetParentID())
+		dbDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, arrayTypeDesc.GetParentID())
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}

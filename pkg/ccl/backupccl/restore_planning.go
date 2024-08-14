@@ -317,7 +317,7 @@ func remapSchemas(
 		} else {
 			// If we found an existing schema, then we need to remap all references
 			// to this schema to the existing one.
-			desc, err := col.ByID(txn.KV()).Get().Schema(ctx, id)
+			desc, err := col.ByIDWithoutLeased(txn.KV()).Get().Schema(ctx, id)
 			if err != nil {
 				return false, err
 			}
@@ -406,7 +406,7 @@ func remapTables(
 		}
 
 		// Check privileges.
-		parentDB, err := col.ByID(txn.KV()).Get().Database(ctx, parentID)
+		parentDB, err := col.ByIDWithoutLeased(txn.KV()).Get().Database(ctx, parentID)
 		if err != nil {
 			return false, errors.Wrapf(err,
 				"failed to lookup parent DB %d", errors.Safe(parentID))
@@ -490,7 +490,7 @@ func remapTypes(
 				targetDB, typ.Name)
 		}
 		// Check privileges on the parent DB.
-		parentDB, err := col.ByID(txn.KV()).Get().Database(ctx, parentID)
+		parentDB, err := col.ByIDWithoutLeased(txn.KV()).Get().Database(ctx, parentID)
 		if err != nil {
 			return false, errors.Wrapf(err,
 				"failed to lookup parent DB %d", errors.Safe(parentID))
@@ -900,7 +900,7 @@ func getDatabaseIDAndDesc(
 		return dbID, nil, errors.Errorf("a database named %q needs to exist", targetDB)
 	}
 	// Check privileges on the parent DB.
-	dbDesc, err = col.ByID(txn).Get().Database(ctx, dbID)
+	dbDesc, err = col.ByIDWithoutLeased(txn).Get().Database(ctx, dbID)
 	if err != nil {
 		return 0, nil, errors.Wrapf(err,
 			"failed to lookup parent DB %d", errors.Safe(dbID))

@@ -97,7 +97,7 @@ func getTableDesc(
 ) (catalog.TableDescriptor, error) {
 	var desc catalog.TableDescriptor
 	f := func(ctx context.Context, txn descs.Txn) error {
-		tableDesc, err := txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
+		tableDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
 		if err != nil {
 			return err
 		}
