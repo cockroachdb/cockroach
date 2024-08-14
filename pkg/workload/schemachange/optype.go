@@ -312,18 +312,25 @@ var opWeights = []int{
 // be downlevel. The declarative schema changer builder does have a supported
 // list, but it's not sufficient for that reason.
 var opDeclarativeVersion = map[opType]clusterversion.Key{
+	insertRow:  clusterversion.MinSupported,
+	selectStmt: clusterversion.MinSupported,
+	validate:   clusterversion.MinSupported,
+
 	alterTableAddColumn:               clusterversion.MinSupported,
 	alterTableAddConstraintForeignKey: clusterversion.MinSupported,
 	alterTableAddConstraintUnique:     clusterversion.MinSupported,
+	alterTableAlterPrimaryKey:         clusterversion.MinSupported,
 	alterTableDropColumn:              clusterversion.MinSupported,
 	alterTableDropConstraint:          clusterversion.MinSupported,
 	alterTableDropNotNull:             clusterversion.MinSupported,
 	alterTypeDropValue:                clusterversion.MinSupported,
 	commentOn:                         clusterversion.MinSupported,
 	createIndex:                       clusterversion.MinSupported,
+	createFunction:                    clusterversion.MinSupported,
 	createSchema:                      clusterversion.MinSupported,
 	createSequence:                    clusterversion.MinSupported,
 	dropIndex:                         clusterversion.MinSupported,
+	dropFunction:                      clusterversion.MinSupported,
 	dropSchema:                        clusterversion.MinSupported,
 	dropSequence:                      clusterversion.MinSupported,
 	dropTable:                         clusterversion.MinSupported,
