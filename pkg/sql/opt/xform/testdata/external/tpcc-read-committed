@@ -4,6 +4,8 @@ import file=tpcc_schema
 import file=tpcc_stats_w100
 ----
 
+
+
 # --------------------------------------------------
 # 2.4 The New Order Transaction
 #
@@ -15,7 +17,7 @@ import file=tpcc_stats_w100
 # reflect on-line database activity as typically found in production
 # environments.
 # --------------------------------------------------
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 UPDATE district
 SET d_next_o_id = d_next_o_id + 1
 WHERE d_w_id = 10 AND d_id = 5
@@ -56,7 +58,7 @@ project
            └── projections
                 └── d_next_o_id:24 + 1 [as=d_next_o_id_new:27, outer=(24), immutable]
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT w_tax FROM warehouse WHERE w_id = 10
 ----
 project
@@ -71,7 +73,7 @@ project
       ├── key: ()
       └── fd: ()-->(1,8)
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT c_discount, c_last, c_credit
 FROM customer
 WHERE c_w_id = 10 AND c_d_id = 100 AND c_id = 50
@@ -88,7 +90,7 @@ project
       ├── key: ()
       └── fd: ()-->(1-3,6,14,16)
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT i_price, i_name, i_data
 FROM item
 WHERE i_id IN (125, 150, 175, 200, 25, 50, 75, 100, 225, 250, 275, 300)
@@ -114,18 +116,21 @@ scan item
  ├── fd: (1)-->(3-5)
  └── ordering: +1
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_05
 FROM stock
 WHERE (s_i_id, s_w_id) IN ((1000, 4), (900, 4), (1100, 4), (1500, 4), (1400, 4))
 ORDER BY s_i_id
+FOR UPDATE
 ----
-project
- ├── columns: s_quantity:3 s_ytd:14 s_order_cnt:15 s_remote_cnt:16 s_data:17 s_dist_05:8  [hidden: s_i_id:1!null]
+lock stock
+ ├── columns: s_quantity:3 s_ytd:14 s_order_cnt:15 s_remote_cnt:16 s_data:17 s_dist_05:8  [hidden: s_i_id:1!null s_w_id:2!null]
+ ├── locking: for-update,durability-guaranteed
  ├── cardinality: [0 - 5]
+ ├── volatile, mutations
  ├── key: (1)
- ├── fd: (1)-->(3,8,14-17)
- ├── ordering: +1
+ ├── fd: ()-->(2), (1)-->(3,8,14-17)
+ ├── ordering: +1 opt(2) [actual: +1]
  └── scan stock
       ├── columns: s_i_id:1!null s_w_id:2!null s_quantity:3 s_dist_05:8 s_ytd:14 s_order_cnt:15 s_remote_cnt:16 s_data:17
       ├── constraint: /2/1
@@ -139,7 +144,7 @@ project
       ├── fd: ()-->(2), (1)-->(3,8,14-17)
       └── ordering: +1 opt(2) [actual: +1]
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 INSERT INTO "order" (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
 VALUES (100, 5, 10, 50, '2019-08-26 16:50:41', 10, 1)
 ----
@@ -169,7 +174,9 @@ insert order
                 ├── columns: o_w_id:19!null o_d_id:20!null o_c_id:21!null
                 ├── key columns: [19 20 21] = [24 23 22]
                 ├── lookup columns are key
+                ├── locking: for-share,durability-guaranteed
                 ├── cardinality: [0 - 1]
+                ├── volatile
                 ├── key: ()
                 ├── fd: ()-->(19-21)
                 ├── with-scan &1
@@ -183,7 +190,7 @@ insert order
                 │    └── fd: ()-->(19-21)
                 └── filters (true)
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 INSERT INTO new_order (no_o_id, no_d_id, no_w_id) VALUES (2000, 100, 10)
 ----
 insert new_order
@@ -207,7 +214,9 @@ insert new_order
                 ├── columns: no_w_id:9!null no_d_id:10!null no_o_id:11!null
                 ├── key columns: [9 10 11] = [14 13 12]
                 ├── lookup columns are key
+                ├── locking: for-share,durability-guaranteed
                 ├── cardinality: [0 - 1]
+                ├── volatile
                 ├── key: ()
                 ├── fd: ()-->(9-11)
                 ├── with-scan &1
@@ -221,7 +230,7 @@ insert new_order
                 │    └── fd: ()-->(9-11)
                 └── filters (true)
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 UPDATE
   stock
 SET
@@ -349,7 +358,7 @@ update stock
            ├── CASE (s_i_id:20, s_w_id:21) WHEN (6823, 0) THEN 1 WHEN (7853, 0) THEN 1 WHEN (8497, 0) THEN 2 WHEN (10904, 0) THEN 1 WHEN (16152, 0) THEN 1 WHEN (41382, 0) THEN 1 WHEN (55952, 0) THEN 1 WHEN (64817, 0) THEN 4 WHEN (66335, 0) THEN 2 WHEN (76567, 0) THEN 1 WHEN (81680, 0) THEN 1 WHEN (89641, 0) THEN 2 WHEN (89905, 0) THEN 4 ELSE CAST(NULL AS INT8) END [as=s_order_cnt_new:41, outer=(20,21)]
            └── CASE (s_i_id:20, s_w_id:21) WHEN (6823, 0) THEN 0 WHEN (7853, 0) THEN 0 WHEN (8497, 0) THEN 0 WHEN (10904, 0) THEN 0 WHEN (16152, 0) THEN 0 WHEN (41382, 0) THEN 0 WHEN (55952, 0) THEN 0 WHEN (64817, 0) THEN 0 WHEN (66335, 0) THEN 0 WHEN (76567, 0) THEN 0 WHEN (81680, 0) THEN 0 WHEN (89641, 0) THEN 0 WHEN (89905, 0) THEN 0 ELSE CAST(NULL AS INT8) END [as=s_remote_cnt_new:42, outer=(20,21)]
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 INSERT INTO order_line
   (ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity,  ol_amount,  ol_dist_info)
 VALUES
@@ -397,7 +406,9 @@ insert order_line
       │         ├── columns: ol_w_id:25!null ol_d_id:26!null ol_o_id:27!null
       │         ├── key columns: [25 26 27] = [30 29 28]
       │         ├── lookup columns are key
+      │         ├── locking: for-share,durability-guaranteed
       │         ├── cardinality: [0 - 6]
+      │         ├── volatile
       │         ├── with-scan &1
       │         │    ├── columns: ol_w_id:25!null ol_d_id:26!null ol_o_id:27!null
       │         │    ├── mapping:
@@ -411,7 +422,9 @@ insert order_line
                 ├── columns: ol_supply_w_id:38!null ol_i_id:39!null
                 ├── key columns: [38 39] = [41 40]
                 ├── lookup columns are key
+                ├── locking: for-share,durability-guaranteed
                 ├── cardinality: [0 - 6]
+                ├── volatile
                 ├── with-scan &1
                 │    ├── columns: ol_supply_w_id:38!null ol_i_id:39!null
                 │    ├── mapping:
@@ -429,7 +442,7 @@ insert order_line
 # stringent response time requirements to satisfy on-line users. In addition,
 # this transaction includes non-primary key access to the CUSTOMER table.
 # --------------------------------------------------
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 UPDATE warehouse SET w_ytd = w_ytd + 3860.61 WHERE w_id = 10
 RETURNING w_name, w_street_1, w_street_2, w_city, w_state, w_zip
 ----
@@ -472,7 +485,7 @@ project
                 └── assignment-cast: DECIMAL(12,2) [as=w_ytd_cast:24, outer=(20), immutable]
                      └── w_ytd:20 + 3860.61
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 UPDATE district SET d_ytd = d_ytd + 3860.61 WHERE (d_w_id = 10) AND (d_id = 5)
 RETURNING d_name, d_street_1, d_street_2, d_city, d_state, d_zip
 ----
@@ -516,7 +529,7 @@ project
                 └── assignment-cast: DECIMAL(12,2) [as=d_ytd_cast:28, outer=(23), immutable]
                      └── d_ytd:23 + 3860.61
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT c_id
 FROM customer
 WHERE c_w_id = 10 AND c_d_id = 100 AND c_last = 'Smith'
@@ -534,7 +547,7 @@ project
       ├── fd: ()-->(2,3,6), (1)-->(4)
       └── ordering: +4 opt(2,3,6) [actual: +4]
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 UPDATE customer
 SET (c_balance, c_ytd_payment, c_payment_cnt, c_data)
   = (
@@ -630,16 +643,12 @@ project
  │              ├── assignment-cast: DECIMAL(12,2) [as=c_ytd_payment_cast:52, outer=(41), immutable]
  │              │    └── c_ytd_payment:41 + 3860.61
  │              ├── assignment-cast: VARCHAR(500) [as=c_data_cast:53, outer=(24-26,37,44), immutable]
-<<<<<<< HEAD
- │              │    └── CASE c_credit:37 WHEN 'BC' THEN left((((((c_id:24::STRING || c_d_id:25::STRING) || c_w_id:26::STRING) || '5') || '10') || '3860.61') || c_data:44, 500) ELSE c_data:44::STRING END
-=======
  │              │    └── CASE c_credit:37 WHEN 'BC' THEN left((((((c_id:24::STRING || c_d_id:25::STRING) || c_w_id:26::STRING) || '5') || '10') || '3860.61') || c_data:44, 500)::VARCHAR ELSE c_data:44::VARCHAR END
->>>>>>> 4a11c7d3b8f (opt: fix BPCHAR type and CASE typing)
  │              └── c_payment_cnt:42 + 1 [as=c_payment_cnt_new:49, outer=(42), immutable]
  └── projections
       └── CASE c_credit:14 WHEN 'BC' THEN left(c_data:21, 200) ELSE '' END [as=case:54, outer=(14,21), immutable]
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 INSERT INTO history
   (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_amount, h_date,                h_data)
 VALUES
@@ -673,7 +682,9 @@ insert history
       │         ├── columns: h_c_w_id:23!null h_c_d_id:24!null h_c_id:25!null
       │         ├── key columns: [23 24 25] = [28 27 26]
       │         ├── lookup columns are key
+      │         ├── locking: for-share,durability-guaranteed
       │         ├── cardinality: [0 - 1]
+      │         ├── volatile
       │         ├── key: ()
       │         ├── fd: ()-->(23-25)
       │         ├── with-scan &1
@@ -691,7 +702,9 @@ insert history
                 ├── columns: h_w_id:49!null h_d_id:50!null
                 ├── key columns: [49 50] = [52 51]
                 ├── lookup columns are key
+                ├── locking: for-share,durability-guaranteed
                 ├── cardinality: [0 - 1]
+                ├── volatile
                 ├── key: ()
                 ├── fd: ()-->(49,50)
                 ├── with-scan &1
@@ -713,7 +726,7 @@ insert history
 # users. In addition, this table includes non-primary key access to the
 # CUSTOMER table.
 # --------------------------------------------------
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT c_balance, c_first, c_middle, c_last
 FROM customer
 WHERE c_w_id = 10 AND c_d_id = 100 AND c_id = 50
@@ -730,7 +743,7 @@ project
       ├── key: ()
       └── fd: ()-->(1-6,17)
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT c_id, c_balance, c_first, c_middle
 FROM customer
 WHERE c_w_id = 10 AND c_d_id = 100 AND c_last = 'Smith'
@@ -753,7 +766,7 @@ project
            ├── fd: ()-->(2,3,6), (1)-->(4)
            └── ordering: +4 opt(2,3,6) [actual: +4]
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT o_id, o_entry_d, o_carrier_id
 FROM "order"
 WHERE o_w_id = 10 AND o_d_id = 100 AND o_c_id = 50
@@ -772,7 +785,7 @@ project
       ├── key: ()
       └── fd: ()-->(1-6)
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d
 FROM order_line
 WHERE ol_w_id = 10 AND ol_d_id = 100 AND ol_o_id = 1000
@@ -800,18 +813,21 @@ project
 # indicating transaction completion. The result of the deferred execution is
 # recorded into a result file.
 # --------------------------------------------------
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT no_o_id
 FROM new_order
 WHERE no_w_id = 10 AND no_d_id = 100
 ORDER BY no_o_id ASC
 LIMIT 1
+FOR UPDATE
 ----
-project
- ├── columns: no_o_id:1!null
+lock new_order
+ ├── columns: no_o_id:1!null  [hidden: no_d_id:2!null no_w_id:3!null]
+ ├── locking: for-update,durability-guaranteed
  ├── cardinality: [0 - 1]
+ ├── volatile, mutations
  ├── key: ()
- ├── fd: ()-->(1)
+ ├── fd: ()-->(1-3)
  └── scan new_order
       ├── columns: no_o_id:1!null no_d_id:2!null no_w_id:3!null
       ├── constraint: /3/2/1: [/10/100 - /10/100]
@@ -819,7 +835,7 @@ project
       ├── key: ()
       └── fd: ()-->(1-3)
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT sum(ol_amount)
 FROM order_line
 WHERE ol_w_id = 10 AND ol_d_id = 100 AND ol_o_id = 1000
@@ -837,7 +853,7 @@ scalar-group-by
       └── sum [as=sum:13, outer=(9)]
            └── ol_amount:9
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 UPDATE "order"
 SET o_carrier_id = 10
 WHERE o_w_id = 10
@@ -900,7 +916,7 @@ project
            └── projections
                 └── 10 [as=o_carrier_id_new:21]
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 UPDATE customer
 SET c_delivery_cnt = c_delivery_cnt + 1,
     c_balance = c_balance + CASE c_d_id
@@ -963,7 +979,7 @@ update customer
            │    └── c_balance:40 + CASE c_d_id:25 WHEN 6 THEN 57214.780000 WHEN 8 THEN 67755.430000 WHEN 1 THEN 51177.840000 WHEN 2 THEN 73840.700000 WHEN 4 THEN 45906.990000 WHEN 9 THEN 32523.760000 WHEN 10 THEN 20240.200000 WHEN 3 THEN 75299.790000 WHEN 5 THEN 56543.340000 WHEN 7 THEN 67157.940000 ELSE CAST(NULL AS DECIMAL) END
            └── c_delivery_cnt:43 + 1 [as=c_delivery_cnt_new:47, outer=(43), immutable]
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 DELETE FROM new_order
 WHERE no_w_id = 10 AND (no_d_id, no_o_id) IN (
     (10, 2167),
@@ -1001,7 +1017,7 @@ delete new_order
       └── fd: ()-->(6,8)
 
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 UPDATE order_line
 SET ol_delivery_d = '2019-08-26 16:50:41'
 WHERE ol_w_id = 10 AND (ol_d_id, ol_o_id) IN (
@@ -1054,7 +1070,7 @@ update order_line
 # heavy read-only database transaction with a low frequency of execution, a
 # relaxed response time requirement, and relaxed consistency requirements.
 # --------------------------------------------------
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT d_next_o_id
 FROM district
 WHERE d_w_id = 10 AND d_id = 100
@@ -1071,7 +1087,7 @@ project
       ├── key: ()
       └── fd: ()-->(1,2,11)
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT count(DISTINCT s_i_id)
 FROM order_line
 JOIN stock
@@ -1111,7 +1127,7 @@ scalar-group-by
 # These queries run after TPCC in order to check database consistency.
 # They are not part of the benchmark itself.
 # --------------------------------------------------
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT count(*)
 FROM warehouse
 FULL OUTER JOIN
@@ -1158,7 +1174,7 @@ scalar-group-by
  └── aggregations
       └── count-rows [as=count_rows:26]
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT d_next_o_id
 FROM district
 ORDER BY d_w_id, d_id
@@ -1169,7 +1185,7 @@ scan district
  ├── fd: (1,2)-->(11)
  └── ordering: +2,+1
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT max(no_o_id)
 FROM new_order
 GROUP BY no_d_id, no_w_id
@@ -1189,7 +1205,7 @@ group-by (streaming)
       └── max [as=max:6, outer=(1)]
            └── no_o_id:1
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT max(o_id)
 FROM "order"
 GROUP BY o_d_id, o_w_id
@@ -1209,7 +1225,7 @@ group-by (streaming)
       └── max [as=max:11, outer=(1)]
            └── o_id:1
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT count(*)
 FROM
 (
@@ -1251,7 +1267,7 @@ scalar-group-by
  └── aggregations
       └── count-rows [as=count_rows:10]
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT sum(o_ol_cnt)
 FROM "order"
 GROUP BY o_w_id, o_d_id
@@ -1270,7 +1286,7 @@ group-by (streaming)
       └── sum [as=sum:11, outer=(7)]
            └── o_ol_cnt:7
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT count(*)
 FROM order_line
 GROUP BY ol_w_id, ol_d_id
@@ -1288,7 +1304,7 @@ group-by (streaming)
  └── aggregations
       └── count-rows [as=count_rows:13]
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 (SELECT no_w_id, no_d_id, no_o_id FROM new_order)
 EXCEPT ALL
 (SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
@@ -1315,7 +1331,7 @@ except-all
            └── filters
                 └── o_carrier_id:11 IS NULL [outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 (SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
 EXCEPT ALL
 (SELECT no_w_id, no_d_id, no_o_id FROM new_order)
@@ -1342,7 +1358,7 @@ except-all
       ├── columns: no_o_id:11!null no_d_id:12!null no_w_id:13!null
       └── key: (11-13)
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 (
     SELECT o_w_id, o_d_id, o_id, o_ol_cnt
     FROM "order"
@@ -1380,7 +1396,7 @@ except-all
       └── aggregations
            └── count-rows [as=count_rows:23]
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 (
     SELECT ol_w_id, ol_d_id, ol_o_id, count(*)
     FROM order_line
@@ -1418,7 +1434,7 @@ except-all
       ├── fd: (14-16)-->(20)
       └── ordering: +16,+15,-14
 
-opt format=hide-qual
+opt format=hide-qual isolation=ReadCommitted
 SELECT count(*)
 FROM
 (
