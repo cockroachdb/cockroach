@@ -194,6 +194,11 @@ func (og *operationGenerator) randOp(
 			}
 		} else {
 			op = opType(og.params.ops.Int())
+			if _, ok := opDeclarativeVersion[op]; ok {
+				// If we're not using the declarative schema changer, then only
+				// generate operations that are not supported in declarative.
+				continue
+			}
 		}
 		og.resetOpState(useDeclarativeSchemaChanger)
 		stmt, err = opFuncs[op](og, ctx, tx)
