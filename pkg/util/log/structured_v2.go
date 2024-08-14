@@ -63,7 +63,7 @@ type StructuredPayload struct {
 	Payload  any               `json:"payload"`
 }
 
-// Structured emits a structured JSON payload to the STRUCTURED_EVENTS channel, along with the included metadata.
+// Structured emits a structured JSON payload to the DEV channel, along with the included metadata.
 // TODO(abarganier): Redaction is not considered here yet. Enable redaction via struct tags.
 // TODO(abarganier): StructuredEvent() is a similar API. We should consider how to reconcile or perhaps
 // combine the two.
@@ -89,7 +89,7 @@ func Structured(ctx context.Context, meta StructuredLogMeta, payload any) {
 	payloadBytes = bytes.TrimPrefix(payloadBytes, trimPrefix)
 	payloadBytes = bytes.TrimSuffix(payloadBytes, trimSuffix)
 
-	entry := makeEntry(ctx, severity.INFO, logpb.Channel_STRUCTURED_EVENTS, 0 /*depth*/)
+	entry := makeEntry(ctx, severity.INFO, logpb.Channel_DEV, 0 /*depth*/)
 	entry.structured = true
 	// TODO(abarganier): Once redaction is in place, we shouldn't need to cast to RedactableString here.
 	entry.payload = makeRedactablePayload(ctx, redact.RedactableString(payloadBytes))
