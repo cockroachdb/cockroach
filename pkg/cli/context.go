@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/ts"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -96,18 +95,7 @@ var serverCfg = func() server.Config {
 }()
 
 func makeClusterSettings() *cluster.Settings {
-	// Even though the code supports upgrading from multiple previous releases,
-	// skipping versions is experimental; by default, we only allow upgrading from
-	// the previous release.
-	//
-	// Version skipping can be enabled by setting COCKROACH_ALLOW_VERSION_SKIPPING=1.
-	var minSupported clusterversion.Key
-	if envutil.EnvOrDefaultBool("COCKROACH_ALLOW_VERSION_SKIPPING", false) {
-		minSupported = clusterversion.MinSupported
-	} else {
-		minSupported = clusterversion.PreviousRelease
-	}
-	st := cluster.MakeClusterSettingsWithVersions(clusterversion.Latest.Version(), minSupported.Version())
+	st := cluster.MakeClusterSettings()
 	logcrash.SetGlobalSettings(&st.SV)
 	return st
 }

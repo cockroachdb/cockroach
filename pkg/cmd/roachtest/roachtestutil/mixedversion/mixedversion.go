@@ -489,16 +489,14 @@ func defaultTestOptions() testOptions {
 	return testOptions{
 		// We use fixtures more often than not as they are more likely to
 		// detect bugs, especially in migrations.
-		useFixturesProbability:  0.7,
-		upgradeTimeout:          clusterupgrade.DefaultUpgradeTimeout,
-		minUpgrades:             1,
-		maxUpgrades:             4,
-		minimumSupportedVersion: OldestSupportedVersion,
-		predecessorFunc:         randomPredecessor,
-		enabledDeploymentModes:  allDeploymentModes,
-		// TODO(radu): restore skipVersionProbability to 0.5 when we enable
-		// 24.1->24.3 upgrade (without a special env flag).
-		skipVersionProbability:         0,
+		useFixturesProbability:         0.7,
+		upgradeTimeout:                 clusterupgrade.DefaultUpgradeTimeout,
+		minUpgrades:                    1,
+		maxUpgrades:                    4,
+		minimumSupportedVersion:        OldestSupportedVersion,
+		predecessorFunc:                randomPredecessor,
+		enabledDeploymentModes:         allDeploymentModes,
+		skipVersionProbability:         0.5,
 		overriddenMutatorProbabilities: make(map[string]float64),
 	}
 }
