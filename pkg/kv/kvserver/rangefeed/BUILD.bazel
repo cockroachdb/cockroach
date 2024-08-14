@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "budget.go",
         "buffered_registration.go",
+        "buffered_stream_sender.go",
         "catchup_scan.go",
         "event_size.go",
         "filter.go",
@@ -59,6 +60,7 @@ go_test(
     srcs = [
         "bench_test.go",
         "budget_test.go",
+        "buffered_stream_sender_test.go",
         "catchup_scan_bench_test.go",
         "catchup_scan_test.go",
         "event_size_test.go",

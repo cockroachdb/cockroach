@@ -32,6 +32,15 @@ type Stream interface {
 	Disconnect(err *kvpb.Error)
 }
 
+// BufferedStream is a Stream that can buffer events before sending them to the
+// underlying Stream. Note that the caller may still choose to bypass the buffer
+// and send to the underlying Stream directly by calling Send directly.
+type BufferedStream interface {
+	Stream
+	// SendBuffered buffers the event before sending it to the underlying Stream.
+	SendBuffered(*kvpb.RangeFeedEvent, *SharedBudgetAllocation) error
+}
+
 // registration defines an interface for registration that can be added to a
 // processor registry. Implemented by bufferedRegistration.
 type registration interface {
