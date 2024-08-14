@@ -985,7 +985,7 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, _ rune) {
 			case *slotGranter:
 				s.Printf("%s%s: used: %d, total: %d", curSep, kind, g.usedSlots, g.totalSlots)
 			case *kvStoreTokenGranter:
-				s.Printf(" io-avail: %d(%d), disk-bw-tokens-avail: %d", g.coordMu.availableIOTokens[admissionpb.RegularWorkClass],
+				s.Printf(" io-avail: %d(%d), elastic-disk-bw-tokens-avail: %d", g.coordMu.availableIOTokens[admissionpb.RegularWorkClass],
 					g.coordMu.availableIOTokens[admissionpb.ElasticWorkClass],
 					g.coordMu.diskTokensAvailable.writeBWTokens)
 			}
