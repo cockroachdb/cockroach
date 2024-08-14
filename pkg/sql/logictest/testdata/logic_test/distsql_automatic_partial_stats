@@ -1,0 +1,177 @@
+# LogicTest: !metamorphic-batch-sizes
+
+# Test a simple update and insert case for partial statistics
+
+# Disable automatic stats
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_partial_collection.min_stale_rows = 5
+
+statement ok
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c), INDEX c_idx (c), INDEX d_idx (d)) WITH (sql_stats_automatic_partial_collection_enabled = true)
+
+statement ok
+INSERT INTO data SELECT a, b, c::FLOAT, 1 FROM
+   generate_series(1, 10) AS a(a),
+   generate_series(1, 10) AS b(b),
+   generate_series(1, 10) AS c(c)
+
+# Verify that no auto stats were collected
+query TTIIIT colnames
+SELECT DISTINCT ON (statistics_name, column_names) statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names, created DESC
+----
+statistics_name   column_names  row_count  distinct_count  null_count  partial_predicate
+
+# Simulate an auto full stats collection
+statement ok
+CREATE STATISTICS __auto__ FROM data
+
+# Set the min_stale_rows to MaxInt32 to ensure that full stat collections are
+# not triggered
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.min_stale_rows = 2147483647
+
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true
+
+# Change 10% of the table to trigger a partial stats collection.
+statement ok
+UPDATE DATA SET d = 2 WHERE a = 1
+
+# The query uses DISTINCT ON and ORDER BY to only show the latest statistic
+# available for each set of column names and statistic type. This is important
+# in order to tolerate the rare case of multiple auto stats jobs running between
+# two retry iterations.
+query TTIIIT colnames,retry
+SELECT DISTINCT ON (statistics_name, column_names) statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names, created DESC
+----
+statistics_name   column_names  row_count  distinct_count  null_count  partial_predicate
+__auto__          {a}           1000       10              0           NULL
+__auto__          {a,b}         1000       100             0           NULL
+__auto__          {a,b,c}       1000       1000            0           NULL
+__auto__          {b}           1000       10              0           NULL
+__auto__          {c}           1000       10              0           NULL
+__auto__          {d}           1000       1               0           NULL
+__auto_partial__  {a}           0          0               0           (a IS NULL) OR ((a < 1:::INT8) OR (a > 10:::INT8))
+__auto_partial__  {c}           0          0               0           (c IS NULL) OR ((c < 1.0:::FLOAT8) OR (c > 10.0:::FLOAT8))
+__auto_partial__  {d}           100        1               0           (d IS NULL) OR ((d < 1:::DECIMAL) OR (d > 1:::DECIMAL))
+
+# Disable automatic partial stats with the table setting
+statement ok
+ALTER TABLE data SET (sql_stats_automatic_partial_collection_enabled = false)
+
+# Change 20% of the table, no new partial stats should be collected.
+statement ok
+UPDATE DATA SET d = 3 WHERE a = 1 OR a = 2
+
+query TTIIIT colnames
+SELECT DISTINCT ON (statistics_name, column_names) statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names, created DESC
+----
+statistics_name   column_names  row_count  distinct_count  null_count  partial_predicate
+__auto__          {a}           1000       10              0           NULL
+__auto__          {a,b}         1000       100             0           NULL
+__auto__          {a,b,c}       1000       1000            0           NULL
+__auto__          {b}           1000       10              0           NULL
+__auto__          {c}           1000       10              0           NULL
+__auto__          {d}           1000       1               0           NULL
+__auto_partial__  {a}           0          0               0           (a IS NULL) OR ((a < 1:::INT8) OR (a > 10:::INT8))
+__auto_partial__  {c}           0          0               0           (c IS NULL) OR ((c < 1.0:::FLOAT8) OR (c > 10.0:::FLOAT8))
+__auto_partial__  {d}           100        1               0           (d IS NULL) OR ((d < 1:::DECIMAL) OR (d > 1:::DECIMAL))
+
+# Disable automatic partial stats by overriding the internal executor session
+# setting instead
+statement ok
+SET CLUSTER SETTING sql.internal_executor.session_overrides = 'EnableCreateStatsUsingExtremes=false';
+
+statement ok
+ALTER TABLE data SET (sql_stats_automatic_partial_collection_enabled = true)
+
+# Change 20% of the table, no new partial stats should be collected.
+statement ok
+UPDATE DATA SET d = 4 WHERE a = 1 OR a = 2
+
+query TTIIIT colnames
+SELECT DISTINCT ON (statistics_name, column_names) statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names, created DESC
+----
+statistics_name   column_names  row_count  distinct_count  null_count  partial_predicate
+__auto__          {a}           1000       10              0           NULL
+__auto__          {a,b}         1000       100             0           NULL
+__auto__          {a,b,c}       1000       1000            0           NULL
+__auto__          {b}           1000       10              0           NULL
+__auto__          {c}           1000       10              0           NULL
+__auto__          {d}           1000       1               0           NULL
+__auto_partial__  {a}           0          0               0           (a IS NULL) OR ((a < 1:::INT8) OR (a > 10:::INT8))
+__auto_partial__  {c}           0          0               0           (c IS NULL) OR ((c < 1.0:::FLOAT8) OR (c > 10.0:::FLOAT8))
+__auto_partial__  {d}           100        1               0           (d IS NULL) OR ((d < 1:::DECIMAL) OR (d > 1:::DECIMAL))
+
+statement ok
+SET CLUSTER SETTING sql.internal_executor.session_overrides = 'EnableCreateStatsUsingExtremes=true';
+
+# Insert enough data to guarantee a partial stats collection.
+statement ok
+INSERT INTO data SELECT a, b, c FROM
+  generate_series(11, 14) AS a(a),
+  generate_series(11, 14) AS b(b),
+  generate_series(11, 14) AS c(c)
+
+query TTIIIT colnames,retry
+SELECT DISTINCT ON (statistics_name, column_names) statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names, created DESC
+----
+statistics_name   column_names  row_count  distinct_count  null_count  partial_predicate
+__auto__          {a}           1000       10              0           NULL
+__auto__          {a,b}         1000       100             0           NULL
+__auto__          {a,b,c}       1000       1000            0           NULL
+__auto__          {b}           1000       10              0           NULL
+__auto__          {c}           1000       10              0           NULL
+__auto__          {d}           1000       1               0           NULL
+__auto_partial__  {a}           64         4               0           (a IS NULL) OR ((a < 1:::INT8) OR (a > 10:::INT8))
+__auto_partial__  {c}           64         4               0           (c IS NULL) OR ((c < 1.0:::FLOAT8) OR (c > 10.0:::FLOAT8))
+__auto_partial__  {d}           264        2               64          (d IS NULL) OR ((d < 1:::DECIMAL) OR (d > 1:::DECIMAL))
+
+# Upsert more than 5% of the table.
+statement ok
+UPSERT INTO data SELECT a, b, c::FLOAT, 5 FROM
+  generate_series(11, 15) AS a(a),
+  generate_series(11, 14) AS b(b),
+  generate_series(11, 13) AS c(c)
+
+query TTIIIT colnames,retry
+SELECT DISTINCT ON (statistics_name, column_names) statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names, created DESC
+----
+statistics_name   column_names  row_count  distinct_count  null_count  partial_predicate
+__auto__          {a}           1000       10              0           NULL
+__auto__          {a,b}         1000       100             0           NULL
+__auto__          {a,b,c}       1000       1000            0           NULL
+__auto__          {b}           1000       10              0           NULL
+__auto__          {c}           1000       10              0           NULL
+__auto__          {d}           1000       1               0           NULL
+__auto_partial__  {a}           76         5               0           (a IS NULL) OR ((a < 1:::INT8) OR (a > 10:::INT8))
+__auto_partial__  {c}           76         4               0           (c IS NULL) OR ((c < 1.0:::FLOAT8) OR (c > 10.0:::FLOAT8))
+__auto_partial__  {d}           276        3               16          (d IS NULL) OR ((d < 1:::DECIMAL) OR (d > 1:::DECIMAL))
+
+# Delete more than 5% of the table.
+statement ok
+DELETE FROM data WHERE a > 11
+
+query TTIIIT colnames,retry
+SELECT DISTINCT ON (statistics_name, column_names) statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names, created DESC
+----
+statistics_name   column_names  row_count  distinct_count  null_count  partial_predicate
+__auto__          {a}           1000       10              0           NULL
+__auto__          {a,b}         1000       100             0           NULL
+__auto__          {a,b,c}       1000       1000            0           NULL
+__auto__          {b}           1000       10              0           NULL
+__auto__          {c}           1000       10              0           NULL
+__auto__          {d}           1000       1               0           NULL
+__auto_partial__  {a}           16         1               0           (a IS NULL) OR ((a < 1:::INT8) OR (a > 10:::INT8))
+__auto_partial__  {c}           16         4               0           (c IS NULL) OR ((c < 1.0:::FLOAT8) OR (c > 10.0:::FLOAT8))
+__auto_partial__  {d}           216        3               4           (d IS NULL) OR ((d < 1:::DECIMAL) OR (d > 1:::DECIMAL))
