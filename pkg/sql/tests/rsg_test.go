@@ -19,6 +19,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -511,16 +512,30 @@ func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 		"drop_user_stmt",
 		"alter_user_stmt",
 	}
-
+	// Create multiple databases, so that in concurrent scenarios two connections
+	// will always share the same database.
+	numDatabases := max(*flagRSGGoRoutines/2, 1)
+	databases := make([]string, 0, numDatabases)
+	for dbIdx := 0; dbIdx < numDatabases; dbIdx++ {
+		databases = append(databases, fmt.Sprintf("ident_%d", dbIdx))
+	}
+	var nextDatabaseName atomic.Int64
 	testRandomSyntax(t, true, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		if err := db.exec(t, ctx, "SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '30s'"); err != nil {
 			return err
 		}
-		return db.exec(t, ctx, `CREATE DATABASE ident;`)
+		for _, dbName := range databases {
+			if err := db.exec(t, ctx, fmt.Sprintf(`CREATE DATABASE %s;`, dbName)); err != nil {
+				return err
+			}
+		}
+		return nil
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		n := r.Intn(len(roots))
 		s := r.Generate(roots[n], 30)
-		return db.exec(t, ctx, s)
+		// Select a database and use it in the generated statement.
+		dbName := databases[nextDatabaseName.Add(1)%int64(len(databases))]
+		return db.exec(t, ctx, strings.Replace(s, "ident", dbName, -1))
 	})
 }
 
