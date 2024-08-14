@@ -142,9 +142,9 @@ case $1 in
         start_a=1000000
         start_b=4611686018427387904
         shift
-        roachprod run $A:1 "nohup ./workload run ycsb --tolerate-errors --families=false --duration=24h --concurrency=16 --ramp=5s \
+        roachprod run $A:1 "env -i nohup ./workload run ycsb --tolerate-errors --families=false --duration=24h --concurrency=16 --ramp=5s \
           --workload='custom' --insert-freq=1.0 --insert-start=${start_a} $@ $(roachprod pgurl $A) > $OUTPUT_FILE_A 2> $OUTPUT_FILE_A &" &
-        roachprod run $B:1 "nohup ./workload run ycsb --tolerate-errors --families=false --duration=24h --concurrency=16 --ramp=5s \
+        roachprod run $B:1 "env -i nohup ./workload run ycsb --tolerate-errors --families=false --duration=24h --concurrency=16 --ramp=5s \
           --workload='custom' --insert-freq=1.0 --insert-start=${start_b} $@ $(roachprod pgurl $B) > $OUTPUT_FILE_B 2> $OUTPUT_FILE_B &" &
         ;;
       "stop")
