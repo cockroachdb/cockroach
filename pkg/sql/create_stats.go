@@ -135,21 +135,29 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	details := record.Details.(jobspb.CreateStatsDetails)
 
-	if n.Name != jobspb.AutoStatsName {
+	if n.Name != jobspb.AutoStatsName && n.Name != jobspb.AutoPartialStatsName {
 		telemetry.Inc(sqltelemetry.CreateStatisticsUseCounter)
 	}
 
 	var job *jobs.StartableJob
 	jobID := n.p.ExecCfg().JobRegistry.MakeJobID()
 	if err := n.p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		if n.Name == jobspb.AutoStatsName {
+		if n.Name == jobspb.AutoStatsName || n.Name == jobspb.AutoPartialStatsName {
 			// Don't start the job if there is already a CREATE STATISTICS job running.
 			// (To handle race conditions we check this again after the job starts,
 			// but this check is used to prevent creating a large number of jobs that
 			// immediately fail).
 			if err := checkRunningJobsInTxn(ctx, jobspb.InvalidJobID, txn); err != nil {
 				return err
+			}
+			// Don't start auto partial stats jobs if there is another auto partial
+			// stats job running on the same table.
+			if n.Name == jobspb.AutoPartialStatsName {
+				if err := checkRunningAutoPartialJobsInTxn(ctx, jobspb.InvalidJobID, txn, n.p.ExecCfg().JobRegistry, details.Table.ID); err != nil {
+					return err
+				}
 			}
 		}
 		return n.p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &job, jobID, txn, *record)
@@ -686,10 +694,18 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 	// associated txn.
 	jobsPlanner := execCtx.(JobExecContext)
 	details := r.job.Details().(jobspb.CreateStatsDetails)
-	if details.Name == jobspb.AutoStatsName {
+	if details.Name == jobspb.AutoStatsName || details.Name == jobspb.AutoPartialStatsName {
+		jobRegistry := jobsPlanner.ExecCfg().JobRegistry
 		// We want to make sure that an automatic CREATE STATISTICS job only runs if
 		// there are no other CREATE STATISTICS jobs running, automatic or manual.
-		if err := checkRunningJobs(ctx, r.job, jobsPlanner); err != nil {
+		if err := checkRunningJobs(
+			ctx,
+			r.job,
+			jobsPlanner,
+			details.Name == jobspb.AutoPartialStatsName,
+			jobRegistry,
+			details.Table.ID,
+		); err != nil {
 			return err
 		}
 	}
@@ -728,6 +744,9 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 		var err error
 		if details.UsingExtremes {
 			for i, colStat := range details.ColumnStats {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
 				// Plan and run partial stats on multiple columns separately since each
 				// partial stat collection will use a different index and have different
 				// plans.
@@ -820,21 +839,37 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 // pending, running, or paused status that started earlier than this one. If
 // there are, checkRunningJobs returns an error. If job is nil, checkRunningJobs
 // just checks if there are any pending, running, or paused CreateStats jobs.
-func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) error {
+// If autoPartial is true, checkRunningJobs also checks if there are any other
+// AutoCreatePartialStats jobs in the pending, running, or paused status that
+// started earlier than this one for the same table.
+func checkRunningJobs(
+	ctx context.Context,
+	job *jobs.Job,
+	p JobExecContext,
+	autoPartial bool,
+	jobRegistry *jobs.Registry,
+	tableID descpb.ID,
+) error {
 	jobID := jobspb.InvalidJobID
 	if job != nil {
 		jobID = job.ID()
 	}
 	return p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		return checkRunningJobsInTxn(ctx, jobID, txn)
+		if err = checkRunningJobsInTxn(ctx, jobID, txn); err != nil {
+			return err
+		}
+		if autoPartial {
+			return checkRunningAutoPartialJobsInTxn(ctx, jobID, txn, jobRegistry, tableID)
+		}
+		return nil
 	})
 }
 
-// checkRunningJobsInTxn checks whether there are any other CreateStats jobs in
-// the pending, running, or paused status that started earlier than this one. If
-// there are, checkRunningJobsInTxn returns an error. If jobID is
-// jobspb.InvalidJobID, checkRunningJobsInTxn just checks if there are any pending,
-// running, or paused CreateStats jobs.
+// checkRunningJobsInTxn checks whether there are any other CreateStats jobs
+// (excluding auto partial stats jobs) in the pending, running, or paused status
+// that started earlier than this one. If there are, checkRunningJobsInTxn
+// returns an error. If jobID is jobspb.InvalidJobID, checkRunningJobsInTxn just
+// checks if there are any pending, running, or paused CreateStats jobs.
 func checkRunningJobsInTxn(ctx context.Context, jobID jobspb.JobID, txn isql.Txn) error {
 	exists, err := jobs.RunningJobExists(ctx, jobID, txn,
 		jobspb.TypeCreateStats, jobspb.TypeAutoCreateStats,
@@ -845,6 +880,40 @@ func checkRunningJobsInTxn(ctx context.Context, jobID jobspb.JobID, txn isql.Txn
 
 	if exists {
 		return stats.ConcurrentCreateStatsError
+	}
+
+	return nil
+}
+
+// checkRunningAutoPartialJobsInTxn checks whether there are any other
+// AutoCreatePartialStats jobs in the pending, running, or paused status that
+// started earlier than this one for the same table. If there are, an error is
+// returned. If jobID is jobspb.InvalidJobID, checkRunningAutoPartialJobsInTxn
+// just checks if there are any pending, running, or paused
+// AutoCreatePartialStats jobs for the same table.
+func checkRunningAutoPartialJobsInTxn(
+	ctx context.Context,
+	jobID jobspb.JobID,
+	txn isql.Txn,
+	jobRegistry *jobs.Registry,
+	tableID descpb.ID,
+) error {
+	autoPartialStatJobIDs, err := jobs.RunningJobs(ctx, jobID, txn,
+		jobspb.TypeAutoCreatePartialStats,
+	)
+	if err != nil {
+		return err
+	}
+
+	for _, id := range autoPartialStatJobIDs {
+		job, err := jobRegistry.LoadJobWithTxn(ctx, id, txn)
+		if err != nil {
+			return err
+		}
+		jobDetails := job.Details().(jobspb.CreateStatsDetails)
+		if jobDetails.Table.ID == tableID {
+			return stats.ConcurrentCreateStatsError
+		}
 	}
 
 	return nil
@@ -862,4 +931,5 @@ func init() {
 	}
 	jobs.RegisterConstructor(jobspb.TypeCreateStats, createResumerFn, jobs.UsesTenantCostControl)
 	jobs.RegisterConstructor(jobspb.TypeAutoCreateStats, createResumerFn, jobs.UsesTenantCostControl)
+	jobs.RegisterConstructor(jobspb.TypeAutoCreatePartialStats, createResumerFn, jobs.UsesTenantCostControl)
 }

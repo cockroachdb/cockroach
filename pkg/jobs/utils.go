@@ -29,22 +29,9 @@ import (
 func RunningJobExists(
 	ctx context.Context, ignoreJobID jobspb.JobID, txn isql.Txn, jobTypes ...jobspb.Type,
 ) (exists bool, retErr error) {
-	var typeStrs string
-	switch len(jobTypes) {
-	case 0:
-		return false, errors.AssertionFailedf("must specify job types")
-	case 1:
-		typeStrs = fmt.Sprintf("('%s')", jobTypes[0].String())
-	case 2:
-		typeStrs = fmt.Sprintf("('%s', '%s')", jobTypes[0].String(), jobTypes[1].String())
-	default:
-		var s strings.Builder
-		fmt.Fprintf(&s, "('%s'", jobTypes[0].String())
-		for _, typ := range jobTypes[1:] {
-			fmt.Fprintf(&s, ", '%s'", typ.String())
-		}
-		s.WriteByte(')')
-		typeStrs = s.String()
+	typeStrs, err := getJobTypeStrs(jobTypes)
+	if err != nil {
+		return false, err
 	}
 
 	orderBy := " ORDER BY created"
@@ -87,6 +74,65 @@ LIMIT 1`
 	return ok && jobspb.JobID(*it.Cur()[0].(*tree.DInt)) != ignoreJobID, nil
 }
 
+// RunningJobs returns the IDs of all jobs of the given types in the pending,
+// running, or paused status, optionally ignoring the job with the ID specified
+// by ignoreJobID as well as any jobs created after it, if the passed ID is not
+// InvalidJobID.
+func RunningJobs(
+	ctx context.Context, ignoreJobID jobspb.JobID, txn isql.Txn, jobTypes ...jobspb.Type,
+) (jobIDs []jobspb.JobID, retErr error) {
+	typeStrs, err := getJobTypeStrs(jobTypes)
+	if err != nil {
+		return jobIDs, err
+	}
+
+	orderBy := " ORDER BY created"
+	if ignoreJobID == jobspb.InvalidJobID {
+		// There is no need to order by the created column if there is no job to
+		// ignore.
+		orderBy = ""
+	}
+
+	stmt := `
+SELECT
+  id
+FROM
+  system.jobs@jobs_status_created_idx
+WHERE
+	job_type IN ` + typeStrs + ` AND
+  status IN ` + NonTerminalStatusTupleString + orderBy
+	it, err := txn.QueryIterator(
+		ctx,
+		"find-all-running-jobs-of-type",
+		txn.KV(),
+		stmt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
+
+	for {
+		ok, err := it.Next(ctx)
+		if err != nil {
+			return jobIDs, err
+		}
+		if !ok {
+			break
+		}
+		jobID := jobspb.JobID(*it.Cur()[0].(*tree.DInt))
+		// If we encounter the jobID to ignore, we can break early since all
+		// additional rows must be created after the ignored ID.
+		if jobID == ignoreJobID {
+			break
+		}
+		jobIDs = append(jobIDs, jobID)
+	}
+	return jobIDs, nil
+}
+
 // JobExists returns true if there is a row corresponding to jobID in the
 // system.jobs table.
 func JobExists(
@@ -115,4 +161,28 @@ func JobCoordinatorID(
 		return 0, errors.AssertionFailedf("expected coordinator ID to be an int, got %T", row[0])
 	}
 	return int32(coordinatorID), nil
+}
+
+// getJobTypeStrs is a helper function that returns a string representation of
+// the job types for use in SQL queries, such as `('type1', 'type2')`. It
+// returns an error if no job types are provided.
+func getJobTypeStrs(jobTypes []jobspb.Type) (string, error) {
+	var typeStrs string
+	switch len(jobTypes) {
+	case 0:
+		return "", errors.AssertionFailedf("must specify job types")
+	case 1:
+		typeStrs = fmt.Sprintf("('%s')", jobTypes[0].String())
+	case 2:
+		typeStrs = fmt.Sprintf("('%s', '%s')", jobTypes[0].String(), jobTypes[1].String())
+	default:
+		var s strings.Builder
+		fmt.Fprintf(&s, "('%s'", jobTypes[0].String())
+		for _, typ := range jobTypes[1:] {
+			fmt.Fprintf(&s, ", '%s'", typ.String())
+		}
+		s.WriteByte(')')
+		typeStrs = s.String()
+	}
+	return typeStrs, nil
 }
