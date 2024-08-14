@@ -445,6 +445,14 @@ func (p *partitionedStreamSubscription) Subscribe(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// Set statement_timeout to 0s for no statement timeout. We
+	// expect crdb_internal.stream_partition to run forevever.
+	_, err = srcConn.Exec(ctx, `SET statement_timeout = '0s'`)
+	if err != nil {
+		return err
+	}
+
 	rows, err := srcConn.Query(ctx, `SELECT * FROM crdb_internal.stream_partition($1, $2)`,
 		p.streamID, p.specBytes)
 	if err != nil {
