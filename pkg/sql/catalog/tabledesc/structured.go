@@ -2453,6 +2453,21 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 			appendStorageParam(catpb.AutoStatsFractionStaleTableSettingName,
 				fmt.Sprintf("%g", value))
 		}
+		if settings.PartialEnabled != nil {
+			value := *settings.PartialEnabled
+			appendStorageParam(catpb.AutoPartialStatsEnabledTableSettingName,
+				fmt.Sprintf("%v", value))
+		}
+		if settings.PartialMinStaleRows != nil {
+			value := *settings.PartialMinStaleRows
+			appendStorageParam(catpb.AutoPartialStatsMinStaleTableSettingName,
+				fmt.Sprintf("%d", value))
+		}
+		if settings.PartialFractionStaleRows != nil {
+			value := *settings.PartialFractionStaleRows
+			appendStorageParam(catpb.AutoPartialStatsFractionStaleTableSettingName,
+				fmt.Sprintf("%g", value))
+		}
 	}
 	if enabled, ok := desc.ForecastStatsEnabled(); ok {
 		appendStorageParam(`sql_stats_forecasts_enabled`, strconv.FormatBool(enabled))
@@ -2498,6 +2513,13 @@ func (desc *wrapper) AutoStatsCollectionEnabled() catpb.AutoStatsCollectionStatu
 		return catpb.AutoStatsCollectionNotSet
 	}
 	return desc.AutoStatsSettings.AutoStatsCollectionEnabled()
+}
+
+func (desc *wrapper) AutoPartialStatsCollectionEnabled() catpb.AutoPartialStatsCollectionStatus {
+	if desc.AutoStatsSettings == nil {
+		return catpb.AutoPartialStatsCollectionNotSet
+	}
+	return desc.AutoStatsSettings.AutoPartialStatsCollectionEnabled()
 }
 
 // AutoStatsMinStaleRows implements the TableDescriptor interface.

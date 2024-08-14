@@ -2517,6 +2517,18 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID:      2,
 				AutoStatsSettings: &catpb.AutoStatsSettings{Enabled: &boolTrue},
 			}},
+		{err: `Setting sql_partial_stats_automatic_collection_enabled may not be set on virtual table`,
+			desc: descpb.TableDescriptor{
+				ID:            catconstants.MinVirtualID,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				NextColumnID:      2,
+				AutoStatsSettings: &catpb.AutoStatsSettings{PartialEnabled: &boolTrue},
+			}},
 		{err: `Setting sql_stats_automatic_collection_enabled may not be set on a view or sequence`,
 			desc: descpb.TableDescriptor{
 				Name:                    "bar",
@@ -2582,6 +2594,18 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID:      2,
 				AutoStatsSettings: &catpb.AutoStatsSettings{MinStaleRows: &negativeOne},
 			}},
+		{err: `invalid integer value for sql_partial_stats_automatic_collection_min_stale_rows: cannot be set to a negative value: -1`,
+			desc: descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				NextColumnID:      2,
+				AutoStatsSettings: &catpb.AutoStatsSettings{PartialMinStaleRows: &negativeOne},
+			}},
 		{err: `invalid float value for sql_stats_automatic_collection_fraction_stale_rows: cannot set to a negative value: -1.000000`,
 			desc: descpb.TableDescriptor{
 				ID:            2,
@@ -2593,6 +2617,18 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID:      2,
 				AutoStatsSettings: &catpb.AutoStatsSettings{FractionStaleRows: &negativeOneFloat},
+			}},
+		{err: `invalid float value for sql_partial_stats_automatic_collection_fraction_stale_rows: cannot set to a negative value: -1.000000`,
+			desc: descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				NextColumnID:      2,
+				AutoStatsSettings: &catpb.AutoStatsSettings{PartialFractionStaleRows: &negativeOneFloat},
 			}},
 		{err: `row-level TTL expiration expression "missing_col" refers to unknown columns`,
 			desc: descpb.TableDescriptor{

@@ -139,6 +139,10 @@ func (rs ReplicationStatus) String() string {
 // running CREATE STATISTICS manually.
 const AutoStatsName = "__auto__"
 
+// AutoPartialStatsName is the name to use for partial statistics created
+// automatically.
+const AutoPartialStatsName = "__auto_partial__"
+
 // ImportStatsName is the name to use for statistics created automatically
 // during import.
 const ImportStatsName = "__import__"
@@ -154,6 +158,7 @@ const MergedStatsName = "__merged__"
 // AutomaticJobTypes is a list of automatic job types that currently exist.
 var AutomaticJobTypes = [...]Type{
 	TypeAutoCreateStats,
+	TypeAutoCreatePartialStats,
 	TypeAutoSpanConfigReconciliation,
 	TypeAutoSQLStatsCompaction,
 	TypeAutoSchemaTelemetry,
@@ -183,6 +188,8 @@ func DetailsType(d isPayload_Details) (Type, error) {
 		createStatsName := d.CreateStats.Name
 		if createStatsName == AutoStatsName {
 			return TypeAutoCreateStats, nil
+		} else if createStatsName == AutoPartialStatsName {
+			return TypeAutoCreatePartialStats, nil
 		}
 		return TypeCreateStats, nil
 	case *Payload_SchemaChangeGC:
@@ -252,6 +259,9 @@ var JobDetailsForEveryJobType = map[Type]Details{
 	TypeCreateStats:  CreateStatsDetails{},
 	TypeAutoCreateStats: CreateStatsDetails{
 		Name: AutoStatsName,
+	},
+	TypeAutoCreatePartialStats: CreateStatsDetails{
+		Name: AutoPartialStatsName,
 	},
 	TypeSchemaChangeGC:               SchemaChangeGCDetails{},
 	TypeTypeSchemaChange:             TypeSchemaChangeDetails{},
@@ -578,7 +588,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 28
+const NumJobTypes = 29
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
 // cloud.SanitizeExternalStorageURI to avoid the dependency from this
