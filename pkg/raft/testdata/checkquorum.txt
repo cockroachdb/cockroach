@@ -198,7 +198,7 @@ stabilize
   Entries:
   3/12 EntryNormal ""
   Messages:
-  1->2 MsgFortifyLeaderResp Term:3 Log:0/0 Rejected (Hint: 0)
+  1->2 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   1->2 MsgAppResp Term:3 Log:0/12
 > 3 handling Ready
   Ready MustSync=true:
@@ -206,12 +206,12 @@ stabilize
   Entries:
   3/12 EntryNormal ""
   Messages:
-  3->2 MsgFortifyLeaderResp Term:3 Log:0/0 Rejected (Hint: 0)
+  3->2 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   3->2 MsgAppResp Term:3 Log:0/12
 > 2 receiving messages
-  1->2 MsgFortifyLeaderResp Term:3 Log:0/0 Rejected (Hint: 0)
+  1->2 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   1->2 MsgAppResp Term:3 Log:0/12
-  3->2 MsgFortifyLeaderResp Term:3 Log:0/0 Rejected (Hint: 0)
+  3->2 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   3->2 MsgAppResp Term:3 Log:0/12
 > 2 handling Ready
   Ready MustSync=false:
