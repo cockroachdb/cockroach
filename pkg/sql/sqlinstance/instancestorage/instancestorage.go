@@ -573,7 +573,7 @@ func (s *Storage) readRegionsFromSystemDatabase(
 	descs := s.cf.NewCollection(ctx)
 	descs.SetDescriptorSessionDataProvider(catsessiondata.DefaultDescriptorSessionDataProvider)
 	defer descs.ReleaseAll(ctx)
-	systemDB, err := descs.ByID(txn).Get().Database(ctx, keys.SystemDatabaseID)
+	systemDB, err := descs.ByIDWithoutLeased(txn).Get().Database(ctx, keys.SystemDatabaseID)
 	if err != nil {
 		return nil, err
 	}
@@ -584,7 +584,7 @@ func (s *Storage) readRegionsFromSystemDatabase(
 	if err != nil {
 		return nil, err
 	}
-	typeEnum, err := descs.ByID(txn).Get().Type(ctx, regionEnumID)
+	typeEnum, err := descs.ByIDWithoutLeased(txn).Get().Type(ctx, regionEnumID)
 	if err != nil {
 		return nil, err
 	}

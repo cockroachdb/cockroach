@@ -78,7 +78,7 @@ func CreateUserDefinedSchemaDescriptor(
 			// and can't be in a dropping state.
 			if schemaID != descpb.InvalidID {
 				// Check if the object already exists in a dropped state
-				sc, err := txn.Descriptors().ByID(txn.KV()).Get().Schema(ctx, schemaID)
+				sc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).Get().Schema(ctx, schemaID)
 				if err != nil || sc.SchemaKind() != catalog.SchemaUserDefined {
 					return nil, nil, err
 				}

@@ -70,7 +70,7 @@ func (p *planner) AlterTableLocality(
 	}
 
 	// Ensure that the database is multi-region enabled.
-	dbDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
+	dbDesc, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 		)
 	}
 
-	dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithoutNonPublic().Get().Database(params.ctx, n.tableDesc.ParentID)
+	dbDesc, err := params.p.Descriptors().ByIDWithoutLeased(params.p.txn).WithoutNonPublic().Get().Database(params.ctx, n.tableDesc.ParentID)
 	if err != nil {
 		return err
 	}
@@ -181,7 +181,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		)
 	}
 
-	dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithoutNonPublic().Get().Database(params.ctx, n.tableDesc.ParentID)
+	dbDesc, err := params.p.Descriptors().ByIDWithoutLeased(params.p.txn).WithoutNonPublic().Get().Database(params.ctx, n.tableDesc.ParentID)
 	if err != nil {
 		return err
 	}
@@ -652,7 +652,7 @@ func setNewLocalityConfig(
 	kvTrace bool,
 ) error {
 	getMultiRegionTypeDesc := func() (*typedesc.Mutable, error) {
-		dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().Get().Database(ctx, desc.GetParentID())
+		dbDesc, err := descsCol.ByIDWithoutLeased(txn).WithoutNonPublic().Get().Database(ctx, desc.GetParentID())
 		if err != nil {
 			return nil, err
 		}

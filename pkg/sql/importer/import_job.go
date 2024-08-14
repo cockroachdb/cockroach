@@ -802,7 +802,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 				ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 			) (err error) {
-				dbDesc, err = descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, parentID)
+				dbDesc, err = descriptors.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, parentID)
 				if err != nil {
 					return err
 				}
@@ -1220,7 +1220,7 @@ func (r *importResumer) checkForUDTModification(
 		ctx context.Context, txn *kv.Txn, col *descs.Collection,
 		savedTypeDesc *descpb.TypeDescriptor,
 	) error {
-		typeDesc, err := col.ByID(txn).Get().Type(ctx, savedTypeDesc.GetID())
+		typeDesc, err := col.ByIDWithoutLeased(txn).Get().Type(ctx, savedTypeDesc.GetID())
 		if err != nil {
 			return errors.Wrap(err, "resolving type descriptor when checking version mismatch")
 		}

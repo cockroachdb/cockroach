@@ -105,7 +105,7 @@ func updateStatusForGCElements(
 	earliestDeadline := timeutil.Unix(0, int64(math.MaxInt64))
 
 	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		table, err := col.ByID(txn.KV()).Get().Table(ctx, tableID)
+		table, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableID)
 		if err != nil {
 			return err
 		}

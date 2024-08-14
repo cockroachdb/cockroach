@@ -233,7 +233,7 @@ func WriteDescriptors(
 func processTableForMultiRegion(
 	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, table catalog.TableDescriptor,
 ) error {
-	dbDesc, err := descsCol.ByID(txn).WithoutDropped().Get().Database(ctx, table.GetParentID())
+	dbDesc, err := descsCol.ByIDWithoutLeased(txn).WithoutDropped().Get().Database(ctx, table.GetParentID())
 	if err != nil {
 		return err
 	}

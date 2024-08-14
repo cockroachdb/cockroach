@@ -199,7 +199,7 @@ func GetResumeSpans(
 	mutationID descpb.MutationID,
 	filter backfill.MutationFilter,
 ) ([]roachpb.Span, *jobs.Job, int, error) {
-	tableDesc, err := col.ByID(txn.KV()).Get().Table(ctx, tableID)
+	tableDesc, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableID)
 	if err != nil {
 		return nil, nil, 0, err
 	}

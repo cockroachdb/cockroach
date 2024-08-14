@@ -53,3 +53,11 @@ func (a AdmittedRaftLogEntries) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("admitted-entries (r%s s%s pri=%s up-to-%s)",
 		a.RangeID, a.StoreID, admissionpb.WorkPriority(a.AdmissionPriority), a.UpToRaftLogPosition)
 }
+
+func (a AdmittedResponseForRange) String() string {
+	return redact.StringWithoutMarkers(a)
+}
+
+func (a AdmittedResponseForRange) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("admitted-response (s%s r%s %s)", a.LeaderStoreID, a.RangeID, a.Msg.String())
+}

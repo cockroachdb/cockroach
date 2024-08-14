@@ -482,10 +482,10 @@ func defaultUnleasedFlags() (f getterFlags) {
 	return f
 }
 
-// ByID returns a ByIDGetterBuilder set up to look up descriptors by ID
+// ByIDWithoutLeased returns a ByIDGetterBuilder set up to look up descriptors by ID
 // in all layers except the leased descriptors layer. To opt in to the
 // leased descriptors, use ByIDWithLeased instead.
-func (tc *Collection) ByID(txn *kv.Txn) ByIDGetterBuilder {
+func (tc *Collection) ByIDWithoutLeased(txn *kv.Txn) ByIDGetterBuilder {
 	return ByIDGetterBuilder(makeGetterBase(txn, tc, getterFlags{
 		layerFilters: layerFilters{
 			withoutLeased: true,
@@ -493,7 +493,7 @@ func (tc *Collection) ByID(txn *kv.Txn) ByIDGetterBuilder {
 	}))
 }
 
-// ByIDWithLeased is like ByID but also looks up in the leased descriptors
+// ByIDWithLeased is like ByIDWithoutLeased but also looks up in the leased descriptors
 // layer. This may save a round-trip to KV at the expense of the descriptor
 // being slightly stale (one version off).
 func (tc *Collection) ByIDWithLeased(txn *kv.Txn) ByIDGetterBuilder {

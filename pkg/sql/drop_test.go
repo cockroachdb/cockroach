@@ -131,7 +131,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "kv")
 	var dbDesc catalog.DatabaseDescriptor
 	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
-		dbDesc, err = col.ByID(txn.KV()).Get().Database(ctx, tbDesc.GetParentID())
+		dbDesc, err = col.ByIDWithoutLeased(txn.KV()).Get().Database(ctx, tbDesc.GetParentID())
 		return err
 	}))
 
@@ -304,7 +304,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tb2Desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "kv2")
 	var dbDesc catalog.DatabaseDescriptor
 	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
-		dbDesc, err = col.ByID(txn.KV()).Get().Database(ctx, tbDesc.GetParentID())
+		dbDesc, err = col.ByIDWithoutLeased(txn.KV()).Get().Database(ctx, tbDesc.GetParentID())
 		return err
 	}))
 
@@ -897,7 +897,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	// Simulate a migration upgrading the table descriptor's format version after
 	// the table has been dropped but before the truncation has occurred.
 	if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
-		tbl, err := col.ByID(txn.KV()).Get().Table(ctx, tableDesc.ID)
+		tbl, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableDesc.ID)
 		if err != nil {
 			return err
 		}
@@ -1242,7 +1242,7 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 	tdb.QueryRow(t, query).Scan(&tableID)
 	require.NoError(t, sql.TestingDescsTxn(ctx, s,
 		func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
-			tableDesc, err = col.ByID(txn.KV()).Get().Table(ctx, tableID)
+			tableDesc, err = col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableID)
 			return err
 		}))
 	shardIdx, err := catalog.MustFindIndexByName(tableDesc, "idx")
@@ -1260,7 +1260,7 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 	// Assert that the index is dropped but the shard column remains after dropping the index.
 	require.NoError(t, sql.TestingDescsTxn(ctx, s,
 		func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
-			tableDesc, err = col.ByID(txn.KV()).Get().Table(ctx, tableID)
+			tableDesc, err = col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableID)
 			return err
 		}))
 	_, err = catalog.MustFindIndexByName(tableDesc, "idx")

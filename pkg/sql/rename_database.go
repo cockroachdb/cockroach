@@ -210,7 +210,7 @@ func maybeFailOnDependentDescInRename(
 	if withLeased {
 		b = p.Descriptors().ByIDWithLeased(p.txn)
 	} else {
-		b = p.Descriptors().ByID(p.txn)
+		b = p.Descriptors().ByIDWithoutLeased(p.txn)
 	}
 	descs, err := b.WithoutNonPublic().Get().Descs(ctx, ids)
 	if err != nil {

@@ -1298,7 +1298,7 @@ func (p *planner) ResetMultiRegionZoneConfigsForTable(
 // database's zone configuration to match what would have originally been set by
 // the multi-region syntax.
 func (p *planner) ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id int64) error {
-	dbDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Database(ctx, descpb.ID(id))
+	dbDesc, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Database(ctx, descpb.ID(id))
 	if err != nil {
 		return err
 	}
@@ -1602,7 +1602,7 @@ func getDBAndRegionEnumDescs(
 	if useCache {
 		b = descsCol.ByIDWithLeased(txn)
 	} else {
-		b = descsCol.ByID(txn)
+		b = descsCol.ByIDWithoutLeased(txn)
 	}
 	if !includeOffline {
 		b = b.WithoutOffline()

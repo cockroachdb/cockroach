@@ -214,7 +214,7 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 	// this one.
 	var dependentFuncs []string
 	for _, dep := range fnDesc.GetDependedOnBy() {
-		desc, err := params.p.Descriptors().ByID(params.p.Txn()).Get().Desc(params.ctx, dep.ID)
+		desc, err := params.p.Descriptors().ByIDWithoutLeased(params.p.Txn()).Get().Desc(params.ctx, dep.ID)
 		if err != nil {
 			return err
 		}
@@ -387,7 +387,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	// this one.
 	var dependentFuncs []string
 	for _, dep := range fnDesc.GetDependedOnBy() {
-		desc, err := params.p.Descriptors().ByID(params.p.Txn()).Get().Desc(params.ctx, dep.ID)
+		desc, err := params.p.Descriptors().ByIDWithoutLeased(params.p.Txn()).Get().Desc(params.ctx, dep.ID)
 		if err != nil {
 			return err
 		}
