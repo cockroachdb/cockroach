@@ -30,6 +30,20 @@ raft-state
 3: StateFollower (Voter) Term:1 Lead:1
 4: StateFollower (Non-Voter) Term:1 Lead:1
 
+# ForgetLeader is ignored if the follower is supporting the leader's store
+# liveness epoch.
+forget-leader 2
+----
+INFO 2 [term 1] ignored MsgForgetLeader from 0 due to leader fortification
+
+withdraw-support 2 1
+----
+  1 2 3 4
+1 1 1 1 1
+2 x 1 1 1
+3 1 1 1 1
+4 1 1 1 1
+
 # ForgetLeader causes a follower to forget its leader, but remain in the current
 # term. It's a noop if it's called again.
 forget-leader 2
@@ -45,7 +59,7 @@ raft-state
 
 forget-leader 2
 ----
-ok
+INFO 2 no leader at term 1; dropping forget leader msg
 
 raft-state
 ----
@@ -54,7 +68,20 @@ raft-state
 3: StateFollower (Voter) Term:1 Lead:1
 4: StateFollower (Non-Voter) Term:1 Lead:1
 
-# ForgetLeader also works on learners.
+# ForgetLeader also works on learners, but only if they are not supporting the
+# leader's store liveness epoch.
+forget-leader 4
+----
+INFO 4 [term 1] ignored MsgForgetLeader from 0 due to leader fortification
+
+withdraw-support 4 1
+----
+  1 2 3 4
+1 1 1 1 1
+2 x 1 1 1
+3 1 1 1 1
+4 x 1 1 1
+
 forget-leader 4
 ----
 INFO 4 forgetting leader 1 at term 1
@@ -168,6 +195,14 @@ ok
 tick-heartbeat 2
 ----
 ok
+
+withdraw-support 2 3
+----
+  1 2 3 4
+1 1 1 1 1
+2 x 1 x 1
+3 1 1 1 1
+4 x 1 1 1
 
 forget-leader 2
 ----

@@ -87,6 +87,19 @@ raft-state
 2: StateFollower (Voter) Term:1 Lead:1
 3: StateFollower (Voter) Term:1 Lead:1
 
+# ForgetLeader is ignored if the follower is supporting the leader's store
+# liveness epoch.
+forget-leader 2
+----
+INFO 2 [term 1] ignored MsgForgetLeader from 0 due to leader fortification
+
+withdraw-support 2 1
+----
+  1 2 3
+1 1 1 1
+2 x 1 1
+3 1 1 1
+
 # If 2 forgets the leader, then 3 can obtain prevotes and hold an election
 # despite 2 having heard from the leader recently.
 forget-leader 2
@@ -186,6 +199,13 @@ stabilize 2
   2/13 EntryNormal "prop_1"
   Messages:
   2->3 MsgAppResp Term:2 Log:0/13
+
+withdraw-support 2 3
+----
+  1 2 3
+1 1 1 1
+2 x 1 x
+3 1 1 1
 
 forget-leader 2
 ----
