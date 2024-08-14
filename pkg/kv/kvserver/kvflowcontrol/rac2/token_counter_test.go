@@ -13,15 +13,18 @@ package rac2
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
@@ -290,5 +293,269 @@ func TestTokenCounter(t *testing.T) {
 		}
 		wg.Wait()
 		assertStateReset(t)
+	})
+}
+
+type mockTokenCounter struct {
+	parent     *evalTestState
+	haveTokens bool
+	signalCh   chan struct{}
+	stream     string
+}
+
+func (tc *mockTokenCounter) handle() *mockWaitHandle {
+	return &mockWaitHandle{tc: tc}
+}
+
+func (tc *mockTokenCounter) signal() {
+	select {
+	case tc.signalCh <- struct{}{}:
+	default:
+	}
+}
+
+type mockWaitHandle struct {
+	tc *mockTokenCounter
+}
+
+var _ TokenWaitingHandle = &mockWaitHandle{}
+
+func (wh *mockWaitHandle) WaitChannel() <-chan struct{} {
+	return wh.tc.signalCh
+}
+
+func (wh *mockWaitHandle) ConfirmHaveTokensAndUnblockNextWaiter() bool {
+	wh.tc.parent.mu.Lock()
+	defer wh.tc.parent.mu.Unlock()
+
+	haveTokens := wh.tc.haveTokens
+	if haveTokens {
+		wh.tc.signal()
+	}
+	return haveTokens
+}
+
+type evalTestState struct {
+	mu struct {
+		syncutil.Mutex
+		counters map[string]*mockTokenCounter
+		evals    map[string]*testEval
+	}
+}
+
+type testEval struct {
+	state     WaitEndState
+	handles   []tokenWaitingHandleInfo
+	quorum    int
+	cancel    context.CancelFunc
+	refreshCh chan struct{}
+}
+
+func newTestState() *evalTestState {
+	ts := &evalTestState{}
+	ts.mu.counters = make(map[string]*mockTokenCounter)
+	ts.mu.evals = make(map[string]*testEval)
+	return ts
+}
+
+func (ts *evalTestState) getOrCreateTC(stream string) *mockTokenCounter {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	tc, exists := ts.mu.counters[stream]
+	if !exists {
+		tc = &mockTokenCounter{
+			parent:     ts,
+			signalCh:   make(chan struct{}, 1),
+			haveTokens: false,
+			stream:     stream,
+		}
+		ts.mu.counters[stream] = tc
+	}
+	return tc
+}
+
+func (ts *evalTestState) startWaitForEval(
+	name string, handles []tokenWaitingHandleInfo, quorum int,
+) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	refreshCh := make(chan struct{})
+	ts.mu.evals[name] = &testEval{
+		state:     -1,
+		handles:   handles,
+		quorum:    quorum,
+		cancel:    cancel,
+		refreshCh: refreshCh,
+	}
+
+	go func() {
+		state, _ := WaitForEval(ctx, refreshCh, handles, quorum, nil)
+		ts.mu.Lock()
+		defer ts.mu.Unlock()
+
+		ts.mu.evals[name].state = state
+	}()
+}
+
+func (ts *evalTestState) setCounterTokens(stream string, positive bool) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	tc, exists := ts.mu.counters[stream]
+	if !exists {
+		panic(fmt.Sprintf("no token counter found for stream: %s", stream))
+	}
+	wasNegative := !tc.haveTokens
+	tc.haveTokens = positive
+	if wasNegative && positive {
+		tc.signal()
+	}
+}
+
+func (ts *evalTestState) tokenCountsString() string {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	var streams []string
+	for stream := range ts.mu.counters {
+		streams = append(streams, stream)
+	}
+	sort.Strings(streams)
+
+	var b strings.Builder
+	for _, stream := range streams {
+		tc := ts.mu.counters[stream]
+		posString := "non-positive"
+		if tc.haveTokens {
+			posString = "positive"
+		}
+		b.WriteString(fmt.Sprintf("%s: %s\n", stream, posString))
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func (ts *evalTestState) evalStatesString() string {
+	// Introduce a sleep here to ensure that any evaluation which complete update
+	// state before we lock the mutex.
+	time.Sleep(100 * time.Millisecond)
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	var states []string
+	for name, op := range ts.mu.evals {
+		switch op.state {
+		case -1:
+			states = append(states, fmt.Sprintf("%s: waiting", name))
+		default:
+			states = append(states, fmt.Sprintf("%s: %s", name, op.state))
+		}
+	}
+	sort.Strings(states)
+	return strings.Join(states, "\n")
+}
+
+// TestWaitForEval is a datadriven test that exercises the WaitForEval function.
+//
+//   - wait_for_eval <name> <quorum> [handle: <stream> required=<true|false>]
+//     name: the name of the WaitForEval operation.
+//     quorum: the number of handles that must be unblocked for the operation to
+//     succeed.
+//     stream: the stream name.
+//     required: whether the handle is required for the operation to succeed.
+//
+//   - set_tokens <stream> <positive>
+//     stream: the stream name.
+//     positive: whether the stream should have positive tokens.
+//
+//   - check_state
+//     Prints the current state of all WaitForEval operations.
+//
+//   - cancel <name>
+//     name: the name of the WaitForEval operation to cancel.
+//
+//   - refresh <name>
+//     name: the name of the WaitForEval operation to refresh.
+func TestWaitForEval(t *testing.T) {
+	ts := newTestState()
+	datadriven.RunTest(t, "testdata/wait_for_eval", func(t *testing.T, d *datadriven.TestData) string {
+		switch d.Cmd {
+		case "wait_for_eval":
+			var name string
+			var quorum int
+			var handles []tokenWaitingHandleInfo
+
+			d.ScanArgs(t, "name", &name)
+			d.ScanArgs(t, "quorum", &quorum)
+			for _, line := range strings.Split(d.Input, "\n") {
+				require.True(t, strings.HasPrefix(line, "handle:"))
+				line = strings.TrimPrefix(line, "handle:")
+				line = strings.TrimSpace(line)
+				parts := strings.Split(line, " ")
+				require.Len(t, parts, 2)
+
+				parts[0] = strings.TrimSpace(parts[0])
+				require.True(t, strings.HasPrefix(parts[0], "stream="))
+				parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "stream=")
+				stream := parts[0]
+
+				parts[1] = strings.TrimSpace(parts[1])
+				require.True(t, strings.HasPrefix(parts[1], "required="))
+				parts[1] = strings.TrimPrefix(strings.TrimSpace(parts[1]), "required=")
+				required := parts[1] == "true"
+
+				handleInfo := tokenWaitingHandleInfo{
+					handle:       ts.getOrCreateTC(stream).handle(),
+					requiredWait: required,
+				}
+				handles = append(handles, handleInfo)
+			}
+
+			ts.startWaitForEval(name, handles, quorum)
+			return ts.evalStatesString()
+
+		case "set_tokens":
+			for _, arg := range d.CmdArgs {
+				require.Equal(t, 1, len(arg.Vals))
+				ts.setCounterTokens(arg.Key, arg.Vals[0] == "positive")
+			}
+			return ts.tokenCountsString()
+
+		case "check_state":
+			return ts.evalStatesString()
+
+		case "cancel":
+			var name string
+			d.ScanArgs(t, "name", &name)
+			func() {
+				ts.mu.Lock()
+				defer ts.mu.Unlock()
+				if op, exists := ts.mu.evals[name]; exists {
+					op.cancel()
+				} else {
+					panic(fmt.Sprintf("no WaitForEval operation with name: %s", name))
+				}
+			}()
+			return ts.evalStatesString()
+
+		case "refresh":
+			var name string
+			d.ScanArgs(t, "name", &name)
+			func() {
+				ts.mu.Lock()
+				defer ts.mu.Unlock()
+				if op, exists := ts.mu.evals[name]; exists {
+					op.refreshCh <- struct{}{}
+				} else {
+					panic(fmt.Sprintf("no WaitForEval operation with name: %s", name))
+				}
+			}()
+			return ts.evalStatesString()
+
+		default:
+			panic(fmt.Sprintf("unknown command: %s", d.Cmd))
+		}
 	})
 }
