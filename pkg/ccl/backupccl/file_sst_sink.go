@@ -84,6 +84,7 @@ func (s *fileSSTSink) Close() error {
 	if s.out != nil {
 		return s.out.Close()
 	}
+	s.sst.Close()
 	return nil
 }
 
