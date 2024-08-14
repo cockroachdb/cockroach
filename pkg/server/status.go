@@ -2495,6 +2495,7 @@ func (s *systemStatusServer) rangesHelper(
 				NoLease:                metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
 				QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
 				RaftLogTooLarge:        metrics.RaftLogTooLarge,
+				RangeTooLarge:          metrics.RangeTooLarge,
 				CircuitBreakerError:    len(state.CircuitBreakerError) > 0,
 				PausedFollowers:        metrics.PausedFollowerCount > 0,
 			},
