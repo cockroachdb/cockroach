@@ -100,6 +100,7 @@ import (
 // | VARCHAR(N)        | STRING         | T_varchar     | 0         | N     |
 // | CHAR              | STRING         | T_bpchar      | 0         | 1     |
 // | CHAR(N)           | STRING         | T_bpchar      | 0         | N     |
+// | BPCHAR            | STRING         | T_bpchar      | 0         | 0     |
 // | "char"            | STRING         | T_char        | 0         | 0     |
 // | NAME              | STRING         | T_name        | 0         | 0     |
 // |                   |                |               |           |       |
@@ -1570,6 +1571,9 @@ func (t *T) Name() string {
 		case oid.T_text:
 			return "string"
 		case oid.T_bpchar:
+			if t.Width() == 0 {
+				return "bpchar"
+			}
 			return "char"
 		case oid.T_char:
 			// Yes, that's the name. The ways of PostgreSQL are inscrutable.
@@ -2834,6 +2838,9 @@ func (t *T) stringTypeSQL() string {
 	case oid.T_varchar:
 		typName = "VARCHAR"
 	case oid.T_bpchar:
+		if t.Width() == 0 {
+			return "BPCHAR"
+		}
 		typName = "CHAR"
 	case oid.T_char:
 		// Yes, that's the name. The ways of PostgreSQL are inscrutable.

@@ -252,7 +252,7 @@ func (b *Builder) buildScalar(
 		for i := range t.Whens {
 			condExpr := t.Whens[i].Cond.(tree.TypedExpr)
 			cond := b.buildScalar(condExpr, inScope, nil, nil, colRefs)
-			valExpr, ok := eval.ReType(t.Whens[i].Val.(tree.TypedExpr), valType)
+			valExpr, ok := eval.ReType(t.Whens[i].Val.(tree.TypedExpr), valType.WithoutTypeModifiers())
 			if !ok {
 				panic(pgerror.Newf(
 					pgcode.DatatypeMismatch,
@@ -266,7 +266,7 @@ func (b *Builder) buildScalar(
 		// Add the ELSE expression to the end of whens as a raw scalar expression.
 		var orElse opt.ScalarExpr
 		if t.Else != nil {
-			elseExpr, ok := eval.ReType(t.Else.(tree.TypedExpr), valType)
+			elseExpr, ok := eval.ReType(t.Else.(tree.TypedExpr), valType.WithoutTypeModifiers())
 			if !ok {
 				panic(pgerror.Newf(
 					pgcode.DatatypeMismatch,
@@ -292,7 +292,7 @@ func (b *Builder) buildScalar(
 			// The type of the CoalesceExpr might be different than the inputs (e.g.
 			// when they are NULL). Force all inputs to be the same type, so that we
 			// build coalesce operator with the correct type.
-			expr, ok := eval.ReType(t.TypedExprAt(i), typ)
+			expr, ok := eval.ReType(t.TypedExprAt(i), typ.WithoutTypeModifiers())
 			if !ok {
 				panic(pgerror.Newf(
 					pgcode.DatatypeMismatch,
@@ -342,7 +342,7 @@ func (b *Builder) buildScalar(
 		ifTrueExpr := reType(t.True.(tree.TypedExpr), valType)
 		ifTrue := b.buildScalar(ifTrueExpr, inScope, nil, nil, colRefs)
 		whens := memo.ScalarListExpr{b.factory.ConstructWhen(memo.TrueSingleton, ifTrue)}
-		orElseExpr, ok := eval.ReType(t.Else.(tree.TypedExpr), valType)
+		orElseExpr, ok := eval.ReType(t.Else.(tree.TypedExpr), valType.WithoutTypeModifiers())
 		if !ok {
 			panic(pgerror.Newf(
 				pgcode.DatatypeMismatch,

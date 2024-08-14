@@ -168,6 +168,11 @@ func TestSchemaChangeComparator_bit(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/bit"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_bpchar(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/bpchar"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_builtin_function(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/builtin_function"
@@ -186,6 +191,11 @@ func TestSchemaChangeComparator_bytes(t *testing.T) {
 func TestSchemaChangeComparator_cascade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/cascade"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
+func TestSchemaChangeComparator_case(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/case"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_case_sensitive_names(t *testing.T) {
