@@ -995,7 +995,12 @@ func (r *raft) hup(t CampaignType) {
 		r.logger.Debugf("%x ignoring MsgHup because already leader", r.id)
 		return
 	}
-
+	// TODO(arul): we will eventually want some kind of logic like this.
+	//
+	//if r.supportingFortifiedLeader() && t != campaignTransfer {
+	//	r.logger.Debugf("%x ignoring MsgHup due to leader fortification", r.id)
+	//	return
+	//}
 	if !r.promotable() {
 		r.logger.Warningf("%x is unpromotable and can not campaign", r.id)
 		return
@@ -1007,6 +1012,21 @@ func (r *raft) hup(t CampaignType) {
 
 	r.logger.Infof("%x is starting a new election at term %d", r.id, r.Term)
 	r.campaign(t)
+}
+
+// supportingFortifiedLeader returns whether the peer is providing fortification
+// support to a leader. When a peer is providing support to a leader, it must
+// not campaign or vote to disrupt that leader's term, unless specifically asked
+// to do so by the leader.
+// TODO(arul): this is a placeholder implementation. Move it around as you see
+// fit.
+func (r *raft) supportingFortifiedLeader() bool {
+	if r.leadEpoch == 0 {
+		return false // not supporting any leader
+	}
+	assertTrue(r.lead != None, "leader epoch is set but leader is not")
+	epoch, ok := r.storeLiveness.SupportFor(r.lead)
+	return ok && epoch == r.leadEpoch
 }
 
 // errBreak is a sentinel error used to break a callback-based loop.
@@ -1727,13 +1747,30 @@ func stepFollower(r *raft, m pb.Message) error {
 		m.To = r.lead
 		r.send(m)
 	case pb.MsgForgetLeader:
+		// TODO(nvanbenschoten): remove MsgForgetLeader once the sole caller in
+		// Replica.maybeForgetLeaderOnVoteRequestLocked is removed. This will
+		// accompany the removal of epoch-based leases.
 		if r.lead == None {
 			r.logger.Infof("%x no leader at term %d; dropping forget leader msg", r.id, r.Term)
+			return nil
+		}
+		if r.supportingFortifiedLeader() && r.lead != m.From {
+			r.logger.Infof("%x [term %d] ignored MsgForgetLeader from %x due to leader fortification", r.id, r.Term, m.From)
 			return nil
 		}
 		r.logger.Infof("%x forgetting leader %x at term %d", r.id, r.lead, r.Term)
 		r.lead = None
 	case pb.MsgTimeoutNow:
+		// TODO(nvanbenschoten): we will eventually want some kind of logic like
+		// this. However, even this may not be enough, because we're calling a
+		// campaignTransfer election, which bypasses leader fortification checks. It
+		// may never be safe for MsgTimeoutNow to come from anyone but the leader.
+		// We need to think about this more.
+		//
+		//if r.supportingFortifiedLeader() && r.lead != m.From {
+		//	r.logger.Infof("%x [term %d] ignored MsgTimeoutNow from %x due to leader fortification", r.id, r.Term, m.From)
+		//	return nil
+		//}
 		r.logger.Infof("%x [term %d] received MsgTimeoutNow from %x and starts an election to get leadership", r.id, r.Term, m.From)
 		// Leadership transfers never use pre-vote even if r.preVote is true; we
 		// know we are not recovering from a partition so there is no need for the
