@@ -468,7 +468,7 @@ NaN        NaN        NaN        NaN        NaN
 # TODO(#115679): There are a few differences vs postgres in the number of
 # decimal places and negative zeros.
 query RRRRR
-WITH v(id, x) AS (VALUES (1, '0'::numeric), (2, '1'::numeric), (3, '-1'::numeric), 
+WITH v(id, x) AS (VALUES (1, '0'::numeric), (2, '1'::numeric), (3, '-1'::numeric),
   (4, '4.2'::numeric), (5, 'inf'::numeric), (6, '-inf'::numeric), (7, 'nan'::numeric)
 )
 SELECT x1, x2,
