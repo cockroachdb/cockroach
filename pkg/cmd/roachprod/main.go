@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/user"
 	"path"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -1713,6 +1714,11 @@ var updateCmd = &cobra.Command{
 		" Swaps the current binary with it. The current roachprod binary will be backed up" +
 		" and can be restored via `roachprod update --revert`.",
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		// We only have prebuilt binaries for Linux. See #120750.
+		if runtime.GOOS != "linux" {
+			return errors.New("this command is only available on Linux at this time")
+		}
+
 		currentBinary, err := os.Executable()
 		if err != nil {
 			return err
