@@ -194,6 +194,11 @@ func (og *operationGenerator) randOp(
 			}
 		} else {
 			op = opType(og.params.ops.Int())
+			if _, ok := opDeclarativeVersion[op]; ok {
+				// If we're not using the declarative schema changer, then only
+				// generate operations that are not supported in declarative.
+				continue
+			}
 		}
 		if numOpsInTxn != 1 {
 			// DML and legacy PK changes are only allowed in single-statement transactions.
