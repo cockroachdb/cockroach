@@ -349,6 +349,12 @@ func (p *ScheduledProcessor) Register(
 		// once they observe the first checkpoint event.
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
+		if bs, ok := stream.(BufferedStream); ok {
+			bs.RegisterRangefeedCleanUp(func() {
+				log.Fatalf(context.Background(), "unimplemented: see #126560")
+			})
+		}
+
 		// Run an output loop for the registry.
 		runOutputLoop := func(ctx context.Context) {
 			r.runOutputLoop(ctx, p.RangeID)

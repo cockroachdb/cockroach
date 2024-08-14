@@ -35,6 +35,11 @@ type BufferedStream interface {
 	Stream
 	// SendBuffered buffers the event before sending it to the underlying Stream.
 	SendBuffered(*kvpb.RangeFeedEvent, *SharedBudgetAllocation) error
+	// RegisterRangefeedCleanUp is used to register a cleanup callback that will
+	// be invoked after Disconnect is called. It is up to the implementation on
+	// when or whether the callback is invoked. The caller should coordinate with
+	// the implementation.
+	RegisterRangefeedCleanUp(func())
 }
 
 // PerRangeEventSink is an implementation of Stream which annotates each
@@ -114,4 +119,15 @@ func (s *BufferedPerRangeEventSink) SendBuffered(
 		StreamID:       s.streamID,
 	}
 	return s.wrapped.SendBuffered(response, alloc)
+}
+
+// RegisterRangefeedCleanUp registers a cleanup callback to be called in a
+// background async job when the stream is disconnected. Note that the callback will
+// not be invoked immediately during DisconnectStreamWithError and may not be
+// called if the StreamMuxer.Stop has been called. It is up to the caller to
+// ensure that this is not called after StreamMuxer.Stop. For p.Register, it is
+// currently done by waiting for runRequest to complete for each
+// stores.RangeFeed call.
+func (s *BufferedPerRangeEventSink) RegisterRangefeedCleanUp(f func()) {
+	s.wrapped.RegisterRangefeedCleanUp(s.streamID, f)
 }
