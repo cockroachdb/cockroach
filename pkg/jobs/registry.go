@@ -1584,7 +1584,7 @@ func (r *Registry) stepThroughStateMachine(
 			log.Errorf(ctx, "%s job %d: stepping through state %s with unexpected error: %+v", jobType, job.ID(), status, jobErr)
 		}
 	} else {
-		if jobType == jobspb.TypeAutoCreateStats {
+		if jobType == jobspb.TypeAutoCreateStats || jobType == jobspb.TypeAutoCreatePartialStats {
 			log.VInfof(ctx, 1, "%s job %d: stepping through state %s", jobType, job.ID(), status)
 		} else {
 			log.Infof(ctx, "%s job %d: stepping through state %s", jobType, job.ID(), status)

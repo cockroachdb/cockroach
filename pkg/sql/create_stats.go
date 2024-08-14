@@ -136,14 +136,14 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 		return err
 	}
 
-	if n.Name != jobspb.AutoStatsName {
+	if n.Name != jobspb.AutoStatsName && n.Name != jobspb.AutoPartialStatsName {
 		telemetry.Inc(sqltelemetry.CreateStatisticsUseCounter)
 	}
 
 	var job *jobs.StartableJob
 	jobID := n.p.ExecCfg().JobRegistry.MakeJobID()
 	if err := n.p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		if n.Name == jobspb.AutoStatsName {
+		if n.Name == jobspb.AutoStatsName || n.Name == jobspb.AutoPartialStatsName {
 			// Don't start the job if there is already a CREATE STATISTICS job running.
 			// (To handle race conditions we check this again after the job starts,
 			// but this check is used to prevent creating a large number of jobs that
@@ -219,7 +219,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		)
 	}
 
-	if n.Options.UsingExtremes && !n.p.SessionData().EnableCreateStatsUsingExtremes {
+	if n.Options.UsingExtremes && !n.p.SessionData().EnableCreateStatsUsingExtremes && n.Name.String() != jobspb.AutoPartialStatsName {
 		return nil, errors.Errorf(`creating partial statistics at extremes is disabled`)
 	}
 
@@ -686,7 +686,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 	// associated txn.
 	jobsPlanner := execCtx.(JobExecContext)
 	details := r.job.Details().(jobspb.CreateStatsDetails)
-	if details.Name == jobspb.AutoStatsName {
+	if details.Name == jobspb.AutoStatsName || details.Name == jobspb.AutoPartialStatsName {
 		// We want to make sure that an automatic CREATE STATISTICS job only runs if
 		// there are no other CREATE STATISTICS jobs running, automatic or manual.
 		if err := checkRunningJobs(ctx, r.job, jobsPlanner); err != nil {
@@ -725,7 +725,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 		// metadata, so we can use a nil rowContainerHelper.
 		resultWriter := NewRowResultWriter(nil /* rowContainer */)
 
-		var err error
+		var retErr error
 		if details.UsingExtremes {
 			for i, colStat := range details.ColumnStats {
 				// Plan and run partial stats on multiple columns separately since each
@@ -734,25 +734,25 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 				singleColDetails := protoutil.Clone(&details).(*jobspb.CreateStatsDetails)
 				singleColDetails.ColumnStats = []jobspb.CreateStatsDetails_ColStat{colStat}
 				planCtx := dsp.NewPlanningCtx(ctx, innerEvalCtx, innerP, txn.KV(), FullDistribution)
-				if err = dsp.planAndRunCreateStats(
+				if err := dsp.planAndRunCreateStats(
 					ctx, innerEvalCtx, planCtx, innerP.SemaCtx(), txn.KV(), resultWriter, r.job.ID(), *singleColDetails,
 					len(details.ColumnStats), i,
 				); err != nil {
-					break
+					retErr = errors.CombineErrors(retErr, err)
 				}
 			}
 		} else {
 			planCtx := dsp.NewPlanningCtx(ctx, innerEvalCtx, innerP, txn.KV(), FullDistribution)
-			err = dsp.planAndRunCreateStats(
+			retErr = dsp.planAndRunCreateStats(
 				ctx, innerEvalCtx, planCtx, innerP.SemaCtx(), txn.KV(), resultWriter, r.job.ID(), details,
 				1 /* numIndexes */, 0, /* curIndex */
 			)
 		}
 
-		if err != nil {
+		if retErr != nil {
 			// Check if this was a context canceled error and restart if it was.
-			if grpcutil.IsContextCanceled(err) {
-				return jobs.MarkAsRetryJobError(err)
+			if grpcutil.IsContextCanceled(retErr) {
+				return jobs.MarkAsRetryJobError(retErr)
 			}
 
 			// If the job was canceled, any of the distsql processors could have been
@@ -771,7 +771,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 			); jobErr != nil {
 				return jobErr
 			}
-			return err
+			return retErr
 		}
 
 		return nil
@@ -830,11 +830,11 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 	})
 }
 
-// checkRunningJobsInTxn checks whether there are any other CreateStats jobs in
-// the pending, running, or paused status that started earlier than this one. If
-// there are, checkRunningJobsInTxn returns an error. If jobID is
-// jobspb.InvalidJobID, checkRunningJobsInTxn just checks if there are any pending,
-// running, or paused CreateStats jobs.
+// checkRunningJobsInTxn checks whether there are any other CreateStats jobs
+// (excluding auto partial stats jobs) in the pending, running, or paused status
+// that started earlier than this one. If there are, checkRunningJobsInTxn
+// returns an error. If jobID is jobspb.InvalidJobID, checkRunningJobsInTxn just
+// checks if there are any pending, running, or paused CreateStats jobs.
 func checkRunningJobsInTxn(ctx context.Context, jobID jobspb.JobID, txn isql.Txn) error {
 	exists, err := jobs.RunningJobExists(ctx, jobID, txn,
 		jobspb.TypeCreateStats, jobspb.TypeAutoCreateStats,
@@ -862,4 +862,5 @@ func init() {
 	}
 	jobs.RegisterConstructor(jobspb.TypeCreateStats, createResumerFn, jobs.UsesTenantCostControl)
 	jobs.RegisterConstructor(jobspb.TypeAutoCreateStats, createResumerFn, jobs.UsesTenantCostControl)
+	jobs.RegisterConstructor(jobspb.TypeAutoCreatePartialStats, createResumerFn, jobs.UsesTenantCostControl)
 }
