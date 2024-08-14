@@ -74,10 +74,10 @@ type ServerIterator interface {
 	getID() serverID
 	// getServerIDAddress returns a gRPC address for the given node
 	// or SQL instance.
-	getServerIDAddress(context.Context, serverID) (*util.UnresolvedAddr, error)
+	getServerIDAddress(context.Context, serverID) (*util.UnresolvedAddr, roachpb.Locality, error)
 	// getServerIDSQLAddress returns a SQL address for the given node
 	// or SQL instance.
-	getServerIDSQLAddress(context.Context, serverID) (*util.UnresolvedAddr, error)
+	getServerIDSQLAddress(context.Context, serverID) (*util.UnresolvedAddr, roachpb.Locality, error)
 }
 
 type tenantFanoutClient struct {
@@ -107,30 +107,30 @@ var _ ServerIterator = &tenantFanoutClient{}
 
 func (t *tenantFanoutClient) getServerIDAddress(
 	ctx context.Context, serverID serverID,
-) (*util.UnresolvedAddr, error) {
+) (*util.UnresolvedAddr, roachpb.Locality, error) {
 	id := base.SQLInstanceID(serverID)
 	instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, roachpb.Locality{}, err
 	}
 	return &util.UnresolvedAddr{
 		NetworkField: "tcp",
 		AddressField: instance.InstanceRPCAddr,
-	}, nil
+	}, instance.Locality, nil
 }
 
 func (t *tenantFanoutClient) getServerIDSQLAddress(
 	ctx context.Context, serverID serverID,
-) (*util.UnresolvedAddr, error) {
+) (*util.UnresolvedAddr, roachpb.Locality, error) {
 	id := base.SQLInstanceID(serverID)
 	instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, roachpb.Locality{}, err
 	}
 	return &util.UnresolvedAddr{
 		NetworkField: "tcp",
 		AddressField: instance.InstanceSQLAddr,
-	}, nil
+	}, instance.Locality, nil
 }
 
 func (t *tenantFanoutClient) getID() serverID {
@@ -145,7 +145,7 @@ func (t *tenantFanoutClient) dialNode(
 	if err != nil {
 		return nil, err
 	}
-	return t.rpcCtx.GRPCDialPod(instance.InstanceRPCAddr, id, rpc.DefaultClass).Connect(ctx)
+	return t.rpcCtx.GRPCDialPod(instance.InstanceRPCAddr, id, instance.Locality, rpc.DefaultClass).Connect(ctx)
 }
 
 func (t *tenantFanoutClient) getAllNodes(
@@ -206,13 +206,13 @@ var _ ServerIterator = &kvFanoutClient{}
 
 func (k kvFanoutClient) getServerIDAddress(
 	_ context.Context, id serverID,
-) (*util.UnresolvedAddr, error) {
+) (*util.UnresolvedAddr, roachpb.Locality, error) {
 	return k.gossip.GetNodeIDAddress(roachpb.NodeID(id))
 }
 
 func (k kvFanoutClient) getServerIDSQLAddress(
 	_ context.Context, id serverID,
-) (*util.UnresolvedAddr, error) {
+) (*util.UnresolvedAddr, roachpb.Locality, error) {
 	return k.gossip.GetNodeIDSQLAddress(roachpb.NodeID(id))
 }
 
@@ -222,11 +222,11 @@ func (k kvFanoutClient) getID() serverID {
 
 func (k kvFanoutClient) dialNode(ctx context.Context, serverID serverID) (*grpc.ClientConn, error) {
 	id := roachpb.NodeID(serverID)
-	addr, err := k.gossip.GetNodeIDAddress(id)
+	addr, locality, err := k.gossip.GetNodeIDAddress(id)
 	if err != nil {
 		return nil, err
 	}
-	return k.rpcCtx.GRPCDialNode(addr.String(), id, rpc.DefaultClass).Connect(ctx)
+	return k.rpcCtx.GRPCDialNode(addr.String(), id, locality, rpc.DefaultClass).Connect(ctx)
 }
 
 func (k kvFanoutClient) listNodes(ctx context.Context) (*serverpb.NodesResponse, error) {

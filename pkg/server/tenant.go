@@ -342,8 +342,8 @@ func newTenantServer(
 	parseNodeIDFn := func(s string) (roachpb.NodeID, bool, error) {
 		return roachpb.NodeID(0), false, errors.New("tenants cannot proxy to KV Nodes")
 	}
-	getNodeIDHTTPAddressFn := func(id roachpb.NodeID) (*util.UnresolvedAddr, error) {
-		return nil, errors.New("tenants cannot proxy to KV Nodes")
+	getNodeIDHTTPAddressFn := func(id roachpb.NodeID) (*util.UnresolvedAddr, roachpb.Locality, error) {
+		return nil, roachpb.Locality{}, errors.New("tenants cannot proxy to KV Nodes")
 	}
 	sHTTP := newHTTPServer(baseCfg, args.rpcContext, parseNodeIDFn, getNodeIDHTTPAddressFn)
 
@@ -1135,6 +1135,7 @@ func makeTenantSQLServerArgs(
 	// This tenant's SQL server only serves SQL connections and SQL-to-SQL
 	// RPCs; so it should refuse to serve SQL-to-KV RPCs completely.
 	rpcCtxOpts.TenantRPCAuthorizer = tenantcapabilitiesauthorizer.NewAllowNothingAuthorizer()
+	rpcCtxOpts.Locality = baseCfg.Locality
 
 	rpcContext := rpc.NewContext(startupCtx, rpcCtxOpts)
 

@@ -11,9 +11,13 @@
 package rpc
 
 import (
+	"strings"
+
 	"github.com/VividCortex/ewma"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 var (
@@ -108,11 +112,68 @@ is reset to zero.
 `,
 		Measurement: "Latency",
 	}
+	metaConnectionConnected = metric.Metadata{
+		Name: "rpc.connection.connected",
+		Help: `Counter of TCP level connected connections.
+
+This metric is the number of gRPC connections from the TCP level. Unlike rpc.connection.healthy
+this metric does not take into account whether the application has been able to heartbeat
+over this connection.
+`,
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaNetworkBytesEgress = metric.Metadata{
+		Name:        "rpc.client.bytes.egress",
+		Unit:        metric.Unit_BYTES,
+		Help:        `Counter of TCP bytes sent via gRPC on connections we initiated.`,
+		Measurement: "Bytes",
+	}
+	metaNetworkBytesIngress = metric.Metadata{
+		Name:        "rpc.client.bytes.ingress",
+		Unit:        metric.Unit_BYTES,
+		Help:        `Counter of TCP bytes received via gRPC on connections we initiated.`,
+		Measurement: "Bytes",
+	}
 )
 
-func makeMetrics() Metrics {
+func (m *Metrics) makeLabels(k peerKey, remoteLocality roachpb.Locality) []string {
+	localLen := len(m.locality.Tiers)
+
+	// length is the shorter of the two, however we always need to fill localLen "slots"
+	length := localLen
+	if len(remoteLocality.Tiers) < length {
+		length = len(remoteLocality.Tiers)
+	}
+
+	childLabels := []string{}
+	matching := true
+	for i := 0; i < length; i++ {
+		if matching {
+			childLabels = append(childLabels, remoteLocality.Tiers[i].Value)
+			if m.locality.Tiers[i].Value != remoteLocality.Tiers[i].Value {
+				matching = false
+			}
+		} else {
+			// Once we have a difference in locality, pad with empty strings.
+			childLabels = append(childLabels, "")
+		}
+	}
+	// Pad with empty strings if the remote locality is shorter than ours.
+	for i := length; i < localLen; i++ {
+		childLabels = append(childLabels, "")
+	}
+	return childLabels
+}
+
+func newMetrics(locality roachpb.Locality) *Metrics {
 	childLabels := []string{"remote_node_id", "remote_addr", "class"}
-	return Metrics{
+	localityLabels := []string{}
+	for _, tier := range locality.Tiers {
+		localityLabels = append(localityLabels, tier.Key)
+	}
+	m := Metrics{
+		locality:                      locality,
 		ConnectionHealthy:             aggmetric.NewGauge(metaConnectionHealthy, childLabels...),
 		ConnectionUnhealthy:           aggmetric.NewGauge(metaConnectionUnhealthy, childLabels...),
 		ConnectionInactive:            aggmetric.NewGauge(metaConnectionInactive, childLabels...),
@@ -120,13 +181,43 @@ func makeMetrics() Metrics {
 		ConnectionUnhealthyFor:        aggmetric.NewGauge(metaConnectionUnhealthyNanos, childLabels...),
 		ConnectionHeartbeats:          aggmetric.NewCounter(metaConnectionHeartbeats, childLabels...),
 		ConnectionFailures:            aggmetric.NewCounter(metaConnectionFailures, childLabels...),
+		ConnectionConnected:           aggmetric.NewGauge(metaConnectionConnected, localityLabels...),
+		ConnectionBytesSent:           aggmetric.NewCounter(metaNetworkBytesEgress, localityLabels...),
+		ConnectionBytesRecv:           aggmetric.NewCounter(metaNetworkBytesIngress, localityLabels...),
 		ConnectionAvgRoundTripLatency: aggmetric.NewGauge(metaConnectionAvgRoundTripLatency, childLabels...),
 	}
+	m.mu.peerMetrics = make(map[string]peerMetrics)
+	m.mu.localityMetrics = make(map[string]localityMetrics)
+	return &m
+}
+
+type ThreadSafeMovingAverage struct {
+	syncutil.Mutex
+	ma ewma.MovingAverage
+}
+
+func (t *ThreadSafeMovingAverage) Set(v float64) {
+	t.Lock()
+	defer t.Unlock()
+	t.ma.Set(v)
+}
+
+func (t *ThreadSafeMovingAverage) Add(v float64) {
+	t.Lock()
+	defer t.Unlock()
+	t.ma.Add(v)
+}
+
+func (t *ThreadSafeMovingAverage) Value() float64 {
+	t.Lock()
+	defer t.Unlock()
+	return t.ma.Value()
 }
 
 // Metrics is a metrics struct for Context metrics.
 // Field X is documented in metaX.
 type Metrics struct {
+	locality                      roachpb.Locality
 	ConnectionHealthy             *aggmetric.AggGauge
 	ConnectionUnhealthy           *aggmetric.AggGauge
 	ConnectionInactive            *aggmetric.AggGauge
@@ -134,7 +225,17 @@ type Metrics struct {
 	ConnectionUnhealthyFor        *aggmetric.AggGauge
 	ConnectionHeartbeats          *aggmetric.AggCounter
 	ConnectionFailures            *aggmetric.AggCounter
+	ConnectionConnected           *aggmetric.AggGauge
+	ConnectionBytesSent           *aggmetric.AggCounter
+	ConnectionBytesRecv           *aggmetric.AggCounter
 	ConnectionAvgRoundTripLatency *aggmetric.AggGauge
+	mu                            struct {
+		syncutil.Mutex
+		// peerMetrics is a map of peerKey to peerMetrics.
+		peerMetrics map[string]peerMetrics
+		// localityMetrics is a map of localityKey to localityMetrics.
+		localityMetrics map[string]localityMetrics
+	}
 }
 
 // peerMetrics are metrics that are kept on a per-peer basis.
@@ -150,8 +251,14 @@ type peerMetrics struct {
 	//
 	// See TestMetricsRelease.
 
-	// 1 on first heartbeat success (via reportHealthy), reset after
-	// runHeartbeatUntilFailure returns.
+	// The invariant is that sum(ConnectionHealthy, ConnectionUnhealthy,
+	// ConnectionInactive) == 1 for any connection that run() has been called
+	// on. A connection begins in an unhealthy state prior to connection
+	// attempt, it then transitions to healthy if the connection succeeds and
+	// stays there until it disconnects and then transitions to either unhealthy
+	// or inactive depending on whether it is going to attempt to reconnect. Any
+	// increment to one of these counter always has to decrement another one to
+	// keep this invariant.
 	ConnectionHealthy *aggmetric.Gauge
 	// Reset on first successful heartbeat (via reportHealthy), 1 after
 	// runHeartbeatUntilFailure returns.
@@ -173,7 +280,7 @@ type peerMetrics struct {
 	// roundTripLatency is the source for the AvgRoundTripLatency gauge. We don't
 	// want to maintain a full histogram per peer, so instead on each heartbeat we
 	// update roundTripLatency and flush the result into AvgRoundTripLatency.
-	roundTripLatency ewma.MovingAverage // *not* thread safe
+	roundTripLatency ewma.MovingAverage
 
 	// Counters.
 
@@ -183,45 +290,48 @@ type peerMetrics struct {
 	ConnectionFailures *aggmetric.Counter
 }
 
-func (m *Metrics) acquire(k peerKey) peerMetrics {
-	labelVals := []string{k.NodeID.String(), k.TargetAddr, k.Class.String()}
-	return peerMetrics{
-		ConnectionHealthy:      m.ConnectionHealthy.AddChild(labelVals...),
-		ConnectionUnhealthy:    m.ConnectionUnhealthy.AddChild(labelVals...),
-		ConnectionInactive:     m.ConnectionInactive.AddChild(labelVals...),
-		ConnectionHealthyFor:   m.ConnectionHealthyFor.AddChild(labelVals...),
-		ConnectionUnhealthyFor: m.ConnectionUnhealthyFor.AddChild(labelVals...),
-		ConnectionHeartbeats:   m.ConnectionHeartbeats.AddChild(labelVals...),
-		ConnectionFailures:     m.ConnectionFailures.AddChild(labelVals...),
-		AvgRoundTripLatency:    m.ConnectionAvgRoundTripLatency.AddChild(labelVals...),
-
-		// We use a SimpleEWMA which uses the zero value to mean "uninitialized"
-		// and operates on a ~60s decay rate.
-		//
-		// Note that this is *not* thread safe.
-		roundTripLatency: &ewma.SimpleEWMA{},
-	}
+type localityMetrics struct {
+	ConnectionConnected *aggmetric.Gauge
+	ConnectionBytesSent *aggmetric.Counter
+	ConnectionBytesRecv *aggmetric.Counter
 }
 
-func (pm *peerMetrics) release() {
-	// All the gauges should be zero now, or the aggregate will be off forever.
-	// Note that this isn't true for counters, as the aggregate *should* track
-	// the count of all children that ever existed, even if they have been
-	// released. (Releasing a peer doesn't "undo" past heartbeats).
-	pm.ConnectionHealthy.Update(0)
-	pm.ConnectionUnhealthy.Update(0)
-	pm.ConnectionInactive.Update(0)
-	pm.ConnectionHealthyFor.Update(0)
-	pm.ConnectionUnhealthyFor.Update(0)
-	pm.AvgRoundTripLatency.Update(0)
-	pm.roundTripLatency.Set(0)
+func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityMetrics) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	labelVals := []string{k.NodeID.String(), k.TargetAddr, k.Class.String()}
+	labelKey := strings.Join(labelVals, ",")
+	pm, ok := m.mu.peerMetrics[labelKey]
+	if !ok {
+		pm = peerMetrics{
+			ConnectionHealthy:      m.ConnectionHealthy.AddChild(labelVals...),
+			ConnectionUnhealthy:    m.ConnectionUnhealthy.AddChild(labelVals...),
+			ConnectionInactive:     m.ConnectionInactive.AddChild(labelVals...),
+			ConnectionHealthyFor:   m.ConnectionHealthyFor.AddChild(labelVals...),
+			ConnectionUnhealthyFor: m.ConnectionUnhealthyFor.AddChild(labelVals...),
+			ConnectionHeartbeats:   m.ConnectionHeartbeats.AddChild(labelVals...),
+			ConnectionFailures:     m.ConnectionFailures.AddChild(labelVals...),
+			AvgRoundTripLatency:    m.ConnectionAvgRoundTripLatency.AddChild(labelVals...),
+			// We use a SimpleEWMA which uses the zero value to mean "uninitialized"
+			// and operates on a ~60s decay rate.
+			roundTripLatency: &ThreadSafeMovingAverage{ma: &ewma.SimpleEWMA{}},
+		}
+		m.mu.peerMetrics[labelKey] = pm
+	}
 
-	pm.ConnectionHealthy.Unlink()
-	pm.ConnectionUnhealthy.Unlink()
-	pm.ConnectionInactive.Unlink()
-	pm.ConnectionHealthyFor.Unlink()
-	pm.ConnectionUnhealthyFor.Unlink()
-	pm.ConnectionHeartbeats.Unlink()
-	pm.ConnectionFailures.Unlink()
-	pm.AvgRoundTripLatency.Unlink()
+	localityLabels := m.makeLabels(k, l)
+	localityKey := strings.Join(localityLabels, ",")
+	lm, ok := m.mu.localityMetrics[localityKey]
+	if !ok {
+		lm = localityMetrics{
+			ConnectionConnected: m.ConnectionConnected.AddChild(localityLabels...),
+			ConnectionBytesSent: m.ConnectionBytesSent.AddChild(localityLabels...),
+			ConnectionBytesRecv: m.ConnectionBytesRecv.AddChild(localityLabels...),
+		}
+		m.mu.localityMetrics[localityKey] = lm
+	}
+
+	// We temporarily increment the inactive count until we actually connect.
+	pm.ConnectionInactive.Inc(1)
+	return pm, lm
 }

@@ -1014,10 +1014,10 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 
 func (c *connector) dialAddr(ctx context.Context, addr string) (conn *grpc.ClientConn, err error) {
 	if c.rpcDialTimeout == 0 {
-		return c.rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
+		return c.rpcContext.GRPCUnvalidatedDial(addr, roachpb.Locality{}).Connect(ctx)
 	}
 	err = timeutil.RunWithTimeout(ctx, "dial addr", c.rpcDialTimeout, func(ctx context.Context) error {
-		conn, err = c.rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
+		conn, err = c.rpcContext.GRPCUnvalidatedDial(addr, roachpb.Locality{}).Connect(ctx)
 		return err
 	})
 	return conn, err
@@ -1062,12 +1062,12 @@ func (c *connector) Query(
 // be used as a nodedialer.AddressResolver. Addresses are resolved to a node's
 // address.
 func AddressResolver(s kvclient.NodeDescStore) nodedialer.AddressResolver {
-	return func(nodeID roachpb.NodeID) (net.Addr, error) {
+	return func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
 		nd, err := s.GetNodeDescriptor(nodeID)
 		if err != nil {
-			return nil, err
+			return nil, roachpb.Locality{}, err
 		}
-		return &nd.Address, nil
+		return &nd.Address, nd.Locality, nil
 	}
 }
 
