@@ -141,7 +141,3 @@ const TELEMETRY = logpb.Channel_TELEMETRY
 // replicas between stores in the cluster, or adding (removing) replicas to
 // ranges.
 const KV_DISTRIBUTION = logpb.Channel_KV_DISTRIBUTION
-
-// STRUCTURED_EVENTS is used to send log events with messages containing structured
-// JSON, which can be consumed externally to power o11y features.
-const STRUCTURED_EVENTS = logpb.Channel_STRUCTURED_EVENTS
