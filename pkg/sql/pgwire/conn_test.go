@@ -62,6 +62,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var nilStat = func(int64) {}
+
 // Test the conn struct: check that it marshalls the correct commands to the
 // stmtBuf.
 //
@@ -746,7 +748,7 @@ func getSessionArgs(
 			// Implement a fake pgwire connection handshake. Send the response
 			// after parsing the client-sent parameters.
 			c := &conn{conn: netConn}
-			c.msgBuilder.init(metric.NewCounter(metric.Metadata{}))
+			c.msgBuilder.init(nilStat)
 			if err := c.authOKMessage(); err != nil {
 				retErr = errors.CombineErrors(retErr, err)
 				return
