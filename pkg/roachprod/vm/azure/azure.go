@@ -495,6 +495,13 @@ func (p *Provider) DeleteCluster(l *logger.Logger, name string) error {
 		}
 	}
 
+	if len(futures) == 0 {
+		// We have seen occurrences of Azure resource groups losing the necessary tags
+		// needed for roachprod to find them. The cluster may need to be manually deleted
+		// through the Azure portal.
+		return errors.Newf("**** MANUAL INTERVENTION REQUIRED ****\nDeleteCluster: Found no azure resource groups with tag cluster: %s", name)
+	}
+
 	if !p.SyncDelete {
 		return nil
 	}
