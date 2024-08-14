@@ -836,6 +836,7 @@ func (ca *changeAggregator) flushBufferedEvents() error {
 	if err := ca.eventConsumer.Flush(ca.Ctx()); err != nil {
 		return err
 	}
+	defer ca.sliMetrics.recordFlushRequestCallback()()
 	return ca.sink.Flush(ca.Ctx())
 }
 
@@ -1875,6 +1876,8 @@ func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
 	if !shouldEmit {
 		return nil
 	}
+
+	defer cf.sliMetrics.recordFlushRequestCallback()()
 	if err := emitResolvedTimestamp(cf.Ctx(), cf.encoder, cf.sink, newResolved); err != nil {
 		return err
 	}

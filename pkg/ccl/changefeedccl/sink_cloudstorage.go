@@ -690,8 +690,6 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 		return errors.New(`cannot Flush on a closed sink`)
 	}
 
-	s.metrics.recordFlushRequestCallback()()
-
 	var err error
 	s.files.Ascend(func(i btree.Item) (wantMore bool) {
 		err = s.flushFile(ctx, i.(*cloudStorageSinkFile))
@@ -857,9 +855,7 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 			}
 
 			// flush file to storage.
-			flushDone := s.metrics.recordFlushRequestCallback()
 			err := req.file.flushToStorage(ctx, s.es, req.dest, s.metrics)
-			flushDone()
 
 			if err != nil {
 				log.Errorf(ctx, "error flushing file to storage: %s", err)

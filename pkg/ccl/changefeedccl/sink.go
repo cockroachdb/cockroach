@@ -579,7 +579,6 @@ func (s *bufferSink) EmitResolvedTimestamp(
 
 // Flush implements the Sink interface.
 func (s *bufferSink) Flush(_ context.Context) error {
-	defer s.metrics.recordFlushRequestCallback()()
 	return nil
 }
 
@@ -676,7 +675,6 @@ func (n *nullSink) EmitResolvedTimestamp(
 
 // Flush implements Sink interface.
 func (n *nullSink) Flush(ctx context.Context) error {
-	defer n.metrics.recordFlushRequestCallback()()
 	if log.V(2) {
 		log.Info(ctx, "flushing")
 	}

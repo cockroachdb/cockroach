@@ -443,8 +443,6 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 
 // Flush implements the Sink interface.
 func (s *kafkaSink) Flush(ctx context.Context) error {
-	defer s.metrics.recordFlushRequestCallback()()
-
 	flushCh := make(chan struct{}, 1)
 	var inflight int64
 	var flushErr error
