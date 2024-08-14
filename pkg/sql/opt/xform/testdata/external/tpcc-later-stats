@@ -633,7 +633,11 @@ project
  │              ├── assignment-cast: DECIMAL(12,2) [as=c_ytd_payment_cast:52, outer=(41), immutable]
  │              │    └── c_ytd_payment:41 + 3860.61
  │              ├── assignment-cast: VARCHAR(500) [as=c_data_cast:53, outer=(24-26,37,44), immutable]
+<<<<<<< HEAD
  │              │    └── CASE c_credit:37 WHEN 'BC' THEN left((((((c_id:24::STRING || c_d_id:25::STRING) || c_w_id:26::STRING) || '5') || '10') || '3860.61') || c_data:44, 500) ELSE c_data:44::STRING END
+=======
+ │              │    └── CASE c_credit:37 WHEN 'BC' THEN left((((((c_id:24::STRING || c_d_id:25::STRING) || c_w_id:26::STRING) || '5') || '10') || '3860.61') || c_data:44, 500)::VARCHAR ELSE c_data:44::VARCHAR END
+>>>>>>> 4a11c7d3b8f (opt: fix BPCHAR type and CASE typing)
  │              └── c_payment_cnt:42 + 1 [as=c_payment_cnt_new:49, outer=(42), immutable]
  └── projections
       └── CASE c_credit:14 WHEN 'BC' THEN left(c_data:21, 200) ELSE '' END [as=case:54, outer=(14,21), immutable]

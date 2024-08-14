@@ -58,3 +58,33 @@ DROP FUNCTION f114677;
 
 statement error pgcode 42883 unknown function: f114677\(\)
 SHOW CREATE FUNCTION f114677;
+
+statement ok
+CREATE FUNCTION f_char(c CHAR) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_char(BPCHAR)
+
+statement ok
+CREATE FUNCTION f_char(c CHAR(2)) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_char(BPCHAR)
+
+statement ok
+CREATE FUNCTION f_char(c BPCHAR) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_char(BPCHAR)
+
+statement ok
+CREATE FUNCTION f_char(c BPCHAR) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_char(CHAR)
+
+statement ok
+CREATE FUNCTION f_char(c BPCHAR) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_char(CHAR(2))
