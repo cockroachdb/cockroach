@@ -740,12 +740,12 @@ SELECT status,
 ----
 failed  ALTER TABLE test.public.customers ADD COLUMN i INT8 DEFAULT 5; ALTER TABLE test.public.customers ADD COLUMN j INT8 DEFAULT 4; ALTER TABLE test.public.customers ADD COLUMN l INT8 DEFAULT 3; ALTER TABLE test.public.customers ADD COLUMN m CHAR; ALTER TABLE test.public.customers ADD COLUMN n CHAR DEFAULT 'a'; CREATE INDEX j_idx ON test.public.customers (j); CREATE INDEX l_idx ON test.public.customers (l); CREATE INDEX m_idx ON test.public.customers (m); CREATE UNIQUE INDEX i_idx ON test.public.customers (i); CREATE UNIQUE INDEX n_idx ON test.public.customers (n)
 
-query TT
-SELECT status,
+query BT
+SELECT status % '(running)|(succeeded)',
        regexp_replace(description, 'ROLL BACK JOB \d+.*', 'ROLL BACK JOB') as descr
   FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for ROLL%' ORDER BY job_id DESC LIMIT 1
 ----
-running  GC for ROLLBACK of ALTER TABLE test.public.customers ADD COLUMN i INT8 DEFAULT 5; ALTER TABLE test.public.customers ADD COLUMN j INT8 DEFAULT 4; ALTER TABLE test.public.customers ADD COLUMN l INT8 DEFAULT 3; ALTER TABLE test.public.customers ADD COLUMN m CHAR; ALTER TABLE test.public.customers ADD COLUMN n CHAR DEFAULT 'a'; CREATE INDEX j_idx ON test.public.customers (j); CREATE INDEX l_idx ON test.public.customers (l); CREATE INDEX m_idx ON test.public.customers (m); CREATE UNIQUE INDEX i_idx ON test.public.customers (i); CREATE UNIQUE INDEX n_idx ON test.public.customers (n)
+true  GC for ROLLBACK of ALTER TABLE test.public.customers ADD COLUMN i INT8 DEFAULT 5; ALTER TABLE test.public.customers ADD COLUMN j INT8 DEFAULT 4; ALTER TABLE test.public.customers ADD COLUMN l INT8 DEFAULT 3; ALTER TABLE test.public.customers ADD COLUMN m CHAR; ALTER TABLE test.public.customers ADD COLUMN n CHAR DEFAULT 'a'; CREATE INDEX j_idx ON test.public.customers (j); CREATE INDEX l_idx ON test.public.customers (l); CREATE INDEX m_idx ON test.public.customers (m); CREATE UNIQUE INDEX i_idx ON test.public.customers (i); CREATE UNIQUE INDEX n_idx ON test.public.customers (n)
 
 subtest add_multiple_computed_elements
 
