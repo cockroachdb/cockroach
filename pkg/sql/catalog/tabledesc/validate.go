@@ -1920,9 +1920,14 @@ func (desc *wrapper) validateAutoStatsSettings(vea catalog.ValidationErrorAccumu
 	if desc.AutoStatsSettings == nil {
 		return
 	}
-	desc.validateAutoStatsEnabled(vea, desc.AutoStatsSettings.Enabled)
-	desc.validateMinStaleRows(vea, desc.AutoStatsSettings.MinStaleRows)
-	desc.validateFractionStaleRows(vea, desc.AutoStatsSettings.FractionStaleRows)
+	desc.validateAutoStatsEnabled(vea, catpb.AutoStatsEnabledTableSettingName, desc.AutoStatsSettings.Enabled)
+	desc.validateAutoStatsEnabled(vea, catpb.AutoPartialStatsEnabledTableSettingName, desc.AutoStatsSettings.PartialEnabled)
+
+	desc.validateMinStaleRows(vea, catpb.AutoStatsMinStaleTableSettingName, desc.AutoStatsSettings.MinStaleRows)
+	desc.validateMinStaleRows(vea, catpb.AutoPartialStatsMinStaleTableSettingName, desc.AutoStatsSettings.PartialMinStaleRows)
+
+	desc.validateFractionStaleRows(vea, catpb.AutoStatsFractionStaleTableSettingName, desc.AutoStatsSettings.FractionStaleRows)
+	desc.validateFractionStaleRows(vea, catpb.AutoPartialStatsFractionStaleTableSettingName, desc.AutoStatsSettings.PartialFractionStaleRows)
 }
 
 func (desc *wrapper) verifyProperTableForStatsSetting(
@@ -1936,15 +1941,18 @@ func (desc *wrapper) verifyProperTableForStatsSetting(
 	}
 }
 
-func (desc *wrapper) validateAutoStatsEnabled(vea catalog.ValidationErrorAccumulator, value *bool) {
+func (desc *wrapper) validateAutoStatsEnabled(
+	vea catalog.ValidationErrorAccumulator, settingName string, value *bool,
+) {
 	if value != nil {
-		desc.verifyProperTableForStatsSetting(vea, catpb.AutoStatsEnabledTableSettingName)
+		desc.verifyProperTableForStatsSetting(vea, settingName)
 	}
 }
 
-func (desc *wrapper) validateMinStaleRows(vea catalog.ValidationErrorAccumulator, value *int64) {
+func (desc *wrapper) validateMinStaleRows(
+	vea catalog.ValidationErrorAccumulator, settingName string, value *int64,
+) {
 	if value != nil {
-		settingName := catpb.AutoStatsMinStaleTableSettingName
 		desc.verifyProperTableForStatsSetting(vea, settingName)
 		if *value < 0 {
 			vea.Report(errors.Newf("invalid integer value for %s: cannot be set to a negative value: %d", settingName, *value))
@@ -1953,10 +1961,9 @@ func (desc *wrapper) validateMinStaleRows(vea catalog.ValidationErrorAccumulator
 }
 
 func (desc *wrapper) validateFractionStaleRows(
-	vea catalog.ValidationErrorAccumulator, value *float64,
+	vea catalog.ValidationErrorAccumulator, settingName string, value *float64,
 ) {
 	if value != nil {
-		settingName := catpb.AutoStatsFractionStaleTableSettingName
 		desc.verifyProperTableForStatsSetting(vea, settingName)
 		if *value < 0 {
 			vea.Report(errors.Newf("invalid float value for %s: cannot set to a negative value: %f", settingName, *value))
