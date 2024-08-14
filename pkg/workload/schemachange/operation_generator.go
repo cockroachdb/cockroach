@@ -251,6 +251,22 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 		return nil, err
 	}
 
+	// PGLSN was added in 23.2.
+	pgLSNNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.V23_2))
+	if err != nil {
+		return nil, err
+	}
+	// REFCURSOR was added in 23.2.
+	refCursorNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.V23_2))
+	if err != nil {
+		return nil, err
+	}
 	def := &tree.ColumnTableDef{
 		// This might be a bit unpleasant, but we need to ensure that even though
 		// identifiers should not be quoted due to our type-related issue, we still
@@ -306,6 +322,16 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 		{
 			code: pgcode.FeatureNotSupported, condition: isJSONTyp,
 		},
+	})
+	// Compatibility errors aren't guaranteed since the cluster version update is not
+	// fully transaction aware.
+	op.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.Syntax, condition: pgLSNNotSupported},
+		{code: pgcode.FeatureNotSupported, condition: pgLSNNotSupported},
+		{code: pgcode.UndefinedObject, condition: pgLSNNotSupported},
+		{code: pgcode.Syntax, condition: refCursorNotSupported},
+		{code: pgcode.FeatureNotSupported, condition: refCursorNotSupported},
+		{code: pgcode.UndefinedObject, condition: refCursorNotSupported},
 	})
 	// Our type inside `def` will get quoted during
 	// lexbase.EncodeRestrictedSQLIdent down the line by default. We have to
