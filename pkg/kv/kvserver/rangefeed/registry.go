@@ -39,6 +39,11 @@ type BufferedStream interface {
 	Stream
 	// SendBuffered buffers the event before sending it to the underlying Stream.
 	SendBuffered(*kvpb.RangeFeedEvent, *SharedBudgetAllocation) error
+	// RegisterRangefeedCleanUp is used to register a cleanup callback that will
+	// be invoked after Disconnect is called. It is up to the implementation on
+	// when or whether the callback is invoked. The caller should coordinate with
+	// the implementation.
+	RegisterRangefeedCleanUp(func())
 }
 
 // registration defines an interface for registration that can be added to a
