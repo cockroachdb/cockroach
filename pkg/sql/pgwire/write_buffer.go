@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 // writeBuffer is a wrapper around bytes.Buffer that provides a convenient interface
@@ -39,17 +38,17 @@ type writeBuffer struct {
 	// bytecount counts the number of bytes written across all pgwire connections, not just this
 	// buffer. This is passed in so that finishMsg can track all messages we've sent to a network
 	// socket, reducing the onus on the many callers of finishMsg.
-	bytecount *metric.Counter
+	bytecount func(int64)
 }
 
-func newWriteBuffer(bytecount *metric.Counter) *writeBuffer {
+func newWriteBuffer(bytecount func(int64)) *writeBuffer {
 	b := new(writeBuffer)
 	b.init(bytecount)
 	return b
 }
 
 // init exists to avoid the allocation imposed by newWriteBuffer.
-func (b *writeBuffer) init(bytecount *metric.Counter) {
+func (b *writeBuffer) init(bytecount func(int64)) {
 	b.bytecount = bytecount
 	b.textFormatter = tree.NewFmtCtx(tree.FmtPgwireText)
 	b.simpleFormatter = tree.NewFmtCtx(tree.FmtSimple)
@@ -174,8 +173,9 @@ func (b *writeBuffer) finishMsg(w io.Writer) error {
 	}
 	bytes := b.wrapped.Bytes()
 	binary.BigEndian.PutUint32(bytes[1:5], uint32(b.wrapped.Len()-1))
+
 	n, err := w.Write(bytes)
-	b.bytecount.Inc(int64(n))
+	b.bytecount(int64(n))
 	return err
 }
 
