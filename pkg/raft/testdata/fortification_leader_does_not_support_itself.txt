@@ -114,7 +114,7 @@ stabilize
   Entries:
   1/3 EntryNormal ""
   Messages:
-  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:3
   2->1 MsgAppResp Term:1 Log:0/3
 > 3 handling Ready
   Ready MustSync=true:
@@ -122,12 +122,12 @@ stabilize
   Entries:
   1/3 EntryNormal ""
   Messages:
-  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
   3->1 MsgAppResp Term:1 Log:0/3
 > 1 receiving messages
-  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:3
   2->1 MsgAppResp Term:1 Log:0/3
-  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
   3->1 MsgAppResp Term:1 Log:0/3
 > 1 handling Ready
   Ready MustSync=false:
@@ -158,3 +158,9 @@ stabilize
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/3
   3->1 MsgAppResp Term:1 Log:0/3
+
+# TODO(arul): Consider adding a directive for the leader's support tracker and
+# printing it out here. We can see that 1 isn't supporting itself by the
+# "leader doesn't support itself" log line, but we don't have a reject message
+# in the test output. We should confirm that the support tracking is as expected
+# by printing out the SupportTracker on the leader.

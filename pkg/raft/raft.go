@@ -1883,6 +1883,7 @@ func (r *raft) handleSnapshot(m pb.Message) {
 
 func (r *raft) handleFortify(m pb.Message) {
 	assertTrue(r.state == StateFollower, "leaders should locally fortify without sending a message")
+	assertTrue(r.lead == m.From, "only the leader should send fortification requests")
 
 	epoch, live := r.storeLiveness.SupportFor(r.lead)
 	if !live {
@@ -1896,18 +1897,17 @@ func (r *raft) handleFortify(m pb.Message) {
 		return
 	}
 	r.leadEpoch = epoch
-	// TODO(arul): for now, we reject the fortification request because the leader
-	// hasn't been taught how to handle it.
 	r.send(pb.Message{
-		To:     m.From,
-		Type:   pb.MsgFortifyLeaderResp,
-		Reject: true,
+		To:        m.From,
+		Type:      pb.MsgFortifyLeaderResp,
+		LeadEpoch: epoch,
 	})
 }
 
 func (r *raft) handleFortifyResp(m pb.Message) {
 	assertTrue(r.state == StateLeader, "only leaders should be handling fortification responses")
-	assertTrue(m.Reject, "TODO(arul): implement")
+	// TODO(arul): record support once
+	// https://github.com/cockroachdb/cockroach/issues/125264 lands.
 }
 
 // restore recovers the state machine from a snapshot. It restores the log and the
