@@ -222,6 +222,9 @@ func TestCreateStatisticsCanBeCancelled(t *testing.T) {
 	require.ErrorContains(t, err, "pq: query execution canceled")
 }
 
+// TestAtMostOneRunningCreateStats tests that auto stat jobs (full or partial)
+// don't run when a full stats job is running. It also tests that manual stat
+// jobs (full or partial) are always allowed to run.
 func TestAtMostOneRunningCreateStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -250,28 +253,52 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT 'd.t'::regclass::int`).Scan(&tID)
 	setTableID(tID)
 
-	// Start a CREATE STATISTICS run and wait until it's done one scan.
-	allowRequest = make(chan struct{})
-	errCh := make(chan error)
-	go func() {
-		_, err := conn.Exec(`CREATE STATISTICS s1 FROM d.t`)
-		errCh <- err
-	}()
-	select {
-	case allowRequest <- struct{}{}:
-	case err := <-errCh:
-		t.Fatal(err)
-	}
-	autoStatsRunShouldFail := func() {
+	autoFullStatsRunShouldFail := func() {
 		_, err := conn.Exec(`CREATE STATISTICS __auto__ FROM d.t`)
 		expected := "another CREATE STATISTICS job is already running"
 		if !testutils.IsError(err, expected) {
 			t.Fatalf("expected '%s' error, but got %v", expected, err)
 		}
 	}
+	autoPartialStatsRunShouldFail := func() {
+		_, err := conn.Exec(`CREATE STATISTICS __auto_partial__ FROM d.t USING EXTREMES`)
+		expected := "another CREATE STATISTICS job is already running"
+		if !testutils.IsError(err, expected) {
+			t.Fatalf("expected '%s' error, but got %v", expected, err)
+		}
+	}
 
-	// Attempt to start an automatic stats run. It should fail.
-	autoStatsRunShouldFail()
+	// Start a full stat run and let it complete so that future partial stats can
+	// be collected
+	allowRequest = make(chan struct{})
+	initialFullStatErrCh := make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS full_statistic FROM d.t`)
+		initialFullStatErrCh <- err
+	}()
+	close(allowRequest)
+	if err := <-initialFullStatErrCh; err != nil {
+		t.Fatalf("create stats job should have completed: %s", err)
+	}
+
+	// Start a manual full stat run and wait until it's done one scan. This will
+	// be the stat job that runs in the background as we test the behavior of new
+	// stat jobs.
+	allowRequest = make(chan struct{})
+	runningManualFullStatErrCh := make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS s1 FROM d.t`)
+		runningManualFullStatErrCh <- err
+	}()
+	select {
+	case allowRequest <- struct{}{}:
+	case err := <-runningManualFullStatErrCh:
+		t.Fatal(err)
+	}
+
+	// Attempt to start automatic full and partial stats runs. Both should fail.
+	autoFullStatsRunShouldFail()
+	autoPartialStatsRunShouldFail()
 
 	// PAUSE JOB does not block until the job is paused but only requests it.
 	// Wait until the job is set to paused.
@@ -297,33 +324,169 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Starting another automatic stats run should still fail.
-	autoStatsRunShouldFail()
+	// Starting automatic full and partial stats run should still fail.
+	autoFullStatsRunShouldFail()
+	autoPartialStatsRunShouldFail()
 
-	// Attempt to start a regular stats run. It should succeed.
-	errCh2 := make(chan error)
+	// Attempt to start manual full and partial stat runs. Both should succeed.
+	manualFullStatErrCh := make(chan error)
 	go func() {
 		_, err := conn.Exec(`CREATE STATISTICS s2 FROM d.t`)
-		errCh2 <- err
+		manualFullStatErrCh <- err
 	}()
+	manualPartialStatErrCh := make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS ps1 FROM d.t USING EXTREMES`)
+		manualPartialStatErrCh <- err
+	}()
+
 	select {
 	case allowRequest <- struct{}{}:
-	case err := <-errCh:
+	case err := <-runningManualFullStatErrCh:
 		t.Fatal(err)
-	case err := <-errCh2:
+	case err := <-manualFullStatErrCh:
+		t.Fatal(err)
+	case err := <-manualPartialStatErrCh:
 		t.Fatal(err)
 	}
+
+	// Allow the running full stat job and the new full and partial stat jobs to complete.
 	close(allowRequest)
 
-	// Verify that the second job completed successfully.
-	if err := <-errCh2; err != nil {
+	// Verify that the manual full and partial stat jobs completed successfully.
+	if err := <-manualFullStatErrCh; err != nil {
+		t.Fatalf("create stats job should have completed: %s", err)
+	}
+	if err := <-manualPartialStatErrCh; err != nil {
+		t.Fatalf("create partial stats job should have completed: %s", err)
+	}
+
+	// Verify that the running full stat job completed successfully.
+	sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", jobID))
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
+	<-runningManualFullStatErrCh
+}
+
+// TestBackgroundAutoPartialStats tests that a running auto partial stats job
+// doesn't prevent any new full or partial stat jobs from running.
+func TestBackgroundAutoPartialStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var allowRequest chan struct{}
+
+	filter, setTableID := createStatsRequestFilter(&allowRequest)
+	var params base.TestClusterArgs
+	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: filter,
+	}
+	params.ServerArgs.DefaultTestTenant = base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109379)
+
+	ctx := context.Background()
+	const nodes = 1
+	tc := testcluster.StartTestCluster(t, nodes, params)
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.ApplicationLayer(0).SQLConn(t)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
+	var tID descpb.ID
+	sqlDB.QueryRow(t, `SELECT 'd.t'::regclass::int`).Scan(&tID)
+	setTableID(tID)
+
+	// Start a full stat run and let it complete so that future partial stats can
+	// be collected
+	allowRequest = make(chan struct{})
+	initialFullStatErrCh := make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS full_statistic FROM d.t`)
+		initialFullStatErrCh <- err
+	}()
+	close(allowRequest)
+	if err := <-initialFullStatErrCh; err != nil {
 		t.Fatalf("create stats job should have completed: %s", err)
 	}
 
-	// Verify that the first job completed successfully.
-	sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", jobID))
-	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
-	<-errCh
+	// Start an auto partial stat run and wait until it's done one scan. This will
+	// be the stat job that runs in the background as we test the behavior of new
+	// stat jobs.
+	allowRequest = make(chan struct{})
+	runningAutoPartialStatErrCh := make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS __auto_partial__ FROM d.t USING EXTREMES`)
+		runningAutoPartialStatErrCh <- err
+	}()
+	select {
+	case allowRequest <- struct{}{}:
+	case err := <-runningAutoPartialStatErrCh:
+		t.Fatal(err)
+	}
+
+	// Attempt to start a simultaneous auto full stat run. It should succeed.
+	autoFullStatErrCh := make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS __auto__ FROM d.t`)
+		autoFullStatErrCh <- err
+	}()
+
+	select {
+	case allowRequest <- struct{}{}:
+	case err := <-runningAutoPartialStatErrCh:
+		t.Fatal(err)
+	case err := <-autoFullStatErrCh:
+		t.Fatal(err)
+	}
+
+	// Allow both auto stat jobs to complete.
+	close(allowRequest)
+
+	// Verify that the auto full stat job completed successfully.
+	if err := <-autoFullStatErrCh; err != nil {
+		t.Fatalf("create auto full stats job should have completed: %s", err)
+	}
+
+	<-runningAutoPartialStatErrCh
+
+	// Start another auto partial stat run and wait until it's done one scan.
+	allowRequest = make(chan struct{})
+	runningAutoPartialStatErrCh = make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS __auto_partial__ FROM d.t USING EXTREMES`)
+		runningAutoPartialStatErrCh <- err
+	}()
+	select {
+	case allowRequest <- struct{}{}:
+	case err := <-runningAutoPartialStatErrCh:
+		t.Fatal(err)
+	}
+
+	// Attempt to start a simultaneous auto partial stat run. It should succeed.
+	autoPartialStatErrCh := make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS __auto_partial__ FROM d.t USING EXTREMES`)
+		autoPartialStatErrCh <- err
+	}()
+
+	select {
+	case allowRequest <- struct{}{}:
+	case err := <-runningAutoPartialStatErrCh:
+		t.Fatal(err)
+	case err := <-autoPartialStatErrCh:
+		t.Fatal(err)
+	}
+
+	// Allow both auto stat jobs to complete.
+	close(allowRequest)
+
+	// Verify that the auto partial stat job completed successfully.
+	if err := <-autoPartialStatErrCh; err != nil {
+		t.Fatalf("create auto partial stats job should have completed: %s", err)
+	}
+
+	<-runningAutoPartialStatErrCh
 }
 
 func TestDeleteFailedJob(t *testing.T) {
