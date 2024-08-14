@@ -12,6 +12,8 @@ package rac2
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -19,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // TokenCounter is the interface for a token counter that can be used to deduct
@@ -300,6 +304,118 @@ func (wh waitHandle) ConfirmHaveTokensAndUnblockNextWaiter() (haveTokens bool) {
 		wh.b.mu.counters[wh.wc].signal()
 	}
 	return haveTokens
+}
+
+type tokenWaitingHandleInfo struct {
+	handle TokenWaitingHandle
+	// For regular work, this will be set for the leaseholder and leader. For
+	// elastic work this will be set for the aforementioned, and all replicas
+	// which are in StateReplicate.
+	requiredWait bool
+}
+
+// WaitEndState is the state returned by WaitForEval and indicates the result
+// of waiting.
+type WaitEndState int32
+
+const (
+	// WaitSuccess indicates that the required quorum and required wait handles
+	// were signaled and had tokens available.
+	WaitSuccess WaitEndState = iota
+	// ContextCanceled indicates that the context was canceled.
+	ContextCanceled
+	// RefreshWaitSignaled indicates that the refresh channel was signaled.
+	RefreshWaitSignaled
+)
+
+func (s WaitEndState) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s WaitEndState) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch s {
+	case WaitSuccess:
+		w.Print("wait_success")
+	case ContextCanceled:
+		w.Print("context_cancelled")
+	case RefreshWaitSignaled:
+		w.Print("refresh_wait_signaled")
+	default:
+		panic(fmt.Sprintf("unknown wait_end_state(%d)", int(s)))
+	}
+}
+
+// WaitForEval waits for a quorum of handles to be signaled and have tokens
+// available, including all the required wait handles. The caller can provide a
+// refresh channel, which when signaled will cause the function to return
+// RefreshWaitSignaled, allowing the caller to retry waiting with updated
+// handles.
+func WaitForEval(
+	ctx context.Context,
+	refreshWaitCh <-chan struct{},
+	handles []tokenWaitingHandleInfo,
+	requiredQuorum int,
+	scratch []reflect.SelectCase,
+) (state WaitEndState, scratch2 []reflect.SelectCase) {
+	scratch = scratch[:0]
+	if len(handles) < requiredQuorum {
+		log.Fatalf(ctx, "%v", errors.AssertionFailedf(
+			"invalid arguments to WaitForEval: len(handles)=%d < required_quorum=%d",
+			len(handles), requiredQuorum))
+	}
+
+	scratch = append(scratch,
+		reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ctx.Done())})
+	scratch = append(scratch,
+		reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(refreshWaitCh)})
+
+	requiredWaitCount := 0
+	for _, h := range handles {
+		if h.requiredWait {
+			requiredWaitCount++
+		}
+		scratch = append(scratch,
+			reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(h.handle.WaitChannel())})
+	}
+	if requiredQuorum == 0 && requiredWaitCount == 0 {
+		log.Fatalf(ctx, "both requiredQuorum and requiredWaitCount are zero")
+	}
+
+	// m is the current length of the scratch slice.
+	m := len(scratch)
+	signaledCount := 0
+
+	// Wait for (1) at least a quorumCount of handles to be signaled and have
+	// available tokens; as well as (2) all of the required wait handles to be
+	// signaled and have tokens available.
+	for signaledCount < requiredQuorum || requiredWaitCount > 0 {
+		chosen, _, _ := reflect.Select(scratch)
+		switch chosen {
+		case 0:
+			return ContextCanceled, scratch
+		case 1:
+			return RefreshWaitSignaled, scratch
+		default:
+			handleInfo := handles[chosen-2]
+			if available := handleInfo.handle.ConfirmHaveTokensAndUnblockNextWaiter(); !available {
+				// The handle was signaled but does not currently have tokens
+				// available. Continue waiting on this handle.
+				continue
+			}
+
+			signaledCount++
+			if handleInfo.requiredWait {
+				requiredWaitCount--
+			}
+			m--
+			scratch[chosen], scratch[m] = scratch[m], scratch[chosen]
+			scratch = scratch[:m]
+			handles[chosen-2], handles[m-2] = handles[m-2], handles[chosen-2]
+		}
+	}
+
+	return WaitSuccess, scratch
 }
 
 // adjust the tokens for the given work class by delta. The adjustment is
