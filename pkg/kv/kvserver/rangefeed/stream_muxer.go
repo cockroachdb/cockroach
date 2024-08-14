@@ -119,10 +119,20 @@ type StreamMuxer struct {
 	// streamID -> streamInfo for active rangefeeds
 	activeStreams syncutil.Map[int64, streamInfo]
 
+	// streamID -> cleanup callback
+	rangefeedCleanup syncutil.Map[int64, func()]
+
 	// notifyMuxError is a buffered channel of size 1 used to signal the presence
 	// of muxErrors. Additional signals are dropped if the channel is already full
-	// so that it's non-blocking.
+	// so that it's non-blocking. StreamMuxer would forward muxErrors back to the
+	// client.
 	notifyMuxError chan struct{}
+
+	// notifyRangefeedCleanUp is a buffered channel of size 1 used to signal the
+	// presence of clean up ids. Additional signals are dropped if the channel is
+	// already full so that it's non-blocking. StreamMuxer would invoke
+	// corresponding clean up callback registered during run.
+	notifyRangefeedCleanUp chan struct{}
 
 	mu struct {
 		syncutil.Mutex
@@ -130,6 +140,11 @@ type StreamMuxer struct {
 		// to the client. Upon receiving the error, the client restart rangefeed
 		// when possible.
 		muxErrors []*kvpb.MuxRangeFeedEvent
+		// cleanupIDs is a slice of stream IDs that have been disconnected and
+		// require invocation on rangefeed cleanup callback registered on
+		// rangefeedCleanup. Note that it is possible to have duplicate stream ids
+		// in the slice. We rely on the rangefeedCleanup map to perform dedupe.
+		cleanupIDs []int64
 	}
 }
 
@@ -137,9 +152,10 @@ type StreamMuxer struct {
 // incoming node.MuxRangefeed RPC stream.
 func NewStreamMuxer(sender ServerStreamSender, metrics RangefeedMetricsRecorder) *StreamMuxer {
 	return &StreamMuxer{
-		sender:         sender,
-		metrics:        metrics,
-		notifyMuxError: make(chan struct{}, 1),
+		sender:                 sender,
+		metrics:                metrics,
+		notifyMuxError:         make(chan struct{}, 1),
+		notifyRangefeedCleanUp: make(chan struct{}, 1),
 	}
 }
 
@@ -185,6 +201,27 @@ func (sm *StreamMuxer) SendBuffered(
 	// Panics if sender is not a BufferedStreamSender. This is a programming
 	// error.
 	return sm.sender.(*BufferedStreamSender).SendBuffered(e, alloc)
+}
+
+func (sm *StreamMuxer) appendCleanUp(streamID int64) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.mu.cleanupIDs = append(sm.mu.cleanupIDs, streamID)
+	// Note that notifyCleanUp is non-blocking.
+	select {
+	case sm.notifyRangefeedCleanUp <- struct{}{}:
+	default:
+	}
+}
+
+// RegisterRangefeedCleanUp registers a cleanup callback for a rangefeed stream.
+// It will be scheduled to run in the background during
+// DisconnectStreamWithError. Note that the cleanup callback is not called
+// immediately after DisconnectStreamWithError and will not be called if
+// StreamMuxer.Stop has been called (which happens when node.MuxRangefeed
+// returns).
+func (sm *StreamMuxer) RegisterRangefeedCleanUp(streamID int64, cleanUp func()) {
+	sm.rangefeedCleanup.Store(streamID, &cleanUp)
 }
 
 // transformRangefeedErrToClientError converts a rangefeed error to a client
@@ -240,6 +277,20 @@ func (sm *StreamMuxer) DisconnectStreamWithError(
 		sm.appendMuxError(ev)
 		sm.metrics.UpdateMetricsOnRangefeedDisconnect()
 	}
+	// Note that we may repeatedly append cleanup signal for the same id. We will
+	// rely on the map rangefeedCleanup to dedupe during Run. Note that it will
+	// not be called if the StreamMuxer is stopped.
+	if _, ok := sm.rangefeedCleanup.Load(streamID); ok {
+		sm.appendCleanUp(streamID)
+	}
+}
+
+func (sm *StreamMuxer) detachCleanUpIDs() []int64 {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	toCleanUp := sm.mu.cleanupIDs
+	sm.mu.cleanupIDs = nil
+	return toCleanUp
 }
 
 // detachMuxErrors returns muxErrors and clears the slice. Caller must ensure
@@ -268,6 +319,15 @@ func (sm *StreamMuxer) run(ctx context.Context, stopper *stop.Stopper) error {
 					return err
 				}
 			}
+		case <-sm.notifyRangefeedCleanUp:
+			toCleanUp := sm.detachCleanUpIDs()
+			for _, streamID := range toCleanUp {
+				if cleanUp, ok := sm.rangefeedCleanup.LoadAndDelete(streamID); ok {
+					// TODO(wenyihu6): add more observability metrics into how long
+					// queuing and the clean up call is taking
+					(*cleanUp)()
+				}
+			}
 		case <-ctx.Done():
 			// Top level goroutine will receive the context cancellation and handle
 			// ctx.Err().
@@ -291,13 +351,42 @@ func (sm *StreamMuxer) Error() chan error {
 	return sm.errCh
 }
 
-// Stop cancels the StreamMuxer.run task and waits for it to complete. It does
-// nothing if StreamMuxer.run is already finished. It is expected to be called
-// after StreamMuxer.Start. Note that the caller is responsible for handling any
-// cleanups for any active streams.
+// Stop cancels the StreamMuxer.run task, waits for it to complete, and handles
+// any cleanups for active streams. It is expected to be called after
+// StreamMuxer.Start. After this function returns, the caller is not expected to
+// call RegisterRangefeedCleanUp, assume that the registered cleanup callback
+// will be executed after calling DisconnectStreamWithError, or assume that
+// DisconnectStreamWithError would send an error back to the client.
+// TODO(wenyihu6): add observability into when this goes wrong
+//
+// Note that it does not send any errors back to the clients since the grpc
+// stream is being torn down, and the client will decide whether to restart all
+// rangefeeds again based on the returned error from stream.
+//
+// TODO(wenyihu6): add tests to make sure client treats node out of budget
+// errors as retryable and will restart all rangefeeds
 func (sm *StreamMuxer) Stop() {
 	sm.taskCancel()
 	sm.wg.Wait()
+	sm.disconnectAll()
+}
+
+// disconnectAll disconnects all active streams and invokes all rangefeed clean
+// up callbacks. It is expected to be called during StreamMuxer.Stop.
+func (sm *StreamMuxer) disconnectAll() {
+	sm.activeStreams.Range(func(streamID int64, info *streamInfo) bool {
+		info.cancel()
+		// Remove the stream from the activeStreams map.
+		sm.activeStreams.Delete(streamID)
+		sm.metrics.UpdateMetricsOnRangefeedDisconnect()
+		return true
+	})
+
+	sm.rangefeedCleanup.Range(func(streamID int64, cleanUp *func()) bool {
+		(*cleanUp)()
+		sm.rangefeedCleanup.Delete(streamID)
+		return true
+	})
 }
 
 // Start launches StreamMuxer.run in the background if no error is returned.
