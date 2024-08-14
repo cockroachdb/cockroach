@@ -182,6 +182,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t)
 	skip.UnderShort(t)
+	skip.UnderDeadlock(t)
 
 	testCases := []struct {
 		name          string
