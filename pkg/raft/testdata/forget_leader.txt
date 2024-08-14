@@ -45,7 +45,7 @@ raft-state
 
 forget-leader 2
 ----
-ok
+INFO 2 no leader at term 1; dropping forget leader msg
 
 raft-state
 ----

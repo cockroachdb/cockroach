@@ -1727,10 +1727,12 @@ func stepFollower(r *raft, m pb.Message) error {
 		m.To = r.lead
 		r.send(m)
 	case pb.MsgForgetLeader:
-		if r.lead != None {
-			r.logger.Infof("%x forgetting leader %x at term %d", r.id, r.lead, r.Term)
-			r.lead = None
+		if r.lead == None {
+			r.logger.Infof("%x no leader at term %d; dropping forget leader msg", r.id, r.Term)
+			return nil
 		}
+		r.logger.Infof("%x forgetting leader %x at term %d", r.id, r.lead, r.Term)
+		r.lead = None
 	case pb.MsgTimeoutNow:
 		r.logger.Infof("%x [term %d] received MsgTimeoutNow from %x and starts an election to get leadership", r.id, r.Term, m.From)
 		// Leadership transfers never use pre-vote even if r.preVote is true; we
