@@ -38,15 +38,17 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
-           ├── 7 elements transitioning toward ABSENT
+           ├── 8 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106 (tbl), ColumnID: 3 (j-)}
            │    ├── PUBLIC      → ABSENT ColumnFamily:{DescID: 106 (tbl), Name: "bob", ColumnFamilyID: 1 (bob-)}
            │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 1 (bob-), ColumnID: 3 (j-), TypeName: "INT8"}
+           │    ├── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j-)}
            │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
            │    ├── PUBLIC      → ABSENT IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-)}
            │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
            │    └── PUBLIC      → ABSENT IndexData:{DescID: 106 (tbl), IndexID: 3}
-           └── 8 Mutation operations
+           └── 9 Mutation operations
+                ├── RemoveColumnComputeExpression {"ColumnID":3,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":106}
                 ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":106}

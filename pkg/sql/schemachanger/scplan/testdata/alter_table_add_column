@@ -26,6 +26,7 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
         ColumnID: 2
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -77,6 +78,7 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
         ColumnID: 2
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -194,6 +196,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
         ColumnID: 2
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -283,6 +286,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
         ColumnID: 2
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -568,6 +572,7 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
         ColumnID: 2
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -595,6 +600,7 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
         ColumnID: 3
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -709,6 +715,7 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
         ColumnID: 2
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -736,6 +743,7 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
         ColumnID: 3
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -1007,11 +1015,12 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
-StatementPhase stage 1 of 1 with 9 MutationType ops
+StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnComputeExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -1031,12 +1040,9 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
     *scop.UpsertColumnType
       ColumnType:
         ColumnID: 2
-        ComputeExpr:
-          expr: i + 1:::INT8
-          referencedColumnIds:
-          - 1
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -1045,6 +1051,14 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
             oid: 20
             width: 64
           TypeName: INT8
+    *scop.AddColumnComputeExpression
+      ComputeExpression:
+        ColumnID: 2
+        Expression:
+          Expr: i + 1:::INT8
+          ReferencedColumnIDs:
+          - 1
+        TableID: 104
     *scop.MakeAbsentIndexBackfilling
       Index:
         ConstraintID: 2
@@ -1083,6 +1097,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnComputeExpression:{DescID: 104, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], PUBLIC] -> ABSENT
     [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC] -> ABSENT
@@ -1093,11 +1108,12 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 13 MutationType ops
+PreCommitPhase stage 2 of 2 with 14 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnComputeExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -1117,12 +1133,9 @@ PreCommitPhase stage 2 of 2 with 13 MutationType ops
     *scop.UpsertColumnType
       ColumnType:
         ColumnID: 2
-        ComputeExpr:
-          expr: i + 1:::INT8
-          referencedColumnIds:
-          - 1
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -1131,6 +1144,14 @@ PreCommitPhase stage 2 of 2 with 13 MutationType ops
             oid: 20
             width: 64
           TypeName: INT8
+    *scop.AddColumnComputeExpression
+      ComputeExpression:
+        ColumnID: 2
+        Expression:
+          Expr: i + 1:::INT8
+          ReferencedColumnIDs:
+          - 1
+        TableID: 104
     *scop.MakeAbsentIndexBackfilling
       Index:
         ConstraintID: 2
@@ -1386,6 +1407,7 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
         ColumnID: 2
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -1412,6 +1434,7 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
         ColumnID: 3
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         IsNullable: true
         TableID: 107
         TypeT:
@@ -1463,6 +1486,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
         ColumnID: 2
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -1489,6 +1513,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
         ColumnID: 3
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         IsNullable: true
         TableID: 107
         TypeT:
@@ -2046,6 +2071,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
         ColumnID: 2
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         IsNullable: true
         TableID: 109
         TypeT:
@@ -2136,6 +2162,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
         ColumnID: 2
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         IsNullable: true
         TableID: 109
         TypeT:
