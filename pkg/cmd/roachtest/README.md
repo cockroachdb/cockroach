@@ -88,8 +88,10 @@ Especially for OSX users, building a linux CockroachDB binary is an extremely ti
 ```
 # Make a single-node local cluster.
 roachprod create -n 1 local
-# Tell roachprod to place a CockroachDB 21.1.5 Linux binary onto node 1.
-roachprod stage local release v21.1.5 --os linux
+# Tell roachprod to place a CockroachDB 23.1.12 Linux binary onto node 1.
+# Alternatively you can choose any other recent release from the
+# releases page: https://www.cockroachlabs.com/docs/releases/
+roachprod stage local release v23.1.12 --os linux --arch amd64
 # Copy it from (local) node 1 to the current directory
 mv ~/local/1/cockroach cockroach
 # Can now use roachtest with the `--cockroach=./cockroach` flag.
