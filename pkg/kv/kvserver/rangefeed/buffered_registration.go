@@ -271,6 +271,8 @@ func (br *bufferedRegistration) maybeRunCatchUpScan(ctx context.Context) error {
 		br.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
+	// Send to underlying stream directly. Note that we are not doing memory
+	// accounting for catch up scans.
 	return catchUpIter.CatchUpScan(ctx, br.stream.Send, br.withDiff, br.withFiltering, br.withOmitRemote)
 }
 

@@ -1935,12 +1935,13 @@ var _ kvpb.RangeFeedEventSink = (*bufferedPerRangeEventSink)(nil)
 var _ rangefeed.Stream = (*bufferedPerRangeEventSink)(nil)
 var _ rangefeed.BufferedStream = (*bufferedPerRangeEventSink)(nil)
 
-// RegisterRangefeedCleanUp registers a cleanup callback to be called when the
-// stream is disconnected. Note that the callback will not be invoked
-// immediately during DisconnectStreamWithError and may not be called if the
-// StreamMuxer.Stop has been called. It is up to the caller to ensure that this
-// is not called after StreamMuxer.Stop. For p.Register, it is currently done by
-// waiting for runRequest to complete for each stores.RangeFeed call.
+// RegisterRangefeedCleanUp registers a cleanup callback to be called in a
+// background async job when the stream is disconnected. Note that the callback will
+// not be invoked immediately during DisconnectStreamWithError and may not be
+// called if the StreamMuxer.Stop has been called. It is up to the caller to
+// ensure that this is not called after StreamMuxer.Stop. For p.Register, it is
+// currently done by waiting for runRequest to complete for each
+// stores.RangeFeed call.
 func (s *bufferedPerRangeEventSink) RegisterRangefeedCleanUp(f func()) {
 	s.wrapped.RegisterRangefeedCleanUp(s.streamID, f)
 }
@@ -1948,9 +1949,9 @@ func (s *bufferedPerRangeEventSink) RegisterRangefeedCleanUp(f func()) {
 // SendBuffered buffers the event in StreamMuxer.BufferedStreamSender,
 // transferring the ownership of the allocated SharedBudgetAllocation to
 // bufferedPerRangeEventSink. The underlying streamMuxer is responsible for
-// properly releasing it when an error occurs or when the event is sent. The
-// event is guaranteed to be sent unless the buffered stream terminates before
-// sending (e.g. broken grpc stream).
+// properly using and releasing it when an error occurs or when the event is
+// sent. The event is guaranteed to be sent unless the buffered stream
+// terminates before sending (e.g. broken grpc stream).
 //
 // Note that this should only be called if the StreamMuxer has a
 // BufferedStreamSender as the sender. Panics otherwise.
