@@ -19,6 +19,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/log",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
 )
@@ -38,6 +39,7 @@ go_test(
         "//pkg/util/admission/admissionpb",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_stretchr_testify//require",
