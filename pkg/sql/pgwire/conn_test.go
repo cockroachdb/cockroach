@@ -61,6 +61,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var nilStat = func(int64) {}
+
 // Test the conn struct: check that it marshalls the correct commands to the
 // stmtBuf.
 //
@@ -737,7 +739,6 @@ func getSessionArgs(
 		if version != version30 {
 			return nil, sql.SessionArgs{}, errors.Errorf("unexpected protocol version: %d", version)
 		}
-
 		ctx := context.Background()
 		cp, err := parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr(), trustRemoteAddr,
 			false /* acceptTenantName */, false /* acceptSystemIdentityOption */)
