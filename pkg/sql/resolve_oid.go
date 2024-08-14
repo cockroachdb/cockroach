@@ -87,7 +87,7 @@ func resolveOID(
 		return nil, true, pgerror.Newf(info.errType,
 			"%s %s does not exist", info.objName, toResolve)
 	}
-	return tree.NewDOidWithName(
+	return tree.NewDOidWithTypeAndName(
 		results[0].(*tree.DOid).Oid,
 		resultType,
 		tree.AsStringWithFlags(results[1], tree.FmtBareStrings),

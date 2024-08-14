@@ -5562,16 +5562,6 @@ func MustBeDOid(e Expr) *DOid {
 	return i
 }
 
-// NewDOidWithName is a helper routine to create a *DOid initialized from a DInt
-// and a string.
-func NewDOidWithName(d oid.Oid, typ *types.T, name string) *DOid {
-	return &DOid{
-		Oid:          d,
-		semanticType: typ,
-		name:         name,
-	}
-}
-
 // AsRegProc changes the input DOid into a regproc with the given name and
 // returns it.
 func (d *DOid) AsRegProc(name string) *DOid {
@@ -5929,7 +5919,7 @@ func NewDefaultDatum(collationEnv *CollationEnvironment, t *types.T) (d Datum, e
 	case types.CollatedStringFamily:
 		return NewDCollatedString("", t.Locale(), collationEnv)
 	case types.OidFamily:
-		return NewDOidWithName(t.Oid(), t, t.SQLStandardName()), nil
+		return NewDOidWithTypeAndName(t.Oid(), t, t.SQLStandardName()), nil
 	case types.UnknownFamily:
 		return DNull, nil
 	case types.UuidFamily:
