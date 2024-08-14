@@ -53,7 +53,7 @@ type MessageHandler interface {
 	// block (e.g. do a synchronous disk write) to prevent a single store with a
 	// problem (e.g. a stalled disk) from affecting message receipt by other
 	// stores on the same node.
-	HandleMessage(ctx context.Context, msg *slpb.Message)
+	HandleMessage(msg *slpb.Message)
 }
 
 // sendQueue is a queue of outgoing Messages.
@@ -80,6 +80,8 @@ type Transport struct {
 	// handlers stores the MessageHandler for each store on the node.
 	handlers syncutil.Map[roachpb.StoreID, MessageHandler]
 }
+
+var _ MessageSender = (*Transport)(nil)
 
 // NewTransport creates a new Store Liveness Transport.
 func NewTransport(
@@ -158,12 +160,12 @@ func (t *Transport) handleMessage(ctx context.Context, msg *slpb.Message) {
 		return
 	}
 
-	(*handler).HandleMessage(ctx, msg)
+	(*handler).HandleMessage(msg)
 }
 
-// SendAsync sends a message to the recipient specified in the request. It
-// returns false if the outgoing queue is full or the node dialer's circuit
-// breaker has tripped.
+// SendAsync implements the MessageSender interface. It sends a message to the
+// recipient specified in the request, and returns false if the outgoing queue
+// is full or the node dialer's circuit breaker has tripped.
 //
 // The returned bool may be a false positive but will never be a false negative;
 // if sent is true the message may or may not actually be sent but if it's false

@@ -26,9 +26,27 @@ type requesterState struct {
 	// meta stores the RequesterMeta, including the max timestamp and max epoch at
 	// which this store has requested support.
 	meta slpb.RequesterMeta
-	// supportFrom stores the SupportState for each remote store from which this
-	// store has received support.
-	supportFrom map[slpb.StoreIdent]slpb.SupportState
+	// supportFrom stores a pointer to requestedSupport for each remote store
+	// from which this store has received support.
+	supportFrom map[slpb.StoreIdent]*requestedSupport
+}
+
+// requestedSupport is a wrapper around SupportState that also indicates whether
+// support from the store has been queried via SupportFrom.
+type requestedSupport struct {
+	// state is the SupportState corresponding to a single store from which
+	// support was requested.
+	state slpb.SupportState
+	// recentlyQueried indicates if support from the store has been queried
+	// (by calling SupportFrom) recently. Unlike all other fields in
+	// requesterState, updating this field does not require locking
+	// requesterStateHandler.mu for writing. This is because recentlyQueried is
+	// not updated as part of the support state and meta process; it updated in
+	// SupportFrom, so it's important that updating recentlyQueried doesn't lock
+	// requesterStateHandler.mu for writing. However, updating recentlyQueried
+	// needs to lock requesterStateHandler.mu for reading to ensure that the
+	// given store is not removed from the supportFrom map.
+	recentlyQueried atomic.Bool
 }
 
 // requesterStateHandler is the main interface for handling support from other
@@ -66,7 +84,7 @@ func newRequesterStateHandler() *requesterStateHandler {
 	rsh := &requesterStateHandler{
 		requesterState: requesterState{
 			meta:        slpb.RequesterMeta{},
-			supportFrom: make(map[slpb.StoreIdent]slpb.SupportState),
+			supportFrom: make(map[slpb.StoreIdent]*requestedSupport),
 		},
 	}
 	rsh.update.Store(
@@ -74,7 +92,7 @@ func newRequesterStateHandler() *requesterStateHandler {
 			checkedIn: &rsh.requesterState,
 			inProgress: requesterState{
 				meta:        slpb.RequesterMeta{},
-				supportFrom: make(map[slpb.StoreIdent]slpb.SupportState),
+				supportFrom: make(map[slpb.StoreIdent]*requestedSupport),
 			},
 		},
 	)
@@ -105,8 +123,15 @@ type requesterStateForUpdate struct {
 func (rsh *requesterStateHandler) getSupportFrom(id slpb.StoreIdent) (slpb.SupportState, bool) {
 	rsh.mu.RLock()
 	defer rsh.mu.RUnlock()
-	ss, ok := rsh.requesterState.supportFrom[id]
-	return ss, ok
+	rs, ok := rsh.requesterState.supportFrom[id]
+	var supportState slpb.SupportState
+	if ok {
+		// If a store is present, set recentlyQueried to true. Otherwise, if
+		// this is a new store, recentlyQueried will be set to true in addStore.
+		rs.recentlyQueried.Store(true)
+		supportState = rs.state
+	}
+	return supportState, ok
 }
 
 // addStore adds a store to the requesterState.supportFrom map, if not present.
@@ -118,20 +143,37 @@ func (rsh *requesterStateHandler) addStore(id slpb.StoreIdent) {
 	rsh.mu.Lock()
 	defer rsh.mu.Unlock()
 	if _, ok := rsh.requesterState.supportFrom[id]; !ok {
-		ss := slpb.SupportState{Target: id, Epoch: rsh.requesterState.meta.MaxEpoch}
-		rsh.requesterState.supportFrom[id] = ss
+		rs := requestedSupport{
+			state: slpb.SupportState{Target: id, Epoch: rsh.requesterState.meta.MaxEpoch},
+		}
+		// Adding a store is done in response to SupportFrom, so it's ok to set
+		// recentlyQueried to true here. This also ensures the store will not be
+		// removed immediately after adding.
+		rs.recentlyQueried.Store(true)
+		rsh.requesterState.supportFrom[id] = &rs
 	}
 }
 
-// removeStore removes a store from the requesterState.supportFrom map.
-func (rsh *requesterStateHandler) removeStore(id slpb.StoreIdent) {
-	// Removing a store doesn't require persisting anything to disk, so it doesn't
+// removeIdleStores removes all stores from the requesterState.supportFrom map
+// that have not appeared in a getSupportFrom call since the last time
+// removeIdleStores was called.
+func (rsh *requesterStateHandler) removeIdleStores() {
+	// Removing stores doesn't require persisting anything to disk, so it doesn't
 	// need to go through the full checkOut/checkIn process. However, we still
 	// check out the update to ensure that there are no concurrent updates.
 	defer rsh.checkInUpdate(rsh.checkOutUpdate())
+	// TODO(mira): If holding the write lock causes too much contention here,
+	// consider iterating through rsh.requesterState.supportFrom while holding a
+	// read lock to find all stores that need to be removed; then, iterate
+	// through that list of stores again while holding the write lock to
+	// actually remove them.
 	rsh.mu.Lock()
 	defer rsh.mu.Unlock()
-	delete(rsh.requesterState.supportFrom, id)
+	for id, rs := range rsh.requesterState.supportFrom {
+		if !rs.recentlyQueried.Swap(false) {
+			delete(rsh.requesterState.supportFrom, id)
+		}
+	}
 }
 
 // Functions for handling requesterState updates.
@@ -168,11 +210,15 @@ func (rsfu *requesterStateForUpdate) getMeta() slpb.RequesterMeta {
 func (rsfu *requesterStateForUpdate) getSupportFrom(
 	storeID slpb.StoreIdent,
 ) (slpb.SupportState, bool) {
-	ss, ok := rsfu.inProgress.supportFrom[storeID]
+	rs, ok := rsfu.inProgress.supportFrom[storeID]
 	if !ok {
-		ss, ok = rsfu.checkedIn.supportFrom[storeID]
+		rs, ok = rsfu.checkedIn.supportFrom[storeID]
 	}
-	return ss, ok
+	var supportState slpb.SupportState
+	if ok {
+		supportState = rs.state
+	}
+	return supportState, ok
 }
 
 // reset clears the inProgress view of requesterStateForUpdate.
@@ -234,8 +280,8 @@ func (rsh *requesterStateHandler) checkInUpdate(rsfu *requesterStateForUpdate) {
 		rsfu.assertMeta()
 		rsfu.checkedIn.meta = rsfu.inProgress.meta
 	}
-	for storeID, ss := range rsfu.inProgress.supportFrom {
-		rsfu.checkedIn.supportFrom[storeID] = ss
+	for storeID, rs := range rsfu.inProgress.supportFrom {
+		rsfu.checkedIn.supportFrom[storeID].state = rs.state
 	}
 }
 
@@ -272,12 +318,12 @@ func (rsfu *requesterStateForUpdate) generateHeartbeats(from slpb.StoreIdent) []
 		len(rsfu.inProgress.supportFrom) == 0, "reading from requesterStateForUpdate."+
 			"checkedIn.supportFrom while requesterStateForUpdate.inProgress.supportFrom is not empty",
 	)
-	for _, ss := range rsfu.checkedIn.supportFrom {
+	for _, rs := range rsfu.checkedIn.supportFrom {
 		heartbeat := slpb.Message{
 			Type:       slpb.MsgHeartbeat,
 			From:       from,
-			To:         ss.Target,
-			Epoch:      ss.Epoch,
+			To:         rs.state.Target,
+			Epoch:      rs.state.Epoch,
 			Expiration: maxRequested,
 		}
 		heartbeats = append(heartbeats, heartbeat)
@@ -290,7 +336,7 @@ func (rsfu *requesterStateForUpdate) generateHeartbeats(from slpb.StoreIdent) []
 // handleHeartbeatResponse handles a single heartbeat response message. It
 // updates the inProgress view of requesterStateForUpdate only if there are any
 // changes.
-func (rsfu *requesterStateForUpdate) handleHeartbeatResponse(msg slpb.Message) {
+func (rsfu *requesterStateForUpdate) handleHeartbeatResponse(msg *slpb.Message) {
 	from := msg.From
 	meta := rsfu.getMeta()
 	ss, ok := rsfu.getSupportFrom(from)
@@ -302,14 +348,14 @@ func (rsfu *requesterStateForUpdate) handleHeartbeatResponse(msg slpb.Message) {
 		rsfu.inProgress.meta = metaNew
 	}
 	if ss != ssNew {
-		rsfu.inProgress.supportFrom[from] = ssNew
+		rsfu.inProgress.supportFrom[from] = &requestedSupport{state: ssNew}
 	}
 }
 
 // handleHeartbeatResponse contains the core logic for updating the epoch and
 // expiration for a support provider upon receiving a heartbeat response.
 func handleHeartbeatResponse(
-	rm slpb.RequesterMeta, ss slpb.SupportState, msg slpb.Message,
+	rm slpb.RequesterMeta, ss slpb.SupportState, msg *slpb.Message,
 ) (slpb.RequesterMeta, slpb.SupportState) {
 	if rm.MaxEpoch < msg.Epoch {
 		rm.MaxEpoch = msg.Epoch
