@@ -326,3 +326,33 @@ DROP TABLE t1_with_b_2_ref;
 
 statement ok
 DROP FUNCTION f_b;
+
+statement ok
+CREATE FUNCTION f_char(c CHAR) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_char(BPCHAR)
+
+statement ok
+CREATE FUNCTION f_char(c CHAR(2)) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_char(BPCHAR)
+
+statement ok
+CREATE FUNCTION f_char(c BPCHAR) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_char(BPCHAR)
+
+statement ok
+CREATE FUNCTION f_char(c BPCHAR) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_char(CHAR)
+
+statement ok
+CREATE FUNCTION f_char(c BPCHAR) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_char(CHAR(2))

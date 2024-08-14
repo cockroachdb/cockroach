@@ -288,6 +288,13 @@ func TestLogic_bit(
 	runLogicTest(t, "bit")
 }
 
+func TestLogic_bpchar(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "bpchar")
+}
+
 func TestLogic_builtin_function(
 	t *testing.T,
 ) {
