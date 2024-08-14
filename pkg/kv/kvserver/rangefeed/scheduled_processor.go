@@ -318,9 +318,10 @@ func (p *ScheduledProcessor) Register(
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 
 	var r registration
-	if _, ok := stream.(BufferedStream); ok {
-		log.Fatalf(context.Background(),
-			"unimplemented: unbuffered registrations for rangefeed, see #126560")
+	bufferedStream, isBufferedStream := stream.(BufferedStream)
+	if isBufferedStream {
+		r = newUnbufferedRegistration(span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+			p.Config.EventChanCap, p.Metrics, bufferedStream, disconnectFn)
 	} else {
 		r = newBufferedRegistration(
 			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
@@ -349,20 +350,37 @@ func (p *ScheduledProcessor) Register(
 		// once they observe the first checkpoint event.
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
-		if bs, ok := stream.(BufferedStream); ok {
-			bs.RegisterRangefeedCleanUp(func() {
-				log.Fatalf(context.Background(), "unimplemented: see #126560")
+		if ubr, ok := r.(*unbufferedRegistration); ok {
+			bufferedStream.RegisterRangefeedCleanUp(func() {
+				// Callback is invoked when stream is closed. In case that the
+				// disconnect happens from the rangefeed side, setDisconnectedIfNot is
+				// no-op. But if this is called from streamMuxer.disconnectAll, this
+				// disconnects everything properly. runOutputLoop is responsible for
+				// draining catchUpBuf.
+				ubr.setDisconnectedIfNot()
+				// Invoke rangefeed clean up callback regardless of whether registration
+				// has been disconnected during the callback.
+				// TODO(wenyihu6): understand what happens if p is stopped here already
+				if p.unregisterClient(r) {
+					// unreg callback is set by replica to tear down processors that have
+					// zero registrations left and to update event filters.
+					if f := r.getUnreg(); f != nil {
+						f()
+					}
+				}
 			})
 		}
 
 		// Run an output loop for the registry.
 		runOutputLoop := func(ctx context.Context) {
 			r.runOutputLoop(ctx, p.RangeID)
-			if p.unregisterClient(r) {
-				// unreg callback is set by replica to tear down processors that have
-				// zero registrations left and to update event filters.
-				if f := r.getUnreg(); f != nil {
-					f()
+			if _, ok := r.(*bufferedRegistration); ok {
+				if p.unregisterClient(r) {
+					// unreg callback is set by replica to tear down processors that have
+					// zero registrations left and to update event filters.
+					if f := r.getUnreg(); f != nil {
+						f()
+					}
 				}
 			}
 		}
@@ -372,6 +390,12 @@ func (p *ScheduledProcessor) Register(
 			// could only happen on shutdown. Disconnect stream and just remove
 			// registration.
 			r.disconnect(kvpb.NewError(err))
+			// Normally, ubr.runOutputLoop is responsible for draining catch up
+			// buffer. If it fails to start, we should drain it here. Double check if
+			// runOutputLoop is guaranteed to be invoked if err == nil here.
+			if ubr, ok := r.(*unbufferedRegistration); ok {
+				ubr.discardCatchUpBuffer()
+			}
 			p.reg.Unregister(ctx, r)
 		}
 		return f
