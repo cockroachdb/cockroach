@@ -25,7 +25,7 @@ import (
 var (
 	// SeedTypes includes the following types that form the basis of randomly
 	// generated types:
-	//   - All scalar types, except UNKNOWN and ANY
+	//   - All scalar types, except UNKNOWN, ANY, REGNAMESPACE, and FLOAT4
 	//   - ARRAY of ANY and TUPLE of ANY, where the ANY will be replaced with
 	//     one of the legal array element types in RandType
 	//   - OIDVECTOR and INT2VECTOR types
@@ -46,6 +46,9 @@ func init() {
 			// https://github.com/cockroachdb/cockroach/issues/55791 is fixed.
 		case oid.T_unknown, oid.T_anyelement:
 			// Don't include these.
+		case oid.T_float4:
+			// Don't include FLOAT4 due to known bugs that cause test failures.
+			// See #73743 and #48613.
 		case oid.T_anyarray, oid.T_oidvector, oid.T_int2vector:
 			// Include these.
 			SeedTypes = append(SeedTypes, typ)
