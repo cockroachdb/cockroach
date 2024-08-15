@@ -69,7 +69,6 @@ const customStyles = {
   container: (provided: any) => ({
     ...provided,
     border: "none",
-    height: "fit-content",
   }),
   control: (provided: any) => ({
     ...provided,
