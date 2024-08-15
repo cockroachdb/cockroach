@@ -795,6 +795,7 @@ func (r *raft) reset(term uint64) {
 		r.Term = term
 		r.Vote = None
 		r.lead = None
+		r.leadEpoch = 0
 	}
 
 	r.electionElapsed = 0
@@ -946,6 +947,7 @@ func (r *raft) becomePreCandidate() {
 	// revoked StoreLiveness support for the leader's store to begin with. It's
 	// a bit weird from the perspective of raft though. See if we can avoid this.
 	r.lead = None
+	r.leadEpoch = 0
 	r.state = StatePreCandidate
 	r.logger.Infof("%x became pre-candidate at term %d", r.id, r.Term)
 }
@@ -1759,6 +1761,7 @@ func stepFollower(r *raft, m pb.Message) error {
 		}
 		r.logger.Infof("%x forgetting leader %x at term %d", r.id, r.lead, r.Term)
 		r.lead = None
+		r.leadEpoch = 0
 	case pb.MsgTimeoutNow:
 		// TODO(nvanbenschoten): we will eventually want some kind of logic like
 		// this. However, even this may not be enough, because we're calling a

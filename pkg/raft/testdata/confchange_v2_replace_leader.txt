@@ -201,17 +201,17 @@ stabilize
 > 1 handling Ready
   Ready MustSync=true:
   State:StateFollower
-  HardState Term:2 Vote:4 Commit:4 Lead:0 LeadEpoch:1
+  HardState Term:2 Vote:4 Commit:4 Lead:0 LeadEpoch:0
   Messages:
   1->4 MsgVoteResp Term:2 Log:0/0
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:2 Vote:4 Commit:4 Lead:0 LeadEpoch:1
+  HardState Term:2 Vote:4 Commit:4 Lead:0 LeadEpoch:0
   Messages:
   2->4 MsgVoteResp Term:2 Log:0/0
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:2 Vote:4 Commit:4 Lead:0 LeadEpoch:1
+  HardState Term:2 Vote:4 Commit:4 Lead:0 LeadEpoch:0
   Messages:
   3->4 MsgVoteResp Term:2 Log:0/0
 > 4 receiving messages
