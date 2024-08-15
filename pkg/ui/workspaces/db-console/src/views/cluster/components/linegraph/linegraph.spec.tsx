@@ -162,7 +162,6 @@ describe("<LineGraph>", function () {
           util.NanoToMilli(mockProps.timeInfo.start.toNumber()),
           util.NanoToMilli(mockProps.timeInfo.end.toNumber()),
         ),
-      false,
     );
     instance.u = new uPlot(mockOptions);
     const setDataSpy = jest.spyOn(instance.u, "setData");
