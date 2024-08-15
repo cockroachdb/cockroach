@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -184,11 +183,6 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 
 // Barrier is part of the rangefeed.TxnPusher interface.
 func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
-	// Check for v24.1 before issuing the request, in case the server binary is
-	// somehow upgraded from 23.2 to 24.1 while the response is in flight. This
-	// seems very unlikely, but it doesn't really cost us anything.
-	isV24_1 := tp.r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1Start)
-
 	// Execute a Barrier on the leaseholder, and obtain its LAI. Error out on any
 	// range changes (e.g. splits/merges) that we haven't applied yet.
 	lai, desc, err := tp.r.store.db.BarrierWithLAI(ctx, tp.span.Key, tp.span.EndKey)
@@ -208,13 +202,6 @@ func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
 		return errors.Wrap(err, "range barrier failed")
 	}
 	if lai == 0 {
-		if !isV24_1 {
-			// We may be talking to a <24.1 binary which doesn't support
-			// BarrierRequest.WithLeaseAppliedIndex. We don't expect to see this,
-			// because those nodes won't support PushTxnResponse.AmbiguousAbort either,
-			// but if we do just return success and degrade to the old behavior.
-			return nil
-		}
 		return errors.AssertionFailedf("barrier response without LeaseAppliedIndex")
 	}
 	if desc.RangeID != tp.r.RangeID {

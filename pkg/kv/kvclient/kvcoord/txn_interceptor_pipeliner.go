@@ -15,7 +15,6 @@ import (
 	"math"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -529,9 +528,6 @@ func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba *kvpb.Batch
 
 		if !kvpb.IsIntentWrite(req) {
 			if !pipelinedLockingReadsEnabled.Get(&tp.st.SV) {
-				return false
-			}
-			if !tp.st.Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1_ReplicatedLockPipelining) {
 				return false
 			}
 		}

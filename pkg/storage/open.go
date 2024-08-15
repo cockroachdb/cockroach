@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
@@ -456,20 +455,12 @@ func makePebbleWALFailoverOptsForDir(
 			// UnhealthyOperationLatencyThreshold should be pulled from the
 			// cluster setting.
 			UnhealthyOperationLatencyThreshold: func() (time.Duration, bool) {
-				// WAL failover requires 24.1 to be finalized first. Otherwise, we might
-				// write WALs to a secondary, downgrade to a previous version's binary and
-				// blindly miss WALs. The second return value indicates whether the
-				// WAL manager is allowed to failover to the secondary.
-				//
-				// NB: We do not use settings.Version.IsActive because we do not have a
-				// guarantee that the cluster version has been initialized.
-				versionOK := settings.Version.ActiveVersionOrEmpty(context.TODO()).IsActive(clusterversion.TODO_Delete_V24_1Start)
 				// WAL failover is a licensed feature.
 				licenseOK := base.CCLDistributionAndEnterpriseEnabled(settings)
 				if !licenseOK && cclWALFailoverLogEvery.ShouldLog() {
 					log.Warningf(context.Background(), "Ignoring WAL failover configuration because it requires an enterprise license.")
 				}
-				return walFailoverUnhealthyOpThreshold.Get(&settings.SV), versionOK && licenseOK
+				return walFailoverUnhealthyOpThreshold.Get(&settings.SV), licenseOK
 			},
 		},
 	}
