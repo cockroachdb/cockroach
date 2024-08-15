@@ -100,6 +100,13 @@ var upgrades = []upgradebase.Upgrade{
 
 	newFirstUpgrade(clusterversion.V24_3_Start.Version()),
 
+	upgrade.NewSystemUpgrade(
+		"create a zone config for the timeseries range if one does not exist already",
+		clusterversion.V24_3_AddTimeseriesZoneConfig.Version(),
+		addTimeseriesZoneConfig,
+		upgrade.RestoreActionNotRequired("this zone config isn't necessary for restore"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

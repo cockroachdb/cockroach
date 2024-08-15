@@ -2832,7 +2832,7 @@ func populateQueriesTable(
 // formatActiveQuery formats a serverpb.ActiveQuery by interpolating its
 // placeholders within the string.
 func formatActiveQuery(query serverpb.ActiveQuery) string {
-	parsed, parseErr := parser.ParseOne(query.Sql)
+	parsed, parseErr := parser.ParseOneRetainComments(query.Sql)
 	if parseErr != nil {
 		// If we failed to interpolate, rather than give up just send out the
 		// SQL without interpolated placeholders. Hallelujah!
