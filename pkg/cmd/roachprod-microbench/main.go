@@ -148,8 +148,8 @@ The source can be a local path or a GCS URI.`,
 func makeCompareCommand() *cobra.Command {
 	config := defaultCompareConfig()
 	runCmdFunc := func(cmd *cobra.Command, args []string) error {
-		config.newDir = args[0]
-		config.oldDir = args[1]
+		config.experimentDir = args[0]
+		config.baselineDir = args[1]
 		c, err := newCompare(config)
 		if err != nil {
 			return err
@@ -163,40 +163,51 @@ func makeCompareCommand() *cobra.Command {
 		comparisonResult := c.createComparisons(metricMaps, "baseline", "experiment")
 
 		var links map[string]string
-		if config.publishGoogleSheet {
+		if c.sheetDesc != "" {
 			links, err = c.publishToGoogleSheets(comparisonResult)
 			if err != nil {
 				return err
 			}
+			if c.slackConfig.token != "" {
+				err = c.postToSlack(links, comparisonResult)
+				if err != nil {
+					return err
+				}
+			}
 		}
 
-		if config.slackToken != "" {
-			err = c.postToSlack(links, comparisonResult)
+		if c.influxConfig.token != "" {
+			err = c.pushToInfluxDB()
 			if err != nil {
 				return err
 			}
 		}
 
 		// if the threshold is set, we want to compare and fail the job in case of perf regressions
-		if config.threshold != skipComparison {
+		if c.threshold != skipComparison {
 			return c.compareUsingThreshold(comparisonResult)
 		}
 		return nil
 	}
 
 	cmd := &cobra.Command{
-		Use:   "compare <new-dir> <old-dir>",
+		Use:   "compare <experiment-dir> <baseline-dir>",
 		Short: "Compare two sets of microbenchmark results.",
-		Long:  `Compare two sets of microbenchmark results.`,
-		Args:  cobra.ExactArgs(2),
-		RunE:  runCmdFunc,
+		Long: `Compare two sets of microbenchmark results.
+
+- experiment and baseline directories should contain the results of running microbenchmarks using the run command.
+- experiment is generally considered the results from a new version of the code, and baseline the results from a stable version.`,
+		Args: cobra.ExactArgs(2),
+		RunE: runCmdFunc,
 	}
-	cmd.Flags().StringVar(&config.sheetDesc, "sheet-desc", config.sheetDesc, "append a description to the sheet title when doing a comparison")
-	cmd.Flags().StringVar(&config.slackToken, "slack-token", config.slackToken, "pass a slack token to post the results to a slack channel")
-	cmd.Flags().StringVar(&config.slackUser, "slack-user", config.slackUser, "slack user to post the results as")
-	cmd.Flags().StringVar(&config.slackChannel, "slack-channel", config.slackChannel, "slack channel to post the results to")
+	cmd.Flags().StringVar(&config.sheetDesc, "sheet-desc", config.sheetDesc, "set a sheet description to publish the results to Google Sheets")
+	cmd.Flags().StringVar(&config.slackConfig.token, "slack-token", config.slackConfig.token, "pass a slack token to post the results to a slack channel")
+	cmd.Flags().StringVar(&config.slackConfig.user, "slack-user", config.slackConfig.user, "slack user to post the results as")
+	cmd.Flags().StringVar(&config.slackConfig.channel, "slack-channel", config.slackConfig.channel, "slack channel to post the results to")
+	cmd.Flags().StringVar(&config.influxConfig.host, "influx-host", config.influxConfig.host, "InfluxDB host to push the results to")
+	cmd.Flags().StringVar(&config.influxConfig.token, "influx-token", config.influxConfig.token, "pass an InfluxDB auth token to push the results to InfluxDB")
+	cmd.Flags().StringToStringVar(&config.influxConfig.metadata, "influx-metadata", config.influxConfig.metadata, "pass metadata to add to the InfluxDB measurement")
 	cmd.Flags().Float64Var(&config.threshold, "threshold", config.threshold, "threshold in percentage value for detecting perf regression ")
-	cmd.Flags().BoolVar(&config.publishGoogleSheet, "publish-sheets", config.publishGoogleSheet, "flag to make the command create a google sheet of the benchmark results and publish it")
 	return cmd
 }
 

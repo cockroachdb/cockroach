@@ -30,11 +30,13 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
+        "@com_github_influxdata_influxdb_client_go_v2//:influxdb-client-go",
         "@com_github_klauspost_pgzip//:pgzip",
         "@com_github_slack_go_slack//:slack",
         "@com_github_spf13_cobra//:cobra",
         "@org_golang_x_exp//maps",
         "@org_golang_x_perf//benchfmt",
+        "@org_golang_x_perf//benchseries",
     ],
 )
 
