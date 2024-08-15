@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -163,7 +164,11 @@ func newRestoreDataProcessor(
 					meta = bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
 						rd.FlowCtx.NodeID.SQLInstanceID(), rd.FlowCtx.ID, rd.agg)
 				}
-				meta.BulkProcessorProgress = &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{Drained: true}
+				if clusterversion.V24_3.Version().LessEq(rd.spec.ResumeClusterVersion) {
+					// Only send the completion message if the restore job started on a
+					// 24.3 cluster or later.
+					meta.BulkProcessorProgress = &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{Drained: true}
+				}
 				return []execinfrapb.ProducerMetadata{*meta}
 			},
 		}); err != nil {

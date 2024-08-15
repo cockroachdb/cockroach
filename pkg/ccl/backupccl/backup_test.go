@@ -1552,7 +1552,7 @@ func TestRestoreReplanOnLag(t *testing.T) {
 	retryErrorChan := make(chan error)
 	defer close(retryErrorChan)
 	//Shorten replan frequency setting to reduce test runtime.
-	replanFreq := time.Second
+	replanFreq := time.Millisecond * 10
 
 	params := base.TestClusterArgs{}
 	knobs := base.TestingKnobs{
