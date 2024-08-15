@@ -17,8 +17,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
+
+// GenericRulesEnabled returns true if rules for optimizing generic query plans
+// are enabled, based on the plan_cache_mode session setting.
+func (c *CustomFuncs) GenericRulesEnabled() bool {
+	return c.e.evalCtx.SessionData().PlanCacheMode != sessiondatapb.PlanCacheModeForceCustom
+}
 
 // HasPlaceholdersOrStableExprs returns true if the given relational expression's subtree has
 // at least one placeholder.
