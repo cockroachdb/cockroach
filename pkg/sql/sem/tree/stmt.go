@@ -820,6 +820,15 @@ func (*CommentOnType) StatementType() StatementType { return TypeDDL }
 func (*CommentOnType) StatementTag() string { return CommentOnTypeTag }
 
 // StatementReturnType implements the Statement interface.
+func (*CommitPrepared) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*CommitPrepared) StatementType() StatementType { return TypeTCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CommitPrepared) StatementTag() string { return "COMMIT PREPARED" }
+
+// StatementReturnType implements the Statement interface.
 func (*CommitTransaction) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
@@ -1291,6 +1300,15 @@ func (*Prepare) StatementType() StatementType { return TypeTCL }
 func (*Prepare) StatementTag() string { return "PREPARE" }
 
 // StatementReturnType implements the Statement interface.
+func (*PrepareTransaction) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*PrepareTransaction) StatementType() StatementType { return TypeTCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*PrepareTransaction) StatementTag() string { return "PREPARE TRANSACTION" }
+
+// StatementReturnType implements the Statement interface.
 func (*ReassignOwnedBy) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -1437,6 +1455,15 @@ func (*RevokeRole) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*RevokeRole) StatementTag() string { return "REVOKE" }
+
+// StatementReturnType implements the Statement interface.
+func (*RollbackPrepared) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*RollbackPrepared) StatementType() StatementType { return TypeTCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*RollbackPrepared) StatementTag() string { return "ROLLBACK PREPARED" }
 
 // StatementReturnType implements the Statement interface.
 func (*RollbackToSavepoint) StatementReturnType() StatementReturnType { return Ack }
@@ -2399,6 +2426,7 @@ func (n *CommentOnSchema) String() string                     { return AsString(
 func (n *CommentOnIndex) String() string                      { return AsString(n) }
 func (n *CommentOnTable) String() string                      { return AsString(n) }
 func (n *CommentOnType) String() string                       { return AsString(n) }
+func (n *CommitPrepared) String() string                      { return AsString(n) }
 func (n *CommitTransaction) String() string                   { return AsString(n) }
 func (n *CopyFrom) String() string                            { return AsString(n) }
 func (n *CopyTo) String() string                              { return AsString(n) }
@@ -2447,6 +2475,7 @@ func (n *Import) String() string                              { return AsString(
 func (n *LiteralValuesClause) String() string                 { return AsString(n) }
 func (n *ParenSelect) String() string                         { return AsString(n) }
 func (n *Prepare) String() string                             { return AsString(n) }
+func (n *PrepareTransaction) String() string                  { return AsString(n) }
 func (n *ReassignOwnedBy) String() string                     { return AsString(n) }
 func (n *ReleaseSavepoint) String() string                    { return AsString(n) }
 func (n *Relocate) String() string                            { return AsString(n) }
@@ -2461,6 +2490,7 @@ func (n *Restore) String() string                             { return AsString(
 func (n *RoutineReturn) String() string                       { return AsString(n) }
 func (n *Revoke) String() string                              { return AsString(n) }
 func (n *RevokeRole) String() string                          { return AsString(n) }
+func (n *RollbackPrepared) String() string                    { return AsString(n) }
 func (n *RollbackToSavepoint) String() string                 { return AsString(n) }
 func (n *RollbackTransaction) String() string                 { return AsString(n) }
 func (n *Savepoint) String() string                           { return AsString(n) }
