@@ -70,8 +70,12 @@ var MaxSnapshotSSTableSize = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kv.snapshot_rebalance.max_sst_size",
 	"maximum size of a rebalance or recovery SST size",
-	128<<20, // 128 MB
-	settings.PositiveInt,
+	// TODO(bilal): Set this default to 128MB when splitting of sstables is fixed:
+	// https://github.com/cockroachdb/cockroach/issues/129026
+	//
+	// 128<<20, // 128 MB
+	0,
+	settings.NonNegativeInt,
 )
 
 // snapshotMetrics contains metrics on the number and size of snapshots in
