@@ -93,7 +93,7 @@ message RaftMessageRequest {
   repeated RaftHeartbeat heartbeat_resps = 7 [(gogoproto.nullable) = false];
 
   // AdmittedRaftLogEntries is coalesced information about all raft log entries
-  // that were admitted below raft.
+  // that were admitted below raft. Used only in RACv1.
   repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedRaftLogEntries admitted_raft_log_entries = 11 [(gogoproto.nullable) = false];
 
   // UsingRAC2Protocol is set to true iff the leader is using the RACv2
@@ -114,6 +114,8 @@ message RaftMessageRequest {
 message RaftMessageRequestBatch {
   repeated RaftMessageRequest requests = 1 [(gogoproto.nullable) = false];
 
+  // StoreIDs is used only in RACv1.
+  //
   // StoreIDs identifies all the stores on the client node. It's populated on
   // the first RaftMessageRequestBatch sent along MultiRaft.RaftMessageBatch
   // gRPC stream identifying at least one store, and the populated once more
