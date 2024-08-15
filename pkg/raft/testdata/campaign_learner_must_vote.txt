@@ -62,7 +62,7 @@ process-ready 2
 ----
 Ready MustSync=true:
 State:StateCandidate
-HardState Term:2 Vote:2 Commit:4 Lead:0 LeadEpoch:1
+HardState Term:2 Vote:2 Commit:4 Lead:0 LeadEpoch:0
 Messages:
 2->1 MsgVote Term:2 Log:1/4
 2->3 MsgVote Term:2 Log:1/4
@@ -82,7 +82,7 @@ stabilize 3
   INFO 3 [logterm: 1, index: 3, vote: 0] cast MsgVote for 2 [logterm: 1, index: 4] at term 2
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:2 Vote:2 Commit:3 Lead:0 LeadEpoch:1
+  HardState Term:2 Vote:2 Commit:3 Lead:0 LeadEpoch:0
   Messages:
   3->2 MsgVoteResp Term:2 Log:0/0
 
