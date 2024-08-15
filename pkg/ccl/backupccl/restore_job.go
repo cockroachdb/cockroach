@@ -317,7 +317,9 @@ func restore(
 		return emptyRowCount, err
 	}
 
-	on231 := clusterversion.TODO_Delete_V23_1.Version().LessEq(job.Payload().CreationClusterVersion)
+	ver := job.Payload().CreationClusterVersion
+	// TODO(radu,msbutler,stevendanna): we might be able to remove this now?
+	on231 := ver.Major > 23 || (ver.Major == 23 && ver.Minor >= 1)
 	restoreCheckpoint := job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
 	requiredSpans := dataToRestore.getSpans()
 	progressTracker, err := makeProgressTracker(

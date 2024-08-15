@@ -18,7 +18,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
@@ -2249,7 +2248,7 @@ func (a *Allocator) IOOverloadOptions() IOOverloadOptions {
 	return IOOverloadOptions{
 		ReplicaEnforcementLevel:      ReplicaIOOverloadThresholdEnforcement.Get(&a.st.SV),
 		LeaseEnforcementLevel:        LeaseIOOverloadThresholdEnforcement.Get(&a.st.SV),
-		UseIOThresholdMax:            a.st.Version.IsActive(context.Background(), clusterversion.TODO_Delete_V24_1_GossipMaximumIOOverload),
+		UseIOThresholdMax:            true,
 		ReplicaIOOverloadThreshold:   ReplicaIOOverloadThreshold.Get(&a.st.SV),
 		LeaseIOOverloadThreshold:     LeaseIOOverloadThreshold.Get(&a.st.SV),
 		LeaseIOOverloadShedThreshold: LeaseIOOverloadShedThreshold.Get(&a.st.SV),
