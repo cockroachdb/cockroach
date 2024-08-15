@@ -218,10 +218,6 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := p.maybeUpdateSystemDBSurvivalGoal(ctx); err != nil {
-		return err
-	}
-
 	// Log Drop Database event. This is an auditable log event and is recorded
 	// in the same transaction as the table descriptor update.
 	return p.logEvent(ctx,

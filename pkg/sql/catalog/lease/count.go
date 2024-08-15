@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -85,9 +84,9 @@ func countLeasesWithDetail(
 		v := settings.Version.ActiveVersion(ctx).Version
 		systemDBVersion = &v
 	}
-	leasingDescIsSessionBased := systemDBVersion != nil &&
-		clusterversion.RemoveDevOffset(*systemDBVersion).AtLeast(
-			clusterversion.RemoveDevOffset(clusterversion.TODO_Delete_V24_1_SessionBasedLeasingUpgradeDescriptor.Version()))
+	// TODO(radu): this used to check the version against a pre-v24.1 gate; should
+	// this be always true now?
+	leasingDescIsSessionBased := systemDBVersion != nil
 	leasingMode := readSessionBasedLeasingMode(ctx, settings)
 	whereClauses := make([][]string, 2)
 	containsSystemDatabase := false
