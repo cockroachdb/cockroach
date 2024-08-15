@@ -17,10 +17,36 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 )
 
-// HasDeprecatedElements returns if the target contains any element marked
-// for deprecation.
+// HasDeprecatedElements returns if the target contains any element or fields
+// marked for deprecation.
 func HasDeprecatedElements(version clusterversion.ClusterVersion, target Target) bool {
 	return target.GetSecondaryIndexPartial() != nil
+}
+
+// migrateDeprecatedFields will check if any of the deprecated fields are being
+// used. If one is found, it will make the necessary migration, potentially
+// returning a new target that must be added.
+func migrateDeprecatedFields(
+	version clusterversion.ClusterVersion, target Target,
+) (migrated bool, newTargets []Target) {
+	newTargets = make([]Target, 0)
+	if columnType := target.GetColumnType(); columnType != nil {
+		if columnType.ComputeExpr != nil && version.IsActive(clusterversion.V24_3) {
+			newTarget := MakeTarget(
+				AsTargetStatus(target.TargetStatus),
+				&ColumnComputeExpression{
+					TableID:    columnType.TableID,
+					ColumnID:   columnType.ColumnID,
+					Expression: *columnType.ComputeExpr,
+				},
+				&target.Metadata,
+			)
+			newTargets = append(newTargets, newTarget)
+			columnType.ComputeExpr = nil
+			migrated = true
+		}
+	}
+	return
 }
 
 // migrateTargetElement migrates an individual target at a given index.
@@ -125,6 +151,8 @@ func MigrateDescriptorState(
 		return false
 	}
 	targetsToRemove := make(map[int]struct{})
+	targetsToAdd := make([]Target, 0)
+	currentStatusesToAdd := make([]Status, 0)
 	newIndexes := make(map[catid.DescID]*TargetMetadata)
 	newTargets := 0
 	updated := false
@@ -147,6 +175,15 @@ func MigrateDescriptorState(
 			state.CurrentStatuses[idx] = current
 			target.TargetStatus = targetStatus
 			updated = true
+		}
+		if migrated, newTargets := migrateDeprecatedFields(version, target); migrated {
+			updated = true
+			for i := range newTargets {
+				targetsToAdd = append(targetsToAdd, newTargets[i])
+				// When adding new targets, we will just match the status of the target
+				// that caused the migration.
+				currentStatusesToAdd = append(currentStatusesToAdd, state.CurrentStatuses[idx])
+			}
 		}
 	}
 	for id, md := range newIndexes {
@@ -171,13 +208,22 @@ func MigrateDescriptorState(
 	state.Targets = make([]Target, 0, len(existingTargets))
 	state.TargetRanks = make([]uint32, 0, len(existingTargetRanks))
 	state.CurrentStatuses = make([]Status, 0, len(existingStatuses))
+	var maxRank uint32 // Keep track of rank in case we have targets to add
 	for idx := range existingTargets {
 		if _, ok := targetsToRemove[idx]; ok {
 			continue
 		}
 		state.Targets = append(state.Targets, existingTargets[idx])
 		state.TargetRanks = append(state.TargetRanks, existingTargetRanks[idx])
+		maxRank = max(maxRank, existingTargetRanks[idx])
 		state.CurrentStatuses = append(state.CurrentStatuses, existingStatuses[idx])
+	}
+	for idx, newTarget := range targetsToAdd {
+		state.Targets = append(state.Targets, newTarget)
+		// These targets are appended to the end. So, we will just set the rank to be max + 1.
+		state.TargetRanks = append(state.TargetRanks, maxRank+1)
+		maxRank++
+		state.CurrentStatuses = append(state.CurrentStatuses, currentStatusesToAdd[idx])
 	}
 
 	return updated

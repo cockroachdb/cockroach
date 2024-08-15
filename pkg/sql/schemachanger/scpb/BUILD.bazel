@@ -101,7 +101,14 @@ genrule(
 
 go_test(
     name = "scpb_test",
-    srcs = ["element_collection_test.go"],
+    srcs = [
+        "element_collection_test.go",
+        "migration_test.go",
+    ],
     embed = [":scpb"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/sql/catalog/catpb",
+        "@com_github_stretchr_testify//require",
+    ],
 )

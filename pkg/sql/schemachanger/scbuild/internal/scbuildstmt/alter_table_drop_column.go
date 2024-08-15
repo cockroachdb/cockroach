@@ -299,6 +299,12 @@ func walkColumnDependencies(
 				} else {
 					columnDeps.Add(elt.ColumnID)
 				}
+			case *scpb.ColumnComputeExpression:
+				if elt.ColumnID == col.ColumnID {
+					fn(e, op, objType)
+				} else {
+					columnDeps.Add(elt.ColumnID)
+				}
 			case *scpb.SequenceOwner:
 				fn(e, op, objType)
 				sequenceDeps.Add(elt.SequenceID)
