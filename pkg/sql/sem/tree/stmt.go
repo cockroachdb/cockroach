@@ -1987,6 +1987,14 @@ func (*ShowConstraints) StatementType() StatementType { return TypeDML }
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowConstraints) StatementTag() string { return "SHOW CONSTRAINTS" }
 
+func (*ShowLogicalReplicationJobs) StatementReturnType() StatementReturnType { return Rows }
+
+func (*ShowLogicalReplicationJobs) StatementType() StatementType { return TypeDML }
+
+func (*ShowLogicalReplicationJobs) StatementTag() string {
+	return "SHOW LOGICAL REPLICATION JOBS"
+}
+
 // StatementReturnType implements the Statement interface.
 func (*ShowTables) StatementReturnType() StatementReturnType { return Rows }
 
@@ -2509,6 +2517,7 @@ func (n *ShowFingerprints) String() string                    { return AsString(
 func (n *ShowDefaultPrivileges) String() string               { return AsString(n) }
 func (n *ShowCompletions) String() string                     { return AsString(n) }
 func (n *ShowCommitTimestamp) String() string                 { return AsString(n) }
+func (n *ShowLogicalReplicationJobs) String() string          { return AsString(n) }
 func (n *Split) String() string                               { return AsString(n) }
 func (n *Truncate) String() string                            { return AsString(n) }
 func (n *TenantSpec) String() string                          { return AsString(n) }
