@@ -97,12 +97,14 @@ type interval struct {
 // leader we only extend the existing state, as discussed in the correctness
 // comment above.
 //
+// Returns true iff the leaderTerm was not stale.
+//
 // INVARIANT: first <= last.
 func (p *lowPriOverrideState) sideChannelForLowPriOverride(
 	leaderTerm uint64, first, last uint64, lowPriOverride bool,
-) {
+) bool {
 	if leaderTerm < p.leaderTerm {
-		return
+		return false
 	}
 	n := len(p.intervals)
 	if leaderTerm > p.leaderTerm {
@@ -124,7 +126,7 @@ func (p *lowPriOverrideState) sideChannelForLowPriOverride(
 		// Common case: existing leader.
 		if n > 0 {
 			if p.intervals[n-1].last >= last {
-				return
+				return true
 			}
 			// INVARIANT: p.intervals[n-1].last < last, so p.intervals[n-1].last + 1 <= last.
 			if p.intervals[n-1].last >= first {
@@ -143,10 +145,21 @@ func (p *lowPriOverrideState) sideChannelForLowPriOverride(
 		p.intervals[n-1].last+1 >= first {
 		// Extend the last interval.
 		p.intervals[n-1].last = last
-		return
+		return true
 	}
 	p.intervals = append(p.intervals,
 		interval{first: first, last: last, lowPriOverride: lowPriOverride})
+	return true
+}
+
+// sideChannelForV1Leader returns true iff the leaderTerm advanced.
+func (p *lowPriOverrideState) sideChannelForV1Leader(leaderTerm uint64) bool {
+	if leaderTerm <= p.leaderTerm {
+		return false
+	}
+	p.leaderTerm = leaderTerm
+	p.intervals = p.intervals[:0]
+	return true
 }
 
 func (p *lowPriOverrideState) getEffectivePriority(
