@@ -359,15 +359,16 @@ func TestLDROnNodeShutdown(
 
 	// Graceful shutdown on both nodes
 	// TODO(naveen.setlur): maybe switch this to a less graceful shutdown via SIGKILL
+	stopOpts := option.NewStopOpts(option.Graceful(shutdownMaxWait))
 	t.L().Printf("Shutting down node-left: %d", nodeToStopL)
 	monitor.ExpectDeath()
-	if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), nodeToStopL); err != nil {
+	if err := c.StopE(ctx, t.L(), stopOpts, c.Node(nodeToStopL)); err != nil {
 		t.Fatalf("Unable to shutdown node: %s", err)
 	}
 
 	t.L().Printf("Shutting down node-right: %d", nodeToStopR)
 	monitor.ExpectDeath()
-	if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), nodeToStopR); err != nil {
+	if err := c.StopE(ctx, t.L(), stopOpts, c.Node(nodeToStopR)); err != nil {
 		t.Fatalf("Unable to shutdown node: %s", err)
 	}
 
