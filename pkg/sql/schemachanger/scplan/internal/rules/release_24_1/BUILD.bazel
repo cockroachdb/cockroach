@@ -45,6 +45,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":release_24_1"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/scpb",

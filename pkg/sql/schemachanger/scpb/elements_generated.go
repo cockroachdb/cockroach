@@ -200,6 +200,43 @@ func (c *ElementCollection[E]) FilterColumnComment() *ElementCollection[*ColumnC
 	return (*ElementCollection[*ColumnComment])(ret)
 }
 
+func (e ColumnComputeExpression) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_ColumnComputeExpression) Element() Element {
+	return e.ColumnComputeExpression
+}
+
+// ForEachColumnComputeExpression iterates over elements of type ColumnComputeExpression.
+// Deprecated
+func ForEachColumnComputeExpression(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnComputeExpression),
+) {
+  c.FilterColumnComputeExpression().ForEach(fn)
+}
+
+// FindColumnComputeExpression finds the first element of type ColumnComputeExpression.
+// Deprecated
+func FindColumnComputeExpression(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *ColumnComputeExpression) {
+	if tc := c.FilterColumnComputeExpression(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*ColumnComputeExpression)
+	}
+	return current, target, element
+}
+
+// ColumnComputeExpressionElements filters elements of type ColumnComputeExpression.
+func (c *ElementCollection[E]) FilterColumnComputeExpression() *ElementCollection[*ColumnComputeExpression] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*ColumnComputeExpression)
+		return ok
+	})
+	return (*ElementCollection[*ColumnComputeExpression])(ret)
+}
+
 func (e ColumnDefaultExpression) element() {}
 
 // Element implements ElementGetter.
@@ -2509,6 +2546,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_Column{ Column: t}
 		case *ColumnComment:
 			e.ElementOneOf = &ElementProto_ColumnComment{ ColumnComment: t}
+		case *ColumnComputeExpression:
+			e.ElementOneOf = &ElementProto_ColumnComputeExpression{ ColumnComputeExpression: t}
 		case *ColumnDefaultExpression:
 			e.ElementOneOf = &ElementProto_ColumnDefaultExpression{ ColumnDefaultExpression: t}
 		case *ColumnFamily:
@@ -2644,6 +2683,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_CheckConstraintUnvalidated)(nil)),
 	((*ElementProto_Column)(nil)),
 	((*ElementProto_ColumnComment)(nil)),
+	((*ElementProto_ColumnComputeExpression)(nil)),
 	((*ElementProto_ColumnDefaultExpression)(nil)),
 	((*ElementProto_ColumnFamily)(nil)),
 	((*ElementProto_ColumnName)(nil)),
@@ -2718,6 +2758,7 @@ func GetElementTypes() []interface{} {
 	((*CheckConstraintUnvalidated)(nil)),
 	((*Column)(nil)),
 	((*ColumnComment)(nil)),
+	((*ColumnComputeExpression)(nil)),
 	((*ColumnDefaultExpression)(nil)),
 	((*ColumnFamily)(nil)),
 	((*ColumnName)(nil)),

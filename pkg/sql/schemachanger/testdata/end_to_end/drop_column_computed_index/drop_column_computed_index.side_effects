@@ -491,11 +491,11 @@ upsert descriptor #104
   -  version: "6"
   +  version: "7"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 4 with 8 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 4 with 9 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 4 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 4 with 11 MutationType ops
 upsert descriptor #104
   ...
          oid: 20

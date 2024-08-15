@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
@@ -85,12 +86,17 @@ func (i *immediateVisitor) addNewColumnType(
 		col.Nullable = op.ColumnType.IsNullable
 	}
 	col.Virtual = op.ColumnType.IsVirtual
-	if ce := op.ColumnType.ComputeExpr; ce != nil {
-		expr := string(ce.Expr)
-		col.ComputeExpr = &expr
-		col.UsesSequenceIds = ce.UsesSequenceIDs
+	// ComputeExpr is deprecated in favor of a separate element
+	// (ColumnComputeExpression). Any changes in this if block
+	// should also be made in the AddColumnComputeExpression function.
+	if !op.ColumnType.ElementCreationMetadata.In_24_3OrLater {
+		if ce := op.ColumnType.ComputeExpr; ce != nil {
+			expr := string(ce.Expr)
+			col.ComputeExpr = &expr
+			col.UsesSequenceIds = ce.UsesSequenceIDs
+		}
 	}
-	if col.ComputeExpr == nil || !col.Virtual {
+	if !col.Virtual {
 		for i := range tbl.Families {
 			fam := &tbl.Families[i]
 			if fam.ID == op.ColumnType.FamilyID {
@@ -103,6 +109,48 @@ func (i *immediateVisitor) addNewColumnType(
 	// Empty names are allowed for families, in which case AllocateIDs will assign
 	// one.
 	return tbl.AllocateIDsWithoutValidation(ctx, false /* createMissingPrimaryKey */)
+}
+
+// AddColumnComputeExpression will set a compute expression to a column.
+func (i *immediateVisitor) AddColumnComputeExpression(
+	ctx context.Context, op scop.AddColumnComputeExpression,
+) error {
+	return i.updateColumnComputeExpression(ctx, op.ComputeExpression.TableID, op.ComputeExpression.ColumnID,
+		&op.ComputeExpression.Expr)
+}
+
+// RemoveColumnComputeExpression will drop a compute expression from a column.
+func (i *immediateVisitor) RemoveColumnComputeExpression(
+	ctx context.Context, op scop.RemoveColumnComputeExpression,
+) error {
+	return i.updateColumnComputeExpression(ctx, op.TableID, op.ColumnID, nil)
+}
+
+// updateColumnComputeExpression will handle add or removal of a compute expression.
+func (i *immediateVisitor) updateColumnComputeExpression(
+	ctx context.Context, tableID descpb.ID, columnID descpb.ColumnID, expr *catpb.Expression,
+) error {
+	tbl, err := i.checkOutTable(ctx, tableID)
+	if err != nil {
+		return err
+	}
+
+	catCol, err := catalog.MustFindColumnByID(tbl, columnID)
+	if err != nil {
+		return err
+	}
+
+	col := catCol.ColumnDesc()
+	if expr == nil {
+		clearComputedExpr(col)
+	} else {
+		expr := string(*expr)
+		col.ComputeExpr = &expr
+	}
+	if err := updateColumnExprSequenceUsage(col); err != nil {
+		return err
+	}
+	return updateColumnExprFunctionsUsage(col)
 }
 
 func (i *immediateVisitor) MakeDeleteOnlyColumnWriteOnly(
@@ -205,13 +253,7 @@ func (i *immediateVisitor) RemoveDroppedColumnType(
 	col := mut.AsColumn().ColumnDesc()
 	col.Type = types.Any
 	if col.IsComputed() {
-		// This operation needs to zero the computed column expression to remove
-		// any references to sequences and whatnot but it can't simply remove the
-		// expression entirely, otherwise in the case of virtual computed columns
-		// the column descriptor will then be interpreted as a virtual non-computed
-		// column, which doesn't make any sense.
-		null := tree.Serialize(tree.DNull)
-		col.ComputeExpr = &null
+		clearComputedExpr(col)
 	}
 	return nil
 }
@@ -385,7 +427,7 @@ func (i *immediateVisitor) updateExistingColumnType(
 	}
 	switch kind {
 	case schemachange.ColumnConversionTrivial, schemachange.ColumnConversionValidate:
-		// Tihs type of update are ones that don't do a backfill. So, we can simply
+		// This type of update are ones that don't do a backfill. So, we can simply
 		// update the column type and be done.
 		desc.Type = op.ColumnType.Type
 	default:
@@ -393,4 +435,14 @@ func (i *immediateVisitor) updateExistingColumnType(
 			desc.Type, op.ColumnType.Type, kind)
 	}
 	return nil
+}
+
+func clearComputedExpr(col *descpb.ColumnDescriptor) {
+	// This operation needs to zero the computed column expression to remove
+	// any references to sequences and whatnot but it can't simply remove the
+	// expression entirely, otherwise in the case of virtual computed columns
+	// the column descriptor will then be interpreted as a virtual non-computed
+	// column, which doesn't make any sense.
+	null := tree.Serialize(tree.DNull)
+	col.ComputeExpr = &null
 }

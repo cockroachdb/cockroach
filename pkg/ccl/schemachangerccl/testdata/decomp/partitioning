@@ -131,6 +131,7 @@ ElementState:
     computeExpr: null
     elementCreationMetadata:
       in231OrLater: true
+      in243OrLater: true
     familyId: 0
     isNullable: false
     isVirtual: false
@@ -159,6 +160,7 @@ ElementState:
     computeExpr: null
     elementCreationMetadata:
       in231OrLater: true
+      in243OrLater: true
     familyId: 0
     isNullable: false
     isVirtual: false
@@ -187,6 +189,7 @@ ElementState:
     computeExpr: null
     elementCreationMetadata:
       in231OrLater: true
+      in243OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -215,6 +218,7 @@ ElementState:
     computeExpr: null
     elementCreationMetadata:
       in231OrLater: true
+      in243OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -243,6 +247,7 @@ ElementState:
     computeExpr: null
     elementCreationMetadata:
       in231OrLater: true
+      in243OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -534,6 +539,7 @@ ElementState:
     computeExpr: null
     elementCreationMetadata:
       in231OrLater: true
+      in243OrLater: true
     familyId: 0
     isNullable: false
     isVirtual: false
@@ -562,6 +568,7 @@ ElementState:
     computeExpr: null
     elementCreationMetadata:
       in231OrLater: true
+      in243OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -590,6 +597,7 @@ ElementState:
     computeExpr: null
     elementCreationMetadata:
       in231OrLater: true
+      in243OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -618,6 +626,7 @@ ElementState:
     computeExpr: null
     elementCreationMetadata:
       in231OrLater: true
+      in243OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false

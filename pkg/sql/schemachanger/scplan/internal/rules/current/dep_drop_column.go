@@ -113,41 +113,40 @@ func init() {
 		},
 	)
 
-	// This rule ensures that a column is dropped only after any virtual, computed column dependent
-	// on the column is dropped i.e. if B is a virtual, computed column using column A
-	// in its compute expression, this rule ensures that the compute expression of B is dropped before
-	// A is dropped. The rules above ensure that the column B is dropped before the expression is dropped
-	// so this rule also implicitly implies that column B is dropped before column A.
-	// This is relevant for expression and hash indexes which create an internal, virtual column
-	// which computes the hash/expression key for the index.
+	// This rule ensures that a column is dropped only after any computed column
+	// dependent on it is dropped. For example, if column B is a computed column
+	// using column A in its compute expression, this rule ensures that the
+	// compute expression of B is dropped before column A is dropped. The rules
+	// above ensure that column B is dropped before the expression is dropped,
+	// so this rule also implicitly implies that column B is dropped before column
+	// A. This is relevant for expression and hash indexes which create an
+	// internal, virtual column that computes the hash/expression key for the index.
 	//
-	// N.B. This rules has been intentionally made very specific to only virtual, computed columns as opposed
-	// to all computed columns. This is due an edge case within the optimizer which actually allows
-	// the compute expressions of virtual computed columns to be evaluated during an active schema change.
-	// Without this rule, the optimizer is unable to read the dependent column as the dependent column
-	// moves to the WRITE_ONLY stage before the computed column is fully dropped. As of now, we don't
-	// need to apply to all computed columns as the optimizer doesn't evaluate their expressions while
-	// dropping them so the above rule where the column type is dropped before the column is sufficient
-	// to enforce the dependency.
+	// N.B. Originally, this rule was specific only to virtual, computed columns.
+	// The rationale was that it was needed due to an edge case within the
+	// optimizer. The optimizer allows the compute expression of virtual computed
+	// columns to be evaluated during an active schema change. Without this rule,
+	// the optimizer cannot read the dependent column as the dependent column
+	// moves to the WRITE_ONLY stage before the computed column is fully dropped.
+	//
+	// However, it is now needed for all compute expressions. When altering a
+	// column's type such that a backfill is required, a new version of the column
+	// is added, and the old version is dropped. A temporary compute expression is
+	// set to map the old rows to the new column type. This expression is dropped
+	// *before* dropping the old column, which this rule helps to enforce.
 	registerDepRuleForDrop(
-		"Virtual computed column expression is dropped before the column it depends on",
+		"Computed column expression is dropped before the column it depends on",
 		scgraph.Precedence,
-		"virtual-column-expr", "column",
+		"column-expr", "column",
 		scpb.Status_ABSENT, scpb.Status_WRITE_ONLY,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.ColumnType)(nil)),
+				from.Type((*scpb.ColumnComputeExpression)(nil)),
 				to.Type((*scpb.Column)(nil)),
 				JoinOnDescID(from, to, "table-id"),
 				FilterElements("computedColumnTypeReferencesColumn", from, to,
-					func(colType *scpb.ColumnType, column *scpb.Column) bool {
-						if !colType.IsVirtual {
-							return false
-						}
-						if colType.ComputeExpr == nil {
-							return false
-						}
-						for _, refColumns := range colType.ComputeExpr.ReferencedColumnIDs {
+					func(computeExpression *scpb.ColumnComputeExpression, column *scpb.Column) bool {
+						for _, refColumns := range computeExpression.ReferencedColumnIDs {
 							if refColumns == column.ColumnID {
 								return true
 							}
