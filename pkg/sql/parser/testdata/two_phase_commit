@@ -1,0 +1,23 @@
+parse
+PREPARE TRANSACTION 'id'
+----
+PREPARE TRANSACTION 'id'
+PREPARE TRANSACTION ('id') -- fully parenthesized
+PREPARE TRANSACTION '_' -- literals removed
+PREPARE TRANSACTION 'id' -- identifiers removed
+
+parse
+COMMIT PREPARED 'id'
+----
+COMMIT PREPARED 'id'
+COMMIT PREPARED ('id') -- fully parenthesized
+COMMIT PREPARED '_' -- literals removed
+COMMIT PREPARED 'id' -- identifiers removed
+
+parse
+ROLLBACK PREPARED 'id'
+----
+ROLLBACK PREPARED 'id'
+ROLLBACK PREPARED ('id') -- fully parenthesized
+ROLLBACK PREPARED '_' -- literals removed
+ROLLBACK PREPARED 'id' -- identifiers removed
