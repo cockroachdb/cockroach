@@ -1,0 +1,2 @@
+rollback_prepared_stmt ::=
+	'ROLLBACK' 'PREPARED' 'SCONST'

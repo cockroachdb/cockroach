@@ -1,0 +1,2 @@
+commit_prepared_stmt ::=
+	'COMMIT' 'PREPARED' 'SCONST'
