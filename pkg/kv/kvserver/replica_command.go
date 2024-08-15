@@ -3190,6 +3190,7 @@ func (r *Replica) followerSendSnapshot(
 		DeprecatedStrategy:  kvserverpb.SnapshotRequest_KV_BATCH,
 		DeprecatedType:      req.DeprecatedType,
 		SharedReplicate:     sharedReplicate,
+		RangeKeysInOrder:    true,
 	}
 	newBatchFn := func() storage.WriteBatch {
 		return r.store.TODOEngine().NewWriteBatch()

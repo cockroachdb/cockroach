@@ -7207,8 +7207,7 @@ func TestReplicaDestroy(t *testing.T) {
 	actualKeys := []roachpb.Key{}
 
 	require.NoError(t, rditer.IterateReplicaKeySpans(tc.repl.Desc(), engSnapshot, false /* replicatedOnly */, rditer.ReplicatedSpansAll,
-		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
-			require.Equal(t, storage.IterKeyTypePointsOnly, keyType)
+		func(iter storage.EngineIterator, _ roachpb.Span) error {
 			var err error
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
 				key, err := iter.UnsafeEngineKey()
