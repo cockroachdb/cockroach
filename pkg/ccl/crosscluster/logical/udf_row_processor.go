@@ -113,17 +113,6 @@ func makeApplierQuerier(
 	}
 }
 
-func makeUDFApplierProcessor(
-	ctx context.Context,
-	settings *cluster.Settings,
-	tableDescs map[descpb.ID]sqlProcessorTableConfig,
-	jobID jobspb.JobID,
-	ie isql.Executor,
-) (*sqlRowProcessor, error) {
-	aq := makeApplierQuerier(ctx, settings, tableDescs, jobID, ie)
-	return makeSQLProcessorFromQuerier(ctx, settings, tableDescs, ie, aq)
-}
-
 func (aq *applierQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) error {
 	var err error
 	td := tc.srcDesc
@@ -142,7 +131,7 @@ func (aq *applierQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfi
 	return err
 }
 
-func (aq *applierQuerier) RequiresParsedBeforeRow() bool { return true }
+func (aq *applierQuerier) RequiresParsedBeforeRow(catid.DescID) bool { return true }
 
 func (aq *applierQuerier) InsertRow(
 	ctx context.Context,
