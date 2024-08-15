@@ -66,6 +66,7 @@ go_test(
         "catchup_scan_bench_test.go",
         "catchup_scan_test.go",
         "event_size_test.go",
+        "processor_helpers_test.go",
         "processor_test.go",
         "registry_test.go",
         "resolved_timestamp_test.go",
