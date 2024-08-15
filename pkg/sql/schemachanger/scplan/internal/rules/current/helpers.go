@@ -153,6 +153,11 @@ func getExpression(element scpb.Element) (*scpb.Expression, error) {
 			return nil, nil
 		}
 		return e.ComputeExpr, nil
+	case *scpb.ColumnComputeExpression:
+		if e == nil {
+			return nil, nil
+		}
+		return &e.Expression, nil
 	case *scpb.ColumnDefaultExpression:
 		if e == nil {
 			return nil, nil
@@ -220,7 +225,7 @@ func isColumnNotNull(e scpb.Element) bool {
 }
 func isColumnTypeDependent(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.SequenceOwner, *scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression:
+	case *scpb.SequenceOwner, *scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression, *scpb.ColumnComputeExpression:
 		return true
 	}
 	return false

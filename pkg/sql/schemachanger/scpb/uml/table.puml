@@ -38,6 +38,12 @@ ColumnComment :  ColumnID
 ColumnComment :  Comment
 ColumnComment :  PgAttributeNum
 
+object ColumnComputeExpression
+
+ColumnComputeExpression :  TableID
+ColumnComputeExpression :  ColumnID
+ColumnComputeExpression :  Expression
+
 object ColumnDefaultExpression
 
 ColumnDefaultExpression :  TableID
@@ -419,6 +425,7 @@ Table <|-- CheckConstraintUnvalidated
 Table <|-- Column
 View <|-- Column
 Column <|-- ColumnComment
+Column <|-- ColumnComputeExpression
 Column <|-- ColumnDefaultExpression
 Table <|-- ColumnFamily
 Column <|-- ColumnName
