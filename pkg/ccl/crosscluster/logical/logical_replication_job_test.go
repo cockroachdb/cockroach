@@ -21,17 +21,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient/randclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1183,4 +1187,80 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 	}
 	dbA.CheckQueryResults(t, "SELECT * from a.tab", expectedRows)
 	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRows)
+}
+
+func TestLogicalReplicationPlanner(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	jobExecCtx, cleanup := sql.MakeJobExecContext(ctx, "test", username.RootUserName(), &sql.MemoryMetrics{}, &execCfg)
+	defer cleanup()
+
+	replicationStartTime := hlc.Timestamp{WallTime: 42}
+
+	var sj *jobs.StartableJob
+	id := registry.MakeJobID()
+	require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(
+		ctx context.Context, txn isql.Txn,
+	) (err error) {
+		return registry.CreateStartableJobWithTxn(ctx, &sj, id, txn, jobs.Record{
+			Username: username.RootUserName(),
+			Details: jobspb.LogicalReplicationDetails{
+				ReplicationStartTime: replicationStartTime,
+			},
+			Progress: jobspb.LogicalReplicationProgress{},
+		})
+	}))
+	asOfChan := make(chan hlc.Timestamp, 1)
+	client := &streamclient.MockStreamClient{
+		OnPlanLogicalReplication: func(req streampb.LogicalReplicationPlanRequest) (streamclient.LogicalReplicationPlan, error) {
+			asOfChan <- req.PlanAsOf
+			return streamclient.LogicalReplicationPlan{
+				Topology: streamclient.Topology{
+					Partitions: []streamclient.PartitionInfo{
+						{
+							ID:                "1",
+							SubscriptionToken: streamclient.SubscriptionToken("1"),
+							Spans:             []roachpb.Span{s.Codec().TenantSpan()},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+	requireAsOf := func(expected hlc.Timestamp) {
+		select {
+		case actual := <-asOfChan:
+			require.Equal(t, expected, actual)
+		case <-time.After(testutils.SucceedsSoonDuration()):
+		}
+	}
+	planner := logicalReplicationPlanner{
+		job:        sj.Job,
+		jobExecCtx: jobExecCtx,
+		client:     client,
+	}
+	t.Run("generatePlan uses the replicationStartTime for planning if replication is unset", func(t *testing.T) {
+		_, _, _ = planner.generatePlan(ctx, jobExecCtx.DistSQLPlanner())
+		requireAsOf(replicationStartTime)
+	})
+	t.Run("generatePlan uses the latest replicated time for planning", func(t *testing.T) {
+		replicatedTime := hlc.Timestamp{WallTime: 142}
+		require.NoError(t, sj.Job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			prog := md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+			prog.ReplicatedTime = replicatedTime
+			ju.UpdateProgress(md.Progress)
+			return nil
+		}))
+		_, _, _ = planner.generatePlan(ctx, jobExecCtx.DistSQLPlanner())
+		requireAsOf(replicatedTime)
+	})
 }
