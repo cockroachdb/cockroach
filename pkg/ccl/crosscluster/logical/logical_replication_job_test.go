@@ -683,13 +683,6 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 	defer cleanup()
 	for i, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.useUDF {
-				defaultSQLProcessor = udfApplierProcessor
-				defer func() {
-					defaultSQLProcessor = lwwProcessor
-				}()
-			}
-
 			tableName := fmt.Sprintf("%s%d", baseTableName, i)
 			schemaStmt := strings.ReplaceAll(tc.schema, baseTableName, tableName)
 			addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
@@ -1134,6 +1127,11 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 	RETURNS string
 	AS $$
 	BEGIN
+	SELECT crdb_internal.log((proposed).payload);
+        IF existing IS NULL THEN
+            RETURN 'accept_proposed';
+        END IF;
+
 	IF existing_origin_timestamp IS NULL THEN
 	    IF existing_mvcc_timestamp < proposed_mvcc_timestamp THEN
 			SELECT crdb_internal.log('case 1');

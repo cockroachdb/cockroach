@@ -81,7 +81,7 @@ func TestLWWInsertQueryGeneration(t *testing.T) {
 		tableNameDst := createTable(t, schemaTmpl)
 		srcDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameSrc)
 		dstDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameDst)
-		rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[descpb.ID]sqlProcessorTableConfig{
+		rp, err := makeSQLProcessor(ctx, s.ClusterSettings(), map[descpb.ID]sqlProcessorTableConfig{
 			dstDesc.GetID(): {
 				srcDesc: srcDesc,
 			},
@@ -150,7 +150,7 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
 	// Simulate how we set up the row processor on the main code path.
 	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
-	rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[descpb.ID]sqlProcessorTableConfig{
+	rp, err := makeSQLProcessor(ctx, s.ClusterSettings(), map[descpb.ID]sqlProcessorTableConfig{
 		desc.GetID(): {
 			srcDesc: desc,
 		},
