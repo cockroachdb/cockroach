@@ -1333,7 +1333,6 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 		// We disable them here so that the test is more stable.
 		envVars = append(envVars, "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true")
 	}
-	envVars = append(envVars, "COCKROACH_ALLOW_VERSION_SKIPPING=true")
 
 	opts := []testserver.TestServerOpt{
 		// During config initialization, NumNodes is required to be 3.

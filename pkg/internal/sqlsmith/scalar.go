@@ -337,9 +337,18 @@ func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		return nil, false
 	}
 	op := ops[s.rnd.Intn(len(ops))]
-	for s.simpleScalarTypes && !(isSimpleSeedType(op.LeftType) && isSimpleSeedType(op.RightType)) {
-		// We must work harder to pick some other op.
-		op = ops[s.rnd.Intn(len(ops))]
+	if s.simpleScalarTypes {
+		attempts := 0
+		for !(isSimpleSeedType(op.LeftType) && isSimpleSeedType(op.RightType)) {
+			// We must work harder to pick some other op. Some types may not have ops for
+			// simple types (e.g., pgvector), so we limit the number of attempts before
+			// giving up.
+			attempts++
+			if attempts >= len(ops) {
+				return nil, false
+			}
+			op = ops[s.rnd.Intn(len(ops))]
+		}
 	}
 
 	if s.postgres {
