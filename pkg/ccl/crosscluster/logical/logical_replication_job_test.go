@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -55,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1274,4 +1276,101 @@ func TestLogicalReplicationPlanner(t *testing.T) {
 		_, _, _ = planner.generatePlan(ctx, jobExecCtx.DistSQLPlanner())
 		requireAsOf(replicatedTime)
 	})
+}
+
+func TestShowLogicalReplicationJobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Setup
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	// Create LDR jobs
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab on $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab on $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+
+	// Wait for jobs to progress
+	now := server.Server(0).Clock().Now()
+	t.Logf("waiting for replication job %d", jobAID)
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	sysDB := sqlutils.MakeSQLRunner(server.Server(0).SystemLayer().SQLConn(t))
+
+	// Sort job IDs to match rows ordered with ORDER BY clause
+	jobIDs := []jobspb.JobID{jobAID, jobBID}
+	slices.Sort(jobIDs)
+
+	var (
+		jobID                jobspb.JobID
+		status               string
+		targets              pq.StringArray
+		replicatedTime       time.Time
+		replicationStartTime time.Time
+	)
+
+	// Verify rows returned by SHOW LOGICAL REPLICATION JOBS
+	showRows := sysDB.Query(t, "SELECT * FROM [SHOW LOGICAL REPLICATION JOBS] ORDER BY job_id")
+	defer showRows.Close()
+
+	rowIdx := 0
+	for showRows.Next() {
+		err := showRows.Scan(&jobID, &status, &targets, &replicatedTime)
+		require.NoError(t, err)
+
+		expectedJobID := jobIDs[rowIdx]
+		require.Equal(t, expectedJobID, jobID)
+		require.Equal(t, jobs.StatusRunning, jobs.Status(status))
+		require.Equal(t, pq.StringArray{"tab"}, targets)
+
+		progress := jobutils.GetJobProgress(t, sysDB, expectedJobID)
+		expectedReplicatedTime := progress.GetLogicalReplication().ReplicatedTime.GoTime()
+		require.Equal(t, expectedReplicatedTime, replicatedTime)
+
+		rowIdx++
+	}
+
+	// Verify rows returned by SHOW LOGICAL REPLICATION JOBS WITH DETAILS
+	showWithDetailsRows := sysDB.Query(t, "SELECT * FROM [SHOW LOGICAL REPLICATION JOBS WITH DETAILS] ORDER BY job_id")
+	defer showWithDetailsRows.Close()
+
+	rowIdx = 0
+	for showWithDetailsRows.Next() {
+		err := showWithDetailsRows.Scan(&jobID, &status, &targets, &replicatedTime, &replicationStartTime)
+		require.NoError(t, err)
+
+		expectedJobID := jobIDs[rowIdx]
+		require.Equal(t, expectedJobID, jobID)
+		require.Equal(t, jobs.StatusRunning, jobs.Status(status))
+		require.Equal(t, pq.StringArray{"tab"}, targets)
+
+		progress := jobutils.GetJobProgress(t, sysDB, expectedJobID)
+		expectedReplicatedTime := progress.GetLogicalReplication().ReplicatedTime.GoTime()
+		require.Equal(t, expectedReplicatedTime, replicatedTime)
+
+		payload := jobutils.GetJobPayload(t, sysDB, expectedJobID)
+		expectedReplicationStartTime := payload.GetLogicalReplicationDetails().ReplicationStartTime.GoTime()
+		require.Equal(t, expectedReplicationStartTime, replicationStartTime)
+
+		rowIdx++
+	}
+
+	// Cleanup
+	sysDB.Exec(t, "CANCEL JOB $1", jobAID.String())
+	sysDB.Exec(t, "CANCEL JOB $1", jobBID.String())
+
+	jobutils.WaitForJobToCancel(t, sysDB, jobAID)
+	jobutils.WaitForJobToCancel(t, sysDB, jobBID)
 }
