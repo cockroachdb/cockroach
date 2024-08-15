@@ -312,7 +312,9 @@ describe("node data selectors without addresses", function () {
 
     it("returns empty collection for empty state", function () {
       const store = createAdminUIStore(createHashHistory());
-      expect(nodeDisplayNameByIDSelectorWithoutAddress(store.getState())).toEqual({});
+      expect(
+        nodeDisplayNameByIDSelectorWithoutAddress(store.getState()),
+      ).toEqual({});
     });
   });
   describe("store IDs by node ID", function () {

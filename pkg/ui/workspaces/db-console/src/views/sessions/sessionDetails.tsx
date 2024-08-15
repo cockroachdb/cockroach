@@ -22,9 +22,7 @@ import {
   refreshNodes,
   refreshSessions,
 } from "src/redux/apiReducers";
-import {
-  nodeDisplayNameByIDSelectorWithoutAddress
-} from "src/redux/nodes";
+import { nodeDisplayNameByIDSelectorWithoutAddress } from "src/redux/nodes";
 import { SessionDetails, byteArrayToUuid } from "@cockroachlabs/cluster-ui";
 import {
   terminateQueryAction,
