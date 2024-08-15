@@ -172,9 +172,6 @@ func TestTimeToEnterpriseLicenseExpiry(t *testing.T) {
 	defer stopper.Stop(ctx)
 	manualTime := timeutil.NewManualTime(t0)
 
-	err := UpdateMetricOnLicenseChange(context.Background(), st, base.LicenseTTL, manualTime, stopper)
-	require.NoError(t, err)
-
 	for _, tc := range []struct {
 		desc       string
 		lic        string
@@ -190,7 +187,7 @@ func TestTimeToEnterpriseLicenseExpiry(t *testing.T) {
 			if err := setLicense(ctx, updater, tc.lic); err != nil {
 				t.Fatal(err)
 			}
-			actual := base.LicenseTTL.Value()
+			actual := base.GetLicenseTTL(context.Background(), st, manualTime)
 			require.Equal(t, tc.ttlSeconds, actual)
 		})
 	}

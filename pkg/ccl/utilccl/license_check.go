@@ -23,8 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -148,49 +146,24 @@ func IsEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, feature string
 		st, timeutil.Now(), cluster, feature, false /* withDetails */) == nil
 }
 
-var licenseMetricUpdateFrequency = 1 * time.Minute
-
-// UpdateMetricOnLicenseChange starts a task to periodically update
-// the given metric with the seconds remaining until license expiry.
-func UpdateMetricOnLicenseChange(
+// GetLicenseTTL is a function which returns the TTL for the active cluster.
+// This is done by reading the license information from the cluster settings
+// and subtracting the epoch from the expiry timestamp.
+var GetLicenseTTL = func(
 	ctx context.Context,
 	st *cluster.Settings,
-	metric *metric.Gauge,
 	ts timeutil.TimeSource,
-	stopper *stop.Stopper,
-) error {
-	enterpriseLicense.SetOnChange(&st.SV, func(ctx context.Context) {
-		updateMetricWithLicenseTTL(ctx, st, metric, ts)
-	})
-	return stopper.RunAsyncTask(ctx, "write-license-expiry-metric", func(ctx context.Context) {
-		ticker := time.NewTicker(licenseMetricUpdateFrequency)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				updateMetricWithLicenseTTL(ctx, st, metric, ts)
-			case <-stopper.ShouldQuiesce():
-				return
-			}
-		}
-	})
-}
-
-func updateMetricWithLicenseTTL(
-	ctx context.Context, st *cluster.Settings, metric *metric.Gauge, ts timeutil.TimeSource,
-) {
+) int64 {
 	license, err := getLicense(st)
 	if err != nil {
-		log.Errorf(ctx, "unable to update license expiry metric: %v", err)
-		metric.Update(0)
-		return
+		log.Errorf(ctx, "unable to find license: %v", err)
+		return 0
 	}
 	if license == nil {
-		metric.Update(0)
-		return
+		return 0
 	}
 	sec := timeutil.Unix(license.ValidUntilUnixSec, 0).Sub(ts.Now()).Seconds()
-	metric.Update(int64(sec))
+	return int64(sec)
 }
 
 // AllCCLCodeImported is set by the `ccl` pkg in an init(), thereby

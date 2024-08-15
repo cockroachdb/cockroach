@@ -19,8 +19,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/util/envutil",
         "//pkg/util/log",
-        "//pkg/util/metric",
-        "//pkg/util/stop",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",

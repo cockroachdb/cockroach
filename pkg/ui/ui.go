@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
@@ -158,6 +159,11 @@ func Handler(cfg Config) http.Handler {
 	buildInfo := build.GetInfo()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		licenseType, err := base.LicenseType(cfg.Settings)
+		if err != nil {
+			log.Errorf(context.Background(), "unable to get license type: %+v", err)
+		}
+		licenseTTL := base.GetLicenseTTL(r.Context(), cfg.Settings, timeutil.DefaultTimeSource{})
 		oidcConf := cfg.OIDC.GetOIDCConf()
 		args := indexHTMLArgs{
 			Insecure:         cfg.Insecure,

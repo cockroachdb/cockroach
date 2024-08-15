@@ -387,11 +387,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// started via the server controller.
 	cfg.RuntimeStatSampler = runtimeSampler
 
-	registry.AddMetric(base.LicenseTTL)
-	err = base.UpdateMetricOnLicenseChange(ctx, cfg.Settings, base.LicenseTTL, timeutil.DefaultTimeSource{}, stopper)
-	if err != nil {
-		log.Errorf(ctx, "unable to initialize periodic license metric update: %v", err)
-	}
+	appRegistry.AddMetric(metric.NewFunctionalGauge(base.LicenseTTLMetadata, func() int64 {
+		return base.GetLicenseTTL(ctx, cfg.Settings, timeutil.DefaultTimeSource{})
+	}))
+	appRegistry.AddMetric(metric.NewFunctionalGauge(base.AdditionalLicenseTTLMetadata, func() int64 {
+		return base.GetLicenseTTL(ctx, cfg.Settings, timeutil.DefaultTimeSource{})
+	}))
 
 	// Create and add KV metric rules.
 	kvserver.CreateAndAddRules(ctx, ruleRegistry)
