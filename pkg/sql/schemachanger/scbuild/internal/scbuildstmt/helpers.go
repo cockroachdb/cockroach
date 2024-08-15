@@ -1699,3 +1699,23 @@ func mustRetrieveIndexColumnElements(
 	}
 	return idxCols
 }
+
+// mustRetrievePhysicalTableElem will resolve a tableID to a physical table
+// element. A "physical" table element includes tables, views, and sequences.
+func mustRetrievePhysicalTableElem(b BuildCtx, tableID catid.DescID) scpb.Element {
+	return b.QueryByID(tableID).Filter(func(
+		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
+	) bool {
+		switch e := e.(type) {
+		case *scpb.Table:
+			return e.TableID == tableID
+		case *scpb.View:
+			if e.IsMaterialized {
+				return e.ViewID == tableID
+			}
+		case *scpb.Sequence:
+			return e.SequenceID == tableID
+		}
+		return false
+	}).MustGetOneElement()
+}
