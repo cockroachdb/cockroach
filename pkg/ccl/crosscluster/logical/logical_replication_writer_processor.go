@@ -931,7 +931,7 @@ func (t *txnBatch) HandleBatch(
 
 	stats := batchStats{}
 	var err error
-	if len(batch) == 1 && !useKVWriter {
+	if len(batch) == 1 {
 		s, err := t.rp.ProcessRow(ctx, nil /* txn */, batch[0].KeyValue, batch[0].PrevValue)
 		if err != nil {
 			return stats, err
