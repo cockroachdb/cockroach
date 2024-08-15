@@ -11,8 +11,11 @@
 package rac2
 
 import (
+	"cmp"
 	"context"
+	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/redact"
@@ -58,7 +61,9 @@ type RangeController interface {
 
 // TODO(pav-kv): This struct is a placeholder for the interface or struct
 // containing raft entries. Replace this as part of #128019.
-type RaftEvent struct{}
+type RaftEvent struct {
+	Entries []raftpb.Entry
+}
 
 // NoReplicaID is a special value of roachpb.ReplicaID, which can never be a
 // valid ID.
@@ -70,9 +75,18 @@ type ReplicaSet map[roachpb.ReplicaID]roachpb.ReplicaDescriptor
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (rs ReplicaSet) SafeFormat(w redact.SafePrinter, _ rune) {
+	// If <= 7 replicas, no need to allocate.
+	var buf [7]roachpb.ReplicaDescriptor
+	replicas := buf[0:0:len(buf)]
+	for _, desc := range rs {
+		replicas = append(replicas, desc)
+	}
+	slices.SortFunc(replicas, func(a, b roachpb.ReplicaDescriptor) int {
+		return cmp.Compare(a.ReplicaID, b.ReplicaID)
+	})
 	w.Printf("[")
 	i := 0
-	for _, desc := range rs {
+	for _, desc := range replicas {
 		if i > 0 {
 			w.Printf(",")
 		}
