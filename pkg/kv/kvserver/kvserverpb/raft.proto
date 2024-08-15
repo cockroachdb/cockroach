@@ -250,6 +250,17 @@ message SnapshotRequest {
     // metadata present in the snapshot, but not file contents.
     bool shared_replicate = 12;
 
+    // If true, the snapshot could contain external files. Such files
+    // will have their metadata present in the snapshot but not the
+    // file contents.
+    bool external_replicate = 13;
+
+    // If true, the snapshot is iterating over range keys and point
+    // keys in key order, as opposed to iterating over point keys first
+    // and range keys second. The receiver can take advantage of this
+    // to split points/range keys into multiple sstables for ingestion.
+    bool range_keys_in_order = 14;
+
     reserved 1, 4;
   }
 
