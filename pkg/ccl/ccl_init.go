@@ -48,7 +48,7 @@ func init() {
 	// this `ccl` pkg.
 	base.CheckEnterpriseEnabled = utilccl.CheckEnterpriseEnabled
 	base.LicenseType = utilccl.GetLicenseType
-	base.UpdateMetricOnLicenseChange = utilccl.UpdateMetricOnLicenseChange
+	base.GetLicenseTTL = utilccl.GetLicenseTTL
 	server.ApplyTenantLicense = utilccl.ApplyTenantLicense
 }
 
