@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -563,4 +564,40 @@ func GCDNS(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 		reportDeletedResources(l, client, channel, "dangling DNS records", deletedRecords)
 	}
 	return nil
+}
+
+// GCAzure iterates through subscription IDs passed in --azure-subscription-names
+// and performs GC on them.
+// N.B. this function does not preserve the existing subscription ID set in the
+// provider.
+func GCAzure(l *logger.Logger, dryrun bool) error {
+	provider := vm.Providers[azure.ProviderName]
+	var azureSubscriptions []string
+	p, ok := provider.(*azure.Provider)
+	if ok {
+		azureSubscriptions = p.SubscriptionNames
+	}
+
+	if len(azureSubscriptions) == 0 {
+		// If no subscription names were specified, then fall back to cleaning up
+		// the subscription ID specified in the env or the default subscription.
+		cld, _ := ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{azure.ProviderName}})
+		return GCClusters(l, cld, dryrun)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
+	defer cancel()
+	var combinedErrors error
+	for _, subscription := range azureSubscriptions {
+		if err := p.SetSubscription(ctx, subscription); err != nil {
+			combinedErrors = errors.CombineErrors(combinedErrors, err)
+			continue
+		}
+
+		cld, _ := ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{azure.ProviderName}})
+		if err := GCClusters(l, cld, dryrun); err != nil {
+			combinedErrors = errors.CombineErrors(combinedErrors, err)
+		}
+	}
+	return combinedErrors
 }
