@@ -1,0 +1,28 @@
+[
+  {
+    "username": "cypress",
+    "password": "tests",
+    "sqlPrivileges": [
+      "ADMIN"
+    ]
+  },
+  {
+    "username": "va_user",
+    "password": "cypress",
+    "sqlPrivileges": [
+      "VIEWACTIVITY"
+    ]
+  },
+  {
+    "username": "va_redacted_user",
+    "password": "cypress",
+    "sqlPrivileges": [
+      "VIEWACTIVITYREDACTED"
+    ]
+  },
+  {
+    "username": "no_privs_user",
+    "password": "cypress",
+    "sqlPrivileges": []
+  }
+]
