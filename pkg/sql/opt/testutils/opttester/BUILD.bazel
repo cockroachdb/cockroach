@@ -45,6 +45,7 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/volatility",
+        "//pkg/sql/sessiondatapb",
         "//pkg/sql/stats",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/floatcmp",
