@@ -11,7 +11,6 @@
 package scbuildstmt
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -21,19 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
-)
-
-// zoneConfigObjType is an enum to represent various types of "objects" that are
-// supported by the CONFIGURE ZONE statement. This is used to determine the
-// scpb that will be generated.
-type zoneConfigObjType int
-
-const (
-	// unspecifiedObj is used when the object type is not specified.
-	unspecifiedObj zoneConfigObjType = iota
-	databaseObj
-	tableObj
-	idxObj
 )
 
 func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
@@ -52,16 +38,17 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 	// Left to support:
 	// - Partition/row
 	// - System Ranges
-	objType, err := fallBackIfNotSupportedZoneConfig(n)
-	if err != nil {
-		panic(err)
+	zoneConfigObject := astToZoneConfigObject(b, n)
+	if zoneConfigObject == nil {
+		panic(scerrors.NotImplementedErrorf(n, "unsupported zone config mode"))
 	}
 
 	// Fallback to the legacy schema changer if the table name is not referenced.
 	//
 	// TODO(annie): remove this when we have something equivalent to
 	// expandMutableIndexName in the DSC.
-	if objType == idxObj && n.TableOrIndex.Table.Table() == "" {
+	_, ok := zoneConfigObject.(*IndexZoneConfigObj)
+	if ok && n.TableOrIndex.Table.Table() == "" {
 		panic(scerrors.NotImplementedErrorf(n, "referencing an index without a table "+
 			"prefix is not supported in the DSC"))
 	}
@@ -73,16 +60,18 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 			"YAML config is deprecated and not supported in the declarative schema changer"))
 	}
 
-	if err := checkPrivilegeForSetZoneConfig(b, n, objType); err != nil {
+	zs := n.ZoneSpecifier
+	if err := zoneConfigObject.CheckPrivilegeForSetZoneConfig(b, zs); err != nil {
 		panic(err)
 	}
 
-	err = checkZoneConfigChangePermittedForMultiRegion(b, n.ZoneSpecifier, n.Options, objType)
-	if err != nil {
+	if err := zoneConfigObject.CheckZoneConfigChangePermittedForMultiRegion(
+		b, zs, n.Options,
+	); err != nil {
 		panic(err)
 	}
 
-	options, err := getUpdatedZoneConfigOptions(b, n.Options, n.ZoneSpecifier.TelemetryName())
+	options, err := getUpdatedZoneConfigOptions(b, n.Options, zs.TelemetryName())
 	if err != nil {
 		panic(err)
 	}
@@ -92,24 +81,22 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		panic(err)
 	}
 
-	telemetryName := n.ZoneSpecifier.TelemetryName()
 	telemetry.Inc(
-		sqltelemetry.SchemaChangeAlterCounterWithExtra(telemetryName, "configure_zone"),
+		sqltelemetry.SchemaChangeAlterCounterWithExtra(zs.TelemetryName(), "configure_zone"),
 	)
 
-	zc, seqNum, hasNewSubzones, indexID, err := applyZoneConfig(b, n, copyFromParentList,
-		setters, objType)
-	if err != nil {
+	if err = applyZoneConfig(b, n, copyFromParentList, setters, zoneConfigObject); err != nil {
 		panic(err)
 	}
 
 	// For tables, we have to directly modify the AST to full resolve the table name.
-	if n.TargetsTable() {
+	if _, ok := zoneConfigObject.(*TableZoneConfigObj); ok {
 		resolvePhysicalTableName(b, n)
 	}
 
-	elem := addZoneConfigToBuildCtx(b, n, zc, seqNum, objType, indexID, hasNewSubzones)
-	// Record that the change has occurred for auditing.
+	elem := zoneConfigObject.AddZoneConfigToBuildCtx(b)
+
+	// Log event for auditing
 	eventDetails := eventpb.CommonZoneConfigDetails{
 		Target:  tree.AsString(&n.ZoneSpecifier),
 		Options: optionsStr,
@@ -118,71 +105,47 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 	b.LogEventForExistingPayload(elem, info)
 }
 
-// addZoneConfigToBuildCtx adds the zone config to the build context and returns
-// the added element for logging.
-func addZoneConfigToBuildCtx(
-	b BuildCtx,
-	n *tree.SetZoneConfig,
-	zc *zonepb.ZoneConfig,
-	seqNum uint32,
-	objType zoneConfigObjType,
-	indexID catid.IndexID,
-	hasNewSubzones bool,
-) scpb.Element {
-	var elem scpb.Element
-	// Increment the value of seqNum to ensure a new zone config is being
-	// updated with a different seqNum.
-	seqNum += 1
-	targetID, err := getTargetIDFromZoneSpecifier(b, n.ZoneSpecifier, objType)
-	if err != nil {
-		panic(err)
+func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) zoneConfigObject {
+	if n.Discard {
+		return nil
 	}
-	switch objType {
-	case databaseObj:
-		elem = &scpb.DatabaseZoneConfig{
-			DatabaseID: targetID,
-			ZoneConfig: zc,
-			SeqNum:     seqNum,
-		}
-	case tableObj:
-		elem = &scpb.TableZoneConfig{
-			TableID:    targetID,
-			ZoneConfig: zc,
-			SeqNum:     seqNum,
-		}
-	case idxObj:
-		oldZoneConfig := b.QueryByID(targetID).FilterTableZoneConfig().MustGetZeroOrOneElement()
-		subzones := zc.Subzones
-		var subzoneToWrite zonepb.Subzone
-		for _, subzone := range subzones {
-			if subzone.IndexID == uint32(indexID) && len(subzone.PartitionName) == 0 {
-				subzoneToWrite = subzone
-			}
-		}
-		// Merge the new subzones with the old subzones so that we can generate
-		// accurate subzone spans.
-		if oldZoneConfig != nil {
-			for _, newSubzone := range zc.Subzones {
-				oldZoneConfig.ZoneConfig.SetSubzone(newSubzone)
-			}
-			subzones = oldZoneConfig.ZoneConfig.Subzones
-		}
+	zs := n.ZoneSpecifier
+	// We are a database object.
+	if n.Database != "" {
+		dbElem := b.ResolveDatabase(zs.Database, ResolveParams{}).FilterDatabase().MustGetOneElement()
+		return &DatabaseZoneConfigObj{databaseID: dbElem.DatabaseID}
+	}
 
-		ss, err := generateSubzoneSpans(b, targetID, subzones, indexID, "", hasNewSubzones)
-		if err != nil {
-			panic(err)
+	// The rest of the cases are for table elements -- resolve the table ID now.
+	tblName := zs.TableOrIndex.Table.ToUnresolvedObjectName()
+	elems := b.ResolvePhysicalTable(tblName, ResolveParams{})
+	var tableID catid.DescID
+	elems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		switch e := e.(type) {
+		case *scpb.Table:
+			tableID = e.TableID
+		case *scpb.View:
+			if e.IsMaterialized {
+				tableID = e.ViewID
+			}
+		case *scpb.Sequence:
+			tableID = e.SequenceID
 		}
-		elem = &scpb.IndexZoneConfig{
-			TableID:      targetID,
-			IndexID:      indexID,
-			Subzone:      subzoneToWrite,
-			SubzoneSpans: ss,
-			SeqNum:       seqNum,
-		}
-	default:
-		panic(errors.AssertionFailedf("programming error: unsupported object type for " +
-			"CONFIGURE ZONE"))
+	})
+	if tableID == catid.InvalidDescID {
+		panic(errors.AssertionFailedf("tableID not found for table %s", tblName))
 	}
-	b.Add(elem)
-	return elem
+	tblComp := TableComponentZoneConfig{tableID: tableID}
+
+	// We are a table object.
+	if n.TargetsTable() && !n.TargetsIndex() && !n.TargetsPartition() {
+		return &TableZoneConfigObj{TableComponentZoneConfig: tblComp}
+	}
+
+	// We are an index object.
+	if n.TargetsIndex() && !n.TargetsPartition() {
+		return &IndexZoneConfigObj{TableComponentZoneConfig: tblComp}
+	}
+
+	return nil
 }
