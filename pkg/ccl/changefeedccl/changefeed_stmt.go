@@ -792,11 +792,6 @@ func getTableDescriptors(
 
 	_, _, _, targetDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
 	if err != nil {
-		var m *backupresolver.MissingTableErr
-		if errors.As(err, &m) {
-			tableName := m.GetTableName()
-			err = errors.Errorf("table %q does not exist", tableName)
-		}
 		err = errors.Wrap(err, "failed to resolve targets in the CHANGEFEED stmt")
 		if !initialHighWater.IsEmpty() {
 			// We specified cursor -- it is possible the targets do not exist at that time.

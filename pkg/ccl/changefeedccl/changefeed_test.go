@@ -713,7 +713,7 @@ func TestMissingTableErr(t *testing.T) {
 
 	t.Run("changefeed on non existing table fails", func(t *testing.T) {
 		kvSQL := sqlutils.MakeSQLRunner(s.DB)
-		kvSQL.ExpectErr(t, `^pq: failed to resolve targets in the CHANGEFEED stmt: table "foo" does not exist$`,
+		kvSQL.ExpectErr(t, `^pq: failed to resolve targets in the CHANGEFEED stmt: table "foo" does not exist`,
 			`CREATE CHANGEFEED FOR foo`,
 		)
 	})
