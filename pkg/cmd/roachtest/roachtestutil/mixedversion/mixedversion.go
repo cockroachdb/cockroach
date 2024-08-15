@@ -501,18 +501,19 @@ func defaultTestOptions() testOptions {
 	}
 }
 
-// DisableSkipVersionUpgrades can be used by callers to disable the
-// experimental "skip version" upgrade testing. Useful if a test is
-// verifying something specific to an upgrade path from the previous
-// release to the current one.
+// DisableSkipVersionUpgrades can be used by callers to disable "skip
+// version" upgrades. Useful if a test is verifying something specific
+// to an upgrade path from the previous release to the current one;
+// otherwise, this option should not be used, as every feature should
+// work when skip-version upgrades are performed.
 func DisableSkipVersionUpgrades(opts *testOptions) {
-	withSkipVersionProbability(0)(opts)
+	WithSkipVersionProbability(0)(opts)
 }
 
-// withSkipVersionProbability allows callers to set the specific
+// WithSkipVersionProbability allows callers to set the specific
 // probability under which skip-version upgrades will happen in a test
-// run. Only used for testing at the moment.
-func withSkipVersionProbability(p float64) CustomOption {
+// run.
+func WithSkipVersionProbability(p float64) CustomOption {
 	return func(opts *testOptions) {
 		opts.skipVersionProbability = p
 	}

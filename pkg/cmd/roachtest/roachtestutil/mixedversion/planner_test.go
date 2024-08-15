@@ -439,7 +439,7 @@ func createDataDrivenMixedVersionTest(
 			opts = append(opts, DisableMutators(arg.Vals[0]))
 
 		case "enable_skip_version":
-			opts = append(opts, withSkipVersionProbability(1))
+			opts = append(opts, WithSkipVersionProbability(1))
 
 		case "deployment_mode":
 			opts = append(opts, EnabledDeploymentModes(DeploymentMode(arg.Vals[0])))
