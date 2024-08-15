@@ -68,19 +68,19 @@ func NakedIntTypeFromDefaultIntSize(defaultIntSize int32) *types.T {
 
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (statements.Statements, error) {
-	return p.parseWithDepth(1, sql, defaultNakedIntType)
+	return p.parseWithDepth(1, sql, defaultNakedIntType, discardComments)
 }
 
 // ParseWithInt parses a sql statement string and returns a list of
 // Statements. The INT token will result in the specified TInt type.
 func (p *Parser) ParseWithInt(sql string, nakedIntType *types.T) (statements.Statements, error) {
-	return p.parseWithDepth(1, sql, nakedIntType)
+	return p.parseWithDepth(1, sql, nakedIntType, discardComments)
 }
 
 func (p *Parser) parseOneWithInt(
-	sql string, nakedIntType *types.T,
+	sql string, nakedIntType *types.T, comments commentsMode,
 ) (statements.Statement[tree.Statement], error) {
-	stmts, err := p.parseWithDepth(1, sql, nakedIntType)
+	stmts, err := p.parseWithDepth(1, sql, nakedIntType, comments)
 	if err != nil {
 		return statements.Statement[tree.Statement]{}, err
 	}
@@ -144,11 +144,21 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 	}
 }
 
+type commentsMode bool
+
+const (
+	retainComments  commentsMode = true
+	discardComments commentsMode = false
+)
+
 func (p *Parser) parseWithDepth(
-	depth int, sql string, nakedIntType *types.T,
+	depth int, sql string, nakedIntType *types.T, cm commentsMode,
 ) (statements.Statements, error) {
 	stmts := statements.Statements(p.stmtBuf[:0])
 	p.scanner.Init(sql)
+	if cm == retainComments {
+		p.scanner.RetainComments()
+	}
 	defer p.scanner.Cleanup()
 	for {
 		sql, tokens, done := p.scanOneStmt()
@@ -232,17 +242,24 @@ func Parse(sql string) (statements.Statements, error) {
 // Statements. The INT token will result in the specified TInt type.
 func ParseWithInt(sql string, nakedIntType *types.T) (statements.Statements, error) {
 	var p Parser
-	return p.parseWithDepth(1, sql, nakedIntType)
+	return p.parseWithDepth(1, sql, nakedIntType, discardComments)
 }
 
 // ParseOne parses a sql statement string, ensuring that it contains only a
 // single statement, and returns that Statement. ParseOne will always
 // interpret the INT and SERIAL types as 64-bit types, since this is
 // used in various internal-execution paths where we might receive
-// bits of SQL from other nodes. In general,earwe expect that all
+// bits of SQL from other nodes. In general, we expect that all
 // user-generated SQL has been run through the ParseWithInt() function.
 func ParseOne(sql string) (statements.Statement[tree.Statement], error) {
 	return ParseOneWithInt(sql, defaultNakedIntType)
+}
+
+// ParseOneRetainComments is similar to ParseOne, but it retains scanned
+// comments in the returned statement's Comment field.
+func ParseOneRetainComments(sql string) (statements.Statement[tree.Statement], error) {
+	var p Parser
+	return p.parseOneWithInt(sql, defaultNakedIntType, retainComments)
 }
 
 // ParseOneWithInt is similar to ParseOn but interprets the INT and SERIAL
@@ -251,7 +268,7 @@ func ParseOneWithInt(
 	sql string, nakedIntType *types.T,
 ) (statements.Statement[tree.Statement], error) {
 	var p Parser
-	return p.parseOneWithInt(sql, nakedIntType)
+	return p.parseOneWithInt(sql, nakedIntType, discardComments)
 }
 
 // ParseQualifiedTableName parses a possibly qualified table name. The
