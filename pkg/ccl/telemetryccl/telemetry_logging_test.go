@@ -22,10 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -257,6 +257,10 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 	db.Exec(t, "CREATE TABLE mydb.public.t1 (x int);")
 	db.Exec(t, "INSERT INTO mydb.public.t1 VALUES (1), (2), (3);")
 
+	nodelocalURL := nodelocal.MakeLocalStorageURI("test1")
+	sanitizedURL, err := uris.SanitizeExternalStorageURI(nodelocalURL, nil)
+	require.NoError(t, err)
+
 	testData := []struct {
 		name             string
 		query            string
@@ -269,7 +273,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "import",
 				stmt: fmt.Sprintf(
-					`IMPORT INTO defaultdb.public.a CSV DATA (%s)`, tree.PasswordSubstitution,
+					`IMPORT INTO defaultdb.public.a CSV DATA ('%s')`, srv.URL,
 				),
 			},
 			recoveryEvent: expectedRecoveryEvent{
@@ -283,8 +287,8 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "import",
 				stmt: fmt.Sprintf(
-					`IMPORT INTO defaultdb.public.a CSV DATA (%s) WITH OPTIONS (detached)`,
-					tree.PasswordSubstitution,
+					`IMPORT INTO defaultdb.public.a CSV DATA ('%s') WITH OPTIONS (detached)`,
+					srv.URL,
 				),
 			},
 			recoveryEvent: expectedRecoveryEvent{
@@ -294,10 +298,10 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 		},
 		{
 			name:  "backup",
-			query: fmt.Sprintf(`BACKUP DATABASE mydb INTO '%s'`, nodelocal.MakeLocalStorageURI("test1")),
+			query: fmt.Sprintf(`BACKUP DATABASE mydb INTO '%s'`, nodelocalURL),
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "backup",
-				stmt:      fmt.Sprintf(`BACKUP DATABASE mydb INTO %s`, tree.PasswordSubstitution),
+				stmt:      fmt.Sprintf(`BACKUP DATABASE mydb INTO '%s'`, sanitizedURL),
 			},
 			recoveryEvent: expectedRecoveryEvent{
 				numRows:      3,
@@ -306,10 +310,12 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 		},
 		{
 			name:  "backup-with-detached",
-			query: fmt.Sprintf(`BACKUP DATABASE mydb INTO '%s' WITH detached`, nodelocal.MakeLocalStorageURI("test1")),
+			query: fmt.Sprintf(`BACKUP DATABASE mydb INTO '%s' WITH detached`, nodelocalURL),
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "backup",
-				stmt:      fmt.Sprintf(`BACKUP DATABASE mydb INTO %s WITH OPTIONS (detached)`, tree.PasswordSubstitution),
+				stmt: fmt.Sprintf(
+					`BACKUP DATABASE mydb INTO '%s' WITH OPTIONS (detached)`, sanitizedURL,
+				),
 			},
 			recoveryEvent: expectedRecoveryEvent{
 				numRows:      3,
@@ -318,10 +324,10 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 		},
 		{
 			name:  "restore",
-			query: fmt.Sprintf(`RESTORE DATABASE mydb FROM LATEST IN '%s'`, nodelocal.MakeLocalStorageURI("test1")),
+			query: fmt.Sprintf(`RESTORE DATABASE mydb FROM LATEST IN '%s'`, nodelocalURL),
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "restore",
-				stmt:      fmt.Sprintf(`RESTORE DATABASE mydb FROM 'latest' IN %s`, tree.PasswordSubstitution),
+				stmt:      fmt.Sprintf(`RESTORE DATABASE mydb FROM 'latest' IN '%s'`, sanitizedURL),
 			},
 			recoveryEvent: expectedRecoveryEvent{
 				numRows:      3,
@@ -330,10 +336,12 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 		},
 		{
 			name:  "restore-with-detached",
-			query: fmt.Sprintf(`RESTORE DATABASE mydb FROM LATEST IN '%s' WITH detached`, nodelocal.MakeLocalStorageURI("test1")),
+			query: fmt.Sprintf(`RESTORE DATABASE mydb FROM LATEST IN '%s' WITH detached`, nodelocalURL),
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "restore",
-				stmt:      fmt.Sprintf(`RESTORE DATABASE mydb FROM 'latest' IN %s WITH OPTIONS (detached)`, tree.PasswordSubstitution),
+				stmt: fmt.Sprintf(
+					`RESTORE DATABASE mydb FROM 'latest' IN '%s' WITH OPTIONS (detached)`, sanitizedURL,
+				),
 			},
 			recoveryEvent: expectedRecoveryEvent{
 				numRows:      3,
@@ -347,7 +355,6 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 	// Run all the queries, one after the previous one is finished.
 	var jobID int
 	var unused interface{}
-	var err error
 	execTimestamp := 0
 	for _, tc := range testData {
 		if strings.HasPrefix(tc.query, "RESTORE") {

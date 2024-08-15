@@ -101,7 +101,7 @@ func (node *Backup) Format(ctx *FmtCtx) {
 	} else {
 		ctx.WriteString("TO ")
 	}
-	ctx.FormatURIs(node.To)
+	ctx.FormatURIs(node.To, false /* kms */)
 	if node.AsOf.Expr != nil {
 		ctx.WriteString(" ")
 		ctx.FormatNode(&node.AsOf)
@@ -112,7 +112,7 @@ func (node *Backup) Format(ctx *FmtCtx) {
 			if i > 0 {
 				ctx.WriteString(", ")
 			}
-			ctx.FormatURI(from)
+			ctx.FormatURI(from, false /* kms */)
 		}
 	}
 
@@ -197,7 +197,7 @@ func (node *Restore) Format(ctx *FmtCtx) {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatURIs(node.From[i])
+		ctx.FormatURIs(node.From[i], false /* kms */)
 	}
 	if node.AsOf.Expr != nil {
 		ctx.WriteString(" ")
@@ -305,13 +305,13 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 	if o.EncryptionKMSURI != nil {
 		maybeAddSep()
 		ctx.WriteString("kms = ")
-		ctx.FormatURIs(o.EncryptionKMSURI)
+		ctx.FormatURIs(o.EncryptionKMSURI, true /* kms */)
 	}
 
 	if o.IncrementalStorage != nil {
 		maybeAddSep()
 		ctx.WriteString("incremental_location = ")
-		ctx.FormatURIs(o.IncrementalStorage)
+		ctx.FormatURIs(o.IncrementalStorage, false /* kms */)
 	}
 
 	if o.ExecutionLocality != nil {
@@ -429,7 +429,7 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 	if o.DecryptionKMSURI != nil {
 		maybeAddSep()
 		ctx.WriteString("kms = ")
-		ctx.FormatURIs(o.DecryptionKMSURI)
+		ctx.FormatURIs(o.DecryptionKMSURI, true /* kms */)
 	}
 
 	if o.IntoDB != nil {
@@ -482,7 +482,7 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 	if o.IncrementalStorage != nil {
 		maybeAddSep()
 		ctx.WriteString("incremental_location = ")
-		ctx.FormatURIs(o.IncrementalStorage)
+		ctx.FormatURIs(o.IncrementalStorage, false /* kms */)
 	}
 
 	if o.AsTenant != nil {
