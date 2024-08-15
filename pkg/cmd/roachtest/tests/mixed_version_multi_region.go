@@ -121,6 +121,13 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 			mvt.OnStartup(
 				"setup tpcc",
 				func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+					if err := enableTenantSplitScatter(l, rng, h); err != nil {
+						return err
+					}
+					if err := enableTenantMultiRegion(l, rng, h); err != nil {
+						return err
+					}
+
 					setupTPCC(ctx, t, l, c, backgroundTPCCOpts)
 					// Update the `SetupType` so that the corresponding
 					// `runTPCC` calls don't attempt to import data again.
