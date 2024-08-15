@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -84,6 +85,7 @@ func TestCopyAndReplace(t *testing.T) {
 	}
 
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx.SessionData().PlanCacheMode = sessiondatapb.PlanCacheModeAuto
 
 	var o xform.Optimizer
 	testutils.BuildQuery(t, &o, cat, &evalCtx, "SELECT * FROM ab WHERE a = $1")

@@ -29,7 +29,9 @@
 #
 [GenerateParameterizedJoin, Explore]
 (Select
-    $scan:(Scan $scanPrivate:*) & (IsCanonicalScan $scanPrivate)
+    $scan:(Scan $scanPrivate:*) &
+        (GenericRulesEnabled) &
+        (IsCanonicalScan $scanPrivate)
     $filters:* &
         (HasPlaceholdersOrStableExprs (Root)) &
         (Let

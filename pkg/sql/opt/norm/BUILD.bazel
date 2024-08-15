@@ -90,6 +90,7 @@ go_test(
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/testutils/datapathutils",
         "//pkg/util/leaktest",
