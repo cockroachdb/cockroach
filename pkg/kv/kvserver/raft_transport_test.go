@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -164,6 +165,7 @@ func (rttc *raftTransportTestContext) AddNode(nodeID roachpb.NodeID) *kvserver.R
 		nodeID, util.TestAddr, rttc.stopper,
 		kvflowdispatch.NewDummyDispatch(), kvserver.NoopStoresFlowControlIntegration{},
 		kvserver.NoopRaftTransportDisconnectListener{},
+		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil,
 	)
 	rttc.GossipNode(nodeID, addr)
@@ -181,6 +183,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	kvflowTokenDispatch kvflowcontrol.DispatchReader,
 	kvflowHandles kvflowcontrol.Handles,
 	disconnectListener kvserver.RaftTransportDisconnectListener,
+	piggybacker node_rac2.PiggybackMsgReader,
 	knobs *kvserver.RaftTransportTestingKnobs,
 ) (*kvserver.RaftTransport, net.Addr) {
 	manual := hlc.NewHybridManualClock()
@@ -198,6 +201,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 		kvflowTokenDispatch,
 		kvflowHandles,
 		disconnectListener,
+		piggybacker,
 		knobs,
 	)
 	rttc.transports[nodeID] = transport
@@ -469,6 +473,7 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 		kvflowdispatch.NewDummyDispatch(),
 		kvserver.NoopStoresFlowControlIntegration{},
 		kvserver.NoopRaftTransportDisconnectListener{},
+		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil,
 	)
 	serverChannel := rttc.ListenStore(serverReplica.NodeID, serverReplica.StoreID)
@@ -583,6 +588,7 @@ func TestReopenConnection(t *testing.T) {
 			kvflowdispatch.NewDummyDispatch(),
 			kvserver.NoopStoresFlowControlIntegration{},
 			kvserver.NoopRaftTransportDisconnectListener{},
+			(*node_rac2.AdmittedPiggybacker)(nil),
 			nil,
 		)
 	rttc.GossipNode(serverReplica.NodeID, serverAddr)
@@ -622,6 +628,7 @@ func TestReopenConnection(t *testing.T) {
 		kvflowdispatch.NewDummyDispatch(),
 		kvserver.NoopStoresFlowControlIntegration{},
 		kvserver.NoopRaftTransportDisconnectListener{},
+		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil,
 	)
 	replacementChannel := rttc.ListenStore(replacementReplica.NodeID, replacementReplica.StoreID)

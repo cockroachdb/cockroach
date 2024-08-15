@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -186,6 +187,7 @@ type RaftTransport struct {
 	incomingMessageHandlers syncutil.Map[roachpb.StoreID, IncomingRaftMessageHandler]
 	outgoingMessageHandlers syncutil.Map[roachpb.StoreID, OutgoingRaftMessageHandler]
 
+	// kvflowControl is used for replication admission control v1.
 	kvflowControl struct {
 		// Everything nested under this struct is used to return flow tokens
 		// from the receiver (where work was admitted) up to the sender (where
@@ -267,6 +269,10 @@ type RaftTransport struct {
 		handles               kvflowcontrol.Handles
 		disconnectListener    RaftTransportDisconnectListener
 	}
+	// kvflowcontrol2 is used for replication admission control v2.
+	kvflowcontrol2 struct {
+		piggybackReader node_rac2.PiggybackMsgReader
+	}
 
 	knobs *RaftTransportTestingKnobs
 }
@@ -291,7 +297,7 @@ func NewDummyRaftTransport(
 	}
 	return NewRaftTransport(ambient, st, nil, clock, nodedialer.New(nil, resolver), nil,
 		kvflowdispatch.NewDummyDispatch(), NoopStoresFlowControlIntegration{},
-		NoopRaftTransportDisconnectListener{}, nil,
+		NoopRaftTransportDisconnectListener{}, nil, nil,
 	)
 }
 
@@ -306,6 +312,7 @@ func NewRaftTransport(
 	kvflowTokenDispatch kvflowcontrol.DispatchReader,
 	kvflowHandles kvflowcontrol.Handles,
 	disconnectListener RaftTransportDisconnectListener,
+	piggybackReader node_rac2.PiggybackMsgReader,
 	knobs *RaftTransportTestingKnobs,
 ) *RaftTransport {
 	if knobs == nil {
@@ -323,6 +330,7 @@ func NewRaftTransport(
 	t.kvflowControl.handles = kvflowHandles
 	t.kvflowControl.disconnectListener = disconnectListener
 	t.kvflowControl.mu.connectionTracker = newConnectionTrackerForFlowControl()
+	t.kvflowcontrol2.piggybackReader = piggybackReader
 
 	t.initMetrics()
 	if grpcServer != nil {
@@ -683,6 +691,7 @@ func (t *RaftTransport) processQueue(
 		return err
 	}
 
+	// For replication admission control v1.
 	maybeAnnotateWithAdmittedRaftLogEntries := func(
 		req *kvserverpb.RaftMessageRequest,
 		admitted []kvflowcontrolpb.AdmittedRaftLogEntries,
@@ -702,6 +711,7 @@ func (t *RaftTransport) processQueue(
 		}
 	}
 
+	// For replication admission control v1.
 	var sentInitialStoreIDs, sentAdditionalStoreIDs bool
 	maybeAnnotateWithStoreIDs := func(batch *kvserverpb.RaftMessageRequestBatch) {
 		shouldSendAdditionalStoreIDs := t.kvflowControl.setAdditionalStoreIDs.Load() && !sentAdditionalStoreIDs
@@ -719,6 +729,12 @@ func (t *RaftTransport) processQueue(
 			log.VInfof(ctx, 1, "informing n%d of %d local store ID(s) (%s) over the raft transport[%s]",
 				q.nodeID, len(batch.StoreIDs), roachpb.StoreIDSlice(batch.StoreIDs), class)
 		}
+	}
+
+	// For replication admission control v2.
+	maybeAnnotateWithAdmittedResponses := func(
+		req *kvserverpb.RaftMessageRequest, admitted []kvflowcontrolpb.AdmittedResponseForRange) {
+		req.AdmittedResponse = append(req.AdmittedResponse, admitted...)
 	}
 
 	annotateWithClockTimestamp := func(batch *kvserverpb.RaftMessageRequestBatch) {
@@ -773,7 +789,10 @@ func (t *RaftTransport) processQueue(
 			budget := targetRaftOutgoingBatchSize.Get(&t.st.SV) - size
 
 			var pendingDispatches []kvflowcontrolpb.AdmittedRaftLogEntries
+			var admittedResponses []kvflowcontrolpb.AdmittedResponseForRange
 			if disableFn := t.knobs.DisablePiggyBackedFlowTokenDispatch; disableFn == nil || !disableFn() {
+				// RACv1.
+				//
 				// Piggyback any pending flow token dispatches on raft transport
 				// messages already bound for the remote node. If the stream
 				// over which we're returning these flow tokens breaks, this is
@@ -792,6 +811,11 @@ func (t *RaftTransport) processQueue(
 					kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV),
 				)
 				maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
+
+				// RACv2.
+				admittedResponses, _ = t.kvflowcontrol2.piggybackReader.PopMsgsForNode(
+					timeutil.Now(), q.nodeID, kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV))
+				maybeAnnotateWithAdmittedResponses(req, admittedResponses)
 			}
 
 			batch.Requests = append(batch.Requests, *req)
@@ -814,7 +838,8 @@ func (t *RaftTransport) processQueue(
 			maybeAnnotateWithStoreIDs(batch)
 			annotateWithClockTimestamp(batch)
 			if err := stream.Send(batch); err != nil {
-				t.metrics.FlowTokenDispatchesDropped.Inc(int64(len(pendingDispatches)))
+				t.metrics.FlowTokenDispatchesDropped.Inc(int64(
+					len(pendingDispatches) + len(admittedResponses)))
 				return err
 			}
 			t.metrics.MessagesSent.Inc(int64(len(batch.Requests)))
@@ -828,28 +853,34 @@ func (t *RaftTransport) processQueue(
 				continue // nothing to do
 			}
 
+			// RACv1.
 			pendingDispatches, remainingDispatches := t.kvflowControl.dispatchReader.PendingDispatchFor(
 				q.nodeID,
 				kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV),
 			)
-			if len(pendingDispatches) == 0 {
+			// RACv2.
+			admittedResponses, remainingAdmittedResponses := t.kvflowcontrol2.piggybackReader.PopMsgsForNode(
+				timeutil.Now(), q.nodeID, kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV))
+			if len(pendingDispatches) == 0 && len(admittedResponses) == 0 {
 				continue // nothing to do
 			}
-			// If there are remaining dispatches, schedule them immediately in the
-			// following raft message.
-			if remainingDispatches > 0 {
+			// If there are remaining dispatches/responses, schedule them
+			// immediately in the following raft message.
+			if remainingDispatches > 0 || remainingAdmittedResponses > 0 {
 				dispatchPendingFlowTokensTimer.Reset(0)
 			}
 
 			req := newRaftMessageRequest()
 			maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
+			maybeAnnotateWithAdmittedResponses(req, admittedResponses)
 			batch.Requests = append(batch.Requests, *req)
 			releaseRaftMessageRequest(req)
 
 			maybeAnnotateWithStoreIDs(batch)
 			annotateWithClockTimestamp(batch)
 			if err := stream.Send(batch); err != nil {
-				t.metrics.FlowTokenDispatchesDropped.Inc(int64(len(pendingDispatches)))
+				t.metrics.FlowTokenDispatchesDropped.Inc(int64(
+					len(pendingDispatches) + len(admittedResponses)))
 				return err
 			}
 			t.metrics.MessagesSent.Inc(int64(len(batch.Requests)))
@@ -1119,6 +1150,18 @@ func (t *RaftTransport) dropFlowTokensForDisconnectedNodes() {
 			math.MaxInt64,
 		)
 		t.metrics.FlowTokenDispatchesDropped.Inc(int64(len(pendingDispatches)))
+	}
+	now := time.Now()
+	for _, nodeID := range t.kvflowcontrol2.piggybackReader.NodesWithMsgs(now) {
+		if t.kvflowControl.mu.connectionTracker.isNodeConnected(nodeID) {
+			continue
+		}
+		msgs, remainingMsgs :=
+			t.kvflowcontrol2.piggybackReader.PopMsgsForNode(now, nodeID, math.MaxInt64)
+		t.metrics.FlowTokenDispatchesDropped.Inc(int64(len(msgs)))
+		if remainingMsgs > 0 {
+			panic(errors.AssertionFailedf("expected zero remaining msgs, and found %d", remainingMsgs))
+		}
 	}
 }
 
