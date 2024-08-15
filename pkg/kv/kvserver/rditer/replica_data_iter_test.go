@@ -175,7 +175,7 @@ func verifyIterateReplicaKeySpans(
 
 	require.NoError(t, IterateReplicaKeySpans(context.Background(), desc, readWriter, replicatedOnly,
 		replicatedSpansFilter,
-		func(iter storage.EngineIterator, span roachpb.Span, keyType storage.IterKeyType) error {
+		func(iter storage.EngineIterator, span roachpb.Span) error {
 			var err error
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
 				// Span should not be empty.
@@ -186,8 +186,8 @@ func verifyIterateReplicaKeySpans(
 				require.True(t, span.ContainsKey(key.Key), "%s not in %s", key, span)
 				require.True(t, key.IsLockTableKey() || key.IsMVCCKey(), "%s neither lock nor MVCC", key)
 
-				switch keyType {
-				case storage.IterKeyTypePointsOnly:
+				hasPoint, hasRange := iter.HasPointAndRange()
+				if hasPoint {
 					var mvccKey storage.MVCCKey
 					if key.IsMVCCKey() {
 						var err error
@@ -213,8 +213,8 @@ func verifyIterateReplicaKeySpans(
 						fmt.Sprintf("%x", key.Version),
 						mvccKey.String(),
 					})
-
-				case storage.IterKeyTypeRangesOnly:
+				}
+				if hasRange && iter.RangeKeyChanged() {
 					bounds, err := iter.EngineRangeBounds()
 					require.NoError(t, err)
 					require.True(t, span.Contains(bounds), "%s not contained in %s", bounds, span)
@@ -234,9 +234,6 @@ func verifyIterateReplicaKeySpans(
 							mvccRangeKey.String(),
 						})
 					}
-
-				default:
-					t.Fatalf("unexpected key type %v", keyType)
 				}
 			}
 			return err
@@ -482,9 +479,11 @@ func TestReplicaDataIteratorGlobalRangeKey(t *testing.T) {
 				var actualSpans []roachpb.Span
 				require.NoError(t, IterateReplicaKeySpans(
 					context.Background(), &desc, snapshot, replicatedOnly, ReplicatedSpansAll,
-					func(iter storage.EngineIterator, span roachpb.Span, keyType storage.IterKeyType) error {
+					func(iter storage.EngineIterator, span roachpb.Span) error {
 						// We should never see any point keys.
-						require.Equal(t, storage.IterKeyTypeRangesOnly, keyType)
+						hasPoint, hasRange := iter.HasPointAndRange()
+						require.False(t, hasPoint)
+						require.True(t, hasRange)
 
 						// The iterator should already be positioned on the range key, which should
 						// span the entire key span and be the only range key.
@@ -590,7 +589,7 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 		for _, desc := range descs {
 			err := IterateReplicaKeySpans(
 				context.Background(), &desc, snapshot, false /* replicatedOnly */, ReplicatedSpansAll,
-				func(iter storage.EngineIterator, _ roachpb.Span, _ storage.IterKeyType) error {
+				func(iter storage.EngineIterator, _ roachpb.Span) error {
 					var err error
 					for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
 						_, _ = iter.UnsafeEngineKey()
