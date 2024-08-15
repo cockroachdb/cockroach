@@ -25,17 +25,14 @@ handle-messages
   msg type=MsgHeartbeat from-node-id=1 from-store-id=2 epoch=2 expiration=102
   msg type=MsgHeartbeat from-node-id=2 from-store-id=3 epoch=3 expiration=103
   msg type=MsgHeartbeat from-node-id=2 from-store-id=4 epoch=4 expiration=104
+  msg type=MsgHeartbeatResp from-node-id=1 from-store-id=2 epoch=1 expiration=110
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=3 epoch=2 expiration=0
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=4 epoch=1 expiration=110
 ----
 responses:
 {Type:MsgHeartbeatResp From:{NodeID:1 StoreID:1} To:{NodeID:1 StoreID:2} Epoch:2 Expiration:102.000000000,0}
 {Type:MsgHeartbeatResp From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:3} Epoch:3 Expiration:103.000000000,0}
 {Type:MsgHeartbeatResp From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:4} Epoch:4 Expiration:104.000000000,0}
-
-handle-messages
-  msg type=MsgHeartbeatResp from-node-id=1 from-store-id=2 epoch=1 expiration=110
-  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=3 epoch=2 expiration=0
-  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=4 epoch=1 expiration=110
-----
 
 debug-requester-state
 ----
