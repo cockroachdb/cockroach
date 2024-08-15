@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
@@ -120,6 +121,11 @@ func checkIsWithExpression(e scpb.Element) error {
 		case *scpb.RowLevelTTL:
 			return nil
 		}
+		// Skip if this version doesn't support the element.
+		if !screl.VersionSupportsElementUse(e, clusterversion.ClusterVersion{Version: clusterversion.V24_2.Version()}) {
+			return nil
+		}
+
 		if isWithExpression(e) {
 			return nil
 		}
@@ -132,6 +138,10 @@ func checkIsWithExpression(e scpb.Element) error {
 func checkIsColumnDependent(e scpb.Element) error {
 	// Exclude columns themselves.
 	if isColumn(e) {
+		return nil
+	}
+	// Skip if this version doesn't support the element.
+	if !screl.VersionSupportsElementUse(e, clusterversion.ClusterVersion{Version: clusterversion.V24_2.Version()}) {
 		return nil
 	}
 	// A column dependent should have a ColumnID attribute.

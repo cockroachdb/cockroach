@@ -809,7 +809,8 @@ func ensureColCanBeUsedInOutboundFK(
 	// actions that would try to change the computed value. Computed values cannot
 	// be altered directly, so attempts to set them to NULL or a DEFAULT value are
 	// blocked.
-	if colTypeElem.ComputeExpr != nil && actions.HasDisallowedActionForComputedFKCol() {
+	computeExpr := retrieveColumnComputeExpression(b, tableID, columnID)
+	if computeExpr != nil && actions.HasDisallowedActionForComputedFKCol() {
 		panic(sqlerrors.NewInvalidActionOnComputedFKColumnError(actions.HasUpdateAction()))
 	}
 }
