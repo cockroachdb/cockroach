@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "node_rac2",
+    srcs = [
+        "admitted_piggybacker.go",
+        "doc.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/kv/kvserver/kvflowcontrol/replica_rac2",
+        "//pkg/raft/raftpb",
+        "//pkg/roachpb",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "node_rac2_test",
+    srcs = ["admitted_piggybacker_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":node_rac2"],
+    deps = [
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/raft/raftpb",
+        "//pkg/roachpb",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)
