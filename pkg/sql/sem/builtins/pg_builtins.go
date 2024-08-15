@@ -550,7 +550,9 @@ func makeCreateRegDef(typ *types.T) builtinDefinition {
 			},
 			ReturnType: tree.FixedReturnType(typ),
 			Fn: func(_ context.Context, _ *eval.Context, d tree.Datums) (tree.Datum, error) {
-				return tree.NewDOidWithName(tree.MustBeDOid(d[0]).Oid, typ, string(tree.MustBeDString(d[1]))), nil
+				return tree.NewDOidWithTypeAndName(
+					tree.MustBeDOid(d[0]).Oid, typ, string(tree.MustBeDString(d[1])),
+				), nil
 			},
 			Info:       notUsableInfo,
 			Volatility: volatility.Immutable,
