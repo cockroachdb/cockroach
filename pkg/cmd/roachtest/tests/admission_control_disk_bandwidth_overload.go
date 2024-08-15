@@ -80,7 +80,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			setBandwidthLimit := func(nodes option.NodeListOption, rw string, bw int, max bool) error {
 				dataMount := "/mnt/data1"
 				if c.Cloud() == spec.Azure {
-					dataMount = "sda1"
+					dataMount = "/mnt"
 				}
 				res, err := c.RunWithDetailsSingleNode(context.TODO(), t.L(), option.WithNodes(nodes[:1]),
 					fmt.Sprintf("lsblk | grep %s | awk '{print $2}'", dataMount),
