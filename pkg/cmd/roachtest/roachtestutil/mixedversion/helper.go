@@ -72,10 +72,17 @@ type (
 	}
 )
 
+// Connect returns a connection pool to the given node. Note that
+// these connection pools are managed by the framework and therefore
+// *must not* be closed. They are closed automatically when the test
+// finishes.
 func (s *Service) Connect(node int) *gosql.DB {
 	return s.connFunc(node)
 }
 
+// RandomDB returns a connection pool to a random node in the
+// cluster. Do *not* close the connection (see comment on `Connect`
+// function).
 func (s *Service) RandomDB(rng *rand.Rand) (int, *gosql.DB) {
 	node := s.Descriptor.Nodes.SeededRandNode(rng)[0]
 	return node, s.Connect(node)
