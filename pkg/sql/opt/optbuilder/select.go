@@ -884,6 +884,16 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 	// Create a scope that can be used for building the scalar expressions.
 	tableScope := b.allocScope()
 	tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
+	// Synthesized CHECK expressions, e.g., for columns of ENUM types, may
+	// reference inaccessible columns. This can happen when the type of an
+	// indexed expression is an ENUM. We make these columns visible so that they
+	// can be resolved while building the CHECK expressions. This is safe to do
+	// for all CHECK expressions, not just synthesized ones, because
+	// user-created CHECK expressions will never reference inaccessible columns
+	// - this is enforced during CREATE TABLE and ALTER TABLE statements.
+	for i := range tableScope.cols {
+		tableScope.cols[i].visibility = columnVisibility(cat.Visible)
+	}
 
 	// Find the non-nullable table columns. Mutation columns can be NULL during
 	// backfill, so they should be excluded.
