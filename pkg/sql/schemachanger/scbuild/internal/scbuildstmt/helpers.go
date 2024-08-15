@@ -242,6 +242,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 		case
 			*scpb.ColumnDefaultExpression,
 			*scpb.ColumnOnUpdateExpression,
+			*scpb.ColumnComputeExpression,
 			*scpb.CheckConstraint,
 			*scpb.CheckConstraintUnvalidated,
 			*scpb.ForeignKeyConstraint,
@@ -1657,4 +1658,24 @@ func retrieveColumnTypeElem(
 ) *scpb.ColumnType {
 	_, _, ret := scpb.FindColumnType(b.QueryByID(tableID).Filter(hasColumnIDAttrFilter(columnID)))
 	return ret
+}
+
+// retrieveColumnComputeExpression returns the compute expression of the column.
+// If no expression exists, then nil is returned. This will handle older
+// versions that may store the expression as part of the ColumnType.
+func retrieveColumnComputeExpression(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) (expr *scpb.Expression) {
+	// First try to retrieve the expression from the ColumnComputeExpression. This
+	// may be unavailable because the column doesn't have a compute expression, or
+	// it's an older version that stores the expression as part of the ColumnType.
+	colComputeExpression := b.QueryByID(tableID).FilterColumnComputeExpression().Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnComputeExpression) bool {
+		return e.ColumnID == columnID
+	}).MustGetZeroOrOneElement()
+	if colComputeExpression != nil {
+		return &colComputeExpression.Expression
+	}
+	// Check the ColumnType in case this is an older version.
+	columnType := mustRetrieveColumnTypeElem(b, tableID, columnID)
+	return columnType.ComputeExpr
 }

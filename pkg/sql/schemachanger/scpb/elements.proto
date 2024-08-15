@@ -98,6 +98,7 @@ message ElementProto {
     SequenceOwner sequence_owner = 34 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnComment column_comment = 35 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnNotNull column_not_null = 36 [(gogoproto.moretags) = "parent:\"Column\""];
+    ColumnComputeExpression column_compute_expression = 190 [(gogoproto.moretags) = "parent:\"Column\""];
 
     // Sequence elements.
     SequenceOption sequence_option = 37 [(gogoproto.moretags) = "parent:\"Sequence\""];
@@ -218,13 +219,21 @@ message ColumnType {
   // necessary to support adding/dropping NOT NULL constraint on an existing
   // column.
   bool is_nullable = 5 [deprecated = true];
-  Expression compute_expr = 6;
+  // Deprecated
+  // compute expression is now handled as a separate element (see ColumnComputeExpression).
+  Expression compute_expr = 6 [deprecated = true];
   bool is_virtual = 7;
   reserved 8, 9, 10;
   // ElementCreationMetadata stores information about when this element is created.
   // It can be used in a similar way to version gates to ensure compatibility
   // in mixed version state.
   ElementCreationMetadata element_creation_metadata= 11;
+}
+
+message ColumnComputeExpression {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 message ColumnFamily {
@@ -762,5 +771,6 @@ message FunctionBody {
 
 message ElementCreationMetadata {
   bool in_23_1_or_later = 1;
+  bool in_24_3_or_later = 2;
 }
 

@@ -233,6 +233,19 @@ type UpsertColumnType struct {
 	ColumnType scpb.ColumnType
 }
 
+// AddColumnComputeExpression will add a new compute expression to a column.
+type AddColumnComputeExpression struct {
+	immediateMutationOp
+	ComputeExpression scpb.ColumnComputeExpression
+}
+
+// RemoveColumnComputeExpression will remove the compute expression from a column.
+type RemoveColumnComputeExpression struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
 // MakeWriteOnlyColumnPublic moves a new column from its mutation to public.
 type MakeWriteOnlyColumnPublic struct {
 	immediateMutationOp

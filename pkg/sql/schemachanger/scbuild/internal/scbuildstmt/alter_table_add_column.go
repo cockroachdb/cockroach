@@ -175,8 +175,16 @@ func alterTableAddColumn(
 		))
 	}
 	if desc.IsComputed() {
-		expr := b.ComputedColumnExpression(tbl, d)
-		spec.colType.ComputeExpr = b.WrapExpression(tbl.TableID, expr)
+		expr := b.WrapExpression(tbl.TableID, b.ComputedColumnExpression(tbl, d))
+		if spec.colType.ElementCreationMetadata.In_24_3OrLater {
+			spec.compute = &scpb.ColumnComputeExpression{
+				TableID:    tbl.TableID,
+				ColumnID:   spec.col.ColumnID,
+				Expression: *expr,
+			}
+		} else {
+			spec.colType.ComputeExpr = expr
+		}
 		if desc.Virtual {
 			b.IncrementSchemaChangeAddColumnQualificationCounter("virtual")
 		} else {
@@ -270,6 +278,7 @@ type addColumnSpec struct {
 	colType  *scpb.ColumnType
 	def      *scpb.ColumnDefaultExpression
 	onUpdate *scpb.ColumnOnUpdateExpression
+	compute  *scpb.ColumnComputeExpression
 	comment  *scpb.ColumnComment
 	unique   bool
 	notNull  bool
@@ -298,6 +307,9 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 		if spec.onUpdate != nil {
 			b.Add(spec.onUpdate)
 		}
+		if spec.compute != nil {
+			b.Add(spec.compute)
+		}
 		if spec.comment != nil {
 			b.Add(spec.comment)
 		}
@@ -307,7 +319,7 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 		}
 
 		inflatedChain := getInflatedPrimaryIndexChain(b, spec.tbl.TableID)
-		if spec.def == nil && spec.colType.ComputeExpr == nil {
+		if spec.def == nil && spec.colType.ComputeExpr == nil && spec.compute == nil {
 			// Optimization opportunity: if we were to add a new column without default
 			// value nor computed expression, then we can just add the column to existing
 			// non-nil primary indexes without actually backfilling any data. This is

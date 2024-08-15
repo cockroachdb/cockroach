@@ -47,6 +47,7 @@ StatementPhase stage 1 of 1 with 24 MutationType ops
         ColumnID: 1
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -181,6 +182,7 @@ PreCommitPhase stage 2 of 2 with 24 MutationType ops
         ColumnID: 1
         ElementCreationMetadata:
           in231OrLater: true
+          in243OrLater: true
         TableID: 104
         TypeT:
           Type:

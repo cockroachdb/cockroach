@@ -9,31 +9,36 @@ EXPLAIN (DDL) ALTER TABLE db.public.tbl ADD COLUMN j INT AS (NULL::INT) VIRTUAL 
 Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL AS (‹NULL›::INT8) VIRTUAL;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 3 elements transitioning toward PUBLIC
+ │         ├── 4 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → DELETE_ONLY Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
  │         │    ├── ABSENT → PUBLIC      ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j+)}
- │         │    └── ABSENT → PUBLIC      ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
- │         └── 3 Mutation operations
- │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"TableID":106}}
- │              ├── SetColumnName {"ColumnID":3,"Name":"j","TableID":106}
- │              └── UpsertColumnType {"ColumnType":{"ColumnID":3,"IsVirtual":true,"TableID":106}}
- ├── PreCommitPhase
- │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 3 elements transitioning toward PUBLIC
- │    │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
- │    │    │    ├── PUBLIC      → ABSENT ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j+)}
- │    │    │    └── PUBLIC      → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
- │    │    └── 1 Mutation operation
- │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
- │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 3 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → DELETE_ONLY Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
- │         │    ├── ABSENT → PUBLIC      ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j+)}
- │         │    └── ABSENT → PUBLIC      ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
- │         └── 5 Mutation operations
+ │         │    ├── ABSENT → PUBLIC      ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
+ │         │    └── ABSENT → PUBLIC      ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+ │         └── 4 Mutation operations
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"TableID":106}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"j","TableID":106}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"IsVirtual":true,"TableID":106}}
+ │              └── AddColumnComputeExpression {"ComputeExpression":{"ColumnID":3,"TableID":106}}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 4 elements transitioning toward PUBLIC
+ │    │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+ │    │    │    ├── PUBLIC      → ABSENT ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j+)}
+ │    │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
+ │    │    │    └── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 4 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → DELETE_ONLY Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC      ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j+)}
+ │         │    ├── ABSENT → PUBLIC      ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
+ │         │    └── ABSENT → PUBLIC      ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+ │         └── 6 Mutation operations
+ │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"TableID":106}}
+ │              ├── SetColumnName {"ColumnID":3,"Name":"j","TableID":106}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"IsVirtual":true,"TableID":106}}
+ │              ├── AddColumnComputeExpression {"ComputeExpression":{"ColumnID":3,"TableID":106}}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
  │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  ├── PostCommitPhase

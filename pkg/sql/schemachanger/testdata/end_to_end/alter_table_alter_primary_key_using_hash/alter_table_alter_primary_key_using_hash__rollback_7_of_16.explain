@@ -35,16 +35,18 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
-           ├── 5 elements transitioning toward ABSENT
+           ├── 6 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
            │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 4 (t_pkey-)}
            │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 5}
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-)}
-           │    └── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_3-), TypeName: "INT8"}
-           └── 6 Mutation operations
+           │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_3-), TypeName: "INT8"}
+           │    └── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-)}
+           └── 7 Mutation operations
                 ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
                 ├── CreateGCJobForIndex {"IndexID":4,"TableID":104}
                 ├── CreateGCJobForIndex {"IndexID":5,"TableID":104}
+                ├── RemoveColumnComputeExpression {"ColumnID":3,"TableID":104}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

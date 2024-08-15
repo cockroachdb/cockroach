@@ -736,13 +736,23 @@ func maybeCreateAndAddShardCol(
 			TableID:                 tbl.TableID,
 			ColumnID:                shardColID,
 			TypeT:                   newTypeT(types.Int),
-			ComputeExpr:             b.WrapExpression(tbl.TableID, parsedExpr),
 			IsVirtual:               true,
 			IsNullable:              false,
 			ElementCreationMetadata: scdecomp.NewElementCreationMetadata(b.EvalCtx().Settings.Version.ActiveVersion(b)),
 		},
 		notNull: true,
 	}
+	wexpr := b.WrapExpression(tbl.TableID, parsedExpr)
+	if spec.colType.ElementCreationMetadata.In_24_3OrLater {
+		spec.compute = &scpb.ColumnComputeExpression{
+			TableID:    tbl.TableID,
+			ColumnID:   shardColID,
+			Expression: *wexpr,
+		}
+	} else {
+		spec.colType.ComputeExpr = wexpr
+	}
+
 	backing := addColumn(b, spec, n)
 	// Create a new check constraint for the hash sharded index column.
 	checkConstraintBucketValues := strings.Builder{}
@@ -843,8 +853,9 @@ func maybeCreateVirtualColumnForIndex(
 	// if it's a virtual column created for an index expression.
 	scpb.ForEachColumnType(elts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.ColumnType) {
 		column := mustRetrieveColumnElem(b, e.TableID, e.ColumnID)
-		if target == scpb.ToPublic && e.ComputeExpr != nil && e.IsVirtual && column.IsInaccessible {
-			otherExpr, err := parser.ParseExpr(string(e.ComputeExpr.Expr))
+		computeExpr := retrieveColumnComputeExpression(b, e.TableID, e.ColumnID)
+		if target == scpb.ToPublic && computeExpr != nil && e.IsVirtual && column.IsInaccessible {
+			otherExpr, err := parser.ParseExpr(string(computeExpr.Expr))
 			if err != nil {
 				panic(err)
 			}
