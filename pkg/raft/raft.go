@@ -796,10 +796,8 @@ func (r *raft) reset(term uint64) {
 	if r.Term != term {
 		r.Term = term
 		r.Vote = None
+		r.lead = None
 	}
-
-	// TODO(arul): we should only reset this if the term has changed.
-	r.lead = None
 
 	r.electionElapsed = 0
 	r.heartbeatElapsed = 0
