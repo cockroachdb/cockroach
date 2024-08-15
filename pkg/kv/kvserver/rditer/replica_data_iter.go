@@ -372,7 +372,7 @@ func IterateReplicaKeySpans(
 	reader storage.Reader,
 	replicatedOnly bool,
 	replicatedSpansFilter ReplicatedSpansFilter,
-	visitor func(storage.EngineIterator, roachpb.Span, storage.IterKeyType) error,
+	visitor func(storage.EngineIterator, roachpb.Span) error,
 ) error {
 	if !reader.ConsistentIterators() {
 		panic("reader must provide consistent iterators")
@@ -394,28 +394,25 @@ func IterateReplicaKeySpans(
 			UnreplicatedByRangeID: true,
 		})
 	}
-	keyTypes := []storage.IterKeyType{storage.IterKeyTypePointsOnly, storage.IterKeyTypeRangesOnly}
 	for _, span := range spans {
-		for _, keyType := range keyTypes {
-			err := func() error {
-				iter, err := reader.NewEngineIterator(storage.IterOptions{
-					KeyTypes:   keyType,
-					LowerBound: span.Key,
-					UpperBound: span.EndKey,
-				})
-				if err != nil {
-					return err
-				}
-				defer iter.Close()
-				ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: span.Key})
-				if err == nil && ok {
-					err = visitor(iter, span, keyType)
-				}
-				return err
-			}()
+		err := func() error {
+			iter, err := reader.NewEngineIterator(storage.IterOptions{
+				KeyTypes:   storage.IterKeyTypePointsAndRanges,
+				LowerBound: span.Key,
+				UpperBound: span.EndKey,
+			})
 			if err != nil {
-				return iterutil.Map(err)
+				return err
 			}
+			defer iter.Close()
+			ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: span.Key})
+			if err == nil && ok {
+				err = visitor(iter, span)
+			}
+			return err
+		}()
+		if err != nil {
+			return iterutil.Map(err)
 		}
 	}
 	return nil
