@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -170,14 +169,10 @@ func (rts *resolvedTimestamp) consumeLogicalOp(
 		return rts.intentQ.UpdateTS(t.TxnID, t.Timestamp)
 
 	case *enginepb.MVCCCommitIntentOp:
-		// This assertion can be violated in mixed-version clusters, so make it
-		// fatal only in 24.1, gated by an envvar just in case. See:
-		// https://github.com/cockroachdb/cockroach/issues/104309
-		//
 		// TODO(erikgrinaker): make this unconditionally fatal.
-		fatal := rts.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1Start) &&
-			!DisableCommitIntentTimestampAssertion
+		fatal := !DisableCommitIntentTimestampAssertion
 		rts.assertOpAboveRTS(ctx, op, t.Timestamp, fatal)
+
 		return rts.intentQ.DecrRef(t.TxnID, t.Timestamp)
 
 	case *enginepb.MVCCAbortIntentOp:

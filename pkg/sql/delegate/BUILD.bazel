@@ -40,7 +40,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/delegate",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/security/username",

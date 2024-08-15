@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -158,15 +157,7 @@ func readSessionBasedLeasingMode(
 	// mode we are executing in.
 	settingMode := LeaseEnableSessionBasedLeasing.Get(&settings.SV)
 	if settingMode == SessionBasedLeasingAuto {
-		if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1_SessionBasedLeasingOnly) {
-			return SessionBasedOnly
-		} else if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1_SessionBasedLeasingDrain) {
-			return SessionBasedDrain
-		} else if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1_SessionBasedLeasingDualWrite) {
-			return SessionBasedDualWrite
-		} else {
-			return SessionBasedLeasingOff
-		}
+		return SessionBasedOnly
 	} else {
 		return settingMode
 	}

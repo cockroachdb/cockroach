@@ -16,7 +16,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1214,16 +1213,9 @@ func (p *planner) AlterDatabaseSurvivalGoal(
 }
 
 func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
-	if err := params.p.alterDatabaseSurvivalGoal(
+	return params.p.alterDatabaseSurvivalGoal(
 		params.ctx, n.desc, n.n.SurvivalGoal, tree.AsStringWithFQNames(n.n, params.Ann()),
-	); err != nil {
-		return err
-	}
-
-	if n.desc.GetID() == keys.SystemDatabaseID {
-		return nil
-	}
-	return params.p.maybeUpdateSystemDBSurvivalGoal(params.ctx)
+	)
 }
 
 // alterDatabaseSurvivalGoal modifies a multi-region database's survival goal,
@@ -1324,83 +1316,6 @@ func (p *planner) alterDatabaseSurvivalGoal(
 			DatabaseName: db.GetName(),
 			SurvivalGoal: survivalGoal.String(),
 		},
-	)
-}
-
-// maybeUpdateSystemDBSurvivalGoal updates the survival goal of system database
-// to the max survival goal of all non-system databases, which means that the
-// survival goal could be either upgraded or downgraded.
-func (p *planner) maybeUpdateSystemDBSurvivalGoal(ctx context.Context) error {
-	// Now that the zone survival goal is properly supported on the system database,
-	// with region liveness support we no longer to inherit the stronger guarantees
-	// assigned to other databases. i.e. Previously if any database had survive region,
-	// the system database would be forced to inherit those stronger guarantees.
-	if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V24_1_SystemDatabaseSurvivability) {
-		return nil
-	}
-
-	sysDB, err := p.Descriptors().MutableByID(p.Txn()).Database(ctx, keys.SystemDatabaseID)
-	if err != nil {
-		return err
-	}
-
-	if !sysDB.IsMultiRegion() {
-		return nil
-	}
-
-	var maxSurvivalGoal descpb.SurvivalGoal
-	maybeUpdateMaxGoal := func(db catalog.DatabaseDescriptor) {
-		// Skip if it's a system db.
-		if db.GetID() == keys.SystemDatabaseID {
-			return
-		}
-		if !db.IsMultiRegion() {
-			return
-		}
-		if db.Dropped() {
-			return
-		}
-		curGoal := db.GetRegionConfig().SurvivalGoal
-		if curGoal > maxSurvivalGoal {
-			maxSurvivalGoal = curGoal
-		}
-	}
-
-	dbs, err := p.Descriptors().GetAllDatabases(ctx, p.Txn())
-	if err != nil {
-		return err
-	}
-
-	if err := dbs.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		db, ok := desc.(catalog.DatabaseDescriptor)
-		if !ok {
-			return errors.WithDetailf(
-				errors.AssertionFailedf(
-					"got unexpected non-database %T while iterating databases",
-					desc,
-				),
-				"unexpected descriptor: %v", desc)
-		}
-		maybeUpdateMaxGoal(db)
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	cfg := sysDB.GetRegionConfig()
-	if cfg.SurvivalGoal == maxSurvivalGoal {
-		return nil
-	}
-
-	targetSurvivalGoal, err := TranslateProtoSurvivalGoal(maxSurvivalGoal)
-	if err != nil {
-		return err
-	}
-	return p.alterDatabaseSurvivalGoal(
-		ctx,
-		sysDB,
-		targetSurvivalGoal,
-		"update system database survival goal to max non-system db survival goal", /* jobDesc */
 	)
 }
 
