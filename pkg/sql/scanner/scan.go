@@ -69,6 +69,9 @@ type Scanner struct {
 	// quoted. Used to distinguish between quoted and non-quoted in
 	// Inspect.
 	quoted bool
+	// retainComments indicates that comments should be collected in the
+	// Comments field. If it is false, they are disgarded.
+	retainComments bool
 }
 
 // SQLScanner is a scanner with a SQL specific scan function
@@ -88,10 +91,18 @@ func (s *Scanner) Pos() int {
 
 // Init initializes a new Scanner that will process str.
 func (s *Scanner) Init(str string) {
-	s.in = str
-	s.pos = 0
-	// Preallocate some buffer space for identifiers etc.
-	s.bytesPrealloc = make([]byte, len(str))
+	*s = Scanner{
+		in:  str,
+		pos: 0,
+		// Preallocate some buffer space for identifiers etc.
+		bytesPrealloc: make([]byte, len(str)),
+	}
+}
+
+// RetainComments instructs the scanner to collect SQL comments in the Comments
+// field.
+func (s *Scanner) RetainComments() {
+	s.retainComments = true
 }
 
 // Cleanup is used to avoid holding on to memory unnecessarily (for the cases
@@ -99,6 +110,7 @@ func (s *Scanner) Init(str string) {
 func (s *Scanner) Cleanup() {
 	s.bytesPrealloc = nil
 	s.Comments = nil
+	s.retainComments = false
 }
 
 func (s *Scanner) allocBytes(length int) []byte {
@@ -529,8 +541,10 @@ func (s *Scanner) skipWhitespace(lval ScanSymType, allowComments bool) (newline,
 			if present, cok := s.ScanComment(lval); !cok {
 				return false, false
 			} else if present {
-				// Mark down the comments that we found.
-				s.Comments = append(s.Comments, s.in[startPos:s.pos])
+				if s.retainComments {
+					// Mark down the comments that we found.
+					s.Comments = append(s.Comments, s.in[startPos:s.pos])
+				}
 				continue
 			}
 		}
