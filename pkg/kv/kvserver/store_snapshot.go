@@ -179,6 +179,7 @@ func newMultiSSTWriter(
 	mvccKeySpan roachpb.Span,
 	sstChunkSize int64,
 	skipClearForMVCCSpan bool,
+	rangeKeysInOrder bool,
 ) (*multiSSTWriter, error) {
 	msstw := &multiSSTWriter{
 		st:            st,
@@ -192,10 +193,17 @@ func newMultiSSTWriter(
 		sstChunkSize:         sstChunkSize,
 		skipClearForMVCCSpan: skipClearForMVCCSpan,
 	}
-	if !skipClearForMVCCSpan {
+	if !skipClearForMVCCSpan && rangeKeysInOrder {
 		// If skipClearForMVCCSpan is true, we don't split the MVCC span across
 		// multiple sstables, as addClearForMVCCSpan could be called by the caller
 		// at any time.
+		//
+		// We also disable snapshot sstable splitting unless the sender has
+		// specified in its snapshot header that it is sending range keys in
+		// key order alongside point keys, as opposed to sending them at the end
+		// of the snapshot. This is necessary to efficiently produce fragmented
+		// snapshot sstables, as otherwise range keys will arrive out-of-order
+		// wrt. point keys.
 		msstw.maxSSTSize = MaxSnapshotSSTableSize.Get(&st.SV)
 	}
 	msstw.rangeKeyFrag = rangekey.Fragmenter{
@@ -701,7 +709,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// The last key range is the user key span.
 	localRanges := keyRanges[:len(keyRanges)-1]
 	mvccRange := keyRanges[len(keyRanges)-1]
-	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, localRanges, mvccRange, kvSS.sstChunkSize, skipClearForMVCCSpan)
+	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, localRanges, mvccRange, kvSS.sstChunkSize, skipClearForMVCCSpan, header.RangeKeysInOrder)
 	if err != nil {
 		return noSnap, err
 	}
@@ -991,14 +999,33 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		replicatedFilter = rditer.ReplicatedSpansExcludeUser
 	}
 
-	iterateRKSpansVisitor := func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
+	iterateRKSpansVisitor := func(iter storage.EngineIterator, _ roachpb.Span) error {
 		timingTag.start("iter")
 		defer timingTag.stop("iter")
 
 		var err error
-		switch keyType {
-		case storage.IterKeyTypePointsOnly:
-			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+		for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+			hasPoint, hasRange := iter.HasPointAndRange()
+			if hasRange && iter.RangeKeyChanged() {
+				bounds, err := iter.EngineRangeBounds()
+				if err != nil {
+					return err
+				}
+				for _, rkv := range iter.EngineRangeKeys() {
+					rangeKVs++
+					if b == nil {
+						b = kvSS.newWriteBatch()
+					}
+					err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
+					if err != nil {
+						return err
+					}
+					if err = maybeFlushBatch(); err != nil {
+						return err
+					}
+				}
+			}
+			if hasPoint {
 				kvs++
 				if b == nil {
 					b = kvSS.newWriteBatch()
@@ -1018,30 +1045,6 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 					return err
 				}
 			}
-
-		case storage.IterKeyTypeRangesOnly:
-			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
-				bounds, err := iter.EngineRangeBounds()
-				if err != nil {
-					return err
-				}
-				for _, rkv := range iter.EngineRangeKeys() {
-					rangeKVs++
-					if b == nil {
-						b = kvSS.newWriteBatch()
-					}
-					err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
-					if err != nil {
-						return err
-					}
-					if err = maybeFlushBatch(); err != nil {
-						return err
-					}
-				}
-			}
-
-		default:
-			return errors.AssertionFailedf("unexpected key type %v", keyType)
 		}
 		return err
 	}
@@ -1965,6 +1968,7 @@ func SendEmptySnapshot(
 		State:              state,
 		RaftMessageRequest: req,
 		RangeSize:          ms.Total(),
+		RangeKeysInOrder:   true,
 	}
 
 	stream, err := NewMultiRaftClient(cc).RaftSnapshot(ctx)
