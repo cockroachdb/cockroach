@@ -64,7 +64,7 @@ if ! gcloud storage cp "$storage_bucket_url/$GITHUB_BASE_REF/$BASE_SHA.log" "$cl
   exit $success_exit_status
 fi
 
-if ! $roachprod_microbench_dir/roachprod-microbench compare "$cleaned_current_dir" "$cleaned_base_dir" --threshold="$threshold" --publish-sheets=false; then
+if ! $roachprod_microbench_dir/roachprod-microbench compare "$cleaned_current_dir" "$cleaned_base_dir" --threshold="$threshold"; then
   echo "There is an error during comparison. If it's a perf regression, please try to fix it. This won't block your change for merging currently."
   exit $error_exit_status
 fi

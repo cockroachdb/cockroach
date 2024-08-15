@@ -71,8 +71,8 @@ func TestCompareBenchmarks(t *testing.T) {
 		require.NoError(t, err)
 		c := &compare{
 			compareConfig: compareConfig{
-				newDir: newDir,
-				oldDir: oldDir,
+				experimentDir: newDir,
+				baselineDir:   oldDir,
 			},
 			packages: packages,
 		}
