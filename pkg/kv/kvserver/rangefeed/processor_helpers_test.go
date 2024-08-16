@@ -266,25 +266,37 @@ func (h *processorTestHelper) triggerTxnPushUntilPushed(t *testing.T, pushedC <-
 	}
 }
 
-type procType int
+type rangefeedTestType struct {
+	processorType bool
+	regType       registrationType
+}
 
-const (
-	legacyProcessor procType = iota
-	schedulerProcessorWithUnbufferedReg
-	schedulerProcessorWithBufferedReg
-)
+var legacyProcessor = rangefeedTestType{
+	processorType: false,
+	regType:       false,
+}
 
-var testTypes = []procType{legacyProcessor,
-	schedulerProcessorWithUnbufferedReg, schedulerProcessorWithBufferedReg}
+var scheduledProcessorWithUnbufferedReg = rangefeedTestType{
+	processorType: true,
+	regType:       true,
+}
 
-func (t procType) String() string {
+var scheduledProcessorWithBufferedReg = rangefeedTestType{
+	processorType: true,
+	regType:       false,
+}
+
+var testTypes = []rangefeedTestType{legacyProcessor,
+	scheduledProcessorWithUnbufferedReg, scheduledProcessorWithBufferedReg}
+
+func (t rangefeedTestType) String() string {
 	switch t {
 	case legacyProcessor:
 		return "legacy"
-	case schedulerProcessorWithUnbufferedReg:
-		return "scheduled processor with buffered stream"
-	case schedulerProcessorWithBufferedReg:
-		return "scheduled processor with unbuffered stream"
+	case scheduledProcessorWithBufferedReg:
+		return "scheduled processor with buffered registration"
+	case scheduledProcessorWithUnbufferedReg:
+		return "scheduled processor with unbuffered registration"
 	}
 	panic("unknown processor type")
 }
@@ -292,7 +304,7 @@ func (t procType) String() string {
 type testConfig struct {
 	Config
 	isc      IntentScannerConstructor
-	procType procType
+	procType rangefeedTestType
 }
 
 type option func(*testConfig)
@@ -305,7 +317,7 @@ func withPusher(txnPusher TxnPusher) option {
 	}
 }
 
-func withProcType(t procType) option {
+func withRangefeedTestType(t rangefeedTestType) option {
 	return func(config *testConfig) {
 		config.procType = t
 	}
@@ -481,7 +493,7 @@ func newTestProcessor(
 			p.syncSendAndWait(&syncEvent{c: make(chan struct{}), testRegCatchupSpan: span})
 		}
 		h.scheduler = &p.scheduler
-		if cfg.procType == schedulerProcessorWithUnbufferedReg {
+		if cfg.procType == scheduledProcessorWithUnbufferedReg {
 			h.toBufferedStreamIfNeeded = func(s Stream) Stream {
 				// Unbuffered registration processor should use buffered stream.
 				return &testBufferedStream{Stream: s}

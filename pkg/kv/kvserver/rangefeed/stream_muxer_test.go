@@ -314,10 +314,10 @@ func TestStreamMuxerWithConcurrentDisconnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "proc type", testTypes, func(t *testing.T, pt procType) {
+	testutils.RunValues(t, "proc type", testTypes, func(t *testing.T, pt rangefeedTestType) {
 		ctx := context.Background()
 
-		p, h, stopper := newTestProcessor(t, withProcType(pt))
+		p, h, stopper := newTestProcessor(t, withRangefeedTestType(pt))
 		defer stopper.Stop(ctx)
 		testServerStream := newTestServerStream()
 		testRangefeedCounter := newTestRangefeedCounter()
@@ -331,7 +331,8 @@ func TestStreamMuxerWithConcurrentDisconnect(t *testing.T) {
 			defer wg.Done()
 			for id := 0; id < 50; id++ {
 				p.Register(h.span, hlc.Timestamp{}, nil, /* catchUpIter */
-					false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, newTestStream(), func() {})
+					false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
+					newTestPerRangeEventSink(int64(id), muxer, pt.regType), func() {})
 			}
 		}()
 		wg.Wait()
