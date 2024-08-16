@@ -230,7 +230,7 @@ func makeDeprecatedWebhookSink(
 	opts changefeedbase.WebhookSinkOptions,
 	parallelism int,
 	source timeutil.TimeSource,
-	mb metricsRecorderBuilder,
+	m metricsRecorder,
 ) (Sink, error) {
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
 		return nil, errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeWebhookHTTPS)
@@ -271,7 +271,7 @@ func makeDeprecatedWebhookSink(
 		exitWorkers: cancel,
 		parallelism: parallelism,
 		ts:          source,
-		metrics:     mb(requiresResourceAccounting),
+		metrics:     m,
 		format:      encodingOpts.Format,
 	}
 

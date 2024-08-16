@@ -424,7 +424,7 @@ func makePubsubSink(
 	parallelism int,
 	pacerFactory func() *admission.Pacer,
 	source timeutil.TimeSource,
-	mb metricsRecorderBuilder,
+	m metricsRecorder,
 	settings *cluster.Settings,
 	knobs *TestingKnobs,
 ) (Sink, error) {
@@ -468,7 +468,7 @@ func makePubsubSink(
 		topicNamer,
 		pacerFactory,
 		source,
-		mb(requiresResourceAccounting),
+		m,
 		settings,
 	), nil
 }

@@ -300,7 +300,7 @@ func makePulsarSink(
 	// TODO(jayant): using the pulsar sink should be version gated, as changefeed
 	// job records are persisted and may be read by un-upgraded nodes.
 	settings *cluster.Settings,
-	mb metricsRecorderBuilder,
+	m metricsRecorder,
 	knobs *TestingKnobs,
 ) (Sink, error) {
 	// TODO(#118858): configure auth and validate URL query params
@@ -322,7 +322,7 @@ func makePulsarSink(
 		parallelism:    10,
 		hasher:         crc32.New(crc32.MakeTable(crc32.IEEE)),
 		topicNamer:     topicNamer,
-		metrics:        mb(requiresResourceAccounting),
+		metrics:        m,
 		knobs:          knobs,
 		clientURL:      u.String(),
 		errCh:          make(chan error, 1),

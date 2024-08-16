@@ -72,7 +72,7 @@ func newKafkaSinkClientV2(
 	bootstrapAddrs string,
 	settings *cluster.Settings,
 	knobs kafkaSinkV2Knobs,
-	mb metricsRecorderBuilder,
+	m metricsRecorder,
 	topicsForConnectionCheck []string,
 ) (*kafkaSinkClientV2, error) {
 
@@ -101,7 +101,7 @@ func newKafkaSinkClientV2(
 	}
 
 	recordResize := func(numRecords int64) {}
-	if m := mb(requiresResourceAccounting); m != nil { // `m` can be nil in tests.
+	if m != nil { // `m` can be nil in tests.
 		baseOpts = append(baseOpts, kgo.WithHooks(&kgoMetricsAdapter{throttling: m.getKafkaThrottlingMetrics(settings)}))
 		recordResize = func(numRecords int64) {
 			m.recordInternalRetry(numRecords, true)
@@ -338,7 +338,7 @@ func makeKafkaSinkV2(
 	pacerFactory func() *admission.Pacer,
 	timeSource timeutil.TimeSource,
 	settings *cluster.Settings,
-	mb metricsRecorderBuilder,
+	metrics metricsRecorder,
 	knobs kafkaSinkV2Knobs,
 ) (Sink, error) {
 	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonConfig, sinkJSONConfig{
@@ -379,13 +379,13 @@ func makeKafkaSinkV2(
 	}
 
 	topicsForConnectionCheck := topicNamer.DisplayNamesSlice()
-	client, err := newKafkaSinkClientV2(ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb, topicsForConnectionCheck)
+	client, err := newKafkaSinkClientV2(ctx, clientOpts, batchCfg, u.Host, settings, knobs, metrics, topicsForConnectionCheck)
 	if err != nil {
 		return nil, err
 	}
 
 	return makeBatchingSink(ctx, sinkTypeKafka, client, time.Duration(batchCfg.Frequency), retryOpts,
-		parallelism, topicNamer, pacerFactory, timeSource, mb(true), settings), nil
+		parallelism, topicNamer, pacerFactory, timeSource, metrics, settings), nil
 }
 
 func buildKgoConfig(

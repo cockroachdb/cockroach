@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -226,12 +227,7 @@ func getSink(
 		return makeSink()
 	}
 
-	metricsBuilder := func(recordingRequired bool) metricsRecorder {
-		if recordingRequired {
-			return maybeWrapMetrics(ctx, m, serverCfg.ExternalIORecorder)
-		}
-		return m
-	}
+	wm := maybeWrapMetrics(ctx, m, serverCfg.ExternalIORecorder)
 
 	newSink := func() (Sink, error) {
 		if feedCfg.SinkURI == "" {
@@ -245,19 +241,15 @@ func getSink(
 
 		switch {
 		case u.Scheme == changefeedbase.SinkSchemeNull:
-			nullIsAccounted := false
-			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
-				nullIsAccounted = knobs.NullSinkIsExternalIOAccounted
-			}
-			return makeNullSink(sinkURL{URL: u}, metricsBuilder(nullIsAccounted))
+			return makeNullSink(sinkURL{URL: u}, m)
 		case isKafkaSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
 				if KafkaV2Enabled.Get(&serverCfg.Settings.SV) {
 					return makeKafkaSinkV2(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(),
 						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
-						serverCfg.Settings, metricsBuilder, kafkaSinkV2Knobs{})
+						serverCfg.Settings, wm, kafkaSinkV2Knobs{})
 				} else {
-					return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), serverCfg.Settings, metricsBuilder)
+					return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), serverCfg.Settings, wm)
 				}
 			})
 		case isPulsarSink(u):
@@ -266,7 +258,7 @@ func getSink(
 				testingKnobs = knobs
 			}
 			return makePulsarSink(ctx, sinkURL{URL: u}, encodingOpts, AllTargets(feedCfg), opts.GetKafkaConfigJSON(),
-				serverCfg.Settings, metricsBuilder, testingKnobs)
+				serverCfg.Settings, wm, testingKnobs)
 		case isWebhookSink(u):
 			webhookOpts, err := opts.GetWebhookSinkOptions()
 			if err != nil {
@@ -276,12 +268,12 @@ func getSink(
 				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
 					return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
 						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
-						metricsBuilder, serverCfg.Settings)
+						wm, serverCfg.Settings)
 				})
 			} else {
 				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
 					return makeDeprecatedWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
-						defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
+						defaultWorkerCount(), timeutil.DefaultTimeSource{}, wm)
 				})
 			}
 		case isPubsubSink(u):
@@ -293,9 +285,9 @@ func getSink(
 				return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), AllTargets(feedCfg),
 					opts.IsSet(changefeedbase.OptUnordered), numSinkIOWorkers(serverCfg),
 					newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
-					metricsBuilder, serverCfg.Settings, testingKnobs)
+					wm, serverCfg.Settings, testingKnobs)
 			} else {
-				return makeDeprecatedPubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered), metricsBuilder, testingKnobs)
+				return makeDeprecatedPubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered), wm, testingKnobs)
 			}
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
@@ -309,14 +301,21 @@ func getSink(
 				if serverCfg.NodeID != nil {
 					nodeID = serverCfg.NodeID.SQLInstanceID()
 				}
+				es, err := serverCfg.ExternalStorageFromURI(ctx, u.String(), user, cloud.WithIOAccountingInterceptor(nil))
+				if err != nil {
+					return nil, err
+				}
+				if m != nil && es != nil && es.RequiresExternalIOAccounting() {
+					m = wm
+				}
 				return makeCloudStorageSink(
 					ctx, sinkURL{URL: u}, nodeID, serverCfg.Settings, encodingOpts,
-					timestampOracle, serverCfg.ExternalStorageFromURI, user, metricsBuilder, testingKnobs,
+					timestampOracle, es, user, m, testingKnobs,
 				)
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
 			return validateOptionsAndMakeSink(changefeedbase.SQLValidOptions, func() (Sink, error) {
-				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, AllTargets(feedCfg), metricsBuilder)
+				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, AllTargets(feedCfg), m)
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExternalConnection:
 			return validateOptionsAndMakeSink(changefeedbase.ExternalConnectionValidOptions, func() (Sink, error) {

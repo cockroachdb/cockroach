@@ -358,7 +358,7 @@ func makeWebhookSink(
 	parallelism int,
 	pacerFactory func() *admission.Pacer,
 	source timeutil.TimeSource,
-	mb metricsRecorderBuilder,
+	m metricsRecorder,
 	settings *cluster.Settings,
 ) (Sink, error) {
 	batchCfg, retryOpts, err := getSinkConfigFromJson(opts.JSONConfig, sinkJSONConfig{})
@@ -381,7 +381,7 @@ func makeWebhookSink(
 		nil,
 		pacerFactory,
 		source,
-		mb(requiresResourceAccounting),
+		m,
 		settings,
 	), nil
 }

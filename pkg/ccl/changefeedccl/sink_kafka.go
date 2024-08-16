@@ -1338,7 +1338,7 @@ func makeKafkaSink(
 	targets changefeedbase.Targets,
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
 	settings *cluster.Settings,
-	mb metricsRecorderBuilder,
+	m metricsRecorder,
 ) (Sink, error) {
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
 	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)
@@ -1346,7 +1346,6 @@ func makeKafkaSink(
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
 
-	m := mb(requiresResourceAccounting)
 	config, err := buildKafkaConfig(ctx, u, jsonStr, m.getKafkaThrottlingMetrics(settings))
 	if err != nil {
 		return nil, err

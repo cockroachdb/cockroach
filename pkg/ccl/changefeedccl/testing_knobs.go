@@ -44,11 +44,6 @@ type TestingKnobs struct {
 	FilterSpanWithMutation func(resolved *jobspb.ResolvedSpan) (bool, error)
 	// FeedKnobs are kvfeed testing knobs.
 	FeedKnobs kvfeed.TestingKnobs
-	// NullSinkIsExternalIOAccounted controls whether we record
-	// tenant usage for the null sink. By default the null sink is
-	// not accounted but it is useful to treat it as accounted in
-	// tests.
-	NullSinkIsExternalIOAccounted bool
 	// OnDistflowSpec is called when specs for distflow planning have been created
 	OnDistflowSpec func(aggregatorSpecs []*execinfrapb.ChangeAggregatorSpec, frontierSpec *execinfrapb.ChangeFrontierSpec)
 	// RaiseRetryableError is a knob used to possibly return an error.

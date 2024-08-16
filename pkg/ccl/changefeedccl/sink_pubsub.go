@@ -111,7 +111,7 @@ func makeDeprecatedPubsubSink(
 	encodingOpts changefeedbase.EncodingOptions,
 	targets changefeedbase.Targets,
 	unordered bool,
-	mb metricsRecorderBuilder,
+	m metricsRecorder,
 	knobs *TestingKnobs,
 ) (Sink, error) {
 
@@ -142,7 +142,7 @@ func makeDeprecatedPubsubSink(
 		numWorkers:  numOfWorkers,
 		exitWorkers: cancel,
 		format:      formatType,
-		metrics:     mb(requiresResourceAccounting),
+		metrics:     m,
 	}
 
 	// creates custom pubsub object based on scheme

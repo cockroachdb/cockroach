@@ -73,7 +73,7 @@ func (s *sqlSink) getConcreteType() sinkType {
 const sqlSinkTableName = `sqlsink`
 
 func makeSQLSink(
-	u sinkURL, tableName string, targets changefeedbase.Targets, mb metricsRecorderBuilder,
+	u sinkURL, tableName string, targets changefeedbase.Targets, metrics metricsRecorder,
 ) (Sink, error) {
 	// Swap the changefeed prefix for the sql connection one that sqlSink
 	// expects.
@@ -104,7 +104,7 @@ func makeSQLSink(
 		tableName:  tableName,
 		topicNamer: topicNamer,
 		hasher:     fnv.New32a(),
-		metrics:    mb(noResourceAccounting),
+		metrics:    metrics,
 	}, nil
 }
 

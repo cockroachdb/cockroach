@@ -95,9 +95,7 @@ const (
 	noResourceAccounting       = false
 )
 
-type metricsRecorderBuilder func(requiresCostAccounting bool) metricsRecorder
-
-var nilMetricsRecorderBuilder metricsRecorderBuilder = func(_ bool) metricsRecorder { return (*sliMetrics)(nil) }
+var nilMetricsRecorder metricsRecorder = (*sliMetrics)(nil)
 
 type metricsRecorder interface {
 	recordMessageSize(int64)

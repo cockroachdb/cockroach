@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
+
 	// Placeholder for pgzip and zdstd.
 	_ "github.com/klauspost/compress/zstd"
 	_ "github.com/klauspost/pgzip"
@@ -385,9 +386,9 @@ func makeCloudStorageSink(
 	settings *cluster.Settings,
 	encodingOpts changefeedbase.EncodingOptions,
 	timestampOracle timestampLowerBoundOracle,
-	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
+	es cloud.ExternalStorage,
 	user username.SQLUsername,
-	mb metricsRecorderBuilder,
+	m metricsRecorder,
 	testingKnobs *TestingKnobs,
 ) (Sink, error) {
 	var targetMaxFileSize int64 = 16 << 20 // 16MB
@@ -431,6 +432,8 @@ func makeCloudStorageSink(
 		asyncFlushCh:     make(chan flushRequest, flushQueueDepth),
 		asyncFlushTermCh: make(chan struct{}),
 		testingKnobs:     testingKnobs,
+		es:               es,
+		metrics:          m,
 	}
 	s.flushGroup.GoCtx(s.asyncFlusher)
 
@@ -486,17 +489,6 @@ func makeCloudStorageSink(
 		if encodingOpts.Format != changefeedbase.OptFormatParquet {
 			s.ext = s.ext + ext
 		}
-	}
-
-	// We make the external storage with a nil IOAccountingInterceptor since we
-	// record usage metrics via s.metrics.
-	if s.es, err = makeExternalStorageFromURI(ctx, u.String(), user, cloud.WithIOAccountingInterceptor(nil)); err != nil {
-		return nil, err
-	}
-	if mb != nil && s.es != nil {
-		s.metrics = mb(s.es.RequiresExternalIOAccounting())
-	} else {
-		s.metrics = (*sliMetrics)(nil)
 	}
 
 	if encodingOpts.Format == changefeedbase.OptFormatParquet {
