@@ -127,6 +127,7 @@ type unbufferedRegistration struct {
 var _ registration = (*unbufferedRegistration)(nil)
 
 func newUnbufferedRegistration(
+	streamCtx context.Context,
 	span roachpb.Span,
 	startTS hlc.Timestamp,
 	catchUpIter *CatchUpIterator,
