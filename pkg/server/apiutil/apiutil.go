@@ -14,6 +14,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 )
@@ -29,4 +31,58 @@ func WriteJSONResponse(ctx context.Context, w http.ResponseWriter, code int, pay
 		return
 	}
 	_, _ = w.Write(res)
+}
+
+// GetQueryStringVal gets the string value of a Query String parameter, param, from the provided url query string
+// values.
+//
+// Returns the value of the param if it exists. Otherwise, returns an empty string.
+
+func GetQueryStringVal(queryStringVals url.Values, param string) string {
+	if queryStringVals.Has(param) {
+		return queryStringVals.Get(param)
+	}
+	return ""
+}
+
+// GetIntQueryStringVal gets the int value of a Query String parameter, param, from the provided url query string
+// values.
+//
+// Returns an int if the param exists and can be cast into an int. Otherwise, returns 0.
+func GetIntQueryStringVal(queryStringVals url.Values, param string) int {
+	if queryStringVals.Has(param) {
+		queryArgStr := queryStringVals.Get(param)
+		queryArgInt, err := strconv.Atoi(queryArgStr)
+		if err == nil {
+			return queryArgInt
+		}
+	}
+	return 0
+}
+
+// GetIntQueryStringVals gets all int values of a Query String parameter, param, from the provided url query string
+// values.
+//
+// Returns an int slice if the param exists and ALL the values can be cast to ints. Otherwise, returns an empty slice.
+func GetIntQueryStringVals(queryStringVals url.Values, param string) []int {
+	if queryStringVals.Has(param) {
+		queryArgStrs := queryStringVals[param]
+		queryArgInts := make([]int, 0, len(queryArgStrs))
+		for _, a := range queryArgStrs {
+
+			i, err := strconv.Atoi(a)
+			if err != nil {
+				return []int{}
+			}
+			queryArgInts = append(queryArgInts, i)
+		}
+
+		return queryArgInts
+	}
+	return []int{}
+}
+
+type QueryStringVal[T any] struct {
+	Value  T
+	Exists bool
 }

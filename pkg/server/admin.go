@@ -3516,6 +3516,19 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		val := int64(*s)
 		*d = &val
 
+	case *[]int64:
+		s, ok := tree.AsDArray(src)
+		if !ok {
+			return errors.Errorf("source type assertion failed")
+		}
+		for i := 0; i < s.Len(); i++ {
+			id, ok := tree.AsDInt(s.Array[i])
+			if !ok {
+				return errors.Errorf("source type assertion failed on index %d", i)
+			}
+			*d = append(*d, int64(id))
+		}
+
 	case *[]descpb.ID:
 		s, ok := tree.AsDArray(src)
 		if !ok {
