@@ -11,6 +11,7 @@
 package rangefeed
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -53,6 +55,8 @@ type testServerStream struct {
 	streamEvents map[int64][]*kvpb.MuxRangeFeedEvent
 }
 
+var _ ServerStreamSender = &testServerStream{}
+
 func newTestServerStream() *testServerStream {
 	return &testServerStream{
 		streamEvents: make(map[int64][]*kvpb.MuxRangeFeedEvent),
@@ -63,6 +67,36 @@ func (s *testServerStream) totalEventsSent() int {
 	s.Lock()
 	defer s.Unlock()
 	return s.eventsSent
+}
+
+func (s *testServerStream) getEventsByStreamID(streamID int64) []*kvpb.MuxRangeFeedEvent {
+	s.Lock()
+	defer s.Unlock()
+	return s.streamEvents[streamID]
+}
+
+func (s *testServerStream) iterateEvents(f func(id int64, events []*kvpb.MuxRangeFeedEvent) bool) {
+	s.Lock()
+	defer s.Unlock()
+	for id, v := range s.streamEvents {
+		if !f(id, v) {
+			return
+		}
+	}
+}
+
+func (s *testServerStream) totalEventsFilterBy(f func(e *kvpb.MuxRangeFeedEvent) bool) int {
+	s.Lock()
+	defer s.Unlock()
+	count := 0
+	for _, v := range s.streamEvents {
+		for _, streamEvent := range v {
+			if f(streamEvent) {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 // hasEvent returns true if the event is found in the streamEvents map. Note
@@ -83,9 +117,31 @@ func (s *testServerStream) hasEvent(e *kvpb.MuxRangeFeedEvent) bool {
 
 // String returns a string representation of the events sent in the stream.
 func (s *testServerStream) String() string {
+	s.Lock()
+	defer s.Unlock()
 	var str strings.Builder
+	fmt.Fprintf(&str, "Total Events Sent: %d\n", len(s.streamEvents))
 	for streamID, eventList := range s.streamEvents {
-		fmt.Fprintf(&str, "StreamID:%d, Len:%d\n", streamID, len(eventList))
+		fmt.Fprintf(&str, "\tStreamID:%d, Len:%d", streamID, len(eventList))
+		for _, ev := range eventList {
+			switch {
+			case ev.Val != nil:
+				fmt.Fprintf(&str, "\t\tvalue")
+			case ev.Checkpoint != nil:
+				fmt.Fprintf(&str, "\t\tcheckpoint")
+			case ev.SST != nil:
+				fmt.Fprintf(&str, "\t\tsst")
+			case ev.DeleteRange != nil:
+				fmt.Fprintf(&str, "\t\tdelete")
+			case ev.Metadata != nil:
+				fmt.Fprintf(&str, "\t\tmetadata")
+			case ev.Error != nil:
+				fmt.Fprintf(&str, "\t\terror")
+			default:
+				panic("unknown event type")
+			}
+		}
+		fmt.Fprintf(&str, "\n")
 	}
 	return str.String()
 }
@@ -109,5 +165,38 @@ func (s *testServerStream) BlockSend() (unblock func()) {
 	var once sync.Once
 	return func() {
 		once.Do(s.Unlock) //nolint:deferunlockcheck
+	}
+}
+
+func NewTestPerRangeEventSink(
+	ctx context.Context,
+	streamID int64,
+	rangeID int64,
+	streamMuxer *StreamMuxer,
+	regType registrationType,
+) Stream {
+	r := NewPerRangeEventSink(ctx, roachpb.RangeID(rangeID), streamID, streamMuxer)
+	switch regType {
+	case unbuffered:
+		return &BufferedPerRangeEventSink{
+			PerRangeEventSink: r,
+		}
+	case buffered:
+		return r
+	default:
+		panic("unknown registration type")
+	}
+}
+
+func NewStreamMuxerWithOpts(
+	sender ServerStreamSender, metrics RangefeedMetricsRecorder, regType registrationType,
+) *StreamMuxer {
+	switch regType {
+	case unbuffered:
+		return NewStreamMuxer(&BufferedStreamSender{sender}, metrics)
+	case buffered:
+		return NewStreamMuxer(sender, metrics)
+	default:
+		panic("unknown registration type")
 	}
 }
