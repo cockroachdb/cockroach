@@ -472,7 +472,7 @@ func (fs loggingFS) ReuseForWrite(
 	return f, err
 }
 
-func (fs loggingFS) Stat(path string) (os.FileInfo, error) {
+func (fs loggingFS) Stat(path string) (vfs.FileInfo, error) {
 	fmt.Fprintf(fs.w, "stat(%q)\n", path)
 	return fs.FS.Stat(path)
 }
