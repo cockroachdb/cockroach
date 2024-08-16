@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -130,10 +131,17 @@ func (p *kvRowProcessor) processParsedRow(
 		return errors.AssertionFailedf("replication configuration missing for table %d / %q", row.TableID, row.TableName)
 	}
 
+	makeBatch := func(txn *kv.Txn) *kv.Batch {
+		b := txn.NewBatch()
+		b.Header.WriteOptions = originID1Options
+		b.AdmissionHeader.Priority = int32(admissionpb.BulkNormalPri)
+		b.AdmissionHeader.Source = kvpb.AdmissionHeader_FROM_SQL
+		return b
+	}
+
 	if txn == nil {
 		if err := p.cfg.DB.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			b := txn.NewBatch()
-			b.Header.WriteOptions = originID1Options
+			b := makeBatch(txn)
 
 			if err := p.addToBatch(ctx, txn, b, dstTableID, row, k, prevValue); err != nil {
 				return err
@@ -147,8 +155,7 @@ func (p *kvRowProcessor) processParsedRow(
 	}
 
 	kvTxn := txn.KV()
-	b := kvTxn.NewBatch()
-	b.Header.WriteOptions = originID1Options
+	b := makeBatch(kvTxn)
 
 	if err := p.addToBatch(ctx, kvTxn, b, dstTableID, row, k, prevValue); err != nil {
 		return err
