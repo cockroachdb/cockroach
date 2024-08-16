@@ -3332,6 +3332,7 @@ func (r *Replica) followerSendSnapshot(
 		SenderQueuePriority: req.SenderQueuePriority,
 		SharedReplicate:     sharedReplicate,
 		ExternalReplicate:   externalReplicate,
+		RangeKeysInOrder:    true,
 	}
 	newBatchFn := func() storage.WriteBatch {
 		return r.store.TODOEngine().NewWriteBatch()
