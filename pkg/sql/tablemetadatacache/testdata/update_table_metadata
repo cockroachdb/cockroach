@@ -45,7 +45,7 @@ success
 
 update-cache
 ----
-updatedTables: 68, errors: 0, run #: 1, duration > 0: true
+updatedTables: 69, errors: 0, run #: 1, duration > 0: true
 
 
 # We are omitting the following columns since they are not deterministic.
@@ -92,7 +92,7 @@ SELECT count(*) FROM system.table_metadata WHERE perc_live_data > 1
 query
 SELECT count(*) FROM system.table_metadata WHERE replication_size_bytes > 0
 ----
-68
+69
 
 query
 SELECT count(*) FROM system.table_metadata WHERE total_live_data_bytes > total_data_bytes

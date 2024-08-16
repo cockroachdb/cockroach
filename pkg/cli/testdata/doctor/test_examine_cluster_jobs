@@ -1,7 +1,7 @@
 debug doctor examine cluster
 ----
 debug doctor examine cluster
-Examining 67 descriptors and 68 namespace entries...
+Examining 68 descriptors and 69 namespace entries...
   ParentID 183, ParentSchemaID 381: relation "foo" (104): referenced database ID 183: referenced descriptor not found
   ParentID 183, ParentSchemaID 381: relation "foo" (104): referenced schema ID 381: referenced descriptor not found
   ParentID 183, ParentSchemaID 381: relation "foo" (104): expected matching namespace entry, found none

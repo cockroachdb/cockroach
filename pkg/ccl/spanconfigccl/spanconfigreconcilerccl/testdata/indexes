@@ -46,6 +46,7 @@ state offset=47
 /Table/{69-70}                             database system (host)
 /Table/7{0-1}                              database system (host)
 /Table/7{1-2}                              database system (host)
+/Table/7{2-3}                              database system (host)
 /Table/10{6-7}                             range default
 
 exec-sql
@@ -92,6 +93,7 @@ state offset=47
 /Table/{69-70}                             database system (host)
 /Table/7{0-1}                              database system (host)
 /Table/7{1-2}                              database system (host)
+/Table/7{2-3}                              database system (host)
 /Table/106{-/2}                            num_replicas=7
 /Table/106/{2-3}                           num_replicas=7 num_voters=5
 /Table/10{6/3-7}                           num_replicas=7
@@ -140,6 +142,7 @@ state offset=47
 /Table/{69-70}                             database system (host)
 /Table/7{0-1}                              database system (host)
 /Table/7{1-2}                              database system (host)
+/Table/7{2-3}                              database system (host)
 /Table/106{-/2}                            ttl_seconds=3600 num_replicas=7
 /Table/106/{2-3}                           ttl_seconds=25 num_replicas=7 num_voters=5
 /Table/10{6/3-7}                           ttl_seconds=3600 num_replicas=7
@@ -178,6 +181,7 @@ state offset=47
 /Table/{69-70}                             database system (host)
 /Table/7{0-1}                              database system (host)
 /Table/7{1-2}                              database system (host)
+/Table/7{2-3}                              database system (host)
 /Table/106{-/2}                            ttl_seconds=3600 num_replicas=9
 /Table/106/{2-3}                           ttl_seconds=25 num_replicas=9 num_voters=5
 /Table/10{6/3-7}                           ttl_seconds=3600 num_replicas=9
@@ -230,3 +234,4 @@ state offset=46
 /Table/{69-70}                             database system (host)
 /Table/7{0-1}                              database system (host)
 /Table/7{1-2}                              database system (host)
+/Table/7{2-3}                              database system (host)

@@ -29,9 +29,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 5.0 MiB               
-  74       | 2        | 5.0 MiB               
-  74       | 3        | 5.0 MiB               
+  75       | 1        | 5.0 MiB               
+  75       | 2        | 5.0 MiB               
+  75       | 3        | 5.0 MiB               
 
 
 -- (Marking n2->n1 raft transport gRPC stream as idle.)
@@ -46,8 +46,8 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 5.0 MiB               
-  74       | 3        | 5.0 MiB               
+  75       | 1        | 5.0 MiB               
+  75       | 3        | 5.0 MiB               
 
 
 -- Flow token metrics from n1 after n2->n1 raft transport stream is culled.
