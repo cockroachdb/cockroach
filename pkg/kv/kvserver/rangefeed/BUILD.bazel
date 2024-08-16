@@ -76,6 +76,7 @@ go_test(
         "scheduler_test.go",
         "sender_helper_test.go",
         "task_test.go",
+        "unbuffered_registration_test.go",
         "unbuffered_sender_test.go",
     ],
     embed = [":rangefeed"],
