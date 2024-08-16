@@ -910,8 +910,8 @@ func DefaultPebbleOptions() *pebble.Options {
 	}
 	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
 	opts.Experimental.RequiredInPlaceValueBound = pebble.UserKeyPrefixBound{
-		Lower: keys.LocalRangeLockTablePrefix,
-		Upper: keys.LocalRangeLockTablePrefix.PrefixEnd(),
+		Lower: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix}),
+		Upper: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()}),
 	}
 
 	for i := 0; i < len(opts.Levels); i++ {
@@ -1184,8 +1184,8 @@ func (p *Pebble) Download(ctx context.Context, span roachpb.Span, copy bool) err
 		return nil
 	}
 	downloadSpan := pebble.DownloadSpan{
-		StartKey:               span.Key,
-		EndKey:                 span.EndKey,
+		StartKey:               EncodeMVCCKey(MVCCKey{Key: span.Key}),
+		EndKey:                 EncodeMVCCKey(MVCCKey{Key: span.EndKey}),
 		ViaBackingFileDownload: copy,
 	}
 	return p.db.Download(ctx, []pebble.DownloadSpan{downloadSpan})
@@ -2419,7 +2419,11 @@ func (p *Pebble) PreIngestDelay(ctx context.Context) {
 
 // GetTableMetrics implements the Engine interface.
 func (p *Pebble) GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetricsInfo, error) {
-	tableInfo, err := p.db.SSTables(pebble.WithKeyRangeFilter(start, end), pebble.WithProperties(), pebble.WithApproximateSpanBytes())
+	filterOpt := pebble.WithKeyRangeFilter(
+		EncodeMVCCKey(MVCCKey{Key: start}),
+		EncodeMVCCKey(MVCCKey{Key: end}),
+	)
+	tableInfo, err := p.db.SSTables(filterOpt, pebble.WithProperties(), pebble.WithApproximateSpanBytes())
 
 	if err != nil {
 		return []enginepb.SSTableMetricsInfo{}, err
