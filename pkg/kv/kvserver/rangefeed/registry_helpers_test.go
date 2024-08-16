@@ -57,10 +57,6 @@ func (s *testStream) Context() context.Context {
 	return s.ctx
 }
 
-func (s *testStream) Cancel() {
-	s.ctxDone()
-}
-
 func (s *testStream) SendIsThreadSafe() {}
 
 func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
