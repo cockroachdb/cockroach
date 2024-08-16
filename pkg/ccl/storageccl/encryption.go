@@ -338,17 +338,29 @@ func (r *decryptReader) Close() error {
 }
 
 // Size returns the size of the file.
-func (r *decryptReader) Stat() (os.FileInfo, error) {
-	stater, ok := r.ciphertext.(interface{ Stat() (os.FileInfo, error) })
-	if !ok {
+func (r *decryptReader) Stat() (vfs.FileInfo, error) {
+	var size int64
+	// The vfs interface uses its own vfs.FileInfo interface. Check for either
+	// the vfs Stat() or the os Stat().
+	// TODO(jackson): Do we ever actually use a native os.File here? We might be
+	// able to remove the support for os.FileInfo (and change r.ciphertext to a
+	// vfs.File).
+	if stater, ok := r.ciphertext.(interface{ Stat() (os.FileInfo, error) }); ok {
+		stat, err := stater.Stat()
+		if err != nil {
+			return nil, err
+		}
+		size = stat.Size()
+	} else if stater, ok := r.ciphertext.(interface{ Stat() (vfs.FileInfo, error) }); ok {
+		stat, err := stater.Stat()
+		if err != nil {
+			return nil, err
+		}
+		size = stat.Size()
+	} else {
 		return nil, errors.Newf("%T does not support stat", r.ciphertext)
 	}
-	stat, err := stater.Stat()
-	if err != nil {
-		return nil, err
-	}
 
-	size := stat.Size()
 	size -= headerSize
 	size -= tagSize * ((size / (int64(encryptionChunkSizeV2) + tagSize)) + 1)
 	return sizeStat(size), nil
