@@ -216,7 +216,7 @@ func (afs *autoDecryptFS) List(dir string) ([]string, error) {
 	return fs.List(dir)
 }
 
-func (afs *autoDecryptFS) Stat(name string) (os.FileInfo, error) {
+func (afs *autoDecryptFS) Stat(name string) (vfs.FileInfo, error) {
 	name, err := filepath.Abs(name)
 	if err != nil {
 		return nil, err
