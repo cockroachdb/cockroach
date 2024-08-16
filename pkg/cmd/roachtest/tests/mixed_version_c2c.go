@@ -18,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
@@ -103,7 +102,7 @@ func InitC2CMixed(
 	return &c2cMixed{
 		sourceMvt:           sourceMvt,
 		destMvt:             destMvt,
-		sourceStartedChan:   make(chan struct{}),
+		sourceInfoChan:      make(chan sourceTenantInfo, 1),
 		destStartedChan:     make(chan struct{}),
 		sp:                  sp,
 		t:                   t,
@@ -124,12 +123,19 @@ type fingerprintArgs struct {
 }
 
 type c2cMixed struct {
-	sourceMvt, destMvt  *mixedversion.Test
-	sourceStartedChan   chan struct{}
-	destStartedChan     chan struct{}
-	sp                  replicationSpec
-	t                   test.Test
-	c                   cluster.Cluster
+	sourceMvt, destMvt *mixedversion.Test
+	// sourceInfoChan provides the destination with source cluster info generated
+	// during source startup. The channel is buffered so the source runner can
+	// buffer the information and proceed with the upgrade process even if the
+	// destination is not ready to receive the information.
+	sourceInfoChan  chan sourceTenantInfo
+	destStartedChan chan struct{}
+	sp              replicationSpec
+	t               test.Test
+	c               cluster.Cluster
+	//fingerprintArgsChan sends information from dest to source about the correct
+	//arguments to use for fingerprinting. This channel is buffered so the dest
+	//can begin fingerprinting if the source is not ready to fingerprint.
 	fingerprintArgsChan chan fingerprintArgs
 	fingerprintChan     chan int64
 	// midUpgradeCatchupMu attempts to prevent the source from upgrading while the
@@ -142,7 +148,6 @@ type c2cMixed struct {
 }
 
 func (cm *c2cMixed) SetupHook(ctx context.Context) {
-	sourceChan := make(chan sourceTenantInfo, 1)
 
 	cm.sourceMvt.OnStartup(
 		"generate pgurl",
@@ -152,7 +157,6 @@ func (cm *c2cMixed) SetupHook(ctx context.Context) {
 			if err := h.System.Exec(r, "SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
 				return errors.Wrap(err, "failed to enable rangefeeds")
 			}
-			close(cm.sourceStartedChan)
 
 			l.Printf("generating pgurl")
 			srcNode := cm.c.Node(1)
@@ -169,9 +173,11 @@ func (cm *c2cMixed) SetupHook(ctx context.Context) {
 				return err
 			}
 
-			sourceChan <- sourceTenantInfo{name: h.Tenant.Descriptor.Name, pgurl: pgURL}
+			cm.sourceInfoChan <- sourceTenantInfo{name: h.Tenant.Descriptor.Name, pgurl: pgURL}
 
-			l.Printf("waiting for destination tenant to be created")
+			// TODO(msbutler): once we allow upgrades during initial scan, remove the
+			// destStartedChan.
+			l.Printf("waiting for destination tenant to be created and replication stream to begin")
 			chanReadCtx(ctx, cm.destStartedChan)
 			l.Printf("done")
 
@@ -182,19 +188,19 @@ func (cm *c2cMixed) SetupHook(ctx context.Context) {
 	cm.destMvt.OnStartup("create destination tenant on standby",
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 			l.Printf("waiting to hear from source cluster")
-			sourceInfo := chanReadCtx(ctx, sourceChan)
+			sourceInfo := chanReadCtx(ctx, cm.sourceInfoChan)
 
 			if err := h.Exec(r, fmt.Sprintf(
-				"CREATE TENANT %q FROM REPLICATION OF %q ON '%s'",
-				destTenantName, sourceInfo.name, sourceInfo.pgurl.String(),
-			)); err != nil {
+				"CREATE TENANT %q FROM REPLICATION OF %q ON $1",
+				destTenantName, sourceInfo.name,
+			), sourceInfo.pgurl.String()); err != nil {
 				return errors.Wrap(err, "creating destination tenant")
 			}
 
-			if err := h.QueryRow(r, fmt.Sprintf(
-				"SELECT job_id FROM [SHOW JOBS] WHERE job_type = '%s'",
+			if err := h.QueryRow(r,
+				"SELECT job_id FROM [SHOW JOBS] WHERE job_type = $1",
 				replicationJobType,
-			)).Scan(&cm.ingestionJobID); err != nil {
+			).Scan(&cm.ingestionJobID); err != nil {
 				return errors.Wrap(err, "querying ingestion job ID")
 			}
 
@@ -238,6 +244,22 @@ func (cm *c2cMixed) LatencyHook(ctx context.Context) {
 	})
 }
 
+// UpdateHook registers a few mixed version hooks that ensure that the upgrading
+// clusters obey several invariants, which include:
+// - the destination cluster must be the same or at most one major version ahead
+// of the source cluster. This implies that for a given major upgrade, the
+// destination cluster finalizes before thesource cluster.
+// - the app tenant must finalize after the system tenant (baked into the mixed
+// version framework).
+//
+// The hooks also conduct he following:
+// - during random destination side mixed version states, the upgrade processes
+// will wait for the PCR replicated time to catch up, validating the stream can
+// advance in a mixed version state.
+// - After the destination has upgraded to its final version, it will issue a
+// cutover command and fingerprint the app tenant key space.
+// - The source will also run a fingerprint command using the same timestamps
+// and ensure the fingerprints are the same.
 func (cm *c2cMixed) UpdateHook(ctx context.Context) {
 	destFinalized := make(chan struct{}, 1)
 
@@ -251,8 +273,6 @@ func (cm *c2cMixed) UpdateHook(ctx context.Context) {
 			return nil
 		})
 
-	// For a given major version upgrade, this can be called three times: upgrade,
-	// downgrade, upgrade again
 	cm.sourceMvt.InMixedVersion(
 		"wait for dest to finalize if source is ready to finalize upgrade",
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
@@ -269,7 +289,6 @@ func (cm *c2cMixed) UpdateHook(ctx context.Context) {
 		},
 	)
 
-	// Called at the end of each major version upgrade.
 	destMajorUpgradeCount := 0
 	cm.destMvt.AfterUpgradeFinalized(
 		"cutover and allow source to finalize",
@@ -291,7 +310,7 @@ func (cm *c2cMixed) UpdateHook(ctx context.Context) {
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 			sourceMajorUpgradeCount++
 			if sourceMajorUpgradeCount == expectedMajorUpgrades {
-				return cm.sourceFingerprint(ctx, l, r, h)
+				return cm.sourceFingerprintAndCompare(ctx, l, r, h)
 			}
 			return nil
 		},
@@ -321,12 +340,12 @@ func (cm *c2cMixed) destCutoverAndFingerprint(
 	if err := h.QueryRow(r, "ALTER TENANT $1 COMPLETE REPLICATION TO LATEST", destTenantName).Scan(&cutoverStr); err != nil {
 		return err
 	}
-	cutover, err := stringToHLC(cutoverStr)
+	cutover, err := hlc.ParseHLC(cutoverStr)
 	if err != nil {
 		return err
 	}
 	_, db := h.RandomDB(r)
-	if err := WaitForSucceed(ctx, db, cm.ingestionJobID, time.Minute); err != nil {
+	if err := WaitForSucceeded(ctx, db, cm.ingestionJobID, time.Minute); err != nil {
 		return err
 	}
 
@@ -346,7 +365,7 @@ func (cm *c2cMixed) destCutoverAndFingerprint(
 	return nil
 }
 
-func (cm *c2cMixed) sourceFingerprint(
+func (cm *c2cMixed) sourceFingerprintAndCompare(
 	ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
 ) error {
 	args := chanReadCtx(ctx, cm.fingerprintArgsChan)
@@ -387,8 +406,6 @@ func (cm *c2cMixed) Run(ctx context.Context, c cluster.Cluster) {
 			}
 		}()
 		defer wg.Done()
-
-		chanReadCtx(ctx, cm.sourceStartedChan)
 		cm.destMvt.Run()
 	}()
 
@@ -420,15 +437,6 @@ func (cm *c2cMixed) WaitForReplicatedTime(
 
 func nowLess30Seconds() time.Time {
 	return timeutil.Now().Add(-30 * time.Second)
-}
-
-func stringToHLC(s string) (hlc.Timestamp, error) {
-	d, _, err := apd.NewFromString(s)
-	if err != nil {
-		return hlc.Timestamp{}, err
-	}
-	ts, err := hlc.DecimalToHLC(d)
-	return ts, err
 }
 
 func chanReadCtx[T any](ctx context.Context, ch <-chan T) T {

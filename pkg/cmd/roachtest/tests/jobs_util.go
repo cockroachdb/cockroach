@@ -175,6 +175,7 @@ func executeNodeShutdown(
 func WaitForRunning(
 	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
 ) error {
+	// TODO(msbutler): we should fast fail in an unexpected state (like failed).
 	return testutils.SucceedsWithinError(func() error {
 		var status jobs.Status
 		if err := db.QueryRowContext(ctx, "SELECT status FROM [SHOW JOB $1]", jobID).Scan(&status); err != nil {
@@ -183,19 +184,19 @@ func WaitForRunning(
 		switch status {
 		case jobs.StatusPending:
 		case jobs.StatusRunning:
-			// TODO(msbutler): this should return here
+			return nil
 		default:
-			return errors.Newf("job too fast! job got to state %s",
-				status)
+			return errors.Newf("job in state %s", status)
 		}
 		return nil
 	}, maxWait)
 }
 
-func WaitForSucceed(
+func WaitForSucceeded(
 	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
 ) error {
 	return testutils.SucceedsWithinError(func() error {
+		// TODO(msbutler): we should fast fail in an unexpected state (like failed).
 		var status jobs.Status
 		if err := db.QueryRowContext(ctx, "SELECT status FROM [SHOW JOB $1]", jobID).Scan(&status); err != nil {
 			return err
@@ -205,8 +206,7 @@ func WaitForSucceed(
 		case jobs.StatusSucceeded:
 			return nil
 		default:
-			return errors.Newf("job too fast! job got to state %s",
-				status)
+			return errors.Newf("job in state %s", status)
 		}
 		return nil
 	}, maxWait)
