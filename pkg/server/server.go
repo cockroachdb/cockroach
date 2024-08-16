@@ -577,8 +577,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 
 	storesForFlowControl := kvserver.MakeStoresForFlowControl(stores)
+	storesForRACv2 := kvserver.MakeStoresForRACv2(stores)
 	kvflowTokenDispatch := kvflowdispatch.New(nodeRegistry, storesForFlowControl, nodeIDContainer)
-	admittedEntryAdaptor := newAdmittedLogEntryAdaptor(kvflowTokenDispatch)
+	admittedEntryAdaptor := newAdmittedLogEntryAdaptor(kvflowTokenDispatch, storesForRACv2)
 	admissionKnobs, ok := cfg.TestingKnobs.AdmissionControl.(*admission.TestingKnobs)
 	if !ok {
 		admissionKnobs = &admission.TestingKnobs{}

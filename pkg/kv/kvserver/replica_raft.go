@@ -1069,7 +1069,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 						continue // nothing to do
 					}
 					r.store.cfg.KVAdmissionController.AdmitRaftEntry(
-						ctx, tenantID, r.StoreID(), r.RangeID, entry,
+						ctx, tenantID, r.StoreID(), r.RangeID, r.replicaID, msgStorageAppend.Term, entry,
 					)
 				}
 			}

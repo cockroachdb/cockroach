@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -181,7 +182,9 @@ type Controller interface {
 	FollowerStoreWriteBytes(roachpb.StoreID, FollowerStoreWriteBytes)
 	// AdmitRaftEntry informs admission control of a raft log entry being
 	// written to storage.
-	AdmitRaftEntry(context.Context, roachpb.TenantID, roachpb.StoreID, roachpb.RangeID, raftpb.Entry)
+	AdmitRaftEntry(
+		_ context.Context, _ roachpb.TenantID, _ roachpb.StoreID, _ roachpb.RangeID, _ roachpb.ReplicaID,
+		leaderTerm uint64, _ raftpb.Entry)
 }
 
 // TenantWeightProvider can be periodically asked to provide the tenant
@@ -570,12 +573,15 @@ func (n *controllerImpl) FollowerStoreWriteBytes(
 		followerWriteBytes.NumEntries, followerWriteBytes.StoreWorkDoneInfo)
 }
 
-// AdmitRaftEntry implements the Controller interface.
+// AdmitRaftEntry implements the Controller interface. It is only used for the
+// RACv1 protocol.
 func (n *controllerImpl) AdmitRaftEntry(
 	ctx context.Context,
 	tenantID roachpb.TenantID,
 	storeID roachpb.StoreID,
 	rangeID roachpb.RangeID,
+	replicaID roachpb.ReplicaID,
+	leaderTerm uint64,
 	entry raftpb.Entry,
 ) {
 	typ, _, err := raftlog.EncodingOf(entry)
@@ -624,14 +630,17 @@ func (n *controllerImpl) AdmitRaftEntry(
 		RequestedCount:  int64(len(entry.Data)),
 	}
 	wi.ReplicatedWorkInfo = admission.ReplicatedWorkInfo{
-		Enabled: true,
-		RangeID: rangeID,
-		Origin:  meta.AdmissionOriginNode,
+		Enabled:    true,
+		RangeID:    rangeID,
+		ReplicaID:  replicaID,
+		LeaderTerm: leaderTerm,
 		LogPosition: admission.LogPosition{
 			Term:  entry.Term,
 			Index: entry.Index,
 		},
-		Ingested: typ.IsSideloaded(),
+		Origin:       meta.AdmissionOriginNode,
+		IsV2Protocol: false,
+		Ingested:     typ.IsSideloaded(),
 	}
 
 	handle, err := storeAdmissionQ.Admit(ctx, admission.StoreWriteWorkInfo{
@@ -644,6 +653,54 @@ func (n *controllerImpl) AdmitRaftEntry(
 	if handle.UseAdmittedWorkDone() {
 		log.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
 	}
+}
+
+var _ replica_rac2.ACWorkQueue = &controllerImpl{}
+
+// Admit implements replica_rac2.ACWorkQueue. It is only used for the RACv2 protocol.
+func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForAdmission) bool {
+	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(entry.CallbackState.StoreID)
+	if storeAdmissionQ == nil {
+		log.Errorf(ctx, "unable to find queue for store: %s", entry.CallbackState.StoreID)
+		return false // nothing to do
+	}
+
+	if entry.RequestedCount == 0 {
+		log.Fatal(ctx, "found (unexpected) empty raft command for below-raft admission")
+	}
+	wi := admission.WorkInfo{
+		TenantID:        entry.TenantID,
+		Priority:        entry.Priority,
+		CreateTime:      entry.CreateTime,
+		BypassAdmission: false,
+		RequestedCount:  entry.RequestedCount,
+	}
+	wi.ReplicatedWorkInfo = admission.ReplicatedWorkInfo{
+		Enabled:    true,
+		RangeID:    entry.CallbackState.RangeID,
+		ReplicaID:  entry.CallbackState.ReplicaID,
+		LeaderTerm: entry.CallbackState.LeaderTerm,
+		LogPosition: admission.LogPosition{
+			Term:  0, // Ignored by callback in RACv2.
+			Index: entry.CallbackState.Index,
+		},
+		Origin:       0,
+		RaftPri:      entry.CallbackState.Priority,
+		IsV2Protocol: true,
+		Ingested:     entry.Ingested,
+	}
+
+	handle, err := storeAdmissionQ.Admit(ctx, admission.StoreWriteWorkInfo{
+		WorkInfo: wi,
+	})
+	if err != nil {
+		log.Errorf(ctx, "error while admitting to store admission queue: %v", err)
+		return false
+	}
+	if handle.UseAdmittedWorkDone() {
+		log.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
+	}
+	return true
 }
 
 // FollowerStoreWriteBytes captures stats about writes done to a store by a

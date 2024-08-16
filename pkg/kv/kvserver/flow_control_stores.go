@@ -15,7 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -219,4 +221,32 @@ func (l NoopStoresFlowControlIntegration) Inspect() []roachpb.RangeID {
 func (NoopStoresFlowControlIntegration) OnRaftTransportDisconnected(
 	context.Context, ...roachpb.StoreID,
 ) {
+}
+
+// StoresForRACv2 implements various interfaces to route to the relevant
+// range's Processor.
+type StoresForRACv2 interface {
+	admission.OnLogEntryAdmitted
+}
+
+func MakeStoresForRACv2(stores *Stores) StoresForRACv2 {
+	return (*storesForRACv2)(stores)
+}
+
+type storesForRACv2 Stores
+
+// AdmittedLogEntry implements admission.OnLogEntryAdmitted.
+func (ss *storesForRACv2) AdmittedLogEntry(
+	ctx context.Context, cbState admission.LogEntryAdmittedCallbackState,
+) {
+	// TODO(sumeer): implement.
+	_ = replica_rac2.EntryForAdmissionCallbackState{
+		StoreID:    cbState.StoreID,
+		RangeID:    cbState.RangeID,
+		ReplicaID:  cbState.ReplicaID,
+		LeaderTerm: cbState.LeaderTerm,
+		Index:      cbState.Pos.Index,
+		Priority:   cbState.RaftPri,
+	}
+	panic("unimplemented")
 }
