@@ -73,6 +73,7 @@ go_test(
         "stream_muxer_helpers_test.go",
         "stream_muxer_test.go",
         "task_test.go",
+        "unbuffered_registration_test.go",
     ],
     embed = [":rangefeed"],
     deps = [

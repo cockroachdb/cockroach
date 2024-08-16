@@ -10,10 +10,7 @@
 
 package rangefeed
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/errors"
-)
+import "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 
 // BufferedStreamSender is a StreamSender that buffers events before sending
 // them to the underlying rpc ServerStreamSender stream.
@@ -29,5 +26,7 @@ type BufferedStreamSender struct {
 func (bs *BufferedStreamSender) SendBuffered(
 	event *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
 ) error {
-	return errors.Errorf("unimplemented: buffered stream sender")
+	// Currently, this is only used in testing. For simplicity, we just send to
+	// underlying stream directly. In the future, we will start buffering events.
+	return bs.SendUnbuffered(event)
 }
