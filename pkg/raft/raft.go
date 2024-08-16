@@ -265,6 +265,9 @@ type Config struct {
 
 	// StoreLiveness is a reference to the store liveness fabric.
 	StoreLiveness raftstoreliveness.StoreLiveness
+
+	// TestingDisableFortification, if set, disables raft leader fortification.
+	TestingDisableFortification bool
 }
 
 func (c *Config) validate() error {
@@ -406,6 +409,10 @@ type raft struct {
 
 	logger        Logger
 	storeLiveness raftstoreliveness.StoreLiveness
+
+	// testingDisableFortification, if set, disables raft fortification. Intended
+	// to be a testing knob for tests to opt-out of leader fortification.
+	testingDisableFortification bool
 }
 
 func newRaft(c *Config) *raft {
@@ -436,6 +443,7 @@ func newRaft(c *Config) *raft {
 		disableConfChangeValidation: c.DisableConfChangeValidation,
 		stepDownOnRemoval:           c.StepDownOnRemoval,
 		storeLiveness:               c.StoreLiveness,
+		testingDisableFortification: c.TestingDisableFortification,
 	}
 	lastID := r.raftLog.lastEntryID()
 
@@ -792,6 +800,8 @@ func (r *raft) maybeCommit() bool {
 
 func (r *raft) reset(term uint64) {
 	if r.Term != term {
+		assertTrue(!r.supportingFortifiedLeader(),
+			"should not be changing terms when supporting a fortified leader")
 		r.Term = term
 		r.Vote = None
 		r.lead = None
@@ -904,6 +914,15 @@ func (r *raft) tickHeartbeat() {
 	}
 }
 
+// deFortify (conceptually) revokes previously provided fortification support to
+// a leader.
+func (r *raft) deFortify(from pb.PeerID, term uint64) {
+	assertTrue(term > r.Term || (from == r.lead && r.Term == term),
+		"can only defortify at current term if told by the leader",
+	)
+	r.leadEpoch = 0
+}
+
 // TODO(arul): Consider removing the lead argument from this function. Instead,
 // for all the methods that want to set the leader explicitly (the ones that are
 // passing in m.From for this field), we can instead have them use an assignLead
@@ -996,6 +1015,7 @@ func (r *raft) hup(t CampaignType) {
 		r.logger.Debugf("%x ignoring MsgHup because already leader", r.id)
 		return
 	}
+
 	// TODO(arul): we will eventually want some kind of logic like this.
 	//
 	//if r.supportingFortifiedLeader() && t != campaignTransfer {
@@ -1156,9 +1176,26 @@ func (r *raft) Step(m pb.Message) error {
 		default:
 			r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d]",
 				r.id, r.Term, m.Type, m.From, m.Term)
-			if m.Type == pb.MsgApp || m.Type == pb.MsgHeartbeat || m.Type == pb.MsgSnap {
+			if m.Type == pb.MsgApp || m.Type == pb.MsgHeartbeat || m.Type == pb.MsgSnap ||
+				m.Type == pb.MsgFortifyLeader {
+				// We've just received a message from the new leader which was elected
+				// at a higher term. The old leader's fortification support has expired,
+				// so it's safe to defortify at this point.
+				r.deFortify(m.From, m.Term)
 				r.becomeFollower(m.Term, m.From)
 			} else {
+				if m.Type == pb.MsgVote {
+					force := bytes.Equal(m.Context, []byte(campaignTransfer))
+					if force {
+						// The leader has asked another follower to campaign. In doing so,
+						// the leader can be thought of as "defortifying".
+						r.deFortify(r.lead, m.Term)
+					}
+					// TODO(arul): Once we start rejecting MsgVotes when we support a
+					// fortified leader we'll never get here. At that point, we can get
+					// rid of this hack.
+					r.deFortify(r.lead, m.Term)
+				}
 				r.becomeFollower(m.Term, None)
 			}
 		}
@@ -1687,7 +1724,9 @@ func stepCandidate(r *raft, m pb.Message) error {
 				r.campaign(campaignElection)
 			} else {
 				r.becomeLeader()
-				r.bcastFortify()
+				if !r.testingDisableFortification {
+					r.bcastFortify()
+				}
 				r.bcastAppend()
 			}
 		case quorum.VoteLost:
@@ -1777,6 +1816,12 @@ func stepFollower(r *raft, m pb.Message) error {
 		// Leadership transfers never use pre-vote even if r.preVote is true; we
 		// know we are not recovering from a partition so there is no need for the
 		// extra round trip.
+		// TODO(nvanbenschoten): Once the TODO above is addressed, and assuming its
+		// handled by ensuring MsgTimeoutNow only comes from the leader, we should
+		// be able to replace this leadEpoch assignment with a call to deFortify.
+		// Currently, it may panic because only the leader should be able to
+		// de-fortify without bumping the term.
+		r.leadEpoch = 0
 		r.hup(campaignTransfer)
 	}
 	return nil

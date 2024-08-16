@@ -46,6 +46,10 @@ ok
 
 # We now pretend that n1 is dead, and n2 is trying to become leader.
 
+bump-epoch 1
+----
+ok
+
 log-level debug
 ----
 ok
