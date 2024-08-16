@@ -28,6 +28,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type testBufferedStream struct {
+	Stream
+	cleanup func()
+}
+
+var _ BufferedStream = (*testBufferedStream)(nil)
+
+func (tb *testBufferedStream) SendBuffered(
+	e *kvpb.RangeFeedEvent, _ *SharedBudgetAllocation,
+) error {
+	// In production code, buffered stream would be responsible for properly using
+	// and releasing the alloc. We just ignore memory accounting here.
+	return tb.Send(e)
+}
+
+func (tb *testBufferedStream) RegisterRangefeedCleanUp(f func()) {
+	tb.cleanup = f
+}
+
+func (tb *testBufferedStream) Disconnect(err *kvpb.Error) {
+	tb.Stream.Disconnect(err)
+	if tb.cleanup != nil {
+		go tb.cleanup()
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func makeLogicalOp(val interface{}) enginepb.MVCCLogicalOp {
 	var op enginepb.MVCCLogicalOp
 	op.MustSetValue(val)
@@ -194,11 +221,12 @@ const testProcessorEventCCap = 16
 const testProcessorEventCTimeout = 10 * time.Millisecond
 
 type processorTestHelper struct {
-	span         roachpb.RSpan
-	rts          *resolvedTimestamp
-	syncEventC   func()
-	sendSpanSync func(*roachpb.Span)
-	scheduler    *ClientScheduler
+	span                     roachpb.RSpan
+	rts                      *resolvedTimestamp
+	syncEventC               func()
+	sendSpanSync             func(*roachpb.Span)
+	scheduler                *ClientScheduler
+	toBufferedStreamIfNeeded func(s Stream) Stream
 }
 
 // syncEventAndRegistrations waits for all previously sent events to be
@@ -238,26 +266,33 @@ func (h *processorTestHelper) triggerTxnPushUntilPushed(t *testing.T, pushedC <-
 	}
 }
 
-type procType bool
+type procType int
 
 const (
-	legacyProcessor    procType = false
-	schedulerProcessor          = true
+	legacyProcessor procType = iota
+	schedulerProcessorWithUnbufferedReg
+	schedulerProcessorWithBufferedReg
 )
 
-var testTypes = []procType{legacyProcessor, schedulerProcessor}
+var testTypes = []procType{legacyProcessor,
+	schedulerProcessorWithUnbufferedReg, schedulerProcessorWithBufferedReg}
 
 func (t procType) String() string {
-	if t {
-		return "scheduler"
+	switch t {
+	case legacyProcessor:
+		return "legacy"
+	case schedulerProcessorWithUnbufferedReg:
+		return "scheduled processor with buffered stream"
+	case schedulerProcessorWithBufferedReg:
+		return "scheduled processor with unbuffered stream"
 	}
-	return "legacy"
+	panic("unknown processor type")
 }
 
 type testConfig struct {
 	Config
-	useScheduler bool
-	isc          IntentScannerConstructor
+	isc      IntentScannerConstructor
+	procType procType
 }
 
 type option func(*testConfig)
@@ -272,7 +307,7 @@ func withPusher(txnPusher TxnPusher) option {
 
 func withProcType(t procType) option {
 	return func(config *testConfig) {
-		config.useScheduler = bool(t)
+		config.procType = t
 	}
 }
 
@@ -406,7 +441,7 @@ func newTestProcessor(
 	for _, o := range opts {
 		o(&cfg)
 	}
-	if cfg.useScheduler {
+	if cfg.procType != legacyProcessor {
 		sch := NewScheduler(SchedulerConfig{
 			Workers:         1,
 			PriorityWorkers: 1,
@@ -434,6 +469,10 @@ func newTestProcessor(
 		h.sendSpanSync = func(span *roachpb.Span) {
 			p.syncEventCWithEvent(&syncEvent{c: make(chan struct{}), testRegCatchupSpan: span})
 		}
+		h.toBufferedStreamIfNeeded = func(s Stream) Stream {
+			// Legacy processor does not support buffered streams.
+			return s
+		}
 	case *ScheduledProcessor:
 		h.rts = &p.rts
 		h.span = p.Span
@@ -442,6 +481,17 @@ func newTestProcessor(
 			p.syncSendAndWait(&syncEvent{c: make(chan struct{}), testRegCatchupSpan: span})
 		}
 		h.scheduler = &p.scheduler
+		if cfg.procType == schedulerProcessorWithUnbufferedReg {
+			h.toBufferedStreamIfNeeded = func(s Stream) Stream {
+				// Unbuffered registration processor should use buffered stream.
+				return &testBufferedStream{Stream: s}
+			}
+		} else {
+			// Buffered registration processor should use unbuffered stream.
+			h.toBufferedStreamIfNeeded = func(s Stream) Stream {
+				return s
+			}
+		}
 	default:
 		panic("unknown processor type")
 	}
