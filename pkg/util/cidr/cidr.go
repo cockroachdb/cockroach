@@ -12,7 +12,9 @@ package cidr
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	io "io"
 	"net"
 	"net/http"
@@ -24,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -318,4 +322,141 @@ func (c *Lookup) LookupIP(ip net.IP) string {
 		}
 	}
 	return ""
+}
+
+type childNetMetrics struct {
+	WriteBytes *aggmetric.Counter
+	ReadBytes  *aggmetric.Counter
+}
+
+// NetMetrics are aggregate metrics around net.Conn mapped based on the CIDR lookup.
+type NetMetrics struct {
+	lookup     *Lookup
+	WriteBytes *aggmetric.AggCounter
+	ReadBytes  *aggmetric.AggCounter
+
+	mu struct {
+		syncutil.Mutex
+		childMetrics map[string]childNetMetrics
+	}
+}
+
+var _ metric.Struct = (*NetMetrics)(nil)
+
+// MetricStruct implements the metric.Struct interface.
+func (m *NetMetrics) MetricStruct() {}
+
+// MakeNetMetrics makes a new NetMetrics object with the given metric metadata.
+func (c *Lookup) MakeNetMetrics(metaWrite, metaRead metric.Metadata, labels ...string) *NetMetrics {
+	labels = append(labels, "remote")
+	nm := &NetMetrics{
+		lookup:     c,
+		WriteBytes: aggmetric.NewCounter(metaWrite, labels...),
+		ReadBytes:  aggmetric.NewCounter(metaRead, labels...),
+	}
+	nm.mu.childMetrics = make(map[string]childNetMetrics)
+	return nm
+}
+
+// DialContext is shorthand for the type of net.Conn.DialContext.
+type DialContext func(ctx context.Context, network, host string) (net.Conn, error)
+
+// Wrap returns a DialContext that wraps the connection with metrics.
+func (m *NetMetrics) Wrap(dial DialContext, labels ...string) DialContext {
+	return func(ctx context.Context, network, host string) (net.Conn, error) {
+		conn, err := dial(ctx, network, host)
+		if err != nil {
+			return conn, err
+		}
+		return m.track(conn, labels...), nil
+	}
+}
+
+// WrapTLS is like Wrap, but can be used if the underlying library doesn't
+// expose a way to plug in a dialer for TLS connections. This is unfortunately
+// pretty ugly... Copied from tls.Dial and kgo.DialTLS because they don't expose
+// a dial call with a DialContext. Ideally you don't have to use this if the
+// third party API does a sensible thing and exposes the ability to replace the
+// "DialContext" directly.
+func (m *NetMetrics) WrapTLS(dial DialContext, tlsCfg *tls.Config, labels ...string) DialContext {
+	return func(ctx context.Context, network, host string) (net.Conn, error) {
+		c := tlsCfg.Clone()
+		if c.ServerName == "" {
+			server, _, err := net.SplitHostPort(host)
+			if err != nil {
+				return nil, fmt.Errorf("unable to split host:port for dialing: %w", err)
+			}
+			c.ServerName = server
+		}
+
+		rawConn, err := dial(ctx, network, host)
+		if err != nil {
+			return nil, err
+		}
+		scopedConn := m.track(rawConn, labels...)
+
+		conn := tls.Client(rawConn, c)
+		if err := conn.HandshakeContext(ctx); err != nil {
+			scopedConn.Close()
+			return nil, err
+		}
+		return conn, nil
+	}
+}
+
+// track converts a connection to a wrapped connection with the given labels.
+func (m *NetMetrics) track(conn net.Conn, labels ...string) metricsConn {
+	var remote string
+	if ip, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
+		remote = m.lookup.LookupIP(ip.IP)
+	}
+	labels = append(labels, remote)
+	key := strings.Join(labels, "/")
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	nm, ok := m.mu.childMetrics[key]
+	if !ok {
+		nm = childNetMetrics{
+			WriteBytes: m.WriteBytes.AddChild(labels...),
+			ReadBytes:  m.ReadBytes.AddChild(labels...),
+		}
+		m.mu.childMetrics[key] = nm
+	}
+
+	return metricsConn{
+		Conn:       conn,
+		WriteBytes: nm.WriteBytes.Inc,
+		ReadBytes:  nm.ReadBytes.Inc,
+	}
+}
+
+// metricsConn wraps a net.Conn and increments the metrics on read and write.
+//
+// NB: If the cost of incrementing the metrics on every read and write is too
+// expensive, we could track the metrics internally and flush them periodically
+// or when the connection is closed.
+// NB: The metrics are cached with the connection, but potentially the cidr
+// mapping could change under us. Since we don't expect "indefinite" connections
+// we are OK with slightly stale metrics.
+type metricsConn struct {
+	net.Conn
+	WriteBytes func(int64)
+	ReadBytes  func(int64)
+}
+
+func (c metricsConn) Read(b []byte) (n int, err error) {
+	n, err = c.Conn.Read(b)
+	if err == nil && n > 0 {
+		c.ReadBytes(int64(n))
+	}
+	return n, err
+}
+
+func (c metricsConn) Write(b []byte) (n int, err error) {
+	n, err = c.Conn.Write(b)
+	if err == nil && n > 0 {
+		c.WriteBytes(int64(n))
+	}
+	return n, err
 }
