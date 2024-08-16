@@ -96,6 +96,15 @@ func NewLookup(st *settings.Values) *Lookup {
 	return c
 }
 
+// NewTestLookup creates a new Lookup for testing purposes. It will never return
+// any results.
+func NewTestLookup() *Lookup {
+	c := &Lookup{}
+	byLength := make([]map[string]string, 0)
+	c.byLength.Store(&byLength)
+	return c
+}
+
 // Start refreshes the lookup once and begins the CIDR lookup refresh task.
 func (c *Lookup) Start(ctx context.Context, stopper *stop.Stopper) (bool, *Lookup) {
 	getTickDuration := func() time.Duration {
@@ -375,7 +384,11 @@ func (m *NetMetrics) Wrap(dial DialContext, labels ...string) DialContext {
 		if err != nil {
 			return conn, err
 		}
-		return m.track(conn, labels...), nil
+		// m can be nil in tests.
+		if m != nil {
+			conn = m.track(conn, labels...)
+		}
+		return conn, nil
 	}
 }
 
@@ -400,7 +413,11 @@ func (m *NetMetrics) WrapTLS(dial DialContext, tlsCfg *tls.Config, labels ...str
 		if err != nil {
 			return nil, err
 		}
-		scopedConn := m.track(rawConn, labels...)
+		scopedConn := rawConn
+		// m can be nil in tests.
+		if m != nil {
+			scopedConn = m.track(rawConn, labels...)
+		}
 
 		conn := tls.Client(rawConn, c)
 		if err := conn.HandshakeContext(ctx); err != nil {
