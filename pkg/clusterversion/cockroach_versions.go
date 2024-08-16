@@ -202,6 +202,11 @@ const (
 	// efficient Batch unary RPCs.
 	V25_1_BatchStreamRPC
 
+	// V25_1_PreparedTransactionsTable adds the system.prepared_transactions
+	// table. The table is used to store information about prepared transaction
+	// that are part of the XA two-phase commit protocol.
+	V25_1_PreparedTransactionsTable
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -241,10 +246,11 @@ var versionTable = [numKeys]roachpb.Version{
 	// v25.1 versions. Internal versions must be even.
 	V25_1_Start: {Major: 24, Minor: 3, Internal: 2},
 
-	V25_1_AddJobsTables:          {Major: 24, Minor: 3, Internal: 4},
-	V25_1_MoveRaftTruncatedState: {Major: 24, Minor: 3, Internal: 6},
-	V25_1_AddRangeForceFlushKey:  {Major: 24, Minor: 3, Internal: 8},
-	V25_1_BatchStreamRPC:         {Major: 24, Minor: 3, Internal: 10},
+	V25_1_AddJobsTables:             {Major: 24, Minor: 3, Internal: 4},
+	V25_1_MoveRaftTruncatedState:    {Major: 24, Minor: 3, Internal: 6},
+	V25_1_AddRangeForceFlushKey:     {Major: 24, Minor: 3, Internal: 8},
+	V25_1_BatchStreamRPC:            {Major: 24, Minor: 3, Internal: 10},
+	V25_1_PreparedTransactionsTable: {Major: 24, Minor: 3, Internal: 12},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

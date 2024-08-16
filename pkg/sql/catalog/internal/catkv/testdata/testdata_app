@@ -406,6 +406,9 @@ catalog:
   "071":
     descriptor: relation
     namespace: (1, 29, "job_message")
+  "072":
+    descriptor: relation
+    namespace: (1, 29, "prepared_transactions")
   "100":
     comments:
       database: this is the default database

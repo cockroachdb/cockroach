@@ -81,7 +81,7 @@ SELECT start_key, end_key, replicas, lease_holder
 FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE j2 WITH DETAILS] ORDER BY lease_holder
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/71>  …/1/44        {1}       1
+<before:/Table/72>  …/1/44        {1}       1
 …/1/44              …/1/88        {2}       2
 …/1/88              <after:/Max>  {3}       3
 

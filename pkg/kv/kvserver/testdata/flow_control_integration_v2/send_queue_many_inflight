@@ -55,9 +55,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 16 MiB                
-  74       | 2        | 16 MiB                
-  74       | 3        | 16 MiB                
+  75       | 1        | 16 MiB                
+  75       | 2        | 16 MiB                
+  75       | 3        | 16 MiB                
 
 
 -- (Enabling wait-for-eval bypass.)
@@ -112,9 +112,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 20 MiB                
-  74       | 2        | 16 MiB                
-  74       | 3        | 20 MiB                
+  75       | 1        | 20 MiB                
+  75       | 2        | 16 MiB                
+  75       | 3        | 20 MiB                
 
 
 -- (Allowing below-raft admission to proceed on [n1,n2,n3].)

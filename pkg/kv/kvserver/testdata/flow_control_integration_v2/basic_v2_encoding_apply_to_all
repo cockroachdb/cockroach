@@ -61,7 +61,7 @@ ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  74       | 3             
+  75       | 3             
 
 
 -- Flow token metrics from n1 after issuing the 1MiB replicated write,
