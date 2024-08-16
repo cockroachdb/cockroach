@@ -16,14 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestBufferedServerStream() *BufferedStreamSender {
-	return &BufferedStreamSender{
+func TestBufferedStreamSender(t *testing.T) {
+	var serverStream ServerStreamSender = &BufferedStreamSender{
 		ServerStreamSender: newTestServerStream(),
 	}
-}
-
-func TestBufferedStreamSender(t *testing.T) {
-	var serverStream ServerStreamSender = newTestBufferedServerStream()
 	require.NotNil(t, serverStream)
 	bs, ok := serverStream.(*BufferedStreamSender)
 	require.True(t, ok)
