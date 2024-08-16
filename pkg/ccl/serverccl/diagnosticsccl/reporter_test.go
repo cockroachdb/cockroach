@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -272,6 +273,68 @@ func TestServerReport(t *testing.T) {
 			require.Equal(t, prefs, zone.LeasePreferences)
 		}
 	}
+}
+
+func TestTelemetry_SuccessfulTelemetryPing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rt := startReporterTest(t, base.TestIsSpecificToStorageLayerAndNeedsASystemTenant)
+	defer rt.Close()
+
+	ctx := context.Background()
+	setupCluster(t, rt.serverDB)
+
+	for _, tc := range []struct {
+		name                  string
+		respError             error
+		respCode              int
+		expectTimestampUpdate bool
+	}{
+		{
+			name:                  "200 response",
+			respError:             nil,
+			respCode:              200,
+			expectTimestampUpdate: true,
+		},
+		{
+			name:                  "400 response",
+			respError:             nil,
+			respCode:              400,
+			expectTimestampUpdate: true,
+		},
+		{
+			name:                  "500 response",
+			respError:             nil,
+			respCode:              500,
+			expectTimestampUpdate: true,
+		},
+		{
+			name:                  "connection error",
+			respError:             errors.New("connection refused"),
+			expectTimestampUpdate: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			defer rt.diagServer.SetRespError(tc.respError)()
+			defer rt.diagServer.SetRespCode(tc.respCode)()
+
+			dr := rt.server.DiagnosticsReporter().(*diagnostics.Reporter)
+
+			before := timeutil.Now()
+			oldTimestamp := dr.LastSuccessfulTelemetryPing
+			require.LessOrEqual(t, dr.LastSuccessfulTelemetryPing, before)
+			dr.ReportDiagnostics(ctx)
+
+			if tc.expectTimestampUpdate {
+				require.GreaterOrEqual(t, dr.LastSuccessfulTelemetryPing, before)
+			} else {
+				require.Equal(t, oldTimestamp, dr.LastSuccessfulTelemetryPing)
+			}
+		})
+	}
+
 }
 
 func TestUsageQuantization(t *testing.T) {
