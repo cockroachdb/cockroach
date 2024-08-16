@@ -1925,85 +1925,6 @@ func (n *Node) RangeLookup(
 	return resp, nil
 }
 
-// bufferedPerRangeEventSink is an implementation of rangefeed.BufferedStream
-// which buffers events before sending them to the underlying grpc stream.
-type bufferedPerRangeEventSink struct {
-	*perRangeEventSink
-}
-
-var _ kvpb.RangeFeedEventSink = (*bufferedPerRangeEventSink)(nil)
-var _ rangefeed.Stream = (*bufferedPerRangeEventSink)(nil)
-var _ rangefeed.BufferedStream = (*bufferedPerRangeEventSink)(nil)
-
-// RegisterRangefeedCleanUp registers a cleanup callback to be called in a
-// background async job when the stream is disconnected. Note that the callback will
-// not be invoked immediately during DisconnectStreamWithError and may not be
-// called if the StreamMuxer.Stop has been called. It is up to the caller to
-// ensure that this is not called after StreamMuxer.Stop. For p.Register, it is
-// currently done by waiting for runRequest to complete for each
-// stores.RangeFeed call.
-func (s *bufferedPerRangeEventSink) RegisterRangefeedCleanUp(f func()) {
-	s.wrapped.RegisterRangefeedCleanUp(s.streamID, f)
-}
-
-// SendBuffered buffers the event in StreamMuxer.BufferedStreamSender,
-// transferring the ownership of the allocated SharedBudgetAllocation to
-// bufferedPerRangeEventSink. The underlying streamMuxer is responsible for
-// properly using and releasing it when an error occurs or when the event is
-// sent. The event is guaranteed to be sent unless the buffered stream
-// terminates before sending (e.g. broken grpc stream).
-//
-// Note that this should only be called if the StreamMuxer has a
-// BufferedStreamSender as the sender. Panics otherwise.
-func (s *bufferedPerRangeEventSink) SendBuffered(
-	event *kvpb.RangeFeedEvent, alloc *rangefeed.SharedBudgetAllocation,
-) error {
-	response := &kvpb.MuxRangeFeedEvent{
-		RangeFeedEvent: *event,
-		RangeID:        s.rangeID,
-		StreamID:       s.streamID,
-	}
-	return s.wrapped.SendBuffered(response, alloc)
-}
-
-// perRangeEventSink is an implementation of rangefeed.Stream which annotates
-// each response with rangeID and streamID. It is used by MuxRangeFeed.
-type perRangeEventSink struct {
-	ctx      context.Context
-	rangeID  roachpb.RangeID
-	streamID int64
-	wrapped  *rangefeed.StreamMuxer
-}
-
-var _ kvpb.RangeFeedEventSink = (*perRangeEventSink)(nil)
-var _ rangefeed.Stream = (*perRangeEventSink)(nil)
-
-func (s *perRangeEventSink) Context() context.Context {
-	return s.ctx
-}
-
-// SendIsThreadSafe is a no-op declaration method. It is a contract that the
-// Send method is thread-safe. Note that Send wraps rangefeed.StreamMuxer which
-// declares its Send method to be thread-safe.
-func (s *perRangeEventSink) SendIsThreadSafe() {}
-
-func (s *perRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
-	response := &kvpb.MuxRangeFeedEvent{
-		RangeFeedEvent: *event,
-		RangeID:        s.rangeID,
-		StreamID:       s.streamID,
-	}
-	return s.wrapped.Send(response)
-}
-
-// Disconnect implements the rangefeed.Stream interface. It requests the
-// StreamMuxer to detach the stream. The StreamMuxer is then responsible for
-// handling the actual disconnection and additional cleanup. Note that Caller
-// should not rely on immediate disconnection as cleanup takes place async.
-func (s *perRangeEventSink) Disconnect(err *kvpb.Error) {
-	s.wrapped.DisconnectStreamWithError(s.streamID, s.rangeID, err)
-}
-
 // lockedMuxStream provides support for concurrent calls to Send. The underlying
 // MuxRangeFeedServer (default grpc.Stream) is not safe for concurrent calls to
 // Send.
@@ -2071,16 +1992,10 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
 
 			var streamSink rangefeed.Stream
-			sink := &perRangeEventSink{
-				ctx:      streamCtx,
-				rangeID:  req.RangeID,
-				streamID: req.StreamID,
-				wrapped:  streamMuxer,
-			}
-
+			sink := rangefeed.NewPerRangeEventSink(streamCtx, req.RangeID, req.StreamID, streamMuxer)
 			if _, ok := muxStream.(*rangefeed.BufferedStreamSender); ok {
-				streamSink = &bufferedPerRangeEventSink{
-					perRangeEventSink: sink,
+				streamSink = &rangefeed.BufferedPerRangeEventSink{
+					PerRangeEventSink: sink,
 				}
 			} else {
 				streamSink = sink
