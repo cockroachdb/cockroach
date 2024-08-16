@@ -30,11 +30,11 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 0 B                   
-  74       | 2        | 0 B                   
-  74       | 3        | 4.0 MiB               
-  74       | 4        | 0 B                   
-  74       | 5        | 0 B                   
+  75       | 1        | 0 B                   
+  75       | 2        | 0 B                   
+  75       | 3        | 4.0 MiB               
+  75       | 4        | 0 B                   
+  75       | 5        | 0 B                   
 
 
 -- Per-store tokens available from n1, these should reflect the lack of tokens 

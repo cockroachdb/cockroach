@@ -30,7 +30,7 @@ query TTTI rowsort
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE kv WITH DETAILS]
 ORDER by 1
 ----
-<before:/Table/71>  …/1/1                   {1}  1
+<before:/Table/72>  …/1/1                   {1}  1
 …/1/1               …/1/2                   {1}  1
 …/1/2               …/1/3                   {2}  2
 …/1/3               …/1/4                   {3}  3

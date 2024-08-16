@@ -48,7 +48,7 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE t1 WITH DETAILS] ORDER BY lease_holder, start_key
 ----
 start_key           end_key                 replicas  lease_holder
-<before:/Table/71>  …/1/0                   {1}       1
+<before:/Table/72>  …/1/0                   {1}       1
 …/1/0               …/1/10                  {1}       1
 …/1/10              …/1/20                  {2}       2
 …/1/20              <after:/Table/110/1/0>  {3}       3
