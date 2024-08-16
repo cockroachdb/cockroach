@@ -94,3 +94,29 @@ func (AlwaysLive) SupportFromEnabled() bool {
 func (AlwaysLive) SupportExpired(hlc.Timestamp) bool {
 	return false
 }
+
+// Disabled is a mock implementation of StoreLiveness where store liveness
+// is disabled.
+type Disabled struct{}
+
+var _ StoreLiveness = Disabled{}
+
+// SupportFor implements the StoreLiveness interface.
+func (Disabled) SupportFor(pb.PeerID) (pb.Epoch, bool) {
+	panic("unimplemented")
+}
+
+// SupportFrom implements the StoreLiveness interface.
+func (Disabled) SupportFrom(pb.PeerID) (pb.Epoch, hlc.Timestamp, bool) {
+	panic("should not be called without checking SupportFromEnabled")
+}
+
+// SupportFromEnabled implements the StoreLiveness interface.
+func (Disabled) SupportFromEnabled() bool {
+	return false // disabled
+}
+
+// SupportExpired implements the StoreLiveness interface.
+func (Disabled) SupportExpired(hlc.Timestamp) bool {
+	panic("unimplemented")
+}

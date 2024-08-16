@@ -353,8 +353,9 @@ func TestLearnerElectionTimeout(t *testing.T) {
 // TestLearnerPromotion verifies that the learner should not election until
 // it is promoted to a normal peer.
 func TestLearnerPromotion(t *testing.T) {
-	n1 := newTestLearnerRaft(1, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)))
-	n2 := newTestLearnerRaft(2, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)))
+	n1 := newTestLearnerRaft(1, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)), withFortificationDisabled())
+
+	n2 := newTestLearnerRaft(2, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)), withFortificationDisabled())
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
@@ -420,9 +421,9 @@ func TestLeaderCyclePreVote(t *testing.T) {
 // pre-vote) work when not starting from a clean slate (as they do in
 // TestLeaderElection)
 func testLeaderCycle(t *testing.T, preVote bool) {
-	var cfg func(*Config)
+	cfg := fortificationDisabledConfig
 	if preVote {
-		cfg = preVoteConfig
+		cfg = preVoteConfigWithFortificationDisabled
 	}
 	n := newNetworkWithConfig(cfg, nil, nil, nil)
 	for campaignerID := pb.PeerID(1); campaignerID <= 3; campaignerID++ {
@@ -570,14 +571,14 @@ func TestLogReplication(t *testing.T) {
 		wcommitted uint64
 	}{
 		{
-			newNetwork(nil, nil, nil),
+			newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil),
 			[]pb.Message{
 				{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}},
 			},
 			2,
 		},
 		{
-			newNetwork(nil, nil, nil),
+			newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil),
 			[]pb.Message{
 				{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}},
 				{From: 1, To: 2, Type: pb.MsgHup},
@@ -671,7 +672,7 @@ func TestSingleNodeCommit(t *testing.T) {
 // when leader changes, no new proposal comes in and ChangeTerm proposal is
 // filtered.
 func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
-	tt := newNetwork(nil, nil, nil, nil, nil)
+	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil, nil, nil)
 	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	// 0 cannot reach 2,3,4
@@ -709,7 +710,7 @@ func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
 // TestCommitWithoutNewTermEntry tests the entries could be committed
 // when leader changes, no new proposal comes in.
 func TestCommitWithoutNewTermEntry(t *testing.T) {
-	tt := newNetwork(nil, nil, nil, nil, nil)
+	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil, nil, nil)
 	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	// 0 cannot reach 3,4,5
@@ -884,7 +885,7 @@ func TestSingleNodePreCandidate(t *testing.T) {
 }
 
 func TestOldMessages(t *testing.T) {
-	tt := newNetwork(nil, nil, nil)
+	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil)
 	// make 0 leader @ term 3
 	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
@@ -1448,9 +1449,15 @@ func TestCandidateResetTermMsgApp(t *testing.T) {
 // MsgHeartbeat or MsgApp from leader, "Step" resets the term
 // with leader's and reverts back to follower.
 func testCandidateResetTerm(t *testing.T, mt pb.MessageType) {
-	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	a := newTestRaft(
+		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	b := newTestRaft(
+		2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	c := newTestRaft(
+		3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
 
 	nt := newNetwork(a, b, c)
 
@@ -1614,9 +1621,14 @@ func TestLeaderStepdownWhenQuorumLost(t *testing.T) {
 }
 
 func TestLeaderSupersedingWithCheckQuorum(t *testing.T) {
-	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	a := newTestRaft(
+		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	b := newTestRaft(
+		2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	c := newTestRaft(
+		3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
 
 	a.checkQuorum = true
 	b.checkQuorum = true
@@ -1648,9 +1660,15 @@ func TestLeaderSupersedingWithCheckQuorum(t *testing.T) {
 }
 
 func TestLeaderElectionWithCheckQuorum(t *testing.T) {
-	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	a := newTestRaft(
+		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	b := newTestRaft(
+		2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	c := newTestRaft(
+		3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
 
 	a.checkQuorum = true
 	b.checkQuorum = true
@@ -1687,9 +1705,15 @@ func TestLeaderElectionWithCheckQuorum(t *testing.T) {
 // can disrupt the leader even if the leader still "officially" holds the lease, The
 // leader is expected to step down and adopt the candidate's term
 func TestFreeStuckCandidateWithCheckQuorum(t *testing.T) {
-	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	a := newTestRaft(
+		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	b := newTestRaft(
+		2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	c := newTestRaft(
+		3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
 
 	a.checkQuorum = true
 	b.checkQuorum = true
@@ -1760,9 +1784,15 @@ func TestNonPromotableVoterWithCheckQuorum(t *testing.T) {
 // candiate's response to late leader heartbeat forces the leader
 // to step down.
 func TestDisruptiveFollower(t *testing.T) {
-	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	n1 := newTestRaft(
+		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	n2 := newTestRaft(
+		2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	n3 := newTestRaft(
+		3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
 
 	n1.checkQuorum = true
 	n2.checkQuorum = true
@@ -2937,7 +2967,7 @@ func TestLeaderTransferIgnoreProposal(t *testing.T) {
 }
 
 func TestLeaderTransferReceiveHigherTermVote(t *testing.T) {
-	nt := newNetwork(nil, nil, nil)
+	nt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	nt.isolate(3)
@@ -3278,9 +3308,9 @@ func TestLearnerCampaign(t *testing.T) {
 // n2 is follower with term 2
 // n3 is partitioned, with term 4 and less log, state is candidate
 func newPreVoteMigrationCluster(t *testing.T) *network {
-	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
@@ -3377,7 +3407,7 @@ func TestPreVoteMigrationWithFreeStuckPreCandidate(t *testing.T) {
 }
 
 func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool) {
-	nt := newNetwork(nil, nil, nil)
+	nt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil)
 	n1 := nt.peers[1].(*raft)
 	n2 := nt.peers[2].(*raft)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
@@ -3785,6 +3815,15 @@ func preVoteConfig(c *Config) {
 	c.PreVote = true
 }
 
+func fortificationDisabledConfig(c *Config) {
+	c.StoreLiveness = raftstoreliveness.Disabled{}
+}
+
+func preVoteConfigWithFortificationDisabled(c *Config) {
+	c.PreVote = true
+	c.StoreLiveness = raftstoreliveness.Disabled{}
+}
+
 func (nw *network) send(msgs ...pb.Message) {
 	for len(msgs) > 0 {
 		m := msgs[0]
@@ -3885,7 +3924,35 @@ func SetRandomizedElectionTimeout(r *RawNode, v int) {
 	setRandomizedElectionTimeout(r.raft, v)
 }
 
-func newTestConfig(id pb.PeerID, election, heartbeat int, storage Storage) *Config {
+// testConfigModifiers allows callers to optionally modify newTestConfig.
+type testConfigModifiers struct {
+	testingDisableFortification bool
+}
+
+// testConfigModifierOpt is the type of an optional parameter to newTestConfig
+// that may be used to modify the config.
+type testConfigModifierOpt func(*testConfigModifiers)
+
+// withRaftFortification disables raft fortification.
+func withFortificationDisabled() testConfigModifierOpt {
+	return func(modifier *testConfigModifiers) {
+		modifier.testingDisableFortification = true
+	}
+}
+
+func newTestConfig(
+	id pb.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
+) *Config {
+	modifiers := testConfigModifiers{}
+	for _, opt := range opts {
+		opt(&modifiers)
+	}
+	var storeLiveness raftstoreliveness.StoreLiveness
+	if modifiers.testingDisableFortification {
+		storeLiveness = raftstoreliveness.Disabled{}
+	} else {
+		storeLiveness = raftstoreliveness.AlwaysLive{}
+	}
 	return &Config{
 		ID:              id,
 		ElectionTick:    election,
@@ -3893,7 +3960,7 @@ func newTestConfig(id pb.PeerID, election, heartbeat int, storage Storage) *Conf
 		Storage:         storage,
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
-		StoreLiveness:   raftstoreliveness.AlwaysLive{},
+		StoreLiveness:   storeLiveness,
 	}
 }
 
@@ -3919,12 +3986,16 @@ func newTestMemoryStorage(opts ...testMemoryStorageOptions) *MemoryStorage {
 	return ms
 }
 
-func newTestRaft(id pb.PeerID, election, heartbeat int, storage Storage) *raft {
-	return newRaft(newTestConfig(id, election, heartbeat, storage))
+func newTestRaft(
+	id pb.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
+) *raft {
+	return newRaft(newTestConfig(id, election, heartbeat, storage, opts...))
 }
 
-func newTestLearnerRaft(id pb.PeerID, election, heartbeat int, storage Storage) *raft {
-	cfg := newTestConfig(id, election, heartbeat, storage)
+func newTestLearnerRaft(
+	id pb.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
+) *raft {
+	cfg := newTestConfig(id, election, heartbeat, storage, opts...)
 	return newRaft(cfg)
 }
 
