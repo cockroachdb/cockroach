@@ -466,7 +466,7 @@ func (e *Env) List(dir string) ([]string, error) {
 }
 
 // Stat returns an os.FileInfo describing the named file.
-func (e *Env) Stat(name string) (os.FileInfo, error) {
+func (e *Env) Stat(name string) (vfs.FileInfo, error) {
 	return e.defaultFS.Stat(name)
 }
 

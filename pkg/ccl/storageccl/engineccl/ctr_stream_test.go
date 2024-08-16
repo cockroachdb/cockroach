@@ -95,7 +95,8 @@ func encryptManySubBlocks(
 // Running non-fips mode:
 // ./dev test pkg/ccl/storageccl/engineccl -f CTRStreamDataDriven  --rewrite --stream-output
 // Running fips mode:
-// ./dev test-binaries --cross=crosslinuxfips pkg/ccl/storageccl/engineccl && mkdir -p fipsbin && tar xf bin/test_binaries.tar.gz -C fipsbin && docker run -v $PWD/fipsbin:/fipsbin -it redhat/ubi9 bash -c 'cd /fipsbin/pkg/ccl/storageccl/engineccl/bin && ./run.sh -test.run CTRStreamDataDriven'
+// ./dev test-binaries --cross=crosslinuxfips pkg/ccl/storageccl/engineccl && mkdir -p fipsbin && tar xf bin/test_binaries.tar.gz -C fipsbin && docker run -v
+// $PWD/fipsbin:/fipsbin -it redhat/ubi9 bash -c 'cd /fipsbin/pkg/ccl/storageccl/engineccl/bin && ./run.sh -test.run CTRStreamDataDriven'
 func TestCTRStreamDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, impl := range []string{"v1", "v2"} {
@@ -343,7 +344,8 @@ func TestFileCipherStreamCreator(t *testing.T) {
 // Running non-fips mode:
 // ./dev bench pkg/ccl/storageccl/engineccl -f FileCipherStream --stream-output --ignore-cache
 // Running fips mode (be sure to look for fips=true in the output):
-// ./dev test-binaries --cross=crosslinuxfips pkg/ccl/storageccl/engineccl && mkdir -p fipsbin && tar xf bin/test_binaries.tar.gz -C fipsbin && docker run -v $PWD/fipsbin:/fipsbin -it redhat/ubi9 /fipsbin/pkg/ccl/storageccl/engineccl/bin/engineccl_test -test.run '^$' -test.bench FileCipherStream
+// ./dev test-binaries --cross=crosslinuxfips pkg/ccl/storageccl/engineccl && mkdir -p fipsbin && tar xf bin/test_binaries.tar.gz -C fipsbin && docker run -v
+// $PWD/fipsbin:/fipsbin -it redhat/ubi9 /fipsbin/pkg/ccl/storageccl/engineccl/bin/engineccl_test -test.run '^$' -test.bench FileCipherStream
 func BenchmarkFileCipherStream(b *testing.B) {
 	isFips := fipsccl.IsFIPSReady()
 	for _, impl := range []string{"v1", "v2"} {
