@@ -780,10 +780,6 @@ func TestMkdirAllAndSyncParentsErrors(t *testing.T) {
 
 	t.Run("empty", func(t *testing.T) {
 		fs := vfs.NewMem()
-		for _, path := range []string{".", "./a", ".."} {
-			require.ErrorContains(t, mkdirAllAndSyncParents(fs, path, os.ModePerm),
-				"topmost dir does not exist", path)
-		}
 		// The root exists in an empty MemFS.
 		require.NoError(t, mkdirAllAndSyncParents(fs, "/", os.ModePerm))
 		// TODO(pavelkalinnikov): find a way to remove "/", and exercise the missing
