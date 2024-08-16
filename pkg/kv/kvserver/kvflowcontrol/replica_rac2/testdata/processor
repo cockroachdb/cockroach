@@ -96,7 +96,7 @@ HandleRaftReady:
  Replica.MuUnlock
 .....
 AdmitRaftEntries:
- ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:25 Priority:LowPri}})
+ ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:25 Priority:LowPri}}) = true
 leader-using-v2: true
 
 # Stable index is advanced to 25.
@@ -147,7 +147,7 @@ HandleRaftReady:
  Replica.MuUnlock
 .....
 AdmitRaftEntries:
- ACWorkQueue.Admit({TenantID:4 Priority:user-high-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:26 Priority:AboveNormalPri}})
+ ACWorkQueue.Admit({TenantID:4 Priority:user-high-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:26 Priority:AboveNormalPri}}) = true
 leader-using-v2: true
 
 # handleRaftReady is a noop.
@@ -241,7 +241,7 @@ HandleRaftReady:
  Replica.MuUnlock
 .....
 AdmitRaftEntries:
- ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:27 Priority:LowPri}})
+ ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:27 Priority:LowPri}}) = true
 leader-using-v2: true
 
 admitted-log-entry replica-id=5 leader-term=50 index=27 pri=3
@@ -378,7 +378,7 @@ HandleRaftReady:
  RangeController.HandleRaftEventRaftMuLocked([28])
 .....
 AdmitRaftEntries:
- ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:52 Index:28 Priority:LowPri}})
+ ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:52 Index:28 Priority:LowPri}}) = true
 leader-using-v2: true
 
 # Entry at index 28 is admitted, but stable index is 27.
@@ -641,7 +641,7 @@ HandleRaftReady:
  RangeController.HandleRaftEventRaftMuLocked([26])
 .....
 AdmitRaftEntries:
- ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:26 Priority:LowPri}})
+ ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:26 Priority:LowPri}}) = true
 leader-using-v2: true
 
 # Entry is admitted.

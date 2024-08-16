@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -215,13 +216,22 @@ type ReplicatedWorkInfo struct {
 	// RangeID identifies the raft group on behalf of which work is being
 	// admitted.
 	RangeID roachpb.RangeID
+	// Replica that asked for admission.
+	ReplicaID roachpb.ReplicaID
+	// LeaderTerm is the term of the leader that asked for this entry to be
+	// appended.
+	LeaderTerm uint64
+	// LogPosition is the point on the raft log where the write was replicated.
+	LogPosition LogPosition
 	// Origin is the node at which this work originated. It's used for
 	// replication admission control to inform the origin of admitted work
 	// (after which flow tokens are released, permitting more replicated
-	// writes).
+	// writes). Only populated for RACv1.
 	Origin roachpb.NodeID
-	// LogPosition is the point on the raft log where the write was replicated.
-	LogPosition LogPosition
+	// RaftPri is the raft priority of the entry. Only populated for RACv2.
+	RaftPri raftpb.Priority
+	// IsV2Protocol is true iff the v2 protocol requested this admission.
+	IsV2Protocol bool
 	// Ingested captures whether the write work corresponds to an ingest
 	// (for sstables, for example). This is used alongside RequestedCount to
 	// maintain accurate linear models for L0 growth due to ingests and
@@ -2085,29 +2095,59 @@ func (q *StoreWorkQueue) admittedReplicatedWork(
 	// revisit -- one possibility is to add this to a notification queue and
 	// have a separate goroutine invoke these callbacks (without holding
 	// coord.mu). We could directly invoke here too if not holding the lock.
-	q.onLogEntryAdmitted.AdmittedLogEntry(
-		q.q[wc].ambientCtx,
-		rwi.Origin,
-		pri,
-		q.storeID,
-		rwi.RangeID,
-		rwi.LogPosition,
-	)
+	cbState := LogEntryAdmittedCallbackState{
+		StoreID:      q.storeID,
+		RangeID:      rwi.RangeID,
+		ReplicaID:    rwi.ReplicaID,
+		LeaderTerm:   rwi.LeaderTerm,
+		Pos:          rwi.LogPosition,
+		Pri:          pri,
+		Origin:       rwi.Origin,
+		RaftPri:      rwi.RaftPri,
+		IsV2Protocol: rwi.IsV2Protocol,
+	}
+	q.onLogEntryAdmitted.AdmittedLogEntry(q.q[wc].ambientCtx, cbState)
 }
 
-// OnLogEntryAdmitted is used to observe the specific entries (identified by
-// rangeID + log position) that were admitted. Since admission control for log
-// entries is asynchronous/non-blocking, this allows callers to do requisite
+// OnLogEntryAdmitted is used to observe the specific entries that were
+// admitted. Since admission control for log entries is
+// asynchronous/non-blocking, this allows callers to do requisite
 // post-admission bookkeeping.
 type OnLogEntryAdmitted interface {
-	AdmittedLogEntry(
-		ctx context.Context,
-		origin roachpb.NodeID, /* node where the entry originated */
-		pri admissionpb.WorkPriority, /* admission priority of the entry */
-		storeID roachpb.StoreID, /* store on which the entry was admitted */
-		rangeID roachpb.RangeID, /* identifying range for the log entry */
-		pos LogPosition, /* log position of the entry that was admitted*/
-	)
+	AdmittedLogEntry(ctx context.Context, cbState LogEntryAdmittedCallbackState)
+}
+
+// LogEntryAdmittedCallbackState is passed to AdmittedLogEntry.
+type LogEntryAdmittedCallbackState struct {
+	// Store on which the entry was admitted.
+	StoreID roachpb.StoreID
+	// Range that contained that entry.
+	RangeID roachpb.RangeID
+	// Replica that asked for admission.
+	ReplicaID roachpb.ReplicaID
+	// LeaderTerm is the term of the leader that asked for this entry to be
+	// appended.
+	LeaderTerm uint64
+	// Pos is the position of the entry in the log.
+	//
+	// TODO(sumeer): when the RACv1 protocol is deleted, drop the Term from this
+	// struct.
+	Pos LogPosition
+	// Pri is the admission priority used for admission.
+	Pri admissionpb.WorkPriority
+	// Origin is the node where the entry originated. It is only populated for
+	// replication admission control v1 (RACv1).
+	Origin roachpb.NodeID
+	// RaftPri is only populated for replication admission control v2 (RACv2).
+	// It is the raft priority for the entry. Technically, it could be derived
+	// from Pri, but we do not want the admission package to be aware of this
+	// translation.
+	RaftPri raftpb.Priority
+	// IsV2Protocol is true iff the v2 protocol requested this admission. It is
+	// used for de-multiplexing the callback correctly.
+	//
+	// TODO(sumeer): remove when the RACv1 protocol is deleted.
+	IsV2Protocol bool
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has completed.
