@@ -43,10 +43,17 @@ func TestRegistrationBasic(t *testing.T) {
 			if noCatchupReg, ok := noCatchupReg.(*bufferedRegistration); ok {
 				require.Equal(t, len(noCatchupReg.buf), 2)
 			}
+			if noCatchupReg, ok := noCatchupReg.(*unbufferedRegistration); ok {
+				require.Nil(t, noCatchupReg.mu.catchUpBuf)
+			}
 			go noCatchupReg.runOutputLoop(ctx, 0)
 			require.NoError(t, noCatchupReg.waitForCaughtUp(ctx))
 			require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, s.Events())
 			noCatchupReg.disconnect(nil)
+			if rt == unbuffered {
+				// No more events should be published.
+				require.Nil(t, s.Events())
+			}
 		})
 		t.Run("registration with catchup scan", func(t *testing.T) {
 			s := newTestStream()
@@ -62,12 +69,19 @@ func TestRegistrationBasic(t *testing.T) {
 			if r, ok := catchupReg.(*bufferedRegistration); ok {
 				require.Equal(t, len(r.buf), 2)
 			}
+			if r, ok := catchupReg.(*unbufferedRegistration); ok {
+				require.Equal(t, len(r.mu.catchUpBuf), 2)
+			}
 			go catchupReg.runOutputLoop(ctx, 0)
 			require.NoError(t, catchupReg.waitForCaughtUp(ctx))
 			events := s.Events()
 			require.Equal(t, 5, len(events))
 			require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, events[3:])
 			catchupReg.disconnect(nil)
+			if rt == unbuffered {
+				// No more events should be published.
+				require.Nil(t, s.Events())
+			}
 		})
 		t.Run("external disconnect after output loop", func(t *testing.T) {
 			s := newTestStream()
@@ -80,6 +94,11 @@ func TestRegistrationBasic(t *testing.T) {
 			disconnectReg.disconnect(discErr)
 			require.Equal(t, discErr.GoError(), s.WaitForError(t))
 			require.Equal(t, 2, len(s.Events()))
+			disconnectReg.publish(ctx, ev1, nil /* alloc */)
+			// No events should be sent after disconnection.
+			if rt == unbuffered {
+				require.Equal(t, 0, len(s.Events()))
+			}
 		})
 		t.Run("external disconnect before output loop", func(t *testing.T) {
 			s := newTestStream()
@@ -125,6 +144,11 @@ func TestRegistrationBasic(t *testing.T) {
 			go overflowReg.runOutputLoop(ctx, 0)
 			require.Equal(t, kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER), s.WaitForError(t))
 			require.Equal(t, capOfBuf, len(s.Events()))
+			require.NoError(t, overflowReg.waitForCaughtUp(ctx))
+			if r, ok := overflowReg.(*unbufferedRegistration); ok {
+				require.Nil(t, r.mu.catchUpBuf)
+				require.True(t, r.mu.catchUpOverflowed)
+			}
 		})
 		t.Run("stream error", func(t *testing.T) {
 			s := newTestStream()
@@ -493,4 +517,49 @@ func TestBaseRegistration(t *testing.T) {
 	require.True(t, r.getWithDiff())
 	require.True(t, r.getWithFiltering())
 	require.False(t, r.getWithOmitRemote())
+}
+
+func TestPublishStrippedEvents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	val := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
+	prevVal := roachpb.Value{RawBytes: []byte("prevVal"), Timestamp: hlc.Timestamp{WallTime: 1}}
+	ev1 := new(kvpb.RangeFeedEvent)
+	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val, PrevValue: prevVal})
+	expectedEv := new(kvpb.RangeFeedEvent)
+	// maybeStripEvent should strip the PrevValue from the event since withDiff is
+	// false.
+	expectedEv.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val})
+
+	testutils.RunValues(t, "registration type=", registrationTestTypes, func(t *testing.T, rt registrationType) {
+		t.Run("registration with no catchup scan specified", func(t *testing.T) {
+			s := newTestStream()
+			noCatchupReg := newTestRegistration(s, withRSpan(spAB), withRegistrationType(rt), withDiff(false))
+			noCatchupReg.publish(ctx, ev1, nil /* alloc */)
+			if r, ok := noCatchupReg.(*unbufferedRegistration); ok {
+				require.Nil(t, r.mu.catchUpBuf)
+			}
+			go noCatchupReg.runOutputLoop(ctx, 0)
+			require.NoError(t, noCatchupReg.waitForCaughtUp(ctx))
+			require.Equal(t, []*kvpb.RangeFeedEvent{expectedEv}, s.Events())
+			noCatchupReg.disconnect(nil)
+		})
+		t.Run("registration with catchup scan", func(t *testing.T) {
+			s := newTestStream()
+			// Use catch up iter to force catch up buffer to be used for events
+			// publish. But catch up scan is noop.
+			catchupReg := newTestRegistration(s, withRSpan(spBC),
+				withStartTs(hlc.Timestamp{WallTime: 1}),
+				withCatchUpIter(newTestIterator([]storage.MVCCKeyValue{}, nil)), withRegistrationType(rt), withDiff(false))
+			catchupReg.publish(ctx, ev1, nil /* alloc */)
+			if r, ok := catchupReg.(*unbufferedRegistration); ok {
+				require.Equal(t, len(r.mu.catchUpBuf), 1)
+			}
+			go catchupReg.runOutputLoop(ctx, 0)
+			require.NoError(t, catchupReg.waitForCaughtUp(ctx))
+			require.Equal(t, []*kvpb.RangeFeedEvent{expectedEv}, s.Events())
+			catchupReg.disconnect(nil)
+		})
+	})
 }
