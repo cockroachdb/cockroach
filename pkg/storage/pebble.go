@@ -2293,14 +2293,14 @@ func (p *Pebble) Type() enginepb.EngineType {
 
 // IngestLocalFiles implements the Engine interface.
 func (p *Pebble) IngestLocalFiles(ctx context.Context, paths []string) error {
-	return p.db.Ingest(paths)
+	return p.db.Ingest(ctx, paths)
 }
 
 // IngestLocalFilesWithStats implements the Engine interface.
 func (p *Pebble) IngestLocalFilesWithStats(
 	ctx context.Context, paths []string,
 ) (pebble.IngestOperationStats, error) {
-	return p.db.IngestWithStats(paths)
+	return p.db.IngestWithStats(ctx, paths)
 }
 
 // IngestAndExciseFiles implements the Engine interface.
@@ -2316,14 +2316,14 @@ func (p *Pebble) IngestAndExciseFiles(
 		Start: EngineKey{Key: exciseSpan.Key}.Encode(),
 		End:   EngineKey{Key: exciseSpan.EndKey}.Encode(),
 	}
-	return p.db.IngestAndExcise(paths, shared, external, rawSpan, sstsContainExciseTombstone)
+	return p.db.IngestAndExcise(ctx, paths, shared, external, rawSpan, sstsContainExciseTombstone)
 }
 
 // IngestExternalFiles implements the Engine interface.
 func (p *Pebble) IngestExternalFiles(
 	ctx context.Context, external []pebble.ExternalFile,
 ) (pebble.IngestOperationStats, error) {
-	return p.db.IngestExternalFiles(external)
+	return p.db.IngestExternalFiles(ctx, external)
 }
 
 // PreIngestDelay implements the Engine interface.
@@ -2352,17 +2352,15 @@ func (p *Pebble) GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetr
 	for level, sstableInfos := range tableInfo {
 		for _, sstableInfo := range sstableInfos {
 			marshalTableInfo, err := json.Marshal(sstableInfo)
-
 			if err != nil {
 				return []enginepb.SSTableMetricsInfo{}, err
 			}
-
-			tableID := sstableInfo.TableInfo.FileNum
-			approximateSpanBytes, err := strconv.ParseUint(sstableInfo.Properties.UserProperties["approximate-span-bytes"], 10, 64)
-			if err != nil {
-				return []enginepb.SSTableMetricsInfo{}, err
-			}
-			metricsInfo = append(metricsInfo, enginepb.SSTableMetricsInfo{TableID: uint64(tableID), Level: int32(level), ApproximateSpanBytes: approximateSpanBytes, TableInfoJSON: marshalTableInfo})
+			metricsInfo = append(metricsInfo, enginepb.SSTableMetricsInfo{
+				Level:                int32(level),
+				TableID:              uint64(sstableInfo.TableInfo.FileNum),
+				TableInfoJSON:        marshalTableInfo,
+				ApproximateSpanBytes: sstableInfo.ApproximateSpanBytes,
+			})
 		}
 	}
 	return metricsInfo, nil

@@ -91,12 +91,15 @@ func benchObjstorageCopy(b *testing.B, prefix string, suffixes []string) {
 					b.Fatal(err)
 				}
 
-				rh := objstorageprovider.NewRemoteReadable(r, fileSize)
+				readable := objstorageprovider.NewRemoteReadable(r, fileSize)
+				rh := readable.NewReadHandle(0 /* readBeforeSize */)
 				if err := objstorage.Copy(ctx, rh, discard{}, 4<<20, uint64(size)); err != nil {
 					b.Fatal(err)
 				}
-
 				if err := rh.Close(); err != nil {
+					b.Fatal(err)
+				}
+				if err := readable.Close(); err != nil {
 					b.Fatal(err)
 				}
 			}
