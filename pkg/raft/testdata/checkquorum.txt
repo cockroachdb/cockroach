@@ -20,6 +20,10 @@ stabilize
 ----
 ok
 
+bump-epoch 1
+----
+ok
+
 log-level debug
 ----
 ok
