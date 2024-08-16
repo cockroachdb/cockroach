@@ -29,7 +29,7 @@ import (
 )
 
 type benchmarkRangefeedOpts struct {
-	procType         procType
+	feedType         rangefeedTestType
 	opType           opType
 	numRegistrations int
 	budget           int64
@@ -46,13 +46,13 @@ const (
 // BenchmarkRangefeed benchmarks the processor and registrations, by submitting
 // a set of events and waiting until they are all emitted.
 func BenchmarkRangefeed(b *testing.B) {
-	for _, procType := range testTypes {
+	for _, feedType := range testTypes {
 		for _, opType := range []opType{writeOpType, commitOpType, closedTSOpType} {
 			for _, numRegistrations := range []int{1, 10, 100} {
-				name := fmt.Sprintf("procType=%s/opType=%s/numRegs=%d", procType, opType, numRegistrations)
+				name := fmt.Sprintf("rangefeedTestType=%s/opType=%s/numRegs=%d", feedType, opType, numRegistrations)
 				b.Run(name, func(b *testing.B) {
 					runBenchmarkRangefeed(b, benchmarkRangefeedOpts{
-						procType:         procType,
+						feedType:         feedType,
 						opType:           opType,
 						numRegistrations: numRegistrations,
 						budget:           math.MaxInt64,
@@ -95,7 +95,7 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 	span := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
 
 	p, h, stopper := newTestProcessor(b, withSpan(span), withBudget(budget), withChanCap(b.N),
-		withEventTimeout(time.Hour), withProcType(opts.procType))
+		withEventTimeout(time.Hour), withRangefeedTestType(opts.feedType))
 	defer stopper.Stop(ctx)
 
 	// Add registrations.
