@@ -654,6 +654,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			},
 			jobAdoptionStopFile,
 			jobsKnobs,
+			cfg.CidrLookup,
 		)
 	}
 	cfg.registry.AddMetricStruct(jobRegistry.MetricsStruct())
