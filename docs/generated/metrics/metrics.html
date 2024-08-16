@@ -869,6 +869,8 @@
 <tr><td>APPLICATION</td><td>changefeed.max_behind_nanos</td><td>(Deprecated in favor of checkpoint_progress) The most any changefeed&#39;s persisted checkpoint is behind the present</td><td>Nanoseconds</td><td>GAUGE</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>changefeed.message_size_hist</td><td>Message size histogram</td><td>Bytes</td><td>HISTOGRAM</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>changefeed.messages.messages_pushback_nanos</td><td>Total time spent throttled for messages quota</td><td>Nanoseconds</td><td>COUNTER</td><td>NANOSECONDS</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
+<tr><td>APPLICATION</td><td>changefeed.network.bytes_in</td><td>The number of received from the network</td><td>Bytes</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
+<tr><td>APPLICATION</td><td>changefeed.network.bytes_out</td><td>The number of bytes sent over the network</td><td>Bytes</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>APPLICATION</td><td>changefeed.nprocs_consume_event_nanos</td><td>Total time spent waiting to add an event to the parallel consumer</td><td>Nanoseconds</td><td>HISTOGRAM</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>changefeed.nprocs_flush_nanos</td><td>Total time spent idle waiting for the parallel consumer to flush</td><td>Nanoseconds</td><td>HISTOGRAM</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>changefeed.nprocs_in_flight_count</td><td>Number of buffered events in the parallel consumer</td><td>Count of Events</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
