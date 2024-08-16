@@ -331,8 +331,8 @@ func (p *ScheduledProcessor) Register(
 	var r registration
 	bufferedStream, isBufferedStream := stream.(BufferedStream)
 	if isBufferedStream {
-		r = newUnbufferedRegistration(streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter,
-			withDiff, withFiltering, withOmitRemote,
+		r = newUnbufferedRegistration(streamCtx,
+			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 			p.Config.EventChanCap, p.Metrics, bufferedStream, disconnectFn)
 	} else {
 		r = newBufferedRegistration(

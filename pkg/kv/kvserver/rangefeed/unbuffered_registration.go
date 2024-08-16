@@ -141,6 +141,7 @@ func newUnbufferedRegistration(
 ) *unbufferedRegistration {
 	br := &unbufferedRegistration{
 		baseRegistration: baseRegistration{
+			streamCtx:        streamCtx,
 			span:             span,
 			catchUpTimestamp: startTS,
 			withDiff:         withDiff,

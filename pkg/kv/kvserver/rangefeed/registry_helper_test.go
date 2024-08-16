@@ -203,6 +203,7 @@ func (s *testStream) BlockSend() func() {
 // by sending the error to the done channel.
 func (s *testStream) SendError(err *kvpb.Error) {
 	s.done <- err
+	s.ctxDone()
 }
 
 // Error returns the error that was sent to the done channel. It returns nil if
