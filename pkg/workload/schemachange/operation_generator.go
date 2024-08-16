@@ -251,6 +251,15 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 		return nil, err
 	}
 
+	// Detect if the cluster was not finalized, which will
+	// prevent certain new types from being used below.
+	isNotFinalized, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.V23_2))
+	if err != nil {
+		return nil, err
+	}
 	def := &tree.ColumnTableDef{
 		// This might be a bit unpleasant, but we need to ensure that even though
 		// identifiers should not be quoted due to our type-related issue, we still
@@ -306,6 +315,19 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 		{
 			code: pgcode.FeatureNotSupported, condition: isJSONTyp,
 		},
+	})
+	// Compatibility errors aren't guaranteed since the cluster version update is not
+	// fully transaction aware.
+	isPGLSN := typ != nil && (typ.Family() == types.PGLSNFamily ||
+		(typ.Family() == types.ArrayFamily &&
+			typ.ArrayContents().Family() == types.PGLSNFamily))
+	isRefCursor := typ != nil && (typ.Family() == types.RefCursorFamily ||
+		(typ.Family() == types.ArrayFamily &&
+			typ.ArrayContents().Family() == types.RefCursorFamily))
+	op.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.Syntax, condition: isNotFinalized && (isPGLSN || isRefCursor)},
+		{code: pgcode.FeatureNotSupported, condition: isNotFinalized && (isPGLSN || isRefCursor)},
+		{code: pgcode.UndefinedObject, condition: isNotFinalized && (isPGLSN || isRefCursor)},
 	})
 	// Our type inside `def` will get quoted during
 	// lexbase.EncodeRestrictedSQLIdent down the line by default. We have to
