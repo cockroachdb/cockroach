@@ -37,9 +37,9 @@ import (
 // workload is run, and shortly after that, n3 is brought down. Upon restart, n3
 // starts to receive large amounts of snapshot data. With excises turned on, it
 // is expected that l0 sublevel counts and p99 latencies remain stable.
-func registerSnapshotOverloadExcise(r registry.Registry) {
+func registerSnapshotOverloadIO(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             "admission-control/snapshot-overload-excise",
+		Name:             "admission-control/snapshot-overload-io-excise",
 		Owner:            registry.OwnerAdmissionControl,
 		Benchmark:        true,
 		CompatibleClouds: registry.OnlyGCE,
