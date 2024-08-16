@@ -240,13 +240,13 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 	if ss, ok := step.(*singleStep); ok {
 		if ss.ID > tr.plan.startSystemID {
 			if err := tr.refreshServiceData(ctx, tr.systemService); err != nil {
-				return err
+				return errors.Wrapf(err, "preparing to run step %d", ss.ID)
 			}
 		}
 
 		if ss.ID > tr.plan.startTenantID && tr.tenantService != nil {
 			if err := tr.refreshServiceData(ctx, tr.tenantService); err != nil {
-				return err
+				return errors.Wrapf(err, "preparing to run step %d", ss.ID)
 			}
 		}
 	}
