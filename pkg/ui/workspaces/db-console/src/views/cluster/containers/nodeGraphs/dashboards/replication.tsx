@@ -438,15 +438,12 @@ export default function (props: GraphDashboardProps) {
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
     >
-      <Axis label="replicas" units={AxisUnits.Count}>
+      <Axis label="Replaced Errors / Sec" units={AxisUnits.Count}>
         {nodeIDs.map(nid => (
           <Metric
             key={nid}
             name="cr.store.queue.replicate.replacedecommissioningreplica.error"
-            title={
-              nodeDisplayName(nodeDisplayNameByID, nid) +
-              " - Replaced Errors / Sec"
-            }
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={storeIDsForNode(storeIDsByNodeID, nid)}
             nonNegativeRate
           />
