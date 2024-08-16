@@ -81,7 +81,7 @@ func runMultiTenantUpgrade(
 		"23.2": "23.1",
 		"24.1": "23.2",
 		"24.2": "24.1",
-		"24.3": "24.1",
+		"24.3": "24.2",
 	}
 	curBinaryMajorAndMinorVersion := getMajorAndMinorVersionOnly(v)
 	currentBinaryMinSupportedVersion, ok := versionToMinSupportedVersion[curBinaryMajorAndMinorVersion]
