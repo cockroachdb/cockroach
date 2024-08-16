@@ -2364,16 +2364,12 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 			return nil, err
 		}
 		if newTyp == nil {
-			errCode := pgcode.UndefinedObject // Error: type 'IrrelevantType'::<newTypeName> does not exist.
-			// Setting default on generated column short-circuits and returns a syntax
-			// error.
-			if columnForDefault.generated {
-				errCode = pgcode.Syntax
-			}
-			return makeOpStmtForSingleError(OpStmtDDL,
-				fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT 'IrrelevantValue':::%s`,
-					tableName.String(), columnForDefault.name.String(), newTypeName.SQLString()),
-				errCode), nil
+			stmt := makeOpStmt(OpStmtDDL)
+			stmt.potentialExecErrors.add(pgcode.UndefinedObject)
+			stmt.potentialExecErrors.add(pgcode.Syntax)
+			stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT 'IrrelevantValue':::%s`,
+				tableName.String(), columnForDefault.name.String(), newTypeName.SQLString())
+			return stmt, nil
 		}
 		datumTyp = newTyp
 	}
@@ -2385,7 +2381,8 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 	}
 	// Generated columns cannot have default values.
 	if columnForDefault.generated {
-		stmt.expectedExecErrors.add(pgcode.Syntax)
+		stmt.potentialExecErrors.add(pgcode.Syntax)
+		stmt.potentialExecErrors.add(pgcode.InvalidTableDefinition)
 	}
 
 	strDefault := tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)
