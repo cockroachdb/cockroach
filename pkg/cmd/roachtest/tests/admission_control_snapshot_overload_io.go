@@ -71,6 +71,16 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 		// low compaction rate. With Pebble's IngestAndExcise all the ingested
 		// sstables should ingest into L6.
 		limitCompactionConcurrency: true,
+		limitDiskBandwidth:         false,
+	}))
+
+	// This tests the behaviour of snpashot ingestion in bandwidth constrained
+	// environments.
+	r.Add(spec("bandwidth", admissionControlSnapshotOverloadIOOpts{
+		// 2x headroom from the ~500GB pre-population of the test.
+		volumeSize:                 1000,
+		limitCompactionConcurrency: false,
+		limitDiskBandwidth:         true,
 	}))
 
 }
@@ -78,6 +88,7 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 type admissionControlSnapshotOverloadIOOpts struct {
 	volumeSize                 int
 	limitCompactionConcurrency bool
+	limitDiskBandwidth         bool
 }
 
 func runAdmissionControlSnapshotOverloadIO(
@@ -129,6 +140,18 @@ func runAdmissionControlSnapshotOverloadIO(
 		if _, err := db.ExecContext(
 			ctx, "SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '256MiB'"); err != nil {
 			t.Fatalf("failed to set kv.snapshot_rebalance.max_rate: %v", err)
+		}
+	}
+
+	if cfg.limitDiskBandwidth {
+		const bandwidthLimit = 128
+		dataDir := "/mnt/data1"
+		if err := setBandwidthLimit(ctx, t, c, c.CRDBNodes(), "wbps", bandwidthLimit<<20 /* 128MiB */, false, dataDir); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.ExecContext(
+			ctx, fmt.Sprintf("SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '%dMiB'", bandwidthLimit)); err != nil {
+			t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
 		}
 	}
 
@@ -219,47 +242,50 @@ func runAdmissionControlSnapshotOverloadIO(
 			return float64(fromVec[0].Value), nil
 		}
 
-		// Assert on l0 sublevel count and p99 latencies.
-		latencyMetric := divQuery("histogram_quantile(0.99, sum by(le) (rate(sql_service_latency_bucket[2m])))", 1<<20 /* 1ms */)
-		const latencyThreshold = 100 // 100ms since the metric is scaled to 1ms above.
-		const sublevelMetric = "storage_l0_sublevels"
-		const sublevelThreshold = 20
-		var l0SublevelCount []float64
-		const sampleCountForL0Sublevel = 12
-		const collectionIntervalSeconds = 10.0
-		// Loop for ~120 minutes.
-		const numIterations = int(120 / (collectionIntervalSeconds / 60))
-		numErrors := 0
-		numSuccesses := 0
-		for i := 0; i < numIterations; i++ {
-			time.Sleep(collectionIntervalSeconds * time.Second)
-			val, err := getHistMetricVal(latencyMetric)
-			if err != nil {
-				numErrors++
-				continue
-			}
-			if val > latencyThreshold {
-				t.Fatalf("sql p99 latency %f exceeded threshold", val)
-			}
-			val, err = getMetricVal(sublevelMetric, "store")
-			if err != nil {
-				numErrors++
-				continue
-			}
-			l0SublevelCount = append(l0SublevelCount, val)
-			// We want to use the mean of the last 2m of data to avoid short-lived
-			// spikes causing failures.
-			if len(l0SublevelCount) >= sampleCountForL0Sublevel {
-				latestSampleMeanL0Sublevels := getMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
-				if latestSampleMeanL0Sublevels > sublevelThreshold {
-					t.Fatalf("sub-level mean %f over last %d iterations exceeded threshold", latestSampleMeanL0Sublevels, sampleCountForL0Sublevel)
+		// TODO(aaditya): assert on disk bandwidth subtest once integrated.
+		if !cfg.limitDiskBandwidth {
+			// Assert on l0 sublevel count and p99 latencies.
+			latencyMetric := divQuery("histogram_quantile(0.99, sum by(le) (rate(sql_service_latency_bucket[2m])))", 1<<20 /* 1ms */)
+			const latencyThreshold = 100 // 100ms since the metric is scaled to 1ms above.
+			const sublevelMetric = "storage_l0_sublevels"
+			const sublevelThreshold = 20
+			var l0SublevelCount []float64
+			const sampleCountForL0Sublevel = 12
+			const collectionIntervalSeconds = 10.0
+			// Loop for ~120 minutes.
+			const numIterations = int(120 / (collectionIntervalSeconds / 60))
+			numErrors := 0
+			numSuccesses := 0
+			for i := 0; i < numIterations; i++ {
+				time.Sleep(collectionIntervalSeconds * time.Second)
+				val, err := getHistMetricVal(latencyMetric)
+				if err != nil {
+					numErrors++
+					continue
 				}
+				if val > latencyThreshold {
+					t.Fatalf("sql p99 latency %f exceeded threshold", val)
+				}
+				val, err = getMetricVal(sublevelMetric, "store")
+				if err != nil {
+					numErrors++
+					continue
+				}
+				l0SublevelCount = append(l0SublevelCount, val)
+				// We want to use the mean of the last 2m of data to avoid short-lived
+				// spikes causing failures.
+				if len(l0SublevelCount) >= sampleCountForL0Sublevel {
+					latestSampleMeanL0Sublevels := getMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
+					if latestSampleMeanL0Sublevels > sublevelThreshold {
+						t.Fatalf("sub-level mean %f over last %d iterations exceeded threshold", latestSampleMeanL0Sublevels, sampleCountForL0Sublevel)
+					}
+				}
+				numSuccesses++
 			}
-			numSuccesses++
-		}
-		t.Status(fmt.Sprintf("done monitoring, errors: %d successes: %d", numErrors, numSuccesses))
-		if numErrors > numSuccesses {
-			t.Fatalf("too many errors retrieving metrics")
+			t.Status(fmt.Sprintf("done monitoring, errors: %d successes: %d", numErrors, numSuccesses))
+			if numErrors > numSuccesses {
+				t.Fatalf("too many errors retrieving metrics")
+			}
 		}
 		return nil
 	})
