@@ -307,3 +307,55 @@ func TestStreamMuxerOnStop(t *testing.T) {
 	require.Equal(t, streamIdStart, int64(testServerStream.totalEventsSent()))
 	require.Equal(t, int32(streamIdEnd-streamIdStart), testRangefeedCounter.get())
 }
+
+// TestStreamMuxerWithConcurrentDisconnect tests that StreamMuxer can handle
+// concurrent stream disconnects.
+func TestStreamMuxerWithConcurrentDisconnect(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunValues(t, "proc type", testTypes, func(t *testing.T, pt procType) {
+		ctx := context.Background()
+
+		p, h, stopper := newTestProcessor(t, withProcType(pt))
+		defer stopper.Stop(ctx)
+		testServerStream := newTestServerStream()
+		testRangefeedCounter := newTestRangefeedCounter()
+		muxer := NewStreamMuxer(testServerStream, testRangefeedCounter)
+		require.NoError(t, muxer.Start(ctx, stopper))
+		defer muxer.Stop()
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for id := 0; id < 50; id++ {
+				p.Register(h.span, hlc.Timestamp{}, nil, /* catchUpIter */
+					false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, newTestStream(), func() {})
+			}
+		}()
+		wg.Wait()
+
+		wg.Add(2)
+		require.Equal(t, 50, p.Len())
+		require.Equal(t, int32(50), testRangefeedCounter.get())
+		go func() {
+			defer wg.Done()
+			for i := int64(1); i < 50; i++ {
+				p.ConsumeLogicalOps(ctx, writeValueOp(hlc.Timestamp{WallTime: i}))
+			}
+		}()
+		h.syncEventAndRegistrations()
+		go func() {
+			defer wg.Done()
+			for id := 0; id < 50; id++ {
+				muxer.DisconnectStreamWithError(int64(id), 1, kvpb.NewError(nil))
+			}
+		}()
+		wg.Wait()
+		time.Sleep(1 * time.Second)
+
+		require.Equal(t, 0, p.Len())
+		require.Equal(t, int32(0), testRangefeedCounter.get())
+	})
+}
