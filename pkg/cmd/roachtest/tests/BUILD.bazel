@@ -149,6 +149,7 @@ go_library(
         "prune_dangling_snapshots_and_disks.go",
         "psycopg.go",
         "psycopg_blocklist.go",
+        "ptp.go",
         "query_comparison_util.go",
         "queue.go",
         "quit.go",
