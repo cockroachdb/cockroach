@@ -11,6 +11,7 @@
 package rangefeed
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -52,6 +54,8 @@ type testServerStream struct {
 	// streamEvents is a map of streamID to a list of events sent to that stream.
 	streamEvents map[int64][]*kvpb.MuxRangeFeedEvent
 }
+
+var _ ServerStreamSender = &testServerStream{}
 
 func newTestServerStream() *testServerStream {
 	return &testServerStream{
@@ -109,5 +113,38 @@ func (s *testServerStream) BlockSend() (unblock func()) {
 	var once sync.Once
 	return func() {
 		once.Do(s.Unlock) //nolint:deferunlockcheck
+	}
+}
+
+func NewTestPerRangeEventSink(
+	ctx context.Context,
+	streamID int64,
+	rangeID int64,
+	streamMuxer *StreamMuxer,
+	regType registrationType,
+) Stream {
+	r := NewPerRangeEventSink(ctx, roachpb.RangeID(rangeID), streamID, streamMuxer)
+	switch regType {
+	case unbuffered:
+		return &BufferedPerRangeEventSink{
+			PerRangeEventSink: r,
+		}
+	case buffered:
+		return r
+	default:
+		panic("unknown registration type")
+	}
+}
+
+func NewStreamMuxerWithOpts(
+	sender ServerStreamSender, metrics RangefeedMetricsRecorder, regType registrationType,
+) *StreamMuxer {
+	switch regType {
+	case unbuffered:
+		return NewStreamMuxer(&BufferedStreamSender{sender}, metrics)
+	case buffered:
+		return NewStreamMuxer(sender, metrics)
+	default:
+		panic("unknown registration type")
 	}
 }

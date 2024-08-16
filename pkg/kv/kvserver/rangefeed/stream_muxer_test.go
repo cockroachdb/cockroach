@@ -321,20 +321,23 @@ func TestStreamMuxerWithConcurrentDisconnect(t *testing.T) {
 		defer stopper.Stop(ctx)
 		testServerStream := newTestServerStream()
 		testRangefeedCounter := newTestRangefeedCounter()
-		muxer := NewStreamMuxer(testServerStream, testRangefeedCounter)
+		muxer := NewStreamMuxerWithOpts(testServerStream, testRangefeedCounter, pt.regType)
 		require.NoError(t, muxer.Start(ctx, stopper))
 		defer muxer.Stop()
+		const r1 = 1
 
 		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for id := 0; id < 50; id++ {
+		for id := int64(0); id < 50; id++ {
+			wg.Add(1)
+			go func(id int64) {
+				defer wg.Done()
+				ctx, done := context.WithCancel(context.Background())
+				muxer.AddStream(id, r1, done)
 				p.Register(h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 					false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-					newTestPerRangeEventSink(int64(id), muxer, pt.regType), func() {})
-			}
-		}()
+					NewTestPerRangeEventSink(ctx, id, r1, muxer, pt.regType), func() {})
+			}(id)
+		}
 		wg.Wait()
 
 		wg.Add(2)

@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/errors"
 )
 
 // PerRangeEventSink is an implementation of rangefeed.Stream which annotates
@@ -122,5 +121,5 @@ type BufferedStreamSender struct {
 func (bs *BufferedStreamSender) SendBuffered(
 	event *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
 ) error {
-	return errors.Errorf("unimplemented: buffered stream sender")
+	return bs.Send(event)
 }
