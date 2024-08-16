@@ -4,6 +4,7 @@ go_library(
     name = "replica_rac2",
     srcs = [
         "admission.go",
+        "doc.go",
         "processor.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2",
