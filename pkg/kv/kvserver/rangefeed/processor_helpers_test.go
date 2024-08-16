@@ -39,7 +39,7 @@ func (tb *testBufferedStream) SendBuffered(
 }
 
 func (tb *testBufferedStream) Disconnect(err *kvpb.Error) {
-	tb.Stream.SendError(err)
+	tb.Stream.Disconnect(err)
 	if tb.cleanup != nil {
 		// In practise, StreamMuxer is responsible for invoking cleanup in the
 		// background. For simplicity, we call it directly here.

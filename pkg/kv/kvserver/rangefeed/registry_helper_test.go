@@ -7,8 +7,6 @@ package rangefeed
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"sync"
 	"testing"
 	"time"
@@ -17,9 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 var (
@@ -200,6 +200,7 @@ func (s *testStream) BlockSend() func() {
 // by sending the error to the done channel.
 func (s *testStream) Disconnect(err *kvpb.Error) {
 	s.done <- err
+	s.ctxDone()
 }
 
 // Error returns the error that was sent to the done channel. It returns nil if
