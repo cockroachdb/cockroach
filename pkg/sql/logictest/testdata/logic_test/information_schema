@@ -1148,6 +1148,7 @@ table_columns
 
 # Check that the metadata is reported properly.
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTT colnames
 SELECT table_catalog, table_schema, table_name, table_type, is_insertable_into
 FROM system.information_schema.tables ORDER BY table_name, table_schema
@@ -1417,6 +1418,7 @@ system         pg_catalog          pg_user_mapping                              
 system         pg_catalog          pg_user_mappings                             SYSTEM VIEW  NO
 system         pg_catalog          pg_views                                     SYSTEM VIEW  NO
 system         information_schema  plugins                                      SYSTEM VIEW  NO
+system         public              prepared_transactions                        BASE TABLE   YES
 system         public              privileges                                   BASE TABLE   YES
 system         information_schema  processlist                                  SYSTEM VIEW  NO
 system         information_schema  profiling                                    SYSTEM VIEW  NO
@@ -1583,6 +1585,7 @@ SET DATABASE = test
 ## information_schema.constraint_column_usage
 
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTTTTTT colnames
 SELECT *
 FROM system.information_schema.table_constraints
@@ -1659,6 +1662,12 @@ system              public             29_30_1_not_null                         
 system              public             29_30_2_not_null                                                                                                system         public        namespace                        CHECK            NO             NO
 system              public             29_30_3_not_null                                                                                                system         public        namespace                        CHECK            NO             NO
 system              public             primary                                                                                                         system         public        namespace                        PRIMARY KEY      NO             NO
+system              public             29_67_1_not_null                                                                                                system         public        prepared_transactions            CHECK            NO             NO
+system              public             29_67_2_not_null                                                                                                system         public        prepared_transactions            CHECK            NO             NO
+system              public             29_67_4_not_null                                                                                                system         public        prepared_transactions            CHECK            NO             NO
+system              public             29_67_5_not_null                                                                                                system         public        prepared_transactions            CHECK            NO             NO
+system              public             29_67_6_not_null                                                                                                system         public        prepared_transactions            CHECK            NO             NO
+system              public             primary                                                                                                         system         public        prepared_transactions            PRIMARY KEY      NO             NO
 system              public             29_52_1_not_null                                                                                                system         public        privileges                       CHECK            NO             NO
 system              public             29_52_2_not_null                                                                                                system         public        privileges                       CHECK            NO             NO
 system              public             29_52_3_not_null                                                                                                system         public        privileges                       CHECK            NO             NO
@@ -1930,6 +1939,7 @@ NULL                   NULL                  UTF8                UCS            
 
 
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -2179,6 +2189,11 @@ system              public             29_66_2_not_null                         
 system              public             29_66_3_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
 system              public             29_66_4_not_null                                                                                                statement_id IS NOT NULL
 system              public             29_66_5_not_null                                                                                                statement_fingerprint_id IS NOT NULL
+system              public             29_67_1_not_null                                                                                                global_id IS NOT NULL
+system              public             29_67_2_not_null                                                                                                transaction_id IS NOT NULL
+system              public             29_67_4_not_null                                                                                                prepared IS NOT NULL
+system              public             29_67_5_not_null                                                                                                owner IS NOT NULL
+system              public             29_67_6_not_null                                                                                                database IS NOT NULL
 system              public             29_6_1_not_null                                                                                                 name IS NOT NULL
 system              public             29_6_2_not_null                                                                                                 value IS NOT NULL
 system              public             29_6_3_not_null                                                                                                 lastUpdated IS NOT NULL
@@ -2196,6 +2211,7 @@ system              public             check_singleton                          
 system              public             single_row                                                                                                      ((singleton))
 
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTTTT colnames
 SELECT *
 FROM system.information_schema.constraint_column_usage
@@ -2238,6 +2254,7 @@ system         public        mvcc_statistics                  table_id          
 system         public        namespace                        name                                                                                                      system              public             primary
 system         public        namespace                        parentID                                                                                                  system              public             primary
 system         public        namespace                        parentSchemaID                                                                                            system              public             primary
+system         public        prepared_transactions            global_id                                                                                                 system              public             primary
 system         public        privileges                       path                                                                                                      system              public             primary
 system         public        privileges                       path                                                                                                      system              public             privileges_path_user_id_key
 system         public        privileges                       path                                                                                                      system              public             privileges_path_username_key
@@ -2335,6 +2352,7 @@ system         public        web_sessions                     id                
 system         public        zones                            id                                                                                                        system              public             primary
 
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTTTT colnames
 SELECT *
 FROM system.information_schema.constraint_column_usage
@@ -2377,6 +2395,7 @@ system         public        mvcc_statistics                  table_id          
 system         public        namespace                        name                                                                                                      system              public             primary
 system         public        namespace                        parentID                                                                                                  system              public             primary
 system         public        namespace                        parentSchemaID                                                                                            system              public             primary
+system         public        prepared_transactions            global_id                                                                                                 system              public             primary
 system         public        privileges                       path                                                                                                      system              public             primary
 system         public        privileges                       path                                                                                                      system              public             privileges_path_user_id_key
 system         public        privileges                       path                                                                                                      system              public             privileges_path_username_key
@@ -2474,6 +2493,7 @@ system         public        web_sessions                     id                
 system         public        zones                            id                                                                                                        system              public             primary
 
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -2723,6 +2743,11 @@ system              public             29_66_2_not_null                         
 system              public             29_66_3_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
 system              public             29_66_4_not_null                                                                                                statement_id IS NOT NULL
 system              public             29_66_5_not_null                                                                                                statement_fingerprint_id IS NOT NULL
+system              public             29_67_1_not_null                                                                                                global_id IS NOT NULL
+system              public             29_67_2_not_null                                                                                                transaction_id IS NOT NULL
+system              public             29_67_4_not_null                                                                                                prepared IS NOT NULL
+system              public             29_67_5_not_null                                                                                                owner IS NOT NULL
+system              public             29_67_6_not_null                                                                                                database IS NOT NULL
 system              public             29_6_1_not_null                                                                                                 name IS NOT NULL
 system              public             29_6_2_not_null                                                                                                 value IS NOT NULL
 system              public             29_6_3_not_null                                                                                                 lastUpdated IS NOT NULL
@@ -2830,6 +2855,7 @@ data_type  column_default
 smallint   0
 
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTI colnames
 SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
 FROM system.information_schema.columns
@@ -2917,6 +2943,13 @@ system         public        namespace                        id                
 system         public        namespace                        name                                                                                                      3
 system         public        namespace                        parentID                                                                                                  1
 system         public        namespace                        parentSchemaID                                                                                            2
+system         public        prepared_transactions            database                                                                                                  6
+system         public        prepared_transactions            global_id                                                                                                 1
+system         public        prepared_transactions            heuristic                                                                                                 7
+system         public        prepared_transactions            owner                                                                                                     5
+system         public        prepared_transactions            prepared                                                                                                  4
+system         public        prepared_transactions            transaction_id                                                                                            2
+system         public        prepared_transactions            transaction_key                                                                                           3
 system         public        privileges                       grant_options                                                                                             4
 system         public        privileges                       path                                                                                                      2
 system         public        privileges                       privileges                                                                                                3
@@ -3828,6 +3861,7 @@ root      other_db       public              ALL             YES
 ## information_schema.table_privileges and information_schema.role_table_grants
 
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 # root can see everything
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.table_privileges ORDER BY table_schema, table_name, table_schema, grantee, privilege_type
@@ -4250,6 +4284,8 @@ NULL     root     system         public              mvcc_statistics            
 NULL     root     system         public              mvcc_statistics                              UPDATE          YES           NO
 NULL     admin    system         public              namespace                                    SELECT          YES           YES
 NULL     root     system         public              namespace                                    SELECT          YES           YES
+NULL     admin    system         public              prepared_transactions                        SELECT          YES           YES
+NULL     root     system         public              prepared_transactions                        SELECT          YES           YES
 NULL     admin    system         public              privileges                                   DELETE          YES           NO
 NULL     admin    system         public              privileges                                   INSERT          YES           NO
 NULL     admin    system         public              privileges                                   SELECT          YES           YES
@@ -4538,6 +4574,7 @@ NULL     root     system         public              zones                      
 NULL     root     system         public              zones                                        UPDATE          YES           NO
 
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.role_table_grants
 ----
@@ -5245,6 +5282,8 @@ NULL     root     system         public              statement_execution_insight
 NULL     root     system         public              statement_execution_insights                 INSERT          YES           NO
 NULL     root     system         public              statement_execution_insights                 SELECT          YES           YES
 NULL     root     system         public              statement_execution_insights                 UPDATE          YES           NO
+NULL     admin    system         public              prepared_transactions                        SELECT          YES           YES
+NULL     root     system         public              prepared_transactions                        SELECT          YES           YES
 
 statement ok
 USE other_db;

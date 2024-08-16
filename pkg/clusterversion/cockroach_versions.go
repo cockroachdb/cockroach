@@ -224,6 +224,11 @@ const (
 	// config for the timeseries range if one does not exist currently.
 	V24_3_AddTimeseriesZoneConfig
 
+	// V24_3_PreparedTransactionsTable adds the system.prepared_transactions
+	// table. The table is used to store information about prepared transaction
+	// that are part of the XA two-phase commit protocol.
+	V24_3_PreparedTransactionsTable
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -275,6 +280,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_3_StoreLivenessEnabled: {Major: 24, Minor: 2, Internal: 4},
 
 	V24_3_AddTimeseriesZoneConfig: {Major: 24, Minor: 2, Internal: 6},
+
+	V24_3_PreparedTransactionsTable: {Major: 24, Minor: 2, Internal: 8},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

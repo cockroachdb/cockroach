@@ -1012,6 +1012,7 @@ system         public        statement_execution_insights     table        admin
 system         public        statement_execution_insights     table        admin    INSERT          true
 system         public        statement_execution_insights     table        admin    SELECT          true
 system         public        statement_execution_insights     table        admin    UPDATE          true
+system         public        prepared_transactions            table        admin    SELECT          true
 a              public        NULL                             schema       admin    ALL             true
 defaultdb      public        NULL                             schema       admin    ALL             true
 postgres       public        NULL                             schema       admin    ALL             true
@@ -1223,6 +1224,7 @@ system         public        statement_execution_insights     table        root 
 system         public        statement_execution_insights     table        root     INSERT          true
 system         public        statement_execution_insights     table        root     SELECT          true
 system         public        statement_execution_insights     table        root     UPDATE          true
+system         public        prepared_transactions            table        root     SELECT          true
 a              pg_extension  NULL                             schema       public   USAGE           false
 a              public        NULL                             schema       public   CREATE          false
 a              public        NULL                             schema       public   USAGE           false
@@ -2079,6 +2081,8 @@ system         public       mvcc_statistics                  table        root  
 system         public       mvcc_statistics                  table        root     UPDATE          true
 system         public       namespace                        table        admin    SELECT          true
 system         public       namespace                        table        root     SELECT          true
+system         public       prepared_transactions            table        admin    SELECT          true
+system         public       prepared_transactions            table        root     SELECT          true
 system         public       privileges                       table        admin    DELETE          true
 system         public       privileges                       table        admin    INSERT          true
 system         public       privileges                       table        admin    SELECT          true

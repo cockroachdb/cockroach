@@ -96,7 +96,7 @@ func TestCreateTenantSystemTables(t *testing.T) {
 		require.NoError(t, err, fmt.Sprintf("%s does not exist", tableName))
 	}
 
-	upgrades.Upgrade(t, tenantDB, clusterversion.V24_2_TenantSystemTables, nil, false)
+	upgrades.Upgrade(t, tenantDB, clusterversion.Latest, nil, false)
 	checkTable("system.tenants")
 	checkTable("system.tenant_settings")
 	checkTable("system.tenant_usage")
