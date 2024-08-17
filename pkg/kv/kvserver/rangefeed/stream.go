@@ -28,6 +28,15 @@ type Stream interface {
 	Disconnect(err *kvpb.Error)
 }
 
+// BufferedStream is a Stream that can buffer events before sending them to the
+// underlying Stream. Note that the caller may still choose to bypass the buffer
+// and send to the underlying Stream directly by calling Send directly.
+type BufferedStream interface {
+	Stream
+	// SendBuffered buffers the event before sending it to the underlying Stream.
+	SendBuffered(*kvpb.RangeFeedEvent, *SharedBudgetAllocation) error
+}
+
 // PerRangeEventSink is an implementation of Stream which annotates each
 // response with rangeID and streamID. It is used by MuxRangeFeed.
 type PerRangeEventSink struct {
@@ -75,4 +84,34 @@ func (s *PerRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
 // on immediate disconnection as cleanup takes place async.
 func (s *PerRangeEventSink) Disconnect(err *kvpb.Error) {
 	s.wrapped.DisconnectStreamWithError(s.streamID, s.rangeID, err)
+}
+
+// BufferedPerRangeEventSink is an implementation of rangefeed.BufferedStream
+// which buffers events before sending them to the underlying grpc stream.
+type BufferedPerRangeEventSink struct {
+	*PerRangeEventSink
+}
+
+var _ kvpb.RangeFeedEventSink = (*BufferedPerRangeEventSink)(nil)
+var _ Stream = (*BufferedPerRangeEventSink)(nil)
+var _ BufferedStream = (*BufferedPerRangeEventSink)(nil)
+
+// SendBuffered buffers the event in StreamMuxer.BufferedStreamSender,
+// transferring the ownership of the allocated SharedBudgetAllocation to
+// bufferedPerRangeEventSink. The underlying streamMuxer is responsible for
+// properly using and releasing it when an error occurs or when the event is
+// sent. The event is guaranteed to be sent unless the buffered stream
+// terminates before sending (e.g. broken grpc stream).
+//
+// Note that this should only be called if the StreamMuxer has a
+// BufferedStreamSender as the sender. Panics otherwise.
+func (s *BufferedPerRangeEventSink) SendBuffered(
+	event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
+) error {
+	response := &kvpb.MuxRangeFeedEvent{
+		RangeFeedEvent: *event,
+		RangeID:        s.rangeID,
+		StreamID:       s.streamID,
+	}
+	return s.wrapped.SendBuffered(response, alloc)
 }
