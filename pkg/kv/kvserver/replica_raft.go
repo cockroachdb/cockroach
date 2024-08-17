@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -586,7 +587,8 @@ var errRemoved = errors.New("replica removed")
 // unquiesced and ready to handle the request.
 func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) error {
 	r.raftMu.AssertHeld()
-	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+	var sideChannelInfo replica_rac2.SideChannelInfoUsingRaftMessageRequest
+	err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		// We're processing an incoming raft message (from a batch that may
 		// include MsgVotes), so don't campaign if we wake up our raft
 		// group.
@@ -634,6 +636,16 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 			if term := raftGroup.BasicStatus().Term; term > req.Message.Term {
 				req.Message.Term = term
 			}
+		case raftpb.MsgApp:
+			if n := len(req.Message.Entries); n > 0 {
+				sideChannelInfo = replica_rac2.SideChannelInfoUsingRaftMessageRequest{
+					UsingV2Protocol: req.UsingRac2Protocol,
+					LeaderTerm:      req.Message.Term,
+					First:           req.Message.Entries[0].Index,
+					Last:            req.Message.Entries[n-1].Index,
+					LowPriOverride:  req.LowPriorityOverride,
+				}
+			}
 		}
 		err := raftGroup.Step(req.Message)
 		if errors.Is(err, raft.ErrProposalDropped) {
@@ -646,6 +658,10 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 		}
 		return false /* unquiesceAndWakeLeader */, err
 	})
+	if sideChannelInfo != (replica_rac2.SideChannelInfoUsingRaftMessageRequest{}) {
+		r.flowControlV2.SideChannelForPriorityOverrideAtFollowerRaftMuLocked(sideChannelInfo)
+	}
+	return err
 }
 
 type handleSnapshotStats struct {
@@ -790,6 +806,20 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		return handleRaftReadyStats{}, errors.AssertionFailedf(
 			"handleRaftReadyRaftMuLocked cannot be called with a cancellable context")
 	}
+	// Before doing anything, including calling Ready(), see if we need to
+	// ratchet up the flow control level. This code will go away when RACv1 =>
+	// RACv2 transition is complete and RACv1 code is removed.
+	if r.raftMu.flowControlLevel < replica_rac2.EnabledWhenLeaderV2Encoding {
+		// Not already at highest level.
+		level := racV2EnabledWhenLeaderLevel(ctx, r.store.cfg.Settings)
+		if level > r.raftMu.flowControlLevel {
+			// TODO(sumeer): close RACv1 leader stuff.
+			// if r.raftMu.flowControlLevel == replica_rac2.NotEnabledWhenLeader {
+			// }
+			r.raftMu.flowControlLevel = level
+			r.flowControlV2.SetEnabledWhenLeaderRaftMuLocked(level)
+		}
+	}
 
 	// NB: we need to reference the named return parameter here. If `stats` were
 	// just a local, we'd be modifying the local but not the return value in the
@@ -816,6 +846,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
+	var readyEntries []raftpb.Entry
 	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		r.deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(ctx, raftGroup)
 
@@ -833,6 +864,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// in raft. This will also eliminate the "side channel" plumbing hack with
 			// this bytesAccount.
 			syncRd := raftGroup.Ready()
+			readyEntries = syncRd.Entries
 			// We apply committed entries during this handleRaftReady, so it is ok to
 			// release the corresponding memory tokens at the end of this func. Next
 			// time we enter this function, the account will be empty again.
@@ -866,6 +898,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	} else if err != nil {
 		return stats, errors.Wrap(err, "checking raft group for Ready")
 	}
+	// Even if we don't have a Ready, or entries in Ready,
+	// replica_rac2.Processor may need to do some work.
+	r.flowControlV2.HandleRaftReadyRaftMuLocked(ctx, readyEntries)
 	if !hasReady {
 		// We must update the proposal quota even if we don't have a ready.
 		// Consider the case when our quota is of size 1 and two out of three
@@ -1063,14 +1098,19 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			if r.IsInitialized() && r.store.cfg.KVAdmissionController != nil {
 				// Enqueue raft log entries into admission queues. This is
 				// non-blocking; actual admission happens asynchronously.
-				tenantID, _ := r.TenantID()
-				for _, entry := range msgStorageAppend.Entries {
-					if len(entry.Data) == 0 {
-						continue // nothing to do
+				usingRACV2 := r.flowControlV2.AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(
+					ctx, msgStorageAppend.Term, msgStorageAppend.Entries)
+				if !usingRACV2 {
+					// Leader is using RACv1 protocol.
+					tenantID, _ := r.TenantID()
+					for _, entry := range msgStorageAppend.Entries {
+						if len(entry.Data) == 0 {
+							continue // nothing to do
+						}
+						r.store.cfg.KVAdmissionController.AdmitRaftEntry(
+							ctx, tenantID, r.StoreID(), r.RangeID, r.replicaID, msgStorageAppend.Term, entry,
+						)
 					}
-					r.store.cfg.KVAdmissionController.AdmitRaftEntry(
-						ctx, tenantID, r.StoreID(), r.RangeID, r.replicaID, msgStorageAppend.Term, entry,
-					)
 				}
 			}
 
@@ -1372,6 +1412,12 @@ func (r *Replica) tick(
 		r.refreshProposalsLocked(ctx, refreshAtDelta, reasonTicks)
 	}
 	return true, nil
+}
+
+func (r *Replica) processRACv2PiggybackedAdmitted(ctx context.Context) bool {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	return r.flowControlV2.ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx)
 }
 
 func (r *Replica) hasRaftReadyRLocked() bool {

@@ -245,6 +245,7 @@ func createTestStoreWithoutStart(
 		NoopStoresFlowControlIntegration{},
 		NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
+		nil,
 		nil, /* knobs */
 	)
 

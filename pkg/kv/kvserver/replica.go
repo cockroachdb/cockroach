@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
@@ -300,6 +301,10 @@ type Replica struct {
 	// See replica_circuit_breaker.go for details.
 	breaker *replicaCircuitBreaker
 
+	// flowControlV2 integrates with RACv2. The value retrieved from
+	// GetEnabledWhenLeader is consistent with raftMu.flowControlLevel.
+	flowControlV2 replica_rac2.Processor
+
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
@@ -321,6 +326,8 @@ type Replica struct {
 		// to be applied. Currently, it only tracks bytes used by committed entries
 		// being applied to the state machine.
 		bytesAccount logstore.BytesAccount
+
+		flowControlLevel replica_rac2.EnabledWhenLeaderLevel
 	}
 
 	// localMsgs contains a collection of raftpb.Message that target the local
@@ -2536,4 +2543,11 @@ func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err er
 // GetMutexForTesting returns the replica's mutex, for use in tests.
 func (r *Replica) GetMutexForTesting() *ReplicaMutex {
 	return &r.mu.ReplicaMutex
+}
+
+func racV2EnabledWhenLeaderLevel(
+	ctx context.Context, st *cluster.Settings,
+) replica_rac2.EnabledWhenLeaderLevel {
+	// TODO(sumeer): implement fully, once all the dependencies are implemented.
+	return replica_rac2.NotEnabledWhenLeader
 }
