@@ -4066,7 +4066,8 @@ FROM
 		if typeVal.Identical(types.AnyTuple) ||
 			typeVal.IsWildcardType() ||
 			typeVal == types.RegClass ||
-			typeVal.Family() == types.OidFamily {
+			typeVal.Family() == types.OidFamily ||
+			typeVal.Family() == types.VoidFamily {
 			continue
 		}
 		if pgVectorNotSupported && typeVal.Family() == types.PGVectorFamily {
