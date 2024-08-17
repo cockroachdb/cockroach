@@ -245,6 +245,7 @@ func createTestStoreWithoutStart(
 		NoopStoresFlowControlIntegration{},
 		NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
+		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
 	)
 
@@ -929,7 +930,11 @@ func TestMarkReplicaInitialized(t *testing.T) {
 		ReplicaID: 1,
 	}}
 	desc.NextReplicaID = 2
-	r.setDescRaftMuLocked(ctx, desc)
+	func() {
+		r.raftMu.Lock()
+		defer r.raftMu.Unlock()
+		r.setDescRaftMuLocked(ctx, desc)
+	}()
 	expectedResult = "not in uninitReplicas"
 	func() {
 		r.mu.Lock()

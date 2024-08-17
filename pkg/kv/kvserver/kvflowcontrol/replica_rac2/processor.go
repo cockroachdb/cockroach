@@ -896,3 +896,14 @@ func admittedIncreased(prev, next [raftpb.NumPriorities]uint64) bool {
 	}
 	return false
 }
+
+// RangeControllerFactoryImpl implements RangeControllerFactory.
+//
+// TODO(sumeer): replace with real implementation once RangeController impl is
+// ready.
+type RangeControllerFactoryImpl struct {
+}
+
+func (f RangeControllerFactoryImpl) New(state rangeControllerInitState) rac2.RangeController {
+	return nil
+}
