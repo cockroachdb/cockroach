@@ -138,7 +138,7 @@ type PercentileValues struct {
 }
 
 // New builds a new Provider.
-func New(st *cluster.Settings, metrics Metrics) *Provider {
+func New(st *cluster.Settings, metrics Metrics, knobs *TestingKnobs) *Provider {
 	store := newStore(st)
 	anomalyDetector := newAnomalyDetector(st, metrics)
 
@@ -148,7 +148,7 @@ func New(st *cluster.Settings, metrics Metrics) *Provider {
 			newRegistry(st, &compositeDetector{detectors: []detector{
 				&latencyThresholdDetector{st: st},
 				anomalyDetector,
-			}}, store),
+			}}, store, knobs),
 		),
 		anomalyDetector: anomalyDetector,
 	}
