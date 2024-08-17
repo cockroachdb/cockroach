@@ -201,7 +201,7 @@ func (t registrationType) String() string {
 	panic("unknown processor type")
 }
 
-var registrationTestTypes = []registrationType{buffered}
+var registrationTestTypes = []registrationType{buffered, unbuffered}
 
 type testRegistrationConfig struct {
 	span                      roachpb.Span
@@ -221,6 +221,20 @@ func newTestRegistration(s *testStream, opts ...registrationOption) registration
 	}
 	if cfg.metrics == nil {
 		cfg.metrics = NewMetrics()
+	}
+	if cfg.withRegistrationTestTypes == unbuffered {
+		return newUnbufferedRegistration(
+			cfg.span,
+			cfg.ts,
+			makeCatchUpIterator(cfg.catchup, cfg.span, cfg.ts),
+			cfg.withDiff,
+			cfg.withFiltering,
+			cfg.withOmitRemote,
+			5,
+			cfg.metrics,
+			&testBufferedStream{Stream: s},
+			func() {},
+		)
 	}
 
 	return newBufferedRegistration(
