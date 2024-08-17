@@ -16,6 +16,7 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -439,4 +440,38 @@ func (f *replicaFlowControlIntegrationImpl) clearState(ctx context.Context) {
 	f.innerHandle = nil
 	f.lastKnownReplicas = roachpb.MakeReplicaSet(nil)
 	f.disconnectedStreams = nil
+}
+
+type replicaForRACv2 Replica
+
+var _ replica_rac2.Replica = &replicaForRACv2{}
+
+// RaftMuAssertHeld implements replica_rac2.Replica.
+func (r *replicaForRACv2) RaftMuAssertHeld() {
+	r.raftMu.AssertHeld()
+}
+
+// MuAssertHeld implements replica_rac2.Replica.
+func (r *replicaForRACv2) MuAssertHeld() {
+	r.mu.AssertHeld()
+}
+
+// MuLock implements replica_rac2.Replica.
+func (r *replicaForRACv2) MuLock() {
+	r.mu.Lock()
+}
+
+// MuUnlock implements replica_rac2.Replica.
+func (r *replicaForRACv2) MuUnlock() {
+	r.mu.Unlock()
+}
+
+// RaftNodeMuLocked implements replica_rac2.Replica.
+func (r *replicaForRACv2) RaftNodeMuLocked() replica_rac2.RaftNode {
+	return raftNodeForRACv2{RawNode: r.mu.internalRaftGroup}
+}
+
+// LeaseholderMuLocked implements replica_rac2.Replica.
+func (r *replicaForRACv2) LeaseholderMuLocked() roachpb.ReplicaID {
+	return r.mu.state.Lease.Replica.ReplicaID
 }

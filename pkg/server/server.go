@@ -626,6 +626,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		admissionControl.storesFlowControl.ResetStreams(ctx)
 	})
 
+	admittedPiggybacker := node_rac2.NewAdmittedPiggybacker()
 	var raftTransportKnobs *kvserver.RaftTransportTestingKnobs
 	if knobs := cfg.TestingKnobs.RaftTransport; knobs != nil {
 		raftTransportKnobs = knobs.(*kvserver.RaftTransportTestingKnobs)
@@ -640,7 +641,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		admissionControl.kvflowTokenDispatch,
 		admissionControl.storesFlowControl,
 		admissionControl.storesFlowControl,
-		(*node_rac2.AdmittedPiggybacker)(nil),
+		admittedPiggybacker,
+		storesForRACv2,
 		raftTransportKnobs,
 	)
 	nodeRegistry.AddMetricStruct(raftTransport.Metrics())
@@ -876,6 +878,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowController:             admissionControl.kvflowController,
 		KVFlowHandles:                admissionControl.storesFlowControl,
 		KVFlowHandleMetrics:          admissionControl.kvFlowHandleMetrics,
+		KVFlowAdmittedPiggybacker:    admittedPiggybacker,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
 		RangeCount:                   &atomic.Int64{},
 	}

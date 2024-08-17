@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -227,6 +228,15 @@ func (NoopStoresFlowControlIntegration) OnRaftTransportDisconnected(
 // range's Processor.
 type StoresForRACv2 interface {
 	admission.OnLogEntryAdmitted
+	PiggybackedAdmittedResponseScheduler
+}
+
+// PiggybackedAdmittedResponseScheduler routes followers piggybacked admitted
+// response messages to the relevant ranges, and schedules those ranges for
+// processing.
+type PiggybackedAdmittedResponseScheduler interface {
+	ScheduleAdmittedResponseForRangeRACv2(
+		ctx context.Context, msgs []kvflowcontrolpb.AdmittedResponseForRange)
 }
 
 func MakeStoresForRACv2(stores *Stores) StoresForRACv2 {
@@ -239,14 +249,52 @@ type storesForRACv2 Stores
 func (ss *storesForRACv2) AdmittedLogEntry(
 	ctx context.Context, cbState admission.LogEntryAdmittedCallbackState,
 ) {
-	// TODO(sumeer): implement.
-	_ = replica_rac2.EntryForAdmissionCallbackState{
+	p := ss.lookup(cbState.StoreID, cbState.RangeID)
+	if p == nil {
+		return
+	}
+	p.AdmittedLogEntry(ctx, replica_rac2.EntryForAdmissionCallbackState{
 		StoreID:    cbState.StoreID,
 		RangeID:    cbState.RangeID,
 		ReplicaID:  cbState.ReplicaID,
 		LeaderTerm: cbState.LeaderTerm,
 		Index:      cbState.Pos.Index,
 		Priority:   cbState.RaftPri,
+	})
+}
+
+func (ss *storesForRACv2) lookup(
+	storeID roachpb.StoreID, rangeID roachpb.RangeID,
+) replica_rac2.Processor {
+	ls := (*Stores)(ss)
+	s, err := ls.GetStore(storeID)
+	if err != nil {
+		// Store has disappeared!
+		panic(err)
 	}
-	panic("unimplemented")
+	r := s.GetReplicaIfExists(rangeID)
+	if r == nil {
+		return nil
+	}
+	return r.flowControlV2
+}
+
+// ScheduleAdmittedResponseForRangeRACv2 implements PiggybackedAdmittedResponseScheduler.
+func (ss *storesForRACv2) ScheduleAdmittedResponseForRangeRACv2(
+	ctx context.Context, msgs []kvflowcontrolpb.AdmittedResponseForRange,
+) {
+	ls := (*Stores)(ss)
+	for _, m := range msgs {
+		s, err := ls.GetStore(m.LeaderStoreID)
+		if err != nil {
+			log.Errorf(ctx, "store %s not found", m.LeaderStoreID)
+			continue
+		}
+		repl := s.GetReplicaIfExists(m.RangeID)
+		if repl == nil {
+			continue
+		}
+		repl.flowControlV2.EnqueuePiggybackedAdmittedAtLeader(m.Msg)
+		s.scheduler.EnqueueRACv2PiggybackAdmitted(m.RangeID)
+	}
 }

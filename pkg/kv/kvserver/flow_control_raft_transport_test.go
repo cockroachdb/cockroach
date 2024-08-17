@@ -165,7 +165,7 @@ func TestFlowControlRaftTransport(t *testing.T) {
 							controlM[nodeID].dispatch,
 							kvserver.NoopStoresFlowControlIntegration{},
 							controlM[nodeID].disconnectListener,
-							controlM[nodeID].piggybacker,
+							controlM[nodeID].piggybacker, nil,
 							controlM[nodeID].knobs,
 						)
 						rttc.GossipNode(nodeID, addr)
@@ -631,6 +631,7 @@ func TestFlowControlRaftTransportV2(t *testing.T) {
 							kvserver.NoopStoresFlowControlIntegration{},
 							controlM[nodeID].disconnectListener,
 							controlM[nodeID].piggybacker,
+							noopPiggybackedAdmittedResponseScheduler{},
 							controlM[nodeID].knobs,
 						)
 						rttc.GossipNode(nodeID, addr)
@@ -787,4 +788,11 @@ func TestFlowControlRaftTransportV2(t *testing.T) {
 				})
 		},
 	)
+}
+
+type noopPiggybackedAdmittedResponseScheduler struct{}
+
+func (s noopPiggybackedAdmittedResponseScheduler) ScheduleAdmittedResponseForRangeRACv2(
+	ctx context.Context, msgs []kvflowcontrolpb.AdmittedResponseForRange,
+) {
 }
