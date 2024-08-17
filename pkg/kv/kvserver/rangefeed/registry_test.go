@@ -61,8 +61,8 @@ func TestRegistrationBasic(t *testing.T) {
 				}, nil)), withRegistrationType(rt))
 			catchupReg.publish(ctx, ev1, nil /* alloc */)
 			catchupReg.publish(ctx, ev2, nil /* alloc */)
-			if noCatchupReg, ok := catchupReg.(*bufferedRegistration); ok {
-				require.Equal(t, len(noCatchupReg.buf), 2)
+			if r, ok := catchupReg.(*bufferedRegistration); ok {
+				require.Equal(t, len(r.buf), 2)
 			}
 			go catchupReg.runOutputLoop(ctx, 0)
 			require.NoError(t, catchupReg.waitForCaughtUp(ctx))
@@ -94,6 +94,10 @@ func TestRegistrationBasic(t *testing.T) {
 			require.Equal(t, discErr.GoError(), s.WaitForError(t))
 			if rt == buffered {
 				require.Equal(t, 0, len(s.Events()))
+			} else {
+				// For unbuffered registration, the events are sent to the stream
+				// directly without going through runOutputLoop buffer.
+				require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, s.Events())
 			}
 		})
 		t.Run("overflow", func(t *testing.T) {
@@ -104,6 +108,18 @@ func TestRegistrationBasic(t *testing.T) {
 			case buffered:
 				overflowReg = newTestRegistration(s, withRSpan(spAB), withRegistrationType(rt))
 				capOfBuf = cap(overflowReg.(*bufferedRegistration).buf)
+			case unbuffered:
+				overflowReg = newTestRegistration(s,
+					withRegistrationType(true),
+					withRSpan(spBC),
+					withStartTs(hlc.Timestamp{WallTime: 1}),
+					// Initialize a noop catch-up iterator to force catch up buffer to be used
+					// for events publish.
+					withCatchUpIter(newTestIterator([]storage.MVCCKeyValue{}, nil)),
+					withRegistrationType(rt))
+				// Safe to access without locking since catchupReg is not used elsewhere
+				// yet.
+				capOfBuf = cap(overflowReg.(*unbufferedRegistration).mu.catchUpBuf)
 			}
 			for i := 0; i < capOfBuf+3; i++ {
 				overflowReg.publish(ctx, ev1, nil /* alloc */)
@@ -186,6 +202,8 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 			require.Zero(t, metrics.RangeFeedCatchUpScanNanos.Count())
 			switch r := r.(type) {
 			case *bufferedRegistration:
+				require.NoError(t, r.maybeRunCatchUpScan(context.Background()))
+			case *unbufferedRegistration:
 				require.NoError(t, r.maybeRunCatchUpScan(context.Background()))
 			}
 			require.True(t, iter.closed)
