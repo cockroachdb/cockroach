@@ -608,3 +608,10 @@ SELECT nextval('s108297')
 2
 
 subtest end
+
+subtest void_parameter
+
+statement error pgcode 42P13 SQL functions cannot have arguments of type VOID
+CREATE FUNCTION f(param VOID) RETURNS UUID LANGUAGE SQL AS $$ SELECT NULL $$;
+
+subtest end
