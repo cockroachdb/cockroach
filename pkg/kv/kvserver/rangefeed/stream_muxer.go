@@ -174,6 +174,19 @@ func (sm *StreamMuxer) Send(e *kvpb.MuxRangeFeedEvent) error {
 	return sm.sender.Send(e)
 }
 
+// SendBuffered buffers MuxRangeFeedEvent in BufferedStreamSender and will rely
+// on BufferedStreamSender to send events to underlying grpc stream. Note that
+// this method can only be called if the wrapped sender is a
+// BufferedStreamSender. It is caller's responsibility to check if stream is
+// active. SendBuffered only sends events.
+func (sm *StreamMuxer) SendBuffered(
+	e *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
+) error {
+	// Panics if sender is not a BufferedStreamSender. This is a programming
+	// error.
+	return sm.sender.(*BufferedStreamSender).SendBuffered(e, alloc)
+}
+
 // transformRangefeedErrToClientError converts a rangefeed error to a client
 // error to be sent back to client. This also handles nil values, preventing nil
 // pointer dereference.
