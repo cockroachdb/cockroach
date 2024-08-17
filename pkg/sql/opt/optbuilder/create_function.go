@@ -184,6 +184,11 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		if param.Class == tree.RoutineParamInOut && param.Name == "" {
 			panic(unimplemented.NewWithIssue(121251, "unnamed INOUT parameters are not yet supported"))
 		}
+		if param.IsInParam() {
+			if typ.Family() == types.VoidFamily {
+				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition, "SQL functions cannot have arguments of type VOID"))
+			}
+		}
 		if param.IsOutParam() {
 			outParamTypes = append(outParamTypes, typ)
 			paramName := string(param.Name)
