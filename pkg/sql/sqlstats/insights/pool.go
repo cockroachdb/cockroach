@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 )
 
+// TODO (xinhaoz): Remove this pool (#128199). The insights object
+// can use the existing statementBuf pool for the statements slice.
 var insightPool = sync.Pool{
 	New: func() interface{} {
 		return new(Insight)
@@ -32,6 +34,9 @@ func makeInsight(sessionID clusterunique.ID, transaction *Transaction) *Insight 
 }
 
 func releaseInsight(insight *Insight) {
+	for i := range insight.Statements {
+		insight.Statements[i] = nil
+	}
 	insight.Statements = insight.Statements[:0]
 	*insight = Insight{Statements: insight.Statements}
 	insightPool.Put(insight)
