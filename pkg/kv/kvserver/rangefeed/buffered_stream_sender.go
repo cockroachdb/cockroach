@@ -121,5 +121,8 @@ type BufferedStreamSender struct {
 func (bs *BufferedStreamSender) SendBuffered(
 	event *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
 ) error {
+	if event == nil {
+		return nil
+	}
 	return bs.Send(event)
 }
