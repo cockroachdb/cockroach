@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "budget.go",
         "buffered_registration.go",
+        "buffered_stream_sender.go",
         "catchup_scan.go",
         "event_size.go",
         "filter.go",
