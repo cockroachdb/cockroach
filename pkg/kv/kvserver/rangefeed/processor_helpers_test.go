@@ -23,6 +23,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type testBufferedStream struct {
+	Stream
+	cleanup func()
+}
+
+var _ BufferedStream = (*testBufferedStream)(nil)
+
+func (tb *testBufferedStream) SendBuffered(
+	e *kvpb.RangeFeedEvent, _ *SharedBudgetAllocation,
+) error {
+	// In production code, buffered stream would be responsible for properly using
+	// and releasing the alloc. We just ignore memory accounting here.
+	return tb.SendUnbuffered(e)
+}
+
+func (tb *testBufferedStream) RegisterRangefeedCleanUp(f func()) {
+	tb.cleanup = f
+}
+
+func (tb *testBufferedStream) Disconnect(err *kvpb.Error) {
+	tb.Stream.SendError(err)
+	if tb.cleanup != nil {
+		// In practise, StreamMuxer is responsible for invoking cleanup in the
+		// background. For simplicity, we call it directly here.
+		go tb.cleanup()
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func makeLogicalOp(val interface{}) enginepb.MVCCLogicalOp {
 	var op enginepb.MVCCLogicalOp
 	op.MustSetValue(val)
