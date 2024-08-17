@@ -399,6 +399,9 @@ func TestProcessorOmitRemote(t *testing.T) {
 	require.Equal(t, []*kvpb.RangeFeedEvent(nil), r2Stream.Events())
 }
 
+// TestProcessorSlowConsumer tests that buffered registration will drop events
+// and properly disconnect the stream when the buffer capacity exceeds. This
+// doesn't apply to unbuffered registrations.
 func TestProcessorSlowConsumer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	p, h, stopper := newTestProcessor(t)
@@ -1461,7 +1464,6 @@ func TestProcessorContextCancellation(t *testing.T) {
 
 	// Try stopping both via the stopper and via Processor.Stop().
 	testutils.RunTrueAndFalse(t, "stopper", func(t *testing.T, useStopper bool) {
-
 		// Set up a transaction to push.
 		txnTS := hlc.Timestamp{WallTime: 10} // after resolved timestamp
 		txnMeta := enginepb.TxnMeta{
