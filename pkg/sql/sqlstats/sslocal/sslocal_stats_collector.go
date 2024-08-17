@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
@@ -26,7 +27,8 @@ import (
 )
 
 // StatsCollector is used to collect statistics for transactions and
-// statements for the entire lifetime of a session.
+// statements for the entire lifetime of a session. It must be closed
+// with Close() when the session is done.
 type StatsCollector struct {
 
 	// currentTransactionStatementStats contains the current transaction's statement
@@ -139,14 +141,19 @@ func (s *StatsCollector) Reset(appStats sqlstats.ApplicationStats, phaseTime *se
 	s.stmtFingerprintID = 0
 }
 
-// Free frees any local memory used by the stats collector.
-func (s *StatsCollector) Free(ctx context.Context) {
+// Close frees any local memory used by the stats collector and
+// any memory allocated by underlying sql stats systems for the session
+// that owns this stats collector.
+func (s *StatsCollector) Close(ctx context.Context, sessionID clusterunique.ID) {
 	// For stats collectors for executors with outer transactions,
 	// the currentTransactionStatementStats is the flush target.
 	// We should make sure we're never freeing the flush target,
 	// since that container exists beyond the stats collector.
 	if s.currentTransactionStatementStats != s.flushTarget {
 		s.currentTransactionStatementStats.Free(ctx)
+	}
+	if s.insightsWriter != nil {
+		s.insightsWriter.ClearSession(sessionID)
 	}
 }
 
@@ -272,9 +279,7 @@ func (s *StatsCollector) ObserveStatement(
 		ErrorCode:            errorCode,
 		ErrorMsg:             errorMsg,
 	}
-	if s.knobs != nil && s.knobs.InsightsWriterStmtInterceptor != nil {
-		s.knobs.InsightsWriterStmtInterceptor(value.SessionID, &insight)
-	} else if s.insightsWriter != nil {
+	if s.insightsWriter != nil {
 		s.insightsWriter.ObserveStatement(value.SessionID, &insight)
 	}
 }
@@ -331,9 +336,7 @@ func (s *StatsCollector) ObserveTransaction(
 		LastErrorMsg:    errorMsg,
 		Status:          status,
 	}
-	if s.knobs != nil && s.knobs.InsightsWriterTxnInterceptor != nil {
-		s.knobs.InsightsWriterTxnInterceptor(ctx, value.SessionID, &insight)
-	} else if s.insightsWriter != nil {
+	if s.insightsWriter != nil {
 		s.insightsWriter.ObserveTransaction(value.SessionID, &insight)
 	}
 }

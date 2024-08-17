@@ -415,7 +415,7 @@ type ServerMetrics struct {
 func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	metrics := makeMetrics(false /* internal */)
 	serverMetrics := makeServerMetrics(cfg)
-	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics)
+	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics, cfg.InsightsTestingKnobs)
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
 		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
@@ -645,7 +645,7 @@ func (s *Server) GetIndexUsageStatsController() *idxusage.Controller {
 	return s.indexUsageStatsController
 }
 
-// GetInsightsReader returns the insights.Reader for the current sql.Server's
+// GetInsightsReader returns the insights store for the current sql.Server's
 // detected execution insights.
 func (s *Server) GetInsightsReader() *insights.LockingStore {
 	return s.insights.Store()
@@ -1267,7 +1267,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	}
 
 	// Free any memory used by the stats collector.
-	ex.statsCollector.Free(ctx)
+	ex.statsCollector.Close(ctx, ex.planner.extendedEvalCtx.SessionID)
 
 	var payloadErr error
 	if closeType == normalClose {

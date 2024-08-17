@@ -448,7 +448,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		Settings: st,
 	})
 
-	insightsProvider := insights.New(st, insights.NewMetrics())
+	insightsProvider := insights.New(st, insights.NewMetrics(), nil)
 	sqlStats := sslocal.New(
 		st,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
@@ -576,7 +576,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 		require.NoError(t, err)
 
 		// Construct the SQL Stats machinery.
-		insightsProvider := insights.New(st, insights.NewMetrics())
+		insightsProvider := insights.New(st, insights.NewMetrics(), nil)
 		sqlStats := sslocal.New(
 			st,
 			sqlstats.MaxMemSQLStatsStmtFingerprints,
@@ -1725,7 +1725,7 @@ func TestSQLStats_ConsumeStats(t *testing.T) {
 		Name:     "test",
 		Settings: st,
 	})
-	insightsProvider := insights.New(st, insights.NewMetrics())
+	insightsProvider := insights.New(st, insights.NewMetrics(), nil)
 
 	sqlStats := sslocal.New(
 		st,

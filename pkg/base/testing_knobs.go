@@ -59,4 +59,5 @@ type TestingKnobs struct {
 	KeyVisualizer                  ModuleTestingKnobs
 	TenantCapabilitiesTestingKnobs ModuleTestingKnobs
 	TableStatsKnobs                ModuleTestingKnobs
+	Insights                       ModuleTestingKnobs
 }
