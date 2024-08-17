@@ -1925,44 +1925,6 @@ func (n *Node) RangeLookup(
 	return resp, nil
 }
 
-// perRangeEventSink is an implementation of rangefeed.Stream which annotates
-// each response with rangeID and streamID. It is used by MuxRangeFeed.
-type perRangeEventSink struct {
-	ctx      context.Context
-	rangeID  roachpb.RangeID
-	streamID int64
-	wrapped  *rangefeed.StreamMuxer
-}
-
-var _ kvpb.RangeFeedEventSink = (*perRangeEventSink)(nil)
-var _ rangefeed.Stream = (*perRangeEventSink)(nil)
-
-func (s *perRangeEventSink) Context() context.Context {
-	return s.ctx
-}
-
-// SendIsThreadSafe is a no-op declaration method. It is a contract that the
-// Send method is thread-safe. Note that Send wraps rangefeed.StreamMuxer which
-// declares its Send method to be thread-safe.
-func (s *perRangeEventSink) SendIsThreadSafe() {}
-
-func (s *perRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
-	response := &kvpb.MuxRangeFeedEvent{
-		RangeFeedEvent: *event,
-		RangeID:        s.rangeID,
-		StreamID:       s.streamID,
-	}
-	return s.wrapped.Send(response)
-}
-
-// Disconnect implements the rangefeed.Stream interface. It requests the
-// StreamMuxer to detach the stream. The StreamMuxer is then responsible for
-// handling the actual disconnection and additional cleanup. Note that Caller
-// should not rely on immediate disconnection as cleanup takes place async.
-func (s *perRangeEventSink) Disconnect(err *kvpb.Error) {
-	s.wrapped.DisconnectStreamWithError(s.streamID, s.rangeID, err)
-}
-
 // lockedMuxStream provides support for concurrent calls to Send. The underlying
 // MuxRangeFeedServer (default grpc.Stream) is not safe for concurrent calls to
 // Send.
@@ -2021,12 +1983,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
 			streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
 
-			streamSink := &perRangeEventSink{
-				ctx:      streamCtx,
-				rangeID:  req.RangeID,
-				streamID: req.StreamID,
-				wrapped:  streamMuxer,
-			}
+			streamSink := rangefeed.NewPerRangeEventSink(streamCtx, req.RangeID, req.StreamID, streamMuxer)
 			streamMuxer.AddStream(req.StreamID, req.RangeID, cancel)
 
 			// Rangefeed attempts to register rangefeed a request over the specified
