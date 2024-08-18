@@ -68,13 +68,13 @@ func (s *PerRangeEventSink) Context() context.Context {
 // declares its Send method to be thread-safe.
 func (s *PerRangeEventSink) SendIsThreadSafe() {}
 
-func (s *PerRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
+func (s *PerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 	response := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
 	}
-	return s.wrapped.Send(response)
+	return s.wrapped.SendUnbuffered(response)
 }
 
 // Disconnect implements the rangefeed.Stream interface. It requests the

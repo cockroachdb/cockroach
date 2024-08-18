@@ -601,15 +601,15 @@ func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 	tombstone := setting1KV
 	tombstone.Value.RawBytes = nil
 
-	require.NoError(t, stream.Send(newRangeFeedEvent(setting1KV, ts1)))
+	require.NoError(t, stream.SendUnbuffered(newRangeFeedEvent(setting1KV, ts1)))
 	settingIsSoon(t, newSettingValue)
 
-	require.NoError(t, stream.Send(newRangeFeedEvent(tombstone, ts0)))
+	require.NoError(t, stream.SendUnbuffered(newRangeFeedEvent(tombstone, ts0)))
 	settingStillHasValueAfterAShortWhile(t, newSettingValue)
 
-	require.NoError(t, stream.Send(newRangeFeedEvent(tombstone, ts2)))
+	require.NoError(t, stream.SendUnbuffered(newRangeFeedEvent(tombstone, ts2)))
 	settingIsSoon(t, defaultFakeSettingValue)
-	require.NoError(t, stream.Send(newRangeFeedEvent(setting1KV, ts1)))
+	require.NoError(t, stream.SendUnbuffered(newRangeFeedEvent(setting1KV, ts1)))
 	settingStillHasValueAfterAShortWhile(t, defaultFakeSettingValue)
 }
 
