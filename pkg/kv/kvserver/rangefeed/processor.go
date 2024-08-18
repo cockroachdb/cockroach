@@ -58,13 +58,15 @@ var (
 	)
 )
 
+func newRetryErrBufferCapacityExceeded() error {
+	return kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER)
+}
+
 // newErrBufferCapacityExceeded creates an error that is returned to subscribers
 // if the rangefeed processor is not able to keep up with the flow of incoming
 // events and is forced to drop events in order to not block.
 func newErrBufferCapacityExceeded() *kvpb.Error {
-	return kvpb.NewError(
-		kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER),
-	)
+	return kvpb.NewError(newRetryErrBufferCapacityExceeded())
 }
 
 // Config encompasses the configuration required to create a Processor.
