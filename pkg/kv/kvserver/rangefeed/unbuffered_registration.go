@@ -425,8 +425,7 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 	// will be responsible for disconnecting first. Caller will drain catchUpBuf
 	// again after disconnect, but it will be no-op.
 	if ubr.mu.catchUpOverflowed {
-		// TODO(wenyihu6): refactor this to a var
-		return kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER)
+		return newRetryErrBufferCapacityExceeded()
 	}
 
 	// Success.
