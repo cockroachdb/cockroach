@@ -94,7 +94,7 @@ func (s *testServerStream) SendIsThreadSafe() {}
 
 // Send mocks grpc.ServerStream Send method. It only counts events and stores
 // events by streamID in streamEvents.
-func (s *testServerStream) Send(e *kvpb.MuxRangeFeedEvent) error {
+func (s *testServerStream) SendUnbuffered(e *kvpb.MuxRangeFeedEvent) error {
 	s.Lock()
 	defer s.Unlock()
 	s.eventsSent++

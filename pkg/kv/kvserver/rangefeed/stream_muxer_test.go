@@ -150,7 +150,7 @@ func TestStreamMuxerOnBlockingIO(t *testing.T) {
 		Span:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 		ResolvedTS: hlc.Timestamp{WallTime: 1},
 	})
-	require.NoError(t, muxer.sender.Send(ev))
+	require.NoError(t, muxer.sender.SendUnbuffered(ev))
 	require.Truef(t, testServerStream.hasEvent(ev),
 		"expected event %v not found in %v", ev, testServerStream)
 

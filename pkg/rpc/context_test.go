@@ -293,7 +293,7 @@ func (s *rangefeedEventSink) Context() context.Context {
 // thread-safety for Send.
 func (s *rangefeedEventSink) SendIsThreadSafe() {}
 
-func (s *rangefeedEventSink) Send(event *kvpb.RangeFeedEvent) error {
+func (s *rangefeedEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 	return s.stream.Send(&kvpb.MuxRangeFeedEvent{RangeFeedEvent: *event})
 }
 
@@ -320,7 +320,7 @@ func (*internalServer) RangeLookup(
 func (s *internalServer) singleRangeFeed(sink kvpb.RangeFeedEventSink) error {
 	for _, ev := range s.rangeFeedEvents {
 		evCpy := ev
-		if err := sink.Send(&evCpy); err != nil {
+		if err := sink.SendUnbuffered(&evCpy); err != nil {
 			return err
 		}
 	}

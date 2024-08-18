@@ -33,7 +33,7 @@ import (
 //
 // Updates are delivered to its stream until one of the following conditions is
 // met:
-// 1. a Send to the Stream returns an error
+// 1. a SendUnbuffered to the Stream returns an error
 // 2. the Stream's context is canceled
 // 3. the registration is manually unregistered
 //
@@ -209,7 +209,7 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 		firstIteration = false
 		select {
 		case nextEvent := <-br.buf:
-			err := br.stream.Send(nextEvent.event)
+			err := br.stream.SendUnbuffered(nextEvent.event)
 			nextEvent.alloc.Release(ctx)
 			putPooledSharedEvent(nextEvent)
 			if err != nil {
@@ -271,7 +271,7 @@ func (br *bufferedRegistration) maybeRunCatchUpScan(ctx context.Context) error {
 		br.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	return catchUpIter.CatchUpScan(ctx, br.stream.Send, br.withDiff, br.withFiltering, br.withOmitRemote)
+	return catchUpIter.CatchUpScan(ctx, br.stream.SendUnbuffered, br.withDiff, br.withFiltering, br.withOmitRemote)
 }
 
 // Wait for this registration to completely process its internal buffer.

@@ -30,8 +30,9 @@ type RangefeedMetricsRecorder interface {
 // ServerStreamSender forwards MuxRangefeedEvents from StreamMuxer to the
 // underlying stream.
 type ServerStreamSender interface {
-	// Send must be thread-safe to be called concurrently.
-	Send(*kvpb.MuxRangeFeedEvent) error
+	// SendUnbuffered must be thread-safe to be called concurrently. We use
+	// SendUnbuffered to distinguish from BufferedStreamSender.SendBuffered.
+	SendUnbuffered(*kvpb.MuxRangeFeedEvent) error
 	// SendIsThreadSafe is a no-op declaration method. It is a contract that the
 	// interface has a thread-safe Send method.
 	SendIsThreadSafe()
@@ -170,8 +171,8 @@ func (sm *StreamMuxer) AddStream(
 // also declares its Send method to be thread-safe.
 func (sm *StreamMuxer) SendIsThreadSafe() {}
 
-func (sm *StreamMuxer) Send(e *kvpb.MuxRangeFeedEvent) error {
-	return sm.sender.Send(e)
+func (sm *StreamMuxer) SendUnbuffered(e *kvpb.MuxRangeFeedEvent) error {
+	return sm.sender.SendUnbuffered(e)
 }
 
 // SendBuffered sends a buffered MuxRangeFeedEvent to the client. Note that this
@@ -261,7 +262,7 @@ func (sm *StreamMuxer) run(ctx context.Context, stopper *stop.Stopper) error {
 		case <-sm.notifyMuxError:
 			toSend := sm.detachMuxErrors()
 			for _, clientErr := range toSend {
-				if err := sm.sender.Send(clientErr); err != nil {
+				if err := sm.sender.SendUnbuffered(clientErr); err != nil {
 					log.Errorf(ctx,
 						"failed to send rangefeed completion error back to client due to broken stream: %v", err)
 					return err
