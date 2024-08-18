@@ -1265,6 +1265,10 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html#GUC-MAX-INDEX-KEYS
 	`max_index_keys`: makeReadOnlyVar("32"),
 
+	// Supported for PG compatibility only. MaxInt32 indicates no limit.
+	// See https://www.postgresql.org/docs/10/runtime-config-resource.html#GUC-MAX-PREPARED-TRANSACTIONS
+	`max_prepared_transactions`: makeReadOnlyVar(strconv.Itoa(math.MaxInt32)),
+
 	// CockroachDB extension.
 	`node_id`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
