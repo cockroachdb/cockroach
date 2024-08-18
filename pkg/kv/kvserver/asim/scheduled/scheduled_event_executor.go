@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/validator"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -118,7 +119,7 @@ func (e *eventExecutor) PrintEventsExecuted(
 	} else {
 		buf := strings.Builder{}
 		buf.WriteString(fmt.Sprintf("%d events executed:\n", len(e.scheduledEvents)))
-		validator := NewValidator(regions)
+		validator := validator.NewValidator(regions)
 		for _, ev := range e.scheduledEvents {
 			buf.WriteString(fmt.Sprintln(ev.String()))
 			if withValidator {

@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package scheduled
+package validator
 
 import (
 	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/scheduled"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 )
 
@@ -32,7 +33,7 @@ func NewValidator(regions []state.Region) Validator {
 	return Validator{zoneToRegion, zone, region, total}
 }
 
-func (v Validator) ValidateEvent(se ScheduledEvent) (satisfiable bool, err error) {
+func (v Validator) ValidateEvent(se scheduled.ScheduledEvent) (satisfiable bool, err error) {
 	if e, ok := se.TargetEvent.(event.SetSpanConfigEvent); ok {
 		// Create a new mockAllocator for every constraint satisfiability check as
 		// isSatisfiable directly modifies mockAllocator fields.
@@ -46,7 +47,7 @@ func (v Validator) ValidateEvent(se ScheduledEvent) (satisfiable bool, err error
 // Validate checks for any invalid events. Currently, it only checks
 // SetSpanConfigEvent for the presence of unsatisfiable configurations. But it
 // can be extended to validate the initial state and other events as well.
-func (v Validator) Validate(events ScheduledEventList) string {
+func (v Validator) Validate(events scheduled.ScheduledEventList) string {
 	buf := strings.Builder{}
 	buf.WriteString("validation result:\n")
 	for _, se := range events {
