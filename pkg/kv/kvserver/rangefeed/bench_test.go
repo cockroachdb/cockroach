@@ -201,7 +201,7 @@ func (s *noopStream) Context() context.Context {
 	return s.ctx
 }
 
-func (s *noopStream) Send(*kvpb.RangeFeedEvent) error {
+func (s *noopStream) SendUnbuffered(*kvpb.RangeFeedEvent) error {
 	s.events++
 	return nil
 }
