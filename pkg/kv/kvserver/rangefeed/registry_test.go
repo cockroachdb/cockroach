@@ -102,7 +102,7 @@ func TestRegistrationBasic(t *testing.T) {
 				overflowReg.publish(ctx, ev1, nil /* alloc */)
 			}
 			go overflowReg.runOutputLoop(ctx, 0)
-			require.Equal(t, kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER), s.WaitForError(t))
+			require.Equal(t, newRetryErrBufferCapacityExceeded(), s.WaitForError(t))
 			require.Equal(t, capOfBuf, len(s.Events()))
 		})
 		t.Run("stream error", func(t *testing.T) {
