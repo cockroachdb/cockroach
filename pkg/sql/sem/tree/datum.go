@@ -2056,57 +2056,56 @@ func (d *DInt8Range) Format(ctx *FmtCtx) {
 	}
 }
 
-func (d *DInt8Range) TypeCheck(
-	ctx context.Context, semaCtx *SemaContext, desired *types.T,
-) (TypedExpr, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
+// ResolvedType implements the Datum interface.
 func (d *DInt8Range) ResolvedType() *types.T {
 	return types.Int8Range
 }
 
+// AmbiguousFormat implements the Datum interface.
 func (d *DInt8Range) AmbiguousFormat() bool {
-	//TODO implement me
-	panic("implement me")
+	return true
 }
 
+// Compare returns -1 if the receiver is less than other, 0 if receiver is
+// equal to other and +1 if receiver is greater than 'other'. Compare is safe
+// to use with a nil eval.Context and results in default behavior, except for
+// when comparing tree.Placeholder datums.
 func (d *DInt8Range) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
+// Prev implements the Datum interface.
 func (d *DInt8Range) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	//TODO implement me
-	panic("implement me")
+	return nil, false
 }
 
+// Compare implements the Datum interface.
 func (d *DInt8Range) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
-	//TODO implement me
-	panic("implement me")
+	return false
 }
 
+// Next implements the Datum interface.
 func (d *DInt8Range) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	//TODO implement me
-	panic("implement me")
+	return nil, false
 }
 
+// IsMax implements the Datum interface.
 func (d *DInt8Range) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
-	//TODO implement me
-	panic("implement me")
+	return false
 }
 
+// Max implements the Datum interface.
 func (d *DInt8Range) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	//TODO implement me
-	panic("implement me")
+	return nil, false
 }
 
+// Min implements the Datum interface.
 func (d *DInt8Range) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	//TODO implement me
-	panic("implement me")
+	return nil, false
 }
 
+// Size implements the Datum interface.
 func (d *DInt8Range) Size() uintptr {
 	return unsafe.Sizeof(*d) + d.StartBound.Val.Size() + d.EndBound.Val.Size()
 }
