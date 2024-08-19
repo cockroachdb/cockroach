@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/codahale/hdrhistogram"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -142,14 +143,15 @@ type Registry struct {
 	prevTick      map[string]time.Time
 	histogramPool *sync.Pool
 	publisher     Publisher
+	exporter      exporter.Exporter
 }
 
 // NewRegistryWithSender returns an initialized Registry.
 // maxLat is the maximum time that queries are expected to take to execute
 // which is needed to initialize the pool of histograms.
 // sender can be specified to enable sending histograms to a remote endpoint.
-func NewRegistryWithPublisher(
-	maxLat time.Duration, workloadName string, publisher Publisher,
+func NewRegistryWithPublisherAndExporter(
+	maxLat time.Duration, workloadName string, publisher Publisher, exporter exporter.Exporter,
 ) *Registry {
 	r := &Registry{
 		workloadName: workloadName,
@@ -158,6 +160,7 @@ func NewRegistryWithPublisher(
 		prevTick:     make(map[string]time.Time),
 		promReg:      prometheus.NewRegistry(),
 		publisher:    publisher,
+		exporter:     exporter,
 		histogramPool: &sync.Pool{
 			New: func() interface{} {
 				return hdrhistogram.New(minLatency.Nanoseconds(), maxLat.Nanoseconds(), sigFigs)
@@ -170,7 +173,13 @@ func NewRegistryWithPublisher(
 }
 
 func NewRegistry(maxLat time.Duration, workloadName string) *Registry {
-	return NewRegistryWithPublisher(maxLat, workloadName, nil)
+	return NewRegistryWithPublisherAndExporter(maxLat, workloadName, nil, nil)
+}
+
+func NewRegistryWithExporter(
+	maxLat time.Duration, workloadName string, exporter exporter.Exporter,
+) *Registry {
+	return NewRegistryWithPublisherAndExporter(maxLat, workloadName, nil, exporter)
 }
 
 // Registerer returns a prometheus.Registerer.
@@ -258,6 +267,7 @@ func (w *Registry) Tick(fn func(Tick)) {
 			Cumulative: w.cumulative[name],
 			Elapsed:    now.Sub(prevTick),
 			Now:        now,
+			Exporter:   w.exporter,
 		})
 		mergedHist.Reset()
 		w.histogramPool.Put(mergedHist)
@@ -365,11 +375,13 @@ type Tick struct {
 	// Now is the time at which the tick was gathered. It covers the period
 	// [Now-Elapsed,Now).
 	Now time.Time
+
+	Exporter exporter.Exporter
 }
 
 // Snapshot creates a SnapshotTick from the receiver.
-func (t Tick) Snapshot() SnapshotTick {
-	return SnapshotTick{
+func (t Tick) Snapshot() exporter.SnapshotTick {
+	return exporter.SnapshotTick{
 		Name:    t.Name,
 		Elapsed: t.Elapsed,
 		Now:     t.Now,
@@ -377,28 +389,17 @@ func (t Tick) Snapshot() SnapshotTick {
 	}
 }
 
-// SnapshotTick parallels Tick but replace the histogram with a
-// snapshot that is suitable for serialization. Additionally, it only contains
-// the per-tick histogram, not the cumulative histogram. (The cumulative
-// histogram can be computed by aggregating all of the per-tick histograms).
-type SnapshotTick struct {
-	Name    string
-	Hist    *hdrhistogram.Snapshot
-	Elapsed time.Duration
-	Now     time.Time
-}
-
-// DecodeSnapshots decodes a file with SnapshotTicks into a series.
-func DecodeSnapshots(path string) (map[string][]SnapshotTick, error) {
+// DecodeSnapshots decodes a File with SnapshotTicks into a series.
+func DecodeSnapshots(path string) (map[string][]exporter.SnapshotTick, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = f.Close() }()
 	dec := json.NewDecoder(f)
-	ret := make(map[string][]SnapshotTick)
+	ret := make(map[string][]exporter.SnapshotTick)
 	for {
-		var tick SnapshotTick
+		var tick exporter.SnapshotTick
 		if err := dec.Decode(&tick); err == io.EOF {
 			break
 		} else if err != nil {
