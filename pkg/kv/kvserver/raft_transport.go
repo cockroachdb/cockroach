@@ -271,7 +271,8 @@ type RaftTransport struct {
 	}
 	// kvflowcontrol2 is used for replication admission control v2.
 	kvflowcontrol2 struct {
-		piggybackReader node_rac2.PiggybackMsgReader
+		piggybackReader              node_rac2.PiggybackMsgReader
+		piggybackedResponseScheduler PiggybackedAdmittedResponseScheduler
 	}
 
 	knobs *RaftTransportTestingKnobs
@@ -297,7 +298,7 @@ func NewDummyRaftTransport(
 	}
 	return NewRaftTransport(ambient, st, nil, clock, nodedialer.New(nil, resolver), nil,
 		kvflowdispatch.NewDummyDispatch(), NoopStoresFlowControlIntegration{},
-		NoopRaftTransportDisconnectListener{}, nil, nil,
+		NoopRaftTransportDisconnectListener{}, nil, nil, nil,
 	)
 }
 
@@ -313,6 +314,7 @@ func NewRaftTransport(
 	kvflowHandles kvflowcontrol.Handles,
 	disconnectListener RaftTransportDisconnectListener,
 	piggybackReader node_rac2.PiggybackMsgReader,
+	piggybackedResponseScheduler PiggybackedAdmittedResponseScheduler,
 	knobs *RaftTransportTestingKnobs,
 ) *RaftTransport {
 	if knobs == nil {
@@ -331,6 +333,7 @@ func NewRaftTransport(
 	t.kvflowControl.disconnectListener = disconnectListener
 	t.kvflowControl.mu.connectionTracker = newConnectionTrackerForFlowControl()
 	t.kvflowcontrol2.piggybackReader = piggybackReader
+	t.kvflowcontrol2.piggybackedResponseScheduler = piggybackedResponseScheduler
 
 	t.initMetrics()
 	if grpcServer != nil {
@@ -449,6 +452,16 @@ func (t *RaftTransport) handleRaftRequest(
 		if log.V(1) {
 			log.Infof(ctx, "informed of below-raft %s", admittedEntries)
 		}
+	}
+	if len(req.AdmittedResponse) > 0 {
+		// NB: we do this via this special path instead of using the
+		// incomingMessageHandler since we don't have a full-fledged
+		// RaftMessageRequest for each range (each of these responses could be for
+		// a different range), and because what we need to do wrt queueing is much
+		// simpler (we don't need to worry about queue size since we only keep the
+		// latest message from each replica).
+		t.kvflowcontrol2.piggybackedResponseScheduler.ScheduleAdmittedResponseForRangeRACv2(
+			ctx, req.AdmittedResponse)
 	}
 	if req.ToReplica.StoreID == roachpb.StoreID(0) && len(req.AdmittedRaftLogEntries) > 0 {
 		// The fallback token dispatch mechanism does not specify a destination

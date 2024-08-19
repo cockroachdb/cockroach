@@ -2486,6 +2486,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 		kvserver.NoopStoresFlowControlIntegration{},
 		kvserver.NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
+		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
 	)
 	errChan := errorChannelTestHandler(make(chan *kvpb.Error, 1))
