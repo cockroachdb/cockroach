@@ -2134,15 +2134,15 @@ const (
 )
 
 func NewDInt8Range(
-	startBoundVal DInt, endBoundVal DInt, startBoundTyp RangeBoundType, endBoundTyp RangeBoundType,
+	startBound Datum, endBound Datum, startBoundTyp RangeBoundType, endBoundTyp RangeBoundType,
 ) *DInt8Range {
 	return &DInt8Range{
 		StartBound: RangeBound{
-			Val: &startBoundVal,
+			Val: startBound,
 			Typ: startBoundTyp,
 		},
 		EndBound: RangeBound{
-			Val: &endBoundVal,
+			Val: endBound,
 			Typ: endBoundTyp,
 		},
 	}

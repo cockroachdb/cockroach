@@ -3944,20 +3944,59 @@ value if you rely on the HLC for accuracy.`,
 	"int8range": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryDateAndTime},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "start_bound", Typ: types.Int}, {Name: "end_bound", Typ: types.Int}},
-			ReturnType: tree.FixedReturnType(types.Int8Range),
+			Types:             tree.ParamTypes{{Name: "start_bound", Typ: types.Int}, {Name: "end_bound", Typ: types.Int}},
+			ReturnType:        tree.FixedReturnType(types.Int8Range),
+			CalledOnNullInput: true,
 			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				startBound := tree.MustBeDInt(args[0])
-				endBound := tree.MustBeDInt(args[1])
-				return tree.NewDInt8Range(startBound, endBound, tree.RangeBoundClose, tree.RangeBoundOpen), nil
+				var startBound, endBound tree.Datum
+				if args[0] == tree.DNull {
+					startBound = tree.DNull
+				} else {
+					startBoundIntDatum := tree.MustBeDInt(args[0])
+					startBound = &startBoundIntDatum
+				}
+
+				if args[1] == tree.DNull {
+					endBound = tree.DNull
+				} else {
+					endBoundIntDatum := tree.MustBeDInt(args[1])
+					endBound = &endBoundIntDatum
+				}
+
+				startBoundTyp := tree.RangeBoundClose
+				endBoundTyp := tree.RangeBoundOpen
+
+				if startBound == tree.DNull {
+					startBoundTyp = tree.RangeBoundNegInf
+				}
+
+				if endBound == tree.DNull {
+					endBoundTyp = tree.RangeBoundInf
+				}
+
+				return tree.NewDInt8Range(startBound, endBound, startBoundTyp, endBoundTyp), nil
 			},
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "start_bound", Typ: types.Int}, {Name: "end_bound", Typ: types.Int}, {Name: "bound_fmt", Typ: types.String}},
-			ReturnType: tree.FixedReturnType(types.Int8Range),
+			Types:             tree.ParamTypes{{Name: "start_bound", Typ: types.Int}, {Name: "end_bound", Typ: types.Int}, {Name: "bound_fmt", Typ: types.String}},
+			ReturnType:        tree.FixedReturnType(types.Int8Range),
+			CalledOnNullInput: true,
 			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				startBound := tree.MustBeDInt(args[0])
-				endBound := tree.MustBeDInt(args[1])
+				var startBound, endBound tree.Datum
+				if args[0] == tree.DNull {
+					startBound = tree.DNull
+				} else {
+					startBoundIntDatum := tree.MustBeDInt(args[0])
+					startBound = &startBoundIntDatum
+				}
+
+				if args[1] == tree.DNull {
+					endBound = tree.DNull
+				} else {
+					endBoundIntDatum := tree.MustBeDInt(args[1])
+					endBound = &endBoundIntDatum
+				}
+
 				boundFmt := tree.MustBeDString(args[2])
 				var startBoundTyp, endBoundTyp tree.RangeBoundType
 				boundFmtStr := tree.AsStringWithFlags(&boundFmt, tree.FmtBareStrings)
@@ -3977,6 +4016,15 @@ value if you rely on the HLC for accuracy.`,
 				default:
 					return nil, errors.AssertionFailedf("unknown bound format for range: %s", boundFmt.String())
 				}
+
+				if startBound == tree.DNull {
+					startBoundTyp = tree.RangeBoundNegInf
+				}
+
+				if endBound == tree.DNull {
+					endBoundTyp = tree.RangeBoundInf
+				}
+
 				return tree.NewDInt8Range(startBound, endBound, startBoundTyp, endBoundTyp), nil
 			},
 		},
