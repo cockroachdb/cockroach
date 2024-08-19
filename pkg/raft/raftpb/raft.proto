@@ -125,6 +125,25 @@ message Message {
   // follower. This can be 0 if the leader hasn't yet established the follower's
   // match index, or for backward compatibility.
   optional uint64 match = 15 [(gogoproto.nullable) = false];
+
+  // admitted contains admitted log indices at different priorities. Raft peers
+  // communicate these to the leader as part of MsgAppResp messages, alongside
+  // the stable log Index.
+  //
+  // When admitted[priority] == k, it means that entries at indices <= k,
+  // written under this priority at terms <= Term, are logically admitted by
+  // this peer's storage.
+  //
+  // Generally, a log entry/index is written to storage first, and then
+  // logically admitted at higher-to-lower priorities. This corresponds to
+  // Admitted[0] <= Admitted[1] <= ... <= Admitted[max-priority] <= Index.
+  //
+  // The former isn't a strict invariant yet, partially due to concurrency
+  // between writes and logical admission, but is mostly right and reflects the
+  // prioritization scheme logic.
+  //
+  // TODO(pav-kv): consider making it an invariant.
+  repeated uint64 admitted = 18 [(gogoproto.nullable) = false];
 }
 
 message HardState {
