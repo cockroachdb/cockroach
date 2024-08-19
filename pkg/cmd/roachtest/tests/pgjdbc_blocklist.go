@@ -621,23 +621,7 @@ var pgjdbcBlockList = blocklist{
 	`org.postgresql.test.util.PasswordUtilTest.encryptionTypeValueOfOn()`:                                                                                           "73337",
 	`org.postgresql.test.util.PasswordUtilTest.mD5()`:                                                                                                               "73337",
 	`org.postgresql.test.util.PasswordUtilTest.scramSha256()`:                                                                                                       "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.autoCommit()`:                                                                                                          "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.commitByDifferentConnection()`:                                                                                         "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.commitUnknownXid()`:                                                                                                    "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.committingCommittedXid()`:                                                                                              "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.databaseRemovesPreparedBeforeCommit()`:                                                                                 "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.databaseRemovesPreparedBeforeRollback()`:                                                                               "unknown",
 	`org.postgresql.test.xa.XADataSourceTest.mappingOfConstraintViolations()`:                                                                                       "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.networkIssueOnCommit()`:                                                                                                "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.networkIssueOnRollback()`:                                                                                              "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.onePhaseCommitOfPrepared()`:                                                                                            "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.preparingPreparedXid()`:                                                                                                "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.recover()`:                                                                                                             "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.repeatedRolledBack()`:                                                                                                  "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.rollback()`:                                                                                                            "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.rollbackByDifferentConnection()`:                                                                                       "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.rollbackUnknownXid()`:                                                                                                  "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.twoPhaseCommit()`:                                                                                                      "unknown",
 }
 
 var pgjdbcIgnoreList = blocklist{
