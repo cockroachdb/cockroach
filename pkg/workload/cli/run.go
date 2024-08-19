@@ -14,8 +14,8 @@ import (
 	"context"
 	gosql "database/sql"
 	"database/sql/driver"
-	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -86,9 +87,16 @@ var individualOperationReceiverAddr = sharedFlags.String(
 var histograms = runFlags.String(
 	"histograms", "",
 	"File to write per-op incremental and cumulative histogram data.")
+
+var histogramExportFormat = runFlags.String(
+	"histogram-export-format", "json",
+	"Export format of the histogram data into the `histograms` file. Options: [ json, openmetrics ]")
 var histogramsMaxLatency = runFlags.Duration(
 	"histograms-max-latency", 100*time.Second,
 	"Expected maximum latency of running a query")
+
+var openmetricsLabels = runFlags.String("openmetrics-labels", "",
+	"Comma separated list of key value pairs used as labels, used by openmetrics exporter. Eg 'cloud=aws, workload=tpcc'")
 
 var securityFlags = pflag.NewFlagSet(`security`, pflag.ContinueOnError)
 var secure = securityFlags.Bool("secure", false,
@@ -428,10 +436,34 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	if *individualOperationReceiverAddr != "" {
 		publisher = histogram.CreateUdpPublisher(*individualOperationReceiverAddr)
 	}
-	reg := histogram.NewRegistryWithPublisher(
+
+	metricsExporter, file, err := maybeInitAndCreateExporter()
+	if err != nil {
+		return errors.Wrap(err, "error creating metrics exporter")
+	}
+	defer func() {
+		if metricsExporter != nil {
+			if err = metricsExporter.Close(func() error {
+				if file == nil {
+					log.Infof(ctx, "no file to close")
+					return nil
+				}
+
+				if err := file.Close(); err != nil {
+					return err
+				}
+				return nil
+			}); err != nil {
+				log.Warningf(ctx, "failed to close histogram exporter: %v", err)
+			}
+		}
+	}()
+
+	reg := histogram.NewRegistryWithPublisherAndExporter(
 		*histogramsMaxLatency,
 		gen.Meta().Name,
 		publisher,
+		metricsExporter,
 	)
 	reg.Registerer().MustRegister(collectors.NewGoCollector())
 	// Expose the prometheus gatherer.
@@ -511,7 +543,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	var wg sync.WaitGroup
 	wg.Add(len(ops.WorkerFns))
 	go func() {
-		// If a ramp period was specified, start all of the workers gradually
+		// If a ramp period was specified, start all the workers gradually
 		// with a new context.
 		var rampCtx context.Context
 		if rampDone != nil {
@@ -557,25 +589,6 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		}()
 	}
 
-	var jsonEnc *json.Encoder
-	if *histograms != "" {
-		_ = os.MkdirAll(filepath.Dir(*histograms), 0755)
-		jsonF, err := os.Create(*histograms)
-		if err != nil {
-			return err
-		}
-		jsonEnc = json.NewEncoder(jsonF)
-		defer func() {
-			if err := jsonF.Sync(); err != nil {
-				log.Warningf(ctx, "histogram: %v", err)
-			}
-
-			if err := jsonF.Close(); err != nil {
-				log.Warningf(ctx, "histogram: %v", err)
-			}
-		}()
-	}
-
 	everySecond := log.Every(*displayEvery)
 	for {
 		select {
@@ -595,8 +608,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			startElapsed := timeutil.Since(start)
 			reg.Tick(func(t histogram.Tick) {
 				formatter.outputTick(startElapsed, t)
-				if jsonEnc != nil && rampDone == nil {
-					if err := jsonEnc.Encode(t.Snapshot()); err != nil {
+				if t.Exporter != nil && rampDone == nil {
+					if err := t.Exporter.SnapshotAndWrite(t.Hist, t.Now, t.Elapsed, &t.Name); err != nil {
 						log.Warningf(ctx, "histogram: %v", err)
 					}
 				}
@@ -620,11 +633,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			resultTick := histogram.Tick{Name: ops.ResultHist}
 			reg.Tick(func(t histogram.Tick) {
 				formatter.outputTotal(startElapsed, t)
-				if jsonEnc != nil {
-					// Note that we're outputting the delta from the last tick. The
-					// cumulative histogram can be computed by merging all of the
-					// per-tick histograms.
-					if err := jsonEnc.Encode(t.Snapshot()); err != nil {
+				if t.Exporter != nil {
+					if err := t.Exporter.SnapshotAndWrite(t.Hist, t.Now, t.Elapsed, &t.Name); err != nil {
 						log.Warningf(ctx, "histogram: %v", err)
 					}
 				}
@@ -636,6 +646,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 						resultTick.Cumulative.Merge(t.Cumulative)
 					}
 				}
+
 			})
 			formatter.outputResult(startElapsed, resultTick)
 
@@ -658,4 +669,51 @@ func maybeLogRandomSeed(ctx context.Context, gen workload.Generator) {
 	if randomSeed := gen.Meta().RandomSeed; randomSeed != nil {
 		log.Infof(ctx, "%s", randomSeed.LogMessage())
 	}
+}
+
+func maybeInitAndCreateExporter() (exporter.Exporter, *os.File, error) {
+	var metricsExporter exporter.Exporter
+	var file *os.File
+	if *histograms != "" {
+
+		switch *histogramExportFormat {
+		case "json":
+			metricsExporter = &exporter.HdrJsonExporter{}
+		case "openmetrics":
+			labelValues := strings.Split(*openmetricsLabels, ",")
+			labels := make(map[string]string)
+			for _, label := range labelValues {
+				parts := strings.Split(label, "=")
+				if len(parts) != 2 {
+					return nil, nil, errors.Errorf("invalid histogram label %q", label)
+				}
+				labels[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+			}
+			openmetricsExporter := exporter.OpenmetricsExporter{}
+			openmetricsExporter.SetLabels(&labels)
+			metricsExporter = &openmetricsExporter
+
+		default:
+			return nil, nil, errors.Errorf("unknown histogram format: %s", *histogramExportFormat)
+		}
+
+		err := metricsExporter.Validate(*histograms)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		err = os.MkdirAll(filepath.Dir(*histograms), 0755)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		file, err = os.Create(*histograms)
+		if err != nil {
+			return nil, nil, err
+		}
+		writer := io.Writer(file)
+
+		metricsExporter.Init(&writer)
+	}
+	return metricsExporter, file, nil
 }
