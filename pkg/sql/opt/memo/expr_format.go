@@ -1642,12 +1642,13 @@ func (f *ExprFmtCtx) formatLocking(tp treeprinter.Node, locking opt.Locking) {
 func (f *ExprFmtCtx) formatLockingWithPrefix(
 	tp treeprinter.Node, labelPrefix string, locking opt.Locking,
 ) {
-	if !locking.IsLocking() {
+	if locking.IsNoOp() {
 		return
 	}
 	strength := ""
 	switch locking.Strength {
 	case tree.ForNone:
+		strength = "none"
 	case tree.ForKeyShare:
 		strength = "for-key-share"
 	case tree.ForShare:
