@@ -145,23 +145,24 @@ func newLogicalReplicationWriterProcessor(
 	}
 	bhPool := make([]BatchHandler, maxWriterWorkers)
 	for i := range bhPool {
+		sqlRP, err := makeSQLProcessor(
+			ctx, flowCtx.Cfg.Settings, tableConfigs,
+			jobspb.JobID(spec.JobID),
+			// Initialize the executor with a fresh session data - this will
+			// avoid creating a new copy on each executor usage.
+			flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
+		)
+		if err != nil {
+			return nil, err
+		}
 		var rp RowProcessor
 		if useKVWriter {
-			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, tableConfigs)
+			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, tableConfigs, sqlRP)
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			rp, err = makeSQLProcessor(
-				ctx, flowCtx.Cfg.Settings, tableConfigs,
-				jobspb.JobID(spec.JobID),
-				// Initialize the executor with a fresh session data - this will
-				// avoid creating a new copy on each executor usage.
-				flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
-			)
-			if err != nil {
-				return nil, err
-			}
+			rp = sqlRP
 		}
 		bhPool[i] = &txnBatch{
 			db:       flowCtx.Cfg.DB,
@@ -645,6 +646,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 			}
 			perChunkStats[worker] = s
 			lrw.metrics.OptimisticInsertConflictCount.Inc(s.optimisticInsertConflicts)
+			lrw.metrics.KVWriteFailureCount.Inc(s.kvWriteFailures)
 			return nil
 		})
 	}
@@ -790,6 +792,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 						}
 					} else {
 						stats.optimisticInsertConflicts += singleStats.optimisticInsertConflicts
+						stats.kvWriteFailures += singleStats.kvWriteFailures
 						batch[i] = streampb.StreamEvent_KV{}
 						stats.processed.success++
 						stats.processed.bytes += int64(batch[i].Size())
@@ -798,6 +801,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 			}
 		} else {
 			stats.optimisticInsertConflicts += s.optimisticInsertConflicts
+			stats.kvWriteFailures += s.kvWriteFailures
 			stats.processed.success += int64(len(batch))
 			// Clear the event to indicate successful application.
 			for i := range batch {
@@ -867,6 +871,7 @@ func (lrw *logicalReplicationWriterProcessor) dlq(
 
 type batchStats struct {
 	optimisticInsertConflicts int64
+	kvWriteFailures           int64
 }
 type flushStats struct {
 	processed struct {
@@ -875,7 +880,7 @@ type flushStats struct {
 	notProcessed struct {
 		count, bytes int64
 	}
-	optimisticInsertConflicts int64
+	optimisticInsertConflicts, kvWriteFailures int64
 }
 
 func (b *flushStats) Add(o flushStats) {
@@ -885,6 +890,7 @@ func (b *flushStats) Add(o flushStats) {
 	b.notProcessed.count += o.notProcessed.count
 	b.notProcessed.bytes += o.notProcessed.bytes
 	b.optimisticInsertConflicts += o.optimisticInsertConflicts
+	b.kvWriteFailures += o.kvWriteFailures
 }
 
 type BatchHandler interface {
