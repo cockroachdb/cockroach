@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/errors"
 	"github.com/codahale/hdrhistogram"
 )
@@ -119,7 +120,7 @@ func NewResult(
 // NewResultWithSnapshots creates a new result from a deserialized set of
 // histogram snapshots.
 func NewResultWithSnapshots(
-	activeWarehouses int, warehouseFactor float64, snapshots map[string][]histogram.SnapshotTick,
+	activeWarehouses int, warehouseFactor float64, snapshots map[string][]exporter.SnapshotTick,
 ) *Result {
 	var start time.Time
 	var end time.Time
