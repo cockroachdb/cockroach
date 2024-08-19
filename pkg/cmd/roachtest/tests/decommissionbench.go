@@ -878,7 +878,7 @@ func runSingleDecommission(
 	// stuck with replicas in purgatory, by pinning them to a node.
 
 	// We stop nodes gracefully when needed.
-	stopOpts := option.NewStopOpts(option.Graceful(shutdownMaxWait))
+	stopOpts := option.NewStopOpts(option.Graceful(shutdownGracePeriod))
 
 	// Gather metadata for logging purposes and wait for balance.
 	var bytesUsed, rangeCount, totalRanges int64

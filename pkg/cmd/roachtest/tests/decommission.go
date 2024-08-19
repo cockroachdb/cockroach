@@ -37,9 +37,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// shudownMaxWait is the default maximum duration (in seconds) that we
+// shudownGracePeriod is the default grace period (in seconds) that we
 // will wait for a graceful shutdown.
-const shutdownMaxWait = 300
+const shutdownGracePeriod = 300
 
 func registerDecommission(r registry.Registry) {
 	{
@@ -301,7 +301,7 @@ func runDecommission(
 		})
 	}
 
-	stopOpts := option.NewStopOpts(option.Graceful(shutdownMaxWait))
+	stopOpts := option.NewStopOpts(option.Graceful(shutdownGracePeriod))
 
 	m.Go(func() error {
 		tBegin, whileDown := timeutil.Now(), true

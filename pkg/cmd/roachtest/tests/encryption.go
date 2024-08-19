@@ -42,7 +42,7 @@ func registerEncryption(r registry.Registry) {
 		}
 
 		for i := 1; i <= nodes; i++ {
-			c.Stop(ctx, t.L(), option.NewStopOpts(option.Graceful(shutdownMaxWait)), c.Node(i))
+			c.Stop(ctx, t.L(), option.NewStopOpts(option.Graceful(shutdownGracePeriod)), c.Node(i))
 		}
 
 		// Restart node with encryption turned on to verify old key works.
