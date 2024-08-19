@@ -158,7 +158,7 @@ func (r *logicalReplicationResumer) ingest(
 	}
 
 	// TODO(azhu): add a flag to avoid recreating dlq tables during replanning
-	dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB.Executor(), planInfo.tableIDsToNames)
+	dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB.Executor(), planInfo.srcTableIDsToDestMeta)
 	if err := dlqClient.Create(ctx); err != nil {
 		return errors.Wrap(err, "failed to create dead letter queue")
 	}
@@ -292,9 +292,9 @@ type logicalReplicationPlanner struct {
 }
 
 type logicalReplicationPlanInfo struct {
-	sourceSpans     []roachpb.Span
-	streamAddress   []string
-	tableIDsToNames map[int32]fullyQualifiedTableName
+	sourceSpans           []roachpb.Span
+	streamAddress         []string
+	srcTableIDsToDestMeta map[descpb.ID]dstTableMetadata
 }
 
 func makeLogicalReplicationPlanner(
@@ -331,7 +331,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		progress = p.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 		payload  = p.job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
 		info     = logicalReplicationPlanInfo{
-			tableIDsToNames: make(map[int32]fullyQualifiedTableName),
+			srcTableIDsToDestMeta: make(map[descpb.ID]dstTableMetadata),
 		}
 	)
 	asOf := progress.ReplicatedTime
@@ -390,10 +390,11 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 				DestinationTableName:          dstTableDesc.GetName(),
 				DestinationFunctionOID:        uint32(fnOID),
 			}
-			info.tableIDsToNames[pair.DstDescriptorID] = fullyQualifiedTableName{
+			info.srcTableIDsToDestMeta[descpb.ID(pair.SrcDescriptorID)] = dstTableMetadata{
 				database: dbDesc.GetName(),
 				schema:   scDesc.GetName(),
 				table:    dstTableDesc.GetName(),
+				tableID:  descpb.ID(pair.DstDescriptorID),
 			}
 		}
 		return nil
