@@ -657,6 +657,32 @@ func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
 	return true
 }
 
+// sendMsgAppAck sends a successful MsgAppResp to the given node (who is the
+// leader at the current Term). The message informs the Term's leader that our
+// log matches the leader's log up to the passed-in index (inclusively).
+func (r *raft) sendMsgAppAck(to pb.PeerID, index uint64) {
+	// NB: the message is not sent immediately, it is contingent to syncing the
+	// latest unstable entries to storage. See the comment in r.send.
+	//
+	// TODO(pav-kv): we may need to revisit this logic, for a couple of reasons
+	// affecting tail latencies:
+	//	- sometimes the message can be sent immediately, notably when all the
+	//	entries in question are already stable and won't be overwritten;
+	//	- by the time the message is sent, the admitted indices attached here
+	//  might be already stale, so we will need another message.
+	r.send(pb.Message{
+		To:     to,
+		Type:   pb.MsgAppResp,
+		Index:  index,
+		Commit: r.raftLog.committed,
+		// TODO(pav-kv): populate the Admitted indices as well. It is questionable
+		// whether we need to do it here though, because of the TODO above which
+		// necessitates a second channel for sending MsgAppResp messages, reactive
+		// to storage admissions rather than storage syncs. For this reason, it may
+		// as well be a separate type of message.
+	})
+}
+
 // sendHeartbeat sends a heartbeat RPC to the given peer.
 func (r *raft) sendHeartbeat(to pb.PeerID) {
 	pr := r.trk.Progress(to)
@@ -858,8 +884,7 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 	//  if r.maybeCommit() {
 	//  	r.bcastAppend()
 	//  }
-	r.send(pb.Message{To: r.id, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex(),
-		Commit: r.raftLog.committed})
+	r.sendMsgAppAck(r.id, r.raftLog.lastIndex())
 	return true
 }
 
@@ -1186,6 +1211,10 @@ func (r *raft) Step(m pb.Message) error {
 			// with "pb.MsgAppResp" of higher term would force leader to step down.
 			// However, this disruption is inevitable to free this stuck node with
 			// fresh election. This can be prevented with Pre-Vote phase.
+			//
+			// NB: we don't use the r.sendMsgAppAck method here because m.From is not
+			// necessarily the leader of our current Term, we don't aim to communicate
+			// the match index to this peer, nor we are guaranteed to know it now.
 			r.send(pb.Message{To: m.From, Type: pb.MsgAppResp})
 		} else if m.Type == pb.MsgPreVote {
 			// Before Pre-Vote enable, there may have candidate with higher term,
@@ -1805,8 +1834,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 	}
 
 	if a.prev.index < r.raftLog.committed {
-		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed,
-			Commit: r.raftLog.committed})
+		r.sendMsgAppAck(m.From, r.raftLog.committed)
 		return
 	}
 	if r.raftLog.maybeAppend(a) {
@@ -1816,8 +1844,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		// the commit index even if the MsgApp is stale.
 		lastIndex := a.lastIndex()
 		r.raftLog.commitTo(logMark{term: m.Term, index: min(m.Commit, lastIndex)})
-		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: lastIndex,
-			Commit: r.raftLog.committed})
+		r.sendMsgAppAck(m.From, lastIndex)
 		return
 	}
 	r.logger.Debugf("%x [logterm: %d, index: %d] rejected MsgApp [logterm: %d, index: %d] from %x",
@@ -1918,13 +1945,11 @@ func (r *raft) handleSnapshot(m pb.Message) {
 	if r.restore(s) {
 		r.logger.Infof("%x [commit: %d] restored snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, id.index, id.term)
-		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex(),
-			Commit: r.raftLog.committed})
+		r.sendMsgAppAck(m.From, r.raftLog.lastIndex())
 	} else {
 		r.logger.Infof("%x [commit: %d] ignored snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, id.index, id.term)
-		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed,
-			Commit: r.raftLog.committed})
+		r.sendMsgAppAck(m.From, r.raftLog.committed)
 	}
 }
 
