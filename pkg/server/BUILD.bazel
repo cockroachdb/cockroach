@@ -239,6 +239,7 @@ go_library(
         "//pkg/sql/importer",
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
+        "//pkg/sql/logging",
         "//pkg/sql/optionalnodeliveness",
         "//pkg/sql/parser",
         "//pkg/sql/parser/statements",

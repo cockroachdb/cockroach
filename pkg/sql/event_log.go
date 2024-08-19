@@ -12,17 +12,10 @@ package sql
 
 import (
 	"context"
-	"encoding/binary"
-	"fmt"
-	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
-	v1 "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/common/v1"
-	otel_logs_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/logs/v1"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -30,18 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
-	"github.com/cockroachdb/redact"
 )
 
 // The logging functions in this file are the different stages of a
@@ -243,18 +230,11 @@ func logEventInternalForSchemaChanges(
 	m.DescriptorID = uint32(descID)
 	m.MutationID = uint32(mutationID)
 
-	// Delegate the storing of the event to the regular event logic.
-	//
 	// We use depth=1 because the caller of this function typically
 	// wraps the call in a db.Txn() callback, which confuses the vmodule
 	// filtering. Easiest is to pretend the event is sourced here.
-	return insertEventRecords(
-		ctx, execCfg,
-		txn,
-		1, /* depth: use this function as origin */
-		eventLogOptions{dst: LogEverywhere},
-		event,
-	)
+	log.StructuredEventDepth(ctx, severity.INFO, 1, event)
+	return nil
 }
 
 // logEventInternalForSQLStatements emits a cluster event on behalf of
@@ -433,7 +413,7 @@ func LogEventForJobs(
 	)
 }
 
-var eventLogSystemTableEnabled = settings.RegisterBoolSetting(
+var EventLogSystemTableEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"server.eventlog.enabled",
 	"if set, logged notable events are also stored in the table system.eventlog",
@@ -560,7 +540,7 @@ func insertEventRecords(
 	}
 
 	// If we only want to log externally and not write to the events table, early exit.
-	loggingToSystemTable := opts.dst.hasFlag(LogToSystemTable) && eventLogSystemTableEnabled.Get(&execCfg.Settings.SV)
+	loggingToSystemTable := opts.dst.hasFlag(LogToSystemTable) && EventLogSystemTableEnabled.Get(&execCfg.Settings.SV)
 	if !loggingToSystemTable {
 		// Simply emit the events to their respective channels and call it a day.
 		if opts.dst.hasFlag(LogExternally) {
@@ -583,194 +563,5 @@ func insertEventRecords(
 		})
 	}
 
-	// Are we doing synchronous writes?
-	syncWrites := execCfg.EventLogTestingKnobs != nil && execCfg.EventLogTestingKnobs.SyncWrites
-	if txn != nil && syncWrites {
-		// Yes, do it now.
-		query, args, otelEvents := prepareEventWrite(ctx, execCfg, entries)
-		txn.KV().AddCommitTrigger(func(ctx context.Context) { sendEventsToObsService(ctx, execCfg, otelEvents) })
-		return writeToSystemEventsTable(ctx, txn, len(entries), query, args)
-	}
-	// No: do them async.
-	// With txn: trigger async write at end of txn (no event logged if txn aborts).
-	// Without txn: schedule it now.
-	if txn == nil {
-		asyncWriteToOtelAndSystemEventsTable(ctx, execCfg, entries)
-	} else {
-		txn.KV().AddCommitTrigger(func(ctx context.Context) {
-			asyncWriteToOtelAndSystemEventsTable(ctx, execCfg, entries)
-		})
-	}
-	return nil
-}
-
-func asyncWriteToOtelAndSystemEventsTable(
-	ctx context.Context, execCfg *ExecutorConfig, entries []logpb.EventPayload,
-) {
-	// perAttemptTimeout is the maximum amount of time to wait on each
-	// eventlog write attempt.
-	const perAttemptTimeout time.Duration = 5 * time.Second
-	// maxAttempts is the maximum number of attempts to write an
-	// eventlog entry.
-	const maxAttempts = 10
-
-	stopper := execCfg.RPCContext.Stopper
-	origCtx := ctx
-	if err := stopper.RunAsyncTask(
-		// Note: we don't want to inherit the cancellation of the parent
-		// context. The SQL statement that causes the eventlog entry may
-		// terminate (and its context cancelled) before the eventlog entry
-		// gets written.
-		context.Background(), "record-events", func(ctx context.Context) {
-			ctx, span := execCfg.AmbientCtx.AnnotateCtxWithSpan(ctx, "record-events")
-			defer span.Finish()
-
-			// Copy the tags from the original query (which will contain
-			// things like username, current internal executor context, etc).
-			ctx = logtags.AddTags(ctx, logtags.FromContext(origCtx))
-
-			// Stop writing the event when the server shuts down.
-			ctx, stopCancel := stopper.WithCancelOnQuiesce(ctx)
-			defer stopCancel()
-
-			// Prepare the data to send.
-			query, args, otelEvents := prepareEventWrite(ctx, execCfg, entries)
-
-			// Send to the Obs Service.
-			sendEventsToObsService(ctx, execCfg, otelEvents)
-
-			// We use a retry loop in case there are transient
-			// non-retriable errors on the cluster during the table write.
-			// (retriable errors are already processed automatically
-			// by db.Txn)
-			retryOpts := base.DefaultRetryOptions()
-			retryOpts.Closer = ctx.Done()
-			retryOpts.MaxRetries = int(maxAttempts)
-			for r := retry.Start(retryOpts); r.Next(); {
-				// Don't try too long to write if the system table is unavailable.
-				if err := timeutil.RunWithTimeout(ctx, "record-events", perAttemptTimeout, func(ctx context.Context) error {
-					return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-						return writeToSystemEventsTable(ctx, txn, len(entries), query, args)
-					})
-				}); err != nil {
-					log.Ops.Warningf(ctx, "unable to save %d entries to system.eventlog: %v", len(entries), err)
-				} else {
-					break
-				}
-			}
-		}); err != nil {
-		expectedStopperError := errors.Is(err, stop.ErrThrottled) || errors.Is(err, stop.ErrUnavailable)
-		if !expectedStopperError {
-			// RunAsyncTask only returns an error not listed above
-			// if its context was canceled, and we're using the
-			// background context here.
-			err = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected stopper error")
-		}
-		log.Warningf(ctx, "failed to start task to save %d events in eventlog: %v", len(entries), err)
-	}
-}
-
-func sendEventsToObsService(
-	ctx context.Context, execCfg *ExecutorConfig, events []*otel_logs_pb.LogRecord,
-) {
-	for i := range events {
-		execCfg.EventsExporter.SendEvent(ctx, obspb.EventlogEvent, events[i])
-	}
-}
-
-func prepareEventWrite(
-	ctx context.Context, execCfg *ExecutorConfig, entries []logpb.EventPayload,
-) (query string, args []interface{}, events []*otel_logs_pb.LogRecord) {
-	reportingID := execCfg.NodeInfo.NodeID.SQLInstanceID()
-	const colsPerEvent = 4
-	// Note: we insert the value zero as targetID because sadly this
-	// now-deprecated column has a NOT NULL constraint.
-	// TODO(knz): Add a migration to remove the column altogether.
-	const baseQuery = `
-INSERT INTO system.eventlog (
-  timestamp, "eventType", "reportingID", info, "targetID"
-)
-VALUES($1, $2, $3, $4, 0)`
-	args = make([]interface{}, 0, len(entries)*colsPerEvent)
-
-	events = make([]*otel_logs_pb.LogRecord, len(entries))
-	sp := tracing.SpanFromContext(ctx)
-	var traceID [16]byte
-	var spanID [8]byte
-	if sp != nil {
-		// Our trace IDs are 8 bytes, but OTLP insists on 16. We'll use only the
-		// most significant bytes and leave the rest zero.
-		//
-		// NOTE(andrei): The BigEndian is an arbitrary decision; I don't know how
-		// others serialize their UUIDs, but I went with the network byte order.
-		binary.BigEndian.PutUint64(traceID[:], uint64(sp.TraceID()))
-		binary.BigEndian.PutUint64(spanID[:], uint64(sp.SpanID()))
-	}
-	nowNanos := timeutil.Now().UnixNano()
-	for i := 0; i < len(entries); i++ {
-		event := entries[i]
-
-		infoBytes := redact.RedactableBytes("{")
-		_, infoBytes = event.AppendJSONFields(false /* printComma */, infoBytes)
-		infoBytes = append(infoBytes, '}')
-		// In the system.eventlog table, we do not use redaction markers.
-		// (compatibility with previous versions of CockroachDB.)
-		infoBytes = infoBytes.StripMarkers()
-		eventType := event.CommonDetails().EventType
-		args = append(
-			args,
-			timeutil.Unix(0, event.CommonDetails().Timestamp),
-			eventType,
-			reportingID,
-			string(infoBytes),
-		)
-
-		events[i] = &otel_logs_pb.LogRecord{
-			TimeUnixNano: uint64(nowNanos),
-			Body:         &v1.AnyValue{Value: &v1.AnyValue_StringValue{StringValue: args[len(args)-1].(string)}},
-			Attributes: []*v1.KeyValue{{
-				Key:   obspb.EventlogEventTypeAttribute,
-				Value: &v1.AnyValue{Value: &v1.AnyValue_StringValue{StringValue: eventType}},
-			}},
-			TraceId: traceID[:],
-			SpanId:  spanID[:],
-		}
-	}
-
-	// In the common case where we have just 1 event, we want to skeep
-	// the extra heap allocation and buffer operations of the loop
-	// below. This is an optimization.
-	query = baseQuery
-	if len(entries) > 1 {
-		// Extend the query with additional VALUES clauses for all the
-		// events after the first one.
-		var completeQuery strings.Builder
-		completeQuery.WriteString(baseQuery)
-
-		for i := range entries[1:] {
-			placeholderNum := 1 + colsPerEvent*(i+1)
-			fmt.Fprintf(&completeQuery, ", ($%d, $%d, $%d, $%d, 0)",
-				placeholderNum, placeholderNum+1, placeholderNum+2, placeholderNum+3)
-		}
-		query = completeQuery.String()
-	}
-
-	return query, args, events
-}
-
-func writeToSystemEventsTable(
-	ctx context.Context, txn isql.Txn, numEntries int, query string, args []interface{},
-) error {
-	rows, err := txn.ExecEx(
-		ctx, "log-event", txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		query, args...,
-	)
-	if err != nil {
-		return err
-	}
-	if rows != numEntries {
-		return errors.AssertionFailedf("%d rows affected by log insertion; expected %d rows affected", rows, numEntries)
-	}
 	return nil
 }

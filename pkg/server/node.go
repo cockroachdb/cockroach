@@ -1450,12 +1450,12 @@ func (n *Node) logStructuredEvent(ctx context.Context, event logpb.EventPayload)
 	if !n.storeCfg.LogRangeAndNodeEvents {
 		return
 	}
-
-	// InsertEventRecord processes the event asynchronously.
-	sql.InsertEventRecords(ctx, n.execCfg,
-		sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* not LogExternally: we already call log.StructuredEvent above */
-		event,
-	)
+	//
+	//// InsertEventRecord processes the event asynchronously.
+	//sql.InsertEventRecords(ctx, n.execCfg,
+	//	sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* not LogExternally: we already call log.StructuredEvent above */
+	//	event,
+	//)
 
 	if n.onStructuredEvent != nil {
 		n.onStructuredEvent(ctx, event)

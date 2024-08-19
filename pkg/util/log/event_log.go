@@ -55,4 +55,5 @@ func StructuredEventDepth(
 
 	logger := logging.getLogger(entry.ch)
 	logger.outputLogEntry(entry)
+	logging.processStructured(ctx, EventType(event.CommonDetails().EventType), event)
 }

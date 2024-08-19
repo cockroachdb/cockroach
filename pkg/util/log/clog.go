@@ -266,7 +266,8 @@ func (l *loggingT) processStructured(ctx context.Context, eventType EventType, e
 	// TODO(abarganier): I'm not sure how possible this is, need to examine further (we use dependency injection).
 	// For now, panic.
 	if l.processor == nil {
-		panic(errors.AssertionFailedf("attempted to process a structured record before processor initialized"))
+		Warning(ctx, "attempted to process a structured record before processor initialized")
+		return
 	}
 	l.processor.Process(ctx, eventType, e)
 }

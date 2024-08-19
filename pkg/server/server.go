@@ -99,6 +99,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob"    // register jobs declared outside of pkg/sql
 	_ "github.com/cockroachdb/cockroach/pkg/sql/importer" // register jobs/planHooks declared outside of pkg/sql
+	"github.com/cockroachdb/cockroach/pkg/sql/logging"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
@@ -115,6 +116,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -1329,6 +1331,63 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	return lateBoundServer, err
 }
 
+func registerStructuredEvents(ctx context.Context, seProcessor logging.StructuredEventProcessor) {
+	seProcessor.RegisterEventType(ctx, &eventpb.NodeJoin{})
+	seProcessor.RegisterEventType(ctx, &eventpb.NodeRestart{})
+	seProcessor.RegisterEventType(ctx, &eventpb.DropDatabase{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CreateDatabase{})
+	seProcessor.RegisterEventType(ctx, &eventpb.DropTable{})
+	seProcessor.RegisterEventType(ctx, &eventpb.AlterTable{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CreateTable{})
+	seProcessor.RegisterEventType(ctx, &eventpb.TruncateTable{})
+	seProcessor.RegisterEventType(ctx, &eventpb.RenameTable{})
+	seProcessor.RegisterEventType(ctx, &eventpb.RenameDatabase{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CreateIndex{})
+	seProcessor.RegisterEventType(ctx, &eventpb.SetZoneConfig{})
+	seProcessor.RegisterEventType(ctx, &eventpb.DropIndex{})
+	seProcessor.RegisterEventType(ctx, &eventpb.SetClusterSetting{})
+	seProcessor.RegisterEventType(ctx, &eventpb.RemoveZoneConfig{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CreateSequence{})
+	seProcessor.RegisterEventType(ctx, &eventpb.AlterSequence{})
+	seProcessor.RegisterEventType(ctx, &eventpb.DropSequence{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CreateView{})
+	seProcessor.RegisterEventType(ctx, &eventpb.DropFunction{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CreateFunction{})
+
+	seProcessor.RegisterEventType(ctx, &eventpb.DropView{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CreateRole{})
+	seProcessor.RegisterEventType(ctx, &eventpb.DropRole{})
+	seProcessor.RegisterEventType(ctx, &eventpb.AlterRole{})
+
+	seProcessor.RegisterEventType(ctx, &eventpb.FinishSchemaChange{})
+	seProcessor.RegisterEventType(ctx, &eventpb.ReverseSchemaChange{})
+	seProcessor.RegisterEventType(ctx, &eventpb.FinishSchemaChangeRollback{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CertsReload{})
+
+	seProcessor.RegisterEventType(ctx, &eventpb.ChangeTablePrivilege{})
+	seProcessor.RegisterEventType(ctx, &eventpb.ChangeSchemaPrivilege{})
+	seProcessor.RegisterEventType(ctx, &eventpb.ChangeDatabasePrivilege{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CreateSchema{})
+	seProcessor.RegisterEventType(ctx, &eventpb.RenameSchema{})
+	seProcessor.RegisterEventType(ctx, &eventpb.DropSchema{})
+
+	seProcessor.RegisterEventType(ctx, &eventpb.AlterSchemaOwner{})
+	seProcessor.RegisterEventType(ctx, &eventpb.AlterTableOwner{})
+	seProcessor.RegisterEventType(ctx, &eventpb.AlterDatabaseOwner{})
+	seProcessor.RegisterEventType(ctx, &eventpb.AlterTypeOwner{})
+
+	seProcessor.RegisterEventType(ctx, &eventpb.CreateType{})
+	seProcessor.RegisterEventType(ctx, &eventpb.AlterType{})
+	seProcessor.RegisterEventType(ctx, &eventpb.RenameType{})
+	seProcessor.RegisterEventType(ctx, &eventpb.DropType{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CommentOnColumn{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CommentOnIndex{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CommentOnTable{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CommentOnSchema{})
+	seProcessor.RegisterEventType(ctx, &eventpb.SetSchema{})
+	log.Info(ctx, "finished registering")
+}
+
 // newClockFromConfig creates a HLC clock from the server configuration.
 func newClockFromConfig(ctx context.Context, cfg BaseConfig) (*hlc.Clock, error) {
 	maxOffset := time.Duration(cfg.MaxOffset)
@@ -1437,7 +1496,8 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	ctx = s.AnnotateCtx(ctx)
 	done := startup.Begin(ctx)
 	defer done()
-
+	seProcessor := logging.NewStructuredEventProcessor(s.sqlServer.execCfg)
+	registerStructuredEvents(ctx, seProcessor)
 	// The following initialization is mirrored in
 	// (*SQLServerWrapper).PreStart. Please keep them in sync.
 
