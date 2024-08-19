@@ -3966,14 +3966,14 @@ value if you rely on the HLC for accuracy.`,
 					startBoundTyp = tree.RangeBoundClose
 					endBoundTyp = tree.RangeBoundOpen
 				case tree.OpenOpenBoundsFmt:
-					startBoundTyp = tree.RangeBoundClose
+					startBoundTyp = tree.RangeBoundOpen
 					endBoundTyp = tree.RangeBoundOpen
 				case tree.CloseCloseBoundsFmt:
 					startBoundTyp = tree.RangeBoundClose
-					endBoundTyp = tree.RangeBoundOpen
+					endBoundTyp = tree.RangeBoundClose
 				case tree.OpenCloseBoundsFmt:
-					startBoundTyp = tree.RangeBoundClose
-					endBoundTyp = tree.RangeBoundOpen
+					startBoundTyp = tree.RangeBoundOpen
+					endBoundTyp = tree.RangeBoundClose
 				default:
 					return nil, errors.AssertionFailedf("unknown bound format for range: %s", boundFmt.String())
 				}

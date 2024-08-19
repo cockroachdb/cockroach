@@ -276,6 +276,10 @@ func writeTextDatumNotNull(
 		// Enums are serialized with their logical representation.
 		b.writeLengthPrefixedString(v.LogicalRep)
 
+	case *tree.DInt8Range:
+		b.textFormatter.FormatNode(d)
+		b.writeFromFmtCtx(b.textFormatter)
+
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
 	}
@@ -828,6 +832,7 @@ func writeBinaryDatumNotNull(
 	case *tree.DOid:
 		b.putInt32(4)
 		b.putInt32(int32(v.Oid))
+	// TODO: implement for tree.DInt8Range
 	default:
 		b.setError(errors.AssertionFailedf("unsupported type %T", d))
 	}

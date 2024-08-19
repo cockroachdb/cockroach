@@ -2012,75 +2012,103 @@ type DInt8Range struct {
 	EndBound   RangeBound
 }
 
-func (D DInt8Range) String() string {
-	//TODO implement me
-	panic("implement me")
+func (d *DInt8Range) String() string {
+	sb := strings.Builder{}
+	if d.StartBound.Typ == RangeBoundClose {
+		sb.WriteString("[")
+	} else {
+		sb.WriteString("(")
+	}
+	if d.StartBound.Typ != RangeBoundNegInf {
+		sb.WriteString(d.StartBound.Val.String())
+	}
+	sb.WriteString(",")
+	if d.EndBound.Typ != RangeBoundInf {
+		sb.WriteString(d.EndBound.Val.String())
+	}
+
+	if d.EndBound.Typ == RangeBoundClose {
+		sb.WriteString("]")
+	} else {
+		sb.WriteString(")")
+	}
+
+	return sb.String()
 }
 
-func (D DInt8Range) Format(ctx *FmtCtx) {
-	//TODO implement me
-	panic("implement me")
+func (d *DInt8Range) Format(ctx *FmtCtx) {
+	if d.StartBound.Typ == RangeBoundClose {
+		ctx.WriteString("[")
+	} else {
+		ctx.WriteString("(")
+	}
+	if d.StartBound.Typ != RangeBoundNegInf {
+		ctx.FormatNode(d.StartBound.Val)
+	}
+	ctx.WriteString(",")
+	if d.EndBound.Typ != RangeBoundInf {
+		ctx.FormatNode(d.EndBound.Val)
+	}
+	if d.EndBound.Typ == RangeBoundClose {
+		ctx.WriteString("]")
+	} else {
+		ctx.WriteString(")")
+	}
 }
 
-func (D DInt8Range) Walk(visitor Visitor) Expr {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (D DInt8Range) TypeCheck(
+func (d *DInt8Range) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (D DInt8Range) ResolvedType() *types.T {
+func (d *DInt8Range) ResolvedType() *types.T {
 	return types.Int8Range
 }
 
-func (D DInt8Range) AmbiguousFormat() bool {
+func (d *DInt8Range) AmbiguousFormat() bool {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (D DInt8Range) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+func (d *DInt8Range) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (D DInt8Range) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+func (d *DInt8Range) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (D DInt8Range) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
+func (d *DInt8Range) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (D DInt8Range) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+func (d *DInt8Range) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (D DInt8Range) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
+func (d *DInt8Range) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (D DInt8Range) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+func (d *DInt8Range) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (D DInt8Range) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+func (d *DInt8Range) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (D DInt8Range) Size() uintptr {
-	//TODO implement me
-	panic("implement me")
+func (d *DInt8Range) Size() uintptr {
+	return unsafe.Sizeof(*d) + d.StartBound.Val.Size() + d.EndBound.Val.Size()
 }
 
 type RangeBound struct {
