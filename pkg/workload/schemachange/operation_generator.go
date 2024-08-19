@@ -1707,7 +1707,7 @@ func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) 
 	}
 
 	stmt := makeOpStmt(OpStmtDDL)
-	stmt.expectedExecErrors.addAll(codesWithConditions{
+	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 		{code: pgcode.Syntax, condition: colIsVirtualComputed || colIsStoredComputed},
 	})
