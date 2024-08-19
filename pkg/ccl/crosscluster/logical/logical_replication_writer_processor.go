@@ -129,18 +129,20 @@ func newLogicalReplicationWriterProcessor(
 	}
 
 	tableConfigs := make(map[descpb.ID]sqlProcessorTableConfig)
-	tableIDToName := make(map[int32]fullyQualifiedTableName)
-	for tableID, md := range spec.TableMetadata {
+	srcTableIDToName := make(map[int32]dstTableMetadata)
+	for dstTableID, md := range spec.TableMetadata {
 		desc := md.SourceDescriptor
-		tableConfigs[descpb.ID(tableID)] = sqlProcessorTableConfig{
+		tableConfigs[descpb.ID(dstTableID)] = sqlProcessorTableConfig{
 			srcDesc: tabledesc.NewBuilder(&desc).BuildImmutableTable(),
 			dstOID:  md.DestinationFunctionOID,
 		}
 
-		tableIDToName[tableID] = fullyQualifiedTableName{
+		srcTableID := int32(desc.GetID())
+		srcTableIDToName[srcTableID] = dstTableMetadata{
 			database: md.DestinationParentDatabaseName,
 			schema:   md.DestinationParentSchemaName,
 			table:    md.DestinationTableName,
+			tableID:  dstTableID,
 		}
 	}
 	bhPool := make([]BatchHandler, maxWriterWorkers)
@@ -215,7 +217,7 @@ func newLogicalReplicationWriterProcessor(
 			StreamID:    streampb.StreamID(spec.StreamID),
 			ProcessorID: processorID,
 		},
-		dlqClient: InitDeadLetterQueueClient(dlqDbExec, tableIDToName),
+		dlqClient: InitDeadLetterQueueClient(dlqDbExec, srcTableIDToName),
 		metrics:   flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
 	}
 	lrw.purgatory = purgatory{

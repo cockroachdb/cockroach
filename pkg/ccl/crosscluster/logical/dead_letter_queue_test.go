@@ -134,50 +134,56 @@ func TestDLQClient(t *testing.T) {
 
 	dbAName := "a"
 
-	tableNames := []fullyQualifiedTableName{
+	dstTableMd := []dstTableMetadata{
 		{
 			database: defaultDbName,
 			schema:   publicScName,
 			table:    "foo",
+			tableID:  1,
 		},
 		{
 			database: defaultDbName,
 			schema:   "baz",
 			table:    "foo",
+			tableID:  2,
 		},
 		{
 			database: defaultDbName,
 			schema:   "bar",
 			table:    "_foo",
+			tableID:  3,
 		},
 		{
 			database: defaultDbName,
 			schema:   "bar_",
 			table:    "foo",
+			tableID:  4,
 		},
 		{
 			database: dbAName,
 			schema:   publicScName,
 			table:    "bar",
+			tableID:  5,
 		},
 		{
 			database: dbAName,
 			schema:   "baz",
 			table:    "foo",
+			tableID:  6,
 		},
 	}
 
 	tableNameToDesc := make(map[string]catalog.TableDescriptor)
-	tableIDToName := make(map[int32]fullyQualifiedTableName)
+	srcTableIDToName := make(map[int32]dstTableMetadata)
 	var expectedDLQTables []string
 
-	for _, name := range tableNames {
-		desc := desctestutils.TestingGetTableDescriptor(kvDB, s.Codec(), name.database, name.schema, name.table)
-		tableID := int32(desc.GetID())
-		tableIDToName[tableID] = name
-		fullyQualifiedName := fmt.Sprintf("%s.%s.%s", name.database, name.schema, name.table)
+	for _, md := range dstTableMd {
+		desc := desctestutils.TestingGetTableDescriptor(kvDB, s.Codec(), md.database, md.schema, md.table)
+		srcTableID := int32(desc.GetID())
+		srcTableIDToName[srcTableID] = md
+		fullyQualifiedName := fmt.Sprintf("%s.%s.%s", md.database, md.schema, md.table)
 		tableNameToDesc[fullyQualifiedName] = desc
-		expectedDLQTables = append(expectedDLQTables, fmt.Sprintf("dlq_%d_%s_%s", tableID, name.schema, name.table))
+		expectedDLQTables = append(expectedDLQTables, fmt.Sprintf("dlq_%d_%s_%s", md.tableID, md.schema, md.table))
 	}
 
 	// Build family desc for cdc event row
@@ -186,7 +192,7 @@ func TestDLQClient(t *testing.T) {
 		Name: "",
 	}
 
-	dlqClient := InitDeadLetterQueueClient(ie, tableIDToName)
+	dlqClient := InitDeadLetterQueueClient(ie, srcTableIDToName)
 	require.NoError(t, dlqClient.Create(ctx))
 
 	// Verify DLQ tables are created with their expected names
@@ -300,8 +306,8 @@ func TestDLQClient(t *testing.T) {
 			if tc.expectedErrMsg == "" {
 				require.NoError(t, err)
 
-				tableID := int32(tc.tableDesc.GetID())
-				name, ok := tableIDToName[tableID]
+				srcTableID := int32(tc.tableDesc.GetID())
+				md, ok := srcTableIDToName[srcTableID]
 				require.True(t, ok)
 
 				actualRow := dlqRow{}
@@ -312,7 +318,7 @@ func TestDLQClient(t *testing.T) {
 						mutation_type,
 						key_value_bytes,
 						incoming_row
-				FROM %s`, name.toDLQTableName(tableID))).Scan(
+				FROM %s`, md.toDLQTableName())).Scan(
 					&actualRow.jobID,
 					&actualRow.tableID,
 					&actualRow.dlqReason,
@@ -326,7 +332,7 @@ func TestDLQClient(t *testing.T) {
 
 				expectedRow := dlqRow{
 					jobID:        tc.jobID,
-					tableID:      tableID,
+					tableID:      md.tableID,
 					dlqReason:    fmt.Sprintf("%s (%s)", tc.applyError.Error(), tc.dlqReason),
 					mutationType: tc.mutationType.String(),
 					kv:           bytes,
@@ -378,12 +384,12 @@ func TestDLQJSONQuery(t *testing.T) {
 	defer cleanup()
 
 	tableID := int32(tableDesc.GetID())
-	tableName := fullyQualifiedTableName{
+	tableName := dstTableMetadata{
 		database: defaultDbName,
 		schema:   publicScName,
 		table:    "foo",
 	}
-	dlqClient := InitDeadLetterQueueClient(ie, map[int32]fullyQualifiedTableName{
+	dlqClient := InitDeadLetterQueueClient(ie, map[int32]dstTableMetadata{
 		tableID: tableName,
 	})
 	require.NoError(t, dlqClient.Create(ctx))
@@ -398,7 +404,7 @@ func TestDLQJSONQuery(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, dlqClient.Log(ctx, 1, streampb.StreamEvent_KV{KeyValue: kv}, updatedRow, errInjected, noSpace))
 
-	dlqtableName := tableName.toDLQTableName(tableID)
+	dlqtableName := tableName.toDLQTableName()
 
 	var (
 		a     int
