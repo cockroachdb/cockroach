@@ -573,8 +573,23 @@ func (t *Test) RNG() *rand.Rand {
 
 // InMixedVersion adds a new mixed-version hook to the test. The
 // functionality in the function passed as argument to this function
-// will be tested in arbitrary mixed-version states. If multiple
-// InMixedVersion hooks are passed, they may be executed
+// will be tested in arbitrary mixed-version states; specifically, it
+// can be called up to four times during each major upgrade
+// performed:
+//
+// 1. when the cluster upgrades to the new binary (`preserve_downgrade_option` set)
+// 2. when the cluster downgrades to the old binary
+// 3. when the cluster upgrades to the new binary again
+// 4. when the cluster is finalizing
+//
+// Note that not every major upgrade performs a downgrade. In those
+// cases, the InMixedVersion hook would only be called up to two times
+// (when the cluster upgrades to the new binary, and when the cluster
+// is finalizing the upgrade). Callers can use `h.Context().Stage` to
+// find out the stage in the upgrade in which the hook is being
+// called.
+//
+// If multiple InMixedVersion hooks are passed, they may be executed
 // concurrently.
 func (t *Test) InMixedVersion(desc string, fn stepFunc) {
 	var prevUpgradeStage UpgradeStage
@@ -613,10 +628,10 @@ func (t *Test) OnStartup(desc string, fn stepFunc) {
 	t.hooks.AddStartup(versionUpgradeHook{name: desc, fn: fn})
 }
 
-// AfterUpgradeFinalized registers a callback that is run once the
-// mixed-version test has brought the cluster to the latest version,
-// and allowed the upgrade to finalize successfully. If multiple such
-// hooks are passed, they will be executed concurrently.
+// AfterUpgradeFinalized registers a callback that is run once per
+// major upgrade performed in a test, after the upgrade is finalized
+// successfully.  If multiple such hooks are passed, they may be
+// executed concurrently.
 func (t *Test) AfterUpgradeFinalized(desc string, fn stepFunc) {
 	t.hooks.AddAfterUpgradeFinalized(versionUpgradeHook{name: desc, fn: fn})
 }
