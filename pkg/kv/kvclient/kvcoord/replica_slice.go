@@ -19,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ReplicaInfo extends the Replica structure with the associated node
@@ -40,6 +42,25 @@ type ReplicaInfo struct {
 
 // A ReplicaSlice is a slice of ReplicaInfo.
 type ReplicaSlice []ReplicaInfo
+
+func (rs ReplicaSlice) String() string {
+	return redact.StringWithoutMarkers(rs)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rs ReplicaSlice) SafeFormat(w redact.SafePrinter, _ rune) {
+	var buf redact.StringBuilder
+	buf.Print("[")
+	for i, r := range rs {
+		if i > 0 {
+			buf.Print(",")
+		}
+		buf.Printf("%v(health=%v match=%d latency=%v)",
+			r, r.healthy, r.tierMatchLength, humanizeutil.Duration(r.latency))
+	}
+	buf.Print("]")
+	w.Print(buf)
+}
 
 // ReplicaSliceFilter controls which kinds of replicas are to be included in
 // the slice for routing BatchRequests to.
