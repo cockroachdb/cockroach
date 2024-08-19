@@ -5,6 +5,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "histogram",
     srcs = [
+        "exporter.go",
         "histogram.go",
         "udp_publisher.go",
         "udp_receiver.go",
@@ -18,14 +19,18 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_codahale_hdrhistogram//:hdrhistogram",
+        "@com_github_gogo_protobuf//proto",
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_client_golang//prometheus/promauto",
+        "@com_github_prometheus_client_model//go",
+        "@com_github_prometheus_common//expfmt",
     ],
 )
 
 go_test(
     name = "histogram_test",
     srcs = [
+        "exporter_test.go",
         "histogram_test.go",
         "udp_test.go",
     ],
@@ -34,6 +39,7 @@ go_test(
         "//pkg/util/ctxgroup",
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_client_model//go",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )
