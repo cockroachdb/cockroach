@@ -48,6 +48,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const SIGKILL = 9
+
 // A SyncedCluster is created from the cluster metadata in the synced clusters
 // cache and is used as the target for installing and managing various software
 // components.
@@ -393,7 +395,8 @@ func (c *SyncedCluster) newSession(
 //
 // When Stop needs to kill a process without other flags, the signal
 // is 9 (SIGKILL) and wait is true. If gracePeriod is non-zero, Stop
-// stops waiting after that approximate number of seconds.
+// stops waiting after that approximate number of seconds, sending a
+// SIGKILL if the process is still running after that time.
 func (c *SyncedCluster) Stop(
 	ctx context.Context,
 	l *logger.Logger,
@@ -481,7 +484,7 @@ func (c *SyncedCluster) kill(
 ) error {
 	const timedOutMessage = "timed out"
 
-	if sig == 9 {
+	if sig == SIGKILL {
 		// `kill -9` without wait is never what a caller wants. See #77334.
 		wait = true
 	}
@@ -549,10 +552,13 @@ fi`,
 				return res, err
 			}
 
-			if wait && strings.Contains(res.CombinedOut, timedOutMessage) {
-				return res, fmt.Errorf(
-					"timed out after %ds waiting for n%d to drain and shutdown",
-					gracePeriod, node,
+			// If the process has not terminated after the grace period,
+			// perform a forceful termination.
+			if wait && sig != SIGKILL && strings.Contains(res.CombinedOut, timedOutMessage) {
+				l.Printf("n%d did not shutdown after %ds, performing a SIGKILL", node, gracePeriod)
+				return res, errors.Wrapf(
+					c.kill(ctx, l, cmdName, display, SIGKILL, true, 0, virtualClusterLabel),
+					"failed to forcefully terminate n%d", node,
 				)
 			}
 
