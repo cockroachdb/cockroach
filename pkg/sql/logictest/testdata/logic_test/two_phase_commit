@@ -39,10 +39,10 @@ read-only  root  test
 
 # Verify the prepared transaction is visible in the pg_catalog.pg_prepared_xacts
 # table.
-# TODO(nvanbenschoten): implement.
 query ITTT
 SELECT transaction, gid, owner, database FROM pg_catalog.pg_prepared_xacts
 ----
+0  read-only  root  test
 
 # Commit the read-only prepared transaction.
 statement ok
@@ -279,10 +279,11 @@ SELECT global_id, owner, database FROM system.prepared_transactions
 read-write-root      root      test
 read-write-testuser  testuser  test
 
-# TODO(nvanbenschoten): implement.
 query ITTT rowsort
 SELECT transaction, gid, owner, database FROM pg_catalog.pg_prepared_xacts
 ----
+0  read-write-root      root      test
+0  read-write-testuser  testuser  test
 
 statement ok
 ROLLBACK PREPARED 'read-write-root'

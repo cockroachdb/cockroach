@@ -2419,13 +2419,48 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 }
 
 var pgCatalogPreparedXactsTable = virtualSchemaTable{
-	comment: `prepared transactions (empty - feature does not exist)
+	comment: `prepared transactions
 https://www.postgresql.org/docs/9.6/view-pg-prepared-xacts.html`,
 	schema: vtable.PGCatalogPreparedXacts,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		rows, err := p.InternalSQLTxn().QueryBufferedEx(
+			ctx,
+			"select-prepared-transactions",
+			p.Txn(),
+			sessiondata.NodeUserSessionDataOverride,
+			`SELECT global_id, prepared, owner, database FROM system.prepared_transactions`,
+		)
+		if err != nil {
+			if pgerror.GetPGCode(err) == pgcode.UndefinedTable {
+				// If the table does not exist, we're in a mixed-version cluster and the
+				// feature is not supported yet. Just return an empty result.
+				// TODO(nvanbenschoten): Remove this logic when mixed-version support
+				// with v24.2 is no longer necessary.
+				return nil
+			}
+			return err
+		}
+		for _, row := range rows {
+			// NOTE: we can't map a 128-bit CockroachDB transaction ID to a 32-bit
+			// Postgres xid, so we just return zero for each transaction's xid. This
+			// is acceptable, as the gid is the important part of pg_prepared_xacts.
+			transaction := zeroVal
+			globalID := row[0]
+			prepared := row[1]
+			owner := tree.NewDName(string(tree.MustBeDString(row[2])))
+			database := tree.NewDName(string(tree.MustBeDString(row[3])))
+			if err := addRow(
+				transaction, // transaction
+				globalID,    // gid
+				prepared,    // prepared
+				owner,       // owner
+				database,    // database
+			); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
-	unimplemented: true,
 }
 
 // pgCatalogPreparedStatementsTable implements the pg_prepared_statements table.

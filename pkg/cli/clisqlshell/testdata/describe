@@ -563,7 +563,7 @@ pg_catalog,pg_policies,table,node,permanent,prefix,pg_policies was created for c
 pg_catalog,pg_policy,table,node,permanent,prefix,pg_policy was created for compatibility and is currently unimplemented
 pg_catalog,pg_prepared_statements,table,node,permanent,prefix,"prepared statements
 https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html"
-pg_catalog,pg_prepared_xacts,table,node,permanent,prefix,"prepared transactions (empty - feature does not exist)
+pg_catalog,pg_prepared_xacts,table,node,permanent,prefix,"prepared transactions
 https://www.postgresql.org/docs/9.6/view-pg-prepared-xacts.html"
 pg_catalog,pg_proc,table,node,permanent,prefix,"built-in functions (incomplete)
 https://www.postgresql.org/docs/16/catalog-pg-proc.html"
