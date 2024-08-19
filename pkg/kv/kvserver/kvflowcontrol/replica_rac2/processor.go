@@ -176,7 +176,9 @@ type EntryForAdmissionCallbackState struct {
 
 // ACWorkQueue abstracts the behavior needed from admission.WorkQueue.
 type ACWorkQueue interface {
-	Admit(ctx context.Context, entry EntryForAdmission)
+	// Admit returns false if the entry was not submitted for admission for
+	// some reason.
+	Admit(ctx context.Context, entry EntryForAdmission) bool
 }
 
 // TODO(sumeer): temporary placeholder, until RangeController is more fully
@@ -772,7 +774,7 @@ func (p *processorImpl) AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(
 		admissionPri := rac2.RaftToAdmissionPriority(raftPri)
 		// NB: cannot hold mu when calling Admit since the callback may
 		// execute from inside Admit, when the entry is immediately admitted.
-		p.opts.ACWorkQueue.Admit(ctx, EntryForAdmission{
+		submitted := p.opts.ACWorkQueue.Admit(ctx, EntryForAdmission{
 			TenantID:       p.opts.TenantID,
 			Priority:       admissionPri,
 			CreateTime:     meta.AdmissionCreateTime,
@@ -787,6 +789,14 @@ func (p *processorImpl) AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(
 				Priority:   raftPri,
 			},
 		})
+		if !submitted {
+			// Very rare. e.g. store was not found.
+			func() {
+				p.mu.Lock()
+				defer p.mu.Unlock()
+				p.mu.waitingForAdmissionState.remove(leaderTerm, entry.Index, raftPri)
+			}()
+		}
 	}
 	return true
 }
