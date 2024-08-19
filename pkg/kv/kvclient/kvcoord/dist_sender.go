@@ -2119,8 +2119,8 @@ func (ds *DistSender) sendToReplicas(
 
 	case kvpb.RoutingPolicy_NEAREST:
 		// Order by latency.
-		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
 		replicas.OptimizeReplicaOrder(ds.st, ds.getNodeID(), ds.HealthFunc(), ds.latencyFunc, ds.locality)
+		log.VEventf(ctx, 2, "routing to nearest replica; leaseholder not required order=%v", replicas)
 
 	default:
 		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
