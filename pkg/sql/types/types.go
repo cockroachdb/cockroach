@@ -716,6 +716,9 @@ var (
 	// by Postgres in system tables. Int2vectors are 0-indexed, unlike normal arrays.
 	Int2Vector = &T{InternalType: InternalType{
 		Family: ArrayFamily, Oid: oid.T_int2vector, ArrayContents: Int2, Locale: &emptyLocale}}
+
+	Int8Range = &T{InternalType: InternalType{
+		Family: RangeFamily, Oid: oid.T_int8range, Locale: &emptyLocale}}
 )
 
 // Unexported wrapper types.

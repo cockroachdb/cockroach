@@ -3941,6 +3941,19 @@ value if you rely on the HLC for accuracy.`,
 		}
 	}, false /* supportsArrayInput */)),
 
+	"int8range": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryDateAndTime},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "startbound", Typ: types.Int}, {Name: "endbound", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int8Range),
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				startBound := tree.MustBeDInt(args[0])
+				endBound := tree.MustBeDInt(args[1])
+				return tree.NewDInt8Range(startBound, endBound, tree.RangeBoundClose, tree.RangeBoundOpen), nil
+			},
+		},
+	),
+
 	// Full text search functions.
 	"ts_match_qv":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
 	"ts_match_vq":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),

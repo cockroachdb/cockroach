@@ -2007,6 +2007,118 @@ func NewDDateFromTime(t time.Time) (*DDate, error) {
 	return NewDDate(d), err
 }
 
+type DInt8Range struct {
+	StartBound RangeBound
+	EndBound   RangeBound
+}
+
+func (D DInt8Range) String() string {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (D DInt8Range) Format(ctx *FmtCtx) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (D DInt8Range) Walk(visitor Visitor) Expr {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (D DInt8Range) TypeCheck(
+	ctx context.Context, semaCtx *SemaContext, desired *types.T,
+) (TypedExpr, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (D DInt8Range) ResolvedType() *types.T {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (D DInt8Range) Eval(ctx context.Context, evaluator ExprEvaluator) (Datum, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (D DInt8Range) AmbiguousFormat() bool {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (D DInt8Range) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (D DInt8Range) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (D DInt8Range) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (D DInt8Range) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (D DInt8Range) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (D DInt8Range) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (D DInt8Range) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (D DInt8Range) Size() uintptr {
+	//TODO implement me
+	panic("implement me")
+}
+
+type RangeBound struct {
+	Val Datum
+	Typ RangeBoundType
+}
+
+type RangeBoundType int
+
+const (
+	RangeBoundOpen RangeBoundType = iota
+	RangeBoundClose
+	// TODO(janexing): should integrate with existing inf?
+	RangeBoundInf
+	RangeBoundNegInf
+)
+
+func NewDInt8Range(
+	startBoundVal DInt, endBoundVal DInt, startBoundTyp RangeBoundType, endBoundTyp RangeBoundType,
+) *DInt8Range {
+	return &DInt8Range{
+		StartBound: RangeBound{
+			Val: &startBoundVal,
+			Typ: startBoundTyp,
+		},
+		EndBound: RangeBound{
+			Val: &endBoundVal,
+			Typ: endBoundTyp,
+		},
+	}
+}
+
 // ParseContext provides the information necessary for
 // parsing dates.
 // A nil value is generally acceptable and will result in
@@ -6080,6 +6192,9 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.INetFamily:           {unsafe.Sizeof(DIPAddr{}), fixedSize},
 	types.OidFamily:            {unsafe.Sizeof(DOid{}.Oid), fixedSize},
 	types.EnumFamily:           {unsafe.Sizeof(DEnum{}), variableSize},
+
+	// TODO(janexing): merely placeholder here.
+	types.RangeFamily: {unsafe.Sizeof(DInt8Range{}), variableSize},
 
 	types.VoidFamily: {sz: unsafe.Sizeof(DVoid{}), variable: fixedSize},
 	// TODO(jordan,justin): This seems suspicious.
