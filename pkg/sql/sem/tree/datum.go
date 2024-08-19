@@ -6214,6 +6214,8 @@ func InferTypes(vals []string) []types.Family {
 	return typs
 }
 
+// range types!
+
 // AdjustValueToType checks that the width (for strings, byte arrays, and bit
 // strings) and scale (decimal). and, shape/srid (for geospatial types) fits the
 // specified column type.
