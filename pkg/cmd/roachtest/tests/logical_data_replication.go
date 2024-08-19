@@ -359,7 +359,7 @@ func TestLDROnNodeShutdown(
 
 	// Graceful shutdown on both nodes
 	// TODO(naveen.setlur): maybe switch this to a less graceful shutdown via SIGKILL
-	stopOpts := option.NewStopOpts(option.Graceful(shutdownMaxWait))
+	stopOpts := option.NewStopOpts(option.Graceful(shutdownGracePeriod))
 	t.L().Printf("Shutting down node-left: %d", nodeToStopL)
 	monitor.ExpectDeath()
 	if err := c.StopE(ctx, t.L(), stopOpts, c.Node(nodeToStopL)); err != nil {

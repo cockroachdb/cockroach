@@ -152,7 +152,7 @@ func executeNodeShutdown(
 	} else {
 		t.L().Printf(`stopping node gracefully %s`, target)
 		if err := c.StopE(
-			ctx, t.L(), option.NewStopOpts(option.Graceful(shutdownMaxWait)), c.Node(cfg.shutdownNode),
+			ctx, t.L(), option.NewStopOpts(option.Graceful(shutdownGracePeriod)), c.Node(cfg.shutdownNode),
 		); err != nil {
 			return errors.Wrapf(err, "could not stop node %s", target)
 		}

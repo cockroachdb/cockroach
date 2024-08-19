@@ -356,7 +356,7 @@ func RestartNodesWithNewBinary(
 	newVersion *Version,
 	settings ...install.ClusterSettingOption,
 ) error {
-	const maxWait = 300 // 5 minutes
+	const gracePeriod = 300 // 5 minutes
 
 	// NB: We could technically stage the binary on all nodes before
 	// restarting each one, but on Unix it's invalid to write to an
@@ -379,7 +379,7 @@ func RestartNodesWithNewBinary(
 		// TODO(yuzefovich): ideally, we would also check that the drain was
 		// successful since if it wasn't, then we might see flakes too.
 		if err := c.StopE(
-			ctx, l, option.NewStopOpts(option.Graceful(maxWait)), c.Node(node),
+			ctx, l, option.NewStopOpts(option.Graceful(gracePeriod)), c.Node(node),
 		); err != nil {
 			return err
 		}

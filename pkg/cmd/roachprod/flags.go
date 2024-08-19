@@ -68,10 +68,10 @@ var (
 	useTreeDist           = true
 	sig                   = 9
 	waitFlag              = false
-	maxWait               = 0
+	gracePeriod           = 0
 	deploySig             = 15
 	deployWaitFlag        = true
-	deployMaxWait         = 300
+	deployGracePeriod     = 300
 	pause                 = time.Duration(0)
 	createVMOpts          = vm.DefaultCreateOpts()
 	startOpts             = roachprod.DefaultStartOpts()
@@ -258,17 +258,17 @@ func initFlags() {
 		// See: https://github.com/spf13/cobra/issues/1398
 		sigPtr := &sig
 		waitPtr := &waitFlag
-		maxWaitPtr := &maxWait
+		gracePeriodPtr := &gracePeriod
 		// deployCmd is a special case, because it is used to stop processes in a
 		// rolling restart, and we want to drain the nodes by default.
 		if stopProcessesCmd == deployCmd {
 			sigPtr = &deploySig
 			waitPtr = &deployWaitFlag
-			maxWaitPtr = &deployMaxWait
+			gracePeriodPtr = &deployGracePeriod
 		}
 		stopProcessesCmd.Flags().IntVar(sigPtr, "sig", *sigPtr, "signal to pass to kill")
 		stopProcessesCmd.Flags().BoolVar(waitPtr, "wait", *waitPtr, "wait for processes to exit")
-		stopProcessesCmd.Flags().IntVar(maxWaitPtr, "max-wait", *maxWaitPtr, "approx number of seconds to wait for processes to exit")
+		stopProcessesCmd.Flags().IntVar(gracePeriodPtr, "grace-period", *gracePeriodPtr, "approx number of seconds to wait for processes to exit")
 	}
 	deployCmd.Flags().DurationVar(&pause, "pause", pause, "duration to pause between node restarts")
 
