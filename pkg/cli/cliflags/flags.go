@@ -843,6 +843,14 @@ This flag is optional. When omitted, the certificate is not scoped; i.e.
 it can be used with all tenants.`,
 	}
 
+	TenantScopeByNames = FlagInfo{
+		Name: "tenant-name-scope",
+		Description: `Assign a tenant scope using tenant names to the certificate.
+This will restrict the certificate to only be valid for the specified tenants.
+This flag is optional. When omitted, the certificate is not scoped; i.e.
+it can be used with all tenants.`,
+	}
+
 	GeneratePKCS8Key = FlagInfo{
 		Name:        "also-generate-pkcs8-key",
 		Description: `Also write the key in pkcs8 format to <certs-dir>/client.<username>.key.pk8.`,
