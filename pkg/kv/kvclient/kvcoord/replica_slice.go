@@ -17,20 +17,44 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ReplicaInfo extends the Replica structure with the associated node
 // Locality information.
 type ReplicaInfo struct {
 	roachpb.ReplicaDescriptor
-	Tiers []roachpb.Tier
+	Tiers           []roachpb.Tier
+	healthy         bool
+	tierMatchLength int
+	latency         time.Duration
 }
 
 // A ReplicaSlice is a slice of ReplicaInfo.
 type ReplicaSlice []ReplicaInfo
+
+func (rs ReplicaSlice) String() string {
+	return redact.StringWithoutMarkers(rs)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rs ReplicaSlice) SafeFormat(w redact.SafePrinter, _ rune) {
+	var buf redact.StringBuilder
+	buf.Print("[")
+	for i, r := range rs {
+		if i > 0 {
+			buf.Print(",")
+		}
+		buf.Printf("%v(health=%v match=%d latency=%v)",
+			r, r.healthy, r.tierMatchLength, humanizeutil.Duration(r.latency))
+	}
+	buf.Print("]")
+	w.Print(buf)
+}
 
 // ReplicaSliceFilter controls which kinds of replicas are to be included in
 // the slice for routing BatchRequests to.
@@ -223,6 +247,14 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 		return
 	}
 
+	for i := range rs {
+		if !FollowerReadsUnhealthy.Get(&st.SV) {
+			rs[i].healthy = healthFn(rs[i].NodeID)
+		}
+		rs[i].tierMatchLength = localityMatch(locality.Tiers, rs[i].Tiers)
+		rs[i].latency, _ = latencyFn(rs[i].NodeID)
+	}
+
 	// Sort replicas by latency and then attribute affinity.
 	sort.Slice(rs, func(i, j int) bool {
 		// Replicas on the same node have the same score.
@@ -234,10 +266,8 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 			// Sort healthy nodes before unhealthy nodes.
 			// NB: This is checked before checking if we are on the local node because
 			// if we are unhealthy, then we prefer to choose a different follower.
-			healthI := healthFn(rs[i].NodeID)
-			healthJ := healthFn(rs[j].NodeID)
-			if healthI != healthJ {
-				return healthI
+			if rs[i].healthy != rs[j].healthy {
+				return rs[i].healthy
 			}
 		}
 
@@ -250,17 +280,11 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 		}
 
 		if latencyFn != nil {
-			latencyI, okI := latencyFn(rs[i].NodeID)
-			latencyJ, okJ := latencyFn(rs[j].NodeID)
-			if okI && okJ {
-				return latencyI < latencyJ
-			}
+			return rs[i].latency < rs[j].latency
 		}
-		attrMatchI := localityMatch(locality.Tiers, rs[i].Tiers)
-		attrMatchJ := localityMatch(locality.Tiers, rs[j].Tiers)
 		// Longer locality matches sort first (the assumption is that
 		// they'll have better latencies).
-		return attrMatchI > attrMatchJ
+		return rs[i].tierMatchLength > rs[j].tierMatchLength
 	})
 }
 
