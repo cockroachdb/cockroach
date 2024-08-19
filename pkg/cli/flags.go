@@ -191,6 +191,41 @@ func (t tenantIDSetter) Set(v string) error {
 	return nil
 }
 
+// tenantNameSetter wraps a list of roachpb.TenantNames and enables setting
+// them via a command-line flag.
+type tenantNameSetter struct {
+	tenantNames *[]roachpb.TenantName
+}
+
+// String implements the pflag.Value interface.
+func (t tenantNameSetter) String() string {
+	var tenantString strings.Builder
+	separator := ""
+	for _, tName := range *t.tenantNames {
+		tenantString.WriteString(separator)
+		tenantString.WriteString(string(tName))
+		separator = ","
+	}
+	return tenantString.String()
+}
+
+// Type implements the pflag.Value interface.
+func (t tenantNameSetter) Type() string { return "<[]TenantName>" }
+
+// Set implements the pflag.Value interface.
+func (t tenantNameSetter) Set(v string) error {
+	*t.tenantNames = []roachpb.TenantName{}
+	tenantScopes := strings.Split(v, "," /* separator */)
+	for _, tenantScope := range tenantScopes {
+		tenant := roachpb.TenantName(tenantScope)
+		if err := tenant.IsValid(); err != nil {
+			return err
+		}
+		*t.tenantNames = append(*t.tenantNames, roachpb.TenantName(tenantScope))
+	}
+	return nil
+}
+
 // Set implements the pflag.Value interface.
 func (a clusterNameSetter) Set(v string) error {
 	if v == "" {
@@ -617,6 +652,7 @@ func init() {
 
 		if cmd == createClientCertCmd {
 			cliflagcfg.VarFlag(f, &tenantIDSetter{tenantIDs: &certCtx.tenantScope}, cliflags.TenantScope)
+			cliflagcfg.VarFlag(f, &tenantNameSetter{tenantNames: &certCtx.tenantNameScope}, cliflags.TenantScopeByNames)
 
 			// PKCS8 key format is only available for the client cert command.
 			cliflagcfg.BoolFlag(f, &certCtx.generatePKCS8Key, cliflags.GeneratePKCS8Key)

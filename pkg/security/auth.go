@@ -97,8 +97,9 @@ func UnsetNodeSubject() {
 // GetCertificateUserScope function expands a cert into a set of "scopes" with
 // each possible username (and tenant ID).
 type CertificateUserScope struct {
-	Username string
-	TenantID roachpb.TenantID
+	Username   string
+	TenantID   roachpb.TenantID
+	TenantName roachpb.TenantName
 	// global is set to true to indicate that the certificate unscoped to
 	// any tenant is a global client certificate which can authenticate
 	// on any tenant. This is ONLY for backward compatibility with old
@@ -212,15 +213,26 @@ func GetCertificateUserScope(
 	peerCert *x509.Certificate,
 ) (userScopes []CertificateUserScope, _ error) {
 	for _, uri := range peerCert.URIs {
-		uriString := uri.String()
-		if URISANHasCRDBPrefix(uriString) {
-			tenantID, user, err := ParseTenantURISAN(uriString)
-			if err != nil {
-				return nil, err
-			}
-			scope := CertificateUserScope{
-				Username: user,
-				TenantID: tenantID,
+		if isCRDBSANURI(uri) {
+			var scope CertificateUserScope
+			if isTenantNameSANURI(uri) {
+				tenantName, user, err := parseTenantNameURISAN(uri)
+				if err != nil {
+					return nil, err
+				}
+				scope = CertificateUserScope{
+					Username:   user,
+					TenantName: tenantName,
+				}
+			} else {
+				tenantID, user, err := parseTenantURISAN(uri)
+				if err != nil {
+					return nil, err
+				}
+				scope = CertificateUserScope{
+					Username: user,
+					TenantID: tenantID,
+				}
 			}
 			userScopes = append(userScopes, scope)
 		}
