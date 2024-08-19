@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/ttycolor"
 	"github.com/codahale/hdrhistogram"
@@ -339,7 +340,7 @@ type kvBenchResult struct {
 // TODO(aayush): The result related logic below is similar to `workload/tpcc/result.go`,
 // so this could definitely be cleaner and better abstracted.
 func newResultFromSnapshots(
-	maxrate int, snapshots map[string][]histogram.SnapshotTick,
+	maxrate int, snapshots map[string][]exporter.SnapshotTick,
 ) *kvBenchResult {
 	var start, end time.Time
 	ret := make(map[string]*hdrhistogram.Histogram, len(snapshots))
