@@ -66,13 +66,7 @@ type asyncProcessorRouter struct {
 	}
 }
 
-// typedEvent is a tuple containing an EventType and event.
-// It's the type that asyncProcessorBuffer operates on. The
-// type information is used for processor routing.
-type typedEvent struct {
-	eventType log.EventType
-	event     any
-}
+var _ ProcessorRouter = &asyncProcessorRouter{}
 
 func newAsyncProcessorRouter(
 	maxStaleness time.Duration, triggerLen int, maxLen int,
@@ -98,6 +92,14 @@ func newAsyncProcessorRouter(
 	return apr
 }
 
+func (bs *asyncProcessorRouter) isEventTypeRegistered(eventType log.EventType) bool {
+	bs.rwmu.RLock()
+	defer bs.rwmu.RUnlock()
+
+	_, ok := bs.rwmu.routes[eventType]
+	return ok
+}
+
 // Register registers a new processor for events of the given type.
 func (bs *asyncProcessorRouter) register(eventType log.EventType, p Processor) {
 	bs.rwmu.Lock()
@@ -120,6 +122,10 @@ func (bs *asyncProcessorRouter) Start(ctx context.Context, stopper *stop.Stopper
 // Process buffers the provided event, eventually flushing it to any
 // underlying register Processor instances for processing, based on its event type.
 func (bs *asyncProcessorRouter) Process(ctx context.Context, e *typedEvent) error {
+	if ok := bs.isEventTypeRegistered(e.eventType); !ok {
+		return nil
+	}
+
 	bs.mu.Lock()
 	defer bs.mu.Unlock()
 	err := bs.mu.buf.appendEvent(e)

@@ -1947,6 +1947,7 @@ GO_TARGETS = [
     "//pkg/sql/lexbase/allkeywords:allkeywords_lib",
     "//pkg/sql/lexbase:lexbase",
     "//pkg/sql/lexbase:lexbase_test",
+    "//pkg/sql/logging:logging",
     "//pkg/sql/logictest/logictestbase:logictestbase",
     "//pkg/sql/logictest/logictestbase:logictestbase_test",
     "//pkg/sql/logictest/tests/5node-disk:5node-disk_test",

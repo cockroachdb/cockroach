@@ -99,6 +99,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob"    // register jobs declared outside of pkg/sql
 	_ "github.com/cockroachdb/cockroach/pkg/sql/importer" // register jobs/planHooks declared outside of pkg/sql
+	"github.com/cockroachdb/cockroach/pkg/sql/logging"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
@@ -115,6 +116,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -1326,7 +1328,32 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		inspectzServer:            inspectzServer,
 	}
 
+	seProcessor := logging.NewStructuredEventProcessor(sqlServer.execCfg, stopper)
+	registerStructuredEvents(ctx, seProcessor)
 	return lateBoundServer, err
+}
+
+func registerStructuredEvents(ctx context.Context, seProcessor logging.StructuredEventProcessor) {
+	seProcessor.RegisterEventType(ctx, &eventpb.NodeJoin{})
+	seProcessor.RegisterEventType(ctx, &eventpb.NodeRestart{})
+	seProcessor.RegisterEventType(ctx, &eventpb.DropDatabase{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CreateDatabase{})
+	seProcessor.RegisterEventType(ctx, &eventpb.DropTable{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CreateTable{})
+	seProcessor.RegisterEventType(ctx, &eventpb.SetClusterSetting{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CreateTable{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CreateTable{})
+
+	seProcessor.RegisterEventType(ctx, &eventpb.FinishSchemaChange{})
+	seProcessor.RegisterEventType(ctx, &eventpb.DropView{})
+	seProcessor.RegisterEventType(ctx, &eventpb.CreateRole{})
+	seProcessor.RegisterEventType(ctx, &eventpb.DropRole{})
+	seProcessor.RegisterEventType(ctx, &eventpb.AlterRole{})
+
+	seProcessor.RegisterEventType(ctx, &eventpb.FinishSchemaChange{})
+	seProcessor.RegisterEventType(ctx, &eventpb.ReverseSchemaChange{})
+	seProcessor.RegisterEventType(ctx, &eventpb.FinishSchemaChangeRollback{})
+
 }
 
 // newClockFromConfig creates a HLC clock from the server configuration.

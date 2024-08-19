@@ -25,13 +25,27 @@ import (
 // of the logstream package.
 var controller = newStreamController()
 
+type ProcessorRouter interface {
+	Start(ctx context.Context, stopper *stop.Stopper) error
+	Process(ctx context.Context, e *typedEvent) error
+	register(eventType log.EventType, p Processor)
+}
+
+// typedEvent is a tuple containing an EventType and event.
+// It's the type that asyncProcessorBuffer operates on. The
+// type information is used for processor routing.
+type typedEvent struct {
+	eventType log.EventType
+	event     any
+}
+
 // streamController provides the primary functionality of the logstream package, which is built
 // to route structured events logged via log.Structured to one or more processors, registered via
 // RegisterProcessor. This is done using tenant separation.
 type streamController struct {
 	rmu struct {
 		syncutil.RWMutex
-		tenantRouters map[roachpb.TenantID]*asyncProcessorRouter
+		tenantRouters map[roachpb.TenantID]ProcessorRouter
 	}
 }
 
@@ -39,7 +53,7 @@ var _ log.StructuredLogProcessor = (*streamController)(nil)
 
 func newStreamController() *streamController {
 	sc := &streamController{}
-	sc.rmu.tenantRouters = make(map[roachpb.TenantID]*asyncProcessorRouter)
+	sc.rmu.tenantRouters = make(map[roachpb.TenantID]ProcessorRouter)
 	return sc
 }
 
@@ -85,11 +99,13 @@ func RegisterProcessor(
 	tenantRouter, ok := controller.rmu.tenantRouters[tID]
 	if !ok {
 		// TODO(abarganier): config knobs around flush trigger criteria.
-		tenantRouter = newAsyncProcessorRouter(
-			10*time.Second,
-			100,  /* triggerLen */
-			1000, /* maxLen */
-		)
+		tenantRouter =
+			//newSyncProcessorRouter()
+			newAsyncProcessorRouter(
+				500*time.Millisecond,
+				1,   /* triggerLen */
+				100, /* maxLen */
+			)
 		controller.rmu.tenantRouters[tID] = tenantRouter
 		if err := tenantRouter.Start(ctx, stopper); err != nil {
 			panic(errors.AssertionFailedf(

@@ -120,8 +120,9 @@ func assertProcessorRegistered(
 	controller.rmu.Lock()
 	defer controller.rmu.Unlock()
 	require.NotZero(t, len(controller.rmu.tenantRouters))
-	processor, ok := controller.rmu.tenantRouters[tID]
+	processorRouter, ok := controller.rmu.tenantRouters[tID]
 	require.True(t, ok)
+	processor := processorRouter.(*asyncProcessorRouter)
 	processor.rwmu.Lock()
 	defer processor.rwmu.Unlock()
 	routes, ok := processor.rwmu.routes[eventType]

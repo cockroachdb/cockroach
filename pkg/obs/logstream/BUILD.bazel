@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "async_processor_router.go",
         "logstream.go",
+        "sync_processor_router.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/obs/logstream",
     visibility = ["//visibility:public"],
