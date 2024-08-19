@@ -1555,6 +1555,7 @@ var familyNames = map[Family]redact.SafeString{
 	UuidFamily:           "uuid",
 	VoidFamily:           "void",
 	EncodedKeyFamily:     "encodedkey",
+	RangeFamily:          "range",
 }
 
 // Name returns a user-friendly word indicating the family type.

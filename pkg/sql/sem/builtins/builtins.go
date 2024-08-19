@@ -3944,12 +3944,40 @@ value if you rely on the HLC for accuracy.`,
 	"int8range": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryDateAndTime},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "startbound", Typ: types.Int}, {Name: "endbound", Typ: types.Int}},
+			Types:      tree.ParamTypes{{Name: "start_bound", Typ: types.Int}, {Name: "end_bound", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int8Range),
 			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				startBound := tree.MustBeDInt(args[0])
 				endBound := tree.MustBeDInt(args[1])
 				return tree.NewDInt8Range(startBound, endBound, tree.RangeBoundClose, tree.RangeBoundOpen), nil
+			},
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "start_bound", Typ: types.Int}, {Name: "end_bound", Typ: types.Int}, {Name: "bound_fmt", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int8Range),
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				startBound := tree.MustBeDInt(args[0])
+				endBound := tree.MustBeDInt(args[1])
+				boundFmt := tree.MustBeDString(args[2])
+				var startBoundTyp, endBoundTyp tree.RangeBoundType
+				boundFmtStr := tree.AsStringWithFlags(&boundFmt, tree.FmtBareStrings)
+				switch boundFmtStr {
+				case tree.CloseOpenBoundsFmt:
+					startBoundTyp = tree.RangeBoundClose
+					endBoundTyp = tree.RangeBoundOpen
+				case tree.OpenOpenBoundsFmt:
+					startBoundTyp = tree.RangeBoundClose
+					endBoundTyp = tree.RangeBoundOpen
+				case tree.CloseCloseBoundsFmt:
+					startBoundTyp = tree.RangeBoundClose
+					endBoundTyp = tree.RangeBoundOpen
+				case tree.OpenCloseBoundsFmt:
+					startBoundTyp = tree.RangeBoundClose
+					endBoundTyp = tree.RangeBoundOpen
+				default:
+					return nil, errors.AssertionFailedf("unknown bound format for range: %s", boundFmt.String())
+				}
+				return tree.NewDInt8Range(startBound, endBound, startBoundTyp, endBoundTyp), nil
 			},
 		},
 	),

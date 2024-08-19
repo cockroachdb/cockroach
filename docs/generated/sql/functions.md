@@ -680,6 +680,8 @@ return a result that is less likely the closest replica. It is otherwise
 hardcoded as -4.8s from the statement time, which may not result in reading from the
 nearest replica.</p>
 </span></td><td>Volatile</td></tr>
+<tr><td><a name="int8range"></a><code>int8range(start_bound: <a href="int.html">int</a>, end_bound: <a href="int.html">int</a>) &rarr; range</code></td><td></td><td>Invalid</td></tr>
+<tr><td><a name="int8range"></a><code>int8range(start_bound: <a href="int.html">int</a>, end_bound: <a href="int.html">int</a>, bound_fmt: <a href="string.html">string</a>) &rarr; range</code></td><td></td><td>Invalid</td></tr>
 <tr><td><a name="localtimestamp"></a><code>localtimestamp() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts
 and which stays constant throughout the transaction. This timestamp

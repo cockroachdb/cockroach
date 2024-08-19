@@ -412,6 +412,9 @@ enum Family {
     //   Oid      : T_trigger
     TriggerFamily = 33;
 
+    // RangeFamily is a type family for range types.
+    RangeFamily = 34;
+
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an

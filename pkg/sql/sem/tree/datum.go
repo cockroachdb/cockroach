@@ -2035,13 +2035,7 @@ func (D DInt8Range) TypeCheck(
 }
 
 func (D DInt8Range) ResolvedType() *types.T {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (D DInt8Range) Eval(ctx context.Context, evaluator ExprEvaluator) (Datum, error) {
-	//TODO implement me
-	panic("implement me")
+	return types.Int8Range
 }
 
 func (D DInt8Range) AmbiguousFormat() bool {
@@ -2102,6 +2096,13 @@ const (
 	// TODO(janexing): should integrate with existing inf?
 	RangeBoundInf
 	RangeBoundNegInf
+)
+
+const (
+	CloseOpenBoundsFmt  = `[)`
+	OpenOpenBoundsFmt   = `()`
+	CloseCloseBoundsFmt = `[]`
+	OpenCloseBoundsFmt  = `(]`
 )
 
 func NewDInt8Range(

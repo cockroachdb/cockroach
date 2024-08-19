@@ -198,6 +198,11 @@ func (node *DInt) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 }
 
 // Eval is part of the TypedExpr interface.
+func (node *DInt8Range) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return node, nil
+}
+
+// Eval is part of the TypedExpr interface.
 func (node *DInterval) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
