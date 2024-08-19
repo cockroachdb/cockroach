@@ -224,13 +224,13 @@ func NoBackupSchedule(opts interface{}) {
 }
 
 // Graceful performs a graceful stop of the cockroach process.
-func Graceful(maxWaitSeconds int) func(interface{}) {
+func Graceful(gracePeriodSeconds int) func(interface{}) {
 	return func(opts interface{}) {
 		switch opts := opts.(type) {
 		case *StopOpts:
 			opts.RoachprodOpts.Sig = 15 // SIGTERM
 			opts.RoachprodOpts.Wait = true
-			opts.RoachprodOpts.MaxWait = maxWaitSeconds
+			opts.RoachprodOpts.GracePeriod = gracePeriodSeconds
 		}
 	}
 }
