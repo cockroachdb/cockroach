@@ -13,6 +13,7 @@ go_library(
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/raft/raftpb",
+        "//pkg/raft/tracker",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
@@ -28,6 +29,7 @@ go_test(
     name = "rac2_test",
     srcs = [
         "priority_test.go",
+        "range_controller_test.go",
         "token_counter_test.go",
     ],
     data = glob(["testdata/**"]),
@@ -35,6 +37,8 @@ go_test(
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/raft/raftpb",
+        "//pkg/raft/tracker",
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/leaktest",

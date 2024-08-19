@@ -47,6 +47,8 @@ type TokenCounter interface {
 	Deduct(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
 	// Return returns flow tokens for the given work class.
 	Return(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
+	// String returns a string representation of the token counter.
+	String() string
 }
 
 // TokenWaitingHandle is the interface for waiting for positive tokens from a
@@ -203,6 +205,20 @@ func newTokenCounter(settings *cluster.Settings) *tokenCounter {
 	kvflowcontrol.RegularTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
 	kvflowcontrol.ElasticTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
 	return t
+}
+
+func (b *tokenCounter) String() string {
+	return redact.StringWithoutMarkers(b)
+}
+
+func (b *tokenCounter) SafeFormat(w redact.SafePrinter, _ rune) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	w.Printf("reg=%v/%v ela=%v/%v",
+		b.mu.counters[admissionpb.RegularWorkClass].tokens,
+		b.mu.counters[admissionpb.RegularWorkClass].limit,
+		b.mu.counters[admissionpb.ElasticWorkClass].tokens,
+		b.mu.counters[admissionpb.ElasticWorkClass].limit)
 }
 
 func (t *tokenCounter) tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {

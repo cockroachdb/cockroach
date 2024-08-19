@@ -1,0 +1,34 @@
+init
+range_id=1 tenant_id=1 local_replica_id=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate
+----
+
+wait_for_eval name=a range_id=1 pri=HighPri
+----
+a: waiting
+
+check_state
+----
+a: waiting
+
+adjust_tokens wc=elastic s1=+16MiB s2=+16MiB
+----
+s1: elastic=16MiB/16MiB regular=0/16MiB
+s2: elastic=16MiB/16MiB regular=0/16MiB
+s3: elastic=0/16MiB regular=0/16MiB
+
+cancel_context name=a
+----
+a=context_cancelled
+
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate
+----
+
+set_leaseholder range_id=1 replica_id=1
+----
