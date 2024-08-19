@@ -98,6 +98,19 @@ export const warningIcon: string = `<svg width="21px" height="21px" viewBox="0 0
     </g>
 </svg>`;
 
+export const informationIcon = `
+<svg width="24" height="24" viewBox="0 0 24 24" fill="" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_11029_22094)">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M0 12C0 5.37261 5.39028 0 12 0C18.6274 0 24 5.37261 24 12C24 18.6274 18.6274 24 12 24C5.37261 24 0 18.6274 0 12ZM11.1163 18.7865H12.8836V9.52586H11.1163V18.7865ZM11.1163 7.68786H12.8836V5.21364H11.1163V7.68786Z" fill="#394455"/>
+</g>
+<defs>
+<clipPath id="clip0_11029_22094">
+<rect width="24" height="24" fill="white" transform="matrix(1 0 0 -1 0 24)"/>
+</clipPath>
+</defs>
+</svg>
+`
+
 export const notificationIcon: string = `
   <svg width="22px" height="22px" viewBox="0 0 38 38" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
     <!-- Generator: Sketch 3.3.3 (12081) - http://www.bohemiancoding.com/sketch -->
