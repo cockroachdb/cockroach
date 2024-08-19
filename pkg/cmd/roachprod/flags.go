@@ -268,7 +268,7 @@ func initFlags() {
 		}
 		stopProcessesCmd.Flags().IntVar(sigPtr, "sig", *sigPtr, "signal to pass to kill")
 		stopProcessesCmd.Flags().BoolVar(waitPtr, "wait", *waitPtr, "wait for processes to exit")
-		stopProcessesCmd.Flags().IntVar(gracePeriodPtr, "grace-period", *gracePeriodPtr, "approx number of seconds to wait for processes to exit")
+		stopProcessesCmd.Flags().IntVar(gracePeriodPtr, "grace-period", *gracePeriodPtr, "approx number of seconds to wait for processes to exit, before a forceful shutdown (SIGKILL) is performed")
 	}
 	deployCmd.Flags().DurationVar(&pause, "pause", pause, "duration to pause between node restarts")
 
