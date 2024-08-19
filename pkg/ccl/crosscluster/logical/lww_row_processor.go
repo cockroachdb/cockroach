@@ -299,10 +299,16 @@ func (srp *sqlRowProcessor) ProcessRow(
 	}
 	srp.lastRow = row
 
+	return srp.processParsedRow(ctx, txn, row, kv.Key, prevValue)
+}
+
+func (srp *sqlRowProcessor) processParsedRow(
+	ctx context.Context, txn isql.Txn, row cdcevent.Row, key roachpb.Key, prevValue roachpb.Value,
+) (batchStats, error) {
 	var parsedBeforeRow *cdcevent.Row
 	if srp.querier.RequiresParsedBeforeRow() {
 		before, err := srp.decoder.DecodeKV(ctx, roachpb.KeyValue{
-			Key:   kv.Key,
+			Key:   key,
 			Value: prevValue,
 		}, cdcevent.PrevRow, prevValue.Timestamp, false)
 		if err != nil {
@@ -311,13 +317,10 @@ func (srp *sqlRowProcessor) ProcessRow(
 		parsedBeforeRow = &before
 	}
 
-	var stats batchStats
 	if row.IsDeleted() {
-		stats, err = srp.querier.DeleteRow(ctx, txn, srp.ie, row, parsedBeforeRow)
-	} else {
-		stats, err = srp.querier.InsertRow(ctx, txn, srp.ie, row, parsedBeforeRow, prevValue.RawBytes == nil)
+		return srp.querier.DeleteRow(ctx, txn, srp.ie, row, parsedBeforeRow)
 	}
-	return stats, err
+	return srp.querier.InsertRow(ctx, txn, srp.ie, row, parsedBeforeRow, prevValue.RawBytes == nil)
 }
 
 func (srp *sqlRowProcessor) GetLastRow() cdcevent.Row {

@@ -42,6 +42,7 @@ type kvRowProcessor struct {
 	dstBySrc map[descpb.ID]descpb.ID
 	writers  map[descpb.ID]*kvTableWriter
 
+	fallback *sqlRowProcessor
 	failureInjector
 }
 
@@ -52,6 +53,7 @@ func newKVRowProcessor(
 	cfg *execinfra.ServerConfig,
 	evalCtx *eval.Context,
 	srcTablesByDestID map[descpb.ID]sqlProcessorTableConfig,
+	fallback *sqlRowProcessor,
 ) (*kvRowProcessor, error) {
 	cdcEventTargets := changefeedbase.Targets{}
 	srcTablesBySrcID := make(map[descpb.ID]catalog.TableDescriptor, len(srcTablesByDestID))
@@ -82,6 +84,7 @@ func newKVRowProcessor(
 		writers:  make(map[descpb.ID]*kvTableWriter, len(srcTablesByDestID)),
 		decoder:  cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false),
 		alloc:    &tree.DatumAlloc{},
+		fallback: fallback,
 	}
 	return p, nil
 }
@@ -109,7 +112,11 @@ func (p *kvRowProcessor) ProcessRow(
 	p.lastRow = row
 
 	if err := p.processParsedRow(ctx, txn, row, keyValue, prevValue); err != nil {
-		return batchStats{}, err
+		stats, err := p.fallback.processParsedRow(ctx, txn, row, keyValue.Key, prevValue)
+		if err == nil {
+			stats.kvWriteFailures += 1
+		}
+		return stats, err
 	}
 	return batchStats{}, nil
 
