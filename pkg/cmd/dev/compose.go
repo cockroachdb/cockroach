@@ -110,6 +110,7 @@ func (d *dev) compose(cmd *cobra.Command, _ []string) error {
 	args = append(args, "--test_output", "all")
 	args = append(args, "--test_env", "COCKROACH_DEV_LICENSE")
 	args = append(args, "--test_env", "COCKROACH_RUN_COMPOSE=true")
+	args = append(args, "--sandbox_add_mount_pair", os.TempDir())
 
 	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
