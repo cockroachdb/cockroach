@@ -2066,12 +2066,44 @@ func (d *DInt8Range) AmbiguousFormat() bool {
 	return true
 }
 
+func (d *DInt8Range) HasIntersection(
+	ctx context.Context, cmpCtx CompareContext, other Datum,
+) (bool, error) {
+	if other == DNull || (d.StartBound.Typ == RangeBoundNegInf && d.EndBound.Typ == RangeBoundInf) {
+		return false, nil
+	}
+
+	otherRange, ok := cmpCtx.UnwrapDatum(ctx, other).(*DInt8Range)
+	if !ok {
+		return false, makeUnsupportedComparisonMessage(d, other)
+	}
+
+	esRes, err := CompareEndBndWithStartBnd(ctx, cmpCtx, d.EndBound, otherRange.StartBound)
+	if err != nil {
+		return false, err
+	}
+
+	if esRes == -1 {
+		return false, err
+	}
+
+	esRes, err = CompareEndBndWithStartBnd(ctx, cmpCtx, otherRange.EndBound, d.StartBound)
+	if err != nil {
+		return false, err
+	}
+
+	if esRes == -1 {
+		return false, err
+	}
+
+	return true, nil
+}
+
 // Compare returns -1 if the receiver is less than other, 0 if receiver is
 // equal to other and +1 if receiver is greater than 'other'. Compare is safe
 // to use with a nil eval.Context and results in default behavior, except for
 // when comparing tree.Placeholder datums.
 func (d *DInt8Range) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
-	//TODO implement me
 	panic("implement me")
 }
 
@@ -2116,6 +2148,41 @@ type RangeBound struct {
 }
 
 type RangeBoundType int
+
+// -1: eb < sb (including -inf vs -inf, inf vs inf)
+// 0: eb = sb, they intersect at the boundary.
+// 1: eb > sb (including inf vs inf)
+func CompareEndBndWithStartBnd(
+	ctx context.Context, cmpCtx CompareContext, eb RangeBound, sb RangeBound,
+) (int, error) {
+	if eb.Typ == RangeBoundNegInf || sb.Typ == RangeBoundInf {
+		return -1, nil
+	}
+
+	if eb.Typ == RangeBoundClose && sb.Typ == RangeBoundClose && eb.Val == sb.Val {
+		return 0, nil
+	}
+
+	if eb.Typ == RangeBoundClose && sb.Typ == RangeBoundOpen ||
+		eb.Typ == RangeBoundOpen && sb.Typ == RangeBoundClose {
+		prevEb, ok := eb.Val.Prev(ctx, cmpCtx)
+		if !ok {
+			return 0, errors.AssertionFailedf("failed to get the prev for end bound")
+		}
+		return prevEb.Compare(ctx, cmpCtx, sb.Val)
+	}
+
+	compRes, err := eb.Val.Compare(ctx, cmpCtx, sb.Val)
+	if err != nil {
+		return 0, err
+	}
+
+	if compRes == 0 && eb.Typ == RangeBoundOpen && sb.Typ == RangeBoundOpen {
+		return -1, nil
+	}
+
+	return compRes, nil
+}
 
 const (
 	RangeBoundOpen RangeBoundType = iota
