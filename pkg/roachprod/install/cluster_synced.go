@@ -1151,6 +1151,7 @@ type RunCmdOptions struct {
 	stdin                   io.Reader
 	stdout, stderr          io.Writer
 	remoteOptions           []remoteSessionOption
+	expanderConfig          ExpanderConfig
 }
 
 // Default RunCmdOptions enable combining output (stdout and stderr) and capturing ssh (verbose) debug output.
@@ -1187,7 +1188,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	var noResult RunResultDetails
 	// Argument template expansion is node specific (e.g. for {store-dir}).
 	e := expander{node: node}
-	expandedCmd, err := e.expand(ctx, l, c, cmd)
+	expandedCmd, err := e.expand(ctx, l, c, opts.expanderConfig, cmd)
 	if err != nil {
 		return &noResult, errors.WithDetailf(err, "error expanding command: %s", cmd)
 	}
@@ -1295,6 +1296,7 @@ func (c *SyncedCluster) Run(
 			includeRoachprodEnvVars: true,
 			stdout:                  stdout,
 			stderr:                  stderr,
+			expanderConfig:          options.ExpanderConfig,
 		}
 		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 		return result, err
@@ -2084,6 +2086,10 @@ func (c *SyncedCluster) Put(
 	var wg sync.WaitGroup
 	wg.Add(len(nodes))
 
+	// We currently don't accept any custom expander configurations in
+	// this function.
+	var expanderConfig ExpanderConfig
+
 	// Each destination for the copy needs a source to copy from. We create a
 	// channel that has capacity for each destination. If we try to add a source
 	// and the channel is full we can simply drop that source as we know we won't
@@ -2116,7 +2122,7 @@ func (c *SyncedCluster) Put(
 		e := expander{
 			node: nodes[i],
 		}
-		dest, err := e.expand(ctx, l, c, dest)
+		dest, err := e.expand(ctx, l, c, expanderConfig, dest)
 		if err != nil {
 			return "", err
 		}
@@ -2139,7 +2145,7 @@ func (c *SyncedCluster) Put(
 					node: nodes[i],
 				}
 				var err error
-				dest, err = e.expand(ctx, l, c, dest)
+				dest, err = e.expand(ctx, l, c, expanderConfig, dest)
 				if err != nil {
 					results <- result{i, err}
 					return
@@ -2429,6 +2435,10 @@ func (c *SyncedCluster) Get(
 		spinner.TaskStatus(nodeID, fmt.Sprintf("  %2d: %s", nodeID, msg), done)
 	}
 
+	// We currently don't accept any custom expander configurations in
+	// this function.
+	var expanderConfig ExpanderConfig
+
 	var wg sync.WaitGroup
 	for i := range nodes {
 		nodeTaskStatus(nodes[i], "copying", false)
@@ -2447,7 +2457,7 @@ func (c *SyncedCluster) Get(
 			e := expander{
 				node: nodes[i],
 			}
-			src, err := e.expand(ctx, l, c, src)
+			src, err := e.expand(ctx, l, c, expanderConfig, src)
 			if err != nil {
 				results <- result{i, err}
 				return
@@ -2682,8 +2692,11 @@ func (c *SyncedCluster) SSH(ctx context.Context, l *logger.Logger, sshArgs, args
 		node: targetNode,
 	}
 	var expandedArgs []string
+	// We currently don't accept any custom expander configurations in
+	// this function.
+	var expanderConfig ExpanderConfig
 	for _, arg := range args {
-		expandedArg, err := e.expand(ctx, l, c, arg)
+		expandedArg, err := e.expand(ctx, l, c, expanderConfig, arg)
 		if err != nil {
 			return err
 		}

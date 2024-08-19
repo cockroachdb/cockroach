@@ -57,6 +57,10 @@ type Cluster interface {
 	// used by builds with runtime assertions enabled.
 	SetRandomSeed(seed int64)
 
+	// SetDefaultVirtualCluster changes the virtual cluster tests
+	// connect to by default.
+	SetDefaultVirtualCluster(string)
+
 	// Starting and stopping CockroachDB.
 
 	StartE(ctx context.Context, l *logger.Logger, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option) error

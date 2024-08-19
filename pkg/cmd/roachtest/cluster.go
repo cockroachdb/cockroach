@@ -665,6 +665,10 @@ type clusterImpl struct {
 		seed *int64
 	}
 
+	// defaultVirtualCluster, when set, changes the default virtual
+	// cluster tests connect to by default.
+	defaultVirtualCluster string
+
 	// destroyState contains state related to the cluster's destruction.
 	destroyState destroyState
 
@@ -2285,6 +2289,10 @@ func (c *clusterImpl) RefetchCertsFromNode(ctx context.Context, node int) error 
 	})
 }
 
+func (c *clusterImpl) SetDefaultVirtualCluster(name string) {
+	c.defaultVirtualCluster = name
+}
+
 // SetRandomSeed sets the random seed to be used by the cluster. If
 // not called, clusters generate a random seed from the global
 // generator in the `rand` package. This function must be called
@@ -2458,9 +2466,12 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 		c.f.L().Printf("details in %s.log", logFile)
 	}
 	l.Printf("> %s", cmd)
+	expanderCfg := install.ExpanderConfig{
+		DefaultVirtualCluster: c.defaultVirtualCluster,
+	}
 	if err := roachprod.Run(
 		ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(),
-		l.Stdout, l.Stderr, args, options,
+		l.Stdout, l.Stderr, args, options.WithExpanderConfig(expanderCfg),
 	); err != nil {
 		if err := ctx.Err(); err != nil {
 			l.Printf("(note: incoming context was canceled: %s)", err)
@@ -2631,6 +2642,7 @@ func (c *clusterImpl) pgURLErr(
 	if opts.External {
 		certsDir = c.localCertsDir
 	}
+	opts.VirtualClusterName = c.virtualCluster(opts.VirtualClusterName)
 	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(nodes), certsDir, opts)
 	if err != nil {
 		return nil, err
@@ -2722,7 +2734,9 @@ func (c *clusterImpl) SQLPorts(
 	tenant string,
 	sqlInstance int,
 ) ([]int, error) {
-	return roachprod.SQLPorts(ctx, l, c.MakeNodes(nodes), c.IsSecure(), tenant, sqlInstance)
+	return roachprod.SQLPorts(
+		ctx, l, c.MakeNodes(nodes), c.IsSecure(), c.virtualCluster(tenant), sqlInstance,
+	)
 }
 
 func (c *clusterImpl) AdminUIPorts(
@@ -2732,7 +2746,22 @@ func (c *clusterImpl) AdminUIPorts(
 	tenant string,
 	sqlInstance int,
 ) ([]int, error) {
-	return roachprod.AdminPorts(ctx, l, c.MakeNodes(nodes), c.IsSecure(), tenant, sqlInstance)
+	return roachprod.AdminPorts(
+		ctx, l, c.MakeNodes(nodes), c.IsSecure(), c.virtualCluster(tenant), sqlInstance,
+	)
+}
+
+// virtualCluster returns the name of the virtual cluster that we
+// should use when the requested `tenant` name was passed by the
+// user. When a specific virtual cluster was required, we use
+// it. Otherwise, we fallback to the cluster's default virtual
+// cluster, if any.
+func (c *clusterImpl) virtualCluster(name string) string {
+	if name != "" {
+		return name
+	}
+
+	return c.defaultVirtualCluster
 }
 
 func (c *clusterImpl) adminUIAddr(
