@@ -25,6 +25,7 @@ on:
       - "!staging-v23.2*"
   push:
     branches:
+      - "gh-readonly-queue/*"
       - "master"
       - "release-*"
       - "staging-*"
