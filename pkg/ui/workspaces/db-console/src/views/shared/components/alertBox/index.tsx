@@ -16,6 +16,7 @@ import {
   warningIcon,
   notificationIcon,
   criticalIcon,
+  informationIcon,
 } from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
 
@@ -27,6 +28,8 @@ function alertIcon(level: AlertLevel) {
       return trustIcon(criticalIcon);
     case AlertLevel.WARNING:
       return trustIcon(warningIcon);
+    case AlertLevel.INFORMATION:
+      return trustIcon(informationIcon);
     default:
       return trustIcon(notificationIcon);
   }
@@ -49,7 +52,7 @@ export class AlertBox extends React.Component<AlertBoxProps, {}> {
 
     const learnMore = this.props.link && (
       <a className="" href={this.props.link}>
-        Learn More.
+        Learn More
       </a>
     );
     content = (
