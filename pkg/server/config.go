@@ -482,7 +482,8 @@ func (kvCfg *KVConfig) SetDefaults() {
 // setting up a SQL server.
 type SQLConfig struct {
 	// The tenant that the SQL server runs on the behalf of.
-	TenantID roachpb.TenantID
+	TenantID   roachpb.TenantID
+	TenantName roachpb.TenantName
 
 	// If set, will to be called at server startup to obtain the tenant id and
 	// locality.
@@ -547,9 +548,12 @@ type LocalKVServerInfo struct {
 }
 
 // MakeSQLConfig returns a SQLConfig with default values.
-func MakeSQLConfig(tenID roachpb.TenantID, tempStorageCfg base.TempStorageConfig) SQLConfig {
+func MakeSQLConfig(
+	tenID roachpb.TenantID, tenName roachpb.TenantName, tempStorageCfg base.TempStorageConfig,
+) SQLConfig {
 	sqlCfg := SQLConfig{
-		TenantID: tenID,
+		TenantID:   tenID,
+		TenantName: tenName,
 	}
 	sqlCfg.SetDefaults(tempStorageCfg)
 	return sqlCfg
@@ -559,7 +563,8 @@ func MakeSQLConfig(tenID roachpb.TenantID, tempStorageCfg base.TempStorageConfig
 // multiple times.
 func (sqlCfg *SQLConfig) SetDefaults(tempStorageCfg base.TempStorageConfig) {
 	tenID := sqlCfg.TenantID
-	*sqlCfg = SQLConfig{TenantID: tenID}
+	tenName := sqlCfg.TenantName
+	*sqlCfg = SQLConfig{TenantID: tenID, TenantName: tenName}
 	sqlCfg.MemoryPoolSize = defaultSQLMemoryPoolSize
 	sqlCfg.TableStatCacheSize = defaultSQLTableStatCacheSize
 	sqlCfg.QueryCacheSize = defaultSQLQueryCacheSize
@@ -598,7 +603,8 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 // MakeConfig returns a Config for the system tenant with default values.
 func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 	storeSpec, tempStorageCfg := makeStorageCfg(ctx, st)
-	sqlCfg := MakeSQLConfig(roachpb.SystemTenantID, tempStorageCfg)
+	sqlCfg := MakeSQLConfig(roachpb.SystemTenantID,
+		roachpb.TenantName(roachpb.SystemTenantID.String()), tempStorageCfg)
 	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
 	baseCfg := MakeBaseConfig(st, tr, storeSpec)
 	kvCfg := MakeKVConfig()
