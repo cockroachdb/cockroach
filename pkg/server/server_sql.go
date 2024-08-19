@@ -1474,6 +1474,7 @@ func (s *SQLServer) preStart(
 		// from KV (or elsewhere).
 		if entry, _ := s.tenantConnect.TenantInfo(); entry.Name != "" {
 			s.cfg.idProvider.SetTenantName(entry.Name)
+			s.execCfg.RPCContext.TenantName = entry.Name
 			s.execCfg.VirtualClusterName = entry.Name
 		}
 		if err := s.startCheckService(ctx, stopper); err != nil {
