@@ -486,7 +486,7 @@ func DecodeDatum(
 			}
 			return &tree.DPGVector{T: ret}, nil
 		case oid.T_int8range:
-			val, err := _range.ParseInt8Range(bs, da)
+			val, err := _range.ParseInt8Range(bs)
 			if err != nil {
 				return nil, err
 			}

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	_range "github.com/cockroachdb/cockroach/pkg/util/range"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -508,6 +509,8 @@ func performCastWithoutPrecisionTruncation(
 			s = t.T.String()
 		case *tree.DEnum:
 			s = t.LogicalRep
+		case *tree.DInt8Range:
+			s = t.String()
 		case *tree.DVoid:
 			s = ""
 		}
@@ -1009,6 +1012,11 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DString:
 			res, _, err := tree.ParseDTupleFromString(evalCtx, string(*v), t)
 			return res, err
+		}
+	case types.RangeFamily:
+		switch v := d.(type) {
+		case *tree.DString:
+			return _range.ParseInt8Range(string(*v))
 		}
 	case types.VoidFamily:
 		switch d.(type) {

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func ParseInt8Range(rangeStr string, da *tree.DatumAlloc) (*tree.DInt8Range, error) {
+func ParseInt8Range(rangeStr string) (*tree.DInt8Range, error) {
 	startBracketType := tree.RangeBoundClose
 	startIncrement := 0
 	if rangeStr[0] == '(' {
@@ -45,7 +45,7 @@ func ParseInt8Range(rangeStr string, da *tree.DatumAlloc) (*tree.DInt8Range, err
 		if err != nil {
 			return nil, fmt.Errorf("invalid start bound value")
 		}
-		startBound.Val = da.NewDInt(tree.DInt(startVal + startIncrement))
+		startBound.Val = tree.NewDInt(tree.DInt(startVal + startIncrement))
 	}
 
 	var endBound tree.RangeBound
@@ -57,7 +57,7 @@ func ParseInt8Range(rangeStr string, da *tree.DatumAlloc) (*tree.DInt8Range, err
 		if err != nil {
 			return nil, fmt.Errorf("invalid end bound value")
 		}
-		endBound.Val = da.NewDInt(tree.DInt(endVal + endIncrement))
+		endBound.Val = tree.NewDInt(tree.DInt(endVal + endIncrement))
 	}
 
 	return &tree.DInt8Range{

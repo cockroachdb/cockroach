@@ -87,6 +87,7 @@ go_library(
         "//pkg/util/json",
         "//pkg/util/mon",
         "//pkg/util/randutil",
+        "//pkg/util/range",
         "//pkg/util/rangedesc",
         "//pkg/util/ring",
         "//pkg/util/timeofday",

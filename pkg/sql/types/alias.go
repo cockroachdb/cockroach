@@ -17,4 +17,5 @@ var PublicSchemaAliases = map[string]*T{
 	"box2d":     Box2D,
 	"geometry":  Geometry,
 	"geography": Geography,
+	"int8range": Int8Range,
 }

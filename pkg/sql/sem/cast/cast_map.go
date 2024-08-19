@@ -106,6 +106,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_int2:         {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_int4:         {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_int8:         {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_int8range:    {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_interval: {
 			MaxContext:     ContextExplicit,
 			origin:         ContextOriginAutomaticIOConversion,
@@ -193,6 +194,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_inet:         {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_int2:         {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_int8:         {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_int8range:    {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_interval: {
 			MaxContext:     ContextExplicit,
 			origin:         ContextOriginAutomaticIOConversion,
@@ -430,6 +432,14 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_text:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_varchar: {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 	},
+	oid.T_int8range: {
+		// Automatic I/O conversions to string types.
+		oid.T_bpchar:  {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_char:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_name:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_text:    {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_varchar: {MaxContext: ContextAssignment, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+	},
 	oid.T_interval: {
 		oid.T_float4:   {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
 		oid.T_float8:   {MaxContext: ContextExplicit, origin: ContextOriginLegacyConversion, Volatility: volatility.Immutable},
@@ -515,6 +525,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_int2:         {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_int4:         {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_int8:         {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_int8range:    {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_interval: {
 			MaxContext:     ContextExplicit,
 			origin:         ContextOriginAutomaticIOConversion,
@@ -762,6 +773,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_int2:         {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_int4:         {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_int8:         {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_int8range:    {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_interval: {
 			MaxContext:     ContextExplicit,
 			origin:         ContextOriginAutomaticIOConversion,
@@ -997,6 +1009,7 @@ var castMap = map[oid.Oid]map[oid.Oid]Cast{
 		oid.T_int2:         {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_int4:         {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_int8:         {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
+		oid.T_int8range:    {MaxContext: ContextExplicit, origin: ContextOriginAutomaticIOConversion, Volatility: volatility.Immutable},
 		oid.T_interval: {
 			MaxContext:     ContextExplicit,
 			origin:         ContextOriginAutomaticIOConversion,
