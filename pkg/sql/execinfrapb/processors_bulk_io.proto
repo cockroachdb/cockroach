@@ -460,7 +460,7 @@ message GenerativeSplitAndScatterSpec {
   // MaxFileCount is the max number of files in an extending restore span entry.
   optional int64 max_file_count = 23[(gogoproto.nullable) = false];
   // SQLInstanceIDs is a slice of SQL instance IDs available for dist restore.
-  repeated int32 sql_instance_ids = 24[(gogoproto.nullable) = false, (gogoproto.customname) = "SQLInstanceIDs"];
+  repeated int32 sql_instance_ids = 24[(gogoproto.customname) = "SQLInstanceIDs"];
   reserved 19;
 }
 
