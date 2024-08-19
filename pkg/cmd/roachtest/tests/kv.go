@@ -494,13 +494,9 @@ func registerKVQuiescenceDead(r registry.Registry) {
 			})
 			// Graceful shut down third node.
 			m.ExpectDeath()
-			if err := c.StopE(
+			c.Stop(
 				ctx, t.L(), option.NewStopOpts(option.Graceful(30)), c.Node(nodes),
-			); err != nil {
-				t.L().Printf("graceful shutdown failed: %v", err)
-				// If graceful shutdown fails within 30 seconds, proceed with hard shutdown.
-				c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(nodes))
-			}
+			)
 			// Measure qps with node down (i.e. without quiescence).
 			qpsOneDown := qps(func() {
 				// Use a different seed to make sure it's not just stepping into the

@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"golang.org/x/sys/unix"
 )
 
 // MalformedClusterNameError is returned when the cluster name passed to Create is invalid.
@@ -710,7 +711,8 @@ type StopOpts struct {
 	// process has terminated).
 	Wait bool // forced to true when Sig == 9
 	// GracePeriod is the mount of time (in seconds) roachprod will wait
-	// until the PID disappears.
+	// until the PID disappears. If the process is not terminated after
+	// that time, a hard stop (SIGKILL) is performed.
 	GracePeriod int
 
 	// Options that only apply to StopServiceForVirtualCluster
@@ -723,7 +725,7 @@ type StopOpts struct {
 func DefaultStopOpts() StopOpts {
 	return StopOpts{
 		ProcessTag:  "",
-		Sig:         9,
+		Sig:         int(unix.SIGKILL),
 		Wait:        false,
 		GracePeriod: 0,
 	}
