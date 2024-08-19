@@ -18,6 +18,7 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
+	"io/fs"
 	"math/rand"
 	"net"
 	"net/url"
@@ -1013,6 +1014,9 @@ type logicTest struct {
 	cluster serverutils.TestClusterInterface
 	// testserverCluster is the testserver cluster. This uses real binaries.
 	testserverCluster testserver.TestServer
+	// logsDir is the directory where logs are located when using a
+	// testserverCluster.
+	logsDir string
 	// sharedIODir is the ExternalIO directory that is shared between all clusters
 	// created in the same logicTest. It is populated during setup() of the logic
 	// test.
@@ -1322,6 +1326,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 			_ = os.RemoveAll(logsDir)
 		}
 	}
+	t.logsDir = logsDir
 
 	var envVars []string
 	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
@@ -1350,16 +1355,9 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < t.cfg.NumNodes; i++ {
-		// Wait for each node to be reachable.
-		if err := ts.WaitForInitFinishForNode(i); err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	t.testserverCluster = ts
 	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop, cleanupLogsDir)
-
+	t.waitForAllNodes()
 	t.setSessionUser(username.RootUser, 0 /* nodeIdx */, false /* newSession */)
 
 	// These tests involve stopping and starting nodes, so to reduce flakiness,
@@ -1368,6 +1366,60 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 	// testing.
 	if _, err := t.db.Exec("SET CLUSTER SETTING server.shutdown.lease_transfer_wait = '40s'"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// waitForAllNodes waits for each node to initialize when under
+// cockroach-go-testserver logic test configurations.
+func (t *logicTest) waitForAllNodes() {
+	if !t.cfg.UseCockroachGoTestserver {
+		return
+	}
+	for i := 0; i < t.cfg.NumNodes; i++ {
+		// Wait for each node to be reachable.
+		if err := t.testserverCluster.WaitForInitFinishForNode(i); err != nil {
+			if testutils.IsError(err, "init did not finish for node") {
+				// Check for `Can't find decompressor for snappy` error in the logs.
+				// This error appears to be some sort of infra issue where CRDB is
+				// unable to connect to another node, possibly because there is
+				// another non-CRDB server listening on that port. Since this is a rare
+				// issue, and we haven't been able to investigate it effectively, we
+				// will ignore this error.
+				// See https://github.com/cockroachdb/cockroach/issues/128759.
+				foundSnappyErr := false
+				walkErr := filepath.WalkDir(t.logsDir, func(path string, d fs.DirEntry, err error) error {
+					if err != nil {
+						return err
+					}
+					if d.IsDir() {
+						return nil
+					}
+					file, err := os.Open(path)
+					if err != nil {
+						return err
+					}
+					defer file.Close()
+
+					scanner := bufio.NewScanner(file)
+					for scanner.Scan() {
+						if strings.Contains(scanner.Text(), "Can't find decompressor for snappy") {
+							foundSnappyErr = true
+							return filepath.SkipAll
+						}
+					}
+					if err := scanner.Err(); err != nil {
+						return err
+					}
+					return nil
+				})
+				if walkErr != nil {
+					t.t().Logf("error while walking logs directory: %v", walkErr)
+				} else if foundSnappyErr {
+					t.t().Skip("ignoring init did not finish for node error due to snappy error")
+				}
+			}
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -3228,14 +3280,10 @@ func (t *logicTest) processSubtest(
 				if err := t.testserverCluster.UpgradeNode(nodeIdx); err != nil {
 					t.Fatal(err)
 				}
-				for i := 0; i < t.cfg.NumNodes; i++ {
-					// Wait for each node to be reachable, since UpgradeNode uses `kill`
-					// to terminate nodes, and may introduce temporary unavailability in
-					// the system range.
-					if err := t.testserverCluster.WaitForInitFinishForNode(i); err != nil {
-						t.Fatal(err)
-					}
-				}
+				// Wait for each node to be reachable, since UpgradeNode uses `kill`
+				// to terminate nodes, and may introduce temporary unavailability in
+				// the system range.
+				t.waitForAllNodes()
 				// The port may have changed, so we must remove all the cached connections
 				// to this node.
 				for _, m := range t.clients {
