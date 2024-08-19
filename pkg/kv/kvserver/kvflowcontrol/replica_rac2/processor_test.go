@@ -175,10 +175,13 @@ func (p *testAdmittedPiggybacker) AddMsgAppRespForLeader(
 
 type testACWorkQueue struct {
 	b *strings.Builder
+	// TODO(sumeer): test case that sets this to true.
+	returnFalse bool
 }
 
-func (q *testACWorkQueue) Admit(ctx context.Context, entry EntryForAdmission) {
-	fmt.Fprintf(q.b, " ACWorkQueue.Admit(%+v)\n", entry)
+func (q *testACWorkQueue) Admit(ctx context.Context, entry EntryForAdmission) bool {
+	fmt.Fprintf(q.b, " ACWorkQueue.Admit(%+v) = %t\n", entry, !q.returnFalse)
+	return !q.returnFalse
 }
 
 type testRangeControllerFactory struct {
