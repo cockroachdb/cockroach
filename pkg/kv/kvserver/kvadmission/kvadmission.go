@@ -185,6 +185,7 @@ type Controller interface {
 	AdmitRaftEntry(
 		_ context.Context, _ roachpb.TenantID, _ roachpb.StoreID, _ roachpb.RangeID, _ roachpb.ReplicaID,
 		leaderTerm uint64, _ raftpb.Entry)
+	replica_rac2.ACWorkQueue
 }
 
 // TenantWeightProvider can be periodically asked to provide the tenant

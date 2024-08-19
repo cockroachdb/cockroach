@@ -80,6 +80,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		NoopStoresFlowControlIntegration{},
 		NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
+		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
 	)
 
