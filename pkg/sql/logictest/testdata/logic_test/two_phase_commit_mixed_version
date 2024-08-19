@@ -11,3 +11,7 @@ COMMIT PREPARED 'txn'
 
 statement error pgcode 0A000 ROLLBACK PREPARED unsupported in mixed-version cluster
 ROLLBACK PREPARED 'txn'
+
+query ITTTT
+SELECT * FROM pg_catalog.pg_prepared_xacts
+----
