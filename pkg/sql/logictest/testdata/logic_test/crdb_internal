@@ -126,7 +126,7 @@ pg_partitioned_table             true
 pg_policies                      true
 pg_policy                        true
 pg_prepared_statements           false
-pg_prepared_xacts                true
+pg_prepared_xacts                false
 pg_proc                          false
 pg_publication                   true
 pg_publication_rel               true
