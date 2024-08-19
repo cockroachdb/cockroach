@@ -449,6 +449,7 @@ func authCert(
 			false, /*insecure*/
 			&tlsState,
 			execCfg.RPCContext.TenantID,
+			execCfg.RPCContext.TenantName,
 			cm,
 			roleSubject,
 			security.ClientCertSubjectRequired.Get(&execCfg.Settings.SV),

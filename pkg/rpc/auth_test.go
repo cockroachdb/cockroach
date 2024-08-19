@@ -132,7 +132,7 @@ func TestAuthenticateTenant(t *testing.T) {
 		{systemID: stid, ous: nil, commonName: "root"},
 		{systemID: stid, ous: nil, commonName: "node"},
 		{systemID: stid, ous: nil, commonName: "root", tenantScope: 10,
-			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "root" on tenant 10\)`},
+			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "root" on tenantID 10\)`},
 		{systemID: tenTen, ous: correctOU, commonName: "10", expTenID: roachpb.TenantID{}},
 		{systemID: tenTen, ous: correctOU, commonName: "123", expErr: `client tenant identity \(123\) does not match server`},
 		{systemID: tenTen, ous: correctOU, commonName: "1", expErr: `invalid tenant ID 1 in Common Name \(CN\)`},
