@@ -449,7 +449,7 @@ func (d *datadogWriter) Emit(data *tspb.TimeSeriesData) error {
 	tags = append(tags, "region:local")
 
 	if debugTimeSeriesDumpOpts.clusterLabel != "" {
-		tags = append(tags, makeDDTag("cluster", debugTimeSeriesDumpOpts.clusterLabel))
+		tags = append(tags, makeDDTag("cluster_label", debugTimeSeriesDumpOpts.clusterLabel))
 	}
 
 	tags = append(tags, makeDDTag(uploadIDTag, d.uploadID))
