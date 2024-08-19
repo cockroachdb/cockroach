@@ -329,7 +329,8 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructTuple(els, t.ResolvedType())
 
 	case *tree.FuncExpr:
-		return b.buildFunction(t, inScope, outScope, outCol, colRefs)
+		funcRes := b.buildFunction(t, inScope, outScope, outCol, colRefs)
+		return funcRes
 
 	case *tree.IfExpr:
 		valType := t.ResolvedType()
@@ -562,7 +563,8 @@ func (b *Builder) buildFunction(
 
 	args := make(memo.ScalarListExpr, len(f.Exprs))
 	for i, pexpr := range f.Exprs {
-		args[i] = b.buildScalar(pexpr.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		argRes := b.buildScalar(pexpr.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		args[i] = argRes
 	}
 
 	// Construct a private FuncOpDef that refers to a resolved function overload.

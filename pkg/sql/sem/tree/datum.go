@@ -2012,6 +2012,26 @@ type DInt8Range struct {
 	EndBound   RangeBound
 }
 
+// AsDInt8Range attempts to retrieve a DInt8Range from an Expr, returning
+// a DInt8Range and a flag signifying whether the assertion was successful.
+func AsDInt8Range(e Expr) (DInt8Range, bool) {
+	switch t := e.(type) {
+	case *DInt8Range:
+		return *t, true
+	}
+	return DInt8Range{}, false
+}
+
+// MustBeDInt8Range attempts to retrieve a DInt8Range from an Expr, panicking if the
+// assertion fails.
+func MustBeDInt8Range(e Expr) DInt8Range {
+	i, ok := AsDInt8Range(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DInt8Range, found %T", e))
+	}
+	return i
+}
+
 func (d *DInt8Range) String() string {
 	sb := strings.Builder{}
 	if d.StartBound.Typ == RangeBoundClose {

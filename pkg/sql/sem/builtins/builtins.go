@@ -3941,8 +3941,27 @@ value if you rely on the HLC for accuracy.`,
 		}
 	}, false /* supportsArrayInput */)),
 
+	// TODO(janexing): For local test only, remove it later.
+	"has_intersect": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "left_range", Typ: types.Int8Range}, {Name: "right_range", Typ: types.Int8Range}},
+			ReturnType:        tree.FixedReturnType(types.Bool),
+			CalledOnNullInput: true,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				lb := tree.MustBeDInt8Range(args[0])
+				res, err := lb.HasIntersection(ctx, evalCtx, args[1])
+				if err != nil {
+					return tree.DBoolFalse, err
+				}
+				dBoolRes := tree.DBool(res)
+				return &dBoolRes, err
+			},
+		},
+	),
+
 	"int8range": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryDateAndTime},
+		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
 		tree.Overload{
 			Types:             tree.ParamTypes{{Name: "start_bound", Typ: types.Int}, {Name: "end_bound", Typ: types.Int}},
 			ReturnType:        tree.FixedReturnType(types.Int8Range),
