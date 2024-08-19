@@ -1529,6 +1529,34 @@ func TestTenantID(t *testing.T) {
 	}
 }
 
+func TestTenantName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		name        string
+		arg         string
+		errContains string
+	}{
+		{"empty tenant name text", "", "invalid tenant name: \"\""},
+		{"tenant name not valid", "a+bc", "invalid tenant name: \"a+bc\""},
+		{"tenant name \"abc\" is valid", "abc", ""},
+		{"tenant name \"system\" is valid", "system", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tenant := roachpb.TenantName(tt.arg)
+			err := tenant.IsValid()
+			if tt.errContains == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorContains(t, err, tt.errContains)
+			}
+			assert.Equal(t, roachpb.TenantName(tt.arg), tenant)
+		})
+	}
+}
+
 func TestTenantIDFromFile(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
