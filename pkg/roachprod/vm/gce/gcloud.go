@@ -346,6 +346,8 @@ type ProviderOpts struct {
 	// Use an instance template and a managed instance group to create VMs. This
 	// enables cluster resizing, load balancing, and health monitoring.
 	Managed bool
+	// Specify spot instance zones for the managed instance group.
+	ManagedSpotZones []string
 	// Enable the cron service. It is disabled by default.
 	EnableCron bool
 
@@ -1033,6 +1035,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	_ = flags.MarkDeprecated("machine-type", "use "+ProviderName+"-machine-type instead")
 	flags.StringSliceVar(&o.Zones, "zones", nil, "DEPRECATED")
 	_ = flags.MarkDeprecated("zones", "use "+ProviderName+"-zones instead")
+	flags.StringSliceVar(&o.ManagedSpotZones, ProviderName+"-managed-spot-zones", nil,
+		"use this to specify in which zones managed instance groups will use spot instances")
 
 	flags.StringVar(&providerInstance.ServiceAccount, ProviderName+"-service-account",
 		providerInstance.ServiceAccount, "Service account to use")
@@ -1445,16 +1449,17 @@ func instanceGroupName(clusterName string) string {
 	return fmt.Sprintf("%s-group", clusterName)
 }
 
-// createInstanceTemplates creates instance templates for a cluster by zone.
-// This is currently only used for managed instance group clusters.
+// createInstanceTemplates creates instance templates for a cluster for each
+// zone with the specified instance args for each template. This is currently
+// only used for managed instance group clusters.
 func createInstanceTemplates(
-	l *logger.Logger, clusterName string, zones []string, instanceArgs []string, labelsArg string,
+	l *logger.Logger, clusterName string, zoneToInstanceArgs map[string][]string, labelsArg string,
 ) error {
-	g := ui.NewDefaultSpinnerGroup(l, "creating instance templates", len(zones))
-	for _, zone := range zones {
+	g := ui.NewDefaultSpinnerGroup(l, "creating instance templates", len(zoneToInstanceArgs))
+	for zone, args := range zoneToInstanceArgs {
 		templateName := instanceTemplateName(clusterName, zone)
 		createTemplateArgs := []string{"compute", "instance-templates", "create"}
-		createTemplateArgs = append(createTemplateArgs, instanceArgs...)
+		createTemplateArgs = append(createTemplateArgs, args...)
 		createTemplateArgs = append(createTemplateArgs, "--labels", labelsArg)
 		createTemplateArgs = append(createTemplateArgs, templateName)
 		g.Go(func() error {
@@ -1594,7 +1599,34 @@ func (p *Provider) Create(
 
 	switch {
 	case providerOpts.Managed:
-		err = createInstanceTemplates(l, opts.ClusterName, usedZones, instanceArgs, labels)
+		zoneToInstanceArgs := make(map[string][]string)
+		for _, zone := range usedZones {
+			zoneToInstanceArgs[zone] = instanceArgs
+		}
+		// If spot instance are requested for specific zones, set the instance args
+		// for those zones to use spot instances.
+		if len(providerOpts.ManagedSpotZones) > 0 {
+			if providerOpts.UseSpot {
+				return errors.Newf("Use either --%[1]s-use-spot or --%[1]s-managed-spot-zones, not both", ProviderName)
+			}
+			spotProviderOpts := *providerOpts
+			spotProviderOpts.UseSpot = true
+			spotInstanceArgs, spotCleanUpFn, err := p.computeInstanceArgs(l, opts, &spotProviderOpts)
+			if spotCleanUpFn != nil {
+				defer spotCleanUpFn()
+			}
+			if err != nil {
+				return err
+			}
+			for _, zone := range providerOpts.ManagedSpotZones {
+				if _, ok := zoneToInstanceArgs[zone]; !ok {
+					return errors.Newf("the managed spot zone: %s is not in the list of zones for the cluster", zone)
+				}
+				zoneToInstanceArgs[zone] = spotInstanceArgs
+			}
+		}
+
+		err = createInstanceTemplates(l, opts.ClusterName, zoneToInstanceArgs, labels)
 		if err != nil {
 			return err
 		}
