@@ -2562,6 +2562,7 @@ GO_TARGETS = [
     "//pkg/util/randident:randident_test",
     "//pkg/util/randutil:randutil",
     "//pkg/util/randutil:randutil_test",
+    "//pkg/util/range:range",
     "//pkg/util/rangedesc:rangedesc",
     "//pkg/util/rangedesc:rangedesc_test",
     "//pkg/util/retry:retry",

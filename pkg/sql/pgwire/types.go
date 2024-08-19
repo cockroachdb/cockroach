@@ -262,6 +262,10 @@ func writeTextDatumNotNull(
 		b.textFormatter.FormatNode(v)
 		b.writeFromFmtCtx(b.textFormatter)
 
+	case *tree.DInt8Range:
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtx(b.textFormatter)
+
 	case *tree.DArray:
 		// Arrays have custom formatting depending on their OID.
 		b.textFormatter.FormatNode(d)
@@ -275,10 +279,6 @@ func writeTextDatumNotNull(
 	case *tree.DEnum:
 		// Enums are serialized with their logical representation.
 		b.writeLengthPrefixedString(v.LogicalRep)
-
-	case *tree.DInt8Range:
-		b.textFormatter.FormatNode(d)
-		b.writeFromFmtCtx(b.textFormatter)
 
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
