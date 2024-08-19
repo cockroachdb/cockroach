@@ -11,6 +11,7 @@
 package admission
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -658,6 +659,24 @@ func (sg *kvStoreTokenGranter) storeReplicatedWorkAdmittedLocked(
 	// decisions, but we don't necessarily need something more sophisticated
 	// like "Dominant Resource Fairness".
 	return additionalL0TokensNeeded
+}
+
+type StoreSnapshotGranter struct {
+	*kvStoreTokenGranter
+}
+
+func (ssg StoreSnapshotGranter) GetRangeSnapshotTokens(ctx context.Context, tokens int64) error {
+	if ssg.kvStoreTokenGranter == nil {
+		return nil
+	}
+	return ssg.getRangeSnapshotTokens(ctx, tokens)
+}
+
+func (ssg StoreSnapshotGranter) ReturnRangeSnapshotTokens(tokens int64) {
+	if ssg.kvStoreTokenGranter == nil {
+		return
+	}
+	ssg.returnRangeSnapshotTokens(tokens)
 }
 
 // PebbleMetricsProvider provides the pebble.Metrics for all stores.

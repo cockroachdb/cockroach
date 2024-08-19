@@ -243,6 +243,14 @@ func (sgc *StoreGrantCoordinators) close() {
 	})
 }
 
+func (sgc *StoreGrantCoordinators) GetStoreSnapshotGranter(storeID int32) StoreSnapshotGranter {
+	if unsafeGranter, ok := sgc.gcMap.Load(storeID); ok {
+		granter := (*GrantCoordinator)(unsafeGranter)
+		return StoreSnapshotGranter{granter.granters[KVWork].(*kvStoreTokenGranter)}
+	}
+	return StoreSnapshotGranter{}
+}
+
 // GrantCoordinator is the top-level object that coordinates grants across
 // different WorkKinds (for more context see the comment in admission.go, and
 // the comment where WorkKind is declared). Typically there will be one
