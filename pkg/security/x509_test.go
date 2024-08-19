@@ -14,6 +14,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"net/url"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 const wiggle = time.Minute * 5
@@ -88,15 +90,16 @@ func TestGenerateCertLifetime(t *testing.T) {
 
 	// Create a Client certificate expiring in 4 days. Should get reduced to the CA lifetime.
 	clientDuration := time.Hour * 96
-	_, err = security.GenerateClientCert(caCert, testKey, testKey.Public(), clientDuration, username.TestUserName(), []roachpb.TenantID{roachpb.SystemTenantID})
+	_, err = security.GenerateClientCert(caCert, testKey, testKey.Public(), clientDuration, username.TestUserName(),
+		[]roachpb.TenantID{roachpb.SystemTenantID}, nil)
 	if !testutils.IsError(err, "CA lifetime is .*, shorter than the requested .*") {
 		t.Fatal(err)
 	}
 
 	// Try again, but expiring before the CA cert.
 	clientDuration = time.Hour * 24
-	clientBytes, err := security.GenerateClientCert(caCert, testKey, testKey.Public(), clientDuration, username.TestUserName(), []roachpb.TenantID{roachpb.SystemTenantID})
-
+	clientBytes, err := security.GenerateClientCert(caCert, testKey, testKey.Public(), clientDuration,
+		username.TestUserName(), []roachpb.TenantID{roachpb.SystemTenantID}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,5 +112,76 @@ func TestGenerateCertLifetime(t *testing.T) {
 	if a, e := clientCert.NotAfter, now.Add(clientDuration); !timesFuzzyEqual(a, e) {
 		t.Fatalf("client expiration differs from requested: %s vs %s", a, e)
 	}
+}
 
+func TestIsTenantNameSANURI(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type testCase struct {
+		name     string
+		sanURL   string
+		expected bool
+	}
+
+	testCases := []testCase{
+		{
+			name:     "valid_tenant_name_prefix",
+			sanURL:   "crdb://tenant-name/tenant10/user/user",
+			expected: true,
+		},
+		{
+			name:     "valid_tenant_name_prefix_upper_case",
+			sanURL:   "crdb://TENANT-NAME/tenant10/user/user",
+			expected: true,
+		},
+		{
+			name:     "invalid_tenant_name_prefix",
+			sanURL:   "crdb://tenant/tenant-name/user/user",
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			url, err := url.Parse(tc.sanURL)
+			require.Nilf(t, err, "invalid SAN URI: %q", tc.sanURL)
+			require.Equalf(t, tc.expected, security.IsTenantNameSANURI(url), "invalid tenant name SAN URI: %q", tc.sanURL)
+		})
+	}
+}
+
+func TestIsCRDBSANURI(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type testCase struct {
+		name     string
+		sanURL   string
+		expected bool
+	}
+
+	testCases := []testCase{
+		{
+			name:     "valid_crdb_scheme",
+			sanURL:   "crdb://tenant-name/tenant10/user/user",
+			expected: true,
+		},
+		{
+			name:     "valid_crdb_scheme_upper_case",
+			sanURL:   "CRDB://tenant/10/user/user",
+			expected: true,
+		},
+		{
+			name:     "invalid_crdb_scheme",
+			sanURL:   "crdb1://tenant/10/user/user",
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			url, err := url.Parse(tc.sanURL)
+			require.Nilf(t, err, "invalid SAN URI: %q", tc.sanURL)
+			require.Equalf(t, tc.expected, security.IsCRDBSANURI(url), "invalid crdb SAN URI: %q", tc.sanURL)
+		})
+	}
 }
