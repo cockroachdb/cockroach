@@ -2331,7 +2331,7 @@ func (c *clusterImpl) StopE(
 		opts := stopOpts.RoachprodOpts
 		opts.Sig = 10 // SIGUSR1
 		opts.Wait = true
-		opts.MaxWait = 10
+		opts.GracePeriod = 10
 		_ = roachprod.Stop(ctx, l, c.MakeNodes(nodes...), opts)
 	}
 	return errors.Wrap(roachprod.Stop(ctx, l, c.MakeNodes(nodes...), stopOpts.RoachprodOpts), "cluster.StopE")

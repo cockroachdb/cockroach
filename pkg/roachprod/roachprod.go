@@ -871,9 +871,9 @@ type StopOpts struct {
 	// If Wait is set, roachprod waits until the PID disappears (i.e. the
 	// process has terminated).
 	Wait bool // forced to true when Sig == 9
-	// If MaxWait is set, roachprod waits that approximate number of seconds
+	// GracePeriod is the mount of time (in seconds) roachprod will wait
 	// until the PID disappears.
-	MaxWait int
+	GracePeriod int
 
 	// Options that only apply to StopServiceForVirtualCluster
 	VirtualClusterID   int
@@ -884,10 +884,10 @@ type StopOpts struct {
 // DefaultStopOpts returns StopOpts populated with the default values used by Stop.
 func DefaultStopOpts() StopOpts {
 	return StopOpts{
-		ProcessTag: "",
-		Sig:        9,
-		Wait:       false,
-		MaxWait:    0,
+		ProcessTag:  "",
+		Sig:         9,
+		Wait:        false,
+		GracePeriod: 0,
 	}
 }
 
@@ -898,7 +898,7 @@ func Stop(ctx context.Context, l *logger.Logger, clusterName string, opts StopOp
 		return err
 	}
 
-	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait, "")
+	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.GracePeriod, "")
 }
 
 // Signal sends a signal to nodes in the cluster.
@@ -2698,7 +2698,7 @@ func Deploy(
 	pauseDuration time.Duration,
 	sig int,
 	wait bool,
-	maxWait int,
+	gracePeriod int,
 	secure bool,
 ) error {
 	// Stage supports `workload` as well, so it needs to be excluded here. This
@@ -2727,7 +2727,7 @@ func Deploy(
 	for _, node := range c.TargetNodes() {
 		curNode := []install.Node{node}
 
-		err = c.WithNodes(curNode).Stop(ctx, l, sig, wait, maxWait, "")
+		err = c.WithNodes(curNode).Stop(ctx, l, sig, wait, gracePeriod, "")
 		if err != nil {
 			return err
 		}

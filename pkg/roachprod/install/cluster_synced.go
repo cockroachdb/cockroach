@@ -391,14 +391,14 @@ func (c *SyncedCluster) newSession(
 // for shared-process configurations.)
 //
 // When Stop needs to kill a process without other flags, the signal
-// is 9 (SIGKILL) and wait is true. If maxWait is non-zero, Stop stops
-// waiting after that approximate number of seconds.
+// is 9 (SIGKILL) and wait is true. If gracePeriod is non-zero, Stop
+// stops waiting after that approximate number of seconds.
 func (c *SyncedCluster) Stop(
 	ctx context.Context,
 	l *logger.Logger,
 	sig int,
 	wait bool,
-	maxWait int,
+	gracePeriod int,
 	virtualClusterLabel string,
 ) error {
 	// virtualClusterDisplay includes information about the virtual
@@ -442,7 +442,7 @@ func (c *SyncedCluster) Stop(
 		if wait {
 			display += " and waiting"
 		}
-		return c.kill(ctx, l, "stop", display, sig, wait, maxWait, virtualClusterLabel)
+		return c.kill(ctx, l, "stop", display, sig, wait, gracePeriod, virtualClusterLabel)
 	} else {
 		cmd := fmt.Sprintf("ALTER TENANT '%s' STOP SERVICE", virtualClusterName)
 		res, err := c.ExecSQL(ctx, l, c.Nodes[:1], "", 0, DefaultAuthMode(), "", /* database */
@@ -462,20 +462,20 @@ func (c *SyncedCluster) Stop(
 // Signal sends a signal to the CockroachDB process.
 func (c *SyncedCluster) Signal(ctx context.Context, l *logger.Logger, sig int) error {
 	display := fmt.Sprintf("%s: sending signal %d", c.Name, sig)
-	return c.kill(ctx, l, "signal", display, sig, false /* wait */, 0 /* maxWait */, "")
+	return c.kill(ctx, l, "signal", display, sig, false /* wait */, 0 /* gracePeriod */, "")
 }
 
 // kill sends the signal sig to all nodes in the cluster using the kill command.
 // cmdName and display specify the roachprod subcommand and a status message,
 // for output/logging. If wait is true, the command will wait for the processes
-// to exit, up to maxWait seconds.
+// to exit, up to gracePeriod seconds.
 func (c *SyncedCluster) kill(
 	ctx context.Context,
 	l *logger.Logger,
 	cmdName, display string,
 	sig int,
 	wait bool,
-	maxWait int,
+	gracePeriod int,
 	virtualClusterLabel string,
 ) error {
 	const timedOutMessage = "timed out"
@@ -507,7 +507,7 @@ func (c *SyncedCluster) kill(
     echo "${pid}: dead" >> %[1]s/roachprod.log
   done`,
 					c.LogDir(node, "", 0), // [1]
-					maxWait,               // [2]
+					gracePeriod,           // [2]
 					timedOutMessage,       // [3]
 				)
 			}
@@ -551,7 +551,7 @@ fi`,
 			if wait && strings.Contains(res.CombinedOut, timedOutMessage) {
 				return res, fmt.Errorf(
 					"timed out after %ds waiting for n%d to drain and shutdown",
-					maxWait, node,
+					gracePeriod, node,
 				)
 			}
 
@@ -562,7 +562,7 @@ fi`,
 // Wipe TODO(peter): document
 func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCerts bool) error {
 	display := fmt.Sprintf("%s: wiping", c.Name)
-	if err := c.Stop(ctx, l, 9, true /* wait */, 0 /* maxWait */, ""); err != nil {
+	if err := c.Stop(ctx, l, 9, true /* wait */, 0 /* gracePeriod */, ""); err != nil {
 		return err
 	}
 	return c.Parallel(ctx, l, WithNodes(c.Nodes).WithDisplay(display), func(ctx context.Context, node Node) (*RunResultDetails, error) {
