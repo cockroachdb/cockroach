@@ -194,7 +194,7 @@ func Test_choosePreviousReleases(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			opts := []CustomOption{NumUpgrades(tc.numUpgrades)}
 			if tc.enableSkipVersion {
-				opts = append(opts, withSkipVersionProbability(1))
+				opts = append(opts, WithSkipVersionProbability(1))
 			} else {
 				opts = append(opts, DisableSkipVersionUpgrades)
 			}
