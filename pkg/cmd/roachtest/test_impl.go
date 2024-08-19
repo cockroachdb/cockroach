@@ -167,7 +167,9 @@ func (t *testImpl) Cockroach() string {
 			assertionsEnabledProbability = 1
 		}
 
-		if rand.Float64() < assertionsEnabledProbability {
+		rng := rand.Float64()
+		t.l.Printf("rng: %f, flag: %f", rng, assertionsEnabledProbability)
+		if rng < assertionsEnabledProbability {
 			// The build with runtime assertions should exist in every nightly
 			// CI build, but we can't assume it exists in every roachtest call.
 			if path := t.RuntimeAssertionsCockroach(); path != "" {
