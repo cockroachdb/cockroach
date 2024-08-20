@@ -1017,12 +1017,9 @@ func runFollowerReadsMixedVersionTest(
 
 	var data map[int]int64
 	runInit := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-		if topology.multiRegion &&
-			h.IsMultitenant() &&
-			!h.Context().FromVersion.AtLeast(mixedversion.TenantsAndSystemAlignedSettingsVersion) {
-			const setting = "sql.multi_region.allow_abstractions_for_secondary_tenants.enabled"
-			if err := setTenantSetting(l, r, h, setting, true); err != nil {
-				return errors.Wrapf(err, "setting %s", setting)
+		if topology.multiRegion {
+			if err := enableTenantMultiRegion(l, r, h); err != nil {
+				return err
 			}
 		}
 
@@ -1039,4 +1036,16 @@ func runFollowerReadsMixedVersionTest(
 	mvt.InMixedVersion("run follower reads", runFollowerReads)
 	mvt.AfterUpgradeFinalized("run follower reads", runFollowerReads)
 	mvt.Run()
+}
+
+// enableTenantMultiRegion enables multi-region features on the
+// mixedversion tenant if necessary (no-op otherwise).
+func enableTenantMultiRegion(l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+	if !h.IsMultitenant() || h.Context().FromVersion.AtLeast(mixedversion.TenantsAndSystemAlignedSettingsVersion) {
+		return nil
+	}
+
+	const setting = "sql.multi_region.allow_abstractions_for_secondary_tenants.enabled"
+	err := setTenantSetting(l, r, h, setting, true)
+	return errors.Wrapf(err, "setting %s", setting)
 }
