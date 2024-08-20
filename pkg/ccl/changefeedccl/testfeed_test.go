@@ -495,6 +495,21 @@ SELECT payload FROM (%s)
 	return payload.GetChangefeed(), nil
 }
 
+// Progress implements FeedJob interface.
+func (f *jobFeed) Progress() (*jobspb.ChangefeedProgress, error) {
+	var details []byte
+	jobProgressByIDQuery := "SELECT value FROM system.job_info WHERE job_id = $1 AND info_key::string = 'legacy_progress' ORDER BY written DESC LIMIT 1"
+
+	if err := f.db.QueryRow(jobProgressByIDQuery, f.jobID).Scan(&details); err != nil {
+		return nil, errors.Wrapf(err, "Progress for job %d", f.jobID)
+	}
+	var progress jobspb.Progress
+	if err := protoutil.Unmarshal(details, &progress); err != nil {
+		return nil, err
+	}
+	return progress.GetChangefeed(), nil
+}
+
 // HighWaterMark implements FeedJob interface.
 func (f *jobFeed) HighWaterMark() (hlc.Timestamp, error) {
 	stmt := fmt.Sprintf(`
