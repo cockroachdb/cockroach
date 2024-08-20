@@ -72,6 +72,7 @@ var (
 	deploySig             = 15
 	deployWaitFlag        = true
 	deployMaxWait         = 300
+	deployKillOnTimeout   = true
 	pause                 = time.Duration(0)
 	createVMOpts          = vm.DefaultCreateOpts()
 	startOpts             = roachprod.DefaultStartOpts()
@@ -270,6 +271,7 @@ func initFlags() {
 		stopProcessesCmd.Flags().BoolVar(waitPtr, "wait", *waitPtr, "wait for processes to exit")
 		stopProcessesCmd.Flags().IntVar(maxWaitPtr, "max-wait", *maxWaitPtr, "approx number of seconds to wait for processes to exit")
 	}
+	deployCmd.Flags().BoolVar(&deployKillOnTimeout, "kill-on-timeout", deployKillOnTimeout, "instead of failing on timeout, kill the process")
 	deployCmd.Flags().DurationVar(&pause, "pause", pause, "duration to pause between node restarts")
 
 	syncCmd.Flags().BoolVar(&listOpts.IncludeVolumes, "include-volumes", false, "Include volumes when syncing")

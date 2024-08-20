@@ -2797,6 +2797,7 @@ func Deploy(
 	sig int,
 	wait bool,
 	maxWait int,
+	killOnTimeout bool,
 	secure bool,
 ) error {
 	// Stage supports `workload` as well, so it needs to be excluded here. This
@@ -2824,10 +2825,17 @@ func Deploy(
 	l.Printf("Performing rolling restart of %d nodes on %s", len(c.VMs), clusterName)
 	for _, node := range c.TargetNodes() {
 		curNode := []install.Node{node}
-
+		l.Printf("Deploying node %d", node)
 		err = c.WithNodes(curNode).Stop(ctx, l, sig, wait, maxWait, "")
 		if err != nil {
-			return err
+			if !killOnTimeout || sig == 9 {
+				return err
+			}
+			l.Printf("Could not stop node %d gracefully, killing it", node)
+			err = c.WithNodes(curNode).Stop(ctx, l, 9, true, 0, "")
+			if err != nil {
+				return err
+			}
 		}
 
 		err = c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(curNode),
