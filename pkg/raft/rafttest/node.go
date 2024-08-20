@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
 type node struct {
@@ -54,6 +55,7 @@ func startNode(id raftpb.PeerID, peers []raft.Peer, iface iface) *node {
 		MaxInflightMsgs:           256,
 		MaxUncommittedEntriesSize: 1 << 30,
 		StoreLiveness:             raftstoreliveness.AlwaysLive{},
+		CRDBVersion:               cluster.MakeTestingClusterSettings().Version,
 	}
 	rn := raft.StartNode(c, peers)
 	n := &node{
@@ -145,6 +147,7 @@ func (n *node) restart() {
 		MaxInflightMsgs:           256,
 		MaxUncommittedEntriesSize: 1 << 30,
 		StoreLiveness:             raftstoreliveness.AlwaysLive{},
+		CRDBVersion:               cluster.MakeTestingClusterSettings().Version,
 	}
 	n.Node = raft.RestartNode(c)
 	n.start()
