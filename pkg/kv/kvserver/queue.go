@@ -1079,7 +1079,9 @@ func (bq *baseQueue) replicaCanBeProcessed(
 			st := repl.CurrentLeaseStatus(ctx)
 			if st.IsValid() && !st.OwnedBy(repl.StoreID()) {
 				log.VEventf(ctx, 1, "needs lease; not adding: %v", st.Lease)
-				return nil, errors.Newf("needs lease, not adding: %v", st.Lease)
+				// NB: this is an expected error, so make sure it doesn't get
+				// logged loudly.
+				return nil, benignerror.New(errors.Newf("needs lease, not adding: %v", st.Lease))
 			}
 		}
 	}
