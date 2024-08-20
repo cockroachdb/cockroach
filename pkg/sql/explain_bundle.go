@@ -533,7 +533,7 @@ func (b *stmtBundleBuilder) addInFlightTrace(c inFlightTraceCollector) {
 // as well as accumulates the string into b.errorStrings. The method should only
 // be used for non-critical errors.
 func (b *stmtBundleBuilder) printError(errString string, buf *bytes.Buffer) {
-	fmt.Fprintf(buf, errString+"\n")
+	fmt.Fprintln(buf, errString)
 	b.errorStrings = append(b.errorStrings, errString)
 }
 

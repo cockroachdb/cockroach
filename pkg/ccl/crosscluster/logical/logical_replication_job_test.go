@@ -547,7 +547,7 @@ func TestRandomTables(t *testing.T) {
 		// We do not have full support for column families.
 		randgen.SkipColumnFamilyMutation())
 	stmt := tree.SerializeForDisplay(createStmt)
-	t.Logf(stmt)
+	t.Log(stmt)
 	runnerA.Exec(t, stmt)
 	runnerB.Exec(t, stmt)
 

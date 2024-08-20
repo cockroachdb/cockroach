@@ -51,7 +51,7 @@ func (s *systemStatusServer) DownloadSpan(
 	if len(req.NodeID) > 0 {
 		_, local, err := s.parseNodeID(req.NodeID)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 
 		if local {

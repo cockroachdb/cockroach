@@ -241,7 +241,7 @@ func runMultiTenantFairness(
 				Flag("batch", s.batch).
 				Flag("max-ops", s.maxOps).
 				Flag("concurrency", 25).
-				Arg(pgurl)
+				Arg("%s", pgurl)
 
 			if err := c.RunE(ctx, option.WithNodes(node), cmd.String()); err != nil {
 				return err
@@ -276,7 +276,7 @@ func runMultiTenantFairness(
 				Flag("duration", s.duration).
 				Flag("read-percent", s.readPercent).
 				Flag("concurrency", s.concurrency(n)).
-				Arg(pgurl)
+				Arg("%s", pgurl)
 
 			if err := c.RunE(ctx, option.WithNodes(node), cmd.String()); err != nil {
 				return err

@@ -65,7 +65,7 @@ func TestUDFWithRandomTables(t *testing.T) {
 		randgen.RequirePrimaryIndex(),
 	)
 	stmt := tree.SerializeForDisplay(createStmt)
-	t.Logf(stmt)
+	t.Log(stmt)
 	runnerA.Exec(t, stmt)
 	runnerB.Exec(t, stmt)
 	runnerB.Exec(t, fmt.Sprintf(testingUDFAcceptProposedBase, tableName))
