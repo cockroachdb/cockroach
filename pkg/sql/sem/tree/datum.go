@@ -2255,6 +2255,8 @@ func NewDInt8Range(
 	}
 }
 
+func MakeInt8Range()
+
 // ParseContext provides the information necessary for
 // parsing dates.
 // A nil value is generally acceptable and will result in

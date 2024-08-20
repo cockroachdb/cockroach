@@ -1250,6 +1250,10 @@ func MakePGVector(dims int32) *T {
 	}}
 }
 
+func MakeInt8Range() *T {
+	return Int8Range
+}
+
 // NewCompositeType constructs a new instance of a TupleFamily type with the
 // given field types and labels, and the given user-defined type OIDs.
 func NewCompositeType(typeOID, arrayTypeOID oid.Oid, contents []*T, labels []string) *T {

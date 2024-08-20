@@ -4404,6 +4404,8 @@ const_vector ::=
 
 const_range ::=
 	'INT8RANGE'
+	| 'INT8RANGE' '(' iconst32 ',' iconst32 ')'
+	| 'INT8RANGE' '(' iconst32 ',' iconst32 ',' a_expr ')'
 
 interval_qualifier ::=
 	'YEAR'

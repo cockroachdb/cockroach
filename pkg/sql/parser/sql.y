@@ -14722,6 +14722,10 @@ const_vector:
 
 const_range:
   INT8RANGE { $$.val = types.Int8Range }
+| INT8RANGE '(' iconst32 ',' iconst32 ')'
+	{ $$.val = types.Int8Range }
+| INT8RANGE '(' iconst32 ',' iconst32 ',' a_expr ')'
+	{ $$.val = types.Int8Range }
 
 // We have a separate const_typename to allow defaulting fixed-length types such
 // as CHAR() and BIT() to an unspecified length. SQL9x requires that these
