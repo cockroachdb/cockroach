@@ -162,6 +162,11 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		if err != nil {
 			panic(err)
 		}
+		if param.Class == tree.RoutineParamIn || param.Class == tree.RoutineParamInOut {
+			if typ.Family() == types.VoidFamily {
+				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition, "SQL functions cannot have arguments of type VOID"))
+			}
+		}
 		// The parameter type must be supported by the current cluster version.
 		checkUnsupportedType(b.ctx, b.semaCtx, typ)
 		if types.IsRecordType(typ) {
