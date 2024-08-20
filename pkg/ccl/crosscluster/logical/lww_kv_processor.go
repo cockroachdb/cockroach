@@ -261,6 +261,7 @@ type kvTableWriter struct {
 	ru               row.Updater
 	ri               row.Inserter
 	rd               row.Deleter
+	scratchTS        tree.DDecimal
 }
 
 func newKVTableWriter(
@@ -355,6 +356,10 @@ func (p *kvTableWriter) fillNew(vals cdcevent.Row) error {
 	p.newVals = p.newVals[:0]
 	if err := vals.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		// TODO(dt): add indirection from col ID to offset.
+		if col.Name == originTimestampColumnName {
+			p.scratchTS.Decimal = eval.TimestampToDecimal(vals.MvccTimestamp)
+			d = &p.scratchTS
+		}
 		p.newVals = append(p.newVals, d)
 		return nil
 	}); err != nil {
