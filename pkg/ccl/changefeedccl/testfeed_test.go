@@ -493,6 +493,19 @@ func (f *jobFeed) Details() (*jobspb.ChangefeedDetails, error) {
 	return payload.GetChangefeed(), nil
 }
 
+// Progress implements FeedJob interface.
+func (f *jobFeed) Progress() (*jobspb.ChangefeedProgress, error) {
+	var details []byte
+	if err := f.db.QueryRow(jobutils.JobProgressByIDQuery, f.jobID).Scan(&details); err != nil {
+		return nil, errors.Wrapf(err, "Progress for job %d", f.jobID)
+	}
+	var progress jobspb.Progress
+	if err := protoutil.Unmarshal(details, &progress); err != nil {
+		return nil, err
+	}
+	return progress.GetChangefeed(), nil
+}
+
 // HighWaterMark implements FeedJob interface.
 func (f *jobFeed) HighWaterMark() (hlc.Timestamp, error) {
 	var details []byte
