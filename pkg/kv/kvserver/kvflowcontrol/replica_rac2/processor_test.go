@@ -101,11 +101,6 @@ type testRaftNode struct {
 	myLeaderTerm      uint64
 }
 
-func (rn *testRaftNode) EnablePingForAdmittedLaggingLocked() {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.EnablePingForAdmittedLaggingLocked\n")
-}
-
 func (rn *testRaftNode) LeaderLocked() roachpb.ReplicaID {
 	rn.r.mu.AssertHeld()
 	fmt.Fprintf(rn.b, " RaftNode.LeaderLocked() = %s\n", rn.leader)
@@ -124,34 +119,10 @@ func (rn *testRaftNode) NextUnstableIndexLocked() uint64 {
 	return rn.nextUnstableIndex
 }
 
-func (rn *testRaftNode) GetAdmittedLocked() [raftpb.NumPriorities]uint64 {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.GetAdmittedLocked = %s\n", admittedString(rn.admitted))
-	return rn.admitted
-}
-
 func (rn *testRaftNode) MyLeaderTermLocked() uint64 {
 	rn.r.mu.AssertHeld()
 	fmt.Fprintf(rn.b, " RaftNode.MyLeaderTermLocked() = %d\n", rn.myLeaderTerm)
 	return rn.myLeaderTerm
-}
-
-func (rn *testRaftNode) SetAdmittedLocked(admitted [raftpb.NumPriorities]uint64) raftpb.Message {
-	rn.r.mu.AssertHeld()
-	// TODO(sumeer): set more fields.
-	msg := raftpb.Message{
-		Type: raftpb.MsgAppResp,
-	}
-	fmt.Fprintf(rn.b, " RaftNode.SetAdmittedLocked(%s) = %s\n",
-		admittedString(admitted), msgString(msg))
-	rn.admitted = admitted
-	return msg
-}
-
-func (rn *testRaftNode) StepMsgAppRespForAdmittedLocked(msg raftpb.Message) error {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.StepMsgAppRespForAdmittedLocked(%s)\n", msgString(msg))
-	return nil
 }
 
 func admittedString(admitted [raftpb.NumPriorities]uint64) string {

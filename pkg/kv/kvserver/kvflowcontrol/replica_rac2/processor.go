@@ -15,14 +15,18 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -91,12 +95,6 @@ type RaftScheduler interface {
 // reads Raft state at various points while holding raftMu, and expects those
 // various reads to be mutually consistent.
 type RaftNode interface {
-	// EnablePingForAdmittedLaggingLocked is a one time behavioral change made
-	// to enable pinging for the admitted array when it is lagging match. Once
-	// changed, this will apply to current and future leadership roles at this
-	// replica.
-	EnablePingForAdmittedLaggingLocked()
-
 	// Read-only methods.
 
 	// LeaderLocked returns the current known leader. This state can advance
@@ -104,8 +102,12 @@ type RaftNode interface {
 	// known as a current group member.
 	LeaderLocked() roachpb.ReplicaID
 	// StableIndexLocked is the (inclusive) highest index that is known to be
-	// successfully persisted in local storage.
-	StableIndexLocked() uint64
+	// successfully persisted in local storage, and the leader term on which it
+	// was received. The leader term must be at least the term of the entry
+	// corresponding to the stable index (and could regress to that entry term
+	// if the node crashed and recovered and this stable index predates the
+	// crash).
+	StableIndexLocked() StableIndexState
 	// NextUnstableIndexLocked returns the index of the next entry that will
 	// be sent to local storage. All entries < this index are either stored,
 	// or have been sent to storage.
@@ -113,30 +115,31 @@ type RaftNode interface {
 	// NB: NextUnstableIndex can regress when the node accepts appends or
 	// snapshots from a newer leader.
 	NextUnstableIndexLocked() uint64
-	// GetAdmittedLocked returns the current value of the admitted array.
-	GetAdmittedLocked() [raftpb.NumPriorities]uint64
 	// MyLeaderTermLocked returns the term, if this replica is the leader, else
 	// 0.
 	MyLeaderTermLocked() uint64
-
-	// Mutating methods.
-
-	// SetAdmittedLocked sets a new value for the admitted array. It is the
-	// caller's responsibility to ensure that it is not regressing admitted,
-	// and it is not advancing admitted beyond the stable index.
-	SetAdmittedLocked([raftpb.NumPriorities]uint64) raftpb.Message
-	// StepMsgAppRespForAdmittedLocked steps a MsgAppResp on the leader, which
-	// may advance its knowledge of a follower's admitted state.
-	StepMsgAppRespForAdmittedLocked(raftpb.Message) error
+	// FollowerState returns the known follower state. If follower is unknown,
+	// the empty struct is returned.
+	FollowerState(r roachpb.ReplicaID) FollowerState
 }
 
-// AdmittedPiggybacker is used to enqueue MsgAppResp messages whose purpose is
-// to advance Admitted. For efficiency, these need to be piggybacked on other
-// messages being sent to the given leader node. The StoreID and RangeID are
-// provided so that the leader node can route the incoming message to the
-// relevant range.
+type StableIndexState struct {
+	LeaderTerm uint64
+	Index      uint64
+}
+
+type FollowerState struct {
+	State tracker.StateType
+	Match uint64
+}
+
+// AdmittedPiggybacker is used to enqueue PiggybackedAdmittedState messages
+// whose purpose is to advance Admitted. For efficiency, these need to be
+// piggybacked on other messages being sent to the given leader node. The
+// ToStoreID and RangeID are provided so that the leader node can route the
+// incoming message to the relevant range.
 type AdmittedPiggybacker interface {
-	AddMsgAppRespForLeader(roachpb.NodeID, roachpb.StoreID, roachpb.RangeID, raftpb.Message)
+	AddPiggybackedAdmittedState(roachpb.NodeID, kvflowcontrolpb.PiggybackedAdmittedState)
 }
 
 // EntryForAdmission is the information provided to the admission control (AC)
@@ -228,6 +231,7 @@ type ProcessorOptions struct {
 	RangeControllerFactory RangeControllerFactory
 
 	EnabledWhenLeaderLevel EnabledWhenLeaderLevel
+	ProbeInterval          time.Duration
 }
 
 // SideChannelInfoUsingRaftMessageRequest is used to provide a follower
@@ -360,12 +364,13 @@ type Processor interface {
 	AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(
 		ctx context.Context, leaderTerm uint64, entries []raftpb.Entry) bool
 
-	// EnqueuePiggybackedAdmittedAtLeader is called at the leader when
-	// receiving a piggybacked MsgAppResp that can advance a follower's
-	// admitted state. The caller is responsible for scheduling on the raft
-	// scheduler, such that ProcessPiggybackedAdmittedAtLeaderRaftMuLocked
-	// gets called soon.
-	EnqueuePiggybackedAdmittedAtLeader(msg raftpb.Message)
+	// EnqueueAdmittedStateAtLeader is called at the leader when receiving an
+	// admitted vector from a follower, that may advance the leader's knowledge
+	// of what the follower has admitted. The caller is responsible for ensuring
+	// that ProcessPiggybackedAdmittedAtLeaderRaftMuLocked is called soon.
+	//
+	// TODO: callee code. Remember the time when this is called.
+	EnqueueAdmittedStateAtLeader(msg kvflowcontrolpb.PiggybackedAdmittedState)
 	// ProcessPiggybackedAdmittedAtLeaderRaftMuLocked is called to process
 	// previous enqueued piggybacked MsgAppResp. Returns true if
 	// HandleRaftReadyRaftMuLocked should be called.
@@ -389,6 +394,191 @@ type Processor interface {
 	AdmittedLogEntry(
 		ctx context.Context, state EntryForAdmissionCallbackState,
 	)
+
+	// TryAdvanceStableIndex is called to get the latest admitted vector to
+	// attach to a MsgAppResp. The caller may have a (leaderTerm, stableIndex)
+	// pair that is beyond even the knowledge of Raft, since the
+	// MsgStorageAppendResp may not have been stepped into Raft yet.
+	TryAdvanceStableIndex(
+		leaderTerm uint64, stableIndex uint64) (admitted AdmittedVector, admittedLeaderTerm uint64)
+
+	// TickAndReturnFollowerAdmittedProbesRaftMuLocked returns some probes to be
+	// sent to followers who have not recently called
+	// EnqueueAdmittedStateAtLeader, have admitted state that is lagging match,
+	// and are still in StateReplicate.
+	TickAndReturnFollowerAdmittedProbesRaftMuLocked() []*kvserverpb.RaftMessageRequest
+
+	// HandleProbeRaftMuLocked is called when the leader has sent an admitted
+	// probe. Returns a RaftMessageRequest to send. Can return nil.
+	HandleProbeRaftMuLocked(from roachpb.ReplicaDescriptor) *kvserverpb.RaftMessageRequest
+}
+
+type AdmittedVector [raftpb.NumPriorities]uint64
+
+// admittedTracker tracks various state needed for advancing the admitted
+// vector. It has its own mutex since it can be called without holding raftMu,
+// or processorImpl.mu. Specifically, we don't want the caller to have to
+// acquire either of those wide mutexes in (a) the AdmittedLogEntry callback,
+// (b) TryAdvanceStableIndex.
+type admittedTracker struct {
+	replicaID roachpb.ReplicaID
+	mu        struct {
+		syncutil.Mutex
+		// Monotonically non-decreasing.
+		leaderTerm uint64
+		// Can regress, due to a new leader.
+		stableIndex uint64
+		// Function of stableIndex and waitingForAdmissionState. Can regress, due
+		// to a new leader. For instance admitted for a particular priority could
+		// advance to 20 under leaderTerm 1, because both persistence and
+		// admission has happened, and then leader term switches to 2 and stable
+		// index regresses to 10, and the admitted value would become <= 10.
+		admitted AdmittedVector
+		// admittedChanged is set to true whenever admitted is updated. It is
+		// reset to false in getAdmitted. It tells the caller of getAdmitted if it
+		// has new information e.g. there is no need for the caller to call
+		// AddPiggybackedAdmittedState if the information it is retrieving has
+		// been retrieved and attached to a MsgAppResp.
+		admittedChanged bool
+		// The followers map only contains entries for the current set of
+		// followers, based on the latest range descriptor. A new follower has an
+		// admitted vector initialized to 0. Can regress if this node lost
+		// leadership and regained it later.
+		followers                   map[roachpb.ReplicaID]*admittedState
+		waitingForAdmissionState    waitingForAdmissionState
+		scheduledAdmittedProcessing bool
+	}
+}
+
+type admittedState struct {
+	admitted          AdmittedVector
+	lastUpdateOrProbe time.Time
+}
+
+// Returns the previous value.
+func (t *admittedTracker) setScheduledAdmittedProcessing(value bool) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if value == t.mu.scheduledAdmittedProcessing {
+		return value
+	}
+	t.mu.scheduledAdmittedProcessing = value
+	return !value
+}
+
+func (t *admittedTracker) close() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	// Release some memory.
+	t.mu.followers = nil
+	t.mu.waitingForAdmissionState = waitingForAdmissionState{}
+}
+
+func (t *admittedTracker) addWaiting(leaderTerm uint64, index uint64, pri raftpb.Priority) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.waitingForAdmissionState.add(leaderTerm, index, pri)
+}
+
+func (t *admittedTracker) removeWaiting(
+	leaderTerm uint64, index uint64, pri raftpb.Priority,
+) (admittedAdvanced bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	mayAdvance := t.mu.waitingForAdmissionState.remove(leaderTerm, index, pri)
+	if mayAdvance && index <= t.mu.stableIndex {
+		t.mu.admitted = t.mu.waitingForAdmissionState.computeAdmitted(t.mu.stableIndex)
+		t.mu.admittedChanged = true
+		return true
+	}
+	return false
+}
+
+// tryAdvanceStableIndex will be called both using (a) MsgAppResp, when the
+// storage write has completed, (b) when processing MsgStorageAppendResp. For
+// (a) the "leader term" corresponds to that log write, and must be in the
+// MsgAppResp. For (b), even though the MsgStorageAppendResp may be for an
+// earlier "accepted term", we are simply using the latest stable index and
+// leader term provided by RaftNode, so they are mutually consistent.
+func (t *admittedTracker) tryAdvanceStableIndex(leaderTerm uint64, stableIndex uint64) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if leaderTerm < t.mu.leaderTerm {
+		return
+	}
+	if t.mu.leaderTerm < leaderTerm {
+		t.mu.leaderTerm = leaderTerm
+		t.mu.stableIndex = stableIndex
+	} else if t.mu.stableIndex >= stableIndex {
+		return
+	} else {
+		t.mu.stableIndex = stableIndex
+	}
+	t.mu.admitted = t.mu.waitingForAdmissionState.computeAdmitted(t.mu.stableIndex)
+	t.mu.admittedChanged = true
+}
+
+func (t *admittedTracker) getAdmitted() (
+	admitted [raftpb.NumPriorities]uint64,
+	leaderTerm uint64,
+	changed bool,
+) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	admittedChanged := t.mu.admittedChanged
+	if admittedChanged {
+		t.mu.admittedChanged = false
+	}
+	return t.mu.admitted, t.mu.leaderTerm, admittedChanged
+}
+
+func (t *admittedTracker) setReplicas(replicas rac2.ReplicaSet) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.mu.followers == nil {
+		t.mu.followers = map[roachpb.ReplicaID]*admittedState{}
+	}
+	for r := range t.mu.followers {
+		if _, ok := replicas[r]; !ok {
+			// Not a replica anymore.
+			delete(t.mu.followers, r)
+		}
+	}
+	for r := range replicas {
+		if r == t.replicaID {
+			continue
+		}
+		if _, ok := t.mu.followers[r]; !ok {
+			t.mu.followers[r] = &admittedState{}
+		}
+	}
+}
+
+func (t *admittedTracker) setAdmittedForFollower(
+	now time.Time, replica roachpb.ReplicaID, v AdmittedVector,
+) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	entry, ok := t.mu.followers[replica]
+	if ok {
+		entry.admitted = v
+		entry.lastUpdateOrProbe = now
+	}
+}
+
+func (t *admittedTracker) iterateFollowersForProbing(
+	now time.Time,
+	probeInterval time.Duration,
+	f func(replica roachpb.ReplicaID, admitted AdmittedVector),
+) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for r, entry := range t.mu.followers {
+		if now.Sub(entry.lastUpdateOrProbe) > probeInterval {
+			entry.lastUpdateOrProbe = now
+			f(r, entry.admitted)
+		}
+	}
 }
 
 type processorImpl struct {
@@ -409,10 +599,6 @@ type processorImpl struct {
 		leaderNodeID  roachpb.NodeID
 		leaderStoreID roachpb.StoreID
 		leaseholderID roachpb.ReplicaID
-		// State for advancing admitted.
-		lastObservedStableIndex     uint64
-		scheduledAdmittedProcessing bool
-		waitingForAdmissionState    waitingForAdmissionState
 		// State at a follower.
 		follower struct {
 			isLeaderUsingV2Protocol bool
@@ -421,7 +607,7 @@ type processorImpl struct {
 		// State when leader, i.e., when leaderID == opts.ReplicaID, and v2
 		// protocol is enabled.
 		leader struct {
-			enqueuedPiggybackedResponses map[roachpb.ReplicaID]raftpb.Message
+			enqueuedPiggybackedResponses map[roachpb.ReplicaID]AdmittedVector
 			rc                           rac2.RangeController
 			// Term is used to notice transitions out of leadership and back,
 			// to recreate rc. It is set when rc is created, and is not
@@ -447,6 +633,9 @@ type processorImpl struct {
 	// mu.enabledWhenLeader.
 	enabledWhenLeader atomic.Uint32
 
+	// admittedTracker.mu is ordered after processorImpl.mu.
+	admittedTracker admittedTracker
+
 	v1EncodingPriorityMismatch log.EveryN
 }
 
@@ -456,6 +645,7 @@ func NewProcessor(opts ProcessorOptions) Processor {
 	p := &processorImpl{opts: opts}
 	p.mu.enabledWhenLeader = opts.EnabledWhenLeaderLevel
 	p.enabledWhenLeader.Store(uint32(opts.EnabledWhenLeaderLevel))
+	p.admittedTracker.replicaID = opts.ReplicaID
 	p.v1EncodingPriorityMismatch = log.Every(time.Minute)
 	return p
 }
@@ -470,7 +660,7 @@ func (p *processorImpl) OnDestroyRaftMuLocked(ctx context.Context) {
 	p.closeLeaderStateRaftMuLockedProcLocked(ctx)
 
 	// Release some memory.
-	p.mu.waitingForAdmissionState = waitingForAdmissionState{}
+	p.admittedTracker.close()
 	p.mu.follower.lowPriOverrideState = lowPriOverrideState{}
 }
 
@@ -529,6 +719,12 @@ func (p *processorImpl) OnDescChangedLocked(ctx context.Context, desc *roachpb.R
 	}
 	p.raftMu.replicas = descToReplicaSet(desc)
 	p.raftMu.replicasChanged = true
+	// Ensure admittedTracker is up-to-date since it may process piggybacked
+	// admitted before the next ready.
+	p.admittedTracker.setReplicas(p.raftMu.replicas)
+	// We need to promptly return tokens if some replicas have been removed.
+	// Ensure that promptness by scheduling ready.
+	p.opts.RaftScheduler.EnqueueRaftReady(p.opts.RangeID)
 }
 
 // makeStateConsistentRaftMuLockedProcLocked, uses the union of the latest
@@ -637,7 +833,7 @@ func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
 		nextRaftIndex: nextUnstableIndex,
 	})
 	p.mu.leader.term = term
-	p.mu.leader.enqueuedPiggybackedResponses = map[roachpb.ReplicaID]raftpb.Message{}
+	p.mu.leader.enqueuedPiggybackedResponses = map[roachpb.ReplicaID]AdmittedVector{}
 }
 
 // HandleRaftReadyRaftMuLocked implements Processor.
@@ -661,9 +857,10 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, entries
 	// leader may switch to v2.
 
 	// Grab the state we need in one shot after acquiring Replica mu.
-	var nextUnstableIndex, stableIndex uint64
+	var nextUnstableIndex uint64
+	var stableIndex StableIndexState
 	var leaderID, leaseholderID roachpb.ReplicaID
-	var admitted [raftpb.NumPriorities]uint64
+	var admitted AdmittedVector
 	var myLeaderTerm uint64
 	func() {
 		p.opts.Replica.MuLock()
@@ -672,7 +869,6 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, entries
 		stableIndex = p.raftMu.raftNode.StableIndexLocked()
 		leaderID = p.raftMu.raftNode.LeaderLocked()
 		leaseholderID = p.opts.Replica.LeaseholderMuLocked()
-		admitted = p.raftMu.raftNode.GetAdmittedLocked()
 		if leaderID == p.opts.ReplicaID {
 			myLeaderTerm = p.raftMu.raftNode.MyLeaderTermLocked()
 		}
@@ -680,8 +876,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, entries
 	if len(entries) > 0 {
 		nextUnstableIndex = entries[0].Index
 	}
-	p.mu.lastObservedStableIndex = stableIndex
-	p.mu.scheduledAdmittedProcessing = false
+	_ = p.admittedTracker.setScheduledAdmittedProcessing(false)
 	p.makeStateConsistentRaftMuLockedProcLocked(
 		ctx, nextUnstableIndex, leaderID, leaseholderID, myLeaderTerm)
 
@@ -692,18 +887,25 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, entries
 	// If there was a recent MsgStoreAppendResp that triggered this Ready
 	// processing, it has already been stepped, so the stable index would have
 	// advanced. So this is an opportune place to do Admitted processing.
-	nextAdmitted := p.mu.waitingForAdmissionState.computeAdmitted(stableIndex)
-	if admittedIncreased(admitted, nextAdmitted) {
-		p.opts.Replica.MuLock()
-		msgResp := p.raftMu.raftNode.SetAdmittedLocked(nextAdmitted)
-		p.opts.Replica.MuUnlock()
+	p.admittedTracker.tryAdvanceStableIndex(stableIndex.LeaderTerm, stableIndex.Index)
+	admitted, leaderTerm, changed := p.admittedTracker.getAdmitted()
+	if changed {
 		if p.mu.leader.rc == nil && p.mu.leaderNodeID != 0 {
 			// Follower, and know leaderNodeID, leaderStoreID.
-			p.opts.AdmittedPiggybacker.AddMsgAppRespForLeader(
-				p.mu.leaderNodeID, p.mu.leaderStoreID, p.opts.RangeID, msgResp)
+			p.opts.AdmittedPiggybacker.AddPiggybackedAdmittedState(
+				p.mu.leaderNodeID, kvflowcontrolpb.PiggybackedAdmittedState{
+					RangeID:       p.opts.RangeID,
+					FromReplicaID: p.opts.ReplicaID,
+					ToReplicaID:   p.mu.leaderID,
+					ToStoreID:     p.mu.leaderStoreID,
+					Admitted: kvflowcontrolpb.AdmittedState{
+						LeaderTerm: leaderTerm,
+						Admitted:   admitted[:],
+					},
+				})
 		}
-		// Else if the local replica is the leader, we have already told it
-		// about the update by calling SetAdmittedLocked. If the leader is not
+		// Else if the local replica is the leader, we have already told it about
+		// the update by calling tryAdvanceStableIndex. If the leader is not
 		// known, we simply drop the message.
 	}
 	if p.mu.leader.rc != nil {
@@ -755,7 +957,7 @@ func (p *processorImpl) AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(
 				p.mu.Lock()
 				defer p.mu.Unlock()
 				raftPri = p.mu.follower.lowPriOverrideState.getEffectivePriority(entry.Index, raftPri)
-				p.mu.waitingForAdmissionState.add(leaderTerm, entry.Index, raftPri)
+				p.admittedTracker.addWaiting(leaderTerm, entry.Index, raftPri)
 			}()
 		} else {
 			raftPri = raftpb.LowPri
@@ -765,11 +967,7 @@ func (p *processorImpl) AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(
 					"do not use RACv1 for pri %s, which is regular work",
 					admissionpb.WorkPriority(meta.AdmissionPriority))
 			}
-			func() {
-				p.mu.Lock()
-				defer p.mu.Unlock()
-				p.mu.waitingForAdmissionState.add(leaderTerm, entry.Index, raftPri)
-			}()
+			p.admittedTracker.addWaiting(leaderTerm, entry.Index, raftPri)
 		}
 		admissionPri := rac2.RaftToAdmissionPriority(raftPri)
 		// NB: cannot hold mu when calling Admit since the callback may
@@ -791,19 +989,15 @@ func (p *processorImpl) AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(
 		})
 		if !submitted {
 			// Very rare. e.g. store was not found.
-			func() {
-				p.mu.Lock()
-				defer p.mu.Unlock()
-				p.mu.waitingForAdmissionState.remove(leaderTerm, entry.Index, raftPri)
-			}()
+			p.admittedTracker.removeWaiting(leaderTerm, entry.Index, raftPri)
 		}
 	}
 	return true
 }
 
-// EnqueuePiggybackedAdmittedAtLeader implements Processor.
-func (p *processorImpl) EnqueuePiggybackedAdmittedAtLeader(msg raftpb.Message) {
-	if roachpb.ReplicaID(msg.To) != p.opts.ReplicaID {
+// EnqueueAdmittedStateAtLeader implements Processor.
+func (p *processorImpl) EnqueueAdmittedStateAtLeader(msg kvflowcontrolpb.PiggybackedAdmittedState) {
+	if msg.ToReplicaID != p.opts.ReplicaID {
 		// Ignore message to a stale ReplicaID.
 		return
 	}
@@ -813,7 +1007,22 @@ func (p *processorImpl) EnqueuePiggybackedAdmittedAtLeader(msg raftpb.Message) {
 		return
 	}
 	// Only need to keep the latest message from a replica.
-	p.mu.leader.enqueuedPiggybackedResponses[roachpb.ReplicaID(msg.From)] = msg
+	v := toAdmittedVector(msg.Admitted)
+	prevV := p.mu.leader.enqueuedPiggybackedResponses[msg.FromReplicaID]
+	if admittedIncreased(prevV, v) {
+		p.mu.leader.enqueuedPiggybackedResponses[msg.FromReplicaID] = v
+	}
+}
+
+func toAdmittedVector(s kvflowcontrolpb.AdmittedState) AdmittedVector {
+	var v AdmittedVector
+	if len(s.Admitted) != len(v) {
+		panic("")
+	}
+	for i := range v {
+		v[i] = s.Admitted[i]
+	}
+	return v
 }
 
 // ProcessPiggybackedAdmittedAtLeaderRaftMuLocked implements Processor.
@@ -824,13 +1033,9 @@ func (p *processorImpl) ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx conte
 	if p.mu.destroyed || len(p.mu.leader.enqueuedPiggybackedResponses) == 0 || p.raftMu.raftNode == nil {
 		return false
 	}
-	p.opts.Replica.MuLock()
-	defer p.opts.Replica.MuUnlock()
+	now := timeutil.Now()
 	for k, m := range p.mu.leader.enqueuedPiggybackedResponses {
-		err := p.raftMu.raftNode.StepMsgAppRespForAdmittedLocked(m)
-		if err != nil {
-			log.Errorf(ctx, "%s", err)
-		}
+		p.admittedTracker.setAdmittedForFollower(now, k, m)
 		delete(p.mu.leader.enqueuedPiggybackedResponses, k)
 	}
 	return true
@@ -865,36 +1070,115 @@ func (p *processorImpl) SideChannelForPriorityOverrideAtFollowerRaftMuLocked(
 }
 
 // AdmittedLogEntry implements Processor.
+//
+// Do *not* acquire any wide mutex in this callback from the AC subsystem.
 func (p *processorImpl) AdmittedLogEntry(
 	ctx context.Context, state EntryForAdmissionCallbackState,
 ) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.mu.destroyed || state.ReplicaID != p.opts.ReplicaID {
+	if state.ReplicaID != p.opts.ReplicaID {
 		return
 	}
-	admittedMayAdvance :=
-		p.mu.waitingForAdmissionState.remove(state.LeaderTerm, state.Index, state.Priority)
-	if !admittedMayAdvance || state.Index > p.mu.lastObservedStableIndex ||
-		(p.mu.leader.rc == nil && !p.mu.follower.isLeaderUsingV2Protocol) {
+	admittedAdvanced :=
+		p.admittedTracker.removeWaiting(state.LeaderTerm, state.Index, state.Priority)
+	if !admittedAdvanced {
 		return
 	}
-	// The lastObservedStableIndex has moved at or ahead of state.Index. This
-	// will happen when admission is not immediate. In this case we need to
-	// schedule processing.
-	if !p.mu.scheduledAdmittedProcessing {
-		p.mu.scheduledAdmittedProcessing = true
+	// admittedAdvanced typically happens when admission happened after stability.
+	// We need to schedule processing, if not already done.
+	prevScheduled := p.admittedTracker.setScheduledAdmittedProcessing(true)
+	if !prevScheduled {
 		p.opts.RaftScheduler.EnqueueRaftReady(p.opts.RangeID)
 	}
 }
 
-func admittedIncreased(prev, next [raftpb.NumPriorities]uint64) bool {
+func admittedIncreased(prev, next AdmittedVector) bool {
 	for i := range prev {
 		if prev[i] < next[i] {
 			return true
 		}
 	}
 	return false
+}
+
+// TryAdvanceStableIndex implements Processor.
+func (p *processorImpl) TryAdvanceStableIndex(
+	leaderTerm uint64, stableIndex uint64,
+) (admitted AdmittedVector, admittedLeaderTerm uint64) {
+	p.admittedTracker.tryAdvanceStableIndex(leaderTerm, stableIndex)
+	admitted, term, _ := p.admittedTracker.getAdmitted()
+	return admitted, term
+}
+
+// TickAndReturnFollowerAdmittedProbesRaftMuLocked implements Processor.
+func (p *processorImpl) TickAndReturnFollowerAdmittedProbesRaftMuLocked() []*kvserverpb.RaftMessageRequest {
+	now := timeutil.Now()
+	var buf [5]roachpb.ReplicaID
+	replicas := buf[0:0:len(buf)]
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.mu.destroyed || p.mu.leader.rc == nil {
+		return nil
+	}
+	p.admittedTracker.iterateFollowersForProbing(now, p.opts.ProbeInterval,
+		func(r roachpb.ReplicaID, admitted AdmittedVector) {
+			p.opts.Replica.MuLock()
+			defer p.opts.Replica.MuUnlock()
+			state := p.raftMu.raftNode.FollowerState(r)
+			if state.State != tracker.StateReplicate {
+				return
+			}
+			for _, v := range admitted {
+				if v < state.Match {
+					replicas = append(replicas, r)
+					return
+				}
+			}
+		})
+	var msgs []*kvserverpb.RaftMessageRequest
+	for _, r := range replicas {
+		desc, ok := p.raftMu.replicas[r]
+		if !ok {
+			continue
+		}
+		msg := &kvserverpb.RaftMessageRequest{
+			RangeID:           p.opts.RangeID,
+			FromReplica:       p.raftMu.replicas[p.opts.ReplicaID],
+			ToReplica:         desc,
+			Message:           raftpb.Message{},
+			UsingRac2Protocol: true,
+			IsAdmittedProbe:   true,
+		}
+		msgs = append(msgs, msg)
+	}
+	return msgs
+}
+
+func (p *processorImpl) HandleProbeRaftMuLocked(
+	from roachpb.ReplicaDescriptor,
+) *kvserverpb.RaftMessageRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.mu.destroyed {
+		return nil
+	}
+	admitted, leaderTerm, _ := p.admittedTracker.getAdmitted()
+	msg := &kvserverpb.RaftMessageRequest{
+		RangeID:     p.opts.RangeID,
+		FromReplica: p.raftMu.replicas[p.opts.ReplicaID],
+		ToReplica:   from,
+		Message: raftpb.Message{
+			// TODO: this will tickle the RaftMessageRequest handling path on the
+			// leader, that will look at Admitted, which is what we want. But there
+			// is nothing else here, and we will needlessly step it. As long as Raft
+			// ignores it, we are ok. Confirm that Raft will ignore it.
+			Type: raftpb.MsgAppResp,
+		},
+		Admitted: kvflowcontrolpb.AdmittedState{
+			LeaderTerm: leaderTerm,
+			Admitted:   admitted[:],
+		},
+	}
+	return msg
 }
 
 // RangeControllerFactoryImpl implements RangeControllerFactory.

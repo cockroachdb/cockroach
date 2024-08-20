@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -29,7 +28,7 @@ type PiggybackMsgReader interface {
 	// least one message will be popped.
 	PopMsgsForNode(
 		now time.Time, nodeID roachpb.NodeID, maxBytes int64,
-	) (msgs []kvflowcontrolpb.AdmittedResponseForRange, remainingMsgs int)
+	) (msgs []kvflowcontrolpb.PiggybackedAdmittedState, remainingMsgs int)
 	// NodesWithMsgs is used to periodically drop msgs from disconnected nodes.
 	// See RaftTransport.dropFlowTokensForDisconnectedNodes.
 	NodesWithMsgs(now time.Time) []roachpb.NodeID
@@ -46,7 +45,7 @@ type AdmittedPiggybacker struct {
 }
 
 type rangeMap struct {
-	rangeMap              map[roachpb.RangeID]kvflowcontrolpb.AdmittedResponseForRange
+	rangeMap              map[roachpb.RangeID]kvflowcontrolpb.PiggybackedAdmittedState
 	transitionToEmptyTime time.Time
 }
 
@@ -59,22 +58,18 @@ func NewAdmittedPiggybacker() *AdmittedPiggybacker {
 var _ PiggybackMsgReader = &AdmittedPiggybacker{}
 var _ replica_rac2.AdmittedPiggybacker = &AdmittedPiggybacker{}
 
-// AddMsgAppRespForLeader implements replica_rac2.AdmittedPiggybacker.
-func (ap *AdmittedPiggybacker) AddMsgAppRespForLeader(
-	nodeID roachpb.NodeID, storeID roachpb.StoreID, rangeID roachpb.RangeID, msg raftpb.Message,
+// AddPiggybackedAdmittedState implements replica_rac2.AdmittedPiggybacker.
+func (ap *AdmittedPiggybacker) AddPiggybackedAdmittedState(
+	nodeID roachpb.NodeID, admitted kvflowcontrolpb.PiggybackedAdmittedState,
 ) {
 	ap.mu.Lock()
 	defer ap.mu.Unlock()
 	rm, ok := ap.mu.msgsForNode[nodeID]
 	if !ok {
-		rm = &rangeMap{rangeMap: map[roachpb.RangeID]kvflowcontrolpb.AdmittedResponseForRange{}}
+		rm = &rangeMap{rangeMap: map[roachpb.RangeID]kvflowcontrolpb.PiggybackedAdmittedState{}}
 		ap.mu.msgsForNode[nodeID] = rm
 	}
-	rm.rangeMap[rangeID] = kvflowcontrolpb.AdmittedResponseForRange{
-		LeaderStoreID: storeID,
-		RangeID:       rangeID,
-		Msg:           msg,
-	}
+	rm.rangeMap[admitted.RangeID] = admitted
 }
 
 // Made-up number. There are 10+ integers, all varint encoded, many of which
@@ -84,7 +79,7 @@ const admittedForRangeRACv2SizeBytes = 50
 // PopMsgsForNode implements PiggybackMsgReader.
 func (ap *AdmittedPiggybacker) PopMsgsForNode(
 	now time.Time, nodeID roachpb.NodeID, maxBytes int64,
-) (msgs []kvflowcontrolpb.AdmittedResponseForRange, remainingMsgs int) {
+) (msgs []kvflowcontrolpb.PiggybackedAdmittedState, remainingMsgs int) {
 	if ap == nil {
 		return nil, 0
 	}

@@ -453,16 +453,6 @@ func (t *RaftTransport) handleRaftRequest(
 			log.Infof(ctx, "informed of below-raft %s", admittedEntries)
 		}
 	}
-	if len(req.AdmittedResponse) > 0 {
-		// NB: we do this via this special path instead of using the
-		// incomingMessageHandler since we don't have a full-fledged
-		// RaftMessageRequest for each range (each of these responses could be for
-		// a different range), and because what we need to do wrt queueing is much
-		// simpler (we don't need to worry about queue size since we only keep the
-		// latest message from each replica).
-		t.kvflowcontrol2.piggybackedResponseScheduler.ScheduleAdmittedResponseForRangeRACv2(
-			ctx, req.AdmittedResponse)
-	}
 	if req.ToReplica.StoreID == roachpb.StoreID(0) && len(req.AdmittedRaftLogEntries) > 0 {
 		// The fallback token dispatch mechanism does not specify a destination
 		// replica, and as such, there's no handler for it. We don't want to
@@ -543,6 +533,17 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 					t.kvflowControl.mu.Lock()
 					t.kvflowControl.mu.connectionTracker.markStoresConnected(storeIDs)
 					t.kvflowControl.mu.Unlock()
+					if len(batch.PiggybackedAdmitted) > 0 {
+						// NB: we do this via this special path instead of using the
+						// incomingMessageHandler since we don't have a full-fledged
+						// RaftMessageRequest for each range (each of these responses
+						// could be for a different range), and because what we need to do
+						// wrt queueing is much simpler (we don't need to worry about
+						// queue size since we only keep the latest message from each
+						// replica).
+						t.kvflowcontrol2.piggybackedResponseScheduler.ScheduleAdmittedStateForRangeRACv2(
+							ctx, batch.PiggybackedAdmitted)
+					}
 					if len(batch.Requests) == 0 {
 						continue
 					}
@@ -746,8 +747,8 @@ func (t *RaftTransport) processQueue(
 
 	// For replication admission control v2.
 	maybeAnnotateWithAdmittedResponses := func(
-		req *kvserverpb.RaftMessageRequest, admitted []kvflowcontrolpb.AdmittedResponseForRange) {
-		req.AdmittedResponse = append(req.AdmittedResponse, admitted...)
+		batch *kvserverpb.RaftMessageRequestBatch, admitted []kvflowcontrolpb.PiggybackedAdmittedState) {
+		batch.PiggybackedAdmitted = append(batch.PiggybackedAdmitted, admitted...)
 	}
 
 	annotateWithClockTimestamp := func(batch *kvserverpb.RaftMessageRequestBatch) {
@@ -763,6 +764,7 @@ func (t *RaftTransport) processQueue(
 		batch.Requests = batch.Requests[:0]
 		batch.StoreIDs = nil
 		batch.Now = hlc.ClockTimestamp{}
+		batch.PiggybackedAdmitted = batch.PiggybackedAdmitted[:0]
 	}
 
 	var raftIdleTimer timeutil.Timer
@@ -802,7 +804,7 @@ func (t *RaftTransport) processQueue(
 			budget := targetRaftOutgoingBatchSize.Get(&t.st.SV) - size
 
 			var pendingDispatches []kvflowcontrolpb.AdmittedRaftLogEntries
-			var admittedResponses []kvflowcontrolpb.AdmittedResponseForRange
+			var admittedResponses []kvflowcontrolpb.PiggybackedAdmittedState
 			if disableFn := t.knobs.DisablePiggyBackedFlowTokenDispatch; disableFn == nil || !disableFn() {
 				// RACv1.
 				//
@@ -828,7 +830,7 @@ func (t *RaftTransport) processQueue(
 				// RACv2.
 				admittedResponses, _ = t.kvflowcontrol2.piggybackReader.PopMsgsForNode(
 					timeutil.Now(), q.nodeID, kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV))
-				maybeAnnotateWithAdmittedResponses(req, admittedResponses)
+				maybeAnnotateWithAdmittedResponses(batch, admittedResponses)
 			}
 
 			batch.Requests = append(batch.Requests, *req)
@@ -885,7 +887,7 @@ func (t *RaftTransport) processQueue(
 
 			req := newRaftMessageRequest()
 			maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
-			maybeAnnotateWithAdmittedResponses(req, admittedResponses)
+			maybeAnnotateWithAdmittedResponses(batch, admittedResponses)
 			batch.Requests = append(batch.Requests, *req)
 			releaseRaftMessageRequest(req)
 

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -1325,6 +1326,15 @@ func (r *Replica) tick(
 ) (bool, error) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
+	msgs := r.flowControlV2.TickAndReturnFollowerAdmittedProbesRaftMuLocked()
+	for _, m := range msgs {
+		if !r.sendRaftMessageRequest(ctx, m) {
+			r.mu.Lock()
+			r.mu.droppedMessages++
+			r.mu.Unlock()
+			r.addUnreachableRemoteReplica(m.ToReplica.ReplicaID)
+		}
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -1899,6 +1909,16 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		FromReplica:   fromReplica,
 		Message:       msg,
 		RangeStartKey: startKey, // usually nil
+	}
+	if msg.Type == raftpb.MsgAppResp {
+		// Send along the latest admitted state.
+		//
+		// TODO(pav-kv): what is the leaderTerm? We need that info from the msg.
+		v, leaderTerm := r.flowControlV2.TryAdvanceStableIndex(0, msg.Index)
+		req.Admitted = kvflowcontrolpb.AdmittedState{
+			LeaderTerm: leaderTerm,
+			Admitted:   v[:],
+		}
 	}
 	if !r.sendRaftMessageRequest(ctx, req) {
 		r.mu.Lock()

@@ -96,18 +96,26 @@ message RaftMessageRequest {
   // that were admitted below raft. Used only in RACv1.
   repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedRaftLogEntries admitted_raft_log_entries = 11 [(gogoproto.nullable) = false];
 
+  // RACv2 fields for leader => follower.
+
   // UsingRAC2Protocol is set to true iff the leader is using the RACv2
-  // protocol.
+  // protocol, and this is a MsgApp.
   bool using_rac2_protocol = 12;
   // LowPriorityOverride is read only when UsingRAC2Protocol is true, and is
   // set only if Message is a MsgApp. When true, it specifies that the
   // priority of the Entries in the Message are overridden to be
   // raftpb.LowPri.
   bool low_priority_override = 13;
+  // IsAdmittedProbe can be set when Message is empty, indicating that the
+  // sender is a leader trying to probe a follower's admitted state.
+  bool is_admitted_probe = 14;
 
-  // AdmittedResponse is used in RACv2, for piggybacking MsgAppResp messages
-  // from a follower to a leader, that advance admitted for a follower.
-  repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedResponseForRange admitted_response = 14 [(gogoproto.nullable) = false];
+  // RACv2 fields for follower => leader.
+
+  // Admitted, when non-empty, specifies the latest admitted state that a
+  // follower is sending to the leader. It is included with a MsgAppResp.
+  kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedState admitted = 15 [(gogoproto.nullable) = false];
+
   reserved 10;
 }
 
@@ -153,6 +161,14 @@ message RaftMessageRequestBatch {
   // provide a disjointness guarantee to leader leases.
   util.hlc.Timestamp now = 3 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  // PiggybackedAdmitted is admitted state from one or more followers to one
+  // or more leaders. They either (a) hitched a ride on this
+  // RaftMessageRequestBatch (the other fields, like requests, may be
+  // populated), or (b) were the cause that the RaftMessageRequestBatch was
+  // sent.
+  repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.PiggybackedAdmittedState piggybacked_admitted = 4 [
+    (gogoproto.nullable) = false];
 }
 
 message RaftMessageResponseUnion {

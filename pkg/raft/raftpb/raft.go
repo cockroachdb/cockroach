@@ -25,6 +25,8 @@ type Epoch int64
 // SafeValue implements the redact.SafeValue interface.
 func (e Epoch) SafeValue() {}
 
+// TODO: move to kvflowcontrolpb.
+
 // Priority specifies per-entry priorities, that are local to the interaction
 // between a leader-replica pair, i.e., they are not an invariant of a
 // particular entry in the raft log (the replica could be the leader itself or

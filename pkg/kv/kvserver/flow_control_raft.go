@@ -13,7 +13,6 @@ package kvserver
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -23,10 +22,6 @@ type raftNodeForRACv2 struct {
 
 var _ replica_rac2.RaftNode = raftNodeForRACv2{}
 
-func (rn raftNodeForRACv2) EnablePingForAdmittedLaggingLocked() {
-	panic("TODO(pav-kv): implement")
-}
-
 func (rn raftNodeForRACv2) LeaderLocked() roachpb.ReplicaID {
 	// This needs to be the latest leader (highest term) that this replica has
 	// heard from, and not the leader recorded in HardState.
@@ -35,9 +30,9 @@ func (rn raftNodeForRACv2) LeaderLocked() roachpb.ReplicaID {
 	return 0
 }
 
-func (rn raftNodeForRACv2) StableIndexLocked() uint64 {
+func (rn raftNodeForRACv2) StableIndexLocked() replica_rac2.StableIndexState {
 	// TODO(pav-kv): implement.
-	return 0
+	return replica_rac2.StableIndexState{}
 }
 
 func (rn raftNodeForRACv2) NextUnstableIndexLocked() uint64 {
@@ -45,20 +40,12 @@ func (rn raftNodeForRACv2) NextUnstableIndexLocked() uint64 {
 	return 0
 }
 
-func (rn raftNodeForRACv2) GetAdmittedLocked() [raftpb.NumPriorities]uint64 {
-	// TODO(pav-kv): implement.
-	return [raftpb.NumPriorities]uint64{}
-}
-
 func (rn raftNodeForRACv2) MyLeaderTermLocked() uint64 {
 	// TODO(pav-kv): implement.
 	return 0
 }
 
-func (rn raftNodeForRACv2) SetAdmittedLocked([raftpb.NumPriorities]uint64) raftpb.Message {
-	panic("TODO(pav-kv): implement")
-}
-
-func (rn raftNodeForRACv2) StepMsgAppRespForAdmittedLocked(m raftpb.Message) error {
-	return rn.RawNode.Step(m)
+func (rn raftNodeForRACv2) FollowerState(r roachpb.ReplicaID) replica_rac2.FollowerState {
+	// TODO(pav-kv): implement.
+	return replica_rac2.FollowerState{}
 }

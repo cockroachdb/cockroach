@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -407,9 +408,34 @@ func (s *Store) processRaftRequestWithReplica(
 	}
 
 	drop := maybeDropMsgApp(ctx, (*replicaMsgAppDropper)(r), &req.Message, req.RangeStartKey)
+	isProbe := req.IsAdmittedProbe
 	if !drop {
-		if err := r.stepRaftGroupRaftMuLocked(req); err != nil {
-			return kvpb.NewError(err)
+		if isProbe {
+			msg := r.flowControlV2.HandleProbeRaftMuLocked(req.FromReplica)
+			if msg != nil {
+				r.sendRaftMessageRequest(ctx, msg)
+			}
+		} else {
+			if err := r.stepRaftGroupRaftMuLocked(req); err != nil {
+				return kvpb.NewError(err)
+			}
+			// If the req contained a MsgAppResp, the follower will have attached the
+			// latest admitted vector. We need to enqueue it, and have it be
+			// processed. We already have a path for enqueueing the piggybacked
+			// admitted vectors, which we may as well reuse. Additionally, since this
+			// method is executing on the raft scheduler, we simply do the processing
+			// now instead of asking to be scheduled later.
+			if len(req.Admitted.Admitted) > 0 {
+				msg := kvflowcontrolpb.PiggybackedAdmittedState{
+					RangeID:       req.RangeID,
+					FromReplicaID: req.FromReplica.ReplicaID,
+					ToReplicaID:   req.ToReplica.ReplicaID,
+					ToStoreID:     req.ToReplica.StoreID,
+					Admitted:      req.Admitted,
+				}
+				r.flowControlV2.EnqueueAdmittedStateAtLeader(msg)
+				r.flowControlV2.ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx)
+			}
 		}
 	}
 	return nil

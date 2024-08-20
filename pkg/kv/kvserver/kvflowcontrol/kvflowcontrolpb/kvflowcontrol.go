@@ -54,10 +54,21 @@ func (a AdmittedRaftLogEntries) SafeFormat(w redact.SafePrinter, _ rune) {
 		a.RangeID, a.StoreID, admissionpb.WorkPriority(a.AdmissionPriority), a.UpToRaftLogPosition)
 }
 
-func (a AdmittedResponseForRange) String() string {
+func (a PiggybackedAdmittedState) String() string {
 	return redact.StringWithoutMarkers(a)
 }
 
-func (a AdmittedResponseForRange) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("admitted-response (s%s r%s %s)", a.LeaderStoreID, a.RangeID, a.Msg.String())
+func (a PiggybackedAdmittedState) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("admitted-state (r%s from-replica %d to s%s replica %d %s)",
+		a.RangeID, a.FromReplicaID, a.ToStoreID, a.ToReplicaID, a.Admitted.String())
+}
+
+func (a AdmittedState) String() string {
+	return redact.StringWithoutMarkers(a)
+}
+
+func (a AdmittedState) SafeFormat(w redact.SafePrinter, _ rune) {
+	if len(a.Admitted) > 0 {
+		w.Printf("admitted [%d %d %d %d]", a.Admitted[0], a.Admitted[1], a.Admitted[2], a.Admitted[3])
+	}
 }
