@@ -14,6 +14,7 @@ go_library(
         "resolved_timestamp.go",
         "scheduled_processor.go",
         "scheduler.go",
+        "stream.go",
         "stream_muxer.go",
         "stream_muxer_test_helper.go",
         "task.go",
