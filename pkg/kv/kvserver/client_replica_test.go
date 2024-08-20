@@ -4449,7 +4449,7 @@ func TestProposalOverhead(t *testing.T) {
 		// affect the memory held by the caller because neither `args` nor
 		// `args.Cmd` are pointers.
 		args.Cmd.WriteBatch = nil
-		t.Logf(pretty.Sprint(args.Cmd))
+		t.Log(pretty.Sprint(args.Cmd))
 		return nil
 	}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{

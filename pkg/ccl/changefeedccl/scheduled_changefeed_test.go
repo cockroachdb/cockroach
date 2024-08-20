@@ -242,7 +242,7 @@ func TestSerializesScheduledChangefeedExecutionArgs(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(fmt.Sprintf(tc.name), func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			defer th.clearSchedules(t)
 
 			sj, err := th.createChangefeedSchedule(t, tc.query, tc.queryArgs...)

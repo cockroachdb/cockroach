@@ -333,7 +333,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			return nil
 		}
 
-		return errors.WithHintf(
+		return errors.WithHint(
 			pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"a foreign key constraint %q will exist between databases after rename "+
 					"(see the '%s' cluster setting)",
@@ -365,7 +365,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			switch {
 			case dependentObject.IsView():
 				if !allowCrossDatabaseViews.Get(&p.execCfg.Settings.SV) {
-					return errors.WithHintf(
+					return errors.WithHint(
 						pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 							"a view %q reference to this table will refer to another databases after rename "+
 								"(see the '%s' cluster setting)",
@@ -376,7 +376,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 				}
 			case dependentObject.IsSequence() && depType == owner:
 				if !allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) {
-					return errors.WithHintf(
+					return errors.WithHint(
 						pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 							"a sequence %q will be OWNED BY a table in a different database after rename "+
 								"(see the '%s' cluster setting)",
@@ -387,7 +387,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 				}
 			case dependentObject.IsSequence() && depType == reference:
 				if !allowCrossDatabaseSeqReferences.Get(&p.execCfg.Settings.SV) {
-					return errors.WithHintf(
+					return errors.WithHint(
 						pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 							"a sequence %q will be referenced by a table in a different database after rename "+
 								"(see the '%s' cluster setting)",
@@ -401,7 +401,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			if !allowCrossDatabaseViews.Get(&p.execCfg.Settings.SV) {
 				// For view's dependent objects can only be
 				// relations.
-				return errors.WithHintf(
+				return errors.WithHint(
 					pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"this view will reference a table %q in another databases after rename "+
 							"(see the '%s' cluster setting)",
@@ -414,7 +414,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			if !allowCrossDatabaseSeqReferences.Get(&p.execCfg.Settings.SV) {
 				// For sequences dependent references can only be
 				// a relations.
-				return errors.WithHintf(
+				return errors.WithHint(
 					pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"this sequence will be referenced by a table %q in a different database after rename "+
 							"(see the '%s' cluster setting)",
@@ -427,7 +427,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			if !allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) {
 				// For sequences dependent owners can only be
 				// a relations.
-				return errors.WithHintf(
+				return errors.WithHint(
 					pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"this sequence will be OWNED BY a table %q in a different database after rename "+
 							"(see the '%s' cluster setting)",
@@ -452,7 +452,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 		if dependentObject.GetParentID() == targetDbDesc.GetID() {
 			return nil
 		}
-		return errors.WithHintf(
+		return errors.WithHint(
 			pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"this view will reference a type %q in another databases after rename "+
 					"(see the '%s' cluster setting)",

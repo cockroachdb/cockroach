@@ -95,7 +95,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 	// Which node is this request for?
 	nodeID, local, err := s.serverIterator.parseServerID(req.NodeId)
 	if err != nil {
-		return status.Errorf(codes.InvalidArgument, err.Error())
+		return status.Error(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		// This request is for another node. Forward it.

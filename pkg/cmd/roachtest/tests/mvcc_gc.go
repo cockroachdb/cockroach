@@ -632,7 +632,7 @@ func sendBatchRequest(
 		debugEnv = fmt.Sprintf("COCKROACH_RANDOM_SEED=%d ", randomSeed)
 	}
 	cmd := roachtestutil.NewCommand("./cockroach debug send-kv-batch").
-		Arg(requestFileName).
+		Arg("%s", requestFileName).
 		Flag("certs-dir", install.CockroachNodeCertsDir).
 		Flag("host", fmt.Sprintf("localhost:{pgport:%d}", node)).
 		String()

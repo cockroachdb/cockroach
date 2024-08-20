@@ -145,7 +145,7 @@ func registerDrop(r registry.Registry) {
 			if !allNodesSpaceCleared {
 				sizeReport += fmt.Sprintf("disk space usage has not dropped below %s on all nodes.",
 					humanizeutil.IBytes(int64(maxSizeBytes)))
-				t.Fatalf(sizeReport)
+				t.Fatal(sizeReport)
 			}
 
 			return nil

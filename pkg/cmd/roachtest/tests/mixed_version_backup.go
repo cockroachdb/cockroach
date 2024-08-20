@@ -2685,7 +2685,7 @@ func schemaChangeWorkloadCmd(
 	// TODO (msbutler): ideally we'd use the `db` flag to explicitly set the
 	// database, but it is currently broken:
 	// https://github.com/cockroachdb/cockroach/issues/115545
-	runCmd := roachtestutil.NewCommand(fmt.Sprintf("COCKROACH_RANDOM_SEED=%d ./workload run schemachange", testRNG.Int63())).
+	runCmd := roachtestutil.NewCommand("COCKROACH_RANDOM_SEED=%d ./workload run schemachange", testRNG.Int63()).
 		Flag("verbose", 1).
 		Flag("max-ops", maxOps).
 		Flag("concurrency", concurrency).

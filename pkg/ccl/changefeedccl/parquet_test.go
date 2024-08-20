@@ -183,7 +183,7 @@ func TestParquetRows(t *testing.T) {
 					writer, err = newParquetWriterFromRow(updatedRow, f, encodingOpts, parquet.WithMaxRowGroupLength(maxRowGroupSize),
 						parquet.WithCompressionCodec(parquet.CompressionGZIP))
 					if err != nil {
-						t.Fatalf(err.Error())
+						t.Fatal(err)
 					}
 					numCols = len(updatedRow.ResultColumns()) + 1
 				}

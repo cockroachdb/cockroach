@@ -83,7 +83,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	if !allowCrossDatabaseViews.Get(&params.p.execCfg.Settings.SV) {
 		for _, dep := range n.planDeps {
 			if dbID := dep.desc.GetParentID(); dbID != n.dbDesc.GetID() && dbID != keys.SystemDatabaseID {
-				return errors.WithHintf(
+				return errors.WithHint(
 					pgerror.Newf(pgcode.FeatureNotSupported,
 						"the view cannot refer to other databases; (see the '%s' cluster setting)",
 						allowCrossDatabaseViewsSetting),

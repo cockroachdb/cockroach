@@ -437,7 +437,7 @@ func cleanUpObjectsBeforeRestore(
 	if len(dbMatch) > 0 {
 		dbName := dbMatch[1]
 		if _, err := db.ExecContext(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s CASCADE", dbName)); err != nil {
-			t.Errorf(errors.Wrapf(err, "failed to drop database %q before restore", dbName).Error())
+			t.Error(errors.Wrapf(err, "failed to drop database %q before restore", dbName).Error())
 		}
 	}
 
@@ -446,7 +446,7 @@ func cleanUpObjectsBeforeRestore(
 	if len(tableMatch) > 0 {
 		tableName := tableMatch[1]
 		if _, err := db.ExecContext(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", tableName)); err != nil {
-			t.Errorf(errors.Wrapf(err, "failed to drop table %q before restore", tableName).Error())
+			t.Error(errors.Wrapf(err, "failed to drop table %q before restore", tableName).Error())
 		}
 	}
 }

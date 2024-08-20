@@ -652,7 +652,7 @@ func maybeAddSequenceDependencies(
 		// Check if this reference is cross DB.
 		if seqDesc.GetParentID() != tableDesc.GetParentID() &&
 			!allowCrossDatabaseSeqReferences.Get(&st.SV) {
-			return nil, errors.WithHintf(
+			return nil, errors.WithHint(
 				pgerror.Newf(pgcode.FeatureNotSupported,
 					"sequence references cannot come from other databases; (see the '%s' cluster setting)",
 					allowCrossDatabaseSeqReferencesSetting),

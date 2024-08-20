@@ -209,7 +209,7 @@ func parseArgs(t *testing.T, d *datadriven.TestData) cmdArgs {
 		case "bytes":
 			v, err := parseBytesVal(args)
 			if err != nil {
-				d.Fatalf(t, err.Error())
+				d.Fatalf(t, "%s", err)
 			}
 			res.bytes = v
 

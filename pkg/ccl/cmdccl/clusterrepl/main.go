@@ -84,7 +84,7 @@ func main() {
 		if errors.Is(err, context.Canceled) {
 			exit.WithCode(exit.Interrupted())
 		} else {
-			fatalf(err.Error())
+			fatalf("%s", err)
 		}
 	}
 }

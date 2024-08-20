@@ -55,7 +55,7 @@ func (s *statusServer) RequestJobProfilerExecutionDetails(
 
 	nodeID, local, err := s.parseNodeID(strconv.Itoa(int(coordinatorID)))
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	// If this node is the current coordinator of the job then we can collect the

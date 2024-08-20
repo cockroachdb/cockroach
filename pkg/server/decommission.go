@@ -251,7 +251,7 @@ func (s *topLevelServer) DecommissionPreCheck(
 	})
 
 	if err != nil {
-		return decommissioning.PreCheckResult{}, grpcstatus.Errorf(codes.Internal, err.Error())
+		return decommissioning.PreCheckResult{}, grpcstatus.Error(codes.Internal, err.Error())
 	}
 
 	return decommissioning.PreCheckResult{
@@ -352,7 +352,7 @@ func (s *topLevelServer) Decommission(
 				return grpcstatus.Error(codes.NotFound, liveness.ErrMissingRecord.Error())
 			}
 			log.Errorf(ctx, "%+s", err)
-			return grpcstatus.Errorf(codes.Internal, err.Error())
+			return grpcstatus.Error(codes.Internal, err.Error())
 		}
 		if statusChanged {
 			event, nodeDetails := newEvent()
