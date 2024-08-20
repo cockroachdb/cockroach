@@ -36,6 +36,7 @@ func constructLogicalReplicationWriterSpecs(
 	jobID jobspb.JobID,
 	streamID streampb.StreamID,
 	filterRangefeed bool,
+	mode jobspb.LogicalReplicationDetails_ApplyMode,
 ) (map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, error) {
 	spanGroup := roachpb.SpanGroup{}
 	baseSpec := execinfrapb.LogicalReplicationWriterSpec{
@@ -47,6 +48,7 @@ func constructLogicalReplicationWriterSpecs(
 		StreamAddress:               string(streamAddress),
 		TableMetadata:               tableMd,
 		FilterRangefeed:             filterRangefeed,
+		Mode:                        mode,
 	}
 
 	writerSpecs := make(map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, len(destSQLInstances))
