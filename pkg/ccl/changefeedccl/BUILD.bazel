@@ -333,6 +333,7 @@ go_test(
         "//pkg/util/cidr",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
+        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/ioctx",

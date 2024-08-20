@@ -122,7 +122,7 @@ func ShouldStartDefaultTestTenant(
 		return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared /* shared */)
 	}
 
-	if decision, override := testTenantDecisionFromEnvironment(baseArg, shared); override {
+	if decision, override := TestTenantDecisionFromEnvironment(baseArg, shared); override {
 		if decision.TestTenantAlwaysEnabled() {
 			t.Log(defaultTestTenantMessage(decision.SharedProcessMode()) + "\n(override via COCKROACH_TEST_TENANT)")
 		}
@@ -173,32 +173,56 @@ const (
 	//   separate process tenant.
 	testTenantEnabledEnvVar = "COCKROACH_TEST_TENANT"
 
-	testTenantModeEnabledShared   = "shared"
-	testTenantModeEnabledExternal = "external"
+	TestTenantModeUnspecified     = "unspecified"
+	TestTenantModeDisabled        = "disabled"
+	TestTenantModeEnabled         = "enabled"
+	TestTenantModeEnabledShared   = "shared"
+	TestTenantModeEnabledExternal = "external"
 )
 
-func testTenantDecisionFromEnvironment(
-	baseArg base.DefaultTestTenantOptions, shared bool,
-) (base.DefaultTestTenantOptions, bool) {
-	if str, present := envutil.EnvString(testTenantEnabledEnvVar, 0); present {
-		v, err := strconv.ParseBool(str)
-		if err == nil {
-			if v {
-				return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared /* shared */), true
-			}
-			return base.InternalNonDefaultDecision(baseArg, false /* enabled */, false /* shared */), true
-		}
-
-		switch str {
-		case testTenantModeEnabledShared:
-			return base.InternalNonDefaultDecision(baseArg, true /* enabled */, true /* shared */), true
-		case testTenantModeEnabledExternal:
-			return base.InternalNonDefaultDecision(baseArg, true /* enabled */, false /* shared */), true
-		default:
-			panic(fmt.Sprintf("invalid value for %s: %s", testTenantEnabledEnvVar, str))
+func testTenantModeFromString(str string) string {
+	v, err := strconv.ParseBool(str)
+	if err == nil {
+		if v {
+			return TestTenantModeEnabled
+		} else {
+			return TestTenantModeDisabled
 		}
 	}
-	return baseArg, false
+
+	switch str {
+	case TestTenantModeUnspecified, TestTenantModeEnabled, TestTenantModeDisabled,
+		TestTenantModeEnabledShared, TestTenantModeEnabledExternal:
+	default:
+		panic(fmt.Sprintf("invalid value for %s: %s", testTenantEnabledEnvVar, str))
+	}
+	return str
+}
+
+var testTenantModeFromEnv = func() string {
+	if str, present := envutil.EnvString(testTenantEnabledEnvVar, 0); present {
+		return testTenantModeFromString(str)
+	}
+	return TestTenantModeUnspecified
+}()
+
+func TestTenantDecisionFromEnvironment(
+	baseArg base.DefaultTestTenantOptions, shared bool,
+) (base.DefaultTestTenantOptions, bool) {
+	switch testTenantModeFromEnv {
+	case TestTenantModeUnspecified:
+		return baseArg, false
+	case TestTenantModeDisabled:
+		return base.InternalNonDefaultDecision(baseArg, false /* enabled */, false /* shared */), true
+	case TestTenantModeEnabled:
+		return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared), true
+	case TestTenantModeEnabledShared:
+		return base.InternalNonDefaultDecision(baseArg, true /* enabled */, true /* shared */), true
+	case TestTenantModeEnabledExternal:
+		return base.InternalNonDefaultDecision(baseArg, true /* enabled */, false /* shared */), true
+	default:
+		panic(fmt.Sprintf("invalid value for %s: %s", testTenantEnabledEnvVar, testTenantModeFromEnv))
+	}
 }
 
 // globalDefaultSelectionOverride is used when an entire package needs
