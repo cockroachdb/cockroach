@@ -1377,8 +1377,8 @@ message QueryTxnRequest {
 // A QueryTxnResponse is the return value from the QueryTxn() method.
 message QueryTxnResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Contains the current state of the queried transaction. If the queried
-  // transaction record does not exist, this will be empty.
+  // Contains the current state of the queried transaction. If a transaction
+  // record is not found, one will be synthesized and returned.
   Transaction queried_txn = 2 [(gogoproto.nullable) = false];
   // txn_record_exists is set if the queried_txn comes from a transaction record
   // read from the database. If not set, then the txn record was "synthesized".
