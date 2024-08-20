@@ -23,8 +23,10 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/datadriven"
 )
 
@@ -64,6 +66,13 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 				arg.Scan(t, i, &cfg.DisableConfChangeValidation)
 			case "step-down-on-removal":
 				arg.Scan(t, i, &cfg.StepDownOnRemoval)
+			case "crdb-version":
+				var key int
+				arg.Scan(t, i, &key)
+				version := clusterversion.Key(key).Version()
+				settings := cluster.MakeTestingClusterSettingsWithVersions(version,
+					clusterversion.MinSupported.Version(), true /* initializeVersion */)
+				cfg.CRDBVersion = settings.Version
 			}
 		}
 	}
