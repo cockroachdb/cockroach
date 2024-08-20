@@ -130,22 +130,22 @@ eval verbose=(topology)
 ----------------------------------
 sample1: start running
 topology:
-AU_EAST
-  AU_EAST_1
+a
+  a_1
     └── [1 2 3]
 sample1: pass
 ----------------------------------
 sample2: start running
 topology:
-AU_EAST
-  AU_EAST_1
+a
+  a_1
     └── [1 2 3]
 sample2: pass
 ----------------------------------
 sample3: start running
 topology:
-AU_EAST
-  AU_EAST_1
+a
+  a_1
     └── [1 2 3]
 sample3: pass
 ----------------------------------
@@ -228,8 +228,8 @@ configurations generated using seed 3440579354231278675
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
 topology:
-AU_EAST
-  AU_EAST_1
+a
+  a_1
     └── [1 2 3]
 no events were scheduled
 sample1: pass
@@ -243,8 +243,8 @@ configurations generated using seed 608747136543856411
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
 topology:
-AU_EAST
-  AU_EAST_1
+a
+  a_1
     └── [1 2 3]
 no events were scheduled
 sample2: pass
@@ -258,8 +258,8 @@ configurations generated using seed 5571782338101878760
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
 topology:
-AU_EAST
-  AU_EAST_1
+a
+  a_1
     └── [1 2 3]
 no events were scheduled
 sample3: pass

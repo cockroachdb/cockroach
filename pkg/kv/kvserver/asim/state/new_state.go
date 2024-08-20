@@ -259,8 +259,8 @@ func ClusterInfoWithStoreCount(nodeCount int, storesPerNode int) ClusterInfo {
 	return ClusterInfoWithDistribution(
 		nodeCount,
 		storesPerNode,
-		[]string{"AU_EAST"}, /* regions */
-		[]float64{1},        /* regionNodeWeights */
+		[]string{"a"}, /* regions */
+		[]float64{1},  /* regionNodeWeights */
 	)
 }
 
