@@ -16,6 +16,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/catalog",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/descmetadata",
         "//pkg/sql/isql",
@@ -25,5 +26,6 @@ go_library(
         "//pkg/sql/schemachanger/scrun",
         "//pkg/util/log",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
