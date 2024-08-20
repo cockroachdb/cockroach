@@ -209,7 +209,7 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// Verify the schema constraints. For consistency with INSERT/UPSERT
 	// and compatibility with PostgreSQL, we must do this before
 	// processing the CHECK constraints.
-	if err := enforceLocalColumnConstraints(u.run.updateValues, u.run.tu.ru.UpdateCols); err != nil {
+	if err := enforceNotNullConstraints(u.run.updateValues, u.run.tu.ru.UpdateCols); err != nil {
 		return err
 	}
 
@@ -347,10 +347,8 @@ func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 	return colinfo.CheckDatumTypeFitsColumnType(ss.column, typ)
 }
 
-// enforceLocalColumnConstraints asserts the column constraints that do not
-// require data validation from other sources than the row data itself. This
-// currently only includes checking for null values in non-nullable columns.
-func enforceLocalColumnConstraints(row tree.Datums, cols []catalog.Column) error {
+// enforceNotNullConstraints enforces NOT NULL column constraints.
+func enforceNotNullConstraints(row tree.Datums, cols []catalog.Column) error {
 	for i, col := range cols {
 		if !col.IsNullable() && row[i] == tree.DNull {
 			return sqlerrors.NewNonNullViolationError(col.GetName())
