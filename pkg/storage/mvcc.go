@@ -6596,9 +6596,10 @@ func MVCCGarbageCollectRangeKeys(
 		// TODO(oleg): this could be misleading if GC fails, but this function still
 		// reports how many keys were GC'd. The approach is identical to what point
 		// key GC does for consistency, but both places could be improved.
+		d := timeutil.Since(begin)
 		log.Eventf(ctx,
-			"done with GC evaluation for %d range keys at %.2f keys/sec. Deleted %d entries",
-			len(rks), float64(len(rks))*1e9/float64(timeutil.Since(begin)), count)
+			"done with GC evaluation for %d range keys in %s (%.2f keys/sec). Deleted %d entries",
+			len(rks), d, float64(len(rks))*1e9/d.Seconds(), count)
 	}(timeutil.Now())
 
 	if len(rks) == 0 {
