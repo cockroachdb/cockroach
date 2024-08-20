@@ -24,9 +24,9 @@ describe cloud=gce suite=nightly
 ----
 tests which are compatible with cloud "gce" and are part of the "nightly" suite
 
-describe cloud=local owner=replication benchmarks
+describe cloud=local owner=kv benchmarks
 ----
-benchmarks which are compatible with cloud "local" and have owner "replication"
+benchmarks which are compatible with cloud "local" and have owner "kv"
 
 describe cloud=gce suite=nightly
 foo

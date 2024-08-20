@@ -27,7 +27,6 @@ const (
 	OwnerCDC                Owner = `cdc`
 	OwnerDisasterRecovery   Owner = `disaster-recovery`
 	OwnerKV                 Owner = `kv`
-	OwnerReplication        Owner = `replication`
 	OwnerAdmissionControl   Owner = `admission-control`
 	OwnerObservability      Owner = `obs-prs`
 	OwnerObservabilityIndia Owner = `obs-india-prs`
