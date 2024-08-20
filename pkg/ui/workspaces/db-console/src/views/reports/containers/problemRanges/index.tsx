@@ -230,6 +230,11 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
           problems={problems}
           extract={problem => problem.paused_replica_ids}
         />
+        <ProblemRangeList
+          name="Range Too Large"
+          problems={problems}
+          extract={problem => problem.too_large_range_ids}
+        />
       </div>
     );
   }

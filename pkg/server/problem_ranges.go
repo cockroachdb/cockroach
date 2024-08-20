@@ -141,6 +141,10 @@ func (s *systemStatusServer) ProblemRanges(
 					problems.PausedReplicaIDs =
 						append(problems.PausedReplicaIDs, info.State.Desc.RangeID)
 				}
+				if info.Problems.RangeTooLarge {
+					problems.TooLargeRangeIds =
+						append(problems.TooLargeRangeIds, info.State.Desc.RangeID)
+				}
 			}
 			slices.Sort(problems.UnavailableRangeIDs)
 			slices.Sort(problems.RaftLeaderNotLeaseHolderRangeIDs)
@@ -152,6 +156,7 @@ func (s *systemStatusServer) ProblemRanges(
 			slices.Sort(problems.RaftLogTooLargeRangeIDs)
 			slices.Sort(problems.CircuitBreakerErrorRangeIDs)
 			slices.Sort(problems.PausedReplicaIDs)
+			slices.Sort(problems.TooLargeRangeIds)
 			response.ProblemsByNodeID[resp.nodeID] = problems
 		case <-ctx.Done():
 			return nil, status.Errorf(codes.DeadlineExceeded, ctx.Err().Error())

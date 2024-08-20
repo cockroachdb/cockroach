@@ -83,6 +83,10 @@ const connectionTableColumns: ConnectionTableColumn[] = [
     extract: problem => problem.paused_replica_ids.length,
   },
   {
+    title: "Range Too Large",
+    extract: problem => problem.too_large_range_ids.length,
+  },
+  {
     title: "Total",
     extract: problem => {
       return (
@@ -95,7 +99,8 @@ const connectionTableColumns: ConnectionTableColumn[] = [
         problem.quiescent_equals_ticking_range_ids.length +
         problem.raft_log_too_large_range_ids.length +
         problem.circuit_breaker_error_range_ids.length +
-        problem.paused_replica_ids.length
+        problem.paused_replica_ids.length +
+        problem.too_large_range_ids.length
       );
     },
   },
