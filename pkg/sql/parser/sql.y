@@ -982,7 +982,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
 %token <str> INDEX_BEFORE_PAREN INDEX_BEFORE_NAME_THEN_PAREN INDEX_AFTER_ORDER_BY_BEFORE_AT
-%token <str> INNER INOUT INPUT INSENSITIVE INSERT INSTEAD INT INTEGER INT8RANGE
+%token <str> INNER INOUT INPUT INSENSITIVE INSERT INSTEAD INT INTEGER
 %token <str> INTERSECT INTERVAL INTO INTO_DB INVERTED INVOKER IS ISERROR ISNULL ISOLATION
 
 %token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
@@ -1629,7 +1629,6 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <*types.T> geo_shape_type
 %type <*types.T> const_geo
 %type <*types.T> const_vector
-%type <*types.T> const_range
 %type <str> extract_arg
 %type <bool> opt_varying
 
@@ -14720,13 +14719,6 @@ const_vector:
     $$.val = types.MakePGVector(dims)
   }
 
-const_range:
-  INT8RANGE { $$.val = types.Int8Range }
-| INT8RANGE '(' iconst32 ',' iconst32 ')'
-	{ $$.val = types.Int8Range }
-| INT8RANGE '(' iconst32 ',' iconst32 ',' a_expr ')'
-	{ $$.val = types.Int8Range }
-
 // We have a separate const_typename to allow defaulting fixed-length types such
 // as CHAR() and BIT() to an unspecified length. SQL9x requires that these
 // default to a length of one, but this makes no sense for constructs like CHAR
@@ -14745,7 +14737,6 @@ const_typename:
 | const_datetime
 | const_geo
 | const_vector
-| const_range
 
 opt_numeric_modifiers:
   '(' iconst32 ')'
@@ -18206,7 +18197,6 @@ bare_label_keywords:
 | INSERT
 | INSTEAD
 | INT
-| INT8RANGE
 | INTEGER
 | INTERVAL
 | INTO_DB
@@ -18605,7 +18595,6 @@ col_name_keyword:
 | IFNULL
 | INOUT
 | INT
-| INT8RANGE
 | INTEGER
 | INTERVAL
 | ISERROR
@@ -18661,8 +18650,8 @@ type_func_name_no_crdb_extra_keyword:
 | COLLATION
 | CROSS
 | FULL
-| INNER
 | ILIKE
+| INNER
 | IS
 | ISNULL
 | JOIN

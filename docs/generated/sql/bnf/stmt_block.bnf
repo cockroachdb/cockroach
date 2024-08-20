@@ -1549,7 +1549,6 @@ col_name_keyword ::=
 	| 'IFNULL'
 	| 'INOUT'
 	| 'INT'
-	| 'INT8RANGE'
 	| 'INTEGER'
 	| 'INTERVAL'
 	| 'ISERROR'
@@ -3436,8 +3435,8 @@ type_func_name_no_crdb_extra_keyword ::=
 	| 'COLLATION'
 	| 'CROSS'
 	| 'FULL'
-	| 'INNER'
 	| 'ILIKE'
+	| 'INNER'
 	| 'IS'
 	| 'ISNULL'
 	| 'JOIN'
@@ -3470,7 +3469,6 @@ const_typename ::=
 	| const_datetime
 	| const_geo
 	| const_vector
-	| const_range
 
 interval_type ::=
 	'INTERVAL'
@@ -3904,7 +3902,6 @@ bare_label_keywords ::=
 	| 'INSERT'
 	| 'INSTEAD'
 	| 'INT'
-	| 'INT8RANGE'
 	| 'INTEGER'
 	| 'INTERVAL'
 	| 'INTO_DB'
@@ -4401,11 +4398,6 @@ const_geo ::=
 const_vector ::=
 	'VECTOR'
 	| 'VECTOR' '(' iconst32 ')'
-
-const_range ::=
-	'INT8RANGE'
-	| 'INT8RANGE' '(' iconst32 ',' iconst32 ')'
-	| 'INT8RANGE' '(' iconst32 ',' iconst32 ',' a_expr ')'
 
 interval_qualifier ::=
 	'YEAR'
