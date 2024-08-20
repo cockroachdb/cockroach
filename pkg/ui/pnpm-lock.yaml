@@ -56,7 +56,7 @@ importers:
         specifier: ^7.12.13
         version: 7.12.13
       '@cockroachlabs/crdb-protobuf-client':
-        specifier: workspace:../db-console/src/js
+        specifier: 24.2.1
         version: link:../db-console/src/js
       '@cockroachlabs/design-tokens':
         specifier: 0.4.5
