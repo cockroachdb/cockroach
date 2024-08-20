@@ -4006,33 +4006,8 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType:        tree.FixedReturnType(types.Int8Range),
 			CalledOnNullInput: true,
 			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				var startBound, endBound tree.Datum
-				if args[0] == tree.DNull {
-					startBound = tree.DNull
-				} else {
-					startBoundIntDatum := tree.MustBeDInt(args[0])
-					startBound = &startBoundIntDatum
-				}
 
-				if args[1] == tree.DNull {
-					endBound = tree.DNull
-				} else {
-					endBoundIntDatum := tree.MustBeDInt(args[1])
-					endBound = &endBoundIntDatum
-				}
-
-				startBoundTyp := tree.RangeBoundClose
-				endBoundTyp := tree.RangeBoundOpen
-
-				if startBound == tree.DNull {
-					startBoundTyp = tree.RangeBoundNegInf
-				}
-
-				if endBound == tree.DNull {
-					endBoundTyp = tree.RangeBoundInf
-				}
-
-				return tree.NewDInt8Range(startBound, endBound, startBoundTyp, endBoundTyp), nil
+				return tree.ParseInt8Range(fmt.Sprintf("(%v,%v)", args[0], args[1]))
 			},
 		},
 		tree.Overload{
@@ -4040,50 +4015,10 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType:        tree.FixedReturnType(types.Int8Range),
 			CalledOnNullInput: true,
 			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				var startBound, endBound tree.Datum
-				if args[0] == tree.DNull {
-					startBound = tree.DNull
-				} else {
-					startBoundIntDatum := tree.MustBeDInt(args[0])
-					startBound = &startBoundIntDatum
-				}
-
-				if args[1] == tree.DNull {
-					endBound = tree.DNull
-				} else {
-					endBoundIntDatum := tree.MustBeDInt(args[1])
-					endBound = &endBoundIntDatum
-				}
 
 				boundFmt := tree.MustBeDString(args[2])
-				var startBoundTyp, endBoundTyp tree.RangeBoundType
-				boundFmtStr := tree.AsStringWithFlags(&boundFmt, tree.FmtBareStrings)
-				switch boundFmtStr {
-				case tree.CloseOpenBoundsFmt:
-					startBoundTyp = tree.RangeBoundClose
-					endBoundTyp = tree.RangeBoundOpen
-				case tree.OpenOpenBoundsFmt:
-					startBoundTyp = tree.RangeBoundOpen
-					endBoundTyp = tree.RangeBoundOpen
-				case tree.CloseCloseBoundsFmt:
-					startBoundTyp = tree.RangeBoundClose
-					endBoundTyp = tree.RangeBoundClose
-				case tree.OpenCloseBoundsFmt:
-					startBoundTyp = tree.RangeBoundOpen
-					endBoundTyp = tree.RangeBoundClose
-				default:
-					return nil, errors.AssertionFailedf("unknown bound format for range: %s", boundFmt.String())
-				}
 
-				if startBound == tree.DNull {
-					startBoundTyp = tree.RangeBoundNegInf
-				}
-
-				if endBound == tree.DNull {
-					endBoundTyp = tree.RangeBoundInf
-				}
-
-				return tree.NewDInt8Range(startBound, endBound, startBoundTyp, endBoundTyp), nil
+				return tree.ParseInt8Range(fmt.Sprintf("%c%v,%v%c", boundFmt[0], args[0], args[1], boundFmt[1]))
 			},
 		},
 	),
