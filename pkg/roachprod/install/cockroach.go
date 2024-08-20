@@ -139,7 +139,7 @@ type StartOpts struct {
 	StorageCluster         *SyncedCluster
 
 	// IsRestart allows skipping steps that are used during initial start like
-	// initialization and sequential node starts.
+	// initialization and sequential node starts and also reuses the previous start script.
 	IsRestart bool
 
 	// EnableFluentSink determines whether to enable the fluent-servers attribute
@@ -762,30 +762,35 @@ func (c *SyncedCluster) ExecSQL(
 func (c *SyncedCluster) startNodeWithResult(
 	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts,
 ) (*RunResultDetails, error) {
-	startCmd, err := c.generateStartCmd(ctx, l, node, startOpts)
-	if err != nil {
-		return newRunResultDetails(node, err), err
-	}
-	var uploadCmd string
-	if c.IsLocal() {
-		uploadCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
-	}
 	startScriptPath := StartScriptPath(startOpts.VirtualClusterName, startOpts.SQLInstance)
-	uploadCmd += fmt.Sprintf(`cat > %[1]s && chmod +x %[1]s`, startScriptPath)
-
-	var res = &RunResultDetails{}
-	uploadOpts := defaultCmdOpts("upload-start-script")
-	uploadOpts.stdin = strings.NewReader(startCmd)
-	res, err = c.runCmdOnSingleNode(ctx, l, node, uploadCmd, uploadOpts)
-	if err != nil || res.Err != nil {
-		return res, err
-	}
-
 	var runScriptCmd string
 	if c.IsLocal() {
 		runScriptCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
 	runScriptCmd += "./" + startScriptPath
+
+	// If we are performing a restart, the start script should already
+	// exist, and we are going to reuse it.
+	if !startOpts.IsRestart {
+		startCmd, err := c.generateStartCmd(ctx, l, node, startOpts)
+		if err != nil {
+			return newRunResultDetails(node, err), err
+		}
+		var uploadCmd string
+		if c.IsLocal() {
+			uploadCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
+		}
+		uploadCmd += fmt.Sprintf(`cat > %[1]s && chmod +x %[1]s`, startScriptPath)
+
+		var res = &RunResultDetails{}
+		uploadOpts := defaultCmdOpts("upload-start-script")
+		uploadOpts.stdin = strings.NewReader(startCmd)
+		res, err = c.runCmdOnSingleNode(ctx, l, node, uploadCmd, uploadOpts)
+		if err != nil || res.Err != nil {
+			return res, err
+		}
+	}
+
 	return c.runCmdOnSingleNode(ctx, l, node, runScriptCmd, defaultCmdOpts("run-start-script"))
 }
 
