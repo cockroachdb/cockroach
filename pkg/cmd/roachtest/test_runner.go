@@ -343,11 +343,11 @@ func (r *testRunner) Run(
 			}
 			//  TODO(bhaskar): remove this once we have more usage details
 			//  and more convinced about using spot VMs for all the runs.
-			if (roachtestflags.Cloud == spec.GCE || roachtestflags.Cloud == spec.AWS) &&
-				tests[i].Benchmark &&
+			if (roachtestflags.Cloud == spec.GCE || (roachtestflags.Cloud == spec.AWS &&
+				tests[i].Benchmark)) &&
 				!tests[i].Suites.Contains(registry.Weekly) &&
 				!tests[i].IsLastFailurePreempt() &&
-				rand.Float64() <= 0.8 {
+				rand.Float64() <= 0.75 {
 				lopt.l.PrintfCtx(ctx, "using spot VMs to run test %s", tests[i].Name)
 				tests[i].Cluster.UseSpotVMs = true
 			}
