@@ -1731,9 +1731,13 @@ func GC(l *logger.Logger, dryrun bool) error {
 		return cloud.GCAWS(l, dryrun)
 	})
 
+	addOpFn(func() error {
+		return cloud.GCAzure(l, dryrun)
+	})
+
 	// ListCloud may fail for a provider, but we can still attempt GC on
 	// the clusters we do have.
-	cld, _ := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{gce.ProviderName, azure.ProviderName}})
+	cld, _ := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{gce.ProviderName}})
 	addOpFn(func() error {
 		return cloud.GCClusters(l, cld, dryrun)
 	})
