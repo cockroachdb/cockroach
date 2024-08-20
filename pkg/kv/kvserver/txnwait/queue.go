@@ -1005,13 +1005,7 @@ func (q *Queue) queryTxnStatus(
 	}
 	br := b.RawResponse()
 	resp := br.Responses[0].GetInner().(*kvpb.QueryTxnResponse)
-	// ID can be nil if no HeartbeatTxn has been sent yet and we're talking to a
-	// 2.1 node.
-	// TODO(nvanbenschoten): Remove this in 2.3.
-	if updatedTxn := &resp.QueriedTxn; updatedTxn.ID != (uuid.UUID{}) {
-		return updatedTxn, resp.WaitingTxns, nil
-	}
-	return nil, nil, nil
+	return &resp.QueriedTxn, resp.WaitingTxns, nil
 }
 
 // forcePushAbort upgrades the PushTxn request to a "forced" push abort, which
