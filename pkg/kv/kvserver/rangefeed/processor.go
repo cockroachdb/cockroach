@@ -66,11 +66,12 @@ var (
 // newErrBufferCapacityExceeded creates an error that is returned to subscribers
 // if the rangefeed processor is not able to keep up with the flow of incoming
 // events and is forced to drop events in order to not block.
-func newErrBufferCapacityExceeded() *kvpb.Error {
-	return kvpb.NewError(
-		kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER),
-	)
-}
+var newErrBufferCapacityExceeded = kvpb.NewRangeFeedRetryError(
+	kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER)
+
+// newKvErrBufferCapacityExceeded is the same as newErrBufferCapacityExceeded
+// but wrapped in a kv error.
+var newKvErrBufferCapacityExceeded = kvpb.NewError(newErrBufferCapacityExceeded)
 
 // Config encompasses the configuration required to create a Processor.
 type Config struct {
@@ -695,7 +696,7 @@ func (p *LegacyProcessor) sendEvent(ctx context.Context, e event, timeout time.D
 			}
 			if err != nil && !errors.Is(err, budgetClosedError) {
 				p.Metrics.RangeFeedBudgetExhausted.Inc(1)
-				p.sendStop(newErrBufferCapacityExceeded())
+				p.sendStop(newKvErrBufferCapacityExceeded)
 				return false
 			}
 			// Always release allocation pointer after sending as it is nil safe.
@@ -721,7 +722,7 @@ func (p *LegacyProcessor) sendEvent(ctx context.Context, e event, timeout time.D
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
 		case <-ctx.Done():
-			p.sendStop(newErrBufferCapacityExceeded())
+			p.sendStop(newKvErrBufferCapacityExceeded)
 			return false
 		}
 	} else {
@@ -750,7 +751,7 @@ func (p *LegacyProcessor) sendEvent(ctx context.Context, e event, timeout time.D
 			case <-ctx.Done():
 				// Sending on the eventC channel would have blocked.
 				// Instead, tear down the processor and return immediately.
-				p.sendStop(newErrBufferCapacityExceeded())
+				p.sendStop(newKvErrBufferCapacityExceeded)
 				return false
 			}
 		}

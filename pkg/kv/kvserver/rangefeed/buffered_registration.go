@@ -58,7 +58,7 @@ type bufferedRegistration struct {
 		// has been emptied.
 		overflowed bool
 		// Boolean indicating if all events have been output to stream. Used only
-		// for testing.
+		// for testing. TODO: find out why caught up is needed
 		caughtUp bool
 		// Management of the output loop goroutine, used to ensure proper teardown.
 		outputLoopCancelFn func()
@@ -204,7 +204,8 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 			if firstIteration {
 				log.Warningf(ctx, "rangefeed on %s was already overflowed by the time that first iteration (after catch up scan from %s) ran", br.span, br.catchUpTimestamp)
 			}
-			return newErrBufferCapacityExceeded().GoError()
+			// rename this error and get rid of the kvpb.New thing
+			return newErrBufferCapacityExceeded
 		}
 		firstIteration = false
 		select {

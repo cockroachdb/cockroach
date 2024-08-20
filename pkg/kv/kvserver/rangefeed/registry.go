@@ -22,14 +22,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+type BufferedStream interface {
+	Stream
+	SendBuffered(*kvpb.RangeFeedEvent, *SharedBudgetAllocation) error
+}
+
 // Stream is a object capable of transmitting RangeFeedEvents.
 type Stream interface {
 	kvpb.RangeFeedEventSink
 	// Disconnect disconnects the stream with the provided error. Note that this
-	// function can be called by the processor worker while holding raftMu, so it
-	// is important that this function doesn't block IO or try acquiring locks
-	// that could lead to deadlocks.
+	// function can be called by the processor worker while holding raftMu and
+	// registration mu, so it is important that this function doesn't block IO or
+	// try acquiring locks that could lead to deadlocks.
 	Disconnect(err *kvpb.Error)
+	RegisterRangefeedCleanUp(func())
 }
 
 // registration defines an interface for registration that can be added to a

@@ -92,6 +92,10 @@ type ServerStreamSender interface {
 //		                              └─────────────────────────────────────────────────────────────────────────┘
 //		                                              registration.disconnect
 type StreamMuxer struct {
+	// Note that lockedMuxStream wraps the underlying grpc server stream, ensuring
+	// thread safety.
+	sender ServerStreamSender
+
 	// taskCancel is a function to cancel StreamMuxer.run spawned in the
 	// background. It is called by StreamMuxer.Stop. It is expected to be called
 	// after StreamMuxer.Start.
@@ -108,20 +112,21 @@ type StreamMuxer struct {
 	// shutdown signal in this case and handle error appropriately.
 	errCh chan error
 
-	// Note that lockedMuxStream wraps the underlying grpc server stream, ensuring
-	// thread safety.
-	sender ServerStreamSender
-
 	// metrics is used to record rangefeed metrics for the node.
 	metrics RangefeedMetricsRecorder
 
 	// streamID -> streamInfo for active rangefeeds
 	activeStreams syncutil.Map[int64, streamInfo]
 
+	// streamID -> cleanup callback
+	rangefeedCleanup syncutil.Map[int64, func()]
+
 	// notifyMuxError is a buffered channel of size 1 used to signal the presence
 	// of muxErrors. Additional signals are dropped if the channel is already full
 	// so that it's non-blocking.
 	notifyMuxError chan struct{}
+
+	notifyRangefeedCleanUp chan struct{}
 
 	mu struct {
 		syncutil.Mutex
@@ -129,6 +134,8 @@ type StreamMuxer struct {
 		// to the client. Upon receiving the error, the client restart rangefeed
 		// when possible.
 		muxErrors []*kvpb.MuxRangeFeedEvent
+
+		cleanupIDs []int64
 	}
 }
 
@@ -170,6 +177,12 @@ func (sm *StreamMuxer) AddStream(
 // also declares its Send method to be thread-safe.
 func (sm *StreamMuxer) SendIsThreadSafe() {}
 
+func (sm *StreamMuxer) SendBuffered(
+	e *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
+) error {
+	return sm.sender.(*BufferedStreamSender).sendBuffered(e, alloc)
+}
+
 func (sm *StreamMuxer) Send(e *kvpb.MuxRangeFeedEvent) error {
 	return sm.sender.Send(e)
 }
@@ -202,6 +215,21 @@ func (sm *StreamMuxer) appendMuxError(e *kvpb.MuxRangeFeedEvent) {
 	}
 }
 
+func (sm *StreamMuxer) appendCleanUp(streamID int64) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.mu.cleanupIDs = append(sm.mu.cleanupIDs, streamID)
+	// Note that notifyCleanUp is non-blocking.
+	select {
+	case sm.notifyRangefeedCleanUp <- struct{}{}:
+	default:
+	}
+}
+
+func (sm *StreamMuxer) RegisterRangefeedCleanUp(streamID int64, cleanUp func()) {
+	sm.rangefeedCleanup.Store(streamID, &cleanUp)
+}
+
 // DisconnectStreamWithError disconnects a stream with an error. Safe to call
 // repeatedly for the same stream, but subsequent errors are ignored. It ensures
 // 1. the stream context is cancelled 2. exactly one error is sent back to the
@@ -227,6 +255,19 @@ func (sm *StreamMuxer) DisconnectStreamWithError(
 		sm.appendMuxError(ev)
 		sm.metrics.UpdateMetricsOnRangefeedDisconnect()
 	}
+	// Note that we may repeatedly append cleanup signal for the same id. We will
+	// rely on the map rangefeedCleanup to dedupe during Run.
+	if _, ok := sm.rangefeedCleanup.Load(streamID); ok {
+		sm.appendCleanUp(streamID)
+	}
+}
+
+func (sm *StreamMuxer) detachCleanUpIDs() []int64 {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	toCleanUp := sm.mu.cleanupIDs
+	sm.mu.cleanupIDs = nil
+	return toCleanUp
 }
 
 // detachMuxErrors returns muxErrors and clears the slice. Caller must ensure
@@ -249,10 +290,30 @@ func (sm *StreamMuxer) run(ctx context.Context, stopper *stop.Stopper) error {
 		case <-sm.notifyMuxError:
 			toSend := sm.detachMuxErrors()
 			for _, clientErr := range toSend {
-				if err := sm.sender.Send(clientErr); err != nil {
+				var err error
+				if bs, ok := sm.sender.(*BufferedStreamSender); ok {
+					// Use send buffered to make sure events sent to buffer already are
+					// still properly received on the client end.
+					err = bs.sendBuffered(clientErr, nil)
+				} else {
+					err = sm.sender.Send(clientErr)
+				}
+				if err != nil {
+					// Note that it is possible that we are shutting down without properly
+					// sending client errors back. But stream is expected to be torn down
+					// soon and client will handle accordingly.
 					log.Errorf(ctx,
 						"failed to send rangefeed completion error back to client due to broken stream: %v", err)
 					return err
+				}
+			}
+		case <-sm.notifyRangefeedCleanUp:
+			toCleanUp := sm.detachCleanUpIDs()
+			for _, streamID := range toCleanUp {
+				if cleanUp, ok := sm.rangefeedCleanup.LoadAndDelete(streamID); ok {
+					// TODO(wenyihu6): add more observability metrics into how long the
+					// clean up call is taking
+					(*cleanUp)()
 				}
 			}
 		case <-ctx.Done():
@@ -285,6 +346,37 @@ func (sm *StreamMuxer) Error() chan error {
 func (sm *StreamMuxer) Stop() {
 	sm.taskCancel()
 	sm.wg.Wait()
+	sm.disconnectAll()
+}
+
+// We are not sending any error back in this case because stream is shutting down. We should think again
+func (sm *StreamMuxer) disconnectAll() {
+	sm.activeStreams.Range(func(streamID int64, info *streamInfo) bool {
+		info.cancel()
+		//if err != nil {
+		//	ev := &kvpb.MuxRangeFeedEvent{
+		//		StreamID: streamID,
+		//		RangeID:  info.rangeID,
+		//	}
+		//	ev.SetValue(&kvpb.RangeFeedError{
+		//		Error: *kvpb.NewError(err),
+		//	})
+		//	// TODO(wenyihu6): check if we should handle this err and maybe do early
+		//	// return next iteration
+		//	_ = sm.sender.Send(ev)
+		//}
+		// Remove the stream from the activeStreams map.
+		sm.activeStreams.Delete(streamID)
+		sm.metrics.UpdateMetricsOnRangefeedDisconnect()
+		return true
+	})
+
+	sm.rangefeedCleanup.Range(func(streamID int64, cleanUp *func()) bool {
+		// TODO(wenyihu6): think about whether this is okay to call before r.disconnect
+		(*cleanUp)()
+		sm.rangefeedCleanup.Delete(streamID)
+		return true
+	})
 }
 
 // Start launches StreamMuxer.run in the background if no error is returned.
