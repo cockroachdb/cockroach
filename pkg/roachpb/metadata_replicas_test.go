@@ -12,11 +12,11 @@ package roachpb
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/confchange"
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -189,7 +189,13 @@ func TestReplicaDescriptorsConfState(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			r := MakeReplicaSet(test.in)
 			cs := r.ConfState()
-			require.Equal(t, test.out, raft.DescribeConfState(cs))
+			describeConfState := func(state raftpb.ConfState) string {
+				return fmt.Sprintf(
+					"Voters:%v VotersOutgoing:%v Learners:%v LearnersNext:%v AutoLeave:%v",
+					state.Voters, state.VotersOutgoing, state.Learners, state.LearnersNext, state.AutoLeave,
+				)
+			}
+			require.Equal(t, test.out, describeConfState(cs))
 		})
 	}
 }
