@@ -90,6 +90,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 func (o *ProviderOpts) ConfigureClusterFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
 }
 
-// ConfigureClusterCleanupFlags is part of ProviderOpts. This implementation is a no-op.
+// ConfigureClusterCleanupFlags is part of ProviderOpts.
 func (o *ProviderOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
+	flags.StringSliceVar(&providerInstance.SubscriptionNames, ProviderName+"-subscription-names", []string{},
+		"Azure subscription names as a comma-separated string")
 }
