@@ -2610,6 +2610,7 @@ var builtinOidsArray = []string{
 	2642: `int8range(start_bound: int, end_bound: int) -> int8range`,
 	2643: `int8range(start_bound: int, end_bound: int, bound_fmt: string) -> int8range`,
 	2644: `has_intersect(left_range: int8range, right_range: int8range) -> bool`,
+	2645: `range_merge(left_range: int8range, right_range: int8range) -> int8range`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

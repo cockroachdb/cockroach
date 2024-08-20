@@ -1305,7 +1305,8 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tbody>
 <tr><td><a name="has_intersect"></a><code>has_intersect(left_range: int8range, right_range: int8range) &rarr; <a href="bool.html">bool</a></code></td><td></td><td>Invalid</td></tr>
 <tr><td><a name="int8range"></a><code>int8range(start_bound: <a href="int.html">int</a>, end_bound: <a href="int.html">int</a>) &rarr; int8range</code></td><td></td><td>Invalid</td></tr>
-<tr><td><a name="int8range"></a><code>int8range(start_bound: <a href="int.html">int</a>, end_bound: <a href="int.html">int</a>, bound_fmt: <a href="string.html">string</a>) &rarr; int8range</code></td><td></td><td>Invalid</td></tr></tbody>
+<tr><td><a name="int8range"></a><code>int8range(start_bound: <a href="int.html">int</a>, end_bound: <a href="int.html">int</a>, bound_fmt: <a href="string.html">string</a>) &rarr; int8range</code></td><td></td><td>Invalid</td></tr>
+<tr><td><a name="range_merge"></a><code>range_merge(left_range: int8range, right_range: int8range) &rarr; int8range</code></td><td></td><td>Invalid</td></tr></tbody>
 </table>
 
 ### STRING[] functions

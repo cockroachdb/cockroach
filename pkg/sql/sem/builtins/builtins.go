@@ -3960,6 +3960,45 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"range_merge": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "left_range", Typ: types.Int8Range}, {Name: "right_range", Typ: types.Int8Range}},
+			ReturnType:        tree.FixedReturnType(types.Int8Range),
+			CalledOnNullInput: false,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				lb := tree.MustBeDInt8Range(args[0])
+				rb := tree.MustBeDInt8Range(args[1])
+
+				var resultStart, resultEnd tree.RangeBound
+				val, err := tree.CompareEndBndWithStartBnd(ctx, evalCtx, rb.StartBound, lb.StartBound)
+				if err != nil {
+					return nil, err
+				}
+				switch val {
+				case -1:
+					resultStart = rb.StartBound
+				case 1, 0:
+					resultStart = lb.StartBound
+
+				}
+
+				val, err = tree.CompareEndBndWithStartBnd(ctx, evalCtx, rb.EndBound, lb.EndBound)
+				if err != nil {
+					return nil, err
+				}
+				switch val {
+				case -1:
+					resultEnd = lb.EndBound
+				case 1, 0:
+					resultEnd = rb.EndBound
+
+				}
+				return &tree.DInt8Range{StartBound: resultStart, EndBound: resultEnd}, nil
+			},
+		},
+	),
+
 	"int8range": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
 		tree.Overload{
