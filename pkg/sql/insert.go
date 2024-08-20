@@ -196,7 +196,7 @@ func (r *insertRun) initRowContainer(params runParams, columns colinfo.ResultCol
 // processSourceRow processes one row from the source for insertion and, if
 // result rows are needed, saves it in the result row container.
 func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) error {
-	if err := enforceLocalColumnConstraints(rowVals, r.insertCols); err != nil {
+	if err := enforceNotNullConstraints(rowVals, r.insertCols); err != nil {
 		return err
 	}
 
