@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -474,6 +475,7 @@ func TestNodeStart(t *testing.T) {
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
+		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
 	StartNode(c, []Peer{{ID: 1}})
 	ctx, cancel, n := newNodeTestHarness(context.Background(), t, c, Peer{ID: 1})
@@ -548,6 +550,7 @@ func TestNodeRestart(t *testing.T) {
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
+		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
 	n := RestartNode(c)
 	defer n.Stop()
@@ -597,6 +600,7 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
+		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
 	n := RestartNode(c)
 	defer n.Stop()
@@ -621,6 +625,7 @@ func TestNodeAdvance(t *testing.T) {
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
+		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
 	ctx, cancel, n := newNodeTestHarness(context.Background(), t, c)
 	defer cancel()

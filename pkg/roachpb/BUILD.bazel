@@ -75,7 +75,6 @@ go_test(
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
-        "//pkg/raft",
         "//pkg/raft/confchange",
         "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
