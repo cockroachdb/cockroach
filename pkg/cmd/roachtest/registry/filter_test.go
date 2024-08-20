@@ -16,9 +16,8 @@ import (
 
 func init() {
 	OverrideTeams(team.Map{
-		OwnerCDC.ToTeamAlias():         {},
-		OwnerKV.ToTeamAlias():          {},
-		OwnerReplication.ToTeamAlias(): {},
+		OwnerCDC.ToTeamAlias(): {},
+		OwnerKV.ToTeamAlias():  {},
 	})
 }
 
