@@ -99,6 +99,25 @@ func createLogicalReplicationStreamPlanHook(
 			return pgerror.New(pgcode.InvalidParameterValue, "the same number of source and destination tables must be specified")
 		}
 
+		options, err := evalLogicalReplicationOptions(ctx, stmt.Options, exprEval, p)
+		if err != nil {
+			return err
+		}
+
+		mode := jobspb.LogicalReplicationDetails_Immediate
+		if m, ok := options.GetMode(); ok {
+			switch m {
+			case "validated":
+				mode = jobspb.LogicalReplicationDetails_Validated
+			case "immediate":
+			default:
+				return pgerror.Newf(pgcode.InvalidParameterValue, "unknown mode %q", m)
+			}
+		}
+		if len(options.userFunctions) > 0 || options.defaultFunction != nil && options.defaultFunction.FunctionId != 0 {
+			mode = jobspb.LogicalReplicationDetails_Validated
+		}
+
 		var (
 			targetsDescription string
 			srcTableNames      = make([]string, len(stmt.From.Tables))
@@ -152,6 +171,16 @@ func createLogicalReplicationStreamPlanHook(
 			} else {
 				targetsDescription += ", " + tbNameWithSchema.FQString()
 			}
+
+			if mode != jobspb.LogicalReplicationDetails_Validated {
+				fks := td.OutboundForeignKeys()
+				for _, fk := range append(fks[:len(fks):len(fks)], td.InboundForeignKeys()...) {
+					// TODO(dt): move the constraint to un-validated for them.
+					if fk.IsConstraintValidated() {
+						return pgerror.Newf(pgcode.InvalidParameterValue, "only 'NOT VALID' foreign keys are only supported with MODE = 'validated'")
+					}
+				}
+			}
 		}
 
 		streamAddress := crosscluster.StreamAddress(from)
@@ -184,10 +213,6 @@ func createLogicalReplicationStreamPlanHook(
 			repPairs[i].SrcDescriptorID = int32(spec.TableDescriptors[name].ID)
 		}
 
-		options, err := evalLogicalReplicationOptions(ctx, stmt.Options, exprEval, p)
-		if err != nil {
-			return err
-		}
 		replicationStartTime := spec.ReplicationStartTime
 		progress := jobspb.LogicalReplicationProgress{}
 		if cursor, ok := options.GetCursor(); ok {
@@ -221,6 +246,7 @@ func createLogicalReplicationStreamPlanHook(
 				TableNames:                srcTableNames,
 				DefaultConflictResolution: defaultConflictResolution,
 				FilterRangefeed:           options.GetFilterRangefeed(),
+				Mode:                      mode,
 			},
 			Progress: progress,
 		}

@@ -107,8 +107,6 @@ var (
 	_ execinfra.RowSource = &logicalReplicationWriterProcessor{}
 )
 
-const useKVWriter = false
-
 const logicalReplicationWriterProcessorName = "logical-replication-writer-processor"
 
 func newLogicalReplicationWriterProcessor(
@@ -158,7 +156,7 @@ func newLogicalReplicationWriterProcessor(
 			return nil, err
 		}
 		var rp RowProcessor
-		if useKVWriter {
+		if spec.Mode == jobspb.LogicalReplicationDetails_Immediate {
 			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, tableConfigs, sqlRP)
 			if err != nil {
 				return nil, err
