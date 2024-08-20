@@ -623,7 +623,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	dbName, scName, tblName := "testdb", "testsc", "t"
-	useLegacyOrDeclarative := func() error {
+	useLegacyOrDeclarative := func(sqlDB *gosql.DB) error {
 		decl := rand.Intn(2) == 0
 		if !decl {
 			_, err := sqlDB.Exec("SET use_declarative_schema_changer='off';")
@@ -633,7 +633,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 		return err
 	}
 
-	createSchema := func() error {
+	createSchema := func(sqlDB *gosql.DB) error {
 		return testutils.SucceedsSoonError(func() error {
 			_, err := sqlDB.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %v;", dbName))
 			if err != nil {
@@ -658,7 +658,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 			return nil
 		})
 	}
-	require.NoError(t, createSchema())
+	require.NoError(t, createSchema(sqlDB))
 
 	// repeatWorkWithInterval repeats `work` indefinitely every `workInterval` until
 	// `ctx` is cancelled.
@@ -687,7 +687,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 	var nextObjectID atomic.Int64
 	// A goroutine that repeatedly renames database `testdb` randomly.
 	g.GoCtx(repeatWorkWithInterval("rename-db-worker", renameDBInterval, func(sqlDB *gosql.DB) error {
-		if err := useLegacyOrDeclarative(); err != nil {
+		if err := useLegacyOrDeclarative(sqlDB); err != nil {
 			return err
 		}
 		drop := rand.Intn(2) == 0
@@ -696,7 +696,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 				return err
 			}
 			t.Logf("DROP DATABASE %v", dbName)
-			return createSchema()
+			return createSchema(sqlDB)
 		}
 		newDBName := fmt.Sprintf("testdb_%v", nextObjectID.Add(1))
 		if newDBName == dbName {
@@ -712,7 +712,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 
 	// A goroutine that renames schema `testdb.testsc` randomly.
 	g.GoCtx(repeatWorkWithInterval("rename-schema-worker", renameSCInterval, func(sqlDB *gosql.DB) error {
-		if err := useLegacyOrDeclarative(); err != nil {
+		if err := useLegacyOrDeclarative(sqlDB); err != nil {
 			return err
 		}
 		drop := rand.Intn(2) == 0
@@ -732,7 +732,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 				t.Logf("RENAME SCHEMA TO %v", newSCName)
 			} else {
 				t.Logf("DROP SCHEMA TO %v", scName)
-				return createSchema()
+				return createSchema(sqlDB)
 			}
 		} else if isPQErrWithCode(err, pgcode.UndefinedDatabase, pgcode.UndefinedSchema) {
 			err = nil // mute those errors as they're expected
@@ -743,7 +743,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 
 	// A goroutine that renames table `testdb.testsc.t` randomly.
 	g.GoCtx(repeatWorkWithInterval("rename-tbl-worker", renameTblInterval, func(sqlDB *gosql.DB) error {
-		if err := useLegacyOrDeclarative(); err != nil {
+		if err := useLegacyOrDeclarative(sqlDB); err != nil {
 			return err
 		}
 		newTblName := fmt.Sprintf("t_%v", nextObjectID.Add(1))
@@ -760,7 +760,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 				t.Logf("RENAME TABLE TO %v", newTblName)
 			} else {
 				t.Logf("DROP TABLE %v", newTblName)
-				return createSchema()
+				return createSchema(sqlDB)
 			}
 		} else if isPQErrWithCode(err, pgcode.UndefinedDatabase, pgcode.UndefinedSchema, pgcode.InvalidSchemaName, pgcode.UndefinedObject, pgcode.UndefinedTable) {
 			err = nil
@@ -771,7 +771,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 
 	// A goroutine that adds columns to `testdb.testsc.t` randomly.
 	g.GoCtx(repeatWorkWithInterval("add-column-worker", addColInterval, func(sqlDB *gosql.DB) error {
-		if err := useLegacyOrDeclarative(); err != nil {
+		if err := useLegacyOrDeclarative(sqlDB); err != nil {
 			return err
 		}
 		dbName, scName, tblName := dbName, scName, tblName
@@ -791,7 +791,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 
 	// A goroutine that drops columns from `testdb.testsc.t` randomly.
 	g.GoCtx(repeatWorkWithInterval("drop-column-worker", dropColInterval, func(sqlDB *gosql.DB) error {
-		if err := useLegacyOrDeclarative(); err != nil {
+		if err := useLegacyOrDeclarative(sqlDB); err != nil {
 			return err
 		}
 		// Randomly pick a non-PK column to drop.
@@ -842,7 +842,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 
 	// A goroutine that drops a secondary index randomly.
 	g.GoCtx(repeatWorkWithInterval("drop-index-worker", dropIdxInterval, func(sqlDB *gosql.DB) error {
-		if err := useLegacyOrDeclarative(); err != nil {
+		if err := useLegacyOrDeclarative(sqlDB); err != nil {
 			return err
 		}
 		// Randomly pick a public, secondary index to drop.
