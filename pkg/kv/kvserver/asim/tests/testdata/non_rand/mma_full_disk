@@ -108,6 +108,6 @@ last store values: [s1=0 s2=0 s3=0 s4=0 s5=0]
 
 topology
 ----
-AU_EAST
-  AU_EAST_1
+a
+  a_1
     └── [1 2 3 4 5]
