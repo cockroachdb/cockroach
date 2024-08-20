@@ -59,6 +59,12 @@ type Statistics struct {
 	// expressions with Cardinality.Max > 0, RowCount will be >= epsilon.
 	RowCount float64
 
+	// EstimatedRowCount is an alternative estimate of the number of rows returned
+	// by the expression, possibly derived from prefiltered or precomputed statistics.
+	// This can be useful in cases where the RowCount might not accurately reflect the
+	// expected results due to filtering or other factors.
+	EstimatedRowCount int64
+
 	// VirtualCols is the set of virtual computed columns produced by our input
 	// that we have statistics on. Any of these could appear in ColStats. This set
 	// is maintained separately from OutputCols to allow lookup of statistics on
@@ -98,6 +104,7 @@ func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 	*s = Statistics{}
 	if relProps.Cardinality.IsZero() {
 		s.RowCount = 0
+		s.EstimatedRowCount = 0
 		s.Selectivity = ZeroSelectivity
 		s.Available = true
 		return true
@@ -119,6 +126,7 @@ func (s *Statistics) RowCountIfAvailable() float64 {
 func (s *Statistics) CopyFrom(other *Statistics) {
 	s.Available = other.Available
 	s.RowCount = other.RowCount
+	s.EstimatedRowCount = other.EstimatedRowCount
 	s.VirtualCols = other.VirtualCols.Copy()
 	s.ColStats.CopyFrom(&other.ColStats)
 	s.Selectivity = other.Selectivity
