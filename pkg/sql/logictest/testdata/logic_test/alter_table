@@ -3967,3 +3967,37 @@ statement error pgcode 42601 variable sub-expressions are not allowed in EXPRESS
 ALTER TABLE t_124546 ADD CONSTRAINT ident UNIQUE ( ( EXISTS ( TABLE error FOR READ ONLY ) ) DESC ) STORING ( ident , ident );
 
 subtest end
+
+subtest alter_table_add_column_serial
+
+statement ok
+SET serial_normalization = rowid
+
+statement ok
+create table roach (id int);
+
+statement ok
+alter table roach add column serial_id SERIAL;
+
+query TTBTTTB colnames,rowsort
+show columns from roach;
+----
+column_name  data_type  is_nullable  column_default  generation_expression  indices       is_hidden
+id           INT8       true         NULL            ·                      {roach_pkey}  false
+rowid        INT8       false        unique_rowid()  ·                      {roach_pkey}  true
+serial_id    INT8       false        unique_rowid()  ·                      {roach_pkey}  false
+
+subtest end
+
+subtest unimplemented_for_non_rowid_in_DSC
+
+statement ok
+SET serial_normalization = sql_sequence
+
+statement ok
+SET use_declarative_schema_changer = unsafe_always
+
+statement error pq: \*tree.ColumnTableDef not implemented in the new schema changer: contains serial data type in unsupported mode
+alter table roach add column serial_id2 SERIAL
+
+subtest end
