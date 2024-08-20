@@ -2037,7 +2037,6 @@ func MustBeDInt8Range(e Expr) DInt8Range {
 }
 
 func ParseInt8Range(s string) (Datum, error) {
-	//fmt.Printf(s)
 	startVal, endVal, err := int8range.ParseInt8Range(s)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse vector")
@@ -2255,6 +2254,8 @@ func NewDInt8Range(
 		},
 	}
 }
+
+func MakeInt8Range()
 
 // ParseContext provides the information necessary for
 // parsing dates.
