@@ -840,7 +840,7 @@ func newTransportForRange(
 	if err != nil {
 		return nil, err
 	}
-	replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
+	replicas.OptimizeReplicaOrder(ctx, ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
 	opts := SendOptions{class: defRangefeedConnClass}
 	return ds.transportFactory(opts, replicas)
 }
