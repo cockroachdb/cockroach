@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -27,6 +26,41 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/pmezard/go-difflib/difflib"
 )
+
+type tenantSystemSchemaComparison struct {
+	name         string
+	bootstrapped string
+	upgraded     string
+}
+
+func newTenantSystemSchemaComparison(name string) *tenantSystemSchemaComparison {
+	return &tenantSystemSchemaComparison{name: name}
+}
+
+func (c tenantSystemSchemaComparison) Diff() error {
+	if c.upgraded == c.bootstrapped {
+		return nil
+	}
+
+	diff, diffErr := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+		A:       difflib.SplitLines(c.bootstrapped),
+		B:       difflib.SplitLines(c.upgraded),
+		Context: 5,
+	})
+
+	if diffErr != nil {
+		return errors.Wrap(diffErr, "failed to produce diff")
+	}
+
+	tenantDesc := "system"
+	if c.name != install.SystemInterfaceName {
+		tenantDesc = "secondary"
+	}
+
+	return errors.Newf("After upgrading, `USE system; SHOW CREATE ALL TABLES;` "+
+		"does not match expected output after version upgrade for %s tenant."+
+		"\nDiff:\n%s", tenantDesc, diff)
+}
 
 // This test tests that, after bootstrapping a cluster from a previous
 // release's binary and upgrading it to the latest version, the `system`
@@ -37,9 +71,13 @@ func runValidateSystemSchemaAfterVersionUpgrade(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
 	// Obtain system table definitions with `SHOW CREATE ALL TABLES` in the SYSTEM db.
-	obtainSystemSchema := func(ctx context.Context, l *logger.Logger, c cluster.Cluster, node int) string {
+	obtainSystemSchema := func(
+		ctx context.Context, l *logger.Logger, c cluster.Cluster, node int, virtualCluster string,
+	) string {
 		// Create a connection to the database cluster.
-		db := c.Conn(ctx, l, node)
+		db := c.Conn(ctx, l, node, option.VirtualClusterName(virtualCluster))
+		defer db.Close()
+
 		sqlRunner := sqlutils.MakeSQLRunner(db)
 
 		// Prepare the SQL query.
@@ -60,27 +98,15 @@ func runValidateSystemSchemaAfterVersionUpgrade(
 		return sb.String()
 	}
 
-	// expected and actual output of `SHOW CREATE ALL TABLES;`.
-	var expected, actual string
-
-	// Start a cluster with the latest binary and get the system schema from the
-	// cluster.
-	if err := clusterupgrade.StartWithSettings(
-		ctx, t.L(), c, c.All(), option.DefaultStartOpts(), install.BinaryOption(test.DefaultCockroachPath),
-	); err != nil {
-		t.Fatal(err)
-	}
-	expected = obtainSystemSchema(ctx, t.L(), c, 1)
-	c.Wipe(ctx, c.All())
+	systemComparison := newTenantSystemSchemaComparison(install.SystemInterfaceName)
+	var tenantComparison *tenantSystemSchemaComparison
 
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(),
-		// Fixtures are generated on a version that's too old for this test.
-		mixedversion.NeverUseFixtures,
 		// We limit the number of upgrades since the test is not expected to work
 		// on versions older than 22.2.
-		mixedversion.MaxUpgrades(2),
-		// Multi-tenant deployments are currently unsupported. See #127378.
-		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
+		mixedversion.MaxUpgrades(3),
+		// Fixtures are generated on a version that's too old for this test.
+		mixedversion.NeverUseFixtures,
 	)
 	mvt.AfterUpgradeFinalized(
 		"obtain system schema from the upgraded cluster",
@@ -91,24 +117,41 @@ func runValidateSystemSchemaAfterVersionUpgrade(
 				return nil
 			}
 
-			// Compare whether the two schemas are equal
-			actual = obtainSystemSchema(ctx, l, c, 1)
-			if expected != actual {
-				diff, diffErr := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
-					A:       difflib.SplitLines(expected),
-					B:       difflib.SplitLines(actual),
-					Context: 5,
-				})
-				if diffErr != nil {
-					return errors.Wrap(diffErr, "failed to produce diff")
-				}
-				return errors.Newf("After upgrading, `USE system; SHOW CREATE ALL TABLES;` "+
-					"does not match expected output after version upgrade."+
-					"\nDiff:\n%s", diff)
+			systemComparison.upgraded = obtainSystemSchema(ctx, l, c, 1, systemComparison.name)
+			if h.IsMultitenant() {
+				tenantComparison = newTenantSystemSchemaComparison(h.Tenant.Descriptor.Name)
+				tenantComparison.upgraded = obtainSystemSchema(ctx, l, c, 1, tenantComparison.name)
 			}
-			l.Printf("validating succeeded:\n%v", expected)
+
 			return nil
 		},
 	)
 	mvt.Run()
+
+	// Start a cluster with the latest binary and get the system schema
+	// from the cluster.
+	c.Wipe(ctx, c.All())
+	settings := install.MakeClusterSettings()
+
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
+	systemComparison.bootstrapped = obtainSystemSchema(ctx, t.L(), c, 1, systemComparison.name)
+
+	if tenantComparison != nil {
+		t.L().Printf("creating shared-process tenant")
+		startOpts := option.StartSharedVirtualClusterOpts(tenantComparison.name)
+		c.StartServiceForVirtualCluster(ctx, t.L(), startOpts, settings)
+		tenantComparison.bootstrapped = obtainSystemSchema(ctx, t.L(), c, 1, tenantComparison.name)
+	}
+
+	if err := systemComparison.Diff(); err != nil {
+		t.Fatal(err)
+	}
+	t.L().Printf("validation succeeded for system tenant")
+
+	if tenantComparison != nil {
+		if err := tenantComparison.Diff(); err != nil {
+			t.Fatal(err)
+		}
+		t.L().Printf("validation succeeded for secondary tenant")
+	}
 }
