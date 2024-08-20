@@ -3674,7 +3674,7 @@ func TestLeaseDescriptorRangeFeedFailure(t *testing.T) {
 						// so the update is detected.
 						if p.Params.ExecutionPhase == scop.PostCommitPhase &&
 							enableAfterStageKnob.Load() &&
-							strings.Contains(p.Statements[0].Statement, "ADD COLUMN") {
+							strings.Contains(p.Statements[0].Statement, "ALTER TABLE t1 ADD COLUMN j INT DEFAULT 64") {
 							rangeFeedResetChan = srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(true)
 						}
 						return nil
@@ -3684,7 +3684,7 @@ func TestLeaseDescriptorRangeFeedFailure(t *testing.T) {
 						// so the update is detected.
 						if p.Params.ExecutionPhase == scop.PostCommitPhase &&
 							enableAfterStageKnob.Load() &&
-							strings.Contains(p.Statements[0].Statement, "ADD COLUMN") {
+							strings.Contains(p.Statements[0].Statement, "ALTER TABLE t1 ADD COLUMN j INT DEFAULT 64") {
 							<-rangeFeedResetChan
 							srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(false)
 							enableAfterStageKnob.Swap(false)
