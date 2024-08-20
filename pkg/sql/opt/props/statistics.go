@@ -104,7 +104,6 @@ func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 	*s = Statistics{}
 	if relProps.Cardinality.IsZero() {
 		s.RowCount = 0
-		s.EstimatedRowCount = 0
 		s.Selectivity = ZeroSelectivity
 		s.Available = true
 		return true
@@ -126,7 +125,6 @@ func (s *Statistics) RowCountIfAvailable() float64 {
 func (s *Statistics) CopyFrom(other *Statistics) {
 	s.Available = other.Available
 	s.RowCount = other.RowCount
-	s.EstimatedRowCount = other.EstimatedRowCount
 	s.VirtualCols = other.VirtualCols.Copy()
 	s.ColStats.CopyFrom(&other.ColStats)
 	s.Selectivity = other.Selectivity

@@ -50,9 +50,6 @@ const (
 	// This is an arbitrary row count used in the absence of any real statistics.
 	unknownRowCount = 1000
 
-	// This is an arbitrary estimated row count used in the absence of any real statistics.
-	unknownEstimatedRowCount = 1000
-
 	// UnknownDistinctCountRatio is the ratio of distinct column values to number
 	// of rows, which is used in the absence of any real statistics for non-key
 	// columns.  TODO(rytaft): See if there is an industry standard value for
