@@ -61,6 +61,8 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 		ptsInterval := 50 * time.Millisecond
 		changefeedbase.ProtectTimestampInterval.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
+		changefeedbase.ProtectTimestampLag.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
@@ -254,6 +256,8 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 			Scan(&tableID)
 
 		changefeedbase.ProtectTimestampInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 100*time.Millisecond)
+		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 100*time.Millisecond)
 
 		ptp := s.Server.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
@@ -501,6 +505,8 @@ func TestChangefeedMigratesProtectedTimestamps(t *testing.T) {
 
 		ptsInterval := 50 * time.Millisecond
 		changefeedbase.ProtectTimestampInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
+		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
