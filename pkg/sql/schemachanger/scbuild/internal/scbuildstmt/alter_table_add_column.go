@@ -15,6 +15,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -25,12 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -71,7 +75,11 @@ func alterTableAddColumn(
 		}
 	}
 	if d.IsSerial {
-		panic(scerrors.NotImplementedErrorf(d, "contains serial data type"))
+		if b.SessionData().SerialNormalizationMode != sessiondatapb.SerialUsesRowID {
+			panic(scerrors.NotImplementedErrorf(d, "contains serial data type in unsupported mode"))
+		}
+		d = alterTableAddColumnSerial(b, d, tn)
+		d.IsSerial = false
 	}
 	if d.GeneratedIdentity.IsGeneratedAsIdentity {
 		panic(scerrors.NotImplementedErrorf(d, "contains generated identity type"))
@@ -257,6 +265,40 @@ func alterTableAddColumn(
 	default:
 		b.IncrementSchemaChangeAddColumnTypeCounter(spec.colType.Type.TelemetryName())
 	}
+}
+
+func alterTableAddColumnSerial(
+	b BuildCtx, d *tree.ColumnTableDef, tn *tree.TableName,
+) *tree.ColumnTableDef {
+	if err := catalog.AssertValidSerialColumnDef(d, tn); err != nil {
+		panic(err)
+	}
+
+	defType, err := tree.ResolveType(b, d.Type, b.SemaCtx().GetTypeResolver())
+	if err != nil {
+		panic(err)
+	}
+
+	telemetry.Inc(sqltelemetry.SerialColumnNormalizationCounter(
+		defType.Name(), b.SessionData().SerialNormalizationMode.String()))
+
+	if defType.Width() < types.Int.Width() {
+		b.EvalCtx().ClientNoticeSender.BufferClientNotice(
+			b,
+			errors.WithHintf(
+				pgnotice.Newf(
+					"upgrading the column %s to %s to utilize the session serial_normalization setting",
+					d.Name.String(),
+					types.Int.SQLString(),
+				),
+				"change the serial_normalization to sql_sequence or sql_sequence_cached if you wish "+
+					"to use a smaller sized serial column at the cost of performance. See %s",
+				docs.URL("serial.html"),
+			),
+		)
+	}
+
+	return catalog.UseRowID(*d)
 }
 
 func columnNamesToIDs(b BuildCtx, tbl *scpb.Table) map[string]descpb.ColumnID {
