@@ -253,6 +253,15 @@ message LogicalReplicationDetails {
   DefaultConflictResolution default_conflict_resolution = 7 [(gogoproto.nullable) = false];
 
   bool filter_rangefeed = 8;
+
+  enum ApplyMode {
+    Immediate = 0;
+    Validated = 1;
+  }
+
+  ApplyMode mode = 9;
+
+  // Next ID: 10.
 }
 
 message LogicalReplicationProgress {
