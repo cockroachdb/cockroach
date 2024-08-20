@@ -966,32 +966,14 @@ const (
 	// so we perform a LEFT JOIN to get a NULL value when no progress row is
 	// found.
 	systemJobsAndJobInfoBaseQuery = `
-WITH
-	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' ORDER BY written DESC),
-	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' ORDER BY written DESC)
-	SELECT
-		DISTINCT(id), status, created, payload.value AS payload, progress.value AS progress,
-		created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
-	FROM system.jobs AS j
-	INNER JOIN latestpayload AS payload ON j.id = payload.job_id
-	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
+SELECT
+DISTINCT(id), status, created, payload.value AS payload, progress.value AS progress,
+created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
+FROM
+system.jobs AS j
+LEFT JOIN system.job_info AS progress ON j.id = progress.job_id AND progress.info_key = 'legacy_progress'
+INNER JOIN system.job_info AS payload ON j.id = payload.job_id AND payload.info_key = 'legacy_payload'
 `
-
-	// systemJobsAndJobInfoBaseQueryWithIDPredicate is the same as
-	// systemJobsAndJobInfoBaseQuery but with a predicate on `job_id` in the CTE
-	// queries.
-	systemJobsAndJobInfoBaseQueryWithIDPredicate = `
-WITH
-	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' AND job_id = $1 ORDER BY written DESC LIMIT 1),
-	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' AND job_id = $1 ORDER BY written DESC LIMIT 1)
-	SELECT
-		id, status, created, payload.value AS payload, progress.value AS progress,
-		created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
-	FROM system.jobs AS j
-	INNER JOIN latestpayload AS payload ON j.id = payload.job_id
-	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
-`
-
 	systemJobsIDPredicate     = ` WHERE id = $1`
 	systemJobsTypePredicate   = ` WHERE job_type = $1`
 	systemJobsStatusPredicate = ` WHERE status = $1`
@@ -1011,7 +993,7 @@ func getInternalSystemJobsQuery(predicate systemJobsPredicate) string {
 	case noPredicate:
 		return systemJobsAndJobInfoBaseQuery
 	case jobID:
-		return systemJobsAndJobInfoBaseQueryWithIDPredicate + systemJobsIDPredicate
+		return systemJobsAndJobInfoBaseQuery + systemJobsIDPredicate
 	case jobType:
 		return systemJobsAndJobInfoBaseQuery + systemJobsTypePredicate
 	case jobStatus:
