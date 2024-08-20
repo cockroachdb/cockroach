@@ -53,6 +53,9 @@ func TestSetupReaderCatalog(t *testing.T) {
 	srcRunner := sqlutils.MakeSQLRunner(srcConn)
 
 	stmts := []string{
+		"CREATE USER roacher WITH CREATEROLE",
+		"GRANT ADMIN TO roacher",
+		"ALTER USER roacher SET timezone='America/New_York'",
 		"CREATE DATABASE db1",
 		"CREATE SCHEMA db1.sc1",
 		"CREATE SEQUENCE sq1",
@@ -85,42 +88,70 @@ func TestSetupReaderCatalog(t *testing.T) {
 		return destStopperTenant, destStopper
 	}
 	_, destStopper := createDest()
-	destStopper.Stop(ctx)
 
 	systemConn := ts.SQLConn(t)
 	systemRunner := sqlutils.MakeSQLRunner(systemConn)
-	systemRunner.Exec(t, "ALTER VIRTUAL CLUSTER dest STOP SERVICE ")
 
-	destName = ""
-	// Setup the reader catalog.
-	systemTenant := ts.SQLConn(t)
-	now := ts.Clock().Now()
-	_, err = systemTenant.Exec("SELECT * FROM crdb_internal.setup_read_from_standby('src', 'dest', $1);", now.WallTime)
-	require.NoError(t, err)
+	// Run multiple iterations as well to ensure descriptors can
+	// be updated, with the virtual cluster offline.
+	for i := 0; i < 2; i++ {
+		destStopper.Stop(ctx)
+		systemRunner.Exec(t, "ALTER VIRTUAL CLUSTER dest STOP SERVICE ")
+		destName = ""
+		// Setup the reader catalog.
+		systemTenant := ts.SQLConn(t)
+		now := ts.Clock().Now()
+		_, err = systemTenant.Exec("SELECT * FROM crdb_internal.setup_read_from_standby('src', 'dest', $1);", now.WallTime)
+		require.NoError(t, err)
 
-	// Confirm that data is readable.
-	dest, destStopper := createDest()
-	defer destStopper.Stop(ctx)
+		// Confirm that data is readable.
+		dest, destStopper := createDest()
+		defer destStopper.Stop(ctx)
 
-	destConn := dest.SQLConn(t)
-	destRunner := sqlutils.MakeSQLRunner(destConn)
+		destConn := dest.SQLConn(t)
+		destRunner := sqlutils.MakeSQLRunner(destConn)
 
-	// compareQueries executes the same query on both catalogs
-	// and expects the same results.
-	compareQueries := func(query string) {
-		expectedResults := srcRunner.QueryStr(t, fmt.Sprintf("SELECT * FROM (%s) AS OF SYSTEM TIME %s", query, now.AsOfSystemTime()))
-		destRunner.CheckQueryResults(t, query, expectedResults)
+		// compareQueries executes the same query on both catalogs
+		// and expects the same results.
+		compareQueries := func(query string) {
+			expectedResults := srcRunner.QueryStr(t, fmt.Sprintf("SELECT * FROM (%s) AS OF SYSTEM TIME %s", query, now.AsOfSystemTime()))
+			destRunner.CheckQueryResults(t, query, expectedResults)
+		}
+
+		// Validate basic queries execute correctly, and we can
+		// read data within tables.
+		compareQueries("SELECT * FROM t1 ORDER BY n")
+		compareQueries("SELECT * FROM v1 ORDER BY 1")
+
+		// Validate reading from sequences works.
+		compareQueries("SELECT * FROM sq1")
+
+		// Confirm that sequence operations are blocked.
+		destRunner.ExpectErr(t, "cannot execute nextval\\(\\) in a read-only transaction", "SELECT nextval('sq1')")
+		destRunner.ExpectErr(t, "cannot execute setval\\(\\) in a read-only transaction", "SELECT setval('sq1', 32)")
+
+		// Confirm that users and roles tables are replicated.
+		compareQueries("SELECT * FROM system.users")
+		compareQueries("SELECT * FROM system.role_members")
+		compareQueries("SELECT * FROM system.role_options")
+		compareQueries("SELECT * FROM system.database_role_settings")
+
+		// Confirm that table_statistics are replicated.
+		compareQueries("SELECT * FROM system.table_statistics")
+
+		// Next modify the destination again.
+		newSQLForSrc := []string{
+			"INSERT INTO t1(val) VALUES('open')",
+			"INSERT INTO t1(val) VALUES('closed')",
+			"INSERT INTO t1(val) VALUES('inactive')",
+			fmt.Sprintf("CREATE TABLE t_new_%d(n int PRIMARY KEY)", i),
+			fmt.Sprintf("CREATE USER roacher%d WITH CREATEROLE", i),
+			fmt.Sprintf("GRANT ADMIN TO roacher%d", i),
+			fmt.Sprintf("ALTER USER roacher%d SET timezone='America/New_York'", i),
+			"SELECT nextval('sq1')",
+		}
+		for _, dml := range newSQLForSrc {
+			srcRunner.Exec(t, dml)
+		}
 	}
-
-	// Validate basic queries execute correctly, and we can
-	// read data within tables.
-	compareQueries("SELECT * FROM t1 ORDER BY n")
-	compareQueries("SELECT * FROM v1 ORDER BY 1")
-
-	// Validate reading from sequences works.
-	compareQueries("SELECT * FROM sq1")
-
-	// Confirm that sequence operations are blocked.
-	destRunner.ExpectErr(t, "cannot execute nextval\\(\\) in a read-only transaction", "SELECT nextval('sq1')")
-	destRunner.ExpectErr(t, "cannot execute setval\\(\\) in a read-only transaction", "SELECT setval('sq1', 32)")
 }
