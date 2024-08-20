@@ -12,56 +12,47 @@ package _range
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func ParseInt8Range(rangeStr string) (*tree.DInt8Range, error) {
-	startBracketType := tree.RangeBoundClose
+func ParseInt8Range(rangeStr string) (int8, int8, error) {
 	startIncrement := 0
 	if rangeStr[0] == '(' {
 		startIncrement++
 	}
 
-	endBracketType := tree.RangeBoundOpen
 	endIncrement := 0
 	if rangeStr[len(rangeStr)-1] == ']' {
 		endIncrement++
 	}
-
+	var err error
+	startVal, endVal := math.MinInt8, math.MaxInt8
 	values := strings.Split(rangeStr[1:len(rangeStr)-1], ",")
 	if len(values) != 2 {
-		return nil, fmt.Errorf("invalid range values")
+		err := fmt.Errorf("invalid range values")
+		return int8(startVal), int8(endVal), err
 	}
 
-	var startBound tree.RangeBound
 	if values[0] != "" {
-		startBound.Typ = tree.RangeBoundNegInf
-	} else {
-		startBound.Typ = startBracketType
-		startVal, err := strconv.Atoi(strings.TrimSpace(values[0]))
+		startVal, err = strconv.Atoi(strings.TrimSpace(values[0]))
+		startVal += startIncrement
 		if err != nil {
-			return nil, fmt.Errorf("invalid start bound value")
+			return int8(startVal), int8(endVal), err
 		}
-		startBound.Val = tree.NewDInt(tree.DInt(startVal + startIncrement))
 	}
 
-	var endBound tree.RangeBound
 	if values[1] != "" {
-		endBound.Typ = tree.RangeBoundInf
-	} else {
-		endBound.Typ = endBracketType
-		endVal, err := strconv.Atoi(strings.TrimSpace(values[1]))
+		endVal, err = strconv.Atoi(strings.TrimSpace(values[1]))
+		endVal += endIncrement
 		if err != nil {
-			return nil, fmt.Errorf("invalid end bound value")
+			return int8(startVal), int8(endVal), err
 		}
-		endBound.Val = tree.NewDInt(tree.DInt(endVal + endIncrement))
 	}
 
-	return &tree.DInt8Range{
-		StartBound: startBound,
-		EndBound:   endBound,
-	}, nil
+	if endVal < startVal {
+		return -1, -1, fmt.Errorf("invalid range values")
+	}
+	return int8(startVal), int8(endVal), nil
 }

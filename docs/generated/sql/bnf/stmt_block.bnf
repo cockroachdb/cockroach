@@ -1549,6 +1549,7 @@ col_name_keyword ::=
 	| 'IFNULL'
 	| 'INOUT'
 	| 'INT'
+	| 'INT8RANGE'
 	| 'INTEGER'
 	| 'INTERVAL'
 	| 'ISERROR'
@@ -3469,6 +3470,7 @@ const_typename ::=
 	| const_datetime
 	| const_geo
 	| const_vector
+	| const_range
 
 interval_type ::=
 	'INTERVAL'
@@ -3902,6 +3904,7 @@ bare_label_keywords ::=
 	| 'INSERT'
 	| 'INSTEAD'
 	| 'INT'
+	| 'INT8RANGE'
 	| 'INTEGER'
 	| 'INTERVAL'
 	| 'INTO_DB'
@@ -4398,6 +4401,9 @@ const_geo ::=
 const_vector ::=
 	'VECTOR'
 	| 'VECTOR' '(' iconst32 ')'
+
+const_range ::=
+	'INT8RANGE'
 
 interval_qualifier ::=
 	'YEAR'

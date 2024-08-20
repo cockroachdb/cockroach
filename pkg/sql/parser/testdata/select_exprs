@@ -2122,3 +2122,11 @@ SELECT "[2,2]" < (-"[3,4]") -- normalized!
 SELECT (("[2,2]") < ((-("[3,4]")))) -- fully parenthesized
 SELECT "[2,2]" < (-"[3,4]") -- literals removed
 SELECT _ < (-_) -- identifiers removed
+
+parse
+SELECT '(1,14)'::int8range
+----
+SELECT '(1,14)'::INT8RANGE -- normalized!
+SELECT (('(1,14)')::INT8RANGE) -- fully parenthesized
+SELECT '_'::INT8RANGE -- literals removed
+SELECT '(1,14)'::INT8RANGE -- identifiers removed

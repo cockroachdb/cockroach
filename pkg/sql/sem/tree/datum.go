@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	int8range "github.com/cockroachdb/cockroach/pkg/util/range"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
@@ -2018,7 +2019,10 @@ func AsDInt8Range(e Expr) (DInt8Range, bool) {
 	switch t := e.(type) {
 	case *DInt8Range:
 		return *t, true
+	case *DOidWrapper:
+		return AsDInt8Range(t.Wrapped)
 	}
+
 	return DInt8Range{}, false
 }
 
@@ -2030,6 +2034,23 @@ func MustBeDInt8Range(e Expr) DInt8Range {
 		panic(errors.AssertionFailedf("expected *DInt8Range, found %T", e))
 	}
 	return i
+}
+
+func ParseInt8Range(s string) (Datum, error) {
+	startVal, endVal, err := int8range.ParseInt8Range(s)
+	if err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse vector")
+	}
+	startType, endType := RangeBoundClose, RangeBoundOpen
+
+	if startVal == math.MinInt8 {
+		startType = RangeBoundNegInf
+	}
+
+	if endVal == math.MaxInt8 {
+		endType = RangeBoundInf
+	}
+	return NewDInt8Range(NewDInt(DInt(startVal)), NewDInt(DInt(endVal)), startType, endType), nil
 }
 
 func (d *DInt8Range) String() string {

@@ -36,7 +36,6 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/ipaddr",
         "//pkg/util/json",
-        "//pkg/util/range",
         "//pkg/util/timeofday",
         "//pkg/util/timetz",
         "//pkg/util/timeutil/pgdate",

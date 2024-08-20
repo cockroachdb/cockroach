@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	_range "github.com/cockroachdb/cockroach/pkg/util/range"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -486,7 +485,7 @@ func DecodeDatum(
 			}
 			return &tree.DPGVector{T: ret}, nil
 		case oid.T_int8range:
-			val, err := _range.ParseInt8Range(bs)
+			val, err := tree.ParseInt8Range(bs)
 			if err != nil {
 				return nil, err
 			}

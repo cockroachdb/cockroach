@@ -680,8 +680,6 @@ return a result that is less likely the closest replica. It is otherwise
 hardcoded as -4.8s from the statement time, which may not result in reading from the
 nearest replica.</p>
 </span></td><td>Volatile</td></tr>
-<tr><td><a name="int8range"></a><code>int8range(start_bound: <a href="int.html">int</a>, end_bound: <a href="int.html">int</a>) &rarr; range</code></td><td></td><td>Invalid</td></tr>
-<tr><td><a name="int8range"></a><code>int8range(start_bound: <a href="int.html">int</a>, end_bound: <a href="int.html">int</a>, bound_fmt: <a href="string.html">string</a>) &rarr; range</code></td><td></td><td>Invalid</td></tr>
 <tr><td><a name="localtimestamp"></a><code>localtimestamp() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts
 and which stays constant throughout the transaction. This timestamp
@@ -1298,6 +1296,16 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="vector_norm"></a><code>vector_norm(vector: vector) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Euclidean norm of the vector.</p>
 </span></td><td>Immutable</td></tr></tbody>
+</table>
+
+### Range functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="has_intersect"></a><code>has_intersect(left_range: int8range, right_range: int8range) &rarr; <a href="bool.html">bool</a></code></td><td></td><td>Invalid</td></tr>
+<tr><td><a name="int8range"></a><code>int8range(start_bound: <a href="int.html">int</a>, end_bound: <a href="int.html">int</a>) &rarr; int8range</code></td><td></td><td>Invalid</td></tr>
+<tr><td><a name="int8range"></a><code>int8range(start_bound: <a href="int.html">int</a>, end_bound: <a href="int.html">int</a>, bound_fmt: <a href="string.html">string</a>) &rarr; int8range</code></td><td></td><td>Invalid</td></tr></tbody>
 </table>
 
 ### STRING[] functions

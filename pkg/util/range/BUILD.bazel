@@ -5,5 +5,4 @@ go_library(
     srcs = ["int8range.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/range",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/sql/sem/tree"],
 )

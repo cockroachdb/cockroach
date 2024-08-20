@@ -160,6 +160,7 @@ go_library(
         "//pkg/util/iterutil",
         "//pkg/util/json",
         "//pkg/util/pretty",
+        "//pkg/util/range",
         "//pkg/util/stringencoding",
         "//pkg/util/syncutil",
         "//pkg/util/timeofday",
