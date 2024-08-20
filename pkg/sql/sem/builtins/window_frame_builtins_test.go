@@ -102,8 +102,8 @@ func testMin(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 			if minResult != naiveMin {
 				t.Errorf("Min sliding window returned wrong result: expected %+v, found %+v", naiveMin, minResult)
 				t.Errorf("partitionSize: %+v idx: %+v offset: %+v", wfr.PartitionSize(), wfr.RowIdx, offset)
-				t.Errorf(min.sw.string())
-				t.Errorf(partitionToString(context.Background(), wfr.Rows))
+				t.Error(min.sw.string())
+				t.Error(partitionToString(context.Background(), wfr.Rows))
 				panic("")
 			}
 		}
@@ -145,8 +145,8 @@ func testMax(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 			if maxResult != naiveMax {
 				t.Errorf("Max sliding window returned wrong result: expected %+v, found %+v", naiveMax, maxResult)
 				t.Errorf("partitionSize: %+v idx: %+v offset: %+v", wfr.PartitionSize(), wfr.RowIdx, offset)
-				t.Errorf(max.sw.string())
-				t.Errorf(partitionToString(context.Background(), wfr.Rows))
+				t.Error(max.sw.string())
+				t.Error(partitionToString(context.Background(), wfr.Rows))
 				panic("")
 			}
 		}
@@ -193,7 +193,7 @@ func testSumAndAvg(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun
 			if s != naiveSum {
 				t.Errorf("Sum sliding window returned wrong result: expected %+v, found %+v", naiveSum, s)
 				t.Errorf("partitionSize: %+v idx: %+v offset: %+v", wfr.PartitionSize(), wfr.RowIdx, offset)
-				t.Errorf(partitionToString(context.Background(), wfr.Rows))
+				t.Error(partitionToString(context.Background(), wfr.Rows))
 				panic("")
 			}
 			a, err := avgResult.Float64()
@@ -207,7 +207,7 @@ func testSumAndAvg(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun
 			if a != float64(naiveSum)/float64(frameSize) {
 				t.Errorf("Sum sliding window returned wrong result: expected %+v, found %+v", float64(naiveSum)/float64(frameSize), a)
 				t.Errorf("partitionSize: %+v idx: %+v offset: %+v", wfr.PartitionSize(), wfr.RowIdx, offset)
-				t.Errorf(partitionToString(context.Background(), wfr.Rows))
+				t.Error(partitionToString(context.Background(), wfr.Rows))
 				panic("")
 			}
 		}

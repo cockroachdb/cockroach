@@ -246,7 +246,7 @@ func TestMakePolygon(t *testing.T) {
 			}
 			polygon, err := MakePolygon(outer, interior...)
 			if tc.err != nil {
-				require.Errorf(t, err, tc.err.Error())
+				require.Error(t, err, tc.err.Error())
 				require.EqualError(t, err, tc.err.Error())
 			} else {
 				require.NoError(t, err)
@@ -354,7 +354,7 @@ func TestMakePolygonFromMultiLineString(t *testing.T) {
 			g := geo.MustParseGeometry(tc.g)
 			polygon, err := MakePolygonFromMultiLineString(g, tc.srid)
 			if tc.err != nil {
-				require.Errorf(t, err, tc.err.Error())
+				require.Error(t, err, tc.err.Error())
 			} else {
 				require.NoError(t, err)
 				expected := geo.MustParseGeometry(tc.expected)

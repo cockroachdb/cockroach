@@ -128,14 +128,14 @@ func (s *jobScheduler) processSchedule(
 			// In particular, it'd be nice to add more time when repeatedly rescheduling
 			// a job.  It would also be nice not to log each event.
 			schedule.SetNextRun(s.env.Now().Add(recheckRunningAfter))
-			schedule.SetScheduleStatus("delayed due to %d already running", numRunning)
+			schedule.SetScheduleStatusf("delayed due to %d already running", numRunning)
 			s.metrics.RescheduleWait.Inc(1)
 			return scheduleStorage.Update(ctx, schedule)
 		case jobspb.ScheduleDetails_SKIP:
 			if err := schedule.ScheduleNextRun(); err != nil {
 				return err
 			}
-			schedule.SetScheduleStatus("rescheduled due to %d already running", numRunning)
+			schedule.SetScheduleStatusf("rescheduled due to %d already running", numRunning)
 			s.metrics.RescheduleSkip.Inc(1)
 			return scheduleStorage.Update(ctx, schedule)
 		}

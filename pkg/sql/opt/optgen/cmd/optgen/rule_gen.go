@@ -889,7 +889,7 @@ func (g *newRuleGen) genBoundStatements(e lang.Expr) {
 // that genNestedExpr can generate references to those statements.
 func (g *newRuleGen) genNestedExpr(e lang.Expr) {
 	if label, ok := g.boundStmts[e]; ok {
-		g.w.write(label)
+		g.w.write("%s", label)
 		return
 	}
 
@@ -910,10 +910,10 @@ func (g *newRuleGen) genNestedExpr(e lang.Expr) {
 			// untyped version.
 			varName = typed
 		}
-		g.w.write(varName)
+		g.w.write("%s", varName)
 
 	case *lang.LetExpr:
-		g.w.write(string(t.Result.Label))
+		g.w.write("%s", string(t.Result.Label))
 
 	case *lang.StringExpr:
 		// Literal string expressions construct DString datums.

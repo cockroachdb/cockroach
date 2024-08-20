@@ -78,7 +78,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 func checkErrSwitch(pass *analysis.Pass, s *ast.SwitchStmt) {
 	if pass.TypesInfo.Types[s.Tag].Type == errorType &&
 		!passesutil.HasNolintComment(pass, s, name) {
-		pass.Reportf(s.Switch, escNl(`invalid direct comparison of error object
+		pass.Reportf(s.Switch, "%s", escNl(`invalid direct comparison of error object
 Tip:
    switch err { case errRef:...
 -> switch { case errors.Is(err, errRef): ...
@@ -89,7 +89,7 @@ Tip:
 func checkErrCast(pass *analysis.Pass, texpr *ast.TypeAssertExpr) {
 	if pass.TypesInfo.Types[texpr.X].Type == errorType &&
 		!passesutil.HasNolintComment(pass, texpr, name) {
-		pass.Reportf(texpr.Lparen, escNl(`invalid direct cast on error object
+		pass.Reportf(texpr.Lparen, "%s", escNl(`invalid direct cast on error object
 Alternatives:
    if _, ok := err.(*T); ok        ->   if errors.HasType(err, (*T)(nil))
    if _, ok := err.(I); ok         ->   if errors.HasInterface(err, (*I)(nil))
@@ -124,7 +124,7 @@ func checkErrCmp(pass *analysis.Pass, binaryExpr *ast.BinaryExpr) {
 				return
 			}
 
-			pass.Reportf(binaryExpr.OpPos, escNl(`use errors.Is instead of a direct comparison
+			pass.Reportf(binaryExpr.OpPos, "%s", escNl(`use errors.Is instead of a direct comparison
 For example:
    if errors.Is(err, errMyOwnErrReference) {
      ...

@@ -32,7 +32,7 @@ func parseConstraint(t *testing.T, field string) roachpb.Constraint {
 	case '-':
 		typ = roachpb.Constraint_PROHIBITED
 	default:
-		t.Fatalf(fmt.Sprintf("unexpected start of field %s", field))
+		t.Fatalf("unexpected start of field %s", field)
 	}
 	kv := strings.Split(field[1:], "=")
 	if len(kv) != 2 {

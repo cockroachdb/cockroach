@@ -98,7 +98,7 @@ func registerExportParquet(r registry.Registry) {
 							fmt.Sprintf("EXPORT INTO PARQUET 'nodelocal://1/outputfile%d' FROM SELECT * FROM %s", fileNum, target))
 						fileNum += 1
 						if err != nil {
-							t.Fatalf(err.Error())
+							t.Fatal(err.Error())
 						}
 					}
 					t.Status(fmt.Sprintf("worker %d/%d terminated", i+1, numConcurrentExports))
@@ -156,7 +156,7 @@ func registerExportParquet(r registry.Registry) {
 					_, err := db.Exec(
 						fmt.Sprintf("EXPORT INTO PARQUET 'nodelocal://1/outputfile%d' FROM SELECT * FROM %s", i, target))
 					if err != nil {
-						t.Fatalf(err.Error())
+						t.Fatal(err.Error())
 					}
 					t.Status(fmt.Sprintf("worker %d/%d terminated", i+1, numWorkers))
 					wg.Done()
