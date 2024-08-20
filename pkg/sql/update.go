@@ -55,22 +55,6 @@ type updateRun struct {
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
 
-	// sourceSlots is the helper that maps RHS expressions to LHS targets.
-	// This is necessary because there may be fewer RHS expressions than
-	// LHS targets. For example, SET (a, b) = (SELECT 1,2) has:
-	// - 2 targets (a, b)
-	// - 1 source slot, the subquery (SELECT 1, 2).
-	// Each call to extractValues() on a sourceSlot will return 1 or more
-	// datums suitable for assignments. In the example above, the
-	// method would return 2 values.
-	sourceSlots []sourceSlot
-
-	// updateValues will hold the new values for every column
-	// mentioned in the LHS of the SET expressions, in the
-	// order specified by those SET expressions (thus potentially
-	// a different order than the source).
-	updateValues tree.Datums
-
 	// rowIdxToRetIdx is the mapping from the columns in ru.FetchCols to the
 	// columns in the resultRowBuffer. A value of -1 is used to indicate
 	// that the column at that index is not part of the resultRowBuffer
@@ -188,28 +172,15 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// expressions.
 	oldValues := sourceVals[:len(u.run.tu.ru.FetchCols)]
 
-	// valueIdx is used in the loop below to map sourceSlots to
-	// entries in updateValues.
-	valueIdx := 0
-
-	// Propagate the values computed for the RHS expressions into
-	// updateValues at the right positions. The positions in
-	// updateValues correspond to the columns named in the LHS
-	// operands for SET.
-	for _, slot := range u.run.sourceSlots {
-		for _, value := range slot.extractValues(sourceVals) {
-			u.run.updateValues[valueIdx] = value
-			valueIdx++
-		}
-	}
-
-	// At this point, we have populated updateValues with the result of
-	// computing the RHS for every assignment.
+	// The update values follow the fetch values and their order corresponds to the order of ru.UpdateCols.
+	numFetchCols := len(u.run.tu.ru.FetchCols)
+	numUpdateCols := len(u.run.tu.ru.UpdateCols)
+	updateValues := sourceVals[numFetchCols : numFetchCols+numUpdateCols]
 
 	// Verify the schema constraints. For consistency with INSERT/UPSERT
 	// and compatibility with PostgreSQL, we must do this before
 	// processing the CHECK constraints.
-	if err := enforceNotNullConstraints(u.run.updateValues, u.run.tu.ru.UpdateCols); err != nil {
+	if err := enforceNotNullConstraints(updateValues, u.run.tu.ru.UpdateCols); err != nil {
 		return err
 	}
 
@@ -243,12 +214,12 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 
 	// Error out the update if the enforce_home_region session setting is on and
 	// the row's locality doesn't match the gateway region.
-	if err := u.run.regionLocalInfo.checkHomeRegion(u.run.updateValues); err != nil {
+	if err := u.run.regionLocalInfo.checkHomeRegion(updateValues); err != nil {
 		return err
 	}
 
 	// Queue the insert in the KV batch.
-	newValues, err := u.run.tu.rowForUpdate(params.ctx, oldValues, u.run.updateValues, pm, u.run.traceKV)
+	newValues, err := u.run.tu.rowForUpdate(params.ctx, oldValues, updateValues, pm, u.run.traceKV)
 	if err != nil {
 		return err
 	}
@@ -314,37 +285,6 @@ func (u *updateNode) rowsWritten() int64 {
 
 func (u *updateNode) enableAutoCommit() {
 	u.run.tu.enableAutoCommit()
-}
-
-// sourceSlot abstracts the idea that our update sources can either be tuples
-// or scalars. Tuples are for cases such as SET (a, b) = (1, 2) or SET (a, b) =
-// (SELECT 1, 2), and scalars are for situations like SET a = b. A sourceSlot
-// represents how to extract and type-check the results of the right-hand side
-// of a single SET statement. We could treat everything as tuples, including
-// scalars as tuples of size 1, and eliminate this indirection, but that makes
-// the query plan more complex.
-type sourceSlot interface {
-	// extractValues returns a slice of the values this slot is responsible for,
-	// as extracted from the row of results.
-	extractValues(resultRow tree.Datums) tree.Datums
-	// checkColumnTypes compares the types of the results that this slot refers to to the types of
-	// the columns those values will be assigned to. It returns an error if those types don't match up.
-	checkColumnTypes(row []tree.TypedExpr) error
-}
-
-type scalarSlot struct {
-	column      catalog.Column
-	sourceIndex int
-}
-
-func (ss scalarSlot) extractValues(row tree.Datums) tree.Datums {
-	return row[ss.sourceIndex : ss.sourceIndex+1]
-}
-
-func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
-	renderedResult := row[ss.sourceIndex]
-	typ := renderedResult.ResolvedType()
-	return colinfo.CheckDatumTypeFitsColumnType(ss.column, typ)
 }
 
 // enforceNotNullConstraints enforces NOT NULL column constraints.

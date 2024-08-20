@@ -1523,10 +1523,6 @@ func (ef *execFactory) ConstructUpdate(
 	// since it compiles tuples and subqueries into a simple sequence of target
 	// columns.
 	updateCols := makeColList(table, updateColOrdSet)
-	sourceSlots := make([]sourceSlot, len(updateCols))
-	for i := range sourceSlots {
-		sourceSlots[i] = scalarSlot{column: updateCols[i], sourceIndex: len(fetchCols) + i}
-	}
 
 	// Create the table updater, which does the bulk of the work.
 	internal := ef.planner.SessionData().Internal
@@ -1553,8 +1549,6 @@ func (ef *execFactory) ConstructUpdate(
 		run: updateRun{
 			tu:             tableUpdater{ru: ru},
 			checkOrds:      checks,
-			sourceSlots:    sourceSlots,
-			updateValues:   make(tree.Datums, len(ru.UpdateCols)),
 			numPassthrough: len(passthrough),
 		},
 	}
