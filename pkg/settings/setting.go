@@ -88,6 +88,10 @@ type Setting interface {
 
 	// ValueOrigin returns the origin of the current value.
 	ValueOrigin(ctx context.Context, sv *Values) ValueOrigin
+
+	// IsInternal returns true if the setting can only set by internal SQL.
+	// Attempts by external users to modify the setting will fail.
+	IsInternal() bool
 }
 
 // NonMaskedSetting is the exported interface of non-masked settings. A

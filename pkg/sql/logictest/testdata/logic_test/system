@@ -1304,6 +1304,7 @@ ORDER BY name
 ----
 cluster.secret
 diagnostics.reporting.enabled
+server.license_grace_period_start.timestamp
 sql.crdb_internal.table_row_statistics.as_of_time
 version
 
@@ -1328,6 +1329,9 @@ INSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalue')
 # Have to exclude kv.range_merge.queue.enabled  (with key name
 # kv.range_merge.queue_enabled) as it is not accessible
 # to tenants.
+#
+# Also, we need to exclude server.license_grace_period_start.timestamp because
+# it's value can change from run to run.
 query TT
 SELECT name, value
 FROM system.settings
@@ -1335,7 +1339,7 @@ WHERE name NOT LIKE 'sql.defaults%'
 AND name NOT LIKE 'sql.distsql%'
 AND name NOT LIKE 'sql.testing%'
 AND name NOT LIKE 'sql.stats%'
-AND name NOT IN ('version', 'cluster.secret', 'kv.range_merge.queue_enabled')
+AND name NOT IN ('version', 'cluster.secret', 'kv.range_merge.queue_enabled', 'server.license_grace_period_start.timestamp')
 ORDER BY name
 ----
 diagnostics.reporting.enabled                      true

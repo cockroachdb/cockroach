@@ -448,3 +448,21 @@ query B
 SHOW CLUSTER SETTING sql.explain_analyze.include_ru_estimation.enabled FOR TENANT "cluster-10"
 ----
 false
+
+subtest internal_setting
+
+# Verify that the internal setting was applied correctly. Since the value can
+# change from run to run, we'll focus on confirming the presence of the setting
+# in the system table rather than checking its specific value.
+query I
+select count(*) FROM system.settings WHERE NAME = 'server.license_grace_period_start.timestamp';
+----
+1
+
+statement error the cluster setting 'server.license_grace_period_start.timestamp' can only be modified internally
+SET CLUSTER SETTING server.license_grace_period_start.timestamp = now()::INT64;
+
+statement error the cluster setting 'server.license_grace_period_start.timestamp' can only be modified internally
+RESET CLUSTER SETTING server.license_grace_period_start.timestamp;
+
+subtest end

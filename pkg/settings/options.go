@@ -76,6 +76,14 @@ func WithReportable(reportable bool) SettingOption {
 	}}
 }
 
+// WithInternalOnly will only allow the setting to change by an internal SQL. An
+// attempt to modify using an external user will fail.
+func WithInternalOnly() SettingOption {
+	return SettingOption{commonOpt: func(c *common) {
+		c.internalOnly = true
+	}}
+}
+
 // Retired marks the setting as obsolete. It also hides it from the
 // output of SHOW CLUSTER SETTINGS. Note: in many case the setting
 // definition can be removed outright, and its name added to the

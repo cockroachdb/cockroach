@@ -422,6 +422,11 @@ func writeSettingInternal(
 	interlockInfo unsafeSettingInterlockInfo,
 ) (expectedEncodedValue string, err error) {
 	if err := func() error {
+		if setting.IsInternal() && !user.IsNodeUser() {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"the cluster setting '%s' can only be modified internally", setting.Name())
+		}
+
 		var reportedValue string
 		if value == nil {
 			// This code is doing work for RESET CLUSTER SETTING.

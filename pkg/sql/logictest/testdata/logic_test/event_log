@@ -475,6 +475,7 @@ AND info NOT LIKE '%sql.defaults%'
 AND info NOT LIKE '%sql.distsql%'
 AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.stats%'
+AND info NOT LIKE '%server.license_grace_period_start.timestamp%'
 ORDER BY "timestamp", info
 ----
 1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "node", "Value": "true"}
@@ -494,6 +495,7 @@ AND info NOT LIKE '%sql.defaults%'
 AND info NOT LIKE '%sql.distsql%'
 AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.stats%'
+AND info NOT LIKE '%server.license_grace_period_start.timestamp%'
 ORDER BY "timestamp", info
 ----
 1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "node", "Value": "true"}

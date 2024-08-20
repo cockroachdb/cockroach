@@ -96,6 +96,11 @@ func (s *MaskedSetting) IsUnsafe() bool {
 	return s.setting.IsUnsafe()
 }
 
+// IsInternal returns true if only internal SQL can modify the setting.
+func (s *MaskedSetting) IsInternal() bool {
+	return s.setting.IsInternal()
+}
+
 // TestingIsReportable is used in testing for reportability.
 func TestingIsReportable(s Setting) bool {
 	if _, ok := s.(*MaskedSetting); ok {

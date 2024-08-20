@@ -29,6 +29,7 @@ type common struct {
 	nonReportable bool
 	retired       bool
 	sensitive     bool
+	internalOnly  bool
 }
 
 // slotIdx is an integer in the range [0, MaxSetting) which is uniquely
@@ -95,6 +96,11 @@ func (c *common) getSlot() slotIdx {
 // ValueOrigin returns the origin of the current value of the setting.
 func (c *common) ValueOrigin(ctx context.Context, sv *Values) ValueOrigin {
 	return sv.getValueOrigin(ctx, c.slot)
+}
+
+// IsInternal returns true if only internal SQL can modify the setting.
+func (c *common) IsInternal() bool {
+	return c.internalOnly
 }
 
 // setReportable configures the reportability.
