@@ -160,7 +160,7 @@ func runDiskStalledWALFailover(
 		t.Fatal("process exited unexectedly")
 	}
 
-	data := mustGetMetrics(ctx, c, t, adminURL,
+	data := mustGetMetrics(ctx, c, t, adminURL, install.SystemInterfaceName,
 		workloadStartAt.Add(time.Minute),
 		timeutil.Now().Add(-time.Minute),
 		[]tsQuery{
@@ -309,7 +309,7 @@ func runDiskStalledDetection(
 	}
 
 	stallAt := timeutil.Now()
-	response := mustGetMetrics(ctx, c, t, adminURL, workloadStartAt, stallAt, []tsQuery{
+	response := mustGetMetrics(ctx, c, t, adminURL, install.SystemInterfaceName, workloadStartAt, stallAt, []tsQuery{
 		{name: "cr.node.sql.query.count", queryType: total},
 	})
 	cum := response.Results[0].Datapoints
@@ -361,7 +361,7 @@ func runDiskStalledDetection(
 
 	{
 		now := timeutil.Now()
-		response := mustGetMetrics(ctx, c, t, adminURL, workloadStartAt, now, []tsQuery{
+		response := mustGetMetrics(ctx, c, t, adminURL, install.SystemInterfaceName, workloadStartAt, now, []tsQuery{
 			{name: "cr.node.sql.query.count", queryType: total},
 		})
 		cum := response.Results[0].Datapoints
