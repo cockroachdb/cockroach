@@ -341,13 +341,19 @@ func coreChangefeed(
 	p.ExtendedEvalContext().ChangefeedState = localState
 	knobs, _ := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 
-	for r := getRetry(ctx); r.Next(); {
+	for r := getRetry(ctx); ; {
+		if !r.Next() {
+			log.Infof(ctx, "core changefeed retry loop exiting: %s", ctx.Err())
+			return ctx.Err() // retry loop exits when context cancels.
+		}
+
 		if knobs != nil && knobs.BeforeDistChangefeed != nil {
 			knobs.BeforeDistChangefeed()
 		}
 
 		err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, localState, resultsCh)
 		if err == nil {
+			log.Infof(ctx, "core changefeed completed with no error")
 			return nil
 		}
 
@@ -364,7 +370,6 @@ func coreChangefeed(
 		// information which is saved in the localState.
 		log.Infof(ctx, "core changefeed retrying due to transient error: %s", err)
 	}
-	return ctx.Err() // retry loop exits when context cancels.
 }
 
 func createChangefeedJobRecord(
