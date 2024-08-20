@@ -5228,7 +5228,7 @@ func CalculateUpperBoundRecursive(tablesAndColumns [][2]string, n int) int64 {
 		rows2 := CalculateEstimatedRowCount(table2)
 		MF2 := GetMaxFrequency(table2, column2)
 
-		minDistinctValues := min(rows1/MF1, rows2/MF2)
+		minDistinctValues := minInt(rows1/MF1, rows2/MF2)
 		upperBound := minDistinctValues * MF1 * MF2
 		return upperBound
 	} else {
@@ -5244,14 +5244,14 @@ func CalculateUpperBoundRecursive(tablesAndColumns [][2]string, n int) int64 {
 		rowsCurr := CalculateEstimatedRowCount(tableCurr)
 		MFCurr := GetMaxFrequency(tableCurr, columnCurr)
 
-		minDistinctValues := min(prevUpperBound/MFPrev, rowsCurr/MFCurr)
+		minDistinctValues := minInt(prevUpperBound/MFPrev, rowsCurr/MFCurr)
 		upperBound := minDistinctValues * MFPrev * MFCurr
 		return upperBound
 	}
 }
 
 // min is a helper function to return the minimum of two int64 values.
-func min(a, b int64) int64 {
+func minInt(a, b int64) int64 {
 	if a < b {
 		return a
 	}
