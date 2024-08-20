@@ -204,8 +204,7 @@ func (r *streamIngestManagerImpl) SetupReaderCatalog(
 		}
 		b := txn.NewBatch()
 		if err := extracted.ForEachDescriptor(func(desc catalog.Descriptor) error {
-			if desc.GetParentID() == keys.SystemDatabaseID ||
-				desc.GetID() == keys.SystemDatabaseID {
+			if !shouldSetupForReader(desc.GetID(), desc.GetParentID()) {
 				return nil
 			}
 			// If there is an existing descriptor with the same ID, we should
@@ -266,8 +265,7 @@ func (r *streamIngestManagerImpl) SetupReaderCatalog(
 			return err
 		}
 		if err := extracted.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
-			if e.GetParentID() == keys.SystemDatabaseID ||
-				e.GetID() == keys.SystemDatabaseID {
+			if !shouldSetupForReader(e.GetID(), e.GetParentID()) {
 				return nil
 			}
 			return errors.Wrapf(writeDescs.UpsertNamespaceEntryToBatch(ctx, true, e, b), "namespace entry %v", e)
@@ -276,6 +274,19 @@ func (r *streamIngestManagerImpl) SetupReaderCatalog(
 		}
 		return errors.Wrap(txn.Run(ctx, b), "running batch")
 	})
+}
+
+// shouldSetupForReader determines if a descriptor should be setup
+// access via external row data.
+func shouldSetupForReader(id descpb.ID, parentSchemaID descpb.ID) bool {
+	switch id {
+	case keys.UsersTableID, keys.RoleMembersTableID, keys.RoleOptionsTableID,
+		keys.DatabaseRoleSettingsTableID, keys.TableStatisticsTableID:
+		return true
+	default:
+		return parentSchemaID != keys.SystemDatabaseID &&
+			id != keys.SystemDatabaseID
+	}
 }
 
 // getCatalogForTenantAsOf reads the descriptors from a given tenant
