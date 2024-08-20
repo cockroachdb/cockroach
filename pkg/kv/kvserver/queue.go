@@ -915,7 +915,6 @@ func (bq *baseQueue) processOneAsyncAndReleaseSem(
 	// it is no longer processable, return immediately.
 	if _, err := bq.replicaCanBeProcessed(ctx, repl, false /*acquireLeaseIfNeeded */); err != nil {
 		bq.finishProcessingReplica(ctx, stopper, repl, err)
-		log.Infof(ctx, "%s: skipping %d since replica can't be processed %v", taskName, repl.ReplicaID(), err)
 		<-bq.processSem
 		return
 	}
