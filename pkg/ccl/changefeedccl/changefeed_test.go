@@ -6125,7 +6125,7 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	// We use feedTestUseRootUserConnection to prevent the
 	// feed factory from trying to create a test user. Because the registry is draining, creating the test user
 	// will fail and the test will fail prematurely.
-	f, closeSink := makeFeedFactory(t, randomSinkType(feedTestEnterpriseSinks), tc.Server(1), tc.ServerConn(0),
+	f, closeSink := makeFeedFactory(t, randomSinkType(t, feedTestEnterpriseSinks), tc.Server(1), tc.ServerConn(0),
 		feedTestUseRootUserConnection)
 	defer closeSink()
 
@@ -6450,7 +6450,7 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 			}
 		}()
 
-		sinkType := randomSinkTypeWithOptions(opts)
+		sinkType := randomSinkTypeWithOptions(t, opts)
 		f, closeSink := makeFeedFactoryWithOptions(t, sinkType, tc, tc.ServerConn(coordinatorID), opts)
 		defer closeSink()
 		feed := feed(t, f, "CREATE CHANGEFEED FOR foo")
@@ -8322,7 +8322,7 @@ func TestChangefeedMultiPodTenantPlanning(t *testing.T) {
 	// Ensure both pods can be assigned work
 	waitForTenantPodsActive(t, tenant1Server, 2)
 
-	feedFactory, cleanupSink := makeFeedFactory(t, randomSinkType(feedTestEnterpriseSinks), tenant1Server, tenant1DB)
+	feedFactory, cleanupSink := makeFeedFactory(t, randomSinkType(t, feedTestEnterpriseSinks), tenant1Server, tenant1DB)
 	defer cleanupSink()
 
 	// Run a changefeed across two tables to guarantee multiple spans that can be spread across the aggregators

@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -622,9 +623,24 @@ func newTestOptions() feedTestOptions {
 	// a SQL-node in a multi-tenant server. 1 for all tests to be run on a
 	// tenant.
 	const percentTenant = 0.5
-	return feedTestOptions{
-		useTenant: rand.Float32() < percentTenant,
+	var useTenant bool
+	if v, present := tenantDecisionFromEnvironment(); present {
+		useTenant = v
+	} else {
+		useTenant = rand.Float32() < percentTenant
 	}
+	return feedTestOptions{
+		useTenant: useTenant,
+	}
+}
+
+func tenantDecisionFromEnvironment() (bool, bool) {
+	const testTenantEnabledEnvVar = "COCKROACH_TEST_TENANT"
+	if str, present := envutil.EnvString(testTenantEnabledEnvVar, 0); present {
+		v, _ := strconv.ParseBool(str)
+		return v, true
+	}
+	return false, false
 }
 
 func makeOptions(opts ...feedTestOption) feedTestOptions {
@@ -876,21 +892,40 @@ func makeServerWithOptions(
 	return makeSystemServerWithOptions(t, options)
 }
 
-func randomSinkType(opts ...feedTestOption) string {
+func randomSinkType(t *testing.T, opts ...feedTestOption) string {
 	options := makeOptions(opts...)
-	return randomSinkTypeWithOptions(options)
+	return randomSinkTypeWithOptions(t, options)
 }
 
-func randomSinkTypeWithOptions(options feedTestOptions) string {
-	sinkWeights := map[string]int{
-		"kafka":        3,
-		"enterprise":   1,
-		"webhook":      1,
-		"pubsub":       1,
-		"sinkless":     2,
-		"cloudstorage": 0,
-		"pulsar":       1,
+var defaultSinkWeights = map[string]int{
+	"kafka":        3,
+	"enterprise":   1,
+	"webhook":      1,
+	"pubsub":       1,
+	"sinkless":     2,
+	"cloudstorage": 0,
+	"pulsar":       1,
+}
+
+func sinkTypeFromEnvironment(t *testing.T, inkWeights map[string]int) (string, bool) {
+	const testSinkEnvVar = "COCKROACH_TEST_SINK"
+	if str, present := envutil.EnvString(testSinkEnvVar, 0); present {
+		w, ok := defaultSinkWeights[str]
+		if !ok {
+			t.Fatalf("unknown sink specified in environment: %s", str)
+			return "", false
+		}
+		if w == 0 {
+			t.Fatalf("sink %q disabled by test options", str)
+			return "", false
+		}
+		return str, true
 	}
+	return "", false
+}
+
+func sinkWeightsForOptions(options feedTestOptions) map[string]int {
+	sinkWeights := defaultSinkWeights
 	if options.externalIODir != "" {
 		sinkWeights["cloudstorage"] = 3
 	}
@@ -905,6 +940,16 @@ func randomSinkTypeWithOptions(options feedTestOptions) string {
 			sinkWeights[sinkType] = 0
 		}
 	}
+	return sinkWeights
+}
+
+func randomSinkTypeWithOptions(t *testing.T, options feedTestOptions) string {
+	sinkWeights := sinkWeightsForOptions(options)
+	if sinkType, ok := sinkTypeFromEnvironment(t, sinkWeights); ok {
+		t.Logf("sink set by env var: %s", sinkType)
+		return sinkType
+	}
+
 	weightTotal := 0
 	for _, weight := range sinkWeights {
 		weightTotal += weight
@@ -1136,8 +1181,7 @@ func cdcTestNamedWithSystem(
 	options := makeOptions(testOpts...)
 	cleanupCloudStorage := addCloudStorageOptions(t, &options)
 	TestingClearSchemaRegistrySingleton()
-
-	sinkType := randomSinkTypeWithOptions(options)
+	sinkType := randomSinkTypeWithOptions(t, options)
 	if sinkType == "skip" {
 		return
 	}
