@@ -220,6 +220,7 @@ type HealthFunc func(roachpb.NodeID) bool
 // leaseholder is known by the caller, the caller will move it to the
 // front if appropriate.
 func (rs ReplicaSlice) OptimizeReplicaOrder(
+	ctx context.Context,
 	st *cluster.Settings,
 	nodeID roachpb.NodeID,
 	healthFn HealthFunc,
@@ -229,6 +230,7 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 	// If we don't know which node we're on or its locality, and we don't have
 	// latency information to other nodes, send the RPCs randomly.
 	if nodeID == 0 && latencyFn == nil && len(locality.Tiers) == 0 {
+		log.VEvent(ctx, 2, "randomly shuffling replicas to route to")
 		shuffle.Shuffle(rs)
 		return
 	}
