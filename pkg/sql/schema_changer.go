@@ -217,6 +217,12 @@ func IsPermanentSchemaChangeError(err error) bool {
 		return true
 	}
 
+	// Errors with looking up descriptors are all considered permanent. It likely
+	// means that the descriptor has been deleted already.
+	if errors.IsAny(err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped, catalog.ErrReferencedDescriptorNotFound) {
+		return true
+	}
+
 	if grpcutil.IsClosedConnection(err) {
 		return false
 	}
