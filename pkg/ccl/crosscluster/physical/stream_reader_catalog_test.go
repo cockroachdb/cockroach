@@ -116,4 +116,11 @@ func TestSetupReaderCatalog(t *testing.T) {
 	// read data within tables.
 	compareQueries("SELECT * FROM t1 ORDER BY n")
 	compareQueries("SELECT * FROM v1 ORDER BY 1")
+
+	// Validate reading from sequences works.
+	compareQueries("SELECT * FROM sq1")
+
+	// Confirm that sequence operations are blocked.
+	destRunner.ExpectErr(t, "cannot execute nextval\\(\\) in a read-only transaction", "SELECT nextval('sq1')")
+	destRunner.ExpectErr(t, "cannot execute setval\\(\\) in a read-only transaction", "SELECT setval('sq1', 32)")
 }

@@ -337,6 +337,9 @@ type TableDescriptor interface {
 	IsPhysicalTable() bool
 	// MaterializedView returns whether this TableDescriptor is a MaterializedView.
 	MaterializedView() bool
+	// IsReadOnly returns if this table descriptor has external data, and cannot
+	// be written to.
+	IsReadOnly() bool
 	// IsAs returns true if the TableDescriptor describes a Table that was created
 	// with a CREATE TABLE AS command.
 	IsAs() bool
