@@ -60,6 +60,7 @@ const (
 	sinkTypeCloudstorage
 	sinkTypeSQL
 	sinkTypePulsar
+	sinkTypeFake
 )
 
 // externalResource is the interface common to both EventSink and
@@ -940,4 +941,57 @@ func shouldFlushBatch(bytes int, messages int, config sinkBatchConfig) bool {
 func sinkSupportsConcurrentEmits(sink EventSink) bool {
 	_, ok := sink.(*batchingSink)
 	return ok
+}
+
+// fakeSink is a sink that used for testing purposes, it wraps another sink
+// and always succeeds on Dial api.
+//
+// TODO (xiaochen): merge "nullSink" into this one.
+type fakeSink struct {
+	wrapped Sink
+}
+
+// Make sure that fakeSink implements the Sink interface.
+var _ Sink = (*fakeSink)(nil)
+
+// MakeFakeSink creates a fake sink that wraps another sink.
+func MakeFakeSink(wrapped Sink) Sink {
+	return &fakeSink{wrapped: wrapped}
+}
+
+// getConcreteType implements the Sink interface.
+func (s *fakeSink) getConcreteType() sinkType {
+	return sinkTypeNull
+}
+
+// Dial implements the Sink interface. It always succeeds.
+func (s *fakeSink) Dial() error {
+	return nil
+}
+
+// Close implements the Sink interface.
+func (s *fakeSink) Close() error {
+	return s.wrapped.Close()
+}
+
+// EmitRow implements Sink interface.
+func (s *fakeSink) EmitRow(
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated, mvcc hlc.Timestamp,
+	r kvevent.Alloc,
+) error {
+	return s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, r)
+}
+
+func (s *fakeSink) EmitResolvedTimestamp(
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
+) error {
+	return s.wrapped.EmitResolvedTimestamp(ctx, encoder, resolved)
+}
+
+// Flush implements Sink interface.
+func (s *fakeSink) Flush(ctx context.Context) error {
+	return s.wrapped.Flush(ctx)
 }

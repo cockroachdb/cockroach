@@ -16,12 +16,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // register all the concrete External Connection implementations
 	ectestutils "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/testutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -52,12 +55,20 @@ func TestDataDriven(t *testing.T) {
 				return skipCheckKMSConnection
 			},
 		}
+		distSQLKnobs := &execinfra.TestingKnobs{
+			Changefeed: &changefeedccl.TestingKnobs{
+				WrapSink: func(s changefeedccl.Sink, _ jobspb.JobID) changefeedccl.Sink {
+					return changefeedccl.MakeFakeSink(s)
+				},
+			},
+		}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs:   jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					ExternalConnection: ecTestingKnobs,
+					DistSQL:            distSQLKnobs,
 				},
 				ExternalIODirConfig: base.ExternalIODirConfig{},
 				ExternalIODir:       dir,

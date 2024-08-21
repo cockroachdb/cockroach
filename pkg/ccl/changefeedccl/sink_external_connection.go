@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -54,30 +55,24 @@ func makeExternalConnectionSink(
 func validateExternalConnectionSinkURI(
 	ctx context.Context, env externalconn.ExternalConnEnv, uri string,
 ) error {
-
 	serverCfg := &execinfra.ServerConfig{ExternalStorageFromURI: func(ctx context.Context, uri string,
 		user username.SQLUsername, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
 		return nil, nil
 	}}
 
-	// Pass through the server config, except for the WrapSink testing knob since that often assumes it's
-	// inside a job.
-
+	// Pass through the server config.
 	if s, ok := env.ServerCfg.(*execinfra.ServerConfig); ok && s != nil {
 		serverCfg = s
-	}
-
-	if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs.WrapSink != nil {
-		wrapSink := knobs.WrapSink
-		knobs.WrapSink = nil
-		defer func() { knobs.WrapSink = wrapSink }()
 	}
 
 	// Validate the URI by creating a canary sink.
 	//
 	// TODO(adityamaru): When we add `CREATE EXTERNAL CONNECTION ... WITH` support
 	// to accept JSONConfig we should validate that here too.
-	s, err := getSink(ctx, serverCfg, jobspb.ChangefeedDetails{SinkURI: uri}, nil, env.Username,
+	str := fmt.Sprintf("going to getAndDialSink, url: %s\n", uri)
+	fmt.Println(str)
+	panic(str)
+	s, err := getAndDialSink(ctx, serverCfg, jobspb.ChangefeedDetails{SinkURI: uri}, nil, env.Username,
 		jobspb.JobID(0), (*sliMetrics)(nil))
 	if err != nil {
 		return errors.Wrap(err, "invalid changefeed sink URI")
