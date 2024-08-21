@@ -528,6 +528,70 @@ family f2(other_payload, v2))
 	serverASQL.CheckQueryResults(t, "SELECT * from tab_with_cf", expectedRows)
 }
 
+func TestFilterRangefeedInReplicationStream(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
+
+	ctx := context.Background()
+
+	filterVal := []bool{}
+	var filterValLock syncutil.Mutex
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				DistSQL: &execinfra.TestingKnobs{
+					StreamingTestingKnobs: &sql.StreamingTestingKnobs{
+						BeforeClientSubscribe: func(_ string, _ string, _ span.Frontier, filterRangefeed bool) {
+							filterValLock.Lock()
+							defer filterValLock.Unlock()
+							filterVal = append(filterVal, filterRangefeed)
+						},
+					},
+				},
+			},
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH IGNORE_CDC_IGNORED_TTL_DELETES", dbAURL.String()).Scan(&jobBID)
+
+	now := server.Server(0).Clock().Now()
+	t.Logf("waiting for replication job %d", jobAID)
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	// Verify that Job contains FilterRangeFeed
+	details := jobutils.GetJobPayload(t, dbA, jobAID).GetLogicalReplicationDetails()
+	require.False(t, details.FilterRangefeed)
+
+	details = jobutils.GetJobPayload(t, dbB, jobBID).GetLogicalReplicationDetails()
+	require.True(t, details.FilterRangefeed)
+
+	require.Equal(t, len(filterVal), 2)
+
+	// Only one should be true
+	require.True(t, filterVal[0] != filterVal[1])
+}
+
 func TestRandomTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -754,7 +818,7 @@ func TestLogicalAutoReplan(t *testing.T) {
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
 					StreamingTestingKnobs: &sql.StreamingTestingKnobs{
-						BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
+						BeforeClientSubscribe: func(addr string, token string, _ span.Frontier, _ bool) {
 							addressesMu.Lock()
 							defer addressesMu.Unlock()
 							clientAddresses[addr] = struct{}{}

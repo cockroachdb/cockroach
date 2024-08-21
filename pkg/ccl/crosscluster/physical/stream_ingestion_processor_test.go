@@ -343,7 +343,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}
 
 		lastClientStart := make(map[string]hlc.Timestamp)
-		streamingTestingKnobs := &sql.StreamingTestingKnobs{BeforeClientSubscribe: func(addr string, token string, clientStartTimes span.Frontier) {
+		streamingTestingKnobs := &sql.StreamingTestingKnobs{BeforeClientSubscribe: func(addr string, token string, clientStartTimes span.Frontier, _ bool) {
 			sp := p1Span
 			if token == string(p2) {
 				sp = p2Span
