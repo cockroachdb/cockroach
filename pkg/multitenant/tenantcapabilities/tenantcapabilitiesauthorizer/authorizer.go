@@ -132,8 +132,8 @@ func (a *Authorizer) authBatchNoCap(
 ) error {
 	for _, ru := range ba.Requests {
 		request := ru.GetInner()
-		requiredCap := reqMethodToCap[request.Method()]
-		if requiredCap == noCapCheckNeeded {
+		requiredCap := reqMethodToCap[request.Method()].get(request)
+		if requiredCap == noCapCheckNeededID {
 			continue
 		}
 		switch request.Method() {
@@ -156,11 +156,11 @@ func (a *Authorizer) capCheckForBatch(
 ) error {
 	for _, ru := range ba.Requests {
 		request := ru.GetInner()
-		requiredCap, hasCap := reqMethodToCap[request.Method()]
-		if requiredCap == noCapCheckNeeded {
+		requiredCap := reqMethodToCap[request.Method()].get(request)
+		if requiredCap == noCapCheckNeededID {
 			continue
 		}
-		if !hasCap || requiredCap == onlySystemTenant ||
+		if requiredCap == unknownMethodID || requiredCap == onlySystemTenantID ||
 			!tenantcapabilities.MustGetBoolByID(entry.TenantCapabilities, requiredCap) {
 			// All allowable request types must be explicitly opted into the
 			// reqMethodToCap map. If a request type is missing from the map
@@ -186,7 +186,36 @@ var (
 	errCannotDebugProcess    = errors.New("client tenant does not have capability to debug the process")
 )
 
-var reqMethodToCap = map[kvpb.Method]tenantcapabilities.ID{
+// methodCapability associates a KV method with a capability. The capability can
+// either be static for all instances of the method, or it can be determined
+// dynamically by a function based on the request.
+type methodCapability struct {
+	capID tenantcapabilities.ID
+	capFn func(kvpb.Request) tenantcapabilities.ID
+}
+
+func (mc methodCapability) get(req kvpb.Request) tenantcapabilities.ID {
+	if mc.capID == 0 && mc.capFn == nil {
+		return unknownMethodID
+	}
+	if mc.capFn != nil {
+		return mc.capFn(req)
+	}
+	return mc.capID
+}
+
+const (
+	noCapCheckNeededID = iota + tenantcapabilities.MaxCapabilityID + 1
+	onlySystemTenantID
+	unknownMethodID
+)
+
+var (
+	noCapCheckNeeded = methodCapability{capID: noCapCheckNeededID}
+	onlySystemTenant = methodCapability{capID: onlySystemTenantID}
+)
+
+var reqMethodToCap = map[kvpb.Method]methodCapability{
 	// The following requests are authorized for all workloads.
 	kvpb.AddSSTable:         noCapCheckNeeded,
 	kvpb.Barrier:            noCapCheckNeeded,
@@ -194,7 +223,6 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.ID{
 	kvpb.ConditionalPut:     noCapCheckNeeded,
 	kvpb.Delete:             noCapCheckNeeded,
 	kvpb.DeleteRange:        noCapCheckNeeded,
-	kvpb.EndTxn:             noCapCheckNeeded,
 	kvpb.Export:             noCapCheckNeeded,
 	kvpb.Get:                noCapCheckNeeded,
 	kvpb.HeartbeatTxn:       noCapCheckNeeded,
@@ -217,14 +245,23 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.ID{
 	kvpb.RevertRange:        noCapCheckNeeded,
 	kvpb.Scan:               noCapCheckNeeded,
 
+	// The following have dynamic capabilities, depending on the type of request.
+	kvpb.EndTxn: {capFn: func(req kvpb.Request) tenantcapabilities.ID {
+		et := req.(*kvpb.EndTxnRequest)
+		if et.Prepare {
+			return tenantcapabilities.CanPrepareTxns
+		}
+		return noCapCheckNeededID
+	}},
+
 	// The following are authorized via specific capabilities.
-	kvpb.AdminChangeReplicas: tenantcapabilities.CanAdminRelocateRange,
-	kvpb.AdminScatter:        tenantcapabilities.CanAdminScatter,
-	kvpb.AdminSplit:          tenantcapabilities.CanAdminSplit,
-	kvpb.AdminUnsplit:        tenantcapabilities.CanAdminUnsplit,
-	kvpb.AdminRelocateRange:  tenantcapabilities.CanAdminRelocateRange,
-	kvpb.AdminTransferLease:  tenantcapabilities.CanAdminRelocateRange,
-	kvpb.CheckConsistency:    tenantcapabilities.CanCheckConsistency,
+	kvpb.AdminChangeReplicas: {capID: tenantcapabilities.CanAdminRelocateRange},
+	kvpb.AdminScatter:        {capID: tenantcapabilities.CanAdminScatter},
+	kvpb.AdminSplit:          {capID: tenantcapabilities.CanAdminSplit},
+	kvpb.AdminUnsplit:        {capID: tenantcapabilities.CanAdminUnsplit},
+	kvpb.AdminRelocateRange:  {capID: tenantcapabilities.CanAdminRelocateRange},
+	kvpb.AdminTransferLease:  {capID: tenantcapabilities.CanAdminRelocateRange},
+	kvpb.CheckConsistency:    {capID: tenantcapabilities.CanCheckConsistency},
 
 	// TODO(knz,arul): Verify with the relevant teams whether secondary
 	// tenants have legitimate access to any of those.
@@ -244,11 +281,6 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.ID{
 	kvpb.WriteBatch:                    onlySystemTenant,
 	kvpb.LinkExternalSSTable:           onlySystemTenant,
 }
-
-const (
-	noCapCheckNeeded = iota + tenantcapabilities.MaxCapabilityID + 1
-	onlySystemTenant
-)
 
 // BindReader implements the tenantcapabilities.Authorizer interface.
 func (a *Authorizer) BindReader(reader tenantcapabilities.Reader) {
