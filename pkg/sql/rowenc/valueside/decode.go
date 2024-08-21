@@ -244,17 +244,33 @@ func DecodeUntaggedDatum(
 		sbTyp := tree.RangeBoundType(int(data[0]))
 		ebTyp := tree.RangeBoundType(int(data[1]))
 		data = data[2:]
-		var sbVal, ebVal int64
+		var sbVal, ebVal tree.Datum
 		//var err error
-		data, sbVal, err = encoding.DecodeIntValue(data)
-		if err != nil {
-			return nil, data, err
+
+		if sbTyp == tree.RangeBoundNegInf {
+			sbVal = tree.DNull
+			data = data[1:]
+		} else {
+			x, sVal, err := encoding.DecodeIntValue(data)
+			data = x
+			if err != nil {
+				return nil, data, err
+			}
+
+			sbVal = tree.NewDInt(tree.DInt(sVal))
 		}
-		data, ebVal, err = encoding.DecodeIntValue(data)
-		if err != nil {
-			return nil, data, err
+		if ebTyp == tree.RangeBoundInf {
+			ebVal = tree.DNull
+			data = data[1:]
+		} else {
+			x, eVal, err := encoding.DecodeIntValue(data)
+			data = x
+			if err != nil {
+				return nil, data, err
+			}
+			ebVal = tree.NewDInt(tree.DInt(eVal))
 		}
-		return tree.NewDInt8Range(tree.NewDInt(tree.DInt(sbVal)), tree.NewDInt(tree.DInt(ebVal)), sbTyp, ebTyp), buf, nil
+		return tree.NewDInt8Range(sbVal, ebVal, sbTyp, ebTyp), buf, nil
 
 	case types.OidFamily:
 		// TODO: This possibly should decode to uint32 (with corresponding changes

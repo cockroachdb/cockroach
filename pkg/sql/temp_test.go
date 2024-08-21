@@ -12,6 +12,7 @@ package sql_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -43,12 +44,32 @@ func TestTemp(t *testing.T) {
 						`)
 	require.NoError(t, err)
 	_, err = sqlDB.Exec(`
-						insert into t.test (k) values (int8range(1,5));
+						insert into t.test (k) values ('(,21)'::int8range);
 						`)
 	require.NoError(t, err)
-	_, err = sqlDB.Query(`
+	_, err = sqlDB.Exec(`
+						insert into t.test (k) values ('(,)'::int8range);
+						`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`
+						insert into t.test (k) values ('(21,)'::int8range);
+						`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`
+						insert into t.test (k) values (int8range(null,21));
+						`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`
+						insert into t.test (k) values (int8range(null,null));
+						`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`
+						insert into t.test (k) values (int8range(21,null));
+						`)
+	require.NoError(t, err)
+	result, err := sqlDB.Query(`
 						select k from t.test;
 						`)
-
+	fmt.Println(result)
 	require.NoError(t, err)
 }

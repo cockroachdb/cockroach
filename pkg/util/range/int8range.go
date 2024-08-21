@@ -23,6 +23,7 @@ func ParseInt8Range(rangeStr string) (int64, int64, error) {
 	}
 
 	var startIncrement int64
+	var startInf, endInf bool
 	if rangeStr[0] == '(' {
 		startIncrement++
 	}
@@ -37,6 +38,8 @@ func ParseInt8Range(rangeStr string) (int64, int64, error) {
 	if len(values) != 2 {
 		err := fmt.Errorf("invalid range values")
 		return startVal, endVal, err
+	} else {
+		startInf = true
 	}
 
 	if values[0] != "" {
@@ -45,6 +48,8 @@ func ParseInt8Range(rangeStr string) (int64, int64, error) {
 		if err != nil {
 			return startVal, endVal, err
 		}
+	} else {
+		endInf = true
 	}
 
 	if values[1] != "" {
@@ -55,7 +60,7 @@ func ParseInt8Range(rangeStr string) (int64, int64, error) {
 		}
 	}
 
-	if endVal < startVal-1 {
+	if !startInf && !endInf && endVal < startVal-1 {
 		return -1, -1, fmt.Errorf("invalid range values: (%d, %d)", startVal-1, endVal)
 	}
 	return startVal, endVal, nil

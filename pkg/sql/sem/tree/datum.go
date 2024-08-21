@@ -2039,7 +2039,7 @@ func MustBeDInt8Range(e Expr) DInt8Range {
 func ParseInt8Range(s string) (*DInt8Range, error) {
 	startVal, endVal, err := int8range.ParseInt8Range(s)
 	if err != nil {
-		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse vector")
+		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse int8 range")
 	}
 	startType, endType := RangeBoundClose, RangeBoundOpen
 
