@@ -1,5 +1,6 @@
 name: GitHub Actions Essential CI
 on:
+  merge_group:
   pull_request:
     types: [opened, reopened, synchronize]
     branches:
@@ -25,7 +26,6 @@ on:
       - "!staging-v23.2*"
   push:
     branches:
-      - "gh-readonly-queue/*"
       - "master"
       - "release-*"
       - "staging-*"
