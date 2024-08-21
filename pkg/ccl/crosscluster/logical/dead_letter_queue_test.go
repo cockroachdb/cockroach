@@ -76,18 +76,31 @@ func setupDLQTestTables(
 	sqlDB.Exec(t, `CREATE TABLE a.baz.foo (a INT)`)
 
 	dstTableMeta := []dstTableMetadata{
+		// Base test case.
 		{
 			database: defaultDbName,
 			schema:   publicScName,
 			table:    "foo",
 			tableID:  1,
 		},
+		// Verify that distinct DLQ tables are created for tables
+		// in different databases with identical schema and table
+		// names.
 		{
 			database: defaultDbName,
 			schema:   "baz",
 			table:    "foo",
 			tableID:  1,
 		},
+		{
+			database: dbAName,
+			schema:   "baz",
+			table:    "foo",
+			tableID:  1,
+		},
+		// Verify that distinct DLQ tables are created for tables
+		// with identical fully qualified names and distinct
+		// table IDs.
 		{
 			database: defaultDbName,
 			schema:   "bar",
@@ -99,18 +112,6 @@ func setupDLQTestTables(
 			schema:   "bar_",
 			table:    "foo",
 			tableID:  2,
-		},
-		{
-			database: dbAName,
-			schema:   publicScName,
-			table:    "bar",
-			tableID:  1,
-		},
-		{
-			database: dbAName,
-			schema:   "baz",
-			table:    "foo",
-			tableID:  1,
 		},
 	}
 
@@ -129,7 +130,7 @@ func setupDLQTestTables(
 	return tableNameToDesc, srcTableIDToName, expectedDLQTables, ie
 }
 
-func TestLoggingDLQClient(t *testing.T) {
+func TestNoopDLQClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -151,7 +152,7 @@ func TestLoggingDLQClient(t *testing.T) {
 	ed, err := cdcevent.NewEventDescriptor(tableDesc, familyDesc, false, false, hlc.Timestamp{})
 	require.NoError(t, err)
 
-	dlqClient := InitLoggingDeadLetterQueueClient()
+	dlqClient := InitNoopDeadLetterQueueClient()
 	require.NoError(t, dlqClient.Create(ctx))
 
 	type testCase struct {
@@ -288,13 +289,6 @@ func TestDLQLogging(t *testing.T) {
 			name:         "insert dlq fallback row for default.bar_.foo",
 			jobID:        1,
 			tableDesc:    tableNameToDesc["defaultdb.bar_.foo"],
-			dlqReason:    noSpace,
-			mutationType: insertMutation,
-		},
-		{
-			name:         "insert dlq fallback row for a.public.bar",
-			jobID:        1,
-			tableDesc:    tableNameToDesc["a.public.bar"],
 			dlqReason:    noSpace,
 			mutationType: insertMutation,
 		},

@@ -1120,6 +1120,32 @@ func WaitUntilReplicatedTime(
 	})
 }
 
+func WaitForDLQProgress(t *testing.T, db *sqlutils.SQLRunner, tableName string) {
+	t.Logf("waiting for write conflicts to be written to DLQ")
+	testutils.SucceedsSoon(t, func() error {
+		query := fmt.Sprintf("SELECT count(*) FROM %s", tableName)
+		var numRows int
+		db.QueryRow(t, query).Scan(&numRows)
+		if numRows == 0 {
+			return errors.Newf("DLQ table is empty")
+		}
+		return nil
+	})
+}
+
+func getTableDescriptorID(t *testing.T, db *sqlutils.SQLRunner, dbName, tableName string) int32 {
+	baseQuery := `
+SELECT id
+FROM system.namespace 
+WHERE name = '%s' 
+  AND "parentID" = (SELECT id FROM system.namespace WHERE name = '%s' AND "parentID" = 0)
+`
+
+	var tableID int32
+	db.QueryRow(t, fmt.Sprintf(baseQuery, tableName, dbName)).Scan(&tableID)
+	return tableID
+}
+
 type mockBatchHandler bool
 
 var _ BatchHandler = mockBatchHandler(true)
@@ -1567,4 +1593,149 @@ func TestUserPrivileges(t *testing.T) {
 		testuser.Exec(t, pauseJobStmt, jobAID)
 		jobutils.WaitForJobToPause(t, dbA, jobAID)
 	})
+}
+
+func TestDLQ(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	testDLQClusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(127241),
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				DistSQL: &execinfra.TestingKnobs{
+					StreamingTestingKnobs: &sql.StreamingTestingKnobs{
+						GetFailureRate: func() uint32 {
+							return 100
+						},
+					},
+				},
+			},
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testDLQClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DEFAULT FUNCTION = 'dlq'", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DEFAULT FUNCTION = 'dlq'", dbAURL.String()).Scan(&jobBID)
+
+	now := s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	dbA.Exec(t, "INSERT INTO tab VALUES (2, 'potato')")
+	dbB.Exec(t, "INSERT INTO tab VALUES (3, 'celeriac')")
+	dbA.Exec(t, "UPSERT INTO tab VALUES (1, 'hello, again')")
+	dbB.Exec(t, "UPSERT INTO tab VALUES (1, 'goodbye, again')")
+
+	tabAID := getTableDescriptorID(t, dbA, "a", "tab")
+	tabBID := getTableDescriptorID(t, dbB, "b", "tab")
+
+	dlqTableNameA := fmt.Sprintf("crdb_replication.dlq_%d_public_tab", tabAID)
+	dlqTableNameB := fmt.Sprintf("crdb_replication.dlq_%d_public_tab", tabBID)
+
+	WaitForDLQProgress(t, dbA, dlqTableNameA)
+	WaitForDLQProgress(t, dbB, dlqTableNameB)
+
+	var (
+		jobID        jobspb.JobID
+		tableID      int32
+		dlqReason    string
+		mutationType string
+	)
+
+	dbA.QueryRow(t, fmt.Sprintf(`
+	SELECT
+		ingestion_job_id,
+		table_id,
+		dlq_reason,
+		mutation_type
+	FROM %s
+	`, dlqTableNameA)).Scan(
+		&jobID,
+		&tableID,
+		&dlqReason,
+		&mutationType,
+	)
+
+	require.Equal(t, jobAID, jobID)
+	require.Equal(t, tabAID, tableID)
+	// DLQ reason is set to `tooOld` when `errInjected` is thrown by `failureInjector`
+	require.Equal(t, fmt.Sprintf("%s (%s)", errInjected, tooOld), dlqReason)
+	require.Equal(t, insertMutation.String(), mutationType)
+
+	dbA.CheckQueryResults(
+		t,
+		fmt.Sprintf(`
+	SELECT
+		incoming_row->>'payload' AS payload,
+		incoming_row->>'pk' AS pk
+	FROM %s
+	ORDER BY pk
+	`, dlqTableNameA),
+		[][]string{
+			{
+				"goodbye, again", "1",
+			},
+			{
+				"celeriac", "3",
+			},
+		},
+	)
+
+	dbB.QueryRow(t, fmt.Sprintf(`
+	SELECT
+		ingestion_job_id,
+		table_id,
+		dlq_reason,
+		mutation_type
+	FROM %s
+	`, dlqTableNameB)).Scan(
+		&jobID,
+		&tableID,
+		&dlqReason,
+		&mutationType,
+	)
+
+	require.Equal(t, jobBID, jobID)
+	require.Equal(t, tabBID, tableID)
+	require.Equal(t, fmt.Sprintf("%s (%s)", errInjected, tooOld), dlqReason)
+	require.Equal(t, insertMutation.String(), mutationType)
+
+	dbB.CheckQueryResults(
+		t,
+		fmt.Sprintf(`
+	SELECT
+		incoming_row->>'payload' AS payload,
+		incoming_row->>'pk' AS pk
+	FROM %s
+	ORDER BY pk
+	`, dlqTableNameB),
+		[][]string{
+			{
+				"hello, again", "1",
+			},
+			{
+				"potato", "2",
+			},
+		},
+	)
+
+	dbA.Exec(t, "CANCEL JOB $1", jobAID.String())
+	dbA.Exec(t, "CANCEL JOB $1", jobBID.String())
+
+	jobutils.WaitForJobToCancel(t, dbA, jobAID)
+	jobutils.WaitForJobToCancel(t, dbA, jobBID)
 }

@@ -1865,6 +1865,8 @@ type StreamingTestingKnobs struct {
 	SkipSpanConfigReplication bool
 
 	SpanConfigRangefeedCacheKnobs *rangefeedcache.TestingKnobs
+
+	GetFailureRate func() uint32
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}

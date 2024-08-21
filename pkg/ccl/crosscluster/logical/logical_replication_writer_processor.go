@@ -164,6 +164,13 @@ func newLogicalReplicationWriterProcessor(
 		} else {
 			rp = sqlRP
 		}
+
+		if streamingKnobs, ok := flowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
+			if streamingKnobs != nil && streamingKnobs.GetFailureRate != nil {
+				rp.SetSyntheticFailurePercent(streamingKnobs.GetFailureRate())
+			}
+		}
+
 		bhPool[i] = &txnBatch{
 			db:       flowCtx.Cfg.DB,
 			rp:       rp,
@@ -844,6 +851,10 @@ func (lrw *logicalReplicationWriterProcessor) shouldRetryLater(
 ) retryEligibility {
 	if eligibility != retryAllowed {
 		return eligibility
+	}
+
+	if errors.Is(err, errInjected) {
+		return tooOld
 	}
 
 	// TODO(dt): maybe this should only be constraint violation errors?
