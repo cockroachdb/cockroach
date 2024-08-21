@@ -1295,8 +1295,12 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 		jobAID jobspb.JobID
 		jobBID jobspb.JobID
 	)
-	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab on $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
-	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab on $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+	dbA.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab on $1 INTO TABLE tab",
+		dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab on $1 INTO TABLE tab WITH DEFAULT FUNCTION = 'dlq'",
+		dbAURL.String()).Scan(&jobBID)
 
 	now := server.Server(0).Clock().Now()
 	t.Logf("waiting for replication job %d", jobAID)
@@ -1316,11 +1320,12 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 	}
 
 	var (
-		jobID                jobspb.JobID
-		status               string
-		targets              pq.StringArray
-		replicatedTime       time.Time
-		replicationStartTime time.Time
+		jobID                  jobspb.JobID
+		status                 string
+		targets                pq.StringArray
+		replicatedTime         time.Time
+		replicationStartTime   time.Time
+		conflictResolutionType string
 	)
 
 	showRows := dbA.Query(t, "SELECT * FROM [SHOW LOGICAL REPLICATION JOBS] ORDER BY job_id")
@@ -1351,13 +1356,16 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 
 	rowIdx = 0
 	for showWithDetailsRows.Next() {
-		err := showWithDetailsRows.Scan(&jobID, &status, &targets, &replicatedTime, &replicationStartTime)
+		err := showWithDetailsRows.Scan(&jobID, &status, &targets, &replicatedTime, &replicationStartTime, &conflictResolutionType)
 		require.NoError(t, err)
 
 		expectedJobID := jobIDs[rowIdx]
 		payload := jobutils.GetJobPayload(t, dbA, expectedJobID)
 		expectedReplicationStartTime := payload.GetLogicalReplicationDetails().ReplicationStartTime.GoTime().Round(time.Microsecond)
 		require.Equal(t, expectedReplicationStartTime, replicationStartTime)
+
+		expectedConflictResolutionType := payload.GetLogicalReplicationDetails().DefaultConflictResolution.ConflictResolutionType.String()
+		require.Equal(t, expectedConflictResolutionType, conflictResolutionType)
 
 		rowIdx++
 	}

@@ -36,7 +36,10 @@ WHERE job_type = 'LOGICAL REPLICATION'
 		, 
 	hlc_to_timestamp((crdb_internal.pb_to_json(
 		'cockroach.sql.jobs.jobspb.Payload',
-		payload)->'logicalReplicationDetails'->'replicationStartTime'->>'wallTime')::DECIMAL) AS replication_start_time
+		payload)->'logicalReplicationDetails'->'replicationStartTime'->>'wallTime')::DECIMAL) AS replication_start_time,
+	IFNULL(crdb_internal.pb_to_json(
+		'cockroach.sql.jobs.jobspb.Payload',
+		payload)->'logicalReplicationDetails'->'defaultConflictResolution'->>'conflictResolutionType', 'LWW') AS conflict_resolution_type
 `
 )
 
