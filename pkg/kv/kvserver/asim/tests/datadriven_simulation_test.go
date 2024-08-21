@@ -445,6 +445,7 @@ func TestDataDriven(t *testing.T) {
 					})
 				case "conformance":
 					var under, over, unavailable, violating, leaseViolating, leaseLessPref int
+					var betterFormat bool
 					under = assertion.ConformanceAssertionSentinel
 					over = assertion.ConformanceAssertionSentinel
 					unavailable = assertion.ConformanceAssertionSentinel
@@ -457,7 +458,9 @@ func TestDataDriven(t *testing.T) {
 					scanIfExists(t, d, "violating", &violating)
 					scanIfExists(t, d, "lease-violating", &leaseViolating)
 					scanIfExists(t, d, "lease-less-preferred", &leaseLessPref)
+					scanIfExists(t, d, "better-format", &betterFormat)
 					assertions = append(assertions, assertion.ConformanceAssertion{
+						BetterFormat:              betterFormat,
 						Underreplicated:           under,
 						Overreplicated:            over,
 						ViolatingConstraints:      violating,

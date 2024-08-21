@@ -301,6 +301,7 @@ func (sa StoreStatAssertion) String() string {
 }
 
 type ConformanceAssertion struct {
+	BetterFormat              bool
 	Underreplicated           int
 	Overreplicated            int
 	ViolatingConstraints      int
@@ -348,6 +349,10 @@ func leasePreferenceReport(
 	}
 
 	return
+}
+
+func BetterFormat() {
+
 }
 
 // Assert looks at a simulation run history and returns true if the
