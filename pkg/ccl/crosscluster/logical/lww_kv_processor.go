@@ -95,10 +95,6 @@ var originID1Options = &kvpb.WriteOptions{OriginID: 1}
 func (p *kvRowProcessor) ProcessRow(
 	ctx context.Context, txn isql.Txn, keyValue roachpb.KeyValue, prevValue roachpb.Value,
 ) (batchStats, error) {
-	if err := p.injectFailure(); err != nil {
-		return batchStats{}, err
-	}
-
 	var err error
 	keyValue.Key, err = keys.StripTenantPrefix(keyValue.Key)
 	if err != nil {
@@ -111,6 +107,10 @@ func (p *kvRowProcessor) ProcessRow(
 		return batchStats{}, errors.Wrap(err, "decoding KeyValue")
 	}
 	p.lastRow = row
+
+	if err = p.injectFailure(); err != nil {
+		return batchStats{}, err
+	}
 
 	// TODO(dt, ssd): the rangefeed prev value does not include its mvcc ts, which
 	// is a problem for us if we want to use CPut to replace the old row with the
@@ -227,7 +227,7 @@ func (p *kvRowProcessor) GetLastRow() cdcevent.Row {
 
 // SetSyntheticFailurePercent implements the RowProcessor interface.
 func (p *kvRowProcessor) SetSyntheticFailurePercent(rate uint32) {
-	// TODO(dt): support failure injection.
+	p.rate = rate
 }
 
 func (p *kvRowProcessor) Close(ctx context.Context) {
