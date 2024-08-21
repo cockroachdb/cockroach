@@ -115,7 +115,7 @@ func (p *kvRowProcessor) ProcessRow(
 	if err := p.processParsedRow(ctx, txn, row, keyValue, prevValue); err != nil {
 		stats, err := p.fallback.processParsedRow(ctx, txn, row, keyValue.Key, prevValue)
 		if err == nil {
-			stats.kvWriteFailures += 1
+			stats.kvWriteFallbacks += 1
 		}
 		return stats, err
 	}
