@@ -711,7 +711,8 @@ func (ex *connExecutor) execDescribe(
 // prepared and executed inside of an aborted transaction.
 func (ex *connExecutor) isAllowedInAbortedTxn(ast tree.Statement) bool {
 	switch s := ast.(type) {
-	case *tree.CommitTransaction, *tree.RollbackTransaction, *tree.RollbackToSavepoint:
+	case *tree.CommitTransaction, *tree.PrepareTransaction,
+		*tree.RollbackTransaction, *tree.RollbackToSavepoint:
 		return true
 	case *tree.Savepoint:
 		if ex.isCommitOnReleaseSavepoint(s.Name) {

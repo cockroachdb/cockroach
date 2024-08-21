@@ -2180,6 +2180,13 @@ func TestLogic_tuple_local(
 	runLogicTest(t, "tuple_local")
 }
 
+func TestLogic_two_phase_commit_mixed_version(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "two_phase_commit_mixed_version")
+}
+
 func TestLogic_txn(
 	t *testing.T,
 ) {

@@ -2161,7 +2161,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 	}
 
 	switch ev.eventType {
-	case txnCommit, txnRollback:
+	case txnCommit, txnRollback, txnPrepare:
 		ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
@@ -4080,10 +4080,10 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 
 		fallthrough
-	case txnRollback:
+	case txnRollback, txnPrepare:
 		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, payloadErr)
-		// Since we're doing a complete rollback, there's no need to keep the
-		// prepared stmts for a txn rewind.
+		// Since we're finalizing the SQL transaction (commit, rollback, prepare),
+		// there's no need to keep the prepared stmts for a txn rewind.
 		ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
 			ex.Ctx(), &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
@@ -4494,6 +4494,11 @@ type StatementCounters struct {
 	TxnRollbackCount telemetry.CounterWithMetric
 	TxnUpgradedCount *metric.Counter
 
+	// Transaction XA two-phase commit operations.
+	TxnPrepareCount          telemetry.CounterWithMetric
+	TxnCommitPreparedCount   telemetry.CounterWithMetric
+	TxnRollbackPreparedCount telemetry.CounterWithMetric
+
 	// Savepoint operations. SavepointCount is for real SQL savepoints;
 	// the RestartSavepoint variants are for the
 	// cockroach-specific client-side retry protocol.
@@ -4531,6 +4536,12 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaTxnRollbackStarted, internal)),
 		TxnUpgradedCount: metric.NewCounter(
 			getMetricMeta(MetaTxnUpgradedFromWeakIsolation, internal)),
+		TxnPrepareCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaTxnPrepareStarted, internal)),
+		TxnCommitPreparedCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaTxnCommitPreparedStarted, internal)),
+		TxnRollbackPreparedCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaTxnRollbackPreparedStarted, internal)),
 		RestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRestartSavepointStarted, internal)),
 		ReleaseRestartSavepointCount: telemetry.NewCounterWithMetric(
@@ -4576,6 +4587,12 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaTxnRollbackExecuted, internal)),
 		TxnUpgradedCount: metric.NewCounter(
 			getMetricMeta(MetaTxnUpgradedFromWeakIsolation, internal)),
+		TxnPrepareCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaTxnPrepareExecuted, internal)),
+		TxnCommitPreparedCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaTxnCommitPreparedExecuted, internal)),
+		TxnRollbackPreparedCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaTxnRollbackPreparedExecuted, internal)),
 		RestartSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRestartSavepointExecuted, internal)),
 		ReleaseRestartSavepointCount: telemetry.NewCounterWithMetric(
@@ -4638,6 +4655,12 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 		} else {
 			sc.TxnRollbackCount.Inc()
 		}
+	case *tree.PrepareTransaction:
+		sc.TxnPrepareCount.Inc()
+	case *tree.CommitPrepared:
+		sc.TxnCommitPreparedCount.Inc()
+	case *tree.RollbackPrepared:
+		sc.TxnRollbackPreparedCount.Inc()
 	case *tree.Savepoint:
 		if ex.isCommitOnReleaseSavepoint(t.Name) {
 			sc.RestartSavepointCount.Inc()

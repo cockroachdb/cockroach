@@ -470,6 +470,10 @@ const (
 	// rolled back, not to a savepoint). It is generated when an implicit
 	// transaction fails and when an explicit transaction runs a ROLLBACK.
 	txnRollback
+	// txnPrepare means that the SQL transaction has been prepared and is now
+	// being dissociated from the session. It is generated when an explicit
+	// transaction runs a PREPARE TRANSACTION statement.
+	txnPrepare
 	// txnRestart means that the transaction is restarting. The iteration of the
 	// txn just finished will not commit. It is generated when we're about to
 	// auto-retry a txn and after a rollback to a savepoint placed at the start of
