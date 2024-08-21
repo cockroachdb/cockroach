@@ -9,13 +9,20 @@
 package changefeedccl
 
 import (
+	"sort"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/stretchr/testify/require"
 )
 
@@ -132,4 +139,87 @@ func TestSetupSpansAndFrontier(t *testing.T) {
 			require.Equal(t, tc.expectedFrontier, ca.frontier.Frontier())
 		})
 	}
+}
+
+type rspans []roachpb.Span
+
+func (rs rspans) Len() int {
+	return len(rs)
+}
+
+func (rs rspans) Less(i int, j int) bool {
+	return rs[i].Key.Compare(rs[j].Key) < 0
+}
+
+func (rs rspans) Swap(i int, j int) {
+	rs[i], rs[j] = rs[j], rs[i]
+}
+
+type spanCP struct {
+	span roachpb.Span
+	ts   hlc.Timestamp
+}
+
+type spanCPs []spanCP
+
+func (rs spanCPs) Len() int {
+	return len(rs)
+}
+
+func (rs spanCPs) Less(i int, j int) bool {
+	return rs[i].span.Key.Compare(rs[j].span.Key) < 0
+}
+
+func (rs spanCPs) Swap(i int, j int) {
+	rs[i], rs[j] = rs[j], rs[i]
+}
+
+func TestGetCheckpointSpans(t *testing.T) {
+	numSpans := 100
+	maxBytes := changefeedbase.FrontierCheckpointMaxBytes.Default()
+	hwm := hlc.Timestamp{}
+	rng, _ := randutil.NewTestRand()
+
+	spans := make(spanCPs, numSpans)
+
+	// Generate spans. They should not be overlapping.
+	// Randomize the order in which spans are processed.
+	for i, s := range rangefeed.GenerateRandomizedSpans(rng, numSpans) {
+		ts := rangefeed.GenerateRandomizedTs(rng, time.Minute.Nanoseconds())
+		if hwm.IsEmpty() || ts.Less(hwm) {
+			hwm = ts
+		}
+		spans[i] = spanCP{s.AsRawSpanWithNoLocals(), ts}
+	}
+	shuffle.Shuffle(spans)
+
+	forEachSpan := func(fn span.Operation) {
+		for _, s := range spans {
+			fn(s.span, s.ts)
+		}
+	}
+
+	// Compute the checkpoint.
+	resSpans, ts := getCheckpointSpans(hwm, forEachSpan, maxBytes)
+
+	// Calculate the total amount of time these spans would have to "catch up"
+	// using the checkpoint spans compared to starting at the frontier.
+	catchup := ts.GoTime().Sub(hwm.GoTime())
+	sort.Sort(rspans(resSpans))
+	sort.Sort(spans)
+	var catchupFromCheckpoint, catchupFromHWM time.Duration
+	j := 0
+	for _, s := range spans {
+		catchupFromHWM += s.ts.GoTime().Sub(hwm.GoTime())
+		if resSpans[j].Equal(s.span) {
+			catchupFromCheckpoint += s.ts.GoTime().Sub(ts.GoTime())
+			j++
+		}
+	}
+	t.Logf("Checkpoint time improved by %v for %d/%d spans\ntotal catchup from checkpoint: %v\ntotal catchup from high watermark: %v\nPercent improvement %f",
+		catchup, len(resSpans), numSpans, catchupFromCheckpoint, catchupFromHWM,
+		100*(1-float64(catchupFromCheckpoint.Nanoseconds())/float64(catchupFromHWM.Nanoseconds())))
+	require.Less(t, catchupFromCheckpoint, catchupFromHWM)
+	require.Less(t, len(resSpans), numSpans)
+	require.True(t, hwm.Less(ts))
 }
