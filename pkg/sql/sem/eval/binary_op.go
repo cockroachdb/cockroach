@@ -306,6 +306,79 @@ func (e *evaluator) EvalContainedByJsonbOp(
 	return tree.MakeDBool(tree.DBool(c)), nil
 }
 
+func (e *evaluator) EvalContainsInt8RangeOp(
+	ctx context.Context, _ *tree.ContainsInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	return e.EvalContainedByInt8RangeOp(ctx, nil, b, a)
+}
+
+// Check if a is contained by b
+func (e *evaluator) EvalContainedByInt8RangeOp(
+	ctx context.Context, _ *tree.ContainedByInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	rRange := tree.MustBeDInt8Range(b)
+	rSBInt := -math.MaxInt64
+	rEBInt := math.MaxInt64
+	if intVal, ok := tree.AsDInt(rRange.StartBound.Val); ok {
+		rSBInt = int(intVal)
+	}
+	if intVal, ok := tree.AsDInt(rRange.EndBound.Val); ok {
+		rEBInt = int(intVal)
+	}
+
+	var lRange tree.DInt8Range
+	var lInt tree.DInt
+	var isInt, isInt8Range bool
+	lInt, isInt = tree.AsDInt(a)
+	if !isInt {
+		lRange, isInt8Range = tree.AsDInt8Range(a)
+	}
+
+	if !isInt8Range && !isInt {
+		return nil, pgerror.Newf(pgcode.Syntax, "contained by for int8range can only work on int8range or int type")
+	} else if isInt {
+		if res := rRange.ContainsInt(int(lInt)); !res {
+			return tree.DBoolFalse, nil
+		} else {
+			return tree.DBoolTrue, nil
+		}
+	} else if isInt8Range {
+		lSBInt := -math.MaxInt64
+		lEBInt := math.MaxInt64
+
+		if intVal, ok := tree.AsDInt(lRange.StartBound.Val); ok {
+			lSBInt = int(intVal)
+		}
+
+		sbInRange := rRange.ContainsInt(lSBInt)
+		if !sbInRange && (lSBInt != rSBInt || lRange.StartBound.Typ != tree.RangeBoundOpen) {
+			return tree.DBoolFalse, nil
+		}
+		if lSBInt == rSBInt && lRange.StartBound.Typ == tree.RangeBoundClose && rRange.StartBound.Typ == tree.RangeBoundOpen {
+			return tree.DBoolFalse, nil
+		}
+
+		if intVal, ok := tree.AsDInt(lRange.EndBound.Val); ok {
+			lEBInt = int(intVal)
+		}
+
+		ebInRange := rRange.ContainsInt(lEBInt)
+
+		if !ebInRange && (lEBInt != rEBInt || lRange.EndBound.Typ != tree.RangeBoundOpen) {
+			return tree.DBoolFalse, nil
+		}
+
+		if lEBInt == rEBInt && lRange.EndBound.Typ == tree.RangeBoundClose && rRange.EndBound.Typ == tree.RangeBoundOpen {
+			return tree.DBoolFalse, nil
+		}
+
+		return tree.DBoolTrue, nil
+	}
+
+	// This should never be hit but just in case.
+	return nil, pgerror.Newf(pgcode.Syntax, "contained by for int8range can only work on int8range or int type")
+}
+
 func (e *evaluator) EvalContainsArrayOp(
 	ctx context.Context, _ *tree.ContainsArrayOp, a, b tree.Datum,
 ) (tree.Datum, error) {

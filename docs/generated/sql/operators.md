@@ -305,6 +305,8 @@
 <tr><td><code><@</code></td><td>Return</td></tr>
 </thead><tbody>
 <tr><td>anyelement <code><@</code> anyelement</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td><a href="int.html">int</a> <code><@</code> int8range</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>int8range <code><@</code> int8range</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>jsonb <code><@</code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
 </tbody></table>
 <table><thead>
@@ -395,6 +397,8 @@
 <tr><td><code>@></code></td><td>Return</td></tr>
 </thead><tbody>
 <tr><td>anyelement <code>@></code> anyelement</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>int8range <code>@></code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>int8range <code>@></code> int8range</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>jsonb <code>@></code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
 </tbody></table>
 <table><thead>

@@ -1999,6 +1999,18 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 			EvalOp:     &ContainsJsonbOp{},
 			Volatility: volatility.Immutable,
 		},
+		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int,
+			EvalOp:     &ContainsInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int8Range,
+			EvalOp:     &ContainsInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
 	}},
 
 	treecmp.ContainedBy: {overloads: []*CmpOp{
@@ -2012,6 +2024,18 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 			LeftType:   types.Jsonb,
 			RightType:  types.Jsonb,
 			EvalOp:     &ContainedByJsonbOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.Int,
+			RightType:  types.Int8Range,
+			EvalOp:     &ContainedByInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int8Range,
+			EvalOp:     &ContainedByInt8RangeOp{},
 			Volatility: volatility.Immutable,
 		},
 	}},

@@ -4133,7 +4133,7 @@ value if you rely on the HLC for accuracy.`,
 					startAddVal++
 					endAddVal++
 				default:
-					return nil, errors.AssertionFailedf("unknown bound format for range: %s", boundFmt.String())
+					return nil, pgerror.Newf(pgcode.Syntax, "unknown bound format for range: %s", boundFmt.String())
 				}
 				var startBoundInt, endBoundInt tree.DInt
 

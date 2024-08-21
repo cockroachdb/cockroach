@@ -74,8 +74,10 @@ type BinaryOpEvaluator interface {
 	EvalConcatStringOp(context.Context, *ConcatStringOp, Datum, Datum) (Datum, error)
 	EvalConcatVarBitOp(context.Context, *ConcatVarBitOp, Datum, Datum) (Datum, error)
 	EvalContainedByArrayOp(context.Context, *ContainedByArrayOp, Datum, Datum) (Datum, error)
+	EvalContainedByInt8RangeOp(context.Context, *ContainedByInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalContainedByJsonbOp(context.Context, *ContainedByJsonbOp, Datum, Datum) (Datum, error)
 	EvalContainsArrayOp(context.Context, *ContainsArrayOp, Datum, Datum) (Datum, error)
+	EvalContainsInt8RangeOp(context.Context, *ContainsInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalContainsJsonbOp(context.Context, *ContainsJsonbOp, Datum, Datum) (Datum, error)
 	EvalCosDistanceVectorOp(context.Context, *CosDistanceVectorOp, Datum, Datum) (Datum, error)
 	EvalDistanceVectorOp(context.Context, *DistanceVectorOp, Datum, Datum) (Datum, error)
@@ -347,6 +349,11 @@ func (op *ContainedByArrayOp) Eval(ctx context.Context, e OpEvaluator, a, b Datu
 }
 
 // Eval is part of the BinaryEvalOp interface.
+func (op *ContainedByInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalContainedByInt8RangeOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
 func (op *ContainedByJsonbOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalContainedByJsonbOp(ctx, op, a, b)
 }
@@ -354,6 +361,11 @@ func (op *ContainedByJsonbOp) Eval(ctx context.Context, e OpEvaluator, a, b Datu
 // Eval is part of the BinaryEvalOp interface.
 func (op *ContainsArrayOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalContainsArrayOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *ContainsInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalContainsInt8RangeOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.

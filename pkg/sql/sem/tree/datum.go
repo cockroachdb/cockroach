@@ -2121,6 +2121,24 @@ func (d *DInt8Range) AmbiguousFormat() bool {
 	return true
 }
 
+func (d *DInt8Range) ContainsInt(i int) bool {
+	if d.StartBound.Typ != RangeBoundNegInf {
+		sbInt := int(MustBeDInt(d.StartBound.Val))
+		if i < sbInt || (i == sbInt && d.StartBound.Typ == RangeBoundOpen) {
+			return false
+		}
+	}
+
+	if d.EndBound.Typ != RangeBoundInf {
+		ebInt := int(MustBeDInt(d.EndBound.Val))
+		if i > ebInt || (i == ebInt && d.EndBound.Typ == RangeBoundOpen) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (d *DInt8Range) HasIntersection(
 	ctx context.Context, cmpCtx CompareContext, other Datum,
 ) (bool, error) {

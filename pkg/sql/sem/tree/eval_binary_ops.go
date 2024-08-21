@@ -402,3 +402,9 @@ type ContainedByArrayOp struct{}
 
 // ContainedByJsonbOp is a BinaryEvalOp.
 type ContainedByJsonbOp struct{}
+
+// ContainedByInt8RangeOp is a BinaryEvalOp.
+type ContainedByInt8RangeOp struct{}
+
+// ContainsInt8RangeOp is a BinaryEvalOp.
+type ContainsInt8RangeOp struct{}
