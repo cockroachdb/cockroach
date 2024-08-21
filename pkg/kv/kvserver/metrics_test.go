@@ -12,13 +12,17 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -92,4 +96,37 @@ func TestTenantsStorageMetricsConcurrency(t *testing.T) {
 		go func() { defer wg.Done(); run() }()
 	}
 	wg.Wait()
+}
+
+// TestPebbleDiskWriteMetrics tests the categorized disk write metrics in Pebble.
+func TestPebbleDiskWriteMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tmpDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	ts, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		StoreSpecs: []base.StoreSpec{
+			{Size: base.SizeSpec{InBytes: base.MinimumStoreSize}, Path: tmpDir},
+		},
+	})
+	defer ts.Stopper().Stop(ctx)
+
+	// Force a WAL write.
+	require.NoError(t, kvDB.Put(ctx, "kev", "value"))
+
+	if err := ts.GetStores().(*Stores).VisitStores(func(s *Store) error {
+		testutils.SucceedsSoon(t, func() error {
+			if ok := s.Registry().Contains("storage.category-pebble-wal.bytes-written"); !ok {
+				return fmt.Errorf("missing pebble WAL writes metric")
+			}
+			return nil
+		})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
