@@ -52,7 +52,7 @@ func registerCostFuzz(r registry.Registry) {
 			RequiresLicense:  true,
 			Cluster:          clusterSpec,
 			CompatibleClouds: registry.AllExceptAWS,
-			Suites:           registry.Suites(registry.Nightly),
+			Suites:           registry.Suites(registry.Weekly),
 			Leases:           registry.MetamorphicLeases,
 			NativeLibs:       registry.LibGEOS,
 			Randomized:       true,
