@@ -416,6 +416,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&exportNode{}):                              "export",
 	reflect.TypeOf(&fetchNode{}):                               "fetch",
 	reflect.TypeOf(&filterNode{}):                              "filter",
+	reflect.TypeOf(&endPreparedTxnNode{}):                      "commit/rollback prepared",
 	reflect.TypeOf(&GrantRoleNode{}):                           "grant role",
 	reflect.TypeOf(&groupNode{}):                               "group",
 	reflect.TypeOf(&hookFnNode{}):                              "plugin",

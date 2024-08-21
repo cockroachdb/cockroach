@@ -274,6 +274,7 @@ go_library(
         "testutils.go",
         "topk.go",
         "truncate.go",
+        "two_phase_commit.go",
         "txn_fingerprint_id_cache.go",
         "txn_state.go",
         "type_change.go",

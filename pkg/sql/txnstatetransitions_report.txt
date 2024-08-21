@@ -17,6 +17,7 @@ Aborted{WasUpgraded:false}
 		TxnFinishAbortedPLpgSQL{}
 		TxnFinishCommittedPLpgSQL{}
 		TxnFinishCommitted{}
+		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnStart{ImplicitTxn:false}
 		TxnStart{ImplicitTxn:true}
@@ -38,6 +39,7 @@ Aborted{WasUpgraded:true}
 		TxnFinishAbortedPLpgSQL{}
 		TxnFinishCommittedPLpgSQL{}
 		TxnFinishCommitted{}
+		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnStart{ImplicitTxn:false}
 		TxnStart{ImplicitTxn:true}
@@ -58,6 +60,7 @@ CommitWait{}
 		TxnFinishAbortedPLpgSQL{}
 		TxnFinishAborted{}
 		TxnFinishCommittedPLpgSQL{}
+		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnRestart{}
 		TxnStart{ImplicitTxn:false}
@@ -81,6 +84,7 @@ NoTxn{}
 		TxnFinishAborted{}
 		TxnFinishCommittedPLpgSQL{}
 		TxnFinishCommitted{}
+		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnRestart{}
 		TxnUpgradeToExplicit{}
@@ -96,6 +100,7 @@ Open{ImplicitTxn:false, WasUpgraded:false}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
+		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnRestart{}
 	missing events:
@@ -117,6 +122,7 @@ Open{ImplicitTxn:false, WasUpgraded:true}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
+		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnRestart{}
 	missing events:
@@ -143,6 +149,7 @@ Open{ImplicitTxn:true, WasUpgraded:false}
 	missing events:
 		SavepointRollback{}
 		TxnCommittedWithShowCommitTimestamp{}
+		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnRestart{}
 		TxnStart{ImplicitTxn:false}
@@ -164,6 +171,7 @@ Open{ImplicitTxn:true, WasUpgraded:true}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAbortedPLpgSQL{}
 		TxnFinishCommittedPLpgSQL{}
+		TxnFinishPrepared{}
 		TxnReleased{}
 		TxnRestart{}
 		TxnStart{ImplicitTxn:false}
