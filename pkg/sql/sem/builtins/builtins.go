@@ -299,6 +299,16 @@ var regularBuiltins = map[string]builtinDefinition{
 	// TODO(pmattis): What string functions should also support types.Bytes?
 
 	"lower": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "range", Typ: types.Int8Range}},
+			ReturnType:        tree.FixedReturnType(types.Int),
+			CalledOnNullInput: true,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				lb := tree.MustBeDInt8Range(args[0])
+				res := lb.Lower(ctx, evalCtx)
+				return res, nil
+			},
+		},
 		stringOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
 				return tree.NewDString(strings.ToLower(s)), nil
@@ -330,6 +340,16 @@ var regularBuiltins = map[string]builtinDefinition{
 	),
 
 	"upper": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "range", Typ: types.Int8Range}},
+			ReturnType:        tree.FixedReturnType(types.Int),
+			CalledOnNullInput: true,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				lb := tree.MustBeDInt8Range(args[0])
+				res := lb.Upper(ctx, evalCtx)
+				return res, nil
+			},
+		},
 		stringOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
 				return tree.NewDString(strings.ToUpper(s)), nil
@@ -4010,7 +4030,7 @@ value if you rely on the HLC for accuracy.`,
 				if args[0] == tree.DNull {
 					startBound = tree.DNull
 				} else {
-					startBoundIntDatum := tree.MustBeDInt(args[0]) + 1
+					startBoundIntDatum := tree.MustBeDInt(args[0])
 					startBound = &startBoundIntDatum
 				}
 

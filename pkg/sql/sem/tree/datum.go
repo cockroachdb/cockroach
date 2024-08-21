@@ -2043,14 +2043,18 @@ func ParseInt8Range(s string) (Datum, error) {
 	}
 	startType, endType := RangeBoundClose, RangeBoundOpen
 
+	var startOut, endOut Datum
+	startOut, endOut = NewDInt(DInt(startVal)), NewDInt(DInt(endVal))
 	if startVal == math.MinInt8 {
+		startOut = DNull
 		startType = RangeBoundNegInf
 	}
 
 	if endVal == math.MaxInt8 {
+		endOut = DNull
 		endType = RangeBoundInf
 	}
-	return NewDInt8Range(NewDInt(DInt(startVal)), NewDInt(DInt(endVal)), startType, endType), nil
+	return NewDInt8Range(startOut, endOut, startType, endType), nil
 }
 
 func (d *DInt8Range) String() string {
@@ -2138,6 +2142,20 @@ func (d *DInt8Range) HasIntersection(
 	}
 
 	return true, nil
+}
+
+func (d *DInt8Range) Lower(ctx context.Context, cmpCtx CompareContext) Datum {
+	if d.StartBound.Typ == RangeBoundNegInf {
+		return DNull
+	}
+	return cmpCtx.UnwrapDatum(ctx, d.StartBound.Val).(*DInt)
+}
+
+func (d *DInt8Range) Upper(ctx context.Context, cmpCtx CompareContext) Datum {
+	if d.EndBound.Typ == RangeBoundInf {
+		return DNull
+	}
+	return cmpCtx.UnwrapDatum(ctx, d.EndBound.Val).(*DInt)
 }
 
 // Compare returns -1 if the receiver is less than other, 0 if receiver is
@@ -2254,8 +2272,6 @@ func NewDInt8Range(
 		},
 	}
 }
-
-func MakeInt8Range()
 
 // ParseContext provides the information necessary for
 // parsing dates.
