@@ -57,7 +57,7 @@ func TestValidator(t *testing.T) {
 		},
 		{
 			description: "promoting some nonvoters to voters",
-			constraint: "num_replicas=6 num_voters=3 constraints={'+zone=a':3} " +
+			constraint: "num_replicas=6 num_voters=3 constraints={'+zone=a3':3} " +
 				"voter_constraints={'+region=a':3,'+zone=a2':2}",
 			expectedSuccess:     true,
 			expectedErrorMsgStr: "",
@@ -72,14 +72,14 @@ func TestValidator(t *testing.T) {
 		},
 		{
 			description:         "satisfying zone constraint can help satisfy region constraint",
-			constraint:          "num_replicas=2 constraints={'+zone=b1':2,'+region=b1':2}",
+			constraint:          "num_replicas=2 constraints={'+zone=b1':2,'+region=b':2}",
 			expectedSuccess:     true,
 			expectedErrorMsgStr: "",
 		},
 		{
 			description: "cluster is fully assigned by region constraints",
 			constraint: "num_replicas=28 num_voters=28 " +
-				"constraints={'+region=a':16,'+region=b1':2,'+region=c':10}",
+				"constraints={'+region=a':16,'+region=b':2,'+region=c':10}",
 			expectedSuccess:     true,
 			expectedErrorMsgStr: "",
 		},
@@ -203,7 +203,7 @@ func TestValidator(t *testing.T) {
 			description:         "unsupported constraint value",
 			constraint:          "num_replicas=5 num_voters=1 voter_constraints={'+region=e':1}",
 			expectedSuccess:     false,
-			expectedErrorMsgStr: "region constraint value CA is not found in the cluster set up",
+			expectedErrorMsgStr: "region constraint value e is not found in the cluster set up",
 		},
 		{
 			description:         "unsupported constraint value",
@@ -224,11 +224,7 @@ func TestValidator(t *testing.T) {
 			config := spanconfigtestutils.ParseZoneConfig(t, tc.constraint).AsSpanConfig()
 			success, actualError := ma.isSatisfiable(config)
 			require.Equal(t, tc.expectedSuccess, success)
-			if tc.expectedErrorMsgStr == "" {
-				require.Nil(t, actualError)
-			} else {
-				require.Equal(t, actualError, tc.expectedErrorMsgStr)
-			}
+			require.Equal(t, actualError, tc.expectedErrorMsgStr)
 		})
 	}
 }
