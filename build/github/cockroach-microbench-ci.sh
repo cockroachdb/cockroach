@@ -44,7 +44,7 @@ bazel test //pkg/sql/tests:tests_test \
   --test_sharding_strategy=disabled \
   --test_arg=-test.cpu --test_arg=1 \
   --test_arg=-test.v \
-  --test_arg=-test.count=4 \
+  --test_arg=-test.count=10 \
   --test_arg=-test.benchmem \
   --crdb_test_off \
   --test_output=all > "$log_output_file_path"
