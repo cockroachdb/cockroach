@@ -60,6 +60,7 @@ func TestSQLInstance(t *testing.T) {
 		numRetries       int
 		initialTimestamp hlc.Timestamp
 		nextTimestamp    hlc.Timestamp
+		lastSessionID    sqlliveness.SessionID
 	}
 	fakeStorage.SetInjectedFailure(func(sid sqlliveness.SessionID, expiration hlc.Timestamp) error {
 		failureMu.Lock()
@@ -68,23 +69,35 @@ func TestSQLInstance(t *testing.T) {
 		if failureMu.numRetries == 1 {
 			failureMu.initialTimestamp = expiration
 			return kvpb.NewReplicaUnavailableError(errors.Newf("fake injected error"), &roachpb.RangeDescriptor{}, roachpb.ReplicaDescriptor{})
+		} else if failureMu.numRetries == 2 {
+			failureMu.lastSessionID = sid
+			return kvpb.NewAmbiguousResultError(errors.Newf("fake injected error"))
 		}
 		failureMu.nextTimestamp = expiration
 		return nil
 	})
 	sqlInstance.Start(ctx, nil)
-	// We expect two attempts to insert, since we inject a replica unavailable
-	// error on the first attempt.
+	// We expect three attempts to insert, since we inject a replica unavailable
+	// error on the first attempt. On the second attempt we will inject an ambiguous
+	// result error. The third and final attempt will be successful.
 	testutils.SucceedsSoon(t, func() error {
 		failureMu.Lock()
 		defer failureMu.Unlock()
-		if failureMu.numRetries < 2 {
+		if failureMu.numRetries < 3 {
 			return errors.AssertionFailedf("unexpected number of retries on session insertion, "+
 				"expected at least 2, got %d", failureMu.numRetries)
 		}
 		if !failureMu.nextTimestamp.After(failureMu.initialTimestamp) {
 			return errors.AssertionFailedf("timestamp should move forward on each retry, "+
 				"got %s. Previous timestamp was: %s", failureMu.nextTimestamp, failureMu.initialTimestamp)
+		}
+		session, err := sqlInstance.Session(ctx)
+		if err != nil {
+			return err
+		}
+		if session.ID() == failureMu.lastSessionID || len(failureMu.lastSessionID) == 0 {
+			return errors.AssertionFailedf("new session ID should have been assigned after an ambiguous"+
+				" result error. Current: %s  Previous: %s", session.ID(), failureMu.lastSessionID)
 		}
 		return nil
 	})
