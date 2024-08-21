@@ -326,12 +326,13 @@ func (e eventGenSettings) String() string {
 func constructSetZoneConfigEventWithConformanceAssertion(
 	span roachpb.Span, zoneConfig zonepb.ZoneConfig, durationToAssert time.Duration,
 ) event.MutationWithAssertionEvent {
+	configChangeEvent := event.SetSpanConfigEvent{
+		Span:   span,
+		Config: zoneConfig.AsSpanConfig(),
+	}
 	return event.MutationWithAssertionEvent{
-		MutationEvent: event.SetSpanConfigEvent{
-			Span:   span,
-			Config: zoneConfig.AsSpanConfig(),
-		},
-		AssertionEvent: event.NewAssertionEvent([]assertion.SimulationAssertion{
+		MutationEvent: configChangeEvent,
+		AssertionEvent: event.NewAssertionEvent(configChangeEvent, []assertion.SimulationAssertion{
 			assertion.ConformanceAssertion{
 				Underreplicated:      0,
 				Overreplicated:       0,

@@ -12,6 +12,26 @@ set_span_config delay=1m
 [0,9999999999): num_replicas=3 constraints={'+region=a'}
 ----
 
+validate_config
+----
+satisfiable:
+validation result:
+	zone:
+		EU_1: voters: 0, non_voters: 0, unassigned: 4
+		EU_2: voters: 0, non_voters: 0, unassigned: 4
+		EU_3: voters: 0, non_voters: 0, unassigned: 4
+		US_East_1: voters: 0, non_voters: 0, unassigned: 4
+		US_East_2: voters: 0, non_voters: 0, unassigned: 4
+		US_East_3: voters: 0, non_voters: 0, unassigned: 4
+		US_West_1: voters: 0, non_voters: 0, unassigned: 4
+		US_West_2: voters: 0, non_voters: 0, unassigned: 4
+		US_West_3: voters: 0, non_voters: 0, unassigned: 4
+	region:
+		EU: voters: 0, non_voters: 0, unassigned: 12
+		US_East: voters: 0, non_voters: 3, unassigned: 9
+		US_West: voters: 0, non_voters: 0, unassigned: 12
+	cluster: voters: 3, non_voters: 0, unassigned: 33
+
 assertion type=conformance under=0 violating=0
 ----
 

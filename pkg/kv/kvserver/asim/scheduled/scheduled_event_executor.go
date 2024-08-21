@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/validator"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -119,23 +118,23 @@ func (e *eventExecutor) PrintEventsExecuted(
 	} else {
 		buf := strings.Builder{}
 		buf.WriteString(fmt.Sprintf("%d events executed:\n", len(e.scheduledEvents)))
-		validator := validator.NewValidator(regions)
+		//validator := validator.NewValidator(regions)
 		for _, ev := range e.scheduledEvents {
 			buf.WriteString(fmt.Sprintln(ev.String()))
-			if withValidator {
-				satisfiable, err := validator.ValidateEvent(ev)
-				if satisfiable {
-					buf.WriteString("\t\t\tsatisfiable\n")
-				} else {
-					buf.WriteString(fmt.Sprintf("\t\t\tunsatisfiable: %s\n", err))
-				}
-				// todo: wenyi make this logic back by adding 1 to 1 correspondance to assertion
-				//if !satisfiable && !history.AssertionResults[i] {
-				//	buf.WriteString(fmt.Sprintf("\t\t\texpected: unsatisfiable and didn't conform to %s\n", err))
-				//} else if satisfiable && !history.AssertionResults[i] {
-				//	buf.WriteString("\t\t\tFAILEDDDD: satisfiable but didn't conform\n")
-				//} else
-			}
+			//if withValidator {
+			//	satisfiable, err := validator.ValidateEvent(ev)
+			//	if satisfiable {
+			//		buf.WriteString("\t\t\tsatisfiable\n")
+			//	} else {
+			//		buf.WriteString(fmt.Sprintf("\t\t\tunsatisfiable: %s\n", err))
+			//	}
+			//	// todo: wenyi make this logic back by adding 1 to 1 correspondance to assertion
+			//	//if !satisfiable && !history.AssertionResults[i] {
+			//	//	buf.WriteString(fmt.Sprintf("\t\t\texpected: unsatisfiable and didn't conform to %s\n", err))
+			//	//} else if satisfiable && !history.AssertionResults[i] {
+			//	//	buf.WriteString("\t\t\tFAILEDDDD: satisfiable but didn't conform\n")
+			//	//} else
+			//}
 		}
 		return buf.String()
 	}
@@ -169,7 +168,7 @@ func (e *eventExecutor) TickEvents(
 			} else {
 				assertionFn, ok := fn.(event.AssertionFunc)
 				if ok {
-					if !assertionFn(ctx, tick, history) && !failureExists {
+					if !assertionFn(ctx, tick, history, state) && !failureExists {
 						failureExists = true
 					}
 				} else {

@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/validator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
@@ -175,6 +177,7 @@ func TestDataDriven(t *testing.T) {
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
 		eventGen := gen.NewStaticEventsWithNoEvents()
 		assertions := []assertion.SimulationAssertion{}
+		var prevConf roachpb.SpanConfig
 		runs := []history.History{}
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -251,11 +254,14 @@ func TestDataDriven(t *testing.T) {
 			case "gen_cluster":
 				var nodes = 3
 				var storesPerNode = 1
+				var locality string
 				scanIfExists(t, d, "nodes", &nodes)
 				scanIfExists(t, d, "stores_per_node", &storesPerNode)
+				scanIfExists(t, d, "locality", &locality)
 				clusterGen = gen.BasicCluster{
 					Nodes:         nodes,
 					StoresPerNode: storesPerNode,
+					Locality:      locality,
 				}
 				return ""
 			case "load_cluster":
@@ -288,12 +294,22 @@ func TestDataDriven(t *testing.T) {
 					tag, data = strings.TrimSpace(tag), strings.TrimSpace(data)
 					span := spanconfigtestutils.ParseSpan(t, tag)
 					conf := spanconfigtestutils.ParseZoneConfig(t, data).AsSpanConfig()
+					prevConf = conf
 					eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetSpanConfigEvent{
 						Span:   span,
 						Config: conf,
 					})
 				}
 				return ""
+			case "validate_config":
+				if clusterGen == nil {
+					return "cluster generator not initialized"
+				}
+				if prevConf.IsEmpty() {
+					return "no span configuration set"
+				}
+				v := validator.NewValidator(clusterGen.Regions())
+				return v.ValidateEvent(prevConf).String()
 			case "set_liveness":
 				var nodeID int
 				var delay time.Duration

@@ -170,6 +170,7 @@ func (lc LoadedCluster) Regions() []state.Region {
 type BasicCluster struct {
 	Nodes         int
 	StoresPerNode int
+	Locality      string
 }
 
 func (bc BasicCluster) String() string {

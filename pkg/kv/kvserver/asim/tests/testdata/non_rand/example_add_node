@@ -26,6 +26,17 @@ set_span_config
 [0,10000): num_replicas=3 num_voters=3
 ----
 
+validate_config
+----
+unsatisfiable:
+validation result:
+	zone:
+		AU_EAST_1: voters: 0, non_voters: 0, unassigned: 1
+	region:
+		AU_EAST: voters: 0, non_voters: 0, unassigned: 1
+	cluster: voters: 0, non_voters: 0, unassigned: 1
+failed to satisfy constraints for cluster
+
 eval duration=20m samples=1 seed=42
 ----
 OK

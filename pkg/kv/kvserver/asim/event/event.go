@@ -20,7 +20,7 @@ import (
 )
 
 // Event outlines the necessary behaviours that event structs must implement.
-// Some key implementations of the interface includes assertionEvent,
+// Some key implementations of the interface includes AssertionEvent,
 // SetSpanConfigEvent, AddNodeEvent, SetNodeLivenessEvent,
 // SetCapacityOverrideEvent.
 type Event interface {
@@ -44,7 +44,7 @@ type EventFunc interface {
 // AssertionFunc is a function type for assertion-based events. It is for
 // function that evaluate assertions based on the given history and current
 // time. The returned boolean indicates the outcome of the assertion.
-type AssertionFunc func(context.Context, time.Time, history.History) (hold bool)
+type AssertionFunc func(context.Context, time.Time, history.History, state.State) (hold bool)
 
 // MutationFunc is a function type for mutation-based events. It is for
 // function that executes mutation events on the given state.
@@ -74,7 +74,7 @@ func (MutationFunc) GetType() eventFuncType {
 // confirm before using.
 type MutationWithAssertionEvent struct {
 	MutationEvent    Event
-	AssertionEvent   assertionEvent
+	AssertionEvent   AssertionEvent
 	DurationToAssert time.Duration
 }
 

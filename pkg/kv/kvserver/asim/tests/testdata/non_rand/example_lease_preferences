@@ -15,13 +15,48 @@ set_span_config
 [0,1000): num_replicas=3 num_voters=3 constraints={'+region=b':3} lease_preferences=[['+region=b']]
 ----
 
+validate_config
+----
+unsatisfiable:
+validation result:
+	zone:
+		AU_EAST_1: voters: 0, non_voters: 0, unassigned: 5
+	region:
+		AU_EAST: voters: 0, non_voters: 0, unassigned: 5
+	cluster: voters: 0, non_voters: 0, unassigned: 5
+region constraint value b is not found in the cluster set up
+
+
 set_span_config 
 [1000,2000): num_replicas=3 num_voters=3 constraints={'+region=b':3} lease_preferences=[['+region=a'],['+region=b']]
 ----
 
+validate_config
+----
+unsatisfiable:
+validation result:
+	zone:
+		AU_EAST_1: voters: 0, non_voters: 0, unassigned: 5
+	region:
+		AU_EAST: voters: 0, non_voters: 0, unassigned: 5
+	cluster: voters: 0, non_voters: 0, unassigned: 5
+region constraint value b is not found in the cluster set up
+
+
 set_span_config 
 [2000,10000): num_replicas=3 num_voters=3 constraints={'+region=b':3} lease_preferences=[['+region=c']]
 ----
+
+validate_config
+----
+unsatisfiable:
+validation result:
+	zone:
+		AU_EAST_1: voters: 0, non_voters: 0, unassigned: 5
+	region:
+		AU_EAST: voters: 0, non_voters: 0, unassigned: 5
+	cluster: voters: 0, non_voters: 0, unassigned: 5
+region constraint value b is not found in the cluster set up
 
 assertion type=conformance lease-violating=1 lease-less-preferred=1
 ----
