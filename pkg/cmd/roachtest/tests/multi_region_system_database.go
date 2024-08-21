@@ -67,7 +67,7 @@ func registerMultiRegionSystemDatabase(r registry.Registry) {
 			// Perform rolling restart to propagate region information to non-primary nodes
 			for i := 2; i <= nodes; i++ {
 				t.WorkerStatus("stop")
-				c.Stop(ctx, t.L(), option.NewStopOpts(option.Graceful(shutdownMaxWait)), c.Node(i))
+				c.Stop(ctx, t.L(), option.NewStopOpts(option.Graceful(shutdownGracePeriod)), c.Node(i))
 				t.WorkerStatus("start")
 				startOpts := option.DefaultStartOpts()
 				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(false)), c.Node(i))
