@@ -600,28 +600,6 @@ Source expression:
 
 New expression 1 of 3:
   inner-join (hash)
-   ├── scan stu
-   ├── inner-join (hash)
-   │    ├── scan abc
-   │    ├── scan xyz
-   │    └── filters
-   │         └── b = y
-   └── filters
-        └── s = a
-
-New expression 2 of 3:
-  inner-join (hash)
-   ├── inner-join (hash)
-   │    ├── scan abc
-   │    ├── scan xyz
-   │    └── filters
-   │         └── b = y
-   ├── scan stu
-   └── filters
-        └── s = a
-
-New expression 3 of 3:
-  inner-join (hash)
    ├── scan xyz
    ├── inner-join (merge)
    │    ├── scan stu
@@ -629,6 +607,28 @@ New expression 3 of 3:
    │    └── filters (true)
    └── filters
         └── b = y
+
+New expression 2 of 3:
+  inner-join (hash)
+   ├── scan stu
+   ├── inner-join (hash)
+   │    ├── scan abc
+   │    ├── scan xyz
+   │    └── filters
+   │         └── b = y
+   └── filters
+        └── s = a
+
+New expression 3 of 3:
+  inner-join (hash)
+   ├── inner-join (hash)
+   │    ├── scan abc
+   │    ├── scan xyz
+   │    └── filters
+   │         └── b = y
+   ├── scan stu
+   └── filters
+        └── s = a
 ----
 ----
 
@@ -882,6 +882,22 @@ Source expression:
 New expression 1 of 2:
   project
    └── inner-join (cross)
+        ├── inner-join (hash)
+        │    ├── scan small
+        │    ├── right-join (hash)
+        │    │    ├── scan large
+        │    │    ├── scan medium
+        │    │    └── filters
+        │    │         └── large.m = medium.m
+        │    └── filters
+        │         ├── medium.n = small.n
+        │         └── (small.m = large.n) OR (large.n IS NULL)
+        ├── scan xyz
+        └── filters (true)
+
+New expression 2 of 2:
+  project
+   └── inner-join (cross)
         ├── select
         │    ├── left-join (hash)
         │    │    ├── inner-join (hash)
@@ -893,22 +909,6 @@ New expression 1 of 2:
         │    │    └── filters
         │    │         └── large.m = medium.m
         │    └── filters
-        │         └── (small.m = large.n) OR (large.n IS NULL)
-        ├── scan xyz
-        └── filters (true)
-
-New expression 2 of 2:
-  project
-   └── inner-join (cross)
-        ├── inner-join (hash)
-        │    ├── scan small
-        │    ├── right-join (hash)
-        │    │    ├── scan large
-        │    │    ├── scan medium
-        │    │    └── filters
-        │    │         └── large.m = medium.m
-        │    └── filters
-        │         ├── medium.n = small.n
         │         └── (small.m = large.n) OR (large.n IS NULL)
         ├── scan xyz
         └── filters (true)
@@ -1001,28 +1001,6 @@ Source expression:
 
 New expression 1 of 3:
   full-join (hash)
-   ├── full-join (hash)
-   │    ├── scan abc
-   │    ├── scan xyz
-   │    └── filters
-   │         └── b = y
-   ├── scan stu
-   └── filters
-        └── s = a
-
-New expression 2 of 3:
-  full-join (hash)
-   ├── scan stu
-   ├── full-join (hash)
-   │    ├── scan abc
-   │    ├── scan xyz
-   │    └── filters
-   │         └── b = y
-   └── filters
-        └── s = a
-
-New expression 3 of 3:
-  full-join (hash)
    ├── scan xyz
    ├── full-join (merge)
    │    ├── scan stu
@@ -1030,6 +1008,28 @@ New expression 3 of 3:
    │    └── filters (true)
    └── filters
         └── b = y
+
+New expression 2 of 3:
+  full-join (hash)
+   ├── full-join (hash)
+   │    ├── scan abc
+   │    ├── scan xyz
+   │    └── filters
+   │         └── b = y
+   ├── scan stu
+   └── filters
+        └── s = a
+
+New expression 3 of 3:
+  full-join (hash)
+   ├── scan stu
+   ├── full-join (hash)
+   │    ├── scan abc
+   │    ├── scan xyz
+   │    └── filters
+   │         └── b = y
+   └── filters
+        └── s = a
 ----
 ----
 
