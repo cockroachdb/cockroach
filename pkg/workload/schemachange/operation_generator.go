@@ -779,7 +779,11 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	if err != nil {
 		return nil, err
 	}
-	childColumnIsStoredVirtual, err := og.columnIsStoredComputed(ctx, tx, childTable, childColumn.name)
+	childColumnIsStoredComputed, err := og.columnIsStoredComputed(ctx, tx, childTable, childColumn.name)
+	if err != nil {
+		return nil, err
+	}
+	parentColumnIsStoredComputed, err := og.columnIsStoredComputed(ctx, tx, parentTable, parentColumn.name)
 	if err != nil {
 		return nil, err
 	}
@@ -798,11 +802,11 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	}
 
 	stmt := makeOpStmt(OpStmtDDL)
-	stmt.expectedExecErrors.addAll(codesWithConditions{
+	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.ForeignKeyViolation, condition: !parentColumnHasUniqueConstraint},
 		{code: pgcode.FeatureNotSupported, condition: childColumnIsVirtualComputed},
-		{code: pgcode.FeatureNotSupported, condition: childColumnIsStoredVirtual},
-		{code: pgcode.FeatureNotSupported, condition: parentColumnIsVirtualComputed},
+		{code: pgcode.FeatureNotSupported, condition: childColumnIsStoredComputed},
+		{code: pgcode.FeatureNotSupported, condition: parentColumnIsVirtualComputed || parentColumnIsStoredComputed},
 		{code: pgcode.DuplicateObject, condition: constraintExists},
 		{code: pgcode.DatatypeMismatch, condition: !childColumn.typ.Equivalent(parentColumn.typ)},
 	})
