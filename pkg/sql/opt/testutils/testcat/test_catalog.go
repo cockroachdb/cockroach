@@ -1396,6 +1396,11 @@ func (ts *TableStat) HistogramType() *types.T {
 	return ts.histogramType
 }
 
+// MostCommonValues is part of the cat.TableStatistic interface.
+func (ts *TableStat) MostCommonValues() []cat.MostCommonValue {
+	return nil
+}
+
 // IsPartial is part of the cat.TableStatistic interface.
 func (ts *TableStat) IsPartial() bool {
 	return ts.js.IsPartial()

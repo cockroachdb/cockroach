@@ -49,6 +49,8 @@ type TableStatistic struct {
 
 	// Histogram is the decoded histogram data.
 	Histogram []cat.HistogramBucket
+
+	MostCommonValues []cat.MostCommonValue
 }
 
 // A TableStatisticsCache contains two underlying LRU caches:

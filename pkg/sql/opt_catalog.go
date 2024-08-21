@@ -1884,6 +1884,11 @@ func (os *optTableStat) HistogramType() *types.T {
 	return os.stat.HistogramData.ColumnType
 }
 
+// MostCommonValues is part of the cat.TableStatistic interface.
+func (os *optTableStat) MostCommonValues() []cat.MostCommonValue {
+	return os.stat.MostCommonValues
+}
+
 // IsPartial is part of the cat.TableStatistic interface.
 func (os *optTableStat) IsPartial() bool {
 	return os.stat.IsPartial()

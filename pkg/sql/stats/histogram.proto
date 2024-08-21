@@ -50,6 +50,10 @@ message HistogramData {
     bytes upper_bound = 3;
   }
 
+  message MCV {
+    int32 bucket_idx = 1;
+  }
+
   // Value type for the column.
   sql.sem.types.T column_type = 2;
 
@@ -57,6 +61,8 @@ message HistogramData {
   // histogram. For an empty table (or a table with all NULL values) Buckets
   // will have zero length.
   repeated Bucket buckets = 1 [(gogoproto.nullable) = false];
+
+  repeated MCV mcvs = 4 [(gogoproto.customname) = "MCVs", (gogoproto.nullable) = false];
 
   // Version of the logic used to construct this histogram. See histogram.go
   // for more details.

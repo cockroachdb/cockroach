@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
@@ -57,13 +58,17 @@ type HistogramVersion uint32
 //
 // ATTENTION: When updating this field, add a brief description of what
 // changed to the version history below and introduce new named constant below.
-const HistVersion = upperBoundsValueEncodedVersion
+const HistVersion = mcvsVersion
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 4
+- Introduced in 24.3.
+- We now include most common values (MCVs) in the histogram.
 
 - Version: 3
 - Introduced in 24.1.
@@ -88,6 +93,10 @@ Please add new entries at the top.
   omitted on Version 0 histograms.
 
 */
+
+// mcvsVersion is the HistogramVersion from which we started including most
+// common values.
+const mcvsVersion = HistogramVersion(4)
 
 // upperBoundsValueEncodedVersion is the HistogramVersion from which we started
 // using value-encoding for upper bound datums.
@@ -167,7 +176,8 @@ func EquiDepthHistogram(
 		return HistogramData{}, nil, errors.Errorf("histogram requires distinctCount > 0")
 	}
 
-	h, err := equiDepthHistogramWithoutAdjustment(ctx, compareCtx, samples, numRows, maxBuckets)
+	maxMCVs := getMaxMCVs(maxBuckets)
+	h, err := equiDepthHistogramWithoutAdjustment(ctx, compareCtx, samples, numRows, maxBuckets, maxMCVs)
 	if err != nil {
 		return HistogramData{}, nil, err
 	}
@@ -231,19 +241,20 @@ func ConstructExtremesHistogram(
 	var lowerHist histogram
 	var upperHist histogram
 	var err error
+	maxMCVs := getMaxMCVs(maxBuckets)
 	if len(lowerSamples) > 0 {
-		lowerHist, err = equiDepthHistogramWithoutAdjustment(ctx, compareCtx, lowerSamples, estNumRowsLower, maxBuckets/2)
+		lowerHist, err = equiDepthHistogramWithoutAdjustment(ctx, compareCtx, lowerSamples, estNumRowsLower, maxBuckets/2, maxMCVs)
 		if err != nil {
 			return HistogramData{}, nil, err
 		}
 	}
 	if len(upperSamples) > 0 {
-		upperHist, err = equiDepthHistogramWithoutAdjustment(ctx, compareCtx, upperSamples, estNumRowsUpper, maxBuckets/2)
+		upperHist, err = equiDepthHistogramWithoutAdjustment(ctx, compareCtx, upperSamples, estNumRowsUpper, maxBuckets/2, maxMCVs)
 		if err != nil {
 			return HistogramData{}, nil, err
 		}
 	}
-	h := histogram{buckets: append(lowerHist.buckets, upperHist.buckets...)}
+	h := combineHistograms(lowerHist, upperHist, maxMCVs)
 	h.adjustCounts(ctx, compareCtx, colType, float64(numRows), float64(distinctCount))
 	histogramData, err := h.toHistogramData(ctx, colType, st)
 	return histogramData, h.buckets, err
@@ -258,6 +269,7 @@ func equiDepthHistogramWithoutAdjustment(
 	samples tree.Datums,
 	numRows int64,
 	maxBuckets int,
+	maxMCVs int,
 ) (histogram, error) {
 	numSamples := len(samples)
 	if maxBuckets < 2 {
@@ -283,16 +295,37 @@ func equiDepthHistogramWithoutAdjustment(
 	if maxBuckets > numSamples {
 		numBuckets = numSamples
 	}
-	h := histogram{buckets: make([]cat.HistogramBucket, 0, numBuckets)}
+	// mcvs contains the indexes in samples of the last instance of each of the
+	// most common values, in index order.
+	mcvs, err := getMCVs(ctx, compareCtx, samples, maxMCVs)
+	if err != nil {
+		return histogram{}, err
+	}
+
+	h := histogram{
+		buckets: make([]cat.HistogramBucket, 0, numBuckets),
+		mcvs:    make([]cat.MostCommonValue, 0, len(mcvs)),
+	}
 	lowerBound := samples[0]
 
 	// i keeps track of the current sample and advances as we form buckets.
+	// j keeps track of the current MCV and advances as the MCVs are accounted for.
+	j, mcv := 0, mcvs[0]
 	for i, b := 0, 0; b < numBuckets && i < numSamples; b++ {
 		// numSamplesInBucket is the number of samples in this bucket. The first
 		// bucket has numSamplesInBucket=1 so the histogram has a clear lower bound.
 		numSamplesInBucket := (numSamples - i) / (numBuckets - b)
 		if i == 0 || numSamplesInBucket < 1 {
 			numSamplesInBucket = 1
+		}
+		// Use a MCV as the upper bound if it would otherwise be lost in the bucket.
+		// As a result, the bucket may be smaller than the target for an equi-depth
+		// histogram, but this ensures we have accurate counts for the heavy hitters.
+		if mcv < i+numSamplesInBucket-1 {
+			numSamplesInBucket = mcv - i + 1
+			h.mcvs = append(h.mcvs, cat.MostCommonValue{BucketIdx: len(h.buckets)})
+			j++
+			mcv = mcvs[j]
 		}
 		upper := samples[i+numSamplesInBucket-1]
 		// numLess is the number of samples less than upper (in this bucket).
@@ -314,6 +347,13 @@ func equiDepthHistogramWithoutAdjustment(
 				break
 			}
 		}
+		// If we happened to land on a heavy hitter, advance j to mark the MCV as
+		// accounted for.
+		if mcv == i+numSamplesInBucket-1 {
+			h.mcvs = append(h.mcvs, cat.MostCommonValue{BucketIdx: len(h.buckets)})
+			j++
+			mcv = mcvs[j]
+		}
 
 		// Estimate the number of rows equal to the upper bound and less than the
 		// upper bound, as well as the number of distinct values less than the upper
@@ -333,6 +373,11 @@ func equiDepthHistogramWithoutAdjustment(
 
 		lowerBound = getNextLowerBound(ctx, compareCtx, upper)
 	}
+
+	// Sort the mcvs in decreasing order of frequency.
+	sort.Slice(h.mcvs, func(i, j int) bool {
+		return h.buckets[h.mcvs[i].BucketIdx].NumEq > h.buckets[h.mcvs[j].BucketIdx].NumEq
+	})
 
 	return h, nil
 }
@@ -390,6 +435,7 @@ func (histogramData *HistogramData) TypeCheck(
 // on empty tables.
 type histogram struct {
 	buckets []cat.HistogramBucket
+	mcvs    []cat.MostCommonValue
 }
 
 // adjustCounts adjusts the row count and number of distinct values per bucket
@@ -405,6 +451,7 @@ func (h *histogram) adjustCounts(
 	// Empty table cases.
 	if rowCountTotal <= 0 || distinctCountTotal <= 0 {
 		h.buckets = make([]cat.HistogramBucket, 0)
+		h.mcvs = make([]cat.MostCommonValue, 0)
 		return
 	}
 
@@ -428,6 +475,7 @@ func (h *histogram) adjustCounts(
 	// If the histogram only had empty buckets, we can't adjust it.
 	if rowCountRange+rowCountEq <= 0 || distinctCountRange+distinctCountEq <= 0 {
 		h.buckets = make([]cat.HistogramBucket, 0)
+		h.mcvs = make([]cat.MostCommonValue, 0)
 		return
 	}
 
@@ -671,6 +719,10 @@ func (h *histogram) addOuterBuckets(
 		maxDistRange, _ := maxDistinctRange(ctx, compareCtx, lowerBound, upperBound)
 		maxDistinctCountExtraBuckets += maxDistRange
 		h.buckets = append([]cat.HistogramBucket{{UpperBound: minVal}}, h.buckets...)
+		// Adjust the MCV bucket indexes since we added one bucket below the others.
+		for i := range h.mcvs {
+			h.mcvs[i].BucketIdx++
+		}
 		addedMin = true
 		newBuckets++
 	}
@@ -740,6 +792,100 @@ func (h *histogram) addOuterBuckets(
 	}
 }
 
+// recalculateMCVs updates h.mcvs to contain indexes of the buckets
+// with the largest NumEq value, in decreasing order of NumEq value.
+func (h *histogram) recalculateMCVs(maxMCVs int) {
+	h.mcvs = make([]cat.MostCommonValue, 0, maxMCVs+1)
+	mcvHeap := histogramMCVHeap(*h)
+	heap.Init[cat.MostCommonValue](mcvHeap)
+	for i := range h.buckets {
+		heap.Push[cat.MostCommonValue](mcvHeap, cat.MostCommonValue{BucketIdx: i})
+		if len(h.mcvs) > maxMCVs {
+			mcvHeap.Pop()
+		}
+	}
+}
+
+// getMaxMCVs returns the maximum number of most common values.
+// Postgres uses a more complex formula to determine the number of MCVs,
+// (see https://github.com/postgres/postgres/blob/REL_17_STABLE/src/backend/commands/analyze.c#L2934)
+// but start simple for now with just 10% of buckets.
+func getMaxMCVs(maxBuckets int) int {
+	return int(float64(maxBuckets) * 0.1)
+}
+
+// combineHistograms combines two disjoint histograms.
+func combineHistograms(lower histogram, upper histogram, maxMCVs int) histogram {
+	res := histogram{
+		buckets: append(lower.buckets, upper.buckets...),
+		mcvs:    make([]cat.MostCommonValue, 0, maxMCVs),
+	}
+	// Perform a merge join on the MCVs, converting the bucket indexes from the upper
+	// histogram to account for the new buckets from the lower histogram.
+	i, j := 0, 0
+	for ; i < len(lower.mcvs) && len(res.mcvs) < maxMCVs; i++ {
+		lowerIdx := lower.mcvs[i].BucketIdx
+		for ; j < len(upper.mcvs) && len(res.mcvs) < maxMCVs; j++ {
+			upperIdx := upper.mcvs[j].BucketIdx
+			if upper.buckets[upperIdx].NumEq > lower.buckets[lowerIdx].NumEq {
+				res.mcvs = append(res.mcvs, cat.MostCommonValue{BucketIdx: upperIdx + len(lower.buckets)})
+			} else {
+				break
+			}
+		}
+		if len(res.mcvs) < maxMCVs {
+			res.mcvs = append(res.mcvs, cat.MostCommonValue{BucketIdx: lowerIdx})
+		}
+	}
+	return res
+}
+
+// getMCVs returns the indexes in samples of the last instance of each of the
+// most common values, in index order. For example, if samples contains
+// [ a, a, a, b, c, c ], and maxMCVs is 2, getMCVs returns [ 2, 5 ].
+func getMCVs(
+	ctx context.Context, compareCtx tree.CompareContext, samples tree.Datums, maxMCVs int,
+) ([]int, error) {
+	// Use a heap to find the most common values.
+	h := make(MCVHeap, 0, maxMCVs+1)
+	heap.Init[MCV](&h)
+	count := 1
+	for i := 1; i < len(samples); i++ {
+		if c, err := samples[i].Compare(ctx, compareCtx, samples[i-1]); err != nil {
+			return nil, err
+		} else if c < 0 {
+			return nil, errors.AssertionFailedf("%+v", "samples not sorted")
+		} else if c > 0 {
+			heap.Push[MCV](&h, MCV{
+				idx:   i - 1,
+				count: count,
+			})
+			if len(h) > maxMCVs {
+				h.Pop()
+			}
+			count = 1
+		} else {
+			count++
+		}
+	}
+	// Add the last value.
+	heap.Push[MCV](&h, MCV{
+		idx:   len(samples) - 1,
+		count: count,
+	})
+	if len(h) > maxMCVs {
+		h.Pop()
+	}
+
+	// Return just the indexes in increasing order.
+	mcvs := make([]int, 0, len(h))
+	for i := range h {
+		mcvs = append(mcvs, h[i].idx)
+	}
+	sort.Ints(mcvs)
+	return mcvs, nil
+}
+
 // toHistogramData converts a histogram to a HistogramData protobuf with the
 // given type.
 func (h histogram) toHistogramData(
@@ -754,6 +900,7 @@ func (h histogram) toHistogramData(
 	}
 	histogramData := HistogramData{
 		Buckets:    make([]HistogramData_Bucket, len(h.buckets)),
+		MCVs:       make([]HistogramData_MCV, len(h.mcvs)),
 		ColumnType: colType,
 		Version:    version,
 	}
@@ -769,6 +916,12 @@ func (h histogram) toHistogramData(
 			NumRange:      int64(math.Round(h.buckets[i].NumRange)),
 			DistinctRange: h.buckets[i].DistinctRange,
 			UpperBound:    encoded,
+		}
+	}
+
+	for i := range h.mcvs {
+		histogramData.MCVs[i] = HistogramData_MCV{
+			BucketIdx: int32(h.mcvs[i].BucketIdx),
 		}
 	}
 

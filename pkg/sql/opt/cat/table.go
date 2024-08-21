@@ -242,6 +242,8 @@ type TableStatistic interface {
 	// inverted index histograms, this will always return types.Bytes.
 	HistogramType() *types.T
 
+	MostCommonValues() []MostCommonValue
+
 	// IsPartial returns true if this statistic was collected with a where
 	// clause. (If the where clause was something like "WHERE 1 = 1" or "WHERE
 	// true" this could technically be a full statistic rather than a partial
@@ -278,6 +280,10 @@ type HistogramBucket struct {
 
 	// UpperBound is the upper bound of the bucket.
 	UpperBound tree.Datum
+}
+
+type MostCommonValue struct {
+	BucketIdx int
 }
 
 // ForeignKeyConstraint represents a foreign key constraint. A foreign key

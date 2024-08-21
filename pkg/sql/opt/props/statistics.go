@@ -225,6 +225,12 @@ type ColumnStatistic struct {
 	// the approximate distribution of values for that column, represented
 	// by a slice of histogram buckets.
 	Histogram *Histogram
+
+	// MostCommonValues contains the most common values in the column represented
+	// as indexes into the slice of histogram buckets, ordered by decreasing NumEq
+	// value. The MCVs are the upper bounds of the specified buckets, and the
+	// frequencies are the values for NumEq.
+	MostCommonValues []int
 }
 
 // ApplySelectivity updates the distinct count, null count, and histogram
