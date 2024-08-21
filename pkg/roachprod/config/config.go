@@ -162,6 +162,13 @@ func DefaultEnvVars() []string {
 		// in testing the upgrade logic that users would actually run when
 		// they upgrade from one release to another.
 		"COCKROACH_TESTING_FORCE_RELEASE_BRANCH=true",
+		// Disable metamorphic testing to reduce flakiness as most metamorphic
+		// constants are not fully tested for compatibility in roachtests.
+		// Passing this in when the cluster is started would suffice in terms
+		// of correctness, but the metamorphic framework logs constants during
+		// init. This leads to a lot of noise in the logs, even if metamorphic
+		// constants aren't used in the test itself.
+		"COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true",
 	}
 }
 

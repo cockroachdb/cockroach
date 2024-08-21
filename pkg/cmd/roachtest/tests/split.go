@@ -427,18 +427,12 @@ func registerLoadSplits(r registry.Registry) {
 // conditions defined by the params. It checks whether certain number of
 // splits occur in different workload scenarios.
 func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params splitParams) {
-	// We run this without metamorphic constants as the tests make
-	// incorrect assumptions about the absolute values of QPS.
-	// See: https://github.com/cockroachdb/cockroach/issues/112664
-	// TODO(DarrylWong): enable metamorphic contants once issue is resolved
-	settings := install.MakeClusterSettings()
-	settings.Env = append(settings.Env, "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true")
 	startOpts := option.NewStartOpts(option.NoBackupSchedule)
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 		"--vmodule=split_queue=2,store_rebalancer=2,allocator=2,replicate_queue=2,"+
 			"decider=3,replica_split_load=1",
 	)
-	c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.CRDBNodes())
 
 	m := c.NewMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
