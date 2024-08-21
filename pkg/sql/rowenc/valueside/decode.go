@@ -270,7 +270,7 @@ func DecodeUntaggedDatum(
 			}
 			ebVal = tree.NewDInt(tree.DInt(eVal))
 		}
-		return tree.NewDInt8Range(sbVal, ebVal, sbTyp, ebTyp), buf, nil
+		return tree.NewDInt8Range(sbVal, ebVal, sbTyp, ebTyp), data, nil
 
 	case types.OidFamily:
 		// TODO: This possibly should decode to uint32 (with corresponding changes

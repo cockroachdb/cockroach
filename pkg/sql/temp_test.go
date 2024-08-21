@@ -12,6 +12,7 @@ package sql_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -67,9 +68,18 @@ func TestTemp(t *testing.T) {
 						insert into t.test (k) values (int8range(21,null));
 						`)
 	require.NoError(t, err)
-	result, err := sqlDB.Query(`
-						select k from t.test;
+	_, err = sqlDB.Exec(`
+						insert into t.test (k) values (int8range(21,45));
 						`)
-	fmt.Println(result)
 	require.NoError(t, err)
+	result, err := sqlDB.Query(`
+						select * from t.test;
+						`)
+	require.NoError(t, err)
+
+	var resultOut []map[string]interface{}
+	result.Scan(&resultOut)
+	bytes, _ := json.Marshal(result)
+	fmt.Println(string(bytes))
+
 }
