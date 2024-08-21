@@ -34,9 +34,10 @@ type StreamTokenCounterProvider struct {
 
 // NewStreamTokenCounterProvider creates a new StreamTokenCounterProvider.
 func NewStreamTokenCounterProvider(settings *cluster.Settings) *StreamTokenCounterProvider {
-	return &StreamTokenCounterProvider{
-		settings: settings,
-	}
+	p := StreamTokenCounterProvider{settings: settings}
+	p.mu.evalCounters = make(map[kvflowcontrol.Stream]TokenCounter)
+	p.mu.sendCounters = make(map[kvflowcontrol.Stream]TokenCounter)
+	return &p
 }
 
 // Eval returns the evaluation token counter for the given stream.
