@@ -347,6 +347,8 @@ jobs:
         if: always()
   cockroach-microbench-ci:
     runs-on: [ self-hosted, basic_runner_group ]
+    # TODO(sambhav-jain-16): enable this for pull requests also
+    if: ${{ github.event_name == 'push' }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
