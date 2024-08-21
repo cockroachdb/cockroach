@@ -110,7 +110,7 @@ func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T
 		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
 		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily, types.TimeTZFamily,
 		types.GeographyFamily, types.GeometryFamily, types.EnumFamily, types.Box2DFamily,
-		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.RefCursorFamily:
+		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.RefCursorFamily, types.RangeFamily:
 	// These types are OK.
 
 	case types.TupleFamily:

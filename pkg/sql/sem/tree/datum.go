@@ -2036,7 +2036,7 @@ func MustBeDInt8Range(e Expr) DInt8Range {
 	return i
 }
 
-func ParseInt8Range(s string) (Datum, error) {
+func ParseInt8Range(s string) (*DInt8Range, error) {
 	startVal, endVal, err := int8range.ParseInt8Range(s)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse vector")
@@ -2045,19 +2045,25 @@ func ParseInt8Range(s string) (Datum, error) {
 
 	var startOut, endOut Datum
 	startOut, endOut = NewDInt(DInt(startVal)), NewDInt(DInt(endVal))
-	if startVal == math.MinInt8 {
+	if startVal == math.MinInt64 {
 		startOut = DNull
 		startType = RangeBoundNegInf
 	}
 
-	if endVal == math.MaxInt8 {
+	if endVal == math.MaxInt64 {
 		endOut = DNull
 		endType = RangeBoundInf
+	} else if endVal == math.MinInt64 {
+		endOut = DNull
+		endType = RangeBoundNegInf
 	}
 	return NewDInt8Range(startOut, endOut, startType, endType), nil
 }
 
 func (d *DInt8Range) String() string {
+	if d.isEmpty() {
+		return "empty"
+	}
 	sb := strings.Builder{}
 	if d.StartBound.Typ == RangeBoundClose {
 		sb.WriteString("[")
@@ -2082,6 +2088,10 @@ func (d *DInt8Range) String() string {
 }
 
 func (d *DInt8Range) Format(ctx *FmtCtx) {
+	if d.isEmpty() {
+		ctx.WriteString("empty")
+		return
+	}
 	if d.StartBound.Typ == RangeBoundClose {
 		ctx.WriteString("[")
 	} else {
@@ -2158,12 +2168,104 @@ func (d *DInt8Range) Upper(ctx context.Context, cmpCtx CompareContext) Datum {
 	return cmpCtx.UnwrapDatum(ctx, d.EndBound.Val).(*DInt)
 }
 
+func (rb RangeBound) compare(other RangeBound, startBounds bool) int {
+	// perform a mini normalization here. maybe this is overkill?
+	var rbVal int64
+	switch rb.Typ {
+	case RangeBoundOpen:
+		if startBounds {
+			rbVal = int64(MustBeDInt(rb.Val)) + 1
+		} else {
+			rbVal = int64(MustBeDInt(rb.Val))
+		}
+	case RangeBoundClose:
+		if startBounds {
+			rbVal = int64(MustBeDInt(rb.Val))
+		} else {
+			rbVal = int64(MustBeDInt(rb.Val)) + 1
+		}
+	case RangeBoundInf:
+		if other.Typ == RangeBoundInf {
+			return 0
+		}
+		return 1
+	case RangeBoundNegInf:
+		if other.Typ == RangeBoundNegInf {
+			return 0
+		}
+		return -1
+	}
+	var otherVal int64
+	switch other.Typ {
+	case RangeBoundOpen:
+		if startBounds {
+			otherVal = int64(MustBeDInt(other.Val)) + 1
+		} else {
+			otherVal = int64(MustBeDInt(other.Val))
+		}
+	case RangeBoundClose:
+		if startBounds {
+			otherVal = int64(MustBeDInt(other.Val))
+		} else {
+			otherVal = int64(MustBeDInt(other.Val)) + 1
+		}
+	case RangeBoundInf:
+		return -1
+	case RangeBoundNegInf:
+		return 1
+	}
+	if rbVal < otherVal {
+		return -1
+	}
+	if rbVal > otherVal {
+		return 1
+	}
+	return 0
+}
+
 // Compare returns -1 if the receiver is less than other, 0 if receiver is
 // equal to other and +1 if receiver is greater than 'other'. Compare is safe
 // to use with a nil eval.Context and results in default behavior, except for
 // when comparing tree.Placeholder datums.
 func (d *DInt8Range) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
-	panic("implement me")
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1, nil
+	}
+	var err error
+	var v *DInt8Range
+	switch t := cmpCtx.UnwrapDatum(ctx, other).(type) {
+	case *DInt8Range:
+		v = t
+	case *DString:
+		v, err = ParseInt8Range(string(*t))
+		if err != nil {
+			return 0, err
+		}
+	case *DCollatedString:
+		v, err = ParseInt8Range(t.Contents)
+		if err != nil {
+			return 0, err
+		}
+	default:
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+	// empty range is less than any non-empty range
+	if d.isEmpty() {
+		if v.isEmpty() {
+			return 0, nil
+		}
+		return -1, nil
+	}
+	if v.isEmpty() {
+		return 1, nil
+	}
+
+	// first compare lower bounds, then compare upper bounds
+	if cmp := d.StartBound.compare(v.StartBound, true /* startBounds */); cmp != 0 {
+		return cmp, nil
+	}
+	return d.EndBound.compare(v.EndBound, false /* startBounds */), nil
 }
 
 // Prev implements the Datum interface.
@@ -2258,10 +2360,77 @@ const (
 	OpenCloseBoundsFmt  = `(]`
 )
 
+// EmptyDInt8Range is the normalized form of an empty range.
+var EmptyDInt8Range = &DInt8Range{
+	StartBound: RangeBound{
+		Val: DNull,
+		Typ: RangeBoundNegInf,
+	},
+	EndBound: RangeBound{
+		Val: DNull,
+		Typ: RangeBoundNegInf,
+	},
+}
+
+func (d *DInt8Range) isEmpty() bool {
+	var closedStart int64
+	switch d.StartBound.Typ {
+	case RangeBoundOpen:
+		closedStart = int64(MustBeDInt(d.StartBound.Val)) + 1
+	case RangeBoundClose:
+		closedStart = int64(MustBeDInt(d.StartBound.Val))
+	case RangeBoundInf:
+		return true
+	case RangeBoundNegInf:
+		return d.EndBound.Typ == RangeBoundNegInf
+	}
+	var closedEnd int64
+	switch d.EndBound.Typ {
+	case RangeBoundOpen:
+		closedEnd = int64(MustBeDInt(d.EndBound.Val)) - 1
+	case RangeBoundClose:
+		closedEnd = int64(MustBeDInt(d.EndBound.Val))
+	case RangeBoundInf:
+		return false
+	case RangeBoundNegInf:
+		return true
+	}
+	return closedStart > closedEnd
+}
+
+// normalize converts to CloseOpenBoundsFmt, with special cases for infinities
+// and the empty range.
+func (d *DInt8Range) normalize() *DInt8Range {
+	// normalize empty ranges
+	if d.isEmpty() {
+		return EmptyDInt8Range
+	}
+
+	// we don't need these for DInt.Next
+	ctx := context.Background()
+	var cmpCtx CompareContext
+
+	// make a copy
+	v := *d
+
+	// normalize to CloseOpenBoundsFmt
+	switch v.StartBound.Typ {
+	case RangeBoundOpen:
+		v.StartBound.Typ = RangeBoundClose
+		v.StartBound.Val, _ = v.StartBound.Val.Next(ctx, cmpCtx)
+	}
+	switch v.EndBound.Typ {
+	case RangeBoundClose:
+		v.EndBound.Typ = RangeBoundOpen
+		v.EndBound.Val, _ = v.EndBound.Val.Next(ctx, cmpCtx)
+	}
+	return &v
+}
+
 func NewDInt8Range(
 	startBound Datum, endBound Datum, startBoundTyp RangeBoundType, endBoundTyp RangeBoundType,
 ) *DInt8Range {
-	return &DInt8Range{
+	return (&DInt8Range{
 		StartBound: RangeBound{
 			Val: startBound,
 			Typ: startBoundTyp,
@@ -2270,7 +2439,7 @@ func NewDInt8Range(
 			Val: endBound,
 			Typ: endBoundTyp,
 		},
-	}
+	}).normalize()
 }
 
 // ParseContext provides the information necessary for
@@ -6347,8 +6516,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.OidFamily:            {unsafe.Sizeof(DOid{}.Oid), fixedSize},
 	types.EnumFamily:           {unsafe.Sizeof(DEnum{}), variableSize},
 
-	// TODO(janexing): merely placeholder here.
-	types.RangeFamily: {unsafe.Sizeof(DInt8Range{}), variableSize},
+	types.RangeFamily: {unsafe.Sizeof(DInt8Range{}), fixedSize},
 
 	types.VoidFamily: {sz: unsafe.Sizeof(DVoid{}), variable: fixedSize},
 	// TODO(jordan,justin): This seems suspicious.

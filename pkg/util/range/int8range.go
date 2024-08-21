@@ -17,42 +17,46 @@ import (
 	"strings"
 )
 
-func ParseInt8Range(rangeStr string) (int8, int8, error) {
-	startIncrement := 0
+func ParseInt8Range(rangeStr string) (int64, int64, error) {
+	if strings.ToLower(rangeStr) == "empty" {
+		return math.MinInt64, math.MinInt64, nil
+	}
+
+	var startIncrement int64
 	if rangeStr[0] == '(' {
 		startIncrement++
 	}
 
-	endIncrement := 0
+	var endIncrement int64
 	if rangeStr[len(rangeStr)-1] == ']' {
 		endIncrement++
 	}
 	var err error
-	startVal, endVal := math.MinInt8, math.MaxInt8
+	var startVal, endVal int64 = math.MinInt64, math.MaxInt64
 	values := strings.Split(rangeStr[1:len(rangeStr)-1], ",")
 	if len(values) != 2 {
 		err := fmt.Errorf("invalid range values")
-		return int8(startVal), int8(endVal), err
+		return startVal, endVal, err
 	}
 
 	if values[0] != "" {
-		startVal, err = strconv.Atoi(strings.TrimSpace(values[0]))
+		startVal, err = strconv.ParseInt(strings.TrimSpace(values[0]), 10, 64)
 		startVal += startIncrement
 		if err != nil {
-			return int8(startVal), int8(endVal), err
+			return startVal, endVal, err
 		}
 	}
 
 	if values[1] != "" {
-		endVal, err = strconv.Atoi(strings.TrimSpace(values[1]))
+		endVal, err = strconv.ParseInt(strings.TrimSpace(values[1]), 10, 64)
 		endVal += endIncrement
 		if err != nil {
-			return int8(startVal), int8(endVal), err
+			return startVal, endVal, err
 		}
 	}
 
-	if endVal < startVal {
-		return -1, -1, fmt.Errorf("invalid range values")
+	if endVal < startVal-1 {
+		return -1, -1, fmt.Errorf("invalid range values: (%d, %d)", startVal-1, endVal)
 	}
-	return int8(startVal), int8(endVal), nil
+	return startVal, endVal, nil
 }
