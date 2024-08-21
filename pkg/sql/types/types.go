@@ -1891,6 +1891,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		return fmt.Sprintf("timestamp(%d) with time zone", typmod)
 	case TriggerFamily:
 		return "trigger"
+	case RangeFamily:
+		return "int8range"
 	case TSQueryFamily:
 		return "tsquery"
 	case TSVectorFamily:
