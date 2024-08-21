@@ -232,6 +232,22 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "sample", &sample)
 				top := runs[sample-1].S.Topology()
 				return (&top).String()
+			case "gen_cluster_with_locality":
+				var storesPerNode = 1
+				var regions []string
+				var nodesPerRegion []int
+				scanIfExists(t, d, "stores_per_node", &storesPerNode)
+				scanIfExists(t, d, "regions", &regions)
+				scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
+				clusterGen = gen.ClusterWithLocality{
+					StoresPerNode:  storesPerNode,
+					NodesPerRegion: nodesPerRegion,
+					Region:         regions,
+				}
+				if len(regions) != len(nodesPerRegion) {
+					return "regions and nodes_per_region must have the same length"
+				}
+				return ""
 			case "gen_cluster":
 				var nodes = 3
 				var storesPerNode = 1
