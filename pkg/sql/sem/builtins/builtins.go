@@ -3980,6 +3980,34 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"isempty": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "range", Typ: types.Int8Range}},
+			ReturnType:        tree.FixedReturnType(types.Bool),
+			CalledOnNullInput: true,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				b := tree.MustBeDInt8Range(args[0])
+
+				if b.StartBound.Typ == tree.RangeBoundNegInf || b.EndBound.Typ == tree.RangeBoundInf {
+					dBoolRes := tree.DBool(false)
+					return &dBoolRes, nil
+				}
+
+				lb := evalCtx.UnwrapDatum(ctx, b.StartBound.Val).(*tree.DInt)
+				rb := evalCtx.UnwrapDatum(ctx, b.EndBound.Val).(*tree.DInt)
+
+				res := true
+				if int64(*rb)-int64(*lb) <= 1 {
+					res = false
+				}
+
+				dBoolRes := tree.DBool(res)
+				return &dBoolRes, nil
+			},
+		},
+	),
+
 	"range_merge": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
 		tree.Overload{
@@ -4019,26 +4047,34 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	// TODO(sambhav-jain-16): Add check for startBound >= endBound
 	"int8range": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
 		tree.Overload{
 			Types:             tree.ParamTypes{{Name: "start_bound", Typ: types.Int}, {Name: "end_bound", Typ: types.Int}},
 			ReturnType:        tree.FixedReturnType(types.Int8Range),
 			CalledOnNullInput: true,
-			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				var startBound, endBound tree.Datum
+
+				var startBoundInt, endBoundInt tree.DInt
+
 				if args[0] == tree.DNull {
 					startBound = tree.DNull
 				} else {
-					startBoundIntDatum := tree.MustBeDInt(args[0])
-					startBound = &startBoundIntDatum
+					startBoundInt = tree.MustBeDInt(args[0])
+					startBound = &startBoundInt
 				}
 
 				if args[1] == tree.DNull {
 					endBound = tree.DNull
 				} else {
-					endBoundIntDatum := tree.MustBeDInt(args[1])
-					endBound = &endBoundIntDatum
+					endBoundInt = tree.MustBeDInt(args[1])
+					endBound = &endBoundInt
+				}
+
+				if (startBound != tree.DNull && endBound != tree.DNull) && int64(endBoundInt)-int64(startBoundInt) < 0 {
+					return nil, errors.New("range lower bound must be less than or equal to range upper bound")
 				}
 
 				startBoundTyp := tree.RangeBoundClose
@@ -4081,19 +4117,24 @@ value if you rely on the HLC for accuracy.`,
 				default:
 					return nil, errors.AssertionFailedf("unknown bound format for range: %s", boundFmt.String())
 				}
+				var startBoundInt, endBoundInt tree.DInt
 
 				if args[0] == tree.DNull {
 					startBound = tree.DNull
 				} else {
-					startBoundIntDatum := tree.MustBeDInt(args[0]) + tree.DInt(startAddVal)
-					startBound = &startBoundIntDatum
+					startBoundInt = tree.MustBeDInt(args[0]) + *tree.NewDInt(tree.DInt(startAddVal))
+					startBound = &startBoundInt
 				}
 
 				if args[1] == tree.DNull {
 					endBound = tree.DNull
 				} else {
-					endBoundIntDatum := tree.MustBeDInt(args[1]) + tree.DInt(endAddVal)
-					endBound = &endBoundIntDatum
+					endBoundInt = tree.MustBeDInt(args[1]) + *tree.NewDInt(tree.DInt(endAddVal))
+					endBound = &endBoundInt
+				}
+
+				if (startBound != tree.DNull && endBound != tree.DNull) && int64(endBoundInt)-int64(startBoundInt) < 0 {
+					return nil, errors.New("range lower bound must be less than or equal to range upper bound")
 				}
 
 				if startBound == tree.DNull {

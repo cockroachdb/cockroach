@@ -1306,6 +1306,7 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tr><td><a name="has_intersect"></a><code>has_intersect(left_range: int8range, right_range: int8range) &rarr; <a href="bool.html">bool</a></code></td><td></td><td>Invalid</td></tr>
 <tr><td><a name="int8range"></a><code>int8range(start_bound: <a href="int.html">int</a>, end_bound: <a href="int.html">int</a>) &rarr; int8range</code></td><td></td><td>Invalid</td></tr>
 <tr><td><a name="int8range"></a><code>int8range(start_bound: <a href="int.html">int</a>, end_bound: <a href="int.html">int</a>, bound_fmt: <a href="string.html">string</a>) &rarr; int8range</code></td><td></td><td>Invalid</td></tr>
+<tr><td><a name="isempty"></a><code>isempty(range: int8range) &rarr; <a href="bool.html">bool</a></code></td><td></td><td>Invalid</td></tr>
 <tr><td><a name="range_merge"></a><code>range_merge(left_range: int8range, right_range: int8range) &rarr; int8range</code></td><td></td><td>Invalid</td></tr></tbody>
 </table>
 
@@ -3198,6 +3199,7 @@ Case mode values range between 0 - 1, representing lower casing and upper casing
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="unaccent"></a><code>unaccent(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes accents (diacritic signs) from the text provided in <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="upper"></a><code>upper(range: int8range) &rarr; <a href="int.html">int</a></code></td><td></td><td>Invalid</td></tr>
 <tr><td><a name="upper"></a><code>upper(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts all characters in <code>val</code> to their to their upper-case equivalents.</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
