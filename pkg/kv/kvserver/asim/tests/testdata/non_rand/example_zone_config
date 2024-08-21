@@ -16,21 +16,10 @@ validate_config
 ----
 satisfiable:
 validation result:
-	zone:
-		a1: voters: 0, non_voters: 0, unassigned: 4
-		a2: voters: 0, non_voters: 0, unassigned: 4
-		a3: voters: 0, non_voters: 0, unassigned: 4
-		b1: voters: 0, non_voters: 0, unassigned: 4
-		b2: voters: 0, non_voters: 0, unassigned: 4
-		b3: voters: 0, non_voters: 0, unassigned: 4
-		c1: voters: 0, non_voters: 0, unassigned: 4
-		c2: voters: 0, non_voters: 0, unassigned: 4
-		c3: voters: 0, non_voters: 0, unassigned: 4
-	region:
-		a: voters: 0, non_voters: 3, unassigned: 9
-		b: voters: 0, non_voters: 0, unassigned: 12
-		c: voters: 0, non_voters: 0, unassigned: 12
-	cluster: voters: 3, non_voters: 0, unassigned: 33
+	1.zone:
+	2.region:
+		a: 3 non_voters
+	3.cluster: 3 voters
 
 assertion type=conformance under=0 violating=0
 ----

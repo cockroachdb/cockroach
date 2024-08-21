@@ -17,14 +17,12 @@ set_span_config
 
 validate_config
 ----
-unsatisfiable:
+satisfiable:
 validation result:
-	zone:
-		AU_EAST_1: voters: 0, non_voters: 0, unassigned: 5
-	region:
-		AU_EAST: voters: 0, non_voters: 0, unassigned: 5
-	cluster: voters: 0, non_voters: 0, unassigned: 5
-region constraint value b is not found in the cluster set up
+	1.zone:
+	2.region:
+		b: 3 non_voters
+	3.cluster: 3 voters
 
 
 set_span_config 
@@ -33,14 +31,12 @@ set_span_config
 
 validate_config
 ----
-unsatisfiable:
+satisfiable:
 validation result:
-	zone:
-		AU_EAST_1: voters: 0, non_voters: 0, unassigned: 5
-	region:
-		AU_EAST: voters: 0, non_voters: 0, unassigned: 5
-	cluster: voters: 0, non_voters: 0, unassigned: 5
-region constraint value b is not found in the cluster set up
+	1.zone:
+	2.region:
+		b: 3 non_voters
+	3.cluster: 3 voters
 
 
 set_span_config 
@@ -49,14 +45,12 @@ set_span_config
 
 validate_config
 ----
-unsatisfiable:
+satisfiable:
 validation result:
-	zone:
-		AU_EAST_1: voters: 0, non_voters: 0, unassigned: 5
-	region:
-		AU_EAST: voters: 0, non_voters: 0, unassigned: 5
-	cluster: voters: 0, non_voters: 0, unassigned: 5
-region constraint value b is not found in the cluster set up
+	1.zone:
+	2.region:
+		b: 3 non_voters
+	3.cluster: 3 voters
 
 assertion type=conformance lease-violating=1 lease-less-preferred=1
 ----

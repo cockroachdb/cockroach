@@ -4,27 +4,6 @@ load_cluster config=complex
 gen_ranges ranges=20
 ----
 
-#ComplexConfig Topology:
-# EU
-#  EU_1
-#  │ └── [19 20 21]
-#  EU_2
-#  │ └── [22 23 24]
-#  EU_3
-#  │ └── [25 26 27 28]
-# US_East
-#  US_East_1
-#  │ └── [1]
-#  US_East_2
-#  │ └── [2 3]
-#  US_East_3
-#  │ └── [4 5 6]
-#  US_East_4
-#  │ └── [7 8 9 10 11 12 13 14 15 16]
-# US_West
-#  US_West_1
-#    └── [17 18]
-
 set_span_config delay=10m
 [0,9999999999): num_replicas=6 num_voters=3 constraints={'+zone=a3':3}, voter_constraints={'+region=a':3,'+zone=a2':2}
 ----
@@ -33,23 +12,19 @@ validate_config
 ----
 satisfiable:
 validation result:
-	zone:
-		a1: voters: 0, non_voters: 0, unassigned: 1
-		a2: voters: 2, non_voters: 0, unassigned: 0
-		a3: voters: 0, non_voters: 3, unassigned: 0
-		a4: voters: 0, non_voters: 0, unassigned: 10
-		b1: voters: 0, non_voters: 0, unassigned: 2
-		c1: voters: 0, non_voters: 0, unassigned: 3
-		c2: voters: 0, non_voters: 0, unassigned: 3
-		c3: voters: 0, non_voters: 0, unassigned: 4
-	region:
-		a: voters: 3, non_voters: 2, unassigned: 11
-		b: voters: 0, non_voters: 0, unassigned: 2
-		c: voters: 0, non_voters: 0, unassigned: 10
-	cluster: voters: 3, non_voters: 3, unassigned: 22
+	1.zone:
+		a2: 2 voters
+		a3: 3 non_voters
+	2.region:
+		a: 3 voters, 2 non_voters
+	3.cluster: 3 voters, 3 non_voters
 
 assertion type=conformance under=0 over=0 unavailable=0 violating=0
 ----
+
+a4 2 voters
+a3 1 voter, 2 non-voters,
+c non-voter
 
 eval duration=60m
 ----
@@ -57,32 +32,53 @@ failed assertion sample 1
   conformance unavailable=0 under=0 over=0 violating=0 
   actual unavailable=0 under=0, over=0 violating=24 lease-violating=0 lease-less-preferred=0
 violating constraints:
-  r2:000000{0500-1000} [(n3,s3):24, (n5,s5):7, (n14,s14):514, (n6,s6):4NON_VOTER, (n4,s4):5NON_VOTER, (n26,s26):8NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r3:0000001{000-500} [(n15,s15):792, (n4,s4):9, (n6,s6):7, (n27,s27):8NON_VOTER, (n5,s5):5NON_VOTER, (n24,s24):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r4:000000{1500-2000} [(n5,s5):7, (n4,s4):11, (n14,s14):167, (n23,s23):8NON_VOTER, (n22,s22):10NON_VOTER, (n20,s20):12NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r4:000000{1500-2000} [(n5,s5):7, (n4,s4):11, (n14,s14):167, (n23,s23):8NON_VOTER, (n22,s22):10NON_VOTER, (n20,s20):12NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r5:0000002{000-500} [(n15,s15):817, (n5,s5):2, (n3,s3):23, (n6,s6):4NON_VOTER, (n4,s4):5NON_VOTER, (n21,s21):6NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r6:000000{2500-3000} [(n3,s3):16, (n12,s12):506, (n5,s5):7, (n28,s28):8NON_VOTER, (n25,s25):10NON_VOTER, (n18,s18):12NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r6:000000{2500-3000} [(n3,s3):16, (n12,s12):506, (n5,s5):7, (n28,s28):8NON_VOTER, (n25,s25):10NON_VOTER, (n18,s18):12NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r7:0000003{000-500} [(n6,s6):1, (n4,s4):7, (n10,s10):182, (n5,s5):4NON_VOTER, (n18,s18):6NON_VOTER, (n21,s21):8NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r8:000000{3500-4000} [(n6,s6):9, (n1,s1):185, (n5,s5):7, (n19,s19):8NON_VOTER, (n4,s4):5NON_VOTER, (n17,s17):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r9:0000004{000-500} [(n4,s4):1, (n16,s16):203, (n11,s11):201, (n6,s6):4NON_VOTER, (n5,s5):5NON_VOTER, (n13,s13):193NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r10:000000{4500-5000} [(n9,s9):806, (n3,s3):11, (n5,s5):7, (n6,s6):4NON_VOTER, (n4,s4):5NON_VOTER, (n22,s22):8NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r11:0000005{000-500} [(n9,s9):164, (n5,s5):2, (n8,s8):163, (n6,s6):4NON_VOTER, (n4,s4):5NON_VOTER, (n23,s23):8NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r13:0000006{000-500} [(n8,s8):57, (n16,s16):56, (n11,s11):47, (n6,s6):4NON_VOTER, (n5,s5):5NON_VOTER, (n4,s4):6NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r14:000000{6500-7000} [(n9,s9):762, (n6,s6):9, (n2,s2):3, (n25,s25):8NON_VOTER, (n5,s5):5NON_VOTER, (n17,s17):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r14:000000{6500-7000} [(n9,s9):762, (n6,s6):9, (n2,s2):3, (n25,s25):8NON_VOTER, (n5,s5):5NON_VOTER, (n17,s17):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r15:0000007{000-500} [(n9,s9):183, (n6,s6):7, (n2,s2):11, (n18,s18):6NON_VOTER, (n5,s5):5NON_VOTER, (n21,s21):8NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r15:0000007{000-500} [(n9,s9):183, (n6,s6):7, (n2,s2):11, (n18,s18):6NON_VOTER, (n5,s5):5NON_VOTER, (n21,s21):8NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r16:000000{7500-8000} [(n4,s4):9, (n14,s14):186, (n5,s5):11, (n20,s20):10NON_VOTER, (n24,s24):8NON_VOTER, (n18,s18):12NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r16:000000{7500-8000} [(n4,s4):9, (n14,s14):186, (n5,s5):11, (n20,s20):10NON_VOTER, (n24,s24):8NON_VOTER, (n18,s18):12NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r17:0000008{000-500} [(n6,s6):1, (n9,s9):788, (n4,s4):7, (n27,s27):8NON_VOTER, (n18,s18):6NON_VOTER, (n26,s26):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r17:0000008{000-500} [(n6,s6):1, (n9,s9):788, (n4,s4):7, (n27,s27):8NON_VOTER, (n18,s18):6NON_VOTER, (n26,s26):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r18:000000{8500-9000} [(n11,s11):38, (n16,s16):44, (n13,s13):43, (n6,s6):4NON_VOTER, (n5,s5):5NON_VOTER, (n4,s4):6NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r19:0000009{000-500} [(n1,s1):184, (n4,s4):7, (n5,s5):9, (n6,s6):4NON_VOTER, (n28,s28):8NON_VOTER, (n27,s27):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
-  r20:{0000009500-2147483647} [(n15,s15):184, (n5,s5):7, (n4,s4):9, (n6,s6):4NON_VOTER, (n20,s20):8NON_VOTER, (n19,s19):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r2:000000{0500-1000} [(n11,s11):924, (n5,s5):7, (n16,s16):922, (n6,s6):4NON_VOTER, (n4,s4):5NON_VOTER, (n26,s26):8NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r3:0000001{000-500} [(n11,s11):822, (n5,s5):9, (n4,s4):7, (n6,s6):4NON_VOTER, (n27,s27):8NON_VOTER, (n24,s24):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r4:000000{1500-2000} [(n14,s14):780, (n4,s4):11, (n6,s6):9, (n23,s23):8NON_VOTER, (n22,s22):10NON_VOTER, (n20,s20):12NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r4:000000{1500-2000} [(n14,s14):780, (n4,s4):11, (n6,s6):9, (n23,s23):8NON_VOTER, (n22,s22):10NON_VOTER, (n20,s20):12NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r5:0000002{000-500} [(n16,s16):821, (n5,s5):2, (n3,s3):11, (n6,s6):4NON_VOTER, (n4,s4):5NON_VOTER, (n21,s21):6NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r6:000000{2500-3000} [(n6,s6):9, (n4,s4):11, (n1,s1):176, (n28,s28):8NON_VOTER, (n25,s25):10NON_VOTER, (n18,s18):12NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r6:000000{2500-3000} [(n6,s6):9, (n4,s4):11, (n1,s1):176, (n28,s28):8NON_VOTER, (n25,s25):10NON_VOTER, (n18,s18):12NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r7:0000003{000-500} [(n6,s6):1, (n10,s10):171, (n16,s16):172, (n5,s5):4NON_VOTER, (n4,s4):5NON_VOTER, (n21,s21):8NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r8:000000{3500-4000} [(n15,s15):771, (n3,s3):19, (n5,s5):7, (n19,s19):8NON_VOTER, (n4,s4):5NON_VOTER, (n17,s17):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r8:000000{3500-4000} [(n15,s15):771, (n3,s3):19, (n5,s5):7, (n19,s19):8NON_VOTER, (n4,s4):5NON_VOTER, (n17,s17):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r9:0000004{000-500} [(n4,s4):1, (n7,s7):172, (n14,s14):170, (n6,s6):4NON_VOTER, (n5,s5):5NON_VOTER, (n21,s21):6NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r10:000000{4500-5000} [(n15,s15):788, (n2,s2):11, (n5,s5):7, (n6,s6):4NON_VOTER, (n4,s4):5NON_VOTER, (n22,s22):8NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r11:0000005{000-500} [(n4,s4):7, (n5,s5):2, (n14,s14):172, (n6,s6):4NON_VOTER, (n25,s25):6NON_VOTER, (n23,s23):8NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r13:0000006{000-500} [(n1,s1):51, (n13,s13):18, (n15,s15):47, (n6,s6):4NON_VOTER, (n4,s4):5NON_VOTER, (n5,s5):6NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r14:000000{6500-7000} [(n5,s5):7, (n9,s9):759, (n2,s2):3, (n6,s6):4NON_VOTER, (n25,s25):8NON_VOTER, (n17,s17):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r14:000000{6500-7000} [(n5,s5):7, (n9,s9):759, (n2,s2):3, (n6,s6):4NON_VOTER, (n25,s25):8NON_VOTER, (n17,s17):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r15:0000007{000-500} [(n4,s4):1, (n5,s5):7, (n12,s12):173, (n6,s6):4NON_VOTER, (n18,s18):6NON_VOTER, (n21,s21):8NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r16:000000{7500-8000} [(n15,s15):813, (n6,s6):7, (n5,s5):11, (n24,s24):8NON_VOTER, (n20,s20):10NON_VOTER, (n18,s18):12NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r16:000000{7500-8000} [(n15,s15):813, (n6,s6):7, (n5,s5):11, (n24,s24):8NON_VOTER, (n20,s20):10NON_VOTER, (n18,s18):12NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r17:0000008{000-500} [(n1,s1):175, (n4,s4):9, (n5,s5):7, (n18,s18):6NON_VOTER, (n27,s27):8NON_VOTER, (n26,s26):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r17:0000008{000-500} [(n1,s1):175, (n4,s4):9, (n5,s5):7, (n18,s18):6NON_VOTER, (n27,s27):8NON_VOTER, (n26,s26):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r18:000000{8500-9000} [(n15,s15):42, (n13,s13):8, (n10,s10):45, (n6,s6):4NON_VOTER, (n4,s4):5NON_VOTER, (n5,s5):6NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r19:0000009{000-500} [(n11,s11):173, (n5,s5):7, (n4,s4):9, (n6,s6):4NON_VOTER, (n28,s28):8NON_VOTER, (n27,s27):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
+  r20:{0000009500-2147483647} [(n11,s11):176, (n6,s6):7, (n4,s4):9, (n5,s5):6NON_VOTER, (n20,s20):8NON_VOTER, (n19,s19):10NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=a3:3] voter_constraints=[+region=a:3 +zone=a2:2]
 
+topology
+----
+a
+  a1
+  │ └── [1]
+  a2
+  │ └── [2 3]
+  a3
+  │ └── [4 5 6]
+  a4
+  │ └── [7 8 9 10 11 12 13 14 15 16]
+b
+  b1
+  │ └── [17 18]
+c
+  c1
+    └── [19 20 21]
+  c2
+    └── [22 23 24]
+  c3
+    └── [25 26 27 28]
 
 # set_span_config delay=2m
-# [0,9999999999): num_replicas=2 num_voters=2 constraints={'+zone=US_West_1':2}
+# [0,9999999999): num_replicas=2 num_voters=2 constraints={'+zone=b1':2}
 # ----

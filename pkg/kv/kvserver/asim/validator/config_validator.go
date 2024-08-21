@@ -50,8 +50,17 @@ type allocationDetailsAtEachLevel struct {
 }
 
 func (a allocationDetailsAtEachLevel) String() string {
-	return fmt.Sprintf("voters: %d, non_voters: %d, unassigned: %d",
-		a.assignedVoters, a.assignedNonVoters, a.unassigned)
+	buf := strings.Builder{}
+	if a.assignedVoters != 0 {
+		buf.WriteString(fmt.Sprintf("%d voters", a.assignedVoters))
+	}
+	if a.assignedNonVoters != 0 {
+		if buf.Len() != 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(fmt.Sprintf("%d non_voters", a.assignedNonVoters))
+	}
+	return buf.String()
 }
 
 func (ma *mockAllocator) String() string {
@@ -65,15 +74,17 @@ func (ma *mockAllocator) String() string {
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			buf.WriteString(fmt.Sprintf("\t\t%s: %v\n", k, m[k]))
+			if m[k].assignedVoters != 0 || m[k].assignedNonVoters != 0 {
+				buf.WriteString(fmt.Sprintf("\t\t%s: %v\n", k, m[k]))
+			}
 		}
 	}
 
-	buf.WriteString("\tzone:\n")
+	buf.WriteString("\t1.zone:\n")
 	helper(ma.zone)
-	buf.WriteString("\tregion:\n")
+	buf.WriteString("\t2.region:\n")
 	helper(ma.region)
-	buf.WriteString(fmt.Sprintf("\tcluster: %v", ma.cluster))
+	buf.WriteString(fmt.Sprintf("\t3.cluster: %v", ma.cluster))
 	return buf.String()
 }
 

@@ -18,14 +18,13 @@ set_span_config
 
 validate_config
 ----
-unsatisfiable:
+satisfiable:
 validation result:
-	zone:
-		AU_EAST_1: voters: 0, non_voters: 0, unassigned: 4
-	region:
-		AU_EAST: voters: 0, non_voters: 0, unassigned: 4
-	cluster: voters: 0, non_voters: 0, unassigned: 4
-region constraint value a is not found in the cluster set up
+	1.zone:
+	2.region:
+		a: 1 non_voters
+		c: 2 non_voters
+	3.cluster: 3 voters
 
 set_span_config delay=5m
 [0,10000): num_replicas=3 constraints={'+region=a':1,'+region=b':1,'+region=c':1}
@@ -33,14 +32,14 @@ set_span_config delay=5m
 
 validate_config
 ----
-unsatisfiable:
+satisfiable:
 validation result:
-	zone:
-		AU_EAST_1: voters: 0, non_voters: 0, unassigned: 4
-	region:
-		AU_EAST: voters: 0, non_voters: 0, unassigned: 4
-	cluster: voters: 0, non_voters: 0, unassigned: 4
-region constraint value a is not found in the cluster set up
+	1.zone:
+	2.region:
+		a: 1 non_voters
+		b: 1 non_voters
+		c: 1 non_voters
+	3.cluster: 3 voters
 
 set_liveness node=4 liveness=decommissioning delay=5m
 ----

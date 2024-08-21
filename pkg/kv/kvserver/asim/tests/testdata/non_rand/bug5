@@ -4,28 +4,6 @@ load_cluster config=complex
 gen_ranges ranges=20
 ----
 
-#ComplexConfig Topology:
-# EU
-#  EU_1
-#  │ └── [19 20 21]
-#  EU_2
-#  │ └── [22 23 24]
-#  EU_3
-#  │ └── [25 26 27 28]
-# US_East
-#  US_East_1
-#  │ └── [1]
-#  US_East_2
-#  │ └── [2 3]
-#  US_East_3
-#  │ └── [4 5 6]
-#  US_East_4
-#  │ └── [7 8 9 10 11 12 13 14 15 16]
-# US_West
-#  US_West_1
-#    └── [17 18]
-
-
 set_span_config delay=10m
 [0,9999999999): num_replicas=16 num_voters=3 constraints={'+region=a':16,'+zone=a1':1,'+zone=a2':2} voter_constraints={'+zone=a4':3}
 ----
@@ -34,20 +12,13 @@ validate_config
 ----
 satisfiable:
 validation result:
-	zone:
-		a1: voters: 0, non_voters: 1, unassigned: 0
-		a2: voters: 0, non_voters: 2, unassigned: 0
-		a3: voters: 0, non_voters: 0, unassigned: 3
-		a4: voters: 3, non_voters: 0, unassigned: 7
-		b1: voters: 0, non_voters: 0, unassigned: 2
-		c1: voters: 0, non_voters: 0, unassigned: 3
-		c2: voters: 0, non_voters: 0, unassigned: 3
-		c3: voters: 0, non_voters: 0, unassigned: 4
-	region:
-		a: voters: 3, non_voters: 13, unassigned: 0
-		b: voters: 0, non_voters: 0, unassigned: 2
-		c: voters: 0, non_voters: 0, unassigned: 10
-	cluster: voters: 3, non_voters: 13, unassigned: 12
+	1.zone:
+		a1: 1 non_voters
+		a2: 2 non_voters
+		a4: 3 voters
+	2.region:
+		a: 3 voters, 13 non_voters
+	3.cluster: 3 voters, 13 non_voters
 
 assertion type=conformance under=0 over=0 unavailable=0 violating=0
 ----
