@@ -1294,6 +1294,10 @@ func (t *Transaction) Update(o *Transaction) {
 		switch t.Status {
 		case PENDING:
 			t.Status = o.Status
+		case PREPARED:
+			if o.Status != PENDING {
+				t.Status = o.Status
+			}
 		case STAGING:
 			if o.Status != PENDING {
 				t.Status = o.Status
@@ -1304,6 +1308,8 @@ func (t *Transaction) Update(o *Transaction) {
 			}
 		case COMMITTED:
 			// Nothing to do.
+		default:
+			log.Fatalf(ctx, "unexpected txn status: %s", t.Status)
 		}
 
 		if t.ReadTimestamp == o.ReadTimestamp {
@@ -1344,8 +1350,8 @@ func (t *Transaction) Update(o *Transaction) {
 			// have incremented the txn's epoch without realizing that it was
 			// aborted.
 			t.Status = ABORTED
-		case COMMITTED:
-			log.Warningf(ctx, "updating txn %s with COMMITTED txn at earlier epoch %s", t.String(), o.String())
+		case PREPARED, COMMITTED:
+			log.Warningf(ctx, "updating txn %s with %s txn at earlier epoch %s", t.String(), o.Status, o.String())
 		}
 	}
 
