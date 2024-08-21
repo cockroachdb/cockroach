@@ -569,9 +569,10 @@ func registerKVGracefulDraining(r registry.Registry) {
 			// Three iterations, each iteration has a 3-minute duration.
 			desiredRunDuration := 10 * time.Minute
 			m.Go(func(ctx context.Context) error {
+				// Don't connect to the node we are going to shut down.
 				cmd := fmt.Sprintf(
 					"./cockroach workload run kv --duration=%s --read-percent=50 --follower-read-percent=50 --concurrency=200 --max-rate=%d {pgurl%s}",
-					desiredRunDuration, specifiedQPS, c.CRDBNodes())
+					desiredRunDuration, specifiedQPS, c.Range(1, nodes-1))
 				t.WorkerStatus(cmd)
 				defer func() {
 					t.WorkerStatus("workload command completed")
