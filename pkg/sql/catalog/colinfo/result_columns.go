@@ -356,6 +356,8 @@ var Ranges = append(
 	// The following columns are computed by RangesExtraRenders below.
 	ResultColumn{Name: "lease_holder", Typ: types.Int},
 	ResultColumn{Name: "range_size", Typ: types.Int},
+	ResultColumn{Name: "lease_holder_error", Typ: types.String},
+	ResultColumn{Name: "range_size_error", Typ: types.String},
 )
 
 // RangesExtraRenders describes the extra projections in
@@ -365,7 +367,12 @@ const RangesExtraRenders = `
 	(crdb_internal.range_stats(start_key)->>'key_bytes')::INT +
 	(crdb_internal.range_stats(start_key)->>'val_bytes')::INT +
 	coalesce((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT, 0) +
-	coalesce((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT, 0) AS range_size
+	coalesce((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT, 0) AS range_size,
+	IF (crdb_internal.lease_holder(start_key) IS NULL, 'error fetching leaseholder', NULL)
+    	AS lease_holder_error,
+	IF (crdb_internal.range_stats(start_key)->>'sys_bytes' IS NULL, 
+		'error fetching range stats', NULL)
+    	AS range_size_error
 `
 
 // IdentifySystemColumns is the schema for IDENTIFY_SYSTEM.

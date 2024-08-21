@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/cockroachdb/errors"
 )
 
 type rangeStatsOperator struct {
@@ -129,16 +128,15 @@ func (r *rangeStatsOperator) Next() coldata.Batch {
 			// keys plus some constant multiple.
 			// TODO(yuzefovich): add unit tests that use the RunTests test
 			// harness.
-			res, err := r.fetcher.RangeStats(r.Ctx, keys...)
-			if err != nil {
-				colexecerror.ExpectedError(err)
-			}
-			if len(res) != len(keys) {
-				colexecerror.InternalError(errors.AssertionFailedf(
-					"unexpected number of RangeStats responses %d: %d expected", len(res), len(keys),
-				))
-			}
+			// Ignore errors and return a partial result.
+			res, _ := r.fetcher.RangeStats(r.Ctx, keys...)
 			for i, outputIdx := range keysOutputIdx {
+				// Not all keys from the keysOutputIdx are guaranteed to be
+				// present in res (e.g. some may be missing if there were errors
+				// in fetcher.RangeStats).
+				if i >= len(res) {
+					break
+				}
 				jsonStr, err := gojson.Marshal(&res[i].MVCCStats)
 				if err != nil {
 					colexecerror.ExpectedError(err)
