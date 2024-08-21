@@ -26,7 +26,7 @@ gen_ranges ranges=20
 #    └── [17 18]
 
 set_span_config delay=2m
-[0,9999999999): num_replicas=28 num_voters=28 constraints={'+region=US_East':16,'+region=US_West':2,'+region=EU':10,'+zone=US_East_1':1,'+zone=US_East_2':2,'+zone=US_East_3':3,'+zone=US_East_4':10,'+zone=US_West_1':2,'+zone=EU_1':3,'+zone=EU_2':3,'+zone=EU_3':4} voter_constraints={'+region=US_East':16,'+region=US_West':2,'+region=EU':10,'+zone=US_East_1':1,'+zone=US_East_2':2,'+zone=US_East_3':3,'+zone=US_East_4':10,'+zone=US_West_1':2,'+zone=EU_1':3,'+zone=EU_2':3,'+zone=EU_3':4}
+[0,9999999999): num_replicas=28 num_voters=28 constraints={'+region=a':16,'+region=b':2,'+region=c':10,'+zone=a1':1,'+zone=a2':2,'+zone=a3':3,'+zone=a4':10,'+zone=b1':2,'+zone=c1':3,'+zone=c2':3,'+zone=c3':4} voter_constraints={'+region=a':16,'+region=b':2,'+region=c':10,'+zone=a1':1,'+zone=a2':2,'+zone=a3':3,'+zone=a4':10,'+zone=b1':2,'+zone=c1':3,'+zone=c2':3,'+zone=c3':4}
 ----
 
 validate_config
@@ -34,18 +34,18 @@ validate_config
 satisfiable:
 validation result:
 	zone:
-		EU_1: voters: 3, non_voters: 0, unassigned: 0
-		EU_2: voters: 3, non_voters: 0, unassigned: 0
-		EU_3: voters: 4, non_voters: 0, unassigned: 0
-		US_East_1: voters: 1, non_voters: 0, unassigned: 0
-		US_East_2: voters: 2, non_voters: 0, unassigned: 0
-		US_East_3: voters: 3, non_voters: 0, unassigned: 0
-		US_East_4: voters: 10, non_voters: 0, unassigned: 0
-		US_West_1: voters: 2, non_voters: 0, unassigned: 0
+		a1: voters: 1, non_voters: 0, unassigned: 0
+		a2: voters: 2, non_voters: 0, unassigned: 0
+		a3: voters: 3, non_voters: 0, unassigned: 0
+		a4: voters: 10, non_voters: 0, unassigned: 0
+		b1: voters: 2, non_voters: 0, unassigned: 0
+		c1: voters: 3, non_voters: 0, unassigned: 0
+		c2: voters: 3, non_voters: 0, unassigned: 0
+		c3: voters: 4, non_voters: 0, unassigned: 0
 	region:
-		EU: voters: 10, non_voters: 0, unassigned: 0
-		US_East: voters: 16, non_voters: 0, unassigned: 0
-		US_West: voters: 2, non_voters: 0, unassigned: 0
+		a: voters: 16, non_voters: 0, unassigned: 0
+		b: voters: 2, non_voters: 0, unassigned: 0
+		c: voters: 10, non_voters: 0, unassigned: 0
 	cluster: voters: 28, non_voters: 0, unassigned: 0
 
 assertion type=conformance under=0 over=0 unavailable=0 violating=0
