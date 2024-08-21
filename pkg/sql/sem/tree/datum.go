@@ -2061,7 +2061,7 @@ func ParseInt8Range(s string) (*DInt8Range, error) {
 }
 
 func (d *DInt8Range) String() string {
-	if d.isEmpty() {
+	if d.IsEmpty() {
 		return "empty"
 	}
 	sb := strings.Builder{}
@@ -2088,7 +2088,7 @@ func (d *DInt8Range) String() string {
 }
 
 func (d *DInt8Range) Format(ctx *FmtCtx) {
-	if d.isEmpty() {
+	if d.IsEmpty() {
 		ctx.WriteString("empty")
 		return
 	}
@@ -2251,13 +2251,13 @@ func (d *DInt8Range) Compare(ctx context.Context, cmpCtx CompareContext, other D
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
 	// empty range is less than any non-empty range
-	if d.isEmpty() {
-		if v.isEmpty() {
+	if d.IsEmpty() {
+		if v.IsEmpty() {
 			return 0, nil
 		}
 		return -1, nil
 	}
-	if v.isEmpty() {
+	if v.IsEmpty() {
 		return 1, nil
 	}
 
@@ -2372,7 +2372,7 @@ var EmptyDInt8Range = &DInt8Range{
 	},
 }
 
-func (d *DInt8Range) isEmpty() bool {
+func (d *DInt8Range) IsEmpty() bool {
 	var closedStart int64
 	switch d.StartBound.Typ {
 	case RangeBoundOpen:
@@ -2402,7 +2402,7 @@ func (d *DInt8Range) isEmpty() bool {
 // and the empty range.
 func (d *DInt8Range) normalize() *DInt8Range {
 	// normalize empty ranges
-	if d.isEmpty() {
+	if d.IsEmpty() {
 		return EmptyDInt8Range
 	}
 

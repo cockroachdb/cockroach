@@ -189,6 +189,7 @@
 <tr><td><a href="int.html">int</a> <code><</code> <a href="float.html">float</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code><</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code><</code> oid</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>int8range <code><</code> int8range</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int[]</a> <code><</code> <a href="int.html">int[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code><</code> <a href="interval.html">interval</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval[]</a> <code><</code> <a href="interval.html">interval[]</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -265,6 +266,7 @@
 <tr><td><a href="int.html">int</a> <code><=</code> <a href="float.html">float</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code><=</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code><=</code> oid</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>int8range <code><=</code> int8range</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int[]</a> <code><=</code> <a href="int.html">int[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code><=</code> <a href="interval.html">interval</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval[]</a> <code><=</code> <a href="interval.html">interval[]</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -335,6 +337,7 @@
 <tr><td><a href="int.html">int</a> <code>=</code> <a href="float.html">float</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>=</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>=</code> oid</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>int8range <code>=</code> int8range</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int[]</a> <code>=</code> <a href="int.html">int[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code>=</code> <a href="interval.html">interval</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval[]</a> <code>=</code> <a href="interval.html">interval[]</a></td><td><a href="bool.html">bool</a></td></tr>

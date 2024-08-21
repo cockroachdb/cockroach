@@ -3989,19 +3989,7 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				b := tree.MustBeDInt8Range(args[0])
 
-				if b.StartBound.Typ == tree.RangeBoundNegInf || b.EndBound.Typ == tree.RangeBoundInf {
-					dBoolRes := tree.DBool(false)
-					return &dBoolRes, nil
-				}
-
-				lb := evalCtx.UnwrapDatum(ctx, b.StartBound.Val).(*tree.DInt)
-				rb := evalCtx.UnwrapDatum(ctx, b.EndBound.Val).(*tree.DInt)
-
-				res := true
-				if int64(*rb)-int64(*lb) <= 1 {
-					res = false
-				}
-
+				res := b.IsEmpty()
 				dBoolRes := tree.DBool(res)
 				return &dBoolRes, nil
 			},
