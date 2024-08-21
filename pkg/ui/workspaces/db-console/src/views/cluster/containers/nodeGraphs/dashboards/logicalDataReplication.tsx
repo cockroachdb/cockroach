@@ -24,10 +24,10 @@ export default function (props: GraphDashboardProps) {
 
   return [
     <LineGraph
-      title="Age of Applied Row Updates"
+      title="Replication Latency"
       isKvGraph={false}
       tenantSource={tenantSource}
-      tooltip={"The difference in row update commit times between the source cluster and the destination cluster"}
+      tooltip={"The difference in commit times between the source cluster and the destination cluster"}
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
@@ -47,17 +47,18 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Age of Oldest Row Pending Replication"
+      title="Replication Lag"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`Age of Oldest Row on Source that has yet to replicate to destination cluster`}
+      tooltip={"The age of the oldest row on the source cluster that has yet to replicate to destination cluster"}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="duration">
         <Metric
           downsampler={TimeSeriesQueryAggregator.MIN}
           aggregator={TimeSeriesQueryAggregator.MAX}
           name="cr.node.logical_replication.replicated_time_seconds"
-          title="Age of Oldest Row Pending Replication"
+          title="Replication Lag"
           transform={datapoints =>
             datapoints
               .filter(d => d.value !== 0)
