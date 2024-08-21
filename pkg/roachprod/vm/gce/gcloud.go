@@ -346,6 +346,10 @@ type ProviderOpts struct {
 	// Use an instance template and a managed instance group to create VMs. This
 	// enables cluster resizing, load balancing, and health monitoring.
 	Managed bool
+	// This specifies a subset of the Zones above that will run on spot instances.
+	// VMs running in Zones not in this list will be provisioned on-demand. This
+	// is only used by managed instance groups.
+	ManagedSpotZones []string
 	// Enable the cron service. It is disabled by default.
 	EnableCron bool
 
@@ -1033,6 +1037,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	_ = flags.MarkDeprecated("machine-type", "use "+ProviderName+"-machine-type instead")
 	flags.StringSliceVar(&o.Zones, "zones", nil, "DEPRECATED")
 	_ = flags.MarkDeprecated("zones", "use "+ProviderName+"-zones instead")
+	flags.StringSliceVar(&o.ManagedSpotZones, ProviderName+"-managed-spot-zones", nil,
+		"subset of zones in managed instance groups that will use spot instances")
 
 	flags.StringVar(&providerInstance.ServiceAccount, ProviderName+"-service-account",
 		providerInstance.ServiceAccount, "Service account to use")
@@ -1437,29 +1443,37 @@ func (p *Provider) computeInstanceArgs(
 	return args, cleanUpFn, nil
 }
 
-func instanceTemplateName(clusterName string) string {
-	return fmt.Sprintf("%s-template", clusterName)
+func instanceTemplateName(clusterName string, zone string) string {
+	return fmt.Sprintf("%s-template-%s", clusterName, zone)
 }
 
 func instanceGroupName(clusterName string) string {
 	return fmt.Sprintf("%s-group", clusterName)
 }
 
-// createInstanceTemplate creates an instance template for the cluster. This is
-// currently only used for managed instance group clusters.
-func createInstanceTemplate(clusterName string, instanceArgs []string, labelsArg string) error {
-	templateName := instanceTemplateName(clusterName)
-	createTemplateArgs := []string{"compute", "instance-templates", "create"}
-	createTemplateArgs = append(createTemplateArgs, instanceArgs...)
-	createTemplateArgs = append(createTemplateArgs, "--labels", labelsArg)
-	createTemplateArgs = append(createTemplateArgs, templateName)
-
-	cmd := exec.Command("gcloud", createTemplateArgs...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", createTemplateArgs, output)
+// createInstanceTemplates creates instance templates for a cluster for each
+// zone with the specified instance args for each template. This is currently
+// only used for managed instance group clusters.
+func createInstanceTemplates(
+	l *logger.Logger, clusterName string, zoneToInstanceArgs map[string][]string, labelsArg string,
+) error {
+	g := ui.NewDefaultSpinnerGroup(l, "creating instance templates", len(zoneToInstanceArgs))
+	for zone, args := range zoneToInstanceArgs {
+		templateName := instanceTemplateName(clusterName, zone)
+		createTemplateArgs := []string{"compute", "instance-templates", "create"}
+		createTemplateArgs = append(createTemplateArgs, args...)
+		createTemplateArgs = append(createTemplateArgs, "--labels", labelsArg)
+		createTemplateArgs = append(createTemplateArgs, templateName)
+		g.Go(func() error {
+			cmd := exec.Command("gcloud", createTemplateArgs...)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", createTemplateArgs, output)
+			}
+			return nil
+		})
 	}
-	return nil
+	return g.Wait()
 }
 
 // createInstanceGroups creates an instance group in each zone, for the cluster
@@ -1467,11 +1481,9 @@ func createInstanceGroups(
 	l *logger.Logger, project, clusterName string, zones []string, opts vm.CreateOpts,
 ) error {
 	groupName := instanceGroupName(clusterName)
-	templateName := instanceTemplateName(clusterName)
 	// Note that we set the IP addresses to be stateful, so that they remain the
 	// same when instances are auto-healed, updated, or recreated.
 	createGroupArgs := []string{"compute", "instance-groups", "managed", "create",
-		"--template", templateName,
 		"--size", "0",
 		"--stateful-external-ip", "enabled,auto-delete=on-permanent-instance-deletion",
 		"--stateful-internal-ip", "enabled,auto-delete=on-permanent-instance-deletion",
@@ -1498,7 +1510,11 @@ func createInstanceGroups(
 
 	g := ui.NewDefaultSpinnerGroup(l, "creating instance groups", len(zones))
 	for _, zone := range zones {
-		argsWithZone := append(createGroupArgs[:len(createGroupArgs):len(createGroupArgs)], "--zone", zone)
+		templateName := instanceTemplateName(clusterName, zone)
+		argsWithZone := make([]string, len(createGroupArgs))
+		copy(argsWithZone, createGroupArgs)
+		argsWithZone = append(argsWithZone, "--zone", zone)
+		argsWithZone = append(argsWithZone, "--template", templateName)
 		g.Go(func() error {
 			cmd := exec.Command("gcloud", argsWithZone...)
 			output, err := cmd.CombinedOutput()
@@ -1585,7 +1601,34 @@ func (p *Provider) Create(
 
 	switch {
 	case providerOpts.Managed:
-		err = createInstanceTemplate(opts.ClusterName, instanceArgs, labels)
+		zoneToInstanceArgs := make(map[string][]string)
+		for _, zone := range usedZones {
+			zoneToInstanceArgs[zone] = instanceArgs
+		}
+		// If spot instance are requested for specific zones, set the instance args
+		// for those zones to use spot instances.
+		if len(providerOpts.ManagedSpotZones) > 0 {
+			if providerOpts.UseSpot {
+				return errors.Newf("Use either --%[1]s-use-spot or --%[1]s-managed-spot-zones, not both", ProviderName)
+			}
+			spotProviderOpts := *providerOpts
+			spotProviderOpts.UseSpot = true
+			spotInstanceArgs, spotCleanUpFn, err := p.computeInstanceArgs(l, opts, &spotProviderOpts)
+			if spotCleanUpFn != nil {
+				defer spotCleanUpFn()
+			}
+			if err != nil {
+				return err
+			}
+			for _, zone := range providerOpts.ManagedSpotZones {
+				if _, ok := zoneToInstanceArgs[zone]; !ok {
+					return errors.Newf("the managed spot zone %q is not in the list of zones for the cluster", zone)
+				}
+				zoneToInstanceArgs[zone] = spotInstanceArgs
+			}
+		}
+
+		err = createInstanceTemplates(l, opts.ClusterName, zoneToInstanceArgs, labels)
 		if err != nil {
 			return err
 		}
@@ -2339,8 +2382,7 @@ func listManagedInstanceGroups(project, groupName string) ([]jsonManagedInstance
 }
 
 // deleteInstanceTemplate deletes the instance template for the cluster.
-func deleteInstanceTemplate(project, clusterName string) error {
-	templateName := instanceTemplateName(clusterName)
+func deleteInstanceTemplate(project, templateName string) error {
 	args := []string{"compute", "instance-templates", "delete", "--project", project, "--quiet", templateName}
 	cmd := exec.Command("gcloud", args...)
 	output, err := cmd.CombinedOutput()
@@ -2418,9 +2460,19 @@ func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
 	// deleted.
 	g = errgroup.Group{}
 	for cluster, project := range clusterProjectMap {
-		g.Go(func() error {
-			return deleteInstanceTemplate(project /* project */, cluster /* cluster */)
-		})
+		templates, err := listInstanceTemplates(project)
+		if err != nil {
+			return err
+		}
+		for _, template := range templates {
+			// Only delete templates that are part of the cluster.
+			if template.Properties.Labels[vm.TagCluster] != cluster {
+				continue
+			}
+			g.Go(func() error {
+				return deleteInstanceTemplate(project, template.Name)
+			})
+		}
 	}
 	return g.Wait()
 }
@@ -2617,6 +2669,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 		// Cluster (VM marked as empty) for it. This allows `Delete` to clean up
 		// any MIG or instance template resources when there are no VMs to
 		// derive it from.
+		clusterSeen := make(map[string]struct{})
 		for _, prj := range p.GetProjects() {
 			projTemplatesInUse := templatesInUse[prj]
 			if projTemplatesInUse == nil {
@@ -2631,10 +2684,20 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 				if managed, ok := template.Properties.Labels[ManagedLabel]; !(ok && managed == "true") {
 					continue
 				}
+				// There can be multiple dangling templates for the same cluster. We
+				// only need to create one `EmptyCluster` VM for each cluster.
+				clusterName := template.Properties.Labels[vm.TagCluster]
+				if clusterName == "" {
+					continue
+				}
+				if _, ok := clusterSeen[clusterName]; ok {
+					continue
+				}
+				clusterSeen[clusterName] = struct{}{}
 				// Create an `EmptyCluster` VM for templates that are not in use.
 				if _, ok := projTemplatesInUse[template.Name]; !ok {
 					vms = append(vms, vm.VM{
-						Name:         template.Name,
+						Name:         vm.Name(clusterName, 0),
 						Provider:     ProviderName,
 						Project:      prj,
 						Labels:       template.Properties.Labels,
