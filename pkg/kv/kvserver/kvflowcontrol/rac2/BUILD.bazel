@@ -7,6 +7,7 @@ go_library(
         "range_controller.go",
         "store_stream.go",
         "token_counter.go",
+        "token_tracker.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2",
     visibility = ["//visibility:public"],
@@ -29,6 +30,7 @@ go_test(
     srcs = [
         "priority_test.go",
         "token_counter_test.go",
+        "token_tracker_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":rac2"],

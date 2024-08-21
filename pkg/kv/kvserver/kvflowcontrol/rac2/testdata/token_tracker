@@ -1,0 +1,211 @@
+# This datadriven test file covers the functionality of the Tracker struct
+# in the rac2 package. It tests various scenarios including initialization,
+# tracking, untracking, and edge cases to ensure the correct behavior of
+# the Tracker.
+
+# Test initialization of the Tracker.
+# This ensures that a new Tracker is correctly initialized with an empty state.
+init
+----
+
+# Test basic tracking functionality.
+# We track multiple entries with different priorities and indices to verify
+# that the Tracker correctly handles various input combinations.
+track
+  index=10 inherited_pri=0 original_pri=0 tokens=100
+  index=20 inherited_pri=1 original_pri=0 tokens=200
+  index=30 inherited_pri=2 original_pri=1 tokens=300
+----
+actions:
+  tracked: index=10, og_pri=0, in_pri=0, tokens=100
+  tracked: index=20, og_pri=0, in_pri=1, tokens=200
+  tracked: index=30, og_pri=1, in_pri=2, tokens=300
+after:
+  0:  (tokens=100 og_pri=0 in_pri=0 index=10)
+  1:  (tokens=200 og_pri=0 in_pri=1 index=20)
+  2:  (tokens=300 og_pri=1 in_pri=2 index=30)
+
+# Test tracking with out-of-order indices.
+# This verifies that the Tracker maintains correct ordering even when entries
+# are not added in ascending index order.
+track
+  index=50 inherited_pri=1 original_pri=1 tokens=500
+  index=40 inherited_pri=0 original_pri=0 tokens=400
+----
+actions:
+  tracked: index=50, og_pri=1, in_pri=1, tokens=500
+  tracked: index=40, og_pri=0, in_pri=0, tokens=400
+after:
+  0:  (tokens=100 og_pri=0 in_pri=0 index=10)
+      (tokens=400 og_pri=0 in_pri=0 index=40)
+  1:  (tokens=200 og_pri=0 in_pri=1 index=20)
+      (tokens=500 og_pri=1 in_pri=1 index=50)
+  2:  (tokens=300 og_pri=1 in_pri=2 index=30)
+
+# Test tracking with duplicate indices.
+# This checks that the Tracker handles attempts to track entries with
+# already existing indices, which should not be allowed.
+track
+  index=30 inherited_pri=3 original_pri=3 tokens=3000
+----
+actions:
+  tracked: index=30, og_pri=3, in_pri=3, tokens=3000
+after:
+  0:  (tokens=100 og_pri=0 in_pri=0 index=10)
+      (tokens=400 og_pri=0 in_pri=0 index=40)
+  1:  (tokens=200 og_pri=0 in_pri=1 index=20)
+      (tokens=500 og_pri=1 in_pri=1 index=50)
+  2:  (tokens=300 og_pri=1 in_pri=2 index=30)
+
+# Test basic untracking functionality.
+# This verifies that the Tracker correctly untracks entries up to a given index.
+untrack 0 25
+----
+before:
+  0:  (tokens=100 og_pri=0 in_pri=0 index=10)
+      (tokens=400 og_pri=0 in_pri=0 index=40)
+  1:  (tokens=200 og_pri=0 in_pri=1 index=20)
+      (tokens=500 og_pri=1 in_pri=1 index=50)
+  2:  (tokens=300 og_pri=1 in_pri=2 index=30)
+actions:
+  untracked: index=10, og_pri=0, tokens=100
+  untracked: index=20, og_pri=0, tokens=200
+after:
+  0:  (tokens=400 og_pri=0 in_pri=0 index=40)
+  1:  (tokens=500 og_pri=1 in_pri=1 index=50)
+  2:  (tokens=300 og_pri=1 in_pri=2 index=30)
+
+# Test untracking with an index that doesn't exist.
+# This checks that the Tracker correctly handles untracking up to an index
+# that is not present in the tracked entries.
+untrack 1 45
+----
+before:
+  0:  (tokens=400 og_pri=0 in_pri=0 index=40)
+  1:  (tokens=500 og_pri=1 in_pri=1 index=50)
+  2:  (tokens=300 og_pri=1 in_pri=2 index=30)
+actions:
+after:
+  0:  (tokens=400 og_pri=0 in_pri=0 index=40)
+  1:  (tokens=500 og_pri=1 in_pri=1 index=50)
+  2:  (tokens=300 og_pri=1 in_pri=2 index=30)
+
+# Test untracking with a priority that has no entries.
+# This verifies that the Tracker correctly handles untracking for a priority
+# that doesn't have any tracked entries.
+untrack 3 100
+----
+before:
+  0:  (tokens=400 og_pri=0 in_pri=0 index=40)
+  1:  (tokens=500 og_pri=1 in_pri=1 index=50)
+  2:  (tokens=300 og_pri=1 in_pri=2 index=30)
+actions:
+after:
+  0:  (tokens=400 og_pri=0 in_pri=0 index=40)
+  1:  (tokens=500 og_pri=1 in_pri=1 index=50)
+  2:  (tokens=300 og_pri=1 in_pri=2 index=30)
+
+# Test untrack_ge functionality.
+# This checks that the Tracker correctly untracks all entries with indices
+# greater than or equal to the given index.
+untrack_ge 40
+----
+before:
+  0:  (tokens=400 og_pri=0 in_pri=0 index=40)
+  1:  (tokens=500 og_pri=1 in_pri=1 index=50)
+  2:  (tokens=300 og_pri=1 in_pri=2 index=30)
+actions:
+  untracked ge: index=40, og_pri=0, in_pri=0, tokens=400
+  untracked ge: index=50, og_pri=1, in_pri=1, tokens=500
+after:
+  2:  (tokens=300 og_pri=1 in_pri=2 index=30)
+
+# Test untrack_ge with an index that doesn't exist.
+# This verifies that the Tracker correctly handles untracking entries greater
+# than or equal to an index that is not present in the tracked entries.
+untrack_ge 35
+----
+before:
+  2:  (tokens=300 og_pri=1 in_pri=2 index=30)
+actions:
+after:
+  2:  (tokens=300 og_pri=1 in_pri=2 index=30)
+
+# Test untrack_all functionality.
+# This ensures that the Tracker correctly untracks all entries across all priorities.
+untrack_all
+----
+before:
+  2:  (tokens=300 og_pri=1 in_pri=2 index=30)
+untracked: 
+  (index=30, og_pri=1, in_pri=2, tokens=300)
+after:
+
+# Test tracking after untrack_all.
+# This verifies that the Tracker can correctly track new entries after
+# all previous entries have been untracked.
+track
+  index=60 inherited_pri=0 original_pri=0 tokens=600
+  index=70 inherited_pri=1 original_pri=1 tokens=700
+----
+actions:
+  tracked: index=60, og_pri=0, in_pri=0, tokens=600
+  tracked: index=70, og_pri=1, in_pri=1, tokens=700
+after:
+  0:  (tokens=600 og_pri=0 in_pri=0 index=60)
+  1:  (tokens=700 og_pri=1 in_pri=1 index=70)
+
+# Test edge case: tracking with maximum priority.
+# This checks that the Tracker correctly handles entries with the highest
+# possible priority (raftpb.NumPriorities - 1).
+track
+  index=80 inherited_pri=3 original_pri=3 tokens=800
+----
+actions:
+  tracked: index=80, og_pri=3, in_pri=3, tokens=800
+after:
+  0:  (tokens=600 og_pri=0 in_pri=0 index=60)
+  1:  (tokens=700 og_pri=1 in_pri=1 index=70)
+  3:  (tokens=800 og_pri=3 in_pri=3 index=80)
+
+# Test edge case: untracking with maximum priority.
+# This verifies that the Tracker correctly untracks entries with the highest
+# possible priority.
+untrack 3 90
+----
+before:
+  0:  (tokens=600 og_pri=0 in_pri=0 index=60)
+  1:  (tokens=700 og_pri=1 in_pri=1 index=70)
+  3:  (tokens=800 og_pri=3 in_pri=3 index=80)
+actions:
+  untracked: index=80, og_pri=3, tokens=800
+after:
+  0:  (tokens=600 og_pri=0 in_pri=0 index=60)
+  1:  (tokens=700 og_pri=1 in_pri=1 index=70)
+
+# Test edge case: tracking with zero tokens.
+# This checks that the Tracker correctly handles entries with zero tokens,
+# which might be an edge case in some systems.
+track
+  index=90 inherited_pri=2 original_pri=2 tokens=0
+----
+actions:
+  tracked: index=90, og_pri=2, in_pri=2, tokens=0
+after:
+  0:  (tokens=600 og_pri=0 in_pri=0 index=60)
+  1:  (tokens=700 og_pri=1 in_pri=1 index=70)
+  2:  (tokens=0 og_pri=2 in_pri=2 index=90)
+
+# Final untrack_all to clean up the Tracker state.
+# This ensures that all entries are untracked at the end of the test suite.
+untrack_all
+----
+before:
+  0:  (tokens=600 og_pri=0 in_pri=0 index=60)
+  1:  (tokens=700 og_pri=1 in_pri=1 index=70)
+  2:  (tokens=0 og_pri=2 in_pri=2 index=90)
+untracked: 
+  (index=60, og_pri=0, in_pri=0, tokens=600)
+  (index=70, og_pri=1, in_pri=1, tokens=700)
+  (index=90, og_pri=2, in_pri=2, tokens=0)
+after:
