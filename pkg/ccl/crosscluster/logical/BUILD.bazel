@@ -114,6 +114,7 @@ go_test(
         "//pkg/ccl/storageccl",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/repstream/streampb",
