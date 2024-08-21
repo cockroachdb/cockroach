@@ -3995,6 +3995,36 @@ value if you rely on the HLC for accuracy.`,
 			},
 		},
 	),
+	"lower_inf": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "range", Typ: types.Int8Range}},
+			ReturnType:        tree.FixedReturnType(types.Bool),
+			CalledOnNullInput: true,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				b := tree.MustBeDInt8Range(args[0])
+
+				res := b.StartBound.Typ == tree.RangeBoundNegInf || b.StartBound.Val == tree.DNull
+				dBoolRes := tree.DBool(res)
+				return &dBoolRes, nil
+			},
+		},
+	),
+	"upper_inf": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "range", Typ: types.Int8Range}},
+			ReturnType:        tree.FixedReturnType(types.Bool),
+			CalledOnNullInput: true,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				b := tree.MustBeDInt8Range(args[0])
+
+				res := b.EndBound.Typ == tree.RangeBoundInf || b.EndBound.Val == tree.DNull
+				dBoolRes := tree.DBool(res)
+				return &dBoolRes, nil
+			},
+		},
+	),
 
 	"range_merge": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryRange},

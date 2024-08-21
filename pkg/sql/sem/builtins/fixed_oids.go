@@ -2614,6 +2614,8 @@ var builtinOidsArray = []string{
 	2646: `lower(range: int8range) -> int`,
 	2647: `upper(range: int8range) -> int`,
 	2648: `isempty(range: int8range) -> bool`,
+	2649: `lower_inf(range: int8range) -> bool`,
+	2650: `upper_inf(range: int8range) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
