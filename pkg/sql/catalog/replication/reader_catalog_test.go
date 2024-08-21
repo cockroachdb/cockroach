@@ -90,6 +90,12 @@ func TestReaderCatalog(t *testing.T) {
 	compareConn("SELECT * FROM system.role_options")
 	compareConn("SELECT * FROM system.database_role_settings")
 
+	// Validate that sequences can be selected.
+	compareConn("SELECT * FROM sq1")
+
+	// Validate that sequence operations are blocked.
+	destRunner.ExpectErr(t, "cannot execute nextval\\(\\) in a read-only transaction", "SELECT nextval('sq1')")
+	destRunner.ExpectErr(t, "cannot execute setval\\(\\) in a read-only transaction", "SELECT setval('sq1', 32)")
 }
 func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
