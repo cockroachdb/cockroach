@@ -112,6 +112,19 @@ func (p *kvRowProcessor) ProcessRow(
 	}
 	p.lastRow = row
 
+	// TODO(dt, ssd): the rangefeed prev value does not include its mvcc ts, which
+	// is a problem for us if we want to use CPut to replace the old row with the
+	// new row, because our local version of the old row is likely to have the
+	// remote version's mvcc timestamp in its origin ts column, i.e. in the value.
+	// Without knowing the remote previous row's ts, we cannot exactly reconstruct
+	// the value of our local row to put in the expected value for a CPut.
+	// Instead, for now, we just don't use the direct CPut for anything other than
+	// inserts. If/when we have a LDR-flavor CPut (or if we move the TS out and
+	// decide that equal values negate LWW) we can remove this.
+	if prevValue.IsPresent() {
+		return p.fallback.processParsedRow(ctx, txn, row, keyValue.Key, prevValue)
+	}
+
 	if err := p.processParsedRow(ctx, txn, row, keyValue, prevValue); err != nil {
 		stats, err := p.fallback.processParsedRow(ctx, txn, row, keyValue.Key, prevValue)
 		if err == nil {
