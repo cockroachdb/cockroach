@@ -43,8 +43,7 @@ func TestTemp(t *testing.T) {
 						`)
 	require.NoError(t, err)
 	_, err = sqlDB.Exec(`
-						CREATE DATABASE t;
-						CREATE TABLE t.test (k INT8RANGE);
+						insert into t.test (k) values (int8range(1,5));
 						`)
 	require.NoError(t, err)
 	_, err = sqlDB.Query(`

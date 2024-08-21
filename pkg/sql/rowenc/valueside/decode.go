@@ -236,18 +236,23 @@ func DecodeUntaggedDatum(
 		return tree.NewDPGVector(vec), b, nil
 	case types.RangeFamily:
 		//TODO(janexing): add assertion.
-		sbTyp := tree.RangeBoundType(int(buf[0]))
-		ebTyp := tree.RangeBoundType(int(buf[1]))
-		buf = buf[2:]
-		var sbVal, ebVal int64
-		var err error
-		buf, sbVal, err = encoding.DecodeIntValue(buf)
+
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
-			return nil, buf, err
+			return nil, b, err
 		}
-		buf, ebVal, err = encoding.DecodeIntValue(buf)
+		sbTyp := tree.RangeBoundType(int(data[0]))
+		ebTyp := tree.RangeBoundType(int(data[1]))
+		data = data[2:]
+		var sbVal, ebVal int64
+		//var err error
+		data, sbVal, err = encoding.DecodeIntValue(data)
 		if err != nil {
-			return nil, buf, err
+			return nil, data, err
+		}
+		data, ebVal, err = encoding.DecodeIntValue(data)
+		if err != nil {
+			return nil, data, err
 		}
 		return tree.NewDInt8Range(tree.NewDInt(tree.DInt(sbVal)), tree.NewDInt(tree.DInt(ebVal)), sbTyp, ebTyp), buf, nil
 

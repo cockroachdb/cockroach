@@ -53,6 +53,7 @@ func DecodeTableValueToCol(
 
 	var err error
 	switch valTyp.Family() {
+
 	case types.BoolFamily:
 		var b bool
 		// A boolean's value is encoded in its tag directly, so we don't have an
