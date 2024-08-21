@@ -537,6 +537,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			dbs := make([]*gosql.DB, nodes-1)
 			for i := range dbs {
 				dbs[i] = c.Conn(ctx, t.L(), i+1)
+				defer dbs[i].Close()
 			}
 
 			err := WaitFor3XReplication(ctx, t, t.L(), dbs[0])
