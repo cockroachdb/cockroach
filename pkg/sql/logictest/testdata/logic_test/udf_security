@@ -1,0 +1,149 @@
+# LogicTest: !local-mixed-24.1 !local-mixed-24.2
+
+subtest basic_owner
+
+statement ok
+CREATE ROLE owner;
+CREATE ROLE invoker;
+
+statement ok
+CREATE TABLE top_secret_data (id INT, secret STRING);
+INSERT INTO top_secret_data VALUES (1, 'Top Secret');
+GRANT SELECT ON TABLE top_secret_data TO owner;
+
+statement ok
+SET ROLE owner;
+
+statement ok
+CREATE FUNCTION get_top_secret_data() RETURNS STRING LANGUAGE SQL SECURITY DEFINER AS $$
+    SELECT secret FROM top_secret_data;
+$$;
+
+statement ok
+SET ROLE invoker;
+
+# The invoker can execute the function, but not access the table directly.
+statement error pgcode 42501 user invoker does not have SELECT privilege on relation top_secret_data
+SELECT * FROM top_secret_data;
+
+query T
+SELECT get_top_secret_data();
+----
+Top Secret
+
+subtest end
+
+subtest block_alter
+
+statement error pgcode 42501 must be owner of function get_top_secret_data
+ALTER FUNCTION get_top_secret_data() SECURITY INVOKER;
+
+subtest end
+
+subtest alter_security
+
+# To change any invoker's ability to execute the function, we can alter the
+# function to be SECURITY INVOKER.
+statement ok
+SET ROLE owner;
+ALTER FUNCTION get_top_secret_data() SECURITY INVOKER;
+SET ROLE invoker;
+
+statement error pgcode 42501 user invoker does not have SELECT privilege on relation top_secret_data
+SELECT get_top_secret_data();
+
+subtest end
+
+subtest change_owner_privs
+
+# Ensure that the invoker inherits from the owner's privileges if the
+# privileges change.
+statement ok
+SET ROLE admin;
+REVOKE SELECT ON TABLE top_secret_data FROM owner;
+ALTER FUNCTION get_top_secret_data() SECURITY DEFINER;
+SET ROLE invoker;
+
+statement error pgcode 42501 user owner does not have SELECT privilege on relation top_secret_data
+SELECT get_top_secret_data();
+
+subtest end
+
+subtest creator_owner
+
+statement ok
+SET ROLE owner;
+CREATE TABLE secret_data (id INT, secret STRING);
+INSERT INTO secret_data VALUES (1, 'Secret');
+CREATE FUNCTION get_secret_data() RETURNS STRING LANGUAGE SQL SECURITY DEFINER AS $$
+    SELECT secret FROM secret_data;
+$$;
+
+# The creator still has implicit privileges on the table. This deviates from
+# postgres, but we can change the ownership of the table.
+statement ok
+REVOKE ALL ON TABLE secret_data FROM owner;
+
+query TTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON TABLE secret_data] WHERE grantee = 'owner';
+----
+database_name  schema_name  table_name   grantee  privilege_type  is_grantable
+test           public       secret_data  owner  ALL             true
+
+statement ok
+SET ROLE admin;
+ALTER TABLE secret_data OWNER TO testuser;
+
+query TTTTTB colnames
+SELECT * FROM [SHOW GRANTS ON TABLE secret_data] WHERE grantee = 'owner';
+----
+database_name  schema_name  table_name   grantee  privilege_type  is_grantable
+
+statement ok
+SET ROLE invoker;
+
+statement error pgcode 42501 user owner does not have SELECT privilege on relation top_secret_data
+SELECT get_top_secret_data();
+
+subtest end
+
+subtest change_owner
+
+statement ok;
+SET ROLE admin;
+ALTER FUNCTION get_secret_data() OWNER TO testuser;
+GRANT SELECT ON secret_data TO testuser;
+SET ROLE invoker;
+
+query T
+SELECT get_secret_data();
+----
+Secret
+
+subtest end
+
+subtest revoke_execute
+
+# Despite SECURITY DEFINER being set, the invoker can't execute the function
+# if it does not have proper privileges.
+statement ok;
+SET ROLE testuser;
+REVOKE ALL ON FUNCTION get_secret_data() FROM PUBLIC;
+SET ROLE invoker;
+
+statement error pgcode 42501 user invoker does not have EXECUTE privilege on function get_secret_data
+SELECT get_secret_data();
+
+subtest end
+
+subtest security_unsupported
+
+# We currently don't allow for routines to create roles. If we did, we would
+# likely want some createrole_self_grant session variable like postgres has.
+# https://www.postgresql.org/docs/current/runtime-config-client.html#GUC-CREATEROLE-SELF-GRANT.
+statement error pgcode 0A000 unimplemented: CREATE ROLE usage inside a function definition
+CREATE FUNCTION create_secret_role() RETURNS VOID LANGUAGE SQL SECURITY DEFINER AS $$
+    CREATE ROLE secret_role;
+$$;
+
+subtest end
