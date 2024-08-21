@@ -4440,7 +4440,8 @@ func listColumnNames(cols colinfo.ResultColumns) string {
 	return buf.String()
 }
 
-// crdbInternalRangesView exposes system ranges.
+// crdbInternalRangesView enhances crdb_internal.ranges_no_leases with
+// additional metadata about leaseholder and range size.
 var crdbInternalRangesView = virtualSchemaView{
 	schema: `
 CREATE VIEW crdb_internal.ranges AS SELECT ` +
@@ -4451,7 +4452,8 @@ CREATE VIEW crdb_internal.ranges AS SELECT ` +
 		colinfo.RangesExtraRenders +
 		`FROM crdb_internal.ranges_no_leases`,
 	resultColumns: colinfo.Ranges,
-	comment:       "ranges is a view which queries ranges_no_leases for system ranges",
+	comment: "ranges is like ranges_no_leases but with extra metadata about leaseholder " +
+		"and range size. The additional metadata may be NULL if the range is unavailable.",
 }
 
 // descriptorsByType is a utility function that iterates through a slice of

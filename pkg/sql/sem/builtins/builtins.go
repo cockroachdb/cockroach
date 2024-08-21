@@ -5843,14 +5843,19 @@ SELECT
 						Key: key,
 					},
 				})
-				if err := evalCtx.Txn.Run(ctx, b); err != nil {
-					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error fetching leaseholder")
+				if err := evalCtx.Txn.DB().Run(ctx, b); err != nil {
+					// Return NULL instead of an error to ensure the entire
+					// query to crdb_internal.lease_holder doesn't fail;
+					// instead, it will return partial results.
+					log.Errorf(ctx, "fetching leaseholder: %v", err)
+					return tree.DNull, nil //nolint:returnerrcheck
+				} else {
+					resp := b.RawResponse().Responses[0].GetInner().(*kvpb.LeaseInfoResponse)
+					return tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID)), nil
 				}
-				resp := b.RawResponse().Responses[0].GetInner().(*kvpb.LeaseInfoResponse)
-
-				return tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID)), nil
 			},
-			Info:       "This function is used to fetch the leaseholder corresponding to a request key",
+			Info: "This function is used to fetch the leaseholder corresponding to a request key. " +
+				"If an error is encountered (e.g. replica unavailability), NULL is returned.",
 			Volatility: volatility.Volatile,
 		},
 	),
@@ -6142,10 +6147,13 @@ SELECT
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
 				}
+				// Ignore errors to ensure the entire query to
+				// crdb_internal.range_stats doesn't fail; instead, it will
+				// return partial results.
 				resps, err := evalCtx.RangeStatsFetcher.RangeStats(ctx,
 					roachpb.Key(tree.MustBeDBytes(args[0])))
 				if err != nil {
-					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error fetching range stats")
+					log.Errorf(ctx, "fetching stats: %v", err)
 				}
 				jsonStr, err := gojson.Marshal(&resps[0].MVCCStats)
 				if err != nil {
@@ -6157,7 +6165,8 @@ SELECT
 				}
 				return jsonDatum, nil
 			},
-			Info:       "This function is used to retrieve range statistics information as a JSON object.",
+			Info: "This function is used to retrieve range statistics information as a JSON object. " +
+				"If an error is encountered (e.g. replica unavailability), empty stats are returned.",
 			Volatility: volatility.Volatile,
 		},
 	),
