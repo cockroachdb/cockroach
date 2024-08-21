@@ -94,6 +94,12 @@ type Reporter struct {
 
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs *TestingKnobs
+
+	// LastSuccessfulTelemetryPing records the current timestamp whenever
+	// we successfully make contact with the registration server. This
+	// timestamp will be updated regardless of whether the response we get
+	// back is successful or not.
+	LastSuccessfulTelemetryPing time.Time
 }
 
 // PeriodicallyReportDiagnostics starts a background worker that periodically
@@ -160,9 +166,20 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 	}
 	defer res.Body.Close()
 	b, err = io.ReadAll(res.Body)
-	if err != nil || res.StatusCode != http.StatusOK {
+	if err != nil {
 		log.Warningf(ctx, "failed to report node usage metrics: status: %s, body: %s, "+
 			"error: %v", res.Status, b, err)
+		return
+	}
+
+	// If `err` == nil then we assume that we've made successful contact
+	// with the telemetry server and any further problems are not the
+	// customer's fault. We update the telemetry timestamp before moving
+	// on with other request handling.
+	r.LastSuccessfulTelemetryPing = timeutil.Now()
+
+	if res.StatusCode != http.StatusOK {
+		log.Warningf(ctx, "failed to report node usage metrics: status: %s, body: %s", res.Status, b)
 		return
 	}
 	r.SQLServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
