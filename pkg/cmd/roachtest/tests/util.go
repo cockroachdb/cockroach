@@ -215,9 +215,7 @@ func setAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, en
 
 // UsingRuntimeAssertions returns true if calls to `t.Cockroach()` for
 // this test will return the cockroach build with runtime
-// assertions. Note that calling this function only makes sense if the
-// test uploads cockroach using `t.Cockroach` (instead of calling
-// t.StandardCockroach or t.RuntimeAssertionsCockroach directly).
+// assertions.
 func UsingRuntimeAssertions(t test.Test) bool {
 	return t.Cockroach() == t.RuntimeAssertionsCockroach()
 }

@@ -1672,6 +1672,7 @@ func (c *SyncedCluster) DistributeCerts(
 				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
 			}
 			cmd += fmt.Sprintf(`
+%[6]s
 rm -fr %[2]s
 mkdir -p %[2]s
 VERSION=$(%[1]s version --build-tag)
@@ -1685,7 +1686,7 @@ fi
 %[1]s cert create-client %[3]s --certs-dir=%[2]s --ca-key=%[2]s/ca.key $TENANT_SCOPE_OPT
 %[1]s cert create-node %[4]s --certs-dir=%[2]s --ca-key=%[2]s/ca.key
 tar cvf %[5]s %[2]s
-`, cockroachNodeBinary(c, 1), CockroachNodeCertsDir, DefaultUser, strings.Join(nodeNames, " "), certsTarName)
+`, cockroachNodeBinary(c, 1), CockroachNodeCertsDir, DefaultUser, strings.Join(nodeNames, " "), certsTarName, SuppressMetamorphicConstantsEnvVar())
 
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("init-certs"))
 		},
@@ -1729,11 +1730,12 @@ func (c *SyncedCluster) RedistributeNodeCert(ctx context.Context, l *logger.Logg
 				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
 			}
 			cmd += fmt.Sprintf(`
+%[6]s
 rm -fr %[2]s/node*
 mkdir -p %[2]s
 %[1]s cert create-node %[4]s --certs-dir=%[2]s --ca-key=%[2]s/ca.key
 tar cvf %[5]s %[2]s
-`, cockroachNodeBinary(c, 1), CockroachNodeCertsDir, DefaultUser, strings.Join(nodeNames, " "), certsTarName)
+`, cockroachNodeBinary(c, 1), CockroachNodeCertsDir, DefaultUser, strings.Join(nodeNames, " "), certsTarName, SuppressMetamorphicConstantsEnvVar())
 
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("redist-node-cert"))
 		},
@@ -1811,6 +1813,7 @@ func (c *SyncedCluster) createTenantCertBundle(
 				cmd += fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
 			}
 			cmd += fmt.Sprintf(`
+%[7]s
 CERT_DIR=%[1]s-%[5]d/certs
 CA_KEY=%[2]s/ca.key
 
@@ -1835,6 +1838,7 @@ tar cvf %[6]s $CERT_DIR
 				strings.Join(nodeNames, " "),
 				virtualClusterID,
 				bundleName,
+				SuppressMetamorphicConstantsEnvVar(),
 			)
 
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("create-tenant-cert-bundle"))

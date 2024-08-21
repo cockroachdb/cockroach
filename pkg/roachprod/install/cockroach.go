@@ -750,7 +750,7 @@ func (c *SyncedCluster) ExecSQL(
 			if c.IsLocal() {
 				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 			}
-			cmd += cockroachNodeBinary(c, node) + " sql --url " +
+			cmd += SuppressMetamorphicConstantsEnvVar() + " " + cockroachNodeBinary(c, node) + " sql --url " +
 				c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, authMode, database) + " " +
 				ssh.Escape(args)
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
@@ -1317,8 +1317,8 @@ func (c *SyncedCluster) generateClusterSettingCmd(
 	// store is used.
 	clusterSettingsCmd += fmt.Sprintf(`
 		if ! test -e %s ; then
-			COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e "%s" && mkdir -p %s && touch %s
-		fi`, path, startSQLTimeout, binary, url, clusterSettingsString, c.NodeDir(node, 1 /* storeIndex */), path)
+			%s COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e "%s" && mkdir -p %s && touch %s
+		fi`, path, SuppressMetamorphicConstantsEnvVar(), startSQLTimeout, binary, url, clusterSettingsString, c.NodeDir(node, 1 /* storeIndex */), path)
 	return clusterSettingsCmd, nil
 }
 
@@ -1337,8 +1337,8 @@ func (c *SyncedCluster) generateInitCmd(ctx context.Context, node Node) (string,
 	binary := cockroachNodeBinary(c, node)
 	initCmd += fmt.Sprintf(`
 		if ! test -e %[1]s ; then
-			COCKROACH_CONNECT_TIMEOUT=%[4]d %[2]s init --url %[3]s && touch %[1]s
-		fi`, path, binary, url, startSQLTimeout)
+			%[2]s COCKROACH_CONNECT_TIMEOUT=%[5]d %[3]s init --url %[4]s && touch %[1]s
+		fi`, path, SuppressMetamorphicConstantsEnvVar(), binary, url, startSQLTimeout)
 	return initCmd, nil
 }
 
@@ -1535,8 +1535,8 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 	}
 
 	url := c.NodeURL("localhost", port, startOpts.VirtualClusterName, serviceMode, AuthRootCert, "" /* database */)
-	fullCmd := fmt.Sprintf(`COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e %q`,
-		startSQLTimeout, binary, url, createScheduleCmd)
+	fullCmd := fmt.Sprintf(`%s COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e %q`,
+		SuppressMetamorphicConstantsEnvVar(), startSQLTimeout, binary, url, createScheduleCmd)
 	// Instead of using `c.ExecSQL()`, use `c.runCmdOnSingleNode()`, which allows us to
 	// 1) prefix the schedule backup cmd with COCKROACH_CONNECT_TIMEOUT.
 	// 2) run the command against the first node in the cluster target.
@@ -1565,4 +1565,17 @@ func getEnvVars() []string {
 		}
 	}
 	return sl
+}
+
+// SuppressMetamorphicConstantsEnvVar returns the env var to disable metamorphic testing.
+// This doesn't actually disable metamorphic constants for a test **unless** it is used
+// when starting the cluster. This does however suppress the metamorphic constants being
+// logged for every cockroach invocation, which while benign, can be very confusing as the
+// constants will be different than what the cockroach cluster is actually using.
+//
+// TODO(darrylwong): Ideally, the metamorphic constants framework would be smarter and only
+// log constants when asked for instead of unconditionally on init(). That way we can remove
+// this workaround and just log the constants once when the cluster is started.
+func SuppressMetamorphicConstantsEnvVar() string {
+	return config.DisableMetamorphicTestingEnvVar
 }

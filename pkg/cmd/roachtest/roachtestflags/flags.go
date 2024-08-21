@@ -185,6 +185,15 @@ var (
 			for tests that support 'arm64' (default 0)`,
 	})
 
+	CockroachEAProbability float64 = defaultCockroachEAProbability
+	_                              = registerRunFlag(&CockroachEAProbability, FlagInfo{
+		Name: "metamorphic-cockroach-ea-probability",
+		Usage: `
+			Probability that tests will be run with assertions enabled. A cockroach
+      binary built with the --crdb_test flag must be passed to --cockroach-ea
+      for assertions to be enabled.`,
+	})
+
 	// ArtifactsDir is a path to a local dir where the test logs and artifacts
 	// collected from cluster will be placed.
 	ArtifactsDir  string = "artifacts"
@@ -473,12 +482,13 @@ var (
 )
 
 const (
-	defaultEncryptionProbability = 1
-	defaultFIPSProbability       = 0
-	defaultARM64Probability      = 0
-	NeverUseSpot                 = "never"
-	AlwaysUseSpot                = "always"
-	AutoUseSpot                  = "auto"
+	defaultEncryptionProbability  = 1
+	defaultFIPSProbability        = 0
+	defaultARM64Probability       = 0
+	defaultCockroachEAProbability = 0
+	NeverUseSpot                  = "never"
+	AlwaysUseSpot                 = "always"
+	AutoUseSpot                   = "auto"
 )
 
 // FlagInfo contains the name and usage of a flag. Used to make the code

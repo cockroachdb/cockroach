@@ -324,6 +324,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		Cluster:          spec.MakeClusterSpec(0),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
+		CockroachBinary:  registry.StandardCockroach,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			<-ctx.Done()
 		},
@@ -335,7 +336,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 	}
 
 	out := buf.String()
-	timeoutRE := regexp.MustCompile(`(?m)^.*test timed out \(.*\)$`)
+	timeoutRE := regexp.MustCompile(`(?m)^.*test timed out \(.*\)`)
 	if !timeoutRE.MatchString(out) {
 		t.Fatalf("unable to find \"timed out\" message:\n%s", out)
 	}

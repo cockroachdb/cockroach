@@ -174,6 +174,8 @@ type Config struct {
 	// threads are not responsible for understanding the response messages, only
 	// for delivering them to the correct target after performing the storage
 	// write.
+	// TODO(#129411): deprecate !AsyncStorageWrites mode as it's not used in
+	// CRDB.
 	AsyncStorageWrites bool
 
 	// MaxSizePerMsg limits the max byte size of each append message. Smaller
