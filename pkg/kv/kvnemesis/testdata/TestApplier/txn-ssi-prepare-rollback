@@ -1,0 +1,8 @@
+echo
+----
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.SetIsoLevel(isolation.Serializable)
+  txn.Put(ctx, tk(5), sv(5)) // @<ts> <nil>
+  txn.Prepare(ctx)
+  return errors.New("rollback")
+}) // rollback

@@ -309,22 +309,46 @@ func TestRandStep(t *testing.T) {
 			} else if o.Type == ClosureTxnType_Commit {
 				switch o.IsoLevel {
 				case isolation.Serializable:
-					counts.ClosureTxn.CommitSerializable++
+					if o.Prepare {
+						counts.ClosureTxn.PrepareCommitSerializable++
+					} else {
+						counts.ClosureTxn.CommitSerializable++
+					}
 				case isolation.Snapshot:
-					counts.ClosureTxn.CommitSnapshot++
+					if o.Prepare {
+						counts.ClosureTxn.PrepareCommitSnapshot++
+					} else {
+						counts.ClosureTxn.CommitSnapshot++
+					}
 				case isolation.ReadCommitted:
-					counts.ClosureTxn.CommitReadCommitted++
+					if o.Prepare {
+						counts.ClosureTxn.PrepareCommitReadCommitted++
+					} else {
+						counts.ClosureTxn.CommitReadCommitted++
+					}
 				default:
 					t.Fatalf("unexpected isolation level %s", o.IsoLevel)
 				}
 			} else if o.Type == ClosureTxnType_Rollback {
 				switch o.IsoLevel {
 				case isolation.Serializable:
-					counts.ClosureTxn.RollbackSerializable++
+					if o.Prepare {
+						counts.ClosureTxn.PrepareRollbackSerializable++
+					} else {
+						counts.ClosureTxn.RollbackSerializable++
+					}
 				case isolation.Snapshot:
-					counts.ClosureTxn.RollbackSnapshot++
+					if o.Prepare {
+						counts.ClosureTxn.PrepareRollbackSnapshot++
+					} else {
+						counts.ClosureTxn.RollbackSnapshot++
+					}
 				case isolation.ReadCommitted:
-					counts.ClosureTxn.RollbackReadCommitted++
+					if o.Prepare {
+						counts.ClosureTxn.PrepareRollbackReadCommitted++
+					} else {
+						counts.ClosureTxn.RollbackReadCommitted++
+					}
 				default:
 					t.Fatalf("unexpected isolation level %s", o.IsoLevel)
 				}

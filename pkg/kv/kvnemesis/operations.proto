@@ -36,6 +36,7 @@ message ClosureTxnOperation {
   BatchOperation commit_in_batch = 3;
   ClosureTxnType type = 4;
   cockroach.kv.kvserver.concurrency.isolation.Level iso_level = 7;
+  bool prepare = 8;
   Result result = 5 [(gogoproto.nullable) = false];
   roachpb.Transaction txn = 6;
 }

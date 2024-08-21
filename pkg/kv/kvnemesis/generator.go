@@ -90,6 +90,24 @@ type ClosureTxnConfig struct {
 	// via the CommitInBatchMethod. This is an important part of the 1pc txn
 	// fastpath.
 	CommitReadCommittedInBatch int
+	// PrepareCommitSerializable is a serializable transaction that prepares and
+	// then commits normally.
+	PrepareCommitSerializable int
+	// PrepareCommitSnapshot is a snapshot transaction that prepares and then
+	// commits normally.
+	PrepareCommitSnapshot int
+	// PrepareCommitReadCommitted is a read committed transaction that prepares
+	// and then commits normally.
+	PrepareCommitReadCommitted int
+	// PrepareRollbackSerializable is a serializable transaction that prepares and
+	// encounters an (external) error at the end and has to roll back.
+	PrepareRollbackSerializable int
+	// PrepareRollbackSnapshot is a snapshot transaction that prepares and
+	// encounters an (external) error at the end and has to roll back.
+	PrepareRollbackSnapshot int
+	// PrepareRollbackReadCommitted is a read committed transaction that prepares
+	// and encounters an (external) error at the end and has to roll back.
+	PrepareRollbackReadCommitted int
 
 	TxnClientOps ClientOperationConfig
 	TxnBatchOps  BatchOperationConfig
@@ -413,19 +431,25 @@ func newAllOperationsConfig() GeneratorConfig {
 		DB:    clientOpConfig,
 		Batch: batchOpConfig,
 		ClosureTxn: ClosureTxnConfig{
-			CommitSerializable:         2,
-			CommitSnapshot:             2,
-			CommitReadCommitted:        2,
-			RollbackSerializable:       2,
-			RollbackSnapshot:           2,
-			RollbackReadCommitted:      2,
-			CommitSerializableInBatch:  2,
-			CommitSnapshotInBatch:      2,
-			CommitReadCommittedInBatch: 2,
-			TxnClientOps:               clientOpConfig,
-			TxnBatchOps:                batchOpConfig,
-			CommitBatchOps:             clientOpConfig,
-			SavepointOps:               savepointConfig,
+			CommitSerializable:           2,
+			CommitSnapshot:               2,
+			CommitReadCommitted:          2,
+			RollbackSerializable:         2,
+			RollbackSnapshot:             2,
+			RollbackReadCommitted:        2,
+			CommitSerializableInBatch:    2,
+			CommitSnapshotInBatch:        2,
+			CommitReadCommittedInBatch:   2,
+			PrepareCommitSerializable:    1,
+			PrepareCommitSnapshot:        1,
+			PrepareCommitReadCommitted:   1,
+			PrepareRollbackSerializable:  1,
+			PrepareRollbackSnapshot:      1,
+			PrepareRollbackReadCommitted: 1,
+			TxnClientOps:                 clientOpConfig,
+			TxnBatchOps:                  batchOpConfig,
+			CommitBatchOps:               clientOpConfig,
+			SavepointOps:                 savepointConfig,
 		},
 		Split: SplitConfig{
 			SplitNew:   1,
@@ -1477,29 +1501,43 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 func (g *generator) registerClosureTxnOps(allowed *[]opGen, c *ClosureTxnConfig) {
 	const Commit, Rollback = ClosureTxnType_Commit, ClosureTxnType_Rollback
 	const SSI, SI, RC = isolation.Serializable, isolation.Snapshot, isolation.ReadCommitted
+	const Prepare, NoPrepare = true, false
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSerializable)
+		makeClosureTxn(Commit, SSI, NoPrepare, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSnapshot)
+		makeClosureTxn(Commit, SI, NoPrepare, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSnapshot)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, RC, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitReadCommitted)
+		makeClosureTxn(Commit, RC, NoPrepare, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitReadCommitted)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSerializable)
+		makeClosureTxn(Rollback, SSI, NoPrepare, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSnapshot)
+		makeClosureTxn(Rollback, SI, NoPrepare, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSnapshot)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, RC, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackReadCommitted)
+		makeClosureTxn(Rollback, RC, NoPrepare, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackReadCommitted)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSerializableInBatch)
+		makeClosureTxn(Commit, SSI, NoPrepare, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSerializableInBatch)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSnapshotInBatch)
+		makeClosureTxn(Commit, SI, NoPrepare, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSnapshotInBatch)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, RC, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitReadCommittedInBatch)
+		makeClosureTxn(Commit, RC, NoPrepare, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitReadCommittedInBatch)
+	addOpGen(allowed,
+		makeClosureTxn(Commit, SSI, Prepare, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.PrepareCommitSerializable)
+	addOpGen(allowed,
+		makeClosureTxn(Commit, SI, Prepare, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.PrepareCommitSnapshot)
+	addOpGen(allowed,
+		makeClosureTxn(Commit, RC, Prepare, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.PrepareCommitReadCommitted)
+	addOpGen(allowed,
+		makeClosureTxn(Rollback, SSI, Prepare, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.PrepareRollbackSerializable)
+	addOpGen(allowed,
+		makeClosureTxn(Rollback, SI, Prepare, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.PrepareRollbackSnapshot)
+	addOpGen(allowed,
+		makeClosureTxn(Rollback, RC, Prepare, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.PrepareRollbackReadCommitted)
 }
 
 func makeClosureTxn(
 	txnType ClosureTxnType,
 	iso isolation.Level,
+	prepare bool,
 	txnClientOps *ClientOperationConfig,
 	txnBatchOps *BatchOperationConfig,
 	commitInBatch *ClientOperationConfig,
@@ -1532,9 +1570,13 @@ func makeClosureTxn(
 			maybeUpdateSavepoints(&spIDs, ops[i])
 		}
 		op := closureTxn(txnType, iso, ops...)
+		op.ClosureTxn.Prepare = prepare
 		if commitInBatch != nil {
 			if txnType != ClosureTxnType_Commit {
 				panic(errors.AssertionFailedf(`CommitInBatch must commit got: %s`, txnType))
+			}
+			if prepare {
+				panic(errors.AssertionFailedf(`CommitInBatch cannot prepare`))
 			}
 			op.ClosureTxn.CommitInBatch = makeRandBatch(commitInBatch)(g, rng).Batch
 		}
@@ -1766,6 +1808,12 @@ func closureTxn(typ ClosureTxnType, iso isolation.Level, ops ...Operation) Opera
 
 func closureTxnSSI(typ ClosureTxnType, ops ...Operation) Operation {
 	return closureTxn(typ, isolation.Serializable, ops...)
+}
+
+func closureTxnPrepare(typ ClosureTxnType, iso isolation.Level, ops ...Operation) Operation {
+	o := closureTxn(typ, iso, ops...)
+	o.ClosureTxn.Prepare = true
+	return o
 }
 
 func closureTxnCommitInBatch(
