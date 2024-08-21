@@ -1370,7 +1370,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(16)),
 		Leases:           registry.MetamorphicLeases,
 		RequiresLicense:  true,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
