@@ -1820,7 +1820,7 @@ type StreamingTestingKnobs struct {
 
 	// BeforeClientSubscribe allows observation of parameters about to be passed
 	// to a streaming client
-	BeforeClientSubscribe func(addr string, token string, frontier span.Frontier)
+	BeforeClientSubscribe func(addr string, token string, frontier span.Frontier, filterRangefeed bool)
 
 	// BeforeIngestionStart allows blocking the stream ingestion job
 	// before a stream ingestion happens.
