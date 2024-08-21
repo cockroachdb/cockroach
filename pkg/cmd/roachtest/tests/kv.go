@@ -540,6 +540,11 @@ func registerKVGracefulDraining(r registry.Registry) {
 			err := WaitFor3XReplication(ctx, t, t.L(), dbs[0])
 			require.NoError(t, err)
 
+			// TODO(baptist): Remove setting once #129427 is addressed.
+			if _, err := dbs[0].ExecContext(ctx, "SET CLUSTER SETTING kv.store_gossip.max_frequency = '0s'"); err != nil {
+				t.Fatalf("failed to disable load based splitting: %v", err)
+			}
+
 			t.Status("initializing workload")
 
 			// Initialize the database with a lot of ranges so that there are
