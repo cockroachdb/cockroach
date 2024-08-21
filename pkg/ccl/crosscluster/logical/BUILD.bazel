@@ -68,6 +68,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/log",
