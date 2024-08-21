@@ -616,37 +616,11 @@ func registerKVGracefulDraining(r registry.Registry) {
 					t.Status("letting workload run with all nodes")
 					select {
 					case <-ctx.Done():
-						return
+						t.Fatalf("context cancelled while waiting")
 					case <-time.After(2 * time.Minute):
 					}
 				}
-				// Graceful drain and allow it to complete. The liveness record is
-				// updated at the beginning of the drain process, so by time the drain
-				// completes in ~5s all other nodes should "know" it is draining.
-				cmd := fmt.Sprintf("./cockroach node drain --certs-dir=%s --port={pgport%s} --self", install.CockroachNodeCertsDir, restartNode)
-				c.Run(ctx, option.WithNodes(restartNode), cmd)
-				// Simulate a hard network drop to this node prior to shutting it down.
-				// This is what we see in some customer environments. As an example, a
-				// docker container shutdown will also disappear from the network and
-				// drop all packets in both directions.
-				// TODO(baptist): Convert this to use a network partitioning
-				// utility function.
-				if !c.IsLocal() {
-					c.Run(ctx, option.WithNodes(restartNode), `sudo iptables -A INPUT -p tcp --dport 26257 -j DROP`)
-					c.Run(ctx, option.WithNodes(restartNode), `sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP`)
-				}
-				c.Stop(ctx, t.L(), option.DefaultStopOpts(), restartNode)
-				t.Status("letting workload run with one node down")
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(1 * time.Minute):
-				}
-				// Clean up the iptables rule before restarting.
-				if !c.IsLocal() {
-					c.Run(ctx, option.WithNodes(restartNode), `sudo iptables -F`)
-				}
-				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), restartNode)
+				drainWithIpTables(ctx, restartNode, c, t)
 				m.ResetDeaths()
 			}
 
@@ -666,6 +640,40 @@ func registerKVGracefulDraining(r registry.Registry) {
 			m.Wait()
 		},
 	})
+}
+
+// drainWithIpTables does a graceful drain and allows it to complete. The
+// liveness record is updated at the beginning of the drain process, so by time
+// the drain completes in ~5s all other nodes should "know" it is draining.
+func drainWithIpTables(
+	ctx context.Context, restartNode option.NodeListOption, c cluster.Cluster, t test.Test,
+) {
+	cmd := fmt.Sprintf("./cockroach node drain --certs-dir=%s --port={pgport%s} --self", install.CockroachNodeCertsDir, restartNode)
+	c.Run(ctx, option.WithNodes(restartNode), cmd)
+
+	// Simulate a hard network drop to this node prior to shutting it down. This
+	// is what we see in some customer environments. As an example, a docker
+	// container shutdown will also disappear from the network and drop all
+	// packets in both directions.
+	// TODO(baptist): Convert this to use a network partitioning utility.
+	if !c.IsLocal() {
+		c.Run(ctx, option.WithNodes(restartNode), `sudo iptables -A INPUT -p tcp --dport 26257 -j DROP`)
+		c.Run(ctx, option.WithNodes(restartNode), `sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP`)
+		// NB: We don't use the original context as it might be cancelled.
+		defer c.Run(context.Background(), option.WithNodes(restartNode), `sudo iptables -F`)
+	}
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), restartNode)
+
+	t.Status("letting workload run with one node down")
+	select {
+	case <-ctx.Done():
+		t.Fatalf("context cancelled while waiting")
+	case <-time.After(1 * time.Minute):
+	}
+
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.SkipInit = true
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), restartNode)
 }
 
 func registerKVSplits(r registry.Registry) {
