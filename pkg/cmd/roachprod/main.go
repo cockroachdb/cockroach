@@ -162,7 +162,11 @@ Cloud cluster has to be a managed cluster (i.e., a cluster created with the
 gce-managed flag). The new nodes will use the instance template that was used to
 create the cluster originally (Nodes will be created in the same zone as the
 existing nodes, or if the cluster is geographically distributed, the nodes will
-be fairly distributed across the zones of the cluster).
+be fairly distributed across the zones of the cluster, unless zones are specified).
+
+If zones are specified, new nodes will be distributed to the specified zones only.
+A weight can be specified for each zone to control the distribution of nodes across
+the zones.
 `,
 	Args: cobra.ExactArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
@@ -170,7 +174,7 @@ be fairly distributed across the zones of the cluster).
 		if err != nil || count < 1 {
 			return errors.Wrapf(err, "invalid num-nodes argument")
 		}
-		return roachprod.Grow(context.Background(), config.Logger, args[0], isSecure, int(count))
+		return roachprod.Grow(context.Background(), config.Logger, args[0], isSecure, int(count), growZones)
 	}),
 }
 

@@ -362,7 +362,7 @@ func CreateCluster(l *logger.Logger, opts []*ClusterCreateOpts) error {
 }
 
 // GrowCluster adds new nodes to an existing cluster.
-func GrowCluster(l *logger.Logger, c *Cluster, numNodes int) error {
+func GrowCluster(l *logger.Logger, c *Cluster, numNodes int, zones []string) error {
 	names := make([]string, 0, numNodes)
 	offset := len(c.VMs) + 1
 	for i := offset; i < offset+numNodes; i++ {
@@ -380,7 +380,7 @@ func GrowCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 		}
 	}
 	return vm.ForProvider(provider, func(p vm.Provider) error {
-		return p.Grow(l, c.VMs, c.Name, names)
+		return p.Grow(l, c.VMs, c.Name, names, zones)
 	})
 }
 

@@ -36,6 +36,7 @@ var (
 	pprofOpts             roachprod.PprofOpts
 	numNodes              int
 	numRacks              int
+	growZones             []string
 	username              string
 	database              string
 	dryrun                bool
@@ -187,6 +188,9 @@ func initFlags() {
 		"mine", "m", false, "Show only clusters belonging to the current user")
 	listCmd.Flags().StringVar(&listPattern,
 		"pattern", "", "Show only clusters matching the regex pattern. Empty string matches everything.")
+
+	growCmd.Flags().StringSliceVar(&growZones,
+		"zones", nil, "existing zones to grow. If zones are formatted as AZ:N where N is an integer, the zone will be repeated N times.")
 
 	adminurlCmd.Flags().StringVar(&adminurlPath,
 		"path", "/", "Path to add to URL (e.g. to open a same page on each node)")

@@ -124,7 +124,9 @@ func (p *provider) Create(
 }
 
 // Grow implements vm.Provider and returns Unimplemented.
-func (p *provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names []string) error {
+func (p *provider) Grow(
+	l *logger.Logger, vms vm.List, clusterName string, names, zones []string,
+) error {
 	return errors.Newf("%s", p.unimplemented)
 }
 

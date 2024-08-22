@@ -22,8 +22,10 @@ type dynamicClusterImpl struct {
 }
 
 // Grow adds nodes to the cluster.
-func (c *clusterImpl) Grow(ctx context.Context, l *logger.Logger, nodeCount int) error {
-	err := roachprod.Grow(ctx, l, c.name, c.IsSecure(), nodeCount)
+func (c *clusterImpl) Grow(
+	ctx context.Context, l *logger.Logger, nodeCount int, zones []string,
+) error {
+	err := roachprod.Grow(ctx, l, c.name, c.IsSecure(), nodeCount, zones)
 	if err != nil {
 		return err
 	}

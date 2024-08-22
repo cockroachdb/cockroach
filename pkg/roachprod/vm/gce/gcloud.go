@@ -1754,7 +1754,9 @@ func (p *Provider) Shrink(l *logger.Logger, vmsToDelete vm.List, clusterName str
 	return waitForGroupStability(l, project, groupName, maps.Keys(vmZones))
 }
 
-func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names []string) error {
+func (p *Provider) Grow(
+	l *logger.Logger, vms vm.List, clusterName string, names, zones []string,
+) error {
 	if !isManaged(vms) {
 		return errors.New("growing is only supported for managed instance groups")
 	}
@@ -1766,11 +1768,39 @@ func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names
 		return err
 	}
 
-	newNodeCount := len(names)
-	sort.Slice(groups, func(i, j int) bool {
-		return groups[i].Size < groups[j].Size
-	})
-	addCounts := computeGrowDistribution(groups, newNodeCount)
+	var addCounts []int
+	// If zones are specified, we distribute the new nodes across the zones.
+	if len(zones) > 0 {
+		expandedZones, err := vm.ExpandZonesFlag(zones)
+		if err != nil {
+			return err
+		}
+		nodesAdded := 0
+		addCounts = make([]int, len(groups))
+	outer:
+		for _, zone := range expandedZones {
+			zoneFound := false
+			for groupIdx, group := range groups {
+				if group.Zone[strings.LastIndex(group.Zone, "/")+1:] == zone {
+					zoneFound = true
+					addCounts[groupIdx]++
+					if nodesAdded++; nodesAdded == len(names) {
+						break outer
+					}
+					break
+				}
+			}
+			if !zoneFound {
+				return errors.Newf("no group has zone %q in cluster %q", zone, clusterName)
+			}
+		}
+	} else {
+		newNodeCount := len(names)
+		sort.Slice(groups, func(i, j int) bool {
+			return groups[i].Size < groups[j].Size
+		})
+		addCounts = computeGrowDistribution(groups, newNodeCount)
+	}
 
 	zoneToHostNames := make(map[string][]string)
 	var g errgroup.Group

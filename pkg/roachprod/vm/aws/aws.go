@@ -713,7 +713,7 @@ func (p *Provider) Create(
 	return p.waitForIPs(l, names, regions, providerOpts)
 }
 
-func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) error {
+func (p *Provider) Grow(*logger.Logger, vm.List, string, []string, []string) error {
 	return vm.UnimplementedError
 }
 

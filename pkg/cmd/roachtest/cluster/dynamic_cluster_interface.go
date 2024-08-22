@@ -20,6 +20,6 @@ import (
 // operations that mutate the underlying cluster topology.
 type DynamicCluster interface {
 	Cluster
-	Grow(ctx context.Context, l *logger.Logger, nodeCount int) error
+	Grow(ctx context.Context, l *logger.Logger, nodeCount int, zones []string) error
 	Shrink(ctx context.Context, l *logger.Logger, nodeCount int) error
 }

@@ -73,7 +73,7 @@ func resizeCluster(
 
 	// Grow the cluster, but keep track of the original cluster size.
 	origClusterSize := c.Spec().NodeCount
-	err = dynamicCluster.Grow(ctx, o.L(), growCount)
+	err = dynamicCluster.Grow(ctx, o.L(), growCount, nil /* zones */)
 	if err != nil {
 		o.Fatal(err)
 	}

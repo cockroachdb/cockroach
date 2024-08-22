@@ -156,7 +156,7 @@ func (p *Provider) AttachVolume(*logger.Logger, vm.Volume, *vm.VM) (string, erro
 	return "", vm.UnimplementedError
 }
 
-func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) error {
+func (p *Provider) Grow(*logger.Logger, vm.List, string, []string, []string) error {
 	return vm.UnimplementedError
 }
 

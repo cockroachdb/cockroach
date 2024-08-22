@@ -279,7 +279,9 @@ func (p *Provider) Create(
 	return nil
 }
 
-func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names []string) error {
+func (p *Provider) Grow(
+	l *logger.Logger, vms vm.List, clusterName string, names, zones []string,
+) error {
 	now := timeutil.Now()
 	offset := p.clusters[clusterName].VMs.Len()
 	for i := range names {

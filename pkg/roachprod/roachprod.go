@@ -1644,7 +1644,12 @@ func Create(
 }
 
 func Grow(
-	ctx context.Context, l *logger.Logger, clusterName string, secure bool, numNodes int,
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	secure bool,
+	numNodes int,
+	zones []string,
 ) error {
 	if numNodes <= 0 || numNodes >= 1000 {
 		// Upper limit is just for safety.
@@ -1656,7 +1661,7 @@ func Grow(
 		return err
 	}
 
-	err = cloud.GrowCluster(l, &c.Cluster, numNodes)
+	err = cloud.GrowCluster(l, &c.Cluster, numNodes, zones)
 	if err != nil {
 		return err
 	}
