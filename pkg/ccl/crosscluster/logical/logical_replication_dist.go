@@ -57,7 +57,7 @@ func constructLogicalReplicationWriterSpecs(
 		destID := matcher.FindMatch(candidate.ClosestDestIDs)
 		partition := candidate.Partition
 
-		log.Infof(ctx, "logical replication src-dst pair candidate: %s (locality %s) - %d ("+
+		log.VInfof(ctx, 2, "logical replication src-dst pair candidate: %s (locality %s) - %d ("+
 			"locality %s)",
 			partition.ID,
 			partition.SrcLocality,

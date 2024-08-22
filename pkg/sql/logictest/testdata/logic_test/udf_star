@@ -111,6 +111,7 @@ f_subquery  CREATE FUNCTION public.f_subquery()
               NOT LEAKPROOF
               CALLED ON NULL INPUT
               LANGUAGE SQL
+              SECURITY INVOKER
               AS $$
               SELECT bar.a FROM (SELECT a FROM (SELECT t_onecol.a FROM test.public.t_onecol) AS foo) AS bar;
             $$
@@ -124,6 +125,7 @@ f_allcolsel_alias  CREATE FUNCTION public.f_allcolsel_alias()
                      NOT LEAKPROOF
                      CALLED ON NULL INPUT
                      LANGUAGE SQL
+                     SECURITY INVOKER
                      AS $$
                      SELECT t1.a, t1.b FROM test.public.t_twocol AS t1, test.public.t_twocol AS t2 WHERE t1.a = t2.a;
                    $$

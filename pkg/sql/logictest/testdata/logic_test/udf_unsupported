@@ -57,6 +57,7 @@ CREATE FUNCTION public.test_vf_f()
   NOT LEAKPROOF
   CALLED ON NULL INPUT
   LANGUAGE SQL
+  SECURITY INVOKER
   AS $$
   SELECT lower('hello':::STRING);
 $$

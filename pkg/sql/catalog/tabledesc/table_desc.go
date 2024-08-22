@@ -292,6 +292,22 @@ func UpdateIndexPartitioning(
 	return true
 }
 
+// NewPartitioning creates a new catalog.paritioning from the given
+// partitioning descriptor. If the partitioning descriptor is nil, the resulting
+// partitioning will have the default value for each entry.
+func NewPartitioning(partDesc *catpb.PartitioningDescriptor) catalog.Partitioning {
+	if partDesc != nil {
+		return &partitioning{desc: partDesc}
+	}
+	partDesc = &catpb.PartitioningDescriptor{
+		NumColumns:         0,
+		NumImplicitColumns: 0,
+		List:               nil,
+		Range:              nil,
+	}
+	return partitioning{desc: partDesc}
+}
+
 // GetPrimaryIndex implements the TableDescriptor interface.
 func (desc *wrapper) GetPrimaryIndex() catalog.UniqueWithIndexConstraint {
 	return desc.getExistingOrNewIndexCache().primary
@@ -339,7 +355,7 @@ func (desc *wrapper) NonDropIndexes() []catalog.Index {
 	return desc.getExistingOrNewIndexCache().nonDrop
 }
 
-// NonDropIndexes returns a slice of all partial indexes in the underlying
+// PartialIndexes returns a slice of all partial indexes in the underlying
 // proto, in their canonical order. This is equivalent to taking the slice
 // produced by AllIndexes and filtering indexes with non-empty expressions.
 func (desc *wrapper) PartialIndexes() []catalog.Index {
