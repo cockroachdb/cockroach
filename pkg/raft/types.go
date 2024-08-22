@@ -38,21 +38,21 @@ func pbEntryID(entry *pb.Entry) entryID {
 	return entryID{term: entry.Term, index: entry.Index}
 }
 
-// logMark is a position in a log consistent with the leader at a specific term.
+// LogMark is a position in a log consistent with the leader at a specific term.
 //
 // This is different from entryID. The entryID ties an entry to the term of the
-// leader who proposed it, while the logMark identifies an entry in a particular
+// leader who proposed it, while the LogMark identifies an entry in a particular
 // leader's coordinate system. Different leaders can have different entries at a
 // particular index.
 //
 // Generally, all entries in raft form a tree (branching when a new leader
-// starts proposing entries at its term). A logMark identifies a position in a
+// starts proposing entries at its term). A LogMark identifies a position in a
 // particular branch of this tree.
-type logMark struct {
-	// term is the term of the leader whose log is considered.
-	term uint64
-	// index is the position in this leader's log.
-	index uint64
+type LogMark struct {
+	// Term is the term of the leader whose log is considered.
+	Term uint64
+	// Index is the position in this leader's log.
+	Index uint64
 }
 
 // logSlice describes a correct slice of a raft log.
@@ -108,9 +108,9 @@ func (s logSlice) lastEntryID() entryID {
 	return s.prev
 }
 
-// mark returns the logMark identifying the end of this logSlice.
-func (s logSlice) mark() logMark {
-	return logMark{term: s.term, index: s.lastIndex()}
+// mark returns the LogMark identifying the end of this logSlice.
+func (s logSlice) mark() LogMark {
+	return LogMark{Term: s.term, Index: s.lastIndex()}
 }
 
 // termAt returns the term of the entry at the given index.
@@ -153,7 +153,7 @@ func (s logSlice) valid() error {
 // observed this committed state.
 //
 // Semantically, from the log perspective, this type is equivalent to a logSlice
-// from 0 to lastEntryID(), plus a commit logMark. All leader logs at terms >=
+// from 0 to lastEntryID(), plus a commit LogMark. All leader logs at terms >=
 // snapshot.term contain all entries up to the lastEntryID(). At earlier terms,
 // logs may or may not be consistent with this snapshot, depending on whether
 // they contain the lastEntryID().
@@ -186,10 +186,10 @@ func (s snapshot) lastEntryID() entryID {
 	return entryID{term: s.snap.Metadata.Term, index: s.snap.Metadata.Index}
 }
 
-// mark returns committed logMark of this snapshot, in the coordinate system of
+// mark returns committed LogMark of this snapshot, in the coordinate system of
 // the leader who observes this committed state.
-func (s snapshot) mark() logMark {
-	return logMark{term: s.term, index: s.snap.Metadata.Index}
+func (s snapshot) mark() LogMark {
+	return LogMark{Term: s.term, Index: s.snap.Metadata.Index}
 }
 
 // valid returns nil iff the snapshot is well-formed.
