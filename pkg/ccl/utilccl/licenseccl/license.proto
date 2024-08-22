@@ -20,6 +20,8 @@ message License {
       NonCommercial = 0;
       Enterprise = 1;
       Evaluation = 2;
+      Free = 3;
+      Trial = 4;
     }
 
     Type type = 3;
@@ -37,4 +39,7 @@ message License {
     }
 
     Usage usage = 5;
+
+    bytes license_id = 6;
+    bytes organization_id = 7;
 }
