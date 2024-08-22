@@ -270,6 +270,31 @@ func (cv ClusterVersion) Encode() []byte {
 	return encoded
 }
 
+// FenceVersion is the fence version -- the internal immediately prior -- for
+// the given version.
+//
+// Fence versions allow the upgrades infrastructure to safely step through
+// consecutive cluster versions in the presence of Nodes (running any binary
+// version) being added to the cluster. See the upgrademanager package for
+// intended usage.
+//
+// Fence versions (and the upgrades infrastructure entirely) were introduced in
+// the 21.1 release cycle. In the same release cycle, we introduced the
+// invariant that new user-defined versions (users being crdb engineers) must
+// always have even-numbered Internal versions, thus reserving the odd numbers
+// to slot in fence versions for each cluster version. See top-level
+// documentation in the clusterversion package for more details.
+func (cv ClusterVersion) FenceVersion() ClusterVersion {
+	if (cv.Internal % 2) != 0 {
+		panic(errors.Newf("only even numbered internal versions allowed, found %s", cv.Version))
+	}
+	// NB: Internal may be negative after this. This is the case for all final
+	// versions for a release.
+	fenceCV := cv
+	fenceCV.Internal--
+	return fenceCV
+}
+
 var _ settings.ClusterVersionImpl = ClusterVersion{}
 
 // EncodingFromVersionStr is a shorthand to generate an encoded cluster version
