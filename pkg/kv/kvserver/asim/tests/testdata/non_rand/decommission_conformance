@@ -22,9 +22,14 @@ satisfiable:
 validation result:
 	1.zone:
 	2.region:
-		a: 1 non_voters
+		a: 1 non_voter
 		c: 2 non_voters
 	3.cluster: 3 voters
+constraint:
+replicas=3
+voters=0
+constraints=[+region=a:1 +region=c:2]
+voter_constraints=[]
 
 set_span_config delay=5m
 [0,10000): num_replicas=3 constraints={'+region=a':1,'+region=b':1,'+region=c':1}
@@ -36,10 +41,15 @@ satisfiable:
 validation result:
 	1.zone:
 	2.region:
-		a: 1 non_voters
-		b: 1 non_voters
-		c: 1 non_voters
+		a: 1 non_voter
+		b: 1 non_voter
+		c: 1 non_voter
 	3.cluster: 3 voters
+constraint:
+replicas=3
+voters=0
+constraints=[+region=a:1 +region=b:1 +region=c:1]
+voter_constraints=[]
 
 set_liveness node=4 liveness=decommissioning delay=5m
 ----

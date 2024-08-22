@@ -20,6 +20,11 @@ validation result:
 	2.region:
 		a: 3 non_voters
 	3.cluster: 3 voters
+constraint:
+replicas=3
+voters=0
+constraints=[+region=a]
+voter_constraints=[]
 
 assertion type=conformance under=0 violating=0
 ----

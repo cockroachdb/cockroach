@@ -23,6 +23,11 @@ validation result:
 	2.region:
 		b: 3 non_voters
 	3.cluster: 3 voters
+constraint:
+replicas=3
+voters=3
+constraints=[+region=b:3]
+voter_constraints=[]
 
 
 set_span_config 
@@ -37,6 +42,11 @@ validation result:
 	2.region:
 		b: 3 non_voters
 	3.cluster: 3 voters
+constraint:
+replicas=3
+voters=3
+constraints=[+region=b:3]
+voter_constraints=[]
 
 
 set_span_config 
@@ -51,6 +61,11 @@ validation result:
 	2.region:
 		b: 3 non_voters
 	3.cluster: 3 voters
+constraint:
+replicas=3
+voters=3
+constraints=[+region=b:3]
+voter_constraints=[]
 
 assertion type=conformance lease-violating=1 lease-less-preferred=1
 ----
