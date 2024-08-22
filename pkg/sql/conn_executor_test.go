@@ -428,7 +428,7 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	for _, s := range []string{
-		`SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true;`,
+		`SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true;`,
 		`CREATE DATABASE t;`,
 		`CREATE TABLE t.test (x FLOAT);`,
 	} {
