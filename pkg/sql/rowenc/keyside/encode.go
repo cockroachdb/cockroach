@@ -186,9 +186,6 @@ func Encode(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, error) {
 		return append(b, []byte(*t)...), nil
 	case *tree.DJSON:
 		return encodeJSONKey(b, t, dir)
-	case *tree.DInt8Range:
-		// TODO(rangers): does direction matter here?
-		return append(b, t.EncodeToByte()...), nil
 	}
 	if buildutil.CrdbTestBuild {
 		return nil, errors.AssertionFailedf("unable to encode table key: %T", val)

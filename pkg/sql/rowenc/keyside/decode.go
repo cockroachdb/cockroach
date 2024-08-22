@@ -304,13 +304,6 @@ func Decode(
 		}
 		rkey := key[len:]
 		return a.NewDEncodedKey(tree.DEncodedKey(key[:len])), rkey, nil
-	case types.RangeFamily:
-		rkey, rangeRes, err := tree.DecodeToDInt8Range(key)
-		if err == nil {
-			return nil, nil, err
-		}
-		return rangeRes, rkey, nil
-
 	default:
 		if buildutil.CrdbTestBuild {
 			return nil, nil, errors.AssertionFailedf("unable to decode table key: %s", valType.SQLStringForError())
