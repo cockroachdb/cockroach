@@ -1456,3 +1456,80 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 	jobutils.WaitForJobToCancel(t, dbA, jobAID)
 	jobutils.WaitForJobToCancel(t, dbA, jobBID)
 }
+
+// TestUserPrivileges verifies the grants and role permissions
+// needed to start and administer LDR
+func TestUserPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	server, s, dbA, _ := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	var jobAID jobspb.JobID
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+
+	// Create user with no privileges
+	dbA.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
+	testuser := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.User(username.TestUser), serverutils.DBName("a")))
+
+	t.Run("view-job", func(t *testing.T) {
+		showJobStmt := "select job_id from [SHOW JOBS] where job_id=$1"
+		showLDRJobStmt := "select job_id from [SHOW LOGICAL REPLICATION JOBS] where job_id=$1"
+		// NEED VIEWJOB system grant to view admin LDR jobs
+		result := testuser.QueryStr(t, showJobStmt, jobAID)
+		require.Empty(t, result, "The user should see no rows without the VIEWJOB grant when running [SHOW JOBS]")
+
+		result = testuser.QueryStr(t, showLDRJobStmt, jobAID)
+		require.Empty(t, result, "The user should see no rows without the VIEWJOB grant when running [SHOW LOGICAL REPLICATION JOBS]")
+
+		var returnedJobID jobspb.JobID
+		dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWJOB to %s", username.TestUser))
+		testuser.QueryRow(t, showJobStmt, jobAID).Scan(&returnedJobID)
+		require.Equal(t, returnedJobID, jobAID, "The user should see the LDR job with the VIEWJOB grant when running [SHOW JOBS]")
+
+		testuser.QueryRow(t, showLDRJobStmt, jobAID).Scan(&returnedJobID)
+		require.Equal(t, returnedJobID, jobAID, "The user should see the LDR job with the VIEWJOB grant when running [SHOW LOGICAL REPLICATION JOBS]")
+	})
+
+	// Kill replication job so we can create one with the testuser for the following test
+	dbA.Exec(t, "CANCEL JOB $1", jobAID)
+	jobutils.WaitForJobToCancel(t, dbA, jobAID)
+
+	t.Run("create-on-schema", func(t *testing.T) {
+		dbA.Exec(t, "CREATE SCHEMA testschema")
+
+		testuser.ExpectErr(t, "user testuser does not have CREATE privilege on schema testschema", fmt.Sprintf(testingUDFAcceptProposedBaseWithSchema, "testschema", "tab"))
+		dbA.Exec(t, "GRANT CREATE ON SCHEMA testschema TO testuser")
+		testuser.Exec(t, fmt.Sprintf(testingUDFAcceptProposedBaseWithSchema, "testschema", "tab"))
+	})
+
+	t.Run("replication", func(t *testing.T) {
+		createWithUDFStmt := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DEFAULT FUNCTION = 'testschema.repl_apply'"
+		testuser.ExpectErr(t, "user testuser does not have REPLICATION system privilege", createWithUDFStmt, dbBURL.String())
+		dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser))
+		testuser.QueryRow(t, createWithUDFStmt, dbBURL.String()).Scan(&jobAID)
+	})
+
+	t.Run("control-job", func(t *testing.T) {
+		pauseJobStmt := "PAUSE JOB $1"
+		testuser.ExpectErr(t, fmt.Sprintf("user testuser does not have privileges for job %s", jobAID), pauseJobStmt, jobAID)
+
+		dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM CONTROLJOB to %s", username.TestUser))
+		testuser.Exec(t, pauseJobStmt, jobAID)
+		jobutils.WaitForJobToPause(t, dbA, jobAID)
+	})
+}
