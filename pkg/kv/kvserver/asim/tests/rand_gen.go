@@ -334,6 +334,7 @@ func constructSetZoneConfigEventWithConformanceAssertion(
 		MutationEvent: configChangeEvent,
 		AssertionEvent: event.NewAssertionEvent(configChangeEvent, []assertion.SimulationAssertion{
 			assertion.ConformanceAssertion{
+				BetterFormat:         true,
 				Underreplicated:      0,
 				Overreplicated:       0,
 				ViolatingConstraints: 0,

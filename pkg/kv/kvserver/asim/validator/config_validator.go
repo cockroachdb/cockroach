@@ -52,13 +52,21 @@ type allocationDetailsAtEachLevel struct {
 func (a allocationDetailsAtEachLevel) String() string {
 	buf := strings.Builder{}
 	if a.assignedVoters != 0 {
-		buf.WriteString(fmt.Sprintf("%d voters", a.assignedVoters))
+		if a.assignedVoters > 1 {
+			buf.WriteString(fmt.Sprintf("%d voters", a.assignedVoters))
+		} else {
+			buf.WriteString(fmt.Sprintf("%d voter", a.assignedVoters))
+		}
 	}
 	if a.assignedNonVoters != 0 {
 		if buf.Len() != 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(fmt.Sprintf("%d non_voters", a.assignedNonVoters))
+		if a.assignedNonVoters > 1 {
+			buf.WriteString(fmt.Sprintf("%d non_voters", a.assignedNonVoters))
+		} else {
+			buf.WriteString(fmt.Sprintf("%d non_voter", a.assignedNonVoters))
+		}
 	}
 	return buf.String()
 }

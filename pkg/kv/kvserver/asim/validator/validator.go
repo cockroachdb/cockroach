@@ -26,19 +26,30 @@ type Validator struct {
 }
 
 type ValidationResult struct {
+	Config         roachpb.SpanConfig
 	Satisfiable    bool
 	Configurations string
 	Reason         string
 }
 
+func PrettyFormat(config roachpb.SpanConfig) string {
+	var buf strings.Builder
+	buf.WriteString("constraint:\n")
+	buf.WriteString(fmt.Sprintf("replicas=%v\n", config.NumReplicas))
+	buf.WriteString(fmt.Sprintf("voters=%v\n", config.NumVoters))
+	buf.WriteString(fmt.Sprintf("constraints=%v\n", config.Constraints))
+	buf.WriteString(fmt.Sprintf("voter_constraints=%v", config.VoterConstraints))
+	return buf.String()
+}
+
 func (v ValidationResult) String() string {
 	buf := strings.Builder{}
 	if v.Satisfiable {
-		buf.WriteString(fmt.Sprintf("satisfiable:\n%v",
-			v.Configurations))
+		buf.WriteString(fmt.Sprintf("satisfiable:\n%v\n%v",
+			v.Configurations, PrettyFormat(v.Config)))
 	} else {
-		buf.WriteString(fmt.Sprintf("unsatisfiable:\n%v\n%v",
-			v.Configurations, v.Reason))
+		buf.WriteString(fmt.Sprintf("unsatisfiable:\n%v\n%v\n%v",
+			v.Configurations, v.Reason, PrettyFormat(v.Config)))
 	}
 	return buf.String()
 }
@@ -56,6 +67,7 @@ func (v Validator) ValidateEvent(config roachpb.SpanConfig) (res ValidationResul
 	ma := v.newMockAllocator()
 	satisfiable, err := ma.isSatisfiable(config)
 	return ValidationResult{
+		Config:         config,
 		Satisfiable:    satisfiable,
 		Configurations: fmt.Sprint(ma.String()),
 		Reason:         err,

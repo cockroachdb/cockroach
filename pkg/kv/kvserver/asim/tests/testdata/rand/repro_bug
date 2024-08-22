@@ -1,6 +1,9 @@
 rand_cluster cluster_gen_type=multi_region
 ----
 
+change_static_option ranges=20
+----
+
 rand_events type=cycle_via_interesting_cases duration_to_assert_on_event=10m
 ----
 
@@ -17,313 +20,215 @@ sample1: start running
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
 	executed at: 2022-03-21 11:10:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > constraints:<num_replicas:3 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > voter_constraints:<num_replicas:1 constraints:<key:"region" value:"EU" > > voter_constraints:<num_replicas:3 constraints:<key:"region" value:"US_East" > > voter_constraints:<num_replicas:1 constraints:<key:"region" value:"US_West" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:5 constraints:<num_replicas:3 constraints:<key:"region" value:"a" > > constraints:<num_replicas:1 constraints:<key:"region" value:"b" > > constraints:<num_replicas:1 constraints:<key:"region" value:"c" > > voter_constraints:<num_replicas:3 constraints:<key:"region" value:"a" > > voter_constraints:<num_replicas:1 constraints:<key:"region" value:"b" > > voter_constraints:<num_replicas:1 constraints:<key:"region" value:"c" > > 
 	executed at: 2022-03-21 11:20:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
 	executed at: 2022-03-21 11:20:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:2 num_voters:2 constraints:<num_replicas:2 constraints:<key:"zone" value:"US_West_1" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:2 num_voters:2 constraints:<num_replicas:2 constraints:<key:"zone" value:"b1" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"b" > > 
 	executed at: 2022-03-21 11:30:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
 	executed at: 2022-03-21 11:30:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:2 num_voters:2 constraints:<num_replicas:2 constraints:<key:"zone" value:"US_West_1" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:2 num_voters:2 constraints:<num_replicas:2 constraints:<key:"zone" value:"b1" > > 
 	executed at: 2022-03-21 11:40:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
 	executed at: 2022-03-21 11:40:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:6 num_voters:3 constraints:<num_replicas:3 constraints:<key:"zone" value:"US_East_3" > > voter_constraints:<num_replicas:3 constraints:<key:"region" value:"US_East" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"US_East_2" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:6 num_voters:3 constraints:<num_replicas:3 constraints:<key:"zone" value:"a3" > > voter_constraints:<num_replicas:3 constraints:<key:"region" value:"a" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > 
 	executed at: 2022-03-21 11:50:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=0 under=0, over=0 violating=10 lease-violating=0 lease-less-preferred=0
+  actual unavailable=0 under=0, over=0 violating=24 lease-violating=0 lease-less-preferred=0
 violating constraints:
-  r1:00000{00000-20000} [(n4,s4):20, (n7,s7):22, (n6,s6):16, (n10,s10):19NON_VOTER, (n18,s18):21NON_VOTER, (n17,s17):23NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=US_East_3:3] voter_constraints=[+region=US_East:3 +zone=US_East_2:2]
-  r2:00000{20000-40000} [(n7,s7):19, (n13,s13):17, (n9,s9):13, (n24,s24):16NON_VOTER, (n26,s26):21NON_VOTER, (n20,s20):22NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=US_East_3:3] voter_constraints=[+region=US_East:3 +zone=US_East_2:2]
-  r3:00000{40000-60000} [(n12,s12):20, (n15,s15):22, (n8,s8):16, (n22,s22):19NON_VOTER, (n21,s21):24NON_VOTER, (n28,s28):25NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=US_East_3:3] voter_constraints=[+region=US_East:3 +zone=US_East_2:2]
-  r4:00000{60000-80000} [(n1,s1):21, (n13,s13):19, (n11,s11):15, (n12,s12):16NON_VOTER, (n26,s26):23NON_VOTER, (n20,s20):24NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=US_East_3:3] voter_constraints=[+region=US_East:3 +zone=US_East_2:2]
-  r5:0000{080000-100000} [(n4,s4):23, (n9,s9):21, (n2,s2):17, (n26,s26):25NON_VOTER, (n16,s16):19NON_VOTER, (n21,s21):26NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=US_East_3:3] voter_constraints=[+region=US_East:3 +zone=US_East_2:2]
-  r6:00001{00000-20000} [(n6,s6):20, (n16,s16):22, (n2,s2):16, (n5,s5):17NON_VOTER, (n23,s23):25NON_VOTER, (n19,s19):24NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=US_East_3:3] voter_constraints=[+region=US_East:3 +zone=US_East_2:2]
-  r7:00001{20000-40000} [(n8,s8):20, (n10,s10):18, (n1,s1):14, (n24,s24):22NON_VOTER, (n15,s15):16NON_VOTER, (n3,s3):23NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=US_East_3:3] voter_constraints=[+region=US_East:3 +zone=US_East_2:2]
-  r8:00001{40000-60000} [(n15,s15):23, (n11,s11):21, (n8,s8):17, (n20,s20):26NON_VOTER, (n28,s28):20NON_VOTER, (n19,s19):25NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=US_East_3:3] voter_constraints=[+region=US_East:3 +zone=US_East_2:2]
-  r9:00001{60000-80000} [(n11,s11):19, (n14,s14):17, (n3,s3):13, (n27,s27):21NON_VOTER, (n15,s15):15NON_VOTER, (n23,s23):22NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=US_East_3:3] voter_constraints=[+region=US_East:3 +zone=US_East_2:2]
-  r10:{0000180000-2147483647} [(n12,s12):22, (n14,s14):20, (n5,s5):16, (n25,s25):19NON_VOTER, (n18,s18):21NON_VOTER, (n21,s21):24NON_VOTER] applying num_replicas=6 num_voters=3 constraints=[+zone=US_East_3:3] voter_constraints=[+region=US_East:3 +zone=US_East_2:2]
- 	satisfiable
-
-
-
-	executed at: 2022-03-21 11:50:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:15 num_voters:6 constraints:<num_replicas:3 constraints:<key:"region" value:"EU" > > constraints:<num_replicas:11 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:10 constraints:<key:"zone" value:"US_East_4" > > voter_constraints:<num_replicas:3 constraints:<key:"region" value:"US_East" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"US_East_3" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"US_West_1" > > 
-	executed at: 2022-03-21 12:00:00
-		event: assertion checking event
-			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=0 under=0, over=0 violating=20 lease-violating=0 lease-less-preferred=0
-violating constraints:
-  r1:00000{00000-20000} [(n4,s4):20, (n7,s7):22, (n6,s6):16, (n28,s28):35NON_VOTER, (n2,s2):34NON_VOTER, (n10,s10):24, (n22,s22):25, (n16,s16):26, (n1,s1):27NON_VOTER, (n25,s25):28NON_VOTER, (n27,s27):29NON_VOTER, (n5,s5):30NON_VOTER, (n14,s14):31NON_VOTER, (n3,s3):32NON_VOTER, (n11,s11):33NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r1:00000{00000-20000} [(n4,s4):20, (n7,s7):22, (n6,s6):16, (n28,s28):35NON_VOTER, (n2,s2):34NON_VOTER, (n10,s10):24, (n22,s22):25, (n16,s16):26, (n1,s1):27NON_VOTER, (n25,s25):28NON_VOTER, (n27,s27):29NON_VOTER, (n5,s5):30NON_VOTER, (n14,s14):31NON_VOTER, (n3,s3):32NON_VOTER, (n11,s11):33NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r2:00000{20000-40000} [(n7,s7):19, (n13,s13):17, (n9,s9):13, (n24,s24):16NON_VOTER, (n26,s26):21NON_VOTER, (n20,s20):22NON_VOTER, (n8,s8):23, (n14,s14):24, (n1,s1):25, (n2,s2):26NON_VOTER, (n5,s5):27NON_VOTER, (n10,s10):28NON_VOTER, (n12,s12):29NON_VOTER, (n6,s6):30NON_VOTER, (n25,s25):31NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r2:00000{20000-40000} [(n7,s7):19, (n13,s13):17, (n9,s9):13, (n24,s24):16NON_VOTER, (n26,s26):21NON_VOTER, (n20,s20):22NON_VOTER, (n8,s8):23, (n14,s14):24, (n1,s1):25, (n2,s2):26NON_VOTER, (n5,s5):27NON_VOTER, (n10,s10):28NON_VOTER, (n12,s12):29NON_VOTER, (n6,s6):30NON_VOTER, (n25,s25):31NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r3:00000{40000-60000} [(n12,s12):20, (n15,s15):22, (n8,s8):16, (n22,s22):19NON_VOTER, (n21,s21):24NON_VOTER, (n28,s28):25NON_VOTER, (n9,s9):26, (n5,s5):27, (n3,s3):28, (n14,s14):29NON_VOTER, (n11,s11):30NON_VOTER, (n6,s6):31NON_VOTER, (n10,s10):32NON_VOTER, (n16,s16):33NON_VOTER, (n23,s23):34NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r3:00000{40000-60000} [(n12,s12):20, (n15,s15):22, (n8,s8):16, (n22,s22):19NON_VOTER, (n21,s21):24NON_VOTER, (n28,s28):25NON_VOTER, (n9,s9):26, (n5,s5):27, (n3,s3):28, (n14,s14):29NON_VOTER, (n11,s11):30NON_VOTER, (n6,s6):31NON_VOTER, (n10,s10):32NON_VOTER, (n16,s16):33NON_VOTER, (n23,s23):34NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r4:00000{60000-80000} [(n1,s1):21, (n13,s13):19, (n11,s11):15, (n12,s12):25, (n20,s20):26, (n26,s26):27, (n4,s4):28NON_VOTER, (n7,s7):29NON_VOTER, (n27,s27):30NON_VOTER, (n2,s2):31NON_VOTER, (n9,s9):32NON_VOTER, (n10,s10):33NON_VOTER, (n15,s15):34NON_VOTER, (n5,s5):35NON_VOTER, (n24,s24):36NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r4:00000{60000-80000} [(n1,s1):21, (n13,s13):19, (n11,s11):15, (n12,s12):25, (n20,s20):26, (n26,s26):27, (n4,s4):28NON_VOTER, (n7,s7):29NON_VOTER, (n27,s27):30NON_VOTER, (n2,s2):31NON_VOTER, (n9,s9):32NON_VOTER, (n10,s10):33NON_VOTER, (n15,s15):34NON_VOTER, (n5,s5):35NON_VOTER, (n24,s24):36NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r5:0000{080000-100000} [(n4,s4):23, (n9,s9):21, (n2,s2):17, (n16,s16):28, (n26,s26):27, (n21,s21):29, (n22,s22):30NON_VOTER, (n7,s7):31NON_VOTER, (n13,s13):32NON_VOTER, (n12,s12):33NON_VOTER, (n8,s8):34NON_VOTER, (n6,s6):35NON_VOTER, (n15,s15):36NON_VOTER, (n3,s3):37NON_VOTER, (n20,s20):38NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r5:0000{080000-100000} [(n4,s4):23, (n9,s9):21, (n2,s2):17, (n16,s16):28, (n26,s26):27, (n21,s21):29, (n22,s22):30NON_VOTER, (n7,s7):31NON_VOTER, (n13,s13):32NON_VOTER, (n12,s12):33NON_VOTER, (n8,s8):34NON_VOTER, (n6,s6):35NON_VOTER, (n15,s15):36NON_VOTER, (n3,s3):37NON_VOTER, (n20,s20):38NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r6:00001{00000-20000} [(n6,s6):20, (n16,s16):22, (n2,s2):16, (n19,s19):26, (n5,s5):27, (n23,s23):28, (n28,s28):29NON_VOTER, (n1,s1):30NON_VOTER, (n10,s10):31NON_VOTER, (n8,s8):32NON_VOTER, (n9,s9):33NON_VOTER, (n13,s13):34NON_VOTER, (n4,s4):35NON_VOTER, (n11,s11):36NON_VOTER, (n24,s24):37NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r6:00001{00000-20000} [(n6,s6):20, (n16,s16):22, (n2,s2):16, (n19,s19):26, (n5,s5):27, (n23,s23):28, (n28,s28):29NON_VOTER, (n1,s1):30NON_VOTER, (n10,s10):31NON_VOTER, (n8,s8):32NON_VOTER, (n9,s9):33NON_VOTER, (n13,s13):34NON_VOTER, (n4,s4):35NON_VOTER, (n11,s11):36NON_VOTER, (n24,s24):37NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r7:00001{20000-40000} [(n8,s8):20, (n10,s10):18, (n1,s1):14, (n24,s24):24, (n15,s15):16NON_VOTER, (n3,s3):25, (n27,s27):26, (n12,s12):27NON_VOTER, (n5,s5):28NON_VOTER, (n19,s19):29NON_VOTER, (n7,s7):30NON_VOTER, (n2,s2):31NON_VOTER, (n14,s14):32NON_VOTER, (n16,s16):33NON_VOTER, (n23,s23):34NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r7:00001{20000-40000} [(n8,s8):20, (n10,s10):18, (n1,s1):14, (n24,s24):24, (n15,s15):16NON_VOTER, (n3,s3):25, (n27,s27):26, (n12,s12):27NON_VOTER, (n5,s5):28NON_VOTER, (n19,s19):29NON_VOTER, (n7,s7):30NON_VOTER, (n2,s2):31NON_VOTER, (n14,s14):32NON_VOTER, (n16,s16):33NON_VOTER, (n23,s23):34NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r8:00001{40000-60000} [(n15,s15):23, (n11,s11):21, (n8,s8):17, (n20,s20):26NON_VOTER, (n28,s28):20NON_VOTER, (n19,s19):25NON_VOTER, (n9,s9):27, (n2,s2):28, (n7,s7):29, (n13,s13):30NON_VOTER, (n12,s12):31NON_VOTER, (n6,s6):32NON_VOTER, (n3,s3):33NON_VOTER, (n4,s4):34NON_VOTER, (n25,s25):35NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r8:00001{40000-60000} [(n15,s15):23, (n11,s11):21, (n8,s8):17, (n20,s20):26NON_VOTER, (n28,s28):20NON_VOTER, (n19,s19):25NON_VOTER, (n9,s9):27, (n2,s2):28, (n7,s7):29, (n13,s13):30NON_VOTER, (n12,s12):31NON_VOTER, (n6,s6):32NON_VOTER, (n3,s3):33NON_VOTER, (n4,s4):34NON_VOTER, (n25,s25):35NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r9:00001{60000-80000} [(n11,s11):19, (n14,s14):17, (n3,s3):13, (n23,s23):23, (n27,s27):24, (n15,s15):25, (n22,s22):26NON_VOTER, (n12,s12):27NON_VOTER, (n10,s10):28NON_VOTER, (n8,s8):29NON_VOTER, (n1,s1):30NON_VOTER, (n16,s16):31NON_VOTER, (n4,s4):32NON_VOTER, (n13,s13):33NON_VOTER, (n19,s19):34NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r9:00001{60000-80000} [(n11,s11):19, (n14,s14):17, (n3,s3):13, (n23,s23):23, (n27,s27):24, (n15,s15):25, (n22,s22):26NON_VOTER, (n12,s12):27NON_VOTER, (n10,s10):28NON_VOTER, (n8,s8):29NON_VOTER, (n1,s1):30NON_VOTER, (n16,s16):31NON_VOTER, (n4,s4):32NON_VOTER, (n13,s13):33NON_VOTER, (n19,s19):34NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r10:{0000180000-2147483647} [(n12,s12):22, (n14,s14):20, (n5,s5):16, (n25,s25):25, (n26,s26):36NON_VOTER, (n21,s21):26, (n3,s3):27, (n24,s24):28NON_VOTER, (n13,s13):29NON_VOTER, (n6,s6):30NON_VOTER, (n16,s16):31NON_VOTER, (n11,s11):32NON_VOTER, (n4,s4):33NON_VOTER, (n7,s7):34NON_VOTER, (n15,s15):35NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
-  r10:{0000180000-2147483647} [(n12,s12):22, (n14,s14):20, (n5,s5):16, (n25,s25):25, (n26,s26):36NON_VOTER, (n21,s21):26, (n3,s3):27, (n24,s24):28NON_VOTER, (n13,s13):29NON_VOTER, (n6,s6):30NON_VOTER, (n16,s16):31NON_VOTER, (n11,s11):32NON_VOTER, (n4,s4):33NON_VOTER, (n7,s7):34NON_VOTER, (n15,s15):35NON_VOTER] applying num_replicas=15 num_voters=6 constraints=[+region=EU:3 +region=US_East:11 +zone=US_East_4:10] voter_constraints=[+region=US_East:3 +zone=US_East_3:1 +zone=US_West_1:1]
- 	unsatisfiable:
+  r1: [a: 3 voters, a3: 2 voters, a4: 1 voter]
+  r2: [a: 3 voters, a3: 2 voters, a4: 1 voter]
+  r3: [a: 3 voters, a3: 2 voters, a4: 1 voter]
+... and 21 more
+ 	satisfiable:
 validation result:
-	zone:
-		EU_1: voters: 0, non_voters: 0, unassigned: 3
-		EU_2: voters: 0, non_voters: 0, unassigned: 3
-		EU_3: voters: 0, non_voters: 0, unassigned: 4
-		US_East_1: voters: 0, non_voters: 0, unassigned: 1
-		US_East_2: voters: 0, non_voters: 0, unassigned: 2
-		US_East_3: voters: 0, non_voters: 0, unassigned: 13
-		US_West_1: voters: 0, non_voters: 0, unassigned: 2
-	region:
-		EU: voters: 0, non_voters: 0, unassigned: 10
-		US_East: voters: 0, non_voters: 0, unassigned: 16
-		US_West: voters: 0, non_voters: 0, unassigned: 2
-	cluster: voters: 0, non_voters: 0, unassigned: 28
-zone constraint value US_East_4 is not found in the cluster set up
+	1.zone:
+		a2: 2 voters
+		a3: 3 non_voters
+	2.region:
+		a: 3 voters, 2 non_voters
+	3.cluster: 3 voters, 3 non_voters
+constraint:
+replicas=6
+voters=3
+constraints=[+zone=a3:3]
+voter_constraints=[+region=a:3 +zone=a2:2]
+
+
+	executed at: 2022-03-21 11:50:00
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:15 num_voters:6 constraints:<num_replicas:11 constraints:<key:"region" value:"a" > > constraints:<num_replicas:3 constraints:<key:"region" value:"c" > > constraints:<num_replicas:10 constraints:<key:"zone" value:"a4" > > voter_constraints:<num_replicas:3 constraints:<key:"region" value:"a" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"a3" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"b1" > > 
+	executed at: 2022-03-21 12:00:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
+  actual unavailable=0 under=0, over=0 violating=28 lease-violating=0 lease-less-preferred=0
+violating constraints:
+  r1: [a: 3 voters, a2: 1 voter, a3: 1 voter, a4: 1 voter]
+  r1: [a: 3 voters, a2: 1 voter, a3: 1 voter, a4: 1 voter]
+  r2: [a: 3 voters, a4: 3 voters]
+... and 25 more
+ 	satisfiable:
+validation result:
+	1.zone:
+		a3: 1 voter
+		a4: 10 non_voters
+		b1: 1 voter
+	2.region:
+		a: 3 voters, 8 non_voters
+		b: 1 voter
+		c: 3 non_voters
+	3.cluster: 6 voters, 9 non_voters
+constraint:
+replicas=15
+voters=6
+constraints=[+region=a:11 +region=c:3 +zone=a4:10]
+voter_constraints=[+region=a:3 +zone=a3:1 +zone=b1:1]
 
 
 	executed at: 2022-03-21 12:00:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:2 constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"US_West_1" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:2 constraints:<num_replicas:2 constraints:<key:"region" value:"b" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"b1" > > 
 	executed at: 2022-03-21 12:10:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
 	executed at: 2022-03-21 12:10:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:28 num_voters:28 constraints:<num_replicas:10 constraints:<key:"region" value:"EU" > > constraints:<num_replicas:16 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:28 num_voters:28 constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > constraints:<num_replicas:2 constraints:<key:"region" value:"b" > > constraints:<num_replicas:10 constraints:<key:"region" value:"c" > > 
 	executed at: 2022-03-21 12:20:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
 	executed at: 2022-03-21 12:20:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:28 num_voters:28 constraints:<num_replicas:10 constraints:<key:"region" value:"EU" > > constraints:<num_replicas:16 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > constraints:<num_replicas:3 constraints:<key:"zone" value:"EU_1" > > constraints:<num_replicas:3 constraints:<key:"zone" value:"EU_2" > > constraints:<num_replicas:4 constraints:<key:"zone" value:"EU_3" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"US_East_1" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"US_East_2" > > constraints:<num_replicas:3 constraints:<key:"zone" value:"US_East_3" > > constraints:<num_replicas:10 constraints:<key:"zone" value:"US_East_4" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"US_West_1" > > voter_constraints:<num_replicas:10 constraints:<key:"region" value:"EU" > > voter_constraints:<num_replicas:16 constraints:<key:"region" value:"US_East" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > voter_constraints:<num_replicas:3 constraints:<key:"zone" value:"EU_1" > > voter_constraints:<num_replicas:3 constraints:<key:"zone" value:"EU_2" > > voter_constraints:<num_replicas:4 constraints:<key:"zone" value:"EU_3" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"US_East_1" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"US_East_2" > > voter_constraints:<num_replicas:3 constraints:<key:"zone" value:"US_East_3" > > voter_constraints:<num_replicas:10 constraints:<key:"zone" value:"US_East_4" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"US_West_1" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:28 num_voters:28 constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > constraints:<num_replicas:2 constraints:<key:"region" value:"b" > > constraints:<num_replicas:10 constraints:<key:"region" value:"c" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"a1" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > constraints:<num_replicas:3 constraints:<key:"zone" value:"a3" > > constraints:<num_replicas:10 constraints:<key:"zone" value:"a4" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"b1" > > constraints:<num_replicas:3 constraints:<key:"zone" value:"c1" > > constraints:<num_replicas:3 constraints:<key:"zone" value:"c2" > > constraints:<num_replicas:4 constraints:<key:"zone" value:"c3" > > voter_constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"b" > > voter_constraints:<num_replicas:10 constraints:<key:"region" value:"c" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"a1" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > voter_constraints:<num_replicas:3 constraints:<key:"zone" value:"a3" > > voter_constraints:<num_replicas:10 constraints:<key:"zone" value:"a4" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"b1" > > voter_constraints:<num_replicas:3 constraints:<key:"zone" value:"c1" > > voter_constraints:<num_replicas:3 constraints:<key:"zone" value:"c2" > > voter_constraints:<num_replicas:4 constraints:<key:"zone" value:"c3" > > 
 	executed at: 2022-03-21 12:30:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=0 under=0, over=0 violating=20 lease-violating=0 lease-less-preferred=0
-violating constraints:
-  r1:00000{00000-20000} [(n18,s18):36, (n17,s17):37, (n10,s10):38, (n27,s27):39, (n2,s2):40, (n25,s25):41, (n22,s22):42, (n6,s6):43, (n24,s24):44, (n5,s5):45, (n9,s9):46, (n8,s8):47, (n14,s14):48, (n1,s1):49, (n12,s12):50, (n16,s16):51, (n23,s23):52, (n28,s28):53, (n13,s13):54, (n7,s7):55, (n15,s15):56, (n19,s19):57, (n4,s4):58, (n26,s26):59, (n20,s20):60, (n11,s11):61, (n21,s21):62, (n3,s3):63] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r1:00000{00000-20000} [(n18,s18):36, (n17,s17):37, (n10,s10):38, (n27,s27):39, (n2,s2):40, (n25,s25):41, (n22,s22):42, (n6,s6):43, (n24,s24):44, (n5,s5):45, (n9,s9):46, (n8,s8):47, (n14,s14):48, (n1,s1):49, (n12,s12):50, (n16,s16):51, (n23,s23):52, (n28,s28):53, (n13,s13):54, (n7,s7):55, (n15,s15):56, (n19,s19):57, (n4,s4):58, (n26,s26):59, (n20,s20):60, (n11,s11):61, (n21,s21):62, (n3,s3):63] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r2:00000{20000-40000} [(n18,s18):33, (n17,s17):32, (n24,s24):34, (n11,s11):35, (n26,s26):36, (n15,s15):37, (n14,s14):38, (n28,s28):39, (n20,s20):40, (n3,s3):41, (n2,s2):42, (n9,s9):43, (n22,s22):44, (n27,s27):45, (n4,s4):46, (n5,s5):47, (n6,s6):48, (n23,s23):49, (n25,s25):50, (n8,s8):51, (n12,s12):52, (n16,s16):53, (n10,s10):54, (n21,s21):55, (n19,s19):56, (n7,s7):57, (n13,s13):58, (n1,s1):59] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r2:00000{20000-40000} [(n18,s18):33, (n17,s17):32, (n24,s24):34, (n11,s11):35, (n26,s26):36, (n15,s15):37, (n14,s14):38, (n28,s28):39, (n20,s20):40, (n3,s3):41, (n2,s2):42, (n9,s9):43, (n22,s22):44, (n27,s27):45, (n4,s4):46, (n5,s5):47, (n6,s6):48, (n23,s23):49, (n25,s25):50, (n8,s8):51, (n12,s12):52, (n16,s16):53, (n10,s10):54, (n21,s21):55, (n19,s19):56, (n7,s7):57, (n13,s13):58, (n1,s1):59] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r3:00000{40000-60000} [(n18,s18):35, (n17,s17):36, (n28,s28):37, (n9,s9):38, (n16,s16):39, (n26,s26):40, (n22,s22):41, (n1,s1):42, (n20,s20):43, (n23,s23):44, (n8,s8):45, (n3,s3):46, (n4,s4):47, (n19,s19):48, (n13,s13):49, (n11,s11):50, (n21,s21):51, (n25,s25):52, (n2,s2):53, (n10,s10):54, (n12,s12):55, (n7,s7):56, (n24,s24):57, (n5,s5):58, (n14,s14):59, (n15,s15):60, (n27,s27):61, (n6,s6):62] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r3:00000{40000-60000} [(n18,s18):35, (n17,s17):36, (n28,s28):37, (n9,s9):38, (n16,s16):39, (n26,s26):40, (n22,s22):41, (n1,s1):42, (n20,s20):43, (n23,s23):44, (n8,s8):45, (n3,s3):46, (n4,s4):47, (n19,s19):48, (n13,s13):49, (n11,s11):50, (n21,s21):51, (n25,s25):52, (n2,s2):53, (n10,s10):54, (n12,s12):55, (n7,s7):56, (n24,s24):57, (n5,s5):58, (n14,s14):59, (n15,s15):60, (n27,s27):61, (n6,s6):62] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r4:00000{60000-80000} [(n17,s17):37, (n18,s18):38, (n16,s16):39, (n26,s26):40, (n20,s20):41, (n2,s2):42, (n4,s4):43, (n7,s7):44, (n12,s12):45, (n5,s5):46, (n15,s15):47, (n25,s25):48, (n14,s14):49, (n22,s22):50, (n13,s13):51, (n11,s11):52, (n27,s27):53, (n28,s28):54, (n24,s24):55, (n1,s1):56, (n8,s8):57, (n19,s19):58, (n3,s3):59, (n9,s9):60, (n21,s21):61, (n23,s23):62, (n6,s6):63, (n10,s10):64] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r4:00000{60000-80000} [(n17,s17):37, (n18,s18):38, (n16,s16):39, (n26,s26):40, (n20,s20):41, (n2,s2):42, (n4,s4):43, (n7,s7):44, (n12,s12):45, (n5,s5):46, (n15,s15):47, (n25,s25):48, (n14,s14):49, (n22,s22):50, (n13,s13):51, (n11,s11):52, (n27,s27):53, (n28,s28):54, (n24,s24):55, (n1,s1):56, (n8,s8):57, (n19,s19):58, (n3,s3):59, (n9,s9):60, (n21,s21):61, (n23,s23):62, (n6,s6):63, (n10,s10):64] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r5:0000{080000-100000} [(n18,s18):40, (n17,s17):39, (n12,s12):41, (n19,s19):42, (n23,s23):43, (n21,s21):44, (n27,s27):45, (n13,s13):46, (n5,s5):47, (n28,s28):48, (n3,s3):49, (n16,s16):50, (n10,s10):51, (n7,s7):52, (n15,s15):53, (n11,s11):54, (n6,s6):55, (n20,s20):56, (n1,s1):57, (n2,s2):58, (n4,s4):59, (n26,s26):60, (n14,s14):61, (n24,s24):62, (n8,s8):63, (n22,s22):64, (n9,s9):65, (n25,s25):66] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r5:0000{080000-100000} [(n18,s18):40, (n17,s17):39, (n12,s12):41, (n19,s19):42, (n23,s23):43, (n21,s21):44, (n27,s27):45, (n13,s13):46, (n5,s5):47, (n28,s28):48, (n3,s3):49, (n16,s16):50, (n10,s10):51, (n7,s7):52, (n15,s15):53, (n11,s11):54, (n6,s6):55, (n20,s20):56, (n1,s1):57, (n2,s2):58, (n4,s4):59, (n26,s26):60, (n14,s14):61, (n24,s24):62, (n8,s8):63, (n22,s22):64, (n9,s9):65, (n25,s25):66] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r6:00001{00000-20000} [(n18,s18):38, (n17,s17):39, (n3,s3):40, (n6,s6):41, (n1,s1):42, (n2,s2):43, (n14,s14):44, (n21,s21):45, (n24,s24):46, (n13,s13):47, (n19,s19):48, (n25,s25):49, (n26,s26):50, (n4,s4):51, (n12,s12):52, (n11,s11):53, (n10,s10):54, (n28,s28):55, (n20,s20):56, (n23,s23):57, (n27,s27):58, (n15,s15):59, (n8,s8):60, (n9,s9):61, (n22,s22):62, (n16,s16):63, (n7,s7):64, (n5,s5):65] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r6:00001{00000-20000} [(n18,s18):38, (n17,s17):39, (n3,s3):40, (n6,s6):41, (n1,s1):42, (n2,s2):43, (n14,s14):44, (n21,s21):45, (n24,s24):46, (n13,s13):47, (n19,s19):48, (n25,s25):49, (n26,s26):50, (n4,s4):51, (n12,s12):52, (n11,s11):53, (n10,s10):54, (n28,s28):55, (n20,s20):56, (n23,s23):57, (n27,s27):58, (n15,s15):59, (n8,s8):60, (n9,s9):61, (n22,s22):62, (n16,s16):63, (n7,s7):64, (n5,s5):65] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r7:00001{20000-40000} [(n17,s17):36, (n18,s18):35, (n9,s9):37, (n15,s15):38, (n24,s24):39, (n11,s11):40, (n6,s6):41, (n27,s27):42, (n10,s10):43, (n5,s5):44, (n28,s28):45, (n21,s21):46, (n22,s22):47, (n1,s1):48, (n26,s26):49, (n20,s20):50, (n19,s19):51, (n25,s25):52, (n14,s14):53, (n7,s7):54, (n12,s12):55, (n13,s13):56, (n8,s8):57, (n3,s3):58, (n4,s4):59, (n2,s2):60, (n16,s16):61, (n23,s23):62] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r7:00001{20000-40000} [(n17,s17):36, (n18,s18):35, (n9,s9):37, (n15,s15):38, (n24,s24):39, (n11,s11):40, (n6,s6):41, (n27,s27):42, (n10,s10):43, (n5,s5):44, (n28,s28):45, (n21,s21):46, (n22,s22):47, (n1,s1):48, (n26,s26):49, (n20,s20):50, (n19,s19):51, (n25,s25):52, (n14,s14):53, (n7,s7):54, (n12,s12):55, (n13,s13):56, (n8,s8):57, (n3,s3):58, (n4,s4):59, (n2,s2):60, (n16,s16):61, (n23,s23):62] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r8:00001{40000-60000} [(n17,s17):37, (n18,s18):36, (n5,s5):38, (n8,s8):39, (n25,s25):40, (n14,s14):41, (n21,s21):42, (n7,s7):43, (n6,s6):44, (n20,s20):45, (n9,s9):46, (n4,s4):47, (n16,s16):48, (n13,s13):49, (n11,s11):50, (n24,s24):51, (n23,s23):52, (n3,s3):53, (n1,s1):54, (n10,s10):55, (n12,s12):56, (n15,s15):57, (n22,s22):58, (n19,s19):59, (n2,s2):60, (n28,s28):61, (n27,s27):62, (n26,s26):63] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r8:00001{40000-60000} [(n17,s17):37, (n18,s18):36, (n5,s5):38, (n8,s8):39, (n25,s25):40, (n14,s14):41, (n21,s21):42, (n7,s7):43, (n6,s6):44, (n20,s20):45, (n9,s9):46, (n4,s4):47, (n16,s16):48, (n13,s13):49, (n11,s11):50, (n24,s24):51, (n23,s23):52, (n3,s3):53, (n1,s1):54, (n10,s10):55, (n12,s12):56, (n15,s15):57, (n22,s22):58, (n19,s19):59, (n2,s2):60, (n28,s28):61, (n27,s27):62, (n26,s26):63] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r9:00001{60000-80000} [(n18,s18):35, (n17,s17):36, (n1,s1):37, (n11,s11):38, (n19,s19):39, (n13,s13):40, (n4,s4):41, (n8,s8):42, (n27,s27):43, (n23,s23):44, (n9,s9):45, (n7,s7):46, (n22,s22):47, (n3,s3):48, (n2,s2):49, (n6,s6):50, (n10,s10):51, (n28,s28):52, (n16,s16):53, (n26,s26):54, (n12,s12):55, (n21,s21):56, (n24,s24):57, (n5,s5):58, (n25,s25):59, (n20,s20):60, (n15,s15):61, (n14,s14):62] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r9:00001{60000-80000} [(n18,s18):35, (n17,s17):36, (n1,s1):37, (n11,s11):38, (n19,s19):39, (n13,s13):40, (n4,s4):41, (n8,s8):42, (n27,s27):43, (n23,s23):44, (n9,s9):45, (n7,s7):46, (n22,s22):47, (n3,s3):48, (n2,s2):49, (n6,s6):50, (n10,s10):51, (n28,s28):52, (n16,s16):53, (n26,s26):54, (n12,s12):55, (n21,s21):56, (n24,s24):57, (n5,s5):58, (n25,s25):59, (n20,s20):60, (n15,s15):61, (n14,s14):62] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r10:{0000180000-2147483647} [(n17,s17):37, (n18,s18):38, (n10,s10):39, (n7,s7):40, (n23,s23):41, (n19,s19):42, (n15,s15):43, (n21,s21):44, (n13,s13):45, (n5,s5):46, (n12,s12):47, (n26,s26):48, (n16,s16):49, (n22,s22):50, (n3,s3):51, (n8,s8):52, (n1,s1):53, (n28,s28):54, (n25,s25):55, (n2,s2):56, (n20,s20):57, (n6,s6):58, (n14,s14):59, (n9,s9):60, (n27,s27):61, (n11,s11):62, (n4,s4):63, (n24,s24):64] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
-  r10:{0000180000-2147483647} [(n17,s17):37, (n18,s18):38, (n10,s10):39, (n7,s7):40, (n23,s23):41, (n19,s19):42, (n15,s15):43, (n21,s21):44, (n13,s13):45, (n5,s5):46, (n12,s12):47, (n26,s26):48, (n16,s16):49, (n22,s22):50, (n3,s3):51, (n8,s8):52, (n1,s1):53, (n28,s28):54, (n25,s25):55, (n2,s2):56, (n20,s20):57, (n6,s6):58, (n14,s14):59, (n9,s9):60, (n27,s27):61, (n11,s11):62, (n4,s4):63, (n24,s24):64] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2] voter_constraints=[+region=EU:10 +region=US_East:16 +region=US_West:2 +zone=EU_1:3 +zone=EU_2:3 +zone=EU_3:4 +zone=US_East_1:1 +zone=US_East_2:2 +zone=US_East_3:3 +zone=US_East_4:10 +zone=US_West_1:2]
- 	unsatisfiable:
-validation result:
-	zone:
-		EU_1: voters: 0, non_voters: 0, unassigned: 3
-		EU_2: voters: 0, non_voters: 0, unassigned: 3
-		EU_3: voters: 0, non_voters: 0, unassigned: 4
-		US_East_1: voters: 0, non_voters: 0, unassigned: 1
-		US_East_2: voters: 0, non_voters: 0, unassigned: 2
-		US_East_3: voters: 0, non_voters: 0, unassigned: 13
-		US_West_1: voters: 0, non_voters: 0, unassigned: 2
-	region:
-		EU: voters: 0, non_voters: 0, unassigned: 10
-		US_East: voters: 0, non_voters: 0, unassigned: 16
-		US_West: voters: 0, non_voters: 0, unassigned: 2
-	cluster: voters: 0, non_voters: 0, unassigned: 28
-zone constraint value US_East_4 is not found in the cluster set up
-
-
+			passed
 	executed at: 2022-03-21 12:30:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:28 num_voters:25 constraints:<num_replicas:2 constraints:<key:"region" value:"US_East" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"US_East" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:28 num_voters:25 constraints:<num_replicas:2 constraints:<key:"region" value:"a" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"a" > > 
 	executed at: 2022-03-21 12:40:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
 	executed at: 2022-03-21 12:40:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:27 num_voters:16 voter_constraints:<num_replicas:16 constraints:<key:"region" value:"US_East" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:27 num_voters:16 voter_constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > 
 	executed at: 2022-03-21 12:50:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
 	executed at: 2022-03-21 12:50:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:16 num_voters:3 constraints:<num_replicas:16 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"US_East_1" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"US_East_2" > > voter_constraints:<num_replicas:3 constraints:<key:"zone" value:"US_East_4" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:16 num_voters:3 constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"a1" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > voter_constraints:<num_replicas:3 constraints:<key:"zone" value:"a4" > > 
 	executed at: 2022-03-21 13:00:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=0 under=0, over=0 violating=10 lease-violating=0 lease-less-preferred=0
-violating constraints:
-  r1:00000{00000-20000} [(n14,s14):82NON_VOTER, (n8,s8):86NON_VOTER, (n10,s10):79NON_VOTER, (n15,s15):87NON_VOTER, (n9,s9):88NON_VOTER, (n4,s4):81NON_VOTER, (n7,s7):84NON_VOTER, (n6,s6):83NON_VOTER, (n16,s16):51, (n3,s3):89NON_VOTER, (n1,s1):85NON_VOTER, (n13,s13):54, (n12,s12):50, (n2,s2):80NON_VOTER, (n11,s11):77NON_VOTER, (n5,s5):78NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16 +zone=US_East_1:1 +zone=US_East_2:2] voter_constraints=[+zone=US_East_4:3]
-  r2:00000{20000-40000} [(n6,s6):76NON_VOTER, (n3,s3):78NON_VOTER, (n5,s5):79NON_VOTER, (n9,s9):77NON_VOTER, (n12,s12):52, (n15,s15):37, (n7,s7):75NON_VOTER, (n4,s4):81NON_VOTER, (n1,s1):82NON_VOTER, (n2,s2):83NON_VOTER, (n14,s14):80NON_VOTER, (n13,s13):85NON_VOTER, (n10,s10):84NON_VOTER, (n16,s16):53, (n8,s8):73NON_VOTER, (n11,s11):74NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16 +zone=US_East_1:1 +zone=US_East_2:2] voter_constraints=[+zone=US_East_4:3]
-  r3:00000{40000-60000} [(n9,s9):80NON_VOTER, (n5,s5):88NON_VOTER, (n13,s13):49, (n4,s4):82NON_VOTER, (n12,s12):55, (n16,s16):76, (n15,s15):90NON_VOTER, (n3,s3):84NON_VOTER, (n6,s6):85NON_VOTER, (n8,s8):81NON_VOTER, (n7,s7):87NON_VOTER, (n14,s14):83NON_VOTER, (n2,s2):89NON_VOTER, (n11,s11):86NON_VOTER, (n1,s1):78NON_VOTER, (n10,s10):79NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16 +zone=US_East_1:1 +zone=US_East_2:2] voter_constraints=[+zone=US_East_4:3]
-  r4:00000{60000-80000} [(n8,s8):84NON_VOTER, (n6,s6):92NON_VOTER, (n16,s16):39, (n3,s3):82NON_VOTER, (n7,s7):83NON_VOTER, (n1,s1):89NON_VOTER, (n10,s10):88NON_VOTER, (n5,s5):85NON_VOTER, (n13,s13):51, (n4,s4):87NON_VOTER, (n15,s15):47, (n9,s9):86NON_VOTER, (n12,s12):90NON_VOTER, (n14,s14):91NON_VOTER, (n2,s2):80NON_VOTER, (n11,s11):81NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16 +zone=US_East_1:1 +zone=US_East_2:2] voter_constraints=[+zone=US_East_4:3]
-  r5:0000{080000-100000} [(n3,s3):88NON_VOTER, (n5,s5):93NON_VOTER, (n6,s6):92NON_VOTER, (n11,s11):94NON_VOTER, (n13,s13):95NON_VOTER, (n14,s14):61, (n12,s12):96NON_VOTER, (n15,s15):53, (n2,s2):90NON_VOTER, (n4,s4):87NON_VOTER, (n10,s10):89NON_VOTER, (n16,s16):50, (n1,s1):91NON_VOTER, (n8,s8):86NON_VOTER, (n7,s7):84NON_VOTER, (n9,s9):85NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16 +zone=US_East_1:1 +zone=US_East_2:2] voter_constraints=[+zone=US_East_4:3]
-  r6:00001{00000-20000} [(n1,s1):88NON_VOTER, (n7,s7):93NON_VOTER, (n14,s14):87NON_VOTER, (n6,s6):83NON_VOTER, (n13,s13):92NON_VOTER, (n4,s4):84NON_VOTER, (n9,s9):91NON_VOTER, (n8,s8):85NON_VOTER, (n15,s15):59, (n12,s12):52, (n11,s11):89NON_VOTER, (n2,s2):90NON_VOTER, (n16,s16):63, (n3,s3):86NON_VOTER, (n10,s10):81NON_VOTER, (n5,s5):82NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16 +zone=US_East_1:1 +zone=US_East_2:2] voter_constraints=[+zone=US_East_4:3]
-  r7:00001{20000-40000} [(n15,s15):85NON_VOTER, (n7,s7):83NON_VOTER, (n8,s8):84NON_VOTER, (n4,s4):87NON_VOTER, (n3,s3):89NON_VOTER, (n12,s12):55, (n6,s6):82NON_VOTER, (n11,s11):90NON_VOTER, (n16,s16):61, (n5,s5):86NON_VOTER, (n14,s14):88NON_VOTER, (n13,s13):56, (n10,s10):80NON_VOTER, (n9,s9):81NON_VOTER, (n1,s1):78NON_VOTER, (n2,s2):79NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16 +zone=US_East_1:1 +zone=US_East_2:2] voter_constraints=[+zone=US_East_4:3]
-  r8:00001{40000-60000} [(n7,s7):81NON_VOTER, (n14,s14):82NON_VOTER, (n1,s1):85NON_VOTER, (n9,s9):79NON_VOTER, (n12,s12):56, (n15,s15):87NON_VOTER, (n5,s5):89NON_VOTER, (n4,s4):88NON_VOTER, (n10,s10):86NON_VOTER, (n8,s8):83NON_VOTER, (n6,s6):84NON_VOTER, (n3,s3):80NON_VOTER, (n16,s16):48, (n13,s13):49, (n11,s11):77NON_VOTER, (n2,s2):78NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16 +zone=US_East_1:1 +zone=US_East_2:2] voter_constraints=[+zone=US_East_4:3]
-  r9:00001{60000-80000} [(n5,s5):86NON_VOTER, (n13,s13):89NON_VOTER, (n2,s2):88NON_VOTER, (n8,s8):85NON_VOTER, (n7,s7):87NON_VOTER, (n10,s10):80NON_VOTER, (n1,s1):84NON_VOTER, (n4,s4):83NON_VOTER, (n16,s16):53, (n14,s14):62, (n15,s15):61, (n12,s12):90NON_VOTER, (n6,s6):81NON_VOTER, (n11,s11):82NON_VOTER, (n3,s3):78NON_VOTER, (n9,s9):79NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16 +zone=US_East_1:1 +zone=US_East_2:2] voter_constraints=[+zone=US_East_4:3]
-  r10:{0000180000-2147483647} [(n14,s14):59, (n7,s7):86NON_VOTER, (n1,s1):88NON_VOTER, (n10,s10):83NON_VOTER, (n13,s13):89NON_VOTER, (n9,s9):85NON_VOTER, (n6,s6):81NON_VOTER, (n15,s15):76, (n11,s11):82NON_VOTER, (n4,s4):80NON_VOTER, (n8,s8):87NON_VOTER, (n3,s3):84NON_VOTER, (n16,s16):49, (n12,s12):90NON_VOTER, (n2,s2):78NON_VOTER, (n5,s5):79NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16 +zone=US_East_1:1 +zone=US_East_2:2] voter_constraints=[+zone=US_East_4:3]
- 	unsatisfiable:
-validation result:
-	zone:
-		EU_1: voters: 0, non_voters: 0, unassigned: 3
-		EU_2: voters: 0, non_voters: 0, unassigned: 3
-		EU_3: voters: 0, non_voters: 0, unassigned: 4
-		US_East_1: voters: 0, non_voters: 0, unassigned: 1
-		US_East_2: voters: 0, non_voters: 0, unassigned: 2
-		US_East_3: voters: 0, non_voters: 0, unassigned: 13
-		US_West_1: voters: 0, non_voters: 0, unassigned: 2
-	region:
-		EU: voters: 0, non_voters: 0, unassigned: 10
-		US_East: voters: 0, non_voters: 0, unassigned: 16
-		US_West: voters: 0, non_voters: 0, unassigned: 2
-	cluster: voters: 0, non_voters: 0, unassigned: 28
-zone constraint value US_East_4 is not found in the cluster set up
-
-
+			passed
 	executed at: 2022-03-21 13:00:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:28 num_voters:3 constraints:<num_replicas:10 constraints:<key:"region" value:"EU" > > constraints:<num_replicas:16 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"EU" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:28 num_voters:3 constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > constraints:<num_replicas:2 constraints:<key:"region" value:"b" > > constraints:<num_replicas:10 constraints:<key:"region" value:"c" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"c" > > 
 	executed at: 2022-03-21 13:10:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
 	executed at: 2022-03-21 13:10:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:6 num_voters:5 constraints:<num_replicas:1 constraints:<key:"zone" value:"EU_1" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"US_East_2" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"US_East_3" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"US_West_1" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"EU_1" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"US_East_2" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"US_East_3" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"US_West_1" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:6 num_voters:5 constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > constraints:<num_replicas:2 constraints:<key:"zone" value:"a3" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"b1" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"c1" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"a3" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"b1" > > voter_constraints:<num_replicas:1 constraints:<key:"zone" value:"c1" > > 
 	executed at: 2022-03-21 13:20:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
 	executed at: 2022-03-21 13:20:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:6 num_voters:5 constraints:<num_replicas:1 constraints:<key:"zone" value:"EU_1" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"US_East_2" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"US_East_3" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"US_West_1" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"US_East_2" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"US_West_1" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:6 num_voters:5 constraints:<num_replicas:1 constraints:<key:"zone" value:"a2" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"a3" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"b1" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"c1" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"b1" > > 
 	executed at: 2022-03-21 13:30:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
 	executed at: 2022-03-21 13:30:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:4 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"US_East_1" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"US_East_2" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"US_East_2" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:4 num_voters:3 constraints:<num_replicas:1 constraints:<key:"region" value:"a" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"a1" > > constraints:<num_replicas:1 constraints:<key:"zone" value:"a2" > > voter_constraints:<num_replicas:2 constraints:<key:"zone" value:"a2" > > 
 	executed at: 2022-03-21 13:40:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
 	executed at: 2022-03-21 13:40:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > constraints:<constraints:<key:"zone" value:"US_East_1" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > constraints:<constraints:<key:"zone" value:"a1" > > 
 	executed at: 2022-03-21 13:50:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=0 under=0, over=10 violating=0 lease-violating=0 lease-less-preferred=0
+  actual unavailable=0 under=0, over=20 violating=0 lease-violating=0 lease-less-preferred=0
 over replicated:
-  r1:00000{00000-20000} [(n16,s16):103NON_VOTER, (n1,s1):112] applying num_replicas=0 constraints=[+zone=US_East_1]
-  r2:00000{20000-40000} [(n1,s1):106, (n15,s15):101NON_VOTER] applying num_replicas=0 constraints=[+zone=US_East_1]
-  r3:00000{40000-60000} [(n9,s9):80NON_VOTER, (n1,s1):111] applying num_replicas=0 constraints=[+zone=US_East_1]
-  r4:00000{60000-80000} [(n4,s4):87NON_VOTER, (n1,s1):114] applying num_replicas=0 constraints=[+zone=US_East_1]
-  r5:0000{080000-100000} [(n1,s1):118, (n8,s8):86NON_VOTER] applying num_replicas=0 constraints=[+zone=US_East_1]
-  r6:00001{00000-20000} [(n16,s16):107NON_VOTER, (n1,s1):117] applying num_replicas=0 constraints=[+zone=US_East_1]
-  r7:00001{20000-40000} [(n1,s1):112, (n7,s7):83NON_VOTER] applying num_replicas=0 constraints=[+zone=US_East_1]
-  r8:00001{40000-60000} [(n1,s1):111, (n15,s15):87NON_VOTER] applying num_replicas=0 constraints=[+zone=US_East_1]
-  r9:00001{60000-80000} [(n5,s5):86NON_VOTER, (n1,s1):112] applying num_replicas=0 constraints=[+zone=US_East_1]
-  r10:{0000180000-2147483647} [(n1,s1):112, (n10,s10):83NON_VOTER] applying num_replicas=0 constraints=[+zone=US_East_1]
- 	satisfiable
-
+  r1: [a: 1 voter 1 non-voter, a1: 1 voter, a4: 1 non-voter]
+  r2: [a: 1 voter, a1: 1 voter, c: 1 non-voter, c2: 1 non-voter]
+  r3: [a: 1 voter 1 non-voter, a1: 1 voter, a4: 1 non-voter]
+... and 17 more
+ 	satisfiable:
+validation result:
+	1.zone:
+	2.region:
+	3.cluster: 
+constraint:
+replicas=0
+voters=0
+constraints=[+zone=a1]
+voter_constraints=[]
 
 
 	executed at: 2022-03-21 13:50:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:28 num_voters:28 constraints:<num_replicas:10 constraints:<key:"region" value:"EU" > > constraints:<num_replicas:17 constraints:<key:"region" value:"US_East" > > constraints:<num_replicas:2 constraints:<key:"region" value:"US_West" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:28 num_voters:28 constraints:<num_replicas:17 constraints:<key:"region" value:"a" > > constraints:<num_replicas:2 constraints:<key:"region" value:"b" > > constraints:<num_replicas:10 constraints:<key:"region" value:"c" > > 
 	executed at: 2022-03-21 14:00:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=0 under=0, over=0 violating=10 lease-violating=0 lease-less-preferred=0
+  actual unavailable=0 under=0, over=0 violating=20 lease-violating=0 lease-less-preferred=0
 violating constraints:
-  r1:00000{00000-20000} [(n1,s1):112, (n16,s16):113, (n11,s11):114, (n26,s26):115, (n23,s23):116, (n12,s12):117, (n7,s7):118, (n18,s18):119, (n5,s5):120, (n21,s21):121, (n27,s27):122, (n15,s15):123, (n4,s4):124, (n17,s17):125, (n19,s19):126, (n10,s10):127, (n28,s28):128, (n22,s22):129, (n20,s20):130, (n24,s24):131, (n9,s9):132, (n25,s25):133, (n2,s2):134, (n3,s3):135, (n14,s14):136, (n13,s13):137, (n6,s6):138, (n8,s8):139] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:17 +region=US_West:2]
-  r2:00000{20000-40000} [(n1,s1):106, (n15,s15):107, (n18,s18):108, (n21,s21):109, (n25,s25):110, (n14,s14):111, (n24,s24):112, (n12,s12):113, (n22,s22):114, (n8,s8):115, (n9,s9):116, (n2,s2):117, (n6,s6):118, (n16,s16):119, (n10,s10):120, (n3,s3):121, (n13,s13):122, (n4,s4):123, (n23,s23):124, (n7,s7):125, (n19,s19):126, (n17,s17):127, (n20,s20):128, (n5,s5):129, (n11,s11):130, (n28,s28):131, (n27,s27):132, (n26,s26):133] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:17 +region=US_West:2]
-  r3:00000{40000-60000} [(n1,s1):111, (n9,s9):112, (n20,s20):113, (n27,s27):114, (n6,s6):115, (n14,s14):116, (n19,s19):117, (n28,s28):118, (n22,s22):119, (n8,s8):120, (n3,s3):121, (n23,s23):122, (n21,s21):123, (n15,s15):124, (n25,s25):125, (n2,s2):126, (n17,s17):127, (n16,s16):128, (n26,s26):129, (n10,s10):130, (n4,s4):131, (n12,s12):132, (n13,s13):133, (n24,s24):134, (n7,s7):135, (n18,s18):136, (n5,s5):137, (n11,s11):138] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:17 +region=US_West:2]
-  r4:00000{60000-80000} [(n1,s1):114, (n4,s4):115, (n10,s10):116, (n24,s24):117, (n17,s17):118, (n20,s20):119, (n19,s19):120, (n27,s27):121, (n5,s5):122, (n14,s14):123, (n13,s13):124, (n7,s7):125, (n16,s16):126, (n26,s26):127, (n9,s9):128, (n3,s3):129, (n22,s22):130, (n25,s25):131, (n18,s18):132, (n11,s11):133, (n15,s15):134, (n8,s8):135, (n21,s21):136, (n12,s12):137, (n6,s6):138, (n28,s28):139, (n23,s23):140, (n2,s2):141] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:17 +region=US_West:2]
-  r5:0000{080000-100000} [(n1,s1):118, (n8,s8):119, (n17,s17):120, (n18,s18):121, (n28,s28):122, (n3,s3):123, (n9,s9):124, (n5,s5):125, (n12,s12):126, (n26,s26):127, (n11,s11):128, (n22,s22):129, (n14,s14):130, (n24,s24):131, (n20,s20):132, (n25,s25):133, (n6,s6):134, (n21,s21):135, (n7,s7):136, (n23,s23):137, (n15,s15):138, (n19,s19):139, (n27,s27):140, (n2,s2):141, (n10,s10):142, (n4,s4):143, (n13,s13):144, (n16,s16):145] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:17 +region=US_West:2]
-  r6:00001{00000-20000} [(n1,s1):117, (n16,s16):118, (n6,s6):119, (n25,s25):120, (n23,s23):121, (n3,s3):122, (n4,s4):123, (n13,s13):124, (n7,s7):125, (n12,s12):126, (n24,s24):127, (n18,s18):128, (n19,s19):129, (n17,s17):130, (n2,s2):131, (n11,s11):132, (n26,s26):133, (n21,s21):134, (n27,s27):135, (n8,s8):136, (n5,s5):137, (n28,s28):138, (n15,s15):139, (n9,s9):140, (n22,s22):141, (n14,s14):142, (n10,s10):143, (n20,s20):144] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:17 +region=US_West:2]
-  r7:00001{20000-40000} [(n1,s1):112, (n7,s7):113, (n3,s3):114, (n26,s26):115, (n13,s13):116, (n28,s28):117, (n11,s11):118, (n24,s24):119, (n23,s23):120, (n12,s12):121, (n14,s14):122, (n6,s6):123, (n4,s4):124, (n10,s10):125, (n21,s21):126, (n20,s20):127, (n2,s2):128, (n16,s16):129, (n27,s27):130, (n8,s8):131, (n9,s9):132, (n18,s18):133, (n25,s25):134, (n5,s5):135, (n22,s22):136, (n19,s19):137, (n17,s17):138, (n15,s15):139] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:17 +region=US_West:2]
-  r8:00001{40000-60000} [(n1,s1):111, (n15,s15):112, (n19,s19):113, (n2,s2):114, (n10,s10):115, (n20,s20):116, (n4,s4):117, (n8,s8):118, (n27,s27):119, (n25,s25):120, (n18,s18):121, (n9,s9):122, (n23,s23):123, (n28,s28):124, (n5,s5):125, (n7,s7):126, (n6,s6):127, (n16,s16):128, (n14,s14):129, (n11,s11):130, (n17,s17):131, (n22,s22):132, (n12,s12):133, (n21,s21):134, (n13,s13):135, (n26,s26):136, (n24,s24):137, (n3,s3):138] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:17 +region=US_West:2]
-  r9:00001{60000-80000} [(n1,s1):112, (n5,s5):113, (n22,s22):114, (n25,s25):115, (n16,s16):116, (n9,s9):117, (n27,s27):118, (n24,s24):119, (n2,s2):120, (n15,s15):121, (n26,s26):122, (n13,s13):123, (n14,s14):124, (n28,s28):125, (n6,s6):126, (n8,s8):127, (n17,s17):128, (n23,s23):129, (n20,s20):130, (n18,s18):131, (n19,s19):132, (n10,s10):133, (n3,s3):134, (n11,s11):135, (n21,s21):136, (n4,s4):137, (n12,s12):138, (n7,s7):139] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:17 +region=US_West:2]
-  r10:{0000180000-2147483647} [(n1,s1):112, (n10,s10):113, (n22,s22):114, (n21,s21):115, (n17,s17):116, (n19,s19):117, (n8,s8):118, (n12,s12):119, (n11,s11):120, (n2,s2):121, (n20,s20):122, (n15,s15):123, (n7,s7):124, (n4,s4):125, (n3,s3):126, (n13,s13):127, (n5,s5):128, (n28,s28):129, (n27,s27):130, (n18,s18):131, (n24,s24):132, (n26,s26):133, (n14,s14):134, (n9,s9):135, (n16,s16):136, (n23,s23):137, (n6,s6):138, (n25,s25):139] applying num_replicas=28 num_voters=28 constraints=[+region=EU:10 +region=US_East:17 +region=US_West:2]
+  r1: [a: 2 voters, a1: 1 voter, a4: 1 voter, c: 1 voter, c1: 1 voter]
+  r2: [a: 2 voters, a1: 1 voter, a4: 1 voter, c: 1 voter, c2: 1 voter]
+  r3: [a: 3 voters, a1: 1 voter, a4: 2 voters]
+... and 17 more
  	unsatisfiable:
 validation result:
-	zone:
-		EU_1: voters: 0, non_voters: 0, unassigned: 3
-		EU_2: voters: 0, non_voters: 0, unassigned: 3
-		EU_3: voters: 0, non_voters: 0, unassigned: 4
-		US_East_1: voters: 0, non_voters: 0, unassigned: 1
-		US_East_2: voters: 0, non_voters: 0, unassigned: 2
-		US_East_3: voters: 0, non_voters: 0, unassigned: 13
-		US_West_1: voters: 0, non_voters: 0, unassigned: 2
-	region:
-		EU: voters: 0, non_voters: 10, unassigned: 0
-		US_East: voters: 0, non_voters: 0, unassigned: 16
-		US_West: voters: 0, non_voters: 0, unassigned: 2
-	cluster: voters: 0, non_voters: 10, unassigned: 18
-failed to satisfy constraints for region US_East
+	1.zone:
+	2.region:
+	3.cluster: 
+failed to satisfy constraints for region a
+constraint:
+replicas=28
+voters=28
+constraints=[+region=a:17 +region=b:2 +region=c:10]
+voter_constraints=[]
 
 
 	executed at: 2022-03-21 14:00:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:16 num_voters:3 constraints:<num_replicas:16 constraints:<key:"region" value:"US_East" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"EU" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:16 num_voters:3 constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > voter_constraints:<num_replicas:2 constraints:<key:"region" value:"c" > > 
 	executed at: 2022-03-21 14:10:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=0 under=0, over=0 violating=10 lease-violating=0 lease-less-preferred=0
-violating constraints:
-  r1:00000{00000-20000} [(n8,s8):139, (n10,s10):127, (n4,s4):124, (n6,s6):140NON_VOTER, (n7,s7):141NON_VOTER, (n13,s13):142NON_VOTER, (n1,s1):143NON_VOTER, (n5,s5):144NON_VOTER, (n16,s16):145NON_VOTER, (n2,s2):146NON_VOTER, (n15,s15):147NON_VOTER, (n14,s14):148NON_VOTER, (n12,s12):149NON_VOTER, (n3,s3):150NON_VOTER, (n9,s9):151NON_VOTER, (n11,s11):152NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16] voter_constraints=[+region=EU:2]
-  r2:00000{20000-40000} [(n6,s6):118, (n5,s5):129, (n13,s13):147, (n14,s14):134NON_VOTER, (n12,s12):135NON_VOTER, (n1,s1):136NON_VOTER, (n3,s3):137NON_VOTER, (n4,s4):138NON_VOTER, (n9,s9):139NON_VOTER, (n11,s11):140NON_VOTER, (n7,s7):141NON_VOTER, (n15,s15):142NON_VOTER, (n8,s8):143NON_VOTER, (n10,s10):146NON_VOTER, (n16,s16):145NON_VOTER, (n2,s2):149NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16] voter_constraints=[+region=EU:2]
-  r3:00000{40000-60000} [(n1,s1):111, (n11,s11):138, (n2,s2):126, (n6,s6):139NON_VOTER, (n7,s7):140NON_VOTER, (n13,s13):141NON_VOTER, (n9,s9):142NON_VOTER, (n5,s5):143NON_VOTER, (n14,s14):144NON_VOTER, (n15,s15):145NON_VOTER, (n4,s4):146NON_VOTER, (n8,s8):147NON_VOTER, (n10,s10):148NON_VOTER, (n3,s3):149NON_VOTER, (n12,s12):150NON_VOTER, (n16,s16):151NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16] voter_constraints=[+region=EU:2]
-  r4:00000{60000-80000} [(n2,s2):141, (n15,s15):134, (n8,s8):135, (n14,s14):142NON_VOTER, (n12,s12):143NON_VOTER, (n5,s5):144NON_VOTER, (n6,s6):145NON_VOTER, (n9,s9):146NON_VOTER, (n3,s3):147NON_VOTER, (n11,s11):148NON_VOTER, (n10,s10):149NON_VOTER, (n13,s13):150NON_VOTER, (n16,s16):151NON_VOTER, (n1,s1):152NON_VOTER, (n4,s4):153NON_VOTER, (n7,s7):154NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16] voter_constraints=[+region=EU:2]
-  r5:0000{080000-100000} [(n11,s11):128, (n9,s9):124, (n16,s16):145, (n14,s14):146NON_VOTER, (n13,s13):147NON_VOTER, (n4,s4):148NON_VOTER, (n12,s12):149NON_VOTER, (n1,s1):150NON_VOTER, (n5,s5):151NON_VOTER, (n6,s6):152NON_VOTER, (n3,s3):153NON_VOTER, (n7,s7):154NON_VOTER, (n15,s15):155NON_VOTER, (n2,s2):156NON_VOTER, (n10,s10):157NON_VOTER, (n8,s8):158NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16] voter_constraints=[+region=EU:2]
-  r6:00001{00000-20000} [(n12,s12):161, (n7,s7):125, (n9,s9):158, (n14,s14):145NON_VOTER, (n1,s1):160NON_VOTER, (n4,s4):147NON_VOTER, (n16,s16):148NON_VOTER, (n13,s13):149NON_VOTER, (n5,s5):150NON_VOTER, (n2,s2):151NON_VOTER, (n3,s3):152NON_VOTER, (n10,s10):153NON_VOTER, (n6,s6):154NON_VOTER, (n8,s8):157NON_VOTER, (n15,s15):156NON_VOTER, (n11,s11):162NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16] voter_constraints=[+region=EU:2]
-  r7:00001{20000-40000} [(n15,s15):139, (n2,s2):128, (n10,s10):125, (n8,s8):140NON_VOTER, (n7,s7):141NON_VOTER, (n12,s12):142NON_VOTER, (n4,s4):143NON_VOTER, (n5,s5):144NON_VOTER, (n6,s6):145NON_VOTER, (n1,s1):146NON_VOTER, (n16,s16):147NON_VOTER, (n3,s3):148NON_VOTER, (n14,s14):149NON_VOTER, (n11,s11):150NON_VOTER, (n13,s13):151NON_VOTER, (n9,s9):152NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16] voter_constraints=[+region=EU:2]
-  r8:00001{40000-60000} [(n16,s16):128, (n3,s3):138, (n13,s13):135, (n4,s4):139NON_VOTER, (n5,s5):140NON_VOTER, (n9,s9):141NON_VOTER, (n12,s12):142NON_VOTER, (n7,s7):143NON_VOTER, (n15,s15):144NON_VOTER, (n10,s10):145NON_VOTER, (n2,s2):146NON_VOTER, (n11,s11):147NON_VOTER, (n8,s8):148NON_VOTER, (n6,s6):149NON_VOTER, (n14,s14):150NON_VOTER, (n1,s1):151NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16] voter_constraints=[+region=EU:2]
-  r9:00001{60000-80000} [(n16,s16):116, (n7,s7):139, (n10,s10):133, (n12,s12):140NON_VOTER, (n11,s11):141NON_VOTER, (n6,s6):142NON_VOTER, (n8,s8):143NON_VOTER, (n3,s3):144NON_VOTER, (n9,s9):145NON_VOTER, (n14,s14):146NON_VOTER, (n15,s15):147NON_VOTER, (n4,s4):148NON_VOTER, (n1,s1):149NON_VOTER, (n13,s13):150NON_VOTER, (n2,s2):151NON_VOTER, (n5,s5):152NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16] voter_constraints=[+region=EU:2]
-  r10:{0000180000-2147483647} [(n5,s5):128, (n9,s9):135, (n6,s6):153, (n12,s12):140NON_VOTER, (n14,s14):141NON_VOTER, (n1,s1):142NON_VOTER, (n3,s3):143NON_VOTER, (n10,s10):144NON_VOTER, (n16,s16):145NON_VOTER, (n2,s2):146NON_VOTER, (n13,s13):147NON_VOTER, (n15,s15):148NON_VOTER, (n7,s7):149NON_VOTER, (n11,s11):150NON_VOTER, (n4,s4):152NON_VOTER, (n8,s8):155NON_VOTER] applying num_replicas=16 num_voters=3 constraints=[+region=US_East:16] voter_constraints=[+region=EU:2]
+  actual unavailable=0 under=1, over=0 violating=22 lease-violating=0 lease-less-preferred=0
+under replicated:
+  r12: [a: 2 voters, a1: 1 voter, a4: 1 voter, c: 1 voter, c2: 1 voter]violating constraints:
+  r1: [a: 3 voters, a4: 3 voters]
+  r2: [a: 3 voters, a2: 1 voter, a4: 2 voters]
+  r3: [a: 3 voters, a3: 2 voters, a4: 1 voter]
+... and 19 more
  	unsatisfiable:
 validation result:
-	zone:
-		EU_1: voters: 0, non_voters: 0, unassigned: 3
-		EU_2: voters: 0, non_voters: 0, unassigned: 3
-		EU_3: voters: 0, non_voters: 0, unassigned: 4
-		US_East_1: voters: 0, non_voters: 0, unassigned: 1
-		US_East_2: voters: 0, non_voters: 0, unassigned: 2
-		US_East_3: voters: 0, non_voters: 0, unassigned: 13
-		US_West_1: voters: 0, non_voters: 0, unassigned: 2
-	region:
-		EU: voters: 2, non_voters: 0, unassigned: 8
-		US_East: voters: 0, non_voters: 16, unassigned: 0
-		US_West: voters: 0, non_voters: 0, unassigned: 2
-	cluster: voters: 3, non_voters: 15, unassigned: 10
+	1.zone:
+	2.region:
+		a: 16 non_voters
+		c: 2 voters
+	3.cluster: 3 voters, 15 non_voters
 failed to satisfy constraints for cluster
+constraint:
+replicas=16
+voters=3
+constraints=[+region=a:16]
+voter_constraints=[+region=c:2]
 
 
 	executed at: 2022-03-21 14:10:00
@@ -333,223 +238,147 @@ failed to satisfy constraints for cluster
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed
 	executed at: 2022-03-21 14:20:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:6 num_voters:2 constraints:<num_replicas:16 constraints:<key:"region" value:"US_East" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:6 num_voters:2 constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > 
 	executed at: 2022-03-21 14:30:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=0 under=0, over=0 violating=10 lease-violating=0 lease-less-preferred=0
+  actual unavailable=0 under=0, over=0 violating=20 lease-violating=0 lease-less-preferred=0
 violating constraints:
-  r1:00000{00000-20000} [(n8,s8):139, (n10,s10):127, (n15,s15):153NON_VOTER, (n16,s16):154NON_VOTER, (n4,s4):155NON_VOTER, (n13,s13):156NON_VOTER] applying num_replicas=6 num_voters=2 constraints=[+region=US_East:16]
-  r2:00000{20000-40000} [(n13,s13):147, (n5,s5):129, (n14,s14):150NON_VOTER, (n1,s1):154NON_VOTER, (n4,s4):152NON_VOTER, (n3,s3):153NON_VOTER] applying num_replicas=6 num_voters=2 constraints=[+region=US_East:16]
-  r3:00000{40000-60000} [(n2,s2):126, (n11,s11):138, (n9,s9):152NON_VOTER, (n1,s1):153NON_VOTER, (n3,s3):154NON_VOTER, (n5,s5):155NON_VOTER] applying num_replicas=6 num_voters=2 constraints=[+region=US_East:16]
-  r4:00000{60000-80000} [(n2,s2):141, (n8,s8):135, (n6,s6):155NON_VOTER, (n12,s12):156NON_VOTER, (n1,s1):157NON_VOTER, (n14,s14):158NON_VOTER] applying num_replicas=6 num_voters=2 constraints=[+region=US_East:16]
-  r5:0000{080000-100000} [(n11,s11):128, (n16,s16):145, (n15,s15):159NON_VOTER, (n3,s3):160NON_VOTER, (n2,s2):161NON_VOTER, (n4,s4):162NON_VOTER] applying num_replicas=6 num_voters=2 constraints=[+region=US_East:16]
-  r6:00001{00000-20000} [(n9,s9):158, (n7,s7):125, (n15,s15):163NON_VOTER, (n3,s3):164NON_VOTER, (n12,s12):165NON_VOTER, (n1,s1):166NON_VOTER] applying num_replicas=6 num_voters=2 constraints=[+region=US_East:16]
-  r7:00001{20000-40000} [(n15,s15):139, (n10,s10):125, (n4,s4):153NON_VOTER, (n12,s12):154NON_VOTER, (n14,s14):155NON_VOTER, (n7,s7):156NON_VOTER] applying num_replicas=6 num_voters=2 constraints=[+region=US_East:16]
-  r8:00001{40000-60000} [(n16,s16):128, (n13,s13):135, (n15,s15):152NON_VOTER, (n2,s2):153NON_VOTER, (n3,s3):154NON_VOTER, (n12,s12):155NON_VOTER] applying num_replicas=6 num_voters=2 constraints=[+region=US_East:16]
-  r9:00001{60000-80000} [(n10,s10):133, (n7,s7):139, (n13,s13):153NON_VOTER, (n6,s6):154NON_VOTER, (n14,s14):155NON_VOTER, (n8,s8):156NON_VOTER] applying num_replicas=6 num_voters=2 constraints=[+region=US_East:16]
-  r10:{0000180000-2147483647} [(n6,s6):153, (n9,s9):135, (n7,s7):156NON_VOTER, (n14,s14):157NON_VOTER, (n4,s4):158NON_VOTER, (n1,s1):159NON_VOTER] applying num_replicas=6 num_voters=2 constraints=[+region=US_East:16]
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 more
  	unsatisfiable:
 validation result:
-	zone:
-		EU_1: voters: 0, non_voters: 0, unassigned: 3
-		EU_2: voters: 0, non_voters: 0, unassigned: 3
-		EU_3: voters: 0, non_voters: 0, unassigned: 4
-		US_East_1: voters: 0, non_voters: 0, unassigned: 1
-		US_East_2: voters: 0, non_voters: 0, unassigned: 2
-		US_East_3: voters: 0, non_voters: 0, unassigned: 13
-		US_West_1: voters: 0, non_voters: 0, unassigned: 2
-	region:
-		EU: voters: 0, non_voters: 0, unassigned: 10
-		US_East: voters: 0, non_voters: 16, unassigned: 0
-		US_West: voters: 0, non_voters: 0, unassigned: 2
-	cluster: voters: 2, non_voters: 14, unassigned: 12
+	1.zone:
+	2.region:
+		a: 16 non_voters
+	3.cluster: 2 voters, 14 non_voters
 failed to satisfy constraints for cluster
+constraint:
+replicas=6
+voters=2
+constraints=[+region=a:16]
+voter_constraints=[]
 
 
 	executed at: 2022-03-21 14:30:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:20 num_voters:2 voter_constraints:<num_replicas:16 constraints:<key:"region" value:"US_East" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:20 num_voters:2 voter_constraints:<num_replicas:16 constraints:<key:"region" value:"a" > > 
 	executed at: 2022-03-21 14:40:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=0 under=0, over=0 violating=10 lease-violating=0 lease-less-preferred=0
+  actual unavailable=0 under=0, over=0 violating=20 lease-violating=0 lease-less-preferred=0
 violating constraints:
-  r1:00000{00000-20000} [(n8,s8):139, (n10,s10):127, (n15,s15):153NON_VOTER, (n16,s16):154NON_VOTER, (n4,s4):155NON_VOTER, (n13,s13):156NON_VOTER, (n18,s18):157NON_VOTER, (n28,s28):158NON_VOTER, (n19,s19):159NON_VOTER, (n20,s20):160NON_VOTER, (n5,s5):161NON_VOTER, (n22,s22):162NON_VOTER, (n21,s21):163NON_VOTER, (n27,s27):164NON_VOTER, (n7,s7):165NON_VOTER, (n24,s24):166NON_VOTER, (n25,s25):167NON_VOTER, (n1,s1):168NON_VOTER, (n17,s17):169NON_VOTER, (n14,s14):170NON_VOTER] applying num_replicas=20 num_voters=2 voter_constraints=[+region=US_East:16]
-  r2:00000{20000-40000} [(n13,s13):147, (n5,s5):129, (n14,s14):150NON_VOTER, (n1,s1):154NON_VOTER, (n4,s4):152NON_VOTER, (n3,s3):153NON_VOTER, (n18,s18):155NON_VOTER, (n22,s22):156NON_VOTER, (n21,s21):157NON_VOTER, (n17,s17):158NON_VOTER, (n28,s28):159NON_VOTER, (n20,s20):160NON_VOTER, (n8,s8):161NON_VOTER, (n6,s6):162NON_VOTER, (n9,s9):163NON_VOTER, (n24,s24):164NON_VOTER, (n12,s12):165NON_VOTER, (n26,s26):166NON_VOTER, (n27,s27):167NON_VOTER, (n19,s19):168NON_VOTER] applying num_replicas=20 num_voters=2 voter_constraints=[+region=US_East:16]
-  r3:00000{40000-60000} [(n2,s2):126, (n11,s11):138, (n9,s9):152NON_VOTER, (n1,s1):153NON_VOTER, (n3,s3):154NON_VOTER, (n5,s5):155NON_VOTER, (n18,s18):156NON_VOTER, (n24,s24):157NON_VOTER, (n14,s14):170NON_VOTER, (n17,s17):159NON_VOTER, (n25,s25):160NON_VOTER, (n23,s23):161NON_VOTER, (n28,s28):162NON_VOTER, (n10,s10):163NON_VOTER, (n16,s16):164NON_VOTER, (n13,s13):165NON_VOTER, (n19,s19):166NON_VOTER, (n21,s21):167NON_VOTER, (n26,s26):168NON_VOTER, (n7,s7):169NON_VOTER] applying num_replicas=20 num_voters=2 voter_constraints=[+region=US_East:16]
-  r4:00000{60000-80000} [(n2,s2):141, (n8,s8):135, (n6,s6):155NON_VOTER, (n12,s12):156NON_VOTER, (n1,s1):157NON_VOTER, (n14,s14):158NON_VOTER, (n25,s25):159NON_VOTER, (n19,s19):160NON_VOTER, (n23,s23):161NON_VOTER, (n20,s20):162NON_VOTER, (n11,s11):163NON_VOTER, (n18,s18):164NON_VOTER, (n15,s15):165NON_VOTER, (n22,s22):166NON_VOTER, (n28,s28):167NON_VOTER, (n26,s26):168NON_VOTER, (n13,s13):169NON_VOTER, (n3,s3):170NON_VOTER, (n5,s5):171NON_VOTER, (n16,s16):172NON_VOTER] applying num_replicas=20 num_voters=2 voter_constraints=[+region=US_East:16]
-  r5:0000{080000-100000} [(n11,s11):128, (n16,s16):145, (n15,s15):159NON_VOTER, (n3,s3):160NON_VOTER, (n2,s2):161NON_VOTER, (n4,s4):162NON_VOTER, (n22,s22):163NON_VOTER, (n26,s26):164NON_VOTER, (n24,s24):165NON_VOTER, (n19,s19):166NON_VOTER, (n18,s18):167NON_VOTER, (n20,s20):168NON_VOTER, (n6,s6):169NON_VOTER, (n5,s5):170NON_VOTER, (n9,s9):171NON_VOTER, (n21,s21):172NON_VOTER, (n23,s23):173NON_VOTER, (n7,s7):174NON_VOTER, (n1,s1):175NON_VOTER, (n10,s10):176NON_VOTER] applying num_replicas=20 num_voters=2 voter_constraints=[+region=US_East:16]
-  r6:00001{00000-20000} [(n9,s9):158, (n7,s7):125, (n15,s15):163NON_VOTER, (n3,s3):164NON_VOTER, (n12,s12):165NON_VOTER, (n1,s1):166NON_VOTER, (n27,s27):167NON_VOTER, (n25,s25):168NON_VOTER, (n26,s26):169NON_VOTER, (n20,s20):170NON_VOTER, (n8,s8):171NON_VOTER, (n21,s21):172NON_VOTER, (n2,s2):173NON_VOTER, (n18,s18):174NON_VOTER, (n28,s28):175NON_VOTER, (n17,s17):176NON_VOTER, (n11,s11):177NON_VOTER, (n23,s23):178NON_VOTER, (n6,s6):179NON_VOTER, (n4,s4):180NON_VOTER] applying num_replicas=20 num_voters=2 voter_constraints=[+region=US_East:16]
-  r7:00001{20000-40000} [(n15,s15):139, (n10,s10):125, (n4,s4):153NON_VOTER, (n12,s12):154NON_VOTER, (n14,s14):155NON_VOTER, (n7,s7):156NON_VOTER, (n17,s17):157NON_VOTER, (n22,s22):158NON_VOTER, (n20,s20):159NON_VOTER, (n9,s9):160NON_VOTER, (n6,s6):161NON_VOTER, (n19,s19):162NON_VOTER, (n16,s16):163NON_VOTER, (n13,s13):164NON_VOTER, (n1,s1):165NON_VOTER, (n27,s27):166NON_VOTER, (n5,s5):167NON_VOTER, (n26,s26):168NON_VOTER, (n23,s23):169NON_VOTER, (n18,s18):170NON_VOTER] applying num_replicas=20 num_voters=2 voter_constraints=[+region=US_East:16]
-  r8:00001{40000-60000} [(n16,s16):128, (n13,s13):135, (n15,s15):152NON_VOTER, (n2,s2):153NON_VOTER, (n3,s3):154NON_VOTER, (n12,s12):155NON_VOTER, (n27,s27):156NON_VOTER, (n23,s23):157NON_VOTER, (n18,s18):158NON_VOTER, (n17,s17):159NON_VOTER, (n20,s20):160NON_VOTER, (n5,s5):161NON_VOTER, (n9,s9):162NON_VOTER, (n25,s25):163NON_VOTER, (n26,s26):164NON_VOTER, (n8,s8):165NON_VOTER, (n4,s4):166NON_VOTER, (n24,s24):167NON_VOTER, (n7,s7):168NON_VOTER, (n10,s10):169NON_VOTER] applying num_replicas=20 num_voters=2 voter_constraints=[+region=US_East:16]
-  r9:00001{60000-80000} [(n10,s10):133, (n7,s7):139, (n13,s13):153NON_VOTER, (n6,s6):154NON_VOTER, (n14,s14):155NON_VOTER, (n8,s8):156NON_VOTER, (n24,s24):157NON_VOTER, (n28,s28):158NON_VOTER, (n25,s25):159NON_VOTER, (n17,s17):160NON_VOTER, (n23,s23):161NON_VOTER, (n27,s27):162NON_VOTER, (n21,s21):163NON_VOTER, (n16,s16):164NON_VOTER, (n11,s11):165NON_VOTER, (n3,s3):166NON_VOTER, (n19,s19):167NON_VOTER, (n2,s2):168NON_VOTER, (n15,s15):169NON_VOTER, (n22,s22):170NON_VOTER] applying num_replicas=20 num_voters=2 voter_constraints=[+region=US_East:16]
-  r10:{0000180000-2147483647} [(n6,s6):153, (n9,s9):135, (n7,s7):156NON_VOTER, (n14,s14):157NON_VOTER, (n4,s4):158NON_VOTER, (n1,s1):159NON_VOTER, (n26,s26):160NON_VOTER, (n21,s21):161NON_VOTER, (n22,s22):162NON_VOTER, (n27,s27):163NON_VOTER, (n20,s20):164NON_VOTER, (n11,s11):165NON_VOTER, (n5,s5):166NON_VOTER, (n24,s24):167NON_VOTER, (n28,s28):168NON_VOTER, (n12,s12):169NON_VOTER, (n25,s25):170NON_VOTER, (n17,s17):171NON_VOTER, (n8,s8):172NON_VOTER, (n10,s10):173NON_VOTER] applying num_replicas=20 num_voters=2 voter_constraints=[+region=US_East:16]
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 more
  	unsatisfiable:
 validation result:
-	zone:
-		EU_1: voters: 0, non_voters: 0, unassigned: 3
-		EU_2: voters: 0, non_voters: 0, unassigned: 3
-		EU_3: voters: 0, non_voters: 0, unassigned: 4
-		US_East_1: voters: 0, non_voters: 0, unassigned: 1
-		US_East_2: voters: 0, non_voters: 0, unassigned: 2
-		US_East_3: voters: 0, non_voters: 0, unassigned: 13
-		US_West_1: voters: 0, non_voters: 0, unassigned: 2
-	region:
-		EU: voters: 0, non_voters: 0, unassigned: 10
-		US_East: voters: 16, non_voters: 0, unassigned: 0
-		US_West: voters: 0, non_voters: 0, unassigned: 2
-	cluster: voters: 16, non_voters: 4, unassigned: 8
+	1.zone:
+	2.region:
+		a: 16 voters
+	3.cluster: 16 voters, 4 non_voters
 failed to satisfy constraints for cluster
+constraint:
+replicas=20
+voters=2
+constraints=[]
+voter_constraints=[+region=a:16]
 
 
 	executed at: 2022-03-21 14:40:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<constraints:<key:"region" value:"US_East" > > voter_constraints:<constraints:<key:"region" value:"US_West" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:3 constraints:<constraints:<key:"region" value:"a" > > voter_constraints:<constraints:<key:"region" value:"b" > > 
 	executed at: 2022-03-21 14:50:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=0 under=10, over=10 violating=10 lease-violating=0 lease-less-preferred=0
+  actual unavailable=0 under=20, over=20 violating=20 lease-violating=0 lease-less-preferred=0
 under replicated:
-  r1:00000{00000-20000} [(n8,s8):139, (n10,s10):127, (n15,s15):153NON_VOTER, (n16,s16):154NON_VOTER, (n4,s4):155NON_VOTER, (n13,s13):156NON_VOTER, (n18,s18):157NON_VOTER, (n28,s28):158NON_VOTER, (n19,s19):159NON_VOTER, (n20,s20):160NON_VOTER, (n5,s5):161NON_VOTER, (n22,s22):162NON_VOTER, (n21,s21):163NON_VOTER, (n27,s27):164NON_VOTER, (n7,s7):165NON_VOTER, (n24,s24):166NON_VOTER, (n25,s25):167NON_VOTER, (n1,s1):168NON_VOTER, (n17,s17):169NON_VOTER, (n14,s14):170NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r2:00000{20000-40000} [(n13,s13):147, (n5,s5):129, (n14,s14):150NON_VOTER, (n1,s1):154NON_VOTER, (n4,s4):152NON_VOTER, (n3,s3):153NON_VOTER, (n18,s18):155NON_VOTER, (n22,s22):156NON_VOTER, (n21,s21):157NON_VOTER, (n17,s17):158NON_VOTER, (n28,s28):159NON_VOTER, (n20,s20):160NON_VOTER, (n8,s8):161NON_VOTER, (n6,s6):162NON_VOTER, (n9,s9):163NON_VOTER, (n24,s24):164NON_VOTER, (n12,s12):165NON_VOTER, (n26,s26):166NON_VOTER, (n27,s27):167NON_VOTER, (n19,s19):168NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r3:00000{40000-60000} [(n2,s2):126, (n11,s11):138, (n9,s9):152NON_VOTER, (n1,s1):153NON_VOTER, (n3,s3):154NON_VOTER, (n5,s5):155NON_VOTER, (n18,s18):156NON_VOTER, (n24,s24):157NON_VOTER, (n14,s14):170NON_VOTER, (n17,s17):159NON_VOTER, (n25,s25):160NON_VOTER, (n23,s23):161NON_VOTER, (n28,s28):162NON_VOTER, (n10,s10):163NON_VOTER, (n16,s16):164NON_VOTER, (n13,s13):165NON_VOTER, (n19,s19):166NON_VOTER, (n21,s21):167NON_VOTER, (n26,s26):168NON_VOTER, (n7,s7):169NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r4:00000{60000-80000} [(n2,s2):141, (n8,s8):135, (n6,s6):155NON_VOTER, (n12,s12):156NON_VOTER, (n1,s1):157NON_VOTER, (n14,s14):158NON_VOTER, (n25,s25):159NON_VOTER, (n19,s19):160NON_VOTER, (n23,s23):161NON_VOTER, (n20,s20):162NON_VOTER, (n11,s11):163NON_VOTER, (n18,s18):164NON_VOTER, (n15,s15):165NON_VOTER, (n22,s22):166NON_VOTER, (n28,s28):167NON_VOTER, (n26,s26):168NON_VOTER, (n13,s13):169NON_VOTER, (n3,s3):170NON_VOTER, (n5,s5):171NON_VOTER, (n16,s16):172NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r5:0000{080000-100000} [(n11,s11):128, (n16,s16):145, (n15,s15):159NON_VOTER, (n3,s3):160NON_VOTER, (n2,s2):161NON_VOTER, (n4,s4):162NON_VOTER, (n22,s22):163NON_VOTER, (n26,s26):164NON_VOTER, (n24,s24):165NON_VOTER, (n19,s19):166NON_VOTER, (n18,s18):167NON_VOTER, (n20,s20):168NON_VOTER, (n6,s6):169NON_VOTER, (n5,s5):170NON_VOTER, (n9,s9):171NON_VOTER, (n21,s21):172NON_VOTER, (n23,s23):173NON_VOTER, (n7,s7):174NON_VOTER, (n1,s1):175NON_VOTER, (n10,s10):176NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r6:00001{00000-20000} [(n9,s9):158, (n7,s7):125, (n15,s15):163NON_VOTER, (n3,s3):164NON_VOTER, (n12,s12):165NON_VOTER, (n1,s1):166NON_VOTER, (n27,s27):167NON_VOTER, (n25,s25):168NON_VOTER, (n26,s26):169NON_VOTER, (n20,s20):170NON_VOTER, (n8,s8):171NON_VOTER, (n21,s21):172NON_VOTER, (n2,s2):173NON_VOTER, (n18,s18):174NON_VOTER, (n28,s28):175NON_VOTER, (n17,s17):176NON_VOTER, (n11,s11):177NON_VOTER, (n23,s23):178NON_VOTER, (n6,s6):179NON_VOTER, (n4,s4):180NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r7:00001{20000-40000} [(n15,s15):139, (n10,s10):125, (n4,s4):153NON_VOTER, (n12,s12):154NON_VOTER, (n14,s14):155NON_VOTER, (n7,s7):156NON_VOTER, (n17,s17):157NON_VOTER, (n22,s22):158NON_VOTER, (n20,s20):159NON_VOTER, (n9,s9):160NON_VOTER, (n6,s6):161NON_VOTER, (n19,s19):162NON_VOTER, (n16,s16):163NON_VOTER, (n13,s13):164NON_VOTER, (n1,s1):165NON_VOTER, (n27,s27):166NON_VOTER, (n5,s5):167NON_VOTER, (n26,s26):168NON_VOTER, (n23,s23):169NON_VOTER, (n18,s18):170NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r8:00001{40000-60000} [(n16,s16):128, (n13,s13):135, (n15,s15):152NON_VOTER, (n2,s2):153NON_VOTER, (n3,s3):154NON_VOTER, (n12,s12):155NON_VOTER, (n27,s27):156NON_VOTER, (n23,s23):157NON_VOTER, (n18,s18):158NON_VOTER, (n17,s17):159NON_VOTER, (n20,s20):160NON_VOTER, (n5,s5):161NON_VOTER, (n9,s9):162NON_VOTER, (n25,s25):163NON_VOTER, (n26,s26):164NON_VOTER, (n8,s8):165NON_VOTER, (n4,s4):166NON_VOTER, (n24,s24):167NON_VOTER, (n7,s7):168NON_VOTER, (n10,s10):169NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r9:00001{60000-80000} [(n10,s10):133, (n7,s7):139, (n13,s13):153NON_VOTER, (n6,s6):154NON_VOTER, (n14,s14):155NON_VOTER, (n8,s8):156NON_VOTER, (n24,s24):157NON_VOTER, (n28,s28):158NON_VOTER, (n25,s25):159NON_VOTER, (n17,s17):160NON_VOTER, (n23,s23):161NON_VOTER, (n27,s27):162NON_VOTER, (n21,s21):163NON_VOTER, (n16,s16):164NON_VOTER, (n11,s11):165NON_VOTER, (n3,s3):166NON_VOTER, (n19,s19):167NON_VOTER, (n2,s2):168NON_VOTER, (n15,s15):169NON_VOTER, (n22,s22):170NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r10:{0000180000-2147483647} [(n6,s6):153, (n9,s9):135, (n7,s7):156NON_VOTER, (n14,s14):157NON_VOTER, (n4,s4):158NON_VOTER, (n1,s1):159NON_VOTER, (n26,s26):160NON_VOTER, (n21,s21):161NON_VOTER, (n22,s22):162NON_VOTER, (n27,s27):163NON_VOTER, (n20,s20):164NON_VOTER, (n11,s11):165NON_VOTER, (n5,s5):166NON_VOTER, (n24,s24):167NON_VOTER, (n28,s28):168NON_VOTER, (n12,s12):169NON_VOTER, (n25,s25):170NON_VOTER, (n17,s17):171NON_VOTER, (n8,s8):172NON_VOTER, (n10,s10):173NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]over replicated:
-  r1:00000{00000-20000} [(n8,s8):139, (n10,s10):127, (n15,s15):153NON_VOTER, (n16,s16):154NON_VOTER, (n4,s4):155NON_VOTER, (n13,s13):156NON_VOTER, (n18,s18):157NON_VOTER, (n28,s28):158NON_VOTER, (n19,s19):159NON_VOTER, (n20,s20):160NON_VOTER, (n5,s5):161NON_VOTER, (n22,s22):162NON_VOTER, (n21,s21):163NON_VOTER, (n27,s27):164NON_VOTER, (n7,s7):165NON_VOTER, (n24,s24):166NON_VOTER, (n25,s25):167NON_VOTER, (n1,s1):168NON_VOTER, (n17,s17):169NON_VOTER, (n14,s14):170NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r2:00000{20000-40000} [(n13,s13):147, (n5,s5):129, (n14,s14):150NON_VOTER, (n1,s1):154NON_VOTER, (n4,s4):152NON_VOTER, (n3,s3):153NON_VOTER, (n18,s18):155NON_VOTER, (n22,s22):156NON_VOTER, (n21,s21):157NON_VOTER, (n17,s17):158NON_VOTER, (n28,s28):159NON_VOTER, (n20,s20):160NON_VOTER, (n8,s8):161NON_VOTER, (n6,s6):162NON_VOTER, (n9,s9):163NON_VOTER, (n24,s24):164NON_VOTER, (n12,s12):165NON_VOTER, (n26,s26):166NON_VOTER, (n27,s27):167NON_VOTER, (n19,s19):168NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r3:00000{40000-60000} [(n2,s2):126, (n11,s11):138, (n9,s9):152NON_VOTER, (n1,s1):153NON_VOTER, (n3,s3):154NON_VOTER, (n5,s5):155NON_VOTER, (n18,s18):156NON_VOTER, (n24,s24):157NON_VOTER, (n14,s14):170NON_VOTER, (n17,s17):159NON_VOTER, (n25,s25):160NON_VOTER, (n23,s23):161NON_VOTER, (n28,s28):162NON_VOTER, (n10,s10):163NON_VOTER, (n16,s16):164NON_VOTER, (n13,s13):165NON_VOTER, (n19,s19):166NON_VOTER, (n21,s21):167NON_VOTER, (n26,s26):168NON_VOTER, (n7,s7):169NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r4:00000{60000-80000} [(n2,s2):141, (n8,s8):135, (n6,s6):155NON_VOTER, (n12,s12):156NON_VOTER, (n1,s1):157NON_VOTER, (n14,s14):158NON_VOTER, (n25,s25):159NON_VOTER, (n19,s19):160NON_VOTER, (n23,s23):161NON_VOTER, (n20,s20):162NON_VOTER, (n11,s11):163NON_VOTER, (n18,s18):164NON_VOTER, (n15,s15):165NON_VOTER, (n22,s22):166NON_VOTER, (n28,s28):167NON_VOTER, (n26,s26):168NON_VOTER, (n13,s13):169NON_VOTER, (n3,s3):170NON_VOTER, (n5,s5):171NON_VOTER, (n16,s16):172NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r5:0000{080000-100000} [(n11,s11):128, (n16,s16):145, (n15,s15):159NON_VOTER, (n3,s3):160NON_VOTER, (n2,s2):161NON_VOTER, (n4,s4):162NON_VOTER, (n22,s22):163NON_VOTER, (n26,s26):164NON_VOTER, (n24,s24):165NON_VOTER, (n19,s19):166NON_VOTER, (n18,s18):167NON_VOTER, (n20,s20):168NON_VOTER, (n6,s6):169NON_VOTER, (n5,s5):170NON_VOTER, (n9,s9):171NON_VOTER, (n21,s21):172NON_VOTER, (n23,s23):173NON_VOTER, (n7,s7):174NON_VOTER, (n1,s1):175NON_VOTER, (n10,s10):176NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r6:00001{00000-20000} [(n9,s9):158, (n7,s7):125, (n15,s15):163NON_VOTER, (n3,s3):164NON_VOTER, (n12,s12):165NON_VOTER, (n1,s1):166NON_VOTER, (n27,s27):167NON_VOTER, (n25,s25):168NON_VOTER, (n26,s26):169NON_VOTER, (n20,s20):170NON_VOTER, (n8,s8):171NON_VOTER, (n21,s21):172NON_VOTER, (n2,s2):173NON_VOTER, (n18,s18):174NON_VOTER, (n28,s28):175NON_VOTER, (n17,s17):176NON_VOTER, (n11,s11):177NON_VOTER, (n23,s23):178NON_VOTER, (n6,s6):179NON_VOTER, (n4,s4):180NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r7:00001{20000-40000} [(n15,s15):139, (n10,s10):125, (n4,s4):153NON_VOTER, (n12,s12):154NON_VOTER, (n14,s14):155NON_VOTER, (n7,s7):156NON_VOTER, (n17,s17):157NON_VOTER, (n22,s22):158NON_VOTER, (n20,s20):159NON_VOTER, (n9,s9):160NON_VOTER, (n6,s6):161NON_VOTER, (n19,s19):162NON_VOTER, (n16,s16):163NON_VOTER, (n13,s13):164NON_VOTER, (n1,s1):165NON_VOTER, (n27,s27):166NON_VOTER, (n5,s5):167NON_VOTER, (n26,s26):168NON_VOTER, (n23,s23):169NON_VOTER, (n18,s18):170NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r8:00001{40000-60000} [(n16,s16):128, (n13,s13):135, (n15,s15):152NON_VOTER, (n2,s2):153NON_VOTER, (n3,s3):154NON_VOTER, (n12,s12):155NON_VOTER, (n27,s27):156NON_VOTER, (n23,s23):157NON_VOTER, (n18,s18):158NON_VOTER, (n17,s17):159NON_VOTER, (n20,s20):160NON_VOTER, (n5,s5):161NON_VOTER, (n9,s9):162NON_VOTER, (n25,s25):163NON_VOTER, (n26,s26):164NON_VOTER, (n8,s8):165NON_VOTER, (n4,s4):166NON_VOTER, (n24,s24):167NON_VOTER, (n7,s7):168NON_VOTER, (n10,s10):169NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r9:00001{60000-80000} [(n10,s10):133, (n7,s7):139, (n13,s13):153NON_VOTER, (n6,s6):154NON_VOTER, (n14,s14):155NON_VOTER, (n8,s8):156NON_VOTER, (n24,s24):157NON_VOTER, (n28,s28):158NON_VOTER, (n25,s25):159NON_VOTER, (n17,s17):160NON_VOTER, (n23,s23):161NON_VOTER, (n27,s27):162NON_VOTER, (n21,s21):163NON_VOTER, (n16,s16):164NON_VOTER, (n11,s11):165NON_VOTER, (n3,s3):166NON_VOTER, (n19,s19):167NON_VOTER, (n2,s2):168NON_VOTER, (n15,s15):169NON_VOTER, (n22,s22):170NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r10:{0000180000-2147483647} [(n6,s6):153, (n9,s9):135, (n7,s7):156NON_VOTER, (n14,s14):157NON_VOTER, (n4,s4):158NON_VOTER, (n1,s1):159NON_VOTER, (n26,s26):160NON_VOTER, (n21,s21):161NON_VOTER, (n22,s22):162NON_VOTER, (n27,s27):163NON_VOTER, (n20,s20):164NON_VOTER, (n11,s11):165NON_VOTER, (n5,s5):166NON_VOTER, (n24,s24):167NON_VOTER, (n28,s28):168NON_VOTER, (n12,s12):169NON_VOTER, (n25,s25):170NON_VOTER, (n17,s17):171NON_VOTER, (n8,s8):172NON_VOTER, (n10,s10):173NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]violating constraints:
-  r1:00000{00000-20000} [(n8,s8):139, (n10,s10):127, (n15,s15):153NON_VOTER, (n16,s16):154NON_VOTER, (n4,s4):155NON_VOTER, (n13,s13):156NON_VOTER, (n18,s18):157NON_VOTER, (n28,s28):158NON_VOTER, (n19,s19):159NON_VOTER, (n20,s20):160NON_VOTER, (n5,s5):161NON_VOTER, (n22,s22):162NON_VOTER, (n21,s21):163NON_VOTER, (n27,s27):164NON_VOTER, (n7,s7):165NON_VOTER, (n24,s24):166NON_VOTER, (n25,s25):167NON_VOTER, (n1,s1):168NON_VOTER, (n17,s17):169NON_VOTER, (n14,s14):170NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r2:00000{20000-40000} [(n13,s13):147, (n5,s5):129, (n14,s14):150NON_VOTER, (n1,s1):154NON_VOTER, (n4,s4):152NON_VOTER, (n3,s3):153NON_VOTER, (n18,s18):155NON_VOTER, (n22,s22):156NON_VOTER, (n21,s21):157NON_VOTER, (n17,s17):158NON_VOTER, (n28,s28):159NON_VOTER, (n20,s20):160NON_VOTER, (n8,s8):161NON_VOTER, (n6,s6):162NON_VOTER, (n9,s9):163NON_VOTER, (n24,s24):164NON_VOTER, (n12,s12):165NON_VOTER, (n26,s26):166NON_VOTER, (n27,s27):167NON_VOTER, (n19,s19):168NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r3:00000{40000-60000} [(n2,s2):126, (n11,s11):138, (n9,s9):152NON_VOTER, (n1,s1):153NON_VOTER, (n3,s3):154NON_VOTER, (n5,s5):155NON_VOTER, (n18,s18):156NON_VOTER, (n24,s24):157NON_VOTER, (n14,s14):170NON_VOTER, (n17,s17):159NON_VOTER, (n25,s25):160NON_VOTER, (n23,s23):161NON_VOTER, (n28,s28):162NON_VOTER, (n10,s10):163NON_VOTER, (n16,s16):164NON_VOTER, (n13,s13):165NON_VOTER, (n19,s19):166NON_VOTER, (n21,s21):167NON_VOTER, (n26,s26):168NON_VOTER, (n7,s7):169NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r4:00000{60000-80000} [(n2,s2):141, (n8,s8):135, (n6,s6):155NON_VOTER, (n12,s12):156NON_VOTER, (n1,s1):157NON_VOTER, (n14,s14):158NON_VOTER, (n25,s25):159NON_VOTER, (n19,s19):160NON_VOTER, (n23,s23):161NON_VOTER, (n20,s20):162NON_VOTER, (n11,s11):163NON_VOTER, (n18,s18):164NON_VOTER, (n15,s15):165NON_VOTER, (n22,s22):166NON_VOTER, (n28,s28):167NON_VOTER, (n26,s26):168NON_VOTER, (n13,s13):169NON_VOTER, (n3,s3):170NON_VOTER, (n5,s5):171NON_VOTER, (n16,s16):172NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r5:0000{080000-100000} [(n11,s11):128, (n16,s16):145, (n15,s15):159NON_VOTER, (n3,s3):160NON_VOTER, (n2,s2):161NON_VOTER, (n4,s4):162NON_VOTER, (n22,s22):163NON_VOTER, (n26,s26):164NON_VOTER, (n24,s24):165NON_VOTER, (n19,s19):166NON_VOTER, (n18,s18):167NON_VOTER, (n20,s20):168NON_VOTER, (n6,s6):169NON_VOTER, (n5,s5):170NON_VOTER, (n9,s9):171NON_VOTER, (n21,s21):172NON_VOTER, (n23,s23):173NON_VOTER, (n7,s7):174NON_VOTER, (n1,s1):175NON_VOTER, (n10,s10):176NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r6:00001{00000-20000} [(n9,s9):158, (n7,s7):125, (n15,s15):163NON_VOTER, (n3,s3):164NON_VOTER, (n12,s12):165NON_VOTER, (n1,s1):166NON_VOTER, (n27,s27):167NON_VOTER, (n25,s25):168NON_VOTER, (n26,s26):169NON_VOTER, (n20,s20):170NON_VOTER, (n8,s8):171NON_VOTER, (n21,s21):172NON_VOTER, (n2,s2):173NON_VOTER, (n18,s18):174NON_VOTER, (n28,s28):175NON_VOTER, (n17,s17):176NON_VOTER, (n11,s11):177NON_VOTER, (n23,s23):178NON_VOTER, (n6,s6):179NON_VOTER, (n4,s4):180NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r7:00001{20000-40000} [(n15,s15):139, (n10,s10):125, (n4,s4):153NON_VOTER, (n12,s12):154NON_VOTER, (n14,s14):155NON_VOTER, (n7,s7):156NON_VOTER, (n17,s17):157NON_VOTER, (n22,s22):158NON_VOTER, (n20,s20):159NON_VOTER, (n9,s9):160NON_VOTER, (n6,s6):161NON_VOTER, (n19,s19):162NON_VOTER, (n16,s16):163NON_VOTER, (n13,s13):164NON_VOTER, (n1,s1):165NON_VOTER, (n27,s27):166NON_VOTER, (n5,s5):167NON_VOTER, (n26,s26):168NON_VOTER, (n23,s23):169NON_VOTER, (n18,s18):170NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r8:00001{40000-60000} [(n16,s16):128, (n13,s13):135, (n15,s15):152NON_VOTER, (n2,s2):153NON_VOTER, (n3,s3):154NON_VOTER, (n12,s12):155NON_VOTER, (n27,s27):156NON_VOTER, (n23,s23):157NON_VOTER, (n18,s18):158NON_VOTER, (n17,s17):159NON_VOTER, (n20,s20):160NON_VOTER, (n5,s5):161NON_VOTER, (n9,s9):162NON_VOTER, (n25,s25):163NON_VOTER, (n26,s26):164NON_VOTER, (n8,s8):165NON_VOTER, (n4,s4):166NON_VOTER, (n24,s24):167NON_VOTER, (n7,s7):168NON_VOTER, (n10,s10):169NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r9:00001{60000-80000} [(n10,s10):133, (n7,s7):139, (n13,s13):153NON_VOTER, (n6,s6):154NON_VOTER, (n14,s14):155NON_VOTER, (n8,s8):156NON_VOTER, (n24,s24):157NON_VOTER, (n28,s28):158NON_VOTER, (n25,s25):159NON_VOTER, (n17,s17):160NON_VOTER, (n23,s23):161NON_VOTER, (n27,s27):162NON_VOTER, (n21,s21):163NON_VOTER, (n16,s16):164NON_VOTER, (n11,s11):165NON_VOTER, (n3,s3):166NON_VOTER, (n19,s19):167NON_VOTER, (n2,s2):168NON_VOTER, (n15,s15):169NON_VOTER, (n22,s22):170NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
-  r10:{0000180000-2147483647} [(n6,s6):153, (n9,s9):135, (n7,s7):156NON_VOTER, (n14,s14):157NON_VOTER, (n4,s4):158NON_VOTER, (n1,s1):159NON_VOTER, (n26,s26):160NON_VOTER, (n21,s21):161NON_VOTER, (n22,s22):162NON_VOTER, (n27,s27):163NON_VOTER, (n20,s20):164NON_VOTER, (n11,s11):165NON_VOTER, (n5,s5):166NON_VOTER, (n24,s24):167NON_VOTER, (n28,s28):168NON_VOTER, (n12,s12):169NON_VOTER, (n25,s25):170NON_VOTER, (n17,s17):171NON_VOTER, (n8,s8):172NON_VOTER, (n10,s10):173NON_VOTER] applying num_replicas=5 num_voters=3 constraints=[+region=US_East] voter_constraints=[+region=US_West]
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 moreover replicated:
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 moreviolating constraints:
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 more
  	unsatisfiable:
 validation result:
-	zone:
-		EU_1: voters: 0, non_voters: 0, unassigned: 3
-		EU_2: voters: 0, non_voters: 0, unassigned: 3
-		EU_3: voters: 0, non_voters: 0, unassigned: 4
-		US_East_1: voters: 0, non_voters: 0, unassigned: 1
-		US_East_2: voters: 0, non_voters: 0, unassigned: 2
-		US_East_3: voters: 0, non_voters: 0, unassigned: 13
-		US_West_1: voters: 0, non_voters: 0, unassigned: 2
-	region:
-		EU: voters: 0, non_voters: 0, unassigned: 10
-		US_East: voters: 0, non_voters: 0, unassigned: 16
-		US_West: voters: 0, non_voters: 0, unassigned: 2
-	cluster: voters: 0, non_voters: 0, unassigned: 28
-failed to satisfy constraints for region US_West
+	1.zone:
+	2.region:
+		a: 5 non_voters
+	3.cluster: 5 non_voters
+failed to satisfy constraints for region b
+constraint:
+replicas=5
+voters=3
+constraints=[+region=a]
+voter_constraints=[+region=b]
 
 
 	executed at: 2022-03-21 14:50:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 constraints:<constraints:<key:"az" value:"US_East" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 constraints:<constraints:<key:"az" value:"a" > > 
 	executed at: 2022-03-21 15:00:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=0 under=10, over=10 violating=10 lease-violating=0 lease-less-preferred=0
+  actual unavailable=0 under=20, over=20 violating=20 lease-violating=0 lease-less-preferred=0
 under replicated:
-  r1:00000{00000-20000} [(n8,s8):139, (n10,s10):127, (n15,s15):153NON_VOTER, (n16,s16):154NON_VOTER, (n4,s4):155NON_VOTER, (n13,s13):156NON_VOTER, (n18,s18):157NON_VOTER, (n28,s28):158NON_VOTER, (n19,s19):159NON_VOTER, (n20,s20):160NON_VOTER, (n5,s5):161NON_VOTER, (n22,s22):162NON_VOTER, (n21,s21):163NON_VOTER, (n27,s27):164NON_VOTER, (n7,s7):165NON_VOTER, (n24,s24):166NON_VOTER, (n25,s25):167NON_VOTER, (n1,s1):168NON_VOTER, (n17,s17):169NON_VOTER, (n14,s14):170NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r2:00000{20000-40000} [(n13,s13):147, (n5,s5):129, (n14,s14):150NON_VOTER, (n1,s1):154NON_VOTER, (n4,s4):152NON_VOTER, (n3,s3):153NON_VOTER, (n18,s18):155NON_VOTER, (n22,s22):156NON_VOTER, (n21,s21):157NON_VOTER, (n17,s17):158NON_VOTER, (n28,s28):159NON_VOTER, (n20,s20):160NON_VOTER, (n8,s8):161NON_VOTER, (n6,s6):162NON_VOTER, (n9,s9):163NON_VOTER, (n24,s24):164NON_VOTER, (n12,s12):165NON_VOTER, (n26,s26):166NON_VOTER, (n27,s27):167NON_VOTER, (n19,s19):168NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r3:00000{40000-60000} [(n2,s2):126, (n11,s11):138, (n9,s9):152NON_VOTER, (n1,s1):153NON_VOTER, (n3,s3):154NON_VOTER, (n5,s5):155NON_VOTER, (n18,s18):156NON_VOTER, (n24,s24):157NON_VOTER, (n14,s14):170NON_VOTER, (n17,s17):159NON_VOTER, (n25,s25):160NON_VOTER, (n23,s23):161NON_VOTER, (n28,s28):162NON_VOTER, (n10,s10):163NON_VOTER, (n16,s16):164NON_VOTER, (n13,s13):165NON_VOTER, (n19,s19):166NON_VOTER, (n21,s21):167NON_VOTER, (n26,s26):168NON_VOTER, (n7,s7):169NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r4:00000{60000-80000} [(n2,s2):141, (n8,s8):135, (n6,s6):155NON_VOTER, (n12,s12):156NON_VOTER, (n1,s1):157NON_VOTER, (n14,s14):158NON_VOTER, (n25,s25):159NON_VOTER, (n19,s19):160NON_VOTER, (n23,s23):161NON_VOTER, (n20,s20):162NON_VOTER, (n11,s11):163NON_VOTER, (n18,s18):164NON_VOTER, (n15,s15):165NON_VOTER, (n22,s22):166NON_VOTER, (n28,s28):167NON_VOTER, (n26,s26):168NON_VOTER, (n13,s13):169NON_VOTER, (n3,s3):170NON_VOTER, (n5,s5):171NON_VOTER, (n16,s16):172NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r5:0000{080000-100000} [(n11,s11):128, (n16,s16):145, (n15,s15):159NON_VOTER, (n3,s3):160NON_VOTER, (n2,s2):161NON_VOTER, (n4,s4):162NON_VOTER, (n22,s22):163NON_VOTER, (n26,s26):164NON_VOTER, (n24,s24):165NON_VOTER, (n19,s19):166NON_VOTER, (n18,s18):167NON_VOTER, (n20,s20):168NON_VOTER, (n6,s6):169NON_VOTER, (n5,s5):170NON_VOTER, (n9,s9):171NON_VOTER, (n21,s21):172NON_VOTER, (n23,s23):173NON_VOTER, (n7,s7):174NON_VOTER, (n1,s1):175NON_VOTER, (n10,s10):176NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r6:00001{00000-20000} [(n9,s9):158, (n7,s7):125, (n15,s15):163NON_VOTER, (n3,s3):164NON_VOTER, (n12,s12):165NON_VOTER, (n1,s1):166NON_VOTER, (n27,s27):167NON_VOTER, (n25,s25):168NON_VOTER, (n26,s26):169NON_VOTER, (n20,s20):170NON_VOTER, (n8,s8):171NON_VOTER, (n21,s21):172NON_VOTER, (n2,s2):173NON_VOTER, (n18,s18):174NON_VOTER, (n28,s28):175NON_VOTER, (n17,s17):176NON_VOTER, (n11,s11):177NON_VOTER, (n23,s23):178NON_VOTER, (n6,s6):179NON_VOTER, (n4,s4):180NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r7:00001{20000-40000} [(n15,s15):139, (n10,s10):125, (n4,s4):153NON_VOTER, (n12,s12):154NON_VOTER, (n14,s14):155NON_VOTER, (n7,s7):156NON_VOTER, (n17,s17):157NON_VOTER, (n22,s22):158NON_VOTER, (n20,s20):159NON_VOTER, (n9,s9):160NON_VOTER, (n6,s6):161NON_VOTER, (n19,s19):162NON_VOTER, (n16,s16):163NON_VOTER, (n13,s13):164NON_VOTER, (n1,s1):165NON_VOTER, (n27,s27):166NON_VOTER, (n5,s5):167NON_VOTER, (n26,s26):168NON_VOTER, (n23,s23):169NON_VOTER, (n18,s18):170NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r8:00001{40000-60000} [(n16,s16):128, (n13,s13):135, (n15,s15):152NON_VOTER, (n2,s2):153NON_VOTER, (n3,s3):154NON_VOTER, (n12,s12):155NON_VOTER, (n27,s27):156NON_VOTER, (n23,s23):157NON_VOTER, (n18,s18):158NON_VOTER, (n17,s17):159NON_VOTER, (n20,s20):160NON_VOTER, (n5,s5):161NON_VOTER, (n9,s9):162NON_VOTER, (n25,s25):163NON_VOTER, (n26,s26):164NON_VOTER, (n8,s8):165NON_VOTER, (n4,s4):166NON_VOTER, (n24,s24):167NON_VOTER, (n7,s7):168NON_VOTER, (n10,s10):169NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r9:00001{60000-80000} [(n10,s10):133, (n7,s7):139, (n13,s13):153NON_VOTER, (n6,s6):154NON_VOTER, (n14,s14):155NON_VOTER, (n8,s8):156NON_VOTER, (n24,s24):157NON_VOTER, (n28,s28):158NON_VOTER, (n25,s25):159NON_VOTER, (n17,s17):160NON_VOTER, (n23,s23):161NON_VOTER, (n27,s27):162NON_VOTER, (n21,s21):163NON_VOTER, (n16,s16):164NON_VOTER, (n11,s11):165NON_VOTER, (n3,s3):166NON_VOTER, (n19,s19):167NON_VOTER, (n2,s2):168NON_VOTER, (n15,s15):169NON_VOTER, (n22,s22):170NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r10:{0000180000-2147483647} [(n6,s6):153, (n9,s9):135, (n7,s7):156NON_VOTER, (n14,s14):157NON_VOTER, (n4,s4):158NON_VOTER, (n1,s1):159NON_VOTER, (n26,s26):160NON_VOTER, (n21,s21):161NON_VOTER, (n22,s22):162NON_VOTER, (n27,s27):163NON_VOTER, (n20,s20):164NON_VOTER, (n11,s11):165NON_VOTER, (n5,s5):166NON_VOTER, (n24,s24):167NON_VOTER, (n28,s28):168NON_VOTER, (n12,s12):169NON_VOTER, (n25,s25):170NON_VOTER, (n17,s17):171NON_VOTER, (n8,s8):172NON_VOTER, (n10,s10):173NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]over replicated:
-  r1:00000{00000-20000} [(n8,s8):139, (n10,s10):127, (n15,s15):153NON_VOTER, (n16,s16):154NON_VOTER, (n4,s4):155NON_VOTER, (n13,s13):156NON_VOTER, (n18,s18):157NON_VOTER, (n28,s28):158NON_VOTER, (n19,s19):159NON_VOTER, (n20,s20):160NON_VOTER, (n5,s5):161NON_VOTER, (n22,s22):162NON_VOTER, (n21,s21):163NON_VOTER, (n27,s27):164NON_VOTER, (n7,s7):165NON_VOTER, (n24,s24):166NON_VOTER, (n25,s25):167NON_VOTER, (n1,s1):168NON_VOTER, (n17,s17):169NON_VOTER, (n14,s14):170NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r2:00000{20000-40000} [(n13,s13):147, (n5,s5):129, (n14,s14):150NON_VOTER, (n1,s1):154NON_VOTER, (n4,s4):152NON_VOTER, (n3,s3):153NON_VOTER, (n18,s18):155NON_VOTER, (n22,s22):156NON_VOTER, (n21,s21):157NON_VOTER, (n17,s17):158NON_VOTER, (n28,s28):159NON_VOTER, (n20,s20):160NON_VOTER, (n8,s8):161NON_VOTER, (n6,s6):162NON_VOTER, (n9,s9):163NON_VOTER, (n24,s24):164NON_VOTER, (n12,s12):165NON_VOTER, (n26,s26):166NON_VOTER, (n27,s27):167NON_VOTER, (n19,s19):168NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r3:00000{40000-60000} [(n2,s2):126, (n11,s11):138, (n9,s9):152NON_VOTER, (n1,s1):153NON_VOTER, (n3,s3):154NON_VOTER, (n5,s5):155NON_VOTER, (n18,s18):156NON_VOTER, (n24,s24):157NON_VOTER, (n14,s14):170NON_VOTER, (n17,s17):159NON_VOTER, (n25,s25):160NON_VOTER, (n23,s23):161NON_VOTER, (n28,s28):162NON_VOTER, (n10,s10):163NON_VOTER, (n16,s16):164NON_VOTER, (n13,s13):165NON_VOTER, (n19,s19):166NON_VOTER, (n21,s21):167NON_VOTER, (n26,s26):168NON_VOTER, (n7,s7):169NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r4:00000{60000-80000} [(n2,s2):141, (n8,s8):135, (n6,s6):155NON_VOTER, (n12,s12):156NON_VOTER, (n1,s1):157NON_VOTER, (n14,s14):158NON_VOTER, (n25,s25):159NON_VOTER, (n19,s19):160NON_VOTER, (n23,s23):161NON_VOTER, (n20,s20):162NON_VOTER, (n11,s11):163NON_VOTER, (n18,s18):164NON_VOTER, (n15,s15):165NON_VOTER, (n22,s22):166NON_VOTER, (n28,s28):167NON_VOTER, (n26,s26):168NON_VOTER, (n13,s13):169NON_VOTER, (n3,s3):170NON_VOTER, (n5,s5):171NON_VOTER, (n16,s16):172NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r5:0000{080000-100000} [(n11,s11):128, (n16,s16):145, (n15,s15):159NON_VOTER, (n3,s3):160NON_VOTER, (n2,s2):161NON_VOTER, (n4,s4):162NON_VOTER, (n22,s22):163NON_VOTER, (n26,s26):164NON_VOTER, (n24,s24):165NON_VOTER, (n19,s19):166NON_VOTER, (n18,s18):167NON_VOTER, (n20,s20):168NON_VOTER, (n6,s6):169NON_VOTER, (n5,s5):170NON_VOTER, (n9,s9):171NON_VOTER, (n21,s21):172NON_VOTER, (n23,s23):173NON_VOTER, (n7,s7):174NON_VOTER, (n1,s1):175NON_VOTER, (n10,s10):176NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r6:00001{00000-20000} [(n9,s9):158, (n7,s7):125, (n15,s15):163NON_VOTER, (n3,s3):164NON_VOTER, (n12,s12):165NON_VOTER, (n1,s1):166NON_VOTER, (n27,s27):167NON_VOTER, (n25,s25):168NON_VOTER, (n26,s26):169NON_VOTER, (n20,s20):170NON_VOTER, (n8,s8):171NON_VOTER, (n21,s21):172NON_VOTER, (n2,s2):173NON_VOTER, (n18,s18):174NON_VOTER, (n28,s28):175NON_VOTER, (n17,s17):176NON_VOTER, (n11,s11):177NON_VOTER, (n23,s23):178NON_VOTER, (n6,s6):179NON_VOTER, (n4,s4):180NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r7:00001{20000-40000} [(n15,s15):139, (n10,s10):125, (n4,s4):153NON_VOTER, (n12,s12):154NON_VOTER, (n14,s14):155NON_VOTER, (n7,s7):156NON_VOTER, (n17,s17):157NON_VOTER, (n22,s22):158NON_VOTER, (n20,s20):159NON_VOTER, (n9,s9):160NON_VOTER, (n6,s6):161NON_VOTER, (n19,s19):162NON_VOTER, (n16,s16):163NON_VOTER, (n13,s13):164NON_VOTER, (n1,s1):165NON_VOTER, (n27,s27):166NON_VOTER, (n5,s5):167NON_VOTER, (n26,s26):168NON_VOTER, (n23,s23):169NON_VOTER, (n18,s18):170NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r8:00001{40000-60000} [(n16,s16):128, (n13,s13):135, (n15,s15):152NON_VOTER, (n2,s2):153NON_VOTER, (n3,s3):154NON_VOTER, (n12,s12):155NON_VOTER, (n27,s27):156NON_VOTER, (n23,s23):157NON_VOTER, (n18,s18):158NON_VOTER, (n17,s17):159NON_VOTER, (n20,s20):160NON_VOTER, (n5,s5):161NON_VOTER, (n9,s9):162NON_VOTER, (n25,s25):163NON_VOTER, (n26,s26):164NON_VOTER, (n8,s8):165NON_VOTER, (n4,s4):166NON_VOTER, (n24,s24):167NON_VOTER, (n7,s7):168NON_VOTER, (n10,s10):169NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r9:00001{60000-80000} [(n10,s10):133, (n7,s7):139, (n13,s13):153NON_VOTER, (n6,s6):154NON_VOTER, (n14,s14):155NON_VOTER, (n8,s8):156NON_VOTER, (n24,s24):157NON_VOTER, (n28,s28):158NON_VOTER, (n25,s25):159NON_VOTER, (n17,s17):160NON_VOTER, (n23,s23):161NON_VOTER, (n27,s27):162NON_VOTER, (n21,s21):163NON_VOTER, (n16,s16):164NON_VOTER, (n11,s11):165NON_VOTER, (n3,s3):166NON_VOTER, (n19,s19):167NON_VOTER, (n2,s2):168NON_VOTER, (n15,s15):169NON_VOTER, (n22,s22):170NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r10:{0000180000-2147483647} [(n6,s6):153, (n9,s9):135, (n7,s7):156NON_VOTER, (n14,s14):157NON_VOTER, (n4,s4):158NON_VOTER, (n1,s1):159NON_VOTER, (n26,s26):160NON_VOTER, (n21,s21):161NON_VOTER, (n22,s22):162NON_VOTER, (n27,s27):163NON_VOTER, (n20,s20):164NON_VOTER, (n11,s11):165NON_VOTER, (n5,s5):166NON_VOTER, (n24,s24):167NON_VOTER, (n28,s28):168NON_VOTER, (n12,s12):169NON_VOTER, (n25,s25):170NON_VOTER, (n17,s17):171NON_VOTER, (n8,s8):172NON_VOTER, (n10,s10):173NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]violating constraints:
-  r1:00000{00000-20000} [(n8,s8):139, (n10,s10):127, (n15,s15):153NON_VOTER, (n16,s16):154NON_VOTER, (n4,s4):155NON_VOTER, (n13,s13):156NON_VOTER, (n18,s18):157NON_VOTER, (n28,s28):158NON_VOTER, (n19,s19):159NON_VOTER, (n20,s20):160NON_VOTER, (n5,s5):161NON_VOTER, (n22,s22):162NON_VOTER, (n21,s21):163NON_VOTER, (n27,s27):164NON_VOTER, (n7,s7):165NON_VOTER, (n24,s24):166NON_VOTER, (n25,s25):167NON_VOTER, (n1,s1):168NON_VOTER, (n17,s17):169NON_VOTER, (n14,s14):170NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r2:00000{20000-40000} [(n13,s13):147, (n5,s5):129, (n14,s14):150NON_VOTER, (n1,s1):154NON_VOTER, (n4,s4):152NON_VOTER, (n3,s3):153NON_VOTER, (n18,s18):155NON_VOTER, (n22,s22):156NON_VOTER, (n21,s21):157NON_VOTER, (n17,s17):158NON_VOTER, (n28,s28):159NON_VOTER, (n20,s20):160NON_VOTER, (n8,s8):161NON_VOTER, (n6,s6):162NON_VOTER, (n9,s9):163NON_VOTER, (n24,s24):164NON_VOTER, (n12,s12):165NON_VOTER, (n26,s26):166NON_VOTER, (n27,s27):167NON_VOTER, (n19,s19):168NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r3:00000{40000-60000} [(n2,s2):126, (n11,s11):138, (n9,s9):152NON_VOTER, (n1,s1):153NON_VOTER, (n3,s3):154NON_VOTER, (n5,s5):155NON_VOTER, (n18,s18):156NON_VOTER, (n24,s24):157NON_VOTER, (n14,s14):170NON_VOTER, (n17,s17):159NON_VOTER, (n25,s25):160NON_VOTER, (n23,s23):161NON_VOTER, (n28,s28):162NON_VOTER, (n10,s10):163NON_VOTER, (n16,s16):164NON_VOTER, (n13,s13):165NON_VOTER, (n19,s19):166NON_VOTER, (n21,s21):167NON_VOTER, (n26,s26):168NON_VOTER, (n7,s7):169NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r4:00000{60000-80000} [(n2,s2):141, (n8,s8):135, (n6,s6):155NON_VOTER, (n12,s12):156NON_VOTER, (n1,s1):157NON_VOTER, (n14,s14):158NON_VOTER, (n25,s25):159NON_VOTER, (n19,s19):160NON_VOTER, (n23,s23):161NON_VOTER, (n20,s20):162NON_VOTER, (n11,s11):163NON_VOTER, (n18,s18):164NON_VOTER, (n15,s15):165NON_VOTER, (n22,s22):166NON_VOTER, (n28,s28):167NON_VOTER, (n26,s26):168NON_VOTER, (n13,s13):169NON_VOTER, (n3,s3):170NON_VOTER, (n5,s5):171NON_VOTER, (n16,s16):172NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r5:0000{080000-100000} [(n11,s11):128, (n16,s16):145, (n15,s15):159NON_VOTER, (n3,s3):160NON_VOTER, (n2,s2):161NON_VOTER, (n4,s4):162NON_VOTER, (n22,s22):163NON_VOTER, (n26,s26):164NON_VOTER, (n24,s24):165NON_VOTER, (n19,s19):166NON_VOTER, (n18,s18):167NON_VOTER, (n20,s20):168NON_VOTER, (n6,s6):169NON_VOTER, (n5,s5):170NON_VOTER, (n9,s9):171NON_VOTER, (n21,s21):172NON_VOTER, (n23,s23):173NON_VOTER, (n7,s7):174NON_VOTER, (n1,s1):175NON_VOTER, (n10,s10):176NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r6:00001{00000-20000} [(n9,s9):158, (n7,s7):125, (n15,s15):163NON_VOTER, (n3,s3):164NON_VOTER, (n12,s12):165NON_VOTER, (n1,s1):166NON_VOTER, (n27,s27):167NON_VOTER, (n25,s25):168NON_VOTER, (n26,s26):169NON_VOTER, (n20,s20):170NON_VOTER, (n8,s8):171NON_VOTER, (n21,s21):172NON_VOTER, (n2,s2):173NON_VOTER, (n18,s18):174NON_VOTER, (n28,s28):175NON_VOTER, (n17,s17):176NON_VOTER, (n11,s11):177NON_VOTER, (n23,s23):178NON_VOTER, (n6,s6):179NON_VOTER, (n4,s4):180NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r7:00001{20000-40000} [(n15,s15):139, (n10,s10):125, (n4,s4):153NON_VOTER, (n12,s12):154NON_VOTER, (n14,s14):155NON_VOTER, (n7,s7):156NON_VOTER, (n17,s17):157NON_VOTER, (n22,s22):158NON_VOTER, (n20,s20):159NON_VOTER, (n9,s9):160NON_VOTER, (n6,s6):161NON_VOTER, (n19,s19):162NON_VOTER, (n16,s16):163NON_VOTER, (n13,s13):164NON_VOTER, (n1,s1):165NON_VOTER, (n27,s27):166NON_VOTER, (n5,s5):167NON_VOTER, (n26,s26):168NON_VOTER, (n23,s23):169NON_VOTER, (n18,s18):170NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r8:00001{40000-60000} [(n16,s16):128, (n13,s13):135, (n15,s15):152NON_VOTER, (n2,s2):153NON_VOTER, (n3,s3):154NON_VOTER, (n12,s12):155NON_VOTER, (n27,s27):156NON_VOTER, (n23,s23):157NON_VOTER, (n18,s18):158NON_VOTER, (n17,s17):159NON_VOTER, (n20,s20):160NON_VOTER, (n5,s5):161NON_VOTER, (n9,s9):162NON_VOTER, (n25,s25):163NON_VOTER, (n26,s26):164NON_VOTER, (n8,s8):165NON_VOTER, (n4,s4):166NON_VOTER, (n24,s24):167NON_VOTER, (n7,s7):168NON_VOTER, (n10,s10):169NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r9:00001{60000-80000} [(n10,s10):133, (n7,s7):139, (n13,s13):153NON_VOTER, (n6,s6):154NON_VOTER, (n14,s14):155NON_VOTER, (n8,s8):156NON_VOTER, (n24,s24):157NON_VOTER, (n28,s28):158NON_VOTER, (n25,s25):159NON_VOTER, (n17,s17):160NON_VOTER, (n23,s23):161NON_VOTER, (n27,s27):162NON_VOTER, (n21,s21):163NON_VOTER, (n16,s16):164NON_VOTER, (n11,s11):165NON_VOTER, (n3,s3):166NON_VOTER, (n19,s19):167NON_VOTER, (n2,s2):168NON_VOTER, (n15,s15):169NON_VOTER, (n22,s22):170NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
-  r10:{0000180000-2147483647} [(n6,s6):153, (n9,s9):135, (n7,s7):156NON_VOTER, (n14,s14):157NON_VOTER, (n4,s4):158NON_VOTER, (n1,s1):159NON_VOTER, (n26,s26):160NON_VOTER, (n21,s21):161NON_VOTER, (n22,s22):162NON_VOTER, (n27,s27):163NON_VOTER, (n20,s20):164NON_VOTER, (n11,s11):165NON_VOTER, (n5,s5):166NON_VOTER, (n24,s24):167NON_VOTER, (n28,s28):168NON_VOTER, (n12,s12):169NON_VOTER, (n25,s25):170NON_VOTER, (n17,s17):171NON_VOTER, (n8,s8):172NON_VOTER, (n10,s10):173NON_VOTER] applying num_replicas=5 constraints=[+az=US_East]
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 moreover replicated:
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 moreviolating constraints:
+  r1: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r2: [a: 2 voters 1 non-voter, a4: 2 voters 1 non-voter]
+  r3: [a: 2 voters 1 non-voter, a3: 1 voter 1 non-voter, a4: 1 voter]
+... and 17 more
  	unsatisfiable:
 validation result:
-	zone:
-		EU_1: voters: 0, non_voters: 0, unassigned: 3
-		EU_2: voters: 0, non_voters: 0, unassigned: 3
-		EU_3: voters: 0, non_voters: 0, unassigned: 4
-		US_East_1: voters: 0, non_voters: 0, unassigned: 1
-		US_East_2: voters: 0, non_voters: 0, unassigned: 2
-		US_East_3: voters: 0, non_voters: 0, unassigned: 13
-		US_West_1: voters: 0, non_voters: 0, unassigned: 2
-	region:
-		EU: voters: 0, non_voters: 0, unassigned: 10
-		US_East: voters: 0, non_voters: 0, unassigned: 16
-		US_West: voters: 0, non_voters: 0, unassigned: 2
-	cluster: voters: 0, non_voters: 0, unassigned: 28
+	1.zone:
+	2.region:
+	3.cluster: 
 only zone and region constraint keys are supported
+constraint:
+replicas=5
+voters=0
+constraints=[+az=a]
+voter_constraints=[]
 
 
 	executed at: 2022-03-21 15:00:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:1 voter_constraints:<num_replicas:1 constraints:<key:"region" value:"CA" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 num_voters:1 voter_constraints:<num_replicas:1 constraints:<key:"region" value:"e" > > 
 	executed at: 2022-03-21 15:10:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=0 under=0, over=0 violating=10 lease-violating=0 lease-less-preferred=0
+  actual unavailable=0 under=0, over=0 violating=20 lease-violating=0 lease-less-preferred=0
 violating constraints:
-  r1:00000{00000-20000} [(n14,s14):170NON_VOTER, (n10,s10):127, (n13,s13):156NON_VOTER, (n24,s24):166NON_VOTER, (n28,s28):158NON_VOTER] applying num_replicas=5 num_voters=1 voter_constraints=[+region=CA:1]
-  r2:00000{20000-40000} [(n28,s28):159NON_VOTER, (n5,s5):129, (n17,s17):158NON_VOTER, (n18,s18):155NON_VOTER, (n4,s4):152NON_VOTER] applying num_replicas=5 num_voters=1 voter_constraints=[+region=CA:1]
-  r3:00000{40000-60000} [(n2,s2):126, (n18,s18):156NON_VOTER, (n9,s9):152NON_VOTER, (n28,s28):162NON_VOTER, (n3,s3):154NON_VOTER] applying num_replicas=5 num_voters=1 voter_constraints=[+region=CA:1]
-  r4:00000{60000-80000} [(n2,s2):141, (n20,s20):162NON_VOTER, (n13,s13):169NON_VOTER, (n15,s15):165NON_VOTER, (n25,s25):159NON_VOTER] applying num_replicas=5 num_voters=1 voter_constraints=[+region=CA:1]
-  r5:0000{080000-100000} [(n7,s7):174NON_VOTER, (n16,s16):145, (n5,s5):170NON_VOTER, (n3,s3):160NON_VOTER, (n1,s1):175NON_VOTER] applying num_replicas=5 num_voters=1 voter_constraints=[+region=CA:1]
-  r6:00001{00000-20000} [(n23,s23):178NON_VOTER, (n7,s7):125, (n17,s17):176NON_VOTER, (n26,s26):169NON_VOTER, (n12,s12):165NON_VOTER] applying num_replicas=5 num_voters=1 voter_constraints=[+region=CA:1]
-  r7:00001{20000-40000} [(n26,s26):168NON_VOTER, (n10,s10):125, (n4,s4):153NON_VOTER, (n12,s12):154NON_VOTER, (n14,s14):155NON_VOTER] applying num_replicas=5 num_voters=1 voter_constraints=[+region=CA:1]
-  r8:00001{40000-60000} [(n12,s12):155NON_VOTER, (n13,s13):135, (n25,s25):163NON_VOTER, (n2,s2):153NON_VOTER, (n23,s23):157NON_VOTER] applying num_replicas=5 num_voters=1 voter_constraints=[+region=CA:1]
-  r9:00001{60000-80000} [(n10,s10):133, (n22,s22):170NON_VOTER, (n11,s11):165NON_VOTER, (n6,s6):154NON_VOTER, (n8,s8):156NON_VOTER] applying num_replicas=5 num_voters=1 voter_constraints=[+region=CA:1]
-  r10:{0000180000-2147483647} [(n27,s27):163NON_VOTER, (n9,s9):135, (n20,s20):164NON_VOTER, (n14,s14):157NON_VOTER, (n24,s24):167NON_VOTER] applying num_replicas=5 num_voters=1 voter_constraints=[+region=CA:1]
+  r1: [a: 1 voter 1 non-voter, a4: 1 voter 1 non-voter, b: 1 non-voter, b1: 1 non-voter]
+  r2: [a: 1 voter 1 non-voter, a4: 1 voter 1 non-voter, b: 1 non-voter, b1: 1 non-voter]
+  r3: [a: 1 voter 1 non-voter, a3: 1 non-voter, a4: 1 voter, c: 1 non-voter, c2: 1 non-voter]
+... and 17 more
  	unsatisfiable:
 validation result:
-	zone:
-		EU_1: voters: 0, non_voters: 0, unassigned: 3
-		EU_2: voters: 0, non_voters: 0, unassigned: 3
-		EU_3: voters: 0, non_voters: 0, unassigned: 4
-		US_East_1: voters: 0, non_voters: 0, unassigned: 1
-		US_East_2: voters: 0, non_voters: 0, unassigned: 2
-		US_East_3: voters: 0, non_voters: 0, unassigned: 13
-		US_West_1: voters: 0, non_voters: 0, unassigned: 2
-	region:
-		EU: voters: 0, non_voters: 0, unassigned: 10
-		US_East: voters: 0, non_voters: 0, unassigned: 16
-		US_West: voters: 0, non_voters: 0, unassigned: 2
-	cluster: voters: 0, non_voters: 0, unassigned: 28
-region constraint value CA is not found in the cluster set up
+	1.zone:
+	2.region:
+	3.cluster: 
+region constraint value e is not found in the cluster set up
+constraint:
+replicas=5
+voters=1
+constraints=[]
+voter_constraints=[+region=e:1]
 
 
 	executed at: 2022-03-21 15:10:00
@@ -558,38 +387,27 @@ region constraint value CA is not found in the cluster set up
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=0 under=0, over=0 violating=10 lease-violating=0 lease-less-preferred=0
+  actual unavailable=0 under=0, over=0 violating=20 lease-violating=0 lease-less-preferred=0
 violating constraints:
-  r1:00000{00000-20000} [(n24,s24):171, (n10,s10):127, (n14,s14):172, (n13,s13):173, (n28,s28):174] applying num_replicas=5 constraints=[+zone=CA:1]
-  r2:00000{20000-40000} [(n18,s18):171, (n5,s5):129, (n17,s17):169, (n4,s4):170, (n28,s28):172] applying num_replicas=5 constraints=[+zone=CA:1]
-  r3:00000{40000-60000} [(n2,s2):126, (n9,s9):171, (n18,s18):172, (n3,s3):173, (n28,s28):174] applying num_replicas=5 constraints=[+zone=CA:1]
-  r4:00000{60000-80000} [(n2,s2):141, (n15,s15):174, (n25,s25):175, (n20,s20):173, (n13,s13):176] applying num_replicas=5 constraints=[+zone=CA:1]
-  r5:0000{080000-100000} [(n3,s3):179, (n16,s16):145, (n5,s5):177, (n1,s1):178, (n7,s7):180] applying num_replicas=5 constraints=[+zone=CA:1]
-  r6:00001{00000-20000} [(n26,s26):183, (n7,s7):125, (n23,s23):181, (n17,s17):182, (n12,s12):184] applying num_replicas=5 constraints=[+zone=CA:1]
-  r7:00001{20000-40000} [(n4,s4):171, (n10,s10):125, (n26,s26):172, (n14,s14):173, (n12,s12):174] applying num_replicas=5 constraints=[+zone=CA:1]
-  r8:00001{40000-60000} [(n25,s25):171, (n13,s13):135, (n23,s23):170, (n12,s12):172, (n2,s2):173] applying num_replicas=5 constraints=[+zone=CA:1]
-  r9:00001{60000-80000} [(n10,s10):133, (n11,s11):173, (n6,s6):172, (n8,s8):171, (n22,s22):174] applying num_replicas=5 constraints=[+zone=CA:1]
-  r10:{0000180000-2147483647} [(n20,s20):175, (n9,s9):135, (n27,s27):174, (n24,s24):176, (n14,s14):177] applying num_replicas=5 constraints=[+zone=CA:1]
+  r1: [a: 2 voters, a4: 2 voters, b: 1 voter, b1: 1 voter]
+  r2: [a: 2 voters, a3: 1 voter, a4: 1 voter, b: 1 voter, b1: 1 voter]
+  r3: [a: 1 voter, a4: 1 voter, c: 2 voters, c1: 1 voter, c3: 1 voter]
+... and 17 more
  	unsatisfiable:
 validation result:
-	zone:
-		EU_1: voters: 0, non_voters: 0, unassigned: 3
-		EU_2: voters: 0, non_voters: 0, unassigned: 3
-		EU_3: voters: 0, non_voters: 0, unassigned: 4
-		US_East_1: voters: 0, non_voters: 0, unassigned: 1
-		US_East_2: voters: 0, non_voters: 0, unassigned: 2
-		US_East_3: voters: 0, non_voters: 0, unassigned: 13
-		US_West_1: voters: 0, non_voters: 0, unassigned: 2
-	region:
-		EU: voters: 0, non_voters: 0, unassigned: 10
-		US_East: voters: 0, non_voters: 0, unassigned: 16
-		US_West: voters: 0, non_voters: 0, unassigned: 2
-	cluster: voters: 0, non_voters: 0, unassigned: 28
+	1.zone:
+	2.region:
+	3.cluster: 
 zone constraint value CA is not found in the cluster set up
+constraint:
+replicas=5
+voters=0
+constraints=[+zone=CA:1]
+voter_constraints=[]
 
 
 	executed at: 2022-03-21 15:20:00
-		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 constraints:<num_replicas:1 constraints:<type:PROHIBITED key:"region" value:"US_West" > > 
+		event: set span config event with span={0000000000-9999999999}, config=range_min_bytes:134217728 range_max_bytes:536870912 gc_policy:<ttl_seconds:14400 > num_replicas:5 constraints:<num_replicas:1 constraints:<type:PROHIBITED key:"region" value:"b" > > 
 	executed at: 2022-03-21 15:30:00
 		event: assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 

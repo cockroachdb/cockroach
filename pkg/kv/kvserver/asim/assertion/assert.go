@@ -14,11 +14,13 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -351,10 +353,6 @@ func leasePreferenceReport(
 	return
 }
 
-func BetterFormat() {
-
-}
-
 // Assert looks at a simulation run history and returns true if the
 // assertion holds and false if not. When the assertion does not hold, the
 // reason is also returned.
@@ -382,38 +380,68 @@ func (ca ConformanceAssertion) Assert(
 	if ca.Unavailable != ConformanceAssertionSentinel &&
 		ca.Unavailable != unavailable {
 		maybeInitHolds()
-		buf.WriteString(PrintSpanConfigConformanceList(
-			"unavailable", replicaReport.Unavailable))
+		if ca.BetterFormat {
+			buf.WriteString(PrettyPrintSpanConfigConformanceList(h.S.NodeLocalityMap(),
+				"unavailable", replicaReport.Unavailable))
+		} else {
+			buf.WriteString(PrintSpanConfigConformanceList(h.S.NodeLocalityMap(),
+				"unavailable", replicaReport.Unavailable))
+		}
 	}
 	if ca.Underreplicated != ConformanceAssertionSentinel &&
 		ca.Underreplicated != under {
 		maybeInitHolds()
-		buf.WriteString(PrintSpanConfigConformanceList(
-			"under replicated", replicaReport.UnderReplicated))
+		if ca.BetterFormat {
+			buf.WriteString(PrettyPrintSpanConfigConformanceList(h.S.NodeLocalityMap(),
+				"under replicated", replicaReport.UnderReplicated))
+		} else {
+			buf.WriteString(PrintSpanConfigConformanceList(h.S.NodeLocalityMap(),
+				"under replicated", replicaReport.UnderReplicated))
+		}
 	}
 	if ca.Overreplicated != ConformanceAssertionSentinel &&
 		ca.Overreplicated != over {
 		maybeInitHolds()
-		buf.WriteString(PrintSpanConfigConformanceList(
-			"over replicated", replicaReport.OverReplicated))
+		if ca.BetterFormat {
+			buf.WriteString(PrettyPrintSpanConfigConformanceList(h.S.NodeLocalityMap(),
+				"over replicated", replicaReport.OverReplicated))
+		} else {
+			buf.WriteString(PrintSpanConfigConformanceList(h.S.NodeLocalityMap(),
+				"over replicated", replicaReport.OverReplicated))
+		}
 	}
 	if ca.ViolatingConstraints != ConformanceAssertionSentinel &&
 		ca.ViolatingConstraints != violatingConstraints {
 		maybeInitHolds()
-		buf.WriteString(PrintSpanConfigConformanceList(
-			"violating constraints", replicaReport.ViolatingConstraints))
+		if ca.BetterFormat {
+			buf.WriteString(PrettyPrintSpanConfigConformanceList(h.S.NodeLocalityMap(),
+				"violating constraints", replicaReport.ViolatingConstraints))
+		} else {
+			buf.WriteString(PrintSpanConfigConformanceList(h.S.NodeLocalityMap(),
+				"violating constraints", replicaReport.ViolatingConstraints))
+		}
 	}
 	if ca.ViolatingLeasePreferences != ConformanceAssertionSentinel &&
 		ca.ViolatingLeasePreferences != violatingLeases {
 		maybeInitHolds()
-		buf.WriteString(PrintSpanConfigConformanceList(
-			"violating lease preferences", leaseViolatingPrefs))
+		if ca.BetterFormat {
+			buf.WriteString(PrettyPrintSpanConfigConformanceList(h.S.NodeLocalityMap(),
+				"violating lease preferences", leaseViolatingPrefs))
+		} else {
+			buf.WriteString(PrintSpanConfigConformanceList(h.S.NodeLocalityMap(),
+				"violating lease preferences", leaseViolatingPrefs))
+		}
 	}
 	if ca.LessPreferredLeases != ConformanceAssertionSentinel &&
 		ca.LessPreferredLeases != lessPrefLeases {
 		maybeInitHolds()
-		buf.WriteString(PrintSpanConfigConformanceList(
-			"less preferred preferences", leaseLessPrefs))
+		if ca.BetterFormat {
+			buf.WriteString(PrettyPrintSpanConfigConformanceList(h.S.NodeLocalityMap(),
+				"less preferred preferences", leaseLessPrefs))
+		} else {
+			buf.WriteString(PrintSpanConfigConformanceList(h.S.NodeLocalityMap(),
+				"less preferred preferences", leaseLessPrefs))
+		}
 	}
 
 	return holds, buf.String()
@@ -444,32 +472,136 @@ func (ca ConformanceAssertion) String() string {
 	return buf.String()
 }
 
-func printRangeDesc(r roachpb.RangeDescriptor) string {
+func formatType(t roachpb.ReplicaType) string {
+	switch t {
+	case roachpb.VOTER_FULL:
+		return "voter"
+	case roachpb.NON_VOTER:
+		return "non-voter"
+	case roachpb.LEARNER:
+		return "learner"
+	case roachpb.VOTER_INCOMING:
+		return "voter-incoming"
+	case roachpb.VOTER_OUTGOING:
+		return "voter-outgoing"
+	case roachpb.VOTER_DEMOTING_LEARNER:
+		return "voter-demoting-learner"
+	case roachpb.VOTER_DEMOTING_NON_VOTER:
+		return "voter-demoting-non-voter"
+	default:
+		panic("unknown replica type")
+	}
+}
+
+func sumRangeInfo(
+	nodes map[state.NodeID]roachpb.Locality, replicas []roachpb.ReplicaDescriptor,
+) string {
+	if len(replicas) <= 0 {
+		return "<no replicas>"
+	}
+
+	var buf strings.Builder
+	tiers := make(map[string]map[roachpb.ReplicaType]int)
+	for _, rep := range replicas {
+		val, ok := nodes[state.NodeID(rep.NodeID)]
+		if !ok {
+			panic(fmt.Sprintf("node %d not found", rep.NodeID))
+		}
+		for _, tier := range val.Tiers {
+			if _, ok := tiers[tier.Value]; !ok {
+				tiers[tier.Value] = make(map[roachpb.ReplicaType]int)
+			}
+			tiers[tier.Value][rep.Type]++
+		}
+	}
+
+	keys := make([]string, 0, len(tiers))
+	for k := range tiers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		v := tiers[k]
+		if buf.Len() > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(fmt.Sprintf("%s: ", k))
+		keys := make([]int, 0, len(v))
+		for k := range v {
+			keys = append(keys, int(k))
+		}
+		sort.Ints(keys)
+		for i, t := range keys {
+			if i > 0 {
+				buf.WriteString(" ")
+			}
+			count := v[roachpb.ReplicaType(t)]
+			if count != 0 {
+				if count > 1 {
+					buf.WriteString(fmt.Sprintf("%d %ss", count, formatType(roachpb.ReplicaType(t))))
+				} else {
+					buf.WriteString(fmt.Sprintf("%d %s", count, formatType(roachpb.ReplicaType(t))))
+				}
+			}
+		}
+	}
+	return buf.String()
+}
+
+func prettyPrintRangeDesc(
+	nodes map[state.NodeID]roachpb.Locality, r roachpb.RangeDescriptor,
+) string {
 	var buf strings.Builder
 	buf.WriteString(fmt.Sprintf("r%d:", r.RangeID))
-	buf.WriteString(r.RSpan().String())
 	buf.WriteString(" [")
-	if allReplicas := r.Replicas().Descriptors(); len(allReplicas) > 0 {
-		for i, rep := range allReplicas {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			buf.WriteString(rep.String())
-		}
-	} else {
-		buf.WriteString("<no replicas>")
-	}
+	// todo(wenyi): reivist replicaset helper functions
+	minLen := min(3, len(r.Replicas().Descriptors()))
+	buf.WriteString(sumRangeInfo(nodes, r.Replicas().Descriptors()[:minLen]))
 	buf.WriteString("]")
 	return buf.String()
 }
 
-func PrintSpanConfigConformanceList(tag string, ranges []roachpb.ConformanceReportedRange) string {
+func printRangeDesc(nodes map[state.NodeID]roachpb.Locality, r roachpb.RangeDescriptor) string {
+	var buf strings.Builder
+	buf.WriteString(fmt.Sprintf("r%d:", r.RangeID))
+	buf.WriteString(r.RSpan().String())
+	buf.WriteString(" [")
+	// todo(wenyi): reivist replicaset helper functions
+	minLen := min(3, len(r.Replicas().Descriptors()))
+	buf.WriteString(sumRangeInfo(nodes, r.Replicas().Descriptors()[:minLen]))
+	buf.WriteString("]")
+	return buf.String()
+}
+
+func PrettyPrintSpanConfigConformanceList(
+	nodes map[state.NodeID]roachpb.Locality, tag string, ranges []roachpb.ConformanceReportedRange,
+) string {
+	var buf strings.Builder
+	for i, r := range ranges {
+		if i == 3 {
+			return buf.String() + fmt.Sprintf("... and %d more", len(ranges)-3)
+		}
+		if i == 0 {
+			buf.WriteString(fmt.Sprintf("%s:\n", tag))
+		}
+		buf.WriteString(fmt.Sprintf("  %s", prettyPrintRangeDesc(nodes, r.RangeDescriptor)))
+		if i != len(ranges)-1 {
+			buf.WriteString("\n")
+		}
+	}
+	return buf.String()
+}
+
+func PrintSpanConfigConformanceList(
+	nodes map[state.NodeID]roachpb.Locality, tag string, ranges []roachpb.ConformanceReportedRange,
+) string {
 	var buf strings.Builder
 	for i, r := range ranges {
 		if i == 0 {
 			buf.WriteString(fmt.Sprintf("%s:\n", tag))
 		}
-		buf.WriteString(fmt.Sprintf("  %s applying %s", printRangeDesc(r.RangeDescriptor),
+		buf.WriteString(fmt.Sprintf("  %s applying %s", printRangeDesc(nodes, r.RangeDescriptor),
 			spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(r.Config)))
 		if i != len(ranges)-1 {
 			buf.WriteString("\n")

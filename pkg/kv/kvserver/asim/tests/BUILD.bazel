@@ -51,6 +51,7 @@ go_test(
         "//pkg/kv/kvserver/asim/validator",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
+        "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_guptarohit_asciigraph//:asciigraph",

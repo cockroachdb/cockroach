@@ -63,6 +63,7 @@ type State interface {
 	// first flag is false, then the capacity is generated from scratch,
 	// otherwise the last calculated capacity values are used for each store.
 	StoreDescriptors(bool, ...StoreID) []roachpb.StoreDescriptor
+	NodeLocalityMap() map[NodeID]roachpb.Locality
 	// Nodes returns all nodes that exist in this state.
 	Nodes() []Node
 	// RangeFor returns the range containing Key in [StartKey, EndKey). This

@@ -312,6 +312,14 @@ func (s *state) Store(storeID StoreID) (Store, bool) {
 	return store, ok
 }
 
+func (s *state) NodeLocalityMap() map[NodeID]roachpb.Locality {
+	nodes := make(map[NodeID]roachpb.Locality, len(s.nodes))
+	for _, node := range s.nodes {
+		nodes[node.nodeID] = node.Descriptor().Locality
+	}
+	return nodes
+}
+
 func (s *state) Nodes() []Node {
 	nodes := make([]Node, 0, len(s.nodes))
 	for _, node := range s.nodes {

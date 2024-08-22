@@ -19,12 +19,8 @@ validation result:
 		a: 3 voters, 2 non_voters
 	3.cluster: 3 voters, 3 non_voters
 
-assertion type=conformance under=0 over=0 unavailable=0 violating=0
+assertion type=conformance under=0 over=0 unavailable=0 violating=0 better-format=true
 ----
-
-a4 2 voters
-a3 1 voter, 2 non-voters,
-c non-voter
 
 eval duration=60m
 ----
