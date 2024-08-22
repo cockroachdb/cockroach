@@ -417,3 +417,5 @@ type AdjacentInt8RangeOp struct{}
 type StrictRightInt8RangeOp struct{}
 
 type StrictLeftInt8RangeOp struct{}
+
+type PlusInt8RangeOp struct{}

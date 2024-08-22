@@ -78,6 +78,7 @@
 <tr><td><a href="int.html">int</a> <code>+</code> <a href="decimal.html">decimal</a></td><td><a href="decimal.html">decimal</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>+</code> <a href="inet.html">inet</a></td><td><a href="inet.html">inet</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>+</code> <a href="int.html">int</a></td><td><a href="int.html">int</a></td></tr>
+<tr><td>int8range <code>+</code> int8range</td><td>int8range</td></tr>
 <tr><td><a href="interval.html">interval</a> <code>+</code> <a href="date.html">date</a></td><td><a href="timestamp.html">timestamp</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code>+</code> <a href="interval.html">interval</a></td><td><a href="interval.html">interval</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code>+</code> <a href="time.html">time</a></td><td><a href="time.html">time</a></td></tr>

@@ -627,6 +627,13 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			Volatility: volatility.Immutable,
 		},
 		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int8Range,
+			ReturnType: types.Int8Range,
+			EvalOp:     &PlusInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
 			LeftType:   types.Float,
 			RightType:  types.Float,
 			ReturnType: types.Float,

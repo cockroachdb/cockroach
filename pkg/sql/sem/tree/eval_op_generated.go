@@ -167,6 +167,7 @@ type BinaryOpEvaluator interface {
 	EvalPlusDecimalPGLSNOp(context.Context, *PlusDecimalPGLSNOp, Datum, Datum) (Datum, error)
 	EvalPlusFloatOp(context.Context, *PlusFloatOp, Datum, Datum) (Datum, error)
 	EvalPlusINetIntOp(context.Context, *PlusINetIntOp, Datum, Datum) (Datum, error)
+	EvalPlusInt8RangeOp(context.Context, *PlusInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalPlusIntDateOp(context.Context, *PlusIntDateOp, Datum, Datum) (Datum, error)
 	EvalPlusIntDecimalOp(context.Context, *PlusIntDecimalOp, Datum, Datum) (Datum, error)
 	EvalPlusIntINetOp(context.Context, *PlusIntINetOp, Datum, Datum) (Datum, error)
@@ -815,6 +816,11 @@ func (op *PlusFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Dat
 // Eval is part of the BinaryEvalOp interface.
 func (op *PlusINetIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusINetIntOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *PlusInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalPlusInt8RangeOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.

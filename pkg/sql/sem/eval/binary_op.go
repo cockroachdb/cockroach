@@ -46,6 +46,11 @@ func BinaryOp(
 func (e *evaluator) EvalOverlapByInt8RangeOp(
 	_ context.Context, _ *tree.OverlapByInt8RangeOp, a, b tree.Datum,
 ) (tree.Datum, error) {
+	return doesInt8RangeOverlap(a, b)
+
+}
+
+func doesInt8RangeOverlap(a, b tree.Datum) (tree.Datum, error) {
 	rRange := tree.MustBeDInt8Range(b)
 	rSBInt := math.MinInt64
 	rEBInt := math.MaxInt64
@@ -80,12 +85,16 @@ func (e *evaluator) EvalOverlapByInt8RangeOp(
 
 	// This should never be hit but just in case.
 	return tree.DBoolFalse, nil
-
 }
 
 func (e *evaluator) EvalStrictRightInt8RangeOp(
 	_ context.Context, _ *tree.StrictRightInt8RangeOp, a, b tree.Datum,
 ) (tree.Datum, error) {
+	return areInt8RangeAdjacent(a, b)
+
+}
+
+func areInt8RangeAdjacent(a, b tree.Datum) (tree.Datum, error) {
 	rRange := tree.MustBeDInt8Range(b)
 
 	rEBInt := math.MaxInt64
@@ -111,7 +120,79 @@ func (e *evaluator) EvalStrictRightInt8RangeOp(
 	}
 
 	return tree.DBoolFalse, nil
+}
 
+func (e *evaluator) EvalPlusInt8RangeOp(
+	_ context.Context, _ *tree.PlusInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	rRange := tree.MustBeDInt8Range(b)
+	rSBInt := math.MinInt64
+	rEBInt := math.MaxInt64
+	if intVal, ok := tree.AsDInt(rRange.StartBound.Val); ok {
+		rSBInt = int(intVal)
+	}
+	if intVal, ok := tree.AsDInt(rRange.EndBound.Val); ok {
+		rEBInt = int(intVal)
+	}
+
+	lRange, isInt8Range := tree.AsDInt8Range(a)
+
+	if !isInt8Range {
+		return nil, pgerror.Newf(pgcode.Syntax, "overlap for int8range can only work on int8range")
+	}
+
+	lSBInt := math.MinInt64
+	lEBInt := math.MaxInt64
+
+	if intVal, ok := tree.AsDInt(lRange.StartBound.Val); ok {
+		lSBInt = int(intVal)
+	}
+
+	if intVal, ok := tree.AsDInt(lRange.EndBound.Val); ok {
+		lEBInt = int(intVal)
+	}
+
+	resultEndVal := rEBInt
+	if lEBInt > resultEndVal {
+		resultEndVal = lEBInt
+	}
+
+	resultStartVal := lSBInt
+	if rSBInt < resultStartVal {
+		resultStartVal = rSBInt
+	}
+
+	areAdjacent, err := areInt8RangeAdjacent(a, b)
+	if err != nil {
+		return nil, err
+	}
+
+	doesOverlap, err := doesInt8RangeOverlap(a, b)
+	if err != nil {
+		return nil, err
+	}
+
+	l, _ := tree.GetBool(areAdjacent)
+	r, _ := tree.GetBool(doesOverlap)
+
+	if !l && !r {
+		return nil, pgerror.Newf(pgcode.Syntax, "result of range union would not be contiguous")
+	}
+
+	var resultStartType, resultEndType tree.RangeBoundType
+	if resultStartVal == math.MinInt64 {
+		resultStartType = tree.RangeBoundNegInf
+	} else {
+		resultStartType = tree.RangeBoundClose
+	}
+
+	if resultEndVal == math.MaxInt64 {
+		resultEndType = tree.RangeBoundInf
+	} else {
+		resultEndType = tree.RangeBoundOpen
+	}
+
+	return tree.NewDInt8Range(tree.NewDInt(tree.DInt(resultStartVal)), tree.NewDInt(tree.DInt(resultEndVal)), resultStartType, resultEndType), nil
 }
 
 func (e *evaluator) EvalStrictLeftInt8RangeOp(
