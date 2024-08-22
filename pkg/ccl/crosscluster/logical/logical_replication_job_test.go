@@ -424,11 +424,11 @@ func TestLogicalStreamIngestionAdvancePTS(t *testing.T) {
 	now := s.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
 	// The ingestion job on cluster A has a pts on cluster B.
-	producerJobIDB := replicationutils.GetLatestProducerJobID(t, dbB)
+	producerJobIDB := replicationutils.GetProducerJobIDFromLDRJob(t, dbA, jobAID)
 	replicationutils.WaitForPTSProtection(t, ctx, dbB, s, producerJobIDB, now)
 
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
-	producerJobIDA := replicationutils.GetLatestProducerJobID(t, dbA)
+	producerJobIDA := replicationutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
 	replicationutils.WaitForPTSProtection(t, ctx, dbA, s, producerJobIDA, now)
 }
 
@@ -935,11 +935,10 @@ func TestHeartbeatCancel(t *testing.T) {
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
 
-	var prodAID jobspb.JobID
-	dbA.QueryRow(t, "SELECT job_ID FROM [SHOW JOBS] WHERE job_type='REPLICATION STREAM PRODUCER'").Scan(&prodAID)
+	prodAID := replicationutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
 
 	// Cancel the producer job and wait for the hearbeat to pick up that the stream is inactive
-	t.Logf("Canceling  replication producer %s", prodAID)
+	t.Logf("canceling replication producer %s", prodAID)
 	dbA.QueryRow(t, "CANCEL JOB $1", prodAID)
 
 	// The ingestion job should eventually retry because it detects 2 nodes are dead

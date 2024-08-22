@@ -245,7 +245,7 @@ func (c *TenantStreamingClusters) WaitUntilStartTimeReached(ingestionJobID jobsp
 func (c *TenantStreamingClusters) WaitForPostCutoverRetentionJob() {
 	c.DestSysSQL.Exec(c.T, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='10ms'`, c.Args.DestTenantName))
 	var retentionJobID jobspb.JobID
-	retentionJobQuery := fmt.Sprintf(`SELECT job_id FROM [SHOW JOBS] 
+	retentionJobQuery := fmt.Sprintf(`SELECT job_id FROM [SHOW JOBS]
 WHERE description = 'History Retention for Physical Replication of %s'
 ORDER BY created DESC LIMIT 1`, c.Args.DestTenantName)
 	c.DestSysSQL.QueryRow(c.T, retentionJobQuery).Scan(&retentionJobID)
@@ -281,7 +281,7 @@ func (c *TenantStreamingClusters) Cutover(
 		require.Equal(c.T, cutoverTime, cutoverOutput.GoTime())
 	}
 
-	protectedTimestamp := replicationutils.TestingGetPTSFromReplicationJob(c.T, ctx, c.SrcSysSQL, c.SrcSysServer, producerJobID)
+	protectedTimestamp := replicationutils.TestingGetPTSFromReplicationJob(c.T, ctx, c.SrcSysSQL, c.SrcSysServer, jobspb.JobID(producerJobID))
 	require.LessOrEqual(c.T, protectedTimestamp.GoTime(), cutoverOutput.GoTime())
 
 	// PTS should be less than or equal to retained time as a result of heartbeats.
