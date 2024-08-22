@@ -2013,6 +2013,58 @@ type DInt8Range struct {
 	EndBound   RangeBound
 }
 
+// EncodeToByte encodes a DInt8Range into a byte array.
+// It encodes the following in order:
+// - StartBound's Type
+// - EndBound's Type
+// - StartBound's DInt Datum
+// - EndBound's DInt Datum
+func (d *DInt8Range) EncodeToByte() []byte {
+	buf := make([]byte, 0)
+	sbInt := MustBeDInt(d.StartBound.Val)
+	buf = encoding.EncodeUntaggedIntValue(buf, int64(sbInt))
+	ebInt := MustBeDInt(d.EndBound.Val)
+	buf = encoding.EncodeUntaggedIntValue(buf, int64(ebInt))
+
+	return buf
+}
+
+// DecodeToDInt8Range decode a byte array to a DInt8Range datum.
+func DecodeToDInt8Range(data []byte) ([]byte, *DInt8Range, error) {
+	var sbVal, ebVal Datum
+	x, sVal, err := encoding.DecodeIntValue(data)
+	data = x
+	if err != nil {
+		return data, nil, err
+	}
+
+	sbVal = NewDInt(DInt(sVal))
+	x, eVal, err := encoding.DecodeIntValue(data)
+	data = x
+	if err != nil {
+		return data, nil, err
+	}
+	ebVal = NewDInt(DInt(eVal))
+
+	sbTyp := RangeBoundStartClose
+	ebTyp := RangeBoundEndOpen
+
+	// TODO(janexing): gut tells me this would be errorsome but just yolo here lol
+	if sVal == math.MinInt64 {
+		sbTyp = RangeBoundNegInf
+	} else if sVal == math.MaxInt64 {
+		sbTyp = RangeBoundInf
+	}
+
+	if eVal == math.MinInt64 {
+		ebTyp = RangeBoundNegInf
+	} else if eVal == math.MaxInt64 {
+		ebTyp = RangeBoundInf
+	}
+
+	return data, NewDInt8Range(sbVal, ebVal, sbTyp, ebTyp), nil
+}
+
 // AsDInt8Range attempts to retrieve a DInt8Range from an Expr, returning
 // a DInt8Range and a flag signifying whether the assertion was successful.
 func AsDInt8Range(e Expr) (DInt8Range, bool) {

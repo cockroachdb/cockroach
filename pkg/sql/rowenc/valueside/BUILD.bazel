@@ -7,7 +7,6 @@ go_library(
         "decode.go",
         "doc.go",
         "encode.go",
-        "int8range.go",
         "legacy.go",
         "tuple.go",
     ],

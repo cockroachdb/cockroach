@@ -3291,6 +3291,17 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 			return dataOffset + ipaddr.IPv6size, err
 		}
 		return 0, errors.Errorf("got invalid INET IP family: %d", family)
+	case Range:
+		_, n1, _, err := DecodeNonsortingStdlibVarint(b)
+		if err != nil {
+			return 0, err
+		}
+		_, n2, _, err := DecodeNonsortingStdlibVarint(b)
+		if err != nil {
+			return 0, err
+		}
+		return dataOffset + n1 + n2, nil
+
 	default:
 		return 0, errors.Errorf("unknown type %s", typ)
 	}
