@@ -350,7 +350,7 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 	exp2Cs := pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}}
 
 	s := newTestMemoryStorage(withPeers(1))
-	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
+	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s, withFortificationDisabled()))
 	require.NoError(t, err)
 
 	rawNode.Campaign()
@@ -637,6 +637,9 @@ func TestRawNodeRestart(t *testing.T) {
 
 	// Ensure we campaign after the election timeout has elapsed.
 	for i := 0; i < rawNode.raft.randomizedElectionTimeout; i++ {
+		// TODO(arul): consider getting rid of this hack to reset the epoch so that
+		// we can call an election without panicking.
+		rawNode.raft.leadEpoch = 0
 		rawNode.raft.tick()
 	}
 	assert.Equal(t, StateCandidate, rawNode.raft.state)
