@@ -527,8 +527,15 @@ func (p *processorImpl) OnDescChangedLocked(ctx context.Context, desc *roachpb.R
 		// RaftNode.
 		p.raftMu.raftNode = p.opts.Replica.RaftNodeMuLocked()
 	}
+	initialization := p.raftMu.replicas == nil
 	p.raftMu.replicas = descToReplicaSet(desc)
 	p.raftMu.replicasChanged = true
+	// We need to promptly return tokens if some replicas have been removed,
+	// since those tokens could be used by other ranges with replicas on the
+	// same store. Ensure that promptness by scheduling ready.
+	if !initialization {
+		p.opts.RaftScheduler.EnqueueRaftReady(p.opts.RangeID)
+	}
 }
 
 // makeStateConsistentRaftMuLockedProcLocked, uses the union of the latest
