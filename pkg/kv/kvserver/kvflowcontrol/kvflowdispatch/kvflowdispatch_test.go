@@ -226,6 +226,12 @@ func (d dummyHandles) Lookup(id roachpb.RangeID) (kvflowcontrol.Handle, bool) {
 	return nil, false
 }
 
+func (d dummyHandles) LookupReplicationAdmissionHandle(
+	rangeID roachpb.RangeID,
+) (kvflowcontrol.ReplicationAdmissionHandle, bool) {
+	return d.Lookup(rangeID)
+}
+
 func (d dummyHandles) ResetStreams(ctx context.Context) {}
 
 func (d dummyHandles) Inspect() []roachpb.RangeID {
