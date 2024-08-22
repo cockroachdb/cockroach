@@ -1456,3 +1456,100 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 	jobutils.WaitForJobToCancel(t, dbA, jobAID)
 	jobutils.WaitForJobToCancel(t, dbA, jobBID)
 }
+
+// TestUserPrivileges verifies the grants and role permissions
+// needed to start and administer LDR
+func TestUserPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+
+	// Create user with no privileges
+	dbA.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
+	testuser := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.User(username.TestUser), serverutils.DBName("a")))
+
+	// NEED VIEWJOB system grant to view admin LDR jobs
+	result := testuser.QueryStr(t, "select * from [SHOW JOBS] where job_id=$1", jobAID)
+	require.Empty(t, result, "The user should see no rows without the VIEWJOB grant")
+
+	dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWJOB to %s", username.TestUser))
+	result = testuser.QueryStr(t, "select * from [SHOW JOBS] where job_id=$1", jobAID)
+	require.NotEmpty(t, result, "The user should see the LDR job with the VIEWJOB grant")
+
+	// Kill replication job so we can create one with the testuser
+	dbA.Exec(t, "CANCEL JOB $1", jobAID)
+	jobutils.WaitForJobToCancel(t, dbA, jobAID)
+
+	// Create a UDF
+	dbA.Exec(t, "CREATE SCHEMA testschema")
+	lwwFunc := `CREATE OR REPLACE FUNCTION testschema.repl_apply(action STRING, proposed tab, existing tab, prev tab, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL,proposed_mvcc_timestamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
+	RETURNS string
+	AS $$
+	BEGIN
+	IF existing_origin_timestamp IS NULL THEN
+	    IF existing_mvcc_timestamp < proposed_mvcc_timestamp THEN
+			SELECT crdb_internal.log('case 1');
+			RETURN 'accept_proposed';
+		ELSE
+			SELECT crdb_internal.log('case 2');
+			RETURN 'ignore_proposed';
+		END IF;
+	ELSE
+		IF existing_origin_timestamp < proposed_mvcc_timestamp THEN
+			SELECT crdb_internal.log('case 3');
+			RETURN 'accept_proposed';
+		ELSE
+			SELECT crdb_internal.log('case 4');
+			RETURN 'ignore_proposed';
+		END IF;
+	END IF;
+	END
+	$$ LANGUAGE plpgsql`
+
+	// Ensure the testuser has CREATE privileges
+	testuser.ExpectErr(t, "user testuser does not have CREATE privilege on schema testschema", lwwFunc)
+	dbA.Exec(t, "GRANT CREATE ON SCHEMA testschema TO testuser")
+	testuser.Exec(t, lwwFunc)
+
+	// Only start replication with the REPLICATION grant
+	testuser.ExpectErr(t, "user testuser does not have REPLICATION system privilege", "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DEFAULT FUNCTION = 'testschema.repl_apply'", dbBURL.String())
+	dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser))
+	testuser.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DEFAULT FUNCTION = 'testschema.repl_apply'", dbBURL.String()).Scan(&jobAID)
+
+	// Attempt to pause job without CONTROLJOB
+	testuser.ExpectErr(t, fmt.Sprintf("user testuser does not have privileges for job %s", jobAID.String()), "PAUSE JOB $1", jobAID.String())
+
+	// GRANT CONTROLJOB
+	dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM CONTROLJOB to %s", username.TestUser))
+
+	testuser.Exec(t, "PAUSE JOB $1", jobAID)
+	jobutils.WaitForJobToPause(t, dbA, jobAID)
+
+	testuser.Exec(t, "RESUME job $1", jobAID)
+	jobutils.WaitForJobToRun(t, dbA, jobAID)
+}
