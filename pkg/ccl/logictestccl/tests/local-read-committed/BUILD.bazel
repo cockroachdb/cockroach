@@ -7,10 +7,11 @@ go_test(
     data = [
         "//c-deps:libgeos",  # keep
         "//pkg/ccl/logictestccl:testdata",  # keep
+        "//pkg/sql/logictest:testdata",  # keep
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep
     ],
     exec_properties = {"test.Pool": "large"},
-    shard_count = 37,
+    shard_count = 48,
     tags = ["cpu:1"],
     deps = [
         "//pkg/base",
