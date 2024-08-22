@@ -97,7 +97,6 @@ func TestUDFWithRandomTables(t *testing.T) {
 	var jobBID jobspb.JobID
 	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
-	t.Logf("waiting for replication job %d", jobBID)
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
 	runnerA.Exec(t, fmt.Sprintf("DELETE FROM %s LIMIT 5", tableName))
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
@@ -143,7 +142,6 @@ func TestUDFInsertOnly(t *testing.T) {
 	var jobBID jobspb.JobID
 	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
-	t.Logf("waiting for replication job %d", jobBID)
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
 	runnerA.Exec(t, "INSERT INTO tallies VALUES (5, 55)")
 	runnerA.Exec(t, "DELETE FROM tallies WHERE pk = 4")
@@ -197,11 +195,8 @@ func TestUDFPreviousValue(t *testing.T) {
 	var jobBID jobspb.JobID
 	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
-	t.Logf("waiting for replication job %d", jobBID)
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
 	runnerA.Exec(t, "UPDATE tallies SET v = 15 WHERE pk = 1")
-
-	t.Logf("waiting for replication job %d", jobBID)
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
 
 	runnerB.CheckQueryResults(t, "SELECT * FROM tallies", [][]string{
