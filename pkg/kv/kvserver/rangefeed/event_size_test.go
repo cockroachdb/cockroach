@@ -294,14 +294,14 @@ func generateRandomTestData(rand *rand.Rand) testData {
 		kvs:              testSSTKVs,
 		span:             generateRandomizedSpan(rand).AsRawSpanWithNoLocals(),
 		key:              generateRandomizedBytes(rand),
-		timestamp:        generateRandomizedTs(rand),
+		timestamp:        GenerateRandomizedTs(rand, 100 /* maxTime */),
 		value:            generateRandomizedBytes(rand),
 		startKey:         startKey,
 		endKey:           endkey,
 		txnID:            generateRandomizedTxnId(rand),
 		txnKey:           generateRandomizedBytes(rand),
 		txnIsoLevel:      isolation.Levels()[rand.Intn(len(isolation.Levels()))],
-		txnMinTimestamp:  generateRandomizedTs(rand),
+		txnMinTimestamp:  GenerateRandomizedTs(rand, 100 /* maxTime */),
 		omitInRangefeeds: rand.Intn(2) == 1,
 	}
 }
