@@ -3529,9 +3529,7 @@ var allowReadCommittedIsolation = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
-// TODO(nvanbenschoten): rename this variable and update uses of it to favor
-// "repeatable read" over "snapshot".
-var allowSnapshotIsolation = settings.RegisterBoolSetting(
+var allowRepeatableReadIsolation = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.txn.snapshot_isolation.enabled",
 	"set to true to allow transactions to use the REPEATABLE READ isolation "+
@@ -3589,20 +3587,17 @@ func (ex *connExecutor) txnIsolationLevelToKV(
 				upgradedDueToLicense = true
 			}
 		}
-	case tree.RepeatableReadIsolation:
-		// REPEATABLE READ is mapped to SNAPSHOT.
-		upgraded = true
-		fallthrough
-	case tree.SnapshotIsolation:
-		// SNAPSHOT is only allowed if the cluster setting is enabled and the
-		// cluster has a license. Otherwise it is mapped to SERIALIZABLE.
-		allowSnapshot := allowSnapshotIsolation.Get(&ex.server.cfg.Settings.SV)
-		if allowSnapshot && hasLicense {
+	case tree.RepeatableReadIsolation, tree.SnapshotIsolation:
+		// REPEATABLE READ and SNAPSHOT are considered aliases. The isolation levels
+		// are only allowed if the cluster setting is enabled and the cluster has a
+		// license. Otherwise, they are mapped to SERIALIZABLE.
+		allowRepeatableRead := allowRepeatableReadIsolation.Get(&ex.server.cfg.Settings.SV)
+		if allowRepeatableRead && hasLicense {
 			ret = isolation.Snapshot
 		} else {
 			upgraded = true
 			ret = isolation.Serializable
-			if allowSnapshot && !hasLicense {
+			if allowRepeatableRead && !hasLicense {
 				upgradedDueToLicense = true
 			}
 		}

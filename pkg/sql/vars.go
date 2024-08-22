@@ -418,10 +418,10 @@ var varGen = map[string]sessionVar{
 	`default_transaction_isolation`: {
 		Set: func(ctx context.Context, m sessionDataMutator, s string) error {
 			allowReadCommitted := allowReadCommittedIsolation.Get(&m.settings.SV)
-			allowSnapshot := allowSnapshotIsolation.Get(&m.settings.SV)
+			allowRepeatableRead := allowRepeatableReadIsolation.Get(&m.settings.SV)
 			hasLicense := base.CCLDistributionAndEnterpriseEnabled(m.settings)
 			var allowedValues = []string{"serializable"}
-			if allowSnapshot {
+			if allowRepeatableRead {
 				// TODO(nvanbenschoten): switch to "repeatable read".
 				allowedValues = append(allowedValues, "snapshot")
 			}
@@ -449,16 +449,13 @@ var varGen = map[string]sessionVar{
 						upgradedDueToLicense = true
 					}
 				}
-			case tree.RepeatableReadIsolation:
-				upgraded = true
-				fallthrough
-			case tree.SnapshotIsolation:
+			case tree.RepeatableReadIsolation, tree.SnapshotIsolation:
 				level = tree.SerializableIsolation
-				if allowSnapshot && hasLicense {
+				if allowRepeatableRead && hasLicense {
 					level = tree.SnapshotIsolation
 				} else {
 					upgraded = true
-					if allowSnapshot && !hasLicense {
+					if allowRepeatableRead && !hasLicense {
 						upgradedDueToLicense = true
 					}
 				}
@@ -1615,7 +1612,7 @@ var varGen = map[string]sessionVar{
 			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
 			if !ok {
 				var allowedValues = []string{"serializable"}
-				if allowSnapshotIsolation.Get(&evalCtx.ExecCfg.Settings.SV) {
+				if allowRepeatableReadIsolation.Get(&evalCtx.ExecCfg.Settings.SV) {
 					// TODO(nvanbenschoten): switch to "repeatable read".
 					allowedValues = append(allowedValues, "snapshot")
 				}
