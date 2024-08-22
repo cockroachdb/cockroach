@@ -99,10 +99,13 @@ type RaftNode interface {
 
 	// Read-only methods.
 
+	// TermLocked returns the current term of this replica.
+	TermLocked() uint64
 	// LeaderLocked returns the current known leader. This state can advance
 	// past the group membership state, so the leader returned here may not be
 	// known as a current group member.
 	LeaderLocked() roachpb.ReplicaID
+
 	// StableIndexLocked is the (inclusive) highest index that is known to be
 	// successfully persisted in local storage.
 	StableIndexLocked() uint64
@@ -115,9 +118,6 @@ type RaftNode interface {
 	NextUnstableIndexLocked() uint64
 	// GetAdmittedLocked returns the current value of the admitted array.
 	GetAdmittedLocked() [raftpb.NumPriorities]uint64
-	// MyLeaderTermLocked returns the term, if this replica is the leader, else
-	// 0.
-	MyLeaderTermLocked() uint64
 
 	// Mutating methods.
 
@@ -489,19 +489,19 @@ func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(level EnabledWhenLeader
 	}
 	// May need to create RangeController.
 	var leaderID roachpb.ReplicaID
-	var myLeaderTerm uint64
+	var term uint64
 	var nextUnstableIndex uint64
 	func() {
 		p.opts.Replica.MuLock()
 		defer p.opts.Replica.MuUnlock()
 		leaderID = p.raftMu.raftNode.LeaderLocked()
 		if leaderID == p.opts.ReplicaID {
-			myLeaderTerm = p.raftMu.raftNode.MyLeaderTermLocked()
+			term = p.raftMu.raftNode.TermLocked()
 			nextUnstableIndex = p.raftMu.raftNode.NextUnstableIndexLocked()
 		}
 	}()
 	if leaderID == p.opts.ReplicaID {
-		p.createLeaderStateRaftMuLockedProcLocked(myLeaderTerm, nextUnstableIndex)
+		p.createLeaderStateRaftMuLockedProcLocked(term, nextUnstableIndex)
 	}
 }
 
@@ -674,7 +674,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, entries
 		leaseholderID = p.opts.Replica.LeaseholderMuLocked()
 		admitted = p.raftMu.raftNode.GetAdmittedLocked()
 		if leaderID == p.opts.ReplicaID {
-			myLeaderTerm = p.raftMu.raftNode.MyLeaderTermLocked()
+			myLeaderTerm = p.raftMu.raftNode.TermLocked()
 		}
 	}()
 	if len(entries) > 0 {

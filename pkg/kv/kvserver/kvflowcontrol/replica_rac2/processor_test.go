@@ -98,12 +98,18 @@ type testRaftNode struct {
 	leader            roachpb.ReplicaID
 	stableIndex       uint64
 	nextUnstableIndex uint64
-	myLeaderTerm      uint64
+	term              uint64
 }
 
 func (rn *testRaftNode) EnablePingForAdmittedLaggingLocked() {
 	rn.r.mu.AssertHeld()
 	fmt.Fprintf(rn.b, " RaftNode.EnablePingForAdmittedLaggingLocked\n")
+}
+
+func (rn *testRaftNode) TermLocked() uint64 {
+	rn.r.mu.AssertHeld()
+	fmt.Fprintf(rn.b, " RaftNode.TermLocked() = %d\n", rn.term)
+	return rn.term
 }
 
 func (rn *testRaftNode) LeaderLocked() roachpb.ReplicaID {
@@ -128,12 +134,6 @@ func (rn *testRaftNode) GetAdmittedLocked() [raftpb.NumPriorities]uint64 {
 	rn.r.mu.AssertHeld()
 	fmt.Fprintf(rn.b, " RaftNode.GetAdmittedLocked = %s\n", admittedString(rn.admitted))
 	return rn.admitted
-}
-
-func (rn *testRaftNode) MyLeaderTermLocked() uint64 {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.MyLeaderTermLocked() = %d\n", rn.myLeaderTerm)
-	return rn.myLeaderTerm
 }
 
 func (rn *testRaftNode) SetAdmittedLocked(admitted [raftpb.NumPriorities]uint64) raftpb.Message {
@@ -282,9 +282,9 @@ func TestProcessorBasic(t *testing.T) {
 		return str
 	}
 	printRaftState := func() {
-		fmt.Fprintf(&b, "Raft: leader: %d leaseholder: %d stable: %d next-unstable: %d my-term: %d admitted: %s",
+		fmt.Fprintf(&b, "Raft: leader: %d leaseholder: %d stable: %d next-unstable: %d term: %d admitted: %s",
 			r.raftNode.leader, r.leaseholder, r.raftNode.stableIndex, r.raftNode.nextUnstableIndex,
-			r.raftNode.myLeaderTerm, admittedString(r.raftNode.admitted))
+			r.raftNode.term, admittedString(r.raftNode.admitted))
 	}
 	ctx := context.Background()
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "processor"),
@@ -320,7 +320,7 @@ func TestProcessorBasic(t *testing.T) {
 				if d.HasArg("my-leader-term") {
 					var myLeaderTerm uint64
 					d.ScanArgs(t, "my-leader-term", &myLeaderTerm)
-					r.raftNode.myLeaderTerm = myLeaderTerm
+					r.raftNode.term = myLeaderTerm
 				}
 				if d.HasArg("leaseholder") {
 					var leaseholder int

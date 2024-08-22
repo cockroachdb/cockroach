@@ -27,12 +27,12 @@ func (rn raftNodeForRACv2) EnablePingForAdmittedLaggingLocked() {
 	panic("TODO(pav-kv): implement")
 }
 
+func (rn raftNodeForRACv2) TermLocked() uint64 {
+	return rn.Term()
+}
+
 func (rn raftNodeForRACv2) LeaderLocked() roachpb.ReplicaID {
-	// This needs to be the latest leader (highest term) that this replica has
-	// heard from, and not the leader recorded in HardState.
-	//
-	// TODO(pav-kv): implement.
-	return 0
+	return roachpb.ReplicaID(rn.Lead())
 }
 
 func (rn raftNodeForRACv2) StableIndexLocked() uint64 {
@@ -41,18 +41,12 @@ func (rn raftNodeForRACv2) StableIndexLocked() uint64 {
 }
 
 func (rn raftNodeForRACv2) NextUnstableIndexLocked() uint64 {
-	// TODO(pav-kv): implement.
-	return 0
+	return rn.NextUnstableIndex()
 }
 
 func (rn raftNodeForRACv2) GetAdmittedLocked() [raftpb.NumPriorities]uint64 {
 	// TODO(pav-kv): implement.
 	return [raftpb.NumPriorities]uint64{}
-}
-
-func (rn raftNodeForRACv2) MyLeaderTermLocked() uint64 {
-	// TODO(pav-kv): implement.
-	return 0
 }
 
 func (rn raftNodeForRACv2) SetAdmittedLocked([raftpb.NumPriorities]uint64) raftpb.Message {
