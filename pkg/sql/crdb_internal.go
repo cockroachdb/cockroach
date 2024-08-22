@@ -2827,7 +2827,7 @@ func formatActiveQuery(query serverpb.ActiveQuery) string {
 				ctx.Printf("$%d", p.Idx+1)
 				return
 			}
-			ctx.Printf(query.Placeholders[p.Idx])
+			ctx.Printf("%s", query.Placeholders[p.Idx])
 		}),
 	)
 	sb.WriteString(sql)

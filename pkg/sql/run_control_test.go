@@ -1023,7 +1023,7 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 				blockSchemaChange.Swap(true)
 				if implicitTxn {
 					_, err := conn.DB.ExecContext(ctx, "ALTER TABLE t1 ADD COLUMN j INT DEFAULT 32")
-					require.Errorf(t, err, sqlerrors.QueryTimeoutError.Error())
+					require.ErrorContains(t, err, sqlerrors.QueryTimeoutError.Error())
 					require.Equal(t, 1, len(actualNotices))
 					require.Regexp(t,
 						"The statement has timed out, but the following background jobs have been created and will continue running: \\d+",

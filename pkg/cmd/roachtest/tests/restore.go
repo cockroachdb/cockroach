@@ -856,7 +856,7 @@ func (tpcc tpccRestore) init(
 		MaybeFlag(tpcc.opts.warehouses > 0, "warehouses", tpcc.opts.warehouses).
 		MaybeFlag(tpcc.opts.seed != 0, "seed", tpcc.opts.seed).
 		MaybeFlag(tpcc.opts.fakeTime != 0, "fake-time", tpcc.opts.fakeTime).
-		Arg(fmt.Sprintf("{pgurl:%d-%d}", crdbNodes[0], crdbNodes[len(crdbNodes)-1]))
+		Arg("{pgurl:%d-%d}", crdbNodes[0], crdbNodes[len(crdbNodes)-1])
 	c.Run(ctx, option.WithNodes([]int{sp.getWorkloadNode()}), cmd.String())
 }
 
@@ -872,7 +872,7 @@ func (tpcc tpccRestore) run(
 		MaybeFlag(tpcc.opts.seed != 0, "seed", tpcc.opts.seed).
 		MaybeFlag(tpcc.opts.fakeTime != 0, "fake-time", tpcc.opts.fakeTime).
 		MaybeFlag(tpcc.opts.queryTraceFile != "", "query-trace-file", tpcc.opts.queryTraceFile).
-		Arg(fmt.Sprintf("{pgurl:%d-%d}", crdbNodes[0], crdbNodes[len(crdbNodes)-1]))
+		Arg("{pgurl:%d-%d}", crdbNodes[0], crdbNodes[len(crdbNodes)-1])
 	return c.RunE(ctx, option.WithNodes([]int{sp.getWorkloadNode()}), cmd.String())
 }
 
