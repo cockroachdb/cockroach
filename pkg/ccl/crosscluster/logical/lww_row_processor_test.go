@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
@@ -19,8 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -300,4 +305,166 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 			require.NoError(b, lastRowErr)
 		})
 	}
+}
+
+// TestLWWConflictResolution tests how insert conflicts are handled under the default
+// last write wins mode. The test cases are as follows:
+// 1. The incoming row to the processor is older than the current row
+// 2. The incoming row to the processor is newer than the current row
+// 3. The current row is a local write (crdb_replication_origin_timestamp is NULL)
+// 4. Both src and dest tables receive a write before one can be propagated to the other
+// All of those combinations are tested with both optimistic inserts and standard inserts.
+// The tests are also run with both the SQL row processor and the KV row processor. Note
+// that currently, KV row proc write conflicts result in a fallback to the SQL row processor.
+func TestLWWConflictResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create new tables for each test to prevent conflicts between tests
+	tableNumber := 0
+	createTable := func(t *testing.T) string {
+		tableName := fmt.Sprintf("tab%d", tableNumber)
+		runner.Exec(t, fmt.Sprintf(`CREATE TABLE %s (pk int primary key, payload string)`, tableName))
+		runner.Exec(t, fmt.Sprintf(
+			"ALTER TABLE %s "+lwwColumnAdd,
+			tableName))
+		tableNumber++
+		return tableName
+	}
+
+	setup := func(t *testing.T, useKVProc bool) (string, RowProcessor, func(hlc.Timestamp, ...interface{}) roachpb.KeyValue) {
+		tableNameSrc := createTable(t)
+		tableNameDst := createTable(t)
+		srcDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameSrc)
+		dstDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameDst)
+
+		// We need the SQL row processor even when testing the KW row processor since it's the fallback
+		var rp RowProcessor
+		rp, err := makeSQLProcessor(ctx, s.ClusterSettings(), map[descpb.ID]sqlProcessorTableConfig{
+			dstDesc.GetID(): {
+				srcDesc: srcDesc,
+			},
+		}, jobspb.JobID(1), s.InternalExecutor().(isql.Executor))
+		require.NoError(t, err)
+
+		if useKVProc {
+			rp, err = newKVRowProcessor(ctx,
+				&execinfra.ServerConfig{
+					DB:           s.InternalDB().(descs.DB),
+					LeaseManager: s.LeaseManager(),
+				}, &eval.Context{
+					Codec:    s.Codec(),
+					Settings: s.ClusterSettings(),
+				}, map[descpb.ID]sqlProcessorTableConfig{
+					dstDesc.GetID(): {
+						srcDesc: srcDesc,
+					},
+				},
+				rp.(*sqlRowProcessor))
+			require.NoError(t, err)
+		}
+		return tableNameDst, rp, func(timestamp hlc.Timestamp, datums ...interface{}) roachpb.KeyValue {
+			kv := replicationtestutils.EncodeKV(t, s.Codec(), srcDesc, datums...)
+			kv.Value.Timestamp = timestamp
+			return kv
+		}
+	}
+
+	insertRow := func(rp RowProcessor, keyValue roachpb.KeyValue, prevValue roachpb.Value) error {
+		return s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			_, err := rp.ProcessRow(ctx, txn, keyValue, prevValue)
+			return err
+		})
+	}
+
+	timeNow := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	timeOneDayForward := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Hour * 24).UnixNano()}
+	row1 := []interface{}{1, "row1"}
+	row2 := []interface{}{1, "row2"}
+	row3 := []interface{}{1, "row3"}
+
+	testutils.RunTrueAndFalse(t, "useKVProc", func(t *testing.T, useKVProc bool) {
+		testutils.RunTrueAndFalse(t, "optimistic_insert", func(t *testing.T, optimisticInsert bool) {
+
+			t.Run("cross-cluster-write", func(t *testing.T) {
+				runner.Exec(t, fmt.Sprintf("SET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled=%t", optimisticInsert))
+				defer runner.Exec(t, "RESET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled")
+				tableNameDst, rp, encoder := setup(t, useKVProc)
+
+				runner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES ($1, $2)", tableNameDst), row1...)
+
+				keyValue2 := encoder(timeOneDayForward, row2...)
+				require.NoError(t, insertRow(rp, keyValue2, roachpb.Value{}))
+
+				expectedRows := [][]string{
+					{"1", "row2"},
+				}
+				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
+			})
+
+			t.Run("sql-conflict-incoming-newer", func(t *testing.T) {
+				runner.Exec(t, fmt.Sprintf("SET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled=%t", optimisticInsert))
+				defer runner.Exec(t, "RESET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled")
+				tableNameDst, rp, encoder := setup(t, useKVProc)
+
+				keyValue1 := encoder(timeNow, row1...)
+				require.NoError(t, insertRow(rp, keyValue1, roachpb.Value{}))
+
+				keyValue2 := encoder(timeOneDayForward, row2...)
+				require.NoError(t, insertRow(rp, keyValue2, roachpb.Value{}))
+
+				expectedRows := [][]string{
+					{"1", "row2"},
+				}
+				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
+			})
+
+			t.Run("sql-conflict-incoming-older", func(t *testing.T) {
+				runner.Exec(t, fmt.Sprintf("SET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled=%t", optimisticInsert))
+				defer runner.Exec(t, "RESET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled")
+				tableNameDst, rp, encoder := setup(t, useKVProc)
+
+				keyValue1 := encoder(timeOneDayForward, row1...)
+				require.NoError(t, insertRow(rp, keyValue1, roachpb.Value{}))
+
+				keyValue2 := encoder(timeNow, row2...)
+				require.NoError(t, insertRow(rp, keyValue2, roachpb.Value{}))
+
+				expectedRows := [][]string{
+					{"1", "row1"},
+				}
+				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
+			})
+
+			// From the perspective of the row processor, once the first row is processed, the next incoming event from the
+			// src rangefeed should have a "previous row" that matches the row currently in the cluster. If writes on the src
+			// and dest occur too close together, both tables will attempt to propagate to the other, and the winner of the
+			// conflict will depend on the MVCC timestamp just like the cross cluster write scenario
+			t.Run("outdated-write-conflict", func(t *testing.T) {
+				runner.Exec(t, fmt.Sprintf("SET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled=%t", optimisticInsert))
+				defer runner.Exec(t, "RESET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled")
+				tableNameDst, rp, encoder := setup(t, useKVProc)
+
+				keyValue1 := encoder(timeNow, row1...)
+				require.NoError(t, insertRow(rp, keyValue1, roachpb.Value{}))
+
+				runner.Exec(t, fmt.Sprintf("UPSERT INTO %s VALUES ($1, $2)", tableNameDst), row2...)
+
+				keyValue3 := encoder(timeOneDayForward, row3...)
+				require.NoError(t, insertRow(rp, keyValue3, keyValue1.Value))
+
+				expectedRows := [][]string{
+					{"1", "row3"},
+				}
+				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
+			})
+		})
+	})
 }
