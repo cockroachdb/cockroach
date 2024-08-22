@@ -240,6 +240,7 @@
 </thead><tbody>
 <tr><td><a href="inet.html">inet</a> <code><<</code> <a href="inet.html">inet</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code><<</code> <a href="int.html">int</a></td><td><a href="int.html">int</a></td></tr>
+<tr><td>int8range <code><<</code> int8range</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>varbit <code><<</code> <a href="int.html">int</a></td><td>varbit</td></tr>
 </tbody></table>
 <table><thead>
@@ -382,6 +383,7 @@
 </thead><tbody>
 <tr><td><a href="inet.html">inet</a> <code>>></code> <a href="inet.html">inet</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>>></code> <a href="int.html">int</a></td><td><a href="int.html">int</a></td></tr>
+<tr><td>int8range <code>>></code> int8range</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>varbit <code>>></code> <a href="int.html">int</a></td><td>varbit</td></tr>
 </tbody></table>
 <table><thead>

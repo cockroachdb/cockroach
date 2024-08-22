@@ -83,6 +83,68 @@ func (e *evaluator) EvalOverlapByInt8RangeOp(
 
 }
 
+func (e *evaluator) EvalStrictRightInt8RangeOp(
+	_ context.Context, _ *tree.StrictRightInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	rRange := tree.MustBeDInt8Range(b)
+
+	rEBInt := math.MaxInt64
+
+	if intVal, ok := tree.AsDInt(rRange.EndBound.Val); ok {
+		rEBInt = int(intVal)
+	}
+
+	lRange, isInt8Range := tree.AsDInt8Range(a)
+
+	if !isInt8Range {
+		return nil, pgerror.Newf(pgcode.Syntax, "overlap for int8range can only work on int8range")
+	}
+
+	lSBInt := math.MinInt64
+
+	if intVal, ok := tree.AsDInt(lRange.StartBound.Val); ok {
+		lSBInt = int(intVal)
+	}
+
+	if lSBInt != math.MinInt8 && rEBInt != math.MaxInt64 && rEBInt <= lSBInt {
+		return tree.DBoolTrue, nil
+	}
+
+	return tree.DBoolFalse, nil
+
+}
+
+func (e *evaluator) EvalStrictLeftInt8RangeOp(
+	_ context.Context, _ *tree.StrictLeftInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	rRange := tree.MustBeDInt8Range(b)
+
+	rSBInt := math.MinInt64
+
+	if intVal, ok := tree.AsDInt(rRange.StartBound.Val); ok {
+		rSBInt = int(intVal)
+	}
+
+	lRange, isInt8Range := tree.AsDInt8Range(a)
+
+	if !isInt8Range {
+		return nil, pgerror.Newf(pgcode.Syntax, "overlap for int8range can only work on int8range")
+	}
+
+	lEBInt := math.MaxInt64
+
+	if intVal, ok := tree.AsDInt(lRange.EndBound.Val); ok {
+		lEBInt = int(intVal)
+	}
+
+	if rSBInt != math.MinInt8 && lEBInt != math.MaxInt64 && lEBInt <= rSBInt {
+		return tree.DBoolTrue, nil
+	}
+
+	return tree.DBoolFalse, nil
+
+}
+
 func (e *evaluator) EvalAdjacentInt8RangeOp(
 	_ context.Context, _ *tree.AdjacentInt8RangeOp, a, b tree.Datum,
 ) (tree.Datum, error) {

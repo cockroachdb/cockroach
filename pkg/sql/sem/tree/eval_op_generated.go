@@ -195,6 +195,8 @@ type BinaryOpEvaluator interface {
 	EvalRShiftIntOp(context.Context, *RShiftIntOp, Datum, Datum) (Datum, error)
 	EvalRShiftVarBitIntOp(context.Context, *RShiftVarBitIntOp, Datum, Datum) (Datum, error)
 	EvalSimilarToOp(context.Context, *SimilarToOp, Datum, Datum) (Datum, error)
+	EvalStrictLeftInt8RangeOp(context.Context, *StrictLeftInt8RangeOp, Datum, Datum) (Datum, error)
+	EvalStrictRightInt8RangeOp(context.Context, *StrictRightInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalTSMatchesQueryVectorOp(context.Context, *TSMatchesQueryVectorOp, Datum, Datum) (Datum, error)
 	EvalTSMatchesVectorQueryOp(context.Context, *TSMatchesVectorQueryOp, Datum, Datum) (Datum, error)
 }
@@ -953,6 +955,16 @@ func (op *RShiftVarBitIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum
 // Eval is part of the BinaryEvalOp interface.
 func (op *SimilarToOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalSimilarToOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *StrictLeftInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalStrictLeftInt8RangeOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *StrictRightInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalStrictRightInt8RangeOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.

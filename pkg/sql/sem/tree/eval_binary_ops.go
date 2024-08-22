@@ -413,3 +413,7 @@ type ContainsInt8RangeOp struct{}
 type OverlapByInt8RangeOp struct{}
 
 type AdjacentInt8RangeOp struct{}
+
+type StrictRightInt8RangeOp struct{}
+
+type StrictLeftInt8RangeOp struct{}

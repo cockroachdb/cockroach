@@ -1264,6 +1264,13 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 	// TODO(pmattis): Check that the shift is valid.
 	treebin.LShift: {overloads: []*BinOp{
 		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int8Range,
+			ReturnType: types.Bool,
+			EvalOp:     &StrictLeftInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
 			LeftType:   types.Int,
 			RightType:  types.Int,
 			ReturnType: types.Int,
@@ -1287,6 +1294,13 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 	}},
 
 	treebin.RShift: {overloads: []*BinOp{
+		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int8Range,
+			ReturnType: types.Bool,
+			EvalOp:     &StrictRightInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
 		{
 			LeftType:   types.Int,
 			RightType:  types.Int,

@@ -132,6 +132,18 @@ func TestTemp(t *testing.T) {
 	require.NoError(t, err)
 	printResult(result)
 
+	result, err = sqlDB.Query(`
+							select int8range(50,60) >> int8range(20,30);
+						`)
+	require.NoError(t, err)
+	printResult(result)
+
+	result, err = sqlDB.Query(`
+						select int8range(1,10) << int8range(100,110);
+						`)
+	require.NoError(t, err)
+	printResult(result)
+
 	_, err = sqlDB.Exec(`
 						insert into t.test (k) values ('empty');
 						`)
