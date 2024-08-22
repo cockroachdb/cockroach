@@ -24,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -335,4 +337,82 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		// "write failed: write tcp 127.0.0.1:37720->127.0.0.1:44313: i/o timeout"
 		require.Error(t, <-upsertErrCh)
 	})
+}
+
+// TestBackpressureBelowLatching ensures that write requests re-check whether
+// they need to backpressure and return an error back to the client instead of
+// proceeding to evaluation after acquiring latches. The test constructs a
+// scenario where the above latching check passes, the request blocks while
+// concurrent requests overfill the range, after which the request unblocks and
+// is allowed to acquire latches.
+func TestBackpressureBelowLatching(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	key := bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec)
+	blockReq := make(chan struct{})
+	startFillingUpRange := make(chan struct{})
+	testingRequestFilter :=
+		func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+			for _, req := range ba.Requests {
+				if put, ok := req.GetInner().(*kvpb.PutRequest); ok {
+					if put.Key.Equal(key) {
+						close(startFillingUpRange)
+						<-blockReq
+					}
+				}
+			}
+			return nil
+		}
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableCanAckBeforeApplication: true,
+				DisableGCQueue:                 true,
+				DisableMergeQueue:              true,
+				DisableSplitQueue:              true,
+				TestingRequestFilter:           testingRequestFilter,
+			},
+		},
+	})
+
+	defer s.Stopper().Stop(ctx)
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	repl := store.LookupReplica(keys.MustAddr(key))
+	spanConfig, err := repl.LoadSpanConfig(ctx)
+	require.NoError(t, err)
+	const minBytes = 1 << 12
+	const maxBytes = 1 << 18
+	spanConfig.RangeMaxBytes = maxBytes
+	spanConfig.RangeMinBytes = minBytes
+	repl.SetSpanConfig(
+		*spanConfig,
+		roachpb.Span{Key: roachpb.Key(repl.Desc().StartKey), EndKey: roachpb.Key(repl.Desc().EndKey)},
+	)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+
+		<-startFillingUpRange
+		fillRange(t, store, repl.RangeID, key, 2*maxBytes+1, false)
+		close(blockReq)
+	}()
+
+	res := make(chan error)
+	go func() {
+
+		res <- store.DB().Put(ctx, key, "test")
+	}()
+
+	err = <-res
+	require.ErrorContains(t, err, "backpressuring writes below latching")
+
+	wg.Wait()
 }

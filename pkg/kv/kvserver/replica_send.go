@@ -500,6 +500,23 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		}
 		latchSpans, lockSpans = nil, nil // ownership released
 
+		// NB: We checked if the range we're operating on was too large before we
+		// got here, in SendWithWriteBytes, but that check was performed above
+		// latching. Performing the check again, now that we've acquired latches and
+		// have sequenced through the ConcurrencyManager, ensures no writes went
+		// through while we were waiting on locks/latches that would necessitate
+		// backpressuring.
+		if backpressureBelowLatchingEnabled.Get(&r.store.ClusterSettings().SV) &&
+			r.mustBackpressureBatch(ba) {
+			log.Infof(ctx, "!!! here should be")
+			r.store.Metrics().BackpressuredBelowLatching.Inc(1)
+			log.VErrEventf(ctx, 2, "backpressuring writes below latching")
+
+			return nil, nil, kvpb.NewError(errors.New("backpressuring writes below latching"))
+		} else {
+			log.Infof(ctx, "!!! here")
+		}
+
 		br, g, writeBytes, pErr = fn(r, ctx, ba, g)
 		if pErr == nil {
 			// Success.
