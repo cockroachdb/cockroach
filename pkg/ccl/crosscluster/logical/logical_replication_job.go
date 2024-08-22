@@ -575,6 +575,9 @@ func (r *logicalReplicationResumer) ingestWithRetries(
 func loadOnlineReplicatedTime(
 	ctx context.Context, db isql.DB, ingestionJob *jobs.Job,
 ) hlc.Timestamp {
+	// TODO(ssd): Isn't this load redundant? The Update API for
+	// the job also updates the local copy of the job with the
+	// latest progress.
 	progress, err := jobs.LoadJobProgress(ctx, db, ingestionJob.ID())
 	if err != nil {
 		log.Warningf(ctx, "error loading job progress: %s", err)
@@ -588,18 +591,54 @@ func loadOnlineReplicatedTime(
 }
 
 // OnFailOrCancel implements jobs.Resumer interface
-func (h *logicalReplicationResumer) OnFailOrCancel(
+func (r *logicalReplicationResumer) OnFailOrCancel(
 	ctx context.Context, execCtx interface{}, _ error,
 ) error {
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
 	metrics := execCfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
 	metrics.ReplicatedTimeSeconds.Update(0)
+	r.completeProducerJob(ctx, execCfg.InternalDB)
 	return nil
 }
 
 // CollectProfile implements jobs.Resumer interface
-func (h *logicalReplicationResumer) CollectProfile(_ context.Context, _ interface{}) error {
+func (r *logicalReplicationResumer) CollectProfile(_ context.Context, _ interface{}) error {
 	return nil
+}
+
+func (r *logicalReplicationResumer) completeProducerJob(
+	ctx context.Context, internalDB *sql.InternalDB,
+) {
+	var (
+		progress = r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+		payload  = r.job.Details().(jobspb.LogicalReplicationDetails)
+	)
+
+	streamID := streampb.StreamID(payload.StreamID)
+	log.Infof(ctx, "attempting to update producer job %d", streamID)
+	if err := timeutil.RunWithTimeout(ctx, "complete producer job", 30*time.Second,
+		func(ctx context.Context) error {
+			client, err := streamclient.GetFirstActiveClient(ctx,
+				append([]string{payload.SourceClusterConnStr}, progress.StreamAddresses...),
+				internalDB,
+				streamclient.WithStreamID(streamID),
+				streamclient.WithLogical(),
+			)
+			if err != nil {
+				return err
+			}
+			defer closeAndLog(ctx, client)
+			return client.Complete(ctx, streamID, false /* successfulIngestion */)
+		},
+	); err != nil {
+		log.Warningf(ctx, "error completing the source cluster producer job %d: %s", streamID, err.Error())
+	}
+}
+
+func closeAndLog(ctx context.Context, d streamclient.Dialer) {
+	if err := d.Close(ctx); err != nil {
+		log.Warningf(ctx, "error closing stream client: %s", err.Error())
+	}
 }
 
 func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {
