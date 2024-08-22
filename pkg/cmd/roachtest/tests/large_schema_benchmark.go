@@ -163,6 +163,10 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						// completes in a reasonable amount of time.
 						_, err := conn.Exec("SET CLUSTER SETTING jobs.retention_time='1h'")
 						require.NoError(t, err)
+						// Use a higher number of retries, since we hit retry errors on importing
+						// a large number of tables
+						_, err = conn.Exec("SET CLUSTER SETTING kv.transaction.internal.max_auto_retries=500")
+						require.NoError(t, err)
 						// Create a user that will be used for authentication for the REST
 						// API calls.
 						_, err = conn.Exec("CREATE USER roachadmin password 'roacher'")
