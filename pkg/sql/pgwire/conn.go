@@ -46,11 +46,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
+
+type atomicWriter struct {
+	mu syncutil.Mutex
+	w  io.Writer
+}
+
+func (a *atomicWriter) Write(p []byte) (n int, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.w.Write(p)
+}
+
+var _ io.Writer = &atomicWriter{}
 
 // conn implements a pgwire network connection (version 3 of the protocol,
 // implemented by Postgres v7.4 and later). conn.serve() reads protocol
@@ -64,6 +78,8 @@ type conn struct {
 	errWriter
 
 	conn net.Conn
+
+	awConn *atomicWriter
 
 	cancelConn context.CancelFunc
 
@@ -113,6 +129,14 @@ type conn struct {
 
 	// alwaysLogAuthActivity is used force-enables logging of authn events.
 	alwaysLogAuthActivity bool
+
+	// notifications is a copy of some of the things required to send
+	// notifications down the connection.
+	notifications struct {
+		syncutil.Mutex
+		msgBuilder writeBuffer
+		buf        bytes.Buffer
+	}
 }
 
 func (c *conn) setErr(err error) {
@@ -132,7 +156,7 @@ func (c *conn) sendError(ctx context.Context, err error) error {
 	// trying to send the client error. This is because clients that
 	// receive error payload are highly correlated with clients
 	// disconnecting abruptly.
-	_ /* err */ = c.writeErr(ctx, err, c.conn)
+	_ /* err */ = c.writeErr(ctx, err, c.awConn)
 	return err
 }
 
@@ -190,7 +214,7 @@ func (c *conn) processCommands(
 				// Add a prefix. This also adds a stack trace.
 				retErr = errors.Wrap(retErr, "caught fatal error")
 				_ = c.writeErr(ctx, retErr, &c.writerState.buf)
-				_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
+				_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.awConn)
 				c.stmtBuf.Close()
 			}
 		}
@@ -271,19 +295,17 @@ func (c *conn) bufferNotice(ctx context.Context, noticeErr pgnotice.Notice) erro
 	return c.writeErrFields(ctx, noticeErr, &c.writerState.buf)
 }
 
-// TODO: synchronize with command execution results writing with `bufferRows`. Currently this is just racey.
-// going to be annoying though as this guy's api is not super well defined.
 func (c *conn) SendNotification(notif pgnotification.Notification) error {
-	c.msgBuilder.initMsg(pgwirebase.ServerMsgNotificationResponse)
-	c.msgBuilder.putInt32(notif.PID)
-	c.msgBuilder.writeTerminatedString(notif.Channel)
-	c.msgBuilder.writeTerminatedString(notif.Payload)
-	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+	c.notifications.msgBuilder.initMsg(pgwirebase.ServerMsgNotificationResponse)
+	c.notifications.msgBuilder.putInt32(notif.PID)
+	c.notifications.msgBuilder.writeTerminatedString(notif.Channel)
+	c.notifications.msgBuilder.writeTerminatedString(notif.Payload)
+	if err := c.notifications.msgBuilder.finishMsg(&c.notifications.buf); err != nil {
 		return err
 	}
 
-	// Flush immediately. TODO: is this right?
-	_, err := c.writerState.buf.WriteTo(c.conn)
+	// Flush immediately.
+	_, err := c.notifications.buf.WriteTo(c.awConn)
 	if err != nil {
 		c.setErr(err)
 		return err
@@ -307,7 +329,7 @@ func (c *conn) sendInitialConnData(
 		sessionID,
 	)
 	if err != nil {
-		_ /* err */ = c.writeErr(ctx, err, c.conn)
+		_ /* err */ = c.writeErr(ctx, err, c.awConn)
 		return sql.ConnectionHandler{}, err
 	}
 
@@ -829,7 +851,7 @@ func (c *conn) BeginCopyIn(
 	for range columns {
 		c.msgBuilder.putInt16(int16(format))
 	}
-	return c.msgBuilder.finishMsg(c.conn)
+	return c.msgBuilder.finishMsg(c.awConn)
 }
 
 // Rd is part of the pgwirebase.Conn interface.
@@ -1272,7 +1294,7 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 	// the underlying ring buffer memory for reuse.
 	c.writerState.fi.cmdStarts.Reset()
 
-	_ /* n */, err := c.writerState.buf.WriteTo(c.conn)
+	_ /* n */, err := c.writerState.buf.WriteTo(c.awConn)
 	if err != nil {
 		c.setErr(err)
 		return err

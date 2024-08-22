@@ -864,6 +864,7 @@ func (s *Server) newConn(
 	sv := &s.execCfg.Settings.SV
 	c := &conn{
 		conn:                  netConn,
+		awConn:                &atomicWriter{w: netConn},
 		cancelConn:            cancelConn,
 		sessionArgs:           sArgs,
 		metrics:               s.tenantMetrics,
@@ -879,6 +880,7 @@ func (s *Server) newConn(
 	c.writerState.fi.buf = &c.writerState.buf
 	c.writerState.fi.lastFlushed = -1
 	c.msgBuilder.init(s.tenantMetrics.BytesOutCount)
+	c.notifications.msgBuilder.init(s.tenantMetrics.BytesOutCount)
 	c.errWriter.sv = sv
 	c.errWriter.msgBuilder = &c.msgBuilder
 	return c
@@ -1323,7 +1325,7 @@ func (s *Server) serveImpl(
 		// will have sent a QueryCanceled error as a response to the query.
 		log.Ops.Info(ctx, "closing existing connection while server is draining")
 		_ /* err */ = c.writeErr(ctx, newAdminShutdownErr(ErrDrainingExistingConn), &c.writerState.buf)
-		_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
+		_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.awConn)
 	}
 }
 
