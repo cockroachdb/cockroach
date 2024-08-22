@@ -446,6 +446,26 @@ func (rn *RawNode) Advance(_ Ready) {
 	rn.stepsOnAdvance = rn.stepsOnAdvance[:0]
 }
 
+// Term returns the current term of this RawNode.
+func (rn *RawNode) Term() uint64 {
+	return rn.raft.Term
+}
+
+// Lead returns the leader of Term(), or None if the leader is unknown.
+func (rn *RawNode) Lead() pb.PeerID {
+	return rn.raft.lead
+}
+
+// NextUnstableIndex returns the index of the next entry that will be sent to
+// local storage, if there are any. All entries < this index are either stored,
+// or have been sent to storage.
+//
+// NB: NextUnstableIndex can regress when the node accepts appends or snapshots
+// from a newer leader.
+func (rn *RawNode) NextUnstableIndex() uint64 {
+	return rn.raft.raftLog.unstable.entryInProgress + 1
+}
+
 // Status returns the current status of the given group. This allocates, see
 // SparseStatus, BasicStatus and WithProgress for allocation-friendlier choices.
 func (rn *RawNode) Status() Status {
