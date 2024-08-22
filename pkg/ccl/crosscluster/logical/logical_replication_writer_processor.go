@@ -391,11 +391,6 @@ func (lrw *logicalReplicationWriterProcessor) close() {
 	if lrw.Closed {
 		return
 	}
-
-	for _, b := range lrw.bh {
-		b.Close(lrw.Ctx())
-	}
-
 	defer lrw.frontier.Release()
 
 	if lrw.streamPartitionClient != nil {
@@ -413,6 +408,10 @@ func (lrw *logicalReplicationWriterProcessor) close() {
 	// in exit signals being sent to all relevant goroutines.
 	if err := lrw.workerGroup.Wait(); err != nil {
 		log.Errorf(lrw.Ctx(), "error on close(): %s", err)
+	}
+
+	for _, b := range lrw.bh {
+		b.Close(lrw.Ctx())
 	}
 
 	// Update the global retry queue gauges to reflect that this queue is going

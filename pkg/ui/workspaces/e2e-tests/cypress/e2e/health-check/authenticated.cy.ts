@@ -8,9 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { SQLPrivilege } from "../../support/types";
+
 describe("health check: authenticated user", () => {
   it("serves a DB Console overview page", () => {
-    cy.login();
+    cy.getUserWithExactPrivileges([SQLPrivilege.ADMIN]);
+    cy.fixture("users").then((users) => {
+      cy.login(users[0].username, users[0].password);
+    });
 
     // Ensure that something reasonable renders at / when authenticated, making
     // just enough assertions to ensure the right page loaded. If this test
