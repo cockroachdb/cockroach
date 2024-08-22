@@ -73,6 +73,7 @@ full-translate
 /Tenant/10/Table/6{4-5}                    database system (tenant)
 /Tenant/10/Table/6{5-6}                    database system (tenant)
 /Tenant/10/Table/6{6-7}                    database system (tenant)
+/Tenant/10/Table/6{7-8}                    database system (tenant)
 /Tenant/10/Table/11{0-1}                   rangefeed_enabled=true
 /Tenant/10/Table/11{1-2}                   rangefeed_enabled=true
 /Tenant/10/Table/11{2-3}                   rangefeed_enabled=true
@@ -136,6 +137,7 @@ translate named-zone=default
 /Tenant/10/Table/6{4-5}                    database system (tenant)
 /Tenant/10/Table/6{5-6}                    database system (tenant)
 /Tenant/10/Table/6{6-7}                    database system (tenant)
+/Tenant/10/Table/6{7-8}                    database system (tenant)
 /Tenant/10/Table/11{0-1}                   rangefeed_enabled=true
 /Tenant/10/Table/11{1-2}                   rangefeed_enabled=true
 /Tenant/10/Table/11{2-3}                   rangefeed_enabled=true
