@@ -630,7 +630,7 @@ func TestNewClientErrorsOnBucketRegion(t *testing.T) {
 		bucket: "bucket-does-not-exist-v1i3m",
 		auth:   cloud.AuthParamImplicit,
 	}
-	_, _, err = newClient(ctx, cfg, testSettings)
+	_, _, err = newClient(ctx, cloud.NilMetrics, cfg, testSettings)
 	require.Regexp(t, "could not find s3 bucket's region", err)
 }
 

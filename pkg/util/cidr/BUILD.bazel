@@ -9,6 +9,8 @@ go_library(
         "//pkg/settings",
         "//pkg/util/envutil",
         "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
