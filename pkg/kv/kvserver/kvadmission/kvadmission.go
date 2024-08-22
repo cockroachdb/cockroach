@@ -76,6 +76,13 @@ var exportRequestElasticControlEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+var elasticAdmissionAllLowPri = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kvadmission.elastic_control_bulk_low_priority.enabled",
+	"determines whether the all low bulk priority requests integrate with elastic CPU control",
+	true,
+)
+
 // elasticCPUDurationPerRangefeedScanUnit controls how many CPU tokens are
 // allotted for each unit of work during rangefeed catchup scans. Only takes
 // effect if kvadmission.rangefeed_catchup_scan_elastic_control.enabled is set.
@@ -406,7 +413,8 @@ func (n *controllerImpl) AdmitKVWork(
 		isInternalLowPriRead := ba.IsReadOnly() && admissionInfo.Priority < admissionpb.UserLowPri
 		shouldUseElasticCPU :=
 			(exportRequestElasticControlEnabled.Get(&n.settings.SV) && ba.IsSingleExportRequest()) ||
-				(internalLowPriReadElasticControlEnabled.Get(&n.settings.SV) && isInternalLowPriRead)
+				(internalLowPriReadElasticControlEnabled.Get(&n.settings.SV) && isInternalLowPriRead) ||
+				(admissionInfo.Priority <= admissionpb.BulkLowPri && elasticAdmissionAllLowPri.Get(&n.settings.SV))
 
 		if shouldUseElasticCPU {
 			var admitDuration time.Duration
