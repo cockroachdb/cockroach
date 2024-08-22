@@ -108,6 +108,7 @@ type s3Storage struct {
 	ioConf   base.ExternalIODirConfig
 	settings *cluster.Settings
 	prefix   string
+	metrics  *cloud.Metrics
 
 	opts   s3ClientConfig
 	cached *s3Client
@@ -451,6 +452,7 @@ func MakeS3Storage(
 		conf:     conf,
 		ioConf:   args.IOConf,
 		prefix:   conf.Prefix,
+		metrics:  args.MetricsRecorder,
 		settings: args.Settings,
 		opts:     clientConfig(conf),
 	}
@@ -472,7 +474,7 @@ func MakeS3Storage(
 	// other callers from making clients in the meantime, not just to avoid making
 	// duplicate clients in a race but also because making clients concurrently
 	// can fail if the AWS metadata server hits its rate limit.
-	client, _, err := newClient(ctx, s.opts, s.settings)
+	client, _, err := newClient(ctx, args.MetricsRecorder, s.opts, s.settings)
 	if err != nil {
 		return nil, err
 	}
@@ -503,7 +505,7 @@ var awsVerboseLogging = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDeb
 // configures the client with it as well as returning it (so the caller can
 // remember it for future calls).
 func newClient(
-	ctx context.Context, conf s3ClientConfig, settings *cluster.Settings,
+	ctx context.Context, metrics *cloud.Metrics, conf s3ClientConfig, settings *cluster.Settings,
 ) (s3Client, string, error) {
 	// Open a span if client creation will do IO/RPCs to find creds/bucket region.
 	if conf.region == "" || conf.auth == cloud.AuthParamImplicit {
@@ -514,7 +516,7 @@ func newClient(
 
 	opts := session.Options{}
 
-	httpClient, err := cloud.MakeHTTPClient(settings)
+	httpClient, err := cloud.MakeHTTPClient(settings, metrics, "aws", conf.bucket)
 	if err != nil {
 		return s3Client{}, "", err
 	}
@@ -604,7 +606,7 @@ func (s *s3Storage) getClient(ctx context.Context) (*s3.S3, error) {
 	if s.cached != nil {
 		return s.cached.client, nil
 	}
-	client, region, err := newClient(ctx, s.opts, s.settings)
+	client, region, err := newClient(ctx, s.metrics, s.opts, s.settings)
 	if err != nil {
 		return nil, err
 	}
@@ -618,7 +620,7 @@ func (s *s3Storage) getUploader(ctx context.Context) (*s3manager.Uploader, error
 	if s.cached != nil {
 		return s.cached.uploader, nil
 	}
-	client, region, err := newClient(ctx, s.opts, s.settings)
+	client, region, err := newClient(ctx, s.metrics, s.opts, s.settings)
 	if err != nil {
 		return nil, err
 	}
