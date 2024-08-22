@@ -55,6 +55,12 @@ type LogMark struct {
 	Index uint64
 }
 
+// After returns true if the log mark logically happens after the other mark.
+// This represents the order of log writes in raft.
+func (l LogMark) After(other LogMark) bool {
+	return l.Term > other.Term || l.Term == other.Term && l.Index > other.Index
+}
+
 // logSlice describes a correct slice of a raft log.
 //
 // Every log slice is considered in a context of a specific leader term. This

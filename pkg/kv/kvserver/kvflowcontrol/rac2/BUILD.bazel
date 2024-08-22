@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "rac2",
     srcs = [
+        "log_tracker.go",
         "metrics.go",
         "priority.go",
         "range_controller.go",
@@ -16,6 +17,7 @@ go_library(
         "//pkg/base",
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/kv/kvserver/raftlog",
+        "//pkg/raft",
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
         "//pkg/roachpb",
@@ -34,6 +36,7 @@ go_library(
 go_test(
     name = "rac2_test",
     srcs = [
+        "log_tracker_test.go",
         "priority_test.go",
         "range_controller_test.go",
         "token_counter_test.go",
