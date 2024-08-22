@@ -41,6 +41,7 @@ export const insightsColumnLabels = {
   tableName: "Table Name",
   indexName: "Index Name",
   cpu: "SQL CPU Time",
+	comments: "SQLCommenter Comment"
 };
 
 export type InsightsTableColumnKeys = keyof typeof insightsColumnLabels;
@@ -243,6 +244,12 @@ export const insightsTableTitles: InsightsTableTitleType = {
       <p>{`SQL CPU Time spent executing within the specified time interval. It
       does not include SQL planning time nor KV execution time.`}</p>,
       "cpu",
+    );
+  },
+  comments: (_: InsightExecEnum) => {
+    return makeToolTip(
+      <p>{`sqlcommenter comments`}</p>,
+      "comments",
     );
   },
 };

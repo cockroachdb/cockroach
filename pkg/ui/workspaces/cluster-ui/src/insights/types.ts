@@ -125,6 +125,7 @@ export type StmtInsightEvent = InsightEventBase & {
   execType?: InsightExecEnum;
   status: StatementStatus;
   errorMsg?: string;
+	comments?: string;
 };
 
 export type Insight = {

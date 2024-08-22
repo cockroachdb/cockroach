@@ -187,6 +187,7 @@ type RecordedStmtStats struct {
 	ExecStats            *execstats.QueryLevelStats
 	Indexes              []string
 	Database             string
+	Comments             string
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.

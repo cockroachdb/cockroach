@@ -215,6 +215,7 @@ func (ex *connExecutor) recordStatementSummary(
 		ExecStats:            queryLevelStats,
 		Indexes:              planner.instrumentation.indexesUsed,
 		Database:             planner.SessionData().Database,
+		Comments:             "/*application=microsvc/ten1",
 	}
 
 	stmtFingerprintID, err :=
