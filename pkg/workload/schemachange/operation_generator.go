@@ -298,7 +298,7 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 	if err != nil {
 		return nil, err
 	}
-	isJSONTyp := typ != nil && typ.Family() == types.ArrayFamily &&
+	isJSONArrayTyp := typ != nil && typ.Family() == types.ArrayFamily &&
 		typ.ArrayContents().Family() == types.JsonFamily
 	op := makeOpStmt(OpStmtDDL)
 	op.expectedExecErrors.addAll(codesWithConditions{
@@ -313,7 +313,7 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 		},
 		// JSON arrays are not supported as a column type (#23468).
 		{
-			code: pgcode.FeatureNotSupported, condition: isJSONTyp,
+			code: pgcode.FeatureNotSupported, condition: isJSONArrayTyp,
 		},
 	})
 	// Compatibility errors aren't guaranteed since the cluster version update is not
@@ -324,10 +324,13 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 	isRefCursor := typ != nil && (typ.Family() == types.RefCursorFamily ||
 		(typ.Family() == types.ArrayFamily &&
 			typ.ArrayContents().Family() == types.RefCursorFamily))
+	isJSONTyp := typ != nil && typ.Family() == types.JsonFamily
 	op.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.Syntax, condition: isNotFinalized && (isPGLSN || isRefCursor)},
 		{code: pgcode.FeatureNotSupported, condition: isNotFinalized && (isPGLSN || isRefCursor)},
 		{code: pgcode.UndefinedObject, condition: isNotFinalized && (isPGLSN || isRefCursor)},
+		{code: pgcode.FeatureNotSupported, condition: isJSONTyp && def.Unique.IsUnique},
+		{code: pgcode.InvalidTableDefinition, condition: isJSONTyp && def.Unique.IsUnique},
 	})
 	// Our type inside `def` will get quoted during
 	// lexbase.EncodeRestrictedSQLIdent down the line by default. We have to
