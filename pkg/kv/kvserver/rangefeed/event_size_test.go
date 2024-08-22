@@ -11,32 +11,19 @@
 package rangefeed
 
 import (
-	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
-type kvs = storageutils.KVs
-
-var (
-	pointKV = storageutils.PointKV
-	rangeKV = storageutils.RangeKV
-)
 var (
 	testKey            = roachpb.Key("/db1")
 	testTxnID          = uuid.MakeV4()
@@ -47,29 +34,7 @@ var (
 	testEndKey         = roachpb.Key("z")
 	testValue          = []byte("1")
 	testPrevValue      = []byte("1234")
-	testSSTKVs         = kvs{
-		pointKV("a", 1, "1"),
-		pointKV("b", 1, "2"),
-		pointKV("c", 1, "3"),
-		rangeKV("d", "e", 1, ""),
-	}
 )
-
-type testData struct {
-	numOfLogicalOps  int
-	kvs              []interface{}
-	span             roachpb.Span
-	key              roachpb.Key
-	timestamp        hlc.Timestamp
-	value            []byte
-	prevValue        []byte
-	startKey, endKey roachpb.Key
-	txnID            uuid.UUID
-	txnKey           []byte
-	txnIsoLevel      isolation.Level
-	txnMinTimestamp  hlc.Timestamp
-	omitInRangefeeds bool
-}
 
 func generateStaticTestdata() testData {
 	return testData{
@@ -249,142 +214,6 @@ func TestEventSizeCalculation(t *testing.T) {
 			}
 		})
 	}
-}
-
-func generateRandomizedTs(rand *rand.Rand) hlc.Timestamp {
-	// Avoid generating zero timestamp which will equal to an empty event.
-	return hlc.Timestamp{WallTime: int64(rand.Intn(100)) + 1}
-}
-
-func generateRandomizedBytes(rand *rand.Rand) []byte {
-	const tableID = 42
-	dataTypes := []*types.T{types.String, types.Int, types.Decimal, types.Bytes, types.Bool, types.Date, types.Timestamp, types.Float}
-	randType := dataTypes[rand.Intn(len(dataTypes))]
-
-	key, err := keyside.Encode(
-		keys.SystemSQLCodec.TablePrefix(tableID),
-		randgen.RandDatumSimple(rand, randType),
-		encoding.Ascending,
-	)
-	if err != nil {
-		panic(err)
-	}
-	return key
-}
-
-func generateStartAndEndKey(rand *rand.Rand) (roachpb.Key, roachpb.Key) {
-	start := rand.Intn(2 << 20)
-	end := start + rand.Intn(2<<20)
-	startDatum := tree.NewDInt(tree.DInt(start))
-	endDatum := tree.NewDInt(tree.DInt(end))
-	const tableID = 42
-
-	startKey, err := keyside.Encode(
-		keys.SystemSQLCodec.TablePrefix(tableID),
-		startDatum,
-		encoding.Ascending,
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	endKey, err := keyside.Encode(
-		keys.SystemSQLCodec.TablePrefix(tableID),
-		endDatum,
-		encoding.Ascending,
-	)
-	if err != nil {
-		panic(err)
-	}
-	return startKey, endKey
-}
-
-func generateRandomizedTxnId(rand *rand.Rand) uuid.UUID {
-	var txnID uuid.UUID
-	n := rand.Intn(100)
-	if n == 0 {
-		// rand.Intn(0) panics
-		n = 1
-	}
-	i := rand.Intn(n) // i must be in [0,n)
-	txnID.DeterministicV4(uint64(i), uint64(n))
-	return txnID
-}
-
-func generateRandomizedSpan(rand *rand.Rand) roachpb.RSpan {
-	startKey, endKey := generateStartAndEndKey(rand)
-	return roachpb.RSpan{
-		Key:    roachpb.RKey(startKey),
-		EndKey: roachpb.RKey(endKey),
-	}
-}
-
-func generateRandomTestData(rand *rand.Rand) testData {
-	startKey, endkey := generateStartAndEndKey(rand)
-	return testData{
-		numOfLogicalOps:  rand.Intn(100) + 1, // Avoid 0 (empty event)
-		kvs:              testSSTKVs,
-		span:             generateRandomizedSpan(rand).AsRawSpanWithNoLocals(),
-		key:              generateRandomizedBytes(rand),
-		timestamp:        generateRandomizedTs(rand),
-		value:            generateRandomizedBytes(rand),
-		startKey:         startKey,
-		endKey:           endkey,
-		txnID:            generateRandomizedTxnId(rand),
-		txnKey:           generateRandomizedBytes(rand),
-		txnIsoLevel:      isolation.Levels()[rand.Intn(len(isolation.Levels()))],
-		txnMinTimestamp:  generateRandomizedTs(rand),
-		omitInRangefeeds: rand.Intn(2) == 1,
-	}
-}
-
-type exampleOp struct {
-	op  enginepb.MVCCLogicalOp
-	mem int64
-}
-
-func generateLogicalOpEvents(rand *rand.Rand, data testData) (ev event, expectedMemUsage int64) {
-	var ops []enginepb.MVCCLogicalOp
-	expectedMemUsage += eventOverhead
-	exampleOps := [7]exampleOp{
-		{
-			op:  writeValueOpWithPrevValue(data.key, data.timestamp, data.value, data.prevValue),
-			mem: mvccWriteValueOp + int64(cap(data.key)) + int64(cap(data.value)) + int64(cap(data.prevValue)),
-		},
-		{
-			op:  deleteRangeOp(data.startKey, data.endKey, data.timestamp),
-			mem: mvccDeleteRangeOp + int64(cap(data.startKey)) + int64(cap(data.endKey)),
-		},
-		{
-			op:  writeIntentOpWithDetails(data.txnID, data.txnKey, data.txnIsoLevel, data.txnMinTimestamp, data.timestamp),
-			mem: mvccWriteIntentOp + int64(cap(data.txnID)) + int64(cap(data.txnKey)),
-		},
-		{
-			op:  updateIntentOp(data.txnID, data.timestamp),
-			mem: mvccUpdateIntentOp + int64(cap(data.txnID)),
-		},
-		{
-			op:  commitIntentOpWithPrevValue(data.txnID, data.key, data.timestamp, data.value, data.prevValue, data.omitInRangefeeds),
-			mem: mvccCommitIntentOp + int64(cap(data.txnID)) + int64(cap(data.key)) + int64(cap(data.value)) + int64(cap(data.prevValue)),
-		},
-		{
-			op:  abortIntentOp(data.txnID),
-			mem: mvccAbortIntentOp + int64(cap(data.txnID)),
-		},
-		{
-			op:  abortTxnOp(data.txnID),
-			mem: mvccAbortTxnOp + int64(cap(data.txnID)),
-		},
-	}
-
-	for i := 0; i < data.numOfLogicalOps; i++ {
-		randomlyPickedIndex := rand.Intn(len(exampleOps))
-		ops = append(ops, exampleOps[randomlyPickedIndex].op)
-		expectedMemUsage += exampleOps[randomlyPickedIndex].mem
-	}
-	ev = event{ops: ops}
-	expectedMemUsage += mvccLogicalOp * int64(cap(ev.ops))
-	return ev, expectedMemUsage
 }
 
 func TestMultipleLogicalOpsEventsSizeCalculation(t *testing.T) {
