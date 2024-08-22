@@ -172,34 +172,34 @@ func (u *unstable) acceptInProgress() {
 //
 // The method makes sure the entries can not be overwritten by an in-progress
 // log append. See the related comment in newStorageAppendRespMsg.
-func (u *unstable) stableTo(mark logMark) {
-	if mark.term != u.term {
+func (u *unstable) stableTo(mark LogMark) {
+	if mark.Term != u.term {
 		// The last accepted term has changed. Ignore. This is possible if part or
 		// all of the unstable log was replaced between that time that a set of
 		// entries started to be written to stable storage and when they finished.
 		u.logger.Infof("mark (term,index)=(%d,%d) mismatched the last accepted "+
-			"term %d in unstable log; ignoring ", mark.term, mark.index, u.term)
+			"term %d in unstable log; ignoring ", mark.Term, mark.Index, u.term)
 		return
 	}
-	if u.snapshot != nil && mark.index == u.snapshot.Metadata.Index {
+	if u.snapshot != nil && mark.Index == u.snapshot.Metadata.Index {
 		// Index matched unstable snapshot, not unstable entry. Ignore.
-		u.logger.Infof("entry at index %d matched unstable snapshot; ignoring", mark.index)
+		u.logger.Infof("entry at index %d matched unstable snapshot; ignoring", mark.Index)
 		return
 	}
-	if mark.index <= u.prev.index || mark.index > u.lastIndex() {
+	if mark.Index <= u.prev.index || mark.Index > u.lastIndex() {
 		// Unstable entry missing. Ignore.
-		u.logger.Infof("entry at index %d missing from unstable log; ignoring", mark.index)
+		u.logger.Infof("entry at index %d missing from unstable log; ignoring", mark.Index)
 		return
 	}
 	if u.snapshot != nil {
 		u.logger.Panicf("mark %+v acked earlier than the snapshot(in-progress=%t): %s",
 			mark, u.snapshotInProgress, DescribeSnapshot(*u.snapshot))
 	}
-	u.logSlice = u.forward(mark.index)
+	u.logSlice = u.forward(mark.Index)
 	// TODO(pav-kv): why can mark.index overtake u.entryInProgress? Probably bugs
 	// in tests using the log writes incorrectly, e.g. TestLeaderStartReplication
 	// takes nextUnstableEnts() without acceptInProgress().
-	u.entryInProgress = max(u.entryInProgress, mark.index)
+	u.entryInProgress = max(u.entryInProgress, mark.Index)
 	u.shrinkEntriesArray()
 }
 
