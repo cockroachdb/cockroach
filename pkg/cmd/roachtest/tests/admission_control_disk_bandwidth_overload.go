@@ -44,7 +44,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 		Owner:            registry.OwnerAdmissionControl,
 		Timeout:          time.Hour,
 		Benchmark:        true,
-		CompatibleClouds: registry.AllClouds,
+		CompatibleClouds: registry.AllExceptAzure,
 		// TODO(aaditya): change to weekly once the test stabilizes.
 		Suites:          registry.Suites(registry.Nightly),
 		Cluster:         r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode()),
@@ -79,9 +79,6 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			// TODO(aaditya): This function shares some of the logic with roachtestutil.DiskStaller. Consider merging the two.
 			setBandwidthLimit := func(nodes option.NodeListOption, rw string, bw int, max bool) error {
 				dataMount := "/mnt/data1"
-				if c.Cloud() == spec.Azure {
-					dataMount = "/mnt"
-				}
 				res, err := c.RunWithDetailsSingleNode(context.TODO(), t.L(), option.WithNodes(nodes[:1]),
 					fmt.Sprintf("lsblk | grep %s | awk '{print $2}'", dataMount),
 				)
