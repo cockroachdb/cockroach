@@ -1,0 +1,261 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package rac2
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
+)
+
+func mark(term, index uint64) LogMark {
+	return LogMark{Term: term, Index: index}
+}
+
+func (l *LogTracker) check(t *testing.T) {
+	require.LessOrEqual(t, l.stable, l.last.Index)
+	require.Equal(t, l.last.Term, l.Stable().Term)
+}
+
+func TestLogTrackerAppend(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tt := range []struct {
+		last   LogMark
+		stable uint64
+
+		after uint64
+		to    LogMark
+		notOk bool
+		want  uint64 // stable index
+	}{
+		// Invalid appends. Writes with stale term or index gaps.
+		{last: mark(10, 100), after: 100, to: mark(9, 200), notOk: true},
+		{last: mark(10, 100), after: 200, to: mark(10, 300), notOk: true},
+		{last: mark(10, 100), after: 20, to: mark(10, 50), notOk: true},
+		// Valid appends.
+		{after: 0, to: mark(10, 100), want: 0},
+		{last: mark(10, 100), after: 100, to: mark(10, 150)},
+		{last: mark(10, 100), after: 100, to: mark(15, 150)},
+		{last: mark(10, 100), after: 50, to: mark(15, 150)},
+		// Stable index does not change.
+		{last: mark(10, 100), stable: 50, after: 100, to: mark(10, 150), want: 50},
+		{last: mark(10, 100), stable: 50, after: 100, to: mark(11, 150), want: 50},
+		{last: mark(10, 100), stable: 50, after: 70, to: mark(11, 150), want: 50},
+		// Stable index regresses.
+		{last: mark(10, 100), stable: 50, after: 30, to: mark(11, 150), want: 30},
+	} {
+		t.Run("", func(t *testing.T) {
+			l := NewLogTracker(tt.last)
+			l.stable = tt.stable
+			l.check(t)
+			was := l
+
+			require.Equal(t, !tt.notOk, l.Append(tt.after, tt.to))
+			l.check(t)
+			if !tt.notOk {
+				require.Equal(t, tt.to, l.last)
+				require.Equal(t, tt.want, l.Stable().Index)
+			} else {
+				require.Equal(t, was, l)
+			}
+		})
+	}
+}
+
+func TestLogTrackerLogSynced(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tt := range []struct {
+		last   LogMark
+		stable uint64
+
+		sync  LogMark
+		notOk bool
+		want  uint64 // stable index
+	}{
+		// Invalid syncs.
+		{last: mark(5, 20), sync: mark(7, 10), notOk: true},
+		{last: mark(5, 20), sync: mark(5, 25), notOk: true},
+
+		// Valid syncs. The sync mark <= the latest observed mark.
+		{last: mark(5, 20), stable: 5, sync: mark(4, 10), want: 5},
+		{last: mark(5, 20), stable: 15, sync: mark(4, 10), want: 15},
+		{last: mark(5, 20), stable: 15, sync: mark(4, 100), want: 15},
+		{last: mark(5, 20), sync: mark(5, 10), want: 10},
+		{last: mark(5, 20), stable: 15, sync: mark(5, 10), want: 15},
+		{last: mark(5, 20), sync: mark(5, 20), want: 20},
+		{last: mark(5, 40), stable: 15, sync: mark(5, 30), want: 30},
+	} {
+		t.Run("", func(t *testing.T) {
+			l := NewLogTracker(tt.last)
+			l.stable = tt.stable
+			l.check(t)
+			was := l
+
+			require.Equal(t, !tt.notOk, l.LogSynced(tt.sync))
+			l.check(t)
+			require.Equal(t, tt.last, l.last)
+			if !tt.notOk {
+				require.Equal(t, tt.want, l.Stable().Index)
+			} else {
+				require.Equal(t, was, l)
+			}
+		})
+	}
+}
+
+func TestLogTrackerSnapSynced(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tt := range []struct {
+		last   LogMark
+		stable uint64
+		snap   LogMark
+		notOk  bool
+	}{
+		// Invalid snapshots.
+		{last: mark(5, 20), snap: mark(4, 30), notOk: true},
+		{last: mark(5, 20), snap: mark(5, 10), notOk: true},
+		// Valid snapshots.
+		{last: mark(5, 20), snap: mark(5, 30)},
+		{last: mark(5, 20), snap: mark(6, 10)},
+		{last: mark(5, 20), snap: mark(6, 30)},
+	} {
+		t.Run("", func(t *testing.T) {
+			l := NewLogTracker(tt.last)
+			l.stable = tt.stable
+			l.check(t)
+			was := l
+
+			require.Equal(t, !tt.notOk, l.SnapSynced(tt.snap))
+			l.check(t)
+			if !tt.notOk {
+				require.Equal(t, tt.snap, l.last)
+				require.Equal(t, tt.snap.Index, l.Stable().Index)
+			} else {
+				require.Equal(t, was, l)
+			}
+		})
+	}
+}
+
+func TestLogTracker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	readPri := func(t *testing.T, d *datadriven.TestData) raftpb.Priority {
+		var s string
+		d.ScanArgs(t, "pri", &s)
+		pri := priFromString(s)
+		if pri == raftpb.NumPriorities {
+			t.Fatalf("unknown pri: %s", s)
+		}
+		return pri
+	}
+	readMark := func(t *testing.T, d *datadriven.TestData, idxName string) LogMark {
+		var mark LogMark
+		d.ScanArgs(t, "term", &mark.Term)
+		d.ScanArgs(t, idxName, &mark.Index)
+		return mark
+	}
+
+	var tracker LogTracker
+	state := func() string {
+		var b strings.Builder
+		fmt.Fprintln(&b, tracker.String())
+		for pri, marks := range tracker.waiting {
+			if len(marks) == 0 {
+				continue
+			}
+			fmt.Fprintf(&b, "%s:", raftpb.Priority(pri))
+			for _, mark := range marks {
+				fmt.Fprintf(&b, " %+v", mark)
+			}
+			fmt.Fprintf(&b, "\n")
+		}
+		return b.String()
+	}
+
+	run := func(t *testing.T, d *datadriven.TestData) string {
+		switch d.Cmd {
+		case "reset": // Example: reset term=1 index=10
+			stable := readMark(t, d, "index")
+			tracker = NewLogTracker(stable)
+			return state()
+
+		case "append": // Example: append term=10 after=100 to=200
+			var after uint64
+			d.ScanArgs(t, "after", &after)
+			to := readMark(t, d, "to")
+			if !tracker.Append(after, to) {
+				return "error"
+			}
+			return state()
+
+		case "sync": // Example: sync term=10 index=100
+			mark := readMark(t, d, "index")
+			if !tracker.LogSynced(mark) {
+				return "error"
+			}
+			return state()
+
+		case "register": // Example: register term=10 index=100 pri=LowPri
+			mark := readMark(t, d, "index")
+			pri := readPri(t, d)
+			if !tracker.Register(mark, pri) {
+				return "error"
+			}
+			return state()
+
+		case "admit": // Example: admit term=10 index=100 pri=LowPri
+			mark := readMark(t, d, "index")
+			pri := readPri(t, d)
+			if !tracker.Admit(mark, pri) {
+				return "error"
+			}
+			return state()
+
+		default:
+			t.Fatalf("unknown command: %s", d.Cmd)
+			return ""
+		}
+	}
+
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "log_tracker"), run)
+}
+
+// priFromString converts a string to Priority.
+// TODO(pav-kv): move to the package next to Priority.
+func priFromString(s string) raftpb.Priority {
+	switch s {
+	case "LowPri":
+		return raftpb.LowPri
+	case "NormalPri":
+		return raftpb.NormalPri
+	case "AboveNormalPri":
+		return raftpb.AboveNormalPri
+	case "HighPri":
+		return raftpb.HighPri
+	default:
+		return raftpb.NumPriorities
+	}
+}
