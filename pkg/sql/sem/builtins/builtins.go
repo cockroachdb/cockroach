@@ -4069,6 +4069,32 @@ value if you rely on the HLC for accuracy.`,
 	"int8range": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
 		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "string", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int8Range),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return eval.PerformCast(ctx, evalCtx, args[0], types.Int8Range)
+			},
+			Class:      tree.NormalClass,
+			Info:       "Cast from STRING to INT8RANGE.",
+			Volatility: volatility.Immutable,
+			// The one for name casts differ.
+			// Since we're using the same one as cast, ignore that from now.
+			IgnoreVolatilityCheck: true,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "int8range", Typ: types.Int8Range}},
+			ReturnType: tree.FixedReturnType(types.Int8Range),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return eval.PerformCast(ctx, evalCtx, args[0], types.Int8Range)
+			},
+			Class:      tree.NormalClass,
+			Info:       "Cast from INT8RANGE to INT8RANGE.",
+			Volatility: volatility.Leakproof,
+			// The one for name casts differ.
+			// Since we're using the same one as cast, ignore that from now.
+			IgnoreVolatilityCheck: true,
+		},
+		tree.Overload{
 			Types:             tree.ParamTypes{{Name: "start_bound", Typ: types.Int}, {Name: "end_bound", Typ: types.Int}},
 			ReturnType:        tree.FixedReturnType(types.Int8Range),
 			CalledOnNullInput: true,

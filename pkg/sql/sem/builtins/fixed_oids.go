@@ -2616,6 +2616,17 @@ var builtinOidsArray = []string{
 	2648: `isempty(range: int8range) -> bool`,
 	2649: `lower_inf(range: int8range) -> bool`,
 	2650: `upper_inf(range: int8range) -> bool`,
+	2651: `int8rangesend(int8range: int8range) -> bytes`,
+	2652: `int8rangein(input: anyelement) -> int8range`,
+	2653: `int8rangerecv(input: anyelement) -> int8range`,
+	2654: `int8rangeout(int8range: int8range) -> bytes`,
+	2655: `varchar(int8range: int8range) -> varchar`,
+	2656: `char(int8range: int8range) -> "char"`,
+	2657: `text(int8range: int8range) -> string`,
+	2658: `name(int8range: int8range) -> name`,
+	2659: `bpchar(int8range: int8range) -> char`,
+	2660: `int8range(string: string) -> int8range`,
+	2661: `int8range(int8range: int8range) -> int8range`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

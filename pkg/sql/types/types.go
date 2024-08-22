@@ -1656,6 +1656,12 @@ func (t *T) Name() string {
 		}
 		return t.TypeMeta.Name.Basename()
 
+	case RangeFamily:
+		if t.Oid() == oid.T_int8range {
+			return "int8range"
+		}
+		fallthrough
+
 	default:
 		return string(fam.Name())
 	}
