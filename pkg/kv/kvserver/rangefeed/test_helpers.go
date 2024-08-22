@@ -187,9 +187,10 @@ type testData struct {
 	omitInRangefeeds bool
 }
 
-func generateRandomizedTs(rand *rand.Rand) hlc.Timestamp {
+// GenerateRandomizedTs generates a timestamp between 1 and ns nanoseconds.
+func GenerateRandomizedTs(rand *rand.Rand, ns int64) hlc.Timestamp {
 	// Avoid generating zero timestamp which will equal to an empty event.
-	return hlc.Timestamp{WallTime: int64(rand.Intn(100)) + 1}
+	return hlc.Timestamp{WallTime: rand.Int63n(ns) + 1}
 }
 
 func generateRandomizedBytes(rand *rand.Rand) []byte {
@@ -208,8 +209,10 @@ func generateRandomizedBytes(rand *rand.Rand) []byte {
 	return key
 }
 
-func generateStartAndEndKey(rand *rand.Rand) (roachpb.Key, roachpb.Key) {
-	start := rand.Intn(2 << 20)
+// generateStartAndEndKey generates a start key at or above k, an end key at or
+// above the start key, and returns the keys and the value of the end key.
+func generateStartAndEndKey(rand *rand.Rand, k int) (roachpb.Key, roachpb.Key, int) {
+	start := k + rand.Intn(2<<20)
 	end := start + rand.Intn(2<<20)
 	startDatum := tree.NewDInt(tree.DInt(start))
 	endDatum := tree.NewDInt(tree.DInt(end))
@@ -232,7 +235,7 @@ func generateStartAndEndKey(rand *rand.Rand) (roachpb.Key, roachpb.Key) {
 	if err != nil {
 		panic(err)
 	}
-	return startKey, endKey
+	return startKey, endKey, end
 }
 
 func generateRandomizedTxnId(rand *rand.Rand) uuid.UUID {
@@ -248,11 +251,26 @@ func generateRandomizedTxnId(rand *rand.Rand) uuid.UUID {
 }
 
 func generateRandomizedSpan(rand *rand.Rand) roachpb.RSpan {
-	startKey, endKey := generateStartAndEndKey(rand)
+	startKey, endKey, _ := generateStartAndEndKey(rand, 0)
 	return roachpb.RSpan{
 		Key:    roachpb.RKey(startKey),
 		EndKey: roachpb.RKey(endKey),
 	}
+}
+
+// GenerateRandomizedSpans generates n non-overlapping spans.
+func GenerateRandomizedSpans(rand *rand.Rand, n int) []roachpb.RSpan {
+	spans := make([]roachpb.RSpan, 0, n)
+	var startKey, endKey roachpb.Key
+	k := 0
+	for range n {
+		startKey, endKey, k = generateStartAndEndKey(rand, k)
+		spans = append(spans, roachpb.RSpan{
+			Key:    roachpb.RKey(startKey),
+			EndKey: roachpb.RKey(endKey),
+		})
+	}
+	return spans
 }
 
 type kvs = storageutils.KVs
@@ -270,20 +288,20 @@ var testSSTKVs = kvs{
 }
 
 func generateRandomTestData(rand *rand.Rand) testData {
-	startKey, endkey := generateStartAndEndKey(rand)
+	startKey, endkey, _ := generateStartAndEndKey(rand, 0)
 	return testData{
 		numOfLogicalOps:  rand.Intn(100) + 1, // Avoid 0 (empty event)
 		kvs:              testSSTKVs,
 		span:             generateRandomizedSpan(rand).AsRawSpanWithNoLocals(),
 		key:              generateRandomizedBytes(rand),
-		timestamp:        generateRandomizedTs(rand),
+		timestamp:        GenerateRandomizedTs(rand, 100),
 		value:            generateRandomizedBytes(rand),
 		startKey:         startKey,
 		endKey:           endkey,
 		txnID:            generateRandomizedTxnId(rand),
 		txnKey:           generateRandomizedBytes(rand),
 		txnIsoLevel:      isolation.Levels()[rand.Intn(len(isolation.Levels()))],
-		txnMinTimestamp:  generateRandomizedTs(rand),
+		txnMinTimestamp:  GenerateRandomizedTs(rand, 100),
 		omitInRangefeeds: rand.Intn(2) == 1,
 	}
 }
