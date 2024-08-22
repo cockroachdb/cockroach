@@ -648,7 +648,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 			}
 			perChunkStats[worker] = s
 			lrw.metrics.OptimisticInsertConflictCount.Inc(s.optimisticInsertConflicts)
-			lrw.metrics.KVWriteFailureCount.Inc(s.kvWriteFailures)
+			lrw.metrics.KVWriteFallbackCount.Inc(s.kvWriteFallbacks)
 			return nil
 		})
 	}
@@ -794,7 +794,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 						}
 					} else {
 						stats.optimisticInsertConflicts += singleStats.optimisticInsertConflicts
-						stats.kvWriteFailures += singleStats.kvWriteFailures
+						stats.kvWriteFallbacks += singleStats.kvWriteFallbacks
 						batch[i] = streampb.StreamEvent_KV{}
 						stats.processed.success++
 						stats.processed.bytes += int64(batch[i].Size())
@@ -803,7 +803,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 			}
 		} else {
 			stats.optimisticInsertConflicts += s.optimisticInsertConflicts
-			stats.kvWriteFailures += s.kvWriteFailures
+			stats.kvWriteFallbacks += s.kvWriteFallbacks
 			stats.processed.success += int64(len(batch))
 			// Clear the event to indicate successful application.
 			for i := range batch {
@@ -873,7 +873,7 @@ func (lrw *logicalReplicationWriterProcessor) dlq(
 
 type batchStats struct {
 	optimisticInsertConflicts int64
-	kvWriteFailures           int64
+	kvWriteFallbacks          int64
 }
 type flushStats struct {
 	processed struct {
@@ -882,7 +882,7 @@ type flushStats struct {
 	notProcessed struct {
 		count, bytes int64
 	}
-	optimisticInsertConflicts, kvWriteFailures int64
+	optimisticInsertConflicts, kvWriteFallbacks int64
 }
 
 func (b *flushStats) Add(o flushStats) {
@@ -892,7 +892,7 @@ func (b *flushStats) Add(o flushStats) {
 	b.notProcessed.count += o.notProcessed.count
 	b.notProcessed.bytes += o.notProcessed.bytes
 	b.optimisticInsertConflicts += o.optimisticInsertConflicts
-	b.kvWriteFailures += o.kvWriteFailures
+	b.kvWriteFallbacks += o.kvWriteFallbacks
 }
 
 type BatchHandler interface {
