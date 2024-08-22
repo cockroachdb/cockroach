@@ -337,6 +337,8 @@ type Replica struct {
 	// - Replica.localMsgs must be held to append messages to active.
 	// - Replica.raftMu and Replica.localMsgs must both be held to switch slices.
 	// - Replica.raftMu < Replica.localMsgs
+	//
+	// TODO(pav-kv): replace these with log marks for the latest completed write.
 	localMsgs struct {
 		syncutil.Mutex
 		active, recycled []raftpb.Message
