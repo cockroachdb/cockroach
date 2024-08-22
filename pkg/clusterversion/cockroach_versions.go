@@ -332,9 +332,9 @@ func (k Key) Version() roachpb.Version {
 // the named version, if it is Internal.
 func (k Key) FenceVersion() roachpb.Version {
 	v := k.Version()
-	if v.Internal > 0 {
-		v.Internal -= 1
-	}
+	// NB: Internal may be negative after this. This is the case for all final
+	// versions for a release.
+	v.Internal -= 1
 	return v
 }
 

@@ -42,6 +42,8 @@ func FenceVersionFor(
 
 	// We'll pick the odd internal version preceding the cluster version,
 	// slotting ourselves right before it.
+	// NB: Internal may be negative after this. This is the case for all final
+	// versions for a release.
 	fenceCV := cv
 	fenceCV.Internal--
 	return fenceCV
