@@ -530,10 +530,150 @@ func (e *evaluator) EvalContainedByJsonbOp(
 	return tree.MakeDBool(tree.DBool(c)), nil
 }
 
+func (e *evaluator) EvalDiffInt8RangeOp(
+	ctx context.Context, _ *tree.DiffInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	containedByRes, err := e.EvalContainedByInt8RangeOp(ctx, nil /* ContainedByInt8RangeOp*/, a, b)
+	if err != nil {
+		return nil, err
+	}
+
+	if tree.MustBeDBool(containedByRes) {
+		return tree.EmptyDInt8Range, nil
+	}
+
+	// If b is completely contained by a, pop error.
+	containsRes, err := e.EvalContainsInt8RangeOp(ctx, nil /* ContainsInt8RangeOp*/, a, b)
+	if err != nil {
+		return nil, err
+	}
+
+	aRange := tree.MustBeDInt8Range(a)
+	bRange := tree.MustBeDInt8Range(b)
+
+	sbEq, err := aRange.StartBound.Equals(ctx, e.ctx(), bRange.StartBound)
+	if err != nil {
+		return nil, err
+	}
+	ebEq, err := aRange.EndBound.Equals(ctx, e.ctx(), bRange.EndBound)
+	if err != nil {
+		return nil, err
+	}
+	if bool(tree.MustBeDBool(containsRes)) && !sbEq && !ebEq {
+		return nil, pgerror.Newf(pgcode.Syntax, "result of range difference would not be contiguous")
+	}
+
+	sbCmpRes, err := aRange.StartBound.Val.Compare(ctx, e.ctx(), bRange.StartBound.Val)
+	if err != nil {
+		return nil, err
+	}
+
+	switch sbCmpRes {
+	case 1:
+	case 0:
+		if aRange.StartBound.Typ == tree.RangeBoundClose && bRange.StartBound.Typ == tree.RangeBoundOpen {
+			// TOOD(janexing): any overflow hazard here? when should it be promoted to inf?
+			nextDInt, ok := aRange.StartBound.Val.Next(ctx, e.ctx())
+			if !ok {
+				return nil, pgerror.Newf(pgcode.Syntax, "cannot get the next DInt for start bound")
+			}
+			return &tree.DInt8Range{
+				StartBound: aRange.StartBound,
+				EndBound: tree.RangeBound{
+					Val: nextDInt,
+					Typ: tree.RangeBoundOpen,
+				},
+			}, nil
+		}
+	case -1:
+		bRangeSB := bRange.StartBound
+		var resEB tree.RangeBound
+		switch bRangeSB.Typ {
+		case tree.RangeBoundInf, tree.RangeBoundNegInf:
+			resEB = bRangeSB
+		case tree.RangeBoundOpen:
+			resEB = tree.RangeBound{
+				Val: bRangeSB.Val,
+				Typ: tree.RangeBoundClose,
+			}
+		case tree.RangeBoundClose:
+			prevDInt, ok := bRangeSB.Val.Prev(ctx, e.ctx())
+			if !ok {
+				return nil, pgerror.Newf(pgcode.Syntax, "cannot get the prev DInt for start bound")
+			}
+			resEB = tree.RangeBound{
+				Val: prevDInt,
+				Typ: tree.RangeBoundOpen,
+			}
+		}
+
+		return &tree.DInt8Range{
+			StartBound: aRange.StartBound,
+			EndBound:   resEB,
+		}, nil
+	}
+
+	// --------
+
+	ebCmpRes, err := aRange.EndBound.Val.Compare(ctx, e.ctx(), bRange.EndBound.Val)
+	if err != nil {
+		return nil, err
+	}
+
+	switch ebCmpRes {
+	case -1:
+	case 0:
+		if aRange.EndBound.Typ == tree.RangeBoundOpen && bRange.EndBound.Typ == tree.RangeBoundClose {
+			// TOOD(janexing): any overflow hazard here? when should it be promoted to inf?
+			nextDInt, ok := aRange.EndBound.Val.Next(ctx, e.ctx())
+			if !ok {
+				return nil, pgerror.Newf(pgcode.Syntax, "cannot get the next DInt for start bound")
+			}
+			return &tree.DInt8Range{
+				StartBound: tree.RangeBound{
+					Val: aRange.EndBound.Val,
+					Typ: tree.RangeBoundClose,
+				},
+				EndBound: tree.RangeBound{
+					Val: nextDInt,
+					Typ: tree.RangeBoundOpen,
+				},
+			}, nil
+		}
+	case 1:
+		bRangeEB := bRange.EndBound
+		var resSB tree.RangeBound
+		switch bRangeEB.Typ {
+		case tree.RangeBoundInf, tree.RangeBoundNegInf:
+			resSB = bRangeEB
+		case tree.RangeBoundOpen:
+			resSB = tree.RangeBound{
+				Val: bRangeEB.Val,
+				Typ: tree.RangeBoundClose,
+			}
+		case tree.RangeBoundClose:
+			nextDInt, ok := bRangeEB.Val.Next(ctx, e.ctx())
+			if !ok {
+				return nil, pgerror.Newf(pgcode.Syntax, "cannot get the prev DInt for start bound")
+			}
+			resSB = tree.RangeBound{
+				Val: nextDInt,
+				Typ: tree.RangeBoundOpen,
+			}
+		}
+
+		return &tree.DInt8Range{
+			StartBound: resSB,
+			EndBound:   aRange.EndBound,
+		}, nil
+	}
+
+	return tree.EmptyDInt8Range, nil
+}
+
 func (e *evaluator) EvalIntersectInt8RangeOp(
 	ctx context.Context, _ *tree.IntersectInt8RangeOp, a, b tree.Datum,
 ) (tree.Datum, error) {
-
 	aRange := tree.MustBeDInt8Range(a)
 	bRange := tree.MustBeDInt8Range(b)
 

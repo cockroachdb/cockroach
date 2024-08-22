@@ -420,4 +420,8 @@ type StrictLeftInt8RangeOp struct{}
 
 type PlusInt8RangeOp struct{}
 
+// IntersectInt8RangeOp is a BinaryEvalOp.
 type IntersectInt8RangeOp struct{}
+
+// DiffInt8RangeOp is a BinaryEvalOp.
+type DiffInt8RangeOp struct{}

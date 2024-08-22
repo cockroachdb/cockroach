@@ -81,6 +81,7 @@ type BinaryOpEvaluator interface {
 	EvalContainsInt8RangeOp(context.Context, *ContainsInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalContainsJsonbOp(context.Context, *ContainsJsonbOp, Datum, Datum) (Datum, error)
 	EvalCosDistanceVectorOp(context.Context, *CosDistanceVectorOp, Datum, Datum) (Datum, error)
+	EvalDiffInt8RangeOp(context.Context, *DiffInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalDistanceVectorOp(context.Context, *DistanceVectorOp, Datum, Datum) (Datum, error)
 	EvalDivDecimalIntOp(context.Context, *DivDecimalIntOp, Datum, Datum) (Datum, error)
 	EvalDivDecimalOp(context.Context, *DivDecimalOp, Datum, Datum) (Datum, error)
@@ -387,6 +388,11 @@ func (op *ContainsJsonbOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) 
 // Eval is part of the BinaryEvalOp interface.
 func (op *CosDistanceVectorOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalCosDistanceVectorOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *DiffInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalDiffInt8RangeOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.

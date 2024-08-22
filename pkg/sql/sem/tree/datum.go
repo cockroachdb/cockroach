@@ -2326,6 +2326,16 @@ type RangeBound struct {
 	Typ RangeBoundType
 }
 
+func (rb1 RangeBound) Equals(
+	ctx context.Context, cmpCtx CompareContext, rb2 RangeBound,
+) (bool, error) {
+	cmpRes, err := rb1.Val.Compare(ctx, cmpCtx, rb2.Val)
+	if err != nil {
+		return false, err
+	}
+	return cmpRes == 0 && rb1.Typ == rb2.Typ, nil
+}
+
 type RangeBoundType int
 
 // -1: eb < sb (including -inf vs -inf, inf vs inf)

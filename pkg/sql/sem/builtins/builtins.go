@@ -4104,6 +4104,7 @@ value if you rely on the HLC for accuracy.`,
 				var startBoundInt, endBoundInt tree.DInt
 
 				if args[0] == tree.DNull {
+					startBoundInt = math.MinInt64
 					startBound = tree.NewDInt(tree.DInt(math.MinInt64))
 				} else {
 					startBoundInt = tree.MustBeDInt(args[0])
@@ -4111,6 +4112,7 @@ value if you rely on the HLC for accuracy.`,
 				}
 
 				if args[1] == tree.DNull {
+					endBoundInt = math.MaxInt64
 					endBound = tree.NewDInt(tree.DInt(math.MaxInt64))
 				} else {
 					endBoundInt = tree.MustBeDInt(args[1])
@@ -4164,14 +4166,18 @@ value if you rely on the HLC for accuracy.`,
 				var startBoundInt, endBoundInt tree.DInt
 
 				if args[0] == tree.DNull {
-					startBound = tree.DNull
+					startBoundInt = math.MinInt64
+					startBound = tree.NewDInt(tree.DInt(math.MinInt64))
+					startBoundTyp = tree.RangeBoundNegInf
 				} else {
 					startBoundInt = tree.MustBeDInt(args[0]) + *tree.NewDInt(tree.DInt(startAddVal))
 					startBound = &startBoundInt
 				}
 
 				if args[1] == tree.DNull {
-					endBound = tree.DNull
+					endBoundInt = math.MaxInt64
+					endBound = tree.NewDInt(tree.DInt(math.MaxInt64))
+					endBoundTyp = tree.RangeBoundInf
 				} else {
 					endBoundInt = tree.MustBeDInt(args[1]) + *tree.NewDInt(tree.DInt(endAddVal))
 					endBound = &endBoundInt
@@ -4179,14 +4185,6 @@ value if you rely on the HLC for accuracy.`,
 
 				if (startBound != tree.DNull && endBound != tree.DNull) && int64(endBoundInt)-int64(startBoundInt) < 0 {
 					return nil, errors.New("range lower bound must be less than or equal to range upper bound")
-				}
-
-				if startBound == tree.DNull {
-					startBoundTyp = tree.RangeBoundNegInf
-				}
-
-				if endBound == tree.DNull {
-					endBoundTyp = tree.RangeBoundInf
 				}
 
 				return tree.NewDInt8Range(startBound, endBound, startBoundTyp, endBoundTyp), nil
