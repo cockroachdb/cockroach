@@ -6585,16 +6585,16 @@ type CollectableGCRangeKey struct {
 // not performed correctly by the level above.
 func MVCCGarbageCollectRangeKeys(
 	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, rks []CollectableGCRangeKey,
-) error {
+) (retE error) {
 
 	var count int64
 	defer func(begin time.Time) {
-		// TODO(oleg): this could be misleading if GC fails, but this function still
-		// reports how many keys were GC'd. The approach is identical to what point
-		// key GC does for consistency, but both places could be improved.
 		log.Eventf(ctx,
-			"done with GC evaluation for %d range keys at %.2f keys/sec. Deleted %d entries",
-			len(rks), float64(len(rks))*1e9/float64(timeutil.Since(begin)), count)
+			"gc evaluation: handled %d incoming range keys (%d fragments) at %.2f keys/sec.",
+			len(rks), count, float64(len(rks))*1e9/float64(timeutil.Since(begin)))
+		if retE != nil {
+			log.Eventf(ctx, "gc evaluation: err: %s", retE)
+		}
 	}(timeutil.Now())
 
 	if len(rks) == 0 {
@@ -6604,7 +6604,8 @@ func MVCCGarbageCollectRangeKeys(
 	// Validate range keys are well formed.
 	for _, rk := range rks {
 		if err := rk.Validate(); err != nil {
-			return errors.Wrap(err, "failed to validate gc range keys in mvcc gc")
+			retE = errors.Wrap(err, "failed to validate gc range keys in mvcc gc")
+			return
 		}
 	}
 
@@ -6615,8 +6616,9 @@ func MVCCGarbageCollectRangeKeys(
 	// Validate that keys are non-overlapping.
 	for i := 1; i < len(rks); i++ {
 		if rks[i].StartKey.Compare(rks[i-1].EndKey) < 0 {
-			return errors.Errorf("range keys in gc request should be non-overlapping: %s vs %s",
+			retE = errors.Errorf("range keys in gc request should be non-overlapping: %s vs %s",
 				rks[i-1].String(), rks[i].String())
+			return
 		}
 	}
 
@@ -6703,9 +6705,12 @@ func MVCCGarbageCollectRangeKeys(
 				if !v.Timestamp.LessEq(gcKey.Timestamp) {
 					break
 				}
-				if err := rw.ClearMVCCRangeKey(rangeKeys.AsRangeKey(v)); err != nil {
+				k := rangeKeys.AsRangeKey(v)
+				log.Eventf(ctx, "gc evaluation: clearing rangekey fragment: %s", k)
+				if err := rw.ClearMVCCRangeKey(k); err != nil {
 					return err
 				}
+				count++
 				if ms != nil {
 					ms.Add(updateStatsOnRangeKeyClearVersion(rangeKeys, v))
 				}
@@ -6753,7 +6758,8 @@ func MVCCGarbageCollectRangeKeys(
 
 	for _, gcKey := range rks {
 		if err := gcRangeKey(gcKey); err != nil {
-			return err
+			retE = err
+			return
 		}
 	}
 
