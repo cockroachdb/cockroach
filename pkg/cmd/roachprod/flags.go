@@ -60,7 +60,7 @@ var (
 	useTreeDist           = true
 	sig                   = 9
 	waitFlag              = false
-	maxWait               = 0
+	gracePeriod           = 0
 	createVMOpts          = vm.DefaultCreateOpts()
 	startOpts             = roachprod.DefaultStartOpts()
 	stageOS               string
@@ -221,7 +221,7 @@ func initFlags() {
 	for _, stopProcessesCmd := range []*cobra.Command{stopCmd, stopInstanceCmd} {
 		stopProcessesCmd.Flags().IntVar(&sig, "sig", sig, "signal to pass to kill")
 		stopProcessesCmd.Flags().BoolVar(&waitFlag, "wait", waitFlag, "wait for processes to exit")
-		stopProcessesCmd.Flags().IntVar(&maxWait, "max-wait", maxWait, "approx number of seconds to wait for processes to exit")
+		stopProcessesCmd.Flags().IntVar(&gracePeriod, "grace-period", gracePeriod, "approx number of seconds to wait for processes to exit, before a forceful shutdown (SIGKILL) is performed")
 	}
 
 	syncCmd.Flags().BoolVar(&listOpts.IncludeVolumes, "include-volumes", false, "Include volumes when syncing")
