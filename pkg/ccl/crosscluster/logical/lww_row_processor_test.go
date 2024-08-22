@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
@@ -19,8 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -299,5 +303,174 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 			}
 			require.NoError(b, lastRowErr)
 		})
+	}
+}
+
+// TestLWWConflictResolution tests how insert conflicts are handled under the default
+// last write wins mode. The test cases are as follows:
+// 1. The incoming row to the processor is older than the current row
+// 2. The incoming row to the processor is newer than the current row
+// For each of these test cases, the current row can either be a local write
+// (crdb_replication_origin_timestamp is NULL) or a prior remote write
+// (crdb_replication_origin_timestamp is populated with the MVCC timestamp of the incoming row).
+// All of those combinations are tested with both the SQL row processor and the KV
+// row processor. Note that currently, KV row proc write conflicts result in a fallback to the
+// SQL row processor.
+func TestLWWConflictResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create new tables for each test to prevent conflicts between tests
+	tableNumber := 0
+	createTable := func(t *testing.T) string {
+		tableName := fmt.Sprintf("tab%d", tableNumber)
+		runner.Exec(t, fmt.Sprintf(`CREATE TABLE %s (pk int primary key, payload string)`, tableName))
+		runner.Exec(t, fmt.Sprintf(
+			"ALTER TABLE %s "+lwwColumnAdd,
+			tableName))
+		tableNumber++
+		return tableName
+	}
+
+	setup := func(t *testing.T, useKVProc bool) (string, RowProcessor, func(hlc.Timestamp, ...interface{}) roachpb.KeyValue) {
+		tableNameSrc := createTable(t)
+		tableNameDst := createTable(t)
+		srcDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameSrc)
+		dstDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameDst)
+
+		// We need the SQL row processor even when testing the KW row processor since it's the fallback
+		var rp RowProcessor
+		rp, err := makeSQLProcessor(ctx, s.ClusterSettings(), map[descpb.ID]sqlProcessorTableConfig{
+			dstDesc.GetID(): {
+				srcDesc: srcDesc,
+			},
+		}, jobspb.JobID(1), s.InternalExecutor().(isql.Executor))
+		require.NoError(t, err)
+
+		if useKVProc {
+			rp, err = newKVRowProcessor(ctx,
+				&execinfra.ServerConfig{
+					DB:           s.InternalDB().(descs.DB),
+					LeaseManager: s.LeaseManager(),
+				}, &eval.Context{
+					Codec:    s.Codec(),
+					Settings: s.ClusterSettings(),
+				}, map[descpb.ID]sqlProcessorTableConfig{
+					dstDesc.GetID(): {
+						srcDesc: srcDesc,
+					},
+				},
+				rp.(*sqlRowProcessor))
+			require.NoError(t, err)
+		}
+		return tableNameDst, rp, func(timestamp hlc.Timestamp, datums ...interface{}) roachpb.KeyValue {
+			kv := replicationtestutils.EncodeKV(t, s.Codec(), srcDesc, datums...)
+			kv.Value.Timestamp = timestamp
+			return kv
+		}
+	}
+
+	insertRow := func(rp RowProcessor, keyValue roachpb.KeyValue) error {
+		return s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			_, err := rp.ProcessRow(ctx, txn, keyValue, roachpb.Value{})
+			return err
+		})
+	}
+
+	timeNow := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	timeOneDayForward := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Hour * 24).UnixNano()}
+
+	for _, tc := range []struct {
+		name string
+		row1 []interface{}
+		row2 []interface{}
+		// The MVCC timestamp of the first insertion
+		timestamp1 hlc.Timestamp
+		// The MVCC timestamp of the second insertion
+		timestamp2 hlc.Timestamp
+		// Expected rows of the table
+		expectedRows [][]string
+	}{
+		{
+			name:       "conflict/secondRowWins",
+			row1:       []interface{}{1, "row1"},
+			row2:       []interface{}{1, "row2"},
+			timestamp1: timeNow,
+			timestamp2: timeOneDayForward,
+			expectedRows: [][]string{
+				{"1", "row2"},
+			},
+		},
+		{
+			name:       "conflict/firstRowWins",
+			row1:       []interface{}{1, "row1"},
+			row2:       []interface{}{1, "row2"},
+			timestamp1: timeOneDayForward,
+			timestamp2: timeNow,
+			expectedRows: [][]string{
+				{"1", "row1"},
+			},
+		},
+	} {
+		for _, useKVProc := range []bool{true, false} {
+			// When useKVProc is true, use the KV row processor instead of the SQL row processor
+			var procName string
+			if useKVProc {
+				procName = "KVProc"
+			} else {
+				procName = "SQLProc"
+			}
+
+			for _, localWrite := range []bool{true, false} {
+				// When localWrite is true, the first row is written locally rather than through the remote write processor
+				var writeName string
+				if localWrite {
+					writeName = "localWrite "
+				} else {
+					writeName = "remoteWrite"
+				}
+
+				t.Run(fmt.Sprintf("%s/%s/%s/insert", tc.name, procName, writeName), func(t *testing.T) {
+					runner.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled=true")
+					defer runner.Exec(t, "RESET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled")
+					tableNameDst, rp, encoder := setup(t, useKVProc)
+
+					if localWrite {
+						runner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES ($1, $2)", tableNameDst), tc.row1...)
+					} else {
+						keyValue1 := encoder(tc.timestamp1, tc.row1...)
+						require.NoError(t, insertRow(rp, keyValue1))
+					}
+
+					keyValue2 := encoder(tc.timestamp2, tc.row2...)
+					require.NoError(t, insertRow(rp, keyValue2))
+					runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), tc.expectedRows)
+				})
+
+				t.Run(fmt.Sprintf("%s/%s/%s/insert-without-optimistic-insert", tc.name, procName, writeName), func(t *testing.T) {
+					runner.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled=false")
+					defer runner.Exec(t, "RESET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled")
+					tableNameDst, rp, encoder := setup(t, useKVProc)
+
+					if localWrite {
+						runner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES ($1, $2)", tableNameDst), tc.row1...)
+					} else {
+						keyValue1 := encoder(tc.timestamp1, tc.row1...)
+						require.NoError(t, insertRow(rp, keyValue1))
+					}
+
+					keyValue2 := encoder(tc.timestamp2, tc.row2...)
+					require.NoError(t, insertRow(rp, keyValue2))
+					runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), tc.expectedRows)
+				})
+			}
+		}
 	}
 }
