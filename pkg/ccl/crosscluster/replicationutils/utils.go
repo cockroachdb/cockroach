@@ -309,9 +309,9 @@ func TestingGetPTSFromReplicationJob(
 	ctx context.Context,
 	sqlRunner *sqlutils.SQLRunner,
 	srv serverutils.ApplicationLayerInterface,
-	producerJobID int,
+	producerJobID jobspb.JobID,
 ) hlc.Timestamp {
-	ptsRecordID := getPTSRecordIDFromProducerJob(t, sqlRunner, jobspb.JobID(producerJobID))
+	ptsRecordID := getPTSRecordIDFromProducerJob(t, sqlRunner, producerJobID)
 	ptsProvider := srv.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 
 	var ptsRecord *ptpb.Record
@@ -330,7 +330,7 @@ func WaitForPTSProtection(
 	ctx context.Context,
 	sqlRunner *sqlutils.SQLRunner,
 	srv serverutils.ApplicationLayerInterface,
-	producerJobID int,
+	producerJobID jobspb.JobID,
 	minTime hlc.Timestamp,
 ) {
 	testutils.SucceedsSoon(t, func() error {
@@ -378,10 +378,4 @@ func GetProducerJobIDFromLDRJob(
 ) jobspb.JobID {
 	payload := jobutils.GetJobPayload(t, sqlRunner, ldrJobID)
 	return jobspb.JobID(payload.GetLogicalReplicationDetails().StreamID)
-}
-
-func GetLatestProducerJobID(t *testing.T, sqlRunner *sqlutils.SQLRunner) int {
-	var producerJobID int
-	sqlRunner.QueryRow(t, "SELECT id FROM system.jobs WHERE job_type = 'REPLICATION STREAM PRODUCER' ORDER BY created DESC LIMIT 1").Scan(&producerJobID)
-	return producerJobID
 }
