@@ -166,16 +166,22 @@ func InitEnv(
 		diskHealthCheckInterval = maxSyncDurationDefault
 	}
 
-	// Pass a reference to the stats collector below. Since retrieving the stats
-	// collector requires the directory to be created first, we defer the
-	// retrieval to after the directories are created.
+	// Create the directory if it doesn't already exist. We need to acquire a
+	// database lock down below, which requires the directory already exist.
+	if cfg.RW == ReadWrite {
+		if err := e.UnencryptedFS.MkdirAll(dir, os.ModePerm); err != nil {
+			return nil, err
+		}
+	}
+
+	// Create the stats collector. This has to be done after the directory has
+	// been created above.
 	var statsCollector *vfs.DiskWriteStatsCollector
 	var err error
-	retrieveStatsCollector := func() error {
-		if diskWriteStats != nil && dir != "" {
-			statsCollector, err = diskWriteStats.GetOrCreateCollector(dir)
+	if diskWriteStats != nil && dir != "" {
+		if statsCollector, err = diskWriteStats.GetOrCreateCollector(dir); err != nil {
+			return nil, errors.Wrap(err, "retrieving stats collector")
 		}
-		return err
 	}
 
 	// Instantiate a file system with disk health checking enabled. This FS
@@ -188,20 +194,6 @@ func InitEnv(
 	e.UnencryptedFS = vfs.OnDiskFull(e.UnencryptedFS, func() {
 		exit.WithCode(exit.DiskFull())
 	})
-
-	// Create the directory if it doesn't already exist. We need to acquire a
-	// database lock down below, which requires the directory already exist.
-	if cfg.RW == ReadWrite {
-		if err := e.UnencryptedFS.MkdirAll(dir, os.ModePerm); err != nil {
-			return nil, err
-		}
-	}
-
-	// Now that we have created the directories, we can retrieve the stats
-	// collector.
-	if err = retrieveStatsCollector(); err != nil {
-		return nil, errors.Wrap(err, "retrieving stats collector")
-	}
 
 	// Acquire the database lock in the store directory to ensure that no other
 	// process is simultaneously accessing the same store. We manually acquire
