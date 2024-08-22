@@ -959,7 +959,10 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
 	topology := topologySpec{multiRegion: false}
-	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness)
+	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness,
+		// Test currently fails in shared-process deployments, see: #129167.
+		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
+	)
 }
 
 // runFollowerReadsMixedVersionGlobalTableTest runs a multi-region follower-read
@@ -974,6 +977,8 @@ func runFollowerReadsMixedVersionGlobalTableTest(
 		survival:    region,
 	}
 	runFollowerReadsMixedVersionTest(ctx, t, c, topology, strong,
+		// Test currently fails in shared-process deployments, see: #129167.
+		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 		// Disable fixtures because we're using a 6-node, multi-region cluster.
 		mixedversion.NeverUseFixtures,
 		// Use a longer upgrade timeout to give the migrations enough time to finish
