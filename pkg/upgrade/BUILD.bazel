@@ -4,7 +4,6 @@ go_library(
     name = "upgrade",
     srcs = [
         "doc.go",
-        "helpers.go",
         "system_upgrade.go",
         "tenant_upgrade.go",
         "upgrade.go",
@@ -27,7 +26,6 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats",
         "//pkg/upgrade/upgradebase",
-        "//pkg/util/log",
         "//pkg/util/retry",
         "//pkg/util/stop",
         "//pkg/util/uuid",

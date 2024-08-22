@@ -81,7 +81,9 @@ func (v Version) SafeFormat(p redact.SafePrinter, _ rune) {
 		}
 		p.Printf("%d.%d-upgrading-to-%d.%d-step-%03d", v.Major, v.Minor, s.Major, s.Minor, v.Internal)
 	} else {
-		// This shouldn't happen in practice.
+		// This branch is used for the fence version of a final cluster version.
+		// For example, the fence version for 23.2-0 is 23.2--1 (with a negative
+		// one at the end).
 		p.Printf("%d.%d-upgrading-step-%03d", v.Major, v.Minor, v.Internal)
 	}
 }
