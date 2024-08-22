@@ -441,7 +441,9 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 					&scpb.IndexZoneConfig{
 						TableID:       tbl.GetID(),
 						IndexID:       catid.IndexID(subZoneCfg.IndexID),
+						Subzone:       subZoneCfg,
 						PartitionName: subZoneCfg.PartitionName,
+						SeqNum:        0,
 					})
 			}
 		}
@@ -872,6 +874,10 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 	w.ev(scpb.Status_PUBLIC, &scpb.FunctionNullInputBehavior{
 		FunctionID:        fnDesc.GetID(),
 		NullInputBehavior: catpb.FunctionNullInputBehavior{NullInputBehavior: fnDesc.GetNullInputBehavior()},
+	})
+	w.ev(scpb.Status_PUBLIC, &scpb.FunctionSecurity{
+		FunctionID: fnDesc.GetID(),
+		Security:   catpb.FunctionSecurity{Security: fnDesc.GetSecurity()},
 	})
 
 	fnBody := &scpb.FunctionBody{

@@ -146,6 +146,40 @@ func (e *ElementProto) Element() Element {
 	return e.GetElementOneOf().(ElementGetter).Element()
 }
 
+type ZoneConfigElement interface {
+	Element
+	GetSeqNum() uint32
+	GetTargetID() catid.DescID
+}
+
+var _ ZoneConfigElement = &DatabaseZoneConfig{}
+var _ ZoneConfigElement = &TableZoneConfig{}
+var _ ZoneConfigElement = &IndexZoneConfig{}
+
+func (e *DatabaseZoneConfig) GetSeqNum() uint32 {
+	return e.SeqNum
+}
+
+func (e *DatabaseZoneConfig) GetTargetID() catid.DescID {
+	return e.DatabaseID
+}
+
+func (e *TableZoneConfig) GetSeqNum() uint32 {
+	return e.SeqNum
+}
+
+func (e *TableZoneConfig) GetTargetID() catid.DescID {
+	return e.TableID
+}
+
+func (e *IndexZoneConfig) GetSeqNum() uint32 {
+	return e.SeqNum
+}
+
+func (e *IndexZoneConfig) GetTargetID() catid.DescID {
+	return e.TableID
+}
+
 // IsLinkedToSchemaChange return if a Target is linked to a schema change.
 func (t *Target) IsLinkedToSchemaChange() bool {
 	return t.Metadata.IsLinkedToSchemaChange()

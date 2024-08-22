@@ -1,0 +1,8 @@
+setup
+CREATE TABLE t(i int);
+CREATE INDEX foo ON t(i);
+----
+
+test
+ALTER INDEX t@foo CONFIGURE ZONE USING num_replicas = 7, gc.ttlseconds = 10000;
+----

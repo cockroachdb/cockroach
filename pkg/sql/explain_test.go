@@ -84,7 +84,6 @@ func TestStatementReuses(t *testing.T) {
 		`ALTER TABLE a SCATTER`,
 
 		`ALTER INDEX a@woo RENAME TO waa`,
-		`ALTER INDEX a@woo CONFIGURE ZONE USING DEFAULT`,
 		`ALTER INDEX a@woo SPLIT AT VALUES(1)`,
 		`ALTER INDEX a@woo SCATTER`,
 

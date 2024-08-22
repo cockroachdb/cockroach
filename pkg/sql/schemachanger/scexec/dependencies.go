@@ -73,20 +73,25 @@ type Catalog interface {
 	DeleteDescriptor(ctx context.Context, id descpb.ID) error
 
 	// UpdateZoneConfig upserts a zone config for a descriptor.
-	UpdateZoneConfig(ctx context.Context, id descpb.ID, zc zonepb.ZoneConfig) error
+	UpdateZoneConfig(ctx context.Context, id descpb.ID, zc *zonepb.ZoneConfig) error
+
+	// UpdateSubzoneConfig upserts a subzone config into the zone config for a
+	// descriptor.
+	UpdateSubzoneConfig(
+		ctx context.Context,
+		tableID descpb.ID,
+		subzones []zonepb.Subzone,
+		subzoneSpans []zonepb.SubzoneSpan,
+	) error
 
 	// DeleteZoneConfig deletes the zone config for a descriptor.
 	DeleteZoneConfig(ctx context.Context, id descpb.ID) error
 
 	// UpdateComment upserts a comment for the (objID, subID, cmtType) key.
-	UpdateComment(
-		ctx context.Context, key catalogkeys.CommentKey, cmt string,
-	) error
+	UpdateComment(ctx context.Context, key catalogkeys.CommentKey, cmt string) error
 
 	// DeleteComment deletes a comment with (objID, subID, cmtType) key.
-	DeleteComment(
-		ctx context.Context, key catalogkeys.CommentKey,
-	) error
+	DeleteComment(ctx context.Context, key catalogkeys.CommentKey) error
 
 	// Validate validates all the uncommitted catalog changes performed
 	// in this transaction so far.

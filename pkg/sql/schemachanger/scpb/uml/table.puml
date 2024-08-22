@@ -210,6 +210,11 @@ object FunctionNullInputBehavior
 FunctionNullInputBehavior :  FunctionID
 FunctionNullInputBehavior :  NullInputBehavior
 
+object FunctionSecurity
+
+FunctionSecurity :  FunctionID
+FunctionSecurity :  Security
+
 object FunctionVolatility
 
 FunctionVolatility :  FunctionID
@@ -254,6 +259,9 @@ object IndexZoneConfig
 IndexZoneConfig :  TableID
 IndexZoneConfig :  IndexID
 IndexZoneConfig :  PartitionName
+IndexZoneConfig :  Subzone
+IndexZoneConfig : []SubzoneSpans
+IndexZoneConfig :  SeqNum
 
 object Namespace
 
@@ -454,6 +462,7 @@ Function <|-- FunctionBody
 Function <|-- FunctionLeakProof
 Function <|-- FunctionName
 Function <|-- FunctionNullInputBehavior
+Function <|-- FunctionSecurity
 Function <|-- FunctionVolatility
 PrimaryIndex <|-- IndexColumn
 SecondaryIndex <|-- IndexColumn

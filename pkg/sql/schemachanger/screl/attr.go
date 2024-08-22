@@ -399,6 +399,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.IndexZoneConfig)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
+		rel.EntityAttr(SeqNum, "SeqNum"),
 	),
 	rel.EntityMapping(t((*scpb.DatabaseData)(nil)),
 		rel.EntityAttr(DescID, "DatabaseID"),
@@ -433,6 +434,9 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(DescID, "FunctionID"),
 	),
 	rel.EntityMapping(t((*scpb.FunctionBody)(nil)),
+		rel.EntityAttr(DescID, "FunctionID"),
+	),
+	rel.EntityMapping(t((*scpb.FunctionSecurity)(nil)),
 		rel.EntityAttr(DescID, "FunctionID"),
 	),
 }

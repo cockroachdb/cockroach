@@ -1,5 +1,5 @@
 alter_func_stmt ::=
-	( 'ALTER' 'FUNCTION' function_with_paramtypes ( ( ( 'CALLED' 'ON' 'NULL' 'INPUT' | 'RETURNS' 'NULL' 'ON' 'NULL' 'INPUT' | 'STRICT' | 'IMMUTABLE' | 'STABLE' | 'VOLATILE' | 'LEAKPROOF' | 'NOT' 'LEAKPROOF' ) ) ( ( ( 'CALLED' 'ON' 'NULL' 'INPUT' | 'RETURNS' 'NULL' 'ON' 'NULL' 'INPUT' | 'STRICT' | 'IMMUTABLE' | 'STABLE' | 'VOLATILE' | 'LEAKPROOF' | 'NOT' 'LEAKPROOF' ) ) )* ) ( 'RESTRICT' |  ) )
+	( 'ALTER' 'FUNCTION' function_with_paramtypes ( ( ( 'CALLED' 'ON' 'NULL' 'INPUT' | 'RETURNS' 'NULL' 'ON' 'NULL' 'INPUT' | 'STRICT' | 'IMMUTABLE' | 'STABLE' | 'VOLATILE' | 'EXTERNAL' 'SECURITY' 'DEFINER' | 'EXTERNAL' 'SECURITY' 'INVOKER' | 'SECURITY' 'DEFINER' | 'SECURITY' 'INVOKER' | 'LEAKPROOF' | 'NOT' 'LEAKPROOF' ) ) ( ( ( 'CALLED' 'ON' 'NULL' 'INPUT' | 'RETURNS' 'NULL' 'ON' 'NULL' 'INPUT' | 'STRICT' | 'IMMUTABLE' | 'STABLE' | 'VOLATILE' | 'EXTERNAL' 'SECURITY' 'DEFINER' | 'EXTERNAL' 'SECURITY' 'INVOKER' | 'SECURITY' 'DEFINER' | 'SECURITY' 'INVOKER' | 'LEAKPROOF' | 'NOT' 'LEAKPROOF' ) ) )* ) ( 'RESTRICT' |  ) )
 	| ( 'ALTER' 'FUNCTION' function_with_paramtypes 'RENAME' 'TO' function_new_name )
 	| ( 'ALTER' 'FUNCTION' function_with_paramtypes 'OWNER' 'TO' role_spec )
 	| ( 'ALTER' 'FUNCTION' function_with_paramtypes 'SET' 'SCHEMA' schema_name )

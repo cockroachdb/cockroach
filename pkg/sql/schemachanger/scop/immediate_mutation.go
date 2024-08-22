@@ -839,6 +839,12 @@ type SetFunctionBody struct {
 	Body scpb.FunctionBody
 }
 
+type SetFunctionSecurity struct {
+	immediateMutationOp
+	FunctionID descpb.ID
+	Security   catpb.Function_Security
+}
+
 type UpdateFunctionTypeReferences struct {
 	immediateMutationOp
 	FunctionID descpb.ID
@@ -911,4 +917,13 @@ type AddTableZoneConfig struct {
 	immediateMutationOp
 	TableID    descpb.ID
 	ZoneConfig *zonepb.ZoneConfig
+}
+
+// AddIndexZoneConfig adds a zone config to an index.
+type AddIndexZoneConfig struct {
+	immediateMutationOp
+	TableID      descpb.ID
+	IndexID      descpb.IndexID
+	Subzone      zonepb.Subzone
+	SubzoneSpans []zonepb.SubzoneSpan
 }

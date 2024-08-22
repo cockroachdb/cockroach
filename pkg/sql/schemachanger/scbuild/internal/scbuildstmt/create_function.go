@@ -173,6 +173,15 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 			lang = v
 		case tree.RoutineBodyStr:
 			fnBodyStr = string(t)
+		case tree.RoutineSecurity:
+			s, err := funcinfo.SecurityToProto(t)
+			if err != nil {
+				panic(err)
+			}
+			b.Add(&scpb.FunctionSecurity{
+				FunctionID: fnID,
+				Security:   catpb.FunctionSecurity{Security: s},
+			})
 		}
 	}
 	owner, ups := b.BuildUserPrivilegesFromDefaultPrivileges(

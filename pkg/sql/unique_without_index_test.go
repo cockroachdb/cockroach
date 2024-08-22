@@ -40,7 +40,7 @@ func TestUWIConstraintReferencingTypes(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	testutils.RunTrueAndFalse(t, "test-in-both-legacy-and-declarative-schema-changer", func(
+	testutils.RunTrueAndFalse(t, "use-declarative-schema-changer", func(
 		t *testing.T, useDeclarativeSchemaChanger bool,
 	) {
 		s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})

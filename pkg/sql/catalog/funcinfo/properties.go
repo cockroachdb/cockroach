@@ -135,3 +135,14 @@ func ParamClassToProto(v tree.RoutineParamClass) (catpb.Function_Param_Class, er
 
 	return -1, errors.AssertionFailedf("unknown function parameter class %q", v)
 }
+
+// SecurityToProto converts sql statement input security to protobuf type.
+func SecurityToProto(v tree.RoutineSecurity) (catpb.Function_Security, error) {
+	switch v {
+	case tree.RoutineInvoker:
+		return catpb.Function_INVOKER, nil
+	case tree.RoutineDefiner:
+		return catpb.Function_DEFINER, nil
+	}
+	return -1, errors.AssertionFailedf("unknown function security class %q", v)
+}
