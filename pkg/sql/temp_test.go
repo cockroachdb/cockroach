@@ -12,6 +12,7 @@ package sql_test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 
@@ -76,10 +77,42 @@ func TestTemp(t *testing.T) {
 						`)
 	require.NoError(t, err)
 
+	result, err = sqlDB.Query(`
+						select int8range(3,7) && int8range(4,12);
+						`)
+	require.NoError(t, err)
+	printResult(result)
+
+	result, err = sqlDB.Query(`
+						select int8range(13,NULL) && int8range(4,12);
+						`)
+	require.NoError(t, err)
+	printResult(result)
+
+	result, err = sqlDB.Query(`
+						select int8range(NULL,NULL) && int8range(4,12);
+						`)
+	require.NoError(t, err)
+	printResult(result)
+
+	result, err = sqlDB.Query(`
+						select int8range(1,45) && int8range(NULL,12);
+						`)
+	require.NoError(t, err)
+	printResult(result)
+
+	result, err = sqlDB.Query(`
+						select int8range(13,NULL) && int8range(NULL,12);
+						`)
+	require.NoError(t, err)
+	printResult(result)
+
+}
+
+func printResult(result *sql.Rows) {
 	for result.Next() {
 		var resultOut string
 		result.Scan(&resultOut)
 		fmt.Println(resultOut)
 	}
-
 }

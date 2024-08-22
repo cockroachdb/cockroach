@@ -2054,6 +2054,12 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 			EvalOp:     &OverlapsINetOp{},
 			Volatility: volatility.Immutable,
 		},
+		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int8Range,
+			EvalOp:     &OverlapByInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
 	}, makeBox2DComparisonOperators(
 		func(lhs, rhs *geo.CartesianBoundingBox) bool {
 			return lhs.Intersects(rhs)

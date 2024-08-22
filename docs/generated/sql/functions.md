@@ -1304,8 +1304,12 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
 <tbody>
 <tr><td><a name="has_intersect"></a><code>has_intersect(left_range: int8range, right_range: int8range) &rarr; <a href="bool.html">bool</a></code></td><td></td><td>Invalid</td></tr>
+<tr><td><a name="int8range"></a><code>int8range(int8range: int8range) &rarr; int8range</code></td><td><span class="funcdesc"><p>Cast from INT8RANGE to INT8RANGE.</p>
+</span></td><td>Leakproof</td></tr>
 <tr><td><a name="int8range"></a><code>int8range(start_bound: <a href="int.html">int</a>, end_bound: <a href="int.html">int</a>) &rarr; int8range</code></td><td></td><td>Invalid</td></tr>
 <tr><td><a name="int8range"></a><code>int8range(start_bound: <a href="int.html">int</a>, end_bound: <a href="int.html">int</a>, bound_fmt: <a href="string.html">string</a>) &rarr; int8range</code></td><td></td><td>Invalid</td></tr>
+<tr><td><a name="int8range"></a><code>int8range(string: <a href="string.html">string</a>) &rarr; int8range</code></td><td><span class="funcdesc"><p>Cast from STRING to INT8RANGE.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="isempty"></a><code>isempty(range: int8range) &rarr; <a href="bool.html">bool</a></code></td><td></td><td>Invalid</td></tr>
 <tr><td><a name="lower_inf"></a><code>lower_inf(range: int8range) &rarr; <a href="bool.html">bool</a></code></td><td></td><td>Invalid</td></tr>
 <tr><td><a name="range_merge"></a><code>range_merge(left_range: int8range, right_range: int8range) &rarr; int8range</code></td><td></td><td>Invalid</td></tr>

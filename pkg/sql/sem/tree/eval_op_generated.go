@@ -154,6 +154,7 @@ type BinaryOpEvaluator interface {
 	EvalMultIntervalIntOp(context.Context, *MultIntervalIntOp, Datum, Datum) (Datum, error)
 	EvalMultPGVectorOp(context.Context, *MultPGVectorOp, Datum, Datum) (Datum, error)
 	EvalNegInnerProductVectorOp(context.Context, *NegInnerProductVectorOp, Datum, Datum) (Datum, error)
+	EvalOverlapByInt8RangeOp(context.Context, *OverlapByInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalOverlapsArrayOp(context.Context, *OverlapsArrayOp, Datum, Datum) (Datum, error)
 	EvalOverlapsINetOp(context.Context, *OverlapsINetOp, Datum, Datum) (Datum, error)
 	EvalPlusDateIntOp(context.Context, *PlusDateIntOp, Datum, Datum) (Datum, error)
@@ -746,6 +747,11 @@ func (op *MultPGVectorOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (
 // Eval is part of the BinaryEvalOp interface.
 func (op *NegInnerProductVectorOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalNegInnerProductVectorOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *OverlapByInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalOverlapByInt8RangeOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
