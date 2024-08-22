@@ -107,6 +107,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("this zone config isn't necessary for restore"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"create prepared_transactions table",
+		clusterversion.V24_3_PreparedTransactionsTable.Version(),
+		upgrade.NoPrecondition,
+		createPreparedTransactionsTable,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

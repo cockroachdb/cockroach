@@ -11,7 +11,8 @@ func _() {
 	_ = x[txnPending-0]
 	_ = x[txnRetryableError-1]
 	_ = x[txnError-2]
-	_ = x[txnFinalized-3]
+	_ = x[txnPrepared-3]
+	_ = x[txnFinalized-4]
 }
 
 func (i txnState) String() string {
@@ -22,6 +23,8 @@ func (i txnState) String() string {
 		return "txnRetryableError"
 	case txnError:
 		return "txnError"
+	case txnPrepared:
+		return "txnPrepared"
 	case txnFinalized:
 		return "txnFinalized"
 	default:
