@@ -438,6 +438,38 @@ func TestLogicalStreamIngestionAdvancePTS(t *testing.T) {
 	replicationutils.WaitForPTSProtection(t, ctx, dbA, s, producerJobIDA, now)
 }
 
+// TestLogicalStreamIngestionCancelUpdatesProducerJob tests whether
+// the producer job's OnFailOrCancel updates the the related producer
+// job, resulting in the PTS record being removed.
+func TestLogicalStreamIngestionCancelUpdatesProducerJob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbA.Exec(t, "SET CLUSTER SETTING physical_replication.producer.stream_liveness_track_frequency='50ms'")
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+
+	var jobBID jobspb.JobID
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+
+	now := server.Server(0).Clock().Now()
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	producerJobID := replicationutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
+	jobutils.WaitForJobToRun(t, dbA, producerJobID)
+
+	dbB.Exec(t, "CANCEL JOB $1", jobBID)
+	jobutils.WaitForJobToCancel(t, dbB, jobBID)
+	jobutils.WaitForJobToFail(t, dbA, producerJobID)
+	replicationutils.WaitForPTSProtectionToNotExist(t, ctx, dbA, s, producerJobID)
+}
+
 func TestLogicalStreamIngestionErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
