@@ -366,6 +366,10 @@ func generate() error {
 		if err != nil {
 			return err
 		}
+		err = t.addLogicTests("TestReadCommittedLogic", readCommittedCalc)
+		if err != nil {
+			return err
+		}
 		tenantCalc := logictestbase.ConfigCalculator{
 			ConfigOverrides:       []string{"3node-tenant"},
 			ConfigFilterOverrides: []string{"3node-tenant-multiregion"},
