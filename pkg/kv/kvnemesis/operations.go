@@ -177,6 +177,12 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		w.WriteString(newFctx.receiver)
 		fmt.Fprintf(w, `.SetIsoLevel(isolation.%s)`, o.IsoLevel)
 		formatOps(w, newFctx, o.Ops)
+		if o.Prepare {
+			w.WriteString("\n")
+			w.WriteString(newFctx.indent)
+			w.WriteString(newFctx.receiver)
+			w.WriteString(`.Prepare(ctx)`)
+		}
 		if o.CommitInBatch != nil {
 			newFctx.receiver = `b`
 			o.CommitInBatch.format(w, newFctx)

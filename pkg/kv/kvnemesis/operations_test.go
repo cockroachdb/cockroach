@@ -97,6 +97,13 @@ func TestOperationsFormat(t *testing.T) {
 		},
 		{step: step(barrier(k1, k2, false /* withLAI */))},
 		{step: step(barrier(k3, k4, true /* withLAI */))},
+		{
+			step: step(
+				closureTxnPrepare(ClosureTxnType_Rollback,
+					isolation.ReadCommitted,
+					get(k8),
+				)),
+		},
 	}
 
 	w := echotest.NewWalker(t, datapathutils.TestDataPath(t, t.Name()))

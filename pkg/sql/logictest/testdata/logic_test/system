@@ -10,6 +10,7 @@ test       root  NULL  NULL  {}  NULL
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTT
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system] ORDER BY 2
 ----
@@ -27,6 +28,7 @@ public  locations                        table     node  NULL
 public  migrations                       table     node  NULL
 public  mvcc_statistics                  table     node  NULL
 public  namespace                        table     node  NULL
+public  prepared_transactions            table     node  NULL
 public  privileges                       table     node  NULL
 public  protected_ts_meta                table     node  NULL
 public  protected_ts_records             table     node  NULL
@@ -88,6 +90,7 @@ public  locations                        table     node  NULL
 public  migrations                       table     node  NULL
 public  mvcc_statistics                  table     node  NULL
 public  namespace                        table     node  NULL
+public  prepared_transactions            table     node  NULL
 public  privileges                       table     node  NULL
 public  protected_ts_meta                table     node  NULL
 public  protected_ts_records             table     node  NULL
@@ -135,6 +138,8 @@ public  zones                            table     node  NULL
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query I rowsort
 SELECT id FROM system.descriptor ORDER BY 1
 ----
@@ -195,6 +200,7 @@ SELECT id FROM system.descriptor ORDER BY 1
 64
 65
 66
+67
 100
 101
 102
@@ -263,6 +269,7 @@ SELECT id FROM system.descriptor ORDER BY 1
 64
 65
 66
+67
 100
 101
 102
@@ -399,6 +406,8 @@ system  root   CONNECT  true
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTTB rowsort
 SHOW GRANTS ON system.*
 ----
@@ -497,6 +506,8 @@ system  public  mvcc_statistics                  root    SELECT  true
 system  public  mvcc_statistics                  root    UPDATE  true
 system  public  namespace                        admin   SELECT  true
 system  public  namespace                        root    SELECT  true
+system  public  prepared_transactions            admin   SELECT  true
+system  public  prepared_transactions            root    SELECT  true
 system  public  privileges                       admin   DELETE  true
 system  public  privileges                       admin   INSERT  true
 system  public  privileges                       admin   SELECT  true
@@ -883,6 +894,8 @@ system  public  mvcc_statistics                  root    SELECT  true
 system  public  mvcc_statistics                  root    UPDATE  true
 system  public  namespace                        admin   SELECT  true
 system  public  namespace                        root    SELECT  true
+system  public  prepared_transactions            admin   SELECT  true
+system  public  prepared_transactions            root    SELECT  true
 system  public  privileges                       admin   DELETE  true
 system  public  privileges                       admin   INSERT  true
 system  public  privileges                       admin   SELECT  true

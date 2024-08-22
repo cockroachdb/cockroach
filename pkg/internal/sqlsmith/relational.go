@@ -12,6 +12,7 @@ package sqlsmith
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -109,6 +110,9 @@ var (
 		{1, makeBegin},
 		{1, makeRollback},
 		{2, makeCommit},
+		{1, makePrepare},
+		{1, makeCommitPrepared},
+		{1, makeRollbackPrepared},
 		{1, makeBackup},
 		{1, makeRestore},
 		{1, makeExport},
@@ -1487,6 +1491,55 @@ func makeCommit(s *Smither) (tree.Statement, bool) {
 
 func makeRollback(s *Smither) (tree.Statement, bool) {
 	return &tree.RollbackTransaction{}, true
+}
+
+func makePrepare(s *Smither) (tree.Statement, bool) {
+	txn, ok := addRandomPreparedTxn(s)
+	if !ok {
+		return nil, false
+	}
+	return &tree.PrepareTransaction{Transaction: tree.NewStrVal(txn)}, true
+}
+
+func makeCommitPrepared(s *Smither) (tree.Statement, bool) {
+	txn, ok := removeRandomPreparedTxn(s)
+	if !ok {
+		return nil, false
+	}
+	return &tree.CommitPrepared{Transaction: tree.NewStrVal(txn)}, true
+}
+
+func makeRollbackPrepared(s *Smither) (tree.Statement, bool) {
+	txn, ok := removeRandomPreparedTxn(s)
+	if !ok {
+		return nil, false
+	}
+	return &tree.RollbackPrepared{Transaction: tree.NewStrVal(txn)}, true
+}
+
+func addRandomPreparedTxn(s *Smither) (string, bool) {
+	if len(s.preparedTxns) >= 10 {
+		return "", false // max 10 prepared transactions
+	}
+	var txn string
+	for {
+		txn = util.RandString(s.rnd, s.d9(), letters)
+		if !slices.Contains(s.preparedTxns, txn) {
+			break
+		}
+	}
+	s.preparedTxns = append(s.preparedTxns, txn)
+	return txn, true
+}
+
+func removeRandomPreparedTxn(s *Smither) (string, bool) {
+	if len(s.preparedTxns) == 0 {
+		return "", false
+	}
+	idx := s.rnd.Intn(len(s.preparedTxns))
+	txn := s.preparedTxns[idx]
+	s.preparedTxns = slices.Delete(s.preparedTxns, idx, idx+1)
+	return txn, true
 }
 
 // makeInsert has only one valid reference: its table source, which can be

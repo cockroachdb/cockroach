@@ -209,6 +209,11 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 				}
 				return err
 			}
+			if o.Prepare {
+				if err := txn.Prepare(ctx); err != nil {
+					return err
+				}
+			}
 			if o.CommitInBatch != nil {
 				b := txn.NewBatch()
 				applyBatchOp(ctx, b, txn.CommitInBatch, o.CommitInBatch)

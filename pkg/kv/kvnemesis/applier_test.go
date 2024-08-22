@@ -281,6 +281,18 @@ func TestApplier(t *testing.T) {
 			"txn-si-rollback", step(closureTxn(ClosureTxnType_Rollback, isolation.Snapshot, put(k5, 5))),
 		},
 		{
+			"txn-ssi-prepare-commit", step(closureTxnPrepare(ClosureTxnType_Rollback, isolation.Serializable, put(k5, 5))),
+		},
+		{
+			"txn-si-prepare-commit", step(closureTxnPrepare(ClosureTxnType_Rollback, isolation.Snapshot, put(k5, 5))),
+		},
+		{
+			"txn-ssi-prepare-rollback", step(closureTxnPrepare(ClosureTxnType_Rollback, isolation.Serializable, put(k5, 5))),
+		},
+		{
+			"txn-si-prepare-rollback", step(closureTxnPrepare(ClosureTxnType_Rollback, isolation.Snapshot, put(k5, 5))),
+		},
+		{
 			"split", step(split(k2)),
 		},
 		{

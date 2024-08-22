@@ -106,6 +106,7 @@ const (
 	MVCCStatistics                         SystemTableName = "mvcc_statistics"
 	StmtExecInsightsTableName              SystemTableName = "statement_execution_insights"
 	TxnExecInsightsTableName               SystemTableName = "transaction_execution_insights"
+	PreparedTransactionsTableName          SystemTableName = "prepared_transactions"
 )
 
 // Oid for virtual database and table.

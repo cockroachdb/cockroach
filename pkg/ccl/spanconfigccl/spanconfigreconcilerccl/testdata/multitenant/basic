@@ -42,6 +42,7 @@ state offset=47
 /Table/6{4-5}                              database system (host)
 /Table/6{5-6}                              database system (host)
 /Table/6{6-7}                              database system (host)
+/Table/6{7-8}                              database system (host)
 /Tenant/10{-\x00}                          database system (tenant)
 /Tenant/11{-\x00}                          database system (tenant)
 /Tenant/12{-\x00}                          database system (tenant)
@@ -109,6 +110,7 @@ upsert /Tenant/10/Table/6{3-4}             database system (tenant)
 upsert /Tenant/10/Table/6{4-5}             database system (tenant)
 upsert /Tenant/10/Table/6{5-6}             database system (tenant)
 upsert /Tenant/10/Table/6{6-7}             database system (tenant)
+upsert /Tenant/10/Table/6{7-8}             database system (tenant)
 
 state offset=47
 ----
@@ -133,6 +135,7 @@ state offset=47
 /Table/6{4-5}                              database system (host)
 /Table/6{5-6}                              database system (host)
 /Table/6{6-7}                              database system (host)
+/Table/6{7-8}                              database system (host)
 /Tenant/10{-/Table/4}                      database system (tenant)
 /Tenant/10/Table/{4-5}                     database system (tenant)
 /Tenant/10/Table/{5-6}                     database system (tenant)
@@ -189,6 +192,7 @@ state offset=47
 /Tenant/10/Table/6{4-5}                    database system (tenant)
 /Tenant/10/Table/6{5-6}                    database system (tenant)
 /Tenant/10/Table/6{6-7}                    database system (tenant)
+/Tenant/10/Table/6{7-8}                    database system (tenant)
 /Tenant/11{-\x00}                          database system (tenant)
 /Tenant/12{-\x00}                          database system (tenant)
 
@@ -213,6 +217,7 @@ upsert /Tenant/10/Table/11{3-4}            rangefeed_enabled=true
 state offset=81
 ----
 ...
+/Tenant/10/Table/2{0-1}                    database system (tenant)
 /Tenant/10/Table/2{1-2}                    database system (tenant)
 /Tenant/10/Table/2{3-4}                    database system (tenant)
 /Tenant/10/Table/2{4-5}                    database system (tenant)
@@ -255,6 +260,7 @@ state offset=81
 /Tenant/10/Table/6{4-5}                    database system (tenant)
 /Tenant/10/Table/6{5-6}                    database system (tenant)
 /Tenant/10/Table/6{6-7}                    database system (tenant)
+/Tenant/10/Table/6{7-8}                    database system (tenant)
 /Tenant/10/Table/10{6-7}                   rangefeed_enabled=true
 /Tenant/10/Table/10{7-8}                   rangefeed_enabled=true
 /Tenant/10/Table/11{2-3}                   rangefeed_enabled=true

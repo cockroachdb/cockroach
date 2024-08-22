@@ -79,6 +79,7 @@ type Smither struct {
 	nameGens         map[string]*nameGenInfo
 	nameGenCfg       randidentcfg.Config
 	activeSavepoints []string
+	preparedTxns     []string
 	types            *typeInfo
 
 	stmtWeights, alterWeights          []statementWeight
@@ -363,6 +364,9 @@ var DisableDDLs = simpleOption("disable DDLs", func(s *Smither) {
 		{2, makeRollbackToSavepoint},
 		{2, makeCommit},
 		{2, makeRollback},
+		{1, makePrepare},
+		{1, makeCommitPrepared},
+		{1, makeRollbackPrepared},
 	}
 })
 
