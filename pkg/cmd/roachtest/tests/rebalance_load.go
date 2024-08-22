@@ -98,6 +98,8 @@ func registerRebalanceLoad(r registry.Registry) {
 				mixedversion.ClusterSettingOption(
 					install.ClusterSettingsOption(settings.ClusterSettings),
 				),
+				// Test currently fails in shared-process deployments, see: #129389.
+				mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 			)
 			mvt.OnStartup("maybe enable split/scatter on tenant",
 				func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
