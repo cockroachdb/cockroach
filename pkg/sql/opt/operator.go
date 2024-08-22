@@ -147,6 +147,8 @@ var ComparisonOpReverseMap = map[Operator]treecmp.ComparisonOperatorSymbol{
 	BBoxIntersectsOp: treecmp.Overlaps,
 	TSMatchesOp:      treecmp.TSMatches,
 	AdjacentOp:       treecmp.Adjacent,
+	OverLeftOp:       treecmp.OverLeft,
+	OverRightOp:      treecmp.OverRight,
 }
 
 // BinaryOpReverseMap maps from an optimizer operator type to a semantic tree

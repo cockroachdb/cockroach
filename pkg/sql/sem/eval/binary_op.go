@@ -801,6 +801,42 @@ func (e *evaluator) EvalContainedByInt8RangeOp(
 	return nil, pgerror.Newf(pgcode.Syntax, "contained by for int8range can only work on int8range or int type")
 }
 
+func (e *evaluator) EvalOverLeftInt8RangeOp(
+	ctx context.Context, _ *tree.OverLeftInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	lrange := tree.MustBeDInt8Range(a)
+	rrange := tree.MustBeDInt8Range(b)
+	if lrange.IsEmpty() || rrange.IsEmpty() {
+		return tree.DBoolFalse, nil
+	}
+	cmp, err := lrange.EndBound.CompareAfterNormalization(ctx, e.ctx(), rrange.EndBound)
+	if err != nil {
+		return nil, err
+	}
+	if cmp <= 0 {
+		return tree.DBoolTrue, nil
+	}
+	return tree.DBoolFalse, nil
+}
+
+func (e *evaluator) EvalOverRightInt8RangeOp(
+	ctx context.Context, _ *tree.OverRightInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	lrange := tree.MustBeDInt8Range(a)
+	rrange := tree.MustBeDInt8Range(b)
+	if lrange.IsEmpty() || rrange.IsEmpty() {
+		return tree.DBoolFalse, nil
+	}
+	cmp, err := lrange.StartBound.CompareAfterNormalization(ctx, e.ctx(), rrange.StartBound)
+	if err != nil {
+		return nil, err
+	}
+	if cmp >= 0 {
+		return tree.DBoolTrue, nil
+	}
+	return tree.DBoolFalse, nil
+}
+
 func (e *evaluator) EvalContainsArrayOp(
 	ctx context.Context, _ *tree.ContainsArrayOp, a, b tree.Datum,
 ) (tree.Datum, error) {

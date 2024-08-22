@@ -425,3 +425,9 @@ type IntersectInt8RangeOp struct{}
 
 // DiffInt8RangeOp is a BinaryEvalOp.
 type DiffInt8RangeOp struct{}
+
+// OverLeftInt8RangeOp is a BinaryEvalOp.
+type OverLeftInt8RangeOp struct{}
+
+// OverRightInt8RangeOp is a BinaryEvalOp.
+type OverRightInt8RangeOp struct{}

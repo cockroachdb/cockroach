@@ -816,6 +816,10 @@ func (b *Builder) constructComparison(
 
 	case treecmp.Adjacent:
 		return b.factory.ConstructAdjacent(left, right)
+	case treecmp.OverLeft:
+		return b.factory.ConstructOverLeft(left, right)
+	case treecmp.OverRight:
+		return b.factory.ConstructOverRight(left, right)
 	}
 	panic(errors.AssertionFailedf("unhandled comparison operator: %s", redact.Safe(cmp.Operator)))
 }

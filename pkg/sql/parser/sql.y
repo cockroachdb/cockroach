@@ -1007,7 +1007,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %token <str> NOVIEWACTIVITY NOVIEWACTIVITYREDACTED NOVIEWCLUSTERSETTING NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR OLD OLD_KMS ON ONLY OPT OPTION OPTIONS OR
-%token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
+%token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OVERLEFT OVERRIGHT OWNED OWNER OPERATOR
 
 %token <str> PARALLEL PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PER PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
@@ -1798,7 +1798,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 // funny behavior of UNBOUNDED on the SQL standard, though.
 %nonassoc  UNBOUNDED         // ideally should have same precedence as IDENT
 %nonassoc  IDENT NULL PARTITION RANGE ROWS GROUPS PRECEDING FOLLOWING CUBE ROLLUP
-%left      CONCAT FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH REMOVE_PATH AT_AT DISTANCE COS_DISTANCE NEG_INNER_PRODUCT ADJACENT // multi-character ops
+%left      CONCAT FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH REMOVE_PATH AT_AT DISTANCE COS_DISTANCE NEG_INNER_PRODUCT ADJACENT OVERLEFT OVERRIGHT // multi-character ops
 %left      '|'
 %left      '#'
 %left      '&'
@@ -15326,6 +15326,14 @@ a_expr:
 	{
 		$$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.Adjacent), Left: $1.expr(), Right: $3.expr()}
 	}
+| a_expr OVERLEFT a_expr
+  {
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.OverLeft), Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr OVERRIGHT a_expr
+  {
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.OverRight), Left: $1.expr(), Right: $3.expr()}
+  }
 | a_expr DISTANCE a_expr
   {
     $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Distance), Left: $1.expr(), Right: $3.expr()}
@@ -16557,6 +16565,8 @@ all_op:
 | '~' { $$.val = tree.MakeUnaryOperator(tree.UnaryComplement) }
 | SQRT { $$.val = tree.MakeUnaryOperator(tree.UnarySqrt) }
 | CBRT { $$.val = tree.MakeUnaryOperator(tree.UnaryCbrt) }
+| OVERLEFT { $$.val = treecmp.MakeComparisonOperator(treecmp.OverLeft) }
+| OVERRIGHT { $$.val = treecmp.MakeComparisonOperator(treecmp.OverRight) }
 
 operator_op:
   all_op

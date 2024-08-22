@@ -496,6 +496,17 @@ define Adjacent {
     Right ScalarExpr
 }
 
+[Scalar, Bool, Comparison]
+define OverLeft {
+    Left ScalarExpr
+    Right ScalarExpr
+}
+
+[Scalar, Bool, Comparison]
+define OverRight {
+    Left ScalarExpr
+    Right ScalarExpr
+}
 
 # BBoxCovers is the ~ operator when used with geometry or bounding box
 # operands. It maps to tree.RegMatch.
