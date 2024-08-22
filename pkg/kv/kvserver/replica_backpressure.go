@@ -43,7 +43,7 @@ var backpressureRangeSizeMultiplier = settings.RegisterFloatSetting(
 // size where backpressure would kick in by more than this quantity will
 // immediately avoid backpressure. This approach is a bit risky because a
 // command larger than this value would effectively disable backpressure
-// altogether. Another downside of this approach is that if the range size
+// altogether[1]. Another downside of this approach is that if the range size
 // is reduced by roughly exactly the multiplier then we'd potentially have
 // lots of ranges in this state.
 //
@@ -60,13 +60,17 @@ var backpressureRangeSizeMultiplier = settings.RegisterFloatSetting(
 //  2. We assign a higher priority in the snapshot queue to ranges which are
 //     currently backpressuring than ranges which are larger but are not
 //     applying backpressure.
+//
+// [1] As such, the default value of this setting is configured to match the
+// default value of MaxCommandSize. This prevents a single raft command from
+// effectively disabling batching in the default case.
 var backpressureByteTolerance = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kv.range.backpressure_byte_tolerance",
 	"defines the number of bytes above the product of "+
 		"backpressure_range_size_multiplier and the range_max_size at which "+
 		"backpressure will not apply",
-	32<<20 /* 32 MiB */)
+	64<<20 /* 64 MiB */)
 
 // backpressureBelowLatchingEnabled dictates whether write requests check
 // whether they need to bail evaluating and backpressure instead after acquiring
