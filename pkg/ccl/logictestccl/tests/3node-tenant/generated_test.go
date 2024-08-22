@@ -654,6 +654,13 @@ func TestTenantLogic_drop_database(
 	runLogicTest(t, "drop_database")
 }
 
+func TestTenantLogic_drop_function(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_function")
+}
+
 func TestTenantLogic_drop_index(
 	t *testing.T,
 ) {

@@ -397,9 +397,6 @@ func (p ParamTypes) MatchAt(typ *types.T, i int) bool {
 
 // MatchAtIdentical is part of the TypeList interface.
 func (p ParamTypes) MatchAtIdentical(typ *types.T, i int) bool {
-	if typ.Family() == types.TupleFamily {
-		typ = types.AnyTuple
-	}
 	return i < len(p) && (typ.Family() == types.UnknownFamily || p[i].Typ.Identical(typ))
 }
 
