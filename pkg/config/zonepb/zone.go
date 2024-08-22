@@ -345,10 +345,16 @@ func (z *ZoneConfig) ValidateTandemFields() error {
 	return nil
 }
 
-// MinRangeMaxBytes is the minimum value for range max bytes.
+// minRangeMaxBytes is the minimum value for range max bytes.
 // The default, 64 MiB, is half of the default range_min_bytes
 var minRangeMaxBytes = envutil.EnvOrDefaultInt64("COCKROACH_MIN_RANGE_MAX_BYTES",
 	64<<20 /* 64 MiB */)
+
+// maxRangeMaxBytes is the maximum value for range max bytes. The default, 8
+// GiB, is sixteen times the default range_max_bytes. Also see
+// kv.range.range_size_hard_cap.
+var maxRangeMaxBytes = envutil.EnvOrDefaultInt64("COCKROACH_MAX_RANGE_MAX_BYTES",
+	8<<30 /* 8 GiB */)
 
 func TestingSetMinRangeMaxBytes(v int64) func() {
 	old := minRangeMaxBytes
@@ -400,6 +406,12 @@ func (z *ZoneConfig) Validate() error {
 	if z.RangeMaxBytes != nil && *z.RangeMaxBytes < minRangeMaxBytes {
 		return fmt.Errorf("RangeMaxBytes %d less than minimum allowed %d",
 			*z.RangeMaxBytes, minRangeMaxBytes)
+	}
+
+	if z.RangeMaxBytes != nil && *z.RangeMaxBytes > maxRangeMaxBytes {
+		return fmt.Errorf("RangeMaxBytes %d greater than maximum allowed %d",
+			*z.RangeMaxBytes, minRangeMaxBytes,
+		)
 	}
 
 	if z.RangeMinBytes != nil && *z.RangeMinBytes < 0 {
