@@ -147,8 +147,10 @@ func (m *Metrics) makeLabels(k peerKey, remoteLocality roachpb.Locality) []strin
 	}
 
 	childLabels := []string{}
+
 	matching := true
 	for i := 0; i < length; i++ {
+		childLabels = append(childLabels, m.locality.Tiers[i].Value)
 		if matching {
 			childLabels = append(childLabels, remoteLocality.Tiers[i].Value)
 			if m.locality.Tiers[i].Value != remoteLocality.Tiers[i].Value {
@@ -161,6 +163,7 @@ func (m *Metrics) makeLabels(k peerKey, remoteLocality roachpb.Locality) []strin
 	}
 	// Pad with empty strings if the remote locality is shorter than ours.
 	for i := length; i < localLen; i++ {
+		childLabels = append(childLabels, m.locality.Tiers[i].Value)
 		childLabels = append(childLabels, "")
 	}
 	return childLabels
@@ -170,7 +173,8 @@ func newMetrics(locality roachpb.Locality) *Metrics {
 	childLabels := []string{"remote_node_id", "remote_addr", "class"}
 	localityLabels := []string{}
 	for _, tier := range locality.Tiers {
-		localityLabels = append(localityLabels, tier.Key)
+		localityLabels = append(localityLabels, "source_"+tier.Key)
+		localityLabels = append(localityLabels, "destination_"+tier.Key)
 	}
 	m := Metrics{
 		locality:                      locality,
