@@ -28,7 +28,7 @@ func (p *planner) SetSessionCharacteristics(
 	upgradedLevel := false
 	upgradedDueToLicense := false
 	allowReadCommitted := allowReadCommittedIsolation.Get(&p.execCfg.Settings.SV)
-	allowSnapshot := allowSnapshotIsolation.Get(&p.execCfg.Settings.SV)
+	allowRepeatableRead := allowRepeatableReadIsolation.Get(&p.execCfg.Settings.SV)
 	hasLicense := base.CCLDistributionAndEnterpriseEnabled(p.ExecCfg().Settings)
 	if err := p.sessionDataMutatorIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
 		// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... '.
@@ -49,16 +49,13 @@ func (p *planner) SetSessionCharacteristics(
 				}
 			}
 			m.SetDefaultTransactionIsolationLevel(level)
-		case tree.RepeatableReadIsolation:
-			upgradedLevel = true
-			fallthrough
-		case tree.SnapshotIsolation:
+		case tree.RepeatableReadIsolation, tree.SnapshotIsolation:
 			level := tree.SerializableIsolation
-			if allowSnapshot && hasLicense {
+			if allowRepeatableRead && hasLicense {
 				level = tree.SnapshotIsolation
 			} else {
 				upgradedLevel = true
-				if allowSnapshot && !hasLicense {
+				if allowRepeatableRead && !hasLicense {
 					upgradedDueToLicense = true
 				}
 			}
