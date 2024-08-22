@@ -356,6 +356,8 @@ func RestartNodesWithNewBinary(
 	newVersion *Version,
 	settings ...install.ClusterSettingOption,
 ) error {
+	const gracePeriod = 300 // 5 minutes
+
 	// NB: We could technically stage the binary on all nodes before
 	// restarting each one, but on Unix it's invalid to write to an
 	// executable file while it is currently running. So we do the
@@ -376,7 +378,9 @@ func RestartNodesWithNewBinary(
 		// this upgraded node for DistSQL plans (see #87154 for more details).
 		// TODO(yuzefovich): ideally, we would also check that the drain was
 		// successful since if it wasn't, then we might see flakes too.
-		if err := c.StopCockroachGracefullyOnNode(ctx, l, node); err != nil {
+		if err := c.StopE(
+			ctx, l, option.NewStopOpts(option.Graceful(gracePeriod)), c.Node(node),
+		); err != nil {
 			return err
 		}
 

@@ -66,5 +66,5 @@ func StopServiceForVirtualCluster(
 	}
 
 	label := install.VirtualClusterLabel(stopOpts.VirtualClusterName, stopOpts.SQLInstance)
-	return c.Stop(ctx, l, stopOpts.Sig, stopOpts.Wait, stopOpts.MaxWait, label)
+	return c.Stop(ctx, l, stopOpts.Sig, stopOpts.Wait, stopOpts.GracePeriod, label)
 }
