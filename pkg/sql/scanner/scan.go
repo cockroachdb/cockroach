@@ -462,6 +462,15 @@ func (s *SQLScanner) Scan(lval ScanSymType) {
 			s.pos++
 			lval.SetID(lexbase.FETCHVAL)
 			return
+		case '|':
+
+			// -|-
+			if s.peekN(1) == '-' {
+				s.pos += 2
+				lval.SetID(lexbase.ADJACENT)
+			}
+			return
+
 		}
 		return
 

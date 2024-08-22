@@ -411,3 +411,5 @@ type ContainsInt8RangeOp struct{}
 
 // ContainedByInt8RangeOp is a BinaryEvalOp.
 type OverlapByInt8RangeOp struct{}
+
+type AdjacentInt8RangeOp struct{}

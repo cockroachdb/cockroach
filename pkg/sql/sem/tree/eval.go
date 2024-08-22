@@ -2080,6 +2080,16 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 			Volatility: volatility.Immutable,
 		},
 	}},
+	treecmp.Adjacent: {
+		overloads: []*CmpOp{
+			{
+				LeftType:   types.Int8Range,
+				RightType:  types.Int8Range,
+				EvalOp:     &AdjacentInt8RangeOp{},
+				Volatility: volatility.Immutable,
+			},
+		},
+	},
 })
 
 func makeBox2DComparisonOperators(op func(lhs, rhs *geo.CartesianBoundingBox) bool) []*CmpOp {

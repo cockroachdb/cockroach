@@ -141,6 +141,11 @@
 <tr><td>jsonb <code>->></code> <a href="string.html">string</a></td><td><a href="string.html">string</a></td></tr>
 </tbody></table>
 <table><thead>
+<tr><td><code>-|-</code></td><td>Return</td></tr>
+</thead><tbody>
+<tr><td>int8range <code>-|-</code> int8range</td><td><a href="bool.html">bool</a></td></tr>
+</tbody></table>
+<table><thead>
 <tr><td><code>/</code></td><td>Return</td></tr>
 </thead><tbody>
 <tr><td><a href="decimal.html">decimal</a> <code>/</code> <a href="decimal.html">decimal</a></td><td><a href="decimal.html">decimal</a></td></tr>

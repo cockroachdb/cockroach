@@ -55,6 +55,7 @@ type UnaryOpEvaluator interface {
 
 // UnaryOpEvaluator knows how to evaluate BinaryEvalOps.
 type BinaryOpEvaluator interface {
+	EvalAdjacentInt8RangeOp(context.Context, *AdjacentInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalAppendToMaybeNullArrayOp(context.Context, *AppendToMaybeNullArrayOp, Datum, Datum) (Datum, error)
 	EvalBitAndINetOp(context.Context, *BitAndINetOp, Datum, Datum) (Datum, error)
 	EvalBitAndIntOp(context.Context, *BitAndIntOp, Datum, Datum) (Datum, error)
@@ -252,6 +253,11 @@ func (op *UnaryMinusIntOp) Eval(ctx context.Context, e OpEvaluator, v Datum) (Da
 // Eval is part of the UnaryEvalOp interface.
 func (op *UnaryMinusIntervalOp) Eval(ctx context.Context, e OpEvaluator, v Datum) (Datum, error) {
 	return e.EvalUnaryMinusIntervalOp(ctx, op, v)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *AdjacentInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalAdjacentInt8RangeOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.

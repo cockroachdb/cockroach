@@ -83,6 +83,47 @@ func (e *evaluator) EvalOverlapByInt8RangeOp(
 
 }
 
+func (e *evaluator) EvalAdjacentInt8RangeOp(
+	_ context.Context, _ *tree.AdjacentInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	rRange := tree.MustBeDInt8Range(b)
+	rSBInt := math.MinInt64
+	rEBInt := math.MaxInt64
+	if intVal, ok := tree.AsDInt(rRange.StartBound.Val); ok {
+		rSBInt = int(intVal)
+	}
+	if intVal, ok := tree.AsDInt(rRange.EndBound.Val); ok {
+		rEBInt = int(intVal)
+	}
+
+	lRange, isInt8Range := tree.AsDInt8Range(a)
+
+	if !isInt8Range {
+		return nil, pgerror.Newf(pgcode.Syntax, "overlap for int8range can only work on int8range")
+	}
+
+	lSBInt := math.MinInt64
+	lEBInt := math.MaxInt64
+
+	if intVal, ok := tree.AsDInt(lRange.StartBound.Val); ok {
+		lSBInt = int(intVal)
+	}
+
+	if intVal, ok := tree.AsDInt(lRange.EndBound.Val); ok {
+		lEBInt = int(intVal)
+	}
+
+	if lEBInt != math.MaxInt64 && lEBInt == rSBInt {
+		return tree.DBoolTrue, nil
+	}
+
+	if rEBInt != math.MaxInt64 && rEBInt == lSBInt {
+		return tree.DBoolTrue, nil
+	}
+
+	return tree.DBoolFalse, nil
+}
+
 func (e *evaluator) EvalAppendToMaybeNullArrayOp(
 	ctx context.Context, op *tree.AppendToMaybeNullArrayOp, a, b tree.Datum,
 ) (tree.Datum, error) {

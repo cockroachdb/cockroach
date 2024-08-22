@@ -936,7 +936,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 // below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str> ABORT ABSOLUTE ACCESS ACTION ADD ADMIN AFTER AGGREGATE
+%token <str> ABORT ABSOLUTE ACCESS ACTION ADD ADMIN AFTER AGGREGATE ADJACENT
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC AS_JSON AT_AT
 %token <str> ASENSITIVE ASYMMETRIC AT ATOMIC ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
 
@@ -1798,7 +1798,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 // funny behavior of UNBOUNDED on the SQL standard, though.
 %nonassoc  UNBOUNDED         // ideally should have same precedence as IDENT
 %nonassoc  IDENT NULL PARTITION RANGE ROWS GROUPS PRECEDING FOLLOWING CUBE ROLLUP
-%left      CONCAT FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH REMOVE_PATH AT_AT DISTANCE COS_DISTANCE NEG_INNER_PRODUCT // multi-character ops
+%left      CONCAT FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH REMOVE_PATH AT_AT DISTANCE COS_DISTANCE NEG_INNER_PRODUCT ADJACENT // multi-character ops
 %left      '|'
 %left      '#'
 %left      '&'
@@ -15322,6 +15322,10 @@ a_expr:
   {
     $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.TSMatches), Left: $1.expr(), Right: $3.expr()}
   }
+| a_expr ADJACENT a_expr
+	{
+		$$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.Adjacent), Left: $1.expr(), Right: $3.expr()}
+	}
 | a_expr DISTANCE a_expr
   {
     $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Distance), Left: $1.expr(), Right: $3.expr()}
@@ -16546,6 +16550,7 @@ all_op:
 | NOT_REGIMATCH { $$.val = treecmp.MakeComparisonOperator(treecmp.NotRegIMatch) }
 | AND_AND { $$.val = treecmp.MakeComparisonOperator(treecmp.Overlaps) }
 | AT_AT { $$.val = treecmp.MakeComparisonOperator(treecmp.TSMatches) }
+| ADJACENT { $$.val = treecmp.MakeComparisonOperator(treecmp.Adjacent) }
 | DISTANCE { $$.val = treebin.MakeBinaryOperator(treebin.Distance) }
 | COS_DISTANCE { $$.val = treebin.MakeBinaryOperator(treebin.CosDistance) }
 | NEG_INNER_PRODUCT { $$.val = treebin.MakeBinaryOperator(treebin.NegInnerProduct) }

@@ -490,6 +490,13 @@ define Overlaps {
     Right ScalarExpr
 }
 
+[Scalar, Bool, Comparison]
+define Adjacent {
+    Left ScalarExpr
+    Right ScalarExpr
+}
+
+
 # BBoxCovers is the ~ operator when used with geometry or bounding box
 # operands. It maps to tree.RegMatch.
 [Scalar, Bool, Comparison]
