@@ -20,6 +20,10 @@ stabilize
 ----
 ok
 
+bump-epoch 1
+----
+ok
+
 log-level debug
 ----
 ok
@@ -37,7 +41,7 @@ stabilize
 > 2 handling Ready
   Ready MustSync=true:
   State:StateCandidate
-  HardState Term:2 Vote:2 Commit:11 Lead:0 LeadEpoch:1
+  HardState Term:2 Vote:2 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   2->1 MsgVote Term:2 Log:1/11
   2->3 MsgVote Term:2 Log:1/11
@@ -128,7 +132,7 @@ stabilize
   INFO 1 [term: 2] ignored a MsgHeartbeatResp message with lower term from 3 [term: 1]
 > 1 handling Ready
   Ready MustSync=true:
-  HardState Term:2 Commit:11 Lead:0 LeadEpoch:1
+  HardState Term:2 Commit:11 Lead:0 LeadEpoch:0
 
 # Other nodes can now successfully campaign. Note that we haven't ticked 3, so
 # it won't grant votes.
@@ -142,7 +146,7 @@ INFO 2 [logterm: 1, index: 11] sent MsgVote request to 3 at term 3
 process-ready 2
 ----
 Ready MustSync=true:
-HardState Term:3 Vote:2 Commit:11 Lead:0 LeadEpoch:1
+HardState Term:3 Vote:2 Commit:11 Lead:0 LeadEpoch:0
 Messages:
 2->1 MsgVote Term:3 Log:1/11
 2->3 MsgVote Term:3 Log:1/11
@@ -165,7 +169,7 @@ stabilize
 ----
 > 1 handling Ready
   Ready MustSync=true:
-  HardState Term:3 Vote:2 Commit:11 Lead:0 LeadEpoch:1
+  HardState Term:3 Vote:2 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   1->2 MsgVoteResp Term:3 Log:0/0
 > 2 receiving messages

@@ -794,12 +794,23 @@ func (r *raft) maybeCommit() bool {
 
 func (r *raft) reset(term uint64) {
 	if r.Term != term {
+		// NB: There are state transitions where reset may be called on a follower
+		// that supports a fortified leader. One example is when a follower is
+		// supporting the old leader, but the quorum isn't, so a new leader is
+		// elected. this case, the follower that's supporting the old leader will
+		// eventually hear from the new leader and call reset with the new leader's
+		// term. Naively, this would trip this assertion -- however, in this
+		// case[*], we expect a call to deFortify first.
+		//
+		// [*] this case, and other cases where a state transition implies
+		// de-fortification.
+		assertTrue(!r.supportingFortifiedLeader(),
+			"should not be changing terms when supporting a fortified leader")
 		r.Term = term
 		r.Vote = None
+		r.lead = None
+		r.leadEpoch = 0
 	}
-
-	// TODO(arul): we should only reset this if the term has changed.
-	r.lead = None
 
 	r.electionElapsed = 0
 	r.heartbeatElapsed = 0
@@ -950,6 +961,7 @@ func (r *raft) becomePreCandidate() {
 	// revoked StoreLiveness support for the leader's store to begin with. It's
 	// a bit weird from the perspective of raft though. See if we can avoid this.
 	r.lead = None
+	r.leadEpoch = 0
 	r.state = StatePreCandidate
 	r.logger.Infof("%x became pre-candidate at term %d", r.id, r.Term)
 }
@@ -998,6 +1010,7 @@ func (r *raft) hup(t CampaignType) {
 		r.logger.Debugf("%x ignoring MsgHup because already leader", r.id)
 		return
 	}
+
 	// TODO(arul): we will eventually want some kind of logic like this.
 	//
 	//if r.supportingFortifiedLeader() && t != campaignTransfer {
@@ -1158,9 +1171,26 @@ func (r *raft) Step(m pb.Message) error {
 		default:
 			r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d]",
 				r.id, r.Term, m.Type, m.From, m.Term)
-			if m.Type == pb.MsgApp || m.Type == pb.MsgHeartbeat || m.Type == pb.MsgSnap {
+			switch m.Type {
+			case pb.MsgApp, pb.MsgHeartbeat, pb.MsgSnap, pb.MsgFortifyLeader:
+				// We've just received a message from the new leader which was elected
+				// at a higher term. The old leader's fortification support has expired,
+				// so it's safe to defortify at this point.
+				r.deFortify(m.From, m.Term)
 				r.becomeFollower(m.Term, m.From)
-			} else {
+			case pb.MsgVote:
+				force := bytes.Equal(m.Context, []byte(campaignTransfer))
+				if force {
+					// The leader has asked another follower to campaign. In doing so,
+					// the leader can be thought of as "defortifying".
+					r.deFortify(r.lead, m.Term)
+				}
+				// TODO(arul): Once we start rejecting MsgVotes when we support a
+				// fortified leader we'll never get here. At that point, we can get
+				// rid of this hack.
+				r.deFortify(r.lead, m.Term)
+				r.becomeFollower(m.Term, None)
+			default:
 				r.becomeFollower(m.Term, None)
 			}
 		}
@@ -1763,6 +1793,7 @@ func stepFollower(r *raft, m pb.Message) error {
 		}
 		r.logger.Infof("%x forgetting leader %x at term %d", r.id, r.lead, r.Term)
 		r.lead = None
+		r.leadEpoch = 0
 	case pb.MsgTimeoutNow:
 		// TODO(nvanbenschoten): we will eventually want some kind of logic like
 		// this. However, even this may not be enough, because we're calling a
@@ -1778,6 +1809,12 @@ func stepFollower(r *raft, m pb.Message) error {
 		// Leadership transfers never use pre-vote even if r.preVote is true; we
 		// know we are not recovering from a partition so there is no need for the
 		// extra round trip.
+		// TODO(nvanbenschoten): Once the TODO above is addressed, and assuming its
+		// handled by ensuring MsgTimeoutNow only comes from the leader, we should
+		// be able to replace this leadEpoch assignment with a call to deFortify.
+		// Currently, it may panic because only the leader should be able to
+		// de-fortify without bumping the term.
+		r.leadEpoch = 0
 		r.hup(campaignTransfer)
 	}
 	return nil
@@ -1957,6 +1994,15 @@ func (r *raft) handleFortifyResp(m pb.Message) {
 	assertTrue(r.state == StateLeader, "only leaders should be handling fortification responses")
 	// TODO(arul): record support once
 	// https://github.com/cockroachdb/cockroach/issues/125264 lands.
+}
+
+// deFortify (conceptually) revokes previously provided fortification support to
+// a leader.
+func (r *raft) deFortify(from pb.PeerID, term uint64) {
+	assertTrue(term > r.Term || (term == r.Term && from == r.lead),
+		"can only defortify at current term if told by the leader",
+	)
+	r.leadEpoch = 0
 }
 
 // restore recovers the state machine from a snapshot. It restores the log and the
