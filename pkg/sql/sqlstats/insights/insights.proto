@@ -138,9 +138,13 @@ message Statement {
   // KVNodeIDs is the ordered list of KV node ids which were used to evaluate KV
   // read requests.
   repeated int32 kv_node_ids = 26 [(gogoproto.customname) = "KVNodeIDs"];
-	string comments = 27;
+	repeated SqlCommenterTag sql_commenter_tags = 27;
 }
 
+message SqlCommenterTag {
+  string name = 1 ;
+  string value = 2 ;
+}
 
 message Insight {
   Session session = 1 [(gogoproto.nullable) = false];

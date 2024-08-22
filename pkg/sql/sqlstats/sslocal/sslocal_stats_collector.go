@@ -271,7 +271,7 @@ func (s *StatsCollector) ObserveStatement(
 		CPUSQLNanos:          cpuSQLNanos,
 		ErrorCode:            errorCode,
 		ErrorMsg:             errorMsg,
-		Comments:             value.Comments,
+		SqlCommenterTags:     value.Comments,
 	}
 	if s.knobs != nil && s.knobs.InsightsWriterStmtInterceptor != nil {
 		s.knobs.InsightsWriterStmtInterceptor(value.SessionID, &insight)

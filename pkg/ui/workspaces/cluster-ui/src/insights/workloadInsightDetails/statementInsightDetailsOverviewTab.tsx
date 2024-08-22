@@ -31,7 +31,7 @@ import { CockroachCloudContext } from "../../contexts";
 import { WaitTimeInsightsLabels } from "../../detailsPanels/waitTimeInsightsPanel";
 import { SortSetting } from "../../sortedtable";
 import { Timestamp } from "../../timestamp";
-import { StmtInsightEvent } from "../types";
+import { SQLComment, StmtInsightEvent } from "../types";
 import { getStmtInsightRecommendations } from "../utils";
 import {
   StatementDetailsLink,
@@ -177,6 +177,23 @@ export const StatementInsightDetailsOverviewTab: React.FC<
               value={StatementDetailsLink(insightDetails)}
             />
           </SummaryCard>
+        </Col>
+      </Row>
+      <Row gutter={24}>
+        <Col span={12}>
+          <SummaryCard>
+						<SummaryCardItem
+							label="SQLCommenter Tags"
+							value={insightDetails?.comments?.length ?? 0}
+						/>
+						<p className={summaryCardStylesCx("summary--card__divider")} />
+						{insightDetails?.comments?.map((comment: SQLComment) => (
+							<SummaryCardItem
+								label={comment.name}
+								value={comment.value}
+							/>
+						))}
+					</SummaryCard>
         </Col>
       </Row>
       <Row gutter={24}>

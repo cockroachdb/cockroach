@@ -113,6 +113,11 @@ export type TxnInsightDetails = {
   statements?: StmtInsightEvent[];
 };
 
+export type SQLComment = {
+  name: string;
+  value: string;
+};
+
 // Shown on the stmt insights overview page.
 export type StmtInsightEvent = InsightEventBase & {
   statementExecutionID: string;
@@ -125,7 +130,7 @@ export type StmtInsightEvent = InsightEventBase & {
   execType?: InsightExecEnum;
   status: StatementStatus;
   errorMsg?: string;
-	comments?: string;
+	comments?: SQLComment[];
 };
 
 export type Insight = {

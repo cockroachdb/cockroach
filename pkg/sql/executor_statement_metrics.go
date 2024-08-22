@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -215,7 +216,7 @@ func (ex *connExecutor) recordStatementSummary(
 		ExecStats:            queryLevelStats,
 		Indexes:              planner.instrumentation.indexesUsed,
 		Database:             planner.SessionData().Database,
-		Comments:             "/*application=microsvc/ten1",
+		Comments:             []*insights.SqlCommenterTag{{Name: "application", Value: "microservice1"}},
 	}
 
 	stmtFingerprintID, err :=

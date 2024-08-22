@@ -13,6 +13,7 @@ import moment from "moment-timezone";
 import {
   ContentionDetails,
   InsightExecEnum,
+  SQLComment,
   StatementStatus,
   StmtInsightEvent,
 } from "src/insights/types";
@@ -70,7 +71,7 @@ export type StmtInsightsResponseRow = {
   cpu_sql_nanos: number;
   error_code: string;
   last_error_redactable: string;
-	comments: string;
+	comments: SQLComment[];
   status: StatementStatus;
 };
 
