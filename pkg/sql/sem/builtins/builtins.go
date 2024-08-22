@@ -4104,20 +4104,20 @@ value if you rely on the HLC for accuracy.`,
 				var startBoundInt, endBoundInt tree.DInt
 
 				if args[0] == tree.DNull {
-					startBound = tree.DNull
+					startBound = tree.NewDInt(tree.DInt(math.MinInt64))
 				} else {
 					startBoundInt = tree.MustBeDInt(args[0])
 					startBound = &startBoundInt
 				}
 
 				if args[1] == tree.DNull {
-					endBound = tree.DNull
+					endBound = tree.NewDInt(tree.DInt(math.MaxInt64))
 				} else {
 					endBoundInt = tree.MustBeDInt(args[1])
 					endBound = &endBoundInt
 				}
 
-				if (startBound != tree.DNull && endBound != tree.DNull) && int64(endBoundInt)-int64(startBoundInt) < 0 {
+				if int64(endBoundInt)-int64(startBoundInt) < 0 {
 					return nil, errors.New("range lower bound must be less than or equal to range upper bound")
 				}
 

@@ -1098,6 +1098,13 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			EvalOp:     &MultPGVectorOp{},
 			Volatility: volatility.Immutable,
 		},
+		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int8Range,
+			ReturnType: types.Int8Range,
+			EvalOp:     &IntersectInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
 	}},
 
 	treebin.Div: {overloads: []*BinOp{

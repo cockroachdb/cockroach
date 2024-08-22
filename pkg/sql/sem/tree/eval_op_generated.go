@@ -95,6 +95,7 @@ type BinaryOpEvaluator interface {
 	EvalFloorDivIntDecimalOp(context.Context, *FloorDivIntDecimalOp, Datum, Datum) (Datum, error)
 	EvalFloorDivIntOp(context.Context, *FloorDivIntOp, Datum, Datum) (Datum, error)
 	EvalInTupleOp(context.Context, *InTupleOp, Datum, Datum) (Datum, error)
+	EvalIntersectInt8RangeOp(context.Context, *IntersectInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalJSONAllExistsOp(context.Context, *JSONAllExistsOp, Datum, Datum) (Datum, error)
 	EvalJSONExistsOp(context.Context, *JSONExistsOp, Datum, Datum) (Datum, error)
 	EvalJSONFetchTextIntOp(context.Context, *JSONFetchTextIntOp, Datum, Datum) (Datum, error)
@@ -456,6 +457,11 @@ func (op *FloorDivIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (D
 // Eval is part of the BinaryEvalOp interface.
 func (op *InTupleOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalInTupleOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *IntersectInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalIntersectInt8RangeOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.

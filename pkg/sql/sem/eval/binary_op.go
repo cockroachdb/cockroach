@@ -530,6 +530,61 @@ func (e *evaluator) EvalContainedByJsonbOp(
 	return tree.MakeDBool(tree.DBool(c)), nil
 }
 
+func (e *evaluator) EvalIntersectInt8RangeOp(
+	ctx context.Context, _ *tree.IntersectInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+
+	aRange := tree.MustBeDInt8Range(a)
+	bRange := tree.MustBeDInt8Range(b)
+
+	hasIntersect, err := aRange.HasIntersection(ctx, e.ctx(), b)
+	if err != nil {
+		return nil, err
+	}
+
+	if !hasIntersect {
+		return tree.EmptyDInt8Range, nil
+	}
+
+	var largerSB, smallerEB tree.RangeBound
+	// Compare SB with SB, EB with EB.
+	sbCmpRes, err := aRange.StartBound.Val.Compare(ctx, e.ctx(), bRange.StartBound.Val)
+	if err != nil {
+		return nil, err
+	}
+	switch sbCmpRes {
+	// a > b
+	case 1:
+		largerSB = aRange.StartBound
+	case -1:
+		largerSB = bRange.StartBound
+	case 0:
+		largerSB = aRange.StartBound
+		if bRange.StartBound.Typ == tree.RangeBoundOpen {
+			largerSB = bRange.StartBound
+		}
+	}
+
+	ebCmpRes, err := aRange.EndBound.Val.Compare(ctx, e.ctx(), bRange.EndBound.Val)
+	if err != nil {
+		return nil, err
+	}
+	switch ebCmpRes {
+	// a > b
+	case 1:
+		smallerEB = bRange.EndBound
+	case -1:
+		smallerEB = aRange.EndBound
+	case 0:
+		smallerEB = aRange.EndBound
+		if bRange.StartBound.Typ == tree.RangeBoundClose {
+			smallerEB = bRange.EndBound
+		}
+	}
+
+	return tree.NewDInt8Range(largerSB.Val, smallerEB.Val, largerSB.Typ, smallerEB.Typ), nil
+}
+
 func (e *evaluator) EvalContainsInt8RangeOp(
 	ctx context.Context, _ *tree.ContainsInt8RangeOp, a, b tree.Datum,
 ) (tree.Datum, error) {

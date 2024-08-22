@@ -419,3 +419,5 @@ type StrictRightInt8RangeOp struct{}
 type StrictLeftInt8RangeOp struct{}
 
 type PlusInt8RangeOp struct{}
+
+type IntersectInt8RangeOp struct{}

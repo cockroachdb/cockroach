@@ -2036,6 +2036,7 @@ func MustBeDInt8Range(e Expr) DInt8Range {
 	return i
 }
 
+// TODO(janexing): is it ever possible to have inf as the start bound and/or -inf as the end bound?
 func ParseInt8Range(s string) (*DInt8Range, error) {
 	startVal, endVal, err := int8range.ParseInt8Range(s)
 	if err != nil {
@@ -2045,18 +2046,21 @@ func ParseInt8Range(s string) (*DInt8Range, error) {
 
 	var startOut, endOut Datum
 	startOut, endOut = NewDInt(DInt(startVal)), NewDInt(DInt(endVal))
-	if startVal == math.MinInt64 {
-		startOut = DNull
+
+	switch startVal {
+	case math.MinInt64:
 		startType = RangeBoundNegInf
+	case math.MaxInt64:
+		startType = RangeBoundInf
 	}
 
-	if endVal == math.MaxInt64 {
-		endOut = DNull
-		endType = RangeBoundInf
-	} else if endVal == math.MinInt64 {
-		endOut = DNull
+	switch endVal {
+	case math.MinInt64:
 		endType = RangeBoundNegInf
+	case math.MaxInt64:
+		endType = RangeBoundInf
 	}
+
 	return NewDInt8Range(startOut, endOut, startType, endType), nil
 }
 
@@ -2142,10 +2146,6 @@ func (d *DInt8Range) ContainsInt(i int) bool {
 func (d *DInt8Range) HasIntersection(
 	ctx context.Context, cmpCtx CompareContext, other Datum,
 ) (bool, error) {
-	if other == DNull || (d.StartBound.Typ == RangeBoundNegInf && d.EndBound.Typ == RangeBoundInf) {
-		return false, nil
-	}
-
 	otherRange, ok := cmpCtx.UnwrapDatum(ctx, other).(*DInt8Range)
 	if !ok {
 		return false, makeUnsupportedComparisonMessage(d, other)
