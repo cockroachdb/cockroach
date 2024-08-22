@@ -243,6 +243,7 @@ func DecodeUntaggedDatum(
 		}
 		sbTyp := tree.RangeBoundType(int(data[0]))
 		ebTyp := tree.RangeBoundType(int(data[1]))
+
 		data = data[2:]
 		var sbVal, ebVal tree.Datum
 		//var err error
@@ -259,7 +260,10 @@ func DecodeUntaggedDatum(
 
 			sbVal = tree.NewDInt(tree.DInt(sVal))
 		}
-		if ebTyp == tree.RangeBoundInf {
+		if ebTyp == tree.RangeBoundNegInf {
+			ebVal = tree.DNull
+			data = data[1:]
+		} else if ebTyp == tree.RangeBoundInf {
 			ebVal = tree.DNull
 			data = data[1:]
 		} else {

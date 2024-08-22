@@ -76,6 +76,7 @@ func TestTemp(t *testing.T) {
 						select * from t.test;
 						`)
 	require.NoError(t, err)
+	printResult(result)
 
 	result, err = sqlDB.Query(`
 						select int8range(3,7) && int8range(4,12);
@@ -127,6 +128,22 @@ func TestTemp(t *testing.T) {
 
 	result, err = sqlDB.Query(`
 						select int8range(2,4) -|- int8range(7,9);
+						`)
+	require.NoError(t, err)
+	printResult(result)
+
+	_, err = sqlDB.Exec(`
+						insert into t.test (k) values ('empty');
+						`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`
+						insert into t.test (k) values ('empty');
+						`)
+	require.NoError(t, err)
+
+	result, err = sqlDB.Query(`
+						select * from t.test;
 						`)
 	require.NoError(t, err)
 	printResult(result)
