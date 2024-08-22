@@ -877,6 +877,9 @@ func runSingleDecommission(
 	// TODO(sarkesian): Consider adding a future test for decommissions that get
 	// stuck with replicas in purgatory, by pinning them to a node.
 
+	// We stop nodes gracefully when needed.
+	stopOpts := option.NewStopOpts(option.Graceful(shutdownGracePeriod))
+
 	// Gather metadata for logging purposes and wait for balance.
 	var bytesUsed, rangeCount, totalRanges int64
 	var candidateStores, avgBytesPerReplica int64
@@ -933,7 +936,7 @@ func runSingleDecommission(
 
 	if stopFirst {
 		h.t.Status(fmt.Sprintf("gracefully stopping node%d", target))
-		if err := h.c.StopCockroachGracefullyOnNode(ctx, h.t.L(), target); err != nil {
+		if err := h.c.StopE(ctx, h.t.L(), stopOpts, c.Node(target)); err != nil {
 			return err
 		}
 		// Wait after stopping the node to distinguish the impact of the node being
@@ -991,7 +994,7 @@ func runSingleDecommission(
 	if reuse {
 		if !stopFirst {
 			h.t.Status(fmt.Sprintf("gracefully stopping node%d", target))
-			if err := h.c.StopCockroachGracefullyOnNode(ctx, h.t.L(), target); err != nil {
+			if err := h.c.StopE(ctx, h.t.L(), stopOpts, c.Node(target)); err != nil {
 				return err
 			}
 		}

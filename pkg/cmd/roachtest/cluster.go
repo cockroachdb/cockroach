@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
+	"golang.org/x/sys/unix"
 )
 
 func init() {
@@ -1048,27 +1049,6 @@ func attachToExistingCluster(
 func (c *clusterImpl) setTest(t test.Test) {
 	c.t = t
 	c.l = t.L()
-}
-
-// StopCockroachGracefullyOnNode stops a running cockroach instance on the requested
-// node before a version upgrade.
-func (c *clusterImpl) StopCockroachGracefullyOnNode(
-	ctx context.Context, l *logger.Logger, node int,
-) error {
-	// A graceful shutdown is sending SIGTERM to the node, then waiting
-	// some reasonable amount of time, then sending a non-graceful SIGKILL.
-	gracefulOpts := option.DefaultStopOpts()
-	gracefulOpts.RoachprodOpts.Sig = 15 // SIGTERM
-	gracefulOpts.RoachprodOpts.Wait = true
-	gracefulOpts.RoachprodOpts.MaxWait = 60
-	if err := c.StopE(ctx, l, gracefulOpts, c.Node(node)); err != nil {
-		return err
-	}
-
-	// NB: we still call Stop to make sure the process is dead when we
-	// try to restart it (in case it takes longer than `MaxWait` for it
-	// to finish).
-	return c.StopE(ctx, l, option.DefaultStopOpts(), c.Node(node))
 }
 
 // Save marks the cluster as "saved" so that it doesn't get destroyed.
@@ -2254,16 +2234,15 @@ func (c *clusterImpl) StopE(
 	c.setStatusForClusterOpt("stopping", stopOpts.RoachtestOpts.Worker, nodes...)
 	defer c.clearStatusForClusterOpt(stopOpts.RoachtestOpts.Worker)
 
-	if c.goCoverDir != "" && stopOpts.RoachprodOpts.Sig == 9 /* SIGKILL */ {
-		// If we are trying to collect coverage, we don't want to kill processes;
-		// use SIGUSR1 which dumps coverage data and exits. Note that Cockroach
-		// v23.1 and earlier ignore SIGUSR1, so we still want to send SIGKILL.
+	if c.goCoverDir != "" && stopOpts.RoachprodOpts.Sig == int(unix.SIGKILL) {
+		// If we are trying to collect coverage, we first send a SIGUSR1
+		// which dumps coverage data and exits. Note that Cockroach v23.1
+		// and earlier ignore SIGUSR1, so we still want to send SIGKILL,
+		// and that's the underlying behaviour of `Stop`.
 		l.Printf("coverage mode: first trying to stop using SIGUSR1")
-		opts := stopOpts.RoachprodOpts
-		opts.Sig = 10 // SIGUSR1
-		opts.Wait = true
-		opts.MaxWait = 10
-		_ = roachprod.Stop(ctx, l, c.MakeNodes(nodes...), opts)
+		stopOpts.RoachprodOpts.Sig = 10 // SIGUSR1
+		stopOpts.RoachprodOpts.Wait = true
+		stopOpts.RoachprodOpts.GracePeriod = 10
 	}
 	return errors.Wrap(roachprod.Stop(ctx, l, c.MakeNodes(nodes...), stopOpts.RoachprodOpts), "cluster.StopE")
 }

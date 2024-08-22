@@ -494,13 +494,9 @@ func registerKVQuiescenceDead(r registry.Registry) {
 			})
 			// Graceful shut down third node.
 			m.ExpectDeath()
-			gracefulOpts := option.DefaultStopOpts()
-			gracefulOpts.RoachprodOpts.Sig = 15 // SIGTERM
-			gracefulOpts.RoachprodOpts.Wait = true
-			gracefulOpts.RoachprodOpts.MaxWait = 30
-			c.Stop(ctx, t.L(), gracefulOpts, c.Node(nodes))
-			// If graceful shutdown fails within 30 seconds, proceed with hard shutdown.
-			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(nodes))
+			c.Stop(
+				ctx, t.L(), option.NewStopOpts(option.Graceful(30)), c.Node(nodes),
+			)
 			// Measure qps with node down (i.e. without quiescence).
 			qpsOneDown := qps(func() {
 				// Use a different seed to make sure it's not just stepping into the
@@ -623,16 +619,11 @@ func registerKVGracefulDraining(r registry.Registry) {
 					case <-time.After(1 * time.Minute):
 					}
 				}
-				// Graceful drain: send SIGTERM, which should be sufficient
-				// to stop the node, followed by a non-graceful SIGKILL a
-				// bit later to clean up should the process have become
-				// stuck.
-				stopOpts := option.DefaultStopOpts()
-				stopOpts.RoachprodOpts.Sig = 15
-				stopOpts.RoachprodOpts.Wait = true
-				stopOpts.RoachprodOpts.MaxWait = 30
+				// Graceful drain: send SIGTERM, which should be sufficient to
+				// stop the node. It will be followed by a non-graceful
+				// SIGKILL a if the drain process does not finish within 30s
+				stopOpts := option.NewStopOpts(option.Graceful(shutdownGracePeriod))
 				c.Stop(ctx, t.L(), stopOpts, c.Node(nodes))
-				c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(nodes))
 				t.Status("letting workload run with one node down")
 				select {
 				case <-ctx.Done():

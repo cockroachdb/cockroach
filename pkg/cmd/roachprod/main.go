@@ -524,7 +524,7 @@ SIGHUP), unless you also configure --max-wait.
 		if sig == 9 /* SIGKILL */ && !cmd.Flags().Changed("wait") {
 			wait = true
 		}
-		stopOpts := roachprod.StopOpts{Wait: wait, MaxWait: maxWait, ProcessTag: tag, Sig: sig}
+		stopOpts := roachprod.StopOpts{Wait: wait, GracePeriod: gracePeriod, ProcessTag: tag, Sig: sig}
 		return roachprod.Stop(context.Background(), config.Logger, args[0], stopOpts)
 	}),
 }
@@ -613,7 +613,7 @@ non-terminating signal (e.g. SIGHUP), unless you also configure --max-wait.
 		}
 		stopOpts := roachprod.StopOpts{
 			Wait:               wait,
-			MaxWait:            maxWait,
+			GracePeriod:        gracePeriod,
 			Sig:                sig,
 			VirtualClusterName: virtualClusterName,
 			SQLInstance:        sqlInstance,
