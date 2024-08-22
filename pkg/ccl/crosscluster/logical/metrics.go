@@ -143,9 +143,9 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaKVWriteFailureCount = metric.Metadata{
-		Name:        "logical_replication.kv_write_failure_count",
-		Help:        "Total number of times the kv write path encountered an error resolved by writing via SQL instead",
+	metaKVWriteFallbackCount = metric.Metadata{
+		Name:        "logical_replication.kv_write_fallback_count",
+		Help:        "Total number of times the kv write path could not handle a row update and fell back to SQL instead",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -191,7 +191,7 @@ type Metrics struct {
 	StreamBatchBytesHist          metric.IHistogram
 	StreamBatchNanosHist          metric.IHistogram
 	OptimisticInsertConflictCount *metric.Counter
-	KVWriteFailureCount           *metric.Counter
+	KVWriteFallbackCount          *metric.Counter
 	ReplanCount                   *metric.Counter
 }
 
@@ -247,7 +247,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		OptimisticInsertConflictCount: metric.NewCounter(metaOptimisticInsertConflictCount),
-		KVWriteFailureCount:           metric.NewCounter(metaKVWriteFailureCount),
+		KVWriteFallbackCount:          metric.NewCounter(metaKVWriteFallbackCount),
 		ReplanCount:                   metric.NewCounter(metaDistSQLReplanCount),
 	}
 }
