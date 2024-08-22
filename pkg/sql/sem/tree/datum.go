@@ -2018,7 +2018,7 @@ type DInt8Range struct {
 func AsDInt8Range(e Expr) (DInt8Range, bool) {
 	switch t := e.(type) {
 	case *DInt8Range:
-		return *t, true
+		return *t.Normalize(), true
 	case *DOidWrapper:
 		return AsDInt8Range(t.Wrapped)
 	}
@@ -2038,11 +2038,11 @@ func MustBeDInt8Range(e Expr) DInt8Range {
 
 // TODO(janexing): is it ever possible to have inf as the start bound and/or -inf as the end bound?
 func ParseInt8Range(s string) (*DInt8Range, error) {
-	startVal, endVal, err := int8range.ParseInt8Range(s)
+	startVal, endVal, err := int8range.ParseValsForInt8Range(s)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse int8 range")
 	}
-	startType, endType := RangeBoundClose, RangeBoundOpen
+	startType, endType := RangeBoundStartClose, RangeBoundEndOpen
 
 	var startOut, endOut Datum
 	startOut, endOut = NewDInt(DInt(startVal)), NewDInt(DInt(endVal))
@@ -2069,7 +2069,7 @@ func (d *DInt8Range) String() string {
 		return "empty"
 	}
 	sb := strings.Builder{}
-	if d.StartBound.Typ == RangeBoundClose {
+	if d.StartBound.Typ == RangeBoundStartClose {
 		sb.WriteString("[")
 	} else {
 		sb.WriteString("(")
@@ -2082,7 +2082,7 @@ func (d *DInt8Range) String() string {
 		sb.WriteString(d.EndBound.Val.String())
 	}
 
-	if d.EndBound.Typ == RangeBoundClose {
+	if d.EndBound.Typ == RangeBoundStartClose {
 		sb.WriteString("]")
 	} else {
 		sb.WriteString(")")
@@ -2096,7 +2096,7 @@ func (d *DInt8Range) Format(ctx *FmtCtx) {
 		ctx.WriteString("empty")
 		return
 	}
-	if d.StartBound.Typ == RangeBoundClose {
+	if d.StartBound.Typ == RangeBoundStartClose {
 		ctx.WriteString("[")
 	} else {
 		ctx.WriteString("(")
@@ -2108,7 +2108,7 @@ func (d *DInt8Range) Format(ctx *FmtCtx) {
 	if d.EndBound.Typ != RangeBoundInf {
 		ctx.FormatNode(d.EndBound.Val)
 	}
-	if d.EndBound.Typ == RangeBoundClose {
+	if d.EndBound.Typ == RangeBoundEndClose {
 		ctx.WriteString("]")
 	} else {
 		ctx.WriteString(")")
@@ -2128,14 +2128,14 @@ func (d *DInt8Range) AmbiguousFormat() bool {
 func (d *DInt8Range) ContainsInt(i int) bool {
 	if d.StartBound.Typ != RangeBoundNegInf {
 		sbInt := int(MustBeDInt(d.StartBound.Val))
-		if i < sbInt || (i == sbInt && d.StartBound.Typ == RangeBoundOpen) {
+		if i < sbInt || (i == sbInt && d.StartBound.Typ == RangeBoundStartOpen) {
 			return false
 		}
 	}
 
 	if d.EndBound.Typ != RangeBoundInf {
 		ebInt := int(MustBeDInt(d.EndBound.Val))
-		if i > ebInt || (i == ebInt && d.EndBound.Typ == RangeBoundOpen) {
+		if i > ebInt || (i == ebInt && d.EndBound.Typ == RangeBoundEndOpen) {
 			return false
 		}
 	}
@@ -2151,7 +2151,7 @@ func (d *DInt8Range) HasIntersection(
 		return false, makeUnsupportedComparisonMessage(d, other)
 	}
 
-	esRes, err := CompareEndBndWithStartBnd(ctx, cmpCtx, d.EndBound, otherRange.StartBound)
+	esRes, err := d.EndBound.CompareAfterNormalization(ctx, cmpCtx, otherRange.StartBound)
 	if err != nil {
 		return false, err
 	}
@@ -2160,7 +2160,7 @@ func (d *DInt8Range) HasIntersection(
 		return false, err
 	}
 
-	esRes, err = CompareEndBndWithStartBnd(ctx, cmpCtx, otherRange.EndBound, d.StartBound)
+	esRes, err = otherRange.EndBound.CompareAfterNormalization(ctx, cmpCtx, d.StartBound)
 	if err != nil {
 		return false, err
 	}
@@ -2184,61 +2184,6 @@ func (d *DInt8Range) Upper(ctx context.Context, cmpCtx CompareContext) Datum {
 		return DNull
 	}
 	return cmpCtx.UnwrapDatum(ctx, d.EndBound.Val).(*DInt)
-}
-
-func (rb RangeBound) compare(other RangeBound, startBounds bool) int {
-	// perform a mini normalization here. maybe this is overkill?
-	var rbVal int64
-	switch rb.Typ {
-	case RangeBoundOpen:
-		if startBounds {
-			rbVal = int64(MustBeDInt(rb.Val)) + 1
-		} else {
-			rbVal = int64(MustBeDInt(rb.Val))
-		}
-	case RangeBoundClose:
-		if startBounds {
-			rbVal = int64(MustBeDInt(rb.Val))
-		} else {
-			rbVal = int64(MustBeDInt(rb.Val)) + 1
-		}
-	case RangeBoundInf:
-		if other.Typ == RangeBoundInf {
-			return 0
-		}
-		return 1
-	case RangeBoundNegInf:
-		if other.Typ == RangeBoundNegInf {
-			return 0
-		}
-		return -1
-	}
-	var otherVal int64
-	switch other.Typ {
-	case RangeBoundOpen:
-		if startBounds {
-			otherVal = int64(MustBeDInt(other.Val)) + 1
-		} else {
-			otherVal = int64(MustBeDInt(other.Val))
-		}
-	case RangeBoundClose:
-		if startBounds {
-			otherVal = int64(MustBeDInt(other.Val))
-		} else {
-			otherVal = int64(MustBeDInt(other.Val)) + 1
-		}
-	case RangeBoundInf:
-		return -1
-	case RangeBoundNegInf:
-		return 1
-	}
-	if rbVal < otherVal {
-		return -1
-	}
-	if rbVal > otherVal {
-		return 1
-	}
-	return 0
 }
 
 // Compare returns -1 if the receiver is less than other, 0 if receiver is
@@ -2279,11 +2224,23 @@ func (d *DInt8Range) Compare(ctx context.Context, cmpCtx CompareContext, other D
 		return 1, nil
 	}
 
-	// first compare lower bounds, then compare upper bounds
-	if cmp := d.StartBound.compare(v.StartBound, true /* startBounds */); cmp != 0 {
-		return cmp, nil
+	d = d.Normalize()
+	v = v.Normalize()
+
+	cmpRes, err := d.StartBound.CompareAfterNormalization(ctx, cmpCtx, v.StartBound)
+	if err != nil {
+		return 0, err
 	}
-	return d.EndBound.compare(v.EndBound, false /* startBounds */), nil
+	if cmpRes != 0 {
+		return cmpRes, nil
+	}
+
+	cmpRes, err = d.EndBound.CompareAfterNormalization(ctx, cmpCtx, v.EndBound)
+	if err != nil {
+		return 0, err
+	}
+
+	return cmpRes, nil
 }
 
 // Prev implements the Datum interface.
@@ -2336,49 +2293,54 @@ func (rb1 RangeBound) Equals(
 	return cmpRes == 0 && rb1.Typ == rb2.Typ, nil
 }
 
-type RangeBoundType int
-
-// -1: eb < sb (including -inf vs -inf, inf vs inf)
-// 0: eb = sb, they intersect at the boundary.
-// 1: eb > sb (including inf vs inf)
-func CompareEndBndWithStartBnd(
-	ctx context.Context, cmpCtx CompareContext, eb RangeBound, sb RangeBound,
+// -1: b < other
+// 0 : b == other
+// 1: b > other
+func (b *RangeBound) CompareAfterNormalization(
+	ctx context.Context, cmpCtx CompareContext, other RangeBound,
 ) (int, error) {
-	if eb.Typ == RangeBoundNegInf || sb.Typ == RangeBoundInf {
+	if b.Typ == RangeBoundNegInf {
+		if other.Typ == RangeBoundNegInf {
+			return 0, nil
+		}
 		return -1, nil
 	}
 
-	if eb.Typ == RangeBoundClose && sb.Typ == RangeBoundClose && eb.Val == sb.Val {
-		return 0, nil
-	}
-
-	if eb.Typ == RangeBoundClose && sb.Typ == RangeBoundOpen ||
-		eb.Typ == RangeBoundOpen && sb.Typ == RangeBoundClose {
-		prevEb, ok := eb.Val.Prev(ctx, cmpCtx)
-		if !ok {
-			return 0, errors.AssertionFailedf("failed to get the prev for end bound")
+	if b.Typ == RangeBoundInf {
+		if other.Typ == RangeBoundInf {
+			return 0, nil
 		}
-		return prevEb.Compare(ctx, cmpCtx, sb.Val)
+		return 1, nil
 	}
 
-	compRes, err := eb.Val.Compare(ctx, cmpCtx, sb.Val)
+	cmpRes, err := b.Val.Compare(ctx, cmpCtx, other.Val)
 	if err != nil {
 		return 0, err
 	}
 
-	if compRes == 0 && eb.Typ == RangeBoundOpen && sb.Typ == RangeBoundOpen {
-		return -1, nil
+	if cmpRes != 0 {
+		return cmpRes, nil
 	}
 
-	return compRes, nil
+	// The values are the same, the only determining factor is the bound type.
+	if b.Typ < other.Typ {
+		return -1, nil
+	} else if b.Typ == other.Typ {
+		return 0, nil
+	}
+
+	return 1, nil
 }
 
+type RangeBoundType int
+
 const (
-	RangeBoundOpen RangeBoundType = iota
-	RangeBoundClose
-	// TODO(janexing): should integrate with existing inf?
+	RangeBoundNegInf RangeBoundType = iota
+	RangeBoundStartClose
+	RangeBoundStartOpen
+	RangeBoundEndOpen
+	RangeBoundEndClose
 	RangeBoundInf
-	RangeBoundNegInf
 )
 
 const (
@@ -2403,9 +2365,9 @@ var EmptyDInt8Range = &DInt8Range{
 func (d *DInt8Range) IsEmpty() bool {
 	var closedStart int64
 	switch d.StartBound.Typ {
-	case RangeBoundOpen:
+	case RangeBoundStartOpen:
 		closedStart = int64(MustBeDInt(d.StartBound.Val)) + 1
-	case RangeBoundClose:
+	case RangeBoundStartClose:
 		closedStart = int64(MustBeDInt(d.StartBound.Val))
 	case RangeBoundInf:
 		return true
@@ -2414,9 +2376,9 @@ func (d *DInt8Range) IsEmpty() bool {
 	}
 	var closedEnd int64
 	switch d.EndBound.Typ {
-	case RangeBoundOpen:
+	case RangeBoundEndOpen:
 		closedEnd = int64(MustBeDInt(d.EndBound.Val)) - 1
-	case RangeBoundClose:
+	case RangeBoundEndClose:
 		closedEnd = int64(MustBeDInt(d.EndBound.Val))
 	case RangeBoundInf:
 		return false
@@ -2426,9 +2388,9 @@ func (d *DInt8Range) IsEmpty() bool {
 	return closedStart > closedEnd
 }
 
-// normalize converts to CloseOpenBoundsFmt, with special cases for infinities
+// Normalize converts to CloseOpenBoundsFmt, with special cases for infinities
 // and the empty range.
-func (d *DInt8Range) normalize() *DInt8Range {
+func (d *DInt8Range) Normalize() *DInt8Range {
 	// normalize empty ranges
 	if d.IsEmpty() {
 		return EmptyDInt8Range
@@ -2443,13 +2405,13 @@ func (d *DInt8Range) normalize() *DInt8Range {
 
 	// normalize to CloseOpenBoundsFmt
 	switch v.StartBound.Typ {
-	case RangeBoundOpen:
-		v.StartBound.Typ = RangeBoundClose
+	case RangeBoundStartOpen:
+		v.StartBound.Typ = RangeBoundStartClose
 		v.StartBound.Val, _ = v.StartBound.Val.Next(ctx, cmpCtx)
 	}
 	switch v.EndBound.Typ {
-	case RangeBoundClose:
-		v.EndBound.Typ = RangeBoundOpen
+	case RangeBoundEndClose:
+		v.EndBound.Typ = RangeBoundEndOpen
 		v.EndBound.Val, _ = v.EndBound.Val.Next(ctx, cmpCtx)
 	}
 	return &v
@@ -2467,7 +2429,7 @@ func NewDInt8Range(
 			Val: endBound,
 			Typ: endBoundTyp,
 		},
-	}).normalize()
+	}).Normalize()
 }
 
 // ParseContext provides the information necessary for

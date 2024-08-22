@@ -183,13 +183,13 @@ func (e *evaluator) EvalPlusInt8RangeOp(
 	if resultStartVal == math.MinInt64 {
 		resultStartType = tree.RangeBoundNegInf
 	} else {
-		resultStartType = tree.RangeBoundClose
+		resultStartType = tree.RangeBoundStartClose
 	}
 
 	if resultEndVal == math.MaxInt64 {
 		resultEndType = tree.RangeBoundInf
 	} else {
-		resultEndType = tree.RangeBoundOpen
+		resultEndType = tree.RangeBoundEndOpen
 	}
 
 	return tree.NewDInt8Range(tree.NewDInt(tree.DInt(resultStartVal)), tree.NewDInt(tree.DInt(resultEndVal)), resultStartType, resultEndType), nil
@@ -571,19 +571,20 @@ func (e *evaluator) EvalDiffInt8RangeOp(
 	switch sbCmpRes {
 	case 1:
 	case 0:
-		if aRange.StartBound.Typ == tree.RangeBoundClose && bRange.StartBound.Typ == tree.RangeBoundOpen {
+		if aRange.StartBound.Typ == tree.RangeBoundStartClose && bRange.StartBound.Typ == tree.RangeBoundStartOpen {
 			// TOOD(janexing): any overflow hazard here? when should it be promoted to inf?
 			nextDInt, ok := aRange.StartBound.Val.Next(ctx, e.ctx())
 			if !ok {
 				return nil, pgerror.Newf(pgcode.Syntax, "cannot get the next DInt for start bound")
 			}
-			return &tree.DInt8Range{
+			res := &tree.DInt8Range{
 				StartBound: aRange.StartBound,
 				EndBound: tree.RangeBound{
 					Val: nextDInt,
-					Typ: tree.RangeBoundOpen,
+					Typ: tree.RangeBoundEndOpen,
 				},
-			}, nil
+			}
+			return res.Normalize(), nil
 		}
 	case -1:
 		bRangeSB := bRange.StartBound
@@ -591,26 +592,28 @@ func (e *evaluator) EvalDiffInt8RangeOp(
 		switch bRangeSB.Typ {
 		case tree.RangeBoundInf, tree.RangeBoundNegInf:
 			resEB = bRangeSB
-		case tree.RangeBoundOpen:
+		case tree.RangeBoundStartOpen:
 			resEB = tree.RangeBound{
 				Val: bRangeSB.Val,
-				Typ: tree.RangeBoundClose,
+				Typ: tree.RangeBoundEndClose,
 			}
-		case tree.RangeBoundClose:
+		case tree.RangeBoundStartClose:
 			prevDInt, ok := bRangeSB.Val.Prev(ctx, e.ctx())
 			if !ok {
 				return nil, pgerror.Newf(pgcode.Syntax, "cannot get the prev DInt for start bound")
 			}
 			resEB = tree.RangeBound{
 				Val: prevDInt,
-				Typ: tree.RangeBoundOpen,
+				Typ: tree.RangeBoundEndOpen,
 			}
 		}
 
-		return &tree.DInt8Range{
+		res := &tree.DInt8Range{
 			StartBound: aRange.StartBound,
 			EndBound:   resEB,
-		}, nil
+		}
+
+		return res.Normalize(), nil
 	}
 
 	// --------
@@ -623,7 +626,7 @@ func (e *evaluator) EvalDiffInt8RangeOp(
 	switch ebCmpRes {
 	case -1:
 	case 0:
-		if aRange.EndBound.Typ == tree.RangeBoundOpen && bRange.EndBound.Typ == tree.RangeBoundClose {
+		if aRange.EndBound.Typ == tree.RangeBoundEndOpen && bRange.EndBound.Typ == tree.RangeBoundEndClose {
 			// TOOD(janexing): any overflow hazard here? when should it be promoted to inf?
 			nextDInt, ok := aRange.EndBound.Val.Next(ctx, e.ctx())
 			if !ok {
@@ -632,11 +635,11 @@ func (e *evaluator) EvalDiffInt8RangeOp(
 			return &tree.DInt8Range{
 				StartBound: tree.RangeBound{
 					Val: aRange.EndBound.Val,
-					Typ: tree.RangeBoundClose,
+					Typ: tree.RangeBoundStartClose,
 				},
 				EndBound: tree.RangeBound{
 					Val: nextDInt,
-					Typ: tree.RangeBoundOpen,
+					Typ: tree.RangeBoundEndOpen,
 				},
 			}, nil
 		}
@@ -646,19 +649,19 @@ func (e *evaluator) EvalDiffInt8RangeOp(
 		switch bRangeEB.Typ {
 		case tree.RangeBoundInf, tree.RangeBoundNegInf:
 			resSB = bRangeEB
-		case tree.RangeBoundOpen:
+		case tree.RangeBoundEndOpen:
 			resSB = tree.RangeBound{
 				Val: bRangeEB.Val,
-				Typ: tree.RangeBoundClose,
+				Typ: tree.RangeBoundStartClose,
 			}
-		case tree.RangeBoundClose:
+		case tree.RangeBoundEndClose:
 			nextDInt, ok := bRangeEB.Val.Next(ctx, e.ctx())
 			if !ok {
 				return nil, pgerror.Newf(pgcode.Syntax, "cannot get the prev DInt for start bound")
 			}
 			resSB = tree.RangeBound{
 				Val: nextDInt,
-				Typ: tree.RangeBoundOpen,
+				Typ: tree.RangeBoundStartOpen,
 			}
 		}
 
@@ -700,7 +703,7 @@ func (e *evaluator) EvalIntersectInt8RangeOp(
 		largerSB = bRange.StartBound
 	case 0:
 		largerSB = aRange.StartBound
-		if bRange.StartBound.Typ == tree.RangeBoundOpen {
+		if bRange.StartBound.Typ == tree.RangeBoundStartOpen {
 			largerSB = bRange.StartBound
 		}
 	}
@@ -717,7 +720,7 @@ func (e *evaluator) EvalIntersectInt8RangeOp(
 		smallerEB = aRange.EndBound
 	case 0:
 		smallerEB = aRange.EndBound
-		if bRange.StartBound.Typ == tree.RangeBoundClose {
+		if bRange.StartBound.Typ == tree.RangeBoundStartClose {
 			smallerEB = bRange.EndBound
 		}
 	}
@@ -770,10 +773,10 @@ func (e *evaluator) EvalContainedByInt8RangeOp(
 		}
 
 		sbInRange := rRange.ContainsInt(lSBInt)
-		if !sbInRange && (lSBInt != rSBInt || lRange.StartBound.Typ != tree.RangeBoundOpen) {
+		if !sbInRange && (lSBInt != rSBInt || lRange.StartBound.Typ != tree.RangeBoundStartOpen) {
 			return tree.DBoolFalse, nil
 		}
-		if lSBInt == rSBInt && lRange.StartBound.Typ == tree.RangeBoundClose && rRange.StartBound.Typ == tree.RangeBoundOpen {
+		if lSBInt == rSBInt && lRange.StartBound.Typ == tree.RangeBoundStartClose && rRange.StartBound.Typ == tree.RangeBoundStartOpen {
 			return tree.DBoolFalse, nil
 		}
 
@@ -783,11 +786,11 @@ func (e *evaluator) EvalContainedByInt8RangeOp(
 
 		ebInRange := rRange.ContainsInt(lEBInt)
 
-		if !ebInRange && (lEBInt != rEBInt || lRange.EndBound.Typ != tree.RangeBoundOpen) {
+		if !ebInRange && (lEBInt != rEBInt || lRange.EndBound.Typ != tree.RangeBoundEndOpen) {
 			return tree.DBoolFalse, nil
 		}
 
-		if lEBInt == rEBInt && lRange.EndBound.Typ == tree.RangeBoundClose && rRange.EndBound.Typ == tree.RangeBoundOpen {
+		if lEBInt == rEBInt && lRange.EndBound.Typ == tree.RangeBoundEndClose && rRange.EndBound.Typ == tree.RangeBoundEndOpen {
 			return tree.DBoolFalse, nil
 		}
 

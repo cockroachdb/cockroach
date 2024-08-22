@@ -17,7 +17,8 @@ import (
 	"strings"
 )
 
-func ParseInt8Range(rangeStr string) (int64, int64, error) {
+// ParseValsForInt8Range takes care of the normalization already.
+func ParseValsForInt8Range(rangeStr string) (int64, int64, error) {
 	if strings.ToLower(rangeStr) == "empty" {
 		return math.MinInt64, math.MinInt64, nil
 	}

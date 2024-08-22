@@ -4033,11 +4033,14 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType:        tree.FixedReturnType(types.Int8Range),
 			CalledOnNullInput: false,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				lb := tree.MustBeDInt8Range(args[0])
-				rb := tree.MustBeDInt8Range(args[1])
+				var lb, rb *tree.DInt8Range
+				*lb = tree.MustBeDInt8Range(args[0])
+				*rb = tree.MustBeDInt8Range(args[1])
+				lb = lb.Normalize()
+				rb = rb.Normalize()
 
 				var resultStart, resultEnd tree.RangeBound
-				val, err := tree.CompareEndBndWithStartBnd(ctx, evalCtx, rb.StartBound, lb.StartBound)
+				val, err := rb.StartBound.CompareAfterNormalization(ctx, evalCtx, lb.StartBound)
 				if err != nil {
 					return nil, err
 				}
@@ -4049,7 +4052,7 @@ value if you rely on the HLC for accuracy.`,
 
 				}
 
-				val, err = tree.CompareEndBndWithStartBnd(ctx, evalCtx, rb.EndBound, lb.EndBound)
+				val, err = rb.EndBound.CompareAfterNormalization(ctx, evalCtx, lb.EndBound)
 				if err != nil {
 					return nil, err
 				}
@@ -4058,9 +4061,10 @@ value if you rely on the HLC for accuracy.`,
 					resultEnd = lb.EndBound
 				case 1, 0:
 					resultEnd = rb.EndBound
-
 				}
-				return &tree.DInt8Range{StartBound: resultStart, EndBound: resultEnd}, nil
+
+				res := &tree.DInt8Range{StartBound: resultStart, EndBound: resultEnd}
+				return res.Normalize(), nil
 			},
 		},
 	),
@@ -4119,12 +4123,12 @@ value if you rely on the HLC for accuracy.`,
 					endBound = &endBoundInt
 				}
 
-				if int64(endBoundInt)-int64(startBoundInt) < 0 {
+				if int64(endBoundInt) < int64(startBoundInt) {
 					return nil, errors.New("range lower bound must be less than or equal to range upper bound")
 				}
 
-				startBoundTyp := tree.RangeBoundClose
-				endBoundTyp := tree.RangeBoundOpen
+				startBoundTyp := tree.RangeBoundStartClose
+				endBoundTyp := tree.RangeBoundEndOpen
 
 				if startBound == tree.DNull {
 					startBoundTyp = tree.RangeBoundNegInf
@@ -4134,7 +4138,9 @@ value if you rely on the HLC for accuracy.`,
 					endBoundTyp = tree.RangeBoundInf
 				}
 
-				return tree.NewDInt8Range(startBound, endBound, startBoundTyp, endBoundTyp), nil
+				res := tree.NewDInt8Range(startBound, endBound, startBoundTyp, endBoundTyp)
+
+				return res.Normalize(), nil
 			},
 		},
 		tree.Overload{
@@ -4143,13 +4149,12 @@ value if you rely on the HLC for accuracy.`,
 			CalledOnNullInput: true,
 			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				var startBound, endBound tree.Datum
-
 				boundFmt := tree.MustBeDString(args[2])
 				var startBoundTyp, endBoundTyp tree.RangeBoundType
 				boundFmtStr := tree.AsStringWithFlags(&boundFmt, tree.FmtBareStrings)
 				startAddVal, endAddVal := 0, 0
-				startBoundTyp = tree.RangeBoundClose
-				endBoundTyp = tree.RangeBoundOpen
+				startBoundTyp = tree.RangeBoundStartClose
+				endBoundTyp = tree.RangeBoundEndOpen
 				switch boundFmtStr {
 				case tree.CloseOpenBoundsFmt:
 					startAddVal = 0
@@ -4183,11 +4188,13 @@ value if you rely on the HLC for accuracy.`,
 					endBound = &endBoundInt
 				}
 
-				if (startBound != tree.DNull && endBound != tree.DNull) && int64(endBoundInt)-int64(startBoundInt) < 0 {
+				if int64(endBoundInt) < int64(startBoundInt) {
 					return nil, errors.New("range lower bound must be less than or equal to range upper bound")
 				}
 
-				return tree.NewDInt8Range(startBound, endBound, startBoundTyp, endBoundTyp), nil
+				res := tree.NewDInt8Range(startBound, endBound, startBoundTyp, endBoundTyp)
+
+				return res.Normalize(), nil
 			},
 		},
 	),
