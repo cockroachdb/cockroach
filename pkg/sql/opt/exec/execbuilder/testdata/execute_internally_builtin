@@ -215,3 +215,37 @@ root
 
 statement ok
 SELECT crdb_internal.execute_internally('EXPLAIN ANALYZE SELECT 1;');
+
+# Ensure that StmtTimeout for a session-independent IE cannot be overriden.
+subtest stmt_timeout
+
+statement ok
+SET CLUSTER SETTING sql.defaults.statement_timeout = '36000000ms';
+
+statement ok
+SET statement_timeout = '39600000ms';
+
+query T
+SELECT crdb_internal.execute_internally('SHOW statement_timeout;');
+----
+0
+
+# Ensure that a session-bound IE still inherits from session vars, if available;
+# otherwise, it inherits from the cluster setting.
+query T
+SELECT crdb_internal.execute_internally('SHOW statement_timeout;', true);
+----
+39600000
+
+statement ok
+RESET statement_timeout;
+
+query T
+SELECT crdb_internal.execute_internally('SHOW statement_timeout;', true);
+----
+36000000
+
+statement ok
+RESET CLUSTER SETTING sql.defaults.statement_timeout;
+
+subtest end
