@@ -315,6 +315,139 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	require.Equal(t, int64(expCPuts), numCPuts.Load())
 }
 
+func TestLogicalCrossClusterWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	// Swap one of the URLs to external:// to verify this indirection works.
+	// TODO(dt): this create should support placeholder for URI.
+	dbB.Exec(t, "CREATE EXTERNAL CONNECTION a AS '"+dbAURL.String()+"'")
+	dbAURL = url.URL{
+		Scheme: "external",
+		Host:   "a",
+	}
+
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+
+	now := server.Server(0).Clock().Now()
+	t.Logf("waiting for replication job %d", jobAID)
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	type testDetail struct {
+		name       string
+		insert1    string
+		insert2    string
+		alterStmt  string
+		deleteStmt string
+		expectedA  [][]string
+		expectedB  [][]string
+	}
+	cases := []testDetail{
+		{
+			name:       "Remote row newer than local with crdb_replication_origin_timestamp",
+			insert1:    "INSERT INTO tab (pk, payload) VALUES (2, 'potato')",
+			alterStmt:  "UPSERT INTO tab (pk, payload, crdb_replication_origin_timestamp) VALUES (2, 'potato', (select crdb_replication_origin_timestamp from tab where pk=2) - 10000)",
+			insert2:    "UPSERT INTO tab (pk, payload) VALUES (2, 'celeriac')",
+			deleteStmt: "DELETE FROM tab WHERE pk=2",
+			expectedA: [][]string{
+				{"2", "celeriac"},
+			},
+			expectedB: [][]string{
+				{"2", "celeriac"},
+			},
+		},
+		{
+			name:       "Remote row older than local with crdb_replication_origin_timestamp",
+			insert1:    "INSERT INTO tab (pk, payload) VALUES (3, 'potato')",
+			alterStmt:  "UPSERT INTO tab (pk, payload, crdb_replication_origin_timestamp) VALUES (3, 'potato', (select crdb_replication_origin_timestamp from tab where pk=3) +  1000000000000000000)",
+			insert2:    "UPSERT INTO tab (pk, payload) VALUES (3, 'celeriac')",
+			deleteStmt: "DELETE FROM tab WHERE pk=3",
+			expectedA: [][]string{
+				{"3", "celeriac"},
+			},
+			expectedB: [][]string{
+				{"3", "potato"},
+			},
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Logf("-- TESTING %s --", testCase.name)
+		dbA.Exec(t, testCase.insert1)
+		now = server.Server(0).Clock().Now()
+		WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+		dbB.Exec(t, testCase.alterStmt)
+
+		dbA.Exec(t, testCase.insert2)
+		now = server.Server(0).Clock().Now()
+		WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+		dbA.CheckQueryResults(t, "SELECT * from a.tab", testCase.expectedA)
+		dbB.CheckQueryResults(t, "SELECT * from b.tab", testCase.expectedB)
+
+		dbA.Exec(t, testCase.deleteStmt)
+		dbB.Exec(t, testCase.deleteStmt)
+		now = server.Server(0).Clock().Now()
+		WaitUntilReplicatedTime(t, now, dbA, jobAID)
+		WaitUntilReplicatedTime(t, now, dbB, jobBID)
+	}
+
+	t.Logf("-- TESTING %s --", "internal MVCC timestamp as expected")
+	var (
+		mvccA float64
+		mvccB float64
+	)
+	// Separate test for MVCC timestamp
+	dbA.Exec(t, "INSERT INTO tab (pk, payload) VALUES (3, 'potato')")
+	dbA.QueryRow(t, "SELECT min(crdb_internal_mvcc_timestamp) from tab").Scan(&mvccA)
+
+	dbB.Exec(t, "UPSERT INTO tab (pk, payload) VALUES (3, 'celeriac')")
+	dbB.QueryRow(t, "SELECT min(crdb_internal_mvcc_timestamp) from tab").Scan(&mvccB)
+
+	now = server.Server(0).Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	expectedRow := [][]string{
+		{"3", "potato"},
+	}
+	if mvccB > mvccA {
+		expectedRow = [][]string{
+			{"3", "celeriac"},
+		}
+	}
+
+	dbA.CheckQueryResults(t, "SELECT * from a.tab", expectedRow)
+	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRow)
+}
+
 func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1033,6 +1166,10 @@ func createBasicTable(t *testing.T, db *sqlutils.SQLRunner, tableName string) {
 	db.Exec(t, fmt.Sprintf("ALTER TABLE %s %s", tableName, lwwColumnAdd))
 }
 
+func printTable(t *testing.T, db *sqlutils.SQLRunner, identifier string) {
+	t.Logf("%s: %s", identifier, sqlutils.MatrixToStr(db.QueryStr(t, "SELECT pk, payload, crdb_replication_origin_timestamp from tab")))
+	t.Logf("%s: %s", identifier, sqlutils.MatrixToStr(db.QueryStr(t, "SELECT pk, payload, crdb_replication_origin_timestamp from tab")))
+}
 func compareReplicatedTables(
 	t *testing.T,
 	s serverutils.ApplicationLayerInterface,
