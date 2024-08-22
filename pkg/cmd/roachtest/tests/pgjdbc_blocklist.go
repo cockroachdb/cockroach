@@ -649,7 +649,7 @@ var pgjdbcBlockList = blocklist{
 	`org.postgresql.test.util.PasswordUtilTest.encryptionTypeValueOfOn()`:                                                                                                      "73337",
 	`org.postgresql.test.util.PasswordUtilTest.mD5()`:                                                                                                                          "73337",
 	`org.postgresql.test.util.PasswordUtilTest.scramSha256()`:                                                                                                                  "unknown",
-	`org.postgresql.test.xa.XADataSourceTest.initializationError`:                                                                                                              "unknown",
+	`org.postgresql.test.xa.XADataSourceTest.mappingOfConstraintViolations()`:                                                                                                  "31632",
 }
 
 var pgjdbcIgnoreList = blocklist{

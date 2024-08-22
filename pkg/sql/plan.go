@@ -184,6 +184,7 @@ var _ planNode = &dropViewNode{}
 var _ planNode = &errorIfRowsNode{}
 var _ planNode = &explainVecNode{}
 var _ planNode = &filterNode{}
+var _ planNode = &endPreparedTxnNode{}
 var _ planNode = &GrantRoleNode{}
 var _ planNode = &groupNode{}
 var _ planNode = &hookFnNode{}

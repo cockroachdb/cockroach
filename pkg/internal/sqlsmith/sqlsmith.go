@@ -363,6 +363,7 @@ var DisableDDLs = simpleOption("disable DDLs", func(s *Smither) {
 		{2, makeRollbackToSavepoint},
 		{2, makeCommit},
 		{2, makeRollback},
+		// TODO(nvanbenschoten): add two-phase commit statements.
 	}
 })
 
