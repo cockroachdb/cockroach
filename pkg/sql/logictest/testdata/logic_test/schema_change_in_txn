@@ -747,7 +747,7 @@ SELECT status,
 failed  ALTER TABLE test.public.customers ADD COLUMN i INT8 DEFAULT … ers (n)
 
 query BT
-SELECT status % '(running)|(succeeded)',
+SELECT status ~ '(running)|(succeeded)',
        regexp_replace(description, 'ROLL BACK JOB \d+.*', 'ROLL BACK JOB') as descr
   FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for ROLL%' ORDER BY job_id DESC LIMIT 1
 ----
