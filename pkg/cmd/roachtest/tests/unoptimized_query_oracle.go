@@ -58,7 +58,7 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 				Timeout:          time.Hour * 1,
 				RequiresLicense:  true,
 				CompatibleClouds: registry.AllExceptAWS,
-				Suites:           registry.Suites(registry.Nightly),
+				Suites:           registry.Suites(registry.Weekly),
 				Cluster:          clusterSpec,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runQueryComparison(ctx, t, c, &queryComparisonTest{
