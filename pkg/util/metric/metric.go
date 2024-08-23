@@ -183,6 +183,7 @@ var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
 var _ Iterable = &CounterFloat64{}
 var _ Iterable = &GaugeVec{}
+var _ Iterable = &CounterVec{}
 
 var _ json.Marshaler = &Gauge{}
 var _ json.Marshaler = &GaugeFloat64{}
@@ -190,6 +191,7 @@ var _ json.Marshaler = &Counter{}
 var _ json.Marshaler = &CounterFloat64{}
 var _ json.Marshaler = &Registry{}
 var _ json.Marshaler = &GaugeVec{}
+var _ json.Marshaler = &CounterVec{}
 
 var _ PrometheusExportable = &Gauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
@@ -197,6 +199,7 @@ var _ PrometheusExportable = &Counter{}
 var _ PrometheusExportable = &CounterFloat64{}
 
 var _ PrometheusVector = &GaugeVec{}
+var _ PrometheusVector = &CounterVec{}
 
 var now = timeutil.Now
 
@@ -1067,74 +1070,89 @@ var RecordHistogramQuantiles = []Quantile{
 	{"-p50", 50},
 }
 
-// GaugeVec is a collector for gauges that have a variable set of lables.
-type GaugeVec struct {
-	Metadata
+// vector holds the base vector implementation. This is meant to be embedded
+// by metric types that require a variable set of labels. Implements
+// PrometheusVector.
+type vector struct {
+	*syncutil.RWMutex
 	encounteredLabelsLookup map[string]struct{}
 	encounteredLabelValues  [][]string
 	orderedLabelNames       []string
-	promVec                 *prometheus.GaugeVec
 }
 
-func NewGaugeVec(metadata Metadata, labelSchema map[string][]string) *GaugeVec {
-	orderedLabelNames := make([]string, 0, len(labelSchema))
-	for k := range labelSchema {
-		orderedLabelNames = append(orderedLabelNames, k)
+func newVector(labelNames []string) vector {
+	sort.Strings(labelNames)
+
+	return vector{
+		RWMutex:                 &syncutil.RWMutex{},
+		encounteredLabelsLookup: make(map[string]struct{}),
+		encounteredLabelValues:  [][]string{},
+		orderedLabelNames:       labelNames,
 	}
-	sort.Strings(orderedLabelNames)
+}
+
+func (v *vector) getOrderedValues(labels map[string]string) []string {
+	labelValues := make([]string, 0, len(labels))
+	for _, labelName := range v.orderedLabelNames {
+		labelValues = append(labelValues, labels[labelName])
+	}
+
+	return labelValues
+}
+
+func (v *vector) recordLabels(labels map[string]string) {
+	v.RLock()
+	labelValues := v.getOrderedValues(labels)
+	lookupKey := strings.Join(labelValues, "_")
+	if _, ok := v.encounteredLabelsLookup[lookupKey]; ok {
+		return
+	}
+	v.RUnlock()
+
+	v.Lock()
+	defer v.Unlock()
+	v.encounteredLabelsLookup[lookupKey] = struct{}{}
+	v.encounteredLabelValues = append(v.encounteredLabelValues, labelValues)
+}
+
+// GaugeVec is a collector for gauges that have a variable set of lables.
+// This uses the prometheus.GaugeVec under the hood.
+type GaugeVec struct {
+	Metadata
+	vector
+	promVec *prometheus.GaugeVec
+}
+
+func NewGaugeVec(metadata Metadata, labelSchema []string) *GaugeVec {
+	vec := newVector(labelSchema)
 
 	promVec := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: metadata.Name,
 		Help: metadata.Help,
-	}, orderedLabelNames)
-
-	cardinality := 1
-	for _, v := range labelSchema {
-		cardinality *= len(v)
-	}
+	}, vec.orderedLabelNames)
 
 	return &GaugeVec{
 		Metadata: metadata,
-		// hashedMetrics:     make(map[string]*atomic.Int64),
-		// labelSchema:       labelSchema,
-		orderedLabelNames:       orderedLabelNames,
-		encounteredLabelsLookup: make(map[string]struct{}),
-		encounteredLabelValues:  make([][]string, 0, cardinality),
-		promVec:                 promVec,
+		vector:   vec,
+		promVec:  promVec,
 	}
 }
 
-func (gv *GaugeVec) recordLabels(labels map[string]string) {
-	labelValues := make([]string, 0, len(labels))
-	labelNames := make([]string, 0, len(labels))
-	for k := range labels {
-		labelNames = append(labelNames, k)
-	}
-	sort.Strings(labelNames)
-
-	for _, labelName := range labelNames {
-		labelValues = append(labelValues, labels[labelName])
-	}
-
-	lookupKey := strings.Join(labelValues, "_")
-	if _, ok := gv.encounteredLabelsLookup[lookupKey]; ok {
-		return
-	}
-
-	gv.encounteredLabelsLookup[lookupKey] = struct{}{}
-	gv.encounteredLabelValues = append(gv.encounteredLabelValues, labelValues)
-}
-
-// With returns a function curried with the hash of the given label value combination. The
-// returned function can be used to set the value
+// Update updates the gauge value for the given combination of labels.
 func (gv *GaugeVec) Update(labels map[string]string, v int64) {
 	gv.recordLabels(labels)
 	gv.promVec.With(prometheus.Labels(labels)).Set(float64(v))
 }
 
+// Inc increments the gauge value for the given combination of labels.
 func (gv *GaugeVec) Inc(labels map[string]string, v int64) {
 	gv.recordLabels(labels)
 	gv.promVec.With(prometheus.Labels(labels)).Add(float64(v))
+}
+
+func (gv *GaugeVec) Dec(labels map[string]string, v int64) {
+	gv.recordLabels(labels)
+	gv.promVec.With(prometheus.Labels(labels)).Sub(float64(v))
 }
 
 func (gv *GaugeVec) GetMetadata() Metadata {
@@ -1159,6 +1177,78 @@ func (gv *GaugeVec) ToPrometheusMetrics() []*prometheusgo.Metric {
 		g := gv.promVec.WithLabelValues(labels...)
 
 		if err := g.Write(m); err != nil {
+			panic(err)
+		}
+
+		metrics = append(metrics, m)
+	}
+
+	return metrics
+}
+
+type CounterVec struct {
+	Metadata
+	vector
+	promVec *prometheus.CounterVec
+}
+
+func NewCounterVec(metadata Metadata, labelNames []string) *CounterVec {
+	vec := newVector(labelNames)
+
+	promVec := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: metadata.Name,
+		Help: metadata.Help,
+	}, vec.orderedLabelNames)
+
+	return &CounterVec{
+		Metadata: metadata,
+		vector:   vec,
+		promVec:  promVec,
+	}
+}
+
+func (cv *CounterVec) Update(labels map[string]string, v int64) {
+	cv.recordLabels(labels)
+	cv.promVec.With(prometheus.Labels(labels)).Add(float64(v))
+}
+
+func (cv *CounterVec) Inc(labels map[string]string, v int64) {
+	cv.recordLabels(labels)
+	cv.promVec.With(prometheus.Labels(labels)).Add(float64(v))
+}
+
+func (cv *CounterVec) Count(labels map[string]string) int64 {
+	m := prometheusgo.Metric{}
+	labelValues := cv.getOrderedValues(labels)
+	if err := cv.promVec.WithLabelValues(labelValues...).Write(&m); err != nil {
+		panic(err)
+	}
+
+	return int64(m.Counter.GetValue())
+}
+
+func (cv *CounterVec) GetMetadata() Metadata {
+	return cv.Metadata
+}
+
+func (cv *CounterVec) Inspect(f func(interface{})) { f(cv) }
+
+func (cv *CounterVec) MarshalJSON() ([]byte, error) {
+	return json.Marshal(cv)
+}
+
+func (cv *CounterVec) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_COUNTER.Enum()
+}
+
+func (cv *CounterVec) ToPrometheusMetrics() []*prometheusgo.Metric {
+	metrics := make([]*prometheusgo.Metric, 0, len(cv.encounteredLabelValues))
+
+	for _, labels := range cv.encounteredLabelValues {
+		m := &prometheusgo.Metric{}
+		c := cv.promVec.WithLabelValues(labels...)
+
+		if err := c.Write(m); err != nil {
 			panic(err)
 		}
 
