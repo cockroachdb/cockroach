@@ -33,6 +33,7 @@ import (
 type testingRCEval struct {
 	pri       admissionpb.WorkPriority
 	done      bool
+	waited    bool
 	err       error
 	cancel    context.CancelFunc
 	refreshCh chan struct{}
@@ -73,10 +74,11 @@ func (r *testingRCRange) startWaitForEval(name string, pri admissionpb.WorkPrior
 	}
 
 	go func() {
-		err := r.rc.WaitForEval(ctx, pri)
+		waited, err := r.rc.WaitForEval(ctx, pri)
 
 		r.mu.Lock()
 		defer r.mu.Unlock()
+		r.mu.evals[name].waited = waited
 		r.mu.evals[name].err = err
 		r.mu.evals[name].done = true
 	}()
@@ -358,7 +360,8 @@ func TestRangeControllerWaitForEval(t *testing.T) {
 			sort.Strings(evals)
 			for _, name := range evals {
 				eval := testRC.mu.evals[name]
-				fmt.Fprintf(&b, "  name=%s pri=%-8v done=%-5t err=%v\n", name, eval.pri, eval.done, eval.err)
+				fmt.Fprintf(&b, "  name=%s pri=%-8v done=%-5t waited=%-5t err=%v\n", name, eval.pri,
+					eval.done, eval.waited, eval.err)
 			}
 		}
 		return b.String()
@@ -487,6 +490,16 @@ func TestRangeControllerWaitForEval(t *testing.T) {
 			testRC := ranges[roachpb.RangeID(rangeID)]
 			testRC.rc.SetLeaseholderRaftMuLocked(ctx, roachpb.ReplicaID(replicaID))
 			return rangeStateString()
+
+		case "close_rcs":
+			for _, r := range ranges {
+				r.rc.CloseRaftMuLocked(ctx)
+			}
+			evalStr := evalStateString()
+			for k := range ranges {
+				delete(ranges, k)
+			}
+			return evalStr
 
 		default:
 			panic(fmt.Sprintf("unknown command: %s", d.Cmd))

@@ -33,12 +33,18 @@ import (
 type RangeController interface {
 	// WaitForEval seeks admission to evaluate a request at the given priority.
 	// This blocks until there are positive tokens available for the request to
-	// be admitted for evaluation. Note the number of tokens required by the
-	// request is not considered, only the priority of the request, as the number
-	// of tokens is not known until eval.
+	// be admitted for evaluation, or the context is canceled (which returns an
+	// error). Note the number of tokens required by the request is not
+	// considered, only the priority of the request, as the number of tokens is
+	// not known until eval.
+	//
+	// In the non-error case, the waited return value is true if the
+	// RangeController was not closed during the execution of WaitForEval. If
+	// closed, a (false, nil) will be returned -- this is important for the
+	// caller to fall back to waiting on the local store.
 	//
 	// No mutexes should be held.
-	WaitForEval(ctx context.Context, pri admissionpb.WorkPriority) error
+	WaitForEval(ctx context.Context, pri admissionpb.WorkPriority) (waited bool, err error)
 	// HandleRaftEventRaftMuLocked handles the provided raft event for the range.
 	//
 	// Requires replica.raftMu to be held.
@@ -210,13 +216,15 @@ func NewRangeController(
 	return rc
 }
 
-// This blocks until there are positive tokens available for the request to
-// be admitted for evaluation. Note the number of tokens required by the
-// request is not considered, only the priority of the request, as the number
-// of tokens is not known until eval.
+// WaitForEval blocks until there are positive tokens available for the
+// request to be admitted for evaluation. Note the number of tokens required
+// by the request is not considered, only the priority of the request, as the
+// number of tokens is not known until eval.
 //
 // No mutexes should be held.
-func (rc *rangeController) WaitForEval(ctx context.Context, pri admissionpb.WorkPriority) error {
+func (rc *rangeController) WaitForEval(
+	ctx context.Context, pri admissionpb.WorkPriority,
+) (waited bool, err error) {
 	wc := admissionpb.WorkClassFromPri(pri)
 	waitForAllReplicateHandles := false
 	if wc == admissionpb.ElasticWorkClass {
@@ -234,7 +242,7 @@ retry:
 
 	if vssRefreshCh == nil {
 		// RangeControllerImpl is closed.
-		return nil
+		return false, nil
 	}
 	for _, vs := range vss {
 		quorumCount := (len(vs) + 2) / 2
@@ -270,13 +278,13 @@ retry:
 			case WaitSuccess:
 				continue
 			case ContextCanceled:
-				return ctx.Err()
+				return false, ctx.Err()
 			case RefreshWaitSignaled:
 				goto retry
 			}
 		}
 	}
-	return nil
+	return true, nil
 }
 
 // HandleRaftEventRaftMuLocked handles the provided raft event for the range.
