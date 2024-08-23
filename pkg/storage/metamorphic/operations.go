@@ -239,7 +239,10 @@ func (m mvccCPutOp) run(ctx context.Context) string {
 	txn.Sequence++
 
 	_, err := storage.MVCCConditionalPut(ctx, writer, m.key,
-		txn.ReadTimestamp, m.value, m.expVal, true, storage.MVCCWriteOptions{Txn: txn})
+		txn.ReadTimestamp, m.value, m.expVal, storage.ConditionalPutWriteOptions{
+			MVCCWriteOptions:    storage.MVCCWriteOptions{Txn: txn},
+			AllowIfDoesNotExist: true,
+		})
 	if err != nil {
 		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
 			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)

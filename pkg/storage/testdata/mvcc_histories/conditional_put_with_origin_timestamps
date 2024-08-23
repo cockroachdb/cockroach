@@ -1,0 +1,126 @@
+# CPut with non-tombstone values
+run ok
+cput k=k1 v=v ts=10
+----
+>> at end:
+data: "k1"/10.000000000,0 -> /BYTES/v
+
+### CPut with OriginTimestamp older than local write loses
+run error
+cput k=k1 v=v ts=12 origin_ts=9
+----
+>> at end:
+data: "k1"/10.000000000,0 -> /BYTES/v
+error: (*kvpb.ConditionFailedError:) OriginTimestamp older than 10.000000000,0
+
+### CPut with OriginTimestamp newer than local but out of date expectation gets an error
+run error
+cput k=k1 v=v ts=13 origin_ts=11 cond=not_v
+----
+>> at end:
+data: "k1"/10.000000000,0 -> /BYTES/v
+error: (*kvpb.ConditionFailedError:) higher OriginTimestamp but unexpected value: raw_bytes:"\000\000\000\000\003v" timestamp:<wall_time:10000000000 > 
+
+### CPut with OriginTimestamp newer than local write but with too old ts still fails
+run error
+cput k=k1 v=v ts=9 origin_ts=11 cond=v
+----
+>> at end:
+data: "k1"/10.000000000,0 -> /BYTES/v
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 9.000000000,0 too old; must write at or above 10.000000000,1
+
+### CPut with OriginTimestamp newer than local write wins
+run ok
+cput k=k1 v=v ts=13 origin_ts=11 cond=v
+----
+>> at end:
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+
+### CPut with OriginTimestamp older than existing OriginTimestamp loses
+run error
+cput k=k1 v=v2 ts=19 origin_ts=9 cond=v
+----
+>> at end:
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+error: (*kvpb.ConditionFailedError:) OriginTimestamp older than 11.000000000,0
+
+### CPut with OriginTimestamp newer than existing OriginTimestamp wins
+run ok
+cput k=k1 v=v2 ts=20 origin_ts=12 cond=v
+----
+>> at end:
+data: "k1"/20.000000000,0 -> {originTs=12.000000000,0}/BYTES/v2
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+
+# CPut with value on on non-existent key with OriginTimestamp set wins
+run ok
+cput k=k2 v=v ts=11 origin_ts=9
+----
+>> at end:
+data: "k1"/20.000000000,0 -> {originTs=12.000000000,0}/BYTES/v2
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+
+run ok
+clear_range k=k1 end=z
+----
+>> at end:
+<no data>
+
+## Test CPut with no value for callers that want to use CPut in place of
+## Del.
+run ok
+del k=k1 ts=2
+----
+del: "k1": found key false
+>> at end:
+data: "k1"/2.000000000,0 -> /<empty>
+
+run ok
+cput k=k2 v=<tombstone> ts=3 origin_ts=2
+----
+>> at end:
+data: "k1"/2.000000000,0 -> /<empty>
+data: "k2"/3.000000000,0 -> {originTs=2.000000000,0}/<empty>
+
+## k1 is now a "normal" tombostone
+## k2 is still a "originTimestamp"'d tombstone
+
+# CPuts with too old origin timestamps fail with both kinds of tombstones
+
+run error
+cput k=k1 v=v1 ts=4 origin_ts=1
+----
+>> at end:
+data: "k1"/2.000000000,0 -> /<empty>
+data: "k2"/3.000000000,0 -> {originTs=2.000000000,0}/<empty>
+error: (*kvpb.ConditionFailedError:) OriginTimestamp older than 2.000000000,0
+
+run error
+cput k=k2 v=v1 ts=4 origin_ts=1
+----
+>> at end:
+data: "k1"/2.000000000,0 -> /<empty>
+data: "k2"/3.000000000,0 -> {originTs=2.000000000,0}/<empty>
+error: (*kvpb.ConditionFailedError:) OriginTimestamp older than 2.000000000,0
+
+run ok
+cput k=k1 v=v1 ts=3 origin_ts=4
+----
+>> at end:
+data: "k1"/3.000000000,0 -> {originTs=4.000000000,0}/BYTES/v1
+data: "k1"/2.000000000,0 -> /<empty>
+data: "k2"/3.000000000,0 -> {originTs=2.000000000,0}/<empty>
+
+run ok
+cput k=k2 v=v1 ts=4 origin_ts=5
+----
+>> at end:
+data: "k1"/3.000000000,0 -> {originTs=4.000000000,0}/BYTES/v1
+data: "k1"/2.000000000,0 -> /<empty>
+data: "k2"/4.000000000,0 -> {originTs=5.000000000,0}/BYTES/v1
+data: "k2"/3.000000000,0 -> {originTs=2.000000000,0}/<empty>
