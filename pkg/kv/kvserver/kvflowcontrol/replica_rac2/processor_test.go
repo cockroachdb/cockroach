@@ -252,6 +252,7 @@ func TestProcessorBasic(t *testing.T) {
 	var q testACWorkQueue
 	var rcFactory testRangeControllerFactory
 	var p *processorImpl
+	tenantID := roachpb.MustMakeTenantID(4)
 	reset := func(enabled EnabledWhenLeaderLevel) {
 		b.Reset()
 		r = newTestReplica(&b)
@@ -263,7 +264,6 @@ func TestProcessorBasic(t *testing.T) {
 			NodeID:                 1,
 			StoreID:                2,
 			RangeID:                3,
-			TenantID:               roachpb.MustMakeTenantID(4),
 			ReplicaID:              5,
 			Replica:                r,
 			RaftScheduler:          &sched,
@@ -273,7 +273,7 @@ func TestProcessorBasic(t *testing.T) {
 			EnabledWhenLeaderLevel: enabled,
 		}).(*processorImpl)
 		fmt.Fprintf(&b, "n%s,s%s,r%s: replica=%s, tenant=%s, enabled-level=%s\n",
-			p.opts.NodeID, p.opts.StoreID, p.opts.RangeID, p.opts.ReplicaID, p.opts.TenantID,
+			p.opts.NodeID, p.opts.StoreID, p.opts.RangeID, p.opts.ReplicaID, tenantID,
 			enabledLevelString(p.mu.enabledWhenLeader))
 	}
 	builderStr := func() string {
@@ -346,7 +346,7 @@ func TestProcessorBasic(t *testing.T) {
 
 			case "on-desc-changed":
 				desc := parseRangeDescriptor(t, d)
-				p.OnDescChangedLocked(ctx, &desc)
+				p.OnDescChangedLocked(ctx, &desc, tenantID)
 				return builderStr()
 
 			case "handle-raft-ready-and-admit":
