@@ -19,28 +19,113 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsolationLevelFromKVTxnIsolationLevel(t *testing.T) {
+func TestToKVIsoLevel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		In  isolation.Level
-		Out tree.IsolationLevel
+		in  tree.IsolationLevel
+		out isolation.Level
 	}{
-		{
-			In:  isolation.Serializable,
-			Out: tree.SerializableIsolation,
-		},
-		{
-			In:  isolation.ReadCommitted,
-			Out: tree.ReadCommittedIsolation,
-		},
-		{
-			In:  isolation.Snapshot,
-			Out: tree.SnapshotIsolation,
-		},
+		{tree.ReadUncommittedIsolation, isolation.ReadCommitted},
+		{tree.ReadCommittedIsolation, isolation.ReadCommitted},
+		{tree.RepeatableReadIsolation, isolation.Snapshot},
+		{tree.SnapshotIsolation, isolation.Snapshot},
+		{tree.SerializableIsolation, isolation.Serializable},
 	}
 
 	for _, tc := range testCases {
-		require.Equal(t, tc.Out, tree.IsolationLevelFromKVTxnIsolationLevel(tc.In))
+		t.Run("", func(t *testing.T) {
+			require.Equal(t, tc.out, tc.in.ToKVIsoLevel())
+		})
+	}
+}
+
+func TestFromKVIsoLevel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		in  isolation.Level
+		out tree.IsolationLevel
+	}{
+		{isolation.ReadCommitted, tree.ReadCommittedIsolation},
+		{isolation.Snapshot, tree.SnapshotIsolation},
+		{isolation.Serializable, tree.SerializableIsolation},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			require.Equal(t, tc.out, tree.FromKVIsoLevel(tc.in))
+		})
+	}
+}
+
+func TestUpgradeToEnabledLevel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const RU = tree.ReadUncommittedIsolation
+	const RC = tree.ReadCommittedIsolation
+	const RR = tree.RepeatableReadIsolation
+	const SI = tree.SnapshotIsolation
+	const SER = tree.SerializableIsolation
+
+	testCases := []struct {
+		in                      tree.IsolationLevel
+		allowReadCommitted      bool
+		allowRepeatableRead     bool
+		hasLicense              bool
+		expOut                  tree.IsolationLevel
+		expUpgraded             bool
+		expUpgradedDueToLicense bool
+	}{
+		{RU, false, false, false, SER, true, false},
+		{RU, true, false, false, SER, true, true},
+		{RU, false, true, false, SER, true, true},
+		{RU, true, true, false, SER, true, true},
+		{RU, false, false, true, SER, true, false},
+		{RU, true, false, true, RC, true, false},
+		{RU, false, true, true, SI, true, false},
+		{RU, true, true, true, RC, true, false},
+		{RC, false, false, false, SER, true, false},
+		{RC, true, false, false, SER, true, true},
+		{RC, false, true, false, SER, true, true},
+		{RC, true, true, false, SER, true, true},
+		{RC, false, false, true, SER, true, false},
+		{RC, true, false, true, RC, false, false},
+		{RC, false, true, true, SI, true, false},
+		{RC, true, true, true, RC, false, false},
+		{RR, false, false, false, SER, true, false},
+		{RR, true, false, false, SER, true, false},
+		{RR, false, true, false, SER, true, true},
+		{RR, true, true, false, SER, true, true},
+		{RR, false, false, true, SER, true, false},
+		{RR, true, false, true, SER, true, false},
+		{RR, false, true, true, SI, false, false},
+		{RR, true, true, true, SI, false, false},
+		{SI, false, false, false, SER, true, false},
+		{SI, true, false, false, SER, true, false},
+		{SI, false, true, false, SER, true, true},
+		{SI, true, true, false, SER, true, true},
+		{SI, false, false, true, SER, true, false},
+		{SI, true, false, true, SER, true, false},
+		{SI, false, true, true, SI, false, false},
+		{SI, true, true, true, SI, false, false},
+		{SER, false, false, false, SER, false, false},
+		{SER, true, false, false, SER, false, false},
+		{SER, false, true, false, SER, false, false},
+		{SER, true, true, false, SER, false, false},
+		{SER, false, false, true, SER, false, false},
+		{SER, true, false, true, SER, false, false},
+		{SER, false, true, true, SER, false, false},
+		{SER, true, true, true, SER, false, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			res, upgraded, upgradedDueToLicense := tc.in.UpgradeToEnabledLevel(
+				tc.allowReadCommitted, tc.allowRepeatableRead, tc.hasLicense)
+			require.Equal(t, tc.expOut, res)
+			require.Equal(t, tc.expUpgraded, upgraded)
+			require.Equal(t, tc.expUpgradedDueToLicense, upgradedDueToLicense)
+		})
 	}
 }
