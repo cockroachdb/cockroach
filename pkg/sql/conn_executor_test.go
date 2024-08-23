@@ -439,7 +439,7 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 
 	for _, isoLevel := range []tree.IsolationLevel{
 		tree.ReadCommittedIsolation,
-		tree.SnapshotIsolation,
+		tree.RepeatableReadIsolation,
 		tree.SerializableIsolation,
 	} {
 		t.Run(isoLevel.String(), func(t *testing.T) {

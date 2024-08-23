@@ -78,8 +78,8 @@ type txnState struct {
 		// autoRetryCounter keeps track of the number of automatic retries that have
 		// occurred. It includes per-statement retries performed under READ
 		// COMMITTED as well as transaction retries for serialization failures under
-		// SNAPSHOT and SERIALIZABLE. It's 0 whenever the transaction state is not
-		// stateOpen.
+		// REPEATABLE READ and SERIALIZABLE. It's 0 whenever the transaction state
+		// is not stateOpen.
 		autoRetryCounter int32
 	}
 
