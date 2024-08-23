@@ -285,14 +285,7 @@ func (cv ClusterVersion) Encode() []byte {
 // to slot in fence versions for each cluster version. See top-level
 // documentation in the clusterversion package for more details.
 func (cv ClusterVersion) FenceVersion() ClusterVersion {
-	if (cv.Internal % 2) != 0 {
-		panic(errors.Newf("only even numbered internal versions allowed, found %s", cv.Version))
-	}
-	// NB: Internal may be negative after this. This is the case for all final
-	// versions for a release.
-	fenceCV := cv
-	fenceCV.Internal--
-	return fenceCV
+	return ClusterVersion{Version: cv.Version.FenceVersion()}
 }
 
 var _ settings.ClusterVersionImpl = ClusterVersion{}

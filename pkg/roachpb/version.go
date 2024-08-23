@@ -81,9 +81,7 @@ func (v Version) SafeFormat(p redact.SafePrinter, _ rune) {
 		}
 		p.Printf("%d.%d-upgrading-to-%d.%d-step-%03d", v.Major, v.Minor, s.Major, s.Minor, v.Internal)
 	} else {
-		// This branch is used for the fence version of a final cluster version.
-		// For example, the fence version for 23.2-0 is 23.2--1 (with a negative
-		// one at the end).
+		// This shouldn't happen in practice.
 		p.Printf("%d.%d-upgrading-step-%03d", v.Major, v.Minor, v.Internal)
 	}
 }
@@ -96,17 +94,47 @@ func (v Version) IsFinal() bool {
 	return v.Internal == 0
 }
 
+// IsFence returns true if this is a fence version.
+//
+// A version is a fence version iff Internal is odd.
+func (v Version) IsFence() bool {
+	// NB: Internal may be -1. This is the case for all fence versions for final
+	// versions of a release.
+	return v.Internal%2 != 0
+}
+
 // PrettyPrint returns the value in a format that makes it apparent whether or
 // not it is a fence version.
 func (v Version) PrettyPrint() string {
-	// If we're a version greater than v20.2 and have an odd internal version,
-	// we're a fence version. See fenceVersionFor in pkg/upgrade to understand
-	// what these are.
-	fenceVersion := !v.LessEq(Version{Major: 20, Minor: 2}) && (v.Internal%2) == 1
-	if !fenceVersion {
+	if !v.IsFence() {
 		return v.String()
 	}
 	return fmt.Sprintf("%v(fence)", v)
+}
+
+// FenceVersion is the fence version -- the internal immediately prior -- for
+// the given version.
+//
+// Fence versions allow the upgrades infrastructure to safely step through
+// consecutive cluster versions in the presence of Nodes (running any binary
+// version) being added to the cluster. See the upgrademanager package for
+// intended usage.
+//
+// Fence versions (and the upgrades infrastructure entirely) were introduced in
+// the 21.1 release cycle. In the same release cycle, we introduced the
+// invariant that new user-defined versions (users being crdb engineers) must
+// always have even-numbered Internal versions, thus reserving the odd numbers
+// to slot in fence versions for each cluster version. See top-level
+// documentation in the clusterversion package for more details.
+func (v Version) FenceVersion() Version {
+	if v.IsFence() {
+		panic(errors.Newf("%s already is a fence version", v))
+	}
+	// NB: Internal may be -1 after this. This is the case for all final versions
+	// for a release.
+	fenceV := v
+	fenceV.Internal--
+	return fenceV
 }
 
 var (
