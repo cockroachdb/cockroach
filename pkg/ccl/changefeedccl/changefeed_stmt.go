@@ -227,8 +227,14 @@ func changefeedPlanHook(
 			logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
 
 			var err error
-			for r := getRetry(ctx); r.Next(); {
+			for r := getRetry(ctx); ; {
+				if !r.Next() {
+					log.Infof(ctx, "core changefeed retry loop exiting: %s", ctx.Err())
+					break
+				}
+
 				if err = distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh); err == nil {
+					log.Infof(ctx, "core changefeed completed with no error")
 					return nil
 				}
 
