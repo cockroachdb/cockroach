@@ -69,7 +69,7 @@ func TestCheckClusterSettingValuesAreEquivalent(t *testing.T) {
 		{ // 5
 			// NB: On release branches, clusterversion.Latest will have a fence
 			// version that has -1 for the internal version.
-			local: encodeFromVersion(t, clusterversion.ClusterVersion{Version: clusterversion.Latest.Version()}.FenceVersion().Version),
+			local: encodeFromVersion(t, clusterversion.Latest.Version().FenceVersion()),
 			kv:    encodeFromVersion(t, (clusterversion.Latest - 1).Version()),
 		},
 		{ // 6
