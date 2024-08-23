@@ -410,7 +410,7 @@ func (z *ZoneConfig) Validate() error {
 
 	if z.RangeMaxBytes != nil && *z.RangeMaxBytes > maxRangeMaxBytes {
 		return fmt.Errorf("RangeMaxBytes %d greater than maximum allowed %d",
-			*z.RangeMaxBytes, minRangeMaxBytes,
+			*z.RangeMaxBytes, maxRangeMaxBytes,
 		)
 	}
 
