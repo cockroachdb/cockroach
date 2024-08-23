@@ -1655,8 +1655,8 @@ func (r *Registry) stepThroughStateMachine(
 		}
 
 		if errors.Is(err, errPauseSelfSentinel) {
-			if err := r.PauseRequested(ctx, nil, job.ID(), err.Error()); err != nil {
-				return err
+			if pauseRequestedErr := r.PauseRequested(ctx, nil, job.ID(), err.Error()); pauseRequestedErr != nil {
+				return errors.WithSecondaryError(pauseRequestedErr, err)
 			}
 			return errors.Wrap(err, PauseRequestExplained)
 		}
