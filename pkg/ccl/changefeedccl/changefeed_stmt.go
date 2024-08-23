@@ -343,8 +343,9 @@ func coreChangefeed(
 
 	for r := getRetry(ctx); ; {
 		if !r.Next() {
+			// Retry loop exits when context is canceled.
 			log.Infof(ctx, "core changefeed retry loop exiting: %s", ctx.Err())
-			break
+			return ctx.Err()
 		}
 
 		if knobs != nil && knobs.BeforeDistChangefeed != nil {
@@ -370,7 +371,6 @@ func coreChangefeed(
 		// information which is saved in the localState.
 		log.Infof(ctx, "core changefeed retrying due to transient error: %s", err)
 	}
-	return ctx.Err() // retry loop exits when context cancels.
 }
 
 func createChangefeedJobRecord(
