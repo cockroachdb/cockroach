@@ -89,7 +89,7 @@ statement ok
 SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
 
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ
 
 query I
 SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE

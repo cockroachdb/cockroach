@@ -185,10 +185,10 @@ ROLLBACK TRANSACTION
 # Set isolation level without a transaction is an error.
 
 statement error pgcode 25P01 there is no transaction in progress
-SET TRANSACTION ISOLATION LEVEL SNAPSHOT
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ
 
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT; COMMIT
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; COMMIT
 
 onlyif config enterprise-configs
 query T noticetrace
@@ -208,7 +208,7 @@ statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; COMMIT
 
 statement ok
-BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL SNAPSHOT; COMMIT
+BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; COMMIT
 
 statement ok
 BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; COMMIT
@@ -299,9 +299,9 @@ SHOW TRANSACTION ISOLATION LEVEL
 ----
 serializable
 
-# SNAPSHOT is now mapped to serializable
+# REPEATABLE READ is now mapped to serializable
 statement ok
-SET TRANSACTION ISOLATION LEVEL SNAPSHOT
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ
 
 query T
 SHOW TRANSACTION ISOLATION LEVEL
@@ -358,7 +358,7 @@ onlyif config enterprise-configs
 query T
 SHOW default_transaction_isolation
 ----
-snapshot
+repeatable read
 
 skipif config enterprise-configs
 query T
@@ -373,7 +373,7 @@ onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
-snapshot
+repeatable read
 
 skipif config enterprise-configs
 query T
@@ -386,19 +386,19 @@ statement ok
 BEGIN
 
 statement ok
-SET TRANSACTION ISOLATION LEVEL SNAPSHOT
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ
 
 onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+repeatable read
 
 onlyif config enterprise-configs
 query T
 SHOW transaction_isolation
 ----
-snapshot
+repeatable read
 
 skipif config enterprise-configs
 query T
@@ -416,19 +416,19 @@ statement ok
 COMMIT
 
 # We can't set isolation level to an unsupported one.
-statement error invalid value for parameter "transaction_isolation": "this is made up"\n.*Available values: serializable,snapshot
+statement error invalid value for parameter "transaction_isolation": "this is made up"\n.*Available values: serializable,repeatable read
 SET transaction_isolation = 'this is made up'
 
 # We can explicitly start a transaction with isolation level specified.
 
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ
 
 onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+repeatable read
 
 skipif config enterprise-configs
 query T
@@ -746,15 +746,15 @@ normal
 # We can specify both isolation level and user priority.
 
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW; COMMIT
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, PRIORITY LOW; COMMIT
 
 statement ok
-BEGIN TRANSACTION PRIORITY LOW, ISOLATION LEVEL SNAPSHOT; COMMIT
+BEGIN TRANSACTION PRIORITY LOW, ISOLATION LEVEL REPEATABLE READ; COMMIT
 
 # We can explicitly start a transaction with specified isolation level and low user priority.
 
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, PRIORITY LOW
 
 query T
 SHOW TRANSACTION ISOLATION LEVEL
@@ -780,7 +780,7 @@ SHOW TRANSACTION PRIORITY
 high
 
 statement ok
-SET TRANSACTION PRIORITY NORMAL, ISOLATION LEVEL SNAPSHOT
+SET TRANSACTION PRIORITY NORMAL, ISOLATION LEVEL REPEATABLE READ
 
 query T
 SHOW TRANSACTION ISOLATION LEVEL
@@ -799,13 +799,13 @@ statement ok
 SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
 
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, PRIORITY LOW
 
 onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+repeatable read
 
 query T
 SHOW TRANSACTION PRIORITY
@@ -829,7 +829,7 @@ statement ok
 COMMIT
 
 # With the repeatable_read_isolation.enabled cluster setting set to true,
-# REPEATABLE READ gets mapped to SNAPSHOT if there is a valid license.
+# REPEATABLE READ can be used if there is a valid license.
 onlyif config enterprise-configs
 query T noticetrace
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
@@ -839,7 +839,7 @@ skipif config enterprise-configs
 query T noticetrace
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
 ----
-NOTICE: SNAPSHOT isolation level is not allowed without an enterprise license; upgrading to SERIALIZABLE
+NOTICE: REPEATABLE READ isolation level is not allowed without an enterprise license; upgrading to SERIALIZABLE
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
@@ -848,7 +848,7 @@ onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
-snapshot
+repeatable read
 
 skipif config enterprise-configs
 query T
@@ -962,15 +962,15 @@ statement ok
 SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
 
 # Since repeatable_read_isolation.enabled is true, setting isolation level to
-# REPEATABLE READ should map to SNAPSHOT.
+# SNAPSHOT should map to REPEATABLE READ.
 statement ok
-SET default_transaction_isolation = 'repeatable read'
+SET default_transaction_isolation = 'snapshot'
 
 onlyif config enterprise-configs
 query T
 SHOW default_transaction_isolation
 ----
-snapshot
+repeatable read
 
 skipif config enterprise-configs
 query T
@@ -979,13 +979,13 @@ SHOW default_transaction_isolation
 serializable
 
 statement ok
-SET DEFAULT_TRANSACTION_ISOLATION TO 'SNAPSHOT'
+SET DEFAULT_TRANSACTION_ISOLATION TO 'REPEATABLE READ'
 
 onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
-snapshot
+repeatable read
 
 skipif config enterprise-configs
 query T
@@ -997,7 +997,7 @@ statement ok
 SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = false
 
 # Since repeatable_read_isolation.enabled is false, setting isolation level to
-# SNAPSHOT should map to SERIALIZABLE.
+# REPEATABLE READ should map to SERIALIZABLE.
 statement ok
 SET default_transaction_isolation = 'repeatable read'
 
@@ -1007,7 +1007,7 @@ SHOW default_transaction_isolation
 serializable
 
 statement ok
-SET DEFAULT_TRANSACTION_ISOLATION TO 'SNAPSHOT'
+SET DEFAULT_TRANSACTION_ISOLATION TO 'REPEATABLE READ'
 
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
@@ -1047,7 +1047,7 @@ statement ok
 BEGIN TRANSACTION
 
 statement ok
-SET TRANSACTION ISOLATION LEVEL SNAPSHOT
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ
 
 query T
 SHOW TRANSACTION ISOLATION LEVEL
@@ -1211,7 +1211,7 @@ statement ok
 BEGIN TRANSACTION;
   SAVEPOINT cockroach_restart;
   SET TRANSACTION PRIORITY HIGH;
-  SET TRANSACTION ISOLATION LEVEL SNAPSHOT;
+  SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 
 statement ok
 SELECT IF(nextval('s')<3, crdb_internal.force_retry('1h':::INTERVAL), 0)

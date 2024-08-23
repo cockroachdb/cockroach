@@ -1123,8 +1123,8 @@ func (s *Server) newConnExecutor(
 			displayLevel := upgradedFrom
 			if upgradedFrom == tree.ReadUncommittedIsolation {
 				displayLevel = tree.ReadCommittedIsolation
-			} else if upgradedFrom == tree.RepeatableReadIsolation {
-				displayLevel = tree.SnapshotIsolation
+			} else if upgradedFrom == tree.SnapshotIsolation {
+				displayLevel = tree.RepeatableReadIsolation
 			}
 			if logIsolationLevelLimiter.ShouldLog() {
 				log.Warningf(ctx, msgFmt, displayLevel)
