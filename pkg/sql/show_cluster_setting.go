@@ -141,7 +141,7 @@ func checkClusterSettingValuesAreEquivalent(localRawVal, kvRawVal []byte) error 
 	}
 	decodedLocal, localVal, localOk := maybeDecodeVersion(localRawVal)
 	decodedKV, kvVal, kvOk := maybeDecodeVersion(kvRawVal)
-	if localOk && kvOk && decodedLocal.Internal%2 != 0 /* isFence */ {
+	if localOk && kvOk && decodedLocal.IsFence() {
 		// NB: The internal version is -1 for the fence version of all final cluster
 		// versions. In these cases, we cannot simply check that the local version
 		// is off-by-one from the KV version, since (for example's sake) we would be
