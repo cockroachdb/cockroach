@@ -35,7 +35,14 @@ import (
 const awsStartupScriptTemplate = `#!/usr/bin/env bash
 # Script for setting up a AWS machine for roachprod use.
 
-set -x
+# ensure any failure fails the entire script
+set -eux
+
+# Redirect output to stdout/err and a log file
+exec &> >(tee -a {{ .StartupLogs }})
+
+# Log the startup of the script with a timestamp
+echo "startup script starting: $(date -u)"
 
 if [ -e {{ .DisksInitializedFile }} ]; then
   echo "Already initialized, exiting."
@@ -75,14 +82,19 @@ ebs_volumes=()
 
 # On different machine types, the drives are either called nvme... or xvdd.
 for d in $(ls /dev/nvme?n1 /dev/xvdd); do
+mounted="no"
 {{ if .Zfs }}
   # Check if the disk is already part of a zpool or mounted; skip if so.
-  (zpool list -v -P | grep ${d} > /dev/null) || (mount | grep ${d} > /dev/null)
+  if (zpool list -v -P | grep -q ${d}) || (mount | grep -q ${d}); then
+		mounted="yes"
+	fi
 {{ else }}
   # Skip already mounted disks.
-  mount | grep ${d} > /dev/null
+  if mount | grep -q ${d}; then
+		mounted="yes"
+	fi
 {{ end }}
-  if [ $? -ne 0 ]; then
+  if [ "$mounted" == "no" ]; then
 		if udevadm info --query=property --name=${d} | grep "ID_MODEL=Amazon Elastic Block Store">/dev/null; then
 			ebs_volumes+=("${d}")
 		else
@@ -178,7 +190,9 @@ sudo /etc/init.d/chrony restart
 sudo chronyc -a waitsync 30 0.01 | sudo tee -a /root/chrony.log
 
 # sshguard can prevent frequent ssh connections to the same host. Disable it.
-sudo service sshguard stop
+if service sshguard status > /dev/null 2>&1; then
+    sudo service sshguard stop
+fi
 # increase the number of concurrent unauthenticated connections to the sshd
 # daemon. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Load_Balancing.
 # By default, only 10 unauthenticated connections are permitted before sshd
@@ -237,6 +251,7 @@ sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
 sudo service ssh restart
 
 sudo touch {{ .DisksInitializedFile }}
+sudo touch {{ .OSInitializedFile }}
 `
 
 // writeStartupScript writes the startup script to a temp file.
@@ -255,6 +270,8 @@ func writeStartupScript(
 		Zfs                  bool
 		EnableFIPS           bool
 		DisksInitializedFile string
+		OSInitializedFile    string
+		StartupLogs          string
 	}
 
 	args := tmplParams{
@@ -264,6 +281,8 @@ func writeStartupScript(
 		Zfs:                  fileSystem == vm.Zfs,
 		EnableFIPS:           enableFips,
 		DisksInitializedFile: vm.DisksInitializedFile,
+		OSInitializedFile:    vm.OSInitializedFile,
+		StartupLogs:          vm.StartupLogs,
 	}
 
 	tmpfile, err := os.CreateTemp("", "aws-startup-script")
