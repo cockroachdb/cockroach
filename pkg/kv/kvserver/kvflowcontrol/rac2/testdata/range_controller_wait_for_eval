@@ -16,14 +16,14 @@ t1/s3: reg=+0 B/+1 B ela=+0 B/+1 B
 wait_for_eval name=a range_id=1 pri=HighPri
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=false err=<nil>
+  name=a pri=high-pri done=false waited=false err=<nil>
 
 # Start a low priority evaluation. It should also not complete.
 wait_for_eval name=b range_id=1 pri=LowPri
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=false err=<nil>
-  name=b pri=low-pri  done=false err=<nil>
+  name=a pri=high-pri done=false waited=false err=<nil>
+  name=b pri=low-pri  done=false waited=false err=<nil>
 
 # Add high priority tokens to the first store. This is not enough for quorum.
 adjust_tokens
@@ -37,8 +37,8 @@ t1/s3: reg=+0 B/+1 B ela=+0 B/+1 B
 cancel_context range_id=1 name=a
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=true  err=context canceled
-  name=b pri=low-pri  done=false err=<nil>
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=false waited=false err=<nil>
 
 # Add high priority tokens to the second store. 'b' is elastic so it should not
 # complete despite having a quorum of streams with available tokens.
@@ -52,8 +52,8 @@ t1/s3: reg=+0 B/+1 B ela=+0 B/+1 B
 check_state
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=true  err=context canceled
-  name=b pri=low-pri  done=false err=<nil>
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=false waited=false err=<nil>
 
 # Add high priority tokens to the third store. Now all stores have positive
 # tokens and 'b' should complete.
@@ -67,8 +67,8 @@ t1/s3: reg=+1 B/+1 B ela=+1 B/+1 B
 check_state
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=true  err=context canceled
-  name=b pri=low-pri  done=true  err=<nil>
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
 
 # Change the replica set: replace replica 3 with a new replica 4.
 set_replicas
@@ -92,9 +92,9 @@ t1/s4: reg=+0 B/+1 B ela=+0 B/+1 B
 wait_for_eval name=c range_id=1 pri=HighPri
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=true  err=context canceled
-  name=b pri=low-pri  done=true  err=<nil>
-  name=c pri=high-pri done=false err=<nil>
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=false waited=false err=<nil>
 
 # Add high priority tokens back to the first store, restoring quorum.
 adjust_tokens
@@ -109,9 +109,9 @@ t1/s4: reg=+0 B/+1 B ela=+0 B/+1 B
 check_state
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=true  err=context canceled
-  name=b pri=low-pri  done=true  err=<nil>
-  name=c pri=high-pri done=true  err=<nil>
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
 
 # Test behavior with a non-voter replica.
 set_replicas
@@ -127,10 +127,10 @@ r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3,(n4,s4):4NON_VOTER]
 wait_for_eval name=d range_id=1 pri=HighPri
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=true  err=context canceled
-  name=b pri=low-pri  done=true  err=<nil>
-  name=c pri=high-pri done=true  err=<nil>
-  name=d pri=high-pri done=true  err=<nil>
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
 
 # Remove tokens from s3, s1 and s2 have tokens which is enough for quorum.
 adjust_tokens
@@ -146,10 +146,10 @@ t1/s4: reg=+0 B/+1 B ela=+0 B/+1 B
 check_state
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=true  err=context canceled
-  name=b pri=low-pri  done=true  err=<nil>
-  name=c pri=high-pri done=true  err=<nil>
-  name=d pri=high-pri done=true  err=<nil>
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
 
 # Test behavior when changing leaseholder.
 set_leaseholder range_id=1 replica_id=2
@@ -162,11 +162,11 @@ r1: [(n1,s1):1,(n2,s2):2*,(n3,s3):3,(n4,s4):4NON_VOTER]
 wait_for_eval name=e range_id=1 pri=HighPri
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=true  err=context canceled
-  name=b pri=low-pri  done=true  err=<nil>
-  name=c pri=high-pri done=true  err=<nil>
-  name=d pri=high-pri done=true  err=<nil>
-  name=e pri=high-pri done=true  err=<nil>
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=high-pri done=true  waited=true  err=<nil>
 
 # Start another evaluation on a new range, which will intersect some of the
 # stores of the first range. The evaluation on the first range will not
@@ -193,25 +193,25 @@ r2: [(n1,s1):1*,(n3,s3):3,(n5,s5):5]
 wait_for_eval name=f range_id=1 pri=LowPri
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=true  err=context canceled
-  name=b pri=low-pri  done=true  err=<nil>
-  name=c pri=high-pri done=true  err=<nil>
-  name=d pri=high-pri done=true  err=<nil>
-  name=e pri=high-pri done=true  err=<nil>
-  name=f pri=low-pri  done=false err=<nil>
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=high-pri done=true  waited=true  err=<nil>
+  name=f pri=low-pri  done=false waited=false err=<nil>
 range_id=2 tenant_id={1} local_replica_id=1
 
 wait_for_eval name=g range_id=2 pri=HighPri
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=true  err=context canceled
-  name=b pri=low-pri  done=true  err=<nil>
-  name=c pri=high-pri done=true  err=<nil>
-  name=d pri=high-pri done=true  err=<nil>
-  name=e pri=high-pri done=true  err=<nil>
-  name=f pri=low-pri  done=false err=<nil>
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=high-pri done=true  waited=true  err=<nil>
+  name=f pri=low-pri  done=false waited=false err=<nil>
 range_id=2 tenant_id={1} local_replica_id=1
-  name=g pri=high-pri done=false err=<nil>
+  name=g pri=high-pri done=false waited=false err=<nil>
 
 adjust_tokens
   store_id=5 pri=HighPri tokens=1
@@ -225,14 +225,14 @@ t1/s5: reg=+1 B/+1 B ela=+1 B/+1 B
 check_state
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=true  err=context canceled
-  name=b pri=low-pri  done=true  err=<nil>
-  name=c pri=high-pri done=true  err=<nil>
-  name=d pri=high-pri done=true  err=<nil>
-  name=e pri=high-pri done=true  err=<nil>
-  name=f pri=low-pri  done=false err=<nil>
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=high-pri done=true  waited=true  err=<nil>
+  name=f pri=low-pri  done=false waited=false err=<nil>
 range_id=2 tenant_id={1} local_replica_id=1
-  name=g pri=high-pri done=true  err=<nil>
+  name=g pri=high-pri done=true  waited=true  err=<nil>
 
 # Adding elastic tokens to s3 should complete the low priority evaluation 'f',
 # as all stores now have elastic tokens available.
@@ -248,14 +248,14 @@ t1/s5: reg=+1 B/+1 B ela=+1 B/+1 B
 check_state
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=true  err=context canceled
-  name=b pri=low-pri  done=true  err=<nil>
-  name=c pri=high-pri done=true  err=<nil>
-  name=d pri=high-pri done=true  err=<nil>
-  name=e pri=high-pri done=true  err=<nil>
-  name=f pri=low-pri  done=true  err=<nil>
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=high-pri done=true  waited=true  err=<nil>
+  name=f pri=low-pri  done=true  waited=true  err=<nil>
 range_id=2 tenant_id={1} local_replica_id=1
-  name=g pri=high-pri done=true  err=<nil>
+  name=g pri=high-pri done=true  waited=true  err=<nil>
 
 # Adjust the tokens so that r1 doesn't have tokens on s3 or s1, then transfer
 # s3 the lease for r1.
@@ -279,15 +279,15 @@ r2: [(n1,s1):1*,(n3,s3):3,(n5,s5):5]
 wait_for_eval name=h range_id=1 pri=HighPri
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=true  err=context canceled
-  name=b pri=low-pri  done=true  err=<nil>
-  name=c pri=high-pri done=true  err=<nil>
-  name=d pri=high-pri done=true  err=<nil>
-  name=e pri=high-pri done=true  err=<nil>
-  name=f pri=low-pri  done=true  err=<nil>
-  name=h pri=high-pri done=false err=<nil>
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=high-pri done=true  waited=true  err=<nil>
+  name=f pri=low-pri  done=true  waited=true  err=<nil>
+  name=h pri=high-pri done=false waited=false err=<nil>
 range_id=2 tenant_id={1} local_replica_id=1
-  name=g pri=high-pri done=true  err=<nil>
+  name=g pri=high-pri done=true  waited=true  err=<nil>
 
 # Add tokens to s3, this should not complete 'h' as the leader of r1 (s1) does
 # not have tokens.
@@ -306,16 +306,16 @@ t1/s5: reg=+1 B/+1 B ela=+1 B/+1 B
 wait_for_eval name=i range_id=1 pri=HighPri
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=true  err=context canceled
-  name=b pri=low-pri  done=true  err=<nil>
-  name=c pri=high-pri done=true  err=<nil>
-  name=d pri=high-pri done=true  err=<nil>
-  name=e pri=high-pri done=true  err=<nil>
-  name=f pri=low-pri  done=true  err=<nil>
-  name=h pri=high-pri done=false err=<nil>
-  name=i pri=high-pri done=false err=<nil>
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=high-pri done=true  waited=true  err=<nil>
+  name=f pri=low-pri  done=true  waited=true  err=<nil>
+  name=h pri=high-pri done=false waited=false err=<nil>
+  name=i pri=high-pri done=false waited=false err=<nil>
 range_id=2 tenant_id={1} local_replica_id=1
-  name=g pri=high-pri done=true  err=<nil>
+  name=g pri=high-pri done=true  waited=true  err=<nil>
 
 # Finally, add tokens to s1 to complete both evaluations 'h' and 'i'.
 adjust_tokens
@@ -330,13 +330,57 @@ t1/s5: reg=+1 B/+1 B ela=+1 B/+1 B
 check_state
 ----
 range_id=1 tenant_id={1} local_replica_id=1
-  name=a pri=high-pri done=true  err=context canceled
-  name=b pri=low-pri  done=true  err=<nil>
-  name=c pri=high-pri done=true  err=<nil>
-  name=d pri=high-pri done=true  err=<nil>
-  name=e pri=high-pri done=true  err=<nil>
-  name=f pri=low-pri  done=true  err=<nil>
-  name=h pri=high-pri done=true  err=<nil>
-  name=i pri=high-pri done=true  err=<nil>
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=high-pri done=true  waited=true  err=<nil>
+  name=f pri=low-pri  done=true  waited=true  err=<nil>
+  name=h pri=high-pri done=true  waited=true  err=<nil>
+  name=i pri=high-pri done=true  waited=true  err=<nil>
 range_id=2 tenant_id={1} local_replica_id=1
-  name=g pri=high-pri done=true  err=<nil>
+  name=g pri=high-pri done=true  waited=true  err=<nil>
+
+# No tokens on s3.
+adjust_tokens
+  store_id=3 pri=HighPri tokens=-1
+----
+t1/s1: reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s2: reg=+1 B/+1 B ela=+1 B/+1 B
+t1/s3: reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s4: reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s5: reg=+1 B/+1 B ela=+1 B/+1 B
+
+# Start an evaluation 'j' on r1, that does not complete since the leaseholder
+# (s3) has tokens.
+wait_for_eval name=j range_id=1 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=high-pri done=true  waited=true  err=<nil>
+  name=f pri=low-pri  done=true  waited=true  err=<nil>
+  name=h pri=high-pri done=true  waited=true  err=<nil>
+  name=i pri=high-pri done=true  waited=true  err=<nil>
+  name=j pri=high-pri done=false waited=false err=<nil>
+range_id=2 tenant_id={1} local_replica_id=1
+  name=g pri=high-pri done=true  waited=true  err=<nil>
+
+# Close all the RangeControllers. Evaluation 'j' is done, but specifies waited
+# is false, and error is nil.
+close_rcs
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=high-pri done=true  waited=true  err=<nil>
+  name=f pri=low-pri  done=true  waited=true  err=<nil>
+  name=h pri=high-pri done=true  waited=true  err=<nil>
+  name=i pri=high-pri done=true  waited=true  err=<nil>
+  name=j pri=high-pri done=true  waited=false err=<nil>
+range_id=2 tenant_id={1} local_replica_id=1
+  name=g pri=high-pri done=true  waited=true  err=<nil>
