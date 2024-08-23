@@ -16,7 +16,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -24,11 +26,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -185,21 +191,34 @@ func (q *testACWorkQueue) Admit(ctx context.Context, entry EntryForAdmission) bo
 }
 
 type testRangeControllerFactory struct {
-	b *strings.Builder
+	b   *strings.Builder
+	rcs []*testRangeController
 }
 
 func (f *testRangeControllerFactory) New(state rangeControllerInitState) rac2.RangeController {
 	fmt.Fprintf(f.b, " RangeControllerFactory.New(replicaSet=%s, leaseholder=%s, nextRaftIndex=%d)\n",
 		state.replicaSet, state.leaseholder, state.nextRaftIndex)
-	return &testRangeController{b: f.b}
+	rc := &testRangeController{b: f.b, waited: true}
+	f.rcs = append(f.rcs, rc)
+	return rc
 }
 
 type testRangeController struct {
-	b *strings.Builder
+	b              *strings.Builder
+	waited         bool
+	waitForEvalErr error
 }
 
-func (c *testRangeController) WaitForEval(ctx context.Context, pri admissionpb.WorkPriority) error {
-	panic("WaitForEval should not be called")
+func (c *testRangeController) WaitForEval(
+	ctx context.Context, pri admissionpb.WorkPriority,
+) (bool, error) {
+	errStr := "<nil>"
+	if c.waitForEvalErr != nil {
+		errStr = c.waitForEvalErr.Error()
+	}
+	fmt.Fprintf(c.b, " RangeController.WaitForEval(pri=%s) = (waited=%t err=%s)\n",
+		pri.String(), c.waited, errStr)
+	return c.waited, c.waitForEvalErr
 }
 
 func raftEventString(e rac2.RaftEvent) string {
@@ -245,12 +264,17 @@ func (c *testRangeController) CloseRaftMuLocked(ctx context.Context) {
 }
 
 func TestProcessorBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
 	var b strings.Builder
 	var r *testReplica
 	var sched testRaftScheduler
 	var piggybacker testAdmittedPiggybacker
 	var q testACWorkQueue
 	var rcFactory testRangeControllerFactory
+	var st *cluster.Settings
 	var p *processorImpl
 	reset := func(enabled EnabledWhenLeaderLevel) {
 		b.Reset()
@@ -259,6 +283,8 @@ func TestProcessorBasic(t *testing.T) {
 		piggybacker = testAdmittedPiggybacker{b: &b}
 		q = testACWorkQueue{b: &b}
 		rcFactory = testRangeControllerFactory{b: &b}
+		st = cluster.MakeTestingClusterSettings()
+		kvflowcontrol.Mode.Override(ctx, &st.SV, kvflowcontrol.ApplyToElastic)
 		p = NewProcessor(ProcessorOptions{
 			NodeID:                 1,
 			StoreID:                2,
@@ -270,6 +296,7 @@ func TestProcessorBasic(t *testing.T) {
 			AdmittedPiggybacker:    &piggybacker,
 			ACWorkQueue:            &q,
 			RangeControllerFactory: &rcFactory,
+			Settings:               st,
 			EnabledWhenLeaderLevel: enabled,
 		}).(*processorImpl)
 		fmt.Fprintf(&b, "n%s,s%s,r%s: replica=%s, tenant=%s, enabled-level=%s\n",
@@ -286,7 +313,6 @@ func TestProcessorBasic(t *testing.T) {
 			r.raftNode.leader, r.leaseholder, r.raftNode.stableIndex, r.raftNode.nextUnstableIndex,
 			r.raftNode.term, admittedString(r.raftNode.admitted))
 	}
-	ctx := context.Background()
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "processor"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -428,10 +454,60 @@ func TestProcessorBasic(t *testing.T) {
 				p.AdmittedLogEntry(ctx, cb)
 				return builderStr()
 
+			case "set-flow-control-mode":
+				var mode string
+				d.ScanArgs(t, "mode", &mode)
+				var modeVal kvflowcontrol.ModeT
+				switch mode {
+				case "apply-to-all":
+					modeVal = kvflowcontrol.ApplyToAll
+				case "apply-to-elastic":
+					modeVal = kvflowcontrol.ApplyToElastic
+				default:
+					t.Fatalf("unknown mode: %s", mode)
+				}
+				kvflowcontrol.Mode.Override(ctx, &st.SV, modeVal)
+				return builderStr()
+
+			case "admit-for-eval":
+				pri := parseAdmissionPriority(t, d)
+				// The callee ignores the create time.
+				admitted, err := p.AdmitForEval(ctx, pri, time.Time{})
+				fmt.Fprintf(&b, "admitted: %t err: ", admitted)
+				if err == nil {
+					fmt.Fprintf(&b, "<nil>\n")
+				} else {
+					fmt.Fprintf(&b, "%s\n", err.Error())
+				}
+				return builderStr()
+
+			case "set-wait-for-eval-return-values":
+				rc := rcFactory.rcs[len(rcFactory.rcs)-1]
+				d.ScanArgs(t, "waited", &rc.waited)
+				rc.waitForEvalErr = nil
+				if d.HasArg("err") {
+					var errStr string
+					d.ScanArgs(t, "err", &errStr)
+					rc.waitForEvalErr = errors.Errorf("%s", errStr)
+				}
+				return builderStr()
+
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
 		})
+}
+
+func parseAdmissionPriority(t *testing.T, td *datadriven.TestData) admissionpb.WorkPriority {
+	var priStr string
+	td.ScanArgs(t, "pri", &priStr)
+	for k, v := range admissionpb.WorkPriorityDict {
+		if v == priStr {
+			return k
+		}
+	}
+	t.Fatalf("unknown priority %s", priStr)
+	return admissionpb.NormalPri
 }
 
 func parseEnabledLevel(t *testing.T, td *datadriven.TestData) EnabledWhenLeaderLevel {
