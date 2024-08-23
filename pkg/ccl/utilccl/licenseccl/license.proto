@@ -20,6 +20,8 @@ message License {
       NonCommercial = 0;
       Enterprise = 1;
       Evaluation = 2;
+      Free = 3;
+      Trial = 4;
     }
 
     Type type = 3;
@@ -37,4 +39,11 @@ message License {
     }
 
     Usage usage = 5;
+
+    // Two UUIDs uniquely identify this license and the associated organization.
+    // They are stored as bytes to align with the server's typical usage. We
+    // avoided using the custom UUID type normally used in protobufs to minimize
+    // dependencies, as the generated code is also used in other repositories.
+    bytes license_id = 6;
+    bytes organization_id = 7;
 }
