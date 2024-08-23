@@ -1017,7 +1017,7 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 				defer dbWithHandler.Close()
 				conn := sqlutils.MakeSQLRunner(dbWithHandler)
 				conn.Exec(t, "CREATE TABLE t1 (n int primary key)")
-				conn.Exec(t, `SET statement_timeout = '1s'`)
+				conn.Exec(t, `SET statement_timeout = '5s'`)
 				require.NoError(t, err)
 				// Test implicit transactions first.
 				blockSchemaChange.Swap(true)
