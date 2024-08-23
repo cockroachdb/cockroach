@@ -1196,6 +1196,8 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 129569, "flakey test")
+
 	ctx := context.Background()
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
