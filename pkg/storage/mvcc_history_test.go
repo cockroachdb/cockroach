@@ -1301,17 +1301,27 @@ func cmdCPut(e *evalCtx) error {
 	if e.hasArg("allow_missing") {
 		behavior = storage.CPutAllowIfMissing
 	}
+
+	originTimestamp := hlc.Timestamp{}
+	if e.hasArg("origin_ts") {
+		originTimestamp = e.getTsWithName("origin_ts")
+	}
+
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("cput", func(rw storage.ReadWriter) error {
-		opts := storage.MVCCWriteOptions{
-			Txn:                            txn,
-			LocalTimestamp:                 localTs,
-			Stats:                          e.ms,
-			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
-			MaxLockConflicts:               e.getMaxLockConflicts(),
+		opts := storage.ConditionalPutWriteOptions{
+			MVCCWriteOptions: storage.MVCCWriteOptions{
+				Txn:                            txn,
+				LocalTimestamp:                 localTs,
+				Stats:                          e.ms,
+				ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
+				MaxLockConflicts:               e.getMaxLockConflicts(),
+			},
+			AllowIfDoesNotExist: behavior,
+			OriginTimestamp:     originTimestamp,
 		}
-		acq, err := storage.MVCCConditionalPut(e.ctx, rw, key, ts, val, expVal, behavior, opts)
+		acq, err := storage.MVCCConditionalPut(e.ctx, rw, key, ts, val, expVal, opts)
 		if err != nil {
 			return err
 		}
@@ -2724,6 +2734,9 @@ func (e *evalCtx) getValInternal(argName string) roachpb.Value {
 	if e.hasArg("raw") {
 		val.RawBytes = []byte(value)
 	} else {
+		if value == "<tombstone>" {
+			return val
+		}
 		val.SetString(value)
 	}
 	return val
