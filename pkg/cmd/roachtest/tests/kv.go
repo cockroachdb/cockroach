@@ -545,7 +545,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 
 			// TODO(baptist): Remove setting once #129427 is addressed.
 			if _, err := dbs[0].ExecContext(ctx, "SET CLUSTER SETTING kv.store_gossip.max_frequency = '0s'"); err != nil {
-				t.Fatalf("failed to disable load based splitting: %v", err)
+				t.Fatalf("failed to update gossip max frequency: %v", err)
 			}
 
 			t.Status("initializing workload")
