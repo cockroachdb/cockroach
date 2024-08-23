@@ -403,7 +403,7 @@ func (n *controllerImpl) AdmitKVWork(
 		//   general (notably, for KV work done on the behalf of row-level TTL
 		//   reads). Everything admissionpb.UserLowPri and above uses the slots
 		//   mechanism.
-		isInternalLowPriRead := ba.IsReadOnly() && admissionInfo.Priority < admissionpb.UserLowPri
+		isInternalLowPriRead := ba.IsReadOnly() && admissionInfo.Priority < admissionpb.BulkNormalPri
 		shouldUseElasticCPU :=
 			(exportRequestElasticControlEnabled.Get(&n.settings.SV) && ba.IsSingleExportRequest()) ||
 				(internalLowPriReadElasticControlEnabled.Get(&n.settings.SV) && isInternalLowPriRead)
