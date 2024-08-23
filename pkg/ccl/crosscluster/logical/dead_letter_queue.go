@@ -37,7 +37,7 @@ const (
 			dlq_timestamp     	TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
   		dlq_reason					STRING NOT NULL,
 			mutation_type				%s.%s.mutation_type,       
-  		key_value_bytes			BYTES NOT NULL,
+  		key_value_bytes			BYTES NOT NULL NOT VISIBLE,
 			incoming_row     		JSONB,
   		-- PK should be unique based on the ID, job ID and timestamp at which the 
   		-- row was written to the table.
