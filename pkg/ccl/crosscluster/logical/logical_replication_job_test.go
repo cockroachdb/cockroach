@@ -301,7 +301,7 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 
 	// Verify that we didn't have the data looping problem. We expect 3 CPuts
 	// when inserting new rows and 3 Puts when updating existing rows.
-	expPuts, expCPuts := 3, 3
+	expPuts, expCPuts := 3, 4
 	if tryOptimisticInsertEnabled.Get(&s.ClusterSettings().SV) {
 		// When performing 1 update, we don't have the prevValue set, so if
 		// we're using the optimistic insert strategy, it would result in an

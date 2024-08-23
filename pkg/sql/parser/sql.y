@@ -4634,7 +4634,7 @@ create_stmt:
 //  ON 'stream_uri'
 //  INTO <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name>
 //  [WITH
-//  < MODE = immediate | transactional > |
+//  < MODE = immediate | validated > |
 //  < CURSOR = start_time > |
 //  < DEFAULT FUNCTION = lww | dlq | udf
 //  < FUNCTION 'udf' FOR TABLE local_name  , ... > |
