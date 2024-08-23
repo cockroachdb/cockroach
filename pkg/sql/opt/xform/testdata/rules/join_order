@@ -848,7 +848,7 @@ Vertexes
   B:
     scan cy
 Edges
-  b = c [inner, ses=AB, tes=AB, rules=()]
+  b = c [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joins Considered: 1
@@ -878,9 +878,9 @@ Vertexes
      └── filters
           └── z > 0
 Edges
-  b = c [inner, ses=AB, tes=AB, rules=()]
-  c = d [inner, ses=BC, tes=BC, rules=()]
-  b = d [inner, ses=AC, tes=AC, rules=()]
+  b = c [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  c = d [inner, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
+  b = d [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joining ABC
@@ -932,7 +932,7 @@ Vertexes
   B:
     scan cy
 Edges
-  bx.b = cy.c [inner, ses=AB, tes=AB, rules=()]
+  bx.b = cy.c [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joins Considered: 1
@@ -964,8 +964,8 @@ Vertexes
           └── max
                └── z
 Edges
-  bx.b = cy.c [inner, ses=AB, tes=AB, rules=()]
-  y = max [inner, ses=BC, tes=BC, rules=()]
+  bx.b = cy.c [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  y = max [inner, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joining ABC
@@ -1011,10 +1011,10 @@ Vertexes
   D:
     scan abc
 Edges
-  bx.b = cy.c [inner, ses=AB, tes=AB, rules=()]
-  y = max [inner, ses=BC, tes=BC, rules=()]
-  max = a [inner, ses=CD, tes=CD, rules=()]
-  y = a [inner, ses=BD, tes=BD, rules=()]
+  bx.b = cy.c [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  y = max [inner, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
+  max = a [inner, ses=CD, tes=CD, rules=(), upperbound=0.000000e+00]
+  y = a [inner, ses=BD, tes=BD, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joining ABC
@@ -1108,7 +1108,7 @@ Vertexes
   B:
     scan dz
 Edges
-  y = z [inner, ses=AB, tes=AB, rules=()]
+  y = z [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joins Considered: 1
@@ -1142,11 +1142,11 @@ Vertexes
   C:
     scan abc
 Edges
-  y = z [inner, ses=AB, tes=AB, rules=()]
-  z = a [inner, ses=BC, tes=BC, rules=()]
-  x = z [inner, ses=AB, tes=AB, rules=()]
-  x = a [inner, ses=AC, tes=AC, rules=()]
-  y = a [inner, ses=AC, tes=AC, rules=()]
+  y = z [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  z = a [inner, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
+  x = z [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  x = a [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
+  y = a [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joining ABC
@@ -1209,7 +1209,7 @@ Vertexes
   B:
     scan dz
 Edges
-  y = z [inner, ses=AB, tes=AB, rules=()]
+  y = z [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joins Considered: 1
@@ -1233,9 +1233,9 @@ Vertexes
   C:
     scan abc
 Edges
-  y = z [inner, ses=AB, tes=AB, rules=()]
-  z = a [inner, ses=BC, tes=BC, rules=()]
-  y = a [inner, ses=AC, tes=AC, rules=()]
+  y = z [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  z = a [inner, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
+  y = a [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joining ABC
@@ -1280,10 +1280,10 @@ Vertexes
   C:
     scan abc
 Edges
-  y = z [inner, ses=AB, tes=AB, rules=()]
-  z = a [inner, ses=BC, tes=BC, rules=()]
-  cross [inner, ses=, tes=DABC, rules=()]
-  y = a [inner, ses=AC, tes=AC, rules=()]
+  y = z [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  z = a [inner, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
+  cross [inner, ses=, tes=DABC, rules=(), upperbound=0.000000e+00]
+  y = a [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joining ABC
@@ -1353,7 +1353,7 @@ Vertexes
   B:
     scan cy
 Edges
-  x = y [inner, ses=AB, tes=AB, rules=()]
+  x = y [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joins Considered: 1
@@ -1371,7 +1371,7 @@ Vertexes
   D:
     scan dz
 Edges
-  a = z [inner, ses=CD, tes=CD, rules=()]
+  a = z [inner, ses=CD, tes=CD, rules=(), upperbound=0.000000e+00]
 Joining CD
   D C [inner, refs=CD]
 Joins Considered: 1
@@ -1402,10 +1402,10 @@ Vertexes
   D:
     scan dz
 Edges
-  x = y [inner, ses=AB, tes=AB, rules=()]
-  a = z [inner, ses=CD, tes=CD, rules=()]
-  abc.b = bx.b [inner, ses=AC, tes=AC, rules=()]
-  abc.c = cy.c [inner, ses=BC, tes=BC, rules=()]
+  x = y [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  a = z [inner, ses=CD, tes=CD, rules=(), upperbound=0.000000e+00]
+  abc.b = bx.b [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
+  abc.c = cy.c [inner, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joining CD
@@ -1486,7 +1486,7 @@ Vertexes
   B:
     scan cy
 Edges
-  b = c [inner, ses=AB, tes=AB, rules=()]
+  b = c [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joins Considered: 1
@@ -1510,8 +1510,8 @@ Vertexes
   C:
     scan dz
 Edges
-  b = c [inner, ses=AB, tes=AB, rules=()]
-  x = z [left, ses=AC, tes=AC, rules=()]
+  b = c [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  x = z [left, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
 Joining AC
   A C [left, refs=AC]
 Joining ABC
@@ -1551,7 +1551,7 @@ Vertexes
   B:
     scan cy
 Edges
-  b = c [left, ses=AB, tes=AB, rules=()]
+  b = c [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -1573,8 +1573,8 @@ Vertexes
   C:
     scan dz
 Edges
-  b = c [left, ses=AB, tes=AB, rules=()]
-  x = z [left, ses=AC, tes=AC, rules=()]
+  b = c [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  x = z [left, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
 Joining AC
   A C [left, refs=AC]
 Joining ABC
@@ -1616,7 +1616,7 @@ Vertexes
   B:
     scan cy
 Edges
-  b = c [left, ses=AB, tes=AB, rules=()]
+  b = c [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -1638,8 +1638,8 @@ Vertexes
   C:
     scan dz
 Edges
-  b = c [left, ses=AB, tes=AB, rules=()]
-  y = z [left, ses=BC, tes=BC, rules=()]
+  b = c [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  y = z [left, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
 Joining BC
   B C [left, refs=BC]
 Joining ABC
@@ -1681,7 +1681,7 @@ Vertexes
   B:
     scan abc
 Edges
-  bx.b = a [anti, ses=AB, tes=AB, rules=()]
+  bx.b = a [anti, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -1703,8 +1703,8 @@ Vertexes
   C:
     scan dz
 Edges
-  bx.b = a [anti, ses=AB, tes=AB, rules=()]
-  bx.b = dz.d [semi, ses=AC, tes=AC, rules=()]
+  bx.b = a [anti, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  bx.b = dz.d [semi, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
 Joining AC
   A C [semi, refs=AC]
 Joining ABC
@@ -1730,8 +1730,8 @@ Vertexes
   C:
     scan dz
 Edges
-  bx.b = a [anti, ses=AB, tes=AB, rules=()]
-  bx.b = dz.d [inner, ses=AC, tes=AC, rules=()]
+  bx.b = a [anti, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  bx.b = dz.d [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
 Joining ABC
   C AB [inner, refs=AC]
 Joining AC
@@ -1766,9 +1766,9 @@ Vertexes
   D:
     scan cy
 Edges
-  bx.b = a [anti, ses=AB, tes=AB, rules=()]
-  bx.b = dz.d [semi, ses=AC, tes=AC, rules=()]
-  bx.b = cy.c [left, ses=AD, tes=AD, rules=()]
+  bx.b = a [anti, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  bx.b = dz.d [semi, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
+  bx.b = cy.c [left, ses=AD, tes=AD, rules=(), upperbound=0.000000e+00]
 Joining AD
   A D [left, refs=AD]
 Joining ACD
@@ -1818,7 +1818,7 @@ Vertexes
   B:
     scan cy
 Edges
-  cross [inner, ses=, tes=AB, rules=()]
+  cross [inner, ses=, tes=AB, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=]
 Joins Considered: 1
@@ -1840,8 +1840,8 @@ Vertexes
   C:
     scan dz
 Edges
-  cross [inner, ses=, tes=AB, rules=()]
-  cross [inner, ses=, tes=ABC, rules=()]
+  cross [inner, ses=, tes=AB, rules=(), upperbound=0.000000e+00]
+  cross [inner, ses=, tes=ABC, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=]
 Joining ABC
@@ -1878,7 +1878,7 @@ Vertexes
   B:
     scan cy
 Edges
-  b = c [full, ses=AB, tes=AB, rules=()]
+  b = c [full, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [full, refs=AB]
 Joins Considered: 1
@@ -1902,8 +1902,8 @@ Vertexes
   C:
     scan dz
 Edges
-  b = c [full, ses=AB, tes=AB, rules=()]
-  y = z [full, ses=BC, tes=BC, rules=()]
+  b = c [full, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  y = z [full, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [full, refs=AB]
 Joining ABC
@@ -1985,7 +1985,7 @@ Vertexes
   B:
     scan abc5 [as=a5]
 Edges
-  a2.c = a5.c [semi, ses=AB, tes=AB, rules=()]
+  a2.c = a5.c [semi, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -2003,7 +2003,7 @@ Vertexes
     distinct-on
      └── scan abc5 [as=a5]
 Edges
-  a2.c = a5.c [inner, ses=AC, tes=AC, rules=()]
+  a2.c = a5.c [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
 Joining AC
   C A [inner, refs=AC]
 Joins Considered: 1
@@ -2027,8 +2027,8 @@ Vertexes
   B:
     scan abc5 [as=a5]
 Edges
-  a2.c = a5.c [semi, ses=AB, tes=AB, rules=()]
-  a1.a = a2.a [inner, ses=DA, tes=DA, rules=()]
+  a2.c = a5.c [semi, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  a1.a = a2.a [inner, ses=DA, tes=DA, rules=(), upperbound=0.000000e+00]
 Joining DAB
   AB D [inner, refs=DA]
 Joining DA
@@ -2065,8 +2065,8 @@ Vertexes
   F:
     scan abc3 [as=a3]
 Edges
-  a1.a = a2.a [inner, ses=DE, tes=DE, rules=()]
-  a2.b = a3.b [inner, ses=EF, tes=EF, rules=()]
+  a1.a = a2.a [inner, ses=DE, tes=DE, rules=(), upperbound=0.000000e+00]
+  a2.b = a3.b [inner, ses=EF, tes=EF, rules=(), upperbound=0.000000e+00]
 Joining DE
   E D [inner, refs=DE]
 Joining DEF
@@ -2114,8 +2114,8 @@ Vertexes
   H:
     scan abc4 [as=a4]
 Edges
-  a2.b = a3.b [inner, ses=GF, tes=GF, rules=()]
-  a3.a = a4.a [inner, ses=FH, tes=FH, rules=()]
+  a2.b = a3.b [inner, ses=GF, tes=GF, rules=(), upperbound=0.000000e+00]
+  a3.a = a4.a [inner, ses=FH, tes=FH, rules=(), upperbound=0.000000e+00]
 Joining GF
   F G [inner, refs=GF]
 Joining GFH
@@ -2178,7 +2178,7 @@ Vertexes
      └── filters
           └── x IS NOT NULL
 Edges
-  a = x [inner, ses=AB, tes=AB, rules=()]
+  a = x [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joins Considered: 1
@@ -2208,8 +2208,8 @@ Vertexes
   C:
     scan cy
 Edges
-  a = x [inner, ses=AB, tes=AB, rules=()]
-  x = y [semi, ses=BC, tes=BC, rules=()]
+  a = x [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  x = y [semi, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
 Joining BC
   B C [semi, refs=BC]
 Joining ABC
@@ -2244,9 +2244,9 @@ Vertexes
     distinct-on
      └── scan cy
 Edges
-  a = x [inner, ses=AB, tes=AB, rules=()]
-  x = y [inner, ses=BD, tes=BD, rules=()]
-  a = y [inner, ses=AD, tes=AD, rules=()]
+  a = x [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  x = y [inner, ses=BD, tes=BD, rules=(), upperbound=0.000000e+00]
+  a = y [inner, ses=AD, tes=AD, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joining ABD
@@ -2296,10 +2296,10 @@ Vertexes
   E:
     scan dz
 Edges
-  a = x [inner, ses=AB, tes=AB, rules=()]
-  x = y [semi, ses=BC, tes=BC, rules=()]
-  a = z [inner, ses=AE, tes=AE, rules=(C->B)]
-  x = z [inner, ses=BE, tes=BE, rules=()]
+  a = x [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  x = y [semi, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
+  a = z [inner, ses=AE, tes=AE, rules=(C->B), upperbound=0.000000e+00]
+  x = z [inner, ses=BE, tes=BE, rules=(), upperbound=0.000000e+00]
 Joining BC
   B C [semi, refs=BC]
 Joining ABC
@@ -2413,7 +2413,7 @@ Vertexes
   B:
     scan dz
 Edges
-  c = d [left, ses=AB, tes=AB, rules=()]
+  c = d [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -2436,9 +2436,9 @@ Vertexes
   B:
     scan dz
 Edges
-  c = d [left, ses=AB, tes=AB, rules=()]
-  b = c [inner, ses=CA, tes=CA, rules=()]
-  (x = z) OR (z IS NULL) [inner, ses=CB, tes=CAB, rules=()]
+  c = d [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  b = c [inner, ses=CA, tes=CA, rules=(), upperbound=0.000000e+00]
+  (x = z) OR (z IS NULL) [inner, ses=CB, tes=CAB, rules=(), upperbound=0.000000e+00]
 Joining CAB
   AB C [inner, refs=CAB]
 Joining CA
@@ -2973,7 +2973,7 @@ Vertexes
   B:
     scan t90761 [as=t4]
 Edges
-  cross [inner, ses=, tes=AB, rules=()]
+  cross [inner, ses=, tes=AB, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=]
 Joins Considered: 1
@@ -2996,8 +2996,8 @@ Vertexes
   B:
     scan t90761 [as=t4]
 Edges
-  cross [inner, ses=, tes=AB, rules=()]
-  t2.b > t4.b [left, ses=CB, tes=CAB, rules=()]
+  cross [inner, ses=, tes=AB, rules=(), upperbound=0.000000e+00]
+  t2.b > t4.b [left, ses=CB, tes=CAB, rules=(), upperbound=0.000000e+00]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #3
@@ -3025,10 +3025,10 @@ Vertexes
   B:
     scan t90761 [as=t4]
 Edges
-  cross [inner, ses=, tes=AB, rules=()]
-  t2.b > t4.b [left, ses=CB, tes=CAB, rules=()]
-  t1.a = t4.a [inner, ses=DB, tes=DCB, rules=()]
-  t1.c = t2.c [inner, ses=DC, tes=DC, rules=()]
+  cross [inner, ses=, tes=AB, rules=(), upperbound=0.000000e+00]
+  t2.b > t4.b [left, ses=CB, tes=CAB, rules=(), upperbound=0.000000e+00]
+  t1.a = t4.a [inner, ses=DB, tes=DCB, rules=(), upperbound=0.000000e+00]
+  t1.c = t2.c [inner, ses=DC, tes=DC, rules=(), upperbound=0.000000e+00]
 Joining DCAB
   CAB D [inner, refs=DCB]
 Joining DC
@@ -3144,7 +3144,7 @@ Vertexes
   B:
     scan patient [as=patient2_]
 Edges
-  task1_.patient_id = patient2_.id [left, ses=AB, tes=AB, rules=()]
+  task1_.patient_id = patient2_.id [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -3166,8 +3166,8 @@ Vertexes
   C:
     scan site [as=site3_]
 Edges
-  task1_.patient_id = patient2_.id [left, ses=AB, tes=AB, rules=()]
-  site_id = site3_.id [left, ses=BC, tes=BC, rules=()]
+  task1_.patient_id = patient2_.id [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  site_id = site3_.id [left, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
 Joining BC
   B C [left, refs=BC]
 Joining ABC
@@ -3209,7 +3209,7 @@ Vertexes
      └── filters
           └── (patient2_.id IS NULL) OR (site3_.id IN (1, 2))
 Edges
-  task1_.id = task0_.id [semi, ses=DE, tes=DE, rules=()]
+  task1_.id = task0_.id [semi, ses=DE, tes=DE, rules=(), upperbound=0.000000e+00]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #4
@@ -3247,7 +3247,7 @@ Vertexes
      └── filters
           └── (patient2_.id IS NULL) OR (site3_.id IN (1, 2))
 Edges
-  task1_.id = task0_.id [inner, ses=DE, tes=DE, rules=()]
+  task1_.id = task0_.id [inner, ses=DE, tes=DE, rules=(), upperbound=0.000000e+00]
 Joining DE
   E D [inner, refs=DE]
 Joins Considered: 1
@@ -3344,7 +3344,7 @@ Vertexes
           └── first-agg
                └── y
 Edges
-  x = x [inner, ses=AB, tes=AB, rules=()]
+  x = x [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joins Considered: 1
@@ -3475,7 +3475,7 @@ right-join (hash)
 
 # Only 2 joins are considered (instead of 8) when the STRAIGHT hint is present in one join.
 reorderjoins format=hide-all
-SELECT * 
+SELECT *
 FROM straight_join1
 INNER STRAIGHT JOIN straight_join2 ON straight_join1.x = straight_join2.y
 INNER JOIN straight_join3 ON straight_join1.x = straight_join3.z
@@ -3504,7 +3504,7 @@ Vertexes
   B:
     scan straight_join3
 Edges
-  straight_join1.x = z [inner, ses=AB, tes=AB, rules=()]
+  straight_join1.x = z [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
 Joining AB
   B A [inner, refs=AB]
 Joins Considered: 1
@@ -3524,7 +3524,7 @@ inner-join (hash)
 
 # No joins are considered when the STRAIGHT hint is present in both joins.
 reorderjoins format=hide-all
-SELECT * 
+SELECT *
 FROM straight_join1
 INNER STRAIGHT JOIN straight_join2 ON straight_join1.x = straight_join2.y
 INNER STRAIGHT JOIN straight_join3 ON straight_join1.x = straight_join3.z
@@ -3544,3 +3544,200 @@ inner-join (hash)
  ├── scan straight_join3
  └── filters
       └── straight_join1.x = z
+
+exec-ddl
+CREATE TABLE ab (a INT, b INT)
+----
+
+exec-ddl
+CREATE TABLE cd (c INT, d INT NOT NULL)
+----
+
+exec-ddl
+CREATE TABLE ef (e INT, f INT NOT NULL)
+----
+
+exec-ddl
+ALTER TABLE ab INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "100"},
+      {"num_eq": 10, "num_range": 180, "distinct_range": 9, "upper_bound": "200"},
+      {"num_eq": 20, "num_range": 270, "distinct_range": 9, "upper_bound": "300"},
+      {"num_eq": 30, "num_range": 360, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40,
+    "avg_size": 2,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "100"},
+      {"num_eq": 10, "num_range": 180, "distinct_range": 9, "upper_bound": "200"},
+      {"num_eq": 20, "num_range": 270, "distinct_range": 9, "upper_bound": "300"},
+      {"num_eq": 30, "num_range": 360, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE cd INJECT STATISTICS '[
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "100"},
+      {"num_eq": 10, "num_range": 180, "distinct_range": 9, "upper_bound": "200"},
+      {"num_eq": 20, "num_range": 270, "distinct_range": 9, "upper_bound": "300"},
+      {"num_eq": 30, "num_range": 360, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40,
+    "avg_size": 2,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "100"},
+      {"num_eq": 10, "num_range": 180, "distinct_range": 9, "upper_bound": "200"},
+      {"num_eq": 20, "num_range": 270, "distinct_range": 9, "upper_bound": "300"},
+      {"num_eq": 390, "num_range": 0, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE ef INJECT STATISTICS '[
+  {
+    "columns": ["e"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "100"},
+      {"num_eq": 10, "num_range": 180, "distinct_range": 9, "upper_bound": "200"},
+      {"num_eq": 20, "num_range": 270, "distinct_range": 9, "upper_bound": "300"},
+      {"num_eq": 30, "num_range": 360, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  },
+  {
+    "columns": ["f"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40,
+    "avg_size": 2,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10, "num_range": 90, "distinct_range": 9, "upper_bound": "100"},
+      {"num_eq": 10, "num_range": 180, "distinct_range": 9, "upper_bound": "200"},
+      {"num_eq": 20, "num_range": 270, "distinct_range": 9, "upper_bound": "300"},
+      {"num_eq": 390, "num_range": 0, "distinct_range": 9, "upper_bound": "400"}
+    ]
+  }
+]'
+----
+
+reorderjoins format=hide-all
+SELECT * FROM ab
+JOIN cd ON b = d
+JOIN ef ON d = f
+-- WHERE a = 1
+----
+--------------------------------------------------------------------------------
+Join Tree #1
+--------------------------------------------------------------------------------
+  inner-join (hash)
+   ├── scan ab
+   ├── scan cd
+   └── filters
+        └── b = d
+Vertexes
+  A:
+    scan ab
+  B:
+    scan cd
+Edges
+  b = d [inner, ses=AB, tes=AB, rules=(), upperbound=3.000000e+04]
+Joining AB
+  B A [inner, refs=AB]
+Joins Considered: 1
+--------------------------------------------------------------------------------
+Join Tree #2
+--------------------------------------------------------------------------------
+  inner-join (hash)
+   ├── inner-join (hash)
+   │    ├── scan ab
+   │    ├── scan cd
+   │    └── filters
+   │         └── b = d
+   ├── scan ef
+   └── filters
+        └── d = f
+Vertexes
+  A:
+    scan ab
+  B:
+    scan cd
+  C:
+    scan ef
+Edges
+  b = d [inner, ses=AB, tes=AB, rules=(), upperbound=3.000000e+04]
+  d = f [inner, ses=BC, tes=BC, rules=(), upperbound=3.900000e+05]
+  b = f [inner, ses=AC, tes=AC, rules=(), upperbound=3.000000e+04]
+Joining AB
+  B A [inner, refs=AB]
+Joining ABC
+  C AB [inner, refs=BC]
+Joining BC
+  B C [inner, refs=BC]
+  C B [inner, refs=BC]
+Joining ABC
+  A BC [inner, refs=AB]
+  BC A [inner, refs=AB]
+Joining AC
+  A C [inner, refs=AC]
+  C A [inner, refs=AC]
+Joining ABC
+  B AC [inner, refs=AB]
+  AC B [inner, refs=AB]
+Joins Considered: 10
+================================================================================
+Final Plan
+================================================================================
+inner-join (hash)
+ ├── inner-join (hash)
+ │    ├── scan ab
+ │    ├── scan cd
+ │    └── filters
+ │         └── b = d
+ ├── scan ef
+ └── filters
+      └── d = f

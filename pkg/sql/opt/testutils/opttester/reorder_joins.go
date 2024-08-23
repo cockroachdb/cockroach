@@ -167,11 +167,12 @@ func (jof *joinOrderFormatter) formatEdge(edge xform.OnReorderEdgeParam) string 
 		}
 	}
 	b.WriteString(fmt.Sprintf(
-		" [%s, ses=%s, tes=%s, rules=%s]",
+		" [%s, ses=%s, tes=%s, rules=%s, upperbound=%e]",
 		joinOpLabel(edge.Op),
 		jof.formatVertexSet(edge.SES),
 		jof.formatVertexSet(edge.TES),
 		jof.formatRules(edge.Rules),
+		edge.UpperBound,
 	))
 	return b.String()
 }

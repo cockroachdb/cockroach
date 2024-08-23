@@ -48,6 +48,8 @@ type OnReorderEdgeParam struct {
 	TES []memo.RelExpr
 	// Rules is the set of conflict rules of the edge.
 	Rules []OnReorderRuleParam
+	// TODO
+	UpperBound float64
 }
 
 // OnReorderRuleParam is a struct representing a conflict rule. This type is
@@ -796,6 +798,7 @@ func (jb *JoinOrderBuilder) makeEdge(op *operator, filters memo.FiltersExpr) (e 
 	e.calcNullRejectedRels(jb)
 	e.calcSES(jb)
 	e.calcTES(jb.edges)
+	e.calcUpperBound(jb)
 	return e
 }
 
@@ -1200,10 +1203,11 @@ func (jb *JoinOrderBuilder) callOnReorderFunc(join memo.RelExpr) {
 	edges := make([]OnReorderEdgeParam, 0, len(jb.edges))
 	for _, edge := range jb.edges {
 		ep := OnReorderEdgeParam{
-			Op:      edge.op.joinType,
-			Filters: edge.filters,
-			SES:     jb.getRelationSlice(edge.ses),
-			TES:     jb.getRelationSlice(edge.tes),
+			Op:         edge.op.joinType,
+			Filters:    edge.filters,
+			SES:        jb.getRelationSlice(edge.ses),
+			TES:        jb.getRelationSlice(edge.tes),
+			UpperBound: edge.upperBound,
 		}
 		for _, rule := range edge.rules {
 			ep.Rules = append(ep.Rules, OnReorderRuleParam{
@@ -1271,6 +1275,9 @@ type edge struct {
 	// a join between two sets of vertexes to be valid. See the conflictRule
 	// comments for more information.
 	rules []conflictRule
+
+	// TODO
+	upperBound float64
 }
 
 // operator contains the properties of a join operator from the original join
@@ -1614,6 +1621,95 @@ func (e *edge) checkRules(s1, s2 vertexSet) bool {
 		}
 	}
 	return true
+}
+
+func (e *edge) calcUpperBound(jb *JoinOrderBuilder) {
+	// Handle only single equality filters for now.
+	if len(e.filters) != 1 {
+		return
+	}
+
+	// TODO: Consider using func deps here instead.
+	eq, ok := e.filters[0].Condition.(*memo.EqExpr)
+	if !ok {
+		return
+	}
+	left, ok := eq.Left.(*memo.VariableExpr)
+	if !ok {
+		return
+	}
+	right, ok := eq.Right.(*memo.VariableExpr)
+	if !ok {
+		return
+	}
+
+	// TODO(mgartner): What about the recursive case?
+	var leftMF, rightMF float64
+	var leftRows, rightRows float64
+	for idx, ok := e.tes.next(0); ok; idx, ok = e.tes.next(idx + 1) {
+		relProps := jb.vertexes[idx].Relational()
+		if relProps.OutputCols.Contains(left.Col) {
+			leftRows = relProps.Statistics().RowCount
+			// TODO: There's a problem here when the base relation is a Select
+			// because the col stat may have a nil histogram. For example, if
+			// the Select has a filter a=1 and the edge filter is b=c, there
+			// will be no histogram for b.
+			colStat, ok := relProps.Statistics().ColStats.LookupSingleton(left.Col)
+			if ok && colStat.Histogram != nil {
+				leftMF = colStat.Histogram.MaxFrequency()
+			}
+		}
+		if relProps.OutputCols.Contains(right.Col) {
+			rightRows = relProps.Statistics().RowCount
+			colStat, ok := relProps.Statistics().ColStats.LookupSingleton(right.Col)
+			if ok && colStat.Histogram != nil {
+				rightMF = colStat.Histogram.MaxFrequency()
+			}
+		}
+		// TODO: We can probably break out of this loop early if we dont' find
+		// the col stats for some reason. This can probably be cleaned up a bit.
+		if leftMF != 0 && rightMF != 0 {
+			minDistinctValues := math.Min(leftRows/leftMF, rightRows/rightMF)
+			e.upperBound = minDistinctValues * leftMF * rightMF
+			return
+		}
+	}
+
+	// / CalculateUpperBoundRecursive calculates the upper bound for joining n tables.
+	// // tablesAndColumns is a slice of pairs where each pair contains a table name and a column name.
+	// func CalculateUpperBoundRecursive(tablesAndColumns [][2]string, n int) int64 {
+	// 	if n == 2 {
+	// 	// Base case: Calculate upper bound for the first two tables
+	// 	table1, column1 := tablesAndColumns[0][0], tablesAndColumns[0][1]
+	// 	table2, column2 := tablesAndColumns[1][0], tablesAndColumns[1][1]
+	//
+	// 	rows1 := CalculateEstimatedRowCount(table1)
+	// 	MF1 := GetMaxFrequency(table1, column1)
+	//
+	// 	rows2 := CalculateEstimatedRowCount(table2)
+	// 	MF2 := GetMaxFrequency(table2, column2)
+	//
+	// 	minDistinctValues := minInt(rows1/MF1, rows2/MF2)
+	// 	upperBound := minDistinctValues * MF1 * MF2
+	// 	return upperBound
+	// } else {
+	// 	// Recursive case: Calculate upper bound for the first n-1 tables and join with the nth table
+	// 	prevUpperBound := CalculateUpperBoundRecursive(tablesAndColumns, n-1)
+	//
+	// 	// Previous table and column
+	// 	tablePrev, columnPrev := tablesAndColumns[n-2][0], tablesAndColumns[n-2][1]
+	// 	MFPrev := GetMaxFrequency(tablePrev, columnPrev)
+	//
+	// 	// Current table and column
+	// 	tableCurr, columnCurr := tablesAndColumns[n-1][0], tablesAndColumns[n-1][1]
+	// 	rowsCurr := CalculateEstimatedRowCount(tableCurr)
+	// 	MFCurr := GetMaxFrequency(tableCurr, columnCurr)
+	//
+	// 	minDistinctValues := minInt(prevUpperBound/MFPrev, rowsCurr/MFCurr)
+	// 	upperBound := minDistinctValues * MFPrev * MFCurr
+	// 	return upperBound
+	// }
+	// }
 }
 
 // commute returns true if the given join operator type is commutable.
