@@ -531,9 +531,9 @@ message LogicalReplicationWriterSpec {
     // containing source table descriptors and fully qualified destination table names.
     map<int32, TableReplicationMetadata> table_metadata = 8 [(gogoproto.nullable) = false];
 
-    // FilterRangefeeed is an option on whether to filter out 'OmitinRangefeed' events
+    // IgnoreCDCIgnoredTTLDeletes is an option on whether to filter out 'OmitinRangefeed' events
     // when processing changes in LDR
-    optional bool filter_rangefeed = 9 [(gogoproto.nullable) = false];
+    optional bool ignore_cdc_ignored_ttl_deletes = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoreCDCIgnoredTTLDeletes"];
 
     optional jobs.jobspb.LogicalReplicationDetails.ApplyMode mode = 10 [(gogoproto.nullable) = false];
 

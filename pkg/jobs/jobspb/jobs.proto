@@ -252,7 +252,7 @@ message LogicalReplicationDetails {
   }
   DefaultConflictResolution default_conflict_resolution = 7 [(gogoproto.nullable) = false];
 
-  bool filter_rangefeed = 8;
+  bool ignore_cdc_ignored_ttl_deletes = 8 [(gogoproto.customname) = "IgnoreCDCIgnoredTTLDeletes"];
 
   enum ApplyMode {
     Immediate = 0;
