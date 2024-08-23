@@ -22,7 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1707,6 +1709,69 @@ func (cf *changeFrontier) checkpointJobProgress(
 	return true, nil
 }
 
+// disable the automatic fix for https://github.com/cockroachdb/cockroach/issues/103855
+var disableStalePTSFix = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"changefeed.protected_timestamp.disable_stale_pts_handling",
+	"if true, disable logic to fix stale PTS records",
+	false,
+)
+
+var stalePTSRecordAgeStepUp = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.protected_timestmap.stale_pts_stepup",
+	"if the PTS record is old and needs to be deleted, keep stepping up record age "+
+		"by this amount.  This step up will happen every changefeed.protect_timestamp_interval (10m)",
+	4*24*time.Hour,
+	settings.PositiveDuration,
+)
+
+func fixStalePTSRecords(
+	ctx context.Context,
+	jobID jobspb.JobID,
+	recordID uuid.UUID,
+	recordTS hlc.Timestamp,
+	stepUp time.Duration,
+	ptsStore protectedts.Storage,
+) error {
+	state, err := ptsStore.GetState(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, rec := range state.Records {
+		if rec.MetaType != jobsprotectedts.GetMetaType(jobsprotectedts.Jobs) {
+			continue // not a job.
+		}
+
+		id, err := jobsprotectedts.DecodeID(rec.Meta)
+		if err != nil {
+			return err
+		}
+
+		if jobspb.JobID(id) != jobID {
+			continue // not our job.
+		}
+
+		if rec.ID.GetUUID().Equal(recordID) {
+			continue // skip current record.
+		}
+
+		if newTS := rec.Timestamp.Add(stepUp.Nanoseconds(), 0); newTS.Less(recordTS) {
+			// Slowly advance the time of the old PTS record.
+			if err := ptsStore.UpdateTimestamp(ctx, rec.ID.GetUUID(), newTS); err != nil {
+				return err
+			}
+		} else {
+			// Delete the record altogether.
+			if err := ptsStore.Release(ctx, rec.ID.GetUUID()); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // manageProtectedTimestamps periodically advances the protected timestamp for
 // the changefeed's targets to the current highwater mark.  The record is
 // cleared during changefeedResumer.OnFailOrCancel
@@ -1754,6 +1819,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		ptr := createProtectedTimestampRecord(
 			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater,
 		)
+		recordID = progress.ProtectedTimestampRecord
 		if err := pts.Protect(ctx, ptr); err != nil {
 			return err
 		}
@@ -1764,6 +1830,14 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 
 		log.Eventf(ctx, "created new pts record %v to replace old pts record %v at %v",
 			progress.ProtectedTimestampRecord, prevRecordId, highWater)
+	}
+
+	fixStalePTS := !disableStalePTSFix.Get(&cf.flowCtx.Cfg.Settings.SV)
+	if fixStalePTS {
+		stepUp := stalePTSRecordAgeStepUp.Get(&cf.flowCtx.Cfg.Settings.SV)
+		if err := fixStalePTSRecords(ctx, cf.spec.JobID, recordID, highWater, stepUp, pts); err != nil {
+			return err
+		}
 	}
 
 	return nil
