@@ -1655,7 +1655,9 @@ func (r *Registry) stepThroughStateMachine(
 		}
 
 		if errors.Is(err, errPauseSelfSentinel) {
+			log.Infof(ctx, "handle pause sentinel %d with err: %v", job.ID(), err)
 			if pauseRequestedErr := r.PauseRequested(ctx, nil, job.ID(), err.Error()); pauseRequestedErr != nil {
+				log.Infof(ctx, "pause handle errored %d: err: %v", job.ID(), err)
 				return errors.WithSecondaryError(pauseRequestedErr, err)
 			}
 			return errors.Wrap(err, PauseRequestExplained)
