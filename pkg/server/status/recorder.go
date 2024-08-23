@@ -717,6 +717,10 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 		} else if m.Counter != nil {
 			fn(name, *m.Counter.Value)
 		}
+	case metric.PrometheusVector:
+		for _, m := range mtr.ToPrometheusMetrics() {
+			fn(name, *m.Gauge.Value)
+		}
 
 	default:
 		return errors.Errorf("cannot extract value for type %T", mtr)

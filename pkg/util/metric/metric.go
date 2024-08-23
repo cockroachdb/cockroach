@@ -14,6 +14,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -55,9 +57,7 @@ type Iterable interface {
 	Inspect(func(interface{}))
 }
 
-// PrometheusExportable is the standard interface for an individual metric
-// that can be exported to prometheus.
-type PrometheusExportable interface {
+type PrometheusCompatible interface {
 	// GetName is a method on Metadata
 	GetName() string
 	// GetHelp is a method on Metadata
@@ -66,12 +66,23 @@ type PrometheusExportable interface {
 	GetType() *prometheusgo.MetricType
 	// GetLabels is a method on Metadata
 	GetLabels() []*prometheusgo.LabelPair
+}
+
+// PrometheusExportable is the standard interface for an individual metric
+// that can be exported to prometheus.
+type PrometheusExportable interface {
+	PrometheusCompatible
 	// ToPrometheusMetric returns a filled-in prometheus metric of the right type
 	// for the given metric. It does not fill in labels.
 	// The implementation must return thread-safe data to the caller, i.e.
 	// usually a copy of internal state.
 	// NB: For histogram metrics, ToPrometheusMetric should return the cumulative histogram.
 	ToPrometheusMetric() *prometheusgo.Metric
+}
+
+type PrometheusVector interface {
+	PrometheusCompatible
+	ToPrometheusMetrics() []*prometheusgo.Metric
 }
 
 // PrometheusIterable is an extension of PrometheusExportable to indicate that
@@ -171,17 +182,21 @@ var _ Iterable = &Gauge{}
 var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
 var _ Iterable = &CounterFloat64{}
+var _ Iterable = &GaugeVec{}
 
 var _ json.Marshaler = &Gauge{}
 var _ json.Marshaler = &GaugeFloat64{}
 var _ json.Marshaler = &Counter{}
 var _ json.Marshaler = &CounterFloat64{}
 var _ json.Marshaler = &Registry{}
+var _ json.Marshaler = &GaugeVec{}
 
 var _ PrometheusExportable = &Gauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
 var _ PrometheusExportable = &Counter{}
 var _ PrometheusExportable = &CounterFloat64{}
+
+var _ PrometheusVector = &GaugeVec{}
 
 var now = timeutil.Now
 
@@ -1050,4 +1065,105 @@ var RecordHistogramQuantiles = []Quantile{
 	{"-p90", 90},
 	{"-p75", 75},
 	{"-p50", 50},
+}
+
+// GaugeVec is a collector for gauges that have a variable set of lables.
+type GaugeVec struct {
+	Metadata
+	encounteredLabelsLookup map[string]struct{}
+	encounteredLabelValues  [][]string
+	orderedLabelNames       []string
+	promVec                 *prometheus.GaugeVec
+}
+
+func NewGaugeVec(metadata Metadata, labelSchema map[string][]string) *GaugeVec {
+	orderedLabelNames := make([]string, 0, len(labelSchema))
+	for k := range labelSchema {
+		orderedLabelNames = append(orderedLabelNames, k)
+	}
+	sort.Strings(orderedLabelNames)
+
+	promVec := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: metadata.Name,
+		Help: metadata.Help,
+	}, orderedLabelNames)
+
+	cardinality := 1
+	for _, v := range labelSchema {
+		cardinality *= len(v)
+	}
+
+	return &GaugeVec{
+		Metadata: metadata,
+		// hashedMetrics:     make(map[string]*atomic.Int64),
+		// labelSchema:       labelSchema,
+		orderedLabelNames:       orderedLabelNames,
+		encounteredLabelsLookup: make(map[string]struct{}),
+		encounteredLabelValues:  make([][]string, 0, cardinality),
+		promVec:                 promVec,
+	}
+}
+
+func (gv *GaugeVec) recordLabels(labels map[string]string) {
+	labelValues := make([]string, 0, len(labels))
+	labelNames := make([]string, 0, len(labels))
+	for k := range labels {
+		labelNames = append(labelNames, k)
+	}
+	sort.Strings(labelNames)
+
+	for _, labelName := range labelNames {
+		labelValues = append(labelValues, labels[labelName])
+	}
+
+	lookupKey := strings.Join(labelValues, "_")
+	if _, ok := gv.encounteredLabelsLookup[lookupKey]; ok {
+		return
+	}
+
+	gv.encounteredLabelsLookup[lookupKey] = struct{}{}
+	gv.encounteredLabelValues = append(gv.encounteredLabelValues, labelValues)
+}
+
+// With returns a function curried with the hash of the given label value combination. The
+// returned function can be used to set the value
+func (gv *GaugeVec) Update(labels map[string]string, v int64) {
+	gv.recordLabels(labels)
+	gv.promVec.With(prometheus.Labels(labels)).Set(float64(v))
+}
+
+func (gv *GaugeVec) Inc(labels map[string]string, v int64) {
+	gv.recordLabels(labels)
+	gv.promVec.With(prometheus.Labels(labels)).Add(float64(v))
+}
+
+func (gv *GaugeVec) GetMetadata() Metadata {
+	return gv.Metadata
+}
+
+func (gv *GaugeVec) Inspect(f func(interface{})) { f(gv) }
+
+func (gv *GaugeVec) MarshalJSON() ([]byte, error) {
+	return json.Marshal(gv)
+}
+
+func (gv *GaugeVec) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_GAUGE.Enum()
+}
+
+func (gv *GaugeVec) ToPrometheusMetrics() []*prometheusgo.Metric {
+	metrics := make([]*prometheusgo.Metric, 0, len(gv.encounteredLabelValues))
+
+	for _, labels := range gv.encounteredLabelValues {
+		m := &prometheusgo.Metric{}
+		g := gv.promVec.WithLabelValues(labels...)
+
+		if err := g.Write(m); err != nil {
+			panic(err)
+		}
+
+		metrics = append(metrics, m)
+	}
+
+	return metrics
 }
