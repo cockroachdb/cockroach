@@ -11,8 +11,10 @@
 package metric
 
 import (
+	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/prometheus/client_golang/prometheus"
@@ -56,7 +58,7 @@ func MakePrometheusExporterForSelectedMetrics(selection map[string]struct{}) Pro
 
 // find the family for the passed-in metric, or create and return it if not found.
 func (pm *PrometheusExporter) findOrCreateFamily(
-	prom PrometheusExportable,
+	prom PrometheusCompatible,
 ) *prometheusgo.MetricFamily {
 	familyName := exportedName(prom.GetName())
 	if family, ok := pm.families[familyName]; ok {
@@ -80,27 +82,41 @@ func (pm *PrometheusExporter) findOrCreateFamily(
 func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, includeChildMetrics bool) {
 	labels := registry.GetLabels()
 	f := func(name string, v interface{}) {
-		prom, ok := v.(PrometheusExportable)
-		if !ok {
+		switch prom := v.(type) {
+		case PrometheusVector:
+			for _, m := range prom.ToPrometheusMetrics() {
+				m := m
+				m.Label = append(m.Label, labels...)
+				m.Label = append(m.Label, prom.GetLabels()...)
+
+				family := pm.findOrCreateFamily(prom)
+				family.Metric = append(family.Metric, m)
+			}
+
+		case PrometheusExportable:
+			m := prom.ToPrometheusMetric()
+			// Set registry and metric labels.
+			m.Label = append(labels, prom.GetLabels()...)
+
+			family := pm.findOrCreateFamily(prom)
+			family.Metric = append(family.Metric, m)
+
+			// Deal with metrics which have children which are exposed to
+			// prometheus if we should.
+			promIter, ok := v.(PrometheusIterable)
+			if !ok || !includeChildMetrics {
+				return
+			}
+			promIter.Each(m.Label, func(metric *prometheusgo.Metric) {
+				family.Metric = append(family.Metric, metric)
+			})
+
+		default:
+			log.Infof(context.Background(), "metric %s is not compatible with any prometheus metric type", name)
 			return
 		}
-		m := prom.ToPrometheusMetric()
-		// Set registry and metric labels.
-		m.Label = append(labels, prom.GetLabels()...)
-
-		family := pm.findOrCreateFamily(prom)
-		family.Metric = append(family.Metric, m)
-
-		// Deal with metrics which have children which are exposed to
-		// prometheus if we should.
-		promIter, ok := v.(PrometheusIterable)
-		if !ok || !includeChildMetrics {
-			return
-		}
-		promIter.Each(m.Label, func(metric *prometheusgo.Metric) {
-			family.Metric = append(family.Metric, metric)
-		})
 	}
+
 	if pm.selection == nil {
 		registry.Each(f)
 	} else {
