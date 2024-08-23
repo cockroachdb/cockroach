@@ -26,6 +26,11 @@ func TestLicense(t *testing.T) {
 	before := ts.Add(time.Hour * -24)
 	wayAfter := ts.Add(time.Hour * 24 * 365 * 200)
 
+	// Generate random, yet deterministic, values for the two byte fields.
+	// The first byte of each will be incremented after each test to ensure variation.
+	orgID := []byte{0}
+	licenseID := []byte{0}
+
 	for i, tc := range []struct {
 		licType    licenseccl.License_Type
 		expiration time.Time
@@ -55,6 +60,14 @@ func TestLicense(t *testing.T) {
 		{licenseccl.License_Enterprise, ts, "tc-13", ts, ""},
 		{licenseccl.License_Enterprise, ts, "", ts, "license valid only for"},
 		{licenseccl.License_Enterprise, ts, "tc-15", ts, ""},
+
+		// free license.
+		{licenseccl.License_Free, ts, "tc-16", ts, ""},
+		{licenseccl.License_Free, after, "tc-17", wayAfter, "expired"},
+
+		// trial license.
+		{licenseccl.License_Trial, wayAfter, "tc-18", before, ""},
+		{licenseccl.License_Trial, ts, "unmatched org", ts, "license valid only for"},
 	} {
 		t.Run("", func(t *testing.T) {
 			var lic *licenseccl.License
@@ -63,6 +76,8 @@ func TestLicense(t *testing.T) {
 					ValidUntilUnixSec: tc.expiration.Unix(),
 					Type:              tc.licType,
 					OrganizationName:  fmt.Sprintf("tc-%d", i),
+					OrganizationId:    orgID,
+					LicenseId:         licenseID,
 				}).Encode()
 				if err != nil {
 					t.Fatal(err)
@@ -79,6 +94,8 @@ func TestLicense(t *testing.T) {
 				t.Fatalf("%d: lic to %s, checked at %s.\n got %q", i,
 					tc.expiration, tc.checkTime, err)
 			}
+			orgID[0]++
+			licenseID[0]++
 		})
 	}
 }
