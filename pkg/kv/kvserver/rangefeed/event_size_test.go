@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
@@ -37,6 +36,7 @@ var (
 	pointKV = storageutils.PointKV
 	rangeKV = storageutils.RangeKV
 )
+
 var (
 	testKey            = roachpb.Key("/db1")
 	testTxnID          = uuid.MakeV4()
@@ -251,11 +251,6 @@ func TestEventSizeCalculation(t *testing.T) {
 	}
 }
 
-func generateRandomizedTs(rand *rand.Rand) hlc.Timestamp {
-	// Avoid generating zero timestamp which will equal to an empty event.
-	return hlc.Timestamp{WallTime: int64(rand.Intn(100)) + 1}
-}
-
 func generateRandomizedBytes(rand *rand.Rand) []byte {
 	const tableID = 42
 	dataTypes := []*types.T{types.String, types.Int, types.Decimal, types.Bytes, types.Bool, types.Date, types.Timestamp, types.Float}
@@ -270,33 +265,6 @@ func generateRandomizedBytes(rand *rand.Rand) []byte {
 		panic(err)
 	}
 	return key
-}
-
-func generateStartAndEndKey(rand *rand.Rand) (roachpb.Key, roachpb.Key) {
-	start := rand.Intn(2 << 20)
-	end := start + rand.Intn(2<<20)
-	startDatum := tree.NewDInt(tree.DInt(start))
-	endDatum := tree.NewDInt(tree.DInt(end))
-	const tableID = 42
-
-	startKey, err := keyside.Encode(
-		keys.SystemSQLCodec.TablePrefix(tableID),
-		startDatum,
-		encoding.Ascending,
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	endKey, err := keyside.Encode(
-		keys.SystemSQLCodec.TablePrefix(tableID),
-		endDatum,
-		encoding.Ascending,
-	)
-	if err != nil {
-		panic(err)
-	}
-	return startKey, endKey
 }
 
 func generateRandomizedTxnId(rand *rand.Rand) uuid.UUID {
@@ -326,14 +294,14 @@ func generateRandomTestData(rand *rand.Rand) testData {
 		kvs:              testSSTKVs,
 		span:             generateRandomizedSpan(rand).AsRawSpanWithNoLocals(),
 		key:              generateRandomizedBytes(rand),
-		timestamp:        generateRandomizedTs(rand),
+		timestamp:        GenerateRandomizedTs(rand, 100 /* maxTime */),
 		value:            generateRandomizedBytes(rand),
 		startKey:         startKey,
 		endKey:           endkey,
 		txnID:            generateRandomizedTxnId(rand),
 		txnKey:           generateRandomizedBytes(rand),
 		txnIsoLevel:      isolation.Levels()[rand.Intn(len(isolation.Levels()))],
-		txnMinTimestamp:  generateRandomizedTs(rand),
+		txnMinTimestamp:  GenerateRandomizedTs(rand, 100 /* maxTime */),
 		omitInRangefeeds: rand.Intn(2) == 1,
 	}
 }
