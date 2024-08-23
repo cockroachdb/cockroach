@@ -1,0 +1,205 @@
+run ok
+cput k=k1 v=v ts=10
+----
+>> at end:
+data: "k1"/10.000000000,0 -> /BYTES/v
+
+# CPut on non-existent key with OriginTimestamp set wins
+run ok
+cput k=k2 v=v ts=11 origin_ts=9
+----
+>> at end:
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+
+# CPut with existing key
+## CPut has value
+### CPut with OriginTimetamp older than local write loses
+run error
+cput k=k1 v=v ts=12 origin_ts=9
+----
+>> at end:
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+error: (*kvpb.ConditionFailedError:) origin timestamp older than 10.000000000,0
+
+### CPut with OriginTimestamp newer than local but out of date expectation gets an error
+run error
+cput k=k1 v=v ts=13 origin_ts=11 cond=not_v
+----
+>> at end:
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+error: (*kvpb.ConditionFailedError:) origin timestamp winner with unexpected value: raw_bytes:"\000\000\000\000\003v" timestamp:<wall_time:10000000000 > 
+
+### CPut with OriginTimestamp newer than local write wins
+run ok
+cput k=k1 v=v ts=13 origin_ts=11 cond=v
+----
+>> at end:
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+
+### CPut with OriginTimestamp older than existing OriginTimestamp loses
+run error
+cput k=k2 v=v ts=14 origin_ts=8
+----
+>> at end:
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+error: (*kvpb.ConditionFailedError:) origin timestamp older than 9.000000000,0
+
+### CPut with OriginTimestamp new than existing OriginTimestamp wins
+run ok
+cput k=k2 v=v ts=15 origin_ts=11 cond=v
+----
+>> at end:
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/15.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+
+
+## CPut with no value
+##
+## These tests are speculative, assuming that the caller
+## will want to generate CPut's with tombstones rather than Deletes
+## so that they can get LWW deletes.
+##
+### CPut with OriginTimetamp older than local write loses
+run ok
+put k=k2 v=v2 ts=16
+----
+>> at end:
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/16.000000000,0 -> /BYTES/v2
+data: "k2"/15.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+
+run error
+cput k=k2 v=<tombstone> ts=17 origin_ts=15 cond=v2
+----
+>> at end:
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/16.000000000,0 -> /BYTES/v2
+data: "k2"/15.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+error: (*kvpb.ConditionFailedError:) origin timestamp older than 16.000000000,0
+
+### CPut with OriginTimestamp newer than local write wins
+run ok
+cput k=k2 v=<tombstone> ts=18 origin_ts=17 cond=v2
+----
+>> at end:
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/18.000000000,0 -> {originTs=17.000000000,0}/<empty>
+data: "k2"/16.000000000,0 -> /BYTES/v2
+data: "k2"/15.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+
+### CPut with OriginTimestamp older than existing OriginTimestamp loses
+run error
+cput k=k1 v=<tombstone> ts=19 origin_ts=9 cond=v
+----
+>> at end:
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/18.000000000,0 -> {originTs=17.000000000,0}/<empty>
+data: "k2"/16.000000000,0 -> /BYTES/v2
+data: "k2"/15.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+error: (*kvpb.ConditionFailedError:) origin timestamp older than 11.000000000,0
+
+### CPut with OriginTimestamp new than existing OriginTimestamp wins
+run ok
+cput k=k1 v=<tombstone> ts=20 origin_ts=12 cond=v
+----
+>> at end:
+data: "k1"/20.000000000,0 -> {originTs=12.000000000,0}/<empty>
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/18.000000000,0 -> {originTs=17.000000000,0}/<empty>
+data: "k2"/16.000000000,0 -> /BYTES/v2
+data: "k2"/15.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+
+
+### CPuts when existing key is a tombstone
+run ok
+del k=k1 ts=21
+----
+del: "k1": found key false
+>> at end:
+data: "k1"/21.000000000,0 -> /<empty>
+data: "k1"/20.000000000,0 -> {originTs=12.000000000,0}/<empty>
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/18.000000000,0 -> {originTs=17.000000000,0}/<empty>
+data: "k2"/16.000000000,0 -> /BYTES/v2
+data: "k2"/15.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+
+## k1 is now a "normal" tombostone
+## k2 is still a "originTimestamp"'d tombstone
+
+run error
+cput k=k1 v=v1 ts=22 origin_ts=12
+----
+>> at end:
+data: "k1"/21.000000000,0 -> /<empty>
+data: "k1"/20.000000000,0 -> {originTs=12.000000000,0}/<empty>
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/18.000000000,0 -> {originTs=17.000000000,0}/<empty>
+data: "k2"/16.000000000,0 -> /BYTES/v2
+data: "k2"/15.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+error: (*kvpb.ConditionFailedError:) origin timestamp older than 21.000000000,0
+
+run error
+cput k=k2 v=v1 ts=23 origin_ts=12
+----
+>> at end:
+data: "k1"/21.000000000,0 -> /<empty>
+data: "k1"/20.000000000,0 -> {originTs=12.000000000,0}/<empty>
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/18.000000000,0 -> {originTs=17.000000000,0}/<empty>
+data: "k2"/16.000000000,0 -> /BYTES/v2
+data: "k2"/15.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+error: (*kvpb.ConditionFailedError:) origin timestamp older than 17.000000000,0
+
+run ok
+cput k=k1 v=v1 ts=24 origin_ts=22
+----
+>> at end:
+data: "k1"/24.000000000,0 -> {originTs=22.000000000,0}/BYTES/v1
+data: "k1"/21.000000000,0 -> /<empty>
+data: "k1"/20.000000000,0 -> {originTs=12.000000000,0}/<empty>
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/18.000000000,0 -> {originTs=17.000000000,0}/<empty>
+data: "k2"/16.000000000,0 -> /BYTES/v2
+data: "k2"/15.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v
+
+run ok
+cput k=k2 v=v1 ts=25 origin_ts=22
+----
+>> at end:
+data: "k1"/24.000000000,0 -> {originTs=22.000000000,0}/BYTES/v1
+data: "k1"/21.000000000,0 -> /<empty>
+data: "k1"/20.000000000,0 -> {originTs=12.000000000,0}/<empty>
+data: "k1"/13.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k1"/10.000000000,0 -> /BYTES/v
+data: "k2"/25.000000000,0 -> {originTs=22.000000000,0}/BYTES/v1
+data: "k2"/18.000000000,0 -> {originTs=17.000000000,0}/<empty>
+data: "k2"/16.000000000,0 -> /BYTES/v2
+data: "k2"/15.000000000,0 -> {originTs=11.000000000,0}/BYTES/v
+data: "k2"/11.000000000,0 -> {originTs=9.000000000,0}/BYTES/v

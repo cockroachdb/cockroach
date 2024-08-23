@@ -58,6 +58,10 @@ func ConditionalPut(
 		ts = h.Timestamp
 	}
 
+	if err := args.Validate(); err != nil {
+		return result.Result{}, err
+	}
+
 	handleMissing := storage.CPutMissingBehavior(args.AllowIfDoesNotExist)
 
 	opts := storage.MVCCWriteOptions{
@@ -71,15 +75,18 @@ func ConditionalPut(
 		TargetLockConflictBytes:        storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		Category:                       fs.BatchEvalReadCategory,
 	}
-
+	originTSOpts := storage.CPutWithOriginTimestampOptions{
+		OriginTimestamp: args.OriginTimestamp,
+		ShouldWinTie:    args.ShouldWinOriginTimestampTie,
+	}
 	var err error
 	var acq roachpb.LockAcquisition
 	if args.Blind {
 		acq, err = storage.MVCCBlindConditionalPut(
-			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, handleMissing, opts)
+			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, handleMissing, originTSOpts, opts)
 	} else {
 		acq, err = storage.MVCCConditionalPut(
-			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, handleMissing, opts)
+			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, handleMissing, originTSOpts, opts)
 	}
 	if err != nil {
 		return result.Result{}, err

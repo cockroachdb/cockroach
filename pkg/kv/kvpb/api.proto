@@ -382,6 +382,16 @@ message ConditionalPutRequest {
   // timestamp. This option should be used with care as it precludes
   // the use of this value with transactions.
   bool inline = 7;
+
+  // OriginTimestamp, if set, indicates that the caller wants to put
+  // the value only if any existing key is older than this timestamp.
+  // Used by logical data replication.
+  util.hlc.Timestamp origin_timestamp = 8 [(gogoproto.nullable) = false];
+
+  // ShouldWinOriginTimestampTie indicates whether the value should be
+  // accepted if the origin timestamp is the same as the
+  // origin_timestamp/mvcc_timestamp of the existing value.
+  bool should_win_origin_timestamp_tie = 9;
 }
 
 // A ConditionalPutResponse is the return value from the
@@ -3213,7 +3223,7 @@ message RangeFeedRequest {
   // OmitInRangefeeds = true, the write will not be emitted on the rangefeed.
   // WithFiltering should NOT be set for system-table rangefeeds.
   bool with_filtering = 7;
-  
+
   // WithMatchingOriginIDs specifies if the rangefeed server should emit events
   // originating from specific clusters during Logical Data Replication. If this
   // field is empty, all events are emitted.

@@ -3023,7 +3023,7 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 		// Condition matches.
 		value2,
 	} {
-		_, err = MVCCConditionalPut(ctx, engine, testKey1, hlc.Timestamp{WallTime: 2}, value3, expVal.TagAndDataBytes(), CPutFailIfMissing, MVCCWriteOptions{})
+		_, err = MVCCConditionalPut(ctx, engine, testKey1, hlc.Timestamp{WallTime: 2}, value3, expVal.TagAndDataBytes(), CPutFailIfMissing, CPutWithOriginTimestampOptions{}, MVCCWriteOptions{})
 		require.ErrorAs(t, err, new(*kvpb.WriteTooOldError))
 
 		// Either way, no new value is written.

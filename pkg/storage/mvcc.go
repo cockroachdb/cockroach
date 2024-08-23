@@ -414,6 +414,12 @@ func (v *optionalValue) ToPointer() *roachpb.Value {
 	return &cpy
 }
 
+// TODO(ssd): Determine if we can just put this in optionalValue.
+type optionalValueWithHeader struct {
+	optionalValue
+	enginepb.MVCCValueHeader
+}
+
 // isSysLocal returns whether the key is system-local.
 func isSysLocal(key roachpb.Key) bool {
 	return key.Compare(keys.LocalMax) < 0
@@ -1942,7 +1948,7 @@ func MVCCPut(
 			defer ltScanner.close()
 		}
 	}
-	return mvccPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, value, nil, opts)
+	return mvccPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, value, nil, nil, opts)
 }
 
 // MVCCBlindPut is a fast-path of MVCCPut. See the MVCCPut comments for details
@@ -1963,7 +1969,7 @@ func MVCCBlindPut(
 	value roachpb.Value,
 	opts MVCCWriteOptions,
 ) (roachpb.LockAcquisition, error) {
-	return mvccPutUsingIter(ctx, writer, nil, nil, key, timestamp, value, nil, opts)
+	return mvccPutUsingIter(ctx, writer, nil, nil, key, timestamp, value, nil, nil, opts)
 }
 
 // MVCCDelete marks the key deleted so that it will not be returned in
@@ -2010,7 +2016,7 @@ func MVCCDelete(
 
 	// TODO(yuzefovich): can we avoid the put if the key does not exist?
 	return mvccPutInternal(
-		ctx, rw, iter, ltScanner, key, timestamp, noValue, buf, nil, opts)
+		ctx, rw, iter, ltScanner, key, timestamp, noValue, buf, nil, nil, opts)
 }
 
 var noValue = roachpb.Value{}
@@ -2028,6 +2034,7 @@ func mvccPutUsingIter(
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	valueFn func(optionalValue) (roachpb.Value, error),
+	valueFnWithHeader func(optionalValueWithHeader) (roachpb.Value, error),
 	opts MVCCWriteOptions,
 ) (roachpb.LockAcquisition, error) {
 	buf := newPutBuffer()
@@ -2036,7 +2043,7 @@ func mvccPutUsingIter(
 	// Most callers don't care about the returned exReplaced value. The ones that
 	// do can call mvccPutInternal directly.
 	_, acq, err := mvccPutInternal(
-		ctx, writer, iter, ltScanner, key, timestamp, value, buf, valueFn, opts)
+		ctx, writer, iter, ltScanner, key, timestamp, value, buf, valueFn, valueFnWithHeader, opts)
 	return acq, err
 }
 
@@ -2080,6 +2087,7 @@ func replayTransactionalWrite(
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 	valueFn func(optionalValue) (roachpb.Value, error),
+	valueFnWithHeader func(optionalValueWithHeader) (roachpb.Value, error),
 	replayWriteTimestampProtection bool,
 ) error {
 	var writtenValue optionalValue
@@ -2126,8 +2134,8 @@ func replayTransactionalWrite(
 	}
 
 	// If the valueFn is specified, we must apply it to the would-be value at the key.
-	if valueFn != nil {
-		var exVal optionalValue
+	if valueFn != nil || valueFnWithHeader != nil {
+		var exVal optionalValueWithHeader
 
 		// If there's an intent history, use that.
 		prevIntent, prevValueWritten := meta.GetPrevIntentSeq(txn.Sequence, txn.IgnoredSeqNums)
@@ -2139,24 +2147,38 @@ func replayTransactionalWrite(
 			if err != nil {
 				return err
 			}
-			exVal = makeOptionalValue(prevIntentVal.Value)
+			exVal = optionalValueWithHeader{
+				optionalValue:   makeOptionalValue(prevIntentVal.Value),
+				MVCCValueHeader: prevIntentVal.MVCCValueHeader,
+			}
 		} else {
 			// If the previous value at the key wasn't written by this
 			// transaction, or it was hidden by a rolled back seqnum, we look at
 			// last committed value on the key. Since we want the last committed
 			// value on the key, we read below our previous intents here.
 			metaTimestamp := meta.Timestamp.ToTimestamp()
-			exVal, _, err = mvccGet(ctx, iter, key, metaTimestamp.Prev(), MVCCGetOptions{
+			val, _, header, err := mvccGetWithValueHeader(ctx, iter, key, metaTimestamp.Prev(), MVCCGetOptions{
 				Tombstones: true,
 			})
 			if err != nil {
 				return err
 			}
+			exVal = optionalValueWithHeader{
+				optionalValue:   val,
+				MVCCValueHeader: header,
+			}
 		}
 
-		value, err = valueFn(exVal)
-		if err != nil {
-			return err
+		if valueFn != nil {
+			value, err = valueFn(exVal.optionalValue)
+			if err != nil {
+				return err
+			}
+		} else if valueFnWithHeader != nil {
+			value, err = valueFnWithHeader(exVal)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -2242,6 +2264,7 @@ func mvccPutInternal(
 	value roachpb.Value,
 	buf *putBuffer,
 	valueFn func(optionalValue) (roachpb.Value, error),
+	valueFnWithHeader func(optionalValueWithHeader) (roachpb.Value, error),
 	opts MVCCWriteOptions,
 ) (bool, roachpb.LockAcquisition, error) {
 	if len(key) == 0 {
@@ -2253,6 +2276,10 @@ func mvccPutInternal(
 	if !value.Timestamp.IsEmpty() {
 		return false, roachpb.LockAcquisition{}, errors.Errorf("cannot have timestamp set in value")
 	}
+	if valueFn != nil && valueFnWithHeader != nil {
+		return false, roachpb.LockAcquisition{}, errors.AssertionFailedf("cannot specify both valueFn and valueFnWithHeader")
+	}
+
 	if err := opts.validate(); err != nil {
 		return false, roachpb.LockAcquisition{}, err
 	}
@@ -2267,6 +2294,10 @@ func mvccPutInternal(
 			return false, roachpb.LockAcquisition{}, errors.Errorf(
 				"ltScanner must be nil for putIsBlind %t, putIsInline %t", putIsBlind, putIsInline)
 		}
+
+	}
+	if putIsInline && valueFnWithHeader != nil {
+		return false, roachpb.LockAcquisition{}, errors.AssertionFailedf("cannot specify valueFnWithHeader for inline put")
 	}
 
 	metaKey := MakeMVCCMetadataKey(key)
@@ -2422,7 +2453,7 @@ func mvccPutInternal(
 				return false,
 					roachpb.LockAcquisition{},
 					replayTransactionalWrite(ctx, iter, meta, key, value,
-						opts.Txn, valueFn, opts.ReplayWriteTimestampProtection,
+						opts.Txn, valueFn, valueFnWithHeader, opts.ReplayWriteTimestampProtection,
 					)
 			}
 
@@ -2449,7 +2480,7 @@ func mvccPutInternal(
 			// committed values, and all past writes by this transaction have been
 			// rolled back, either due to transaction retries or transaction savepoint
 			// rollbacks.)
-			var exVal optionalValue
+			var exVal optionalValueWithHeader
 			// Set when the current provisional value is not ignored due to a txn
 			// restart or a savepoint rollback. Represents an encoded MVCCValue.
 			var curProvValRaw []byte
@@ -2477,7 +2508,10 @@ func mvccPutInternal(
 					if err != nil {
 						return false, roachpb.LockAcquisition{}, err
 					}
-					exVal = makeOptionalValue(curIntentVal.Value)
+					exVal = optionalValueWithHeader{
+						optionalValue:   makeOptionalValue(curIntentVal.Value),
+						MVCCValueHeader: curIntentVal.MVCCValueHeader,
+					}
 				} else {
 					// Seqnum of last write was ignored. Try retrieving the value from the history.
 					prevIntent, prevIntentOk := meta.GetPrevIntentSeq(opts.Txn.Sequence, opts.Txn.IgnoredSeqNums)
@@ -2486,7 +2520,10 @@ func mvccPutInternal(
 						if err != nil {
 							return false, roachpb.LockAcquisition{}, err
 						}
-						exVal = makeOptionalValue(prevIntentVal.Value)
+						exVal = optionalValueWithHeader{
+							optionalValue:   makeOptionalValue(prevIntentVal.Value),
+							MVCCValueHeader: prevIntentVal.MVCCValueHeader,
+						}
 					}
 				}
 			}
@@ -2498,12 +2535,16 @@ func mvccPutInternal(
 				//
 				// Since we want the last committed value on the key, we must
 				// read below our previous intents here.
-				exVal, _, err = mvccGet(ctx, iter, key, metaTimestamp.Prev(), MVCCGetOptions{
+				optVal, _, header, err := mvccGetWithValueHeader(ctx, iter, key, metaTimestamp.Prev(), MVCCGetOptions{
 					Tombstones:   true,
 					ReadCategory: opts.Category,
 				})
 				if err != nil {
 					return false, roachpb.LockAcquisition{}, err
+				}
+				exVal = optionalValueWithHeader{
+					optionalValue:   optVal,
+					MVCCValueHeader: header,
 				}
 			}
 
@@ -2513,7 +2554,12 @@ func mvccPutInternal(
 			// version. For example, a conditional put within same
 			// transaction should read previous write.
 			if valueFn != nil {
-				value, err = valueFn(exVal)
+				value, err = valueFn(exVal.optionalValue)
+				if err != nil {
+					return false, roachpb.LockAcquisition{}, err
+				}
+			} else if valueFnWithHeader != nil {
+				value, err = valueFnWithHeader(exVal)
 				if err != nil {
 					return false, roachpb.LockAcquisition{}, err
 				}
@@ -2637,15 +2683,29 @@ func mvccPutInternal(
 			return false, roachpb.LockAcquisition{}, writeTooOldErr
 		} else /* meta.Txn == nil && metaTimestamp.Less(readTimestamp) */ {
 			// If a valueFn is specified, read the existing value using iter.
+			opts := MVCCGetOptions{
+				Tombstones:   true,
+				ReadCategory: opts.Category,
+			}
 			if valueFn != nil {
-				exVal, _, err := mvccGet(ctx, iter, key, readTimestamp, MVCCGetOptions{
-					Tombstones:   true,
-					ReadCategory: opts.Category,
-				})
+				exVal, _, err := mvccGet(ctx, iter, key, readTimestamp, opts)
 				if err != nil {
 					return false, roachpb.LockAcquisition{}, err
 				}
 				value, err = valueFn(exVal)
+				if err != nil {
+					return false, roachpb.LockAcquisition{}, err
+				}
+			} else if valueFnWithHeader != nil {
+				exVal, _, header, err := mvccGetWithValueHeader(ctx, iter, key, readTimestamp, opts)
+				if err != nil {
+					return false, roachpb.LockAcquisition{}, err
+				}
+
+				value, err = valueFnWithHeader(optionalValueWithHeader{
+					optionalValue:   exVal,
+					MVCCValueHeader: header,
+				})
 				if err != nil {
 					return false, roachpb.LockAcquisition{}, err
 				}
@@ -2656,6 +2716,11 @@ func mvccPutInternal(
 		// nil write a deletion tombstone for the key.
 		if valueFn != nil {
 			value, err = valueFn(optionalValue{exists: false})
+			if err != nil {
+				return false, roachpb.LockAcquisition{}, err
+			}
+		} else if valueFnWithHeader != nil {
+			value, err = valueFnWithHeader(optionalValueWithHeader{optionalValue: optionalValue{exists: false}})
 			if err != nil {
 				return false, roachpb.LockAcquisition{}, err
 			}
@@ -2852,7 +2917,7 @@ func MVCCIncrement(
 		return newValue, nil
 	}
 
-	acq, err := mvccPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, noValue, valueFn, opts)
+	acq, err := mvccPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, noValue, valueFn, nil, opts)
 	return newInt64Val, acq, err
 }
 
@@ -2867,6 +2932,15 @@ const (
 	// expected value exactly i.e. if a value is expected, it must exist.
 	CPutFailIfMissing CPutMissingBehavior = false
 )
+
+type CPutWithOriginTimestampOptions struct {
+	OriginTimestamp hlc.Timestamp
+	ShouldWinTie    bool
+}
+
+func (o CPutWithOriginTimestampOptions) IsEmpty() bool {
+	return o == CPutWithOriginTimestampOptions{}
+}
 
 // MVCCConditionalPut sets the value for a specified key only if the expected
 // value matches. If not, the return a ConditionFailedError containing the
@@ -2891,6 +2965,7 @@ func MVCCConditionalPut(
 	value roachpb.Value,
 	expVal []byte,
 	allowIfDoesNotExist CPutMissingBehavior,
+	originTSOpts CPutWithOriginTimestampOptions,
 	opts MVCCWriteOptions,
 ) (roachpb.LockAcquisition, error) {
 	iter, err := newMVCCIterator(
@@ -2917,7 +2992,7 @@ func MVCCConditionalPut(
 		defer ltScanner.close()
 	}
 	return mvccConditionalPutUsingIter(
-		ctx, rw, iter, ltScanner, key, timestamp, value, expVal, allowIfDoesNotExist, opts)
+		ctx, rw, iter, ltScanner, key, timestamp, value, expVal, allowIfDoesNotExist, originTSOpts, opts)
 }
 
 // MVCCBlindConditionalPut is a fast-path of MVCCConditionalPut. See the
@@ -2937,10 +3012,11 @@ func MVCCBlindConditionalPut(
 	value roachpb.Value,
 	expVal []byte,
 	allowIfDoesNotExist CPutMissingBehavior,
+	originTSOpts CPutWithOriginTimestampOptions,
 	opts MVCCWriteOptions,
 ) (roachpb.LockAcquisition, error) {
 	return mvccConditionalPutUsingIter(
-		ctx, writer, nil, nil, key, timestamp, value, expVal, allowIfDoesNotExist, opts)
+		ctx, writer, nil, nil, key, timestamp, value, expVal, allowIfDoesNotExist, originTSOpts, opts)
 }
 
 func mvccConditionalPutUsingIter(
@@ -2953,23 +3029,84 @@ func mvccConditionalPutUsingIter(
 	value roachpb.Value,
 	expBytes []byte,
 	allowNoExisting CPutMissingBehavior,
+	originTSOpts CPutWithOriginTimestampOptions,
 	opts MVCCWriteOptions,
 ) (roachpb.LockAcquisition, error) {
-	valueFn := func(existVal optionalValue) (roachpb.Value, error) {
-		if expValPresent, existValPresent := len(expBytes) != 0, existVal.IsPresent(); expValPresent && existValPresent {
-			if !bytes.Equal(expBytes, existVal.TagAndDataBytes()) {
+	if bool(allowNoExisting) && !originTSOpts.IsEmpty() {
+		return roachpb.LockAcquisition{}, errors.AssertionFailedf("allowNoExisting and non-zero originTSOpts are incompatible")
+	}
+
+	var valueFn func(existVal optionalValue) (roachpb.Value, error)
+	var valueFnWithHeader func(existVal optionalValueWithHeader) (roachpb.Value, error)
+	if originTSOpts.IsEmpty() {
+		valueFn = func(existVal optionalValue) (roachpb.Value, error) {
+			if expValPresent, existValPresent := len(expBytes) != 0, existVal.IsPresent(); expValPresent && existValPresent {
+				if !bytes.Equal(expBytes, existVal.TagAndDataBytes()) {
+					return roachpb.Value{}, &kvpb.ConditionFailedError{
+						ActualValue: existVal.ToPointer(),
+					}
+				}
+			} else if expValPresent != existValPresent && (existValPresent || !bool(allowNoExisting)) {
 				return roachpb.Value{}, &kvpb.ConditionFailedError{
 					ActualValue: existVal.ToPointer(),
 				}
 			}
-		} else if expValPresent != existValPresent && (existValPresent || !bool(allowNoExisting)) {
-			return roachpb.Value{}, &kvpb.ConditionFailedError{
-				ActualValue: existVal.ToPointer(),
-			}
+			return value, nil
 		}
-		return value, nil
+	} else {
+		valueFnWithHeader = func(existVal optionalValueWithHeader) (roachpb.Value, error) {
+			expValExists := len(expBytes) != 0
+			// If the existing value doesn't exist, we are
+			// definitely the winner based on OriginTimestamp.
+			if !existVal.exists {
+				if expValExists {
+					return roachpb.Value{}, &kvpb.ConditionFailedError{
+						HadNewerOriginTimestamp: true,
+					}
+				}
+				return value, nil
+			}
+
+			existTS := existVal.MVCCValueHeader.OriginTimestamp
+			if !existTS.IsSet() {
+				existTS = existVal.Timestamp
+			}
+
+			proposedIsOriginTSWinner := existTS.Less(originTSOpts.OriginTimestamp) || (existTS.Equal(originTSOpts.OriginTimestamp) && originTSOpts.ShouldWinTie)
+			if !proposedIsOriginTSWinner {
+				return roachpb.Value{}, &kvpb.ConditionFailedError{
+					OriginTimestampOlderThan: existTS,
+				}
+			}
+
+			// We are the OriginTimestamp comparison winner. We
+			// check the expected bytes because a mismatch implies
+			// that the caller may have produced other commands with
+			// outdated data.
+			if expValExists && existVal.IsPresent() && !bytes.Equal(expBytes, existVal.TagAndDataBytes()) {
+				return roachpb.Value{}, &kvpb.ConditionFailedError{
+					HadNewerOriginTimestamp: true,
+					ActualValue:             existVal.ToPointer(),
+				}
+			} else if expValExists != existVal.IsPresent() {
+				return roachpb.Value{}, &kvpb.ConditionFailedError{
+					HadNewerOriginTimestamp: true,
+					ActualValue:             existVal.ToPointer(),
+				}
+			}
+			// Everything is cool in the pool.
+			return value, nil
+		}
+
+		// TODO(ssd): We set the OriginTimestamp on our write
+		// options to the originTimestamp passed to us. We
+		// don't assert they are the same yet because it is
+		// still unclear how exactly we want to manage this in
+		// the long run.
+		opts.OriginTimestamp = originTSOpts.OriginTimestamp
 	}
-	return mvccPutUsingIter(ctx, writer, iter, ltScanner, key, timestamp, noValue, valueFn, opts)
+
+	return mvccPutUsingIter(ctx, writer, iter, ltScanner, key, timestamp, noValue, valueFn, valueFnWithHeader, opts)
 }
 
 // MVCCInitPut sets the value for a specified key if the key doesn't exist. It
@@ -3064,7 +3201,7 @@ func mvccInitPutUsingIter(
 		}
 		return value, nil
 	}
-	return mvccPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, noValue, valueFn, opts)
+	return mvccPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, noValue, valueFn, nil, opts)
 }
 
 // mvccKeyFormatter is an fmt.Formatter for MVCC Keys.
@@ -3692,7 +3829,7 @@ func MVCCDeleteRange(
 	var acqs []roachpb.LockAcquisition
 	for i, kv := range res.KVs {
 		_, acq, err := mvccPutInternal(
-			ctx, rw, iter, ltScanner, kv.Key, timestamp, noValue, buf, nil, opts,
+			ctx, rw, iter, ltScanner, kv.Key, timestamp, noValue, buf, nil, nil, opts,
 		)
 		if err != nil {
 			return nil, nil, 0, nil, err
@@ -3930,7 +4067,7 @@ func MVCCPredicateDeleteRange(
 			for i := int64(0); i < runSize; i++ {
 				_, acq, err := mvccPutInternal(
 					ctx, rw, pointTombstoneIter, ltScanner, buf[i], endTime, noValue, pointTombstoneBuf,
-					nil, MVCCWriteOptions{
+					nil, nil, MVCCWriteOptions{
 						LocalTimestamp: localTimestamp, Stats: ms, Category: fs.BatchEvalReadCategory},
 				)
 				if err != nil {

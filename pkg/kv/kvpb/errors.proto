@@ -400,6 +400,15 @@ message OpRequiresTxnError {
 // contain the actual value found.
 message ConditionFailedError {
   optional roachpb.Value actual_value = 1;
+  // HadNwereOriginTimestamp is returned when an OriginTimestamp was
+  // sent in the conditional put, the origin timestamp was newer than
+  // the existing value (or no existing value exists), but the
+  // expected value was mismatched. The caller may choose to try again
+  // with the returned ActualValue.
+  optional bool had_newer_origin_timestamp = 2 [(gogoproto.nullable) = false];
+  // OriginTimestampOlderThan is returned when an OriginTimestamp was
+  // send in the conditional put and was older than an existing value.
+  optional util.hlc.Timestamp origin_timestamp_older_than = 3 [(gogoproto.nullable) = false];
 }
 
 // A LeaseRejectedError indicates that the requested replica could
@@ -692,7 +701,7 @@ message RefreshFailedError {
 
   // The timestamp the key was last updated.
   optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
-  
+
   // The conflicting transaction's TxnMeta, if available. This field is used
   // when the refresh fails with REASON_INTENT and is bubbled up for
   // observability purposes to track the conflicting transaction. This field is
