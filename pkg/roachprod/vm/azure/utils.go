@@ -25,12 +25,20 @@ type azureStartupArgs struct {
 	RemoteUser           string // The uname for /data* directories.
 	AttachedDiskLun      *int   // Use attached disk, with specified LUN; Use local ssd if nil.
 	DisksInitializedFile string // File to touch when disks are initialized.
+	StartupLogs          string // File to redirect startup script output logs.
 }
 
 const azureStartupTemplate = `#!/bin/bash
 
 # Script for setting up a Azure machine for roachprod use.
-set -xe
+# ensure any failure fails the entire script
+set -eux
+
+# Redirect output to stdout/err and a log file
+exec &> >(tee -a {{ .StartupLogs }})
+
+# Log the startup of the script with a timestamp
+echo "startup script starting: $(date -u)"
 mount_opts="defaults"
 
 {{if .AttachedDiskLun}}

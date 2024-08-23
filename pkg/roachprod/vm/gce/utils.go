@@ -31,7 +31,16 @@ import (
 const gceDiskStartupScriptTemplate = `#!/usr/bin/env bash
 # Script for setting up a GCE machine for roachprod use.
 
-set -x
+# ensure any failure fails the entire script
+set -eux
+
+# Redirect output to stdout/err and a log file
+exec &> >(tee -a {{ .StartupLogs }})
+
+# Log the startup of the script with a timestamp
+echo "startup script starting: $(date -u)"
+
+sudo -u {{ .SharedUser }} bash -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
 
 function setup_disks() {
   first_setup=$1
@@ -73,14 +82,19 @@ function setup_disks() {
 
 	for l in ${local_or_persistent}; do
   d=$(readlink -f $l)
+  mounted="no"
   {{ if .Zfs }}
     # Check if the disk is already part of a zpool or mounted; skip if so.
-    (zpool list -v -P | grep ${d} > /dev/null) || (mount | grep ${d} > /dev/null)
+    if (zpool list -v -P | grep -q ${d}) || (mount | grep -q ${d}); then
+      mounted="yes"
+    fi
   {{ else }}
     # Skip already mounted disks.
-    mount | grep ${d} > /dev/null
+    if mount | grep -q ${d}; then
+      mounted="yes"
+    fi
   {{ end }}
-		if [ $? -ne 0 ]; then
+		if [ "$mounted" -eq "no" ]; then
 			disks+=("${d}")
 			echo "Disk ${d} not mounted, need to mount..."
 		else
@@ -163,7 +177,9 @@ fi
 setup_disks true
 
 # sshguard can prevent frequent ssh connections to the same host. Disable it.
-systemctl stop sshguard
+if systemctl is-active --quiet sshguard; then
+    systemctl stop sshguard
+fi
 systemctl mask sshguard
 # increase the number of concurrent unauthenticated connections to the sshd
 # daemon. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Load_Balancing.
@@ -239,7 +255,9 @@ for timer in apt-daily-upgrade.timer apt-daily.timer e2scrub_all.timer fstrim.ti
 done
 
 for service in apport.service atd.service; do
-  systemctl stop $service
+	if systemctl is-active --quiet $service; then
+    systemctl stop $service
+	fi
   systemctl mask $service
 done
 
@@ -270,7 +288,6 @@ sysctl --system  # reload sysctl settings
 sudo ua enable fips --assume-yes
 {{ end }}
 
-sudo -u {{ .SharedUser }} bash -c "mkdir ~/.ssh && chmod 700 ~/.ssh"
 sudo -u {{ .SharedUser }} bash -c 'echo "{{ .PublicKey }}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
 
 sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
@@ -298,6 +315,7 @@ func writeStartupScript(
 		EnableCron           bool
 		OSInitializedFile    string
 		DisksInitializedFile string
+		StartupLogs          string
 	}
 
 	publicKey, err := config.SSHPublicKey()
@@ -315,6 +333,7 @@ func writeStartupScript(
 		EnableCron:           enableCron,
 		OSInitializedFile:    vm.OSInitializedFile,
 		DisksInitializedFile: vm.DisksInitializedFile,
+		StartupLogs:          vm.StartupLogs,
 	}
 
 	tmpfile, err := os.CreateTemp("", "gce-startup-script")

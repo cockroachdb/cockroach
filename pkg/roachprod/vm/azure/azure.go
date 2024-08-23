@@ -743,6 +743,7 @@ func (p *Provider) createVM(
 	startupArgs := azureStartupArgs{
 		RemoteUser:           remoteUser,
 		DisksInitializedFile: vm.DisksInitializedFile,
+		StartupLogs:          vm.StartupLogs,
 	}
 	if !opts.SSDOpts.UseLocalSSD {
 		// We define lun42 explicitly in the data disk request below.
