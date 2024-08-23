@@ -897,6 +897,7 @@ func TestLogicalJobResiliency(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
+	skip.UnderDeadlock(t, "Scattering prior to creating LDR job slows down ingestion")
 
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -1066,7 +1067,7 @@ func CreateScatteredTable(t *testing.T, db *sqlutils.SQLRunner, numNodes int, db
 	// ranges, so if we write just a few ranges those might all be on a single
 	// server, which will cause the test to flake.
 	numRanges := 50
-	rowsPerRange := 40
+	rowsPerRange := 20
 	db.Exec(t, "INSERT INTO tab (pk) SELECT * FROM generate_series(1, $1)",
 		numRanges*rowsPerRange)
 	db.Exec(t, "ALTER TABLE tab SPLIT AT (SELECT * FROM generate_series($1::INT, $2::INT, $3::INT))",
