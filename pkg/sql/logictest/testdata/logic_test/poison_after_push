@@ -2,8 +2,8 @@
 # not immediately poisoned when it revisits a Range on which one of
 # its intents has had its timestamp pushed. This allows it to continue
 # laying down intents in a single pass, despite the possibility that it
-# will restart on commit. A SNAPSHOT transaction can always proceed and
-# commit with its new timestamp.
+# will restart on commit. A REPEATABLE READ transaction can always
+# proceed and commit with its new timestamp.
 #
 # Note that ORDER BY id is done on selects which expect more than a
 # single result, to account for the distsql config, which randomly
@@ -65,9 +65,10 @@ SELECT * FROM t ORDER BY id
 statement ok
 COMMIT
 
-# The same type of session for a SNAPSHOT transaction shouldn't be poisoned.
+# The same type of session for a REPEATABLE READ transaction shouldn't be
+# poisoned.
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, PRIORITY LOW
 
 statement ok
 INSERT INTO t VALUES (3)
