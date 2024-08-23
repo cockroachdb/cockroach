@@ -86,4 +86,7 @@ type noopProcessor struct {
 	replica_rac2.Processor
 }
 
-func (p noopProcessor) OnDescChangedLocked(ctx context.Context, desc *roachpb.RangeDescriptor) {}
+func (p noopProcessor) OnDescChangedLocked(
+	ctx context.Context, desc *roachpb.RangeDescriptor, tenantID roachpb.TenantID,
+) {
+}

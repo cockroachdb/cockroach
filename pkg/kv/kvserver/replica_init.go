@@ -225,11 +225,9 @@ func newUninitializedReplicaWithoutRaftGroup(
 	)
 	r.raftMu.flowControlLevel = racV2EnabledWhenLeaderLevel(r.raftCtx, store.cfg.Settings)
 	r.flowControlV2 = replica_rac2.NewProcessor(replica_rac2.ProcessorOptions{
-		NodeID:  store.NodeID(),
-		StoreID: r.StoreID(),
-		RangeID: r.RangeID,
-		// TODO(sumeer): TenantID is not known yet. Fix.
-		TenantID:               roachpb.TenantID{},
+		NodeID:                 store.NodeID(),
+		StoreID:                r.StoreID(),
+		RangeID:                r.RangeID,
 		ReplicaID:              r.replicaID,
 		Replica:                (*replicaForRACv2)(r),
 		RaftScheduler:          r.store.scheduler,
@@ -433,7 +431,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.mu.state.Desc = desc
 	r.mu.replicaFlowControlIntegration.onDescChanged(ctx)
-	r.flowControlV2.OnDescChangedLocked(ctx, desc)
+	r.flowControlV2.OnDescChangedLocked(ctx, desc, r.mu.tenantID)
 
 	// Give the liveness and meta ranges high priority in the Raft scheduler, to
 	// avoid head-of-line blocking and high scheduling latency.
