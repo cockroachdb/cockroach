@@ -31,7 +31,11 @@ import (
 const gceDiskStartupScriptTemplate = `#!/usr/bin/env bash
 # Script for setting up a GCE machine for roachprod use.
 
-set -x
+# ensure any failure fails the entire script
+set -eux
+
+# Redirect output to a log file
+exec > /var/log/roachprod_startup.log 2>&1
 
 function setup_disks() {
   first_setup=$1
