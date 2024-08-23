@@ -94,6 +94,7 @@ func NewInternalSessionData(
 	sd.SearchPath = sessiondata.DefaultSearchPathForUser(username.NodeUserName())
 	sd.SequenceState = sessiondata.NewSequenceState()
 	sd.Location = time.UTC
+	sd.StmtTimeout = 0
 	return sd
 }
 
