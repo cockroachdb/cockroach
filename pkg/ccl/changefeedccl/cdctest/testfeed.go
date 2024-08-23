@@ -84,6 +84,8 @@ type EnterpriseTestFeed interface {
 	FetchRunningStatus() (string, error)
 	// Details returns changefeed details for this feed.
 	Details() (*jobspb.ChangefeedDetails, error)
+	// Progress returns the changefeed progress for this feed.
+	Progress() (*jobspb.ChangefeedProgress, error)
 	// HighWaterMark returns feed highwatermark.
 	HighWaterMark() (hlc.Timestamp, error)
 	// TickHighWaterMark waits until job highwatermark progresses beyond specified threshold.
