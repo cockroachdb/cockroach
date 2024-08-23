@@ -534,4 +534,8 @@ message LogicalReplicationWriterSpec {
     // FilterRangefeeed is an option on whether to filter out 'OmitinRangefeed' events
     // when processing changes in LDR
     optional bool filter_rangefeed = 9 [(gogoproto.nullable) = false];
+
+    optional jobs.jobspb.LogicalReplicationDetails.ApplyMode mode = 10 [(gogoproto.nullable) = false];
+
+    // Next ID: 11.
 }
