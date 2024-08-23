@@ -848,9 +848,9 @@ Vertexes
   B:
     scan cy
 Edges
-  b = c [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  b = c [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joins Considered: 1
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -878,25 +878,25 @@ Vertexes
      └── filters
           └── z > 0
 Edges
-  b = c [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  c = d [inner, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
-  b = d [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
+  b = c [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  c = d [inner, ses=BC, tes=BC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  b = d [inner, ses=AC, tes=AC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joining ABC
-  C AB [inner, refs=BC]
+  C AB [inner, refs=BC, ub=NaN]
 Joining BC
-  B C [inner, refs=BC]
-  C B [inner, refs=BC]
+  B C [inner, refs=BC, ub=NaN]
+  C B [inner, refs=BC, ub=NaN]
 Joining ABC
-  A BC [inner, refs=AB]
-  BC A [inner, refs=AB]
+  A BC [inner, refs=AB, ub=NaN]
+  BC A [inner, refs=AB, ub=NaN]
 Joining AC
-  A C [inner, refs=AC]
-  C A [inner, refs=AC]
+  A C [inner, refs=AC, ub=NaN]
+  C A [inner, refs=AC, ub=NaN]
 Joining ABC
-  B AC [inner, refs=AB]
-  AC B [inner, refs=AB]
+  B AC [inner, refs=AB, ub=NaN]
+  AC B [inner, refs=AB, ub=NaN]
 Joins Considered: 10
 ================================================================================
 Final Plan
@@ -932,9 +932,9 @@ Vertexes
   B:
     scan cy
 Edges
-  bx.b = cy.c [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  bx.b = cy.c [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joins Considered: 1
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -964,18 +964,18 @@ Vertexes
           └── max
                └── z
 Edges
-  bx.b = cy.c [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  y = max [inner, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
+  bx.b = cy.c [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  y = max [inner, ses=BC, tes=BC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joining ABC
-  C AB [inner, refs=BC]
+  C AB [inner, refs=BC, ub=NaN]
 Joining BC
-  B C [inner, refs=BC]
-  C B [inner, refs=BC]
+  B C [inner, refs=BC, ub=NaN]
+  C B [inner, refs=BC, ub=NaN]
 Joining ABC
-  A BC [inner, refs=AB]
-  BC A [inner, refs=AB]
+  A BC [inner, refs=AB, ub=NaN]
+  BC A [inner, refs=AB, ub=NaN]
 Joins Considered: 6
 --------------------------------------------------------------------------------
 Join Tree #3
@@ -1011,49 +1011,49 @@ Vertexes
   D:
     scan abc
 Edges
-  bx.b = cy.c [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  y = max [inner, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
-  max = a [inner, ses=CD, tes=CD, rules=(), upperbound=0.000000e+00]
-  y = a [inner, ses=BD, tes=BD, rules=(), upperbound=0.000000e+00]
+  bx.b = cy.c [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  y = max [inner, ses=BC, tes=BC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  max = a [inner, ses=CD, tes=CD, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  y = a [inner, ses=BD, tes=BD, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joining ABC
-  C AB [inner, refs=BC]
+  C AB [inner, refs=BC, ub=NaN]
 Joining BC
-  B C [inner, refs=BC]
-  C B [inner, refs=BC]
+  B C [inner, refs=BC, ub=NaN]
+  C B [inner, refs=BC, ub=NaN]
 Joining ABC
-  A BC [inner, refs=AB]
-  BC A [inner, refs=AB]
+  A BC [inner, refs=AB, ub=NaN]
+  BC A [inner, refs=AB, ub=NaN]
 Joining ABCD
-  D ABC [inner, refs=CD]
+  D ABC [inner, refs=CD, ub=NaN]
 Joining CD
-  C D [inner, refs=CD]
-  D C [inner, refs=CD]
+  C D [inner, refs=CD, ub=NaN]
+  D C [inner, refs=CD, ub=NaN]
 Joining BCD
-  B CD [inner, refs=BC]
-  CD B [inner, refs=BC]
+  B CD [inner, refs=BC, ub=NaN]
+  CD B [inner, refs=BC, ub=NaN]
 Joining BD
-  B D [inner, refs=BD]
-  D B [inner, refs=BD]
+  B D [inner, refs=BD, ub=NaN]
+  D B [inner, refs=BD, ub=NaN]
 Joining BCD
-  C BD [inner, refs=BC]
-  BD C [inner, refs=BC]
-  BC D [inner, refs=CD]
-  D BC [inner, refs=CD]
+  C BD [inner, refs=BC, ub=NaN]
+  BD C [inner, refs=BC, ub=NaN]
+  BC D [inner, refs=CD, ub=NaN]
+  D BC [inner, refs=CD, ub=NaN]
 Joining ABCD
-  A BCD [inner, refs=AB]
-  BCD A [inner, refs=AB]
-  AB CD [inner, refs=BC]
-  CD AB [inner, refs=BC]
+  A BCD [inner, refs=AB, ub=NaN]
+  BCD A [inner, refs=AB, ub=NaN]
+  AB CD [inner, refs=BC, ub=NaN]
+  CD AB [inner, refs=BC, ub=NaN]
 Joining ABD
-  A BD [inner, refs=AB]
-  BD A [inner, refs=AB]
-  AB D [inner, refs=BD]
-  D AB [inner, refs=BD]
+  A BD [inner, refs=AB, ub=NaN]
+  BD A [inner, refs=AB, ub=NaN]
+  AB D [inner, refs=BD, ub=NaN]
+  D AB [inner, refs=BD, ub=NaN]
 Joining ABCD
-  C ABD [inner, refs=BC]
-  ABD C [inner, refs=BC]
+  C ABD [inner, refs=BC, ub=NaN]
+  ABD C [inner, refs=BC, ub=NaN]
 Joins Considered: 27
 ================================================================================
 Final Plan
@@ -1108,9 +1108,9 @@ Vertexes
   B:
     scan dz
 Edges
-  y = z [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  y = z [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joins Considered: 1
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -1142,27 +1142,27 @@ Vertexes
   C:
     scan abc
 Edges
-  y = z [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  z = a [inner, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
-  x = z [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  x = a [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
-  y = a [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
+  y = z [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  z = a [inner, ses=BC, tes=BC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  x = z [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  x = a [inner, ses=AC, tes=AC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  y = a [inner, ses=AC, tes=AC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joining ABC
-  C AB [inner, refs=BC]
+  C AB [inner, refs=BC, ub=NaN]
 Joining BC
-  B C [inner, refs=BC]
-  C B [inner, refs=BC]
+  B C [inner, refs=BC, ub=NaN]
+  C B [inner, refs=BC, ub=NaN]
 Joining ABC
-  A BC [inner, refs=AB]
-  BC A [inner, refs=AB]
+  A BC [inner, refs=AB, ub=NaN]
+  BC A [inner, refs=AB, ub=NaN]
 Joining AC
-  A C [inner, refs=AC]
-  C A [inner, refs=AC]
+  A C [inner, refs=AC, ub=NaN]
+  C A [inner, refs=AC, ub=NaN]
 Joining ABC
-  B AC [inner, refs=AB]
-  AC B [inner, refs=AB]
+  B AC [inner, refs=AB, ub=NaN]
+  AC B [inner, refs=AB, ub=NaN]
 Joins Considered: 10
 ================================================================================
 Final Plan
@@ -1209,9 +1209,9 @@ Vertexes
   B:
     scan dz
 Edges
-  y = z [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  y = z [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joins Considered: 1
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -1233,25 +1233,25 @@ Vertexes
   C:
     scan abc
 Edges
-  y = z [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  z = a [inner, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
-  y = a [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
+  y = z [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  z = a [inner, ses=BC, tes=BC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  y = a [inner, ses=AC, tes=AC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joining ABC
-  C AB [inner, refs=BC]
+  C AB [inner, refs=BC, ub=NaN]
 Joining BC
-  B C [inner, refs=BC]
-  C B [inner, refs=BC]
+  B C [inner, refs=BC, ub=NaN]
+  C B [inner, refs=BC, ub=NaN]
 Joining ABC
-  A BC [inner, refs=AB]
-  BC A [inner, refs=AB]
+  A BC [inner, refs=AB, ub=NaN]
+  BC A [inner, refs=AB, ub=NaN]
 Joining AC
-  A C [inner, refs=AC]
-  C A [inner, refs=AC]
+  A C [inner, refs=AC, ub=NaN]
+  C A [inner, refs=AC, ub=NaN]
 Joining ABC
-  B AC [inner, refs=AB]
-  AC B [inner, refs=AB]
+  B AC [inner, refs=AB, ub=NaN]
+  AC B [inner, refs=AB, ub=NaN]
 Joins Considered: 10
 --------------------------------------------------------------------------------
 Join Tree #3
@@ -1280,28 +1280,28 @@ Vertexes
   C:
     scan abc
 Edges
-  y = z [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  z = a [inner, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
-  cross [inner, ses=, tes=DABC, rules=(), upperbound=0.000000e+00]
-  y = a [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
+  y = z [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  z = a [inner, ses=BC, tes=BC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  cross [inner, ses=, tes=DABC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  y = a [inner, ses=AC, tes=AC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joining ABC
-  C AB [inner, refs=BC]
+  C AB [inner, refs=BC, ub=NaN]
 Joining BC
-  B C [inner, refs=BC]
-  C B [inner, refs=BC]
+  B C [inner, refs=BC, ub=NaN]
+  C B [inner, refs=BC, ub=NaN]
 Joining ABC
-  A BC [inner, refs=AB]
-  BC A [inner, refs=AB]
+  A BC [inner, refs=AB, ub=NaN]
+  BC A [inner, refs=AB, ub=NaN]
 Joining AC
-  A C [inner, refs=AC]
-  C A [inner, refs=AC]
+  A C [inner, refs=AC, ub=NaN]
+  C A [inner, refs=AC, ub=NaN]
 Joining ABC
-  B AC [inner, refs=AB]
-  AC B [inner, refs=AB]
+  B AC [inner, refs=AB, ub=NaN]
+  AC B [inner, refs=AB, ub=NaN]
 Joining DABC
-  ABC D [inner, refs=]
+  ABC D [inner, refs=, ub=NaN]
 Joins Considered: 11
 ================================================================================
 Final Plan
@@ -1353,9 +1353,9 @@ Vertexes
   B:
     scan cy
 Edges
-  x = y [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  x = y [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joins Considered: 1
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -1371,9 +1371,9 @@ Vertexes
   D:
     scan dz
 Edges
-  a = z [inner, ses=CD, tes=CD, rules=(), upperbound=0.000000e+00]
+  a = z [inner, ses=CD, tes=CD, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining CD
-  D C [inner, refs=CD]
+  D C [inner, refs=CD, ub=NaN]
 Joins Considered: 1
 --------------------------------------------------------------------------------
 Join Tree #3
@@ -1402,50 +1402,50 @@ Vertexes
   D:
     scan dz
 Edges
-  x = y [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  a = z [inner, ses=CD, tes=CD, rules=(), upperbound=0.000000e+00]
-  abc.b = bx.b [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
-  abc.c = cy.c [inner, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
+  x = y [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  a = z [inner, ses=CD, tes=CD, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  abc.b = bx.b [inner, ses=AC, tes=AC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  abc.c = cy.c [inner, ses=BC, tes=BC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joining CD
-  D C [inner, refs=CD]
+  D C [inner, refs=CD, ub=NaN]
 Joining ABCD
-  CD AB [inner, refs=ABC]
+  CD AB [inner, refs=ABC, ub=NaN]
 Joining BCD
-  B CD [inner, refs=BC]
-  CD B [inner, refs=BC]
+  B CD [inner, refs=BC, ub=NaN]
+  CD B [inner, refs=BC, ub=NaN]
 Joining BC
-  B C [inner, refs=BC]
-  C B [inner, refs=BC]
+  B C [inner, refs=BC, ub=NaN]
+  C B [inner, refs=BC, ub=NaN]
 Joining BCD
-  BC D [inner, refs=CD]
-  D BC [inner, refs=CD]
+  BC D [inner, refs=CD, ub=NaN]
+  D BC [inner, refs=CD, ub=NaN]
 Joining ABCD
-  A BCD [inner, refs=ABC]
-  BCD A [inner, refs=ABC]
+  A BCD [inner, refs=ABC, ub=NaN]
+  BCD A [inner, refs=ABC, ub=NaN]
 Joining ACD
-  A CD [inner, refs=AC]
-  CD A [inner, refs=AC]
+  A CD [inner, refs=AC, ub=NaN]
+  CD A [inner, refs=AC, ub=NaN]
 Joining AC
-  A C [inner, refs=AC]
-  C A [inner, refs=AC]
+  A C [inner, refs=AC, ub=NaN]
+  C A [inner, refs=AC, ub=NaN]
 Joining ACD
-  AC D [inner, refs=CD]
-  D AC [inner, refs=CD]
+  AC D [inner, refs=CD, ub=NaN]
+  D AC [inner, refs=CD, ub=NaN]
 Joining ABCD
-  B ACD [inner, refs=ABC]
-  ACD B [inner, refs=ABC]
+  B ACD [inner, refs=ABC, ub=NaN]
+  ACD B [inner, refs=ABC, ub=NaN]
 Joining ABC
-  A BC [inner, refs=ABC]
-  BC A [inner, refs=ABC]
-  B AC [inner, refs=ABC]
-  AC B [inner, refs=ABC]
-  AB C [inner, refs=ABC]
-  C AB [inner, refs=ABC]
+  A BC [inner, refs=ABC, ub=NaN]
+  BC A [inner, refs=ABC, ub=NaN]
+  B AC [inner, refs=ABC, ub=NaN]
+  AC B [inner, refs=ABC, ub=NaN]
+  AB C [inner, refs=ABC, ub=NaN]
+  C AB [inner, refs=ABC, ub=NaN]
 Joining ABCD
-  ABC D [inner, refs=CD]
-  D ABC [inner, refs=CD]
+  ABC D [inner, refs=CD, ub=NaN]
+  D ABC [inner, refs=CD, ub=NaN]
 Joins Considered: 27
 ================================================================================
 Final Plan
@@ -1486,9 +1486,9 @@ Vertexes
   B:
     scan cy
 Edges
-  b = c [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  b = c [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joins Considered: 1
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -1510,13 +1510,13 @@ Vertexes
   C:
     scan dz
 Edges
-  b = c [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  x = z [left, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
+  b = c [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  x = z [left, ses=AC, tes=AC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AC
-  A C [left, refs=AC]
+  A C [left, refs=AC, ub=NaN]
 Joining ABC
-  B AC [inner, refs=AB]
-  AC B [inner, refs=AB]
+  B AC [inner, refs=AB, ub=NaN]
+  AC B [inner, refs=AB, ub=NaN]
 Joins Considered: 3
 ================================================================================
 Final Plan
@@ -1551,7 +1551,7 @@ Vertexes
   B:
     scan cy
 Edges
-  b = c [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  b = c [left, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -1573,12 +1573,12 @@ Vertexes
   C:
     scan dz
 Edges
-  b = c [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  x = z [left, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
+  b = c [left, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  x = z [left, ses=AC, tes=AC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AC
-  A C [left, refs=AC]
+  A C [left, refs=AC, ub=NaN]
 Joining ABC
-  AC B [left, refs=AB]
+  AC B [left, refs=AB, ub=NaN]
 Joins Considered: 2
 ================================================================================
 Final Plan
@@ -1616,7 +1616,7 @@ Vertexes
   B:
     scan cy
 Edges
-  b = c [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  b = c [left, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -1638,12 +1638,12 @@ Vertexes
   C:
     scan dz
 Edges
-  b = c [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  y = z [left, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
+  b = c [left, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  y = z [left, ses=BC, tes=BC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining BC
-  B C [left, refs=BC]
+  B C [left, refs=BC, ub=NaN]
 Joining ABC
-  A BC [left, refs=AB]
+  A BC [left, refs=AB, ub=NaN]
 Joins Considered: 2
 ================================================================================
 Final Plan
@@ -1681,7 +1681,7 @@ Vertexes
   B:
     scan abc
 Edges
-  bx.b = a [anti, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  bx.b = a [anti, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -1703,12 +1703,12 @@ Vertexes
   C:
     scan dz
 Edges
-  bx.b = a [anti, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  bx.b = dz.d [semi, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
+  bx.b = a [anti, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  bx.b = dz.d [semi, ses=AC, tes=AC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AC
-  A C [semi, refs=AC]
+  A C [semi, refs=AC, ub=NaN]
 Joining ABC
-  AC B [anti, refs=AB]
+  AC B [anti, refs=AB, ub=NaN]
 Joins Considered: 2
 --------------------------------------------------------------------------------
 Join Tree #3
@@ -1730,15 +1730,15 @@ Vertexes
   C:
     scan dz
 Edges
-  bx.b = a [anti, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  bx.b = dz.d [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
+  bx.b = a [anti, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  bx.b = dz.d [inner, ses=AC, tes=AC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining ABC
-  C AB [inner, refs=AC]
+  C AB [inner, refs=AC, ub=NaN]
 Joining AC
-  A C [inner, refs=AC]
-  C A [inner, refs=AC]
+  A C [inner, refs=AC, ub=NaN]
+  C A [inner, refs=AC, ub=NaN]
 Joining ABC
-  AC B [anti, refs=AB]
+  AC B [anti, refs=AB, ub=NaN]
 Joins Considered: 4
 --------------------------------------------------------------------------------
 Join Tree #4
@@ -1766,24 +1766,24 @@ Vertexes
   D:
     scan cy
 Edges
-  bx.b = a [anti, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  bx.b = dz.d [semi, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
-  bx.b = cy.c [left, ses=AD, tes=AD, rules=(), upperbound=0.000000e+00]
+  bx.b = a [anti, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  bx.b = dz.d [semi, ses=AC, tes=AC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  bx.b = cy.c [left, ses=AD, tes=AD, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AD
-  A D [left, refs=AD]
+  A D [left, refs=AD, ub=NaN]
 Joining ACD
-  AD C [semi, refs=AC]
+  AD C [semi, refs=AC, ub=NaN]
 Joining AC
-  A C [semi, refs=AC]
+  A C [semi, refs=AC, ub=NaN]
 Joining ACD
-  AC D [left, refs=AD]
+  AC D [left, refs=AD, ub=NaN]
 Joining ABCD
-  ACD B [anti, refs=AB]
+  ACD B [anti, refs=AB, ub=NaN]
 Joining ABD
-  AD B [anti, refs=AB]
-  AB D [left, refs=AD]
+  AD B [anti, refs=AB, ub=NaN]
+  AB D [left, refs=AD, ub=NaN]
 Joining ABCD
-  ABD C [semi, refs=AC]
+  ABD C [semi, refs=AC, ub=NaN]
 Joins Considered: 8
 ================================================================================
 Final Plan
@@ -1818,9 +1818,9 @@ Vertexes
   B:
     scan cy
 Edges
-  cross [inner, ses=, tes=AB, rules=(), upperbound=0.000000e+00]
+  cross [inner, ses=, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=]
+  B A [inner, refs=, ub=NaN]
 Joins Considered: 1
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -1840,12 +1840,12 @@ Vertexes
   C:
     scan dz
 Edges
-  cross [inner, ses=, tes=AB, rules=(), upperbound=0.000000e+00]
-  cross [inner, ses=, tes=ABC, rules=(), upperbound=0.000000e+00]
+  cross [inner, ses=, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  cross [inner, ses=, tes=ABC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=]
+  B A [inner, refs=, ub=NaN]
 Joining ABC
-  C AB [inner, refs=]
+  C AB [inner, refs=, ub=NaN]
 Joins Considered: 2
 ================================================================================
 Final Plan
@@ -1878,9 +1878,9 @@ Vertexes
   B:
     scan cy
 Edges
-  b = c [full, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  b = c [full, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [full, refs=AB]
+  B A [full, refs=AB, ub=NaN]
 Joins Considered: 1
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -1902,18 +1902,18 @@ Vertexes
   C:
     scan dz
 Edges
-  b = c [full, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  y = z [full, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
+  b = c [full, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  y = z [full, ses=BC, tes=BC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [full, refs=AB]
+  B A [full, refs=AB, ub=NaN]
 Joining ABC
-  C AB [full, refs=BC]
+  C AB [full, refs=BC, ub=NaN]
 Joining BC
-  B C [full, refs=BC]
-  C B [full, refs=BC]
+  B C [full, refs=BC, ub=NaN]
+  C B [full, refs=BC, ub=NaN]
 Joining ABC
-  A BC [full, refs=AB]
-  BC A [full, refs=AB]
+  A BC [full, refs=AB, ub=NaN]
+  BC A [full, refs=AB, ub=NaN]
 Joins Considered: 6
 ================================================================================
 Final Plan
@@ -1985,7 +1985,7 @@ Vertexes
   B:
     scan abc5 [as=a5]
 Edges
-  a2.c = a5.c [semi, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  a2.c = a5.c [semi, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -2003,9 +2003,9 @@ Vertexes
     distinct-on
      └── scan abc5 [as=a5]
 Edges
-  a2.c = a5.c [inner, ses=AC, tes=AC, rules=(), upperbound=0.000000e+00]
+  a2.c = a5.c [inner, ses=AC, tes=AC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AC
-  C A [inner, refs=AC]
+  C A [inner, refs=AC, ub=NaN]
 Joins Considered: 1
 --------------------------------------------------------------------------------
 Join Tree #3
@@ -2027,15 +2027,15 @@ Vertexes
   B:
     scan abc5 [as=a5]
 Edges
-  a2.c = a5.c [semi, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  a1.a = a2.a [inner, ses=DA, tes=DA, rules=(), upperbound=0.000000e+00]
+  a2.c = a5.c [semi, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  a1.a = a2.a [inner, ses=DA, tes=DA, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining DAB
-  AB D [inner, refs=DA]
+  AB D [inner, refs=DA, ub=NaN]
 Joining DA
-  D A [inner, refs=DA]
-  A D [inner, refs=DA]
+  D A [inner, refs=DA, ub=NaN]
+  A D [inner, refs=DA, ub=NaN]
 Joining DAB
-  DA B [semi, refs=AB]
+  DA B [semi, refs=AB, ub=NaN]
 Joins Considered: 4
 --------------------------------------------------------------------------------
 Join Tree #4
@@ -2065,18 +2065,18 @@ Vertexes
   F:
     scan abc3 [as=a3]
 Edges
-  a1.a = a2.a [inner, ses=DE, tes=DE, rules=(), upperbound=0.000000e+00]
-  a2.b = a3.b [inner, ses=EF, tes=EF, rules=(), upperbound=0.000000e+00]
+  a1.a = a2.a [inner, ses=DE, tes=DE, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  a2.b = a3.b [inner, ses=EF, tes=EF, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining DE
-  E D [inner, refs=DE]
+  E D [inner, refs=DE, ub=NaN]
 Joining DEF
-  F DE [inner, refs=EF]
+  F DE [inner, refs=EF, ub=NaN]
 Joining EF
-  E F [inner, refs=EF]
-  F E [inner, refs=EF]
+  E F [inner, refs=EF, ub=NaN]
+  F E [inner, refs=EF, ub=NaN]
 Joining DEF
-  D EF [inner, refs=DE]
-  EF D [inner, refs=DE]
+  D EF [inner, refs=DE, ub=NaN]
+  EF D [inner, refs=DE, ub=NaN]
 Joins Considered: 6
 --------------------------------------------------------------------------------
 Join Tree #5
@@ -2114,18 +2114,18 @@ Vertexes
   H:
     scan abc4 [as=a4]
 Edges
-  a2.b = a3.b [inner, ses=GF, tes=GF, rules=(), upperbound=0.000000e+00]
-  a3.a = a4.a [inner, ses=FH, tes=FH, rules=(), upperbound=0.000000e+00]
+  a2.b = a3.b [inner, ses=GF, tes=GF, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  a3.a = a4.a [inner, ses=FH, tes=FH, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining GF
-  F G [inner, refs=GF]
+  F G [inner, refs=GF, ub=NaN]
 Joining GFH
-  H GF [inner, refs=FH]
+  H GF [inner, refs=FH, ub=NaN]
 Joining FH
-  F H [inner, refs=FH]
-  H F [inner, refs=FH]
+  F H [inner, refs=FH, ub=NaN]
+  H F [inner, refs=FH, ub=NaN]
 Joining GFH
-  G FH [inner, refs=GF]
-  FH G [inner, refs=GF]
+  G FH [inner, refs=GF, ub=NaN]
+  FH G [inner, refs=GF, ub=NaN]
 Joins Considered: 6
 ================================================================================
 Final Plan
@@ -2178,9 +2178,9 @@ Vertexes
      └── filters
           └── x IS NOT NULL
 Edges
-  a = x [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  a = x [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joins Considered: 1
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -2208,13 +2208,13 @@ Vertexes
   C:
     scan cy
 Edges
-  a = x [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  x = y [semi, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
+  a = x [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  x = y [semi, ses=BC, tes=BC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining BC
-  B C [semi, refs=BC]
+  B C [semi, refs=BC, ub=NaN]
 Joining ABC
-  A BC [inner, refs=AB]
-  BC A [inner, refs=AB]
+  A BC [inner, refs=AB, ub=NaN]
+  BC A [inner, refs=AB, ub=NaN]
 Joins Considered: 3
 --------------------------------------------------------------------------------
 Join Tree #3
@@ -2244,25 +2244,25 @@ Vertexes
     distinct-on
      └── scan cy
 Edges
-  a = x [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  x = y [inner, ses=BD, tes=BD, rules=(), upperbound=0.000000e+00]
-  a = y [inner, ses=AD, tes=AD, rules=(), upperbound=0.000000e+00]
+  a = x [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  x = y [inner, ses=BD, tes=BD, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  a = y [inner, ses=AD, tes=AD, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joining ABD
-  D AB [inner, refs=BD]
+  D AB [inner, refs=BD, ub=NaN]
 Joining BD
-  B D [inner, refs=BD]
-  D B [inner, refs=BD]
+  B D [inner, refs=BD, ub=NaN]
+  D B [inner, refs=BD, ub=NaN]
 Joining ABD
-  A BD [inner, refs=AB]
-  BD A [inner, refs=AB]
+  A BD [inner, refs=AB, ub=NaN]
+  BD A [inner, refs=AB, ub=NaN]
 Joining AD
-  A D [inner, refs=AD]
-  D A [inner, refs=AD]
+  A D [inner, refs=AD, ub=NaN]
+  D A [inner, refs=AD, ub=NaN]
 Joining ABD
-  B AD [inner, refs=AB]
-  AD B [inner, refs=AB]
+  B AD [inner, refs=AB, ub=NaN]
+  AD B [inner, refs=AB, ub=NaN]
 Joins Considered: 10
 --------------------------------------------------------------------------------
 Join Tree #4
@@ -2296,45 +2296,45 @@ Vertexes
   E:
     scan dz
 Edges
-  a = x [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  x = y [semi, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
-  a = z [inner, ses=AE, tes=AE, rules=(C->B), upperbound=0.000000e+00]
-  x = z [inner, ses=BE, tes=BE, rules=(), upperbound=0.000000e+00]
+  a = x [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  x = y [semi, ses=BC, tes=BC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  a = z [inner, ses=AE, tes=AE, rules=(C->B), ub=0.000000, mf=0.000000, rows=0.000000]
+  x = z [inner, ses=BE, tes=BE, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining BC
-  B C [semi, refs=BC]
+  B C [semi, refs=BC, ub=NaN]
 Joining ABC
-  A BC [inner, refs=AB]
-  BC A [inner, refs=AB]
+  A BC [inner, refs=AB, ub=NaN]
+  BC A [inner, refs=AB, ub=NaN]
 Joining ABCE
-  E ABC [inner, refs=AE]
+  E ABC [inner, refs=AE, ub=NaN]
 Joining BE
-  B E [inner, refs=BE]
-  E B [inner, refs=BE]
+  B E [inner, refs=BE, ub=NaN]
+  E B [inner, refs=BE, ub=NaN]
 Joining BCE
-  BE C [semi, refs=BC]
-  BC E [inner, refs=BE]
-  E BC [inner, refs=BE]
+  BE C [semi, refs=BC, ub=NaN]
+  BC E [inner, refs=BE, ub=NaN]
+  E BC [inner, refs=BE, ub=NaN]
 Joining ABCE
-  A BCE [inner, refs=AB]
-  BCE A [inner, refs=AB]
+  A BCE [inner, refs=AB, ub=NaN]
+  BCE A [inner, refs=AB, ub=NaN]
 Joining ABE
-  A BE [inner, refs=AB]
-  BE A [inner, refs=AB]
+  A BE [inner, refs=AB, ub=NaN]
+  BE A [inner, refs=AB, ub=NaN]
 Joining AE
-  A E [inner, refs=AE]
-  E A [inner, refs=AE]
+  A E [inner, refs=AE, ub=NaN]
+  E A [inner, refs=AE, ub=NaN]
 Joining ABE
-  B AE [inner, refs=AB]
-  AE B [inner, refs=AB]
+  B AE [inner, refs=AB, ub=NaN]
+  AE B [inner, refs=AB, ub=NaN]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joining ABE
-  AB E [inner, refs=AE]
-  E AB [inner, refs=AE]
+  AB E [inner, refs=AE, ub=NaN]
+  E AB [inner, refs=AE, ub=NaN]
 Joining ABCE
-  ABE C [semi, refs=BC]
-  BC AE [inner, refs=AB]
-  AE BC [inner, refs=AB]
+  ABE C [semi, refs=BC, ub=NaN]
+  BC AE [inner, refs=AB, ub=NaN]
+  AE BC [inner, refs=AB, ub=NaN]
 Joins Considered: 23
 ================================================================================
 Final Plan
@@ -2413,7 +2413,7 @@ Vertexes
   B:
     scan dz
 Edges
-  c = d [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  c = d [left, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -2436,16 +2436,16 @@ Vertexes
   B:
     scan dz
 Edges
-  c = d [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  b = c [inner, ses=CA, tes=CA, rules=(), upperbound=0.000000e+00]
-  (x = z) OR (z IS NULL) [inner, ses=CB, tes=CAB, rules=(), upperbound=0.000000e+00]
+  c = d [left, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  b = c [inner, ses=CA, tes=CA, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  (x = z) OR (z IS NULL) [inner, ses=CB, tes=CAB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining CAB
-  AB C [inner, refs=CAB]
+  AB C [inner, refs=CAB, ub=NaN]
 Joining CA
-  C A [inner, refs=CA]
-  A C [inner, refs=CA]
+  C A [inner, refs=CA, ub=NaN]
+  A C [inner, refs=CA, ub=NaN]
 Joining CAB
-  CA B [left, refs=AB] [select, refs=CB]
+  CA B [left, refs=AB, ub=NaN] [select, refs=CB]
 Joins Considered: 4
 ================================================================================
 Final Plan
@@ -2973,9 +2973,9 @@ Vertexes
   B:
     scan t90761 [as=t4]
 Edges
-  cross [inner, ses=, tes=AB, rules=(), upperbound=0.000000e+00]
+  cross [inner, ses=, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=]
+  B A [inner, refs=, ub=NaN]
 Joins Considered: 1
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -2996,8 +2996,8 @@ Vertexes
   B:
     scan t90761 [as=t4]
 Edges
-  cross [inner, ses=, tes=AB, rules=(), upperbound=0.000000e+00]
-  t2.b > t4.b [left, ses=CB, tes=CAB, rules=(), upperbound=0.000000e+00]
+  cross [inner, ses=, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  t2.b > t4.b [left, ses=CB, tes=CAB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #3
@@ -3025,19 +3025,19 @@ Vertexes
   B:
     scan t90761 [as=t4]
 Edges
-  cross [inner, ses=, tes=AB, rules=(), upperbound=0.000000e+00]
-  t2.b > t4.b [left, ses=CB, tes=CAB, rules=(), upperbound=0.000000e+00]
-  t1.a = t4.a [inner, ses=DB, tes=DCB, rules=(), upperbound=0.000000e+00]
-  t1.c = t2.c [inner, ses=DC, tes=DC, rules=(), upperbound=0.000000e+00]
+  cross [inner, ses=, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  t2.b > t4.b [left, ses=CB, tes=CAB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  t1.a = t4.a [inner, ses=DB, tes=DCB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  t1.c = t2.c [inner, ses=DC, tes=DC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining DCAB
-  CAB D [inner, refs=DCB]
+  CAB D [inner, refs=DCB, ub=NaN]
 Joining DC
-  D C [inner, refs=DC]
-  C D [inner, refs=DC]
+  D C [inner, refs=DC, ub=NaN]
+  C D [inner, refs=DC, ub=NaN]
 Joining AB
-  B A [inner, refs=]
+  B A [inner, refs=, ub=NaN]
 Joining DCAB
-  DC AB [left, refs=CB] [select, refs=DB]
+  DC AB [left, refs=CB, ub=NaN] [select, refs=DB]
 Joins Considered: 5
 ================================================================================
 Final Plan
@@ -3144,7 +3144,7 @@ Vertexes
   B:
     scan patient [as=patient2_]
 Edges
-  task1_.patient_id = patient2_.id [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  task1_.patient_id = patient2_.id [left, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -3166,12 +3166,12 @@ Vertexes
   C:
     scan site [as=site3_]
 Edges
-  task1_.patient_id = patient2_.id [left, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
-  site_id = site3_.id [left, ses=BC, tes=BC, rules=(), upperbound=0.000000e+00]
+  task1_.patient_id = patient2_.id [left, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  site_id = site3_.id [left, ses=BC, tes=BC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining BC
-  B C [left, refs=BC]
+  B C [left, refs=BC, ub=NaN]
 Joining ABC
-  A BC [left, refs=AB]
+  A BC [left, refs=AB, ub=NaN]
 Joins Considered: 2
 --------------------------------------------------------------------------------
 Join Tree #3
@@ -3209,7 +3209,7 @@ Vertexes
      └── filters
           └── (patient2_.id IS NULL) OR (site3_.id IN (1, 2))
 Edges
-  task1_.id = task0_.id [semi, ses=DE, tes=DE, rules=(), upperbound=0.000000e+00]
+  task1_.id = task0_.id [semi, ses=DE, tes=DE, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joins Considered: 0
 --------------------------------------------------------------------------------
 Join Tree #4
@@ -3247,9 +3247,9 @@ Vertexes
      └── filters
           └── (patient2_.id IS NULL) OR (site3_.id IN (1, 2))
 Edges
-  task1_.id = task0_.id [inner, ses=DE, tes=DE, rules=(), upperbound=0.000000e+00]
+  task1_.id = task0_.id [inner, ses=DE, tes=DE, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining DE
-  E D [inner, refs=DE]
+  E D [inner, refs=DE, ub=NaN]
 Joins Considered: 1
 ================================================================================
 Final Plan
@@ -3344,9 +3344,9 @@ Vertexes
           └── first-agg
                └── y
 Edges
-  x = x [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  x = x [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joins Considered: 1
 ================================================================================
 Final Plan
@@ -3504,9 +3504,9 @@ Vertexes
   B:
     scan straight_join3
 Edges
-  straight_join1.x = z [inner, ses=AB, tes=AB, rules=(), upperbound=0.000000e+00]
+  straight_join1.x = z [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=NaN]
 Joins Considered: 1
 ================================================================================
 Final Plan
@@ -3685,9 +3685,9 @@ Vertexes
   B:
     scan cd
 Edges
-  b = d [inner, ses=AB, tes=AB, rules=(), upperbound=3.000000e+04]
+  b = d [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=30000.000000]
 Joins Considered: 1
 --------------------------------------------------------------------------------
 Join Tree #2
@@ -3709,25 +3709,25 @@ Vertexes
   C:
     scan ef
 Edges
-  b = d [inner, ses=AB, tes=AB, rules=(), upperbound=3.000000e+04]
-  d = f [inner, ses=BC, tes=BC, rules=(), upperbound=3.900000e+05]
-  b = f [inner, ses=AC, tes=AC, rules=(), upperbound=3.000000e+04]
+  b = d [inner, ses=AB, tes=AB, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  d = f [inner, ses=BC, tes=BC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
+  b = f [inner, ses=AC, tes=AC, rules=(), ub=0.000000, mf=0.000000, rows=0.000000]
 Joining AB
-  B A [inner, refs=AB]
+  B A [inner, refs=AB, ub=30000.000000]
 Joining ABC
-  C AB [inner, refs=BC]
+  C AB [inner, refs=BC, ub=390000.000000]
 Joining BC
-  B C [inner, refs=BC]
-  C B [inner, refs=BC]
+  B C [inner, refs=BC, ub=390000.000000]
+  C B [inner, refs=BC, ub=390000.000000]
 Joining ABC
-  A BC [inner, refs=AB]
-  BC A [inner, refs=AB]
+  A BC [inner, refs=AB, ub=900000.000000]
+  BC A [inner, refs=AB, ub=900000.000000]
 Joining AC
-  A C [inner, refs=AC]
-  C A [inner, refs=AC]
+  A C [inner, refs=AC, ub=30000.000000]
+  C A [inner, refs=AC, ub=30000.000000]
 Joining ABC
-  B AC [inner, refs=AB]
-  AC B [inner, refs=AB]
+  B AC [inner, refs=AB, ub=11700000.000000]
+  AC B [inner, refs=AB, ub=11700000.000000]
 Joins Considered: 10
 ================================================================================
 Final Plan

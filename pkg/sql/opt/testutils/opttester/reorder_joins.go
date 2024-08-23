@@ -75,7 +75,7 @@ func (ot *OptTester) ReorderJoins() (string, error) {
 		})
 
 	o.JoinOrderBuilder().NotifyOnAddJoin(
-		func(left, right, all, joinRefs, selRefs []memo.RelExpr, op opt.Operator) {
+		func(left, right, all, joinRefs, selRefs []memo.RelExpr, op opt.Operator, ub float64) {
 			relsToJoin := jof.formatVertexSet(all)
 			if relsToJoin != relsJoinedLast {
 				ot.output("Joining %s\n", relsToJoin)
@@ -87,11 +87,12 @@ func (ot *OptTester) ReorderJoins() (string, error) {
 			}
 			ot.indent(
 				fmt.Sprintf(
-					"%s %s [%s, refs=%s]%s",
+					"%s %s [%s, refs=%s, ub=%f]%s",
 					jof.formatVertexSet(left),
 					jof.formatVertexSet(right),
 					joinOpLabel(op),
 					jof.formatVertexSet(joinRefs),
+					ub,
 					selString,
 				),
 			)
@@ -167,12 +168,14 @@ func (jof *joinOrderFormatter) formatEdge(edge xform.OnReorderEdgeParam) string 
 		}
 	}
 	b.WriteString(fmt.Sprintf(
-		" [%s, ses=%s, tes=%s, rules=%s, upperbound=%e]",
+		" [%s, ses=%s, tes=%s, rules=%s, ub=%f, mf=%f, rows=%f]",
 		joinOpLabel(edge.Op),
 		jof.formatVertexSet(edge.SES),
 		jof.formatVertexSet(edge.TES),
 		jof.formatRules(edge.Rules),
-		edge.UpperBound,
+		edge.UB,
+		edge.MF,
+		edge.Rows,
 	))
 	return b.String()
 }

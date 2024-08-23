@@ -49,7 +49,9 @@ type OnReorderEdgeParam struct {
 	// Rules is the set of conflict rules of the edge.
 	Rules []OnReorderRuleParam
 	// TODO
-	UpperBound float64
+	UB   float64
+	MF   float64
+	Rows float64
 }
 
 // OnReorderRuleParam is a struct representing a conflict rule. This type is
@@ -65,7 +67,7 @@ type OnReorderRuleParam struct {
 // the base relations of the left and right inputs of the join, the set of all
 // base relations currently being considered, the base relations referenced by
 // the join's ON condition, and the type of join.
-type OnAddJoinFunc func(left, right, all, joinRefs, selectRefs []memo.RelExpr, op opt.Operator)
+type OnAddJoinFunc func(left, right, all, joinRefs, selectRefs []memo.RelExpr, op opt.Operator, ub float64)
 
 // JoinOrderBuilder is used to add valid orderings of a given join tree to the
 // memo during exploration.
@@ -856,7 +858,43 @@ func (jb *JoinOrderBuilder) checkAppliedEdges(s1, s2 vertexSet, appliedEdges edg
 func (jb *JoinOrderBuilder) addCandidatePlan(
 	op opt.Operator, s1, s2 vertexSet, joinEdges, selectEdges edgeSet,
 ) {
+	// TODO: Probably need to double check this math...
 	union := s1.union(s2)
+	var included vertexSet
+	var ub float64
+	var mf float64
+	var minDistinctValues float64
+	first := true
+	for i, ok := joinEdges.Next(0); ok; i, ok = joinEdges.Next(i + 1) {
+		e := &jb.edges[i]
+		if first {
+			mf = e.lmf * e.rmf
+			minDistinctValues = math.Min(e.lrows/e.lmf, e.rrows/e.rmf)
+			ub = minDistinctValues * mf
+			included.add(e.lvertex)
+			included.add(e.rvertex)
+			first = false
+			continue
+		}
+		// TODO: Figure out why this is happening...
+		// if !included.contains(e.lvertex) && !included.contains(e.rvertex) {
+		// 	panic("this should never happen")
+		// }
+		if !included.contains(e.lvertex) {
+			mf = mf * e.lmf
+			minDistinctValues = math.Min(minDistinctValues, e.lrows/e.lmf)
+			ub = minDistinctValues * mf
+			included.add(e.lvertex)
+		} else if !included.contains(e.rvertex) {
+			mf = mf * e.rmf
+			minDistinctValues = math.Min(minDistinctValues, e.lrows/e.lmf)
+			ub = minDistinctValues * mf
+			included.add(e.rvertex)
+		} else {
+			panic("this should never happen")
+		}
+	}
+
 	jb.candidatePlans[union] = append(
 		jb.candidatePlans[union],
 		candidatePlan{
@@ -865,6 +903,7 @@ func (jb *JoinOrderBuilder) addCandidatePlan(
 			right: s2,
 			on:    joinEdges,
 			sel:   selectEdges,
+			ub:    ub,
 		},
 	)
 }
@@ -947,7 +986,7 @@ func (jb *JoinOrderBuilder) buildCandidatePlans(relations vertexSet) memo.RelExp
 			}
 			if jb.onAddJoinFunc != nil {
 				// Hook for testing purposes.
-				jb.callOnAddJoinFunc(plan.left, plan.right, joinFilters, selectFilters, plan.typ)
+				jb.callOnAddJoinFunc(plan.left, plan.right, joinFilters, selectFilters, plan.typ, plan.ub)
 			}
 		}
 		if commute(plan.typ) {
@@ -961,7 +1000,7 @@ func (jb *JoinOrderBuilder) buildCandidatePlans(relations vertexSet) memo.RelExp
 			jb.addToGroup(plan.typ, right, left, joinFilters, selectFilters, memoGroup)
 			if jb.onAddJoinFunc != nil {
 				// Hook for testing purposes.
-				jb.callOnAddJoinFunc(plan.right, plan.left, joinFilters, selectFilters, plan.typ)
+				jb.callOnAddJoinFunc(plan.right, plan.left, joinFilters, selectFilters, plan.typ, plan.ub)
 			}
 		}
 	}
@@ -1203,11 +1242,13 @@ func (jb *JoinOrderBuilder) callOnReorderFunc(join memo.RelExpr) {
 	edges := make([]OnReorderEdgeParam, 0, len(jb.edges))
 	for _, edge := range jb.edges {
 		ep := OnReorderEdgeParam{
-			Op:         edge.op.joinType,
-			Filters:    edge.filters,
-			SES:        jb.getRelationSlice(edge.ses),
-			TES:        jb.getRelationSlice(edge.tes),
-			UpperBound: edge.upperBound,
+			Op:      edge.op.joinType,
+			Filters: edge.filters,
+			SES:     jb.getRelationSlice(edge.ses),
+			TES:     jb.getRelationSlice(edge.tes),
+			UB:      edge.ub,
+			MF:      edge.mf,
+			// Rows:    edge.rows,
 		}
 		for _, rule := range edge.rules {
 			ep.Rules = append(ep.Rules, OnReorderRuleParam{
@@ -1223,7 +1264,7 @@ func (jb *JoinOrderBuilder) callOnReorderFunc(join memo.RelExpr) {
 // callOnAddJoinFunc calls the onAddJoinFunc callback function. Panics if the
 // function is nil.
 func (jb *JoinOrderBuilder) callOnAddJoinFunc(
-	s1, s2 vertexSet, joinFilters, selectFilters memo.FiltersExpr, op opt.Operator,
+	s1, s2 vertexSet, joinFilters, selectFilters memo.FiltersExpr, op opt.Operator, ub float64,
 ) {
 	jb.onAddJoinFunc(
 		jb.getRelationSlice(s1),
@@ -1232,6 +1273,7 @@ func (jb *JoinOrderBuilder) callOnAddJoinFunc(
 		jb.getRelationSlice(jb.getRelations(jb.getFreeVars(joinFilters))),
 		jb.getRelationSlice(jb.getRelations(jb.getFreeVars(selectFilters))),
 		op,
+		ub,
 	)
 }
 
@@ -1277,7 +1319,11 @@ type edge struct {
 	rules []conflictRule
 
 	// TODO
-	upperBound float64
+	ub               float64
+	mf               float64
+	lmf, rmf         float64
+	lrows, rrows     float64
+	lvertex, rvertex uint64
 }
 
 // operator contains the properties of a join operator from the original join
@@ -1644,35 +1690,45 @@ func (e *edge) calcUpperBound(jb *JoinOrderBuilder) {
 	}
 
 	// TODO(mgartner): What about the recursive case?
-	var leftMF, rightMF float64
-	var leftRows, rightRows float64
+	// var leftMF, rightMF float64
+	// var leftRows, rightRows float64
+	leftSet, rightSet := false, false
 	for idx, ok := e.tes.next(0); ok; idx, ok = e.tes.next(idx + 1) {
 		relProps := jb.vertexes[idx].Relational()
 		if relProps.OutputCols.Contains(left.Col) {
-			leftRows = relProps.Statistics().RowCount
+			e.lrows = relProps.Statistics().RowCount
+			e.lvertex = idx
 			// TODO: There's a problem here when the base relation is a Select
 			// because the col stat may have a nil histogram. For example, if
 			// the Select has a filter a=1 and the edge filter is b=c, there
 			// will be no histogram for b.
 			colStat, ok := relProps.Statistics().ColStats.LookupSingleton(left.Col)
 			if ok && colStat.Histogram != nil {
-				leftMF = colStat.Histogram.MaxFrequency()
+				e.lmf = colStat.Histogram.MaxFrequency()
 			}
+			leftSet = true
 		}
 		if relProps.OutputCols.Contains(right.Col) {
-			rightRows = relProps.Statistics().RowCount
+			e.rrows = relProps.Statistics().RowCount
+			e.rvertex = idx
 			colStat, ok := relProps.Statistics().ColStats.LookupSingleton(right.Col)
 			if ok && colStat.Histogram != nil {
-				rightMF = colStat.Histogram.MaxFrequency()
+				e.rmf = colStat.Histogram.MaxFrequency()
 			}
+			rightSet = true
+		}
+		if leftSet && rightSet {
+			break
 		}
 		// TODO: We can probably break out of this loop early if we dont' find
 		// the col stats for some reason. This can probably be cleaned up a bit.
-		if leftMF != 0 && rightMF != 0 {
-			minDistinctValues := math.Min(leftRows/leftMF, rightRows/rightMF)
-			e.upperBound = minDistinctValues * leftMF * rightMF
-			return
-		}
+		// if leftMF != 0 && rightMF != 0 {
+		// 	e.mf = leftMF * rightMF
+		// 	// e.rows = relProps.Statistics().RowCount
+		// 	minDistinctValues := math.Min(leftRows/leftMF, rightRows/rightMF)
+		// 	e.ub = minDistinctValues * leftMF * rightMF
+		// 	return
+		// }
 	}
 
 	// / CalculateUpperBoundRecursive calculates the upper bound for joining n tables.
@@ -1690,8 +1746,8 @@ func (e *edge) calcUpperBound(jb *JoinOrderBuilder) {
 	// 	MF2 := GetMaxFrequency(table2, column2)
 	//
 	// 	minDistinctValues := minInt(rows1/MF1, rows2/MF2)
-	// 	upperBound := minDistinctValues * MF1 * MF2
-	// 	return upperBound
+	// 	ub := minDistinctValues * MF1 * MF2
+	// 	return ub
 	// } else {
 	// 	// Recursive case: Calculate upper bound for the first n-1 tables and join with the nth table
 	// 	prevUpperBound := CalculateUpperBoundRecursive(tablesAndColumns, n-1)
@@ -1706,8 +1762,8 @@ func (e *edge) calcUpperBound(jb *JoinOrderBuilder) {
 	// 	MFCurr := GetMaxFrequency(tableCurr, columnCurr)
 	//
 	// 	minDistinctValues := minInt(prevUpperBound/MFPrev, rowsCurr/MFCurr)
-	// 	upperBound := minDistinctValues * MFPrev * MFCurr
-	// 	return upperBound
+	// 	ub := minDistinctValues * MFPrev * MFCurr
+	// 	return ub
 	// }
 	// }
 }
@@ -1964,6 +2020,7 @@ type candidatePlan struct {
 	typ         opt.Operator
 	left, right vertexSet
 	on, sel     edgeSet
+	ub          float64
 }
 
 type edgeSet = intsets.Fast
@@ -1986,6 +2043,10 @@ func (s bitSet) add(idx uint64) bitSet {
 		panic(errors.AssertionFailedf("cannot insert %d into bitSet", idx))
 	}
 	return s | (1 << idx)
+}
+
+func (s bitSet) contains(idx uint64) bool {
+	return (s & (1 << idx)) != 0
 }
 
 // union returns the set union of this set with the given set.
