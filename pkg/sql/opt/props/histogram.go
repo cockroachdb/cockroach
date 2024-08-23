@@ -182,6 +182,17 @@ func (h *Histogram) maxDistinctValuesCount() float64 {
 	return count
 }
 
+// MaxFrequency returns the maximum value of NumEq across all histogram buckets.
+func (h *Histogram) MaxFrequency() float64 {
+	var mf float64
+	for i := range h.buckets {
+		if numEq := h.numEq(i); numEq > mf {
+			mf = numEq
+		}
+	}
+	return mf
+}
+
 // maxDistinctValuesInRange returns the maximum number of distinct values in
 // the range (lowerBound, upperBound). It returns ok=false when it is not
 // possible to determine a finite value (which is the case for all types other
