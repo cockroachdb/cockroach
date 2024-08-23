@@ -432,7 +432,11 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 		"--vmodule=split_queue=2,store_rebalancer=2,allocator=2,replicate_queue=2,"+
 			"decider=3,replica_split_load=1",
 	)
-	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.CRDBNodes())
+	settings := install.MakeClusterSettings()
+	if params.maxSize > 8<<30 {
+		settings.Env = append(settings.Env, fmt.Sprintf("COCKROACH_MAX_RANGE_MAX_BYTES=%d", params.maxSize))
+	}
+	c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 
 	m := c.NewMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
@@ -466,6 +470,13 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 			}
 		} else {
 			t.Fatal("no CPU or QPS split threshold set")
+		}
+
+		// The default for backpressureRangeHardCap is 8 GiB.
+		if params.maxSize > 8<<30 {
+			t.Status("allowing ranges up to ", params.maxSize, " bytes")
+			_, err := db.ExecContext(ctx, fmt.Sprintf("SET CLUSTER SETTING kv.range.range_size_hard_cap = '%d'", params.maxSize))
+			require.NoError(t, err)
 		}
 
 		t.Status("increasing range_max_bytes")
@@ -583,7 +594,9 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	const minBytes = 16 << 20 // 16 MB
 
 	numNodes := c.Spec().NodeCount
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
+	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, fmt.Sprintf("COCKROACH_MAX_RANGE_MAX_BYTES=%d", 10*size))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(1))
 
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
@@ -621,6 +634,10 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 			if err := disableLoadBasedSplitting(ctx, db); err != nil {
 				return err
 			}
+
+			if _, err := db.ExecContext(ctx, fmt.Sprintf("SET CLUSTER SETTING kv.range.range_size_hard_cap = '%d'", 10*size)); err != nil {
+				return err
+			}
 			if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='512MiB'`); err != nil {
 				return err
 			}
@@ -650,7 +667,7 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	// Phase 2: add other nodes, wait for full replication of bank table.
 	t.Status("waiting for full replication")
 	{
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(2, numNodes))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(2, numNodes))
 		m := c.NewMonitor(ctx, c.All())
 		// NB: we do a round-about thing of making sure that there's at least one
 		// range that has 3 replicas (rather than waiting that there are no ranges
