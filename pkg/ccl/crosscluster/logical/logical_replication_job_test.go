@@ -278,10 +278,8 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
 	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
 
-	now := server.Server(0).Clock().Now()
-	t.Logf("waiting for replication job %d", jobAID)
+	now := s.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
-	t.Logf("waiting for replication job %d", jobBID)
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
 
 	dbA.Exec(t, "INSERT INTO tab VALUES (2, 'potato')")
@@ -289,7 +287,7 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	dbA.Exec(t, "UPSERT INTO tab VALUES (1, 'hello, again')")
 	dbB.Exec(t, "UPSERT INTO tab VALUES (1, 'goodbye, again')")
 
-	now = server.Server(0).Clock().Now()
+	now = s.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
 
@@ -349,7 +347,7 @@ func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
 	dbA.Exec(t, "INSERT INTO tab VALUES (7, 'do not replicate')")
 	dbB.Exec(t, "INSERT INTO tab VALUES (8, 'do not replicate')")
 	// Perform the inserts first before starting the LDR stream.
-	now := server.Server(0).Clock().Now()
+	now := s.Clock().Now()
 	dbA.Exec(t, "INSERT INTO tab VALUES (2, 'potato')")
 	dbB.Exec(t, "INSERT INTO tab VALUES (3, 'celeriac')")
 	dbA.Exec(t, "UPSERT INTO tab VALUES (1, 'hello, again')")
@@ -358,10 +356,8 @@ func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
 	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR=$2", dbBURL.String(), now.AsOfSystemTime()).Scan(&jobAID)
 	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR=$2", dbAURL.String(), now.AsOfSystemTime()).Scan(&jobBID)
 
-	now = server.Server(0).Clock().Now()
-	t.Logf("waiting for replication job %d", jobAID)
+	now = s.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
-	t.Logf("waiting for replication job %d", jobBID)
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
 
 	// The rows added before the now time should remain only
@@ -425,17 +421,45 @@ func TestLogicalStreamIngestionAdvancePTS(t *testing.T) {
 	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
 	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
 
-	now := server.Server(0).Clock().Now()
-	t.Logf("waiting for replication job %d", jobAID)
+	now := s.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
 	// The ingestion job on cluster A has a pts on cluster B.
-	producerJobIDB := replicationutils.GetLatestProducerJobID(t, dbB)
+	producerJobIDB := replicationutils.GetProducerJobIDFromLDRJob(t, dbA, jobAID)
 	replicationutils.WaitForPTSProtection(t, ctx, dbB, s, producerJobIDB, now)
 
-	t.Logf("waiting for replication job %d", jobBID)
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
-	producerJobIDA := replicationutils.GetLatestProducerJobID(t, dbA)
+	producerJobIDA := replicationutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
 	replicationutils.WaitForPTSProtection(t, ctx, dbA, s, producerJobIDA, now)
+}
+
+// TestLogicalStreamIngestionCancelUpdatesProducerJob tests whether
+// the producer job's OnFailOrCancel updates the the related producer
+// job, resulting in the PTS record being removed.
+func TestLogicalStreamIngestionCancelUpdatesProducerJob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbA.Exec(t, "SET CLUSTER SETTING physical_replication.producer.stream_liveness_track_frequency='50ms'")
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+
+	var jobBID jobspb.JobID
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
+
+	producerJobID := replicationutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
+	jobutils.WaitForJobToRun(t, dbA, producerJobID)
+
+	dbB.Exec(t, "CANCEL JOB $1", jobBID)
+	jobutils.WaitForJobToCancel(t, dbB, jobBID)
+	jobutils.WaitForJobToFail(t, dbA, producerJobID)
+	replicationutils.WaitForPTSProtectionToNotExist(t, ctx, dbA, s, producerJobID)
 }
 
 func TestLogicalStreamIngestionErrors(t *testing.T) {
@@ -474,7 +498,7 @@ func TestLogicalStreamIngestionErrors(t *testing.T) {
 
 	if s.Codec().IsSystem() {
 		dbB.ExpectErr(t, "kv.rangefeed.enabled must be enabled on the source cluster for logical replication", createQ, urlA)
-		kvserver.RangefeedEnabled.Override(ctx, &server.Server(0).ClusterSettings().SV, true)
+		kvserver.RangefeedEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	}
 
 	dbB.Exec(t, createQ, urlA)
@@ -644,7 +668,6 @@ func TestRandomTables(t *testing.T) {
 	var jobBID jobspb.JobID
 	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
-	t.Logf("waiting for replication job %d", jobBID)
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
 
 	compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
@@ -772,7 +795,6 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 			var jobBID jobspb.JobID
 			runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
-			t.Logf("waiting for replication job %d", jobBID)
 			WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
 
 			if tc.delete {
@@ -850,10 +872,8 @@ func TestLogicalAutoReplan(t *testing.T) {
 	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
 	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
 
-	now := server.Server(0).Clock().Now()
-	t.Logf("waiting for replication job %d", jobAID)
+	now := s.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
-	t.Logf("waiting for replication job %d", jobBID)
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
 
 	server.AddAndStartServer(t, clusterArgs.ServerArgs)
@@ -914,8 +934,7 @@ func TestLogicalJobResiliency(t *testing.T) {
 	var jobAID jobspb.JobID
 	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
 
-	now := server.Server(0).Clock().Now()
-	t.Logf("waiting for replication job %d", jobAID)
+	now := s.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
 
 	progress := jobutils.GetJobProgress(t, dbA, jobAID)
@@ -970,17 +989,14 @@ func TestHeartbeatCancel(t *testing.T) {
 	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
 	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
 
-	now := server.Server(0).Clock().Now()
-	t.Logf("waiting for replication job %d", jobAID)
+	now := s.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
-	t.Logf("waiting for replication job %d", jobBID)
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
 
-	var prodAID jobspb.JobID
-	dbA.QueryRow(t, "SELECT job_ID FROM [SHOW JOBS] WHERE job_type='REPLICATION STREAM PRODUCER'").Scan(&prodAID)
+	prodAID := replicationutils.GetProducerJobIDFromLDRJob(t, dbB, jobBID)
 
 	// Cancel the producer job and wait for the hearbeat to pick up that the stream is inactive
-	t.Logf("Canceling  replication producer %s", prodAID)
+	t.Logf("canceling replication producer %s", prodAID)
 	dbA.QueryRow(t, "CANCEL JOB $1", prodAID)
 
 	// The ingestion job should eventually retry because it detects 2 nodes are dead
@@ -1008,7 +1024,7 @@ func setupLogicalTestServer(
 	dbA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("a")))
 	dbB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
 
-	sysDB := sqlutils.MakeSQLRunner(server.Server(0).SystemLayer().SQLConn(t))
+	sysDB := sqlutils.MakeSQLRunner(server.SystemLayer(0).SQLConn(t))
 	for _, s := range testClusterSystemSettings {
 		sysDB.Exec(t, s)
 	}
@@ -1088,15 +1104,16 @@ func CreateScatteredTable(t *testing.T, db *sqlutils.SQLRunner, numNodes int, db
 func WaitUntilReplicatedTime(
 	t *testing.T, targetTime hlc.Timestamp, db *sqlutils.SQLRunner, ingestionJobID jobspb.JobID,
 ) {
+	t.Logf("waiting for logical replication job %d to reach replicated time of %s", ingestionJobID, targetTime)
 	testutils.SucceedsSoon(t, func() error {
 		progress := jobutils.GetJobProgress(t, db, ingestionJobID)
 		replicatedTime := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.ReplicatedTime
 		if replicatedTime.IsEmpty() {
-			return errors.Newf("stream ingestion has not recorded any progress yet, waiting to advance pos %s",
+			return errors.Newf("logical replication has not recorded any progress yet, waiting to advance pos %s",
 				targetTime)
 		}
 		if replicatedTime.Less(targetTime) {
-			return errors.Newf("waiting for stream ingestion job progress %s to advance beyond %s",
+			return errors.Newf("waiting for logical replication job replicated time %s to advance beyond %s",
 				replicatedTime, targetTime)
 		}
 		return nil
@@ -1242,9 +1259,8 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH FUNCTION repl_apply FOR TABLE tab", dbAURL.String()).Scan(&jobBID)
 
 	now := s.Clock().Now()
-	t.Logf("waiting for replication job %d", jobAID)
+
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
-	t.Logf("waiting for replication job %d", jobBID)
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
 
 	dbA.Exec(t, "INSERT INTO tab VALUES (2, 'potato')")
@@ -1365,10 +1381,8 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab on $1 INTO TABLE tab WITH DEFAULT FUNCTION = 'dlq'",
 		dbAURL.String()).Scan(&jobBID)
 
-	now := server.Server(0).Clock().Now()
-	t.Logf("waiting for replication job %d", jobAID)
+	now := s.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
-	t.Logf("waiting for replication job %d", jobBID)
 	WaitUntilReplicatedTime(t, now, dbB, jobBID)
 
 	// Sort job IDs to match rows ordered with ORDER BY clause

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -307,11 +309,9 @@ func TestingGetPTSFromReplicationJob(
 	ctx context.Context,
 	sqlRunner *sqlutils.SQLRunner,
 	srv serverutils.ApplicationLayerInterface,
-	producerJobID int,
+	producerJobID jobspb.JobID,
 ) hlc.Timestamp {
-	payload := jobutils.GetJobPayload(t, sqlRunner, jobspb.JobID(producerJobID))
-	details := payload.GetStreamReplication()
-	ptsRecordID := details.ProtectedTimestampRecordID
+	ptsRecordID := getPTSRecordIDFromProducerJob(t, sqlRunner, producerJobID)
 	ptsProvider := srv.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 
 	var ptsRecord *ptpb.Record
@@ -330,7 +330,7 @@ func WaitForPTSProtection(
 	ctx context.Context,
 	sqlRunner *sqlutils.SQLRunner,
 	srv serverutils.ApplicationLayerInterface,
-	producerJobID int,
+	producerJobID jobspb.JobID,
 	minTime hlc.Timestamp,
 ) {
 	testutils.SucceedsSoon(t, func() error {
@@ -342,8 +342,40 @@ func WaitForPTSProtection(
 	})
 }
 
-func GetLatestProducerJobID(t *testing.T, sqlRunner *sqlutils.SQLRunner) int {
-	var producerJobID int
-	sqlRunner.QueryRow(t, "SELECT id FROM system.jobs WHERE job_type = 'REPLICATION STREAM PRODUCER' ORDER BY created DESC LIMIT 1").Scan(&producerJobID)
-	return producerJobID
+func WaitForPTSProtectionToNotExist(
+	t *testing.T,
+	ctx context.Context,
+	sqlRunner *sqlutils.SQLRunner,
+	srv serverutils.ApplicationLayerInterface,
+	producerJobID jobspb.JobID,
+) {
+	ptsRecordID := getPTSRecordIDFromProducerJob(t, sqlRunner, producerJobID)
+	ptsProvider := srv.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+	testutils.SucceedsSoon(t, func() error {
+		err := srv.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			_, err := ptsProvider.WithTxn(txn).GetRecord(ctx, ptsRecordID)
+			return err
+		})
+		if errors.Is(err, protectedts.ErrNotExists) {
+			return nil
+		}
+		if err == nil {
+			return errors.New("PTS record still exists")
+		}
+		return err
+	})
+}
+
+func getPTSRecordIDFromProducerJob(
+	t *testing.T, sqlRunner *sqlutils.SQLRunner, producerJobID jobspb.JobID,
+) uuid.UUID {
+	payload := jobutils.GetJobPayload(t, sqlRunner, producerJobID)
+	return payload.GetStreamReplication().ProtectedTimestampRecordID
+}
+
+func GetProducerJobIDFromLDRJob(
+	t *testing.T, sqlRunner *sqlutils.SQLRunner, ldrJobID jobspb.JobID,
+) jobspb.JobID {
+	payload := jobutils.GetJobPayload(t, sqlRunner, ldrJobID)
+	return jobspb.JobID(payload.GetLogicalReplicationDetails().StreamID)
 }
