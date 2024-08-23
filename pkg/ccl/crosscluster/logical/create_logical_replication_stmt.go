@@ -243,15 +243,15 @@ func createLogicalReplicationStreamPlanHook(
 			Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", targetsDescription, streamAddress),
 			Username:    p.User(),
 			Details: jobspb.LogicalReplicationDetails{
-				StreamID:                  uint64(spec.StreamID),
-				SourceClusterID:           spec.SourceClusterID,
-				ReplicationStartTime:      replicationStartTime,
-				SourceClusterConnStr:      string(streamAddress),
-				ReplicationPairs:          repPairs,
-				TableNames:                srcTableNames,
-				DefaultConflictResolution: defaultConflictResolution,
-				FilterRangefeed:           options.GetFilterRangefeed(),
-				Mode:                      mode,
+				StreamID:                   uint64(spec.StreamID),
+				SourceClusterID:            spec.SourceClusterID,
+				ReplicationStartTime:       replicationStartTime,
+				SourceClusterConnStr:       string(streamAddress),
+				ReplicationPairs:           repPairs,
+				TableNames:                 srcTableNames,
+				DefaultConflictResolution:  defaultConflictResolution,
+				IgnoreCDCIgnoredTTLDeletes: options.IgnoreCDCIgnoredTTLDeletes(),
+				Mode:                       mode,
 			},
 			Progress: progress,
 		}
@@ -281,7 +281,7 @@ func createLogicalReplicationStreamTypeCheck(
 			stmt.Options.Mode,
 		},
 		exprutil.Bools{
-			stmt.Options.FilterRangefeed,
+			stmt.Options.IgnoreCDCIgnoredTTLDeletes,
 		},
 	}
 	if err := exprutil.TypeCheck(ctx, "LOGICAL REPLICATION STREAM", p.SemaCtx(),
@@ -298,8 +298,8 @@ type resolvedLogicalReplicationOptions struct {
 	mode            string
 	defaultFunction *jobspb.LogicalReplicationDetails_DefaultConflictResolution
 	// Mapping of table name to function descriptor
-	userFunctions   map[string]int32
-	filterRangefeed bool
+	userFunctions              map[string]int32
+	ignoreCDCIgnoredTTLDeletes bool
 }
 
 func evalLogicalReplicationOptions(
@@ -374,8 +374,8 @@ func evalLogicalReplicationOptions(
 		}
 	}
 
-	if options.FilterRangefeed == tree.DBoolTrue {
-		r.filterRangefeed = true
+	if options.IgnoreCDCIgnoredTTLDeletes == tree.DBoolTrue {
+		r.ignoreCDCIgnoredTTLDeletes = true
 	}
 	return r, nil
 }
@@ -429,9 +429,9 @@ func (r *resolvedLogicalReplicationOptions) GetUserFunctions() (map[string]int32
 	return r.userFunctions, true
 }
 
-func (r *resolvedLogicalReplicationOptions) GetFilterRangefeed() bool {
+func (r *resolvedLogicalReplicationOptions) IgnoreCDCIgnoredTTLDeletes() bool {
 	if r == nil {
 		return false
 	}
-	return r.filterRangefeed
+	return r.ignoreCDCIgnoredTTLDeletes
 }

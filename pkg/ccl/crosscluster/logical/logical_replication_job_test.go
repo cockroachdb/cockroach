@@ -605,10 +605,10 @@ func TestFilterRangefeedInReplicationStream(t *testing.T) {
 
 	// Verify that Job contains FilterRangeFeed
 	details := jobutils.GetJobPayload(t, dbA, jobAID).GetLogicalReplicationDetails()
-	require.False(t, details.FilterRangefeed)
+	require.False(t, details.IgnoreCDCIgnoredTTLDeletes)
 
 	details = jobutils.GetJobPayload(t, dbB, jobBID).GetLogicalReplicationDetails()
-	require.True(t, details.FilterRangefeed)
+	require.True(t, details.IgnoreCDCIgnoredTTLDeletes)
 
 	require.Equal(t, len(filterVal), 2)
 
