@@ -1100,9 +1100,11 @@ func (v *vector) getOrderedValues(labels map[string]string) []string {
 	return labelValues
 }
 
-func (v *vector) recordLabels(labels map[string]string) {
+// recordLabels records the given combination of label values if they haven't
+// been seen before. This is used to iterate over all the counters created
+// based on unique label combinations.
+func (v *vector) recordLabels(labelValues []string) {
 	v.RLock()
-	labelValues := v.getOrderedValues(labels)
 	lookupKey := strings.Join(labelValues, "_")
 	if _, ok := v.encounteredLabelsLookup[lookupKey]; ok {
 		return
@@ -1140,19 +1142,22 @@ func NewGaugeVec(metadata Metadata, labelSchema []string) *GaugeVec {
 
 // Update updates the gauge value for the given combination of labels.
 func (gv *GaugeVec) Update(labels map[string]string, v int64) {
-	gv.recordLabels(labels)
-	gv.promVec.With(prometheus.Labels(labels)).Set(float64(v))
+	labelValues := gv.getOrderedValues(labels)
+	gv.recordLabels(labelValues)
+	gv.promVec.WithLabelValues(labelValues...).Set(float64(v))
 }
 
 // Inc increments the gauge value for the given combination of labels.
 func (gv *GaugeVec) Inc(labels map[string]string, v int64) {
-	gv.recordLabels(labels)
-	gv.promVec.With(prometheus.Labels(labels)).Add(float64(v))
+	labelValues := gv.getOrderedValues(labels)
+	gv.recordLabels(labelValues)
+	gv.promVec.WithLabelValues(labelValues...).Add(float64(v))
 }
 
 func (gv *GaugeVec) Dec(labels map[string]string, v int64) {
-	gv.recordLabels(labels)
-	gv.promVec.With(prometheus.Labels(labels)).Sub(float64(v))
+	labelValues := gv.getOrderedValues(labels)
+	gv.recordLabels(labelValues)
+	gv.promVec.WithLabelValues(labelValues...).Sub(float64(v))
 }
 
 func (gv *GaugeVec) GetMetadata() Metadata {
@@ -1207,14 +1212,26 @@ func NewCounterVec(metadata Metadata, labelNames []string) *CounterVec {
 	}
 }
 
+// Update updates the counter value for the given combination of labels.
+// prometheus.CounterVec does not support an Update method, so we have to
+// implement it ourselves by getting the current counter value and adding the
+// difference. This panics if the current value is greater than the new value.
 func (cv *CounterVec) Update(labels map[string]string, v int64) {
-	cv.recordLabels(labels)
-	cv.promVec.With(prometheus.Labels(labels)).Add(float64(v))
+	labelValues := cv.getOrderedValues(labels)
+	cv.recordLabels(labelValues)
+
+	currentValue := cv.Count(labels)
+	if currentValue > v {
+		panic(fmt.Sprintf("Counters should not decrease, prev: %d, new: %d.", currentValue, v))
+	}
+
+	cv.promVec.WithLabelValues(labelValues...).Add(float64(v - currentValue))
 }
 
 func (cv *CounterVec) Inc(labels map[string]string, v int64) {
-	cv.recordLabels(labels)
-	cv.promVec.With(prometheus.Labels(labels)).Add(float64(v))
+	labelValues := cv.getOrderedValues(labels)
+	cv.recordLabels(labelValues)
+	cv.promVec.WithLabelValues(labelValues...).Add(float64(v))
 }
 
 func (cv *CounterVec) Count(labels map[string]string) int64 {
