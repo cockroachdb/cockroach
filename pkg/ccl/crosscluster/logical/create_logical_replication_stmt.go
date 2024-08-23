@@ -294,8 +294,8 @@ func createLogicalReplicationStreamTypeCheck(
 }
 
 type resolvedLogicalReplicationOptions struct {
-	cursor          *hlc.Timestamp
-	mode            *string
+	cursor          hlc.Timestamp
+	mode            string
 	defaultFunction *jobspb.LogicalReplicationDetails_DefaultConflictResolution
 	// Mapping of table name to function descriptor
 	userFunctions   map[string]int32
@@ -314,7 +314,7 @@ func evalLogicalReplicationOptions(
 		if err != nil {
 			return nil, err
 		}
-		r.mode = &mode
+		r.mode = mode
 	}
 	if options.Cursor != nil {
 		cursor, err := eval.String(ctx, options.Cursor)
@@ -326,7 +326,7 @@ func evalLogicalReplicationOptions(
 		if err != nil {
 			return nil, err
 		}
-		r.cursor = &asOf.Timestamp
+		r.cursor = asOf.Timestamp
 	}
 	if options.DefaultFunction != nil {
 		defaultResolution := &jobspb.LogicalReplicationDetails_DefaultConflictResolution{}
@@ -399,17 +399,17 @@ func lookupFunctionID(
 }
 
 func (r *resolvedLogicalReplicationOptions) GetCursor() (hlc.Timestamp, bool) {
-	if r == nil || r.cursor == nil {
+	if r == nil || r.cursor.IsEmpty() {
 		return hlc.Timestamp{}, false
 	}
-	return *r.cursor, true
+	return r.cursor, true
 }
 
 func (r *resolvedLogicalReplicationOptions) GetMode() (string, bool) {
-	if r == nil || r.mode == nil {
+	if r == nil || r.mode == "" {
 		return "", false
 	}
-	return *r.mode, true
+	return r.mode, true
 }
 
 func (r *resolvedLogicalReplicationOptions) GetDefaultFunction() (
