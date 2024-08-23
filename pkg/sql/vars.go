@@ -3488,6 +3488,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension.
+	`optimizer_allow_duplicate_subquery`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_allow_duplicate_subquery`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_allow_duplicate_subquery", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerAllowDuplicateSubquery(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerAllowDuplicateSubquery), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

@@ -729,6 +729,22 @@ func (c *CustomFuncs) FilterHasCorrelatedSubquery(filters memo.FiltersExpr) bool
 	return false
 }
 
+// AllowDuplicateSubquery returns true the given filter does not contain a
+// subquery, or subquery push down is allowed by the
+// optimizer_prevent_subquery_duplication session setting.
+func (c *CustomFuncs) AllowDuplicateSubquery(f *memo.FiltersItem) bool {
+	if f.ScalarProps().HasSubquery {
+		return c.f.evalCtx.SessionData().OptimizerAllowDuplicateSubquery
+	}
+	return true
+}
+
+// FilterItemHasSubquery returns true if any of the filter conditions
+// contain a subquery.
+// func (c *CustomFuncs) FilterItemHasSubquery(f *memo.FiltersItem) bool {
+// 	return f.ScalarProps().HasSubquery
+// }
+
 // IsFilterFalse returns true if the filters always evaluate to false. The only
 // case that's checked is the fully normalized case, when the list contains a
 // single False condition.

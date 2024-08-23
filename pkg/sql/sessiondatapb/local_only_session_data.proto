@@ -545,6 +545,10 @@ message LocalOnlySessionData {
   // hoisting a volatile expression that is conditionally executed by a CASE,
   // COALESCE, or IFERR expression.
   bool optimizer_use_conditional_hoist_fix = 138;
+  // OptimizerAllowDuplicateSubquery, when true, allows the optimizer to
+  // duplicate references to subqueries in different scalar expressions within a
+  // memo. This is known to cause issues during optimization, see #116022.
+  bool optimizer_allow_duplicate_subquery = 139;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

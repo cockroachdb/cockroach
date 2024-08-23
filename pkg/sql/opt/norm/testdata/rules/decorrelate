@@ -4175,20 +4175,7 @@ project
       │    │    │    ├── scan xy
       │    │    │    │    └── columns: y:9
       │    │    │    └── filters
-      │    │    │         ├── y:9 = 10 [outer=(9), constraints=(/9: [/10 - /10]; tight), fd=()-->(9)]
-      │    │    │         └── eq [subquery]
-      │    │    │              ├── subquery
-      │    │    │              │    └── limit
-      │    │    │              │         ├── columns: x:12!null
-      │    │    │              │         ├── cardinality: [0 - 1]
-      │    │    │              │         ├── key: ()
-      │    │    │              │         ├── fd: ()-->(12)
-      │    │    │              │         ├── scan xy
-      │    │    │              │         │    ├── columns: x:12!null
-      │    │    │              │         │    ├── key: (12)
-      │    │    │              │         │    └── limit hint: 1.00
-      │    │    │              │         └── 1
-      │    │    │              └── 100
+      │    │    │         └── y:9 = 10 [outer=(9), constraints=(/9: [/10 - /10]; tight), fd=()-->(9)]
       │    │    └── filters
       │    │         └── y:9 = k:1 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
       │    └── 1
@@ -4879,6 +4866,7 @@ select
 
 # The subquery should only be hoisted once to avoid creating an expression with
 # children that have intersecting columns. See #114703.
+# TODO: Would we still need this test and the corresponding session setting?
 norm expect=HoistSelectSubquery
 SELECT NULL
 FROM a AS t1
@@ -4890,6 +4878,7 @@ project
  ├── fd: ()-->(23)
  ├── inner-join (hash)
  │    ├── columns: t1.i:2!null t2.i:9!null "?column?":22!null
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    ├── fd: ()-->(2,9,22), (2)==(9,22), (22)==(2,9), (9)==(2,22)
  │    ├── inner-join (hash)
  │    │    ├── columns: t1.i:2!null "?column?":22!null
@@ -4911,26 +4900,8 @@ project
  │    │    │              └── 0 [as="?column?":22]
  │    │    └── filters
  │    │         └── t1.i:2 = "?column?":22 [outer=(2,22), constraints=(/2: (/NULL - ]; /22: (/NULL - ]), fd=(2)==(22), (22)==(2)]
- │    ├── select
- │    │    ├── columns: t2.i:9!null
- │    │    ├── scan a [as=t2]
- │    │    │    └── columns: t2.i:9
- │    │    └── filters
- │    │         └── eq [outer=(9), subquery, constraints=(/9: (/NULL - ])]
- │    │              ├── t2.i:9
- │    │              └── subquery
- │    │                   └── max1-row
- │    │                        ├── columns: "?column?":22!null
- │    │                        ├── error: "more than one row returned by a subquery used as an expression"
- │    │                        ├── cardinality: [0 - 1]
- │    │                        ├── key: ()
- │    │                        ├── fd: ()-->(22)
- │    │                        └── project
- │    │                             ├── columns: "?column?":22!null
- │    │                             ├── fd: ()-->(22)
- │    │                             ├── scan a
- │    │                             └── projections
- │    │                                  └── 0 [as="?column?":22]
+ │    ├── scan a [as=t2]
+ │    │    └── columns: t2.i:9
  │    └── filters
  │         └── t1.i:2 = t2.i:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  └── projections
@@ -4948,36 +4919,18 @@ project
  ├── fd: ()-->(31)
  ├── inner-join (hash)
  │    ├── columns: t1.i:2!null t2.i:9!null "?column?":22!null "?column?":30!null
- │    ├── fd: ()-->(2,9,22,30), (2)==(9,22,30), (30)==(2,9,22), (22)==(2,9,30), (9)==(2,22,30)
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    ├── fd: ()-->(2,9,22,30), (2)==(9,22,30), (22)==(2,9,30), (30)==(2,9,22), (9)==(2,22,30)
  │    ├── inner-join (hash)
  │    │    ├── columns: t1.i:2!null "?column?":22!null "?column?":30!null
  │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │    │    ├── fd: ()-->(2,22,30), (2)==(22,30), (30)==(2,22), (22)==(2,30)
+ │    │    ├── fd: ()-->(2,22,30), (2)==(22,30), (22)==(2,30), (30)==(2,22)
  │    │    ├── inner-join (hash)
- │    │    │    ├── columns: t1.i:2!null "?column?":30!null
+ │    │    │    ├── columns: t1.i:2!null "?column?":22!null
  │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │    │    │    ├── fd: ()-->(2,30), (2)==(30), (30)==(2)
+ │    │    │    ├── fd: ()-->(2,22), (2)==(22), (22)==(2)
  │    │    │    ├── scan a [as=t1]
  │    │    │    │    └── columns: t1.i:2
- │    │    │    ├── max1-row
- │    │    │    │    ├── columns: "?column?":30!null
- │    │    │    │    ├── error: "more than one row returned by a subquery used as an expression"
- │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(30)
- │    │    │    │    └── project
- │    │    │    │         ├── columns: "?column?":30!null
- │    │    │    │         ├── fd: ()-->(30)
- │    │    │    │         ├── scan a
- │    │    │    │         └── projections
- │    │    │    │              └── 0 [as="?column?":30]
- │    │    │    └── filters
- │    │    │         └── t1.i:2 = "?column?":30 [outer=(2,30), constraints=(/2: (/NULL - ]; /30: (/NULL - ]), fd=(2)==(30), (30)==(2)]
- │    │    ├── select
- │    │    │    ├── columns: "?column?":22!null
- │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(22)
  │    │    │    ├── max1-row
  │    │    │    │    ├── columns: "?column?":22!null
  │    │    │    │    ├── error: "more than one row returned by a subquery used as an expression"
@@ -4991,58 +4944,23 @@ project
  │    │    │    │         └── projections
  │    │    │    │              └── 0 [as="?column?":22]
  │    │    │    └── filters
- │    │    │         └── eq [outer=(22), subquery, constraints=(/22: (/NULL - ])]
- │    │    │              ├── "?column?":22
- │    │    │              └── subquery
- │    │    │                   └── max1-row
- │    │    │                        ├── columns: "?column?":30!null
- │    │    │                        ├── error: "more than one row returned by a subquery used as an expression"
- │    │    │                        ├── cardinality: [0 - 1]
- │    │    │                        ├── key: ()
- │    │    │                        ├── fd: ()-->(30)
- │    │    │                        └── project
- │    │    │                             ├── columns: "?column?":30!null
- │    │    │                             ├── fd: ()-->(30)
- │    │    │                             ├── scan a
- │    │    │                             └── projections
- │    │    │                                  └── 0 [as="?column?":30]
+ │    │    │         └── t1.i:2 = "?column?":22 [outer=(2,22), constraints=(/2: (/NULL - ]; /22: (/NULL - ]), fd=(2)==(22), (22)==(2)]
+ │    │    ├── max1-row
+ │    │    │    ├── columns: "?column?":30!null
+ │    │    │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(30)
+ │    │    │    └── project
+ │    │    │         ├── columns: "?column?":30!null
+ │    │    │         ├── fd: ()-->(30)
+ │    │    │         ├── scan a
+ │    │    │         └── projections
+ │    │    │              └── 0 [as="?column?":30]
  │    │    └── filters
- │    │         └── t1.i:2 = "?column?":22 [outer=(2,22), constraints=(/2: (/NULL - ]; /22: (/NULL - ]), fd=(2)==(22), (22)==(2)]
- │    ├── select
- │    │    ├── columns: t2.i:9!null
- │    │    ├── scan a [as=t2]
- │    │    │    └── columns: t2.i:9
- │    │    └── filters
- │    │         ├── eq [outer=(9), subquery, constraints=(/9: (/NULL - ])]
- │    │         │    ├── t2.i:9
- │    │         │    └── subquery
- │    │         │         └── max1-row
- │    │         │              ├── columns: "?column?":22!null
- │    │         │              ├── error: "more than one row returned by a subquery used as an expression"
- │    │         │              ├── cardinality: [0 - 1]
- │    │         │              ├── key: ()
- │    │         │              ├── fd: ()-->(22)
- │    │         │              └── project
- │    │         │                   ├── columns: "?column?":22!null
- │    │         │                   ├── fd: ()-->(22)
- │    │         │                   ├── scan a
- │    │         │                   └── projections
- │    │         │                        └── 0 [as="?column?":22]
- │    │         └── eq [outer=(9), subquery, constraints=(/9: (/NULL - ])]
- │    │              ├── t2.i:9
- │    │              └── subquery
- │    │                   └── max1-row
- │    │                        ├── columns: "?column?":30!null
- │    │                        ├── error: "more than one row returned by a subquery used as an expression"
- │    │                        ├── cardinality: [0 - 1]
- │    │                        ├── key: ()
- │    │                        ├── fd: ()-->(30)
- │    │                        └── project
- │    │                             ├── columns: "?column?":30!null
- │    │                             ├── fd: ()-->(30)
- │    │                             ├── scan a
- │    │                             └── projections
- │    │                                  └── 0 [as="?column?":30]
+ │    │         └── t1.i:2 = "?column?":30 [outer=(2,30), constraints=(/2: (/NULL - ]; /30: (/NULL - ]), fd=(2)==(30), (30)==(2)]
+ │    ├── scan a [as=t2]
+ │    │    └── columns: t2.i:9
  │    └── filters
  │         └── t1.i:2 = t2.i:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  └── projections
@@ -5067,6 +4985,7 @@ project
  ├── fd: ()-->(19)
  ├── inner-join (hash)
  │    ├── columns: t1.i:2!null t2.i:9!null x:15!null
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    ├── fd: ()-->(2,9,15), (2)==(9,15), (15)==(2,9), (9)==(2,15)
  │    ├── inner-join (hash)
  │    │    ├── columns: t1.i:2!null x:15!null
@@ -5086,24 +5005,8 @@ project
  │    │    │    └── 1
  │    │    └── filters
  │    │         └── t1.i:2 = x:15 [outer=(2,15), constraints=(/2: (/NULL - ]; /15: (/NULL - ]), fd=(2)==(15), (15)==(2)]
- │    ├── select
- │    │    ├── columns: t2.i:9!null
- │    │    ├── scan a [as=t2]
- │    │    │    └── columns: t2.i:9
- │    │    └── filters
- │    │         └── eq [outer=(9), subquery, constraints=(/9: (/NULL - ])]
- │    │              ├── t2.i:9
- │    │              └── subquery
- │    │                   └── limit
- │    │                        ├── columns: x:15!null
- │    │                        ├── cardinality: [0 - 1]
- │    │                        ├── key: ()
- │    │                        ├── fd: ()-->(15)
- │    │                        ├── scan xy
- │    │                        │    ├── columns: x:15!null
- │    │                        │    ├── key: (15)
- │    │                        │    └── limit hint: 1.00
- │    │                        └── 1
+ │    ├── scan a [as=t2]
+ │    │    └── columns: t2.i:9
  │    └── filters
  │         └── t1.i:2 = t2.i:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  └── projections

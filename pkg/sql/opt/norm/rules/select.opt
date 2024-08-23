@@ -196,6 +196,7 @@ $input
     $filters:[
         ...
         $item:(FiltersItem $condition:*) &
+            (AllowDuplicateSubquery $item) &
             (IsBoundBy $item (OutputCols $left)) &
             (CanMapJoinOpFilter
                 $item

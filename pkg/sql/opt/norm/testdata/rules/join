@@ -1245,35 +1245,9 @@ project
  │    │    │    │              │         └── scan a
  │    │    │    │              │              └── columns: s:28
  │    │    │    │              └── 'foo'
- │    │    │    ├── select
- │    │    │    │    ├── scan uv
- │    │    │    │    └── filters
- │    │    │    │         └── eq [subquery]
- │    │    │    │              ├── subquery
- │    │    │    │              │    └── max1-row
- │    │    │    │              │         ├── columns: s:28
- │    │    │    │              │         ├── error: "more than one row returned by a subquery used as an expression"
- │    │    │    │              │         ├── cardinality: [0 - 1]
- │    │    │    │              │         ├── key: ()
- │    │    │    │              │         ├── fd: ()-->(28)
- │    │    │    │              │         └── scan a
- │    │    │    │              │              └── columns: s:28
- │    │    │    │              └── 'foo'
+ │    │    │    ├── scan uv
  │    │    │    └── filters (true)
- │    │    ├── select
- │    │    │    ├── scan b
- │    │    │    └── filters
- │    │    │         └── eq [subquery]
- │    │    │              ├── subquery
- │    │    │              │    └── max1-row
- │    │    │              │         ├── columns: s:28
- │    │    │              │         ├── error: "more than one row returned by a subquery used as an expression"
- │    │    │              │         ├── cardinality: [0 - 1]
- │    │    │              │         ├── key: ()
- │    │    │              │         ├── fd: ()-->(28)
- │    │    │              │         └── scan a
- │    │    │              │              └── columns: s:28
- │    │    │              └── 'foo'
+ │    │    ├── scan b
  │    │    └── filters (true)
  │    └── filters (true)
  └── projections
@@ -1506,6 +1480,116 @@ project
                 │    ├── columns: item.i_name:53
                 │    └── limit hint: 1.00
                 └── 1
+
+# Regression test for #116022. Do not push down a filter with a subquery.
+exec-ddl
+CREATE TABLE t116022a (
+  id INT PRIMARY KEY
+)
+----
+
+exec-ddl
+CREATE TABLE t116022b (
+  id INT PRIMARY KEY,
+  x INT
+)
+----
+
+exec-ddl
+CREATE TABLE t116022c (
+  id INT PRIMARY KEY,
+  x INT,
+  y INT
+)
+----
+
+exec-ddl
+CREATE TABLE t116022d (
+  id INT PRIMARY KEY,
+  x INT,
+  y INT
+)
+----
+
+# Explain why we use opt here.
+opt locality=(region=east) expect-not=PushFilterIntoJoinLeftAndRight
+SELECT a.id
+FROM t116022a AS a
+INNER JOIN t116022b AS b ON b.x = a.id
+INNER JOIN t116022c AS c ON c.y = b.id
+LEFT JOIN LATERAL (
+  SELECT d.id
+  FROM t116022d AS d
+  WHERE d.x = c.x
+  ORDER BY d.y
+  LIMIT 1
+) ON true
+WHERE b.id = (SELECT id FROM t116022b)
+----
+distribute
+ ├── columns: id:1!null
+ ├── fd: ()-->(1)
+ ├── distribution: east
+ ├── input distribution: 
+ └── project
+      ├── columns: a.id:1!null
+      ├── fd: ()-->(1)
+      └── distinct-on
+           ├── columns: a.id:1!null c.id:8!null
+           ├── grouping columns: c.id:8!null
+           ├── internal-ordering: +15 opt(1,4,5,10,18)
+           ├── key: (8)
+           ├── fd: ()-->(1)
+           ├── sort
+           │    ├── columns: a.id:1!null b.id:4!null b.x:5!null c.id:8!null c.x:9 c.y:10!null d.x:14 d.y:15 t116022b.id:18!null
+           │    ├── fd: ()-->(1,4,5,10,18), (4)==(10,18), (1)==(5), (5)==(1), (18)==(4,10), (8)-->(9), (10)==(4,18)
+           │    ├── ordering: +15 opt(1,4,5,10,18) [actual: +15]
+           │    └── right-join (hash)
+           │         ├── columns: a.id:1!null b.id:4!null b.x:5!null c.id:8!null c.x:9 c.y:10!null d.x:14 d.y:15 t116022b.id:18!null
+           │         ├── fd: ()-->(1,4,5,10,18), (4)==(10,18), (1)==(5), (5)==(1), (18)==(4,10), (8)-->(9), (10)==(4,18)
+           │         ├── scan t116022d [as=d]
+           │         │    └── columns: d.x:14 d.y:15
+           │         ├── inner-join (hash)
+           │         │    ├── columns: a.id:1!null b.id:4!null b.x:5!null c.id:8!null c.x:9 c.y:10!null t116022b.id:18!null
+           │         │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+           │         │    ├── key: (8)
+           │         │    ├── fd: ()-->(1,4,5,10,18), (4)==(10,18), (1)==(5), (5)==(1), (18)==(4,10), (8)-->(9), (10)==(4,18)
+           │         │    ├── scan t116022c [as=c]
+           │         │    │    ├── columns: c.id:8!null c.x:9 c.y:10
+           │         │    │    ├── key: (8)
+           │         │    │    └── fd: (8)-->(9,10)
+           │         │    ├── inner-join (lookup t116022a [as=a])
+           │         │    │    ├── columns: a.id:1!null b.id:4!null b.x:5!null t116022b.id:18!null
+           │         │    │    ├── key columns: [5] = [1]
+           │         │    │    ├── lookup columns are key
+           │         │    │    ├── cardinality: [0 - 1]
+           │         │    │    ├── key: ()
+           │         │    │    ├── fd: ()-->(1,4,5,18), (4)==(18), (1)==(5), (5)==(1), (18)==(4)
+           │         │    │    ├── inner-join (lookup t116022b [as=b])
+           │         │    │    │    ├── columns: b.id:4!null b.x:5 t116022b.id:18!null
+           │         │    │    │    ├── key columns: [18] = [4]
+           │         │    │    │    ├── lookup columns are key
+           │         │    │    │    ├── cardinality: [0 - 1]
+           │         │    │    │    ├── key: ()
+           │         │    │    │    ├── fd: ()-->(4,5,18), (18)==(4), (4)==(18)
+           │         │    │    │    ├── max1-row
+           │         │    │    │    │    ├── columns: t116022b.id:18!null
+           │         │    │    │    │    ├── error: "more than one row returned by a subquery used as an expression"
+           │         │    │    │    │    ├── cardinality: [0 - 1]
+           │         │    │    │    │    ├── key: ()
+           │         │    │    │    │    ├── fd: ()-->(18)
+           │         │    │    │    │    └── scan t116022b
+           │         │    │    │    │         ├── columns: t116022b.id:18!null
+           │         │    │    │    │         └── key: (18)
+           │         │    │    │    └── filters (true)
+           │         │    │    └── filters (true)
+           │         │    └── filters
+           │         │         └── c.y:10 = b.id:4 [outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
+           │         └── filters
+           │              └── d.x:14 = c.x:9 [outer=(9,14), constraints=(/9: (/NULL - ]; /14: (/NULL - ]), fd=(9)==(14), (14)==(9)]
+           └── aggregations
+                └── const-agg [as=a.id:1, outer=(1)]
+                     └── a.id:1
 
 # ---------------------------------
 # MapEqualityIntoJoinLeftAndRight

@@ -76,6 +76,7 @@
     $on:[
         ...
         $item:* &
+            (AllowDuplicateSubquery $item) &
             ^(FiltersItem (Eq (Variable) (Variable))) &
             (CanMapJoinOpFilter
                 $item
@@ -171,6 +172,11 @@
         $item:* &
             ^(FiltersItem (Eq (Variable) (Variable))) &
             ^(IsBoundBy $item $rightCols:(OutputCols $right)) &
+            ^(PossibleMapFilterCycle
+                $item
+                (OutputCols $left)
+                $rightCols
+            ) &
             (CanMapJoinOpFilter
                 $item
                 $rightCols
