@@ -13,6 +13,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/errors"
 	"io"
 	"math"
 	"net/url"
@@ -834,6 +835,45 @@ func TestCloudStorageSink(t *testing.T) {
 			})
 		}
 	})
+	// Verify no goroutines leaked with a retryable error
+	testWithAndWithoutAsyncFlushing(t, `no goroutine leaks with retry error`, func(t *testing.T) {
+		before := opts.Compression
+		// Compression codecs include buffering that interferes with other tests,
+		// e.g. the bucketing test that configures very small flush sizes.
+		defer func() {
+			opts.Compression = before
+		}()
+		topic := makeTopic(`t1`)
+		flushErr := error(nil)
+		flushErrOverride := func() error {
+			return flushErr
+		}
+		for _, compression := range []string{"gzip", "zstd"} {
+			opts.Compression = compression
+			t.Run("compress="+stringOrDefault(compression, "none"), func(t *testing.T) {
+				timestampOracle := explicitTimestampOracle(ts(1))
+				s, err := makeCloudStorageSink(
+					ctx, sinkURI(t, 2048), 1, settings, opts,
+					timestampOracle, externalStorageFromURI, user, nil, &TestingKnobs{RaiseRetryableError: flushErrOverride},
+				)
+				require.NoError(t, err)
+				rng, _ := randutil.NewPseudoRand()
+				data := randutil.RandBytes(rng, 1024)
+				// Write few megs worth of data.
+				for n := 0; n < 20; n++ {
+					eventTS := ts(int64(n + 1))
+					require.NoError(t, s.EmitRow(ctx, topic, noKey, data, eventTS, eventTS, zeroAlloc))
+				}
+				// Cause a retryable error.
+				t.Log("trigger a retry error")
+				flushErr = errors.New("trigger a retry error")
+				eventTS := ts(21)
+				require.Error(t, s.EmitRow(ctx, topic, noKey, data, eventTS, eventTS, zeroAlloc))
+				flushErr = nil
+			})
+		}
+	})
+
 }
 
 type explicitTimestampOracle hlc.Timestamp
