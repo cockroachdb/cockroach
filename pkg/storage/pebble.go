@@ -12,6 +12,7 @@ package storage
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -305,47 +306,37 @@ func EngineKeyCompare(a, b []byte) int {
 	aEnd := len(a) - 1
 	bEnd := len(b) - 1
 	if aEnd < 0 || bEnd < 0 {
-		// This should never happen unless there is some sort of corruption of
-		// the keys.
+		// Pebble sometimes passes empty "keys" and we have to tolerate them.
 		return bytes.Compare(a, b)
 	}
 
-	// Compute the index of the separator between the key and the version. If the
-	// separator is found to be at -1 for both keys, then we are comparing bare
-	// suffixes without a user key part. Pebble requires bare suffixes to be
-	// comparable with the same ordering as if they had a common user key.
-	aSep := aEnd - int(a[aEnd])
-	bSep := bEnd - int(b[bEnd])
-	if aSep == -1 && bSep == -1 {
-		aSep, bSep = 0, 0 // comparing bare suffixes
-	}
-	if aSep < 0 || bSep < 0 {
-		// This should never happen unless there is some sort of corruption of
-		// the keys.
+	// Last byte is the version length + 1 when there is a version,
+	// else it is 0.
+	aSuffixLen := int(a[len(a)-1])
+	aSuffixStart := len(a) - aSuffixLen
+	bSuffixLen := int(b[len(b)-1])
+	bSuffixStart := len(b) - bSuffixLen
+	if aSuffixStart < 0 || bSuffixStart < 0 {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("malformed keys: %x, %x", a, b))
+		}
 		return bytes.Compare(a, b)
 	}
 
-	// Compare the "user key" part of the key.
-	if c := bytes.Compare(a[:aSep], b[:bSep]); c != 0 {
+	// Compare the "prefix" part of the keys.
+	if c := bytes.Compare(a[:aSuffixStart], b[:bSuffixStart]); c != 0 {
 		return c
 	}
 
-	// Compare the version part of the key. Note that when the version is a
-	// timestamp, the timestamp encoding causes byte comparison to be equivalent
-	// to timestamp comparison.
-	aVer := a[aSep:aEnd]
-	bVer := b[bSep:bEnd]
-	if len(aVer) == 0 {
-		if len(bVer) == 0 {
-			return 0
-		}
-		return -1
-	} else if len(bVer) == 0 {
-		return 1
+	if aSuffixLen == 0 || bSuffixLen == 0 {
+		// Empty suffixes come before non-empty suffixes.
+		return cmp.Compare(aSuffixLen, bSuffixLen)
 	}
-	aVer = normalizeEngineKeyVersionForCompare(aVer)
-	bVer = normalizeEngineKeyVersionForCompare(bVer)
-	return bytes.Compare(bVer, aVer)
+
+	return bytes.Compare(
+		normalizeEngineSuffixForCompare(b[bSuffixStart:]),
+		normalizeEngineSuffixForCompare(a[aSuffixStart:]),
+	)
 }
 
 // EngineKeyEqual checks for equality of cockroach keys, including the version
@@ -358,80 +349,89 @@ func EngineKeyEqual(a, b []byte) bool {
 	aEnd := len(a) - 1
 	bEnd := len(b) - 1
 	if aEnd < 0 || bEnd < 0 {
-		// This should never happen unless there is some sort of corruption of
-		// the keys.
+		// Pebble sometimes passes empty "keys" and we have to tolerate them.
 		return bytes.Equal(a, b)
 	}
 
 	// Last byte is the version length + 1 when there is a version,
 	// else it is 0.
-	aVerLen := int(a[aEnd])
-	bVerLen := int(b[bEnd])
+	aSuffixLen := int(a[len(a)-1])
+	aSuffixStart := len(a) - aSuffixLen
+	bSuffixLen := int(b[len(b)-1])
+	bSuffixStart := len(b) - bSuffixLen
+	if aSuffixStart < 0 || bSuffixStart < 0 {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("malformed keys: %x, %x", a, b))
+		}
+		return bytes.Equal(a, b)
+	}
 
-	// Fast-path. If the key version is empty or contains only a walltime
-	// component then normalizeEngineKeyVersionForCompare is a no-op, so we don't
-	// need to split the "user key" from the version suffix before comparing to
-	// compute equality. Instead, we can check for byte equality immediately.
+	// Fast-path: normalizeEngineSuffixForCompare doesn't strip off bytes when the
+	// length is withWall or withLockTableLen. In this case, as well as cases with
+	// no prefix, we can check for byte equality immediately.
 	const withWall = mvccEncodedTimeSentinelLen + mvccEncodedTimeWallLen
 	const withLockTableLen = mvccEncodedTimeSentinelLen + engineKeyVersionLockTableLen
-	if (aVerLen <= withWall && bVerLen <= withWall) || (aVerLen == withLockTableLen && bVerLen == withLockTableLen) {
+	if (aSuffixLen <= withWall && bSuffixLen <= withWall) ||
+		(aSuffixLen == withLockTableLen && bSuffixLen == withLockTableLen) ||
+		aSuffixLen == 0 || bSuffixLen == 0 {
 		return bytes.Equal(a, b)
 	}
 
-	// Compute the index of the separator between the key and the version. If the
-	// separator is found to be at -1 for both keys, then we are comparing bare
-	// suffixes without a user key part. Pebble requires bare suffixes to be
-	// comparable with the same ordering as if they had a common user key.
-	aSep := aEnd - aVerLen
-	bSep := bEnd - bVerLen
-	if aSep == -1 && bSep == -1 {
-		aSep, bSep = 0, 0 // comparing bare suffixes
-	}
-	if aSep < 0 || bSep < 0 {
-		// This should never happen unless there is some sort of corruption of
-		// the keys.
-		return bytes.Equal(a, b)
-	}
-
-	// Compare the "user key" part of the key.
-	if !bytes.Equal(a[:aSep], b[:bSep]) {
+	// Compare the "prefix" part of the keys.
+	if !bytes.Equal(a[:aSuffixStart], b[:bSuffixStart]) {
 		return false
 	}
 
-	// Compare the version part of the key.
-	aVer := a[aSep:aEnd]
-	bVer := b[bSep:bEnd]
-	aVer = normalizeEngineKeyVersionForCompare(aVer)
-	bVer = normalizeEngineKeyVersionForCompare(bVer)
-	return bytes.Equal(aVer, bVer)
+	return bytes.Equal(
+		normalizeEngineSuffixForCompare(a[aSuffixStart:]),
+		normalizeEngineSuffixForCompare(b[bSuffixStart:]),
+	)
 }
 
 var zeroLogical [mvccEncodedTimeLogicalLen]byte
 
+// normalizeEngineSuffixForCompare takes a non-empty key suffix (including the
+// trailing version length byte) and returns a prefix of the buffer that should
+// be used for byte-wise comparison. It trims the trailing version length byte
+// and any other trailing bytes that need to be ignored (like a synthetic bit or
+// zero logical component).
+//
 //gcassert:inline
-func normalizeEngineKeyVersionForCompare(a []byte) []byte {
-	// In general, the version could also be a non-timestamp version, but we know
-	// that engineKeyVersionLockTableLen+mvccEncodedTimeSentinelLen is a different
-	// constant than the above, so there is no danger here of stripping parts from
-	// a non-timestamp version.
-	const withWall = mvccEncodedTimeSentinelLen + mvccEncodedTimeWallLen
-	const withLogical = withWall + mvccEncodedTimeLogicalLen
-	const withSynthetic = withLogical + mvccEncodedTimeSyntheticLen
-	if len(a) == withSynthetic {
+func normalizeEngineSuffixForCompare(a []byte) []byte {
+	// Check the trailing version length byte.
+	if buildutil.CrdbTestBuild && len(a) != int(a[len(a)-1]) {
+		panic(errors.AssertionFailedf("malformed suffix: %x", a))
+	}
+	// Strip off the trailing version length byte.
+	a = a[:len(a)-1]
+	switch len(a) {
+	case engineKeyVersionWallLogicalAndSyntheticTimeLen:
 		// Strip the synthetic bit component from the timestamp version. The
 		// presence of the synthetic bit does not affect key ordering or equality.
-		a = a[:withLogical]
-	}
-	if len(a) == withLogical {
+		a = a[:engineKeyVersionWallAndLogicalTimeLen]
+		fallthrough
+	case engineKeyVersionWallAndLogicalTimeLen:
 		// If the timestamp version contains a logical timestamp component that is
 		// zero, strip the component. encodeMVCCTimestampToBuf will typically omit
 		// the entire logical component in these cases as an optimization, but it
 		// does not guarantee to never include a zero logical component.
 		// Additionally, we can fall into this case after stripping off other
 		// components of the key version earlier on in this function.
-		if bytes.Equal(a[withWall:], zeroLogical[:]) {
-			a = a[:withWall]
+		if bytes.Equal(a[engineKeyVersionWallTimeLen:], zeroLogical[:]) {
+			a = a[:engineKeyVersionWallTimeLen]
 		}
+		fallthrough
+	case engineKeyVersionWallTimeLen:
+		// Nothing to do.
+
+	case engineKeyVersionLockTableLen:
+		// We rely on engineKeyVersionLockTableLen being different from the other
+		// lengths above to ensure that we don't strip parts from a non-timestamp
+		// version.
+
+	default:
+		// It would have been nice to panic here in test builds, but the fuzz tests
+		// trigger it.
 	}
 	return a
 }
