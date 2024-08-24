@@ -1,12 +1,9 @@
 package tests
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 )
 
@@ -213,80 +210,4 @@ func GetInterestingSpanConfigs() []zonepb.ZoneConfig {
 		spanConfigs = append(spanConfigs, spanconfigtestutils.ParseZoneConfig(&testing.T{}, c.constraint))
 	}
 	return spanConfigs
-}
-
-type constraint struct {
-	replicas int
-	voters   int
-}
-
-func FormatConstraint(
-	numReplicas int, numVoters int, regions map[string]constraint, zones map[string]constraint,
-) string {
-	// Format the constraint string
-	buf := &strings.Builder{}
-	if numReplicas > 0 {
-		buf.WriteString(fmt.Sprintf("num_replicas=%d ", numReplicas))
-	}
-	if numVoters > 0 {
-		buf.WriteString(fmt.Sprintf("num_voters=%d ", numVoters))
-	}
-	return buf.String()
-}
-
-// for every zone, num_replicas = [0, total number of nodes in the zone];
-// num_voters <= num_replicas
-// for every region, num_replicas = no constraints [total of the zones
-// above, total]; num_voters <= num_replicas
-// for every cluster, num_replicas = total of the regions above , num_voters <=
-// num_replicas
-// future optimization: determine when a constraint is impossible to satisfy
-// given the prev state is unsatisfiable
-
-// regions -> num_replicas and num_voters
-// zones -> num_replicas and num_voters
-// cluster -> num_replicas and num_voters
-// constraints [tierValue:constraint]
-
-func total(r state.Region) (sum int) {
-	for _, z := range r.Zones {
-		sum += z.NodeCount
-	}
-	return sum
-}
-
-func push(m []map[string]constraint) {
-
-}
-
-// For every region,
-// For every zones, make a decision on numReplicas and then on numVoters
-func backtrack(regions []state.Region, m []map[string]constraint) {
-	for _, region := range regions {
-		for _, zone := range region.Zones {
-			totalReplicas := 0
-			// make a decision here on num_replicas for the zone [0, total)
-			// make a decision internally again for num_voters [0, num_replicas)
-			for numReplicas := 0; numReplicas <= zone.NodeCount; numReplicas++ {
-				totalReplicas += numReplicas
-				for numVoters := 0; numVoters <= numReplicas; numVoters++ {
-					// Make a deicision on replicas
-					m[zone.Name] = constraint{
-						replicas: numReplicas,
-						voters:   numVoters,
-					}
-				}
-				totalReplicas -= numReplicas
-			}
-		}
-
-		for numReplicas := 0; numReplicas < total(region); numReplicas++ {
-			for numVoters := 0; numVoters <= numReplicas; numVoters++ {
-				m[region.Name] = constraint{
-					replicas: numReplicas,
-					voters:   numVoters,
-				}
-			}
-		}
-	}
 }

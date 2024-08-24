@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "constraints",
+    srcs = ["rand_constraint.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/constraints",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/kv/kvserver/asim/state"],
+)
+
+go_test(
+    name = "constraints_test",
+    srcs = ["rand_constraint_test.go"],
+    embed = [":constraints"],
+    deps = [
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/spanconfig/spanconfigtestutils",
+    ],
+)
