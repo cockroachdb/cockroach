@@ -10,25 +10,26 @@
 
 package tree
 
-// Unlisten represents a UNLISTEN statement.
-type Unlisten struct {
+// Notify represents a NOTIFY statement.
+type Notify struct {
 	ChannelName Name
-	Star        bool
+	// Payload is a constant string expression and it may be empty/nil.
+	Payload *StrVal
 }
 
-var _ Statement = &Unlisten{}
+var _ Statement = &Notify{}
 
 // Format implements the NodeFormatter interface.
-func (node *Unlisten) Format(ctx *FmtCtx) {
-	ctx.WriteString("UNLISTEN ")
-	if node.Star {
-		ctx.WriteString("* ")
-	} else {
-		ctx.WriteString(node.ChannelName.Normalize())
+func (node *Notify) Format(ctx *FmtCtx) {
+	ctx.WriteString("NOTIFY ")
+	ctx.WriteString(node.ChannelName.Normalize())
+	if node.Payload != nil {
+		ctx.WriteString(", ")
+		ctx.FormatNode(node.Payload)
 	}
 }
 
 // String implements the Statement interface.
-func (node *Unlisten) String() string {
+func (node *Notify) String() string {
 	return AsString(node)
 }
