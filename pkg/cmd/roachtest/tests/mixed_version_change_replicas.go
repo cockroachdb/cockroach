@@ -31,7 +31,7 @@ import (
 func registerChangeReplicasMixedVersion(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "change-replicas/mixed-version",
-		Owner:            registry.OwnerReplication,
+		Owner:            registry.OwnerKV,
 		Cluster:          r.MakeClusterSpec(4),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),

@@ -44,10 +44,6 @@ cockroachdb/kv:
     cockroachdb/kv-prs: other
   triage_column_id: 14242655
   label: T-kv
-cockroachdb/replication:
-  aliases:
-    cockroachdb/repl-prs: other
-  label: T-kv-replication
 cockroachdb/spatial:
   triage_column_id: 9487269
   label: T-spatial
