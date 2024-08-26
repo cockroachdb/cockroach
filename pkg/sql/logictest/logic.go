@@ -3661,11 +3661,12 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 						continue
 					}
 					valT := reflect.TypeOf(val).Kind()
+					colPos := i + 1
 					switch colT {
 					case 'T':
 						if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
 							return fmt.Errorf("%s: expected text value for column %d, but found %T: %#v",
-								query.pos, i, val, val,
+								query.pos, colPos, val, val,
 							)
 						}
 					case 'I':
@@ -3677,7 +3678,7 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 								return nil
 							}
 							return fmt.Errorf("%s: expected int value for column %d, but found %T: %#v",
-								query.pos, i, val, val,
+								query.pos, colPos, val, val,
 							)
 						}
 					case 'F', 'R':
@@ -3689,19 +3690,19 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 								return nil
 							}
 							return fmt.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v",
-								query.pos, i, val, val,
+								query.pos, colPos, val, val,
 							)
 						}
 					case 'B':
 						if valT != reflect.Bool {
 							return fmt.Errorf("%s: expected boolean value for column %d, but found %T: %#v",
-								query.pos, i, val, val,
+								query.pos, colPos, val, val,
 							)
 						}
 					case 'O':
 						if valT != reflect.Slice {
 							return fmt.Errorf("%s: expected oid value for column %d, but found %T: %#v",
-								query.pos, i, val, val,
+								query.pos, colPos, val, val,
 							)
 						}
 					default:
