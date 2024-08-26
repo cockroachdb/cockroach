@@ -27,9 +27,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestStreamMuxer tests that correctly forwards rangefeed completion errors to
-// the server stream.
-func TestStreamMuxer(t *testing.T) {
+func makeMuxRangefeedErrorEvent(
+	streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
+) *kvpb.MuxRangeFeedEvent {
+	ev := &kvpb.MuxRangeFeedEvent{
+		StreamID: streamID,
+		RangeID:  rangeID,
+	}
+	ev.MustSetValue(&kvpb.RangeFeedError{
+		Error: *transformRangefeedErrToClientError(err),
+	})
+	return ev
+}
+
+// TestUnbufferedSenderDisconnect tests that correctly forwards rangefeed
+// completion errors to the server stream.
+func TestUnbufferedSenderDisconnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -40,7 +53,7 @@ func TestStreamMuxer(t *testing.T) {
 
 	testServerStream := newTestServerStream()
 	testRangefeedCounter := newTestRangefeedCounter()
-	muxer := NewStreamMuxer(testServerStream, testRangefeedCounter)
+	muxer := NewUnbufferedSender(testServerStream, testRangefeedCounter)
 	require.NoError(t, muxer.Start(ctx, stopper))
 	defer muxer.Stop()
 
@@ -48,10 +61,11 @@ func TestStreamMuxer(t *testing.T) {
 		const streamID = 0
 		const rangeID = 1
 		streamCtx, cancel := context.WithCancel(context.Background())
-		muxer.AddStream(streamID, rangeID, cancel)
+		muxer.AddStream(streamID, cancel)
 		// Note that kvpb.NewError(nil) == nil.
 		require.Equal(t, testRangefeedCounter.get(), int32(1))
-		muxer.DisconnectStreamWithError(streamID, rangeID, kvpb.NewError(nil))
+		muxer.SendErrorWithoutBlocking(makeMuxRangefeedErrorEvent(streamID, rangeID,
+			kvpb.NewError(nil)))
 		require.Equal(t, testRangefeedCounter.get(), int32(0))
 		require.Equal(t, context.Canceled, streamCtx.Err())
 		expectedErrEvent := &kvpb.MuxRangeFeedEvent{
@@ -66,13 +80,13 @@ func TestStreamMuxer(t *testing.T) {
 		require.True(t, testServerStream.hasEvent(expectedErrEvent))
 
 		// Repeat closing the stream does nothing.
-		muxer.DisconnectStreamWithError(streamID, rangeID,
-			kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)))
+		muxer.SendErrorWithoutBlocking(makeMuxRangefeedErrorEvent(streamID, rangeID,
+			kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))))
 		time.Sleep(10 * time.Millisecond)
-		require.Equal(t, 1, testServerStream.totalEventsSent())
+		require.Equalf(t, 1, testServerStream.totalEventsSent(), testServerStream.String())
 	})
 
-	t.Run("send rangefeed completion error", func(t *testing.T) {
+	t.Run("send rangefeed completion error concurrently", func(t *testing.T) {
 		testRangefeedCompletionErrors := []struct {
 			streamID int64
 			rangeID  roachpb.RangeID
@@ -86,7 +100,7 @@ func TestStreamMuxer(t *testing.T) {
 		require.Equal(t, testRangefeedCounter.get(), int32(0))
 
 		for _, muxError := range testRangefeedCompletionErrors {
-			muxer.AddStream(muxError.streamID, muxError.rangeID, func() {})
+			muxer.AddStream(muxError.streamID, func() {})
 		}
 
 		require.Equal(t, testRangefeedCounter.get(), int32(3))
@@ -96,7 +110,7 @@ func TestStreamMuxer(t *testing.T) {
 			wg.Add(1)
 			go func(streamID int64, rangeID roachpb.RangeID, err error) {
 				defer wg.Done()
-				muxer.DisconnectStreamWithError(streamID, rangeID, kvpb.NewError(err))
+				muxer.SendErrorWithoutBlocking(makeMuxRangefeedErrorEvent(streamID, rangeID, kvpb.NewError(err)))
 			}(muxError.streamID, muxError.rangeID, muxError.Error)
 		}
 		wg.Wait()
@@ -120,9 +134,9 @@ func TestStreamMuxer(t *testing.T) {
 	})
 }
 
-// TestStreamMuxerOnBlockingIO tests that the
-// StreamMuxer.DisconnectStreamWithError doesn't block on IO.
-func TestStreamMuxerOnBlockingIO(t *testing.T) {
+// TestUnbufferedSenderOnBlockingIO tests that the
+// UnbufferedSender.SendErrorWithoutBlocking doesn't block on IO.
+func TestUnbufferedSenderOnBlockingIO(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -133,14 +147,14 @@ func TestStreamMuxerOnBlockingIO(t *testing.T) {
 
 	testServerStream := newTestServerStream()
 	testRangefeedCounter := newTestRangefeedCounter()
-	muxer := NewStreamMuxer(testServerStream, testRangefeedCounter)
+	muxer := NewUnbufferedSender(testServerStream, testRangefeedCounter)
 	require.NoError(t, muxer.Start(ctx, stopper))
 	defer muxer.Stop()
 
 	const streamID = 0
 	const rangeID = 1
 	streamCtx, streamCancel := context.WithCancel(context.Background())
-	muxer.AddStream(0, rangeID, streamCancel)
+	muxer.AddStream(0, streamCancel)
 
 	ev := &kvpb.MuxRangeFeedEvent{
 		StreamID: streamID,
@@ -159,8 +173,8 @@ func TestStreamMuxerOnBlockingIO(t *testing.T) {
 
 	// Although stream is blocked, we should be able to disconnect the stream
 	// without blocking.
-	muxer.DisconnectStreamWithError(streamID, rangeID,
-		kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER)))
+	muxer.SendErrorWithoutBlocking(makeMuxRangefeedErrorEvent(streamID, rangeID,
+		kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER))))
 	require.Equal(t, streamCtx.Err(), context.Canceled)
 	unblock()
 	time.Sleep(100 * time.Millisecond)
