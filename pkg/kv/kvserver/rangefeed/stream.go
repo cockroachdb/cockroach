@@ -34,11 +34,11 @@ type PerRangeEventSink struct {
 	ctx      context.Context
 	rangeID  roachpb.RangeID
 	streamID int64
-	wrapped  *StreamMuxer
+	wrapped  *UnbufferedSender
 }
 
 func NewPerRangeEventSink(
-	ctx context.Context, rangeID roachpb.RangeID, streamID int64, wrapped *StreamMuxer,
+	ctx context.Context, rangeID roachpb.RangeID, streamID int64, wrapped *UnbufferedSender,
 ) *PerRangeEventSink {
 	return &PerRangeEventSink{
 		ctx:      ctx,
@@ -56,8 +56,8 @@ func (s *PerRangeEventSink) Context() context.Context {
 }
 
 // SendIsThreadSafe is a no-op declaration method. It is a contract that the
-// Send method is thread-safe. Note that Send wraps StreamMuxer which declares
-// its Send method to be thread-safe.
+// Send method is thread-safe. Note that UnbufferedSender.SendUnbuffered is
+// thread-safe.
 func (s *PerRangeEventSink) SendIsThreadSafe() {}
 
 func (s *PerRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
@@ -66,13 +66,36 @@ func (s *PerRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
 	}
-	return s.wrapped.Send(response)
+	return s.wrapped.SendUnbuffered(response)
 }
 
-// Disconnect implements the Stream interface. It requests the StreamMuxer to
-// detach the stream. The StreamMuxer is then responsible for handling the
-// actual disconnection and additional cleanup. Note that Caller should not rely
-// on immediate disconnection as cleanup takes place async.
+// Disconnect implements the Stream interface. It requests the UnbufferedSender
+// to detach the stream. The UnbufferedSender is then responsible for handling
+// the actual disconnection and additional cleanup. Note that Caller should not
+// rely on immediate disconnection as cleanup takes place async.
 func (s *PerRangeEventSink) Disconnect(err *kvpb.Error) {
-	s.wrapped.DisconnectStreamWithError(s.streamID, s.rangeID, err)
+	ev := &kvpb.MuxRangeFeedEvent{
+		RangeID:  s.rangeID,
+		StreamID: s.streamID,
+	}
+	ev.MustSetValue(&kvpb.RangeFeedError{
+		Error: *transformRangefeedErrToClientError(err),
+	})
+	s.wrapped.SendErrorWithoutBlocking(ev)
+}
+
+// transformRangefeedErrToClientError converts a rangefeed error to a client
+// error to be sent back to client. This also handles nil values, preventing nil
+// pointer dereference.
+//
+// NB: when processor.Stop() is called (stopped when it no longer has any
+// registrations, it would attempt to close all feeds again with a nil error).
+// Theoretically, this should never happen as processor would always stop with a
+// reason if feeds are active.
+func transformRangefeedErrToClientError(err *kvpb.Error) *kvpb.Error {
+	if err == nil {
+		return kvpb.NewError(
+			kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))
+	}
+	return err
 }
