@@ -356,6 +356,7 @@ on-desc-changed  replicas=n11/s11/11,n1/s2/5
 ----
  Replica.RaftMuAssertHeld
  Replica.MuAssertHeld
+ RaftScheduler.EnqueueRaftReady(rangeID=3)
 
 set-raft-state next-unstable-index=29
 ----
@@ -478,6 +479,7 @@ on-desc-changed  replicas=n11/s11/11,n1/s2/5,n13/s13/13
 ----
  Replica.RaftMuAssertHeld
  Replica.MuAssertHeld
+ RaftScheduler.EnqueueRaftReady(rangeID=3)
 
 handle-raft-ready-and-admit
 ----
