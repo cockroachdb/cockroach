@@ -638,6 +638,10 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		todo = todo[len(chunk):]
 		bh := lrw.bh[worker]
 
+		if err := ctx.Err(); err != nil {
+			break
+		}
+
 		g.GoCtx(func(ctx context.Context) error {
 			s, err := lrw.flushChunk(ctx, bh, chunk, canRetry)
 			if err != nil {
@@ -651,6 +655,10 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	}
 
 	if err := g.Wait(); err != nil {
+		return nil, 0, err
+	}
+
+	if err := ctx.Err(); err != nil {
 		return nil, 0, err
 	}
 
@@ -766,7 +774,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 		if s, err := bh.HandleBatch(ctx, batch); err != nil {
 			// If it already failed while applying on its own, handle the failure.
 			if len(batch) == 1 {
-				if eligibility := lrw.shouldRetryLater(err, canRetry); eligibility != retryAllowed {
+				if eligibility := lrw.shouldRetryLater(ctx, err, canRetry); eligibility != retryAllowed {
 					if err := lrw.dlq(ctx, batch[0], bh.GetLastRow(), err, eligibility); err != nil {
 						return flushStats{}, err
 					}
@@ -777,10 +785,14 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 				}
 			} else {
 				// If there were multiple events in the batch, give each its own chance
-				// to apply on its own before switching to handle its failure.
+				// to apply on its own before switching to handle its failure. However,
+				// if the context is canceled, abort rather than splitting up the batch.
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return flushStats{}, ctxErr
+				}
 				for i := range batch {
 					if singleStats, err := bh.HandleBatch(ctx, batch[i:i+1]); err != nil {
-						if eligibility := lrw.shouldRetryLater(err, canRetry); eligibility != retryAllowed {
+						if eligibility := lrw.shouldRetryLater(ctx, err, canRetry); eligibility != retryAllowed {
 							if err := lrw.dlq(ctx, batch[i], bh.GetLastRow(), err, eligibility); err != nil {
 								return flushStats{}, err
 							}
@@ -821,10 +833,15 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 // again at a later time. This could be the case, for example, if that time is
 // after the parent side of an FK relationship is ingested by another processor.
 func (lrw *logicalReplicationWriterProcessor) shouldRetryLater(
-	err error, eligibility retryEligibility,
+	ctx context.Context, err error, eligibility retryEligibility,
 ) retryEligibility {
 	if eligibility != retryAllowed {
 		return eligibility
+	}
+
+	// If the context is already canceled, nothing should be retried.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return errType
 	}
 	// TODO(dt): maybe this should only be constraint violation errors?
 	return retryAllowed
@@ -846,6 +863,11 @@ func (lrw *logicalReplicationWriterProcessor) dlq(
 	applyErr error,
 	eligibility retryEligibility,
 ) error {
+	// If the context is canceled, just abort rather than DLQ.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	if log.V(1) || logAllDLQs {
 		if row.IsInitialized() {
 			log.Infof(ctx, "DLQ'ing row update due to %s (%s): %s", applyErr, eligibility, row.DebugString())
