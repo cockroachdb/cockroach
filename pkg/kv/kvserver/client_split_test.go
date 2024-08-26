@@ -808,12 +808,19 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	start := s.Clock().Now()
 
 	// Get the range stats now that we have data.
+	// NB: need raft lock so that in-mem and disk stats can be expected to match.
+	// See: https://github.com/cockroachdb/cockroach/issues/129601#issuecomment-2309865742
+	repl.RaftLock()
+	replMS := repl.GetMVCCStats()
 	snap := store.TODOEngine().NewSnapshot()
 	defer snap.Close()
+	repl.RaftUnlock()
+
 	ms, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
 	assertRecomputedStats(t, "before split", snap, repl.Desc(), ms, start.WallTime)
-	require.Equal(t, repl.GetMVCCStats(), ms, "in-memory and on-disk stats diverge")
+
+	require.Equal(t, replMS, ms, "in-memory and on-disk stats diverge")
 
 	// Split the range at approximate halfway point.
 	// Call AdminSplit on the replica directly so that we can pass a
