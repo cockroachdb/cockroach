@@ -3,48 +3,50 @@ load("@aspect_rules_js//npm:defs.bzl", "npm_package")
 load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@npm//:defs.bzl", "npm_link_all_packages")
-load("//docs/generated/http:defs.bzl", "PROTOBUF_TARGETS")
-load("//pkg/ui/workspaces/db-console/src/js:defs.bzl", "proto_sources")
+load("//pkg:protos.bzl", "PROTO_FILES", "SERVER_PROTOS")
 
 npm_link_all_packages(name = "node_modules")
+
+OUTPUT_FILES = [
+    f
+    for files in [
+        [
+            file.replace(".proto", "_pb.js"),
+            file.replace(".proto", "_pb.d.ts"),
+        ]
+        for file in [
+            "dist/" + label.replace("//pkg/", "").replace(":", "/").replace("@com_github_cockroachdb_errors//", "").replace("@com_github_prometheus_client_model//", "")
+            for label in PROTO_FILES
+        ]
+    ]
+    for f in files
+]
+
+PROTOS_CMD = """
+    mkdir -p $(RULEDIR)/dist
+    DESCRIPTOR_SET_IN=$$(for word in $(SRCS); do echo $$word; done | grep '\\.bin$$' | tr -s '\\n' ':')
+    ALL_PROTOS="{}"
+    export PATH=$$PATH:$$(dirname $(NODE_PATH))
+    $(location @com_google_protobuf//:protoc) \
+        --plugin=$(location :node_modules/@bufbuild/protoc-gen-es/bin/protoc-gen-es) \
+        --es_out $(RULEDIR)/dist \
+        --descriptor_set_in $$DESCRIPTOR_SET_IN \
+        --es_opt target=js+dts \
+        $$ALL_PROTOS""".format(
+    " ".join([label.replace("//pkg/", "").replace(":", "/").replace("@com_github_cockroachdb_errors//", "").replace("@com_github_prometheus_client_model//", "") for label in PROTO_FILES]),
+)
 
 genrule(
     name = "protos",
     srcs = [
         ":node_modules/@bufbuild/protoc-gen-es/bin/protoc-gen-es",
-        ":proto_sources",
-    ] + PROTOBUF_TARGETS,
-    outs = ["dist"],
-    cmd = """
-    mkdir -p $(OUTS);
-    DESCRIPTOR_SET_IN=$$(for word in $(SRCS); do echo $$word; done | grep '\\.bin$$' | tr -s '\\n' ':');
-    PROTO_PATHS=$$(for f in $(locations :proto_sources);
-        do if [[ "$$f" =~ ^.*/pkg/.*/_virtual_imports/.*_proto/.*.proto$$ ]];
-            then echo $$f | sed 's|.*pkg/.*/_virtual_imports/.*_proto/||' | sed 's|.bin$$||';
-        elif [[ "$$f" =~ ^.*/com_github_cockroachdb_errors/.*.proto$$ ]];
-            then echo $$f | sed 's|.*/com_github_cockroachdb_errors/||' | sed 's|.bin$$||';
-        elif [[ "$$f" =~ ^.*/io/prometheus/client/.*.proto$$ ]];
-            then echo $$f | sed 's|.*/io/prometheus/client/|io/prometheus/client/|' | sed 's|.bin$$||';
-        fi; done | sort -u);
-    export PATH=$$PATH:$$(dirname $(NODE_PATH))
-    $(location @com_google_protobuf//:protoc) \
-        --plugin=$(location :node_modules/@bufbuild/protoc-gen-es/bin/protoc-gen-es) \
-        --es_out $(OUTS) \
-        --descriptor_set_in $$DESCRIPTOR_SET_IN \
-        --es_opt target=js+dts \
-    $$PROTO_PATHS""",
+    ] + SERVER_PROTOS,
+    outs = OUTPUT_FILES,
+    cmd = PROTOS_CMD,
     toolchains = ["@nodejs_toolchains//:resolved_toolchain"],
     tools = [
         "@com_google_protobuf//:protoc",
         "@nodejs_toolchains//:resolved_toolchain",
-    ],
-)
-
-proto_sources(
-    name = "proto_sources",
-    protos = [
-        "//pkg/server/serverpb:serverpb_proto",
-        "//pkg/ts/tspb:tspb_proto",
     ],
 )
 
@@ -53,14 +55,17 @@ genrule(
     srcs = [":protos"],
     outs = ["index.ts"],
     cmd = """
-    ABS_ROOT_PATH=$$(realpath $(SRCS))
-    for f in $$(find $$ABS_ROOT_PATH -name *.js)
+    for f in $(SRCS)
     do
+        if [[ $$f != *.js ]]
+        then
+            continue
+        fi
         filename=$$(basename -s .js $$f)
-        filepath=$${f#$$ABS_ROOT_PATH/}
+        filepath=$$(echo $$f | sed 's|^.*dist/||')
         filepath=$${filepath%.js}
-        import_name=$${filepath/-/_}; \
-        echo export "*" as $${import_name////_} from \\"./$$(basename $(SRCS))/$${filepath}\\"\\; >> $@
+        import_name=$${filepath/-/_}
+        echo export '*' as $${import_name////_} from \\"./dist/$${filepath}\\"\\; >> $@
     done
     """,
 )

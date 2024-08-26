@@ -1,8 +1,8 @@
-load(":defs.bzl", "PROTOBUF_TARGETS")
+load("//pkg:protos.bzl", "SERVER_PROTOS")
 
 genrule(
     name = "http",
-    srcs = PROTOBUF_TARGETS,
+    srcs = SERVER_PROTOS,
     outs = [
         "full.md",
         "health-other.md",
