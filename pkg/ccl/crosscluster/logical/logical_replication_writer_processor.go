@@ -638,6 +638,14 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		todo = todo[len(chunk):]
 		bh := lrw.bh[worker]
 
+		if err := ctx.Err(); err != nil {
+			// Bail early if ctx is canceled. NB: we break rather than return the err
+			// now since we still need to Wait() to avoid leaking a goroutine. We will
+			// re-check for any ctx errors after the Wait() in case all workers had
+			// completed without error as of this break.
+			break
+		}
+
 		g.GoCtx(func(ctx context.Context) error {
 			s, err := lrw.flushChunk(ctx, bh, chunk, canRetry)
 			if err != nil {
@@ -651,6 +659,10 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	}
 
 	if err := g.Wait(); err != nil {
+		return nil, 0, err
+	}
+
+	if err := ctx.Err(); err != nil {
 		return nil, 0, err
 	}
 
@@ -764,6 +776,10 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 		preBatchTime := timeutil.Now()
 
 		if s, err := bh.HandleBatch(ctx, batch); err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return flushStats{}, ctxErr
+			}
+
 			// If it already failed while applying on its own, handle the failure.
 			if len(batch) == 1 {
 				if eligibility := lrw.shouldRetryLater(err, canRetry); eligibility != retryAllowed {
@@ -780,6 +796,9 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 				// to apply on its own before switching to handle its failure.
 				for i := range batch {
 					if singleStats, err := bh.HandleBatch(ctx, batch[i:i+1]); err != nil {
+						if ctxErr := ctx.Err(); ctxErr != nil {
+							return flushStats{}, ctxErr
+						}
 						if eligibility := lrw.shouldRetryLater(err, canRetry); eligibility != retryAllowed {
 							if err := lrw.dlq(ctx, batch[i], bh.GetLastRow(), err, eligibility); err != nil {
 								return flushStats{}, err
@@ -826,6 +845,7 @@ func (lrw *logicalReplicationWriterProcessor) shouldRetryLater(
 	if eligibility != retryAllowed {
 		return eligibility
 	}
+
 	// TODO(dt): maybe this should only be constraint violation errors?
 	return retryAllowed
 }
