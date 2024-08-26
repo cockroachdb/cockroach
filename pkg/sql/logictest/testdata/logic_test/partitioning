@@ -1,6 +1,6 @@
-# 3node-tenant is blocked from running this file because the config runs with
+# enterprise-configs are blocked from running this file because they run with
 # a CCL binary, so the expected failures from using a non-CCL binary don't occur.
-# LogicTest: !3node-tenant-default-configs
+# LogicTest: !enterprise-configs
 
 statement error pgcode XXC01 creating or manipulating partitions requires a CCL binary
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
