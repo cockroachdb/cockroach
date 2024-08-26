@@ -871,6 +871,10 @@ type Replica struct {
 		// both the leaseholder and raft leader.
 		//
 		// Accessing it requires Replica.mu to be held, exclusively.
+		//
+		// There is a one-way transition from RACv1 => RACv2 that causes the
+		// existing real implementation to be destroyed and replaced with a real
+		// implementation.
 		replicaFlowControlIntegration replicaFlowControlIntegration
 	}
 

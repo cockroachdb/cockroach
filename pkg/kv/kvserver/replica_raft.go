@@ -356,6 +356,10 @@ func (r *Replica) evalAndPropose(
 	return proposalCh, abandon, idKey, writeBytes, nil
 }
 
+func (r *Replica) encodePriorityForRACv2() bool {
+	return r.flowControlV2.GetEnabledWhenLeader() == replica_rac2.EnabledWhenLeaderV2Encoding
+}
+
 // propose encodes a command, starts tracking it, and proposes it to Raft.
 //
 // The method hands ownership of the command over to the Raft machinery. After
@@ -409,7 +413,7 @@ func (r *Replica) propose(
 	data, err := raftlog.EncodeCommand(ctx, p.command, p.idKey,
 		raftlog.EncodeOptions{
 			RaftAdmissionMeta: raftAdmissionMeta,
-			EncodePriority:    false,
+			EncodePriority:    r.encodePriorityForRACv2(),
 		})
 	if err != nil {
 		return kvpb.NewError(err)
@@ -813,9 +817,19 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// Not already at highest level.
 		level := racV2EnabledWhenLeaderLevel(ctx, r.store.cfg.Settings)
 		if level > r.raftMu.flowControlLevel {
-			// TODO(sumeer): close RACv1 leader stuff.
-			// if r.raftMu.flowControlLevel == replica_rac2.NotEnabledWhenLeader {
-			// }
+			if r.raftMu.flowControlLevel == replica_rac2.NotEnabledWhenLeader {
+				func() {
+					r.mu.Lock()
+					defer r.mu.Unlock()
+					// This will close all connected streams and consequently all
+					// requests waiting on v1 kvflowcontrol.ReplicationAdmissionHandles
+					// will return.
+					r.mu.replicaFlowControlIntegration.onDestroyed(ctx)
+					// Replace with a noop integration since want no code to execute on
+					// various calls.
+					r.mu.replicaFlowControlIntegration = noopReplicaFlowControlIntegration{}
+				}()
+			}
 			r.raftMu.flowControlLevel = level
 			r.flowControlV2.SetEnabledWhenLeaderRaftMuLocked(level)
 		}
