@@ -112,6 +112,16 @@ func ToUnixMicros(t time.Time) int64 {
 }
 
 // Unix wraps time.Unix ensuring that the result is in UTC instead of Local.
+//
+// The process of deriving the args to construct a specific time.Time:
+//
+//	// say we want to construct timestamp "294277-01-01 23:59:59.999999 +0000 UTC"
+//	tm := time.Date(294277, 1, 1, 23, 59, 59, 999999000, time.UTC)
+//	// get the args of "timeutil.Unix"
+//	sec := tm.Unix()
+//	nsec := int64(tm.Nanosecond())
+//	// verify
+//	fmt.Println(tm == time.Unix(sec, nsec).UTC())
 func Unix(sec, nsec int64) time.Time {
 	return time.Unix(sec, nsec).UTC()
 }
