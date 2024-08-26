@@ -48,6 +48,8 @@ type SQLStatusServer interface {
 	NodesUI(context.Context, *NodesRequest) (*NodesResponseExternal, error)
 	RequestJobProfilerExecutionDetails(context.Context, *RequestJobProfilerExecutionDetailsRequest) (*RequestJobProfilerExecutionDetailsResponse, error)
 	TenantServiceStatus(context.Context, *TenantServiceStatusRequest) (*TenantServiceStatusResponse, error)
+	UpdateTableMetadataCache(context.Context, *UpdateTableMetadataCacheRequest) (*UpdateTableMetadataCacheResponse, error)
+	SetUpdateTableMetadataCacheSignal(ch chan struct{})
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present
