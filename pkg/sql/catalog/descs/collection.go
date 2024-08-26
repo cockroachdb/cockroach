@@ -33,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -124,6 +126,10 @@ type Collection struct {
 	// repairs.
 	skipValidationOnWrite bool
 
+	// readerCatalogSetup indicates that replicated descriptors can be modified
+	// by this collection.
+	readerCatalogSetup bool
+
 	// deletedDescs that will not need to wait for new lease versions.
 	deletedDescs catalog.DescriptorIDSet
 
@@ -179,6 +185,12 @@ func (tc *Collection) GetMaxTimestampBound() hlc.Timestamp {
 // a transaction commit.
 func (tc *Collection) SkipValidationOnWrite() {
 	tc.skipValidationOnWrite = true
+}
+
+// SetReaderCatalogSetup indicates this collection is being used to
+// modify reader catalogs.
+func (tc *Collection) SetReaderCatalogSetup() {
+	tc.readerCatalogSetup = true
 }
 
 // ReleaseSpecifiedLeases releases the leases for the descriptors with ids in
@@ -282,6 +294,15 @@ func (tc *Collection) WriteDescToBatch(
 		return errors.AssertionFailedf("cannot write descriptor with an empty ID: %v", desc)
 	}
 	desc.MaybeIncrementVersion()
+	// If this is not an initial version, then replication
+	// versions of descriptors cannot be mutated.
+	if !tc.readerCatalogSetup && desc.GetVersion() != 1 && desc.GetReplicatedVersion() != 0 {
+		return pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+			"replicated %s %s (%d) cannot be mutated",
+			desc.GetObjectTypeString(),
+			desc.GetName(),
+			desc.GetID())
+	}
 	if !tc.skipValidationOnWrite && tc.validationModeProvider.ValidateDescriptorsOnWrite() {
 		if err := validate.Self(tc.version, desc); err != nil {
 			return err

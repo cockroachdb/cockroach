@@ -345,3 +345,8 @@ func (v *tableImplicitRecordType) AsTableImplicitRecordTypeDescriptor() catalog.
 func (v *tableImplicitRecordType) UnderlyingTableDescriptor() catalog.TableDescriptor {
 	return v.desc
 }
+
+// GetReplicatedVersion is a part of the catalog.Descriptor
+func (v *tableImplicitRecordType) GetReplicatedVersion() descpb.DescriptorVersion {
+	return v.desc.GetReplicatedVersion()
+}

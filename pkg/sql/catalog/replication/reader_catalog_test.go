@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -46,6 +47,7 @@ func TestReaderCatalog(t *testing.T) {
 	})
 	require.NoError(t, err)
 	srcConn := srcTenant.SQLConn(t)
+	srcRunner := sqlutils.MakeSQLRunner(srcConn)
 	destConn := destTenant.SQLConn(t)
 
 	ddlToExec := []string{
@@ -64,21 +66,27 @@ func TestReaderCatalog(t *testing.T) {
 		"CREATE TABLE t2(n int);",
 	}
 	for _, ddl := range ddlToExec {
-		_, err = srcConn.Exec(ddl)
-		require.NoError(t, err)
+		srcRunner.Exec(t, ddl)
 	}
 
 	now := ts.Clock().Now()
 	idb := destTenant.InternalDB().(*sql.InternalDB)
 	require.NoError(t, replication.SetupOrAdvanceStandbyReaderCatalog(ctx, serverutils.TestTenantID(), now, idb, destTenant.ClusterSettings()))
 
-	srcRunner := sqlutils.MakeSQLRunner(srcConn)
 	destRunner := sqlutils.MakeSQLRunner(destConn)
 
-	compareConn := func(query string) {
+	compareConnAt := func(query string, now hlc.Timestamp, isEqual bool) {
 		srcRes := srcRunner.QueryStr(t, fmt.Sprintf("SELECT * FROM (%s) AS OF SYSTEM TIME %s", query, now.AsOfSystemTime()))
 		destRes := destRunner.QueryStr(t, query)
-		require.Equal(t, srcRes, destRes)
+		if isEqual {
+			require.Equal(t, srcRes, destRes)
+		} else {
+			require.NotEqualValues(t, srcRes, destRes)
+		}
+	}
+
+	compareConn := func(query string) {
+		compareConnAt(query, now, true)
 	}
 
 	// Validate tables and views match in the catalog reader
@@ -94,6 +102,50 @@ func TestReaderCatalog(t *testing.T) {
 
 	// Validate that sequences can be selected.
 	compareConn("SELECT * FROM sq1")
+
+	// Modify the schema next in the src tenant.
+	ddlToExec = []string{
+		"INSERT INTO t1(val) VALUES('open');",
+		"INSERT INTO t1(val) VALUES('closed');",
+		"INSERT INTO t1(val) VALUES('inactive');",
+		"CREATE USER roacher2 WITH CREATEROLE;",
+		"GRANT ADMIN TO roacher2;",
+		"ALTER USER roacher2 SET timezone='America/New_York';",
+		"CREATE TABLE t4(n int)",
+		"INSERT INTO t4 VALUES (32)",
+	}
+	for _, ddl := range ddlToExec {
+		srcRunner.Exec(t, ddl)
+	}
+
+	// Validate that system tables are synced at the old timestamp.
+	compareConn("SELECT * FROM t1 ORDER BY n")
+	compareConn("SELECT * FROM v1 ORDER BY 1")
+	compareConn("SELECT * FROM system.users")
+	compareConn("SELECT * FROM system.table_statistics")
+	compareConn("SELECT * FROM system.role_options")
+	compareConn("SELECT * FROM system.database_role_settings")
+
+	newTS := ts.Clock().Now()
+	// Validate that system tables are not matching with new timestamps.
+	compareConnAt("SELECT * FROM t1 ORDER BY n", newTS, false)
+	compareConnAt("SELECT * FROM v1 ORDER BY 1", newTS, false)
+	compareConnAt("SELECT * FROM system.users", newTS, false)
+	compareConnAt("SELECT * FROM system.role_options", newTS, false)
+	compareConnAt("SELECT * FROM system.database_role_settings", newTS, false)
+
+	// Move the timestamp up on the reader catalog, and confirm that everything matches
+	now = newTS
+	require.NoError(t, replication.SetupOrAdvanceStandbyReaderCatalog(ctx, serverutils.TestTenantID(), now, idb, destTenant.ClusterSettings()))
+
+	// Validate that system tables are synced and the new object shows.
+	compareConn("SELECT * FROM t1 ORDER BY n")
+	compareConn("SELECT * FROM v1 ORDER BY 1")
+	compareConn("SELECT * FROM system.users")
+	compareConn("SELECT * FROM system.table_statistics")
+	compareConn("SELECT * FROM system.role_options")
+	compareConn("SELECT * FROM system.database_role_settings")
+	compareConn("SELECT * FROM t4 ORDER BY n")
 
 	// Validate that sequence operations are blocked.
 	destRunner.ExpectErr(t, "cannot execute nextval\\(\\) in a read-only transaction", "SELECT nextval('sq1')")

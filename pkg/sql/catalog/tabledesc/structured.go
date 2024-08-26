@@ -2574,6 +2574,11 @@ func (desc *wrapper) HistogramBucketsCount() (histogramBucketsCount uint32, ok b
 	return *desc.HistogramBuckets, true
 }
 
+// GetReplicatedVersion is a part of the catalog.Descriptor
+func (desc *wrapper) GetReplicatedVersion() descpb.DescriptorVersion {
+	return desc.ReplicatedVersion
+}
+
 // SetTableLocalityRegionalByTable sets the descriptor's locality config to
 // regional at the table level in the supplied region. An empty region name
 // (or its alias PrimaryRegionNotSpecifiedName) denotes that the table is homed in

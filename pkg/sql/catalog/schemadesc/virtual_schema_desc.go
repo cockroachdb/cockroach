@@ -55,11 +55,12 @@ type virtual struct {
 var _ catalog.SchemaDescriptor = virtual{}
 var _ privilege.Object = virtual{}
 
-func (p virtual) GetID() descpb.ID                     { return p.id }
-func (p virtual) GetName() string                      { return p.name }
-func (p virtual) GetParentID() descpb.ID               { return descpb.InvalidID }
-func (p virtual) SchemaDesc() *descpb.SchemaDescriptor { return makeSyntheticSchemaDesc(p) }
-func (p virtual) DescriptorProto() *descpb.Descriptor  { return makeSyntheticDesc(p) }
+func (p virtual) GetID() descpb.ID                               { return p.id }
+func (p virtual) GetName() string                                { return p.name }
+func (p virtual) GetParentID() descpb.ID                         { return descpb.InvalidID }
+func (p virtual) SchemaDesc() *descpb.SchemaDescriptor           { return makeSyntheticSchemaDesc(p) }
+func (p virtual) DescriptorProto() *descpb.Descriptor            { return makeSyntheticDesc(p) }
+func (p virtual) GetReplicatedVersion() descpb.DescriptorVersion { return 0 }
 
 type virtualBase struct{}
 
