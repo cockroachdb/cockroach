@@ -316,10 +316,16 @@ func (p *ScheduledProcessor) Register(
 	p.syncEventC()
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
-	r := newBufferedRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
-	)
+	var r registration
+	if _, ok := stream.(BufferedStream); ok {
+		log.Fatalf(context.Background(),
+			"unimplemented: unbuffered registrations for rangefeed, see #126560")
+	} else {
+		r = newBufferedRegistration(
+			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
+		)
+	}
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
 		if p.stopping {
