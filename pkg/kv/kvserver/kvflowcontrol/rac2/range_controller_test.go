@@ -317,10 +317,11 @@ func TestRangeControllerWaitForEval(t *testing.T) {
 
 	tokenCountsString := func() string {
 		var b strings.Builder
-		streams := make([]kvflowcontrol.Stream, 0, len(ssTokenCounter.mu.evalCounters))
-		for stream := range ssTokenCounter.mu.evalCounters {
-			streams = append(streams, stream)
-		}
+		var streams []kvflowcontrol.Stream
+		ssTokenCounter.evalCounters.Range(func(k kvflowcontrol.Stream, v *TokenCounter) bool {
+			streams = append(streams, k)
+			return true
+		})
 		sort.Slice(streams, func(i, j int) bool {
 			return streams[i].StoreID < streams[j].StoreID
 		})
@@ -372,7 +373,7 @@ func TestRangeControllerWaitForEval(t *testing.T) {
 			}
 			if _, ok := zeroedTokenCounters[stream]; !ok {
 				zeroedTokenCounters[stream] = struct{}{}
-				ssTokenCounter.Eval(stream).(*tokenCounter).adjust(ctx, admissionpb.RegularWorkClass, -1)
+				ssTokenCounter.Eval(stream).adjust(ctx, admissionpb.RegularWorkClass, -1)
 			}
 		}
 	}
@@ -445,7 +446,7 @@ func TestRangeControllerWaitForEval(t *testing.T) {
 				ssTokenCounter.Eval(kvflowcontrol.Stream{
 					StoreID:  roachpb.StoreID(store),
 					TenantID: roachpb.SystemTenantID,
-				}).(*tokenCounter).adjust(ctx,
+				}).adjust(ctx,
 					admissionpb.WorkClassFromPri(pri),
 					kvflowcontrol.Tokens(tokens))
 			}

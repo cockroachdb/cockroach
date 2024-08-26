@@ -25,32 +25,6 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// TokenCounter is the interface for a token counter that can be used to deduct
-// and return flow control tokens. Additionally, it can be used to wait for
-// tokens to become available, and to check if tokens are available without
-// blocking.
-//
-// TODO(kvoli): Consider de-interfacing if not necessary for testing.
-type TokenCounter interface {
-	// TokensAvailable returns true if tokens are available. If false, it returns
-	// a handle that may be used for waiting for tokens to become available.
-	TokensAvailable(admissionpb.WorkClass) (available bool, tokenWaitingHandle TokenWaitingHandle)
-	// TryDeduct attempts to deduct flow tokens for the given work class. If
-	// there are no tokens available, 0 tokens are returned. When less than the
-	// requested token count is available, partial tokens are returned
-	// corresponding to this partial amount.
-	TryDeduct(
-		context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens) kvflowcontrol.Tokens
-	// Deduct deducts (without blocking) flow tokens for the given work class. If
-	// there are not enough available tokens, the token counter will go into debt
-	// (negative available count) and still issue the requested number of tokens.
-	Deduct(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
-	// Return returns flow tokens for the given work class.
-	Return(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
-	// String returns a string representation of the token counter.
-	String() string
-}
-
 // TokenWaitingHandle is the interface for waiting for positive tokens from a
 // token counter.
 type TokenWaitingHandle interface {
@@ -164,10 +138,10 @@ type tokensPerWorkClass struct {
 	regular, elastic kvflowcontrol.Tokens
 }
 
-// tokenCounter holds flow tokens for {regular,elastic} traffic over a
+// TokenCounter holds flow tokens for {regular,elastic} traffic over a
 // kvflowcontrol.Stream. It's used to synchronize handoff between threads
 // returning and waiting for flow tokens.
-type tokenCounter struct {
+type TokenCounter struct {
 	settings *cluster.Settings
 
 	mu struct {
@@ -177,10 +151,9 @@ type tokenCounter struct {
 	}
 }
 
-var _ TokenCounter = &tokenCounter{}
-
-func newTokenCounter(settings *cluster.Settings) *tokenCounter {
-	t := &tokenCounter{
+// NewTokenCounter creates a new TokenCounter.
+func NewTokenCounter(settings *cluster.Settings) *TokenCounter {
+	t := &TokenCounter{
 		settings: settings,
 	}
 	limit := tokensPerWorkClass{
@@ -208,12 +181,12 @@ func newTokenCounter(settings *cluster.Settings) *tokenCounter {
 }
 
 // String returns a string representation of the token counter.
-func (b *tokenCounter) String() string {
+func (b *TokenCounter) String() string {
 	return redact.StringWithoutMarkers(b)
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (b *tokenCounter) SafeFormat(w redact.SafePrinter, _ rune) {
+func (b *TokenCounter) SafeFormat(w redact.SafePrinter, _ rune) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	w.Printf("reg=%v/%v ela=%v/%v",
@@ -223,19 +196,19 @@ func (b *tokenCounter) SafeFormat(w redact.SafePrinter, _ rune) {
 		b.mu.counters[admissionpb.ElasticWorkClass].limit)
 }
 
-func (t *tokenCounter) tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
+func (t *TokenCounter) tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return t.tokensLocked(wc)
 }
 
-func (b *tokenCounter) tokensLocked(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
+func (b *TokenCounter) tokensLocked(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
 	return b.mu.counters[wc].tokens
 }
 
 // TokensAvailable returns true if tokens are available. If false, it returns
 // a handle that may be used for waiting for tokens to become available.
-func (t *tokenCounter) TokensAvailable(
+func (t *TokenCounter) TokensAvailable(
 	wc admissionpb.WorkClass,
 ) (available bool, handle TokenWaitingHandle) {
 	if t.tokens(wc) > 0 {
@@ -248,7 +221,7 @@ func (t *tokenCounter) TokensAvailable(
 // are no tokens available, 0 tokens are returned. When less than the requested
 // token count is available, partial tokens are returned corresponding to this
 // partial amount.
-func (t *tokenCounter) TryDeduct(
+func (t *TokenCounter) TryDeduct(
 	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
 ) kvflowcontrol.Tokens {
 	t.mu.Lock()
@@ -267,14 +240,14 @@ func (t *tokenCounter) TryDeduct(
 // Deduct deducts (without blocking) flow tokens for the given work class. If
 // there are not enough available tokens, the token counter will go into debt
 // (negative available count) and still issue the requested number of tokens.
-func (t *tokenCounter) Deduct(
+func (t *TokenCounter) Deduct(
 	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
 ) {
 	t.adjust(ctx, wc, -tokens)
 }
 
 // Return returns flow tokens for the given work class.
-func (t *tokenCounter) Return(
+func (t *TokenCounter) Return(
 	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
 ) {
 	t.adjust(ctx, wc, tokens)
@@ -284,7 +257,7 @@ func (t *tokenCounter) Return(
 // token counter.
 type waitHandle struct {
 	wc admissionpb.WorkClass
-	b  *tokenCounter
+	b  *TokenCounter
 }
 
 var _ TokenWaitingHandle = waitHandle{}
@@ -438,7 +411,7 @@ func WaitForEval(
 
 // adjust the tokens for the given work class by delta. The adjustment is
 // performed atomically.
-func (t *tokenCounter) adjust(
+func (t *TokenCounter) adjust(
 	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens,
 ) {
 	t.mu.Lock()
@@ -447,7 +420,7 @@ func (t *tokenCounter) adjust(
 	t.adjustLocked(ctx, class, delta)
 }
 
-func (t *tokenCounter) adjustLocked(
+func (t *TokenCounter) adjustLocked(
 	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens,
 ) {
 	switch class {

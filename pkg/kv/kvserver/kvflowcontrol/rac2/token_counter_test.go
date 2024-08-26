@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func (t *tokenCounter) testingGetLimit() tokensPerWorkClass {
+func (t *TokenCounter) testingGetLimit() tokensPerWorkClass {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -46,7 +46,7 @@ func TestTokenAdjustment(t *testing.T) {
 
 	var (
 		ctx         = context.Background()
-		counter     *tokenCounter
+		counter     *TokenCounter
 		adjustments []adjustment
 	)
 
@@ -54,7 +54,7 @@ func TestTokenAdjustment(t *testing.T) {
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
-				counter = newTokenCounter(cluster.MakeTestingClusterSettings())
+				counter = NewTokenCounter(cluster.MakeTestingClusterSettings())
 				adjustments = nil
 				return ""
 
@@ -172,7 +172,7 @@ func TestTokenCounter(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &settings.SV, int64(limits.elastic))
 	kvflowcontrol.RegularTokensPerStream.Override(ctx, &settings.SV, int64(limits.regular))
-	counter := newTokenCounter(settings)
+	counter := NewTokenCounter(settings)
 
 	assertStateReset := func(t *testing.T) {
 		available, handle := counter.TokensAvailable(admissionpb.ElasticWorkClass)
@@ -296,12 +296,12 @@ func TestTokenCounter(t *testing.T) {
 	})
 }
 
-func (t *tokenCounter) testingHandle() waitHandle {
+func (t *TokenCounter) testingHandle() waitHandle {
 	return waitHandle{wc: admissionpb.RegularWorkClass, b: t}
 }
 
 type namedTokenCounter struct {
-	*tokenCounter
+	*TokenCounter
 	parent *evalTestState
 	stream string
 }
@@ -343,7 +343,7 @@ func (ts *evalTestState) getOrCreateTC(stream string) *namedTokenCounter {
 	if !exists {
 		tc = &namedTokenCounter{
 			parent:       ts,
-			tokenCounter: newTokenCounter(ts.settings),
+			TokenCounter: NewTokenCounter(ts.settings),
 			stream:       stream,
 		}
 		// Ensure the token counter starts with no tokens initially.
@@ -392,9 +392,9 @@ func (ts *evalTestState) setCounterTokens(stream string, positive bool) {
 
 	wasPositive := tc.tokens(admissionpb.RegularWorkClass) > 0
 	if !wasPositive && positive {
-		tc.tokenCounter.adjust(context.Background(), admissionpb.RegularWorkClass, +1)
+		tc.TokenCounter.adjust(context.Background(), admissionpb.RegularWorkClass, +1)
 	} else if wasPositive && !positive {
-		tc.tokenCounter.adjust(context.Background(), admissionpb.RegularWorkClass, -1)
+		tc.TokenCounter.adjust(context.Background(), admissionpb.RegularWorkClass, -1)
 	}
 }
 
