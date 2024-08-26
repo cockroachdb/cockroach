@@ -65,6 +65,7 @@ func TestSetupReaderCatalog(t *testing.T) {
 		"INSERT INTO t1(val) VALUES('closed')",
 		"INSERT INTO t1(val) VALUES('inactive')",
 		"CREATE VIEW v1 AS (SELECT n from t1)",
+		"CREATE TABLE t3 as (SELECT n, val FROM t1)",
 	}
 
 	for _, stmt := range stmts {
@@ -94,7 +95,7 @@ func TestSetupReaderCatalog(t *testing.T) {
 
 	// Run multiple iterations as well to ensure descriptors can
 	// be updated, with the virtual cluster offline.
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 3; i++ {
 		destStopper.Stop(ctx)
 		systemRunner.Exec(t, "ALTER VIRTUAL CLUSTER dest STOP SERVICE ")
 		destName = ""
@@ -121,6 +122,7 @@ func TestSetupReaderCatalog(t *testing.T) {
 		// Validate basic queries execute correctly, and we can
 		// read data within tables.
 		compareQueries("SELECT * FROM t1 ORDER BY n")
+		compareQueries("SELECT * FROM t3 ORDER BY n")
 		compareQueries("SELECT * FROM v1 ORDER BY 1")
 
 		// Validate reading from sequences works.
@@ -149,6 +151,8 @@ func TestSetupReaderCatalog(t *testing.T) {
 			fmt.Sprintf("GRANT ADMIN TO roacher%d", i),
 			fmt.Sprintf("ALTER USER roacher%d SET timezone='America/New_York'", i),
 			"SELECT nextval('sq1')",
+			"DROP TABLE t3",
+			"CREATE TABLE t3 as (SELECT n, val FROM t1)",
 		}
 		for _, dml := range newSQLForSrc {
 			srcRunner.Exec(t, dml)

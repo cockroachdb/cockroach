@@ -194,6 +194,7 @@ func (r *streamIngestManagerImpl) SetupReaderCatalog(
 	writeDescs := descs.NewBareBonesCollectionFactory(execCfg.Settings, keys.MakeSQLCodec(toID)).
 		NewCollection(ctx, descs.WithMonitor(m), descs.WithDescriptorSessionDataProvider(dsdp))
 	return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var descsToDelete catalog.DescriptorIDSet
 		// Reset any state between txn retries.
 		defer writeDescs.ReleaseAll(ctx)
 		// Resolve any existing descriptors within the tenant, which
@@ -202,11 +203,25 @@ func (r *streamIngestManagerImpl) SetupReaderCatalog(
 		if err != nil {
 			return err
 		}
+		// Track all the existing descriptors in the database.
+		err = existingDescriptors.ForEachDescriptor(func(desc catalog.Descriptor) error {
+			if desc.GetParentID() == keys.SystemDatabaseID ||
+				desc.GetID() == keys.SystemDatabaseID {
+				return nil
+			}
+			descsToDelete.Add(desc.GetID())
+			return nil
+		})
+		if err != nil {
+			return err
+		}
 		b := txn.NewBatch()
 		if err := extracted.ForEachDescriptor(func(desc catalog.Descriptor) error {
 			if !shouldSetupForReader(desc.GetID(), desc.GetParentID()) {
 				return nil
 			}
+			// Remove descriptors that are being updated.
+			descsToDelete.Remove(desc.GetID())
 			// If there is an existing descriptor with the same ID, we should
 			// determine the old bytes in storage for the upsert.
 			var existingRawBytes []byte
@@ -276,6 +291,19 @@ func (r *streamIngestManagerImpl) SetupReaderCatalog(
 			return errors.Wrapf(writeDescs.UpsertNamespaceEntryToBatch(ctx, true, e, b), "namespace entry %v", e)
 		}); err != nil {
 			return err
+		}
+		// For any descriptor that isn't updated above, get rid of
+		// it.
+		for _, deleteID := range descsToDelete.Ordered() {
+			desc := existingDescriptors.LookupDescriptor(deleteID)
+			err := writeDescs.DeleteDescToBatch(ctx, true, deleteID, b)
+			if err != nil {
+				return err
+			}
+			err = writeDescs.DeleteNamespaceEntryToBatch(ctx, true, desc, b)
+			if err != nil {
+				return err
+			}
 		}
 		return errors.Wrap(txn.Run(ctx, b), "running batch")
 	})
