@@ -12,12 +12,15 @@ package tablemetadatacache
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
 type tableMetadataUpdateJobResumer struct {
@@ -31,8 +34,41 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	log.Infof(ctx, "starting table metadata update job")
 	j.job.MarkIdle(true)
 
-	<-ctx.Done()
-	return nil
+	execCtx := execCtxI.(sql.JobExecContext)
+	metrics := execCtx.ExecCfg().JobRegistry.MetricsStruct().
+		JobSpecificMetrics[jobspb.TypeUpdateTableMetadataCache].(TableMetadataUpdateJobMetrics)
+
+	stopper := execCtx.ExecCfg().Stopper
+	// Channel used to signal the job should run.
+
+	// We must reset the job's num runs to 0 so that it doesn't get
+	// delayed by the job system's exponential backoff strategy.
+	if err := j.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		if md.RunStats != nil && md.RunStats.NumRuns > 0 {
+			ju.UpdateRunStats(0, md.RunStats.LastRun)
+		}
+		return nil
+	}); err != nil {
+		log.Errorf(ctx, "%s", err.Error())
+	}
+
+	signalCh := make(chan struct{})
+	execCtx.ExecCfg().SQLStatusServer.SetUpdateTableMetadataCachSignal(signalCh)
+
+	for {
+		select {
+		case <-signalCh:
+			log.Infof(ctx, "running table metadata update job")
+			metrics.NumRuns.Inc(1)
+
+			// TODO(xinhaoz): implement the actual table metadata update logic.
+
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-stopper.ShouldQuiesce():
+			return nil
+		}
+	}
 }
 
 // OnFailOrCancel implements jobs.Resumer.
@@ -55,11 +91,31 @@ func (j *tableMetadataUpdateJobResumer) CollectProfile(
 	return nil
 }
 
+type TableMetadataUpdateJobMetrics struct {
+	NumRuns *metric.Counter
+}
+
+func (m TableMetadataUpdateJobMetrics) MetricStruct() {}
+
+func newTableMetadataUpdateJobMetrics() metric.Struct {
+	return TableMetadataUpdateJobMetrics{
+		NumRuns: metric.NewCounter(metric.Metadata{
+			Name:        "jobs.update_table_metadata.runs",
+			Help:        "The total number of runs of the update table metadata job.",
+			Measurement: "Executions",
+			Unit:        metric.Unit_COUNT,
+			MetricType:  io_prometheus_client.MetricType_COUNTER,
+		}),
+	}
+}
+
 func init() {
 	jobs.RegisterConstructor(
 		jobspb.TypeUpdateTableMetadataCache,
 		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 			return &tableMetadataUpdateJobResumer{job: job}
-		}, jobs.DisablesTenantCostControl,
+		},
+		jobs.DisablesTenantCostControl,
+		jobs.WithJobMetrics(newTableMetadataUpdateJobMetrics()),
 	)
 }

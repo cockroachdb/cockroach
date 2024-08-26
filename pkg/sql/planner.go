@@ -1024,3 +1024,10 @@ func (p *planner) StartHistoryRetentionJob(
 func (p *planner) ExtendHistoryRetention(ctx context.Context, jobID jobspb.JobID) error {
 	return ExtendHistoryRetention(ctx, p.EvalContext(), p.InternalSQLTxn(), jobID)
 }
+
+func (p *planner) UpdateTableMetadataCache(ctx context.Context) error {
+	// TODO (xinhaoz) do smth with this response
+	_, err := p.extendedEvalCtx.SQLStatusServer.UpdateTableMetadataCache(ctx,
+		&serverpb.UpdateTableMetadataCacheRequest{Local: false})
+	return err
+}

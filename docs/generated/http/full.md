@@ -5410,6 +5410,50 @@ Support status: [reserved](#support-status)
 
 
 
+## UpdateTableMetadataCache
+
+
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| local | [bool](#cockroach.server.serverpb.UpdateTableMetadataCacheRequest-bool) |  | If true, the server will attempt to send a signal to the table metadata job by notifying the channel set on the status server. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| success | [bool](#cockroach.server.serverpb.UpdateTableMetadataCacheResponse-bool) |  | Bool indicating if the update signal was successfully sent. This may be false if the job was already executing. | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## Users
 
 `GET /_admin/v1/users`
