@@ -306,6 +306,12 @@ func (e *Env) Close() {
 	}
 }
 
+// Unwrap is part of the vfs.FS interface.
+func (e *Env) Unwrap() vfs.FS {
+	// We don't want to expose the unencrypted FS.
+	return nil
+}
+
 func (e *Env) onDiskSlow(info vfs.DiskSlowInfo) {
 	if fn := e.onDiskSlowFunc.Load(); fn != nil {
 		(*fn)(info)
