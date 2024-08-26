@@ -338,7 +338,7 @@ func (n *controllerImpl) AdmitKVWork(
 		var admitted bool
 		attemptFlowControl := kvflowcontrol.Enabled.Get(&n.settings.SV)
 		if attemptFlowControl && !bypassAdmission {
-			kvflowHandle, found := n.kvflowHandles.Lookup(ba.RangeID)
+			kvflowHandle, found := n.kvflowHandles.LookupReplicationAdmissionHandle(ba.RangeID)
 			if !found {
 				return Handle{}, nil
 			}

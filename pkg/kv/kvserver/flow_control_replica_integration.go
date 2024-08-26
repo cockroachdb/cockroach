@@ -442,6 +442,22 @@ func (f *replicaFlowControlIntegrationImpl) clearState(ctx context.Context) {
 	f.disconnectedStreams = nil
 }
 
+type noopReplicaFlowControlIntegration struct{}
+
+func (n noopReplicaFlowControlIntegration) onBecameLeader(context.Context)    {}
+func (n noopReplicaFlowControlIntegration) onBecameFollower(context.Context)  {}
+func (n noopReplicaFlowControlIntegration) onDescChanged(context.Context)     {}
+func (n noopReplicaFlowControlIntegration) onFollowersPaused(context.Context) {}
+func (n noopReplicaFlowControlIntegration) onRaftTransportDisconnected(
+	context.Context, ...roachpb.StoreID,
+) {
+}
+func (n noopReplicaFlowControlIntegration) onRaftTicked(context.Context) {}
+func (n noopReplicaFlowControlIntegration) onDestroyed(context.Context)  {}
+func (n noopReplicaFlowControlIntegration) handle() (kvflowcontrol.Handle, bool) {
+	return nil, false
+}
+
 type replicaForRACv2 Replica
 
 var _ replica_rac2.Replica = &replicaForRACv2{}

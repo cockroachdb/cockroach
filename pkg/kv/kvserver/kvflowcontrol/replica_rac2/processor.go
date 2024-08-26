@@ -389,6 +389,15 @@ type Processor interface {
 	AdmittedLogEntry(
 		ctx context.Context, state EntryForAdmissionCallbackState,
 	)
+
+	// AdmitForEval is called to admit work that wants to evaluate at the
+	// leaseholder.
+	//
+	// If the callee decided not to admit because replication admission
+	// control is disabled, or for any other reason, admitted will be false
+	// and error will be nil.
+	AdmitForEval(
+		ctx context.Context, pri admissionpb.WorkPriority, ct time.Time) (admitted bool, err error)
 }
 
 type processorImpl struct {
@@ -893,6 +902,14 @@ func (p *processorImpl) AdmittedLogEntry(
 		p.mu.scheduledAdmittedProcessing = true
 		p.opts.RaftScheduler.EnqueueRaftReady(p.opts.RangeID)
 	}
+}
+
+// AdmitForEval implements Processor.
+func (p *processorImpl) AdmitForEval(
+	ctx context.Context, pri admissionpb.WorkPriority, ct time.Time,
+) (admitted bool, err error) {
+	// TODO(sumeer):
+	return false, nil
 }
 
 func admittedIncreased(prev, next [raftpb.NumPriorities]uint64) bool {

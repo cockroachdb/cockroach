@@ -181,6 +181,28 @@ type Controller interface {
 	// See I2, I3a and [^7] in kvflowcontrol/doc.go.
 }
 
+// ReplicationAdmissionHandle abstracts waiting for admission across RACv1 and RACv2.
+type ReplicationAdmissionHandle interface {
+	// Admit seeks admission to replicate data, regardless of size, for work
+	// with the given priority and create-time. This blocks until there are flow
+	// tokens available for connected streams. This returns true if the request
+	// was admitted through flow control. Ignore the first return type if err !=
+	// nil. admitted == false && err == nil is a valid return, when something
+	// caused the callee to not care whether flow tokens were available. This
+	// can happen for at least the following reasons:
+	// - Configuration specifies the given WorkPriority is not subject to
+	//   replication AC.
+	// - The callee doesn't think it is the leader or has been closed/destroyed.
+	//
+	// The latter can happen in the midst of a transition from RACv1 => RACv2.
+	// In this case if the callee waited on at least one connectedStream and was
+	// admitted, it will return (true, nil). This includes the case where the
+	// connectedStream was closed while waiting. If there were no
+	// connectedStreams (because they were already closed) it will return
+	// (false, nil).
+	Admit(context.Context, admissionpb.WorkPriority, time.Time) (admitted bool, _ error)
+}
+
 // Handle is used to interface with replication flow control; it's typically
 // backed by a node-level kvflowcontrol.Controller. Handles are held on replicas
 // initiating replication traffic, i.e. are both the leaseholder and raft
@@ -195,14 +217,7 @@ type Controller interface {
 // given priority, takes log position into account -- see
 // kvflowcontrolpb.AdmittedRaftLogEntries for more details).
 type Handle interface {
-	// Admit seeks admission to replicate data, regardless of size, for work with
-	// the given priority and create-time. This blocks until there are flow tokens
-	// available for all connected streams. This returns true if the request was
-	// admitted through flow control. Ignore the first return type if err != nil.
-	// admitted == false && err == nil is a valid return, when something (e.g.
-	// configuration) caused the callee to not care whether flow tokens were
-	// available.
-	Admit(context.Context, admissionpb.WorkPriority, time.Time) (admitted bool, _ error)
+	ReplicationAdmissionHandle
 	// DeductTokensFor deducts (without blocking) flow tokens for replicating
 	// work with given priority along connected streams. The deduction is
 	// tracked with respect to the specific raft log position it's expecting it
@@ -285,6 +300,12 @@ type Handles interface {
 	// part of #95563.
 	//
 	//   Iterate(roachpb.StoreID, func(context.Context, Handle, Stream))
+
+	// LookupReplicationAdmissionHandle looks up the ReplicationAdmissionHandle
+	// for the specific range (or rather, the replica of the specific range
+	// that's locally held). The bool is false if no handle was found, in which
+	// case the caller must use the pre-replication-admission-control path.
+	LookupReplicationAdmissionHandle(roachpb.RangeID) (ReplicationAdmissionHandle, bool)
 }
 
 // HandleFactory is used to construct new Handles.
