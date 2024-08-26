@@ -11574,11 +11574,11 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	type params struct {
-		raftStatus               raft.BasicStatus
-		livenessMap              livenesspb.IsLiveMap
-		desc                     *roachpb.RangeDescriptor
-		shouldUseExpirationLease bool
-		now                      hlc.Timestamp
+		raftStatus  raft.BasicStatus
+		livenessMap livenesspb.IsLiveMap
+		desc        *roachpb.RangeDescriptor
+		leaseType   roachpb.LeaseType
+		now         hlc.Timestamp
 	}
 
 	// Set up a base state that we can vary, representing this node n1 being a
@@ -11608,7 +11608,8 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 			2: livenesspb.IsLiveMapEntry{IsLive: false},
 			3: livenesspb.IsLiveMapEntry{IsLive: false},
 		},
-		now: hlc.Timestamp{Logical: 10},
+		leaseType: roachpb.LeaseEpoch,
+		now:       hlc.Timestamp{Logical: 10},
 	}
 
 	testcases := map[string]struct {
@@ -11632,7 +11633,10 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 			p.raftStatus.Lead = raft.None
 		}},
 		"should use expiration lease": {false, func(p *params) {
-			p.shouldUseExpirationLease = true
+			p.leaseType = roachpb.LeaseExpiration
+		}},
+		"should use leader lease": {false, func(p *params) {
+			p.leaseType = roachpb.LeaseLeader
 		}},
 		"leader not in desc": {false, func(p *params) {
 			p.raftStatus.Lead = 4
@@ -11678,7 +11682,7 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 			}
 			tc.modify(&p)
 			require.Equal(t, tc.expect, shouldCampaignOnLeaseRequestRedirect(
-				p.raftStatus, p.livenessMap, p.desc, p.shouldUseExpirationLease, p.now))
+				p.raftStatus, p.livenessMap, p.desc, p.leaseType, p.now))
 		})
 	}
 }

@@ -144,7 +144,7 @@ type proposer interface {
 	leaseAppliedIndex() kvpb.LeaseAppliedIndex
 	enqueueUpdateCheck()
 	closedTimestampTarget() hlc.Timestamp
-	shouldCampaignOnRedirect(raftGroup proposerRaft) bool
+	shouldCampaignOnRedirect(raftGroup proposerRaft, leaseType roachpb.LeaseType) bool
 
 	// The following require the proposer to hold an exclusive lock.
 	withGroupLocked(func(proposerRaft) error) error
@@ -663,7 +663,7 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 
 			// TODO(nvanbenschoten): move this to replica_range_lease.go when we
 			// support build-time verification for lease acquisition. See #118435.
-			if p.Request.IsSingleRequestLeaseRequest() && b.p.shouldCampaignOnRedirect(raftGroup) {
+			if p.Request.IsSingleRequestLeaseRequest() && b.p.shouldCampaignOnRedirect(raftGroup, nextLease.Type()) {
 				const format = "campaigning because Raft leader (id=%d) not live in node liveness map"
 				lead := raftGroup.BasicStatus().Lead
 				if logCampaignOnRejectLease.ShouldLog() {
@@ -1221,14 +1221,16 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	rp.mu.proposals[p.idKey] = p
 }
 
-func (rp *replicaProposer) shouldCampaignOnRedirect(raftGroup proposerRaft) bool {
+func (rp *replicaProposer) shouldCampaignOnRedirect(
+	raftGroup proposerRaft, leaseType roachpb.LeaseType,
+) bool {
 	r := (*Replica)(rp)
 	livenessMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
 	return shouldCampaignOnLeaseRequestRedirect(
 		raftGroup.BasicStatus(),
 		livenessMap,
 		r.descRLocked(),
-		r.shouldUseExpirationLeaseRLocked(),
+		leaseType,
 		r.store.Clock().Now(),
 	)
 }
