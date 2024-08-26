@@ -327,8 +327,8 @@ show commit timestamp
 statement ok
 commit
 
-# The timestamps are different under READ COMMITTED.
-skipif config local-read-committed
+# The timestamps are different under READ COMMITTED and REPEATABLE READ.
+skipif config weak-iso-level-configs
 query IT
   SELECT i,
          CASE
@@ -343,7 +343,7 @@ ORDER BY i ASC;
 3  ts1
 4  ts2
 
-onlyif config local-read-committed
+onlyif config weak-iso-level-configs
 query IT
   SELECT i,
          CASE

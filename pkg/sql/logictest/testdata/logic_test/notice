@@ -26,8 +26,8 @@ statement ok
 CREATE DATABASE d;
 CREATE TABLE d.t (x int)
 
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 query T noticetrace
 ALTER TABLE d.t RENAME TO d.t2
 ----
@@ -41,8 +41,8 @@ CREATE TYPE color AS ENUM ()
 statement ok
 ALTER TYPE color ADD VALUE 'black'
 
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 query T noticetrace
 ALTER TYPE color ADD VALUE IF NOT EXISTS 'black'
 ----
@@ -51,8 +51,8 @@ NOTICE: enum value "black" already exists, skipping
 statement ok
 CREATE MATERIALIZED VIEW v AS SELECT 1
 
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 query T noticetrace
 REFRESH MATERIALIZED VIEW CONCURRENTLY v
 ----

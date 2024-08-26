@@ -1268,8 +1268,8 @@ func (t *logicTest) getOrOpenClient(user string, nodeIdx int, newSession bool) *
 	if _, err := db.Exec("SET index_recommendations_enabled = false"); err != nil {
 		t.Fatal(err)
 	}
-	if t.cfg.EnableDefaultReadCommitted {
-		if _, err := db.Exec("SET default_transaction_isolation = 'READ COMMITTED'"); err != nil {
+	if iso := t.cfg.EnableDefaultIsolationLevel; iso != 0 {
+		if _, err := db.Exec(fmt.Sprintf("SET default_transaction_isolation = '%s'", iso)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1761,6 +1761,12 @@ func (t *logicTest) newCluster(
 		if cfg.DisableDeclarativeSchemaChanger {
 			if _, err := conn.Exec(
 				"SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'"); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if cfg.EnableDefaultIsolationLevel == tree.RepeatableReadIsolation {
+			if _, err := conn.Exec("SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true"); err != nil {
 				t.Fatal(err)
 			}
 		}
