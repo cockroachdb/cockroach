@@ -193,7 +193,10 @@ func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
 	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo apt-get purge -y snapd`)
 	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo umount -f /mnt/data1 || true`)
 	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo dmsetup remove_all`)
-	err := s.c.RunE(ctx, option.WithNodes(s.c.All()), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
+	// Gets spurious errors:
+	//    device-mapper: reload ioctl on data1 (253:0) failed: Device or resource busy
+	// See https://github.com/cockroachdb/cockroach/issues/129619#issuecomment-2309628187.
+	err := RepeatRunE(ctx, s.f, s.c, s.c.All(), "blockdev", `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
 		`sudo dmsetup create data1`)
 	if err != nil {
 		// This has occasionally been seen to fail with "Device or resource busy",
