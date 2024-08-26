@@ -2336,7 +2336,7 @@ func shouldCampaignOnLeaseRequestRedirect(
 	raftStatus raft.BasicStatus,
 	livenessMap livenesspb.IsLiveMap,
 	desc *roachpb.RangeDescriptor,
-	shouldUseExpirationLease bool,
+	leaseType roachpb.LeaseType,
 	now hlc.Timestamp,
 ) bool {
 	// If we're already campaigning don't start a new term.
@@ -2351,14 +2351,14 @@ func shouldCampaignOnLeaseRequestRedirect(
 	if raftStatus.Lead == raft.None {
 		return true
 	}
-	// If we should be using an expiration lease then we don't need to campaign
+	// If we don't want to use an epoch-based lease then we don't need to campaign
 	// based on liveness state because there can never be a case where a node can
 	// retain Raft leadership but still be unable to acquire the lease. This is
 	// possible on ranges that use epoch-based leases because the Raft leader may
 	// be partitioned from the liveness range.
 	// See TestRequestsOnFollowerWithNonLiveLeaseholder for an example of a test
 	// that demonstrates this case.
-	if shouldUseExpirationLease {
+	if leaseType != roachpb.LeaseEpoch {
 		return false
 	}
 	// Determine if we think the leader is alive, if we don't have the leader in
