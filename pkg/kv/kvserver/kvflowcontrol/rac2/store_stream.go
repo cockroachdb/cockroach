@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -24,12 +26,20 @@ import (
 // TODO(kvoli): Add stream deletion upon decommissioning a store.
 type StreamTokenCounterProvider struct {
 	settings                   *cluster.Settings
+	clock                      *hlc.Clock
+	tokenMetrics               *tokenMetrics
 	sendCounters, evalCounters syncutil.Map[kvflowcontrol.Stream, tokenCounter]
 }
 
 // NewStreamTokenCounterProvider creates a new StreamTokenCounterProvider.
-func NewStreamTokenCounterProvider(settings *cluster.Settings) *StreamTokenCounterProvider {
-	return &StreamTokenCounterProvider{settings: settings}
+func NewStreamTokenCounterProvider(
+	settings *cluster.Settings, clock *hlc.Clock,
+) *StreamTokenCounterProvider {
+	return &StreamTokenCounterProvider{
+		settings:     settings,
+		clock:        clock,
+		tokenMetrics: newTokenMetrics(),
+	}
 }
 
 // Eval returns the evaluation token counter for the given stream.
@@ -37,7 +47,8 @@ func (p *StreamTokenCounterProvider) Eval(stream kvflowcontrol.Stream) *tokenCou
 	if t, ok := p.evalCounters.Load(stream); ok {
 		return t
 	}
-	t, _ := p.evalCounters.LoadOrStore(stream, newTokenCounter(p.settings))
+	t, _ := p.evalCounters.LoadOrStore(stream, newTokenCounter(
+		p.settings, p.clock, p.tokenMetrics.counterMetrics[flowControlEvalMetricType]))
 	return t
 }
 
@@ -46,8 +57,57 @@ func (p *StreamTokenCounterProvider) Send(stream kvflowcontrol.Stream) *tokenCou
 	if t, ok := p.sendCounters.Load(stream); ok {
 		return t
 	}
-	t, _ := p.sendCounters.LoadOrStore(stream, newTokenCounter(p.settings))
+	t, _ := p.sendCounters.LoadOrStore(stream, newTokenCounter(
+		p.settings, p.clock, p.tokenMetrics.counterMetrics[flowControlSendMetricType]))
 	return t
+}
+
+// UpdateMetricGauges updates the gauge token metrics.
+func (p *StreamTokenCounterProvider) UpdateMetricGauges() {
+	var (
+		count           [numFlowControlMetricTypes][admissionpb.NumWorkClasses]int64
+		blockedCount    [numFlowControlMetricTypes][admissionpb.NumWorkClasses]int64
+		tokensAvailable [numFlowControlMetricTypes][admissionpb.NumWorkClasses]int64
+	)
+	now := p.clock.PhysicalTime()
+
+	// First aggregate the metrics across all streams, by (eval|send) types and
+	// (regular|elastic) work classes, then using the aggregate update the
+	// gauges.
+	gaugeUpdateFn := func(metricType flowControlMetricType) func(
+		kvflowcontrol.Stream, *tokenCounter) bool {
+		return func(stream kvflowcontrol.Stream, t *tokenCounter) bool {
+			count[metricType][regular]++
+			count[metricType][elastic]++
+			tokensAvailable[metricType][regular] += int64(t.tokens(regular))
+			tokensAvailable[metricType][elastic] += int64(t.tokens(elastic))
+
+			regularStats, elasticStats := t.GetAndResetStats(now)
+			if regularStats.noTokenDuration > 0 {
+				blockedCount[metricType][regular]++
+			}
+			if elasticStats.noTokenDuration > 0 {
+				blockedCount[metricType][elastic]++
+			}
+			return true
+		}
+	}
+
+	p.evalCounters.Range(gaugeUpdateFn(flowControlEvalMetricType))
+	p.sendCounters.Range(gaugeUpdateFn(flowControlSendMetricType))
+	for _, typ := range []flowControlMetricType{
+		flowControlEvalMetricType,
+		flowControlSendMetricType,
+	} {
+		for _, wc := range []admissionpb.WorkClass{
+			admissionpb.RegularWorkClass,
+			admissionpb.ElasticWorkClass,
+		} {
+			p.tokenMetrics.streamMetrics[typ].count[wc].Update(count[typ][wc])
+			p.tokenMetrics.streamMetrics[typ].blockedCount[wc].Update(blockedCount[typ][wc])
+			p.tokenMetrics.streamMetrics[typ].tokensAvailable[wc].Update(tokensAvailable[typ][wc])
+		}
+	}
 }
 
 // SendTokenWatcherHandleID is a unique identifier for a handle that is
