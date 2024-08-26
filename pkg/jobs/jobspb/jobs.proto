@@ -1344,7 +1344,13 @@ message MVCCStatisticsJobProgress {
 }
 
 message UpdateTableMetadataCacheDetails {}
-message UpdateTableMetadataCacheProgress {}
+message UpdateTableMetadataCacheProgress {
+  // The time at which the job last started a run.
+  google.protobuf.Timestamp last_run_time = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.stdtime) = true
+  ];
+}
 
 message ImportRollbackDetails {
   // TableID is the descriptor ID of table that should be rolled back.
