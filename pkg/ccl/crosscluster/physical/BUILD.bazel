@@ -28,6 +28,7 @@ go_library(
         "//pkg/ccl/crosscluster/streamclient",
         "//pkg/ccl/revertccl",
         "//pkg/ccl/utilccl",
+        "//pkg/cloud",
         "//pkg/cloud/externalconn",
         "//pkg/cloud/externalconn/connectionpb",
         "//pkg/jobs",
