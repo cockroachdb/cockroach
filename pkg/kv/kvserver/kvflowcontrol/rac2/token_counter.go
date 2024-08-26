@@ -25,32 +25,6 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// TokenCounter is the interface for a token counter that can be used to deduct
-// and return flow control tokens. Additionally, it can be used to wait for
-// tokens to become available, and to check if tokens are available without
-// blocking.
-//
-// TODO(kvoli): Consider de-interfacing if not necessary for testing.
-type TokenCounter interface {
-	// TokensAvailable returns true if tokens are available. If false, it returns
-	// a handle that may be used for waiting for tokens to become available.
-	TokensAvailable(admissionpb.WorkClass) (available bool, tokenWaitingHandle TokenWaitingHandle)
-	// TryDeduct attempts to deduct flow tokens for the given work class. If
-	// there are no tokens available, 0 tokens are returned. When less than the
-	// requested token count is available, partial tokens are returned
-	// corresponding to this partial amount.
-	TryDeduct(
-		context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens) kvflowcontrol.Tokens
-	// Deduct deducts (without blocking) flow tokens for the given work class. If
-	// there are not enough available tokens, the token counter will go into debt
-	// (negative available count) and still issue the requested number of tokens.
-	Deduct(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
-	// Return returns flow tokens for the given work class.
-	Return(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
-	// String returns a string representation of the token counter.
-	String() string
-}
-
 // TokenWaitingHandle is the interface for waiting for positive tokens from a
 // token counter.
 type TokenWaitingHandle interface {
@@ -177,8 +151,7 @@ type tokenCounter struct {
 	}
 }
 
-var _ TokenCounter = &tokenCounter{}
-
+// newTokenCounter creates a new TokenCounter.
 func newTokenCounter(settings *cluster.Settings) *tokenCounter {
 	t := &tokenCounter{
 		settings: settings,

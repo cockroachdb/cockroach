@@ -22,49 +22,31 @@ import (
 // for a given stream.
 //
 // TODO(kvoli): Add stream deletion upon decommissioning a store.
-// TODO(kvoli): Check mutex performance against syncutil.Map.
 type StreamTokenCounterProvider struct {
-	settings *cluster.Settings
-
-	mu struct {
-		syncutil.Mutex
-		sendCounters, evalCounters map[kvflowcontrol.Stream]TokenCounter
-	}
+	settings                   *cluster.Settings
+	sendCounters, evalCounters syncutil.Map[kvflowcontrol.Stream, tokenCounter]
 }
 
 // NewStreamTokenCounterProvider creates a new StreamTokenCounterProvider.
 func NewStreamTokenCounterProvider(settings *cluster.Settings) *StreamTokenCounterProvider {
-	p := StreamTokenCounterProvider{settings: settings}
-	p.mu.evalCounters = make(map[kvflowcontrol.Stream]TokenCounter)
-	p.mu.sendCounters = make(map[kvflowcontrol.Stream]TokenCounter)
-	return &p
+	return &StreamTokenCounterProvider{settings: settings}
 }
 
 // Eval returns the evaluation token counter for the given stream.
-func (p *StreamTokenCounterProvider) Eval(stream kvflowcontrol.Stream) TokenCounter {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if t, ok := p.mu.evalCounters[stream]; ok {
+func (p *StreamTokenCounterProvider) Eval(stream kvflowcontrol.Stream) *tokenCounter {
+	if t, ok := p.evalCounters.Load(stream); ok {
 		return t
 	}
-
-	t := newTokenCounter(p.settings)
-	p.mu.evalCounters[stream] = t
+	t, _ := p.evalCounters.LoadOrStore(stream, newTokenCounter(p.settings))
 	return t
 }
 
 // Send returns the send token counter for the given stream.
-func (p *StreamTokenCounterProvider) Send(stream kvflowcontrol.Stream) TokenCounter {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if t, ok := p.mu.sendCounters[stream]; ok {
+func (p *StreamTokenCounterProvider) Send(stream kvflowcontrol.Stream) *tokenCounter {
+	if t, ok := p.sendCounters.Load(stream); ok {
 		return t
 	}
-
-	t := newTokenCounter(p.settings)
-	p.mu.sendCounters[stream] = t
+	t, _ := p.sendCounters.LoadOrStore(stream, newTokenCounter(p.settings))
 	return t
 }
 
@@ -86,7 +68,7 @@ type SendTokenWatcher interface {
 	// call CancelHandle when tokens are no longer needed, or when the caller is
 	// done.
 	NotifyWhenAvailable(
-		TokenCounter,
+		*tokenCounter,
 		TokenGrantNotification,
 	) SendTokenWatcherHandleID
 	// CancelHandle cancels the given handle, stopping it from being notified
