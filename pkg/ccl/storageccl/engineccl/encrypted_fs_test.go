@@ -536,7 +536,7 @@ func (etfs *encryptedTestFS) restart() error {
 		etfs.encEnv.Closer.Close()
 		etfs.encEnv = nil
 	}
-	etfs.mem.ResetToSyncedState()
+	etfs.mem = etfs.mem.CrashClone(vfs.CrashCloneCfg{})
 	ei := &errorInjector{prob: etfs.errorProb, rand: etfs.errorRand}
 	fsMeta := errorfs.Wrap(etfs.mem, ei)
 	// TODO(sumeer): Do deterministic rollover of file registry after small
@@ -559,7 +559,7 @@ func (etfs *encryptedTestFS) restart() error {
 }
 
 func makeEncryptedTestFS(t *testing.T, errorProb float64, errorRand *rand.Rand) *encryptedTestFS {
-	mem := vfs.NewStrictMem()
+	mem := vfs.NewCrashableMem()
 	keyFile128 := "111111111111111111111111111111111234567890123456"
 	writeToFile(t, mem, "16.key", []byte(keyFile128))
 	dir, err := mem.OpenDir("/")

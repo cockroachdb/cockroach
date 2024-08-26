@@ -624,7 +624,7 @@ func TestFileRegistryKeepOldFilesAndSync(t *testing.T) {
 	skip.UnderRace(t) // Slow under race.
 
 	const dir = "/mydb"
-	mem := vfs.NewStrictMem()
+	mem := vfs.NewCrashableMem()
 	{
 		require.NoError(t, mem.MkdirAll(dir, 0755))
 		// Sync the root dir so that /mydb does not vanish later.
@@ -672,11 +672,11 @@ func TestFileRegistryKeepOldFilesAndSync(t *testing.T) {
 			}
 			expectedFiles = append(expectedFiles, registryFiles[n-1])
 			// Also check that it matches what is in the filesystem.
-			lsFiles, err := mem.List(dir)
+			lsFiles, err := registry.FS.List(dir)
 			require.NoError(t, err)
 			var foundFiles []string
 			for _, f := range lsFiles {
-				f = mem.PathBase(f)
+				f = registry.FS.PathBase(f)
 				if strings.HasPrefix(f, registryFilenameBase) {
 					foundFiles = append(foundFiles, f)
 				}
@@ -700,21 +700,22 @@ func TestFileRegistryKeepOldFilesAndSync(t *testing.T) {
 		}
 		registryChecker.addEntry(registry)
 	}
-	// Start ignoring syncs.
-	mem.SetIgnoreSyncs(true)
+	// Take a crash-consistent snapshot.
+	crashFS := mem.CrashClone(vfs.CrashCloneCfg{})
 	// Add another entry, that will be deliberately lost.
 	registryChecker.addEntry(registry)
 	registryChecker.checkEntries(registry)
 	require.NoError(t, registry.Close())
-	mem.ResetToSyncedState()
-	// Remove the lost entry from what we check.
-	registryChecker.numAddedEntries--
 
-	mem.SetIgnoreSyncs(false)
+	numAddedEntries := registryChecker.numAddedEntries
+	registryChecker = makeFileRegistryEntryChecker(t, crashFS, dir)
+	// Remove the lost entry from what we check.
+	registryChecker.numAddedEntries = numAddedEntries - 1
+
 	// Keep no old registry files.
 	numOldRegistryFiles = 0
 	registry = &FileRegistry{
-		FS:                  mem,
+		FS:                  crashFS,
 		DBDir:               dir,
 		NumOldRegistryFiles: numOldRegistryFiles,
 		SoftMaxSize:         1024,
@@ -728,7 +729,7 @@ func TestFileRegistryKeepOldFilesAndSync(t *testing.T) {
 
 	// Another load, with a different NumOldRegistryFiles, just for fun.
 	numOldRegistryFiles = 1
-	registry = &FileRegistry{FS: mem, DBDir: dir, NumOldRegistryFiles: numOldRegistryFiles}
+	registry = &FileRegistry{FS: crashFS, DBDir: dir, NumOldRegistryFiles: numOldRegistryFiles}
 	require.NoError(t, registry.Load(context.Background()))
 	registryChecker.checkEntries(registry)
 }

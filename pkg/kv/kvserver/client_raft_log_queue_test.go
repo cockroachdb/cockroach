@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
@@ -341,16 +342,15 @@ func TestCrashWhileTruncatingSideloadedEntries(t *testing.T) {
 			}
 		}
 	}
-	memFS.SetIgnoreSyncs(true)
+	crashFS := memFS.CrashClone(vfs.CrashCloneCfg{})
 	info(follower, "follower")
 	t.Log("CRASH!")
 	// TODO(pavelkalinnikov): add "crash" helpers to the TestCluster.
 	tc.StopServer(1)
 
 	t.Log("restarting follower")
-	memFS.ResetToSyncedState()
-	memFS.SetIgnoreSyncs(false)
-	t.Logf("FS after restart:\n%s", memFS.String())
+	vfsReg.Set("auto-node2-store1", crashFS)
+	t.Logf("FS after restart:\n%s", crashFS.String())
 	require.NoError(t, tc.RestartServer(1))
 
 	// Update the follower variable to point at a newly restarted replica.
