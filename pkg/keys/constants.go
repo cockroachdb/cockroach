@@ -301,6 +301,9 @@ var (
 	// BootstrapVersionKey is the key at which clusters bootstrapped with a version
 	// > 1.0 persist the version at which they were bootstrapped.
 	BootstrapVersionKey = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("bootstrap-version")))
+	// ClusterInitTimestamp is used for license enforcement. It represents the timestamp
+	// of when the cluster was first initialized and is used for tracking the grace period.
+	ClusterInitTimestamp = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("lic-cls-init")))
 	//
 	// NodeIDGenerator is the global node ID generator sequence.
 	NodeIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("node-idgen")))

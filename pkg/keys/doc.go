@@ -248,6 +248,7 @@ var _ = [...]interface{}{
 	SystemPrefix,
 	NodeLivenessPrefix,     // "\x00liveness-"
 	BootstrapVersionKey,    // "bootstrap-version"
+	ClusterInitTimestamp,   // "lic-cls-init"
 	NodeIDGenerator,        // "node-idgen"
 	RangeIDGenerator,       // "range-idgen"
 	StatusPrefix,           // "status-"

@@ -357,6 +357,7 @@ go_library(
         "//pkg/security/password",
         "//pkg/security/sessionrevival",
         "//pkg/security/username",
+        "//pkg/server/license",
         "//pkg/server/pgurl",
         "//pkg/server/serverpb",
         "//pkg/server/settingswatcher",
