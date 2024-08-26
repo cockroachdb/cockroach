@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -24,23 +25,29 @@ import (
 // TODO(kvoli): Add stream deletion upon decommissioning a store.
 type StreamTokenCounterProvider struct {
 	settings                   *cluster.Settings
+	clock                      *hlc.Clock
 	sendCounters, evalCounters syncutil.Map[kvflowcontrol.Stream, TokenCounter]
 }
 
 // NewStreamTokenCounterProvider creates a new StreamTokenCounterProvider.
-func NewStreamTokenCounterProvider(settings *cluster.Settings) *StreamTokenCounterProvider {
-	return &StreamTokenCounterProvider{settings: settings}
+func NewStreamTokenCounterProvider(
+	settings *cluster.Settings, clock *hlc.Clock,
+) *StreamTokenCounterProvider {
+	return &StreamTokenCounterProvider{
+		settings: settings,
+		clock:    clock,
+	}
 }
 
 // Eval returns the evaluation token counter for the given stream.
 func (p *StreamTokenCounterProvider) Eval(stream kvflowcontrol.Stream) *TokenCounter {
-	t, _ := p.evalCounters.LoadOrStore(stream, NewTokenCounter(p.settings))
+	t, _ := p.evalCounters.LoadOrStore(stream, NewTokenCounter(p.settings, p.clock))
 	return t
 }
 
 // Send returns the send token counter for the given stream.
 func (p *StreamTokenCounterProvider) Send(stream kvflowcontrol.Stream) *TokenCounter {
-	t, _ := p.sendCounters.LoadOrStore(stream, NewTokenCounter(p.settings))
+	t, _ := p.sendCounters.LoadOrStore(stream, NewTokenCounter(p.settings, p.clock))
 	return t
 }
 

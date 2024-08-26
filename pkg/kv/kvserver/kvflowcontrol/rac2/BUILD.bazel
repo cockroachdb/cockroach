@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "rac2",
     srcs = [
+        "metrics.go",
         "priority.go",
         "range_controller.go",
         "store_stream.go",
@@ -11,6 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
@@ -18,16 +20,20 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
+        "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_dustin_go_humanize//:go-humanize",
     ],
 )
 
 go_test(
     name = "rac2_test",
     srcs = [
+        "metrics_test.go",
         "priority_test.go",
         "range_controller_test.go",
         "token_counter_test.go",
@@ -41,10 +47,12 @@ go_test(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_stretchr_testify//require",

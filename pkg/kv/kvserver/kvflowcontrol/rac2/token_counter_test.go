@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -54,7 +55,7 @@ func TestTokenAdjustment(t *testing.T) {
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
-				counter = NewTokenCounter(cluster.MakeTestingClusterSettings())
+				counter = NewTokenCounter(cluster.MakeTestingClusterSettings(), hlc.NewClockForTesting(nil))
 				adjustments = nil
 				return ""
 
@@ -170,9 +171,10 @@ func TestTokenCounter(t *testing.T) {
 		elastic: 50,
 	}
 	settings := cluster.MakeTestingClusterSettings()
+	clock := hlc.NewClockForTesting(nil)
 	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &settings.SV, int64(limits.elastic))
 	kvflowcontrol.RegularTokensPerStream.Override(ctx, &settings.SV, int64(limits.regular))
-	counter := NewTokenCounter(settings)
+	counter := NewTokenCounter(settings, clock)
 
 	assertStateReset := func(t *testing.T) {
 		available, handle := counter.TokensAvailable(admissionpb.ElasticWorkClass)
@@ -343,7 +345,7 @@ func (ts *evalTestState) getOrCreateTC(stream string) *namedTokenCounter {
 	if !exists {
 		tc = &namedTokenCounter{
 			parent:       ts,
-			TokenCounter: NewTokenCounter(ts.settings),
+			TokenCounter: NewTokenCounter(ts.settings, hlc.NewClockForTesting(nil)),
 			stream:       stream,
 		}
 		// Ensure the token counter starts with no tokens initially.

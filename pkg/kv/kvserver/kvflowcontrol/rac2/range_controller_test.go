@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
@@ -266,7 +267,8 @@ func TestRangeControllerWaitForEval(t *testing.T) {
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
 	ranges := make(map[roachpb.RangeID]*testingRCRange)
-	ssTokenCounter := NewStreamTokenCounterProvider(settings)
+	clock := hlc.NewClockForTesting(nil)
+	ssTokenCounter := NewStreamTokenCounterProvider(settings, clock)
 
 	// Eval will only wait on a positive token amount, set the limit to 1 in
 	// order to simplify testing.
