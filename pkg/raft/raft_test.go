@@ -1868,9 +1868,9 @@ func TestDisruptiveFollower(t *testing.T) {
 // Then pre-vote phase prevents this isolated node from forcing
 // current leader to step down, thus less disruptions.
 func TestDisruptiveFollowerPreVote(t *testing.T) {
-	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
 
 	n1.checkQuorum = true
 	n2.checkQuorum = true
@@ -3118,9 +3118,9 @@ func TestTransferNonMember(t *testing.T) {
 // Previously the cluster would come to a standstill when run with PreVote
 // enabled.
 func TestNodeWithSmallerTermCanCompleteElection(t *testing.T) {
-	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
@@ -3185,9 +3185,9 @@ func TestNodeWithSmallerTermCanCompleteElection(t *testing.T) {
 // TestPreVoteWithSplitVote verifies that after split vote, cluster can complete
 // election in next round.
 func TestPreVoteWithSplitVote(t *testing.T) {
-	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)

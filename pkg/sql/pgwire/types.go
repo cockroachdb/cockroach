@@ -905,6 +905,17 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 // is represented as the number of microseconds between the given time and Jan 1, 2000
 // (dubbed the PGEpochJDate), stored within an int64.
 func timeToPgBinary(t time.Time, offset *time.Location) int64 {
+	if t == pgdate.TimeInfinity {
+		// Postgres uses math.MaxInt64 microseconds as the infinity value.
+		// See: https://github.com/postgres/postgres/blob/42aa1f0ab321fd43cbfdd875dd9e13940b485900/src/include/datatype/timestamp.h#L107.
+		return math.MaxInt64
+	}
+	if t == pgdate.TimeNegativeInfinity {
+		// Postgres uses math.MinInt64 microseconds as the negative infinity value.
+		// See: https://github.com/postgres/postgres/blob/42aa1f0ab321fd43cbfdd875dd9e13940b485900/src/include/datatype/timestamp.h#L107.
+		return math.MinInt64
+	}
+
 	if offset != nil {
 		t = t.In(offset)
 	} else {

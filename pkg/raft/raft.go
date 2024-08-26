@@ -878,6 +878,35 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 
 // tickElection is run by followers and candidates after r.electionTimeout.
 func (r *raft) tickElection() {
+	if r.leadEpoch != 0 {
+		if r.supportingFortifiedLeader() {
+			// There's a fortified leader and we're supporting it. Reset the
+			// electionElapsed ticker and early return.
+			r.electionElapsed = 0
+			return
+		}
+		// We're no longer supporting the fortified leader. Let's make this
+		// de-fortification explicit. Doing so ensures that we don't enter this
+		// conditional again unless the term changes or the follower is
+		// re-fortified, which means we'll only ever skip the initial part of the
+		// election timeout once per fortified -> no longer fortified transition.
+		r.deFortify(r.id, r.Term)
+		if r.electionElapsed == 0 {
+			// NB: The peer was supporting a leader who had fortified until the last
+			// tick, but that support has now expired. As a result:
+			// 1. We don't want to wait out an entire election timeout before
+			// campaigning.
+			// 2. But we do want to take advantage of randomized election timeouts
+			// built into raft to prevent hung elections.
+			// We achieve both of these goals by "forwarding" electionElapsed to begin
+			// at r.electionTimeout. Also see pastElectionTimeout.
+			r.logger.Debugf(
+				"%d setting election elapsed to start from %d ticks after store liveness support expired",
+				r.id, r.electionTimeout,
+			)
+			r.electionElapsed = r.electionTimeout - 1 // -1 because we'll add one below.
+		}
+	}
 	r.electionElapsed++
 
 	if r.promotable() && r.pastElectionTimeout() {
@@ -950,6 +979,8 @@ func (r *raft) becomePreCandidate() {
 	if r.state == StateLeader {
 		panic("invalid transition [leader -> pre-candidate]")
 	}
+	assertTrue(!r.supportingFortifiedLeader(),
+		"should not be supporting a fortified leader when becoming pre-candidate")
 	// Becoming a pre-candidate changes our step functions and state,
 	// but doesn't change anything else. In particular it does not increase
 	// r.Term or change r.Vote.
@@ -1010,15 +1041,12 @@ func (r *raft) hup(t CampaignType) {
 		r.logger.Debugf("%x ignoring MsgHup because already leader", r.id)
 		return
 	}
-
-	// TODO(arul): we will eventually want some kind of logic like this.
-	//
-	//if r.supportingFortifiedLeader() && t != campaignTransfer {
-	//	r.logger.Debugf("%x ignoring MsgHup due to leader fortification", r.id)
-	//	return
-	//}
 	if !r.promotable() {
 		r.logger.Warningf("%x is unpromotable and can not campaign", r.id)
+		return
+	}
+	if r.supportingFortifiedLeader() {
+		r.logger.Debugf("%x ignoring MsgHup due to leader fortification", r.id)
 		return
 	}
 	if r.hasUnappliedConfChanges() {
@@ -1034,15 +1062,14 @@ func (r *raft) hup(t CampaignType) {
 // support to a leader. When a peer is providing support to a leader, it must
 // not campaign or vote to disrupt that leader's term, unless specifically asked
 // to do so by the leader.
-// TODO(arul): this is a placeholder implementation. Move it around as you see
-// fit.
 func (r *raft) supportingFortifiedLeader() bool {
 	if r.leadEpoch == 0 {
 		return false // not supporting any leader
 	}
-	assertTrue(r.lead != None, "leader epoch is set but leader is not")
-	epoch, ok := r.storeLiveness.SupportFor(r.lead)
-	return ok && epoch == r.leadEpoch
+	assertTrue(r.lead != None, "lead epoch is set but leader is not")
+	epoch, live := r.storeLiveness.SupportFor(r.lead)
+	assertTrue(epoch >= r.leadEpoch, "epochs in store liveness shouldn't regress")
+	return live && epoch == r.leadEpoch
 }
 
 // errBreak is a sentinel error used to break a callback-based loop.
@@ -1999,8 +2026,10 @@ func (r *raft) handleFortifyResp(m pb.Message) {
 // deFortify (conceptually) revokes previously provided fortification support to
 // a leader.
 func (r *raft) deFortify(from pb.PeerID, term uint64) {
-	assertTrue(term > r.Term || (term == r.Term && from == r.lead),
-		"can only defortify at current term if told by the leader",
+	assertTrue(term > r.Term ||
+		(term == r.Term && from == r.lead) ||
+		(term == r.Term && from == r.id && !r.supportingFortifiedLeader()),
+		"can only defortify at current term if told by the leader or if fortification support has expired",
 	)
 	r.leadEpoch = 0
 }

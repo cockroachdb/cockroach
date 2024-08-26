@@ -17,9 +17,22 @@
 // The target postgres server must accept plaintext (non-ssl) connections from
 // the postgres:postgres account. A suitable server can be started with:
 //
-// `docker run -p 127.0.0.1:5432:5432 postgres:11`
+// Start a postgres14 server with postgis extension:
 //
-// The output of this file generates pkg/sql/pgwire/testdata/encodings.json.
+//	docker run --name postgres \
+//	  -e POSTGRES_DB=db \
+//	  -e POSTGRES_HOST_AUTH_METHOD=trust \
+//	  -p	127.0.0.1:5432:5432 \
+//	  postgis/postgis:14-3.4
+//
+//	docker exec -it postgres psql -U postgres -c "CREATE EXTENSION postgis;"
+//
+// TODO(xiaochen): figure out where the `"Text": "9E+4"` in encodings.json comes from
+// and fix it. (postgres 9 ~ 14 all return "90000" for `SELECT '9E+4'::decimal;`)
+//
+// Generate file "encodings.json":
+//
+//	bazel run pkg/cmd/generate-binary > pkg/sql/pgwire/testdata/encodings.json
 package main
 
 import (
@@ -313,6 +326,8 @@ var inputs = map[string][]string{
 		"0004-10-19 10:23:54 BC",
 		"4004-10-19 10:23:54",
 		"9004-10-19 10:23:54",
+		"infinity",
+		"-infinity",
 	},
 
 	"'%s'::timestamptz": {
