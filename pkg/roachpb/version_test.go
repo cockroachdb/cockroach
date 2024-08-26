@@ -29,6 +29,11 @@ func TestParseVersion(t *testing.T) {
 		{s: "1000023.1-upgrading-to-1000023.2-step-004", v: Version{Major: 1000023, Minor: 1, Internal: 4}, roundtrip: true},
 		{s: "23.1-4", v: Version{Major: 23, Minor: 1, Internal: 4}},
 		{s: "23.1-upgrading-step-004", v: Version{Major: 23, Minor: 1, Internal: 4}},
+		// NB: The fence version for a final version will have Internal=-1.
+		{s: "23.2-upgrading-final-step", v: Version{Major: 23, Minor: 2, Internal: -1}, roundtrip: true},
+		// We used to have unintuitive formatting logic for the -1 internal version.
+		// See https://github.com/cockroachdb/cockroach/issues/129460.
+		{s: "23.2-upgrading-step--01", v: Version{Major: 23, Minor: 2, Internal: -1}},
 	}
 	for _, tc := range testData {
 		t.Run("", func(t *testing.T) {
