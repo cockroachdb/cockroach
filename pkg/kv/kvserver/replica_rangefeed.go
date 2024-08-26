@@ -93,6 +93,18 @@ var RangeFeedUseScheduler = settings.RegisterBoolSetting(
 var RangefeedSchedulerDisabled = envutil.EnvOrDefaultBool("COCKROACH_RANGEFEED_DISABLE_SCHEDULER",
 	false)
 
+// RangefeedUseBufferedSender controls whether rangefeed uses a node level
+// buffered sender to buffer events instead of buffering events separately in a
+// channel at a per client per registration level. It is currently left
+// unimplemented and disabled everywhere (#126560). Panics if enabled.
+var RangefeedUseBufferedSender = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.rangefeed.buffered_stream_sender.enabled",
+	"use buffered sender for all range feeds instead of buffering events "+
+		"separately per client per range",
+	false,
+)
+
 func init() {
 	// Inject into kvserverbase to allow usage from kvcoord.
 	kvserverbase.RangeFeedRefreshInterval = RangeFeedRefreshInterval
