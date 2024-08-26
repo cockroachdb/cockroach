@@ -345,3 +345,8 @@ func (v *tableImplicitRecordType) AsTableImplicitRecordTypeDescriptor() catalog.
 func (v *tableImplicitRecordType) UnderlyingTableDescriptor() catalog.TableDescriptor {
 	return v.desc
 }
+
+// GetReplicatedPCRVersion is a part of the catalog.Descriptor
+func (v *tableImplicitRecordType) GetReplicatedPCRVersion() descpb.DescriptorVersion {
+	return v.desc.GetReplicatedPCRVersion()
+}

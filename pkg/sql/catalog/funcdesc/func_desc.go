@@ -469,6 +469,11 @@ func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error
 	return iterutil.Map(fn(desc.ReturnType.Type))
 }
 
+// GetReplicatedPCRVersion is a part of the catalog.Descriptor
+func (desc *immutable) GetReplicatedPCRVersion() descpb.DescriptorVersion {
+	return desc.ReplicatedPCRVersion
+}
+
 // IsUncommittedVersion implements the catalog.LeasableDescriptor interface.
 func (desc *Mutable) IsUncommittedVersion() bool {
 	return desc.IsNew() || desc.clusterVersion.GetVersion() != desc.GetVersion()
