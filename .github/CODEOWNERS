@@ -38,6 +38,7 @@
 
 /Makefile                    @cockroachdb/dev-inf
 
+#!/pkg                         @cockroachdb/unowned
 #!/pkg/sql/                    @cockroachdb/sql-queries-noreview
 
 /pkg/sql/inverted/           @cockroachdb/sql-queries-prs
