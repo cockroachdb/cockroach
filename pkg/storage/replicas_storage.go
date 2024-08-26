@@ -28,7 +28,7 @@ import (
 //   we can lift.
 // - Implement interface.
 // - Unit tests and randomized tests, including engine restarts that lose
-//   state (using vfs.NewStrictMem).
+//   state (using vfs.NewCrashableMem).
 // - Benchmarks comparing single and two engine implementations.
 // - Race-build dynamically asserts that SSTs or MutationBatches that are
 //   passed through this interface only touch the keys they are allowed to
