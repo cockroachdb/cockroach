@@ -213,7 +213,7 @@ type voterStateForWaiters struct {
 	isLeader         bool
 	isLeaseHolder    bool
 	isStateReplicate bool
-	evalTokenCounter TokenCounter
+	evalTokenCounter *tokenCounter
 }
 
 type voterSet []voterStateForWaiters
@@ -432,7 +432,7 @@ type replicaState struct {
 	// is the identity that is used to deduct tokens or wait for tokens to be
 	// positive.
 	stream           kvflowcontrol.Stream
-	evalTokenCounter TokenCounter
+	evalTokenCounter *tokenCounter
 	desc             roachpb.ReplicaDescriptor
 	connectedState   connectedState
 }
