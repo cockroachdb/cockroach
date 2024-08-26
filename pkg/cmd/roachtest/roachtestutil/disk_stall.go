@@ -33,6 +33,7 @@ type DiskStaller interface {
 }
 
 type Fataler interface {
+	Failed() bool
 	Fatal(args ...interface{})
 	Fatalf(format string, args ...interface{})
 	L() *logger.Logger
