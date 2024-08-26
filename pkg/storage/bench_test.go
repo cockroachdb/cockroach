@@ -2124,8 +2124,8 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
 		writer := sstable.NewWriter(objstorageprovider.NewFileWritable(sstFile), opts)
 		for _, kv := range kvPairs {
-			require.NoError(b, writer.Raw().Add(
-				pebble.MakeInternalKey(kv.key, 0 /* seqNum */, kv.kind), kv.value))
+			require.NoError(b, writer.Raw().AddWithForceObsolete(
+				pebble.MakeInternalKey(kv.key, 0 /* seqNum */, kv.kind), kv.value, false /* forceObsolete */))
 		}
 		require.NoError(b, writer.Close())
 		batch.Close()
