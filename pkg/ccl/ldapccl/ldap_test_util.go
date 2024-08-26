@@ -99,6 +99,10 @@ func (lu *mockLDAPUtil) ListGroups(
 	if strings.Contains(conf.ldapGroupListFilter, invalidParam) {
 		return nil, errors.Newf(groupListFailureMessage+": invalid group list filter %q provided", conf.ldapGroupListFilter)
 	}
+	if strings.Contains(userDN, invalidParam) {
+		return nil, errors.Newf(groupListFailureMessage+": invalid user DN %q provided", userDN)
+	}
+
 	if len(userDN) == 0 {
 		return nil, errors.Newf(groupListFailureMessage+": user dn %q does not belong to any groups", userDN)
 	}
