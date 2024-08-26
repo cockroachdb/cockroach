@@ -36,13 +36,13 @@ GRANT SELECT ON ALL SEQUENCES IN SCHEMA s TO testuser
 
 # This should be a no-op, since backup privellege is not
 # supported on sequences.
-skipif config local-read-committed
+skipif config weak-iso-level-configs
 query T noticetrace
 GRANT BACKUP ON ALL TABLES IN SCHEMA S TO testuser
 ----
 NOTICE: some privileges have no effect on sequences: [BACKUP]
 
-onlyif config local-read-committed
+onlyif config weak-iso-level-configs
 query T noticetrace
 GRANT BACKUP ON ALL TABLES IN SCHEMA S TO testuser
 ----

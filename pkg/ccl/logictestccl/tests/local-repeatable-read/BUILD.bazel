@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "local-repeatable-read_test",
+    size = "enormous",
+    srcs = ["generated_test.go"],
+    data = [
+        "//c-deps:libgeos",  # keep
+        "//pkg/ccl/logictestccl:testdata",  # keep
+        "//pkg/sql/logictest:testdata",  # keep
+        "//pkg/sql/opt/exec/execbuilder:testdata",  # keep
+    ],
+    exec_properties = {"test.Pool": "large"},
+    shard_count = 48,
+    tags = ["cpu:1"],
+    deps = [
+        "//pkg/base",
+        "//pkg/build/bazel",
+        "//pkg/ccl",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/logictest",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+    ],
+)

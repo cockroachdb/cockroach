@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 18
+const configIdx = 19
 
 var sqliteLogicTestDir string
 

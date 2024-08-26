@@ -239,11 +239,11 @@ statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
 onlyif config enterprise-configs
-skipif config local-read-committed
+skipif config weak-iso-level-configs
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-onlyif config local-read-committed
+onlyif config weak-iso-level-configs
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
@@ -257,11 +257,11 @@ statement ok
 SELECT * FROM kv LIMIT 1
 
 onlyif config enterprise-configs
-skipif config local-read-committed
+skipif config weak-iso-level-configs
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET transaction_isolation = 'READ COMMITTED'
 
-onlyif config local-read-committed
+onlyif config weak-iso-level-configs
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET transaction_isolation = 'SERIALIZABLE'
 
@@ -271,7 +271,11 @@ ROLLBACK
 statement ok
 SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = false
 
-# Transactions default to serializable when the read_committed cluster setting is off.
+statement ok
+SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = false
+
+# Transactions default to serializable when the read_committed and
+# repeatable_read cluster settings are off.
 
 statement ok
 BEGIN TRANSACTION
