@@ -1324,6 +1324,7 @@ WHERE name NOT LIKE 'sql.defaults%'
 AND name NOT LIKE 'sql.distsql%'
 AND name NOT LIKE 'sql.testing%'
 AND name NOT LIKE 'sql.stats%'
+AND name NOT LIKE 'sql.txn.%_isolation.enabled'
 AND name != 'kv.range_merge.queue_enabled'
 ORDER BY name
 ----
@@ -1340,6 +1341,7 @@ WHERE name NOT LIKE 'sql.defaults%'
 AND name NOT LIKE 'sql.distsql%'
 AND name NOT LIKE 'sql.testing%'
 AND name NOT LIKE 'sql.stats%'
+AND name NOT LIKE 'sql.txn.%_isolation.enabled'
 ORDER BY name
 ----
 cluster.secret
@@ -1360,6 +1362,7 @@ WHERE name NOT LIKE 'sql.defaults%'
 AND name NOT LIKE 'sql.distsql%'
 AND name NOT LIKE 'sql.testing%'
 AND name NOT LIKE 'sql.stats%'
+AND name NOT LIKE 'sql.txn.%_isolation.enabled'
 AND name NOT IN ('version', 'cluster.secret', 'kv.range_merge.queue_enabled')
 ORDER BY name
 ----
@@ -1375,6 +1378,7 @@ WHERE name NOT LIKE 'sql.defaults%'
 AND name NOT LIKE 'sql.distsql%'
 AND name NOT LIKE 'sql.testing%'
 AND name NOT LIKE 'sql.stats%'
+AND name NOT LIKE 'sql.txn.%_isolation.enabled'
 AND name NOT IN ('version', 'cluster.secret')
 ORDER BY name
 ----

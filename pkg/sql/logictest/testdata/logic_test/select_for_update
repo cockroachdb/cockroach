@@ -1,4 +1,4 @@
-# LogicTest: !local-read-committed
+# LogicTest: !weak-iso-level-configs
 # This test assumes that SERIALIZABLE isolation is being used. See
 # select_for_update_read_committed for READ COMMITTED testing.
 

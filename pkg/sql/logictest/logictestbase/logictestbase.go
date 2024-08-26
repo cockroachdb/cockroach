@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 var (
@@ -82,9 +83,9 @@ type TestClusterConfig struct {
 	// disableLocalityOptimizedSearch disables the cluster setting
 	// locality_optimized_partitioned_index_scan, which is enabled by default.
 	DisableLocalityOptimizedSearch bool
-	// EnableDefaultReadCommitted uses READ COMMITTED for all transactions
-	// by default.
-	EnableDefaultReadCommitted bool
+	// EnableDefaultIsolationLevel uses the specified isolation level for all
+	// transactions by default.
+	EnableDefaultIsolationLevel tree.IsolationLevel
 	// DeclarativeCorpusCollection enables support for collecting corpuses
 	// for the declarative schema changer.
 	DeclarativeCorpusCollection bool
@@ -302,11 +303,18 @@ var LogicTestConfigs = []TestClusterConfig{
 		OverrideVectorize:   "off",
 	},
 	{
-		Name:                       "local-read-committed",
-		NumNodes:                   1,
-		OverrideDistSQLMode:        "off",
-		IsCCLConfig:                true,
-		EnableDefaultReadCommitted: true,
+		Name:                        "local-read-committed",
+		NumNodes:                    1,
+		OverrideDistSQLMode:         "off",
+		IsCCLConfig:                 true,
+		EnableDefaultIsolationLevel: tree.ReadCommittedIsolation,
+	},
+	{
+		Name:                        "local-repeatable-read",
+		NumNodes:                    1,
+		OverrideDistSQLMode:         "off",
+		IsCCLConfig:                 true,
+		EnableDefaultIsolationLevel: tree.RepeatableReadIsolation,
 	},
 	{
 		Name:                "fakedist",
@@ -581,6 +589,7 @@ var (
 		"local-legacy-schema-changer",
 		"local-vec-off",
 		"local-read-committed",
+		"local-repeatable-read",
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",
@@ -609,6 +618,16 @@ var (
 		"3node-tenant",
 		"3node-tenant-multiregion",
 		"local-read-committed",
+		"local-repeatable-read",
+	}
+	// WeakIsoLevelConfigName is a special alias for all configs which default to
+	// a weak transaction isolation level.
+	WeakIsoLevelConfigName = "weak-iso-level-configs"
+	// WeakIsoLevelConfigNames is the list of all weak transaction isolation level
+	// configs.
+	WeakIsoLevelConfigNames = []string{
+		"local-read-committed",
+		"local-repeatable-read",
 	}
 	// DefaultConfig is the default test configuration.
 	DefaultConfig = parseTestConfig(DefaultConfigNames)
@@ -618,6 +637,8 @@ var (
 	ThreeNodeTenantDefaultConfig = parseTestConfig(ThreeNodeTenantDefaultConfigNames)
 	// EnterpriseConfig is the enterprise test configuration.
 	EnterpriseConfig = parseTestConfig(EnterpriseConfigNames)
+	// WeakIsoLevelConfig is the weak transaction isolation level test configuration.
+	WeakIsoLevelConfig = parseTestConfig(WeakIsoLevelConfigNames)
 )
 
 // logger is an interface implemented by testing.TB as well as stdlogger below.
@@ -807,6 +828,8 @@ func processConfigs(
 				configs = append(configs, applyBlocklistToConfigs(ThreeNodeTenantDefaultConfig, blocklist)...)
 			case EnterpriseConfigName:
 				configs = append(configs, applyBlocklistToConfigs(EnterpriseConfig, blocklist)...)
+			case WeakIsoLevelConfigName:
+				configs = append(configs, applyBlocklistToConfigs(WeakIsoLevelConfig, blocklist)...)
 			default:
 				t.Fatalf("%s: unknown config name %s", path, configName)
 			}
@@ -882,6 +905,8 @@ func getDefaultConfigListNames(name string) []string {
 		return ThreeNodeTenantDefaultConfigNames
 	case EnterpriseConfigName:
 		return EnterpriseConfigNames
+	case WeakIsoLevelConfigName:
+		return WeakIsoLevelConfigNames
 	}
 	return []string{}
 }
