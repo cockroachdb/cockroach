@@ -137,7 +137,7 @@ func (v Version) FenceVersion() Version {
 
 var (
 	verPattern = regexp.MustCompile(
-		`^(?P<major>[0-9]+)\.(?P<minor>[0-9]+)(|(-|-upgrading(|-to-[0-9]+.[0-9]+)-step-)(?P<internal>[0-9]+))$`,
+		`^(?P<major>[0-9]+)\.(?P<minor>[0-9]+)(|(-|-upgrading(|-to-[0-9]+.[0-9]+)-step-)(?P<internal>[-0-9]+))$`,
 	)
 	verPatternMajorIdx    = verPattern.SubexpIndex("major")
 	verPatternMinorIdx    = verPattern.SubexpIndex("minor")
@@ -226,7 +226,9 @@ var successorSeries = map[ReleaseSeries]ReleaseSeries{
 // ReleaseSeries obtains the release series for the given version. Specifically:
 //   - if the version is final (Internal=0), the ReleaseSeries has the same major/minor.
 //   - if the version is a transitional version during upgrade (e.g. v23.1-8),
-//     the result is the next final version (e.g. v23.1).
+//     the result is the next final version (e.g. v23.2).
+//   - if the internal version is negative (which is the case for the fence
+//     version of a final version), the result has the same major/minor.
 //
 // For non-final versions (which indicate an update to the next series), this
 // requires knowledge of the next series; unknown non-final versions will return
@@ -237,6 +239,9 @@ var successorSeries = map[ReleaseSeries]ReleaseSeries{
 func (v Version) ReleaseSeries() (s ReleaseSeries, ok bool) {
 	base := ReleaseSeries{v.Major, v.Minor}
 	if v.IsFinal() {
+		return base, true
+	}
+	if v.Internal < 0 {
 		return base, true
 	}
 	s, ok = base.Successor()
