@@ -19,6 +19,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -32,6 +33,8 @@ import (
 func defaultTMComparator(first, second tableMetadata) int {
 	return cmp.Compare(first.TableId, second.TableId)
 }
+
+func defaultDMComparator(first, second dbMetadata) int { return cmp.Compare(first.DbId, second.DbId) }
 
 func descendingComparator[T any](comparator func(first, second T) int) func(first, second T) int {
 	return func(f, s T) int {
@@ -281,6 +284,166 @@ func TestGetTableMetadata(t *testing.T) {
 		for _, tmdr := range mdResp.Results {
 			require.Condition(t, func() (success bool) {
 				return slices.Contains(tmdr.StoreIds, storeIds[0]) || slices.Contains(tmdr.StoreIds, storeIds[1])
+			})
+		}
+	})
+}
+
+func TestGetDBMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+	conn := testCluster.ServerConn(0)
+	defer conn.Close()
+	var (
+		db1Name = "new_test_db_1"
+		db2Name = "new_test_db_2"
+	)
+	db1Id, _ := setupTest(t, conn, db1Name, db2Name)
+
+	ts := testCluster.Server(0)
+	client, err := ts.GetAdminHTTPClient()
+	require.NoError(t, err)
+	t.Run("non GET method 405 error", func(t *testing.T) {})
+	t.Run("sorting", func(t *testing.T) {
+
+		nameComparator := func(first, second dbMetadata) int {
+			return cmp.Or(cmp.Compare(first.DbName, second.DbName), defaultDMComparator(first, second))
+		}
+		sizeComparator := func(first, second dbMetadata) int {
+			return cmp.Or(cmp.Compare(first.SizeBytes, second.SizeBytes), defaultDMComparator(first, second))
+		}
+		tableCountComparator := func(first, second dbMetadata) int {
+			return cmp.Or(cmp.Compare(first.TableCount, second.TableCount), defaultDMComparator(first, second))
+		}
+		lastUpdatedComparator := func(first, second dbMetadata) int {
+			return cmp.Or(first.LastUpdated.Compare(second.LastUpdated), defaultDMComparator(first, second))
+		}
+
+		var sortTests = []struct {
+			name        string
+			queryString string
+			comparator  func(first, second dbMetadata) int
+		}{
+			{"no sort", "", defaultDMComparator},
+			{"empty sort", "?sortBy=", defaultDMComparator},
+			{"non-sortable param", "?sortBy=asdfas", defaultDMComparator},
+			{"empty query string and set sort order", "?sortOrder=desc", defaultDMComparator},
+			{"sort by size", "?sortBy=name", nameComparator},
+			{"sort by size", "?sortBy=size", sizeComparator},
+			{"sort by table count", "?sortBy=tableCount", tableCountComparator},
+			{"sort by lastUpdated", "?sortBy=lastUpdated", lastUpdatedComparator},
+			{"sort by name descending", "?sortBy=name&sortOrder=desc", descendingComparator(nameComparator)},
+			{"sort by size descending", "?sortBy=size&sortOrder=desc", descendingComparator(sizeComparator)},
+			{"sort by table count descending", "?sortBy=tableCount&sortOrder=desc", descendingComparator(tableCountComparator)},
+			{"sort by last updated descending", "?sortBy=lastUpdated&sortOrder=desc", descendingComparator(lastUpdatedComparator)},
+		}
+		for _, tt := range sortTests {
+			t.Run(tt.name, func(t *testing.T) {
+				uri := fmt.Sprintf("/api/v2/database_metadata/%s", tt.queryString)
+				mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, client, ts.AdminURL().WithPath(uri).String())
+				require.NotEmpty(t, mdResp.Results)
+				isSorted := slices.IsSortedFunc(mdResp.Results, tt.comparator)
+				require.True(t, isSorted)
+			})
+		}
+	})
+
+	t.Run("authorization", func(t *testing.T) {
+		sessionUsername := username.TestUserName()
+		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
+		require.NoError(t, err)
+
+		// Assert that the test user gets an empty response for db 1
+		uri := "/api/v2/database_metadata/"
+		mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String())
+
+		require.Empty(t, mdResp.Results)
+		require.Zero(t, mdResp.PaginationInfo.TotalResults)
+
+		// Grant connect access to DB 1
+		_, e := conn.Exec(fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", db1Name, sessionUsername.Normalized()))
+		require.NoError(t, e)
+		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String())
+
+		// Assert that user now see results for db1
+		require.Len(t, mdResp.Results, 1)
+		require.True(t, mdResp.Results[0].DbId == int64(db1Id))
+		require.True(t, slices.IsSortedFunc(mdResp.Results, defaultDMComparator))
+
+		// Revoke connect access from db1
+		_, e = conn.Exec(fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM %s", db1Name, sessionUsername.Normalized()))
+		require.NoError(t, e)
+		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String())
+
+		// Assert that user no longer sees results from db1
+		require.Empty(t, mdResp.Results)
+
+		// Make user admin
+		_, e = conn.Exec(fmt.Sprintf("GRANT admin TO %s", sessionUsername.Normalized()))
+		require.NoError(t, e)
+		mdResp = makeApiRequest[PaginatedResponse[[]dbMetadata]](t, userClient, ts.AdminURL().WithPath(uri).String())
+
+		// Assert that user now see results for all dbs
+		require.Len(t, mdResp.Results, 2)
+		require.True(t, slices.IsSortedFunc(mdResp.Results, defaultDMComparator))
+
+	})
+	t.Run("pagination", func(t *testing.T) {
+		var pageTests = []struct {
+			name             string
+			queryString      string
+			expectedPageNum  int
+			expectedPageSize int
+		}{
+			{"no page size or page num", "?", defaultPageNum, defaultPageSize},
+			{"set page size", "?pageSize=1", defaultPageNum, 1},
+			{"set page size and page num", "?pageSize=1&pageNum=2", 2, 1},
+			{"invalid page size and num", "?pageSize=0&pageNum=0", defaultPageNum, defaultPageSize},
+		}
+		for _, tt := range pageTests {
+			t.Run(tt.name, func(t *testing.T) {
+				uri := fmt.Sprintf("/api/v2/database_metadata/%s", tt.queryString)
+				mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, client, ts.AdminURL().WithPath(uri).String())
+				require.NotEmpty(t, mdResp.Results)
+				require.LessOrEqual(t, tt.expectedPageSize, len(mdResp.Results))
+				require.Equal(t, tt.expectedPageSize, mdResp.PaginationInfo.PageSize)
+				require.Equal(t, tt.expectedPageNum, mdResp.PaginationInfo.PageNum)
+			})
+		}
+	})
+	t.Run("db name filter", func(t *testing.T) {
+		var dbtableNameTests = []struct {
+			name          string
+			nameFilter    string
+			expectedCount int
+		}{
+			// matches database: new_test_db_1
+			{"with db name", db1Name, 1},
+			// matches database new_test_db_1
+			{"with db name non-matching case", strings.ToUpper(db1Name), 1},
+			// matches database new_test_db_1, new_test_db2
+			{"with partial database name", db1Name[0:4], 2},
+		}
+
+		for _, tt := range dbtableNameTests {
+			t.Run(tt.name, func(t *testing.T) {
+				uri := fmt.Sprintf("/api/v2/database_metadata/?name=%s", tt.nameFilter)
+				mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, client, ts.AdminURL().WithPath(uri).String())
+
+				require.Equal(t, int64(tt.expectedCount), mdResp.PaginationInfo.TotalResults)
+			})
+		}
+	})
+	t.Run("filter store id", func(t *testing.T) {
+		storeIds := []int64{8, 9}
+		uri := fmt.Sprintf("/api/v2/database_metadata/?storeId=%d&storeId=%d", storeIds[0], storeIds[1])
+		mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, client, ts.AdminURL().WithPath(uri).String())
+		for _, dmdr := range mdResp.Results {
+			require.Condition(t, func() (success bool) {
+				return slices.Contains(dmdr.StoreIds, storeIds[0]) || slices.Contains(dmdr.StoreIds, storeIds[1])
 			})
 		}
 	})

@@ -261,7 +261,7 @@ func (a *apiV2Server) getTableMetadata(
 	if len(storeIds) > 0 {
 		query.Append("AND ( ")
 		for i, storeId := range storeIds {
-			query.Append("store_ids @> ARRAY[$] ", storeId)
+			query.Append("tbm.store_ids @> ARRAY[$] ", storeId)
 			if i < len(storeIds)-1 {
 				query.Append("OR ")
 			}
@@ -366,6 +366,268 @@ func (a *apiV2Server) getTableMetadata(
 	return tms, totalRowCount, nil
 }
 
+// GetDBMetadata returns a paginated response of database metadata and statistics. This is not a live view of
+// the database data but instead is cached data that had been precomputed at an earlier time.
+//
+// The user making the request will receive database metadata based on the CONNECT database grant and admin privilege.
+//
+// ---
+// parameters:
+//
+//   - name: name
+//     type: string
+//     description: a string which is used to match database name against.
+//     in: query
+//     required: false
+//
+//   - name: sortBy
+//     type: string
+//     description: Which column to sort by. This currently supports: "name", "size", "tableCount", and "lastUpdated".
+//     If a non supported value is provided, it will be ignored.
+//     in: query
+//     required: false
+//
+//   - name: sortOrder
+//     type: string
+//     description: The direction in which to order the sortBy column by. Supports either "asc" or "desc". If a non
+//     supported value is provided, it will be ignored.
+//     in: query
+//     required: false
+//
+//   - name: pageSize
+//     type: string
+//     description: The size of the page of the result set to return.
+//     in: query
+//     required: false
+//
+//   - name: pageNum
+//     type: string
+//     description: The page number of the result set to return.
+//     in: query
+//     required: false
+//
+//   - name: storeId
+//     type: integer
+//     description: The id of the store to filter databases by. If the database has at least one table in it that
+//     contains data in the store, it will be included in the result set. Multiple storeId query parameters are support.
+//     If multiple are provided, a database will be included in the result set if it contains >0 tables data in at least
+//     one of the stores.
+//     in: query
+//     required: false
+//
+// produces:
+// - application/json
+//
+// responses:
+//
+//	"200":
+//	  description: A paginated response of dbMetadata results.
+func (a *apiV2Server) GetDBMetadata(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx = a.sqlServer.AnnotateCtx(ctx)
+	sqlUser := authserver.UserFromHTTPAuthInfoContext(ctx)
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	queryValues := r.URL.Query()
+
+	dbName := apiutil.GetQueryStringVal(queryValues, nameKey)
+	storeIds := apiutil.GetIntQueryStringVals(queryValues, storeIdKey)
+	sortByQs := apiutil.GetQueryStringVal(queryValues, sortByKey)
+	sortOrderQs := apiutil.GetQueryStringVal(queryValues, sortOrderKey)
+	pageNum := apiutil.GetIntQueryStringVal(queryValues, pageNumKey)
+	pageSize := apiutil.GetIntQueryStringVal(queryValues, pageSizeKey)
+
+	if pageSize <= 0 {
+		pageSize = defaultPageSize
+	}
+
+	if pageNum <= 0 {
+		pageNum = defaultPageNum
+	}
+
+	offset := (pageNum - 1) * pageSize
+
+	var sortBy string
+	switch sortByQs {
+	case "name":
+		sortBy = "db_name"
+	case "size":
+		sortBy = "size_bytes"
+	case "tableCount":
+		sortBy = "table_count"
+	case "lastUpdated":
+		sortBy = "last_updated"
+	}
+
+	var sortOrder string
+	if sortByQs != "" {
+		switch sortOrderQs {
+		case "asc":
+			sortOrder = "ASC"
+		case "desc":
+			sortOrder = "DESC"
+		default:
+			sortOrder = "ASC"
+		}
+
+	}
+
+	var dbNameFilter string
+	if dbName != "" {
+		dbNameFilter = fmt.Sprintf("%%%s%%", dbName)
+	}
+
+	dbm, totalRowCount, err := a.getDBMetadata(ctx, sqlUser, dbNameFilter, storeIds, sortBy, sortOrder, pageSize, offset)
+
+	if err != nil {
+		srverrors.APIV2InternalError(ctx, err, w)
+		return
+	}
+
+	resp := PaginatedResponse[[]dbMetadata]{
+		Results: dbm,
+		PaginationInfo: paginationInfo{
+			TotalResults: totalRowCount,
+			PageSize:     pageSize,
+			PageNum:      pageNum,
+		},
+	}
+	apiutil.WriteJSONResponse(ctx, w, 200, resp)
+
+}
+
+func (a *apiV2Server) getDBMetadata(
+	ctx context.Context,
+	sqlUser username.SQLUsername,
+	dbName string,
+	storeIds []int,
+	sortBy string,
+	sortOrder string,
+	limit int,
+	offset int,
+) (dbms []dbMetadata, totalRowCount int64, retErr error) {
+	sqlUserStr := sqlUser.Normalized()
+	dbms = make([]dbMetadata, 0)
+	query := safesql.NewQuery()
+
+	// Base query aggregates table metadata by db_id. It joins on a subquery which flattens
+	// and deduplicates all store ids for tables in a database into a single array. This query
+	// will only return databases that the provided sql user has CONNECT privileges to. If they
+	// are an admin, they have access to all databases.
+	query.Append(`SELECT
+		tbm.db_id,
+		tbm.db_name,
+		sum(tbm.replication_size_bytes):: INT as size_bytes,
+		count(tbm.table_id) as table_count,
+		max(tbm.last_updated) as last_updated,
+		s.store_ids,
+		count(*) OVER() as total_row_count
+		FROM system.table_metadata tbm
+		JOIN crdb_internal.databases dbs ON dbs.id = tbm.db_id
+		LEFT JOIN system.role_members rm ON rm.role = 'admin' AND member = $
+		JOIN (
+			SELECT db_id, array_agg(DISTINCT unnested_ids) as store_ids
+			FROM system.table_metadata, unnest(store_ids) as unnested_ids
+			GROUP BY db_id
+		) s ON s.db_id = tbm.db_id
+		WHERE (rm.role = 'admin' OR dbs.name in (
+			SELECT cdp.database_name
+			FROM "".crdb_internal.cluster_database_privileges cdp
+			WHERE grantee = $
+			AND privilege_type = 'CONNECT'
+		))
+`, sqlUserStr, sqlUserStr)
+
+	if dbName != "" {
+		query.Append("AND db_name ILIKE $ ", dbName)
+	}
+
+	// If store ids are provided, at least one of the store
+	// ids must exist in the store_ids array.
+	if len(storeIds) > 0 {
+		query.Append("AND ( ")
+		for i, storeId := range storeIds {
+			query.Append("tbm.store_ids @> ARRAY[$] ", storeId)
+			if i < len(storeIds)-1 {
+				query.Append("OR ")
+			}
+		}
+		query.Append(") ")
+	}
+
+	orderBy := ""
+	if sortBy != "" {
+		orderBy = fmt.Sprintf("%s %s,", sortBy, sortOrder)
+	}
+
+	query.Append("GROUP BY tbm.db_id, tbm.db_name, s.store_ids ")
+	query.Append(fmt.Sprintf("ORDER BY %s db_id %s ", orderBy, sortOrder))
+	query.Append("LIMIT $ ", limit)
+	query.Append("OFFSET $ ", offset)
+
+	it, err := a.admin.internalExecutor.QueryIteratorEx(
+		ctx, "get-database-metadata", nil, /* txn */
+		sessiondata.InternalExecutorOverride{},
+		query.String(), query.QueryArguments()...,
+	)
+
+	if err != nil {
+		return nil, totalRowCount, err
+	}
+
+	defer func(it isql.Rows) {
+		retErr = errors.CombineErrors(retErr, it.Close())
+	}(it)
+
+	ok, err := it.Next(ctx)
+	if err != nil {
+		return nil, totalRowCount, err
+	}
+
+	setTotalRowCount := true
+	if ok {
+		// If ok == false, the query returned 0 rows.
+		scanner := makeResultScanner(it.Types())
+		for ; ok; ok, err = it.Next(ctx) {
+			var dbm dbMetadata
+			row := it.Cur()
+			if setTotalRowCount {
+				if err := scanner.Scan(row, "total_row_count", &totalRowCount); err != nil {
+					return nil, totalRowCount, err
+				}
+				setTotalRowCount = false
+			}
+			if err := scanner.Scan(row, "db_id", &dbm.DbId); err != nil {
+				return nil, 0, err
+			}
+			if err := scanner.Scan(row, "db_name", &dbm.DbName); err != nil {
+				return nil, 0, err
+			}
+			if err := scanner.Scan(row, "size_bytes", &dbm.SizeBytes); err != nil {
+				return nil, 0, err
+			}
+			if err := scanner.Scan(row, "table_count", &dbm.TableCount); err != nil {
+				return nil, 0, err
+			}
+			if err := scanner.Scan(row, "store_ids", &dbm.StoreIds); err != nil {
+				return nil, totalRowCount, err
+			}
+			if err := scanner.Scan(row, "last_updated", &dbm.LastUpdated); err != nil {
+				return nil, 0, err
+			}
+			dbms = append(dbms, dbm)
+		}
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+
+	return dbms, totalRowCount, nil
+}
+
 type PaginatedResponse[T any] struct {
 	Results        T              `json:"results"`
 	PaginationInfo paginationInfo `json:"paginationInfo"`
@@ -393,4 +655,13 @@ type tableMetadata struct {
 	StoreIds             []int64   `json:"store_ids"`
 	LastUpdateError      string    `json:"last_update_error,omitempty"`
 	LastUpdated          time.Time `json:"last_updated"`
+}
+
+type dbMetadata struct {
+	DbId        int64     `json:"db_id,omitempty"`
+	DbName      string    `json:"db_name,omitempty"`
+	SizeBytes   int64     `json:"size_bytes,omitempty"`
+	TableCount  int64     `json:"table_count,omitempty"`
+	StoreIds    []int64   `json:"store_ids"`
+	LastUpdated time.Time `json:"last_updated"`
 }
