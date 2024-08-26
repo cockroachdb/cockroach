@@ -14,7 +14,9 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -67,6 +69,16 @@ const VersionMajorDevOffset = 1_000_000
 func (v Version) SafeFormat(p redact.SafePrinter, _ rune) {
 	if v.IsFinal() {
 		p.Printf("%d.%d", v.Major, v.Minor)
+		return
+	}
+	// NB: Internal may be -1. This is the case for all fence versions for final
+	// versions of a release. Handle it specially to avoid printing the -1, which
+	// is confusable with the `-` separator.
+	if v.Internal < 0 {
+		if buildutil.CrdbTestBuild && v.Internal != -1 {
+			panic(errors.Newf("%s should not have Internal less than -1", v))
+		}
+		p.Printf("%d.%d-upgrading-final-step", v.Major, v.Minor)
 		return
 	}
 	// If the version is offset, remove the offset and add it back to the result. We want
@@ -139,7 +151,7 @@ func (v Version) FenceVersion() Version {
 
 var (
 	verPattern = regexp.MustCompile(
-		`^(?P<major>[0-9]+)\.(?P<minor>[0-9]+)(|(-|-upgrading(|-to-[0-9]+.[0-9]+)-step-)(?P<internal>[0-9]+))$`,
+		`^(?P<major>[0-9]+)\.(?P<minor>[0-9]+)(|-upgrading-final-step|(-|-upgrading(|-to-[0-9]+.[0-9]+)-step-)(?P<internal>[-0-9]+))$`,
 	)
 	verPatternMajorIdx    = verPattern.SubexpIndex("major")
 	verPatternMinorIdx    = verPattern.SubexpIndex("minor")
@@ -168,9 +180,14 @@ func ParseVersion(s string) (Version, error) {
 		return int32(n)
 	}
 	v := Version{
-		Major:    toInt(matches[verPatternMajorIdx]),
-		Minor:    toInt(matches[verPatternMinorIdx]),
-		Internal: toInt(matches[verPatternInternalIdx]),
+		Major: toInt(matches[verPatternMajorIdx]),
+		Minor: toInt(matches[verPatternMinorIdx]),
+	}
+	// NB: Internal is -1 for all fence versions for final versions of a release.
+	if strings.Contains(s, "-upgrading-final-step") {
+		v.Internal = -1
+	} else {
+		v.Internal = toInt(matches[verPatternInternalIdx])
 	}
 	if err != nil {
 		return Version{}, errors.Wrapf(err, "invalid version %s", s)
@@ -227,7 +244,9 @@ var successorSeries = map[ReleaseSeries]ReleaseSeries{
 // ReleaseSeries obtains the release series for the given version. Specifically:
 //   - if the version is final (Internal=0), the ReleaseSeries has the same major/minor.
 //   - if the version is a transitional version during upgrade (e.g. v23.1-8),
-//     the result is the next final version (e.g. v23.1).
+//     the result is the next final version (e.g. v23.2).
+//   - if the internal version is -1 (which is the case for the fence
+//     version of a final version), the result has the same major/minor.
 //
 // For non-final versions (which indicate an update to the next series), this
 // requires knowledge of the next series; unknown non-final versions will return
@@ -238,6 +257,14 @@ var successorSeries = map[ReleaseSeries]ReleaseSeries{
 func (v Version) ReleaseSeries() (s ReleaseSeries, ok bool) {
 	base := ReleaseSeries{v.Major, v.Minor}
 	if v.IsFinal() {
+		return base, true
+	}
+	// NB: Internal may be -1. This is the case for all fence versions for final
+	// versions of a release.
+	if v.Internal < 0 {
+		if buildutil.CrdbTestBuild && v.Internal != -1 {
+			panic(errors.Newf("%s should not have Internal less than -1", v))
+		}
 		return base, true
 	}
 	s, ok = base.Successor()
