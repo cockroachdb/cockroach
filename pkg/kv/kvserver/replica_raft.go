@@ -2336,7 +2336,7 @@ func shouldCampaignOnLeaseRequestRedirect(
 	raftStatus raft.BasicStatus,
 	livenessMap livenesspb.IsLiveMap,
 	desc *roachpb.RangeDescriptor,
-	shouldUseExpirationLease bool,
+	leaseType roachpb.LeaseType,
 	now hlc.Timestamp,
 ) bool {
 	// If we're already campaigning don't start a new term.
@@ -2351,14 +2351,14 @@ func shouldCampaignOnLeaseRequestRedirect(
 	if raftStatus.Lead == raft.None {
 		return true
 	}
-	// If we should be using an expiration lease then we don't need to campaign
+	// If we don't want to use an epoch-based lease then we don't need to campaign
 	// based on liveness state because there can never be a case where a node can
 	// retain Raft leadership but still be unable to acquire the lease. This is
 	// possible on ranges that use epoch-based leases because the Raft leader may
 	// be partitioned from the liveness range.
 	// See TestRequestsOnFollowerWithNonLiveLeaseholder for an example of a test
 	// that demonstrates this case.
-	if shouldUseExpirationLease {
+	if leaseType != roachpb.LeaseEpoch {
 		return false
 	}
 	// Determine if we think the leader is alive, if we don't have the leader in
@@ -2386,14 +2386,26 @@ func shouldCampaignOnLeaseRequestRedirect(
 
 // campaignLocked campaigns for raft leadership, using PreVote and, if
 // CheckQuorum is enabled, the recent leader condition. That is, followers will
-// not grant prevotes if we're behind on the log and, with CheckQuorum, if
+// not grant (pre)votes if we're behind on the log and, with CheckQuorum, if
 // they've heard from a leader in the past election timeout interval.
+// Additionally, the local replica will not even begin to campaign if the recent
+// leader condition does not allow it to (i.e. this method will be a no-op).
+//
+// The "recent leader condition" is based on raft heartbeats for ranges that are
+// not using the leader fortification protocol. Followers will not vote against
+// a leader if they have recently received a heartbeat (or other message) from
+// it. For ranges that are using the leader fortification protocol, the "recent
+// leader condition" is based on whether a follower is supporting a fortified
+// leader. Followers will not campaign or vote against a leader who's fortified
+// store liveness epoch they currently support.
 //
 // The CheckQuorum condition can delay elections, particularly with quiesced
 // ranges that don't tick. However, it is necessary to avoid spurious elections
 // and stolen leaderships during partial/asymmetric network partitions, which
 // can lead to permanent unavailability if the leaseholder can no longer reach
-// the leader.
+// the leader. For ranges using the leader fortification protocol, it is also
+// necessary to implement irrevocable leader support upon which leader leases
+// are built.
 //
 // Only followers enforce the CheckQuorum recent leader condition though, so if
 // a quorum of followers consider the leader dead and choose to become
@@ -2420,6 +2432,10 @@ func (r *Replica) campaignLocked(ctx context.Context) {
 // under partial/asymmetric network partitions. It should only be used when the
 // caller is certain that the current leader is actually dead, and we're not
 // simply partitioned away from it and/or liveness.
+//
+// TODO(nvanbenschoten): this is the remaining logic which needs work in order
+// to complete #125254. See the comment in raft.go about how even a local
+// fortification check is not enough to make MsgTimeoutNow safe.
 func (r *Replica) forceCampaignLocked(ctx context.Context) {
 	log.VEventf(ctx, 3, "force campaigning")
 	msg := raftpb.Message{To: raftpb.PeerID(r.replicaID), Type: raftpb.MsgTimeoutNow}
