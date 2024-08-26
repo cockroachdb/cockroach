@@ -533,3 +533,7 @@ func (rn *RawNode) TransferLeader(transferee pb.PeerID) {
 func (rn *RawNode) ForgetLeader() error {
 	return rn.raft.Step(pb.Message{Type: pb.MsgForgetLeader})
 }
+
+func (rn *RawNode) TestingStepDown() error {
+	return rn.raft.testingStepDown()
+}
