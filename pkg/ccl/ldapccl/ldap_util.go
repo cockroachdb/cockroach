@@ -121,12 +121,13 @@ func (lu *ldapUtil) ListGroups(
 	if err != nil {
 		return nil, errors.Wrap(err, groupListFailureMessage)
 	}
-
 	if len(sr.Entries) == 0 {
 		return nil, errors.Newf(groupListFailureMessage+": user dn %s does not belong to any groups", userDN)
 	}
+
+	ldapGroupsDN = make([]string, len(sr.Entries))
 	for idx := range sr.Entries {
-		ldapGroupsDN = append(ldapGroupsDN, sr.Entries[idx].DN)
+		ldapGroupsDN[idx] = sr.Entries[idx].DN
 	}
 	return ldapGroupsDN, nil
 }
