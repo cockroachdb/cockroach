@@ -36,19 +36,7 @@ var (
 	loginSuccessUseCounter = telemetry.GetCounterOnce(loginSuccessCounterName)
 )
 
-// validateLDAPAuthNOptions checks the ldap authentication config values.
-func (authManager *ldapAuthManager) validateLDAPAuthNOptions() error {
-	const ldapOptionsErrorMsg = "ldap authentication params in HBA conf missing"
-	if authManager.mu.conf.ldapSearchFilter == "" {
-		return errors.New(ldapOptionsErrorMsg + " search filter")
-	}
-	if authManager.mu.conf.ldapSearchAttribute == "" {
-		return errors.New(ldapOptionsErrorMsg + " search attribute")
-	}
-	return nil
-}
-
-// ValidateLDAPLogin validates an attempt to bind to an LDAP server.
+// FetchLDAPUserDN fetches the LDAP server DN for the sql user authenticating via LDAP.
 // In particular, it checks that:
 // * The cluster has an enterprise license.
 // * The active cluster version is 24.2 for this feature.
@@ -56,20 +44,17 @@ func (authManager *ldapAuthManager) validateLDAPAuthNOptions() error {
 // * The auth attempt is not for a reserved user.
 // * The hba conf entry options could be parsed to obtain ldap server params.
 // * All ldap server params are valid.
-// * LDAPs connection can be established with configured server.
 // * Configured bind DN and password can be used to search for the sql user DN on ldap server.
-// * The obtained user DN could be used to bind with the password from sql connection string.
 // It returns the retrievedUserDN which is the DN associated with the user in
 // LDAP server, authError (which is the error sql clients will see in case of
 // failures) and detailedError (which is the internal error from ldap clients
 // that might contain sensitive information we do not want to send to sql
 // clients but still want to log it). We do not want to send any information
 // back to client which was not provided by the client.
-func (authManager *ldapAuthManager) ValidateLDAPLogin(
+func (authManager *ldapAuthManager) FetchLDAPUserDN(
 	ctx context.Context,
 	st *cluster.Settings,
 	user username.SQLUsername,
-	ldapPwd string,
 	entry *hba.Entry,
 	_ *identmap.Conf,
 ) (retrievedUserDN *ldap.DN, detailedErrorMsg redact.RedactableString, authError error) {
@@ -82,11 +67,9 @@ func (authManager *ldapAuthManager) ValidateLDAPLogin(
 
 	authManager.mu.Lock()
 	defer authManager.mu.Unlock()
-
 	if !authManager.mu.enabled {
 		return nil, "", errors.Newf("LDAP authentication: not enabled")
 	}
-	telemetry.Inc(beginAuthNUseCounter)
 
 	if user.IsRootUser() || user.IsReserved() {
 		return nil, "", errors.WithDetailf(
@@ -104,7 +87,7 @@ func (authManager *ldapAuthManager) ValidateLDAPLogin(
 			errors.Newf("LDAP authentication: unable to validate authManager base options")
 	}
 
-	if err := authManager.validateLDAPAuthNOptions(); err != nil {
+	if err := authManager.validateLDAPUserFetchOptions(); err != nil {
 		return nil, redact.Sprintf("error validating authentication hba conf options for LDAP: %v", err),
 			errors.Newf("LDAP authentication: unable to validate authManager authentication options")
 	}
@@ -134,11 +117,81 @@ func (authManager *ldapAuthManager) ValidateLDAPLogin(
 				"cannot find provided user %s on LDAP server", user.Normalized())
 	}
 
-	// Bind as the user to verify their password
-	err = authManager.mu.util.Bind(ctx, userDN, ldapPwd)
+	return retrievedUserDN, "", nil
+}
+
+// validateLDAPUserFetchOptions checks the ldap user search config values.
+func (authManager *ldapAuthManager) validateLDAPUserFetchOptions() error {
+	const ldapOptionsErrorMsg = "ldap authentication params in HBA conf missing"
+	if authManager.mu.conf.ldapSearchFilter == "" {
+		return errors.New(ldapOptionsErrorMsg + " search filter")
+	}
+	if authManager.mu.conf.ldapSearchAttribute == "" {
+		return errors.New(ldapOptionsErrorMsg + " search attribute")
+	}
+	return nil
+}
+
+// ValidateLDAPLogin validates an attempt to bind provided user DN to configured LDAP server.
+// In particular, it checks that:
+// * The cluster has an enterprise license.
+// * The active cluster version is 24.2 for this feature.
+// * LDAP authManager is enabled after settings were reloaded.
+// * The hba conf entry options could be parsed to obtain ldap server params.
+// * All ldap server params are valid.
+// * LDAPs connection can be established with configured server.
+// * The provided user DN could be used to bind with the password from sql connection string.
+// It returns authError (which is the error sql clients will see in case of
+// failures) and detailedError (which is the internal error from ldap clients
+// that might contain sensitive information we do not want to send to sql
+// clients but still want to log it). We do not want to send any information
+// back to client which was not provided by the client.
+func (authManager *ldapAuthManager) ValidateLDAPLogin(
+	ctx context.Context,
+	st *cluster.Settings,
+	ldapUserDN *ldap.DN,
+	user username.SQLUsername,
+	ldapPwd string,
+	entry *hba.Entry,
+	_ *identmap.Conf,
+) (detailedErrorMsg redact.RedactableString, authError error) {
+	if err := utilccl.CheckEnterpriseEnabled(st, "LDAP authentication"); err != nil {
+		return "", err
+	}
+	if !st.Version.IsActive(ctx, clusterversion.V24_2) {
+		return "", pgerror.Newf(pgcode.FeatureNotSupported, "LDAP authentication is only supported after v24.2 upgrade is finalized")
+	}
+
+	authManager.mu.Lock()
+	defer authManager.mu.Unlock()
+
+	if !authManager.mu.enabled {
+		return "", errors.Newf("LDAP authentication: not enabled")
+	}
+	telemetry.Inc(beginAuthNUseCounter)
+
+	if err := authManager.setLDAPConfigOptions(entry); err != nil {
+		return redact.Sprintf("error parsing hba conf options for LDAP: %v", err),
+			errors.Newf("LDAP authentication: unable to parse hba conf options")
+	}
+
+	if err := authManager.validateLDAPBaseOptions(); err != nil {
+		return redact.Sprintf("error validating base hba conf options for LDAP: %v", err),
+			errors.Newf("LDAP authentication: unable to validate authManager base options")
+	}
+
+	// Establish a LDAPs connection with the set LDAP server and port
+	err := authManager.mu.util.MaybeInitLDAPsConn(ctx, authManager.mu.conf)
 	if err != nil {
-		return retrievedUserDN, redact.Sprintf("error when binding as user %s with DN(%s) in LDAP server: %v",
-				user.Normalized(), userDN, err,
+		return redact.Sprintf("error when trying to create LDAP connection: %v", err),
+			errors.Newf("LDAP authentication: unable to establish LDAP connection")
+	}
+
+	// Bind as the user to verify their password
+	err = authManager.mu.util.Bind(ctx, ldapUserDN.String(), ldapPwd)
+	if err != nil {
+		return redact.Sprintf("error when binding as user %s with DN(%s) in LDAP server: %v",
+				user.Normalized(), ldapUserDN, err,
 			),
 			errors.WithDetailf(
 				errors.Newf("LDAP authentication: unable to bind as LDAP user"),
@@ -146,5 +199,5 @@ func (authManager *ldapAuthManager) ValidateLDAPLogin(
 	}
 
 	telemetry.Inc(loginSuccessUseCounter)
-	return retrievedUserDN, "", nil
+	return "", nil
 }

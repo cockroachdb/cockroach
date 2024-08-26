@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/go-ldap/ldap/v3"
 )
 
 const (
@@ -74,10 +75,11 @@ func (authManager *ldapAuthManager) validateLDAPAuthZOptions() error {
 func (authManager *ldapAuthManager) FetchLDAPGroups(
 	ctx context.Context,
 	st *cluster.Settings,
-	userDN username.SQLUsername,
+	userDN *ldap.DN,
+	user username.SQLUsername,
 	entry *hba.Entry,
 	_ *identmap.Conf,
-) (ldapGroups []string, detailedErrorMsg redact.RedactableString, authError error) {
+) (_ []*ldap.DN, detailedErrorMsg redact.RedactableString, authError error) {
 	if err := utilccl.CheckEnterpriseEnabled(st, "LDAP authorization"); err != nil {
 		return nil, "", err
 	}
@@ -92,12 +94,6 @@ func (authManager *ldapAuthManager) FetchLDAPGroups(
 		return nil, "", errors.Newf("LDAP authentication: not enabled")
 	}
 	telemetry.Inc(beginAuthZUseCounter)
-
-	if err := distinguishedname.ValidateDN(userDN.Normalized()); err != nil {
-		return nil,
-			redact.Sprintf("error validating provided ldap DN %q for LDAP: %v", userDN.Normalized(), err),
-			errors.Newf("LDAP authorization: unable to validate provided ldap DN")
-	}
 
 	if err := authManager.setLDAPConfigOptions(entry); err != nil {
 		return nil, redact.Sprintf("error parsing hba conf options for LDAP: %v", err),
@@ -123,12 +119,23 @@ func (authManager *ldapAuthManager) FetchLDAPGroups(
 
 	// Fetch the ldap server Distinguished Name using sql username as search value
 	// for  ldap search attribute
-	ldapGroups, err = authManager.mu.util.ListGroups(ctx, authManager.mu.conf, userDN.Normalized())
+	fetchedGroups, err := authManager.mu.util.ListGroups(ctx, authManager.mu.conf, userDN.String())
 	if err != nil {
-		return nil, redact.Sprintf("error when searching for user dn %q in LDAP server: %v", userDN.Normalized(), err),
+		return nil, redact.Sprintf("error when fetching groups for user dn %q in LDAP server: %v", userDN.String(), err),
 			errors.WithDetailf(
 				errors.Newf("LDAP authorization: unable to fetch groups for user"),
 				"cannot find groups for which user is a member")
+	}
+
+	ldapGroups := make([]*ldap.DN, len(fetchedGroups))
+	for idx := range fetchedGroups {
+		ldapGroups[idx], err = distinguishedname.ParseDN(fetchedGroups[idx])
+		if err != nil {
+			return nil, redact.Sprintf("error parsing member group DN %s obtained from LDAP server: %v", ldapGroups[idx], err),
+				errors.WithDetailf(
+					errors.Newf("LDAP authentication: unable to parse member LDAP group distinguished name"),
+					"cannot find provided user %s on LDAP server", user.Normalized())
+		}
 	}
 
 	telemetry.Inc(authZSuccessCounter)
