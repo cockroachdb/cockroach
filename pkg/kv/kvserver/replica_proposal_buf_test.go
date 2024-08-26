@@ -210,7 +210,9 @@ func (t *testProposer) registerProposalLocked(p *ProposalData) {
 	t.registered++
 }
 
-func (t *testProposer) shouldCampaignOnRedirect(raftGroup proposerRaft) bool {
+func (t *testProposer) shouldCampaignOnRedirect(
+	raftGroup proposerRaft, leaseType roachpb.LeaseType,
+) bool {
 	return t.leaderNotLive
 }
 
