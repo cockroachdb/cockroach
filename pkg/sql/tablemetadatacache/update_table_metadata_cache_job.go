@@ -16,7 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,8 +34,36 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	log.Infof(ctx, "starting table metadata update job")
 	j.job.MarkIdle(true)
 
-	<-ctx.Done()
-	return nil
+	execCtx := execCtxI.(sql.JobExecContext)
+
+	stopper := execCtx.ExecCfg().Stopper
+	// Channel used to signal the job should run.
+	signalCh := make(chan struct{})
+	execCtx.ExecCfg().SQLStatusServer.SetUpdateTableMetadataCachSignal(signalCh)
+
+	for {
+		select {
+		case <-signalCh:
+			log.Infof(ctx, "running table metadata update job")
+			if err := j.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+				numRuns := 0
+				if md.RunStats != nil {
+					numRuns = md.RunStats.NumRuns
+				}
+				ju.UpdateRunStats(numRuns+1, timeutil.Now())
+				return nil
+			}); err != nil {
+				log.Errorf(ctx, "%s", err.Error())
+			}
+
+			// TODO(xinhaoz): implement the actual table metadata update logic.
+
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-stopper.ShouldQuiesce():
+			return nil
+		}
+	}
 }
 
 // OnFailOrCancel implements jobs.Resumer.
