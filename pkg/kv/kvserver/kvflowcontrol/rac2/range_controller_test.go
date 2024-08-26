@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -370,7 +371,8 @@ func TestRangeController(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "range_controller"), func(t *testing.T, path string) {
 		settings := cluster.MakeTestingClusterSettings()
 		ranges := make(map[roachpb.RangeID]*testingRCRange)
-		ssTokenCounter := NewStreamTokenCounterProvider(settings)
+		ssTokenCounter := NewStreamTokenCounterProvider(settings, hlc.NewClockForTesting(nil))
+
 		// setTokenCounters is used to ensure that we only set the initial token
 		// counts once per counter.
 		setTokenCounters := make(map[kvflowcontrol.Stream]struct{})
