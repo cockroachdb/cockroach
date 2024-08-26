@@ -1942,14 +1942,14 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 }
 
 // MuxRangeFeed implements the roachpb.InternalServer interface.
-func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
-	muxStream := &lockedMuxStream{wrapped: stream}
+func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
+	lockedMuxStream := &lockedMuxStream{wrapped: muxStream}
 
 	// All context created below should derive from this context, which is
 	// cancelled once MuxRangeFeed exits.
-	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
+	ctx, cancel := context.WithCancel(n.AnnotateCtx(muxStream.Context()))
 	defer cancel()
-	streamMuxer := rangefeed.NewStreamMuxer(muxStream, n.metrics)
+	streamMuxer := rangefeed.NewStreamMuxer(lockedMuxStream, n.metrics)
 	if err := streamMuxer.Start(ctx, n.stopper); err != nil {
 		return err
 	}
@@ -1964,7 +1964,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		case <-n.stopper.ShouldQuiesce():
 			return stop.ErrUnavailable
 		default:
-			req, err := stream.Recv()
+			req, err := muxStream.Recv()
 			if err != nil {
 				return err
 			}
