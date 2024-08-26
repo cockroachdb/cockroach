@@ -187,6 +187,7 @@ func registerRoutes(
 		{"rules/", a.listRules, false, authserver.RegularRole, true},
 
 		{"sql/", a.execSQL, true, authserver.RegularRole, true},
+		{"database_metadata/", a.GetDBMetadata, true, authserver.RegularRole, true},
 		{"table_metadata/", a.GetTableMetadata, true, authserver.RegularRole, true},
 	}
 
