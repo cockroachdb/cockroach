@@ -3246,7 +3246,7 @@ func iterateNodes[Client, Result any](
 				responseFn(res.nodeID, res.response)
 			}
 		case <-ctx.Done():
-			resultErr = errors.Errorf("request of %s canceled before completion", errorCtx)
+			resultErr = errors.Wrapf(ctx.Err(), "request of %s canceled before completion", errorCtx)
 		}
 		numNodes--
 	}
