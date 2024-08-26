@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -487,6 +488,13 @@ type statusServer struct {
 	// 256 concurrent queries actively running on a node, then it would
 	// take 2^16 seconds (18 hours) to hit any one of them.
 	cancelSemaphore *quotapool.IntPool
+
+	// updateTableMetadataJobSignal is used to signal the updateTableMetadataCacheJob
+	// to execute.
+	mu struct {
+		syncutil.RWMutex
+		updateTableMetadataJobSignal chan struct{}
+	}
 
 	knobs *TestingKnobs
 }
@@ -4195,4 +4203,61 @@ func (s *statusServer) ListJobProfilerExecutionDetails(
 		return nil, err
 	}
 	return &serverpb.ListJobProfilerExecutionDetailsResponse{Files: files}, nil
+}
+
+func (s *statusServer) localUpdateTableMetadataCache(
+	ctx context.Context,
+) (*serverpb.UpdateTableMetadataCacheResponse, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.mu.updateTableMetadataJobSignal == nil {
+		return nil, errors.New("job signal is unset")
+	}
+	success := false
+	select {
+	case s.mu.updateTableMetadataJobSignal <- struct{}{}:
+		success = true
+	default:
+	}
+	return &serverpb.UpdateTableMetadataCacheResponse{Success: success}, nil
+}
+
+func (s *statusServer) UpdateTableMetadataCache(
+	ctx context.Context, req *serverpb.UpdateTableMetadataCacheRequest,
+) (*serverpb.UpdateTableMetadataCacheResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	if req.Local {
+		return s.localUpdateTableMetadataCache(ctx)
+	}
+
+	// Get the node id for the job.
+	row, err := s.internalExecutor.QueryRow(ctx, "get-node-id", nil, `
+SELECT claim_instance_id
+FROM system.jobs
+WHERE id = $1
+`, jobs.UpdateTableMetadataCacheJobID)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, errors.New("no job record found")
+	}
+	if row[0] == tree.DNull {
+		return nil, errors.New("update table metadata cache job is unclaimed")
+	}
+
+	nodeID := roachpb.NodeID(*row[0].(*tree.DInt))
+	statusClient, err := s.dialNode(ctx, nodeID)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+	return statusClient.UpdateTableMetadataCache(ctx, &serverpb.UpdateTableMetadataCacheRequest{
+		Local: true,
+	})
+}
+
+func (s *statusServer) SetUpdateTableMetadataCachSignal(ch chan struct{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.updateTableMetadataJobSignal = ch
 }
