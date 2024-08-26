@@ -30,3 +30,8 @@ func (env *InteractionEnv) handleForgetLeader(t *testing.T, d datadriven.TestDat
 func (env *InteractionEnv) ForgetLeader(idx int) {
 	env.Nodes[idx].ForgetLeader()
 }
+
+func (env *InteractionEnv) handleStepDown(t *testing.T, d datadriven.TestData) error {
+	idx := firstAsNodeIdx(t, d)
+	return env.Nodes[idx].TestingStepDown()
+}

@@ -804,8 +804,8 @@ func (r *raft) reset(term uint64) {
 		//
 		// [*] this case, and other cases where a state transition implies
 		// de-fortification.
-		assertTrue(!r.supportingFortifiedLeader(),
-			"should not be changing terms when supporting a fortified leader")
+		assertTrue(!r.supportingFortifiedLeader() || r.lead == r.id,
+			"should not be changing terms when supporting a fortified leader; leader exempted")
 		r.Term = term
 		r.Vote = None
 		r.lead = None
@@ -979,8 +979,9 @@ func (r *raft) becomePreCandidate() {
 	if r.state == StateLeader {
 		panic("invalid transition [leader -> pre-candidate]")
 	}
-	assertTrue(!r.supportingFortifiedLeader(),
-		"should not be supporting a fortified leader when becoming pre-candidate")
+	assertTrue(!r.supportingFortifiedLeader() || r.lead == r.id,
+		"shouldn't be supporting a fortified leader when becoming pre-candidate; leader exempted",
+	)
 	// Becoming a pre-candidate changes our step functions and state,
 	// but doesn't change anything else. In particular it does not increase
 	// r.Term or change r.Vote.
@@ -1045,7 +1046,13 @@ func (r *raft) hup(t CampaignType) {
 		r.logger.Warningf("%x is unpromotable and can not campaign", r.id)
 		return
 	}
-	if r.supportingFortifiedLeader() {
+	// NB: The leader is allowed to bump its term by calling an election. Note that
+	// we must take care to ensure the leader's support expiration doesn't regress.
+	//
+	// TODO(arul): add special handling for the r.lead == r.id case with an
+	// assertion to ensure the LeaderSupportExpiration is in the past before
+	// campaigning.
+	if r.supportingFortifiedLeader() && r.lead != r.id {
 		r.logger.Debugf("%x ignoring MsgHup due to leader fortification", r.id)
 		return
 	}
@@ -1175,17 +1182,43 @@ func (r *raft) Step(m pb.Message) error {
 	case m.Term > r.Term:
 		if m.Type == pb.MsgVote || m.Type == pb.MsgPreVote {
 			force := bytes.Equal(m.Context, []byte(campaignTransfer))
-			inLease := r.checkQuorum && r.lead != None && r.electionElapsed < r.electionTimeout
-			if !force && inLease {
-				// If a server receives a RequestVote request within the minimum election timeout
-				// of hearing from a current leader, it does not update its term or grant its vote
-				last := r.raftLog.lastEntryID()
-				// TODO(pav-kv): it should be ok to simply print the %+v of the lastEntryID.
-				r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: recently received communication from leader (remaining ticks: %d)",
-					r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term, r.electionTimeout-r.electionElapsed)
-				return nil
+			inHeartbeatLease := r.checkQuorum && r.lead != None && r.electionElapsed < r.electionTimeout
+			// NB: A fortified leader is allowed to bump its term. It'll need to
+			// re-fortify once if it gets elected at the higher term though, so the
+			// leader must take care to not regress its supported expiration. However,
+			// at the follower, we grant the fortified leader our vote at the higher
+			// term.
+			inFortifyLease := r.supportingFortifiedLeader() && r.lead != m.From
+			if !force && (inHeartbeatLease || inFortifyLease) {
+				// If a server receives a Request{,Pre}Vote message but is still
+				// supporting a fortified leader, it does not update its term or grant
+				// its vote. Similarly, if a server receives a Request{,Pre}Vote message
+				// within the minimum election timeout of hearing from the current
+				// leader it does not update its term or grant its vote.
+				{
+					// Log why we're ignoring the Request{,Pre}Vote.
+					var inHeartbeatLeaseMsg string
+					var inFortifyLeaseMsg string
+					var sep string
+					if inHeartbeatLease {
+						inHeartbeatLeaseMsg = fmt.Sprintf("recently received communication from leader (remaining ticks: %d)", r.electionTimeout-r.electionElapsed)
+					}
+					if inFortifyLease {
+						inFortifyLeaseMsg = fmt.Sprintf("supporting fortified leader %d at epoch %d", r.lead, r.leadEpoch)
+					}
+					if inFortifyLease && inHeartbeatLease {
+						sep = " and "
+					}
+					last := r.raftLog.lastEntryID()
+					// TODO(pav-kv): it should be ok to simply print the %+v of the
+					// lastEntryID.
+					r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: %s%s%s",
+						r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term, inHeartbeatLeaseMsg, sep, inFortifyLeaseMsg)
+				}
+				return nil // don't update term/grant vote; early return
 			}
 		}
+
 		switch {
 		case m.Type == pb.MsgPreVote:
 			// Never change our term in response to a PreVote
@@ -1207,15 +1240,13 @@ func (r *raft) Step(m pb.Message) error {
 				r.becomeFollower(m.Term, m.From)
 			case pb.MsgVote:
 				force := bytes.Equal(m.Context, []byte(campaignTransfer))
-				if force {
-					// The leader has asked another follower to campaign. In doing so,
-					// the leader can be thought of as "defortifying".
+				if force || m.From == r.lead {
+					// The leader has asked another follower to campaign or is trying to
+					// bump its term knowing fully well it'll no longer be fortified at
+					// the higher term. Both these cases can be considered the leader
+					// explicitly "defortifying".
 					r.deFortify(r.lead, m.Term)
 				}
-				// TODO(arul): Once we start rejecting MsgVotes when we support a
-				// fortified leader we'll never get here. At that point, we can get
-				// rid of this hack.
-				r.deFortify(r.lead, m.Term)
 				r.becomeFollower(m.Term, None)
 			default:
 				r.becomeFollower(m.Term, None)
@@ -2277,4 +2308,12 @@ func (r *raft) reduceUncommittedSize(s entryPayloadSize) {
 	} else {
 		r.uncommittedSize -= s
 	}
+}
+
+func (r *raft) testingStepDown() error {
+	if r.lead != r.id {
+		return errors.New("cannot step down if not the leader")
+	}
+	r.becomeFollower(r.Term, r.id) // mirror the logic in how we step down when CheckQuorum fails
+	return nil
 }
