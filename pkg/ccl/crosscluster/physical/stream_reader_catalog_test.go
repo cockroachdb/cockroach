@@ -153,5 +153,20 @@ func TestSetupReaderCatalog(t *testing.T) {
 		for _, dml := range newSQLForSrc {
 			srcRunner.Exec(t, dml)
 		}
+
+		// Validate that descriptors are not modifiable.
+		blockedForModification := []string{
+			"ALTER DATABASE db1 RENAME to bob",
+			"ALTER SCHEMA db1.sc1 RENAME to sc2",
+			"ALTER TYPE status ADD VALUE 'unknown'",
+			"ALTER SEQUENCE sq1 RENAME to sq2",
+			"DROP TABLE t1 CASCADE",
+			"DROP VIEW v1 CASCADE",
+		}
+		for _, ddl := range blockedForModification {
+			destRunner.ExpectErr(t,
+				".*replicated (database|schema|type|sequence|relation|table) \\w+ \\(\\d+\\) cannot be mutated",
+				ddl)
+		}
 	}
 }

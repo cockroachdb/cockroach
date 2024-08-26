@@ -142,6 +142,7 @@ var validationMap = []struct {
 			"ImportType":                    {status: thisFieldReferencesNoObjects},
 			"External": {status: todoIAmKnowinglyAddingTechDebt,
 				reason: "TODO(features): add validation that TableID is sane within the same tenant"},
+			"ReplicatedVersion": {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -261,6 +262,7 @@ var validationMap = []struct {
 			"RegionConfig":                  {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 			"Composite":                     {status: iSolemnlySwearThisFieldIsValidated},
+			"ReplicatedVersion":             {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -278,6 +280,7 @@ var validationMap = []struct {
 			"DefaultPrivileges":             {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 			"SystemDatabaseSchemaVersion":   {status: iSolemnlySwearThisFieldIsValidated},
+			"ReplicatedVersion":             {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -295,6 +298,7 @@ var validationMap = []struct {
 			"DefaultPrivileges":             {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 			"Functions":                     {status: iSolemnlySwearThisFieldIsValidated},
+			"ReplicatedVersion":             {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -334,6 +338,7 @@ var validationMap = []struct {
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 			"IsProcedure":                   {status: thisFieldReferencesNoObjects},
 			"Security":                      {status: thisFieldReferencesNoObjects},
+			"ReplicatedVersion":             {status: thisFieldReferencesNoObjects},
 		},
 	},
 }

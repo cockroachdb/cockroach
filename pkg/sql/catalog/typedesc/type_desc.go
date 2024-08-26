@@ -262,6 +262,11 @@ func (desc *immutable) DescriptorType() catalog.DescriptorType {
 	return catalog.Type
 }
 
+// GetReplicatedVersion is a part of the catalog.Descriptor
+func (desc *immutable) GetReplicatedVersion() descpb.DescriptorVersion {
+	return desc.ReplicatedVersion
+}
+
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *Mutable) MaybeIncrementVersion() {
 	// Already incremented, no-op.

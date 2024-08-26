@@ -606,6 +606,11 @@ func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error
 	return nil
 }
 
+// GetReplicatedVersion is a part of the catalog.Descriptor
+func (desc *immutable) GetReplicatedVersion() descpb.DescriptorVersion {
+	return desc.ReplicatedVersion
+}
+
 // maybeRemoveDroppedSelfEntryFromSchemas removes an entry in the Schemas map corresponding to the
 // database itself which was added due to a bug in prior versions when dropping any user-defined schema.
 // The bug inserted an entry for the database rather than the schema being dropped. This function fixes the

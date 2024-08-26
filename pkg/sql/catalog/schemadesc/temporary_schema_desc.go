@@ -45,11 +45,12 @@ type temporary struct {
 var _ catalog.SchemaDescriptor = temporary{}
 var _ privilege.Object = temporary{}
 
-func (p temporary) GetID() descpb.ID                     { return p.id }
-func (p temporary) GetName() string                      { return p.name }
-func (p temporary) GetParentID() descpb.ID               { return p.parentID }
-func (p temporary) SchemaDesc() *descpb.SchemaDescriptor { return makeSyntheticSchemaDesc(p) }
-func (p temporary) DescriptorProto() *descpb.Descriptor  { return makeSyntheticDesc(p) }
+func (p temporary) GetID() descpb.ID                               { return p.id }
+func (p temporary) GetName() string                                { return p.name }
+func (p temporary) GetParentID() descpb.ID                         { return p.parentID }
+func (p temporary) SchemaDesc() *descpb.SchemaDescriptor           { return makeSyntheticSchemaDesc(p) }
+func (p temporary) DescriptorProto() *descpb.Descriptor            { return makeSyntheticDesc(p) }
+func (p temporary) GetReplicatedVersion() descpb.DescriptorVersion { return 0 }
 
 type temporaryBase struct{}
 

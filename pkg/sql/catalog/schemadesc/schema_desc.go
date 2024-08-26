@@ -638,6 +638,11 @@ func (desc *immutable) ForEachFunctionSignature(
 	return nil
 }
 
+// GetReplicatedVersion is a part of the catalog.Descriptor
+func (desc *immutable) GetReplicatedVersion() descpb.DescriptorVersion {
+	return desc.ReplicatedVersion
+}
+
 // IsSchemaNameValid returns whether the input name is valid for a user defined
 // schema.
 func IsSchemaNameValid(name string) error {

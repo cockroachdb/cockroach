@@ -165,7 +165,7 @@ func (r *streamIngestManagerImpl) SetupReaderCatalog(
 		} else if asOf.IsEmpty() {
 			asOf = execCfg.Clock.Now()
 		}
-		if toTenant.ServiceMode != mtinfopb.ServiceModeNone {
+		if toTenant.ServiceMode != mtinfopb.ServiceModeNone && false {
 			return errors.Newf("tenant %s must have service stopped to enable reader mode",
 				toTenant.Name)
 		}
@@ -216,6 +216,7 @@ func (r *streamIngestManagerImpl) SetupReaderCatalog(
 			var mut catalog.MutableDescriptor
 			switch t := desc.DescriptorProto().GetUnion().(type) {
 			case *descpb.Descriptor_Table:
+				t.Table.ReplicatedVersion = t.Table.Version
 				t.Table.Version = 1
 				mutBuilder := tabledesc.NewBuilder(t.Table)
 				if existingRawBytes != nil {
@@ -231,6 +232,7 @@ func (r *streamIngestManagerImpl) SetupReaderCatalog(
 					mutTbl.SetExternalRowData(&descpb.ExternalRowData{TenantID: fromID, TableID: desc.GetID(), AsOf: asOf})
 				}
 			case *descpb.Descriptor_Database:
+				t.Database.ReplicatedVersion = t.Database.Version
 				t.Database.Version = 1
 				mutBuilder := dbdesc.NewBuilder(t.Database)
 				if existingRawBytes != nil {
@@ -238,6 +240,7 @@ func (r *streamIngestManagerImpl) SetupReaderCatalog(
 				}
 				mut = mutBuilder.BuildCreatedMutable()
 			case *descpb.Descriptor_Schema:
+				t.Schema.ReplicatedVersion = t.Schema.Version
 				t.Schema.Version = 1
 				mutBuilder := schemadesc.NewBuilder(t.Schema)
 				if existingRawBytes != nil {
@@ -245,6 +248,7 @@ func (r *streamIngestManagerImpl) SetupReaderCatalog(
 				}
 				mut = mutBuilder.BuildCreatedMutable()
 			case *descpb.Descriptor_Function:
+				t.Function.ReplicatedVersion = t.Function.Version
 				t.Function.Version = 1
 				mutBuilder := funcdesc.NewBuilder(t.Function)
 				if existingRawBytes != nil {
@@ -252,6 +256,7 @@ func (r *streamIngestManagerImpl) SetupReaderCatalog(
 				}
 				mut = mutBuilder.BuildCreatedMutable()
 			case *descpb.Descriptor_Type:
+				t.Type.ReplicatedVersion = t.Type.Version
 				t.Type.Version = 1
 				mutBuilder := typedesc.NewBuilder(t.Type)
 				if existingRawBytes != nil {

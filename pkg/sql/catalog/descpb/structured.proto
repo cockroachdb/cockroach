@@ -1219,7 +1219,12 @@ message TableDescriptor {
   // stored outside the span of the object.
   optional ExternalRowData external = 61 [(gogoproto.nullable) = true];
 
-  // Next ID: 62
+  // Replicated ID tracks the original version from the source tenant
+  // that this descriptor was created from.
+  optional uint32 replicated_version = 63 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ReplicatedVersion", (gogoproto.casttype) = "DescriptorVersion"];
+
+  // Next ID: 64
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside
@@ -1339,7 +1344,12 @@ message DatabaseDescriptor {
   // Note: It should only be set for the system database.
   optional roachpb.Version system_database_schema_version = 13;
 
-  // Next field is 14.
+  // Replicated ID tracks the original version from the source tenant
+  // that this descriptor was created from.
+  optional uint32 replicated_version = 14 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ReplicatedVersion", (gogoproto.casttype) = "DescriptorVersion"];
+
+  // Next field is 15.
 }
 
 // SuperRegion stores a super region configuration.
@@ -1545,6 +1555,11 @@ message TypeDescriptor {
   // Composite is the list of fields if this is a composite type.
   optional Composite composite = 18;
 
+  // Replicated ID tracks the original version from the source tenant
+  // that this descriptor was created from.
+  optional uint32 replicated_version = 20 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ReplicatedVersion", (gogoproto.casttype) = "DescriptorVersion"];
+
   // Next field is 19.
 }
 
@@ -1631,7 +1646,12 @@ message SchemaDescriptor {
   // functions contains all UDFs created in this schema.
   map<string, Function> functions = 13 [(gogoproto.nullable) = false];
 
-  // Next field is 14.
+  // Replicated ID tracks the original version from the source tenant
+  // that this descriptor was created from.
+  optional uint32 replicated_version = 14 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ReplicatedVersion", (gogoproto.casttype) = "DescriptorVersion"];
+
+  // Next field is 15.
 }
 
 // FunctionDescriptor represent a User Defined Function (UDF).
@@ -1736,7 +1756,12 @@ message FunctionDescriptor {
   // The default mode is INVOKER.
   optional cockroach.sql.catalog.catpb.Function.Security security = 23 [(gogoproto.nullable) = false];
 
-  // Next field id is 24
+  // Replicated ID tracks the original version from the source tenant
+  // that this descriptor was created from.
+  optional uint32 replicated_version = 24 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ReplicatedVersion", (gogoproto.casttype) = "DescriptorVersion"];
+
+  // Next field id is 25
 }
 
 // Descriptor is a union type for descriptors for tables, schemas, databases,

@@ -33,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -282,6 +284,15 @@ func (tc *Collection) WriteDescToBatch(
 		return errors.AssertionFailedf("cannot write descriptor with an empty ID: %v", desc)
 	}
 	desc.MaybeIncrementVersion()
+	// If this is not an initial version, then replication
+	// versions of descriptors cannot be mutated.
+	if desc.GetVersion() != 1 && desc.GetReplicatedVersion() != 0 {
+		return pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+			"replicated %s %s (%d) cannot be mutated",
+			desc.GetObjectTypeString(),
+			desc.GetName(),
+			desc.GetID())
+	}
 	if !tc.skipValidationOnWrite && tc.validationModeProvider.ValidateDescriptorsOnWrite() {
 		if err := validate.Self(tc.version, desc); err != nil {
 			return err

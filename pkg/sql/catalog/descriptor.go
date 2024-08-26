@@ -266,6 +266,10 @@ type Descriptor interface {
 	// referenced by this descriptor which must be hydrated prior to using it.
 	// iterutil.StopIteration is supported.
 	ForEachUDTDependentForHydration(func(t *types.T) error) error
+
+	// GetReplicatedVersion return the version from the source
+	// tenant if this descriptor is replicated.
+	GetReplicatedVersion() descpb.DescriptorVersion
 }
 
 // DatabaseDescriptor encapsulates the concept of a database.

@@ -43,11 +43,12 @@ type public struct {
 var _ catalog.SchemaDescriptor = public{}
 var _ privilege.Object = public{}
 
-func (p public) GetID() descpb.ID                     { return keys.PublicSchemaID }
-func (p public) GetParentID() descpb.ID               { return descpb.InvalidID }
-func (p public) GetName() string                      { return catconstants.PublicSchemaName }
-func (p public) SchemaDesc() *descpb.SchemaDescriptor { return makeSyntheticSchemaDesc(p) }
-func (p public) DescriptorProto() *descpb.Descriptor  { return makeSyntheticDesc(p) }
+func (p public) GetID() descpb.ID                               { return keys.PublicSchemaID }
+func (p public) GetParentID() descpb.ID                         { return descpb.InvalidID }
+func (p public) GetName() string                                { return catconstants.PublicSchemaName }
+func (p public) SchemaDesc() *descpb.SchemaDescriptor           { return makeSyntheticSchemaDesc(p) }
+func (p public) DescriptorProto() *descpb.Descriptor            { return makeSyntheticDesc(p) }
+func (p public) GetReplicatedVersion() descpb.DescriptorVersion { return 0 }
 
 type publicBase struct{}
 
