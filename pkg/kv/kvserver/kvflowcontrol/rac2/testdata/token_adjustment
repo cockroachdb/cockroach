@@ -1,5 +1,20 @@
-init
+init stream=1
 ----
+
+metrics
+----
+kvflowcontrol.streams.eval.regular.total_count  : 1
+kvflowcontrol.streams.eval.regular.blocked_count: 0
+kvflowcontrol.tokens.eval.regular.available     : 16777216
+kvflowcontrol.tokens.eval.regular.deducted      : 0
+kvflowcontrol.tokens.eval.regular.returned      : 0
+kvflowcontrol.tokens.eval.regular.unaccounted   : 0
+kvflowcontrol.streams.eval.elastic.total_count  : 1
+kvflowcontrol.streams.eval.elastic.blocked_count: 0
+kvflowcontrol.tokens.eval.elastic.available     : 8388608
+kvflowcontrol.tokens.eval.elastic.deducted      : 0
+kvflowcontrol.tokens.eval.elastic.returned      : 0
+kvflowcontrol.tokens.eval.elastic.unaccounted   : 0
 
 adjust
 class=regular delta=-1MiB
@@ -36,8 +51,43 @@ history
  +2.0MiB elastic    +10MiB |  +2.0MiB
  +6.0MiB regular    +16MiB |  +8.0MiB
 
-init
+# Despite the elastic stream being unblocked by the time metrics is called, the
+# stream was blocked for a non-zero duration between metric calls so we expect
+# elastic.blocked_count=1.
+metrics
 ----
+kvflowcontrol.streams.eval.regular.total_count  : 1
+kvflowcontrol.streams.eval.regular.blocked_count: 0
+kvflowcontrol.tokens.eval.regular.available     : 16777216
+kvflowcontrol.tokens.eval.regular.deducted      : 16777216
+kvflowcontrol.tokens.eval.regular.returned      : 16777216
+kvflowcontrol.tokens.eval.regular.unaccounted   : 0
+kvflowcontrol.streams.eval.elastic.total_count  : 1
+kvflowcontrol.streams.eval.elastic.blocked_count: 1
+kvflowcontrol.tokens.eval.elastic.available     : 8388608
+kvflowcontrol.tokens.eval.elastic.deducted      : 18874368
+kvflowcontrol.tokens.eval.elastic.returned      : 18874368
+kvflowcontrol.tokens.eval.elastic.unaccounted   : 0
+
+init stream=2
+----
+
+# There should now be two streams in the metrics, double the available tokens
+# for each work class.
+metrics
+----
+kvflowcontrol.streams.eval.regular.total_count  : 2
+kvflowcontrol.streams.eval.regular.blocked_count: 0
+kvflowcontrol.tokens.eval.regular.available     : 33554432
+kvflowcontrol.tokens.eval.regular.deducted      : 16777216
+kvflowcontrol.tokens.eval.regular.returned      : 16777216
+kvflowcontrol.tokens.eval.regular.unaccounted   : 0
+kvflowcontrol.streams.eval.elastic.total_count  : 2
+kvflowcontrol.streams.eval.elastic.blocked_count: 0
+kvflowcontrol.tokens.eval.elastic.available     : 16777216
+kvflowcontrol.tokens.eval.elastic.deducted      : 18874368
+kvflowcontrol.tokens.eval.elastic.returned      : 18874368
+kvflowcontrol.tokens.eval.elastic.unaccounted   : 0
 
 adjust
 class=elastic delta=-7MiB
@@ -47,8 +97,10 @@ class=regular delta=-1MiB
 class=regular delta=-6MiB
 class=regular delta=+6MiB
 class=regular delta=-9MiB
-class=regular delta=+16MiB
+class=regular delta=+17MiB
+class=elastic delta=+1MiB
 ----
+
 
 history
 ----
@@ -62,4 +114,20 @@ history
  -6.0MiB regular   +2.0MiB |  -7.0MiB (elastic blocked)
  +6.0MiB regular   +8.0MiB |  -1.0MiB (elastic blocked)
  -9.0MiB regular   -1.0MiB |   -10MiB (regular and elastic blocked)
-  +16MiB regular    +15MiB |  +6.0MiB
+  +17MiB regular    +16MiB |  +7.0MiB
+ +1.0MiB elastic    +16MiB |  +8.0MiB
+
+metrics
+----
+kvflowcontrol.streams.eval.regular.total_count  : 2
+kvflowcontrol.streams.eval.regular.blocked_count: 1
+kvflowcontrol.tokens.eval.regular.available     : 33554432
+kvflowcontrol.tokens.eval.regular.deducted      : 40894464
+kvflowcontrol.tokens.eval.regular.returned      : 40894464
+kvflowcontrol.tokens.eval.regular.unaccounted   : 0
+kvflowcontrol.streams.eval.elastic.total_count  : 2
+kvflowcontrol.streams.eval.elastic.blocked_count: 1
+kvflowcontrol.tokens.eval.elastic.available     : 16777216
+kvflowcontrol.tokens.eval.elastic.deducted      : 50331648
+kvflowcontrol.tokens.eval.elastic.returned      : 50331648
+kvflowcontrol.tokens.eval.elastic.unaccounted   : 0

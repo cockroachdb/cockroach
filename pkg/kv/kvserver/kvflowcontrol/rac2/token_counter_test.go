@@ -20,8 +20,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -44,6 +46,10 @@ func TestTokenAdjustment(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	provider := NewStreamTokenCounterProvider(
+		cluster.MakeTestingClusterSettings(),
+		hlc.NewClockForTesting(nil),
+	)
 	var (
 		ctx         = context.Background()
 		counter     *tokenCounter
@@ -54,7 +60,9 @@ func TestTokenAdjustment(t *testing.T) {
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
-				counter = newTokenCounter(cluster.MakeTestingClusterSettings())
+				var stream int
+				d.ScanArgs(t, "stream", &stream)
+				counter = provider.Eval(kvflowcontrol.Stream{StoreID: roachpb.StoreID(stream)})
 				adjustments = nil
 				return ""
 
@@ -120,6 +128,25 @@ func TestTokenAdjustment(t *testing.T) {
 				}
 				return buf.String()
 
+			case "metrics":
+				provider.UpdateMetricGauges()
+				var buf strings.Builder
+				// We are only using the eval token counter in this test.
+				counterMetrics := provider.tokenMetrics.counterMetrics[flowControlEvalMetricType]
+				streamMetrics := provider.tokenMetrics.streamMetrics[flowControlEvalMetricType]
+				for _, wc := range []admissionpb.WorkClass{
+					admissionpb.RegularWorkClass,
+					admissionpb.ElasticWorkClass,
+				} {
+					fmt.Fprintf(&buf, "%-48v: %v\n", streamMetrics.count[wc].GetName(), streamMetrics.count[wc].Value())
+					fmt.Fprintf(&buf, "%-48v: %v\n", streamMetrics.blockedCount[wc].GetName(), streamMetrics.blockedCount[wc].Value())
+					fmt.Fprintf(&buf, "%-48v: %v\n", streamMetrics.tokensAvailable[wc].GetName(), streamMetrics.tokensAvailable[wc].Value())
+					fmt.Fprintf(&buf, "%-48v: %v\n", counterMetrics.deducted[wc].GetName(), counterMetrics.deducted[wc].Count())
+					fmt.Fprintf(&buf, "%-48v: %v\n", counterMetrics.returned[wc].GetName(), counterMetrics.returned[wc].Count())
+					fmt.Fprintf(&buf, "%-48v: %v\n", counterMetrics.unaccounted[wc].GetName(), counterMetrics.unaccounted[wc].Count())
+				}
+				return buf.String()
+
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
@@ -172,7 +199,11 @@ func TestTokenCounter(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &settings.SV, int64(limits.elastic))
 	kvflowcontrol.RegularTokensPerStream.Override(ctx, &settings.SV, int64(limits.regular))
-	counter := newTokenCounter(settings)
+	counter := newTokenCounter(
+		settings,
+		hlc.NewClockForTesting(nil),
+		newTokenCounterMetrics(flowControlEvalMetricType),
+	)
 
 	assertStateReset := func(t *testing.T) {
 		available, handle := counter.TokensAvailable(admissionpb.ElasticWorkClass)
@@ -342,9 +373,13 @@ func (ts *evalTestState) getOrCreateTC(stream string) *namedTokenCounter {
 	tc, exists := ts.mu.counters[stream]
 	if !exists {
 		tc = &namedTokenCounter{
-			parent:       ts,
-			tokenCounter: newTokenCounter(ts.settings),
-			stream:       stream,
+			parent: ts,
+			tokenCounter: newTokenCounter(
+				ts.settings,
+				hlc.NewClockForTesting(nil),
+				newTokenCounterMetrics(flowControlEvalMetricType),
+			),
+			stream: stream,
 		}
 		// Ensure the token counter starts with no tokens initially.
 		tc.adjust(context.Background(),

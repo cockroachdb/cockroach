@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "rac2",
     srcs = [
+        "metrics.go",
         "priority.go",
         "range_controller.go",
         "store_stream.go",
@@ -19,7 +20,9 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
+        "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
@@ -43,6 +46,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
