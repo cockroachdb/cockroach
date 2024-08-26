@@ -1313,6 +1313,7 @@ func TestStreamingRegionalConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes too long under race")
+	skip.UnderDeadlock(t, "takes too long under deadlock")
 
 	testutils.RunTrueAndFalse(t, "fromSys", func(t *testing.T, sys bool) {
 		ctx := context.Background()
