@@ -1176,16 +1176,37 @@ func (r *raft) Step(m pb.Message) error {
 		if m.Type == pb.MsgVote || m.Type == pb.MsgPreVote {
 			force := bytes.Equal(m.Context, []byte(campaignTransfer))
 			inLease := r.checkQuorum && r.lead != None && r.electionElapsed < r.electionTimeout
-			if !force && inLease {
-				// If a server receives a RequestVote request within the minimum election timeout
-				// of hearing from a current leader, it does not update its term or grant its vote
-				last := r.raftLog.lastEntryID()
-				// TODO(pav-kv): it should be ok to simply print the %+v of the lastEntryID.
-				r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: lease is not expired (remaining ticks: %d)",
-					r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term, r.electionTimeout-r.electionElapsed)
-				return nil
+			inFortifyLease := r.supportingFortifiedLeader()
+			if !force && (inLease || inFortifyLease) {
+				// If a server receives a Request{,Pre}Vote message but is still
+				// supporting a fortified leader, it does not update its term or grant
+				// its vote. Similarly, if a server receives a Request{,Pre}Vote message
+				// within the minimum election timeout of hearing from the current
+				// leader it does not update its term or grant its vote.
+				{
+					// Log why we're ignoring the Request{,Pre}Vote.
+					var inFortifyLeaseMsg string
+					var inLeaseMsg string
+					var sep string
+					if inLease {
+						inLeaseMsg = fmt.Sprintf("lease is not expired (remaining ticks: %d)", r.electionTimeout-r.electionElapsed)
+					}
+					if inFortifyLease {
+						inFortifyLeaseMsg = fmt.Sprintf("supporting fortified leader %d at epoch %d", r.lead, r.leadEpoch)
+					}
+					if inFortifyLease && inLease {
+						sep = " and "
+					}
+					last := r.raftLog.lastEntryID()
+					// TODO(pav-kv): it should be ok to simply print the %+v of the
+					// lastEntryID.
+					r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: %s%s%s",
+						r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term, inLeaseMsg, sep, inFortifyLeaseMsg)
+				}
+				return nil // don't update term/grant vote; early return
 			}
 		}
+
 		switch {
 		case m.Type == pb.MsgPreVote:
 			// Never change our term in response to a PreVote
@@ -1212,10 +1233,6 @@ func (r *raft) Step(m pb.Message) error {
 					// the leader can be thought of as "defortifying".
 					r.deFortify(r.lead, m.Term)
 				}
-				// TODO(arul): Once we start rejecting MsgVotes when we support a
-				// fortified leader we'll never get here. At that point, we can get
-				// rid of this hack.
-				r.deFortify(r.lead, m.Term)
 				r.becomeFollower(m.Term, None)
 			default:
 				r.becomeFollower(m.Term, None)
