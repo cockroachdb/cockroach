@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -229,23 +230,34 @@ func TestRunGenerativeSplitAndScatterRandomizedDestOnFailScatter(t *testing.T) {
 		// and can break if it changes.
 		require.GreaterOrEqual(t, cnt, 2)
 	}
+
+	// Also test that errors from split mid-chunk are returned (this deadlocked at
+	// one point).
+	spec.ChunkSize = 2
+	require.Error(t, runGenerativeSplitAndScatter(ctx, &flowCtx, &spec,
+		[]splitAndScatterer{&scatterAlwaysFailsSplitScatterer{}},
+		[]splitAndScatterer{&scatterAlwaysFailsSplitScatterer{err: errors.New("injected")}},
+		make(chan entryNode, 1000),
+		&cache,
+	))
 }
 
 // scatterAlwaysFailsSplitScatterer always fails the scatter and returns 0 as
 // the chunk destination.
 type scatterAlwaysFailsSplitScatterer struct {
+	err error
 }
 
 func (t *scatterAlwaysFailsSplitScatterer) split(
 	ctx context.Context, codec keys.SQLCodec, splitKey roachpb.Key,
 ) error {
-	return nil
+	return t.err
 }
 
 func (t *scatterAlwaysFailsSplitScatterer) scatter(
 	ctx context.Context, codec keys.SQLCodec, scatterKey roachpb.Key,
 ) (roachpb.NodeID, error) {
-	return 0, nil
+	return 0, t.err
 }
 
 func makeTestingGenerativeSplitAndScatterSpec(
