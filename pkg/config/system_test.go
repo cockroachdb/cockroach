@@ -566,6 +566,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()), keys.SystemRangesID},
 		{roachpb.RKey(keys.TableDataMin), keys.SystemDatabaseID},
 		{roachpb.RKey(keys.SystemConfigSplitKey), keys.SystemDatabaseID},
+		{roachpb.RKey(keys.GracePeriodInitTimestamp), keys.SystemRangesID},
 
 		{tkey(keys.ZonesTableID), keys.ZonesTableID},
 		{roachpb.RKey(keys.SystemZonesTableSpan.Key), keys.ZonesTableID},
