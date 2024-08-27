@@ -1181,7 +1181,7 @@ func (r *raft) Step(m pb.Message) error {
 				// of hearing from a current leader, it does not update its term or grant its vote
 				last := r.raftLog.lastEntryID()
 				// TODO(pav-kv): it should be ok to simply print the %+v of the lastEntryID.
-				r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: lease is not expired (remaining ticks: %d)",
+				r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: recently received communication from leader (remaining ticks: %d)",
 					r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term, r.electionTimeout-r.electionElapsed)
 				return nil
 			}
