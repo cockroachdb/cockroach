@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "delegate.go",
         "job_control.go",
+        "notify.go",
         "show_all_cluster_settings.go",
         "show_changefeed_jobs.go",
         "show_database_indexes.go",
