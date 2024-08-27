@@ -872,9 +872,6 @@ func (u *sqlSymUnion) showRangesOpts() *tree.ShowRangesOptions {
 func (u *sqlSymUnion) tenantSpec() *tree.TenantSpec {
     return u.val.(*tree.TenantSpec)
 }
-func (u *sqlSymUnion) likeTenantSpec() *tree.LikeTenantSpec {
-    return u.val.(*tree.LikeTenantSpec)
-}
 func (u *sqlSymUnion) cteMaterializeClause() tree.CTEMaterializeClause {
     return u.val.(tree.CTEMaterializeClause)
 }
@@ -1238,7 +1235,6 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <tree.Statement> create_proc_stmt
 %type <tree.Statement> create_trigger_stmt
 
-%type <*tree.LikeTenantSpec> opt_like_virtual_cluster
 %type <tree.LogicalReplicationResources> logical_replication_resources, logical_replication_resources_list
 %type <*tree.LogicalReplicationOptions> opt_logical_replication_options logical_replication_options logical_replication_options_list
 
@@ -4744,49 +4740,45 @@ logical_replication_options:
 // %Help: CREATE VIRTUAL CLUSTER - create a new virtual cluster
 // %Category: Experimental
 // %Text:
-// CREATE VIRTUAL CLUSTER [ IF NOT EXISTS ] name [ LIKE <virtual_cluster_spec> ] [ <replication> ]
+// CREATE VIRTUAL CLUSTER [ IF NOT EXISTS ] name [ <replication> ]
 //
 // Replication option:
 //    FROM REPLICATION OF <virtual_cluster_spec> ON <location> [ WITH OPTIONS ... ]
 create_virtual_cluster_stmt:
-  CREATE virtual_cluster d_expr opt_like_virtual_cluster
+  CREATE virtual_cluster d_expr
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()},
-      Like: $4.likeTenantSpec(),
     }
   }
-| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_virtual_cluster
+| CREATE virtual_cluster IF NOT EXISTS d_expr
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
       IfNotExists: true,
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
-      Like: $7.likeTenantSpec(),
     }
   }
-| CREATE virtual_cluster d_expr opt_like_virtual_cluster FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
+| CREATE virtual_cluster d_expr FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()},
-      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $8.expr()},
-      ReplicationSourceAddress: $10.expr(),
-      Options: *$11.tenantReplicationOptions(),
-      Like: $4.likeTenantSpec(),
+      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $7.expr()},
+      ReplicationSourceAddress: $9.expr(),
+      Options: *$10.tenantReplicationOptions(),
     }
   }
-| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_virtual_cluster FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
+| CREATE virtual_cluster IF NOT EXISTS d_expr FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
       IfNotExists: true,
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
-      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $11.expr()},
-      ReplicationSourceAddress: $13.expr(),
-      Options: *$14.tenantReplicationOptions(),
-      Like: $7.likeTenantSpec(),
+      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $10.expr()},
+      ReplicationSourceAddress: $12.expr(),
+      Options: *$13.tenantReplicationOptions(),
     }
   }
 | CREATE virtual_cluster error // SHOW HELP: CREATE VIRTUAL CLUSTER
@@ -4794,19 +4786,6 @@ create_virtual_cluster_stmt:
 virtual_cluster:
   TENANT { /* SKIP DOC */ }
 | VIRTUAL CLUSTER
-
-// opt_like_virtual_cluster defines a LIKE clause for CREATE VIRTUAL CLUSTER.
-// Eventually this can grow to support INCLUDING/EXCLUDING options
-// like in CREATE TABLE.
-opt_like_virtual_cluster:
-  /* EMPTY */
-  {
-     $$.val = &tree.LikeTenantSpec{}
-  }
-| LIKE virtual_cluster_spec
-  {
-      $$.val = &tree.LikeTenantSpec{OtherTenant: $2.tenantSpec()}
-  }
 
 // Optional tenant replication options.
 opt_with_replication_options:
