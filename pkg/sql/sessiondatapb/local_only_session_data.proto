@@ -13,6 +13,7 @@ package cockroach.sql.sessiondatapb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb";
 
 import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
 
 // LocalOnlySessionData contains the serializable components of session
 // parameters that only influence execution on the gateway nodes.
@@ -545,6 +546,10 @@ message LocalOnlySessionData {
   // hoisting a volatile expression that is conditionally executed by a CASE,
   // COALESCE, or IFERR expression.
   bool optimizer_use_conditional_hoist_fix = 138;
+  // OriginTimestampForLogicalDataReplication is the mvcc timestamp the data
+	// written in this session were originally written with before being
+	// replicated via Logical Data Replication.
+  util.hlc.Timestamp origin_timestamp_for_logical_data_replication = 139 [(gogoproto.nullable) = false];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

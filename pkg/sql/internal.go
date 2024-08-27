@@ -973,6 +973,9 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.OriginIDForLogicalDataReplication != 0 {
 		sd.OriginIDForLogicalDataReplication = o.OriginIDForLogicalDataReplication
 	}
+	if o.OriginTimestampForLogicalDataReplication.IsSet() {
+		sd.OriginTimestampForLogicalDataReplication = o.OriginTimestampForLogicalDataReplication
+	}
 	if o.PlanCacheMode != nil {
 		sd.PlanCacheMode = *o.PlanCacheMode
 	}
