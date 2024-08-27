@@ -448,6 +448,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				descriptorChanged = true
 				for _, updated := range affected {
+					// Disallow schema change if the FK references a table whose schema is
+					// locked.
+					if err := checkTableSchemaUnlocked(updated); err != nil {
+						return err
+					}
 					if err := params.p.writeSchemaChange(
 						params.ctx, updated, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 					); err != nil {
