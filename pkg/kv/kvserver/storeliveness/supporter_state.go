@@ -36,9 +36,11 @@ type supporterState struct {
 //   - ssfu := checkOutUpdate()
 //     ssfu.handleHeartbeat(msg slpb.Message)
 //     checkInUpdate(ssfu)
+//     finishUpdate(ssfu)
 //   - ssfu := checkOutUpdate()
 //     ssfu.withdrawSupport(now hlc.ClockTimestamp)
 //     checkInUpdate(ssfu)
+//     finishUpdate(ssfu)
 //
 // Only one update can be in progress to ensure that multiple mutation methods
 // are not run concurrently.
@@ -149,19 +151,20 @@ func (ssfu *supporterStateForUpdate) reset() {
 }
 
 // write writes the supporter meta and supportFor to disk if they changed in
-// this update.
-func (ssfu *supporterStateForUpdate) write(ctx context.Context, rw storage.ReadWriter) error {
+// this update. Use a batch to avoid potentially writing multiple support states
+// separately.
+func (ssfu *supporterStateForUpdate) write(ctx context.Context, b storage.Batch) error {
 	if ssfu.inProgress.meta == (slpb.SupporterMeta{}) && len(ssfu.inProgress.supportFor) == 0 {
 		return nil
 	}
 	if ssfu.inProgress.meta != (slpb.SupporterMeta{}) {
 		ssfu.assertMeta()
-		if err := writeSupporterMeta(ctx, rw, ssfu.inProgress.meta); err != nil {
+		if err := writeSupporterMeta(ctx, b, ssfu.inProgress.meta); err != nil {
 			return err
 		}
 	}
 	for _, ss := range ssfu.inProgress.supportFor {
-		if err := writeSupportForState(ctx, rw, ss); err != nil {
+		if err := writeSupportForState(ctx, b, ss); err != nil {
 			return err
 		}
 	}
@@ -204,10 +207,6 @@ func (ssh *supporterStateHandler) checkOutUpdate() *supporterStateForUpdate {
 // updates from the inProgress view. It clears the inProgress view, and swaps it
 // back in supporterStateHandler.update to be checked out by future updates.
 func (ssh *supporterStateHandler) checkInUpdate(ssfu *supporterStateForUpdate) {
-	defer func() {
-		ssfu.reset()
-		ssh.update.Swap(ssfu)
-	}()
 	if ssfu.inProgress.meta == (slpb.SupporterMeta{}) && len(ssfu.inProgress.supportFor) == 0 {
 		return
 	}
@@ -220,6 +219,14 @@ func (ssh *supporterStateHandler) checkInUpdate(ssfu *supporterStateForUpdate) {
 	for storeID, ss := range ssfu.inProgress.supportFor {
 		ssfu.checkedIn.supportFor[storeID] = ss
 	}
+}
+
+// finishUpdate performs cleanup after a successful or unsuccessful
+// checkInUpdate. It resets the supporterStateForUpdate in-progress state and
+// makes it available for future check out.
+func (ssh *supporterStateHandler) finishUpdate(ssfu *supporterStateForUpdate) {
+	ssfu.reset()
+	ssh.update.Swap(ssfu)
 }
 
 // Functions for handling heartbeats.
