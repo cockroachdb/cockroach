@@ -166,9 +166,7 @@ database_name = 'rand' AND schema_name = 'public'`)
 	withOnlineRestore := func() string {
 		onlineRestoreExtension := ""
 		if rng.Intn(2) != 0 {
-			// TODO(msbutler): once this test is deflaked, add back the online restore
-			// variant of this test.
-			onlineRestoreExtension = ""
+			onlineRestoreExtension = ", experimental deferred copy"
 		}
 		return onlineRestoreExtension
 	}

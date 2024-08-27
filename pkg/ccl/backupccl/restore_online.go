@@ -302,11 +302,6 @@ func sendAddRemoteSSTWorker(
 					)
 				}
 
-				// TODO(dt): remove when pebble supports empty (virtual) files.
-				if !file.BackupFileEntrySpan.Equal(restoringSubspan) {
-					return errors.AssertionFailedf("file span %s at path %s is not contained in restore span %s", file.BackupFileEntrySpan, file.Path, entry.Span)
-				}
-
 				restoringSubspan, err := rewriteSpan(&kr, restoringSubspan.Clone(), entry.ElidedPrefix)
 				if err != nil {
 					return err
