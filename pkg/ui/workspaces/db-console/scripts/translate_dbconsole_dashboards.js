@@ -37,7 +37,7 @@ const translateMetricDef = (metricElement, i, groupByNode) => {
       }
       query = query + "{$cluster}";
       if (groupByNode) {
-        query += ' by {node}';
+        query += ' by {node_id}';
       }
       metricDef.query.query = query;
     }
