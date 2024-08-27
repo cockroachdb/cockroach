@@ -17,11 +17,14 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -102,6 +105,8 @@ type FollowerStateInfo struct {
 	// (Match, Next) is in-flight.
 	Match uint64
 	Next  uint64
+	// TODO(kvoli): Find a better home for this, we need it for token return.
+	Term uint64
 	// Invariant: Admitted[i] <= Match.
 	Admitted [raftpb.NumPriorities]uint64
 }
@@ -309,7 +314,14 @@ retry:
 //
 // Requires replica.raftMu to be held.
 func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e RaftEvent) error {
-	panic("unimplemented")
+	for r, rs := range rc.replicaMap {
+		info := rc.opts.RaftInterface.FollowerState(r)
+		rs.handleReadyState(ctx, info)
+	}
+	for _, rs := range rc.replicaMap {
+		rs.handleReadyEntries(ctx, e.Entries)
+	}
+	return nil
 }
 
 // HandleSchedulerEventRaftMuLocked processes an event scheduled by the
@@ -434,7 +446,10 @@ type replicaState struct {
 	stream           kvflowcontrol.Stream
 	evalTokenCounter TokenCounter
 	desc             roachpb.ReplicaDescriptor
-	connectedState   connectedState
+
+	connectedState connectedState
+	closed         bool
+	tracker        *Tracker
 }
 
 func NewReplicaState(
@@ -446,11 +461,13 @@ func NewReplicaState(
 		stream:           stream,
 		evalTokenCounter: parent.opts.SSTokenCounter.Eval(stream),
 		desc:             desc,
+		tracker:          &Tracker{},
 	}
 
 	// TODO(rac2): Construct the sendStream state here if the replica is in state
 	// replicate.
 	state := parent.opts.RaftInterface.FollowerState(desc.ReplicaID)
+	rs.tracker.Init(stream)
 	switch state.State {
 	case tracker.StateReplicate:
 		rs.connectedState = replicate
@@ -460,6 +477,127 @@ func NewReplicaState(
 		rs.connectedState = snapshot
 	}
 	return rs
+}
+
+type entryFCState struct {
+	term, index     uint64
+	usesFlowControl bool
+	tokens          kvflowcontrol.Tokens
+	pri             raftpb.Priority
+}
+
+// getEntryFCStateOrFatal returns the given entry's flow control state. If the
+// entry encoding cannot be determined, a fatal is logged.
+func getEntryFCStateOrFatal(ctx context.Context, entry raftpb.Entry) entryFCState {
+	enc, pri, err := raftlog.EncodingOf(entry)
+	if err != nil {
+		log.Fatalf(ctx, "error getting encoding of entry: %v", err)
+	}
+	return entryFCState{
+		index:           entry.Index,
+		term:            entry.Term,
+		usesFlowControl: enc.UsesAdmissionControl(),
+		tokens:          kvflowcontrol.Tokens(len(entry.Data)),
+		pri:             pri,
+	}
+}
+
+func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []raftpb.Entry) {
+	if rs.closed || rs.connectedState != replicate {
+		return
+	}
+	for _, entry := range entries {
+		state := getEntryFCStateOrFatal(ctx, entry)
+		log.Infof(ctx, "entry: %v", state)
+		if !state.usesFlowControl {
+			continue
+		}
+		rs.tracker.Track(ctx, state.term, state.index, state.pri, state.tokens)
+		rs.evalTokenCounter.Deduct(
+			ctx, WorkClassFromRaftPriority(state.pri), state.tokens)
+	}
+}
+
+func (rs *replicaState) handleReadyState(ctx context.Context, info FollowerStateInfo) {
+	state := info.State
+	switch state {
+	case tracker.StateProbe:
+		if !rs.closed {
+			rs.close(ctx)
+		}
+	case tracker.StateReplicate:
+		rs.closed = false
+		rs.makeConsistentInStateReplicate(ctx, info)
+	case tracker.StateSnapshot:
+		if !rs.closed {
+			switch rs.connectedState {
+			case replicate:
+				rs.changeToStateSnapshot(ctx)
+			case probeRecentlyReplicate:
+				rs.close(ctx)
+			case snapshot:
+			}
+		}
+	}
+}
+
+func (rs *replicaState) close(ctx context.Context) {
+	if rs.connectedState != snapshot {
+		rs.changeToStateSnapshot(ctx)
+	}
+	rs.closed = true
+}
+
+func (rs *replicaState) makeConsistentInStateReplicate(
+	ctx context.Context, info FollowerStateInfo,
+) {
+	defer rs.returnTokensUsingInfo(ctx, info)
+
+	// The leader is always in state replicate.
+	if rs.parent.opts.LocalReplicaID == rs.desc.ReplicaID {
+		if rs.connectedState != replicate {
+			log.Fatalf(ctx, "%v", errors.AssertionFailedf(
+				"leader should always be in state replicate but found in %v",
+				rs.connectedState))
+		}
+		return
+	}
+	// Follower replica case. Update the connected state.
+	switch rs.connectedState {
+	case replicate:
+	case probeRecentlyReplicate:
+		rs.connectedState = replicate
+	case snapshot:
+		rs.connectedState = replicate
+	}
+}
+
+func (rs *replicaState) changeToStateSnapshot(ctx context.Context) {
+	rs.connectedState = snapshot
+	// Since the replica is now in StateSnapshot, there is no need for Raft to
+	// send MsgApp pings to discover what has been missed. So there is no
+	// liveness guarantee on when these tokens will be returned, and therefore we
+	// return all tokens in the tracker.
+	rs.returnTokens(ctx, rs.tracker.UntrackAll())
+}
+
+func (rs *replicaState) returnTokensUsingInfo(ctx context.Context, info FollowerStateInfo) {
+	log.Infof(ctx, "return tokens using info: term=%v admitted=%v", info.Term, info.Admitted)
+	rs.returnTokens(ctx, rs.tracker.Untrack(info.Term, info.Admitted))
+}
+
+// returnTokens takes the tokens untracked by the tracker and returns them to
+// the eval token counter.
+func (rs *replicaState) returnTokens(
+	ctx context.Context, returned [raftpb.NumPriorities]kvflowcontrol.Tokens,
+) {
+	log.Infof(ctx, "return tokens: %v", returned)
+	for pri, tokens := range returned {
+		pri := raftpb.Priority(pri)
+		if tokens > 0 {
+			rs.evalTokenCounter.Return(ctx, WorkClassFromRaftPriority(pri), tokens)
+		}
+	}
 }
 
 type connectedState uint32

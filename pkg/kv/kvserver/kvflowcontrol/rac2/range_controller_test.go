@@ -20,11 +20,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -82,6 +88,30 @@ func (r *testingRCRange) startWaitForEval(name string, pri admissionpb.WorkPrior
 		r.mu.evals[name].err = err
 		r.mu.evals[name].done = true
 	}()
+}
+
+func (r *testingRCRange) admit(
+	ctx context.Context,
+	storeID roachpb.StoreID,
+	term uint64,
+	toIndex uint64,
+	pri admissionpb.WorkPriority,
+) {
+	r.mu.Lock()
+
+	for _, replica := range r.mu.r.replicaSet {
+		if replica.desc.StoreID == storeID {
+			replica := replica
+			replica.info.Admitted[AdmissionToRaftPriority(pri)] = toIndex
+			replica.info.Term = term
+			r.mu.r.replicaSet[replica.desc.ReplicaID] = replica
+			break
+		}
+	}
+
+	r.mu.Unlock()
+	// Send an empty raft event in order to trigger potential token return.
+	r.rc.HandleRaftEventRaftMuLocked(ctx, RaftEvent{})
 }
 
 type testingRange struct {
@@ -233,8 +263,47 @@ func parsePriority(t *testing.T, input string) admissionpb.WorkPriority {
 	case "HighPri":
 		return admissionpb.HighPri
 	default:
-		require.Fail(t, "unknown work class")
+		require.Failf(t, "unknown work class", "%v", input)
 		return admissionpb.WorkPriority(-1)
+	}
+}
+
+func testingFCStateToEntry(t *testing.T, state entryFCState) raftpb.Entry {
+	cmdID := kvserverbase.CmdIDKey("11111111")
+	var metaBuf []byte
+	if state.usesFlowControl {
+		meta := kvflowcontrolpb.RaftAdmissionMeta{
+			AdmissionPriority: int32(state.pri),
+		}
+		var err error
+		metaBuf, err = protoutil.Marshal(&meta)
+		require.NoError(t, err)
+	}
+	cmdBufPrefix := raftlog.EncodeCommandBytes(raftlog.EntryEncodingStandardWithACAndPriority, cmdID, nil, state.pri)
+	paddingLen := int(state.tokens) - len(cmdBufPrefix) - len(metaBuf)
+	// Padding also needs to decode as part of the RaftCommand proto, so we
+	// abuse the WriteBatch.Data field which is a byte slice. Since it is a
+	// nested field it consumes two tags plus two lengths. We'll approximate
+	// this as needing a maximum of 15 bytes, to be on the safe side.
+	require.LessOrEqual(t, 15, paddingLen)
+	cmd := kvserverpb.RaftCommand{
+		WriteBatch: &kvserverpb.WriteBatch{Data: make([]byte, paddingLen)}}
+	// Shrink by 1 on each iteration. This doesn't give us a guarantee that we
+	// will get exactly paddingLen since the length of data affects the encoded
+	// lengths, but it should usually work, and cause fewer questions when
+	// looking at the testdata file.
+	for cmd.Size() > paddingLen {
+		cmd.WriteBatch.Data = cmd.WriteBatch.Data[:len(cmd.WriteBatch.Data)-1]
+	}
+	cmdBuf, err := protoutil.Marshal(&cmd)
+	require.NoError(t, err)
+	data := append(cmdBufPrefix, metaBuf...)
+	data = append(data, cmdBuf...)
+	return raftpb.Entry{
+		Term:  state.term,
+		Index: state.index,
+		Type:  raftpb.EntryNormal,
+		Data:  data,
 	}
 }
 
@@ -269,11 +338,13 @@ func TestRangeControllerWaitForEval(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	ranges := make(map[roachpb.RangeID]*testingRCRange)
 	ssTokenCounter := NewStreamTokenCounterProvider(settings)
+	// By default we will initialize the token counters to 0 tokens.
+	shouldZeroTCs := true
 
 	// Eval will only wait on a positive token amount, set the limit to 1 in
 	// order to simplify testing.
-	kvflowcontrol.RegularTokensPerStream.Override(ctx, &settings.SV, 1)
-	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &settings.SV, 1)
+	// kvflowcontrol.RegularTokensPerStream.Override(ctx, &settings.SV, 1)
+	// kvflowcontrol.ElasticTokensPerStream.Override(ctx, &settings.SV, 1)
 	// We will initialize each token counter to 0 tokens initially. The map is
 	// used to do so exactly once per stream.
 	zeroedTokenCounters := make(map[kvflowcontrol.Stream]struct{})
@@ -368,6 +439,9 @@ func TestRangeControllerWaitForEval(t *testing.T) {
 	}
 
 	maybeZeroTokenCounters := func(r testingRange) {
+		if !shouldZeroTCs {
+			return
+		}
 		for _, replica := range r.replicaSet {
 			stream := kvflowcontrol.Stream{
 				StoreID:  replica.desc.StoreID,
@@ -405,9 +479,11 @@ func TestRangeControllerWaitForEval(t *testing.T) {
 		return testRC
 	}
 
-	datadriven.RunTest(t, "testdata/range_controller_wait_for_eval", func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, "testdata/range_controller_raft_event", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "init":
+			var zeroTokens bool
+			d.MaybeScanArgs(t, "zero_tokens", &zeroTokens)
 			for _, r := range scanRanges(t, d.Input) {
 				getOrInitRange(r)
 			}
@@ -500,6 +576,151 @@ func TestRangeControllerWaitForEval(t *testing.T) {
 				delete(ranges, k)
 			}
 			return evalStr
+
+		case "admit":
+			var lastRangeID roachpb.RangeID
+			for _, line := range strings.Split(d.Input, "\n") {
+				var (
+					rangeID  int
+					storeID  int
+					term     int
+					to_index int
+					err      error
+				)
+				parts := strings.Fields(line)
+				parts[0] = strings.TrimSpace(parts[0])
+
+				if strings.HasPrefix(parts[0], "range_id=") {
+					parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "range_id=")
+					rangeID, err = strconv.Atoi(parts[0])
+					require.NoError(t, err)
+					lastRangeID = roachpb.RangeID(rangeID)
+				} else {
+					parts[0] = strings.TrimSpace(parts[0])
+					require.True(t, strings.HasPrefix(parts[0], "store_id="))
+					parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "store_id=")
+					storeID, err = strconv.Atoi(parts[0])
+					require.NoError(t, err)
+
+					parts[1] = strings.TrimSpace(parts[1])
+					require.True(t, strings.HasPrefix(parts[1], "term="))
+					parts[1] = strings.TrimPrefix(strings.TrimSpace(parts[1]), "term=")
+					term, err = strconv.Atoi(parts[1])
+					require.NoError(t, err)
+
+					parts[2] = strings.TrimSpace(parts[2])
+					require.True(t, strings.HasPrefix(parts[2], "to_index="))
+					parts[2] = strings.TrimPrefix(strings.TrimSpace(parts[2]), "to_index=")
+					to_index, err = strconv.Atoi(parts[2])
+					require.NoError(t, err)
+
+					parts[3] = strings.TrimSpace(parts[3])
+					require.True(t, strings.HasPrefix(parts[3], "pri="))
+					parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "pri=")
+					pri := parsePriority(t, parts[3])
+					ranges[lastRangeID].admit(ctx, roachpb.StoreID(storeID), uint64(term), uint64(to_index), pri)
+				}
+			}
+			return tokenCountsString()
+
+		case "raft_event":
+			var lastRangeID roachpb.RangeID
+			init := false
+			var buf []entryFCState
+
+			propRangeEntries := func() {
+				event := RaftEvent{
+					Entries: make([]raftpb.Entry, len(buf)),
+				}
+				for i, state := range buf {
+					event.Entries[i] = testingFCStateToEntry(t, state)
+				}
+				ranges[lastRangeID].rc.HandleRaftEventRaftMuLocked(ctx, event)
+			}
+
+			for _, line := range strings.Split(d.Input, "\n") {
+				var (
+					rangeID, term, index int
+					size                 int64
+					err                  error
+					pri                  admissionpb.WorkPriority
+				)
+
+				parts := strings.Fields(line)
+				parts[0] = strings.TrimSpace(parts[0])
+				if strings.HasPrefix(parts[0], "range_id=") {
+					if init {
+						// We are moving to another range, if a previous range has entries
+						// created then create the raft event and call handle raft ready
+						// using all the entries added so far.
+						propRangeEntries()
+						init = false
+					}
+
+					parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "range_id=")
+					rangeID, err = strconv.Atoi(parts[0])
+					require.NoError(t, err)
+					lastRangeID = roachpb.RangeID(rangeID)
+				} else {
+					require.True(t, strings.HasPrefix(parts[0], "term="))
+					parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "term=")
+					term, err = strconv.Atoi(parts[0])
+					require.NoError(t, err)
+
+					parts[1] = strings.TrimSpace(parts[1])
+					require.True(t, strings.HasPrefix(parts[1], "index="))
+					parts[1] = strings.TrimPrefix(strings.TrimSpace(parts[1]), "index=")
+					index, err = strconv.Atoi(parts[1])
+					require.NoError(t, err)
+
+					parts[2] = strings.TrimSpace(parts[2])
+					require.True(t, strings.HasPrefix(parts[2], "pri="))
+					parts[2] = strings.TrimPrefix(strings.TrimSpace(parts[2]), "pri=")
+					pri = parsePriority(t, parts[2])
+
+					parts[3] = strings.TrimSpace(parts[3])
+					require.True(t, strings.HasPrefix(parts[3], "size="))
+					parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "size=")
+					size, err = humanizeutil.ParseBytes(parts[3])
+					require.NoError(t, err)
+
+					init = true
+					buf = append(buf, entryFCState{
+						term:            uint64(term),
+						index:           uint64(index),
+						usesFlowControl: true,
+						tokens:          kvflowcontrol.Tokens(size),
+						pri:             AdmissionToRaftPriority(pri),
+					})
+				}
+			}
+			if init {
+				propRangeEntries()
+			}
+
+			return tokenCountsString()
+
+		case "tracker_state":
+			var rangeID int
+			d.ScanArgs(t, "range_id", &rangeID)
+
+			var buf strings.Builder
+			testRC := ranges[roachpb.RangeID(rangeID)]
+
+			var replicaIDs []int
+			for replicaID := range testRC.mu.r.replicaSet {
+				replicaIDs = append(replicaIDs, int(replicaID))
+			}
+			sort.Ints(replicaIDs)
+
+			for _, replicaID := range replicaIDs {
+				replica := testRC.rc.replicaMap[roachpb.ReplicaID(replicaID)]
+				buf.WriteString(fmt.Sprintf("%v\n", replica.desc))
+				buf.WriteString(formatTrackerState(replica.tracker))
+				buf.WriteString("++++\n")
+			}
+
+			return buf.String()
 
 		default:
 			panic(fmt.Sprintf("unknown command: %s", d.Cmd))

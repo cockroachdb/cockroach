@@ -13,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/kv/kvserver/raftlog",
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
         "//pkg/roachpb",
@@ -38,6 +39,10 @@ go_test(
     embed = [":rac2"],
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/raftlog",
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
         "//pkg/roachpb",
@@ -46,6 +51,7 @@ go_test(
         "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_dustin_go_humanize//:go-humanize",

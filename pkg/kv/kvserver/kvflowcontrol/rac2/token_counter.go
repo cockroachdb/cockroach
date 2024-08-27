@@ -270,6 +270,7 @@ func (t *tokenCounter) TryDeduct(
 func (t *tokenCounter) Deduct(
 	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
 ) {
+	log.Infof(ctx, "deducting tokens %v for work class %v", tokens, wc)
 	t.adjust(ctx, wc, -tokens)
 }
 
@@ -277,6 +278,7 @@ func (t *tokenCounter) Deduct(
 func (t *tokenCounter) Return(
 	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
 ) {
+	log.Infof(ctx, "returning tokens %v for work class %v", tokens, wc)
 	t.adjust(ctx, wc, tokens)
 }
 
