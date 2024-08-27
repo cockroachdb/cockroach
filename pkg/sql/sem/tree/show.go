@@ -1160,11 +1160,21 @@ func (node *ShowFingerprints) Format(ctx *FmtCtx) {
 // ShowFingerprintOptions describes options for the SHOW EXPERIMENTAL_FINGERPINT
 // execution.
 type ShowFingerprintOptions struct {
-	StartTimestamp Expr
+	StartTimestamp      Expr
+	ExcludedUserColumns StringOrPlaceholderOptList
 }
 
 func (s *ShowFingerprintOptions) Format(ctx *FmtCtx) {
+	var addSep bool
+	maybeAddSep := func() {
+		if addSep {
+			ctx.WriteString(", ")
+		}
+		addSep = true
+	}
+
 	if s.StartTimestamp != nil {
+		maybeAddSep()
 		ctx.WriteString("START TIMESTAMP = ")
 		_, canOmitParentheses := s.StartTimestamp.(alreadyDelimitedAsSyntacticDExpr)
 		if !canOmitParentheses {
@@ -1174,6 +1184,11 @@ func (s *ShowFingerprintOptions) Format(ctx *FmtCtx) {
 		if !canOmitParentheses {
 			ctx.WriteByte(')')
 		}
+	}
+	if s.ExcludedUserColumns != nil {
+		maybeAddSep()
+		ctx.WriteString("EXCLUDED_USER_COLUMNS = ")
+		s.ExcludedUserColumns.Format(ctx)
 	}
 }
 
@@ -1188,13 +1203,18 @@ func (s *ShowFingerprintOptions) CombineWith(other *ShowFingerprintOptions) erro
 		s.StartTimestamp = other.StartTimestamp
 	}
 
+	var err error
+	s.ExcludedUserColumns, err = combineStringOrPlaceholderOptList(s.ExcludedUserColumns, other.ExcludedUserColumns, "excluded_user_columns")
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 // IsDefault returns true if this backup options struct has default value.
 func (s ShowFingerprintOptions) IsDefault() bool {
 	options := ShowFingerprintOptions{}
-	return s.StartTimestamp == options.StartTimestamp
+	return s.StartTimestamp == options.StartTimestamp && cmp.Equal(s.ExcludedUserColumns, options.ExcludedUserColumns)
 }
 
 var _ NodeFormatter = &ShowFingerprintOptions{}

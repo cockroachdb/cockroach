@@ -958,7 +958,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DEPENDS DESC DESTINATION DETACHED DETAILS
 %token <str> DISCARD DISTANCE DISTINCT DO DOMAIN DOUBLE DROP
 
-%token <str> EACH ELSE ENCODING ENCRYPTED ENCRYPTION_INFO_DIR ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
+%token <str> EACH ELSE ENCODING ENCRYPTED ENCRYPTION_INFO_DIR ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING EXCLUDED_USER_COLUMNS
 %token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT EXPERIMENTAL_RELOCATE
@@ -9634,10 +9634,10 @@ show_locality_stmt:
   }
 
 show_fingerprints_stmt:
-  SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name
+  SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name opt_with_show_fingerprints_options
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName()}
+    $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName(), Options: *$6.showFingerprintOptions()}
   }
 | SHOW EXPERIMENTAL_FINGERPRINTS FROM virtual_cluster virtual_cluster_spec opt_with_show_fingerprints_options
   {
@@ -9678,6 +9678,11 @@ fingerprint_options:
   {
     $$.val = &tree.ShowFingerprintOptions{StartTimestamp: $4.expr()}
   }
+| EXCLUDED_USER_COLUMNS '=' string_or_placeholder_opt_list
+  {
+    $$.val = &tree.ShowFingerprintOptions{ExcludedUserColumns: $3.stringOrPlaceholderOptList()}
+  }
+
 
 
 show_full_scans_stmt:
@@ -17591,6 +17596,7 @@ unreserved_keyword:
 | ESCAPE
 | EXCLUDE
 | EXCLUDING
+| EXCLUDED_USER_COLUMNS
 | EXECUTE
 | EXECUTION
 | EXPERIMENTAL
@@ -18112,6 +18118,7 @@ bare_label_keywords:
 | ESCAPE
 | EXCLUDE
 | EXCLUDING
+| EXCLUDED_USER_COLUMNS
 | EXECUTE
 | EXECUTION
 | EXISTS
