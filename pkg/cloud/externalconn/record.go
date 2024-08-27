@@ -197,6 +197,11 @@ func (e *MutableExternalConnection) RedactedConnectionURI() string {
 		if err == nil {
 			return redactedURI
 		}
+	case connectionpb.TypeForeignData.String():
+		redactedURI, err := cloud.SanitizeExternalStorageURI(unredactedURI, nil)
+		if err == nil {
+			return redactedURI
+		}
 	default:
 		err = fmt.Errorf("cannot redact URI for unknown connection type: %s", e.rec.ConnectionType)
 	}
