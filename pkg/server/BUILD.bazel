@@ -167,6 +167,7 @@ go_library(
         "//pkg/server/diagnostics",
         "//pkg/server/diagnostics/diagnosticspb",
         "//pkg/server/goroutinedumper",
+        "//pkg/server/license",
         "//pkg/server/pgurl",
         "//pkg/server/profiler",
         "//pkg/server/serverpb",
