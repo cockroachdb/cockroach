@@ -75,9 +75,11 @@ const (
 //   - rsfu := checkOutUpdate()
 //     rsfu.getHeartbeatsToSend(now hlc.Timestamp, interval time.Duration)
 //     checkInUpdate(rsfu)
+//     finishUpdate(rsfu)
 //   - rsfu := checkOutUpdate()
 //     rsfu.handleHeartbeatResponse(msg slpb.Message)
 //     checkInUpdate(rsfu)
+//     finishUpdate(rsfu)
 //
 // Only one update can be in progress to ensure that multiple mutation methods
 // are not run concurrently. Adding or removing a store while an update is in
@@ -157,7 +159,7 @@ func (rsh *requesterStateHandler) addStore(id slpb.StoreIdent) {
 	// Adding a store doesn't require persisting anything to disk, so it doesn't
 	// need to go through the full checkOut/checkIn process. However, we still
 	// check out the update to ensure that there are no concurrent updates.
-	defer rsh.checkInUpdate(rsh.checkOutUpdate())
+	defer rsh.finishUpdate(rsh.checkOutUpdate())
 	rsh.mu.Lock()
 	defer rsh.mu.Unlock()
 	if _, ok := rsh.requesterState.supportFrom[id]; !ok {
@@ -180,7 +182,7 @@ func (rsh *requesterStateHandler) markIdleStores() {
 	// Marking stores doesn't require persisting anything to disk, so it doesn't
 	// need to go through the full checkOut/checkIn process. However, we still
 	// check out the update to ensure that there are no concurrent updates.
-	defer rsh.checkInUpdate(rsh.checkOutUpdate())
+	defer rsh.finishUpdate(rsh.checkOutUpdate())
 
 	rsh.mu.RLock()
 	defer rsh.mu.RUnlock()
@@ -282,10 +284,6 @@ func (rsh *requesterStateHandler) checkOutUpdate() *requesterStateForUpdate {
 // updates from the inProgress view. It clears the inProgress view, and swaps it
 // back in requesterStateHandler.update to be checked out by future updates.
 func (rsh *requesterStateHandler) checkInUpdate(rsfu *requesterStateForUpdate) {
-	defer func() {
-		rsfu.reset()
-		rsh.update.Swap(rsfu)
-	}()
 	if rsfu.inProgress.meta == (slpb.RequesterMeta{}) && len(rsfu.inProgress.supportFrom) == 0 {
 		return
 	}
@@ -298,6 +296,14 @@ func (rsh *requesterStateHandler) checkInUpdate(rsfu *requesterStateForUpdate) {
 	for storeID, rs := range rsfu.inProgress.supportFrom {
 		rsfu.checkedIn.supportFrom[storeID].state = rs.state
 	}
+}
+
+// finishUpdate performs cleanup after a successful or unsuccessful
+// checkInUpdate. It resets the requesterStateForUpdate in-progress state and
+// makes it available for future check out.
+func (rsh *requesterStateHandler) finishUpdate(rsfu *requesterStateForUpdate) {
+	rsfu.reset()
+	rsh.update.Swap(rsfu)
 }
 
 // Functions for generating heartbeats.
