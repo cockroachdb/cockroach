@@ -108,10 +108,10 @@ var upgrades = []upgradebase.Upgrade{
 	),
 
 	upgrade.NewTenantUpgrade(
-		"add new table_metadata table to the system tenant",
+		"add new table_metadata table and job to the system tenant",
 		clusterversion.V24_3_TableMetadata.Version(),
 		upgrade.NoPrecondition,
-		addTableMetadataTable,
+		addTableMetadataTableAndJob,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
 

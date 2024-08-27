@@ -6,6 +6,7 @@ go_library(
         "descriptor_utils.go",
         "first_upgrade.go",
         "permanent_create_jobs_metrics_polling_job.go",
+        "permanent_create_update_table_metadata_cache_job.go",
         "permanent_ensure_sql_schema_telemetry_schedule.go",
         "permanent_key_visualizer_migration.go",
         "permanent_mvcc_statistics_migration.go",
