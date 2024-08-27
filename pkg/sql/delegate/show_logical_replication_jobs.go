@@ -39,8 +39,10 @@ WHERE job_type = 'LOGICAL REPLICATION'
 		payload)->'logicalReplicationDetails'->'replicationStartTime'->>'wallTime')::DECIMAL) AS replication_start_time,
 	IFNULL(crdb_internal.pb_to_json(
 		'cockroach.sql.jobs.jobspb.Payload',
-		payload)->'logicalReplicationDetails'->'defaultConflictResolution'->>'conflictResolutionType', 'LWW') AS conflict_resolution_type
-`
+		payload)->'logicalReplicationDetails'->'defaultConflictResolution'->>'conflictResolutionType', 'LWW') AS conflict_resolution_type,
+	crdb_internal.pb_to_json(
+		'cockroach.sql.jobs.jobspb.Payload',
+		payload)->>'description' AS description`
 )
 
 func (d *delegator) delegateShowLogicalReplicationJobs(
