@@ -2554,6 +2554,13 @@ func (writeOptions *WriteOptions) GetOriginID() uint32 {
 	return writeOptions.OriginID
 }
 
+func (writeOptions *WriteOptions) GetOriginTimestamp() hlc.Timestamp {
+	if writeOptions == nil {
+		return hlc.Timestamp{}
+	}
+	return writeOptions.OriginTimestamp
+}
+
 func (r *ConditionalPutRequest) Validate() error {
 	if !r.OriginTimestamp.IsEmpty() {
 		if r.AllowIfDoesNotExist {

@@ -4712,8 +4712,12 @@ type MVCCWriteOptions struct {
 	ReplayWriteTimestampProtection bool
 	OmitInRangefeeds               bool
 	ImportEpoch                    uint32
-	OriginID                       uint32
-	OriginTimestamp                hlc.Timestamp
+	// OriginID, when set during Logical Data Replication, will bind to the
+	// putting key's MVCCValueHeader.
+	OriginID uint32
+	// OriginTimestamp, when set during Logical Data Replication, will bind to the
+	// putting key's MVCCValueHeader.
+	OriginTimestamp hlc.Timestamp
 	// MaxLockConflicts is a maximum number of conflicting locks collected before
 	// returning LockConflictError. Even single-key writes can encounter multiple
 	// conflicting shared locks, so the limit is important to bound the number of

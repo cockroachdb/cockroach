@@ -70,9 +70,12 @@ func ConditionalPut(
 			ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
 			OmitInRangefeeds:               cArgs.OmitInRangefeeds,
 			OriginID:                       h.WriteOptions.GetOriginID(),
-			MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
-			TargetLockConflictBytes:        storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
-			Category:                       fs.BatchEvalReadCategory,
+			// TODO(ssd, msbutler): if args.OriginTimestamp is set, we should use it
+			// here and assert that h.WriteOptions is not set.
+			OriginTimestamp:         h.WriteOptions.GetOriginTimestamp(),
+			MaxLockConflicts:        storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+			TargetLockConflictBytes: storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+			Category:                fs.BatchEvalReadCategory,
 		},
 		AllowIfDoesNotExist:         storage.CPutMissingBehavior(args.AllowIfDoesNotExist),
 		OriginTimestamp:             args.OriginTimestamp,
