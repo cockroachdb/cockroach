@@ -1405,6 +1405,7 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 		replicatedTime         time.Time
 		replicationStartTime   time.Time
 		conflictResolutionType string
+		description            string
 	)
 
 	showRows := dbA.Query(t, "SELECT * FROM [SHOW LOGICAL REPLICATION JOBS] ORDER BY job_id")
@@ -1435,7 +1436,14 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 
 	rowIdx = 0
 	for showWithDetailsRows.Next() {
-		err := showWithDetailsRows.Scan(&jobID, &status, &targets, &replicatedTime, &replicationStartTime, &conflictResolutionType)
+		err := showWithDetailsRows.Scan(
+			&jobID,
+			&status,
+			&targets,
+			&replicatedTime,
+			&replicationStartTime,
+			&conflictResolutionType,
+			&description)
 		require.NoError(t, err)
 
 		expectedJobID := jobIDs[rowIdx]
@@ -1446,9 +1454,73 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 		expectedConflictResolutionType := payload.GetLogicalReplicationDetails().DefaultConflictResolution.ConflictResolutionType.String()
 		require.Equal(t, expectedConflictResolutionType, conflictResolutionType)
 
+		expectedJobDescription := payload.Description
+		require.Equal(t, expectedJobDescription, description)
+
 		rowIdx++
 	}
 	require.Equal(t, 2, rowIdx)
+
+	dbA.Exec(t, "CANCEL JOB $1", jobAID.String())
+	dbA.Exec(t, "CANCEL JOB $1", jobBID.String())
+
+	jobutils.WaitForJobToCancel(t, dbA, jobAID)
+	jobutils.WaitForJobToCancel(t, dbA, jobBID)
+}
+
+func TestLogicalReplicationJobDescription(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	redactedDbAURL := strings.Replace(dbAURL.String(), username.RootUser, `redacted`, 1)
+	redactedDbBURL := strings.Replace(dbBURL.String(), username.RootUser, `redacted`, 1)
+
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+	dbA.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab on $1 INTO TABLE tab",
+		dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab on $1 INTO TABLE tab WITH DEFAULT FUNCTION = 'dlq'",
+		dbAURL.String()).Scan(&jobBID)
+
+	now := server.Server(0).Clock().Now()
+	t.Logf("waiting for replication job %d", jobAID)
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	expectedJobADescription := fmt.Sprintf("LOGICAL REPLICATION STREAM into a.public.tab from %s", redactedDbBURL)
+	expectedJobBDescription := fmt.Sprintf("LOGICAL REPLICATION STREAM into b.public.tab from %s", redactedDbAURL)
+
+	var jobADescription string
+	dbA.QueryRow(t, "SELECT description FROM [SHOW JOB $1]", jobAID).Scan(&jobADescription)
+	require.Equal(t, expectedJobADescription, jobADescription)
+
+	dbA.QueryRow(t,
+		"SELECT description FROM [SHOW LOGICAL REPLICATION JOBS WITH DETAILS] WHERE job_id = $1",
+		jobAID).Scan(&jobADescription)
+	require.Equal(t, expectedJobADescription, jobADescription)
+
+	var jobBDescription string
+	dbA.QueryRow(t, "SELECT description FROM [SHOW JOB $1]", jobBID).Scan(&jobBDescription)
+	require.Equal(t, expectedJobBDescription, jobBDescription)
+
+	dbA.QueryRow(t,
+		"SELECT description FROM [SHOW LOGICAL REPLICATION JOBS WITH DETAILS] WHERE job_id = $1",
+		jobBID).Scan(&jobBDescription)
+	require.Equal(t, expectedJobBDescription, jobBDescription)
 
 	dbA.Exec(t, "CANCEL JOB $1", jobAID.String())
 	dbA.Exec(t, "CANCEL JOB $1", jobBID.String())

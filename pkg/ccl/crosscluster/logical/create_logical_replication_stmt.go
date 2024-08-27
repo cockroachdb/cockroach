@@ -13,9 +13,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -195,6 +197,15 @@ func createLogicalReplicationStreamPlanHook(
 		}
 		streamAddress = crosscluster.StreamAddress(streamURL.String())
 
+		cleanedURI, err := cloud.SanitizeExternalStorageURI(from, nil)
+		if err != nil {
+			return err
+		}
+		cleanedURI, err = changefeedbase.RedactUserFromURI(cleanedURI)
+		if err != nil {
+			return err
+		}
+
 		client, err := streamclient.NewStreamClient(ctx, streamAddress, p.ExecCfg().InternalDB, streamclient.WithLogical())
 		if err != nil {
 			return err
@@ -240,7 +251,7 @@ func createLogicalReplicationStreamPlanHook(
 
 		jr := jobs.Record{
 			JobID:       p.ExecCfg().JobRegistry.MakeJobID(),
-			Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", targetsDescription, streamAddress),
+			Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", targetsDescription, cleanedURI),
 			Username:    p.User(),
 			Details: jobspb.LogicalReplicationDetails{
 				StreamID:                  uint64(spec.StreamID),
