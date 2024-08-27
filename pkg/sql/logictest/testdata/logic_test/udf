@@ -931,4 +931,26 @@ SELECT f('0');
 statement ok
 DROP FUNCTION f;
 
+# Regression test for #117101 - update the resolved type of a VALUES row with a
+# UDF after the UDF is built.
+subtest regression_117101
+
+statement ok
+CREATE FUNCTION f117101() RETURNS RECORD CALLED ON NULL INPUT AS $funcbody$
+  SELECT ((42)::INT8, (43)::INT8)
+$funcbody$ LANGUAGE SQL;
+
+statement error pgcode 42804 pq: VALUES types tuple{int, int} and tuple{tuple{string, int}, unknown} cannot be matched
+SELECT
+  *
+FROM
+(
+  VALUES
+    (
+     (('aloha'::TEXT,
+     (44)::INT8), NULL)
+    ),
+    (COALESCE(f117101(), NULL))
+);
+
 subtest end
