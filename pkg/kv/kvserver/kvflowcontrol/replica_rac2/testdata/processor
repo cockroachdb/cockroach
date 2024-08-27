@@ -24,6 +24,13 @@ admit-for-eval pri=normal-pri
 ----
 admitted: false err: <nil>
 
+# No-op since RaftNode is not initialized.
+handle-raft-ready-and-admit
+----
+HandleRaftReady:
+ Replica.RaftMuAssertHeld
+.....
+
 reset
 ----
 n1,s2,r3: replica=5, tenant=4, enabled-level=not-enabled
@@ -40,6 +47,12 @@ set-enabled-level enabled-level=v1-encoding
 get-enabled-level
 ----
 enabled-level: v1-encoding
+
+# TODO(pav-kv): initialize to a correct state.
+init-raft log-term=0 log-index=20
+----
+ Replica.RaftMuAssertHeld
+ Replica.MuAssertHeld
 
 # Since stable-index is 20, admitted is slightly behind. The leader and
 # leaseholder are both on replica-id 10.
@@ -60,7 +73,6 @@ on-desc-changed  replicas=n11/s11/11
 ----
  Replica.RaftMuAssertHeld
  Replica.MuAssertHeld
- Replica.RaftNodeMuLocked
 
 # handleRaftReady. It thinks the leader is using v1, so there is no
 # advancement of admitted, or submission of this entry for admission.
@@ -604,6 +616,11 @@ get-enabled-level
 ----
 enabled-level: not-enabled
 
+init-raft log-term=0 log-index=20
+----
+ Replica.RaftMuAssertHeld
+ Replica.MuAssertHeld
+
 set-raft-state leader=5 my-leader-term=50 leaseholder=5 stable-index=20 next-unstable-index=25 admitted=[15,20,15,20]
 ----
 Raft: leader: 5 leaseholder: 5 stable: 20 next-unstable: 25 term: 50 admitted: [15, 20, 15, 20]
@@ -620,7 +637,6 @@ on-desc-changed  replicas=n11/s11/11,n13/s13/13
 ----
  Replica.RaftMuAssertHeld
  Replica.MuAssertHeld
- Replica.RaftNodeMuLocked
 
 handle-raft-ready-and-admit
 ----
