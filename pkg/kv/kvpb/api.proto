@@ -2981,6 +2981,7 @@ message Header {
 
 message WriteOptions {
   uint32 origin_id = 1[(gogoproto.customname) = "OriginID"];
+  util.hlc.Timestamp origin_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // BoundedStalenessHeader contains configuration values pertaining to bounded

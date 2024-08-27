@@ -2553,3 +2553,10 @@ func (writeOptions *WriteOptions) GetOriginID() uint32 {
 	}
 	return writeOptions.OriginID
 }
+
+func (writeOptions *WriteOptions) GetOriginTimestamp() hlc.Timestamp {
+	if writeOptions == nil {
+		return hlc.Timestamp{}
+	}
+	return writeOptions.OriginTimestamp
+}
