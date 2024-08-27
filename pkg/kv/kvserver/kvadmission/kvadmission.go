@@ -58,12 +58,12 @@ var elasticCPUDurationPerInternalLowPriRead = settings.RegisterDurationSetting(
 	settings.DurationInRange(admission.MinElasticCPUDuration, admission.MaxElasticCPUDuration),
 )
 
-// internalLowPriReadElasticControlEnabled determines whether internally
-// submitted low pri reads integrate with elastic CPU control.
-var internalLowPriReadElasticControlEnabled = settings.RegisterBoolSetting(
+// elasticAdmissionAllLowPri determines whether internally
+// submitted low bulk pri requests integrate with elastic CPU control.
+var elasticAdmissionAllLowPri = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"kvadmission.low_pri_read_elastic_control.enabled",
-	"determines whether the internally submitted low priority reads integrate with elastic CPU control",
+	"kvadmission.elastic_control_bulk_low_priority.enabled",
+	"determines whether the all low bulk priority requests integrate with elastic CPU control",
 	true,
 )
 
@@ -399,14 +399,13 @@ func (n *controllerImpl) AdmitKVWork(
 		//   handed out through this mechanism, as a way to provide latency
 		//   isolation to non-elastic ("latency sensitive") work running on the
 		//   same machine.
-		// - We do the same for internally submitted low priority reads in
+		// - We do the same for internally submitted bulk low priority requests in
 		//   general (notably, for KV work done on the behalf of row-level TTL
-		//   reads). Everything admissionpb.UserLowPri and above uses the slots
-		//   mechanism.
-		isInternalLowPriRead := ba.IsReadOnly() && admissionInfo.Priority < admissionpb.UserLowPri
+		//   reads or other jobs). Everything admissionpb.UserLowPri and above uses
+		//   the slots mechanism.
 		shouldUseElasticCPU :=
 			(exportRequestElasticControlEnabled.Get(&n.settings.SV) && ba.IsSingleExportRequest()) ||
-				(internalLowPriReadElasticControlEnabled.Get(&n.settings.SV) && isInternalLowPriRead)
+				(admissionInfo.Priority <= admissionpb.BulkLowPri && elasticAdmissionAllLowPri.Get(&n.settings.SV))
 
 		if shouldUseElasticCPU {
 			var admitDuration time.Duration
