@@ -349,7 +349,7 @@ func (l *raftLog) lastIndex() uint64 {
 
 // commitTo bumps the commit index to the given value if it is higher than the
 // current commit index.
-func (l *raftLog) commitTo(mark logMark) {
+func (l *raftLog) commitTo(mark LogMark) {
 	// TODO(pav-kv): it is only safe to update the commit index if our log is
 	// consistent with the mark.term leader. If the mark.term leader sees the
 	// mark.index entry as committed, all future leaders have it in the log. It is
@@ -357,11 +357,11 @@ func (l *raftLog) commitTo(mark logMark) {
 	// accTerm >= mark.term. Do this once raftLog/unstable tracks the accTerm.
 
 	// never decrease commit
-	if l.committed < mark.index {
-		if l.lastIndex() < mark.index {
-			l.logger.Panicf("tocommit(%d) is out of range [lastIndex(%d)]. Was the raft log corrupted, truncated, or lost?", mark.index, l.lastIndex())
+	if l.committed < mark.Index {
+		if l.lastIndex() < mark.Index {
+			l.logger.Panicf("tocommit(%d) is out of range [lastIndex(%d)]. Was the raft log corrupted, truncated, or lost?", mark.Index, l.lastIndex())
 		}
-		l.committed = mark.index
+		l.committed = mark.Index
 	}
 }
 
@@ -400,7 +400,7 @@ func (l *raftLog) acceptApplying(i uint64, size entryEncodingSize, allowUnstable
 		i < l.maxAppliableIndex(allowUnstable)
 }
 
-func (l *raftLog) stableTo(mark logMark) { l.unstable.stableTo(mark) }
+func (l *raftLog) stableTo(mark LogMark) { l.unstable.stableTo(mark) }
 
 func (l *raftLog) stableSnapTo(i uint64) { l.unstable.stableSnapTo(i) }
 

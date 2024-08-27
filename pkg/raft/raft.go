@@ -788,7 +788,7 @@ func (r *raft) maybeCommit() bool {
 	if !r.raftLog.matchTerm(entryID{term: r.Term, index: index}) {
 		return false
 	}
-	r.raftLog.commitTo(logMark{term: r.Term, index: index})
+	r.raftLog.commitTo(LogMark{Term: r.Term, Index: index})
 	return true
 }
 
@@ -1278,7 +1278,7 @@ func (r *raft) Step(m pb.Message) error {
 			r.appliedSnap(m.Snapshot)
 		}
 		if m.Index != 0 {
-			r.raftLog.stableTo(logMark{term: m.LogTerm, index: m.Index})
+			r.raftLog.stableTo(LogMark{Term: m.LogTerm, Index: m.Index})
 		}
 
 	case pb.MsgStorageApplyResp:
@@ -1881,7 +1881,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		// committed entries at m.Term (by raft invariants), so it is safe to bump
 		// the commit index even if the MsgApp is stale.
 		lastIndex := a.lastIndex()
-		r.raftLog.commitTo(logMark{term: m.Term, index: min(m.Commit, lastIndex)})
+		r.raftLog.commitTo(LogMark{Term: m.Term, Index: min(m.Commit, lastIndex)})
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: lastIndex,
 			Commit: r.raftLog.committed})
 		return
@@ -1959,8 +1959,8 @@ func (r *raft) handleHeartbeat(m pb.Message) {
 	// commit index if accTerm >= m.Term.
 	// TODO(pav-kv): move this logic to raftLog.commitTo, once the accTerm has
 	// migrated to raftLog/unstable.
-	mark := logMark{term: m.Term, index: min(m.Commit, r.raftLog.lastIndex())}
-	if mark.term == r.raftLog.accTerm() {
+	mark := LogMark{Term: m.Term, Index: min(m.Commit, r.raftLog.lastIndex())}
+	if mark.Term == r.raftLog.accTerm() {
 		r.raftLog.commitTo(mark)
 	}
 	r.send(pb.Message{To: m.From, Type: pb.MsgHeartbeatResp})
