@@ -8,6 +8,7 @@ package cockroach.sql.sessiondatapb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb";
 
 import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
 
 // LocalOnlySessionData contains the serializable components of session
 // parameters that only influence execution on the gateway nodes.
@@ -543,6 +544,10 @@ message LocalOnlySessionData {
   // OptimizerPushLimitIntoProjectFilteredScan, when true, indicates that the
   // optimizer should push limit expressions into projects of filtered scans.
   bool optimizer_push_limit_into_project_filtered_scan = 139;
+  // OriginTimestampForLogicalDataReplication is the mvcc timestamp the data
+  // written in this session were originally written with before being
+  // replicated via Logical Data Replication.
+  util.hlc.Timestamp origin_timestamp_for_logical_data_replication = 140 [(gogoproto.nullable) = false];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
