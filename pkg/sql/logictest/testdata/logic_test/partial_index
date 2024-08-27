@@ -1809,7 +1809,7 @@ CREATE TABLE t61414_c (
   FAMILY (k, a, c)
 )
 
-skipif config local-read-committed 110873
+skipif config weak-iso-level-configs 110873
 statement ok
 UPSERT INTO t61414_c (k, a, b, d) VALUES (1, 2, 3, 4)
 

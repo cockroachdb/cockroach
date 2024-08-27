@@ -1,6 +1,7 @@
-# LogicTest: !local-read-committed
-# This test is skipped under READ COMMITTED since it asserts on the NOTICE
-# output, and read committed schema changes always send out extra notices.
+# LogicTest: !weak-iso-level-configs
+# This test is skipped under READ COMMITTED and REPEATABLE READ, since it
+# asserts on the NOTICE output, and weak isolation level schema changes always
+# send out extra notices.
 
 statement ok
 CREATE TABLE t (

@@ -84,14 +84,14 @@ user root
 statement ok
 CREATE DATABASE test2
 
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 query T noticetrace
 GRANT SELECT ON TABLE test2.information_schema.columns TO testuser
 ----
 NOTICE: virtual table privileges are not database specific
 
-onlyif config local-read-committed
+onlyif config weak-iso-level-configs
 statement ok
 GRANT SELECT ON TABLE test2.information_schema.columns TO testuser
 

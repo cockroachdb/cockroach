@@ -15,10 +15,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -225,6 +227,7 @@ type ProcessorOptions struct {
 	AdmittedPiggybacker    AdmittedPiggybacker
 	ACWorkQueue            ACWorkQueue
 	RangeControllerFactory RangeControllerFactory
+	Settings               *cluster.Settings
 
 	EnabledWhenLeaderLevel EnabledWhenLeaderLevel
 }
@@ -432,7 +435,12 @@ type processorImpl struct {
 		// protocol is enabled.
 		leader struct {
 			enqueuedPiggybackedResponses map[roachpb.ReplicaID]raftpb.Message
-			rc                           rac2.RangeController
+			// Updating the rc reference requires both the enclosing mu and
+			// rcReferenceUpdateMu. Code paths that want to access this
+			// reference only need one of these mutexes. rcReferenceUpdateMu
+			// is ordered after the enclosing mu.
+			rcReferenceUpdateMu syncutil.RWMutex
+			rc                  rac2.RangeController
 			// Term is used to notice transitions out of leadership and back,
 			// to recreate rc. It is set when rc is created, and is not
 			// up-to-date if there is no rc (which can happen when using the
@@ -647,7 +655,11 @@ func (p *processorImpl) closeLeaderStateRaftMuLockedProcLocked(ctx context.Conte
 		return
 	}
 	p.mu.leader.rc.CloseRaftMuLocked(ctx)
-	p.mu.leader.rc = nil
+	func() {
+		p.mu.leader.rcReferenceUpdateMu.Lock()
+		defer p.mu.leader.rcReferenceUpdateMu.Unlock()
+		p.mu.leader.rc = nil
+	}()
 	p.mu.leader.enqueuedPiggybackedResponses = nil
 	p.mu.leader.term = 0
 }
@@ -658,11 +670,15 @@ func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
 	if p.mu.leader.rc != nil {
 		panic("RangeController already exists")
 	}
-	p.mu.leader.rc = p.opts.RangeControllerFactory.New(rangeControllerInitState{
-		replicaSet:    p.raftMu.replicas,
-		leaseholder:   p.mu.leaseholderID,
-		nextRaftIndex: nextUnstableIndex,
-	})
+	func() {
+		p.mu.leader.rcReferenceUpdateMu.Lock()
+		defer p.mu.leader.rcReferenceUpdateMu.Unlock()
+		p.mu.leader.rc = p.opts.RangeControllerFactory.New(rangeControllerInitState{
+			replicaSet:    p.raftMu.replicas,
+			leaseholder:   p.mu.leaseholderID,
+			nextRaftIndex: nextUnstableIndex,
+		})
+	}()
 	p.mu.leader.term = term
 	p.mu.leader.enqueuedPiggybackedResponses = map[roachpb.ReplicaID]raftpb.Message{}
 }
@@ -919,8 +935,22 @@ func (p *processorImpl) AdmittedLogEntry(
 func (p *processorImpl) AdmitForEval(
 	ctx context.Context, pri admissionpb.WorkPriority, ct time.Time,
 ) (admitted bool, err error) {
-	// TODO(sumeer):
-	return false, nil
+	workClass := admissionpb.WorkClassFromPri(pri)
+	mode := kvflowcontrol.Mode.Get(&p.opts.Settings.SV)
+	bypass := mode == kvflowcontrol.ApplyToElastic && workClass == admissionpb.RegularWorkClass
+	if bypass {
+		return false, nil
+	}
+	var rc rac2.RangeController
+	func() {
+		p.mu.leader.rcReferenceUpdateMu.RLock()
+		defer p.mu.leader.rcReferenceUpdateMu.RUnlock()
+		rc = p.mu.leader.rc
+	}()
+	if rc == nil {
+		return false, nil
+	}
+	return p.mu.leader.rc.WaitForEval(ctx, pri)
 }
 
 func admittedIncreased(prev, next [raftpb.NumPriorities]uint64) bool {
