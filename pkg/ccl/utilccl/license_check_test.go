@@ -85,6 +85,8 @@ func TestGetLicenseTypePresent(t *testing.T) {
 		{licenseccl.License_NonCommercial, "NonCommercial"},
 		{licenseccl.License_Enterprise, "Enterprise"},
 		{licenseccl.License_Evaluation, "Evaluation"},
+		{licenseccl.License_Trial, "Trial"},
+		{licenseccl.License_Free, "Free"},
 	} {
 		st := cluster.MakeTestingClusterSettings()
 		updater := st.MakeUpdater()
@@ -154,13 +156,13 @@ func TestTimeToEnterpriseLicenseExpiry(t *testing.T) {
 
 	lic0M, _ := (&licenseccl.License{
 		ClusterID:         []uuid.UUID{id},
-		Type:              licenseccl.License_Evaluation,
+		Type:              licenseccl.License_Free,
 		ValidUntilUnixSec: t0.AddDate(0, 0, 0).Unix(),
 	}).Encode()
 
 	licExpired, _ := (&licenseccl.License{
 		ClusterID:         []uuid.UUID{id},
-		Type:              licenseccl.License_Evaluation,
+		Type:              licenseccl.License_Trial,
 		ValidUntilUnixSec: t0.AddDate(0, -1, 0).Unix(),
 	}).Encode()
 
