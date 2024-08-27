@@ -49,14 +49,7 @@ type testReplica struct {
 var _ Replica = &testReplica{}
 
 func newTestReplica(b *strings.Builder) *testReplica {
-	r := &testReplica{
-		b: b,
-	}
-	r.raftNode = &testRaftNode{
-		b: b,
-		r: r,
-	}
-	return r
+	return &testReplica{b: b}
 }
 
 func (r *testReplica) RaftMuAssertHeld() {
@@ -75,11 +68,6 @@ func (r *testReplica) MuLock() {
 func (r *testReplica) MuUnlock() {
 	fmt.Fprintf(r.b, " Replica.MuUnlock\n")
 	r.mu.Unlock()
-}
-
-func (r *testReplica) RaftNodeMuLocked() RaftNode {
-	fmt.Fprintf(r.b, " Replica.RaftNodeMuLocked\n")
-	return r.raftNode
 }
 
 func (r *testReplica) LeaseholderMuLocked() roachpb.ReplicaID {
@@ -330,6 +318,14 @@ func TestProcessorBasic(t *testing.T) {
 			case "reset":
 				enabledLevel := parseEnabledLevel(t, d)
 				reset(enabledLevel)
+				return builderStr()
+
+			case "init-raft":
+				var mark rac2.LogMark
+				d.ScanArgs(t, "log-term", &mark.Term)
+				d.ScanArgs(t, "log-index", &mark.Index)
+				r.raftNode = &testRaftNode{b: &b, r: r, term: mark.Term, stableIndex: mark.Index}
+				p.InitRaftLocked(ctx, r.raftNode)
 				return builderStr()
 
 			case "set-raft-state":

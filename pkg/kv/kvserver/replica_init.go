@@ -320,6 +320,7 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 		return err
 	}
 	r.mu.internalRaftGroup = rg
+	r.flowControlV2.InitRaftLocked(ctx, replica_rac2.NewRaftNode(rg))
 	return nil
 }
 
