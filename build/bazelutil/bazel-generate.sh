@@ -85,5 +85,5 @@ fi
 if files_unchanged_from_upstream $(find_relevant ./pkg -name BUILD.bazel) $(find_relevant ./pkg/cmd/generate-bazel-extra -name BUILD.bazel -or -name '*.go'); then
   echo "Skipping //pkg/cmd/generate-bazel-extra (relevant files are unchanged from upstream)."
 else
-  bazel run //pkg/cmd/generate-bazel-extra --run_under="cd $PWD && " ${EXTRA_BAZEL_ARGS:-} -- -gen_test_suites
+  bazel run //pkg/cmd/generate-bazel-extra --run_under="cd $PWD && " ${EXTRA_BAZEL_ARGS:-}
 fi
