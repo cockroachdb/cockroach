@@ -3,7 +3,7 @@ SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = false
 ----
 
 exec
-SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = false
+SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = false
 ----
 
 feature-list
@@ -95,7 +95,7 @@ SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
 ----
 
 exec
-SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
+SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
 ----
 
 feature-usage

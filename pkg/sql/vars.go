@@ -422,6 +422,7 @@ var varGen = map[string]sessionVar{
 			hasLicense := base.CCLDistributionAndEnterpriseEnabled(m.settings)
 			var allowedValues = []string{"serializable"}
 			if allowSnapshot {
+				// TODO(nvanbenschoten): switch to "repeatable read".
 				allowedValues = append(allowedValues, "snapshot")
 			}
 			if allowReadCommitted {
@@ -1615,6 +1616,7 @@ var varGen = map[string]sessionVar{
 			if !ok {
 				var allowedValues = []string{"serializable"}
 				if allowSnapshotIsolation.Get(&evalCtx.ExecCfg.Settings.SV) {
+					// TODO(nvanbenschoten): switch to "repeatable read".
 					allowedValues = append(allowedValues, "snapshot")
 				}
 				if allowReadCommittedIsolation.Get(&evalCtx.ExecCfg.Settings.SV) {

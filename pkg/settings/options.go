@@ -45,7 +45,7 @@ func WithName(name SettingName) SettingOption {
 }
 
 // WithRetiredName configures a previous user-visible name of the setting,
-// when that name was diferent from the key and is not in use any more.
+// when that name was different from the key and is not in use any more.
 func WithRetiredName(name SettingName) SettingOption {
 	return SettingOption{commonOpt: func(c *common) {
 		registerAlias(c.key, name, NameRetired)
