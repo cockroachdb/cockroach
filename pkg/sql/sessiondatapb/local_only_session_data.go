@@ -292,11 +292,11 @@ const (
 
 	// TTLStatsLow denotes a QoS level used internally by the TTL feature, which
 	// is not settable as a session default_transaction_quality_of_service value.
-	TTLStatsLow = QoSLevel(admissionpb.TTLLowPri)
+	TTLStatsLow = QoSLevel(admissionpb.BulkLowPri)
 
 	// TTLLow denotes a QoS level used internally by the TTL feature, which is not
 	// settable as a session default_transaction_quality_of_service value.
-	TTLLow = QoSLevel(admissionpb.TTLLowPri)
+	TTLLow = QoSLevel(admissionpb.BulkLowPri)
 
 	// UserLow denotes an end user QoS level lower than the default.
 	UserLow = QoSLevel(admissionpb.UserLowPri)
