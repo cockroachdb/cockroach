@@ -2299,7 +2299,7 @@ func TestGcKeyBatcher(t *testing.T) {
 				gcer:             &g,
 				info:             &Info{},
 				pointsBatches:    make([]pointsBatch, 1),
-				clearRangeEndKey: keys.MaxKey,
+				clearRangeEndKey: keys.MaxKey.Clone(),
 				prevWasNewest:    true,
 			}
 

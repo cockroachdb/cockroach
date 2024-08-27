@@ -477,8 +477,8 @@ func processReplicatedKeyRange(
 				gcer:                   gcer,
 				info:                   info,
 				pointsBatches:          make([]pointsBatch, 1),
-				// We must clone here as we reuse key slice to avoid realocating on every
-				// key.
+				// We must clone here as we reuse key slice to avoid reallocating on
+				// every key.
 				clearRangeEndKey: span.EndKey.Clone(),
 				prevWasNewest:    true,
 			}
@@ -842,7 +842,7 @@ func (b *gcKeyBatcher) foundGarbage(
 				b.clearRangeCounters.keysAffected += b.partialPointBatchCounters.keysAffected - flushedCounters.keysAffected
 				b.clearRangeCounters.versionsAffected += b.partialPointBatchCounters.versionsAffected - flushedCounters.versionsAffected
 				b.clearRangeCounters.memUsed += b.partialPointBatchCounters.memUsed - flushedCounters.memUsed
-				b.clearRangeEndKey = lastKey[:len(lastKey):len(lastKey)].Next()
+				b.clearRangeEndKey = lastKey.ClonedNext()
 			}
 			b.partialPointBatchCounters = gcBatchCounters{}
 
@@ -879,8 +879,8 @@ func (b *gcKeyBatcher) foundGarbage(
 // maybeFlushPendingBatches flushes accumulated GC requests. If clear range is
 // used and current data is eligible for deletion then pending points batch and
 // clear range request are flushed.
-// If there's not enough point keys to justify clear range, then point point
-// batches may be flushed:
+// If there's not enough point keys to justify clear range, then point batches
+// may be flushed:
 //   - if there's a single batch and it didn't reach desired size, nothing is
 //     flushed
 //   - if there's more than single points batch accumulated, then all batches
@@ -901,7 +901,9 @@ func (b *gcKeyBatcher) maybeFlushPendingBatches(ctx context.Context) (err error)
 			// previous key completely covering this range. If this is true then we
 			// don't need to handle this batch and can tighten the clear range span
 			// to cover only up to the start of first batch.
-			b.clearRangeEndKey = b.pointsBatches[0].batchGCKeys[0].Key.Next()
+			//
+			// Clone because clearRangeEndKey will be reused.
+			b.clearRangeEndKey = b.pointsBatches[0].batchGCKeys[0].Key.ClonedNext()
 		} else {
 			b.pointsBatches[0].batchGCKeys = b.pointsBatches[0].batchGCKeys[:lastIdx]
 			b.pointsBatches[0].gcBatchCounters = b.partialPointBatchCounters
@@ -915,12 +917,15 @@ func (b *gcKeyBatcher) maybeFlushPendingBatches(ctx context.Context) (err error)
 		// Flush clear range.
 		// To reduce locking contention between keys, if we have a range that only
 		// covers multiple versions of a single key we could avoid latching range
-		// and fall back to poing GC behaviour where gc threshold guards against
+		// and fall back to point GC behaviour where gc threshold guards against
 		// key interference. We do it by setting end key to StartKey.Next() and thus
 		// signalling gc request handler to skip locking.
-		endRange := b.clearRangeEndKey
+		var endRange roachpb.Key
 		if b.clearRangeCounters.keysAffected == 1 {
 			endRange = b.clearRangeStartKey.Key.Next()
+		} else {
+			// Clone the end key because clearRangeEndKey will be reused.
+			endRange = b.clearRangeEndKey.Clone()
 		}
 		if err := b.gcer.GC(ctx, nil, nil, &kvpb.GCRequest_GCClearRange{
 			StartKey:          b.clearRangeStartKey.Key,
@@ -947,7 +952,7 @@ func (b *gcKeyBatcher) maybeFlushPendingBatches(ctx context.Context) (err error)
 		}
 	}
 	b.clearRangeCounters = gcBatchCounters{}
-	b.clearRangeEndKey = nil
+	b.clearRangeEndKey = b.clearRangeEndKey[:0]
 	return nil
 }
 
