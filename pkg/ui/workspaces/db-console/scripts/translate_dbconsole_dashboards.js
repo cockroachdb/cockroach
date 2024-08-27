@@ -91,19 +91,31 @@ const extractGraph = (node) => {
             //  />
             //))}
             // We'll just skip into the Metric section, and add a group by by node.
-            //console.log(elt.expression.callee)
             let listName;
-            if (elt.expression.callee.object.name === "_" && elt.expression.callee.property.name === "map") {
+            if (elt.expression.callee.name === "map") {
               // Lodash map
               child = elt.expression.arguments[1].body
               listName = elt.expression.arguments[0].name
+            } else if (elt.expression.callee.name === "storeMetrics") {
+              // Special case metrics type in storage.tsx.
+              listName = "nodeIDs"
+              //child = elt.expression.arguments[1].body
+              parsed = parse("<Metric foo=\"bar\"/>", {jsx:true})
+              child = parsed.body[0].expression
+              child.openingElement.attributes = elt.expression.arguments[0].properties.map(prop => {
+                return {
+                  type: "JSXElement",
+                  name: {type: "JSXIdentifier", name: prop.key.name},
+                  value: prop.value,
+                }
+              })
             } else {
               // Native map
               child = elt.expression.arguments[0].body
               listName = elt.expression.callee.object.name
             }
             if (listName !== "nodeIDs") {
-              //console.log("bailing ", listName, elt, elt.expression.callee.object)
+              console.error("can't parse, giving up", elt.expression.arguments[0])
               child = null
               // Just give up in this case - some people are trying to map
               // over percentiles.
@@ -153,7 +165,7 @@ const extractGraph = (node) => {
 
 const generateGraphGroup = (filePath) => {
   const tsContent = fs.readFileSync(filePath, 'utf8');
-  //console.log(filePath)
+  console.error("Processing file", filePath)
 
   // Parse the content to AST
   const ast = parse(tsContent, {
