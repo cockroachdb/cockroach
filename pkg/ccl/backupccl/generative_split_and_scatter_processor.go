@@ -529,82 +529,83 @@ func runGenerativeSplitAndScatter(
 
 	importSpanChunksCh := make(chan scatteredChunk, chunkSplitAndScatterWorkers*2)
 
-	// This group of goroutines processes the chunks from restoreEntryChunksCh.
-	// For each chunk, a split is created at the start key of the next chunk. The
-	// current chunk is then scattered, and the chunk with its destination is
-	// passed to importSpanChunksCh.
-	g2 := ctxgroup.WithContext(ctx)
-	for worker := 0; worker < chunkSplitAndScatterWorkers; worker++ {
-		worker := worker
-		g2.GoCtx(func(ctx context.Context) error {
-			hash := fnv.New32a()
-
-			// Chunks' leaseholders should be randomly placed throughout the
-			// cluster.
-			for importSpanChunk := range restoreEntryChunksCh {
-				scatterKey := importSpanChunk.entries[0].Span.Key
-				if !importSpanChunk.splitKey.Equal(roachpb.Key{}) {
-					// Split at the start of the next chunk, to partition off a
-					// prefix of the space to scatter.
-					if err := chunkSplitAndScatterers[worker].split(ctx, flowCtx.Codec(), importSpanChunk.splitKey); err != nil {
-						return err
-					}
-				}
-				chunkDestination, err := chunkSplitAndScatterers[worker].scatter(ctx, flowCtx.Codec(), scatterKey)
-				if err != nil {
-					return err
-				}
-				if chunkDestination == 0 {
-					// If scatter failed to find a node for range ingestion, route the
-					// range to a random node that has already been scattered to so far.
-					// The random node is chosen by hashing the scatter key.
-					if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); ok {
-						cachedNodeIDs := cache.cachedNodeIDs()
-						if len(cachedNodeIDs) > 0 {
-							hash.Reset()
-							if _, err := hash.Write(scatterKey); err != nil {
-								log.Warningf(ctx, "scatter returned node 0. Route span starting at %s to current node %v because of hash error: %v",
-									scatterKey, nodeID, err)
-							} else {
-								hashedKey := int(hash.Sum32())
-								nodeID = cachedNodeIDs[hashedKey%len(cachedNodeIDs)]
-							}
-
-							log.Warningf(ctx, "scatter returned node 0. "+
-								"Random route span starting at %s node %v", scatterKey, nodeID)
-						} else {
-							log.Warningf(ctx, "scatter returned node 0. "+
-								"Route span starting at %s to current node %v", scatterKey, nodeID)
-						}
-						chunkDestination = nodeID
-					} else {
-						// TODO(rui): OptionalNodeID only returns a node if the sql server runs
-						// in the same process as the kv server (e.g., not serverless). Figure
-						// out how to handle this error in serverless restore.
-						log.Warningf(ctx, "scatter returned node 0. "+
-							"Route span starting at %s to default stream", scatterKey)
-					}
-				}
-
-				sc := scatteredChunk{
-					destination: chunkDestination,
-					entries:     importSpanChunk.entries,
-				}
-
-				select {
-				case <-ctx.Done():
-					return errors.Wrap(ctx.Err(), "sending scattered chunk")
-				case importSpanChunksCh <- sc:
-				}
-			}
-			return nil
-		})
-	}
-
-	// This goroutine waits for the chunkSplitAndScatter workers to finish so that
-	// it can close importSpanChunksCh.
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(importSpanChunksCh)
+
+		// This group of goroutines processes the chunks from restoreEntryChunksCh.
+		// For each chunk, a split is created at the start key of the next chunk. The
+		// current chunk is then scattered, and the chunk with its destination is
+		// passed to importSpanChunksCh.
+		g2 := ctxgroup.WithContext(ctx)
+		for worker := 0; worker < chunkSplitAndScatterWorkers; worker++ {
+			worker := worker
+			g2.GoCtx(func(ctx context.Context) error {
+				hash := fnv.New32a()
+
+				// Chunks' leaseholders should be randomly placed throughout the
+				// cluster.
+				for importSpanChunk := range restoreEntryChunksCh {
+					scatterKey := importSpanChunk.entries[0].Span.Key
+					if !importSpanChunk.splitKey.Equal(roachpb.Key{}) {
+						// Split at the start of the next chunk, to partition off a
+						// prefix of the space to scatter.
+						if err := chunkSplitAndScatterers[worker].split(ctx, flowCtx.Codec(), importSpanChunk.splitKey); err != nil {
+							return err
+						}
+					}
+					chunkDestination, err := chunkSplitAndScatterers[worker].scatter(ctx, flowCtx.Codec(), scatterKey)
+					if err != nil {
+						return err
+					}
+					if chunkDestination == 0 {
+						// If scatter failed to find a node for range ingestion, route the
+						// range to a random node that has already been scattered to so far.
+						// The random node is chosen by hashing the scatter key.
+						if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); ok {
+							cachedNodeIDs := cache.cachedNodeIDs()
+							if len(cachedNodeIDs) > 0 {
+								hash.Reset()
+								if _, err := hash.Write(scatterKey); err != nil {
+									log.Warningf(ctx, "scatter returned node 0. Route span starting at %s to current node %v because of hash error: %v",
+										scatterKey, nodeID, err)
+								} else {
+									hashedKey := int(hash.Sum32())
+									nodeID = cachedNodeIDs[hashedKey%len(cachedNodeIDs)]
+								}
+
+								log.Warningf(ctx, "scatter returned node 0. "+
+									"Random route span starting at %s node %v", scatterKey, nodeID)
+							} else {
+								log.Warningf(ctx, "scatter returned node 0. "+
+									"Route span starting at %s to current node %v", scatterKey, nodeID)
+							}
+							chunkDestination = nodeID
+						} else {
+							// TODO(rui): OptionalNodeID only returns a node if the sql server runs
+							// in the same process as the kv server (e.g., not serverless). Figure
+							// out how to handle this error in serverless restore.
+							log.Warningf(ctx, "scatter returned node 0. "+
+								"Route span starting at %s to default stream", scatterKey)
+						}
+					}
+
+					sc := scatteredChunk{
+						destination: chunkDestination,
+						entries:     importSpanChunk.entries,
+					}
+
+					select {
+					case <-ctx.Done():
+						return errors.Wrap(ctx.Err(), "sending scattered chunk")
+					case importSpanChunksCh <- sc:
+					}
+				}
+				return nil
+			})
+		}
+
+		// This goroutine waits for the chunkSplitAndScatter workers to finish so that
+		// it can close importSpanChunksCh.
 		return errors.Wrap(g2.Wait(), "waiting for chunkSplitAndScatter workers")
 	})
 
