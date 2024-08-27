@@ -272,6 +272,8 @@ func alterTableAddForeignKey(
 		panic(scerrors.NotImplementedErrorf(t, "cross DB FK reference is a deprecated feature "+
 			"and is no longer supported."))
 	}
+	// Disallow schema change if the FK references a table whose schema is locked.
+	panicIfSchemaIsLocked(b.QueryByID(referencedTableID))
 
 	// 6. Check that temporary tables can only reference temporary tables, or,
 	// permanent tables can only reference permanent tables.
