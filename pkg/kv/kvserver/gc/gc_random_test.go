@@ -171,6 +171,7 @@ func TestRunNewVsOld(t *testing.T) {
 // BenchmarkRun benchmarks the old and implementations of Run with different
 // data distributions.
 func BenchmarkRun(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	runGC := func(eng storage.Engine, old bool, spec randomRunGCTestSpec) (Info, error) {
 		runGCFunc := Run
