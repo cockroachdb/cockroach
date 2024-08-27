@@ -460,3 +460,13 @@ func (t *tokenCounter) adjustLocked(
 		t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta)
 	}
 }
+
+// testingSetTokens is used in tests to set the tokens for a given work class,
+// ignoring any adjustments.
+func (t *tokenCounter) testingSetTokens(
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.counters[wc].adjustTokensLocked(ctx, tokens-t.mu.counters[wc].tokens)
+}
