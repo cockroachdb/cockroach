@@ -341,28 +341,27 @@ type Processor interface {
 	// if there was no Ready, since it can be used to advance Admitted, and do
 	// other processing.
 	//
-	// The entries slice is Ready.Entries, i.e., represent MsgStorageAppend on
-	// all replicas. To stay consistent with the structure of
-	// Replica.handleRaftReadyRaftMuLocked, this method only does leader
-	// specific processing of entries.
-	// AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked does the general
-	// replica processing for MsgStorageAppend.
+	// The RaftEvent represents MsgStorageAppend on all replicas. To stay
+	// consistent with the structure of Replica.handleRaftReadyRaftMuLocked, this
+	// method only does leader specific processing of entries.
+	// AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked does the general replica
+	// processing for MsgStorageAppend.
 	//
 	// raftMu is held.
-	HandleRaftReadyRaftMuLocked(ctx context.Context, entries []raftpb.Entry)
-	// AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked subjects entries to
-	// admission control on a replica (leader or follower). Like
-	// HandleRaftReadyRaftMuLocked, this is called from
-	// Replica.handleRaftReadyRaftMuLocked. It is split off from that function
-	// since it is natural to position the admission control processing when we
-	// are writing to the store in Replica.handleRaftReadyRaftMuLocked. This is
-	// a noop if the leader is not using the RACv2 protocol. Returns false if
-	// the leader is using RACv1, in which the caller should follow the RACv1
-	// admission pathway.
+	HandleRaftReadyRaftMuLocked(context.Context, rac2.RaftEvent)
+	// AdmitRaftEntriesRaftMuLocked subjects entries to admission control on a
+	// replica (leader or follower). Like HandleRaftReadyRaftMuLocked, this is
+	// called from Replica.handleRaftReadyRaftMuLocked.
+	//
+	// It is split off from that function since it is natural to position the
+	// admission control processing when we are writing to the store in
+	// Replica.handleRaftReadyRaftMuLocked. This is a noop if the leader is not
+	// using the RACv2 protocol. Returns false if the leader is using RACv1, in
+	// which the caller should follow the RACv1 admission pathway.
 	//
 	// raftMu is held.
-	AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(
-		ctx context.Context, leaderTerm uint64, entries []raftpb.Entry) bool
+	AdmitRaftEntriesRaftMuLocked(
+		ctx context.Context, event rac2.RaftEvent) bool
 
 	// EnqueuePiggybackedAdmittedAtLeader is called at the leader when
 	// receiving a piggybacked MsgAppResp that can advance a follower's
@@ -684,7 +683,7 @@ func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
 }
 
 // HandleRaftReadyRaftMuLocked implements Processor.
-func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, entries []raftpb.Entry) {
+func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.RaftEvent) {
 	p.opts.Replica.RaftMuAssertHeld()
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -693,7 +692,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, entries
 	}
 	if p.raftMu.raftNode == nil {
 		if buildutil.CrdbTestBuild {
-			if len(entries) > 0 {
+			if len(e.Entries) > 0 {
 				panic(errors.AssertionFailedf("entries provided without raft node"))
 			}
 		}
@@ -720,8 +719,8 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, entries
 			myLeaderTerm = p.raftMu.raftNode.TermLocked()
 		}
 	}()
-	if len(entries) > 0 {
-		nextUnstableIndex = entries[0].Index
+	if len(e.Entries) > 0 {
+		nextUnstableIndex = e.Entries[0].Index
 	}
 	p.mu.lastObservedStableIndex = stableIndex
 	p.mu.scheduledAdmittedProcessing = false
@@ -750,18 +749,14 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, entries
 		// known, we simply drop the message.
 	}
 	if p.mu.leader.rc != nil {
-		if err := p.mu.leader.rc.HandleRaftEventRaftMuLocked(ctx, rac2.RaftEvent{
-			Entries: entries,
-		}); err != nil {
+		if err := p.mu.leader.rc.HandleRaftEventRaftMuLocked(ctx, e); err != nil {
 			log.Errorf(ctx, "error handling raft event: %v", err)
 		}
 	}
 }
 
-// AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked implements Processor.
-func (p *processorImpl) AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(
-	ctx context.Context, leaderTerm uint64, entries []raftpb.Entry,
-) bool {
+// AdmitRaftEntriesRaftMuLocked implements Processor.
+func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2.RaftEvent) bool {
 	// NB: the state being read here is only modified under raftMu, so it will
 	// not become stale during this method.
 	var isLeaderUsingV2Protocol bool
@@ -774,7 +769,7 @@ func (p *processorImpl) AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(
 	if !isLeaderUsingV2Protocol {
 		return false
 	}
-	for _, entry := range entries {
+	for _, entry := range e.Entries {
 		typ, priBits, err := raftlog.EncodingOf(entry)
 		if err != nil {
 			panic(errors.Wrap(err, "unable to determine raft command encoding"))
@@ -798,7 +793,7 @@ func (p *processorImpl) AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(
 				p.mu.Lock()
 				defer p.mu.Unlock()
 				raftPri = p.mu.follower.lowPriOverrideState.getEffectivePriority(entry.Index, raftPri)
-				p.mu.waitingForAdmissionState.add(leaderTerm, entry.Index, raftPri)
+				p.mu.waitingForAdmissionState.add(e.Term, entry.Index, raftPri)
 			}()
 		} else {
 			raftPri = raftpb.LowPri
@@ -811,7 +806,7 @@ func (p *processorImpl) AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(
 			func() {
 				p.mu.Lock()
 				defer p.mu.Unlock()
-				p.mu.waitingForAdmissionState.add(leaderTerm, entry.Index, raftPri)
+				p.mu.waitingForAdmissionState.add(e.Term, entry.Index, raftPri)
 			}()
 		}
 		admissionPri := rac2.RaftToAdmissionPriority(raftPri)
@@ -827,7 +822,7 @@ func (p *processorImpl) AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(
 				StoreID:    p.opts.StoreID,
 				RangeID:    p.opts.RangeID,
 				ReplicaID:  p.opts.ReplicaID,
-				LeaderTerm: leaderTerm,
+				LeaderTerm: e.Term,
 				Index:      entry.Index,
 				Priority:   raftPri,
 			},
@@ -837,7 +832,7 @@ func (p *processorImpl) AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(
 			func() {
 				p.mu.Lock()
 				defer p.mu.Unlock()
-				p.mu.waitingForAdmissionState.remove(leaderTerm, entry.Index, raftPri)
+				p.mu.waitingForAdmissionState.remove(e.Term, entry.Index, raftPri)
 			}()
 		}
 	}

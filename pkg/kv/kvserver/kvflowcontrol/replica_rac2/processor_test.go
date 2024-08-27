@@ -376,20 +376,21 @@ func TestProcessorBasic(t *testing.T) {
 				return builderStr()
 
 			case "handle-raft-ready-and-admit":
-				var entries []raftpb.Entry
+				var event rac2.RaftEvent
 				if d.HasArg("entries") {
 					var arg string
 					d.ScanArgs(t, "entries", &arg)
-					entries = createEntries(t, parseEntryInfos(t, arg))
+					event.Entries = createEntries(t, parseEntryInfos(t, arg))
+				}
+				if len(event.Entries) > 0 {
+					d.ScanArgs(t, "leader-term", &event.Term)
 				}
 				fmt.Fprintf(&b, "HandleRaftReady:\n")
-				p.HandleRaftReadyRaftMuLocked(ctx, entries)
+				p.HandleRaftReadyRaftMuLocked(ctx, event)
 				fmt.Fprintf(&b, ".....\n")
-				if len(entries) > 0 {
-					var leaderTerm uint64
-					d.ScanArgs(t, "leader-term", &leaderTerm)
+				if len(event.Entries) > 0 {
 					fmt.Fprintf(&b, "AdmitRaftEntries:\n")
-					isV2 := p.AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(ctx, leaderTerm, entries)
+					isV2 := p.AdmitRaftEntriesRaftMuLocked(ctx, event)
 					fmt.Fprintf(&b, "leader-using-v2: %t\n", isV2)
 				}
 				return builderStr()
