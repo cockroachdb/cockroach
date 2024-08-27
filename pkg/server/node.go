@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"net"
 	"sort"
 	"strings"
@@ -240,6 +241,13 @@ var (
 		"kv.trace.slow_request_stacks.threshold",
 		`duration spent in processing above any available stack history is appended to its trace, if automatic trace snapshots are enabled`,
 		time.Second*30,
+	)
+
+	livenessRangeCompactInterval = settings.RegisterDurationSetting(
+		settings.SystemOnly,
+		"kv.liveness_range_compact.interval",
+		`interval at which the liveness range is compacted. A value of 0 disables the periodic compaction`,
+		0,
 	)
 )
 
@@ -810,6 +818,8 @@ func (n *Node) start(
 		log.Infof(ctx, "started with engine type %v", &t)
 	}
 	log.Infof(ctx, "started with attributes %v", attrs.Attrs)
+
+	n.startPeriodicLivenessCompaction(n.stopper, livenessRangeCompactInterval)
 	return nil
 }
 
@@ -1094,6 +1104,73 @@ func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.
 				if err := n.computeMetricsPeriodically(ctx, previousMetrics, tick); err != nil {
 					log.Errorf(ctx, "failed computing periodic metrics: %s", err)
 				}
+			case <-stopper.ShouldQuiesce():
+				return
+			}
+		}
+	})
+}
+
+// startPeriodicLivenessCompaction starts a loop where it periodically compacts
+// the liveness range.
+func (n *Node) startPeriodicLivenessCompaction(
+	stopper *stop.Stopper, livenessRangeCompactInterval *settings.DurationSetting,
+) {
+	ctx := n.AnnotateCtx(context.Background())
+
+	// getCompactionInterval() returns the interval at which the liveness range is
+	// set to be compacted. If the interval is set to 0, the period is set to the
+	// max possible duration because a value of 0 cause the ticker to panic.
+	getCompactionInterval := func() time.Duration {
+		interval := livenessRangeCompactInterval.Get(&n.storeCfg.Settings.SV)
+		if interval == 0 {
+			interval = math.MaxInt64
+		}
+		return interval
+	}
+
+	_ = stopper.RunAsyncTask(ctx, "liveness-compaction", func(ctx context.Context) {
+		interval := getCompactionInterval()
+		ticker := time.NewTicker(interval)
+
+		// Update the compaction interval when the setting changes.
+		livenessRangeCompactInterval.SetOnChange(&n.storeCfg.Settings.SV, func(ctx context.Context) {
+			interval := getCompactionInterval()
+			ticker.Reset(interval)
+		})
+
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				// Find the liveness replica in order to compact it.
+				_ = n.stores.VisitStores(func(store *kvserver.Store) error {
+					store.VisitReplicas(func(repl *kvserver.Replica) bool {
+						span := repl.Desc().KeySpan().AsRawSpanWithNoLocals()
+						if keys.NodeLivenessSpan.Overlaps(span) {
+
+							// The CompactRange() method expects the start and end keys to be
+							// encoded.
+							startEngineKey :=
+								storage.EngineKey{
+									Key: span.Key,
+								}.Encode()
+
+							endEngineKey :=
+								storage.EngineKey{
+									Key: span.EndKey,
+								}.Encode()
+
+							log.Infof(ctx, "attempting to compact liveness replica: %+v", repl)
+							if err := store.TODOEngine().CompactRange(startEngineKey, endEngineKey); err != nil {
+								log.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
+							}
+							log.Infof(ctx, "finished compacting liveness replica: %+v", repl)
+						}
+						return true
+					})
+					return nil
+				})
 			case <-stopper.ShouldQuiesce():
 				return
 			}
