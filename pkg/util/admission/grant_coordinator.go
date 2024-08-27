@@ -457,7 +457,7 @@ func makeStoresGrantCoordinators(
 			admissionpb.NormalPri, admissionpb.LockingNormalPri)
 	elasticStoreWorkQueueMetrics :=
 		makeWorkQueueMetrics(fmt.Sprintf("%s-stores", admissionpb.ElasticWorkClass), registry,
-			admissionpb.TTLLowPri, admissionpb.BulkNormalPri)
+			admissionpb.BulkLowPri, admissionpb.BulkNormalPri)
 	storeWorkQueueMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{
 		regularStoreWorkQueueMetrics, elasticStoreWorkQueueMetrics,
 	}
