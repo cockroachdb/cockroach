@@ -289,7 +289,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 
 	if streamingKnobs, ok := lrw.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 		if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
-			streamingKnobs.BeforeClientSubscribe(addr, string(token), lrw.frontier, lrw.spec.FilterRangefeed)
+			streamingKnobs.BeforeClientSubscribe(addr, string(token), lrw.frontier, lrw.spec.IgnoreCDCIgnoredTTLDeletes)
 		}
 	}
 	sub, err := streamClient.Subscribe(ctx,
@@ -297,7 +297,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 		int32(lrw.FlowCtx.NodeID.SQLInstanceID()), lrw.ProcessorID,
 		token,
 		lrw.spec.InitialScanTimestamp, lrw.frontier,
-		streamclient.WithFiltering(lrw.spec.FilterRangefeed),
+		streamclient.WithFiltering(lrw.spec.IgnoreCDCIgnoredTTLDeletes),
 		streamclient.WithDiff(true),
 	)
 	if err != nil {

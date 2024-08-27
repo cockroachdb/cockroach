@@ -421,7 +421,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		tablesMd,
 		p.job.ID(),
 		streampb.StreamID(payload.StreamID),
-		payload.FilterRangefeed,
+		payload.IgnoreCDCIgnoredTTLDeletes,
 		payload.Mode,
 	)
 	if err != nil {
