@@ -3529,13 +3529,16 @@ var allowReadCommittedIsolation = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+// TODO(nvanbenschoten): rename this variable and update uses of it to favor
+// "repeatable read" over "snapshot".
 var allowSnapshotIsolation = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.txn.snapshot_isolation.enabled",
-	"set to true to allow transactions to use the SNAPSHOT isolation level. At "+
-		"the time of writing, this setting is intended only for usage by "+
+	"set to true to allow transactions to use the REPEATABLE READ isolation "+
+		"level. At the time of writing, this setting is intended only for usage by "+
 		"CockroachDB developers.",
 	false,
+	settings.WithName("sql.txn.repeatable_read_isolation.enabled"),
 )
 
 var logIsolationLevelLimiter = log.Every(10 * time.Second)
