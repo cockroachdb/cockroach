@@ -88,6 +88,13 @@ func TestKeyNext(t *testing.T) {
 	noExtraCap[0] = 'x'
 	noExtraCap[1] = 'o'
 
+	wasReallocated := func(a, b Key) bool {
+		if cap(a) == 0 {
+			return cap(b) != 0
+		}
+		return &a[0] != &b[0]
+	}
+
 	testCases := []struct {
 		key           Key
 		next          Key
@@ -101,16 +108,17 @@ func TestKeyNext(t *testing.T) {
 		{Key(extraCap), Key("xo\x00"), -1},
 		{Key(noExtraCap), Key("xo\x00"), 1},
 	}
-	for i, c := range testCases {
+	for _, c := range testCases {
 		next := c.key.Next()
-		if !bytes.Equal(next, c.next) {
-			t.Errorf("%d: unexpected next bytes for %q: %q", i, c.key, next)
-		}
+		require.Equal(t, c.next, next)
 		if c.expReallocate != 0 {
-			if expect, reallocated := c.expReallocate > 0, (&next[0] != &c.key[0]); expect != reallocated {
-				t.Errorf("%d: unexpected next reallocation = %t, found reallocation = %t", i, expect, reallocated)
-			}
+			require.Equal(t, c.expReallocate > 0, wasReallocated(c.key, next))
 		}
+
+		// Also test the ClonedNext method.
+		clonedNext := c.key.ClonedNext()
+		require.Equal(t, c.next, clonedNext)
+		require.True(t, wasReallocated(c.key, clonedNext))
 	}
 }
 

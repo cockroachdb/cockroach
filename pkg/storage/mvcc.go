@@ -7108,7 +7108,7 @@ func mvccMinSplitKey(it MVCCIterator, startKey roachpb.Key) (roachpb.Key, error)
 	if minSplitKey == nil {
 		// The first key in the range does not represent a row in a SQL table.
 		// Allow a split at any key that sorts after it.
-		minSplitKey = it.UnsafeKey().Key.Clone().Next()
+		minSplitKey = it.UnsafeKey().Key.ClonedNext()
 	}
 	return minSplitKey, nil
 }
