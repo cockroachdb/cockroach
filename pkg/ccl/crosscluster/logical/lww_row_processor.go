@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -332,15 +333,20 @@ const (
 	replicatedApplyUDFOpName         = "replicated-apply-udf"
 )
 
-func getIEOverride(opName string, jobID jobspb.JobID) sessiondata.InternalExecutorOverride {
-	o := ieOverrideBase
-	// We want the ingestion queries to show up on the SQL Activity page
-	// alongside with the foreground traffic by default. We can achieve this
-	// by using the same naming scheme as AttributeToUser feature of the IE
-	// override (effectively, we opt out of using the "external" metrics for
-	// the ingestion queries).
-	o.ApplicationName = fmt.Sprintf("%s-%s-%d", catconstants.AttributedToUserInternalAppNamePrefix, opName, jobID)
-	return o
+type IEOverrideFactory func(originTimestamp hlc.Timestamp) sessiondata.InternalExecutorOverride
+
+func getIEOverrideFactory(opName string, jobID jobspb.JobID) IEOverrideFactory {
+	return func(originTimestamp hlc.Timestamp) sessiondata.InternalExecutorOverride {
+		o := ieOverrideBase
+		o.OriginTimestampForLogicalDataReplication = originTimestamp
+		// We want the ingestion queries to show up on the SQL Activity page
+		// alongside with the foreground traffic by default. We can achieve this
+		// by using the same naming scheme as AttributeToUser feature of the IE
+		// override (effectively, we opt out of using the "external" metrics for
+		// the ingestion queries).
+		o.ApplicationName = fmt.Sprintf("%s-%s-%d", catconstants.AttributedToUserInternalAppNamePrefix, opName, jobID)
+		return o
+	}
 }
 
 func init() {
@@ -386,9 +392,9 @@ func makeSQLProcessor(
 			deleteQueries: make(map[catid.DescID]queryBuilder, len(tableConfigs)),
 			insertQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
 		},
-		ieOverrideOptimisticInsert: getIEOverride(replicatedOptimisticInsertOpName, jobID),
-		ieOverrideInsert:           getIEOverride(replicatedInsertOpName, jobID),
-		ieOverrideDelete:           getIEOverride(replicatedDeleteOpName, jobID),
+		ieoFactoryOptimisticInsert: getIEOverrideFactory(replicatedOptimisticInsertOpName, jobID),
+		ieoFactoryInsert:           getIEOverrideFactory(replicatedInsertOpName, jobID),
+		ieoFactoryDelete:           getIEOverrideFactory(replicatedDeleteOpName, jobID),
 	}
 	var udfQuerier querier
 	if needUDFQuerier {
@@ -465,9 +471,9 @@ type lwwQuerier struct {
 	settings    *cluster.Settings
 	queryBuffer queryBuffer
 
-	ieOverrideOptimisticInsert sessiondata.InternalExecutorOverride
-	ieOverrideInsert           sessiondata.InternalExecutorOverride
-	ieOverrideDelete           sessiondata.InternalExecutorOverride
+	ieoFactoryOptimisticInsert IEOverrideFactory
+	ieoFactoryInsert           IEOverrideFactory
+	ieoFactoryDelete           IEOverrideFactory
 }
 
 func (lww *lwwQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) error {
@@ -515,7 +521,7 @@ func (lww *lwwQuerier) InsertRow(
 		if err != nil {
 			return batchStats{}, err
 		}
-		if _, err = ie.ExecParsed(ctx, replicatedOptimisticInsertOpName, kvTxn, lww.ieOverrideOptimisticInsert, stmt, datums...); err != nil {
+		if _, err = ie.ExecParsed(ctx, replicatedOptimisticInsertOpName, kvTxn, lww.ieoFactoryOptimisticInsert(row.MvccTimestamp), stmt, datums...); err != nil {
 			// If the optimistic insert failed with unique violation, we have to
 			// fall back to the pessimistic path. If we got a different error,
 			// then we bail completely.
@@ -534,7 +540,7 @@ func (lww *lwwQuerier) InsertRow(
 	if err != nil {
 		return batchStats{}, err
 	}
-	if _, err = ie.ExecParsed(ctx, replicatedInsertOpName, kvTxn, lww.ieOverrideInsert, stmt, datums...); err != nil {
+	if _, err = ie.ExecParsed(ctx, replicatedInsertOpName, kvTxn, lww.ieoFactoryInsert(row.MvccTimestamp), stmt, datums...); err != nil {
 		log.Warningf(ctx, "replicated insert failed (query: %s): %s", stmt.SQL, err.Error())
 		return batchStats{}, err
 	}
@@ -562,7 +568,7 @@ func (lww *lwwQuerier) DeleteRow(
 		return batchStats{}, err
 	}
 
-	if _, err := ie.ExecParsed(ctx, replicatedDeleteOpName, kvTxn, lww.ieOverrideDelete, stmt, datums...); err != nil {
+	if _, err := ie.ExecParsed(ctx, replicatedDeleteOpName, kvTxn, lww.ieoFactoryDelete(row.MvccTimestamp), stmt, datums...); err != nil {
 		log.Warningf(ctx, "replicated delete failed (query: %s): %s", stmt.SQL, err.Error())
 		return batchStats{}, err
 	}

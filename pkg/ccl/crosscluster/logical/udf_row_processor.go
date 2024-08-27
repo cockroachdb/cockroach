@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -86,7 +87,7 @@ type applierQuerier struct {
 	settings    *cluster.Settings
 	queryBuffer queryBuffer
 
-	ieoInsert, ieoDelete, ieoApplyUDF sessiondata.InternalExecutorOverride
+	ieoInsertFactory, ieoDeleteFactory, ieoApplyUDFFactory IEOverrideFactory
 
 	// Used for the applier query to reduce allocations.
 	proposedMVCCTs     tree.DDecimal
@@ -106,10 +107,10 @@ func makeApplierQuerier(
 			insertQueries:  make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
 			applierQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
 		},
-		settings:    settings,
-		ieoInsert:   getIEOverride(replicatedInsertOpName, jobID),
-		ieoDelete:   getIEOverride(replicatedDeleteOpName, jobID),
-		ieoApplyUDF: getIEOverride(replicatedApplyUDFOpName, jobID),
+		settings:           settings,
+		ieoInsertFactory:   getIEOverrideFactory(replicatedInsertOpName, jobID),
+		ieoDeleteFactory:   getIEOverrideFactory(replicatedDeleteOpName, jobID),
+		ieoApplyUDFFactory: getIEOverrideFactory(replicatedApplyUDFOpName, jobID),
 	}
 }
 
@@ -211,7 +212,7 @@ func (aq *applierQuerier) applyUDF(
 	aq.proposedPrevMVCCTs.Decimal = eval.TimestampToDecimal(prevRow.MvccTimestamp)
 
 	decisionRow, err := aq.queryRowExParsed(
-		ctx, replicatedApplyUDFOpName, txn, ie, aq.ieoApplyUDF, stmt,
+		ctx, replicatedApplyUDFOpName, txn, ie, aq.ieoApplyUDFFactory(hlc.Timestamp{}), stmt,
 		append(datums, &aq.proposedMVCCTs, &aq.proposedPrevMVCCTs)...,
 	)
 	if err != nil {
@@ -254,7 +255,7 @@ func (aq *applierQuerier) applyDecision(
 		if err != nil {
 			return batchStats{}, err
 		}
-		if err := aq.execParsed(ctx, replicatedDeleteOpName, txn, ie, aq.ieoDelete, stmt, datums...); err != nil {
+		if err := aq.execParsed(ctx, replicatedDeleteOpName, txn, ie, aq.ieoDeleteFactory(hlc.Timestamp{}), stmt, datums...); err != nil {
 			return batchStats{}, err
 		}
 		return batchStats{}, nil
@@ -270,7 +271,7 @@ func (aq *applierQuerier) applyDecision(
 		if err != nil {
 			return batchStats{}, err
 		}
-		if err := aq.execParsed(ctx, replicatedInsertOpName, txn, ie, aq.ieoInsert, stmt, datums...); err != nil {
+		if err := aq.execParsed(ctx, replicatedInsertOpName, txn, ie, aq.ieoInsertFactory(hlc.Timestamp{}), stmt, datums...); err != nil {
 			return batchStats{}, err
 		}
 		return batchStats{}, nil
