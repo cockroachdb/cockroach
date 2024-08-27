@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -860,7 +861,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
-	var readyEntries []raftpb.Entry
 	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		r.deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(ctx, raftGroup)
 
@@ -878,7 +878,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// in raft. This will also eliminate the "side channel" plumbing hack with
 			// this bytesAccount.
 			syncRd := raftGroup.Ready()
-			readyEntries = syncRd.Entries
 			// We apply committed entries during this handleRaftReady, so it is ok to
 			// release the corresponding memory tokens at the end of this func. Next
 			// time we enter this function, the account will be empty again.
@@ -914,7 +913,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 	// Even if we don't have a Ready, or entries in Ready,
 	// replica_rac2.Processor may need to do some work.
-	r.flowControlV2.HandleRaftReadyRaftMuLocked(ctx, readyEntries)
+	raftEvent := rac2.RaftEventFromMsgStorageAppend(msgStorageAppend)
+	r.flowControlV2.HandleRaftReadyRaftMuLocked(ctx, raftEvent)
 	if !hasReady {
 		// We must update the proposal quota even if we don't have a ready.
 		// Consider the case when our quota is of size 1 and two out of three
@@ -1112,17 +1112,16 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			if r.IsInitialized() && r.store.cfg.KVAdmissionController != nil {
 				// Enqueue raft log entries into admission queues. This is
 				// non-blocking; actual admission happens asynchronously.
-				usingRACV2 := r.flowControlV2.AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(
-					ctx, msgStorageAppend.Term, msgStorageAppend.Entries)
+				usingRACV2 := r.flowControlV2.AdmitRaftEntriesRaftMuLocked(ctx, raftEvent)
 				if !usingRACV2 {
 					// Leader is using RACv1 protocol.
 					tenantID, _ := r.TenantID()
-					for _, entry := range msgStorageAppend.Entries {
+					for _, entry := range raftEvent.Entries {
 						if len(entry.Data) == 0 {
 							continue // nothing to do
 						}
 						r.store.cfg.KVAdmissionController.AdmitRaftEntry(
-							ctx, tenantID, r.StoreID(), r.RangeID, r.replicaID, msgStorageAppend.Term, entry,
+							ctx, tenantID, r.StoreID(), r.RangeID, r.replicaID, raftEvent.Term, entry,
 						)
 					}
 				}

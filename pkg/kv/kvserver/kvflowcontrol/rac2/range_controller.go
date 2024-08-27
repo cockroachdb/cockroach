@@ -100,10 +100,28 @@ type FollowerStateInfo struct {
 	Admitted [raftpb.NumPriorities]uint64
 }
 
-// TODO(pav-kv): This struct is a placeholder for the interface or struct
-// containing raft entries. Replace this as part of #128019.
+// RaftEvent carries a RACv2-relevant subset of raft state sent to storage.
 type RaftEvent struct {
+	// Term is the leader term on whose behalf the entries or snapshot are
+	// written. Note that it may be behind the raft node's current term.
+	Term uint64
+	// Snap contains the snapshot to be written to storage.
+	Snap *raftpb.Snapshot
+	// Entries contains the log entries to be written to storage.
 	Entries []raftpb.Entry
+}
+
+// RaftEventFromMsgStorageAppend constructs a RaftEvent from the given raft
+// MsgStorageAppend message. Returns zero value if the message is empty.
+func RaftEventFromMsgStorageAppend(msg raftpb.Message) RaftEvent {
+	if msg.Type != raftpb.MsgStorageAppend {
+		return RaftEvent{}
+	}
+	return RaftEvent{
+		Term:    msg.LogTerm,
+		Snap:    msg.Snapshot,
+		Entries: msg.Entries,
+	}
 }
 
 // NoReplicaID is a special value of roachpb.ReplicaID, which can never be a
