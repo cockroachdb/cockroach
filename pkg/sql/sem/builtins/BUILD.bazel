@@ -61,6 +61,7 @@ go_library(
         "//pkg/sql/appstatspb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/randgen/randgencfg",
         "//pkg/sql/colexecerror",

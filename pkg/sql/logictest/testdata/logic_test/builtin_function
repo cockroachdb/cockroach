@@ -4379,3 +4379,37 @@ public  roach_dwellings  ·
 public  testenum         ·
 
 subtest end
+
+subtest type_is_indexable
+
+# Indexable type (int4).
+query B
+SELECT crdb_internal.type_is_indexable(23);
+----
+true
+
+# Unindexable type (refcursor).
+query B
+SELECT crdb_internal.type_is_indexable(1790);
+----
+false
+
+statement ok
+CREATE TYPE foo_type AS ENUM ('v1', 'v2', 'v3');
+
+query O
+SELECT oid FROM pg_type WHERE typname = 'foo_type';
+----
+100132
+
+query B
+SELECT crdb_internal.type_is_indexable(100132);
+----
+true
+
+query T
+SELECT crdb_internal.type_is_indexable(NULL);
+----
+NULL
+
+subtest end
