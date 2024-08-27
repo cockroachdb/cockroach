@@ -983,6 +983,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	refreshReason := noReason
 	if hasMsg(msgStorageAppend) {
 		app := logstore.MakeMsgStorageAppend(msgStorageAppend)
+		cb := (*replicaSyncCallback)(r)
 
 		// Leadership changes, if any, are communicated through MsgStorageAppends.
 		// Check if that's the case here.
@@ -1080,8 +1081,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				refreshReason = reasonSnapshotApplied
 			}
 
-			// Send MsgStorageAppend's responses.
-			r.sendRaftMessages(ctx, app.Responses, nil /* blocked */, true /* willDeliverLocal */)
+			cb.OnSnapSync(ctx, app.OnDone())
 		} else {
 			// TODO(pavelkalinnikov): find a way to move it to storeEntries.
 			if app.Commit != 0 && !r.IsInitialized() {
@@ -1107,7 +1107,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				DisableSyncLogWriteToss: buildutil.CrdbTestBuild &&
 					r.store.TestingKnobs().DisableSyncLogWriteToss,
 			}
-			cb := (*replicaSyncCallback)(r)
 			if r.IsInitialized() && r.store.cfg.KVAdmissionController != nil {
 				// Enqueue raft log entries into admission queues. This is
 				// non-blocking; actual admission happens asynchronously.
@@ -1678,6 +1677,11 @@ func (r *replicaSyncCallback) OnLogSync(
 	if commitStats.TotalDuration > defaultReplicaRaftMuWarnThreshold {
 		log.Infof(repl.raftCtx, "slow non-blocking raft commit: %s", commitStats)
 	}
+}
+
+func (r *replicaSyncCallback) OnSnapSync(ctx context.Context, done logstore.MsgStorageAppendDone) {
+	repl := (*Replica)(r)
+	repl.sendRaftMessages(ctx, done.Responses(), nil /* blocked */, true /* willDeliverLocal */)
 }
 
 // sendRaftMessages sends a slice of Raft messages.

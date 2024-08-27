@@ -170,8 +170,11 @@ type LogStore struct {
 }
 
 // SyncCallback is a callback that is notified when a raft log write has been
-// durably committed to disk. The function is handed the response messages that
-// are associated with the MsgStorageAppend that triggered the fsync.
+// durably committed to disk.
+//
+// The function is handed the struct containing messages that are associated
+// with the MsgStorageAppend that triggered the fsync.
+//
 // commitStats is populated iff this was a non-blocking sync.
 type SyncCallback interface {
 	OnLogSync(context.Context, MsgStorageAppendDone, storage.BatchCommitStats)
