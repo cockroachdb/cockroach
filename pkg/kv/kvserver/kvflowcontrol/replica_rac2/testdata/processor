@@ -60,7 +60,6 @@ on-desc-changed  replicas=n11/s11/11
 ----
  Replica.RaftMuAssertHeld
  Replica.MuAssertHeld
- Replica.RaftNodeMuLocked
 
 # handleRaftReady. It thinks the leader is using v1, so there is no
 # advancement of admitted, or submission of this entry for admission.
@@ -625,7 +624,6 @@ on-desc-changed  replicas=n11/s11/11,n13/s13/13
 ----
  Replica.RaftMuAssertHeld
  Replica.MuAssertHeld
- Replica.RaftNodeMuLocked
 
 handle-raft-ready-and-admit
 ----

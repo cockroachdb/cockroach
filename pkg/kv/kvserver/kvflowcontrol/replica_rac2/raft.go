@@ -8,10 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvserver
+package replica_rac2
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,7 +20,10 @@ type raftNodeForRACv2 struct {
 	*raft.RawNode
 }
 
-var _ replica_rac2.RaftNode = raftNodeForRACv2{}
+// NewRaftNode creates a RaftNode implementation from the given RawNode.
+func NewRaftNode(rn *raft.RawNode) RaftNode {
+	return raftNodeForRACv2{RawNode: rn}
+}
 
 func (rn raftNodeForRACv2) EnablePingForAdmittedLaggingLocked() {
 	panic("TODO(pav-kv): implement")

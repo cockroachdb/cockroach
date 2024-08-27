@@ -40,12 +40,6 @@ type Replica interface {
 	MuLock()
 	// MuUnlock releases Replica.mu.
 	MuUnlock()
-	// RaftNodeMuLocked returns a reference to the RaftNode. It is only called
-	// after Processor knows the Replica is initialized.
-	//
-	// At least Replica mu is held. The caller does not make any claims about
-	// whether it holds raftMu or not.
-	RaftNodeMuLocked() RaftNode
 	// LeaseholderMuLocked returns the Replica's current knowledge of the
 	// leaseholder, which can be stale. It is only called after Processor
 	// knows the Replica is initialized.
@@ -295,6 +289,11 @@ type SideChannelInfoUsingRaftMessageRequest struct {
 //     NotEnabledWhenLeader, acquire Replica.mu and close
 //     replicaFlowControlIntegrationImpl (RACv1).
 type Processor interface {
+	// InitRaftLocked is called when raft RawNode is initialized.
+	//
+	// Both Replica mu and raftMu are held.
+	InitRaftLocked(RaftNode)
+
 	// OnDestroyRaftMuLocked is called when the Replica is being destroyed.
 	//
 	// We need to know when Replica.mu.destroyStatus is updated, so that we
@@ -479,6 +478,12 @@ func NewProcessor(opts ProcessorOptions) Processor {
 	return p
 }
 
+// InitRaftLocked implements Processor.
+func (p *processorImpl) InitRaftLocked(rn RaftNode) {
+	p.raftMu.raftNode = rn
+	// TODO(pav-kv): initialize the stable log mark tracking from RawNode state.
+}
+
 // OnDestroyRaftMuLocked implements Processor.
 func (p *processorImpl) OnDestroyRaftMuLocked(ctx context.Context) {
 	p.opts.Replica.RaftMuAssertHeld()
@@ -543,18 +548,13 @@ func (p *processorImpl) OnDescChangedLocked(
 ) {
 	p.opts.Replica.RaftMuAssertHeld()
 	p.opts.Replica.MuAssertHeld()
-	if p.raftMu.replicas == nil {
-		// Replica is initialized, in that we have a descriptor. Get the
-		// RaftNode.
-		p.raftMu.raftNode = p.opts.Replica.RaftNodeMuLocked()
-		p.raftMu.tenantID = tenantID
-	} else {
-		if p.raftMu.tenantID != tenantID {
-			panic(errors.AssertionFailedf("tenantId was changed from %s to %s",
-				p.raftMu.tenantID, tenantID))
-		}
-	}
 	initialization := p.raftMu.replicas == nil
+	if initialization {
+		p.raftMu.tenantID = tenantID
+	} else if p.raftMu.tenantID != tenantID {
+		panic(errors.AssertionFailedf("tenantId was changed from %s to %s",
+			p.raftMu.tenantID, tenantID))
+	}
 	p.raftMu.replicas = descToReplicaSet(desc)
 	p.raftMu.replicasChanged = true
 	// We need to promptly return tokens if some replicas have been removed,
@@ -687,14 +687,13 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	p.opts.Replica.RaftMuAssertHeld()
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.mu.destroyed {
+	// Skip if the replica is not initialized or already destroyed.
+	if p.raftMu.replicas == nil || p.mu.destroyed {
 		return
 	}
 	if p.raftMu.raftNode == nil {
-		if buildutil.CrdbTestBuild {
-			if len(e.Entries) > 0 {
-				panic(errors.AssertionFailedf("entries provided without raft node"))
-			}
+		if buildutil.CrdbTestBuild && len(e.Entries) != 0 {
+			panic(errors.AssertionFailedf("entries provided without raft node"))
 		}
 		return
 	}
