@@ -370,7 +370,7 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 				return nil
 			}
 			if err := serverCfg.DB.Txn(
-				ctx, do, isql.SteppingEnabled(), isql.WithPriority(admissionpb.TTLLowPri),
+				ctx, do, isql.SteppingEnabled(), isql.WithPriority(admissionpb.BulkLowPri),
 			); err != nil {
 				return spanRowCount, errors.Wrapf(err, "error during row deletion")
 			}

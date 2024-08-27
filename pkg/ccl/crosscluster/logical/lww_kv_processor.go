@@ -147,7 +147,7 @@ func (p *kvRowProcessor) processParsedRow(
 	makeBatch := func(txn *kv.Txn) *kv.Batch {
 		b := txn.NewBatch()
 		b.Header.WriteOptions = originID1Options
-		b.AdmissionHeader.Priority = int32(admissionpb.BulkNormalPri)
+		b.AdmissionHeader.Priority = int32(admissionpb.BulkLowPri)
 		b.AdmissionHeader.Source = kvpb.AdmissionHeader_FROM_SQL
 		return b
 	}
