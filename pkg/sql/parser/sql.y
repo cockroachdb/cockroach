@@ -4738,7 +4738,7 @@ logical_replication_options:
   }
 | IGNORE_CDC_IGNORED_TTL_DELETES
   {
-    $$.val = &tree.LogicalReplicationOptions{FilterRangefeed: tree.MakeDBool(true)}
+    $$.val = &tree.LogicalReplicationOptions{IgnoreCDCIgnoredTTLDeletes: tree.MakeDBool(true)}
   }
 
 // %Help: CREATE VIRTUAL CLUSTER - create a new virtual cluster

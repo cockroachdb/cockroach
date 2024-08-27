@@ -30,11 +30,11 @@ type LogicalReplicationResources struct {
 
 type LogicalReplicationOptions struct {
 	// Mapping of table name to UDF name
-	UserFunctions   map[UnresolvedName]RoutineName
-	Cursor          Expr
-	Mode            Expr
-	DefaultFunction Expr
-	FilterRangefeed *DBool
+	UserFunctions              map[UnresolvedName]RoutineName
+	Cursor                     Expr
+	Mode                       Expr
+	DefaultFunction            Expr
+	IgnoreCDCIgnoredTTLDeletes *DBool
 }
 
 var _ Statement = &CreateLogicalReplicationStream{}
@@ -125,7 +125,7 @@ func (lro *LogicalReplicationOptions) Format(ctx *FmtCtx) {
 			ctx.FormatNode(&k)
 		}
 	}
-	if lro.FilterRangefeed != nil && *lro.FilterRangefeed {
+	if lro.IgnoreCDCIgnoredTTLDeletes != nil && *lro.IgnoreCDCIgnoredTTLDeletes {
 		maybeAddSep()
 		ctx.WriteString("IGNORE_CDC_IGNORED_TTL_DELETES")
 	}
@@ -168,12 +168,12 @@ func (o *LogicalReplicationOptions) CombineWith(other *LogicalReplicationOptions
 		}
 	}
 
-	if o.FilterRangefeed != nil {
-		if other.FilterRangefeed != nil {
-			return errors.New("IGNORE_TTL_DELETES option specified multiple times")
+	if o.IgnoreCDCIgnoredTTLDeletes != nil {
+		if other.IgnoreCDCIgnoredTTLDeletes != nil {
+			return errors.New("IGNORE_CDC_IGNORED_TTL_DELETES option specified multiple times")
 		}
 	} else {
-		o.FilterRangefeed = other.FilterRangefeed
+		o.IgnoreCDCIgnoredTTLDeletes = other.IgnoreCDCIgnoredTTLDeletes
 	}
 
 	return nil
@@ -186,5 +186,5 @@ func (o LogicalReplicationOptions) IsDefault() bool {
 		o.Mode == options.Mode &&
 		o.DefaultFunction == options.DefaultFunction &&
 		o.UserFunctions == nil &&
-		o.FilterRangefeed == options.FilterRangefeed
+		o.IgnoreCDCIgnoredTTLDeletes == options.IgnoreCDCIgnoredTTLDeletes
 }
