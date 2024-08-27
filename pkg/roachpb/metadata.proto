@@ -463,6 +463,10 @@ message Version {
   // cycle. They are subversions that are never the end versions of a release,
   // i.e. users of stable, public release will only use binaries with the
   // internal version set to 0.
+  // This field will be odd for fence versions, which allow the upgrades
+  // infrastructure to safely step through consecutive cluster versions. Note
+  // that -1 is a legal value, as that is the fence version for all final
+  // releases, which have an internal version of 0.
   optional int32 internal = 4 [(gogoproto.nullable) = false];
 }
 

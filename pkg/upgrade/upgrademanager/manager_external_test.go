@@ -827,7 +827,7 @@ func TestMigrationFailure(t *testing.T) {
 	// Pick a random version in to fail at
 	versions := clusterversion.ListBetween(startVersion, endVersion)
 	failVersion := versions[rand.Intn(len(versions))]
-	fenceVersion := upgrade.FenceVersionFor(ctx, clusterversion.ClusterVersion{Version: failVersion}).Version
+	fenceVersion := failVersion.FenceVersion()
 	t.Logf("test will fail at version: %s", failVersion.String())
 
 	// Create a storage cluster for the tenant.
