@@ -463,7 +463,7 @@ func (m *Manager) Migrate(
 
 		cv := clusterversion.ClusterVersion{Version: clusterVersion}
 
-		fenceVersion := upgrade.FenceVersionFor(ctx, cv)
+		fenceVersion := cv.FenceVersion()
 		if err := bumpClusterVersion(ctx, m.deps.Cluster, fenceVersion); err != nil {
 			return err
 		}
