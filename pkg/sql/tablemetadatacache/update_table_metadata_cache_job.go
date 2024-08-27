@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package tablemetadatacache
 
 import (
 	"context"
@@ -41,7 +41,7 @@ func (j *tableMetadataUpdateJobResumer) OnFailOrCancel(
 ) error {
 	if jobs.HasErrJobCanceled(jobErr) {
 		err := errors.NewAssertionErrorWithWrappedErrf(
-			jobErr, "mvcc statistics update job is not cancelable",
+			jobErr, "update table metadata cache job is not cancelable",
 		)
 		log.Errorf(ctx, "%v", err)
 	}
