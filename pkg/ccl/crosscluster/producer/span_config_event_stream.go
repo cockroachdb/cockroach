@@ -157,7 +157,12 @@ func (s *spanConfigEventStream) Next(ctx context.Context) (bool, error) {
 	case err := <-s.errCh:
 		return false, err
 	case s.data = <-s.streamCh:
-		return true, nil
+		select {
+		case err := <-s.errCh:
+			return false, err
+		default:
+			return true, nil
+		}
 	}
 }
 
