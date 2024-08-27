@@ -33,7 +33,7 @@ mkdir -p "$output_dir"
 # Run benchmarks and clean output
 # running count=4 here because that's the minimum required for a comparison
 bazel test //pkg/sql/tests:tests_test \
-  --config=use_ci_timeouts \
+  --test_timeout=1800 \
   --strategy=TestRunner=sandboxed \
   --jobs 100 \
   --config=crosslinux \
