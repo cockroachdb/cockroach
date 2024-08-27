@@ -2608,6 +2608,7 @@ var builtinOidsArray = []string{
 	2640: `crdb_internal.clear_query_plan_cache() -> void`,
 	2641: `crdb_internal.clear_table_stats_cache() -> void`,
 	2642: `crdb_internal.get_fully_qualified_table_name(table_descriptor_id: int) -> string`,
+	2643: `crdb_internal.type_is_indexable(oid: oid) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
