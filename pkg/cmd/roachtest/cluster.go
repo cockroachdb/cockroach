@@ -2714,17 +2714,27 @@ func addrToHostPort(addr string) (string, int, error) {
 // InternalAdminUIAddr returns the internal Admin UI address in the form host:port
 // for the specified nodes.
 func (c *clusterImpl) InternalAdminUIAddr(
-	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts ...option.CustomOption,
 ) ([]string, error) {
-	return c.adminUIAddr(ctx, l, nodes, false)
+	var virtualClusterOptions option.VirtualClusterOptions
+	if err := option.Apply(&virtualClusterOptions, opts); err != nil {
+		return nil, err
+	}
+
+	return c.adminUIAddr(ctx, l, nodes, virtualClusterOptions, false /* external */)
 }
 
 // ExternalAdminUIAddr returns the external Admin UI address in the form host:port
 // for the specified nodes.
 func (c *clusterImpl) ExternalAdminUIAddr(
-	ctx context.Context, l *logger.Logger, nodes option.NodeListOption,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts ...option.CustomOption,
 ) ([]string, error) {
-	return c.adminUIAddr(ctx, l, nodes, true)
+	var virtualClusterOptions option.VirtualClusterOptions
+	if err := option.Apply(&virtualClusterOptions, opts); err != nil {
+		return nil, err
+	}
+
+	return c.adminUIAddr(ctx, l, nodes, virtualClusterOptions, true /* external */)
 }
 
 func (c *clusterImpl) SQLPorts(
@@ -2765,11 +2775,24 @@ func (c *clusterImpl) virtualCluster(name string) string {
 }
 
 func (c *clusterImpl) adminUIAddr(
-	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, external bool,
+	ctx context.Context,
+	l *logger.Logger,
+	nodes option.NodeListOption,
+	opts option.VirtualClusterOptions,
+	external bool,
 ) ([]string, error) {
 	var addrs []string
-	adminURLs, err := roachprod.AdminURL(ctx, l, c.MakeNodes(nodes), "", 0, "",
-		external, false, false)
+	adminURLs, err := roachprod.AdminURL(
+		ctx,
+		l,
+		c.MakeNodes(nodes),
+		c.virtualCluster(opts.VirtualClusterName),
+		opts.SQLInstance,
+		"", /* path */
+		external,
+		false,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2852,7 +2875,7 @@ var _ = (&clusterImpl{}).ExternalIP
 
 // Conn returns a SQL connection to the specified node.
 func (c *clusterImpl) Conn(
-	ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption),
+	ctx context.Context, l *logger.Logger, node int, opts ...option.CustomOption,
 ) *gosql.DB {
 	db, err := c.ConnE(ctx, l, node, opts...)
 	if err != nil {
@@ -2863,15 +2886,16 @@ func (c *clusterImpl) Conn(
 
 // ConnE returns a SQL connection to the specified node.
 func (c *clusterImpl) ConnE(
-	ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption),
+	ctx context.Context, l *logger.Logger, node int, opts ...option.CustomOption,
 ) (_ *gosql.DB, retErr error) {
 	// NB: errors.Wrap returns nil if err is nil.
 	defer func() { retErr = errors.Wrapf(retErr, "connecting to node %d", node) }()
 
-	connOptions := &option.ConnOption{}
-	for _, opt := range opts {
-		opt(connOptions)
+	connOptions := &option.ConnOptions{}
+	if err := option.Apply(connOptions, opts); err != nil {
+		return nil, err
 	}
+
 	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), roachprod.PGURLOptions{
 		VirtualClusterName: connOptions.VirtualClusterName,
 		SQLInstance:        connOptions.SQLInstance,
@@ -2895,16 +2919,19 @@ func (c *clusterImpl) ConnE(
 	}
 	dataSourceName := u.String()
 
-	if len(connOptions.Options) > 0 {
-		vals := make(url.Values)
-		for k, v := range connOptions.Options {
-			vals.Add(k, v)
-		}
-		// connect_timeout is a libpq-specific parameter for the maximum wait for
-		// connection, in seconds.
-		vals.Add("connect_timeout", "60")
-		dataSourceName = dataSourceName + "&" + vals.Encode()
+	vals := make(url.Values)
+	for k, v := range connOptions.ConnectionOption {
+		vals.Add(k, v)
 	}
+
+	if _, ok := vals["connect_timeout"]; !ok {
+		// connect_timeout is a libpq-specific parameter for the maximum
+		// wait for connection, in seconds. If the caller did not specify
+		// a connection timeout, we set a default.
+		vals.Add("connect_timeout", "60")
+	}
+
+	dataSourceName = dataSourceName + "&" + vals.Encode()
 	db, err := gosql.Open("postgres", dataSourceName)
 	if err != nil {
 		return nil, err

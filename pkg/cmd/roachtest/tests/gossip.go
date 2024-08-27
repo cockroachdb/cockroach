@@ -160,7 +160,7 @@ SELECT node_id
 type gossipUtil struct {
 	waitTime   time.Duration
 	urlMap     map[int]string
-	conn       func(ctx context.Context, l *logger.Logger, i int, opts ...func(*option.ConnOption)) *gosql.DB
+	conn       func(ctx context.Context, l *logger.Logger, i int, opts ...option.CustomOption) *gosql.DB
 	httpClient *roachtestutil.RoachtestHTTPClient
 }
 
@@ -467,7 +467,7 @@ SELECT count(replicas)
 	// current infrastructure which doesn't know about cockroach nodes started on
 	// non-standard ports.
 	g := newGossipUtil(ctx, t, c)
-	g.conn = func(ctx context.Context, l *logger.Logger, i int, opts ...func(*option.ConnOption)) *gosql.DB {
+	g.conn = func(ctx context.Context, l *logger.Logger, i int, _ ...option.CustomOption) *gosql.DB {
 		if i != 1 {
 			return c.Conn(ctx, l, i)
 		}

@@ -96,13 +96,13 @@ type Cluster interface {
 
 	// SQL clients to nodes.
 
-	Conn(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) *gosql.DB
-	ConnE(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) (*gosql.DB, error)
+	Conn(ctx context.Context, l *logger.Logger, node int, opts ...option.CustomOption) *gosql.DB
+	ConnE(ctx context.Context, l *logger.Logger, node int, opts ...option.CustomOption) (*gosql.DB, error)
 
 	// URLs and Ports for the Admin UI.
 
-	InternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
-	ExternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
+	InternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption, opts ...option.CustomOption) ([]string, error)
+	ExternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption, opts ...option.CustomOption) ([]string, error)
 	AdminUIPorts(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]int, error)
 
 	// Running commands on nodes.
