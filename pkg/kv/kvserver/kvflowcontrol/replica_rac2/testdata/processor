@@ -14,6 +14,16 @@ on-destroy
 ----
  Replica.RaftMuAssertHeld
 
+# AdmitForEval returns false since there is no RangeController.
+admit-for-eval pri=low-pri
+----
+admitted: false err: <nil>
+
+# AdmitForEval returns false since there is no RangeController.
+admit-for-eval pri=normal-pri
+----
+admitted: false err: <nil>
+
 reset
 ----
 n1,s2,r3: replica=5, tenant=4, enabled-level=not-enabled
@@ -381,6 +391,49 @@ HandleRaftReady:
 AdmitRaftEntries:
  ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:52 Index:28 Priority:LowPri}}) = true
 leader-using-v2: true
+
+# AdmitForEval returns true since there is a RangeController which admitted.
+admit-for-eval pri=low-pri
+----
+ RangeController.WaitForEval(pri=low-pri) = (waited=true err=<nil>)
+admitted: true err: <nil>
+
+# AdmitForEval returns false despite there being a RangeController since
+# normal-pri is not subject to replication AC. RangeController.WaitForEval was
+# not called.
+admit-for-eval pri=normal-pri
+----
+admitted: false err: <nil>
+
+# Subject normal-pri to replication AC.
+set-flow-control-mode mode=apply-to-all
+----
+
+# AdmitForEval for normal-pri returns true.
+admit-for-eval pri=normal-pri
+----
+ RangeController.WaitForEval(pri=normal-pri) = (waited=true err=<nil>)
+admitted: true err: <nil>
+
+# Change the return value from WaitForEval.
+set-wait-for-eval-return-values waited=false
+----
+
+# Plumbing to WaitForEval is correct.
+admit-for-eval pri=normal-pri
+----
+ RangeController.WaitForEval(pri=normal-pri) = (waited=false err=<nil>)
+admitted: false err: <nil>
+
+# Set WaitForEval to return an error.
+set-wait-for-eval-return-values waited=false err=rc-was-closed
+----
+
+# Plumbing to WaitForEval is correct.
+admit-for-eval pri=normal-pri
+----
+ RangeController.WaitForEval(pri=normal-pri) = (waited=false err=rc-was-closed)
+admitted: false err: rc-was-closed
 
 # Entry at index 28 is admitted, but stable index is 27.
 admitted-log-entry replica-id=5 leader-term=52 index=28 pri=0

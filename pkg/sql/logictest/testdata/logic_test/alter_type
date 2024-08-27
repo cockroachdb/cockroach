@@ -564,8 +564,8 @@ subtest if_not_exists
 statement ok
 CREATE TYPE ifNotExists AS ENUM()
 
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 query T noticetrace
 CREATE TYPE IF NOT EXISTS ifNotExists AS ENUM();
 ----
