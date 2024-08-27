@@ -270,6 +270,7 @@ func (t *tokenCounter) TryDeduct(
 func (t *tokenCounter) Deduct(
 	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
 ) {
+	log.Infof(ctx, "deducting tokens %v for work class %v", tokens, wc)
 	t.adjust(ctx, wc, -tokens)
 }
 
@@ -277,6 +278,7 @@ func (t *tokenCounter) Deduct(
 func (t *tokenCounter) Return(
 	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
 ) {
+	log.Infof(ctx, "returning tokens %v for work class %v", tokens, wc)
 	t.adjust(ctx, wc, tokens)
 }
 
@@ -459,4 +461,14 @@ func (t *tokenCounter) adjustLocked(
 		// Elastic {deductions,returns} only affect elastic flow tokens.
 		t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta)
 	}
+}
+
+// testingSetTokens is used in tests to set the tokens for a given work class,
+// ignoring any adjustments.
+func (t *tokenCounter) testingSetTokens(
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.counters[wc].adjustTokensLocked(ctx, tokens-t.mu.counters[wc].tokens)
 }

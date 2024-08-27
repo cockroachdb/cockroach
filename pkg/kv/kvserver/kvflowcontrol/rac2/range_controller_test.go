@@ -20,11 +20,18 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -82,6 +89,30 @@ func (r *testingRCRange) startWaitForEval(name string, pri admissionpb.WorkPrior
 		r.mu.evals[name].err = err
 		r.mu.evals[name].done = true
 	}()
+}
+
+func (r *testingRCRange) admit(
+	ctx context.Context,
+	storeID roachpb.StoreID,
+	term uint64,
+	toIndex uint64,
+	pri admissionpb.WorkPriority,
+) {
+	r.mu.Lock()
+
+	for _, replica := range r.mu.r.replicaSet {
+		if replica.desc.StoreID == storeID {
+			replica := replica
+			replica.info.Admitted[AdmissionToRaftPriority(pri)] = toIndex
+			replica.info.Term = term
+			r.mu.r.replicaSet[replica.desc.ReplicaID] = replica
+			break
+		}
+	}
+
+	r.mu.Unlock()
+	// Send an empty raft event in order to trigger potential token return.
+	r.rc.HandleRaftEventRaftMuLocked(ctx, RaftEvent{})
 }
 
 type testingRange struct {
@@ -233,12 +264,51 @@ func parsePriority(t *testing.T, input string) admissionpb.WorkPriority {
 	case "HighPri":
 		return admissionpb.HighPri
 	default:
-		require.Fail(t, "unknown work class")
+		require.Failf(t, "unknown work class", "%v", input)
 		return admissionpb.WorkPriority(-1)
 	}
 }
 
-// TestRangeControllerWaitForEval tests the RangeController WaitForEval method.
+func testingFCStateToEntry(t *testing.T, state entryFCState) raftpb.Entry {
+	cmdID := kvserverbase.CmdIDKey("11111111")
+	var metaBuf []byte
+	if state.usesFlowControl {
+		meta := kvflowcontrolpb.RaftAdmissionMeta{
+			AdmissionPriority: int32(state.pri),
+		}
+		var err error
+		metaBuf, err = protoutil.Marshal(&meta)
+		require.NoError(t, err)
+	}
+	cmdBufPrefix := raftlog.EncodeCommandBytes(raftlog.EntryEncodingStandardWithACAndPriority, cmdID, nil, state.pri)
+	paddingLen := int(state.tokens) - len(cmdBufPrefix) - len(metaBuf)
+	// Padding also needs to decode as part of the RaftCommand proto, so we
+	// abuse the WriteBatch.Data field which is a byte slice. Since it is a
+	// nested field it consumes two tags plus two lengths. We'll approximate
+	// this as needing a maximum of 15 bytes, to be on the safe side.
+	require.LessOrEqual(t, 15, paddingLen)
+	cmd := kvserverpb.RaftCommand{
+		WriteBatch: &kvserverpb.WriteBatch{Data: make([]byte, paddingLen)}}
+	// Shrink by 1 on each iteration. This doesn't give us a guarantee that we
+	// will get exactly paddingLen since the length of data affects the encoded
+	// lengths, but it should usually work, and cause fewer questions when
+	// looking at the testdata file.
+	for cmd.Size() > paddingLen {
+		cmd.WriteBatch.Data = cmd.WriteBatch.Data[:len(cmd.WriteBatch.Data)-1]
+	}
+	cmdBuf, err := protoutil.Marshal(&cmd)
+	require.NoError(t, err)
+	data := append(cmdBufPrefix, metaBuf...)
+	data = append(data, cmdBuf...)
+	return raftpb.Entry{
+		Term:  state.term,
+		Index: state.index,
+		Type:  raftpb.EntryNormal,
+		Data:  data,
+	}
+}
+
+// TestRangeController tests the RangeController's various methods.
 //
 //   - init: Initializes the range controller with the given ranges.
 //     range_id=<range_id> tenant_id=<tenant_id> local_replica_id=<local_replica_id>
@@ -264,245 +334,444 @@ func parsePriority(t *testing.T, input string) admissionpb.WorkPriority {
 //
 //   - set_leaseholder: Sets the leaseholder for the given range.
 //     range_id=<range_id> replica_id=<replica_id>
-func TestRangeControllerWaitForEval(t *testing.T) {
+//
+//   - close_rcs: Closes all range controllers.
+//
+//   - admit: Admits the given store to the given range.
+//     range_id=<range_id>
+//     store_id=<store_id> term=<term> to_index=<to_index> pri=<pri>
+//     ...
+//
+//   - raft_event: Simulates a raft event on the given range, calling
+//     HandleRaftEvent.
+//     range_id=<range_id>
+//     term=<term> index=<index> pri=<pri> size=<size>
+//     ...
+//
+//   - tracker_state: Prints the state of the tracker for the given range.
+//     range_id=<range_id>
+func TestRangeController(t *testing.T) {
 	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-	ranges := make(map[roachpb.RangeID]*testingRCRange)
-	ssTokenCounter := NewStreamTokenCounterProvider(settings)
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "range_controller"), func(t *testing.T, path string) {
+		settings := cluster.MakeTestingClusterSettings()
+		ranges := make(map[roachpb.RangeID]*testingRCRange)
+		ssTokenCounter := NewStreamTokenCounterProvider(settings)
 
-	// Eval will only wait on a positive token amount, set the limit to 1 in
-	// order to simplify testing.
-	kvflowcontrol.RegularTokensPerStream.Override(ctx, &settings.SV, 1)
-	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &settings.SV, 1)
-	// We will initialize each token counter to 0 tokens initially. The map is
-	// used to do so exactly once per stream.
-	zeroedTokenCounters := make(map[kvflowcontrol.Stream]struct{})
+		// setTokenCounters is used to ensure that we only set the initial token
+		// counts once per counter.
+		setTokenCounters := make(map[kvflowcontrol.Stream]struct{})
+		initialRegularTokens, initialElasticTokens := int64(-1), int64(-1)
 
-	rangeStateString := func() string {
+		rangeStateString := func() string {
+			var b strings.Builder
 
-		var b strings.Builder
-
-		// Sort the ranges by rangeID to ensure deterministic output.
-		sortedRanges := make([]*testingRCRange, 0, len(ranges))
-		for _, testRC := range ranges {
-			sortedRanges = append(sortedRanges, testRC)
-			// We retain the lock until the end of the function call.
-			testRC.mu.Lock()
-			defer testRC.mu.Unlock()
-		}
-		sort.Slice(sortedRanges, func(i, j int) bool {
-			return sortedRanges[i].mu.r.rangeID < sortedRanges[j].mu.r.rangeID
-		})
-
-		for _, testRC := range sortedRanges {
-			replicaIDs := make([]int, 0, len(testRC.mu.r.replicaSet))
-			for replicaID := range testRC.mu.r.replicaSet {
-				replicaIDs = append(replicaIDs, int(replicaID))
-			}
-			sort.Ints(replicaIDs)
-
-			fmt.Fprintf(&b, "r%d: [", testRC.mu.r.rangeID)
-			for i, replicaID := range replicaIDs {
-				replica := testRC.mu.r.replicaSet[roachpb.ReplicaID(replicaID)]
-				if i > 0 {
-					fmt.Fprintf(&b, ",")
-				}
-				fmt.Fprintf(&b, "%v", replica.desc)
-				if replica.desc.ReplicaID == testRC.rc.leaseholder {
-					fmt.Fprint(&b, "*")
-				}
-			}
-			fmt.Fprintf(&b, "]\n")
-		}
-		return b.String()
-	}
-
-	tokenCountsString := func() string {
-		var b strings.Builder
-		streams := make([]kvflowcontrol.Stream, 0, len(ssTokenCounter.mu.evalCounters))
-		for stream := range ssTokenCounter.mu.evalCounters {
-			streams = append(streams, stream)
-		}
-		sort.Slice(streams, func(i, j int) bool {
-			return streams[i].StoreID < streams[j].StoreID
-		})
-		for _, stream := range streams {
-			fmt.Fprintf(&b, "%v: %v\n", stream, ssTokenCounter.Eval(stream))
-		}
-
-		return b.String()
-	}
-
-	evalStateString := func() string {
-		time.Sleep(100 * time.Millisecond)
-		var b strings.Builder
-
-		// Sort the ranges by rangeID to ensure deterministic output.
-		sortedRanges := make([]*testingRCRange, 0, len(ranges))
-		for _, testRC := range ranges {
-			sortedRanges = append(sortedRanges, testRC)
-			// We retain the lock until the end of the function call.
-			testRC.mu.Lock()
-			defer testRC.mu.Unlock()
-		}
-		sort.Slice(sortedRanges, func(i, j int) bool {
-			return sortedRanges[i].mu.r.rangeID < sortedRanges[j].mu.r.rangeID
-		})
-
-		for _, testRC := range sortedRanges {
-			fmt.Fprintf(&b, "range_id=%d tenant_id=%d local_replica_id=%d\n",
-				testRC.mu.r.rangeID, testRC.mu.r.tenantID, testRC.mu.r.localReplicaID)
-			// Sort the evals by name to ensure deterministic output.
-			evals := make([]string, 0, len(testRC.mu.evals))
-			for name := range testRC.mu.evals {
-				evals = append(evals, name)
-			}
-			sort.Strings(evals)
-			for _, name := range evals {
-				eval := testRC.mu.evals[name]
-				fmt.Fprintf(&b, "  name=%s pri=%-8v done=%-5t waited=%-5t err=%v\n", name, eval.pri,
-					eval.done, eval.waited, eval.err)
-			}
-		}
-		return b.String()
-	}
-
-	maybeZeroTokenCounters := func(r testingRange) {
-		for _, replica := range r.replicaSet {
-			stream := kvflowcontrol.Stream{
-				StoreID:  replica.desc.StoreID,
-				TenantID: r.tenantID,
-			}
-			if _, ok := zeroedTokenCounters[stream]; !ok {
-				zeroedTokenCounters[stream] = struct{}{}
-				ssTokenCounter.Eval(stream).(*tokenCounter).adjust(ctx, admissionpb.RegularWorkClass, -1)
-			}
-		}
-	}
-
-	getOrInitRange := func(r testingRange) *testingRCRange {
-		testRC, ok := ranges[r.rangeID]
-		if !ok {
-			testRC = &testingRCRange{}
-			testRC.mu.r = r
-			testRC.mu.evals = make(map[string]*testingRCEval)
-			options := RangeControllerOptions{
-				RangeID:        r.rangeID,
-				TenantID:       r.tenantID,
-				LocalReplicaID: r.localReplicaID,
-				SSTokenCounter: ssTokenCounter,
-				RaftInterface:  testRC,
-			}
-
-			init := RangeControllerInitState{
-				ReplicaSet:  r.replicas(),
-				Leaseholder: r.localReplicaID,
-			}
-			testRC.rc = NewRangeController(ctx, options, init)
-			ranges[r.rangeID] = testRC
-		}
-		maybeZeroTokenCounters(r)
-		return testRC
-	}
-
-	datadriven.RunTest(t, "testdata/range_controller_wait_for_eval", func(t *testing.T, d *datadriven.TestData) string {
-		switch d.Cmd {
-		case "init":
-			for _, r := range scanRanges(t, d.Input) {
-				getOrInitRange(r)
-			}
-			return rangeStateString() + tokenCountsString()
-
-		case "wait_for_eval":
-			var rangeID int
-			var name, priString string
-			d.ScanArgs(t, "range_id", &rangeID)
-			d.ScanArgs(t, "name", &name)
-			d.ScanArgs(t, "pri", &priString)
-			testRC := ranges[roachpb.RangeID(rangeID)]
-			testRC.startWaitForEval(name, parsePriority(t, priString))
-			return evalStateString()
-
-		case "check_state":
-			return evalStateString()
-
-		case "adjust_tokens":
-			for _, line := range strings.Split(d.Input, "\n") {
-				parts := strings.Fields(line)
-				parts[0] = strings.TrimSpace(parts[0])
-				require.True(t, strings.HasPrefix(parts[0], "store_id="))
-				parts[0] = strings.TrimPrefix(parts[0], "store_id=")
-				store, err := strconv.Atoi(parts[0])
-				require.NoError(t, err)
-
-				parts[1] = strings.TrimSpace(parts[1])
-				require.True(t, strings.HasPrefix(parts[1], "pri="))
-				pri := parsePriority(t, strings.TrimPrefix(parts[1], "pri="))
-
-				parts[2] = strings.TrimSpace(parts[2])
-				require.True(t, strings.HasPrefix(parts[2], "tokens="))
-				tokenString := strings.TrimPrefix(parts[2], "tokens=")
-				tokens, err := humanizeutil.ParseBytes(tokenString)
-				require.NoError(t, err)
-
-				ssTokenCounter.Eval(kvflowcontrol.Stream{
-					StoreID:  roachpb.StoreID(store),
-					TenantID: roachpb.SystemTenantID,
-				}).(*tokenCounter).adjust(ctx,
-					admissionpb.WorkClassFromPri(pri),
-					kvflowcontrol.Tokens(tokens))
-			}
-
-			return tokenCountsString()
-
-		case "cancel_context":
-			var rangeID int
-			var name string
-
-			d.ScanArgs(t, "range_id", &rangeID)
-			d.ScanArgs(t, "name", &name)
-			testRC := ranges[roachpb.RangeID(rangeID)]
-			func() {
+			// Sort the ranges by rangeID to ensure deterministic output.
+			sortedRanges := make([]*testingRCRange, 0, len(ranges))
+			for _, testRC := range ranges {
+				sortedRanges = append(sortedRanges, testRC)
+				// We retain the lock until the end of the function call.
 				testRC.mu.Lock()
 				defer testRC.mu.Unlock()
-				testRC.mu.evals[name].cancel()
-			}()
+			}
+			sort.Slice(sortedRanges, func(i, j int) bool {
+				return sortedRanges[i].mu.r.rangeID < sortedRanges[j].mu.r.rangeID
+			})
 
-			return evalStateString()
+			for _, testRC := range sortedRanges {
+				replicaIDs := make([]int, 0, len(testRC.mu.r.replicaSet))
+				for replicaID := range testRC.mu.r.replicaSet {
+					replicaIDs = append(replicaIDs, int(replicaID))
+				}
+				sort.Ints(replicaIDs)
 
-		case "set_replicas":
-			for _, r := range scanRanges(t, d.Input) {
-				testRC := getOrInitRange(r)
+				fmt.Fprintf(&b, "r%d: [", testRC.mu.r.rangeID)
+				for i, replicaID := range replicaIDs {
+					replica := testRC.mu.r.replicaSet[roachpb.ReplicaID(replicaID)]
+					if i > 0 {
+						fmt.Fprintf(&b, ",")
+					}
+					fmt.Fprintf(&b, "%v", replica.desc)
+					if replica.desc.ReplicaID == testRC.rc.leaseholder {
+						fmt.Fprint(&b, "*")
+					}
+				}
+				fmt.Fprintf(&b, "]\n")
+			}
+			return b.String()
+		}
+
+		tokenCountsString := func() string {
+			var b strings.Builder
+			streams := make([]kvflowcontrol.Stream, 0, len(ssTokenCounter.mu.evalCounters))
+			for stream := range ssTokenCounter.mu.evalCounters {
+				streams = append(streams, stream)
+			}
+			sort.Slice(streams, func(i, j int) bool {
+				return streams[i].StoreID < streams[j].StoreID
+			})
+			for _, stream := range streams {
+				fmt.Fprintf(&b, "%v: %v\n", stream, ssTokenCounter.Eval(stream))
+			}
+
+			return b.String()
+		}
+
+		evalStateString := func() string {
+			time.Sleep(100 * time.Millisecond)
+			var b strings.Builder
+
+			// Sort the ranges by rangeID to ensure deterministic output.
+			sortedRanges := make([]*testingRCRange, 0, len(ranges))
+			for _, testRC := range ranges {
+				sortedRanges = append(sortedRanges, testRC)
+				// We retain the lock until the end of the function call.
+				testRC.mu.Lock()
+				defer testRC.mu.Unlock()
+			}
+			sort.Slice(sortedRanges, func(i, j int) bool {
+				return sortedRanges[i].mu.r.rangeID < sortedRanges[j].mu.r.rangeID
+			})
+
+			for _, testRC := range sortedRanges {
+				fmt.Fprintf(&b, "range_id=%d tenant_id=%d local_replica_id=%d\n",
+					testRC.mu.r.rangeID, testRC.mu.r.tenantID, testRC.mu.r.localReplicaID)
+				// Sort the evals by name to ensure deterministic output.
+				evals := make([]string, 0, len(testRC.mu.evals))
+				for name := range testRC.mu.evals {
+					evals = append(evals, name)
+				}
+				sort.Strings(evals)
+				for _, name := range evals {
+					eval := testRC.mu.evals[name]
+					fmt.Fprintf(&b, "  name=%s pri=%-8v done=%-5t waited=%-5t err=%v\n", name, eval.pri,
+						eval.done, eval.waited, eval.err)
+				}
+			}
+			return b.String()
+		}
+
+		maybeSetInitialTokens := func(r testingRange) {
+			for _, replica := range r.replicaSet {
+				stream := kvflowcontrol.Stream{
+					StoreID:  replica.desc.StoreID,
+					TenantID: r.tenantID,
+				}
+				if _, ok := setTokenCounters[stream]; !ok {
+					setTokenCounters[stream] = struct{}{}
+					if initialRegularTokens != -1 {
+						ssTokenCounter.Eval(stream).(*tokenCounter).testingSetTokens(ctx,
+							admissionpb.RegularWorkClass, kvflowcontrol.Tokens(initialRegularTokens))
+						ssTokenCounter.Send(stream).(*tokenCounter).testingSetTokens(ctx,
+							admissionpb.RegularWorkClass, kvflowcontrol.Tokens(initialRegularTokens))
+					}
+					if initialElasticTokens != -1 {
+						ssTokenCounter.Eval(stream).(*tokenCounter).testingSetTokens(ctx,
+							admissionpb.ElasticWorkClass, kvflowcontrol.Tokens(initialElasticTokens))
+						ssTokenCounter.Send(stream).(*tokenCounter).testingSetTokens(ctx,
+							admissionpb.ElasticWorkClass, kvflowcontrol.Tokens(initialElasticTokens))
+					}
+				}
+			}
+		}
+
+		getOrInitRange := func(r testingRange) *testingRCRange {
+			testRC, ok := ranges[r.rangeID]
+			if !ok {
+				testRC = &testingRCRange{}
+				testRC.mu.r = r
+				testRC.mu.evals = make(map[string]*testingRCEval)
+				options := RangeControllerOptions{
+					RangeID:        r.rangeID,
+					TenantID:       r.tenantID,
+					LocalReplicaID: r.localReplicaID,
+					SSTokenCounter: ssTokenCounter,
+					RaftInterface:  testRC,
+				}
+
+				init := RangeControllerInitState{
+					ReplicaSet:  r.replicas(),
+					Leaseholder: r.localReplicaID,
+				}
+				testRC.rc = NewRangeController(ctx, options, init)
+				ranges[r.rangeID] = testRC
+			}
+			maybeSetInitialTokens(r)
+			return testRC
+		}
+
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "init":
+				var regularInitString, elasticInitString string
+				var regularLimitString, elasticLimitString string
+				d.MaybeScanArgs(t, "regular_init", &regularInitString)
+				d.MaybeScanArgs(t, "elastic_init", &elasticInitString)
+				d.MaybeScanArgs(t, "regular_limit", &regularLimitString)
+				d.MaybeScanArgs(t, "elastic_limit", &elasticLimitString)
+				// If the test specifies different token limits or initial token counts
+				// (default is the limit), then we override the default limit and also
+				// store the initial token count. tokenCounters are created
+				// dynamically, so we update them on the fly as well.
+				if regularLimitString != "" {
+					regularLimit, err := humanizeutil.ParseBytes(regularLimitString)
+					require.NoError(t, err)
+					kvflowcontrol.RegularTokensPerStream.Override(ctx, &settings.SV, regularLimit)
+				}
+				if elasticLimitString != "" {
+					elasticLimit, err := humanizeutil.ParseBytes(elasticLimitString)
+					require.NoError(t, err)
+					kvflowcontrol.ElasticTokensPerStream.Override(ctx, &settings.SV, elasticLimit)
+				}
+				if regularInitString != "" {
+					regularInit, err := humanizeutil.ParseBytes(regularInitString)
+					require.NoError(t, err)
+					initialRegularTokens = regularInit
+				}
+
+				if elasticInitString != "" {
+					elasticInit, err := humanizeutil.ParseBytes(elasticInitString)
+					require.NoError(t, err)
+					initialElasticTokens = elasticInit
+				}
+
+				for _, r := range scanRanges(t, d.Input) {
+					getOrInitRange(r)
+				}
+				return rangeStateString() + tokenCountsString()
+
+			case "wait_for_eval":
+				var rangeID int
+				var name, priString string
+				d.ScanArgs(t, "range_id", &rangeID)
+				d.ScanArgs(t, "name", &name)
+				d.ScanArgs(t, "pri", &priString)
+				testRC := ranges[roachpb.RangeID(rangeID)]
+				testRC.startWaitForEval(name, parsePriority(t, priString))
+				return evalStateString()
+
+			case "check_state":
+				return evalStateString()
+
+			case "adjust_tokens":
+				for _, line := range strings.Split(d.Input, "\n") {
+					parts := strings.Fields(line)
+					parts[0] = strings.TrimSpace(parts[0])
+					require.True(t, strings.HasPrefix(parts[0], "store_id="))
+					parts[0] = strings.TrimPrefix(parts[0], "store_id=")
+					store, err := strconv.Atoi(parts[0])
+					require.NoError(t, err)
+
+					parts[1] = strings.TrimSpace(parts[1])
+					require.True(t, strings.HasPrefix(parts[1], "pri="))
+					pri := parsePriority(t, strings.TrimPrefix(parts[1], "pri="))
+
+					parts[2] = strings.TrimSpace(parts[2])
+					require.True(t, strings.HasPrefix(parts[2], "tokens="))
+					tokenString := strings.TrimPrefix(parts[2], "tokens=")
+					tokens, err := humanizeutil.ParseBytes(tokenString)
+					require.NoError(t, err)
+
+					ssTokenCounter.Eval(kvflowcontrol.Stream{
+						StoreID:  roachpb.StoreID(store),
+						TenantID: roachpb.SystemTenantID,
+					}).(*tokenCounter).adjust(ctx,
+						admissionpb.WorkClassFromPri(pri),
+						kvflowcontrol.Tokens(tokens))
+				}
+
+				return tokenCountsString()
+
+			case "cancel_context":
+				var rangeID int
+				var name string
+
+				d.ScanArgs(t, "range_id", &rangeID)
+				d.ScanArgs(t, "name", &name)
+				testRC := ranges[roachpb.RangeID(rangeID)]
 				func() {
 					testRC.mu.Lock()
 					defer testRC.mu.Unlock()
-					testRC.mu.r = r
+					testRC.mu.evals[name].cancel()
 				}()
-				err := testRC.rc.SetReplicasRaftMuLocked(ctx, r.replicas())
-				require.NoError(t, err)
-			}
-			return rangeStateString()
 
-		case "set_leaseholder":
-			var rangeID, replicaID int
-			d.ScanArgs(t, "range_id", &rangeID)
-			d.ScanArgs(t, "replica_id", &replicaID)
-			testRC := ranges[roachpb.RangeID(rangeID)]
-			testRC.rc.SetLeaseholderRaftMuLocked(ctx, roachpb.ReplicaID(replicaID))
-			return rangeStateString()
+				return evalStateString()
 
-		case "close_rcs":
-			for _, r := range ranges {
-				r.rc.CloseRaftMuLocked(ctx)
-			}
-			evalStr := evalStateString()
-			for k := range ranges {
-				delete(ranges, k)
-			}
-			return evalStr
+			case "set_replicas":
+				for _, r := range scanRanges(t, d.Input) {
+					testRC := getOrInitRange(r)
+					func() {
+						testRC.mu.Lock()
+						defer testRC.mu.Unlock()
+						testRC.mu.r = r
+					}()
+					err := testRC.rc.SetReplicasRaftMuLocked(ctx, r.replicas())
+					require.NoError(t, err)
+				}
+				return rangeStateString()
 
-		default:
-			panic(fmt.Sprintf("unknown command: %s", d.Cmd))
-		}
+			case "set_leaseholder":
+				var rangeID, replicaID int
+				d.ScanArgs(t, "range_id", &rangeID)
+				d.ScanArgs(t, "replica_id", &replicaID)
+				testRC := ranges[roachpb.RangeID(rangeID)]
+				testRC.rc.SetLeaseholderRaftMuLocked(ctx, roachpb.ReplicaID(replicaID))
+				return rangeStateString()
+
+			case "close_rcs":
+				for _, r := range ranges {
+					r.rc.CloseRaftMuLocked(ctx)
+				}
+				evalStr := evalStateString()
+				for k := range ranges {
+					delete(ranges, k)
+				}
+				return evalStr
+
+			case "admit":
+				var lastRangeID roachpb.RangeID
+				for _, line := range strings.Split(d.Input, "\n") {
+					var (
+						rangeID  int
+						storeID  int
+						term     int
+						to_index int
+						err      error
+					)
+					parts := strings.Fields(line)
+					parts[0] = strings.TrimSpace(parts[0])
+
+					if strings.HasPrefix(parts[0], "range_id=") {
+						parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "range_id=")
+						rangeID, err = strconv.Atoi(parts[0])
+						require.NoError(t, err)
+						lastRangeID = roachpb.RangeID(rangeID)
+					} else {
+						parts[0] = strings.TrimSpace(parts[0])
+						require.True(t, strings.HasPrefix(parts[0], "store_id="))
+						parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "store_id=")
+						storeID, err = strconv.Atoi(parts[0])
+						require.NoError(t, err)
+
+						parts[1] = strings.TrimSpace(parts[1])
+						require.True(t, strings.HasPrefix(parts[1], "term="))
+						parts[1] = strings.TrimPrefix(strings.TrimSpace(parts[1]), "term=")
+						term, err = strconv.Atoi(parts[1])
+						require.NoError(t, err)
+
+						parts[2] = strings.TrimSpace(parts[2])
+						require.True(t, strings.HasPrefix(parts[2], "to_index="))
+						parts[2] = strings.TrimPrefix(strings.TrimSpace(parts[2]), "to_index=")
+						to_index, err = strconv.Atoi(parts[2])
+						require.NoError(t, err)
+
+						parts[3] = strings.TrimSpace(parts[3])
+						require.True(t, strings.HasPrefix(parts[3], "pri="))
+						parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "pri=")
+						pri := parsePriority(t, parts[3])
+						ranges[lastRangeID].admit(ctx, roachpb.StoreID(storeID), uint64(term), uint64(to_index), pri)
+					}
+				}
+				return tokenCountsString()
+
+			case "raft_event":
+				var lastRangeID roachpb.RangeID
+				init := false
+				var buf []entryFCState
+
+				propRangeEntries := func() {
+					event := RaftEvent{
+						Entries: make([]raftpb.Entry, len(buf)),
+					}
+					for i, state := range buf {
+						event.Entries[i] = testingFCStateToEntry(t, state)
+					}
+					ranges[lastRangeID].rc.HandleRaftEventRaftMuLocked(ctx, event)
+				}
+
+				for _, line := range strings.Split(d.Input, "\n") {
+					var (
+						rangeID, term, index int
+						size                 int64
+						err                  error
+						pri                  admissionpb.WorkPriority
+					)
+
+					parts := strings.Fields(line)
+					parts[0] = strings.TrimSpace(parts[0])
+					if strings.HasPrefix(parts[0], "range_id=") {
+						if init {
+							// We are moving to another range, if a previous range has entries
+							// created then create the raft event and call handle raft ready
+							// using all the entries added so far.
+							propRangeEntries()
+							init = false
+						}
+
+						parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "range_id=")
+						rangeID, err = strconv.Atoi(parts[0])
+						require.NoError(t, err)
+						lastRangeID = roachpb.RangeID(rangeID)
+					} else {
+						require.True(t, strings.HasPrefix(parts[0], "term="))
+						parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "term=")
+						term, err = strconv.Atoi(parts[0])
+						require.NoError(t, err)
+
+						parts[1] = strings.TrimSpace(parts[1])
+						require.True(t, strings.HasPrefix(parts[1], "index="))
+						parts[1] = strings.TrimPrefix(strings.TrimSpace(parts[1]), "index=")
+						index, err = strconv.Atoi(parts[1])
+						require.NoError(t, err)
+
+						parts[2] = strings.TrimSpace(parts[2])
+						require.True(t, strings.HasPrefix(parts[2], "pri="))
+						parts[2] = strings.TrimPrefix(strings.TrimSpace(parts[2]), "pri=")
+						pri = parsePriority(t, parts[2])
+
+						parts[3] = strings.TrimSpace(parts[3])
+						require.True(t, strings.HasPrefix(parts[3], "size="))
+						parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "size=")
+						size, err = humanizeutil.ParseBytes(parts[3])
+						require.NoError(t, err)
+
+						init = true
+						buf = append(buf, entryFCState{
+							term:            uint64(term),
+							index:           uint64(index),
+							usesFlowControl: true,
+							tokens:          kvflowcontrol.Tokens(size),
+							pri:             AdmissionToRaftPriority(pri),
+						})
+					}
+				}
+				if init {
+					propRangeEntries()
+				}
+				return tokenCountsString()
+
+			case "tracker_state":
+				var rangeID int
+				d.ScanArgs(t, "range_id", &rangeID)
+
+				var buf strings.Builder
+				testRC := ranges[roachpb.RangeID(rangeID)]
+
+				var replicaIDs []int
+				for replicaID := range testRC.mu.r.replicaSet {
+					replicaIDs = append(replicaIDs, int(replicaID))
+				}
+				sort.Ints(replicaIDs)
+				for _, replicaID := range replicaIDs {
+					replica := testRC.rc.replicaMap[roachpb.ReplicaID(replicaID)]
+					buf.WriteString(fmt.Sprintf("%v\n", replica.desc))
+					buf.WriteString(formatTrackerState(&replica.sendStream.tracker))
+					buf.WriteString("++++\n")
+				}
+				return buf.String()
+
+			default:
+				panic(fmt.Sprintf("unknown command: %s", d.Cmd))
+			}
+		})
 	})
 }

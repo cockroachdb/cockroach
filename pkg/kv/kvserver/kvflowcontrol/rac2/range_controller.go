@@ -17,11 +17,14 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -102,6 +105,8 @@ type FollowerStateInfo struct {
 	// (Match, Next) is in-flight.
 	Match uint64
 	Next  uint64
+	// TODO(kvoli): Find a better home for this, we need it for token return.
+	Term uint64
 	// Invariant: Admitted[i] <= Match.
 	Admitted [raftpb.NumPriorities]uint64
 }
@@ -309,7 +314,20 @@ retry:
 //
 // Requires replica.raftMu to be held.
 func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e RaftEvent) error {
-	panic("unimplemented")
+	shouldWaitChange := false
+	for r, rs := range rc.replicaMap {
+		info := rc.opts.RaftInterface.FollowerState(r)
+		shouldWaitChange = shouldWaitChange || rs.handleReadyState(ctx, info)
+	}
+	// If there was a quorum change, update the voter sets, triggering the
+	// refresh channel for any requests waiting for eval tokens.
+	if shouldWaitChange {
+		rc.updateVoterSets()
+	}
+	for _, rs := range rc.replicaMap {
+		rs.handleReadyEntries(ctx, e.Entries)
+	}
+	return nil
 }
 
 // HandleSchedulerEventRaftMuLocked processes an event scheduled by the
@@ -409,9 +427,8 @@ func (rc *rangeController) updateVoterSets() {
 			replicaID:     r.ReplicaID,
 			isLeader:      r.ReplicaID == rc.opts.LocalReplicaID,
 			isLeaseHolder: r.ReplicaID == rc.leaseholder,
-			// TODO(rac2): Once the send stream is added, check that the send stream
-			// is initialized here as well.
-			isStateReplicate: rs.connectedState.shouldWaitForElasticEvalTokens(),
+			isStateReplicate: rs.sendStream != nil &&
+				rs.sendStream.connectedState.shouldWaitForElasticEvalTokens(),
 			evalTokenCounter: rs.evalTokenCounter,
 		}
 		if isOld {
@@ -431,10 +448,11 @@ type replicaState struct {
 	// stream aggregates across the streams for the same (tenant, store). This
 	// is the identity that is used to deduct tokens or wait for tokens to be
 	// positive.
-	stream           kvflowcontrol.Stream
-	evalTokenCounter TokenCounter
-	desc             roachpb.ReplicaDescriptor
-	connectedState   connectedState
+	stream                             kvflowcontrol.Stream
+	evalTokenCounter, sendTokenCounter TokenCounter
+	desc                               roachpb.ReplicaDescriptor
+
+	sendStream *replicaSendStream
 }
 
 func NewReplicaState(
@@ -445,21 +463,166 @@ func NewReplicaState(
 		parent:           parent,
 		stream:           stream,
 		evalTokenCounter: parent.opts.SSTokenCounter.Eval(stream),
+		sendTokenCounter: parent.opts.SSTokenCounter.Send(stream),
 		desc:             desc,
 	}
-
-	// TODO(rac2): Construct the sendStream state here if the replica is in state
-	// replicate.
 	state := parent.opts.RaftInterface.FollowerState(desc.ReplicaID)
-	switch state.State {
-	case tracker.StateReplicate:
-		rs.connectedState = replicate
-	case tracker.StateProbe:
-		rs.connectedState = probeRecentlyReplicate
-	case tracker.StateSnapshot:
-		rs.connectedState = snapshot
+	if state.State == tracker.StateReplicate {
+		rs.createReplicaSendStream()
 	}
+
 	return rs
+}
+
+type replicaSendStream struct {
+	parent         *replicaState
+	connectedState connectedState
+	tracker        Tracker
+	closed         bool
+}
+
+func (rs *replicaState) createReplicaSendStream() {
+	// Must be in StateReplicate on creation.
+	rs.sendStream = &replicaSendStream{
+		parent:         rs,
+		connectedState: replicate,
+		closed:         false,
+	}
+	rs.sendStream.tracker.Init(rs.stream)
+}
+
+type entryFCState struct {
+	term, index     uint64
+	usesFlowControl bool
+	tokens          kvflowcontrol.Tokens
+	pri             raftpb.Priority
+}
+
+// getEntryFCStateOrFatal returns the given entry's flow control state. If the
+// entry encoding cannot be determined, a fatal is logged.
+func getEntryFCStateOrFatal(ctx context.Context, entry raftpb.Entry) entryFCState {
+	enc, pri, err := raftlog.EncodingOf(entry)
+	if err != nil {
+		log.Fatalf(ctx, "error getting encoding of entry: %v", err)
+	}
+	return entryFCState{
+		index:           entry.Index,
+		term:            entry.Term,
+		usesFlowControl: enc.UsesAdmissionControl(),
+		tokens:          kvflowcontrol.Tokens(len(entry.Data)),
+		pri:             pri,
+	}
+}
+
+func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []raftpb.Entry) {
+	if rs.sendStream == nil {
+		return
+	}
+	for _, entry := range entries {
+		state := getEntryFCStateOrFatal(ctx, entry)
+		if !state.usesFlowControl {
+			continue
+		}
+		rs.sendStream.tracker.Track(ctx, state.term, state.index, state.pri, state.tokens)
+		rs.evalTokenCounter.Deduct(
+			ctx, WorkClassFromRaftPriority(state.pri), state.tokens)
+		rs.sendTokenCounter.Deduct(
+			ctx, WorkClassFromRaftPriority(state.pri), state.tokens)
+	}
+}
+
+// handleReadyState handles state management for the replica based on the
+// provided follower state information. If the state changes in a way that
+// affects requests waiting for evaluation, returns true.
+func (rs *replicaState) handleReadyState(
+	ctx context.Context, info FollowerStateInfo,
+) (shouldWaitChange bool) {
+	switch info.State {
+	case tracker.StateProbe:
+		if rs.sendStream != nil {
+			// TODO(kvoli): delay this by 1s.
+			rs.closeSendStream(ctx)
+			shouldWaitChange = true
+		}
+	case tracker.StateReplicate:
+		if rs.sendStream == nil {
+			rs.createReplicaSendStream()
+			shouldWaitChange = true
+		} else {
+			shouldWaitChange = rs.sendStream.makeConsistentInStateReplicate(ctx, info)
+		}
+	case tracker.StateSnapshot:
+		if rs.sendStream != nil {
+			switch rs.sendStream.connectedState {
+			case replicate:
+				rs.sendStream.changeToStateSnapshot(ctx)
+				shouldWaitChange = true
+			case probeRecentlyReplicate:
+				rs.closeSendStream(ctx)
+				shouldWaitChange = true
+			case snapshot:
+			}
+		}
+	}
+	return shouldWaitChange
+}
+
+func (rs *replicaState) closeSendStream(ctx context.Context) {
+	if rs.sendStream.connectedState != snapshot {
+		rs.sendStream.changeToStateSnapshot(ctx)
+	}
+	rs.sendStream.closed = true
+	rs.sendStream = nil
+}
+
+func (rs *replicaSendStream) makeConsistentInStateReplicate(
+	ctx context.Context, info FollowerStateInfo,
+) (shouldWaitChange bool) {
+	defer rs.returnTokens(ctx, rs.tracker.Untrack(info.Term, info.Admitted))
+
+	// The leader is always in state replicate.
+	if rs.parent.parent.opts.LocalReplicaID == rs.parent.desc.ReplicaID {
+		if rs.connectedState != replicate {
+			log.Fatalf(ctx, "%v", errors.AssertionFailedf(
+				"leader should always be in state replicate but found in %v",
+				rs.connectedState))
+		}
+		return false
+	}
+
+	// Follower replica case. Update the connected state.
+	switch rs.connectedState {
+	case replicate:
+	case probeRecentlyReplicate:
+		rs.connectedState = replicate
+	case snapshot:
+		rs.connectedState = replicate
+		shouldWaitChange = true
+	}
+	return shouldWaitChange
+}
+
+func (rs *replicaSendStream) changeToStateSnapshot(ctx context.Context) {
+	rs.connectedState = snapshot
+	// Since the replica is now in StateSnapshot, there is no need for Raft to
+	// send MsgApp pings to discover what has been missed. So there is no
+	// liveness guarantee on when these tokens will be returned, and therefore we
+	// return all tokens in the tracker.
+	rs.returnTokens(ctx, rs.tracker.UntrackAll())
+}
+
+// returnTokens takes the tokens untracked by the tracker and returns them to
+// the eval and send token counters.
+func (rs *replicaSendStream) returnTokens(
+	ctx context.Context, returned [raftpb.NumPriorities]kvflowcontrol.Tokens,
+) {
+	for pri, tokens := range returned {
+		pri := raftpb.Priority(pri)
+		if tokens > 0 {
+			rs.parent.evalTokenCounter.Return(ctx, WorkClassFromRaftPriority(pri), tokens)
+			rs.parent.sendTokenCounter.Return(ctx, WorkClassFromRaftPriority(pri), tokens)
+		}
+	}
 }
 
 type connectedState uint32

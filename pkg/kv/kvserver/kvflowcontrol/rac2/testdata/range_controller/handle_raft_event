@@ -1,0 +1,71 @@
+# Intialize a range with voters on s1,s2 and s3. The local replica and
+# leaseholder will be s1. The leaseholder is denoted by the '*' suffix.
+init
+range_id=1 tenant_id=1 local_replica_id=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+t1/s1: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s2: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s3: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+
+tracker_state range_id=1
+----
+(n1,s1):1
+++++
+(n2,s2):2
+++++
+(n3,s3):3
+++++
+
+raft_event
+range_id=1
+  term=1 index=1 pri=NormalPri size=1MiB
+  term=1 index=2 pri=NormalPri size=1MiB
+  term=1 index=3 pri=NormalPri size=1MiB
+----
+t1/s1: reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+t1/s2: reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+t1/s3: reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+
+tracker_state range_id=1
+----
+(n1,s1):1
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+(n2,s2):2
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+(n3,s3):3
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+
+admit
+range_id=1
+  store_id=1 term=1 to_index=3 pri=NormalPri
+  store_id=2 term=1 to_index=3 pri=NormalPri
+  store_id=3 term=1 to_index=3 pri=NormalPri
+----
+t1/s1: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s2: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s3: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+
+tracker_state range_id=1
+----
+(n1,s1):1
+++++
+(n2,s2):2
+++++
+(n3,s3):3
+++++
