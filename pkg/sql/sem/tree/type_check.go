@@ -1178,6 +1178,12 @@ func (expr *FuncExpr) typeCheckWithFuncAncestor(semaCtx *SemaContext, fn func() 
 func (expr *FuncExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
+	if expr.fn != nil && expr.fn.Type != BuiltinRoutine && expr.typ != nil {
+		// Don't overwrite the resolved properties for a user-defined routine if the
+		// routine has already been resolved.
+		return expr, nil
+	}
+
 	searchPath := EmptySearchPath
 	var resolver FunctionReferenceResolver
 	if semaCtx != nil {
