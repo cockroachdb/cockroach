@@ -3864,6 +3864,31 @@ select crdb_internal.job_payload_type('invalid'::BYTES);
 query error pgcode 22023 pq: crdb_internal.job_payload_type\(\): invalid type in job payload protocol message: Payload.Type called on a payload with an unknown details type: <nil>
 select crdb_internal.job_payload_type('');
 
+subtest crdb_internal.get_fully_qualified_table_name
+query T
+SELECT crdb_internal.get_fully_qualified_table_name(NULL)
+----
+NULL
+
+query T
+SELECT crdb_internal.get_fully_qualified_table_name((SELECT id FROM system.namespace WHERE name = 'foo'))
+----
+test.public.foo
+
+statement error unknown signature: crdb_internal.get_fully_qualified_table_name\(string\)
+SELECT crdb_internal.get_fully_qualified_table_name('')
+
+statement ok
+CREATE SCHEMA "testSchema"
+
+statement ok
+CREATE TABLE "testSchema"."testTable" (a INT)
+
+query T
+SELECT crdb_internal.get_fully_qualified_table_name((SELECT id FROM system.namespace WHERE name = 'testTable'))
+----
+test."testSchema"."testTable"
+
 subtest crdb_internal.redactable_sql_constants
 query T
 SELECT crdb_internal.redactable_sql_constants(NULL)
