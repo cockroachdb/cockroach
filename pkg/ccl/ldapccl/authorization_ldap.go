@@ -61,17 +61,6 @@ func (authManager *ldapAuthManager) validateLDAPAuthZOptions() error {
 // contain sensitive information we do not want to send to sql clients but still
 // want to log it). We do not want to send any information back to client which
 // was not provided by the client.
-//
-//	 Example authorization example for obtaining LDAP groups for LDAP user:
-//	 if ldapGroups, detailedErrors, authError := ldapManager.m.FetchLDAPGroups(ctx, execCfg.Settings, externalUserDN, entry, identMap); authError != nil {
-//		errForLog := authError
-//		if detailedErrors != "" {
-//			errForLog = errors.Join(errForLog, errors.Newf("%s", detailedErrors))
-//		}
-//		  log.Warningf(ctx, "error retrieving ldap groups for authZ: %+v", errForLog)
-//	 } else {
-//		  log.Infof(ctx, "LDAP authorization: retrieved ldap groups are %+v", ldapGroups)
-//	 }
 func (authManager *ldapAuthManager) FetchLDAPGroups(
 	ctx context.Context,
 	st *cluster.Settings,
