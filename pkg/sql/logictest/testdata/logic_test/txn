@@ -327,8 +327,9 @@ serializable
 statement ok
 COMMIT
 
-# Since read_committed_isolation.enabled is false, setting isolation level
-# to READ COMMITTED should map to SERIALIZABLE.
+# Since read_committed_isolation.enabled and repeatable_read_isolation.enabled
+# are both false, setting isolation level to READ COMMITTED should map to
+# SERIALIZABLE.
 statement ok
 SET default_transaction_isolation = 'read committed'
 
@@ -345,10 +346,42 @@ SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 serializable
 
-# REPEATABLE READ can be used with a hidden cluster setting.
 statement ok
 SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
 
+# Since read_committed_isolation.enabled is false but repeatable_read_isolation.enabled
+# is true, setting isolation level to READ COMMITTED should map to REPEATABLE READ.
+statement ok
+SET default_transaction_isolation = 'read committed'
+
+onlyif config enterprise-configs
+query T
+SHOW default_transaction_isolation
+----
+snapshot
+
+skipif config enterprise-configs
+query T
+SHOW default_transaction_isolation
+----
+serializable
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+onlyif config enterprise-configs
+query T
+SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+snapshot
+
+skipif config enterprise-configs
+query T
+SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+serializable
+
+# Since repeatable_read_isolation.enabled is true, REPEATABLE READ can be used.
 statement ok
 BEGIN
 
