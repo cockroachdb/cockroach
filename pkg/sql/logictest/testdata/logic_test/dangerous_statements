@@ -40,13 +40,9 @@ statement error rejected.*: SELECT FOR UPDATE without WHERE or LIMIT clause
 statement ok
 (SELECT * FROM foo WHERE x = 2) FOR UPDATE
 
-# Skipped due to https://github.com/cockroachdb/cockroach/issues/129647.
-skipif config weak-iso-level-configs
 statement ok
 SELECT * FROM (SELECT * FROM foo WHERE x = 2) FOR UPDATE
 
-# Skipped due to https://github.com/cockroachdb/cockroach/issues/129647.
-skipif config weak-iso-level-configs
 statement ok
 SELECT * FROM (SELECT * FROM (SELECT * FROM foo) WHERE x = 2) FOR UPDATE
 
@@ -59,8 +55,6 @@ SELECT * FROM (SELECT * FROM foo WHERE x = 2 FOR UPDATE) m, (SELECT * FROM foo) 
 statement error rejected.*: SELECT FOR SHARE without WHERE or LIMIT clause
 SELECT * FROM (SELECT * FROM foo FOR SHARE) m, (SELECT * FROM foo) n WHERE m.x = n.x
 
-# Skipped due to https://github.com/cockroachdb/cockroach/issues/129647.
-skipif config weak-iso-level-configs
 statement ok
 SELECT * FROM (SELECT * FROM (SELECT * FROM foo) WHERE x > 1) WHERE x > 2 FOR UPDATE
 
