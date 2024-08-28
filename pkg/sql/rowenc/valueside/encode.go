@@ -119,6 +119,12 @@ func Encode(appendTo []byte, colID ColumnIDDelta, val tree.Datum, scratch []byte
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.PhysicalRep), nil
 	case *tree.DVoid:
 		return encoding.EncodeVoidValue(appendTo, uint32(colID)), nil
+	case *tree.DInt8Range:
+		a, err := encodeInt8Range(t, colID)
+		if err != nil {
+			return nil, err
+		}
+		return encoding.EncodeInt8RangeValue(appendTo, uint32(colID), a), nil
 	default:
 		if buildutil.CrdbTestBuild {
 			return nil, errors.AssertionFailedf("unable to encode table value: %T", t)

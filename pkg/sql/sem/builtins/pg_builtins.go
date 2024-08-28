@@ -151,7 +151,8 @@ func init() {
 			return
 		}
 		toType, ok := types.OidToType[toOID]
-		if !ok {
+		// special case for int8range, which is both a cast builtin and a regular builtin
+		if !ok || toOID == oid.T_int8range {
 			return
 		}
 		distSQLBlockList := toType.Family() == types.OidFamily

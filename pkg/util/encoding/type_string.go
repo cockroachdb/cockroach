@@ -54,6 +54,7 @@ func _() {
 	_ = x[JsonEmptyArray-42]
 	_ = x[JsonEmptyArrayDesc-43]
 	_ = x[PGVector-44]
+	_ = x[Range-45]
 }
 
 func (i Type) String() string {
@@ -148,6 +149,8 @@ func (i Type) String() string {
 		return "JsonEmptyArrayDesc"
 	case PGVector:
 		return "PGVector"
+	case Range:
+		return "Range"
 	default:
 		return "Type(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

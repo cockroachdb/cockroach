@@ -484,6 +484,12 @@ func DecodeDatum(
 				return nil, err
 			}
 			return &tree.DPGVector{T: ret}, nil
+		case oid.T_int8range:
+			val, err := tree.ParseInt8Range(bs)
+			if err != nil {
+				return nil, err
+			}
+			return val, nil
 		}
 		switch typ.Family() {
 		case types.ArrayFamily, types.TupleFamily:

@@ -59,6 +59,7 @@ const (
 	CategorySystemRepair        = "System repair"
 	CategoryClusterReplication  = "Cluster Replication and Migration"
 	CategoryTesting             = "Testing"
+	CategoryRange               = "Range"
 )
 
 const (

@@ -72,6 +72,7 @@ var OidToType = map[oid.Oid]*T{
 	oid.T_int2vector: Int2Vector,
 	oid.T_int4:       Int4,
 	oid.T_int8:       Int,
+	oid.T_int8range:  Int8Range,
 	oid.T_inet:       INet,
 	oid.T_interval:   Interval,
 	// NOTE(sql-exp): Uncomment the line below if we support the JSON type.
@@ -128,6 +129,7 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oid.T_int2vector:   oid.T__int2vector,
 	oid.T_int4:         oid.T__int4,
 	oid.T_int8:         oid.T__int8,
+	oid.T_int8range:    oid.T__int8range,
 	oid.T_interval:     oid.T__interval,
 	oid.T_jsonb:        oid.T__jsonb,
 	oid.T_name:         oid.T__name,
@@ -190,6 +192,7 @@ var familyToOid = map[Family]oid.Oid{
 	TupleFamily:          oid.T_record,
 	BitFamily:            oid.T_bit,
 	AnyFamily:            oid.T_anyelement,
+	RangeFamily:          oid.T_anyrange,
 
 	GeometryFamily:  oidext.T_geometry,
 	GeographyFamily: oidext.T_geography,

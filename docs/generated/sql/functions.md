@@ -1298,6 +1298,24 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 
+### Range functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="has_intersect"></a><code>has_intersect(left_range: int8range, right_range: int8range) &rarr; <a href="bool.html">bool</a></code></td><td></td><td>Invalid</td></tr>
+<tr><td><a name="int8range"></a><code>int8range(int8range: int8range) &rarr; int8range</code></td><td><span class="funcdesc"><p>Cast from INT8RANGE to INT8RANGE.</p>
+</span></td><td>Leakproof</td></tr>
+<tr><td><a name="int8range"></a><code>int8range(start_bound: <a href="int.html">int</a>, end_bound: <a href="int.html">int</a>) &rarr; int8range</code></td><td></td><td>Invalid</td></tr>
+<tr><td><a name="int8range"></a><code>int8range(start_bound: <a href="int.html">int</a>, end_bound: <a href="int.html">int</a>, bound_fmt: <a href="string.html">string</a>) &rarr; int8range</code></td><td></td><td>Invalid</td></tr>
+<tr><td><a name="int8range"></a><code>int8range(string: <a href="string.html">string</a>) &rarr; int8range</code></td><td><span class="funcdesc"><p>Cast from STRING to INT8RANGE.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="isempty"></a><code>isempty(range: int8range) &rarr; <a href="bool.html">bool</a></code></td><td></td><td>Invalid</td></tr>
+<tr><td><a name="lower_inf"></a><code>lower_inf(range: int8range) &rarr; <a href="bool.html">bool</a></code></td><td></td><td>Invalid</td></tr>
+<tr><td><a name="range_merge"></a><code>range_merge(left_range: int8range, right_range: int8range) &rarr; int8range</code></td><td></td><td>Invalid</td></tr>
+<tr><td><a name="upper_inf"></a><code>upper_inf(range: int8range) &rarr; <a href="bool.html">bool</a></code></td><td></td><td>Invalid</td></tr></tbody>
+</table>
+
 ### STRING[] functions
 
 <table>
@@ -2921,6 +2939,7 @@ Can be used to define the tile bounds required by ST_AsMVTGeom to convert geomet
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="length"></a><code>length(val: varbit) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits in <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="lower"></a><code>lower(range: int8range) &rarr; <a href="int.html">int</a></code></td><td></td><td>Invalid</td></tr>
 <tr><td><a name="lower"></a><code>lower(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts all characters in <code>val</code> to their lower-case equivalents.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="lpad"></a><code>lpad(string: <a href="string.html">string</a>, length: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Pads <code>string</code> to <code>length</code> by adding ’ ’ to the left of <code>string</code>.If <code>string</code> is longer than <code>length</code> it is truncated.</p>
@@ -3186,6 +3205,7 @@ Case mode values range between 0 - 1, representing lower casing and upper casing
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="unaccent"></a><code>unaccent(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes accents (diacritic signs) from the text provided in <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="upper"></a><code>upper(range: int8range) &rarr; <a href="int.html">int</a></code></td><td></td><td>Invalid</td></tr>
 <tr><td><a name="upper"></a><code>upper(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts all characters in <code>val</code> to their to their upper-case equivalents.</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>

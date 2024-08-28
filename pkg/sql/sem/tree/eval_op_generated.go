@@ -55,6 +55,7 @@ type UnaryOpEvaluator interface {
 
 // UnaryOpEvaluator knows how to evaluate BinaryEvalOps.
 type BinaryOpEvaluator interface {
+	EvalAdjacentInt8RangeOp(context.Context, *AdjacentInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalAppendToMaybeNullArrayOp(context.Context, *AppendToMaybeNullArrayOp, Datum, Datum) (Datum, error)
 	EvalBitAndINetOp(context.Context, *BitAndINetOp, Datum, Datum) (Datum, error)
 	EvalBitAndIntOp(context.Context, *BitAndIntOp, Datum, Datum) (Datum, error)
@@ -74,10 +75,13 @@ type BinaryOpEvaluator interface {
 	EvalConcatStringOp(context.Context, *ConcatStringOp, Datum, Datum) (Datum, error)
 	EvalConcatVarBitOp(context.Context, *ConcatVarBitOp, Datum, Datum) (Datum, error)
 	EvalContainedByArrayOp(context.Context, *ContainedByArrayOp, Datum, Datum) (Datum, error)
+	EvalContainedByInt8RangeOp(context.Context, *ContainedByInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalContainedByJsonbOp(context.Context, *ContainedByJsonbOp, Datum, Datum) (Datum, error)
 	EvalContainsArrayOp(context.Context, *ContainsArrayOp, Datum, Datum) (Datum, error)
+	EvalContainsInt8RangeOp(context.Context, *ContainsInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalContainsJsonbOp(context.Context, *ContainsJsonbOp, Datum, Datum) (Datum, error)
 	EvalCosDistanceVectorOp(context.Context, *CosDistanceVectorOp, Datum, Datum) (Datum, error)
+	EvalDiffInt8RangeOp(context.Context, *DiffInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalDistanceVectorOp(context.Context, *DistanceVectorOp, Datum, Datum) (Datum, error)
 	EvalDivDecimalIntOp(context.Context, *DivDecimalIntOp, Datum, Datum) (Datum, error)
 	EvalDivDecimalOp(context.Context, *DivDecimalOp, Datum, Datum) (Datum, error)
@@ -92,6 +96,7 @@ type BinaryOpEvaluator interface {
 	EvalFloorDivIntDecimalOp(context.Context, *FloorDivIntDecimalOp, Datum, Datum) (Datum, error)
 	EvalFloorDivIntOp(context.Context, *FloorDivIntOp, Datum, Datum) (Datum, error)
 	EvalInTupleOp(context.Context, *InTupleOp, Datum, Datum) (Datum, error)
+	EvalIntersectInt8RangeOp(context.Context, *IntersectInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalJSONAllExistsOp(context.Context, *JSONAllExistsOp, Datum, Datum) (Datum, error)
 	EvalJSONExistsOp(context.Context, *JSONExistsOp, Datum, Datum) (Datum, error)
 	EvalJSONFetchTextIntOp(context.Context, *JSONFetchTextIntOp, Datum, Datum) (Datum, error)
@@ -152,6 +157,7 @@ type BinaryOpEvaluator interface {
 	EvalMultIntervalIntOp(context.Context, *MultIntervalIntOp, Datum, Datum) (Datum, error)
 	EvalMultPGVectorOp(context.Context, *MultPGVectorOp, Datum, Datum) (Datum, error)
 	EvalNegInnerProductVectorOp(context.Context, *NegInnerProductVectorOp, Datum, Datum) (Datum, error)
+	EvalOverlapByInt8RangeOp(context.Context, *OverlapByInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalOverlapsArrayOp(context.Context, *OverlapsArrayOp, Datum, Datum) (Datum, error)
 	EvalOverlapsINetOp(context.Context, *OverlapsINetOp, Datum, Datum) (Datum, error)
 	EvalPlusDateIntOp(context.Context, *PlusDateIntOp, Datum, Datum) (Datum, error)
@@ -163,6 +169,7 @@ type BinaryOpEvaluator interface {
 	EvalPlusDecimalPGLSNOp(context.Context, *PlusDecimalPGLSNOp, Datum, Datum) (Datum, error)
 	EvalPlusFloatOp(context.Context, *PlusFloatOp, Datum, Datum) (Datum, error)
 	EvalPlusINetIntOp(context.Context, *PlusINetIntOp, Datum, Datum) (Datum, error)
+	EvalPlusInt8RangeOp(context.Context, *PlusInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalPlusIntDateOp(context.Context, *PlusIntDateOp, Datum, Datum) (Datum, error)
 	EvalPlusIntDecimalOp(context.Context, *PlusIntDecimalOp, Datum, Datum) (Datum, error)
 	EvalPlusIntINetOp(context.Context, *PlusIntINetOp, Datum, Datum) (Datum, error)
@@ -191,6 +198,8 @@ type BinaryOpEvaluator interface {
 	EvalRShiftIntOp(context.Context, *RShiftIntOp, Datum, Datum) (Datum, error)
 	EvalRShiftVarBitIntOp(context.Context, *RShiftVarBitIntOp, Datum, Datum) (Datum, error)
 	EvalSimilarToOp(context.Context, *SimilarToOp, Datum, Datum) (Datum, error)
+	EvalStrictLeftInt8RangeOp(context.Context, *StrictLeftInt8RangeOp, Datum, Datum) (Datum, error)
+	EvalStrictRightInt8RangeOp(context.Context, *StrictRightInt8RangeOp, Datum, Datum) (Datum, error)
 	EvalTSMatchesQueryVectorOp(context.Context, *TSMatchesQueryVectorOp, Datum, Datum) (Datum, error)
 	EvalTSMatchesVectorQueryOp(context.Context, *TSMatchesVectorQueryOp, Datum, Datum) (Datum, error)
 }
@@ -249,6 +258,11 @@ func (op *UnaryMinusIntOp) Eval(ctx context.Context, e OpEvaluator, v Datum) (Da
 // Eval is part of the UnaryEvalOp interface.
 func (op *UnaryMinusIntervalOp) Eval(ctx context.Context, e OpEvaluator, v Datum) (Datum, error) {
 	return e.EvalUnaryMinusIntervalOp(ctx, op, v)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *AdjacentInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalAdjacentInt8RangeOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
@@ -347,6 +361,11 @@ func (op *ContainedByArrayOp) Eval(ctx context.Context, e OpEvaluator, a, b Datu
 }
 
 // Eval is part of the BinaryEvalOp interface.
+func (op *ContainedByInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalContainedByInt8RangeOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
 func (op *ContainedByJsonbOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalContainedByJsonbOp(ctx, op, a, b)
 }
@@ -357,6 +376,11 @@ func (op *ContainsArrayOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) 
 }
 
 // Eval is part of the BinaryEvalOp interface.
+func (op *ContainsInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalContainsInt8RangeOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
 func (op *ContainsJsonbOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalContainsJsonbOp(ctx, op, a, b)
 }
@@ -364,6 +388,11 @@ func (op *ContainsJsonbOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) 
 // Eval is part of the BinaryEvalOp interface.
 func (op *CosDistanceVectorOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalCosDistanceVectorOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *DiffInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalDiffInt8RangeOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
@@ -434,6 +463,11 @@ func (op *FloorDivIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (D
 // Eval is part of the BinaryEvalOp interface.
 func (op *InTupleOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalInTupleOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *IntersectInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalIntersectInt8RangeOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
@@ -737,6 +771,11 @@ func (op *NegInnerProductVectorOp) Eval(ctx context.Context, e OpEvaluator, a, b
 }
 
 // Eval is part of the BinaryEvalOp interface.
+func (op *OverlapByInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalOverlapByInt8RangeOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
 func (op *OverlapsArrayOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalOverlapsArrayOp(ctx, op, a, b)
 }
@@ -789,6 +828,11 @@ func (op *PlusFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Dat
 // Eval is part of the BinaryEvalOp interface.
 func (op *PlusINetIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusINetIntOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *PlusInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalPlusInt8RangeOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
@@ -929,6 +973,16 @@ func (op *RShiftVarBitIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum
 // Eval is part of the BinaryEvalOp interface.
 func (op *SimilarToOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalSimilarToOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *StrictLeftInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalStrictLeftInt8RangeOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *StrictRightInt8RangeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalStrictRightInt8RangeOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.

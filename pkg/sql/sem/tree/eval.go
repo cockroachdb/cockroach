@@ -627,6 +627,13 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			Volatility: volatility.Immutable,
 		},
 		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int8Range,
+			ReturnType: types.Int8Range,
+			EvalOp:     &PlusInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
 			LeftType:   types.Float,
 			RightType:  types.Float,
 			ReturnType: types.Float,
@@ -1001,6 +1008,13 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			EvalOp:     &MinusPGVectorOp{},
 			Volatility: volatility.Immutable,
 		},
+		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int8Range,
+			ReturnType: types.Int8Range,
+			EvalOp:     &DiffInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
 	}},
 
 	treebin.Mult: {overloads: []*BinOp{
@@ -1089,6 +1103,13 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			RightType:  types.PGVector,
 			ReturnType: types.PGVector,
 			EvalOp:     &MultPGVectorOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int8Range,
+			ReturnType: types.Int8Range,
+			EvalOp:     &IntersectInt8RangeOp{},
 			Volatility: volatility.Immutable,
 		},
 	}},
@@ -1264,6 +1285,13 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 	// TODO(pmattis): Check that the shift is valid.
 	treebin.LShift: {overloads: []*BinOp{
 		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int8Range,
+			ReturnType: types.Bool,
+			EvalOp:     &StrictLeftInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
 			LeftType:   types.Int,
 			RightType:  types.Int,
 			ReturnType: types.Int,
@@ -1287,6 +1315,13 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 	}},
 
 	treebin.RShift: {overloads: []*BinOp{
+		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int8Range,
+			ReturnType: types.Bool,
+			EvalOp:     &StrictRightInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
 		{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1619,6 +1654,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeEqFn(types.Geometry, types.Geometry, volatility.Leakproof),
 		makeEqFn(types.INet, types.INet, volatility.Leakproof),
 		makeEqFn(types.Int, types.Int, volatility.Leakproof),
+		makeEqFn(types.Int8Range, types.Int8Range, volatility.Leakproof),
 		makeEqFn(types.Interval, types.Interval, volatility.Leakproof),
 		makeEqFn(types.Jsonb, types.Jsonb, volatility.Immutable),
 		makeEqFn(types.Oid, types.Oid, volatility.Leakproof),
@@ -1645,7 +1681,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeEqFn(types.Int, types.Decimal, volatility.Leakproof),
 		makeEqFn(types.Int, types.Float, volatility.Leakproof),
 		makeEqFn(types.Int, types.Oid, volatility.Leakproof),
-		makeEqFn(types.Oid, types.Int, volatility.Leakproof),
+		makeEqFn(types.Oid, types.Int, volatility.Immutable),
 		makeEqFn(types.Timestamp, types.Date, volatility.Immutable),
 		makeEqFn(types.Timestamp, types.TimestampTZ, volatility.Stable),
 		makeEqFn(types.TimestampTZ, types.Date, volatility.Stable),
@@ -1681,6 +1717,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLtFn(types.Geometry, types.Geometry, volatility.Leakproof),
 		makeLtFn(types.INet, types.INet, volatility.Leakproof),
 		makeLtFn(types.Int, types.Int, volatility.Leakproof),
+		makeLtFn(types.Int8Range, types.Int8Range, volatility.Leakproof),
 		makeLtFn(types.Interval, types.Interval, volatility.Leakproof),
 		makeLtFn(types.Oid, types.Oid, volatility.Leakproof),
 		makeLtFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
@@ -1741,6 +1778,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLeFn(types.Geometry, types.Geometry, volatility.Leakproof),
 		makeLeFn(types.INet, types.INet, volatility.Leakproof),
 		makeLeFn(types.Int, types.Int, volatility.Leakproof),
+		makeLeFn(types.Int8Range, types.Int8Range, volatility.Leakproof),
 		makeLeFn(types.Interval, types.Interval, volatility.Leakproof),
 		makeLeFn(types.Oid, types.Oid, volatility.Leakproof),
 		makeLeFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
@@ -1821,6 +1859,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeIsFn(types.Geometry, types.Geometry, volatility.Leakproof),
 		makeIsFn(types.INet, types.INet, volatility.Leakproof),
 		makeIsFn(types.Int, types.Int, volatility.Leakproof),
+		makeIsFn(types.Int8Range, types.Int8Range, volatility.Leakproof),
 		makeIsFn(types.Interval, types.Interval, volatility.Leakproof),
 		makeIsFn(types.Jsonb, types.Jsonb, volatility.Immutable),
 		makeIsFn(types.Oid, types.Oid, volatility.Leakproof),
@@ -1890,6 +1929,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeEvalTupleIn(types.Geometry, volatility.Leakproof),
 		makeEvalTupleIn(types.INet, volatility.Leakproof),
 		makeEvalTupleIn(types.Int, volatility.Leakproof),
+		makeEvalTupleIn(types.Int8Range, volatility.Leakproof),
 		makeEvalTupleIn(types.Interval, volatility.Leakproof),
 		makeEvalTupleIn(types.Jsonb, volatility.Leakproof),
 		makeEvalTupleIn(types.Oid, volatility.Leakproof),
@@ -1996,6 +2036,18 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 			EvalOp:     &ContainsJsonbOp{},
 			Volatility: volatility.Immutable,
 		},
+		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int,
+			EvalOp:     &ContainsInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int8Range,
+			EvalOp:     &ContainsInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
 	}},
 
 	treecmp.ContainedBy: {overloads: []*CmpOp{
@@ -2011,6 +2063,18 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 			EvalOp:     &ContainedByJsonbOp{},
 			Volatility: volatility.Immutable,
 		},
+		{
+			LeftType:   types.Int,
+			RightType:  types.Int8Range,
+			EvalOp:     &ContainedByInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int8Range,
+			EvalOp:     &ContainedByInt8RangeOp{},
+			Volatility: volatility.Immutable,
+		},
 	}},
 	treecmp.Overlaps: {overloads: append([]*CmpOp{
 		{
@@ -2023,6 +2087,12 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 			LeftType:   types.INet,
 			RightType:  types.INet,
 			EvalOp:     &OverlapsINetOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.Int8Range,
+			RightType:  types.Int8Range,
+			EvalOp:     &OverlapByInt8RangeOp{},
 			Volatility: volatility.Immutable,
 		},
 	}, makeBox2DComparisonOperators(
@@ -2045,6 +2115,36 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 			Volatility: volatility.Immutable,
 		},
 	}},
+	treecmp.Adjacent: {
+		overloads: []*CmpOp{
+			{
+				LeftType:   types.Int8Range,
+				RightType:  types.Int8Range,
+				EvalOp:     &AdjacentInt8RangeOp{},
+				Volatility: volatility.Immutable,
+			},
+		},
+	},
+	treecmp.OverLeft: {
+		overloads: []*CmpOp{
+			{
+				LeftType:   types.Int8Range,
+				RightType:  types.Int8Range,
+				EvalOp:     &OverLeftInt8RangeOp{},
+				Volatility: volatility.Immutable,
+			},
+		},
+	},
+	treecmp.OverRight: {
+		overloads: []*CmpOp{
+			{
+				LeftType:   types.Int8Range,
+				RightType:  types.Int8Range,
+				EvalOp:     &OverRightInt8RangeOp{},
+				Volatility: volatility.Immutable,
+			},
+		},
+	},
 })
 
 func makeBox2DComparisonOperators(op func(lhs, rhs *geo.CartesianBoundingBox) bool) []*CmpOp {

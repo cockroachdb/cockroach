@@ -43,6 +43,230 @@ func BinaryOp(
 	return op.Eval(ctx, (*evaluator)(evalCtx), left, right)
 }
 
+func (e *evaluator) EvalOverlapByInt8RangeOp(
+	_ context.Context, _ *tree.OverlapByInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	return doesInt8RangeOverlap(a, b)
+
+}
+
+func doesInt8RangeOverlap(a, b tree.Datum) (tree.Datum, error) {
+	rRange := tree.MustBeDInt8Range(b)
+	rSBInt := math.MinInt64
+	rEBInt := math.MaxInt64
+	if intVal, ok := tree.AsDInt(rRange.StartBound.Val); ok {
+		rSBInt = int(intVal)
+	}
+	if intVal, ok := tree.AsDInt(rRange.EndBound.Val); ok {
+		rEBInt = int(intVal)
+	}
+
+	lRange, isInt8Range := tree.AsDInt8Range(a)
+
+	if !isInt8Range {
+		return nil, pgerror.Newf(pgcode.Syntax, "overlap for int8range can only work on int8range")
+	}
+
+	lSBInt := math.MinInt64
+	lEBInt := math.MaxInt64
+
+	if intVal, ok := tree.AsDInt(lRange.StartBound.Val); ok {
+		lSBInt = int(intVal)
+	}
+
+	if intVal, ok := tree.AsDInt(lRange.EndBound.Val); ok {
+		lEBInt = int(intVal)
+	}
+
+	if lSBInt <= rEBInt && rSBInt <= lEBInt {
+
+		return tree.DBoolTrue, nil
+	}
+
+	// This should never be hit but just in case.
+	return tree.DBoolFalse, nil
+}
+
+func (e *evaluator) EvalStrictRightInt8RangeOp(
+	_ context.Context, _ *tree.StrictRightInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	return areInt8RangeAdjacent(a, b)
+
+}
+
+func areInt8RangeAdjacent(a, b tree.Datum) (tree.Datum, error) {
+	rRange := tree.MustBeDInt8Range(b)
+
+	rEBInt := math.MaxInt64
+
+	if intVal, ok := tree.AsDInt(rRange.EndBound.Val); ok {
+		rEBInt = int(intVal)
+	}
+
+	lRange, isInt8Range := tree.AsDInt8Range(a)
+
+	if !isInt8Range {
+		return nil, pgerror.Newf(pgcode.Syntax, "overlap for int8range can only work on int8range")
+	}
+
+	lSBInt := math.MinInt64
+
+	if intVal, ok := tree.AsDInt(lRange.StartBound.Val); ok {
+		lSBInt = int(intVal)
+	}
+
+	if lSBInt != math.MinInt8 && rEBInt != math.MaxInt64 && rEBInt <= lSBInt {
+		return tree.DBoolTrue, nil
+	}
+
+	return tree.DBoolFalse, nil
+}
+
+func (e *evaluator) EvalPlusInt8RangeOp(
+	_ context.Context, _ *tree.PlusInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	rRange := tree.MustBeDInt8Range(b)
+	rSBInt := math.MinInt64
+	rEBInt := math.MaxInt64
+	if intVal, ok := tree.AsDInt(rRange.StartBound.Val); ok {
+		rSBInt = int(intVal)
+	}
+	if intVal, ok := tree.AsDInt(rRange.EndBound.Val); ok {
+		rEBInt = int(intVal)
+	}
+
+	lRange, isInt8Range := tree.AsDInt8Range(a)
+
+	if !isInt8Range {
+		return nil, pgerror.Newf(pgcode.Syntax, "overlap for int8range can only work on int8range")
+	}
+
+	lSBInt := math.MinInt64
+	lEBInt := math.MaxInt64
+
+	if intVal, ok := tree.AsDInt(lRange.StartBound.Val); ok {
+		lSBInt = int(intVal)
+	}
+
+	if intVal, ok := tree.AsDInt(lRange.EndBound.Val); ok {
+		lEBInt = int(intVal)
+	}
+
+	resultEndVal := rEBInt
+	if lEBInt > resultEndVal {
+		resultEndVal = lEBInt
+	}
+
+	resultStartVal := lSBInt
+	if rSBInt < resultStartVal {
+		resultStartVal = rSBInt
+	}
+
+	areAdjacent, err := areInt8RangeAdjacent(a, b)
+	if err != nil {
+		return nil, err
+	}
+
+	doesOverlap, err := doesInt8RangeOverlap(a, b)
+	if err != nil {
+		return nil, err
+	}
+
+	l, _ := tree.GetBool(areAdjacent)
+	r, _ := tree.GetBool(doesOverlap)
+
+	if !l && !r {
+		return nil, pgerror.Newf(pgcode.Syntax, "result of range union would not be contiguous")
+	}
+
+	var resultStartType, resultEndType tree.RangeBoundType
+	if resultStartVal == math.MinInt64 {
+		resultStartType = tree.RangeBoundNegInf
+	} else {
+		resultStartType = tree.RangeBoundStartClose
+	}
+
+	if resultEndVal == math.MaxInt64 {
+		resultEndType = tree.RangeBoundInf
+	} else {
+		resultEndType = tree.RangeBoundEndOpen
+	}
+
+	return tree.NewDInt8Range(tree.NewDInt(tree.DInt(resultStartVal)), tree.NewDInt(tree.DInt(resultEndVal)), resultStartType, resultEndType), nil
+}
+
+func (e *evaluator) EvalStrictLeftInt8RangeOp(
+	_ context.Context, _ *tree.StrictLeftInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	rRange := tree.MustBeDInt8Range(b)
+
+	rSBInt := math.MinInt64
+
+	if intVal, ok := tree.AsDInt(rRange.StartBound.Val); ok {
+		rSBInt = int(intVal)
+	}
+
+	lRange, isInt8Range := tree.AsDInt8Range(a)
+
+	if !isInt8Range {
+		return nil, pgerror.Newf(pgcode.Syntax, "overlap for int8range can only work on int8range")
+	}
+
+	lEBInt := math.MaxInt64
+
+	if intVal, ok := tree.AsDInt(lRange.EndBound.Val); ok {
+		lEBInt = int(intVal)
+	}
+
+	if rSBInt != math.MinInt8 && lEBInt != math.MaxInt64 && lEBInt <= rSBInt {
+		return tree.DBoolTrue, nil
+	}
+
+	return tree.DBoolFalse, nil
+
+}
+
+func (e *evaluator) EvalAdjacentInt8RangeOp(
+	_ context.Context, _ *tree.AdjacentInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	rRange := tree.MustBeDInt8Range(b)
+	rSBInt := math.MinInt64
+	rEBInt := math.MaxInt64
+	if intVal, ok := tree.AsDInt(rRange.StartBound.Val); ok {
+		rSBInt = int(intVal)
+	}
+	if intVal, ok := tree.AsDInt(rRange.EndBound.Val); ok {
+		rEBInt = int(intVal)
+	}
+
+	lRange, isInt8Range := tree.AsDInt8Range(a)
+
+	if !isInt8Range {
+		return nil, pgerror.Newf(pgcode.Syntax, "overlap for int8range can only work on int8range")
+	}
+
+	lSBInt := math.MinInt64
+	lEBInt := math.MaxInt64
+
+	if intVal, ok := tree.AsDInt(lRange.StartBound.Val); ok {
+		lSBInt = int(intVal)
+	}
+
+	if intVal, ok := tree.AsDInt(lRange.EndBound.Val); ok {
+		lEBInt = int(intVal)
+	}
+
+	if lEBInt != math.MaxInt64 && lEBInt == rSBInt {
+		return tree.DBoolTrue, nil
+	}
+
+	if rEBInt != math.MaxInt64 && rEBInt == lSBInt {
+		return tree.DBoolTrue, nil
+	}
+
+	return tree.DBoolFalse, nil
+}
+
 func (e *evaluator) EvalAppendToMaybeNullArrayOp(
 	ctx context.Context, op *tree.AppendToMaybeNullArrayOp, a, b tree.Datum,
 ) (tree.Datum, error) {
@@ -304,6 +528,313 @@ func (e *evaluator) EvalContainedByJsonbOp(
 		return nil, err
 	}
 	return tree.MakeDBool(tree.DBool(c)), nil
+}
+
+func (e *evaluator) EvalDiffInt8RangeOp(
+	ctx context.Context, _ *tree.DiffInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	containedByRes, err := e.EvalContainedByInt8RangeOp(ctx, nil /* ContainedByInt8RangeOp*/, a, b)
+	if err != nil {
+		return nil, err
+	}
+
+	if tree.MustBeDBool(containedByRes) {
+		return tree.EmptyDInt8Range, nil
+	}
+
+	// If b is completely contained by a, pop error.
+	containsRes, err := e.EvalContainsInt8RangeOp(ctx, nil /* ContainsInt8RangeOp*/, a, b)
+	if err != nil {
+		return nil, err
+	}
+
+	aRange := tree.MustBeDInt8Range(a)
+	bRange := tree.MustBeDInt8Range(b)
+
+	sbEq, err := aRange.StartBound.Equals(ctx, e.ctx(), bRange.StartBound)
+	if err != nil {
+		return nil, err
+	}
+	ebEq, err := aRange.EndBound.Equals(ctx, e.ctx(), bRange.EndBound)
+	if err != nil {
+		return nil, err
+	}
+	if bool(tree.MustBeDBool(containsRes)) && !sbEq && !ebEq {
+		return nil, pgerror.Newf(pgcode.Syntax, "result of range difference would not be contiguous")
+	}
+
+	sbCmpRes, err := aRange.StartBound.Val.Compare(ctx, e.ctx(), bRange.StartBound.Val)
+	if err != nil {
+		return nil, err
+	}
+
+	switch sbCmpRes {
+	case 1:
+	case 0:
+		if aRange.StartBound.Typ == tree.RangeBoundStartClose && bRange.StartBound.Typ == tree.RangeBoundStartOpen {
+			// TOOD(janexing): any overflow hazard here? when should it be promoted to inf?
+			nextDInt, ok := aRange.StartBound.Val.Next(ctx, e.ctx())
+			if !ok {
+				return nil, pgerror.Newf(pgcode.Syntax, "cannot get the next DInt for start bound")
+			}
+			res := &tree.DInt8Range{
+				StartBound: aRange.StartBound,
+				EndBound: tree.RangeBound{
+					Val: nextDInt,
+					Typ: tree.RangeBoundEndOpen,
+				},
+			}
+			return res.Normalize(), nil
+		}
+	case -1:
+		bRangeSB := bRange.StartBound
+		var resEB tree.RangeBound
+		switch bRangeSB.Typ {
+		case tree.RangeBoundInf, tree.RangeBoundNegInf:
+			resEB = bRangeSB
+		case tree.RangeBoundStartOpen:
+			resEB = tree.RangeBound{
+				Val: bRangeSB.Val,
+				Typ: tree.RangeBoundEndClose,
+			}
+		case tree.RangeBoundStartClose:
+			prevDInt, ok := bRangeSB.Val.Prev(ctx, e.ctx())
+			if !ok {
+				return nil, pgerror.Newf(pgcode.Syntax, "cannot get the prev DInt for start bound")
+			}
+			resEB = tree.RangeBound{
+				Val: prevDInt,
+				Typ: tree.RangeBoundEndOpen,
+			}
+		}
+
+		res := &tree.DInt8Range{
+			StartBound: aRange.StartBound,
+			EndBound:   resEB,
+		}
+
+		return res.Normalize(), nil
+	}
+
+	// --------
+
+	ebCmpRes, err := aRange.EndBound.Val.Compare(ctx, e.ctx(), bRange.EndBound.Val)
+	if err != nil {
+		return nil, err
+	}
+
+	switch ebCmpRes {
+	case -1:
+	case 0:
+		if aRange.EndBound.Typ == tree.RangeBoundEndOpen && bRange.EndBound.Typ == tree.RangeBoundEndClose {
+			// TOOD(janexing): any overflow hazard here? when should it be promoted to inf?
+			nextDInt, ok := aRange.EndBound.Val.Next(ctx, e.ctx())
+			if !ok {
+				return nil, pgerror.Newf(pgcode.Syntax, "cannot get the next DInt for start bound")
+			}
+			return &tree.DInt8Range{
+				StartBound: tree.RangeBound{
+					Val: aRange.EndBound.Val,
+					Typ: tree.RangeBoundStartClose,
+				},
+				EndBound: tree.RangeBound{
+					Val: nextDInt,
+					Typ: tree.RangeBoundEndOpen,
+				},
+			}, nil
+		}
+	case 1:
+		bRangeEB := bRange.EndBound
+		var resSB tree.RangeBound
+		switch bRangeEB.Typ {
+		case tree.RangeBoundInf, tree.RangeBoundNegInf:
+			resSB = bRangeEB
+		case tree.RangeBoundEndOpen:
+			resSB = tree.RangeBound{
+				Val: bRangeEB.Val,
+				Typ: tree.RangeBoundStartClose,
+			}
+		case tree.RangeBoundEndClose:
+			nextDInt, ok := bRangeEB.Val.Next(ctx, e.ctx())
+			if !ok {
+				return nil, pgerror.Newf(pgcode.Syntax, "cannot get the prev DInt for start bound")
+			}
+			resSB = tree.RangeBound{
+				Val: nextDInt,
+				Typ: tree.RangeBoundStartOpen,
+			}
+		}
+
+		return &tree.DInt8Range{
+			StartBound: resSB,
+			EndBound:   aRange.EndBound,
+		}, nil
+	}
+
+	return tree.EmptyDInt8Range, nil
+}
+
+func (e *evaluator) EvalIntersectInt8RangeOp(
+	ctx context.Context, _ *tree.IntersectInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	aRange := tree.MustBeDInt8Range(a)
+	bRange := tree.MustBeDInt8Range(b)
+
+	hasIntersect, err := aRange.HasIntersection(ctx, e.ctx(), b)
+	if err != nil {
+		return nil, err
+	}
+
+	if !hasIntersect {
+		return tree.EmptyDInt8Range, nil
+	}
+
+	var largerSB, smallerEB tree.RangeBound
+	// Compare SB with SB, EB with EB.
+	sbCmpRes, err := aRange.StartBound.Val.Compare(ctx, e.ctx(), bRange.StartBound.Val)
+	if err != nil {
+		return nil, err
+	}
+	switch sbCmpRes {
+	// a > b
+	case 1:
+		largerSB = aRange.StartBound
+	case -1:
+		largerSB = bRange.StartBound
+	case 0:
+		largerSB = aRange.StartBound
+		if bRange.StartBound.Typ == tree.RangeBoundStartOpen {
+			largerSB = bRange.StartBound
+		}
+	}
+
+	ebCmpRes, err := aRange.EndBound.Val.Compare(ctx, e.ctx(), bRange.EndBound.Val)
+	if err != nil {
+		return nil, err
+	}
+	switch ebCmpRes {
+	// a > b
+	case 1:
+		smallerEB = bRange.EndBound
+	case -1:
+		smallerEB = aRange.EndBound
+	case 0:
+		smallerEB = aRange.EndBound
+		if bRange.StartBound.Typ == tree.RangeBoundStartClose {
+			smallerEB = bRange.EndBound
+		}
+	}
+
+	return tree.NewDInt8Range(largerSB.Val, smallerEB.Val, largerSB.Typ, smallerEB.Typ), nil
+}
+
+func (e *evaluator) EvalContainsInt8RangeOp(
+	ctx context.Context, _ *tree.ContainsInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	return e.EvalContainedByInt8RangeOp(ctx, nil, b, a)
+}
+
+// Check if a is contained by b
+func (e *evaluator) EvalContainedByInt8RangeOp(
+	ctx context.Context, _ *tree.ContainedByInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	rRange := tree.MustBeDInt8Range(b)
+	rSBInt := -math.MaxInt64
+	rEBInt := math.MaxInt64
+	if intVal, ok := tree.AsDInt(rRange.StartBound.Val); ok {
+		rSBInt = int(intVal)
+	}
+	if intVal, ok := tree.AsDInt(rRange.EndBound.Val); ok {
+		rEBInt = int(intVal)
+	}
+
+	var lRange tree.DInt8Range
+	var lInt tree.DInt
+	var isInt, isInt8Range bool
+	lInt, isInt = tree.AsDInt(a)
+	if !isInt {
+		lRange, isInt8Range = tree.AsDInt8Range(a)
+	}
+
+	if !isInt8Range && !isInt {
+		return nil, pgerror.Newf(pgcode.Syntax, "contained by for int8range can only work on int8range or int type")
+	} else if isInt {
+		if res := rRange.ContainsInt(int(lInt)); !res {
+			return tree.DBoolFalse, nil
+		} else {
+			return tree.DBoolTrue, nil
+		}
+	} else if isInt8Range {
+		lSBInt := -math.MaxInt64
+		lEBInt := math.MaxInt64
+
+		if intVal, ok := tree.AsDInt(lRange.StartBound.Val); ok {
+			lSBInt = int(intVal)
+		}
+
+		sbInRange := rRange.ContainsInt(lSBInt)
+		if !sbInRange && (lSBInt != rSBInt || lRange.StartBound.Typ != tree.RangeBoundStartOpen) {
+			return tree.DBoolFalse, nil
+		}
+		if lSBInt == rSBInt && lRange.StartBound.Typ == tree.RangeBoundStartClose && rRange.StartBound.Typ == tree.RangeBoundStartOpen {
+			return tree.DBoolFalse, nil
+		}
+
+		if intVal, ok := tree.AsDInt(lRange.EndBound.Val); ok {
+			lEBInt = int(intVal)
+		}
+
+		ebInRange := rRange.ContainsInt(lEBInt)
+
+		if !ebInRange && (lEBInt != rEBInt || lRange.EndBound.Typ != tree.RangeBoundEndOpen) {
+			return tree.DBoolFalse, nil
+		}
+
+		if lEBInt == rEBInt && lRange.EndBound.Typ == tree.RangeBoundEndClose && rRange.EndBound.Typ == tree.RangeBoundEndOpen {
+			return tree.DBoolFalse, nil
+		}
+
+		return tree.DBoolTrue, nil
+	}
+
+	// This should never be hit but just in case.
+	return nil, pgerror.Newf(pgcode.Syntax, "contained by for int8range can only work on int8range or int type")
+}
+
+func (e *evaluator) EvalOverLeftInt8RangeOp(
+	ctx context.Context, _ *tree.OverLeftInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	lrange := tree.MustBeDInt8Range(a)
+	rrange := tree.MustBeDInt8Range(b)
+	if lrange.IsEmpty() || rrange.IsEmpty() {
+		return tree.DBoolFalse, nil
+	}
+	cmp, err := lrange.EndBound.CompareAfterNormalization(ctx, e.ctx(), rrange.EndBound)
+	if err != nil {
+		return nil, err
+	}
+	if cmp <= 0 {
+		return tree.DBoolTrue, nil
+	}
+	return tree.DBoolFalse, nil
+}
+
+func (e *evaluator) EvalOverRightInt8RangeOp(
+	ctx context.Context, _ *tree.OverRightInt8RangeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	lrange := tree.MustBeDInt8Range(a)
+	rrange := tree.MustBeDInt8Range(b)
+	if lrange.IsEmpty() || rrange.IsEmpty() {
+		return tree.DBoolFalse, nil
+	}
+	cmp, err := lrange.StartBound.CompareAfterNormalization(ctx, e.ctx(), rrange.StartBound)
+	if err != nil {
+		return nil, err
+	}
+	if cmp >= 0 {
+		return tree.DBoolTrue, nil
+	}
+	return tree.DBoolFalse, nil
 }
 
 func (e *evaluator) EvalContainsArrayOp(

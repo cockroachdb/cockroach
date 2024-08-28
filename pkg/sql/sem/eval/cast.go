@@ -508,6 +508,8 @@ func performCastWithoutPrecisionTruncation(
 			s = t.T.String()
 		case *tree.DEnum:
 			s = t.LogicalRep
+		case *tree.DInt8Range:
+			s = t.String()
 		case *tree.DVoid:
 			s = ""
 		}
@@ -1010,6 +1012,14 @@ func performCastWithoutPrecisionTruncation(
 			res, _, err := tree.ParseDTupleFromString(evalCtx, string(*v), t)
 			return res, err
 		}
+	case types.RangeFamily:
+		switch d := d.(type) {
+		case *tree.DString:
+			return tree.ParseInt8Range(string(*d))
+		case *tree.DCollatedString:
+			return tree.ParseInt8Range(d.Contents)
+		}
+
 	case types.VoidFamily:
 		switch d.(type) {
 		case *tree.DString:

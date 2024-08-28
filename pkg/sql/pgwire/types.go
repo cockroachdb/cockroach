@@ -262,6 +262,10 @@ func writeTextDatumNotNull(
 		b.textFormatter.FormatNode(v)
 		b.writeFromFmtCtx(b.textFormatter)
 
+	case *tree.DInt8Range:
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtx(b.textFormatter)
+
 	case *tree.DArray:
 		// Arrays have custom formatting depending on their OID.
 		b.textFormatter.FormatNode(d)
@@ -828,6 +832,7 @@ func writeBinaryDatumNotNull(
 	case *tree.DOid:
 		b.putInt32(4)
 		b.putInt32(int32(v.Oid))
+	// TODO: implement for tree.DInt8Range
 	default:
 		b.setError(errors.AssertionFailedf("unsupported type %T", d))
 	}

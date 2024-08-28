@@ -2071,6 +2071,7 @@ func checkResultType(typ *types.T, fmtCode pgwirebase.FormatCode) error {
 	case types.TupleFamily:
 	case types.EnumFamily:
 	case types.VoidFamily:
+	case types.RangeFamily:
 	case types.ArrayFamily:
 		if fmtCode == pgwirebase.FormatBinary && typ.ArrayContents().Family() == types.ArrayFamily {
 			return unimplemented.NewWithIssueDetail(32552,

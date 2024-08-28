@@ -1781,6 +1781,8 @@ const (
 	JsonEmptyArray     Type = 42
 	JsonEmptyArrayDesc Type = 43
 	PGVector           Type = 44
+
+	Range Type = 45
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -2641,6 +2643,13 @@ func EncodeBytesValue(appendTo []byte, colID uint32, data []byte) []byte {
 func EncodeUntaggedBytesValue(appendTo []byte, data []byte) []byte {
 	appendTo = EncodeNonsortingUvarint(appendTo, uint64(len(data)))
 	return append(appendTo, data...)
+}
+
+// EncodeInt8RangeValue encodes a byte representing an int8Range appends it to
+// the supplied buffer, and returns the final buffer.
+func EncodeInt8RangeValue(appendTo []byte, colID uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, Range)
+	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
 // EncodeArrayValue encodes a byte array value with its value tag, appends it to

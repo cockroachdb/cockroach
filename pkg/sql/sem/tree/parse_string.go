@@ -71,6 +71,8 @@ func ParseAndRequireString(
 		d, err = ParseDPGLSN(s)
 	case types.PGVectorFamily:
 		d, err = ParseDPGVector(s)
+	case types.RangeFamily:
+		d, err = ParseInt8Range(s)
 	case types.RefCursorFamily:
 		d = NewDRefCursor(s)
 	case types.Box2DFamily:

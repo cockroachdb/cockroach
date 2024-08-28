@@ -16,7 +16,11 @@
 // builtins package.
 package builtinsregistry
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
 
 var registry = map[string]definition{}
 
@@ -29,7 +33,7 @@ var subscriptions []Subscription
 // if a function of the same name has already been registered.
 func Register(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
 	if _, exists := registry[name]; exists {
-		panic("duplicate builtin: " + name)
+		panic("duplicate builtin: " + name + " " + fmt.Sprint(registry[name]))
 	}
 	registry[name] = definition{
 		props:     props,

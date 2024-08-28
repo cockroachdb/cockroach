@@ -716,6 +716,9 @@ var (
 	// by Postgres in system tables. Int2vectors are 0-indexed, unlike normal arrays.
 	Int2Vector = &T{InternalType: InternalType{
 		Family: ArrayFamily, Oid: oid.T_int2vector, ArrayContents: Int2, Locale: &emptyLocale}}
+
+	Int8Range = &T{InternalType: InternalType{
+		Family: RangeFamily, Oid: oid.T_int8range, Locale: &emptyLocale}}
 )
 
 // Unexported wrapper types.
@@ -1247,6 +1250,10 @@ func MakePGVector(dims int32) *T {
 	}}
 }
 
+func MakeInt8Range() *T {
+	return Int8Range
+}
+
 // NewCompositeType constructs a new instance of a TupleFamily type with the
 // given field types and labels, and the given user-defined type OIDs.
 func NewCompositeType(typeOID, arrayTypeOID oid.Oid, contents []*T, labels []string) *T {
@@ -1552,6 +1559,7 @@ var familyNames = map[Family]redact.SafeString{
 	UuidFamily:           "uuid",
 	VoidFamily:           "void",
 	EncodedKeyFamily:     "encodedkey",
+	RangeFamily:          "int8range",
 }
 
 // Name returns a user-friendly word indicating the family type.
@@ -1647,6 +1655,12 @@ func (t *T) Name() string {
 			return "unknown_enum"
 		}
 		return t.TypeMeta.Name.Basename()
+
+	case RangeFamily:
+		if t.Oid() == oid.T_int8range {
+			return "int8range"
+		}
+		fallthrough
 
 	default:
 		return string(fam.Name())
@@ -1883,6 +1897,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		return fmt.Sprintf("timestamp(%d) with time zone", typmod)
 	case TriggerFamily:
 		return "trigger"
+	case RangeFamily:
+		return "int8range"
 	case TSQueryFamily:
 		return "tsquery"
 	case TSVectorFamily:

@@ -299,6 +299,16 @@ var regularBuiltins = map[string]builtinDefinition{
 	// TODO(pmattis): What string functions should also support types.Bytes?
 
 	"lower": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "range", Typ: types.Int8Range}},
+			ReturnType:        tree.FixedReturnType(types.Int),
+			CalledOnNullInput: true,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				lb := tree.MustBeDInt8Range(args[0])
+				res := lb.Lower(ctx, evalCtx)
+				return res, nil
+			},
+		},
 		stringOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
 				return tree.NewDString(strings.ToLower(s)), nil
@@ -330,6 +340,16 @@ var regularBuiltins = map[string]builtinDefinition{
 	),
 
 	"upper": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "range", Typ: types.Int8Range}},
+			ReturnType:        tree.FixedReturnType(types.Int),
+			CalledOnNullInput: true,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				lb := tree.MustBeDInt8Range(args[0])
+				res := lb.Upper(ctx, evalCtx)
+				return res, nil
+			},
+		},
 		stringOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
 				return tree.NewDString(strings.ToUpper(s)), nil
@@ -3940,6 +3960,244 @@ value if you rely on the HLC for accuracy.`,
 			CalledOnNullInput: true,
 		}
 	}, false /* supportsArrayInput */)),
+
+	// TODO(janexing): For local test only, remove it later.
+	"has_intersect": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "left_range", Typ: types.Int8Range}, {Name: "right_range", Typ: types.Int8Range}},
+			ReturnType:        tree.FixedReturnType(types.Bool),
+			CalledOnNullInput: true,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				lb := tree.MustBeDInt8Range(args[0])
+				res, err := lb.HasIntersection(ctx, evalCtx, args[1])
+				if err != nil {
+					return tree.DBoolFalse, err
+				}
+				dBoolRes := tree.DBool(res)
+				return &dBoolRes, err
+			},
+		},
+	),
+
+	"isempty": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "range", Typ: types.Int8Range}},
+			ReturnType:        tree.FixedReturnType(types.Bool),
+			CalledOnNullInput: true,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				b := tree.MustBeDInt8Range(args[0])
+
+				res := b.IsEmpty()
+				dBoolRes := tree.DBool(res)
+				return &dBoolRes, nil
+			},
+		},
+	),
+	"lower_inf": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "range", Typ: types.Int8Range}},
+			ReturnType:        tree.FixedReturnType(types.Bool),
+			CalledOnNullInput: true,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				b := tree.MustBeDInt8Range(args[0])
+
+				res := b.StartBound.Typ == tree.RangeBoundNegInf || b.StartBound.Val == tree.DNull
+				dBoolRes := tree.DBool(res)
+				return &dBoolRes, nil
+			},
+		},
+	),
+	"upper_inf": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "range", Typ: types.Int8Range}},
+			ReturnType:        tree.FixedReturnType(types.Bool),
+			CalledOnNullInput: true,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				b := tree.MustBeDInt8Range(args[0])
+
+				res := b.EndBound.Typ == tree.RangeBoundInf || b.EndBound.Val == tree.DNull
+				dBoolRes := tree.DBool(res)
+				return &dBoolRes, nil
+			},
+		},
+	),
+
+	"range_merge": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "left_range", Typ: types.Int8Range}, {Name: "right_range", Typ: types.Int8Range}},
+			ReturnType:        tree.FixedReturnType(types.Int8Range),
+			CalledOnNullInput: false,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				var lb, rb *tree.DInt8Range
+				*lb = tree.MustBeDInt8Range(args[0])
+				*rb = tree.MustBeDInt8Range(args[1])
+				lb = lb.Normalize()
+				rb = rb.Normalize()
+
+				var resultStart, resultEnd tree.RangeBound
+				val, err := rb.StartBound.CompareAfterNormalization(ctx, evalCtx, lb.StartBound)
+				if err != nil {
+					return nil, err
+				}
+				switch val {
+				case -1:
+					resultStart = rb.StartBound
+				case 1, 0:
+					resultStart = lb.StartBound
+
+				}
+
+				val, err = rb.EndBound.CompareAfterNormalization(ctx, evalCtx, lb.EndBound)
+				if err != nil {
+					return nil, err
+				}
+				switch val {
+				case -1:
+					resultEnd = lb.EndBound
+				case 1, 0:
+					resultEnd = rb.EndBound
+				}
+
+				res := &tree.DInt8Range{StartBound: resultStart, EndBound: resultEnd}
+				return res.Normalize(), nil
+			},
+		},
+	),
+
+	// TODO(sambhav-jain-16): Add check for startBound >= endBound
+	"int8range": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryRange},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "string", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int8Range),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return eval.PerformCast(ctx, evalCtx, args[0], types.Int8Range)
+			},
+			Class:      tree.NormalClass,
+			Info:       "Cast from STRING to INT8RANGE.",
+			Volatility: volatility.Immutable,
+			// The one for name casts differ.
+			// Since we're using the same one as cast, ignore that from now.
+			IgnoreVolatilityCheck: true,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "int8range", Typ: types.Int8Range}},
+			ReturnType: tree.FixedReturnType(types.Int8Range),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return eval.PerformCast(ctx, evalCtx, args[0], types.Int8Range)
+			},
+			Class:      tree.NormalClass,
+			Info:       "Cast from INT8RANGE to INT8RANGE.",
+			Volatility: volatility.Leakproof,
+			// The one for name casts differ.
+			// Since we're using the same one as cast, ignore that from now.
+			IgnoreVolatilityCheck: true,
+		},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "start_bound", Typ: types.Int}, {Name: "end_bound", Typ: types.Int}},
+			ReturnType:        tree.FixedReturnType(types.Int8Range),
+			CalledOnNullInput: true,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				var startBound, endBound tree.Datum
+
+				var startBoundInt, endBoundInt tree.DInt
+
+				if args[0] == tree.DNull {
+					startBoundInt = math.MinInt64
+					startBound = tree.NewDInt(tree.DInt(math.MinInt64))
+				} else {
+					startBoundInt = tree.MustBeDInt(args[0])
+					startBound = &startBoundInt
+				}
+
+				if args[1] == tree.DNull {
+					endBoundInt = math.MaxInt64
+					endBound = tree.NewDInt(tree.DInt(math.MaxInt64))
+				} else {
+					endBoundInt = tree.MustBeDInt(args[1])
+					endBound = &endBoundInt
+				}
+
+				if int64(endBoundInt) < int64(startBoundInt) {
+					return nil, errors.New("range lower bound must be less than or equal to range upper bound")
+				}
+
+				startBoundTyp := tree.RangeBoundStartClose
+				endBoundTyp := tree.RangeBoundEndOpen
+
+				if startBound == tree.DNull {
+					startBoundTyp = tree.RangeBoundNegInf
+				}
+
+				if endBound == tree.DNull {
+					endBoundTyp = tree.RangeBoundInf
+				}
+
+				res := tree.NewDInt8Range(startBound, endBound, startBoundTyp, endBoundTyp)
+
+				return res.Normalize(), nil
+			},
+		},
+		tree.Overload{
+			Types:             tree.ParamTypes{{Name: "start_bound", Typ: types.Int}, {Name: "end_bound", Typ: types.Int}, {Name: "bound_fmt", Typ: types.String}},
+			ReturnType:        tree.FixedReturnType(types.Int8Range),
+			CalledOnNullInput: true,
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				var startBound, endBound tree.Datum
+				boundFmt := tree.MustBeDString(args[2])
+				var startBoundTyp, endBoundTyp tree.RangeBoundType
+				boundFmtStr := tree.AsStringWithFlags(&boundFmt, tree.FmtBareStrings)
+				startAddVal, endAddVal := 0, 0
+				startBoundTyp = tree.RangeBoundStartClose
+				endBoundTyp = tree.RangeBoundEndOpen
+				switch boundFmtStr {
+				case tree.CloseOpenBoundsFmt:
+					startAddVal = 0
+				case tree.OpenOpenBoundsFmt:
+					startAddVal++
+				case tree.CloseCloseBoundsFmt:
+					endAddVal++
+				case tree.OpenCloseBoundsFmt:
+					startAddVal++
+					endAddVal++
+				default:
+					return nil, pgerror.Newf(pgcode.Syntax, "unknown bound format for range: %s", boundFmt.String())
+				}
+				var startBoundInt, endBoundInt tree.DInt
+
+				if args[0] == tree.DNull {
+					startBoundInt = math.MinInt64
+					startBound = tree.NewDInt(tree.DInt(math.MinInt64))
+					startBoundTyp = tree.RangeBoundNegInf
+				} else {
+					startBoundInt = tree.MustBeDInt(args[0]) + *tree.NewDInt(tree.DInt(startAddVal))
+					startBound = &startBoundInt
+				}
+
+				if args[1] == tree.DNull {
+					endBoundInt = math.MaxInt64
+					endBound = tree.NewDInt(tree.DInt(math.MaxInt64))
+					endBoundTyp = tree.RangeBoundInf
+				} else {
+					endBoundInt = tree.MustBeDInt(args[1]) + *tree.NewDInt(tree.DInt(endAddVal))
+					endBound = &endBoundInt
+				}
+
+				if int64(endBoundInt) < int64(startBoundInt) {
+					return nil, errors.New("range lower bound must be less than or equal to range upper bound")
+				}
+
+				res := tree.NewDInt8Range(startBound, endBound, startBoundTyp, endBoundTyp)
+
+				return res.Normalize(), nil
+			},
+		},
+	),
 
 	// Full text search functions.
 	"ts_match_qv":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),

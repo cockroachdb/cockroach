@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	int8range "github.com/cockroachdb/cockroach/pkg/util/range"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
@@ -2011,6 +2012,430 @@ func MakeDDate(d pgdate.Date) DDate {
 func NewDDateFromTime(t time.Time) (*DDate, error) {
 	d, err := pgdate.MakeDateFromTime(t)
 	return NewDDate(d), err
+}
+
+type DInt8Range struct {
+	StartBound RangeBound
+	EndBound   RangeBound
+}
+
+// AsDInt8Range attempts to retrieve a DInt8Range from an Expr, returning
+// a DInt8Range and a flag signifying whether the assertion was successful.
+func AsDInt8Range(e Expr) (DInt8Range, bool) {
+	switch t := e.(type) {
+	case *DInt8Range:
+		return *t.Normalize(), true
+	case *DOidWrapper:
+		return AsDInt8Range(t.Wrapped)
+	}
+
+	return DInt8Range{}, false
+}
+
+// MustBeDInt8Range attempts to retrieve a DInt8Range from an Expr, panicking if the
+// assertion fails.
+func MustBeDInt8Range(e Expr) DInt8Range {
+	i, ok := AsDInt8Range(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DInt8Range, found %T", e))
+	}
+	return i
+}
+
+// TODO(janexing): is it ever possible to have inf as the start bound and/or -inf as the end bound?
+func ParseInt8Range(s string) (*DInt8Range, error) {
+	startVal, endVal, err := int8range.ParseValsForInt8Range(s)
+	if err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse int8 range")
+	}
+	startType, endType := RangeBoundStartClose, RangeBoundEndOpen
+
+	var startOut, endOut Datum
+	startOut, endOut = NewDInt(DInt(startVal)), NewDInt(DInt(endVal))
+
+	switch startVal {
+	case math.MinInt64:
+		startType = RangeBoundNegInf
+	case math.MaxInt64:
+		startType = RangeBoundInf
+	}
+
+	switch endVal {
+	case math.MinInt64:
+		endType = RangeBoundNegInf
+	case math.MaxInt64:
+		endType = RangeBoundInf
+	}
+
+	return NewDInt8Range(startOut, endOut, startType, endType), nil
+}
+
+func (d *DInt8Range) String() string {
+	if d.IsEmpty() {
+		return "empty"
+	}
+	sb := strings.Builder{}
+	if d.StartBound.Typ == RangeBoundStartClose {
+		sb.WriteString("[")
+	} else {
+		sb.WriteString("(")
+	}
+	if d.StartBound.Typ != RangeBoundNegInf {
+		sb.WriteString(d.StartBound.Val.String())
+	}
+	sb.WriteString(",")
+	if d.EndBound.Typ != RangeBoundInf {
+		sb.WriteString(d.EndBound.Val.String())
+	}
+
+	if d.EndBound.Typ == RangeBoundStartClose {
+		sb.WriteString("]")
+	} else {
+		sb.WriteString(")")
+	}
+
+	return sb.String()
+}
+
+func (d *DInt8Range) Format(ctx *FmtCtx) {
+	if d.IsEmpty() {
+		ctx.WriteString("empty")
+		return
+	}
+	if d.StartBound.Typ == RangeBoundStartClose {
+		ctx.WriteString("[")
+	} else {
+		ctx.WriteString("(")
+	}
+	if d.StartBound.Typ != RangeBoundNegInf {
+		ctx.FormatNode(d.StartBound.Val)
+	}
+	ctx.WriteString(",")
+	if d.EndBound.Typ != RangeBoundInf {
+		ctx.FormatNode(d.EndBound.Val)
+	}
+	if d.EndBound.Typ == RangeBoundEndClose {
+		ctx.WriteString("]")
+	} else {
+		ctx.WriteString(")")
+	}
+}
+
+// ResolvedType implements the Datum interface.
+func (d *DInt8Range) ResolvedType() *types.T {
+	return types.Int8Range
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (d *DInt8Range) AmbiguousFormat() bool {
+	return true
+}
+
+func (d *DInt8Range) ContainsInt(i int) bool {
+	if d.StartBound.Typ != RangeBoundNegInf {
+		sbInt := int(MustBeDInt(d.StartBound.Val))
+		if i < sbInt || (i == sbInt && d.StartBound.Typ == RangeBoundStartOpen) {
+			return false
+		}
+	}
+
+	if d.EndBound.Typ != RangeBoundInf {
+		ebInt := int(MustBeDInt(d.EndBound.Val))
+		if i > ebInt || (i == ebInt && d.EndBound.Typ == RangeBoundEndOpen) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (d *DInt8Range) HasIntersection(
+	ctx context.Context, cmpCtx CompareContext, other Datum,
+) (bool, error) {
+	otherRange, ok := cmpCtx.UnwrapDatum(ctx, other).(*DInt8Range)
+	if !ok {
+		return false, makeUnsupportedComparisonMessage(d, other)
+	}
+
+	esRes, err := d.EndBound.CompareAfterNormalization(ctx, cmpCtx, otherRange.StartBound)
+	if err != nil {
+		return false, err
+	}
+
+	if esRes == -1 {
+		return false, err
+	}
+
+	esRes, err = otherRange.EndBound.CompareAfterNormalization(ctx, cmpCtx, d.StartBound)
+	if err != nil {
+		return false, err
+	}
+
+	if esRes == -1 {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (d *DInt8Range) Lower(ctx context.Context, cmpCtx CompareContext) Datum {
+	if d.StartBound.Typ == RangeBoundNegInf {
+		return DNull
+	}
+	return cmpCtx.UnwrapDatum(ctx, d.StartBound.Val).(*DInt)
+}
+
+func (d *DInt8Range) Upper(ctx context.Context, cmpCtx CompareContext) Datum {
+	if d.EndBound.Typ == RangeBoundInf {
+		return DNull
+	}
+	return cmpCtx.UnwrapDatum(ctx, d.EndBound.Val).(*DInt)
+}
+
+// Compare returns -1 if the receiver is less than other, 0 if receiver is
+// equal to other and +1 if receiver is greater than 'other'. Compare is safe
+// to use with a nil eval.Context and results in default behavior, except for
+// when comparing tree.Placeholder datums.
+func (d *DInt8Range) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1, nil
+	}
+	var err error
+	var v *DInt8Range
+	switch t := cmpCtx.UnwrapDatum(ctx, other).(type) {
+	case *DInt8Range:
+		v = t
+	case *DString:
+		v, err = ParseInt8Range(string(*t))
+		if err != nil {
+			return 0, err
+		}
+	case *DCollatedString:
+		v, err = ParseInt8Range(t.Contents)
+		if err != nil {
+			return 0, err
+		}
+	default:
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+	// empty range is less than any non-empty range
+	if d.IsEmpty() {
+		if v.IsEmpty() {
+			return 0, nil
+		}
+		return -1, nil
+	}
+	if v.IsEmpty() {
+		return 1, nil
+	}
+
+	d = d.Normalize()
+	v = v.Normalize()
+
+	cmpRes, err := d.StartBound.CompareAfterNormalization(ctx, cmpCtx, v.StartBound)
+	if err != nil {
+		return 0, err
+	}
+	if cmpRes != 0 {
+		return cmpRes, nil
+	}
+
+	cmpRes, err = d.EndBound.CompareAfterNormalization(ctx, cmpCtx, v.EndBound)
+	if err != nil {
+		return 0, err
+	}
+
+	return cmpRes, nil
+}
+
+// Prev implements the Datum interface.
+func (d *DInt8Range) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Compare implements the Datum interface.
+func (d *DInt8Range) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
+	return false
+}
+
+// Next implements the Datum interface.
+func (d *DInt8Range) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (d *DInt8Range) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
+	return false
+}
+
+// Max implements the Datum interface.
+func (d *DInt8Range) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Min implements the Datum interface.
+func (d *DInt8Range) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Size implements the Datum interface.
+func (d *DInt8Range) Size() uintptr {
+	return unsafe.Sizeof(*d) + d.StartBound.Val.Size() + d.EndBound.Val.Size()
+}
+
+type RangeBound struct {
+	Val Datum
+	Typ RangeBoundType
+}
+
+func (rb1 RangeBound) Equals(
+	ctx context.Context, cmpCtx CompareContext, rb2 RangeBound,
+) (bool, error) {
+	cmpRes, err := rb1.Val.Compare(ctx, cmpCtx, rb2.Val)
+	if err != nil {
+		return false, err
+	}
+	return cmpRes == 0 && rb1.Typ == rb2.Typ, nil
+}
+
+// -1: b < other
+// 0 : b == other
+// 1: b > other
+func (b *RangeBound) CompareAfterNormalization(
+	ctx context.Context, cmpCtx CompareContext, other RangeBound,
+) (int, error) {
+	if b.Typ == RangeBoundNegInf {
+		if other.Typ == RangeBoundNegInf {
+			return 0, nil
+		}
+		return -1, nil
+	}
+
+	if b.Typ == RangeBoundInf {
+		if other.Typ == RangeBoundInf {
+			return 0, nil
+		}
+		return 1, nil
+	}
+
+	cmpRes, err := b.Val.Compare(ctx, cmpCtx, other.Val)
+	if err != nil {
+		return 0, err
+	}
+
+	if cmpRes != 0 {
+		return cmpRes, nil
+	}
+
+	// The values are the same, the only determining factor is the bound type.
+	if b.Typ < other.Typ {
+		return -1, nil
+	} else if b.Typ == other.Typ {
+		return 0, nil
+	}
+
+	return 1, nil
+}
+
+type RangeBoundType int
+
+const (
+	RangeBoundNegInf RangeBoundType = iota
+	RangeBoundStartClose
+	RangeBoundStartOpen
+	RangeBoundEndOpen
+	RangeBoundEndClose
+	RangeBoundInf
+)
+
+const (
+	CloseOpenBoundsFmt  = `[)`
+	OpenOpenBoundsFmt   = `()`
+	CloseCloseBoundsFmt = `[]`
+	OpenCloseBoundsFmt  = `(]`
+)
+
+// EmptyDInt8Range is the normalized form of an empty range.
+var EmptyDInt8Range = &DInt8Range{
+	StartBound: RangeBound{
+		Val: DNull,
+		Typ: RangeBoundNegInf,
+	},
+	EndBound: RangeBound{
+		Val: DNull,
+		Typ: RangeBoundNegInf,
+	},
+}
+
+func (d *DInt8Range) IsEmpty() bool {
+	var closedStart int64
+	switch d.StartBound.Typ {
+	case RangeBoundStartOpen:
+		closedStart = int64(MustBeDInt(d.StartBound.Val)) + 1
+	case RangeBoundStartClose:
+		closedStart = int64(MustBeDInt(d.StartBound.Val))
+	case RangeBoundInf:
+		return true
+	case RangeBoundNegInf:
+		return d.EndBound.Typ == RangeBoundNegInf
+	}
+	var closedEnd int64
+	switch d.EndBound.Typ {
+	case RangeBoundEndOpen:
+		closedEnd = int64(MustBeDInt(d.EndBound.Val)) - 1
+	case RangeBoundEndClose:
+		closedEnd = int64(MustBeDInt(d.EndBound.Val))
+	case RangeBoundInf:
+		return false
+	case RangeBoundNegInf:
+		return true
+	}
+	return closedStart > closedEnd
+}
+
+// Normalize converts to CloseOpenBoundsFmt, with special cases for infinities
+// and the empty range.
+func (d *DInt8Range) Normalize() *DInt8Range {
+	// normalize empty ranges
+	if d.IsEmpty() {
+		return EmptyDInt8Range
+	}
+
+	// we don't need these for DInt.Next
+	ctx := context.Background()
+	var cmpCtx CompareContext
+
+	// make a copy
+	v := *d
+
+	// normalize to CloseOpenBoundsFmt
+	switch v.StartBound.Typ {
+	case RangeBoundStartOpen:
+		v.StartBound.Typ = RangeBoundStartClose
+		v.StartBound.Val, _ = v.StartBound.Val.Next(ctx, cmpCtx)
+	}
+	switch v.EndBound.Typ {
+	case RangeBoundEndClose:
+		v.EndBound.Typ = RangeBoundEndOpen
+		v.EndBound.Val, _ = v.EndBound.Val.Next(ctx, cmpCtx)
+	}
+	return &v
+}
+
+func NewDInt8Range(
+	startBound Datum, endBound Datum, startBoundTyp RangeBoundType, endBoundTyp RangeBoundType,
+) *DInt8Range {
+	return (&DInt8Range{
+		StartBound: RangeBound{
+			Val: startBound,
+			Typ: startBoundTyp,
+		},
+		EndBound: RangeBound{
+			Val: endBound,
+			Typ: endBoundTyp,
+		},
+	}).Normalize()
 }
 
 // ParseContext provides the information necessary for
@@ -6090,6 +6515,8 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.OidFamily:            {unsafe.Sizeof(DOid{}.Oid), fixedSize},
 	types.EnumFamily:           {unsafe.Sizeof(DEnum{}), variableSize},
 
+	types.RangeFamily: {unsafe.Sizeof(DInt8Range{}), fixedSize},
+
 	types.VoidFamily: {sz: unsafe.Sizeof(DVoid{}), variable: fixedSize},
 	// TODO(jordan,justin): This seems suspicious.
 	types.ArrayFamily: {unsafe.Sizeof(DString("")), variableSize},
@@ -6222,6 +6649,8 @@ func InferTypes(vals []string) []types.Family {
 	}
 	return typs
 }
+
+// range types!
 
 // AdjustValueToType checks that the width (for strings, byte arrays, and bit
 // strings) and scale (decimal). and, shape/srid (for geospatial types) fits the

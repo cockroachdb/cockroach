@@ -402,3 +402,32 @@ type ContainedByArrayOp struct{}
 
 // ContainedByJsonbOp is a BinaryEvalOp.
 type ContainedByJsonbOp struct{}
+
+// ContainedByInt8RangeOp is a BinaryEvalOp.
+type ContainedByInt8RangeOp struct{}
+
+// ContainsInt8RangeOp is a BinaryEvalOp.
+type ContainsInt8RangeOp struct{}
+
+// ContainedByInt8RangeOp is a BinaryEvalOp.
+type OverlapByInt8RangeOp struct{}
+
+type AdjacentInt8RangeOp struct{}
+
+type StrictRightInt8RangeOp struct{}
+
+type StrictLeftInt8RangeOp struct{}
+
+type PlusInt8RangeOp struct{}
+
+// IntersectInt8RangeOp is a BinaryEvalOp.
+type IntersectInt8RangeOp struct{}
+
+// DiffInt8RangeOp is a BinaryEvalOp.
+type DiffInt8RangeOp struct{}
+
+// OverLeftInt8RangeOp is a BinaryEvalOp.
+type OverLeftInt8RangeOp struct{}
+
+// OverRightInt8RangeOp is a BinaryEvalOp.
+type OverRightInt8RangeOp struct{}

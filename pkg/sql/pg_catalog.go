@@ -3287,7 +3287,7 @@ var (
 	// Avoid unused warning for constants.
 	_ = typCategoryEnum
 	_ = typCategoryGeometric
-	_ = typCategoryRange
+	//_ = typCategoryRange
 	_ = typCategoryBitString
 
 	commaTypDelim = tree.NewDString(",")
@@ -4787,6 +4787,7 @@ var datumToTypeCategory = map[types.Family]*tree.DString{
 	types.UnknownFamily:     typCategoryUnknown,
 	types.VoidFamily:        typCategoryPseudo,
 	types.TriggerFamily:     typCategoryPseudo,
+	types.RangeFamily:       typCategoryRange,
 }
 
 func typCategory(typ *types.T) tree.Datum {

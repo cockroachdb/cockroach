@@ -88,6 +88,9 @@ const (
 	Some
 	All
 
+	Adjacent
+	OverLeft
+	OverRight
 	NumComparisonOperatorSymbols
 )
 
@@ -125,6 +128,9 @@ var comparisonOpName = [...]string{
 	Any:               "ANY",
 	Some:              "SOME",
 	All:               "ALL",
+	Adjacent:          "-|-",
+	OverLeft:          "&<",
+	OverRight:         "&>",
 }
 
 func (i ComparisonOperatorSymbol) String() string {

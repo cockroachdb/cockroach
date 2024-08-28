@@ -234,6 +234,48 @@ func DecodeUntaggedDatum(
 			return nil, b, err
 		}
 		return tree.NewDPGVector(vec), b, nil
+	case types.RangeFamily:
+		//TODO(janexing): add assertion.
+
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		sbTyp := tree.RangeBoundType(int(data[0]))
+		ebTyp := tree.RangeBoundType(int(data[1]))
+
+		data = data[2:]
+		var sbVal, ebVal tree.Datum
+		//var err error
+
+		if sbTyp == tree.RangeBoundNegInf {
+			sbVal = tree.DNull
+			data = data[1:]
+		} else {
+			x, sVal, err := encoding.DecodeIntValue(data)
+			data = x
+			if err != nil {
+				return nil, data, err
+			}
+
+			sbVal = tree.NewDInt(tree.DInt(sVal))
+		}
+		if ebTyp == tree.RangeBoundNegInf {
+			ebVal = tree.DNull
+			data = data[1:]
+		} else if ebTyp == tree.RangeBoundInf {
+			ebVal = tree.DNull
+			data = data[1:]
+		} else {
+			x, eVal, err := encoding.DecodeIntValue(data)
+			data = x
+			if err != nil {
+				return nil, data, err
+			}
+			ebVal = tree.NewDInt(tree.DInt(eVal))
+		}
+		return tree.NewDInt8Range(sbVal, ebVal, sbTyp, ebTyp), data, nil
+
 	case types.OidFamily:
 		// TODO: This possibly should decode to uint32 (with corresponding changes
 		// to encoding) to ensure that the value fits in a DOid without any loss of
