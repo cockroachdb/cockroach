@@ -466,6 +466,15 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 
+	for _, t := range targetDescs {
+		if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
+			if tbl.ExternalRowData().TenantID.IsSet() {
+				return nil, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on a replication target are not supported")
+			}
+			return nil, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on external tables are not supported")
+		}
+	}
+
 	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.Targets,
 		changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName(), sinkURI)
 
