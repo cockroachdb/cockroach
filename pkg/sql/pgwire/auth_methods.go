@@ -975,7 +975,31 @@ func authLDAP(
 		}
 		return nil
 	})
-	// TODO(souravcrl): add authorizer auth behavior b.SetAuthorizer() for syncing LDAP groups
+
+	b.SetAuthorizer(func(ctx context.Context, user username.SQLUsername, clientConnection bool) ([]username.SQLUsername, error) {
+		c.LogAuthInfof(ctx, "LDAP authentication succeeded; attempting authorization")
+		if ldapGroups, detailedErrors, authError := ldapManager.m.FetchLDAPGroups(ctx, execCfg.Settings, ldapUserDN, user, entry, identMap); authError != nil {
+			errForLog := authError
+			if detailedErrors != "" {
+				errForLog = errors.Join(errForLog, errors.Newf("%s", detailedErrors))
+			}
+			log.Warningf(ctx, "LDAP authorization: error retrieving ldap groups for authorization: %+v", errForLog)
+			return nil, authError
+		} else {
+			log.Infof(ctx, "LDAP authorization sync succeeded; attempting to assign roles")
+			sqlGroupRoles := make([]username.SQLUsername, len(ldapGroups))
+			for idx := range ldapGroups {
+				var err error
+				if sqlGroupRoles[idx], err = username.MakeSQLUsernameFromUserInput(ldapGroups[idx].String(), username.PurposeValidation); err != nil {
+					return nil, errors.Wrapf(err, "LDAP authorization: error creating group role for DN %s", ldapGroups[idx].String())
+				}
+			}
+			return sqlGroupRoles, nil
+		}
+	})
+	b.SetRoleGranter(func(ctx context.Context, user username.SQLUsername, sqlGroups []username.SQLUsername) error {
+		return nil
+	})
 
 	return b, nil
 }
