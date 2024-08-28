@@ -698,7 +698,7 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 		return err
 	}
 	fmt.Println("cleared during Flush")
-	s.files.Clear(true /* addNodesToFreeList */)
+	//s.files.Clear(true /* addNodesToFreeList */)
 	s.setDataFileTimestamp()
 	return s.waitAsyncFlush(ctx)
 }
