@@ -687,7 +687,7 @@ func (u *unknownIndex) Column(i int) cat.IndexColumn {
 	var col cat.Column
 	col.Init(
 		i,
-		cat.StableID(0),
+		cat.DefaultStableID,
 		"?",
 		cat.Ordinary,
 		types.Int,

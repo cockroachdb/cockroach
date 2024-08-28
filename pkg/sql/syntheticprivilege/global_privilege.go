@@ -66,7 +66,7 @@ func (p *GlobalPrivilege) GetName() string {
 
 // ID implements the cat.Object interface.
 func (p *GlobalPrivilege) ID() cat.StableID {
-	return cat.StableID(descpb.InvalidID)
+	return cat.DefaultStableID
 }
 
 // PostgresDescriptorID implements the cat.Object interface.
