@@ -104,7 +104,6 @@ var _ io.Writer = &cloudStorageSinkFile{}
 func (f *cloudStorageSinkFile) Write(p []byte) (int, error) {
 	f.rawSize += len(p)
 	if f.codec != nil {
-		fmt.Println("cloudStorageSinkFile.Write with len: ", len(p))
 		return f.codec.Write(p)
 	}
 	return f.buf.Write(p)
@@ -541,11 +540,10 @@ func (s *cloudStorageSink) getOrCreateFile(
 		f.codec = codec
 	}
 
-	s.files.ReplaceOrInsert(f)
-	//if oldF := s.files.ReplaceOrInsert(f); oldF != nil {
-	//	_ = oldF.(*cloudStorageSinkFile).codec.Close()
-	//}
-	fmt.Println("here: ", s.files.Len())
+	//s.files.ReplaceOrInsert(f)
+	if oldF := s.files.ReplaceOrInsert(f); oldF != nil {
+		_ = oldF.(*cloudStorageSinkFile).codec.Close()
+	}
 	return f, nil
 }
 
@@ -693,11 +691,10 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 		err = s.flushFile(ctx, i.(*cloudStorageSinkFile))
 		return err == nil
 	})
-	fmt.Println("flush")
+	fmt.Println("flush with err: ", err)
 	if err != nil {
 		return err
 	}
-	fmt.Println("cleared during Flush")
 	//s.files.Clear(true /* addNodesToFreeList */)
 	s.setDataFileTimestamp()
 	return s.waitAsyncFlush(ctx)
@@ -725,6 +722,7 @@ func (s *cloudStorageSink) waitAsyncFlush(ctx context.Context) error {
 	done := make(chan struct{})
 	select {
 	case <-ctx.Done():
+		fmt.Println("ctx done")
 		return ctx.Err()
 	case <-s.asyncFlushTermCh:
 		fmt.Println("ended early")
@@ -734,6 +732,7 @@ func (s *cloudStorageSink) waitAsyncFlush(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
+		fmt.Println("ctx done")
 		return ctx.Err()
 	case <-s.asyncFlushTermCh:
 		fmt.Println("ended early")
@@ -888,8 +887,15 @@ func (s *cloudStorageSink) closeAllCodecs() (err error) {
 	// Codecs need to be closed because of the klauspost compression library implementation
 	// details where it spins up go routines to perform compression in parallel.
 	// Those go routines are cleaned up when the compression codec is closed.
+	fmt.Println(s.files.Len())
 	s.files.Ascend(func(i btree.Item) (wantMore bool) {
 		f := i.(*cloudStorageSinkFile)
+		if f != nil {
+			if f.codec == nil {
+				fmt.Println("codec is nil:")
+			}
+			f.alloc.Release(context.Background())
+		}
 		if f.codec != nil {
 			cErr := f.codec.Close()
 			f.codec = nil
@@ -904,9 +910,12 @@ func (s *cloudStorageSink) closeAllCodecs() (err error) {
 
 // Close implements the Sink interface.
 func (s *cloudStorageSink) Close() error {
+	defer func() {
+		_ = s.closeAllCodecs()
+		s.files = nil
+	}()
 	fmt.Println("closed again")
-	err := s.closeAllCodecs()
-	s.files = nil
+	var err error
 	err = errors.CombineErrors(err, s.waitAsyncFlush(context.Background()))
 	close(s.asyncFlushCh) // signal flusher to exit.
 	err = errors.CombineErrors(err, s.flushGroup.Wait())

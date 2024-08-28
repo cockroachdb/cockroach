@@ -930,13 +930,12 @@ func TestCloudStorageSinkMemRepro(t *testing.T) {
 		}
 		fmt.Println("after EmitRow: ", s.(*cloudStorageSink).files.Len())
 		PrintMemUsage()
-		//s.(*cloudStorageSink).files.Clear(false /* addNodesToFreeList */)
 		_ = s.Flush(ctx)
 		fmt.Println("after Flush: ", s.(*cloudStorageSink).files.Len())
+		//s.(*cloudStorageSink).files.Clear(false /* addNodesToFreeList */)
 		PrintMemUsage()
-		fmt.Println("new len: ", s.(*cloudStorageSink).files.Len())
-		PrintMemUsage()
-		_ = s.Close()
+
+		require.Error(t, s.Close()) // injected error received here
 		// Print memory usage statistics in GB
 		fmt.Println("after close: ")
 		PrintMemUsage()
