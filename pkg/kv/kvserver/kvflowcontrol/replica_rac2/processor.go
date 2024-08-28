@@ -559,18 +559,16 @@ func (p *processorImpl) OnDescChangedLocked(
 ) {
 	p.opts.Replica.RaftMuAssertHeld()
 	p.opts.Replica.MuAssertHeld()
-	if p.raftMu.replicas == nil {
-		// Replica is initialized, in that we have a descriptor. Get the
-		// RaftNode.
+	initialization := p.raftMu.replicas == nil
+	if initialization {
+		// Replica is initialized, in that we have a descriptor and the tenant ID.
+		// Get the RaftNode.
 		p.raftMu.raftNode = p.opts.Replica.RaftNodeMuLocked()
 		p.raftMu.tenantID = tenantID
-	} else {
-		if p.raftMu.tenantID != tenantID {
-			panic(errors.AssertionFailedf("tenantId was changed from %s to %s",
-				p.raftMu.tenantID, tenantID))
-		}
+	} else if p.raftMu.tenantID != tenantID {
+		panic(errors.AssertionFailedf("tenantId was changed from %s to %s",
+			p.raftMu.tenantID, tenantID))
 	}
-	initialization := p.raftMu.replicas == nil
 	p.raftMu.replicas = descToReplicaSet(desc)
 	p.raftMu.replicasChanged = true
 	// We need to promptly return tokens if some replicas have been removed,
