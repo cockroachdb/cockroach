@@ -60,5 +60,3 @@ func RepeatRunE(
 	}
 	return errors.Wrapf(lastError, "all attempts failed for %s", operation)
 }
-
-var _ = RepeatRunE
