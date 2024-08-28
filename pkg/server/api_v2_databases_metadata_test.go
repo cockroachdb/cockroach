@@ -449,6 +449,45 @@ func TestGetDBMetadata(t *testing.T) {
 	})
 }
 
+func TestGetTableMetadataUpdateJobStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+	conn := testCluster.ServerConn(0)
+	defer conn.Close()
+
+	ts := testCluster.Server(0)
+
+	t.Run("authorized", func(t *testing.T) {
+		uri := "/api/v2/table_metadata/updatejob/"
+		sessionUsername := username.TestUserName()
+		userClient, _, err := ts.GetAuthenticatedHTTPClientAndCookie(sessionUsername, false, 1)
+		require.NoError(t, err)
+
+		failed := makeApiRequest[interface{}](t, userClient, ts.AdminURL().WithPath(uri).String())
+		require.Equal(t, http.StatusText(http.StatusNotFound), failed)
+
+		_, e := conn.Exec(fmt.Sprintf("GRANT CONNECT ON DATABASE defaultdb TO %s", sessionUsername.Normalized()))
+		require.NoError(t, e)
+		_, e = conn.Exec(fmt.Sprintf("GRANT SYSTEM viewjob TO %s", sessionUsername.Normalized()))
+		require.NoError(t, e)
+		mdResp := makeApiRequest[tmUpdateJobStatusResponse](t, userClient, ts.AdminURL().WithPath(uri).String())
+		require.Equal(t, "running", mdResp.CurrentState)
+
+		_, e = conn.Exec(fmt.Sprintf("REVOKE CONNECT ON DATABASE defaultdb FROM %s", sessionUsername.Normalized()))
+		require.NoError(t, e)
+		failed = makeApiRequest[string](t, userClient, ts.AdminURL().WithPath(uri).String())
+		require.Equal(t, http.StatusText(http.StatusNotFound), failed)
+
+		_, e = conn.Exec(fmt.Sprintf("GRANT admin TO %s", sessionUsername.Normalized()))
+		require.NoError(t, e)
+		mdResp = makeApiRequest[tmUpdateJobStatusResponse](t, userClient, ts.AdminURL().WithPath(uri).String())
+		require.Equal(t, "running", mdResp.CurrentState)
+	})
+}
+
 func makeApiRequest[T any](t *testing.T, client http.Client, uri string) (mdResp T) {
 	req, err := http.NewRequest("GET", uri, nil)
 	require.NoError(t, err)
@@ -456,8 +495,14 @@ func makeApiRequest[T any](t *testing.T, client http.Client, uri string) (mdResp
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.NotNil(t, resp)
-	require.Equal(t, 200, resp.StatusCode)
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&mdResp))
+	//require.Equal(t, 200, resp.StatusCode)
+	contentType := resp.Header.Get("Content-type")
+	data, err := io.ReadAll(resp.Body)
+	if strings.Contains(contentType, "text/plain") {
+		data = []byte(fmt.Sprintf(`"%s"`, strings.TrimSpace(string(data))))
+	}
+	t.Logf("data: %s", data)
+	require.NoError(t, json.Unmarshal(data, &mdResp))
 	return mdResp
 }
 

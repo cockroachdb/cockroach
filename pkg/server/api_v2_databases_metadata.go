@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -628,6 +629,170 @@ func (a *apiV2Server) getDBMetadata(
 	return dbms, totalRowCount, nil
 }
 
+// TableMetadataJob routes to the necessary receiver based on the http method of the request. Requires
+// The user making the request must have the CONNECT database grant on at least one database and the VIEWJOB system
+// privilege, or admin privilege.
+// ---
+// produces:
+// - application/json
+//
+// responses:
+//
+//	"200":
+//	  description: A tmUpdateJobStatusResponse
+//	"404":
+//	  description: Not found if the user doesn't have the correct authorizations
+func (a *apiV2Server) TableMetadataJob(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx = a.sqlServer.AnnotateCtx(ctx)
+	sqlUser := authserver.UserFromHTTPAuthInfoContext(ctx)
+
+	authorized, err := a.updateTableMetadataJobAuthorized(ctx, sqlUser)
+	if err != nil {
+		srverrors.APIV2InternalError(ctx, err, w)
+		return
+	}
+
+	if !authorized {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
+
+	var resp interface{}
+	switch r.Method {
+	case http.MethodGet:
+		resp, err = a.getTableMetadataUpdateJobStatus(ctx, sqlUser)
+	case http.MethodPost:
+		// TODO: trigger update job
+	default:
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err != nil {
+		srverrors.APIV2InternalError(ctx, err, w)
+		return
+	}
+
+	apiutil.WriteJSONResponse(ctx, w, 200, resp)
+}
+
+// getTableMetadataUpdateJobStatus gets the status of the table metadata update job. The requesting user
+// must have the CONNECT privilege to at least one database on the cluster, or the admin role. If the user
+// doesn't have the necessary authorization, an "empty" response will be returned.
+func (a *apiV2Server) getTableMetadataUpdateJobStatus(
+	ctx context.Context, sqlUser username.SQLUsername,
+) (jobStatus tmUpdateJobStatusResponse, retErr error) {
+	isAuthorized, err := a.updateTableMetadataJobAuthorized(ctx, sqlUser)
+	if err != nil {
+		return jobStatus, err
+	}
+	if !isAuthorized {
+		return jobStatus, err
+	}
+	query := safesql.NewQuery()
+	query.Append(`
+	SELECT 
+		status,
+	  fraction_completed,
+	  modified,
+	  last_run
+	FROM crdb_internal.jobs
+	WHERE job_id = $
+`, jobs.UpdateTableMetadataCacheJobID)
+
+	it, err := a.sqlServer.internalExecutor.QueryIteratorEx(
+		ctx, "get-tableMetadataUpdateJob-status", nil, /* txn */
+		sessiondata.InternalExecutorOverride{},
+		query.String(), query.QueryArguments()...,
+	)
+
+	if err != nil {
+		return jobStatus, err
+	}
+
+	defer func(it isql.Rows) {
+		retErr = errors.CombineErrors(retErr, it.Close())
+	}(it)
+
+	ok, err := it.Next(ctx)
+	if err != nil {
+		return jobStatus, err
+	}
+
+	if ok {
+		// If ok == false, the query returned 0 rows.
+		row := it.Cur()
+		scanner := makeResultScanner(it.Types())
+		if err = scanner.Scan(row, "status", &jobStatus.CurrentState); err != nil {
+			return jobStatus, err
+		}
+		if err = scanner.Scan(row, "fraction_completed", &jobStatus.Progress); err != nil {
+			return jobStatus, err
+		}
+		if err = scanner.Scan(row, "modified", &jobStatus.LastUpdatedTime); err != nil {
+			return jobStatus, err
+		}
+		if err = scanner.Scan(row, "last_run", &jobStatus.LastCompletedTime); err != nil {
+			return jobStatus, err
+		}
+	}
+
+	return jobStatus, nil
+}
+
+func (a *apiV2Server) updateTableMetadataJobAuthorized(
+	ctx context.Context, sqlUser username.SQLUsername,
+) (isAuthorized bool, retErr error) {
+	query := safesql.NewQuery()
+	sqlUserStr := sqlUser.Normalized()
+	query.Append(`
+	SELECT count(*)
+	FROM (
+	  SELECT 1 FROM system.role_members WHERE member = $
+		UNION
+		SELECT 1 
+		FROM "".crdb_internal.cluster_database_privileges cdp
+		JOIN system.privileges p ON cdp.grantee = p.username
+	 	WHERE cdp.grantee = $ 
+	 	AND cdp.privilege_type = 'CONNECT'
+	 	AND 'VIEWJOB' = ANY(p.privileges) 
+	)
+`, sqlUserStr, sqlUserStr)
+
+	it, err := a.sqlServer.internalExecutor.QueryIteratorEx(
+		ctx, "check-updatejob-authorized", nil, /* txn */
+		sessiondata.InternalExecutorOverride{},
+		query.String(), query.QueryArguments()...,
+	)
+
+	if err != nil {
+		return false, err
+	}
+
+	defer func(it isql.Rows) {
+		retErr = errors.CombineErrors(retErr, it.Close())
+	}(it)
+
+	ok, err := it.Next(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	if ok {
+		// If ok == false, the query returned 0 rows.
+		row := it.Cur()
+		scanner := makeResultScanner(it.Types())
+		var count int64
+		if err = scanner.Scan(row, "count", &count); err != nil {
+			return false, err
+		}
+		return count > 0, nil
+	}
+	return false, nil
+
+}
+
 type PaginatedResponse[T any] struct {
 	Results        T              `json:"results"`
 	PaginationInfo paginationInfo `json:"paginationInfo"`
@@ -664,4 +829,11 @@ type dbMetadata struct {
 	TableCount  int64     `json:"table_count,omitempty"`
 	StoreIds    []int64   `json:"store_ids"`
 	LastUpdated time.Time `json:"last_updated"`
+}
+
+type tmUpdateJobStatusResponse struct {
+	CurrentState      string     `json:"current_state"`
+	Progress          float32    `json:"progress"`
+	LastCompletedTime *time.Time `json:"last_completed_time"`
+	LastUpdatedTime   *time.Time `json:"last_updated_time"`
 }
