@@ -14018,7 +14018,7 @@ func TestReplicaRateLimit(t *testing.T) {
 	cfg.TestingKnobs.DisableMergeWaitForReplicasInit = true
 	// Use time travel to control the rate limiter in this test. Set authorizer to
 	// engage the rate limiter, overriding the default allow-all policy in tests.
-	cfg.TestingKnobs.TenantRateKnobs.TimeSource = tc.manualClock
+	cfg.TestingKnobs.TenantRateKnobs.QuotaPoolOptions = []quotapool.Option{quotapool.WithTimeSource(tc.manualClock)}
 	cfg.TestingKnobs.TenantRateKnobs.Authorizer = tenantcapabilitiesauthorizer.New(cfg.Settings, nil)
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
