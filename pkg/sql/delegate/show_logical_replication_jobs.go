@@ -19,16 +19,32 @@ import (
 
 const (
 	baseSelectClause = `
+WITH table_names AS (
+	SELECT
+		t.job_id,
+		ARRAY_AGG(t.table_name) AS targets
+	FROM (
+		SELECT
+			id AS job_id,
+			crdb_internal.get_fully_qualified_table_name(jsonb_array_elements(crdb_internal.pb_to_json(
+			 	 			'cockroach.sql.jobs.jobspb.Payload', 
+			 	 			payload)->'logicalReplicationDetails'->'replicationPairs')['srcDescriptorId']::INT) AS table_name
+		FROM crdb_internal.system_jobs 
+		WHERE job_type = 'LOGICAL REPLICATION'
+	) AS t
+	GROUP BY t.job_id
+)
+
 SELECT
-	id AS job_id, 
-	status, 
-	jsonb_array_to_string_array(crdb_internal.pb_to_json(
-			'cockroach.sql.jobs.jobspb.Payload', 
-			payload)->'logicalReplicationDetails'->'tableNames') AS targets, 
+	job_info.id AS job_id, 
+	job_info.status, 
+	table_names.targets AS targets,
 	hlc_to_timestamp((crdb_internal.pb_to_json(
 	  	'cockroach.sql.jobs.jobspb.Progress',
-	  	progress)->'LogicalReplication'->'replicatedTime'->>'wallTime')::DECIMAL) AS replicated_time%s
-FROM crdb_internal.system_jobs 
+	  	job_info.progress)->'LogicalReplication'->'replicatedTime'->>'wallTime')::DECIMAL) AS replicated_time%s
+FROM crdb_internal.system_jobs AS job_info
+LEFT JOIN table_names
+ON job_info.id = table_names.job_id
 WHERE job_type = 'LOGICAL REPLICATION'
 `
 

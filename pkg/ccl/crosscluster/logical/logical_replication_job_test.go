@@ -1430,7 +1430,12 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 		expectedJobID := jobIDs[rowIdx]
 		require.Equal(t, expectedJobID, jobID)
 		require.Equal(t, jobs.StatusRunning, jobs.Status(status))
-		require.Equal(t, pq.StringArray{"tab"}, targets)
+
+		if expectedJobID == jobAID {
+			require.Equal(t, pq.StringArray{"b.public.tab"}, targets)
+		} else if expectedJobID == jobBID {
+			require.Equal(t, pq.StringArray{"a.public.tab"}, targets)
+		}
 
 		// `SHOW LOGICAL REPLICATION JOBS` query runs after the job query in `jobutils.GetJobProgress()`,
 		// `LogicalReplicationProgress.ReplicatedTime` could have advanced by the time we run
@@ -1523,6 +1528,8 @@ func TestUserPrivileges(t *testing.T) {
 		result := testuser.QueryStr(t, showJobStmt, jobAID)
 		require.Empty(t, result, "The user should see no rows without the VIEWJOB grant when running [SHOW JOBS]")
 
+		// For non-root users, SHOW LDR Jobs command requires SELECT privilege to system.namespace table
+		dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWSYSTEMTABLE TO %s", username.TestUser))
 		result = testuser.QueryStr(t, showLDRJobStmt, jobAID)
 		require.Empty(t, result, "The user should see no rows without the VIEWJOB grant when running [SHOW LOGICAL REPLICATION JOBS]")
 
