@@ -48,7 +48,7 @@ func (m preserveDowngradeOptionRandomizerMutator) Name() string {
 // plan's approach of resetting the cluster setting when all nodes are
 // upgraded is the most sensible / common.
 func (m preserveDowngradeOptionRandomizerMutator) Probability() float64 {
-	return 0.3
+	return 1
 }
 
 // Generate returns mutations to remove the existing step to reset the
