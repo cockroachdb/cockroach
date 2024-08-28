@@ -193,6 +193,15 @@ func (c *conn) handleAuthentication(
 		return connClose, c.sendError(ctx, err)
 	}
 
+	// Since authentication was successful for the user session, we try to perform
+	// additional authorization for the user. This delegates to the selected
+	// AuthMethod implementation to complete the authorization.
+	if err := behaviors.MaybeAuthorize(ctx, systemIdentity, true /* public */); err != nil {
+		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_UNKNOWN, err)
+		err = pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification)
+		return connClose, c.sendError(ctx, err)
+	}
+
 	// Add all the defaults to this session's defaults. If there is an
 	// error (e.g., a setting that no longer exists, or bad input),
 	// log a warning instead of preventing login.
