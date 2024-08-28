@@ -1121,7 +1121,7 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            3 * time.Hour,
 			additionalDuration: 60 * time.Minute,
 			cutover:            30 * time.Minute,
-			clouds:             registry.AllExceptAzure,
+			clouds:             registry.AllClouds,
 			suites:             registry.Suites(registry.Nightly),
 		},
 		{
