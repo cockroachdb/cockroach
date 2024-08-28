@@ -33,6 +33,15 @@ BEGIN
   RETURN 'accept_proposed';
 END;
 $$ LANGUAGE plpgsql`
+
+	testingUDFAcceptProposedBaseWithSchema = `
+CREATE OR REPLACE FUNCTION %[1]s.repl_apply(action STRING, data %[2]s, existing %[2]s, prev %[2]s, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
+RETURNS string
+AS $$
+BEGIN
+  RETURN 'accept_proposed';
+END;
+$$ LANGUAGE plpgsql`
 )
 
 func TestUDFWithRandomTables(t *testing.T) {
