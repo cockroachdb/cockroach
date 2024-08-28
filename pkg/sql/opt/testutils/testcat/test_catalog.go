@@ -1528,12 +1528,13 @@ func (fk *ForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction {
 // UniqueConstraint implements cat.UniqueConstraint. See that interface
 // for more information on the fields.
 type UniqueConstraint struct {
-	name           string
-	tabID          cat.StableID
-	columnOrdinals []int
-	predicate      string
-	withoutIndex   bool
-	validated      bool
+	name             string
+	tabID            cat.StableID
+	columnOrdinals   []int
+	predicate        string
+	withoutIndex     bool
+	canUseTombstones bool
+	validated        bool
 }
 
 var _ cat.UniqueConstraint = &UniqueConstraint{}
@@ -1573,6 +1574,8 @@ func (u *UniqueConstraint) Predicate() (string, bool) {
 func (u *UniqueConstraint) WithoutIndex() bool {
 	return u.withoutIndex
 }
+
+func (u *UniqueConstraint) CanUseTombstones() bool { return u.canUseTombstones }
 
 // Validated is part of the cat.UniqueConstraint interface.
 func (u *UniqueConstraint) Validated() bool {

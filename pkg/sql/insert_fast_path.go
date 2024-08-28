@@ -193,15 +193,11 @@ func (r *insertFastPathRun) addUniqChecks(
 				combinedRow = make(tree.Datums, len(templateRow))
 			}
 			copy(combinedRow, templateRow)
-			isInputRow := true
 			for j := 0; j < len(c.InsertCols); j++ {
 				// Datums from single-table constraints are already present in
 				// DatumsFromConstraint. Fill in other values from the input row.
 				if combinedRow[c.InsertCols[j]] == nil {
 					combinedRow[c.InsertCols[j]] = inputRow[c.InsertCols[j]]
-				}
-				if combinedRow[c.InsertCols[j]] != inputRow[c.InsertCols[j]] {
-					isInputRow = false
 				}
 			}
 			if !forTesting {
@@ -210,29 +206,14 @@ func (r *insertFastPathRun) addUniqChecks(
 					return nil, err
 				}
 				reqIdx := len(r.uniqBatch.Requests)
-				// Since predicate locks are not yet supported by the KV layer, we
-				// emulate them by writing a tombstone to the other partitions instead
-				// of scanning and locking. These tombstones are added to the insert
-				// batch instead of the uniqueness check batch because they do not
-				// require any post-processing (the KV generated conflict message is
-				// what we want).
-				if c.Locking.Form == tree.LockPredicate {
-					if !isInputRow {
-						if r.traceKV {
-							log.VEventf(ctx, 2, "CPut %s (LockPredicate)", span)
-						}
-						r.ti.putter.CPut(span.Key, nil, nil)
-					}
-				} else {
-					if r.traceKV {
-						log.VEventf(ctx, 2, "UniqScan %s", span)
-					}
-					r.uniqBatch.Requests = append(r.uniqBatch.Requests, kvpb.RequestUnion{})
-					// TODO(msirek): Batch-allocate the kvpb.ScanRequests outside the loop.
-					r.uniqBatch.Requests[reqIdx].MustSetInner(&kvpb.ScanRequest{
-						RequestHeader: kvpb.RequestHeaderFromSpan(span),
-					})
+				if r.traceKV {
+					log.VEventf(ctx, 2, "UniqScan %s", span)
 				}
+				r.uniqBatch.Requests = append(r.uniqBatch.Requests, kvpb.RequestUnion{})
+				// TODO(msirek): Batch-allocate the kvpb.ScanRequests outside the loop.
+				r.uniqBatch.Requests[reqIdx].MustSetInner(&kvpb.ScanRequest{
+					RequestHeader: kvpb.RequestHeaderFromSpan(span),
+				})
 				r.uniqSpanInfo = append(r.uniqSpanInfo, insertFastPathFKUniqSpanInfo{
 					check:  c,
 					rowIdx: rowIdx,
