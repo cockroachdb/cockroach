@@ -252,6 +252,9 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 	// handling to use a fast-path in r.raftLog.term() before the newly appended
 	// entries are removed from the unstable log.
 	m.Responses = r.msgsAfterAppend
+	// Warning: there is code outside raft package depending on the order of
+	// Responses, particularly MsgStorageAppendResp being last in this list.
+	// Change this with caution.
 	if needStorageAppendRespMsg(rd) {
 		m.Responses = append(m.Responses, newStorageAppendRespMsg(r, rd))
 	}
