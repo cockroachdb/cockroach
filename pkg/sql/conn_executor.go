@@ -3529,9 +3529,7 @@ var allowReadCommittedIsolation = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
-// TODO(nvanbenschoten): rename this variable and update uses of it to favor
-// "repeatable read" over "snapshot".
-var allowSnapshotIsolation = settings.RegisterBoolSetting(
+var allowRepeatableReadIsolation = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.txn.snapshot_isolation.enabled",
 	"set to true to allow transactions to use the REPEATABLE READ isolation "+
@@ -3566,56 +3564,17 @@ func (ex *connExecutor) txnIsolationLevelToKV(
 	if level == tree.UnspecifiedIsolation {
 		level = tree.IsolationLevel(ex.sessionData().DefaultTxnIsolationLevel)
 	}
-	upgraded := false
-	upgradedDueToLicense := false
+	originalLevel := level
+	allowReadCommitted := allowReadCommittedIsolation.Get(&ex.server.cfg.Settings.SV)
+	allowRepeatableRead := allowRepeatableReadIsolation.Get(&ex.server.cfg.Settings.SV)
 	hasLicense := base.CCLDistributionAndEnterpriseEnabled(ex.server.cfg.Settings)
-	ret := isolation.Serializable
-	switch level {
-	case tree.ReadUncommittedIsolation:
-		// READ UNCOMMITTED is mapped to READ COMMITTED. PostgreSQL also does
-		// this: https://www.postgresql.org/docs/current/transaction-iso.html.
-		upgraded = true
-		fallthrough
-	case tree.ReadCommittedIsolation:
-		// READ COMMITTED is only allowed if the cluster setting is enabled and
-		// the cluster has a license. Otherwise it is mapped to SERIALIZABLE.
-		allowReadCommitted := allowReadCommittedIsolation.Get(&ex.server.cfg.Settings.SV)
-		if allowReadCommitted && hasLicense {
-			ret = isolation.ReadCommitted
-		} else {
-			upgraded = true
-			ret = isolation.Serializable
-			if allowReadCommitted && !hasLicense {
-				upgradedDueToLicense = true
-			}
-		}
-	case tree.RepeatableReadIsolation:
-		// REPEATABLE READ is mapped to SNAPSHOT.
-		upgraded = true
-		fallthrough
-	case tree.SnapshotIsolation:
-		// SNAPSHOT is only allowed if the cluster setting is enabled and the
-		// cluster has a license. Otherwise it is mapped to SERIALIZABLE.
-		allowSnapshot := allowSnapshotIsolation.Get(&ex.server.cfg.Settings.SV)
-		if allowSnapshot && hasLicense {
-			ret = isolation.Snapshot
-		} else {
-			upgraded = true
-			ret = isolation.Serializable
-			if allowSnapshot && !hasLicense {
-				upgradedDueToLicense = true
-			}
-		}
-	case tree.SerializableIsolation:
-		ret = isolation.Serializable
-	default:
-		log.Fatalf(context.Background(), "unknown isolation level: %s", level)
-	}
-
+	level, upgraded, upgradedDueToLicense := level.UpgradeToEnabledLevel(
+		allowReadCommitted, allowRepeatableRead, hasLicense)
 	if f := ex.dataMutatorIterator.upgradedIsolationLevel; upgraded && f != nil {
-		f(ctx, level, upgradedDueToLicense)
+		f(ctx, originalLevel, upgradedDueToLicense)
 	}
 
+	ret := level.ToKVIsoLevel()
 	if ret != isolation.Serializable {
 		telemetry.Inc(sqltelemetry.IsolationLevelCounter(ctx, ret))
 	}
@@ -4257,7 +4216,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			Priority:            ex.state.mu.priority.String(),
 			QualityOfService:    sessiondatapb.ToQoSLevelString(txn.AdmissionHeader().Priority),
 			LastAutoRetryReason: autoRetryReasonStr,
-			IsolationLevel:      tree.IsolationLevelFromKVTxnIsolationLevel(ex.state.mu.isolationLevel).String(),
+			IsolationLevel:      tree.FromKVIsoLevel(ex.state.mu.isolationLevel).String(),
 		}
 	}
 

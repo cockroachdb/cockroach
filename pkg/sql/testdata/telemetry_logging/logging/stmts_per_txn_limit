@@ -228,4 +228,3 @@ BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
 	"TransactionFingerprintID": "2831371359051261045",
 	"User": "root"
 }
-
