@@ -62,29 +62,58 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 ) []mutation {
 	var mutations []mutation
 	for _, upgradeSelector := range randomUpgrades(rng, plan) {
-		removeExistingStep := upgradeSelector.
+		tenantSupportsAutoUpgrade := upgradeSelector.upgrade.to.AtLeast(tenantSupportsAutoUpgradeVersion)
+		changeTenant := plan.deploymentMode == SharedProcessDeployment &&
+			tenantSupportsAutoUpgrade &&
+			rng.Float64() < 0.5
+
+		serviceContext := func(c Context) *ServiceContext {
+			if changeTenant {
+				return c.Tenant
+			}
+
+			return c.System
+		}
+
+		var serviceName string
+		removeExistingStep := upgradeSelector.selector.
 			Filter(func(s *singleStep) bool {
 				step, ok := s.impl.(allowUpgradeStep)
-				return ok && step.virtualClusterName == install.SystemInterfaceName
+				isSystem := step.virtualClusterName == install.SystemInterfaceName
+
+				var matched bool
+				if changeTenant {
+					matched = ok && !isSystem
+				} else {
+					matched = ok && isSystem
+				}
+
+				if matched {
+					serviceName = step.virtualClusterName
+				}
+
+				return matched
 			}).
 			Remove()
 
-		addRandomly := upgradeSelector.
+		addRandomly := upgradeSelector.selector.
 			Filter(func(s *singleStep) bool {
+				service := serviceContext(s.context)
+
 				// It is valid to reset the cluster setting when we are
 				// performing a rollback (as we know the next upgrade will be
 				// the final one); or during the final upgrade itself.
-				return (s.context.System.Stage == LastUpgradeStage || s.context.System.Stage == RollbackUpgradeStage) &&
+				return (service.Stage == LastUpgradeStage || service.Stage == RollbackUpgradeStage) &&
 					// We also don't want all nodes to be running the latest
 					// binary, as that would be equivalent to the test plan
 					// without this mutator.
-					len(s.context.System.NodesInNextVersion()) < len(s.context.System.Descriptor.Nodes)
+					len(service.NodesInNextVersion()) < len(service.Descriptor.Nodes)
 			}).
 			RandomStep(rng).
 			// Note that we don't attempt a concurrent insert because the
 			// selected step could be one that restarts a cockroach node,
 			// and `allowUpgradeStep` could fail in that situation.
-			InsertBefore(allowUpgradeStep{virtualClusterName: install.SystemInterfaceName})
+			InsertBefore(allowUpgradeStep{virtualClusterName: serviceName})
 
 		// Finally, we update the context associated with every step where
 		// all nodes are running the next version to indicate they are in
@@ -92,12 +121,13 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 		// after `allowUpgradeStep` but, when this mutator is enabled,
 		// `Finalizing` should be `true` as soon as all nodes are on the
 		// next version.
-		for _, step := range upgradeSelector.
+		for _, step := range upgradeSelector.selector.
 			Filter(func(s *singleStep) bool {
-				return s.context.System.Stage == LastUpgradeStage &&
-					len(s.context.System.NodesInNextVersion()) == len(s.context.System.Descriptor.Nodes)
+				service := serviceContext(s.context)
+				return service.Stage == LastUpgradeStage &&
+					len(service.NodesInNextVersion()) == len(service.Descriptor.Nodes)
 			}) {
-			step.context.System.Finalizing = true
+			serviceContext(step.context).Finalizing = true
 		}
 
 		mutations = append(mutations, removeExistingStep...)
@@ -107,10 +137,17 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 	return mutations
 }
 
+// upgradeSelector groups together an upgrade performed during the
+// test with the corresponding step selector for that upgrade.
+type upgradeSelector struct {
+	upgrade  *upgradePlan
+	selector stepSelector
+}
+
 // randomUpgrades returns selectors for the steps of a random subset
 // of upgrades in the plan. The last upgrade is always returned, as
 // that is the most critical upgrade being tested.
-func randomUpgrades(rng *rand.Rand, plan *TestPlan) []stepSelector {
+func randomUpgrades(rng *rand.Rand, plan *TestPlan) []upgradeSelector {
 	allUpgrades := plan.allUpgrades()
 	numChanges := rng.Intn(len(allUpgrades)) // other than last upgrade
 	allExceptLastUpgrade := append([]*upgradePlan{}, allUpgrades[:len(allUpgrades)-1]...)
@@ -119,18 +156,19 @@ func randomUpgrades(rng *rand.Rand, plan *TestPlan) []stepSelector {
 		allExceptLastUpgrade[i], allExceptLastUpgrade[j] = allExceptLastUpgrade[j], allExceptLastUpgrade[i]
 	})
 
-	byUpgrade := func(upgrade *upgradePlan) func(*singleStep) bool {
-		return func(s *singleStep) bool {
-			return s.context.System.FromVersion.Equal(upgrade.from)
+	newUpgradeSelector := func(upgrade *upgradePlan) upgradeSelector {
+		return upgradeSelector{
+			upgrade: upgrade,
+			selector: plan.newStepSelector().Filter(func(s *singleStep) bool {
+				return s.context.System.FromVersion.Equal(upgrade.from)
+			}),
 		}
 	}
 
 	// By default, include the last upgrade.
-	selectors := []stepSelector{
-		plan.newStepSelector().Filter(byUpgrade(allUpgrades[len(allUpgrades)-1])),
-	}
+	selectors := []upgradeSelector{newUpgradeSelector(allUpgrades[len(allUpgrades)-1])}
 	for _, upgrade := range allExceptLastUpgrade[:numChanges] {
-		selectors = append(selectors, plan.newStepSelector().Filter(byUpgrade(upgrade)))
+		selectors = append(selectors, newUpgradeSelector(upgrade))
 	}
 
 	return selectors
