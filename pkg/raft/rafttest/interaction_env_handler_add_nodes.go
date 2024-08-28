@@ -23,8 +23,11 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/datadriven"
 )
 
@@ -64,6 +67,17 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 				arg.Scan(t, i, &cfg.DisableConfChangeValidation)
 			case "step-down-on-removal":
 				arg.Scan(t, i, &cfg.StepDownOnRemoval)
+			case "crdb-version":
+				var key string
+				arg.Scan(t, i, &key)
+				version, err := roachpb.ParseVersion(key)
+				if err != nil {
+					return err
+				}
+				settings := cluster.MakeTestingClusterSettingsWithVersions(version,
+					clusterversion.RemoveDevOffset(clusterversion.MinSupported.Version()),
+					true /* initializeVersion */)
+				cfg.CRDBVersion = settings.Version
 			}
 		}
 	}
@@ -129,6 +143,12 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 
 		env.Fabric.addNode()
 		cfg.StoreLiveness = newStoreLiveness(env.Fabric, id)
+
+		// If the node creating command hasn't specified the CRDBVersion, use the
+		// latest one.
+		if cfg.CRDBVersion == nil {
+			cfg.CRDBVersion = cluster.MakeTestingClusterSettings().Version
+		}
 
 		if env.Options.OnConfig != nil {
 			env.Options.OnConfig(&cfg)
