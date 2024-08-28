@@ -367,6 +367,7 @@ func NewDatumRowConverter(
 		nil, /* txn */
 		evalCtx.Codec,
 		tableDesc,
+		nil, /* uniqueWithTombstoneIndexes */
 		cols,
 		&tree.DatumAlloc{},
 		&evalCtx.Settings.SV,

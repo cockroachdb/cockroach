@@ -1,0 +1,142 @@
+# LogicTest: local
+
+statement ok
+CREATE TYPE part_type AS ENUM ('one', 'two', 'three', 'four', 'five');
+
+statement ok
+SET experimental_enable_implicit_column_partitioning = true
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+CREATE TABLE t (
+  pk INT PRIMARY KEY,
+  a part_type,
+  b INT,
+  c INT,
+  d INT,
+  j JSON,
+  UNIQUE INDEX (c),
+  FAMILY (pk, a, b, c, d, j)
+) PARTITION ALL BY LIST(a) ( 
+  PARTITION one VALUES IN ('one'),
+  PARTITION two VALUES IN ('two'),
+  PARTITION three VALUES IN ('three'),
+  PARTITION four VALUES IN ('four'),
+  PARTITION five VALUES IN ('five')
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  a public.part_type NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NULL,
+  j JSONB NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (pk ASC),
+  UNIQUE INDEX t_c_key (c ASC),
+  FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
+) PARTITION ALL BY LIST (a) (
+  PARTITION one VALUES IN (('one')),
+  PARTITION two VALUES IN (('two')),
+  PARTITION three VALUES IN (('three')),
+  PARTITION four VALUES IN (('four')),
+  PARTITION five VALUES IN (('five'))
+)
+-- Warning: Partitioned table with no zone configurations.
+
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  a public.part_type NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NULL,
+  j JSONB NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (pk ASC),
+  UNIQUE INDEX t_c_key (c ASC),
+  FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
+) PARTITION ALL BY LIST (a) (
+  PARTITION one VALUES IN (('one')),
+  PARTITION two VALUES IN (('two')),
+  PARTITION three VALUES IN (('three')),
+  PARTITION four VALUES IN (('four')),
+  PARTITION five VALUES IN (('five'))
+)
+-- Warning: Partitioned table with no zone configurations.
+
+
+query T
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── pk int not null
+ ├── a part_type not null
+ ├── b int
+ ├── c int
+ ├── d int
+ ├── j jsonb
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
+ ├── CHECK (a IN (x'20':::@100106, x'40':::@100106, x'80':::@100106, x'a0':::@100106, x'c0':::@100106))
+ ├── PRIMARY INDEX t_pkey
+ │    ├── a part_type not null (implicit)
+ │    ├── pk int not null
+ │    └── partitions
+ │         ├── one
+ │         │    └── partition by list prefixes
+ │         │         └── ('one')
+ │         ├── two
+ │         │    └── partition by list prefixes
+ │         │         └── ('two')
+ │         ├── three
+ │         │    └── partition by list prefixes
+ │         │         └── ('three')
+ │         ├── four
+ │         │    └── partition by list prefixes
+ │         │         └── ('four')
+ │         └── five
+ │              └── partition by list prefixes
+ │                   └── ('five')
+ ├── UNIQUE INDEX t_c_key
+ │    ├── a part_type not null (implicit)
+ │    ├── c int
+ │    ├── pk int not null (storing)
+ │    └── partitions
+ │         ├── one
+ │         │    └── partition by list prefixes
+ │         │         └── ('one')
+ │         ├── two
+ │         │    └── partition by list prefixes
+ │         │         └── ('two')
+ │         ├── three
+ │         │    └── partition by list prefixes
+ │         │         └── ('three')
+ │         ├── four
+ │         │    └── partition by list prefixes
+ │         │         └── ('four')
+ │         └── five
+ │              └── partition by list prefixes
+ │                   └── ('five')
+ ├── UNIQUE WITHOUT INDEX (pk)
+ └── UNIQUE WITHOUT INDEX (c)
+scan t
+ └── check constraint expressions
+      └── a IN ('one', 'two', 'three', 'four', 'five')
+
+statement ok
+INSERT INTO t VALUES (1, 'two', 3, 4, 5)
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "t_pkey"
+INSERT INTO t VALUES (1, 'one', 3, 6, 5)
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "t_c_key"
+INSERT INTO t VALUES (2, 'three', 3, 4, 5)
