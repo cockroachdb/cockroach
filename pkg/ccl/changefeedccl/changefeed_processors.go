@@ -1720,10 +1720,10 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress,
 ) error {
 	ptsUpdateInterval := changefeedbase.ProtectTimestampInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
+	ptsUpdateLag := changefeedbase.ProtectTimestampLag.Get(&cf.FlowCtx.Cfg.Settings.SV)
 	if timeutil.Since(cf.lastProtectedTimestampUpdate) < ptsUpdateInterval {
 		return nil
 	}
-	cf.lastProtectedTimestampUpdate = timeutil.Now()
 
 	pts := cf.flowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
 
@@ -1738,10 +1738,9 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 			ctx, cf.flowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater,
 		)
 		progress.ProtectedTimestampRecord = ptr.ID.GetUUID()
+		cf.lastProtectedTimestampUpdate = timeutil.Now()
 		return pts.Protect(ctx, ptr)
 	}
-
-	log.VEventf(ctx, 2, "updating protected timestamp %v at %v", progress.ProtectedTimestampRecord, highWater)
 
 	rec, err := pts.GetRecord(ctx, progress.ProtectedTimestampRecord)
 	if err != nil {
@@ -1749,6 +1748,16 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	}
 
 	if rec.Target != nil {
+		// Only update the PTS timestamp if it is lagging behind the high
+		// watermark. This is to prevent a rush of updates to the PTS if the
+		// changefeed restarts, which can cause contention and second order effects
+		// on system tables.
+		if !rec.Timestamp.AddDuration(ptsUpdateLag).Less(highWater) {
+			return nil
+		}
+
+		log.VEventf(ctx, 2, "updating protected timestamp %v at %v", progress.ProtectedTimestampRecord, highWater)
+		cf.lastProtectedTimestampUpdate = timeutil.Now()
 		return pts.UpdateTimestamp(ctx, progress.ProtectedTimestampRecord, highWater)
 	}
 
@@ -1772,6 +1781,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 			progress.ProtectedTimestampRecord, prevRecordId, highWater)
 	}
 
+	cf.lastProtectedTimestampUpdate = timeutil.Now()
 	return nil
 }
 

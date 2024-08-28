@@ -9404,3 +9404,74 @@ func TestChangefeedAvroDecimalColumnWithDiff(t *testing.T) {
 
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
+
+func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		// Checkpoint and trigger potential protected timestamp updates frequently.
+		// Make the protected timestamp lag long enough that it shouldn't be
+		// immediately updated after a restart.
+		changefeedbase.FrontierCheckpointFrequency.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.ProtectTimestampInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.ProtectTimestampLag.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Hour)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT)`)
+
+		createStmt := `CREATE CHANGEFEED FOR foo WITH resolved='10ms', no_initial_scan`
+		testFeed := feed(t, f, createStmt)
+		defer closeFeed(t, testFeed)
+
+		eFeed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		// Wait for the changefeed to checkpoint.
+		var lastHWM hlc.Timestamp
+		checkHWM := func() error {
+			hwm, err := eFeed.HighWaterMark()
+			if err == nil && !hwm.IsEmpty() && lastHWM.Less(hwm) {
+				lastHWM = hwm
+				return nil
+			}
+			return errors.New("waiting for high watermark to advance")
+		}
+		testutils.SucceedsSoon(t, checkHWM)
+
+		// Get the PTS of this feed.
+		p, err := eFeed.Progress()
+		require.NoError(t, err)
+
+		ptsQry := fmt.Sprintf(`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`, p.ProtectedTimestampRecord)
+		var ts, ts2 string
+		sqlDB.QueryRow(t, ptsQry).Scan(&ts)
+		require.NoError(t, err)
+
+		// Force the changefeed to restart.
+		require.NoError(t, eFeed.Pause())
+		require.NoError(t, eFeed.Resume())
+
+		// Wait for a new checkpoint.
+		testutils.SucceedsSoon(t, checkHWM)
+
+		// Check that the PTS was not updated after the resume.
+		sqlDB.QueryRow(t, ptsQry).Scan(&ts2)
+		require.NoError(t, err)
+		require.Equal(t, ts, ts2)
+
+		// Lower the PTS lag and check that it has been updated.
+		changefeedbase.ProtectTimestampLag.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+
+		testutils.SucceedsSoon(t, checkHWM)
+
+		sqlDB.QueryRow(t, ptsQry).Scan(&ts2)
+		require.NoError(t, err)
+		require.Less(t, ts, ts2)
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
