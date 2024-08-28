@@ -84,7 +84,7 @@ func FromKVIsoLevel(level isolation.Level) IsolationLevel {
 	case isolation.ReadCommitted:
 		return ReadCommittedIsolation
 	case isolation.Snapshot:
-		return SnapshotIsolation
+		return RepeatableReadIsolation
 	case isolation.Serializable:
 		return SerializableIsolation
 	default:
@@ -120,7 +120,7 @@ func (i IsolationLevel) UpgradeToEnabledLevel(
 		// are only allowed if the cluster setting is enabled and the cluster has a
 		// license. Otherwise, they are mapped to SERIALIZABLE.
 		if allowRepeatableRead && hasLicense {
-			return SnapshotIsolation, upgraded, upgradedDueToLicense
+			return RepeatableReadIsolation, upgraded, upgradedDueToLicense
 		}
 		upgraded = true
 		if allowRepeatableRead && !hasLicense {
