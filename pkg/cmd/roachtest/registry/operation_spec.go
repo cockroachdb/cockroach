@@ -30,6 +30,7 @@ const (
 	OperationRequiresPopulatedDatabase
 	OperationRequiresZeroUnavailableRanges
 	OperationRequiresZeroUnderreplicatedRanges
+	OperationRequiresLDRJobRunning
 )
 
 // OperationCleanup specifies an operation that
