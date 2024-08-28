@@ -144,9 +144,9 @@ type AdmittedPiggybacker interface {
 // EntryForAdmission is the information provided to the admission control (AC)
 // system, when requesting admission.
 type EntryForAdmission struct {
-	// Information needed by the AC system, for deciding when to admit, and
-	// for maintaining its accounting of how much work has been
-	// requested/admitted.
+	// Information needed by the AC system, for deciding when to admit, and for
+	// maintaining its accounting of how much work has been requested/admitted.
+	StoreID    roachpb.StoreID
 	TenantID   roachpb.TenantID
 	Priority   admissionpb.WorkPriority
 	CreateTime int64
@@ -157,6 +157,10 @@ type EntryForAdmission struct {
 	// ingested into Pebble.
 	Ingested bool
 
+	// Routing info to get to the Processor, in addition to StoreID.
+	RangeID   roachpb.RangeID
+	ReplicaID roachpb.ReplicaID
+
 	// CallbackState is information that is needed by the callback when the
 	// entry is admitted.
 	CallbackState EntryForAdmissionCallbackState
@@ -165,12 +169,7 @@ type EntryForAdmission struct {
 // EntryForAdmissionCallbackState is passed to the callback when the entry is
 // admitted.
 type EntryForAdmissionCallbackState struct {
-	// Routing state to get to the Processor.
-	StoreID roachpb.StoreID
-	RangeID roachpb.RangeID
-
-	// State needed by the Processor.
-	ReplicaID  roachpb.ReplicaID
+	// TODO(pav-kv): use LogMark.
 	LeaderTerm uint64
 	Index      uint64
 	Priority   raftpb.Priority
@@ -813,15 +812,15 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 		// NB: cannot hold mu when calling Admit since the callback may
 		// execute from inside Admit, when the entry is immediately admitted.
 		submitted := p.opts.ACWorkQueue.Admit(ctx, EntryForAdmission{
+			StoreID:        p.opts.StoreID,
 			TenantID:       p.raftMu.tenantID,
 			Priority:       admissionPri,
 			CreateTime:     meta.AdmissionCreateTime,
 			RequestedCount: int64(len(entry.Data)),
 			Ingested:       typ.IsSideloaded(),
+			RangeID:        p.opts.RangeID,
+			ReplicaID:      p.opts.ReplicaID,
 			CallbackState: EntryForAdmissionCallbackState{
-				StoreID:    p.opts.StoreID,
-				RangeID:    p.opts.RangeID,
-				ReplicaID:  p.opts.ReplicaID,
 				LeaderTerm: e.Term,
 				Index:      entry.Index,
 				Priority:   raftPri,
@@ -908,7 +907,7 @@ func (p *processorImpl) AdmittedLogEntry(
 ) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.mu.destroyed || state.ReplicaID != p.opts.ReplicaID {
+	if p.mu.destroyed {
 		return
 	}
 	admittedMayAdvance :=
