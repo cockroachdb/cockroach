@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/maps"
 )
 
 // ClusterStat represents a filtered query by the given LabelName. For example,
@@ -128,7 +129,7 @@ func (r *ClusterStatRun) serializeOpenmetricsOutRun(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) error {
 
-	labelString := GetDefaultOpenmetricsLabelString(t, c)
+	labelString := GetDefaultOpenmetricsLabelString(t, c, nil)
 	report, err := serializeOpenmetricsReport(*r, &labelString)
 	if err != nil {
 		return errors.Wrap(err, "failed to serialize perf artifacts")
@@ -397,15 +398,23 @@ func (cs *clusterStatCollector) getStatSummary(
 	return ret, nil
 }
 
-func GetDefaultOpenmetricsLabelString(t test.Test, c cluster.Cluster) string {
-	return util.LabelMapToString(GetDefaultOpenmetricsLabelMap(t, c))
+func GetDefaultOpenmetricsLabelString(
+	t test.Test, c cluster.Cluster, labels map[string]string,
+) string {
+	return util.LabelMapToString(GetDefaultOpenmetricsLabelMap(t, c, labels))
 }
 
-func GetDefaultOpenmetricsLabelMap(t test.Test, c cluster.Cluster) map[string]string {
-	return map[string]string{
+func GetDefaultOpenmetricsLabelMap(
+	t test.Test, c cluster.Cluster, labels map[string]string,
+) map[string]string {
+	defaultMap := map[string]string{
 		"test":  t.Name(),
 		"cloud": c.Cloud().String(),
 		"owner": string(t.Spec().(*registry.TestSpec).Owner),
 		"suite": t.Spec().(*registry.TestSpec).Suites.String(),
 	}
+	if labels != nil {
+		maps.Copy(defaultMap, labels)
+	}
+	return defaultMap
 }

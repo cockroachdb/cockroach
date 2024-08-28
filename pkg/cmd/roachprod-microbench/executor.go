@@ -109,7 +109,7 @@ func newExecutor(config executorConfig) (*executor, error) {
 
 	roachprodConfig.Quiet = config.quiet
 	timestamp := timeutil.Now()
-	l := util.InitLogger(filepath.Join(config.outputDir, fmt.Sprintf("roachprod-microbench-%s.log", timestamp.Format(util.TimeFormat))))
+	l := InitLogger(filepath.Join(config.outputDir, fmt.Sprintf("roachprod-microbench-%s.log", timestamp.Format(util.TimeFormat))))
 
 	excludeBenchmarks := util.GetRegexExclusionPairs(config.excludeList)
 	return &executor{
@@ -275,7 +275,7 @@ func (e *executor) executeBenchmarks() error {
 	}
 
 	// Init `roachprod` and get the number of nodes in the cluster.
-	util.InitRoachprod()
+	InitRoachprod()
 	statuses, err := roachprod.Status(context.Background(), e.log, e.cluster, "")
 	if err != nil {
 		return err

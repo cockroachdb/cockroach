@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -70,10 +71,15 @@ func runConnectionLatencyTest(
 
 		t.L().Printf("running workload in %q against urls:\n%s", locality, strings.Join(urls, "\n"))
 
+		labels := map[string]string{
+			"duration": "30000",
+			"locality": locality,
+		}
+
 		workloadCmd := fmt.Sprintf(
-			`./workload run connectionlatency %s --secure --duration 30s --histograms=%s/stats.json --locality %s`,
+			`./workload run connectionlatency %s --secure --duration 30s %s --locality %s`,
 			urlString,
-			t.PerfArtifactsDir(),
+			roachtestutil.GetWorkloadHistogramArgsString(t, c, labels),
 			locality,
 		)
 		err = c.RunE(ctx, option.WithNodes(loadNode), workloadCmd)
