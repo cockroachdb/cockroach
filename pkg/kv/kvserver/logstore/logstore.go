@@ -73,6 +73,17 @@ func MakeMsgStorageAppend(m raftpb.Message) MsgStorageAppend {
 	return MsgStorageAppend(m)
 }
 
+// HardState returns the hard state assembled from the message.
+func (m *MsgStorageAppend) HardState() raftpb.HardState {
+	return raftpb.HardState{
+		Term:      m.Term,
+		Vote:      m.Vote,
+		Commit:    m.Commit,
+		Lead:      m.Lead,
+		LeadEpoch: m.LeadEpoch,
+	}
+}
+
 // MustSync returns true if this storage write must be synced.
 func (m *MsgStorageAppend) MustSync() bool {
 	return len(m.Responses) != 0
@@ -235,14 +246,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		stats.End = timeutil.Now()
 	}
 
-	hs := raftpb.HardState{
-		Term:      m.Term,
-		Vote:      m.Vote,
-		Commit:    m.Commit,
-		Lead:      m.Lead,
-		LeadEpoch: m.LeadEpoch,
-	}
-	if !raft.IsEmptyHardState(hs) {
+	if hs := m.HardState(); !raft.IsEmptyHardState(hs) {
 		// NB: Note that without additional safeguards, it's incorrect to write
 		// the HardState before appending m.Entries. When catching up, a follower
 		// will receive Entries that are immediately Committed in the same
