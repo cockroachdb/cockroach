@@ -975,13 +975,27 @@ func newOptTable(
 
 		if idx.IsUnique() {
 			if idx.ImplicitPartitioningColumnCount() > 0 {
-				// Add unique constraints for implicitly partitioned unique indexes.
+				// If the index is sharded, we can still enforce uniqueness constraints
+				// with tombstones so long as there is only one non-shard column.
+				shardColumns := 0
+				if idx.IsSharded() {
+					shardColumns = 1
+				}
+				// Add unique constraints for implicitly partitioned unique indexes. If
+				// there is a single implicit column of ENUM type (e.g. an implicit RBR
+				// column), then we can ensure uniqueness under non-Serializable
+				// isolation levels by writing tombstones. We assume that the partition
+				// column is the first column of the index.
+				partitionColumn := catalog.FindColumnByID(desc, idx.GetKeyColumnID(0 /* columnOrdinal */))
+				canUseTombstones := idx.ImplicitPartitioningColumnCount() == shardColumns+1 &&
+					partitionColumn.GetType().Family() == types.EnumFamily
 				ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
-					name:         idx.GetName(),
-					table:        ot.ID(),
-					columns:      idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
-					withoutIndex: true,
-					predicate:    idx.GetPredicate(),
+					name:             idx.GetName(),
+					table:            ot.ID(),
+					columns:          idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
+					withoutIndex:     true,
+					canUseTombstones: canUseTombstones,
+					predicate:        idx.GetPredicate(),
 					// TODO(rytaft): will we ever support an unvalidated unique constraint
 					// here?
 					validity: descpb.ConstraintValidity_Validated,
@@ -1955,8 +1969,9 @@ type optUniqueConstraint struct {
 	columns   []descpb.ColumnID
 	predicate string
 
-	withoutIndex bool
-	validity     descpb.ConstraintValidity
+	withoutIndex     bool
+	canUseTombstones bool
+	validity         descpb.ConstraintValidity
 
 	uniquenessGuaranteedByAnotherIndex bool
 }
@@ -1999,6 +2014,10 @@ func (u *optUniqueConstraint) Predicate() (string, bool) {
 // WithoutIndex is part of the cat.UniqueConstraint interface.
 func (u *optUniqueConstraint) WithoutIndex() bool {
 	return u.withoutIndex
+}
+
+func (u *optUniqueConstraint) CanUseTombstones() bool {
+	return u.canUseTombstones
 }
 
 // Validated is part of the cat.UniqueConstraint interface.

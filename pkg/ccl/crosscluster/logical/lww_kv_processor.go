@@ -297,7 +297,7 @@ func newKVTableWriter(
 
 	// TODO(dt): pass these some sort fo flag to have them use versions of CPut
 	// or a new LWW KV API. For now they're not detecting/handling conflicts.
-	ri, err := row.MakeInserter(ctx, nil, evalCtx.Codec, tableDesc, writeCols, a, &evalCtx.Settings.SV, internal, nil)
+	ri, err := row.MakeInserter(ctx, nil, evalCtx.Codec, tableDesc, nil /* uniqueWithTombstoneIndexes */, writeCols, a, &evalCtx.Settings.SV, internal, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -182,7 +182,7 @@ func MakeUpdater(
 		var err error
 		ru.rd = MakeDeleter(codec, tableDesc, requestedCols, sv, internal, metrics)
 		if ru.ri, err = MakeInserter(
-			ctx, txn, codec, tableDesc, requestedCols, alloc, sv, internal, metrics,
+			ctx, txn, codec, tableDesc, nil /* uniqueWithTombstoneIndexes */, requestedCols, alloc, sv, internal, metrics,
 		); err != nil {
 			return Updater{}, err
 		}
