@@ -144,7 +144,7 @@ func registerKV(r registry.Registry) {
 			} else {
 				readPercent = fmt.Sprintf(" --read-percent=%d", opts.readPercent)
 			}
-			histograms := " --histograms=" + t.PerfArtifactsDir() + "/stats.json"
+
 			var batchSize string
 			if opts.batchSize > 0 {
 				batchSize = fmt.Sprintf(" --batch=%d", opts.batchSize)
@@ -168,6 +168,8 @@ func registerKV(r registry.Registry) {
 			if opts.sharedProcessMT {
 				url = fmt.Sprintf(" {pgurl:1-%d:%s}", nodes, appTenantName)
 			}
+
+			histograms := " " + roachtestutil.GetWorkloadHistogramArgsString(t, c, roachtestutil.GetLabelMapFromStruct(opts))
 			cmd := fmt.Sprintf(
 				"./cockroach workload run kv --tolerate-errors --init --user=%s --password=%s", install.DefaultUser, install.DefaultPassword,
 			) +
