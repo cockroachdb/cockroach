@@ -158,7 +158,7 @@ type LogStore struct {
 // are associated with the MsgStorageAppend that triggered the fsync.
 // commitStats is populated iff this was a non-blocking sync.
 type SyncCallback interface {
-	OnLogSync(context.Context, []raftpb.Message, storage.BatchCommitStats)
+	OnLogSync(context.Context, MsgStorageAppendDone, storage.BatchCommitStats)
 }
 
 func newStoreEntriesBatch(eng storage.Engine) storage.Batch {
@@ -303,7 +303,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		*waiterCallback = nonBlockingSyncWaiterCallback{
 			ctx:            ctx,
 			cb:             cb,
-			msgs:           m.Responses,
+			onDone:         m.OnDone(),
 			batch:          batch,
 			metrics:        s.Metrics,
 			logCommitBegin: stats.PebbleBegin,
@@ -321,7 +321,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		if wantsSync {
 			logCommitEnd := stats.PebbleEnd
 			s.Metrics.RaftLogCommitLatency.RecordValue(logCommitEnd.Sub(stats.PebbleBegin).Nanoseconds())
-			cb.OnLogSync(ctx, m.Responses, storage.BatchCommitStats{})
+			cb.OnLogSync(ctx, m.OnDone(), storage.BatchCommitStats{})
 		}
 	}
 	stats.Sync = wantsSync
@@ -371,9 +371,9 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 // callback.
 type nonBlockingSyncWaiterCallback struct {
 	// Used to run SyncCallback.
-	ctx  context.Context
-	cb   SyncCallback
-	msgs []raftpb.Message
+	ctx    context.Context
+	cb     SyncCallback
+	onDone MsgStorageAppendDone
 	// Used to extract stats. This is the batch that has been synced.
 	batch storage.WriteBatch
 	// Used to record Metrics.
@@ -386,7 +386,7 @@ func (cb *nonBlockingSyncWaiterCallback) run() {
 	dur := timeutil.Since(cb.logCommitBegin).Nanoseconds()
 	cb.metrics.RaftLogCommitLatency.RecordValue(dur)
 	commitStats := cb.batch.CommitStats()
-	cb.cb.OnLogSync(cb.ctx, cb.msgs, commitStats)
+	cb.cb.OnLogSync(cb.ctx, cb.onDone, commitStats)
 	cb.release()
 }
 
