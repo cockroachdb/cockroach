@@ -977,9 +977,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	refreshReason := noReason
 	if hasMsg(msgStorageAppend) {
+		app := logstore.MakeMsgStorageAppend(msgStorageAppend)
+
 		// Leadership changes, if any, are communicated through MsgStorageAppends.
 		// Check if that's the case here.
-		if msgStorageAppend.Lead != raft.None && leaderID != roachpb.ReplicaID(msgStorageAppend.Lead) {
+		if app.Lead != raft.None && leaderID != roachpb.ReplicaID(app.Lead) {
 			// Refresh pending commands if the Raft leader has changed. This is
 			// usually the first indication we have of a new leader on a restarted
 			// node.
@@ -989,26 +991,26 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// indicating a newly elected leader or a conf change. Replay protection
 			// prevents any corruption, so the waste is only a performance issue.
 			if log.V(3) {
-				log.Infof(ctx, "raft leader changed: %d -> %d", leaderID, msgStorageAppend.Lead)
+				log.Infof(ctx, "raft leader changed: %d -> %d", leaderID, app.Lead)
 			}
 			if !r.store.TestingKnobs().DisableRefreshReasonNewLeader {
 				refreshReason = reasonNewLeader
 			}
-			leaderID = roachpb.ReplicaID(msgStorageAppend.Lead)
+			leaderID = roachpb.ReplicaID(app.Lead)
 		}
 
-		if msgStorageAppend.Snapshot != nil {
+		if app.Snapshot != nil {
 			if inSnap.Desc == nil {
 				// If we didn't expect Raft to have a snapshot but it has one
 				// regardless, that is unexpected and indicates a programming
 				// error.
 				return stats, errors.AssertionFailedf(
 					"have inSnap=nil, but raft has a snapshot %s",
-					raft.DescribeSnapshot(*msgStorageAppend.Snapshot),
+					raft.DescribeSnapshot(*app.Snapshot),
 				)
 			}
 
-			snapUUID, err := uuid.FromBytes(msgStorageAppend.Snapshot.Data)
+			snapUUID, err := uuid.FromBytes(app.Snapshot.Data)
 			if err != nil {
 				return stats, errors.Wrap(err, "invalid snapshot id")
 			}
@@ -1019,15 +1021,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				log.Fatalf(ctx, "incoming snapshot id doesn't match raft snapshot id: %s != %s", snapUUID, inSnap.SnapUUID)
 			}
 
-			snap := *msgStorageAppend.Snapshot
-			hs := raftpb.HardState{
-				Term:      msgStorageAppend.Term,
-				Vote:      msgStorageAppend.Vote,
-				Commit:    msgStorageAppend.Commit,
-				Lead:      msgStorageAppend.Lead,
-				LeadEpoch: msgStorageAppend.LeadEpoch,
-			}
-			if len(msgStorageAppend.Entries) != 0 {
+			snap := *app.Snapshot
+			if len(app.Entries) != 0 {
 				log.Fatalf(ctx, "found Entries in MsgStorageAppend with non-empty Snapshot")
 			}
 
@@ -1040,10 +1035,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			defer releaseMergeLock()
 
 			stats.tSnapBegin = timeutil.Now()
-			if err := r.applySnapshot(ctx, inSnap, snap, hs, subsumedRepls); err != nil {
+			if err := r.applySnapshot(ctx, inSnap, snap, app.HardState(), subsumedRepls); err != nil {
 				return stats, errors.Wrap(err, "while applying snapshot")
 			}
-			for _, msg := range msgStorageAppend.Responses {
+			for _, msg := range app.Responses {
 				// The caller would like to see the MsgAppResp that usually results from
 				// applying the snapshot synchronously, so fish it out.
 				if msg.To == raftpb.PeerID(inSnap.FromReplica.ReplicaID) &&
@@ -1081,10 +1076,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 
 			// Send MsgStorageAppend's responses.
-			r.sendRaftMessages(ctx, msgStorageAppend.Responses, nil /* blocked */, true /* willDeliverLocal */)
+			r.sendRaftMessages(ctx, app.Responses, nil /* blocked */, true /* willDeliverLocal */)
 		} else {
 			// TODO(pavelkalinnikov): find a way to move it to storeEntries.
-			if msgStorageAppend.Commit != 0 && !r.IsInitialized() {
+			if app.Commit != 0 && !r.IsInitialized() {
 				log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s", r)
 			}
 			// TODO(pavelkalinnikov): construct and store this in Replica.
@@ -1107,7 +1102,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				DisableSyncLogWriteToss: buildutil.CrdbTestBuild &&
 					r.store.TestingKnobs().DisableSyncLogWriteToss,
 			}
-			m := logstore.MakeMsgStorageAppend(msgStorageAppend)
 			cb := (*replicaSyncCallback)(r)
 			if r.IsInitialized() && r.store.cfg.KVAdmissionController != nil {
 				// Enqueue raft log entries into admission queues. This is
@@ -1127,7 +1121,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				}
 			}
 
-			if state, err = s.StoreEntries(ctx, state, m, cb, &stats.append); err != nil {
+			if state, err = s.StoreEntries(ctx, state, app, cb, &stats.append); err != nil {
 				return stats, errors.Wrap(err, "while storing log entries")
 			}
 		}
