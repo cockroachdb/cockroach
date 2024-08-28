@@ -27,8 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/lestrrat-go/jwx/jwk"
-	"github.com/lestrrat-go/jwx/jwt"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jws"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
 const (
@@ -158,8 +159,10 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	telemetry.Inc(beginAuthUseCounter)
 
 	// Just parse the token to check the format is valid and issuer is present.
-	// The token will be parsed again later to actually verify the signature.
-	unverifiedToken, err := jwt.Parse(tokenBytes)
+	// ParseInsecure has to be used as jwx/v2 library mandates verification and
+	// validation with Parse. To extract token Issuer we and extract jwkSet parse
+	// the token using ParseInsecure and later validate the signature.
+	unverifiedToken, err := jwt.ParseInsecure(tokenBytes)
 	if err != nil {
 		return "", errors.WithDetailf(
 			errors.Newf("JWT authentication: invalid token"),
@@ -185,7 +188,7 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	}
 
 	// Now that both the issuer and key-id are matched, parse the token again to validate the signature.
-	parsedToken, err := jwt.Parse(tokenBytes, jwt.WithKeySet(jwkSet), jwt.WithValidate(true), jwt.InferAlgorithmFromKey(true))
+	parsedToken, err := jwt.Parse(tokenBytes, jwt.WithKeySet(jwkSet, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
 	if err != nil {
 		return "", errors.WithDetailf(
 			errors.Newf("JWT authentication: invalid token"),

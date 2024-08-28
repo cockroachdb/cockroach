@@ -44,7 +44,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_redact//:redact",
-        "@com_github_lestrrat_go_jwx//jwk",
+        "@com_github_lestrrat_go_jwx_v2//jwk",
         "@com_github_olekukonko_tablewriter//:tablewriter",
         "@com_github_spf13_cobra//:cobra",
         "@com_github_spf13_pflag//:pflag",
