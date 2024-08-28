@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/codahale/hdrhistogram"
 	"github.com/gogo/protobuf/proto"
 	prom "github.com/prometheus/client_model/go"
@@ -139,8 +140,8 @@ func (o *OpenMetricsExporter) SetLabels(labels *map[string]string) {
 	var labelValues []*prom.LabelPair
 
 	for label, value := range *labels {
-		labelName := sanitizeOpenMetricsLabels(label)
-		labelValue := value
+		labelName := util.SanitizeKey(label)
+		labelValue := util.SanitizeValue(value)
 		labelPair := &prom.LabelPair{
 			Name:  &labelName,
 			Value: &labelValue,

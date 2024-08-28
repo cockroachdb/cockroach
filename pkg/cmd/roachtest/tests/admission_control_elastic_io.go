@@ -71,10 +71,14 @@ func registerElasticIO(r registry.Registry) {
 			duration := 30 * time.Minute
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, c.CRDBNodes())
+			labels := map[string]string{
+				"duration":    fmt.Sprintf("%d", duration.Milliseconds()),
+				"concurrency": "512",
+			}
 			m.Go(func(ctx context.Context) error {
 				dur := " --duration=" + duration.String()
 				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
-				cmd := "./cockroach workload run kv --init --histograms=perf/stats.json --concurrency=512 " +
+				cmd := "./cockroach workload run kv --init " + roachtestutil.GetWorkloadHistogramArgsString(t, c, labels) + " -concurrency=512 " +
 					"--splits=1000 --read-percent=0 --min-block-bytes=65536 --max-block-bytes=65536 " +
 					"--txn-qos=background --tolerate-errors --secure" + dur + url
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)

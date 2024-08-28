@@ -11,6 +11,7 @@ go_library(
         "main.go",
         "metadata.go",
         "report.go",
+        "roachprod_util.go",
         "slack.go",
         "stage.go",
     ],

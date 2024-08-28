@@ -15,12 +15,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -63,6 +65,41 @@ func Every(n time.Duration) EveryN {
 // ShouldLog returns whether it's been more than N time since the last event.
 func (e *EveryN) ShouldLog() bool {
 	return e.ShouldProcess(timeutil.Now())
+}
+
+// GetWorkloadHistogramArgsString creates a histogram flag string based on the roachtest to pass to workload binary
+// This is used to make use of t.ExportOpenmetrics() method and create appropriate exporter
+func GetWorkloadHistogramArgsString(
+	t test.Test, c cluster.Cluster, labels map[string]string,
+) string {
+	var histogramArgs string
+	if t.ExportOpenmetrics() {
+		// Add openmetrics related labels and arguments
+		histogramArgs += " --histogram-export-format='openmetrics' " +
+			"--histograms=" + t.PerfArtifactsDir() + "/stats.om " +
+			fmt.Sprintf("--openmetrics-labels='%s'", clusterstats.GetOpenmetricsLabelString(t, c, labels))
+	} else {
+		// Since default is json, no need to add --histogram-export-format flag in this case and also the labels
+		histogramArgs = " --histograms=" + t.PerfArtifactsDir() + "/stats.json"
+	}
+
+	return histogramArgs
+}
+
+// CreateWorkloadHistogramExporter creates a exporter.Exporter based on the roachtest parameters
+func CreateWorkloadHistogramExporter(t test.Test, c cluster.Cluster) exporter.Exporter {
+	var metricsExporter exporter.Exporter
+	if t.ExportOpenmetrics() {
+		labels := clusterstats.GetOpenmetricsLabelMap(t, c, nil)
+		openMetricsExporter := &exporter.OpenMetricsExporter{}
+		openMetricsExporter.SetLabels(&labels)
+		metricsExporter = openMetricsExporter
+
+	} else {
+		metricsExporter = &exporter.HdrJsonExporter{}
+	}
+
+	return metricsExporter
 }
 
 // WaitForReady waits until the given nodes report ready via health checks.

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -109,12 +110,22 @@ func runSchemaChangeRandomLoad(
 	runCmd := []string{
 		"./workload run schemachange --verbose=1",
 		"--tolerate-errors=false",
-		// Save the histograms so that they can be reported to https://roachperf.crdb.dev/.
-		" --histograms=" + t.PerfArtifactsDir() + "/stats.json",
 		fmt.Sprintf("--max-ops %d", maxOps),
 		fmt.Sprintf("--concurrency %d", concurrency),
 		fmt.Sprintf("--txn-log %s", filepath.Join(storeDirectory, txnLogFile)),
 		fmt.Sprintf("{pgurl%s}", loadNode),
+	}
+	if t.ExportOpenmetrics() {
+		runCmd = append(runCmd, "--histogram-export-format='openmetrics'")
+		runCmd = append(runCmd, "--histograms="+t.PerfArtifactsDir()+"/stats.om")
+		extraLabels := map[string]string{
+			"concurrency": fmt.Sprintf("%d", concurrency),
+			"max-ops":     fmt.Sprintf("%d", maxOps),
+		}
+		runCmd = append(runCmd, fmt.Sprintf("--openmetrics-labels='%s'", clusterstats.GetOpenmetricsLabelString(t, c, extraLabels)))
+	} else {
+		// Save the histograms so that they can be reported to https://roachperf.crdb.dev/.
+		runCmd = append(runCmd, " --histograms="+t.PerfArtifactsDir()+"/stats.json")
 	}
 	t.Status("running schemachange workload")
 	err = c.RunE(ctx, option.WithNodes(loadNode), runCmd...)

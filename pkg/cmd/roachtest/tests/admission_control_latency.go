@@ -9,8 +9,8 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
-	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
 	"path/filepath"
@@ -940,7 +940,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.Status("T5: validating results")
 	require.NoError(t, roachtestutil.DownloadProfiles(ctx, c, t.L(), t.ArtifactsDir()))
 
-	require.NoError(t, v.writePerfArtifacts(ctx, t.Name(), t.PerfArtifactsDir(), baselineStats, perturbationStats,
+	require.NoError(t, v.writePerfArtifacts(ctx, t, c, baselineStats, perturbationStats,
 		afterStats))
 
 	t.L().Printf("validating stats during the perturbation")
@@ -1210,23 +1210,33 @@ func sortedStringKeys(m map[string]trackedStat) []string {
 // there would be too many lines on the graph otherwise.
 func (v variations) writePerfArtifacts(
 	ctx context.Context,
-	name string,
-	perfDir string,
+	t test.Test,
+	c cluster.Cluster,
 	baseline, perturbation, recovery map[string]trackedStat,
 ) error {
-	reg := histogram.NewRegistry(
+
+	exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+	defer func() {
+		_ = exporter.Close(nil)
+	}()
+
+	reg := histogram.NewRegistryWithExporter(
 		time.Second,
 		histogram.MockWorkloadName,
+		exporter,
 	)
+
+	bytesBuf := bytes.NewBuffer([]byte{})
+	writer := io.Writer(bytesBuf)
+	exporter.Init(&writer)
+
 	reg.GetHandle().Get("baseline").Record(baseline["write"].score)
 	reg.GetHandle().Get("perturbation").Record(perturbation["write"].score)
 	reg.GetHandle().Get("recovery").Record(recovery["write"].score)
 
-	bytesBuf := bytes.NewBuffer([]byte{})
-	jsonEnc := json.NewEncoder(bytesBuf)
 	var err error
 	reg.Tick(func(tick histogram.Tick) {
-		err = jsonEnc.Encode(tick.Snapshot())
+		err = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
 	})
 	if err != nil {
 		return err
@@ -1234,10 +1244,15 @@ func (v variations) writePerfArtifacts(
 
 	node := v.Node(1)
 	// Upload the perf artifacts to the given node.
-	if err := v.RunE(ctx, option.WithNodes(node), "mkdir -p "+perfDir); err != nil {
+	if err := v.RunE(ctx, option.WithNodes(node), "mkdir -p "+t.PerfArtifactsDir()); err != nil {
 		return err
 	}
-	path := filepath.Join(perfDir, "stats.json")
+
+	destFileName := "stats.json"
+	if t.ExportOpenmetrics() {
+		destFileName = "stats.om"
+	}
+	path := filepath.Join(t.PerfArtifactsDir(), destFileName)
 	if err := v.PutString(ctx, bytesBuf.String(), path, 0755, node); err != nil {
 		return err
 	}

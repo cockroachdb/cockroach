@@ -8,12 +8,14 @@ package tests
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -57,14 +59,20 @@ func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 	m := c.NewMonitor(ctx, c.CRDBNodes())
 	rampDuration := 2 * time.Minute
 	duration := 3 * time.Minute
+	labels := map[string]string{
+		"ramp":        rampDuration.String(),
+		"duration":    duration.String(),
+		"warehouses":  strconv.Itoa(s.Warehouses),
+		"concurrency": strconv.Itoa(s.Concurrency),
+	}
 	m.Go(func(ctx context.Context) error {
 		t.WorkerStatus("running querybench")
 		cmd := fmt.Sprintf(
 			"./workload run querybench --db tpcc"+
 				" --tolerate-errors=t"+
 				" --concurrency=%d"+
-				" --query-file %s"+
-				" --histograms="+t.PerfArtifactsDir()+"/stats.json "+
+				" --query-file %s "+
+				roachtestutil.GetWorkloadHistogramArgsString(t, c, labels)+
 				" --ramp=%s --duration=%s {pgurl:1-%d}",
 			s.Concurrency, queryFileName, rampDuration, duration, c.Spec().NodeCount-1)
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
