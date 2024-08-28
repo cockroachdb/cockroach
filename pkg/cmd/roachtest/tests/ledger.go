@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -43,7 +44,7 @@ func registerLedger(r registry.Registry) {
 				duration := " --duration=" + ifLocal(c, "10s", "10m")
 
 				// See https://github.com/cockroachdb/cockroach/issues/94062 for the --data-loader.
-				cmd := fmt.Sprintf("./workload run ledger --init --data-loader=INSERT --histograms="+t.PerfArtifactsDir()+"/stats.json"+
+				cmd := fmt.Sprintf("./workload run ledger --init --data-loader=INSERT"+roachtestutil.GetWorkloadHistogramArgsString(t, c)+
 					concurrency+duration+" {pgurl%s}", gatewayNodes)
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 				return nil

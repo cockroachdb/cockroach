@@ -272,7 +272,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(
 			`./cockroach workload run kv --read-percent %d --write-seq R%d `+
 				`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-				`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-2}`,
+				roachtestutil.GetWorkloadHistogramArgsString(t, c)+` {pgurl:1-2}`,
 			readPercent, insertCount))
 		if ctx.Err() != nil {
 			return nil // test requested workload shutdown
@@ -447,7 +447,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:6-7}`)
+			roachtestutil.GetWorkloadHistogramArgsString(t, c)+` {pgurl:6-7}`)
 		if ctx.Err() != nil {
 			return nil // test requested workload shutdown
 		}
@@ -578,7 +578,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
+			roachtestutil.GetWorkloadHistogramArgsString(t, c)+` {pgurl:1-3}`)
 		if ctx.Err() != nil {
 			return nil // test requested workload shutdown
 		}
@@ -700,7 +700,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
+			roachtestutil.GetWorkloadHistogramArgsString(t, c)+` {pgurl:1-3}`)
 		if ctx.Err() != nil {
 			return nil // test requested workload shutdown
 		}
@@ -811,7 +811,7 @@ func runFailoverNonSystem(
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
+			roachtestutil.GetWorkloadHistogramArgsString(t, c)+` {pgurl:1-3}`)
 		if ctx.Err() != nil {
 			return nil // test requested workload shutdown
 		}
@@ -924,7 +924,7 @@ func runFailoverLiveness(
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
+			roachtestutil.GetWorkloadHistogramArgsString(t, c)+` {pgurl:1-3}`)
 		if ctx.Err() != nil {
 			return nil // test requested workload shutdown
 		}
@@ -1036,7 +1036,7 @@ func runFailoverSystemNonLiveness(
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
+			roachtestutil.GetWorkloadHistogramArgsString(t, c)+` {pgurl:1-3}`)
 		if ctx.Err() != nil {
 			return nil // test requested workload shutdown
 		}
