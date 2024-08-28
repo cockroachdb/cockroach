@@ -402,8 +402,6 @@ type Node struct {
 	// COCKROACH_DEBUG_TS_IMPORT_FILE env var.
 	suppressNodeStatus atomic.Bool
 
-	diskStatsMap diskStatsMap
-
 	testingErrorEvent func(context.Context, *kvpb.BatchRequest, error)
 
 	// Used to collect samples for the key visualizer.
@@ -1240,27 +1238,33 @@ func (mm *diskMonitorManager) Monitor(path string) (kvserver.DiskStatsMonitor, e
 
 func (n *Node) registerEnginesForDiskStatsMap(
 	specs []base.StoreSpec, engines []storage.Engine, diskManager *diskMonitorManager,
-) error {
-	if err := n.diskStatsMap.initDiskStatsMap(specs, engines, diskManager); err != nil {
-		return err
+) (admission.PebbleMetricsProvider, error) {
+	pmp := &nodePebbleMetricsProvider{n: n}
+	if err := pmp.diskStatsMap.initDiskStatsMap(specs, engines, diskManager); err != nil {
+		return nil, err
 	}
-	if err := n.stores.RegisterDiskMonitors(n.diskStatsMap.diskMonitors); err != nil {
-		return err
+	if err := n.stores.RegisterDiskMonitors(pmp.diskStatsMap.diskMonitors); err != nil {
+		return nil, err
 	}
-	return nil
+	return pmp, nil
+}
+
+type nodePebbleMetricsProvider struct {
+	n            *Node
+	diskStatsMap diskStatsMap
 }
 
 // GetPebbleMetrics implements admission.PebbleMetricsProvider.
-func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
+func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetrics {
 	clusterProvisionedBandwidth := kvadmission.ProvisionedBandwidth.Get(
-		&n.storeCfg.Settings.SV)
-	storeIDToDiskStats, err := n.diskStatsMap.tryPopulateAdmissionDiskStats(clusterProvisionedBandwidth)
+		&pmp.n.storeCfg.Settings.SV)
+	storeIDToDiskStats, err := pmp.diskStatsMap.tryPopulateAdmissionDiskStats(clusterProvisionedBandwidth)
 	if err != nil {
 		log.Warningf(context.Background(), "%v",
 			errors.Wrapf(err, "unable to populate disk stats"))
 	}
 	var metrics []admission.StoreMetrics
-	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
+	_ = pmp.n.stores.VisitStores(func(store *kvserver.Store) error {
 		m := store.TODOEngine().GetMetrics()
 		diskStats := admission.DiskStats{ProvisionedBandwidth: clusterProvisionedBandwidth}
 		if s, ok := storeIDToDiskStats[store.StoreID()]; ok {
@@ -1274,6 +1278,11 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 		return nil
 	})
 	return metrics
+}
+
+// Close implements admission.PebbleMetricsProvider.
+func (pmp *nodePebbleMetricsProvider) Close() {
+	pmp.diskStatsMap.closeDiskMonitors()
 }
 
 // GetTenantWeights implements kvserver.TenantWeightProvider.
