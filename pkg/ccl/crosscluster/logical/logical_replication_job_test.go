@@ -1367,10 +1367,21 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
-	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	dbAURL, cleanup := s.PGUrl(t,
+		serverutils.DBName("a"),
+		serverutils.UserPassword(username.RootUser, "password"))
 	defer cleanup()
-	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+
+	dbBURL, cleanupB := s.PGUrl(t,
+		serverutils.DBName("b"),
+		serverutils.UserPassword(username.RootUser, "password"))
 	defer cleanupB()
+
+	redactedDbAURL := strings.Replace(dbAURL.String(), "password", `redacted`, 1)
+	redactedDbBURL := strings.Replace(dbBURL.String(), "password", `redacted`, 1)
+
+	redactedJobADescription := fmt.Sprintf("LOGICAL REPLICATION STREAM into a.public.tab from %s", redactedDbBURL)
+	redactedJobBDescription := fmt.Sprintf("LOGICAL REPLICATION STREAM into b.public.tab from %s", redactedDbAURL)
 
 	var (
 		jobAID jobspb.JobID
@@ -1405,6 +1416,7 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 		replicatedTime         time.Time
 		replicationStartTime   time.Time
 		conflictResolutionType string
+		description            string
 	)
 
 	showRows := dbA.Query(t, "SELECT * FROM [SHOW LOGICAL REPLICATION JOBS] ORDER BY job_id")
@@ -1435,7 +1447,14 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 
 	rowIdx = 0
 	for showWithDetailsRows.Next() {
-		err := showWithDetailsRows.Scan(&jobID, &status, &targets, &replicatedTime, &replicationStartTime, &conflictResolutionType)
+		err := showWithDetailsRows.Scan(
+			&jobID,
+			&status,
+			&targets,
+			&replicatedTime,
+			&replicationStartTime,
+			&conflictResolutionType,
+			&description)
 		require.NoError(t, err)
 
 		expectedJobID := jobIDs[rowIdx]
@@ -1445,6 +1464,17 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 
 		expectedConflictResolutionType := payload.GetLogicalReplicationDetails().DefaultConflictResolution.ConflictResolutionType.String()
 		require.Equal(t, expectedConflictResolutionType, conflictResolutionType)
+
+		expectedJobDescription := payload.Description
+
+		// Verify that URL is redacted in job descriptions
+		if jobID == jobAID {
+			require.Equal(t, redactedJobADescription, expectedJobDescription)
+		} else if jobID == jobBID {
+			require.Equal(t, redactedJobBDescription, expectedJobDescription)
+		}
+
+		require.Equal(t, expectedJobDescription, description)
 
 		rowIdx++
 	}
