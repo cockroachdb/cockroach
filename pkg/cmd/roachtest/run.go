@@ -322,7 +322,11 @@ func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegi
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 	go func() {
-		<-sig
+		select {
+		case <-sig:
+		case <-ctx.Done():
+			return
+		}
 		shout(ctx, l, os.Stderr,
 			"Signaled received. Canceling workers and waiting up to 5s for them.")
 		// Signal runner.Run() to stop.
