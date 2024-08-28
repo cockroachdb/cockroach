@@ -436,8 +436,6 @@ func TestProcessorBasic(t *testing.T) {
 				return builderStr()
 
 			case "admitted-log-entry":
-				var replicaID int
-				d.ScanArgs(t, "replica-id", &replicaID)
 				var leaderTerm uint64
 				d.ScanArgs(t, "leader-term", &leaderTerm)
 				var index uint64
@@ -445,9 +443,6 @@ func TestProcessorBasic(t *testing.T) {
 				var pri int
 				d.ScanArgs(t, "pri", &pri)
 				cb := EntryForAdmissionCallbackState{
-					StoreID:    2,
-					RangeID:    3,
-					ReplicaID:  roachpb.ReplicaID(replicaID),
 					LeaderTerm: leaderTerm,
 					Index:      index,
 					Priority:   raftpb.Priority(pri),

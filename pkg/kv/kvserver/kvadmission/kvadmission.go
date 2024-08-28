@@ -659,9 +659,9 @@ var _ replica_rac2.ACWorkQueue = &controllerImpl{}
 
 // Admit implements replica_rac2.ACWorkQueue. It is only used for the RACv2 protocol.
 func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForAdmission) bool {
-	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(entry.CallbackState.StoreID)
+	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(entry.StoreID)
 	if storeAdmissionQ == nil {
-		log.Errorf(ctx, "unable to find queue for store: %s", entry.CallbackState.StoreID)
+		log.Errorf(ctx, "unable to find queue for store: %s", entry.StoreID)
 		return false // nothing to do
 	}
 
@@ -677,8 +677,8 @@ func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForA
 	}
 	wi.ReplicatedWorkInfo = admission.ReplicatedWorkInfo{
 		Enabled:    true,
-		RangeID:    entry.CallbackState.RangeID,
-		ReplicaID:  entry.CallbackState.ReplicaID,
+		RangeID:    entry.RangeID,
+		ReplicaID:  entry.ReplicaID,
 		LeaderTerm: entry.CallbackState.LeaderTerm,
 		LogPosition: admission.LogPosition{
 			Term:  0, // Ignored by callback in RACv2.
