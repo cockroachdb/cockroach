@@ -73,6 +73,38 @@ func MakeMsgStorageAppend(m raftpb.Message) MsgStorageAppend {
 	return MsgStorageAppend(m)
 }
 
+// OnDone returns the storage write post-processing information.
+func (m *MsgStorageAppend) OnDone() MsgStorageAppendDone { return m.Responses }
+
+// MsgStorageAppendDone encapsulates the actions to do after MsgStorageAppend is
+// done, such as sending messages back to raft node and its peers.
+type MsgStorageAppendDone []raftpb.Message
+
+// Responses returns the messages to send after the write/sync is completed.
+func (m MsgStorageAppendDone) Responses() []raftpb.Message { return m }
+
+// Mark returns the LogMark of the raft log in storage after the write/sync is
+// completed. Returns zero value if the write does not update the log mark.
+func (m MsgStorageAppendDone) Mark() raft.LogMark {
+	if len(m) == 0 {
+		return raft.LogMark{}
+	}
+	// Optimization: the MsgStorageAppendResp message, if any, is always the last
+	// one in the list.
+	// TODO(pav-kv): this is an undocumented API quirk. Refactor the raft write
+	// API to be more digestible outside the package.
+	msg := m[len(m)-1]
+	if msg.Type != raftpb.MsgStorageAppendResp {
+		return raft.LogMark{}
+	}
+	if len(msg.Entries) != 0 {
+		return raft.LogMark{Term: msg.LogTerm, Index: msg.Index}
+	} else if msg.Snapshot != nil {
+		return raft.LogMark{Term: msg.LogTerm, Index: msg.Snapshot.Metadata.Index}
+	}
+	return raft.LogMark{}
+}
+
 // RaftState stores information about the last entry and the size of the log.
 type RaftState struct {
 	LastIndex kvpb.RaftIndex
