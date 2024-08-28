@@ -106,7 +106,7 @@ HandleRaftReady:
  Replica.MuUnlock
 .....
 AdmitRaftEntries:
- ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:25 Priority:LowPri}}) = true
+ ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{LeaderTerm:50 Index:25 Priority:LowPri}}) = true
 leader-using-v2: true
 
 # Stable index is advanced to 25.
@@ -157,7 +157,7 @@ HandleRaftReady:
  Replica.MuUnlock
 .....
 AdmitRaftEntries:
- ACWorkQueue.Admit({TenantID:4 Priority:user-high-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:26 Priority:AboveNormalPri}}) = true
+ ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:user-high-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{LeaderTerm:50 Index:26 Priority:AboveNormalPri}}) = true
 leader-using-v2: true
 
 # handleRaftReady is a noop.
@@ -180,11 +180,6 @@ set-raft-state stable-index=26
 ----
 Raft: leader: 11 leaseholder: 10 stable: 26 next-unstable: 27 term: 0 admitted: [24, 25, 25, 25]
 
-# Bogus callback which does not match the replica-id, so ignored. index 25
-# (LowPri) is still not admitted.
-admitted-log-entry replica-id=51 leader-term=50 index=25 pri=0
-----
-
 # Some admitted indices are advanced, but LowPri and AboveNormalPri cannot
 # advance past the index 25 and index 26 entries respectively, that are
 # waiting for admission.
@@ -206,7 +201,7 @@ HandleRaftReady:
 .....
 
 # Callback is accurate and index 25 is admitted.
-admitted-log-entry replica-id=5 leader-term=50 index=25 pri=0
+admitted-log-entry leader-term=50 index=25 pri=0
 ----
  RaftScheduler.EnqueueRaftReady(rangeID=3)
 
@@ -251,13 +246,13 @@ HandleRaftReady:
  Replica.MuUnlock
 .....
 AdmitRaftEntries:
- ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:27 Priority:LowPri}}) = true
+ ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{LeaderTerm:50 Index:27 Priority:LowPri}}) = true
 leader-using-v2: true
 
-admitted-log-entry replica-id=5 leader-term=50 index=27 pri=3
+admitted-log-entry leader-term=50 index=27 pri=3
 ----
 
-admitted-log-entry replica-id=5 leader-term=50 index=26 pri=2
+admitted-log-entry leader-term=50 index=26 pri=2
 ----
  RaftScheduler.EnqueueRaftReady(rangeID=3)
 
@@ -322,7 +317,7 @@ AdmitRaftEntries:
 leader-using-v2: false
 
 # Noop.
-admitted-log-entry replica-id=5 leader-term=50 index=27 pri=0
+admitted-log-entry leader-term=50 index=27 pri=0
 ----
 
 # Same leader switches to v2.
@@ -389,7 +384,7 @@ HandleRaftReady:
  RangeController.HandleRaftEventRaftMuLocked([28])
 .....
 AdmitRaftEntries:
- ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:52 Index:28 Priority:LowPri}}) = true
+ ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{LeaderTerm:52 Index:28 Priority:LowPri}}) = true
 leader-using-v2: true
 
 # AdmitForEval returns true since there is a RangeController which admitted.
@@ -436,7 +431,7 @@ admit-for-eval pri=normal-pri
 admitted: false err: rc-was-closed
 
 # Entry at index 28 is admitted, but stable index is 27.
-admitted-log-entry replica-id=5 leader-term=52 index=28 pri=0
+admitted-log-entry leader-term=52 index=28 pri=0
 ----
 
 # Noop.
@@ -597,7 +592,7 @@ AdmitRaftEntries:
 leader-using-v2: false
 
 # Noop.
-admitted-log-entry replica-id=5 leader-term=52 index=28 pri=0
+admitted-log-entry leader-term=52 index=28 pri=0
 ----
 
 # Test transitioning to v2 protocol after becoming leader.
@@ -696,11 +691,11 @@ HandleRaftReady:
  RangeController.HandleRaftEventRaftMuLocked([26])
 .....
 AdmitRaftEntries:
- ACWorkQueue.Admit({TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false CallbackState:{StoreID:2 RangeID:3 ReplicaID:5 LeaderTerm:50 Index:26 Priority:LowPri}}) = true
+ ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{LeaderTerm:50 Index:26 Priority:LowPri}}) = true
 leader-using-v2: true
 
 # Entry is admitted.
-admitted-log-entry replica-id=5 leader-term=50 index=26 pri=0
+admitted-log-entry leader-term=50 index=26 pri=0
 ----
 
 # Noop, since stable index is still 20.
