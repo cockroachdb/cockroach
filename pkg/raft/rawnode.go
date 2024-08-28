@@ -218,6 +218,7 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 		Entries: rd.Entries,
 	}
 	if ln := len(rd.Entries); ln != 0 {
+		// See comment in newStorageAppendRespMsg for why the accTerm is attached.
 		m.LogTerm = r.raftLog.accTerm()
 		m.Index = rd.Entries[ln-1].Index
 	}
@@ -238,6 +239,8 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 	if !IsEmptySnap(rd.Snapshot) {
 		snap := rd.Snapshot
 		m.Snapshot = &snap
+		// See comment in newStorageAppendRespMsg for why the accTerm is attached.
+		m.LogTerm = r.raftLog.accTerm()
 	}
 	// Attach all messages in msgsAfterAppend as responses to be delivered after
 	// the message is processed, along with a self-directed MsgStorageAppendResp
@@ -249,6 +252,9 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 	// handling to use a fast-path in r.raftLog.term() before the newly appended
 	// entries are removed from the unstable log.
 	m.Responses = r.msgsAfterAppend
+	// Warning: there is code outside raft package depending on the order of
+	// Responses, particularly MsgStorageAppendResp being last in this list.
+	// Change this with caution.
 	if needStorageAppendRespMsg(rd) {
 		m.Responses = append(m.Responses, newStorageAppendRespMsg(r, rd))
 	}
@@ -322,6 +328,7 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 	if !IsEmptySnap(rd.Snapshot) {
 		snap := rd.Snapshot
 		m.Snapshot = &snap
+		m.LogTerm = r.raftLog.accTerm()
 	}
 	return m
 }
