@@ -297,6 +297,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		txn,
 		cb.evalCtx.Codec,
 		tableDesc,
+		nil, /* uniqueWithTombstoneIndexes */
 		cb.updateCols,
 		requestedCols,
 		row.UpdaterOnlyColumns,
