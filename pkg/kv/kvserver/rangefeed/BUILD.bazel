@@ -15,11 +15,10 @@ go_library(
         "scheduled_processor.go",
         "scheduler.go",
         "stream.go",
-        "stream_muxer.go",
-        "stream_muxer_test_helper.go",
         "task.go",
         "test_helpers.go",
         "testutil.go",
+        "unbuffered_sender.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed",
     visibility = ["//visibility:public"],
@@ -59,7 +58,6 @@ go_library(
 
 go_test(
     name = "rangefeed_test",
-    size = "large",
     srcs = [
         "bench_test.go",
         "budget_test.go",
@@ -70,8 +68,9 @@ go_test(
         "registry_test.go",
         "resolved_timestamp_test.go",
         "scheduler_test.go",
-        "stream_muxer_test.go",
+        "sender_helper_test.go",
         "task_test.go",
+        "unbuffered_sender_test.go",
     ],
     embed = [":rangefeed"],
     deps = [
