@@ -54,7 +54,7 @@ func MakeInserter(
 ) (Inserter, error) {
 	ri := Inserter{
 		Helper: NewRowHelper(
-			codec, tableDesc, tableDesc.WritableNonPrimaryIndexes(), sv, internal, metrics,
+			codec, tableDesc, tableDesc.WritableNonPrimaryIndexes(), nil /* uniqueWithTombstoneIndexes */, sv, internal, metrics,
 		),
 
 		InsertCols:            insertCols,
