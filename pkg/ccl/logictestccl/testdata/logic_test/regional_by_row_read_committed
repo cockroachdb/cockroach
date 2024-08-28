@@ -78,7 +78,7 @@ CREATE TABLE river (
 LOCALITY REGIONAL BY ROW AS region
 
 statement ok
-GRANT INSERT ON TABLE university TO testuser
+GRANT INSERT, UPDATE, SELECT ON TABLE university TO testuser
 
 # Test non-conflicting INSERT.
 
@@ -117,10 +117,15 @@ INSERT INTO university (name, mascot, postal_code)
 VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8'), ('Evergreen State', 'geoducks', '98505')
 ON CONFLICT (mascot) DO NOTHING
 
+# TODO(mw5h): Temporary until ON CONFLICT works
+statement ok
+INSERT INTO university (name, mascot, postal_code) VALUES ('Evergreen State', 'geoducks', '98505')
+
 query TTT
 SELECT name, mascot, postal_code FROM university ORDER BY name
 ----
-Western Oregon  wolves  97361
+Evergreen State  geoducks  98505
+Western Oregon   wolves    97361
 
 statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
 INSERT INTO volcano VALUES
@@ -170,10 +175,10 @@ UPSERT INTO river VALUES ('us-east-1', 'Fraser', 'Salish Sea')
 
 # Test conflicting UPDATE.
 
-statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"
 UPDATE university SET mascot = 'wolves' WHERE name = 'Evergreen State'
 
-statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
+statement ok
 UPDATE volcano SET origin = 'Fought over Loowit and was transformed by Saghalie.' WHERE name = 'Mount St. Helens'
 
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "city_pkey"\nDETAIL: Key \(name, state_or_province\)=\('Vancouver', 'BC'\) already exists\.
@@ -232,5 +237,41 @@ awaitstatement conflict
 query TTT
 SELECT name, mascot, postal_code FROM university ORDER BY name
 ----
-CMU             Scottie Dog  15213
-Western Oregon  wolves       97361
+CMU              Scottie Dog  15213
+Evergreen State  geoducks     98505
+Western Oregon   wolves       97361
+
+statement ok
+INSERT INTO university VALUES ('Central Michigan University', 'Chippewas', '97858');
+
+statement ok
+UPDATE university SET name = 'Carnegie Mellon University' WHERE name = 'CMU';
+
+statement ok
+BEGIN
+
+statement ok
+UPDATE university SET name = 'CMU' WHERE name = 'Carnegie Mellon University';
+
+user testuser
+
+statement async conflict error pgcode 23505 pq: duplicate key value violates unique constraint "university_pkey"
+UPDATE university SET name = 'CMU' WHERE name = 'Central Michigan University'
+
+user root
+
+statement ok
+COMMIT
+
+awaitstatement conflict
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"
+UPDATE university SET mascot = 'wolves' WHERE name = 'CMU'
+
+query TTT
+SELECT name, mascot, postal_code FROM university ORDER BY name
+----
+CMU                          Scottie Dog  15213
+Central Michigan University  Chippewas    97858
+Evergreen State              geoducks     98505
+Western Oregon               wolves       97361
