@@ -547,11 +547,6 @@ func registerKVGracefulDraining(r registry.Registry) {
 			err := WaitFor3XReplication(ctx, t, t.L(), dbs[0])
 			require.NoError(t, err)
 
-			// TODO(baptist): Remove setting once #129427 is addressed.
-			if _, err := dbs[0].ExecContext(ctx, "SET CLUSTER SETTING kv.store_gossip.max_frequency = '0s'"); err != nil {
-				t.Fatalf("failed to update gossip max frequency: %v", err)
-			}
-
 			t.Status("initializing workload")
 
 			// Initialize the database with a lot of ranges so that there are
@@ -578,9 +573,10 @@ func registerKVGracefulDraining(r registry.Registry) {
 			// Three iterations, each iteration has a 3-minute duration.
 			desiredRunDuration := 10 * time.Minute
 			m.Go(func(ctx context.Context) error {
+				// TODO(baptist): Remove --tolerate-errors once #129427 is addressed.
 				// Don't connect to the node we are going to shut down.
 				cmd := fmt.Sprintf(
-					"./cockroach workload run kv --duration=%s --read-percent=50 --follower-read-percent=50 --concurrency=200 --max-rate=%d {pgurl%s}",
+					"./cockroach workload run kv --tolerate-errors --duration=%s --read-percent=50 --follower-read-percent=50 --concurrency=200 --max-rate=%d {pgurl%s}",
 					desiredRunDuration, specifiedQPS, c.Range(1, nodes-1))
 				t.WorkerStatus(cmd)
 				defer func() {
