@@ -19,6 +19,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/clusterstats",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/test",
@@ -36,6 +37,7 @@ go_library(
         "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/workload/histogram/exporter",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],

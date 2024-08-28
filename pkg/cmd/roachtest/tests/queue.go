@@ -54,13 +54,18 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if initTables {
 				init = " --init"
 			}
+			labels := map[string]string{
+				"batch":       "100",
+				"concurrency": roachtestutil.IfLocal(c, "", fmt.Sprint(dbNodeCount*64)),
+				"duration":    duration,
+			}
 			cmd := fmt.Sprintf(
-				"./workload run queue --histograms="+t.PerfArtifactsDir()+"/stats.json"+
-					init+
-					concurrency+
-					duration+
-					batch+
-					" {pgurl%s}",
+				"./workload run queue %s %s %s %s %s  {pgurl%s}",
+				roachtestutil.GetWorkloadHistogramArgs(t, c, labels),
+				init,
+				concurrency,
+				duration,
+				batch,
 				c.CRDBNodes(),
 			)
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)

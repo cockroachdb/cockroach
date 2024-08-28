@@ -142,10 +142,16 @@ func registerSnapshotOverload(r registry.Registry) {
 			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				duration := " --duration=" + totalWorkloadDuration.String()
-				histograms := " --histograms=" + t.PerfArtifactsDir() + "/stats.json"
 				concurrency := roachtestutil.IfLocal(c, "  --concurrency=8", " --concurrency=256")
 				maxRate := roachtestutil.IfLocal(c, "  --max-rate=100", " --max-rate=12000")
 				splits := roachtestutil.IfLocal(c, "  --splits=10", " --splits=100")
+
+				labels := map[string]string{
+					"concurrency": concurrency,
+					"max-rate":    maxRate,
+					"splits":      splits,
+				}
+				histograms := roachtestutil.GetWorkloadHistogramArgs(t, c, labels)
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()),
 					"./cockroach workload run kv --max-block-bytes=1 --read-percent=95 "+
 						histograms+duration+concurrency+maxRate+splits+fmt.Sprintf(" {pgurl%s}", c.CRDBNodes()),

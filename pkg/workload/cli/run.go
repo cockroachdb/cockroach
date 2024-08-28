@@ -432,7 +432,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		publisher = histogram.CreateUdpPublisher(*individualOperationReceiverAddr)
 	}
 
-	metricsExporter, file, err := maybeInitAndCreateExporter()
+	metricsExporter, file, err := maybeInitAndCreateExporter(gen)
 	if err != nil {
 		return errors.Wrap(err, "error creating metrics exporter")
 	}
@@ -666,7 +666,7 @@ func maybeLogRandomSeed(ctx context.Context, gen workload.Generator) {
 	}
 }
 
-func maybeInitAndCreateExporter() (exporter.Exporter, *os.File, error) {
+func maybeInitAndCreateExporter(gen workload.Generator) (exporter.Exporter, *os.File, error) {
 	if *histograms == "" {
 		return nil, nil, nil
 	}
@@ -687,6 +687,9 @@ func maybeInitAndCreateExporter() (exporter.Exporter, *os.File, error) {
 			}
 			labels[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
 		}
+
+		// Append workload generator name as a tag
+		labels["workload"] = gen.Meta().Name
 		openMetricsExporter := exporter.OpenMetricsExporter{}
 		openMetricsExporter.SetLabels(&labels)
 		metricsExporter = &openMetricsExporter

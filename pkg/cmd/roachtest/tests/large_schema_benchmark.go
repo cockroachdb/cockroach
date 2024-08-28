@@ -196,14 +196,11 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 				populateFileName := fmt.Sprintf("populate_%d", dbListType)
 				mon.Go(func(ctx context.Context) error {
 					waitEnabled := "--wait 0.0"
-					// Export histograms out for the roach perf dashboard
-					histograms := " --histograms=" + t.PerfArtifactsDir() + "/stats.json"
 					var wlInstance []workloadInstance
 					// Inactive databases will intentionally have wait time on
 					// them and not include them in our histograms.
 					if dbListType == inactiveDbListType {
 						waitEnabled = "--wait 1.0"
-						histograms = ""
 						// Use a different prometheus port for the inactive databases,
 						// this will not be measured.
 						wlInstance = append(
@@ -224,7 +221,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						WorkloadInstances: wlInstance,
 						Duration:          time.Minute * 60,
 						ExtraRunArgs: fmt.Sprintf("--db-list-file=%s --txn-preamble-file=%s --admin-urls=%q "+
-							"--console-api-file=apiCalls --console-api-username=%q --console-api-password=%q --conns=%d --workers=%d %s %s",
+							"--console-api-file=apiCalls --console-api-username=%q --console-api-password=%q --conns=%d --workers=%d %s",
 							populateFileName,
 							"ormQueries.sql",
 							strings.Join(webConsoleURLs, ","),
@@ -232,8 +229,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 							"roacher",
 							numWorkers,
 							numWorkers,
-							waitEnabled,
-							histograms),
+							waitEnabled),
 					}
 					runTPCC(ctx, t, t.L(), c, options)
 					return nil
