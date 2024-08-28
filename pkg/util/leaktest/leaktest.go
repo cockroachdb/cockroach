@@ -64,6 +64,8 @@ func interestingGoroutines() map[int64]string {
 			strings.Contains(stack, "github.com/jackc/pgconn/internal/ctxwatch.(*ContextWatcher).Watch.func1") ||
 			// Ignore pq goroutine that watches for context cancellation.
 			strings.Contains(stack, "github.com/lib/pq.(*conn).watchCancel") ||
+			// Ignore TLS handshake related goroutine.
+			strings.Contains(stack, "net/http.(*persistConn).addTLS") ||
 			// Seems to be gccgo specific.
 			(runtime.Compiler == "gccgo" && strings.Contains(stack, "testing.T.Parallel")) ||
 			// Ignore intentionally long-running logging goroutines that live for the
