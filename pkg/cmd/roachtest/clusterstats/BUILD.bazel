@@ -36,6 +36,7 @@ go_library(
         "@com_github_prometheus_client_golang//api",
         "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
         "@com_github_prometheus_common//model",
+        "@org_golang_x_exp//maps",
     ],
 )
 

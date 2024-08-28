@@ -8,11 +8,10 @@ package tests
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -1124,30 +1123,31 @@ func exportToRoachperf(
 	ctx context.Context, t test.Test, c cluster.Cluster, testName string, metric int64,
 ) {
 
+	exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+
 	// The easiest way to record a precise metric for roachperf is to caste it as a duration,
 	// in seconds in the histogram's upper bound.
-	reg := histogram.NewRegistry(
-		time.Duration(metric)*time.Second,
-		histogram.MockWorkloadName,
-	)
-	bytesBuf := bytes.NewBuffer([]byte{})
-	jsonEnc := json.NewEncoder(bytesBuf)
+	reg := histogram.NewRegistryWithExporter(time.Duration(metric)*time.Second, histogram.MockWorkloadName, exporter)
 
+	bytesBuf := bytes.NewBuffer([]byte{})
+	writer := io.Writer(bytesBuf)
+
+	exporter.Init(&writer)
+	var err error
 	// Ensure the histogram contains the name of the roachtest
 	reg.GetHandle().Get(testName)
 
 	// Serialize the histogram into the buffer
 	reg.Tick(func(tick histogram.Tick) {
-		_ = jsonEnc.Encode(tick.Snapshot())
+		err = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
 	})
-	// Upload the perf artifacts to any one of the nodes so that the test
-	// runner copies it into an appropriate directory path.
-	dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-	if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
-		t.L().ErrorfCtx(ctx, "failed to create perf dir: %+v", err)
+
+	if err != nil {
+		return
 	}
-	if err := c.PutString(ctx, bytesBuf.String(), dest, 0755, c.Node(1)); err != nil {
-		t.L().ErrorfCtx(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+	if _, err = roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, bytesBuf, exporter, c.Node(1)); err != nil {
+		t.L().Errorf("error creating stats file: %s", err)
+		return
 	}
 }
 

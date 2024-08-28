@@ -71,10 +71,15 @@ func runConnectionLatencyTest(
 
 		t.L().Printf("running workload in %q against urls:\n%s", locality, strings.Join(urls, "\n"))
 
+		labels := map[string]string{
+			"duration": "30000",
+			"locality": locality,
+		}
+
 		workloadCmd := fmt.Sprintf(
-			`./workload run connectionlatency %s --secure --duration 30s --histograms=%s/stats.json --locality %s`,
+			`./workload run connectionlatency %s --secure --duration 30s %s --locality %s`,
 			urlString,
-			t.PerfArtifactsDir(),
+			roachtestutil.GetWorkloadHistogramArgs(t, c, labels),
 			locality,
 		)
 		err = c.RunE(ctx, option.WithNodes(loadNode), workloadCmd)

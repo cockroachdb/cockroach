@@ -10,12 +10,11 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -39,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -286,21 +286,28 @@ func fingerprint(ctx context.Context, conn *gosql.DB, db, table string) (string,
 
 // initBulkJobPerfArtifacts registers a histogram, creates a performance
 // artifact directory and returns a method that when invoked records a tick.
-func initBulkJobPerfArtifacts(testName string, timeout time.Duration) (func(), *bytes.Buffer) {
+func initBulkJobPerfArtifacts(
+	timeout time.Duration, t test.Test, e exporter.Exporter,
+) (func(), *bytes.Buffer) {
 	// Register a named histogram to track the total time the bulk job took.
 	// Roachperf uses this information to display information about this
 	// roachtest.
-	reg := histogram.NewRegistry(
+
+	reg := histogram.NewRegistryWithExporter(
 		timeout,
 		histogram.MockWorkloadName,
+		e,
 	)
-	reg.GetHandle().Get(testName)
+	reg.GetHandle().Get(t.Name())
 
 	bytesBuf := bytes.NewBuffer([]byte{})
-	jsonEnc := json.NewEncoder(bytesBuf)
+	writer := io.Writer(bytesBuf)
+
+	e.Init(&writer)
+
 	tick := func() {
 		reg.Tick(func(tick histogram.Tick) {
-			_ = jsonEnc.Encode(tick.Snapshot())
+			_ = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
 		})
 	}
 
@@ -328,7 +335,8 @@ func registerBackup(r registry.Registry) {
 				rows = 100
 			}
 			dest := importBankData(ctx, rows, t, c)
-			tick, perfBuf := initBulkJobPerfArtifacts("backup/2TB", 2*time.Hour)
+			exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+			tick, perfBuf := initBulkJobPerfArtifacts(2*time.Hour, t, exporter)
 
 			m := c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
@@ -349,14 +357,8 @@ func registerBackup(r registry.Registry) {
 				}
 				tick()
 
-				// Upload the perf artifacts to any one of the nodes so that the test
-				// runner copies it into an appropriate directory path.
-				dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-				if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
-					t.L().ErrorfCtx(ctx, "failed to create perf dir: %+v", err)
-				}
-				if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
-					t.L().ErrorfCtx(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+				if _, err := roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, perfBuf, exporter, c.Node(1)); err != nil {
+					return err
 				}
 				return nil
 			})
