@@ -208,21 +208,25 @@ var planMutators = []mutator{
 		"kv.expiration_leases_only.enabled",
 		[]bool{true, false},
 		clusterSettingMinimumVersion("v23.1.0"),
+		clusterSettingSystemOnly,
 	),
 	newClusterSettingMutator(
 		"storage.ingest_split.enabled",
 		[]bool{true, false},
 		clusterSettingMinimumVersion("v23.2.0"),
+		clusterSettingSystemOnly,
 	),
 	newClusterSettingMutator(
 		"kv.snapshot_receiver.excise.enabled",
 		[]bool{true, false},
 		clusterSettingMinimumVersion("v23.2.0"),
+		clusterSettingSystemOnly,
 	),
 	newClusterSettingMutator(
 		"storage.sstable.compression_algorithm",
 		[]string{"snappy", "zstd"},
 		clusterSettingMinimumVersion("v24.1.0-alpha.0"),
+		clusterSettingSystemOnly,
 	),
 }
 
@@ -828,7 +832,7 @@ func (p *testPlanner) serviceDescriptors() []*ServiceDescriptor {
 }
 
 func (p *testPlanner) isMultitenant() bool {
-	return p.deploymentMode != SystemOnlyDeployment
+	return isMultitenant(p.deploymentMode)
 }
 
 func (p *testPlanner) tenantName() string {
@@ -1304,6 +1308,10 @@ func (plan *TestPlan) Steps() []testStep {
 	return steps
 }
 
+func (plan *TestPlan) isMultitenant() bool {
+	return isMultitenant(plan.deploymentMode)
+}
+
 // Steps returns the list of steps to be performed to setup the
 // cluster for the test (which may include creating tenants where the
 // tests will run).
@@ -1482,6 +1490,10 @@ func (u UpgradeStage) String() string {
 	default:
 		return fmt.Sprintf("invalid upgrade stage (%d)", u)
 	}
+}
+
+func isMultitenant(mode DeploymentMode) bool {
+	return mode != SystemOnlyDeployment
 }
 
 func versionToClusterVersion(v *clusterupgrade.Version) string {
