@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
+	"github.com/cockroachdb/errors"
 	"github.com/codahale/hdrhistogram"
 	"github.com/gogo/protobuf/proto"
 	prom "github.com/prometheus/client_model/go"
@@ -135,18 +137,24 @@ func (o *OpenMetricsExporter) Labels() []*prom.LabelPair {
 	return o.labels
 }
 
-func (o *OpenMetricsExporter) SetLabels(labels *map[string]string) {
+func (o *OpenMetricsExporter) SetLabels(labels *map[string]string) error {
 	var labelValues []*prom.LabelPair
 
 	for label, value := range *labels {
-		labelName := sanitizeOpenMetricsLabels(label)
-		labelValue := value
+		if util.InvalidCharKeyRegex.MatchString(label) {
+			return errors.Errorf("invalid label key %q", label)
+		}
+
+		if util.InvalidCharValueRegex.MatchString(value) {
+			return errors.Errorf("invalid label value %q", value)
+		}
 		labelPair := &prom.LabelPair{
-			Name:  &labelName,
-			Value: &labelValue,
+			Name:  &label,
+			Value: &value,
 		}
 		labelValues = append(labelValues, labelPair)
 	}
 
 	o.labels = labelValues
+	return nil
 }

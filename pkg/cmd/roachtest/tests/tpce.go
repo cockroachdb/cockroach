@@ -7,6 +7,7 @@ package tests
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
@@ -254,7 +256,7 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 		}
 
 		if opts.exportMetrics {
-			return exportTPCEResults(t, result.Stdout)
+			return exportTPCEResults(t, c, result.Stdout)
 		}
 		return nil
 	})
@@ -327,7 +329,7 @@ type tpceMetrics struct {
 //
 // The Measured Throughput is computed as the total number of Valid Trade-Result Transactions
 // within the Measurement Interval divided by the duration of the Measurement Interval in seconds.
-func exportTPCEResults(t test.Test, result string) error {
+func exportTPCEResults(t test.Test, c cluster.Cluster, result string) error {
 	// Filter out everything but the TradeResult transaction metrics.
 	//
 	// Example output of TPCE:
@@ -357,7 +359,20 @@ func exportTPCEResults(t test.Test, result string) error {
 			P99Latency:  removeUnits(fields[11]),
 			PMaxLatency: removeUnits(fields[12]),
 		}
-		metricBytes, err := json.Marshal(metrics)
+
+		var metricBytes []byte
+		var err error
+		fileName := roachtestutil.GetBenchmarkMetricsFileName(t)
+		if t.ExportOpenmetrics() {
+			labels := map[string]string{
+				"workload": "tpce",
+			}
+			labelString := clusterstats.GetOpenmetricsLabelString(t, c, labels)
+			metricBytes = getOpenMetrics(metrics, fields[5], labelString)
+		} else {
+			metricBytes, err = json.Marshal(metrics)
+		}
+
 		if err != nil {
 			return err
 		}
@@ -369,7 +384,27 @@ func exportTPCEResults(t test.Test, result string) error {
 			return err
 		}
 
-		return os.WriteFile(fmt.Sprintf("%s/stats.json", perfDir), metricBytes, 0666)
+		return os.WriteFile(fmt.Sprintf("%s/%s", perfDir, fileName), metricBytes, 0666)
 	}
 	return errors.Errorf("exportTPCEResults: found no lines starting with TradeResult")
+}
+
+func getOpenMetrics(metrics tpceMetrics, countOfLatencies string, labelString string) []byte {
+
+	// Create a buffer to build the OpenMetrics summary metric
+	var buffer bytes.Buffer
+
+	// Write the OpenMetrics summary metric to the buffer
+	buffer.WriteString("# TYPE tpce_latency summary\n")
+	buffer.WriteString("# HELP tpce_latency Latency metrics for TPC-E transactions\n")
+	buffer.WriteString(fmt.Sprintf("tpce_latency{%s, quantile=\"0.5\"} %s\n", labelString, metrics.P50Latency))
+	buffer.WriteString(fmt.Sprintf("tpce_latency{%s, quantile=\"0.9\"} %s\n", labelString, metrics.P90Latency))
+	buffer.WriteString(fmt.Sprintf("tpce_latency{%s, quantile=\"0.99\"} %s\n", labelString, metrics.P99Latency))
+	buffer.WriteString(fmt.Sprintf("tpce_latency{%s, quantile=\"1.0\"} %s\n", labelString, metrics.PMaxLatency))
+	buffer.WriteString(fmt.Sprintf("tpce_latency_sum{%s} %d\n", labelString, 0))
+	buffer.WriteString(fmt.Sprintf("tpce_latency_count{%s} %s\n", labelString, countOfLatencies))
+
+	// Convert the buffer to a byte array
+	metricsBytes := buffer.Bytes()
+	return metricsBytes
 }

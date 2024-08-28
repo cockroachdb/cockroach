@@ -6,7 +6,6 @@
 package exporter
 
 import (
-	"regexp"
 	"time"
 
 	"github.com/codahale/hdrhistogram"
@@ -15,16 +14,8 @@ import (
 )
 
 var (
-	invalidCharRegex      = regexp.MustCompile(`[^a-zA-Z0-9_]`)
-	invalidFirstCharRegex = regexp.MustCompile(`^[^a-zA-Z_]`)
-	summaryQuantiles      = []float64{50, 95, 99, 100}
+	summaryQuantiles = []float64{50, 95, 99, 100}
 )
-
-func sanitizeOpenMetricsLabels(input string) string {
-	sanitized := invalidCharRegex.ReplaceAllString(input, "_")
-	sanitized = invalidFirstCharRegex.ReplaceAllString(sanitized, "_")
-	return sanitized
-}
 
 // ConvertHdrHistogramToPrometheusMetricFamily converts a Hdr histogram into MetricFamily which is used
 // by expfmt.MetricFamilyToOpenMetrics to export openmetrics

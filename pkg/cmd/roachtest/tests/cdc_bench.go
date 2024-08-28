@@ -9,8 +9,8 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
-	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strconv"
 	"sync/atomic"
@@ -346,7 +346,7 @@ func runCDCBenchScan(
 		t.L().Printf("changefeed completed in %s (scanned %s rows per second)",
 			duration.Truncate(time.Second), humanize.Comma(rate))
 
-		// Record scan rate to stats.json.
+		// Record scan rate to stats file.
 		return writeCDCBenchStats(ctx, t, c, nCoord, "scan-rate", rate)
 	})
 
@@ -547,10 +547,17 @@ func runCDCBenchWorkload(
 			extra += ` --tolerate-errors`
 		}
 		t.L().Printf("running workload")
+		labels := map[string]string{
+			"duration":     duration.String(),
+			"concurrency":  fmt.Sprintf("%d", concurrency),
+			"read_percent": fmt.Sprintf("%d", readPercent),
+			"insert_count": fmt.Sprintf("%d", insertCount),
+		}
+
 		err := c.RunE(ctx, option.WithNodes(nWorkload), fmt.Sprintf(
-			`./cockroach workload run kv --seed %d --histograms=%s/stats.json `+
+			`./cockroach workload run kv --seed %d %s `+
 				`--concurrency %d --duration %s --write-seq R%d --read-percent %d %s {pgurl:%d-%d}`,
-			workloadSeed, t.PerfArtifactsDir(), concurrency, duration, insertCount, readPercent, extra,
+			workloadSeed, roachtestutil.GetWorkloadHistogramArgsString(t, c, labels), concurrency, duration, insertCount, readPercent, extra,
 			nData[0], nData[len(nData)-1]))
 		if err != nil {
 			return err
@@ -627,7 +634,7 @@ func waitForChangefeed(
 	}
 }
 
-// writeCDCBenchStats writes a single perf metric into stats.json on the
+// writeCDCBenchStats writes a single perf metric into stats file on the
 // given node, for graphing in roachperf.
 func writeCDCBenchStats(
 	ctx context.Context,
@@ -640,21 +647,28 @@ func writeCDCBenchStats(
 	// The easiest way to record a precise metric for roachperf is to cast it as a
 	// duration in seconds in the histogram's upper bound.
 	valueS := time.Duration(value) * time.Second
-	reg := histogram.NewRegistry(valueS, histogram.MockWorkloadName)
-	bytesBuf := bytes.NewBuffer([]byte{})
-	jsonEnc := json.NewEncoder(bytesBuf)
 
+	exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+	defer func() {
+		_ = exporter.Close(nil)
+	}()
+	reg := histogram.NewRegistryWithExporter(valueS, histogram.MockWorkloadName, exporter)
+
+	bytesBuf := bytes.NewBuffer([]byte{})
+	writer := io.Writer(bytesBuf)
+
+	exporter.Init(&writer)
 	var err error
 	reg.GetHandle().Get(metric).Record(valueS)
 	reg.Tick(func(tick histogram.Tick) {
-		err = jsonEnc.Encode(tick.Snapshot())
+		err = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
 	})
 	if err != nil {
 		return err
 	}
 
 	// Upload the perf artifacts to the given node.
-	path := filepath.Join(t.PerfArtifactsDir(), "stats.json")
+	path := filepath.Join(t.PerfArtifactsDir(), roachtestutil.GetBenchmarkMetricsFileName(t))
 	if err := c.RunE(ctx, option.WithNodes(node), "mkdir -p "+filepath.Dir(path)); err != nil {
 		return err
 	}
