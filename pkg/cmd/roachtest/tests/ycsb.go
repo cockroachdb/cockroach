@@ -88,9 +88,10 @@ func registerYCSB(r registry.Registry) {
 
 			defaultDuration := ifLocal(c, "10s", "30m")
 			args += getEnvWorkloadDurationValueOrDefault(defaultDuration)
+
 			cmd := fmt.Sprintf(
 				"./cockroach workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+
-					" --splits=%d --histograms="+t.PerfArtifactsDir()+"/stats.json"+args+
+					" --splits=%d "+roachtestutil.GetWorkloadHistogramArgsString(t, c)+args+
 					" {pgurl%s}",
 				wl, conc, len(c.CRDBNodes()), c.CRDBNodes())
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)

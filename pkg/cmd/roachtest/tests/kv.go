@@ -144,7 +144,7 @@ func registerKV(r registry.Registry) {
 			} else {
 				readPercent = fmt.Sprintf(" --read-percent=%d", opts.readPercent)
 			}
-			histograms := " --histograms=" + t.PerfArtifactsDir() + "/stats.json"
+			histograms := " " + roachtestutil.GetWorkloadHistogramArgsString(t, c)
 			var batchSize string
 			if opts.batchSize > 0 {
 				batchSize = fmt.Sprintf(" --batch=%d", opts.batchSize)
