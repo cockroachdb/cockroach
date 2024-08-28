@@ -1670,6 +1670,10 @@ type ExecutorTestingKnobs struct {
 	// due to some other condition. We can't set the probability to 0 since
 	// that would disable the feature entirely.
 	DisableProbabilisticSampling bool
+
+	// AfterArbiterRead, if set, will be called after each row read from an arbiter index
+	// for an UPSERT or INSERT.
+	AfterArbiterRead func()
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.

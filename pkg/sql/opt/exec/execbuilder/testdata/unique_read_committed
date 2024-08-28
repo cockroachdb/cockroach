@@ -25,176 +25,22 @@ CREATE TABLE uniq_enum (
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-query T
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
 EXPLAIN (OPT) INSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
-----
-insert uniq_enum
- ├── project
- │    ├── values
- │    │    ├── ('us-west', 'foo', 1, 1)
- │    │    └── ('us-east', 'bar', 2, 2)
- │    └── projections
- │         └── column1 IN ('us-east', 'us-west', 'eu-west')
- └── unique-checks
-      ├── unique-checks-item: uniq_enum(i)
-      │    └── project
-      │         └── semi-join (lookup uniq_enum)
-      │              ├── flags: prefer lookup join (into right side)
-      │              ├── locking: for-share,predicate,durability-guaranteed
-      │              ├── with-scan &1
-      │              └── filters
-      │                   └── r != uniq_enum.r
-      └── unique-checks-item: uniq_enum(s,j)
-           └── project
-                └── semi-join (lookup uniq_enum@uniq_enum_r_s_j_key)
-                     ├── flags: prefer lookup join (into right side)
-                     ├── locking: for-share,predicate,durability-guaranteed
-                     ├── with-scan &1
-                     └── filters
-                          └── (r != uniq_enum.r) OR (i != uniq_enum.i)
 
-query T
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
 EXPLAIN (OPT) INSERT INTO uniq_enum (s, i) VALUES ('foo', 1), ('bar', 2)
-----
-insert uniq_enum
- ├── project
- │    ├── project
- │    │    ├── values
- │    │    │    ├── ('foo', 1)
- │    │    │    └── ('bar', 2)
- │    │    └── projections
- │    │         ├── CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
- │    │         └── CAST(NULL AS INT8)
- │    └── projections
- │         └── r_default IN ('us-east', 'us-west', 'eu-west')
- └── unique-checks
-      └── unique-checks-item: uniq_enum(i)
-           └── project
-                └── semi-join (lookup uniq_enum)
-                     ├── flags: prefer lookup join (into right side)
-                     ├── locking: for-share,predicate,durability-guaranteed
-                     ├── with-scan &1
-                     └── filters
-                          └── r != uniq_enum.r
 
-query T
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
 EXPLAIN (OPT) INSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
 ON CONFLICT DO NOTHING
-----
-insert uniq_enum
- ├── arbiter constraints: unique_i unique_s_j
- └── project
-      ├── anti-join (lookup uniq_enum@uniq_enum_r_s_j_key)
-      │    ├── flags: prefer lookup join (into right side)
-      │    ├── lookup columns are key
-      │    ├── locking: for-share,predicate,durability-guaranteed
-      │    ├── anti-join (lookup uniq_enum)
-      │    │    ├── flags: prefer lookup join (into right side)
-      │    │    ├── lookup columns are key
-      │    │    ├── locking: for-share,predicate,durability-guaranteed
-      │    │    ├── values
-      │    │    │    ├── ('us-west', 'foo', 1, 1)
-      │    │    │    └── ('us-east', 'bar', 2, 2)
-      │    │    └── filters (true)
-      │    └── filters (true)
-      └── projections
-           └── column1 IN ('us-east', 'us-west', 'eu-west')
 
-query T
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
 EXPLAIN (OPT) UPDATE uniq_enum SET r = DEFAULT, s = 'baz', i = 3 WHERE r = 'eu-west' AND i > 10 AND i <= 20
-----
-update uniq_enum
- ├── project
- │    ├── project
- │    │    ├── scan uniq_enum
- │    │    │    └── constraint: /9/11: [/'eu-west'/11 - /'eu-west'/20]
- │    │    └── projections
- │    │         ├── CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
- │    │         ├── 'baz'
- │    │         └── 3
- │    └── projections
- │         └── r_new IN ('us-east', 'us-west', 'eu-west')
- └── unique-checks
-      ├── unique-checks-item: uniq_enum(i)
-      │    └── project
-      │         └── semi-join (lookup uniq_enum)
-      │              ├── flags: prefer lookup join (into right side)
-      │              ├── locking: for-share,predicate,durability-guaranteed
-      │              ├── with-scan &1
-      │              └── filters
-      │                   └── r != uniq_enum.r
-      └── unique-checks-item: uniq_enum(s,j)
-           └── project
-                └── semi-join (lookup uniq_enum@uniq_enum_r_s_j_key)
-                     ├── flags: prefer lookup join (into right side)
-                     ├── locking: for-share,predicate,durability-guaranteed
-                     ├── with-scan &1
-                     └── filters
-                          └── (r != uniq_enum.r) OR (i != uniq_enum.i)
 
-query T
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
 EXPLAIN (OPT) UPSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
-----
-upsert uniq_enum
- ├── arbiter indexes: uniq_enum_pkey
- ├── project
- │    ├── project
- │    │    ├── left-join (lookup uniq_enum)
- │    │    │    ├── lookup columns are key
- │    │    │    ├── values
- │    │    │    │    ├── ('us-west', 'foo', 1, 1)
- │    │    │    │    └── ('us-east', 'bar', 2, 2)
- │    │    │    └── filters (true)
- │    │    └── projections
- │    │         ├── CASE WHEN uniq_enum.r IS NULL THEN column1 ELSE uniq_enum.r END
- │    │         └── CASE WHEN uniq_enum.r IS NULL THEN column3 ELSE uniq_enum.i END
- │    └── projections
- │         └── upsert_r IN ('us-east', 'us-west', 'eu-west')
- └── unique-checks
-      ├── unique-checks-item: uniq_enum(i)
-      │    └── project
-      │         └── semi-join (lookup uniq_enum)
-      │              ├── flags: prefer lookup join (into right side)
-      │              ├── locking: for-share,predicate,durability-guaranteed
-      │              ├── with-scan &1
-      │              └── filters
-      │                   └── r != uniq_enum.r
-      └── unique-checks-item: uniq_enum(s,j)
-           └── project
-                └── semi-join (lookup uniq_enum@uniq_enum_r_s_j_key)
-                     ├── flags: prefer lookup join (into right side)
-                     ├── locking: for-share,predicate,durability-guaranteed
-                     ├── with-scan &1
-                     └── filters
-                          └── (r != uniq_enum.r) OR (i != uniq_enum.i)
 
-query T
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
 EXPLAIN (OPT) INSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
 ON CONFLICT (s, j) DO UPDATE SET i = 3
-----
-upsert uniq_enum
- ├── arbiter constraints: unique_s_j
- ├── project
- │    ├── project
- │    │    ├── left-join (lookup uniq_enum@uniq_enum_r_s_j_key)
- │    │    │    ├── flags: prefer lookup join (into right side)
- │    │    │    ├── lookup columns are key
- │    │    │    ├── locking: for-update,predicate,durability-guaranteed
- │    │    │    ├── values
- │    │    │    │    ├── ('us-west', 'foo', 1, 1)
- │    │    │    │    └── ('us-east', 'bar', 2, 2)
- │    │    │    └── filters (true)
- │    │    └── projections
- │    │         ├── CASE WHEN uniq_enum.r IS NULL THEN column1 ELSE uniq_enum.r END
- │    │         └── CASE WHEN uniq_enum.r IS NULL THEN column3 ELSE 3 END
- │    └── projections
- │         └── upsert_r IN ('us-east', 'us-west', 'eu-west')
- └── unique-checks
-      └── unique-checks-item: uniq_enum(i)
-           └── project
-                └── semi-join (lookup uniq_enum)
-                     ├── flags: prefer lookup join (into right side)
-                     ├── locking: for-share,predicate,durability-guaranteed
-                     ├── with-scan &1
-                     └── filters
-                          └── r != uniq_enum.r
