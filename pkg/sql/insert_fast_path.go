@@ -463,6 +463,12 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 				return false, err
 			}
 		}
+
+		// This testing knob allows us to suspend execution to force a race condition.
+		if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
+			fn()
+		}
+
 		// Process the insertion for the current source row, potentially
 		// accumulating the result row for later.
 		if err := n.run.processSourceRow(params, inputRow); err != nil {

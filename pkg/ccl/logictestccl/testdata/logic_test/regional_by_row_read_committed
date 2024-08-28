@@ -112,14 +112,10 @@ INSERT INTO river VALUES ('ap-southeast-2', 'Skykomish', 'Snoqualmie')
 
 # Test conflicting INSERT ON CONFLICT DO NOTHING.
 
-statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
+statement ok
 INSERT INTO university (name, mascot, postal_code)
 VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8'), ('Evergreen State', 'geoducks', '98505')
 ON CONFLICT (mascot) DO NOTHING
-
-# TODO(mw5h): Temporary until ON CONFLICT works
-statement ok
-INSERT INTO university (name, mascot, postal_code) VALUES ('Evergreen State', 'geoducks', '98505')
 
 query TTT
 SELECT name, mascot, postal_code FROM university ORDER BY name
@@ -127,7 +123,7 @@ SELECT name, mascot, postal_code FROM university ORDER BY name
 Evergreen State  geoducks  98505
 Western Oregon   wolves    97361
 
-statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
+statement ok
 INSERT INTO volcano VALUES
 ('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2'),
 ('Mount St. Helens', 'Fair maiden Loowit could not choose between Wyeast and Pahto and was transformed by Saghalie.', 'POINT(-122.1944 46.1912)', 'ap-southeast-2')
@@ -136,7 +132,8 @@ ON CONFLICT (origin) DO NOTHING
 query TTT
 SELECT name, origin, location FROM volcano ORDER BY name
 ----
-Mount Hood  Fought over Loowit and was transformed by Saghalie.  0101000020E6100000909E2287886C5EC08236397CD2AF4640
+Mount Hood        Fought over Loowit and was transformed by Saghalie.                                            0101000020E6100000909E2287886C5EC08236397CD2AF4640
+Mount St. Helens  Fair maiden Loowit could not choose between Wyeast and Pahto and was transformed by Saghalie.  0101000020E6100000EA95B20C718C5EC0637FD93D79184740
 
 statement ok
 INSERT INTO city VALUES ('Vancouver', 'The Big Smoke', 'BC'), ('Salem', 'Cherry City', 'OR')
@@ -160,10 +157,10 @@ us-east-1       Fraser     Strait of Georgia
 
 # Test conflicting UPSERT.
 
-statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"
 UPSERT INTO university (name, mascot, postal_code) VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8')
 
-statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_origin_key"
 UPSERT INTO volcano VALUES
 ('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2')
 
@@ -178,7 +175,7 @@ UPSERT INTO river VALUES ('us-east-1', 'Fraser', 'Salish Sea')
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"
 UPDATE university SET mascot = 'wolves' WHERE name = 'Evergreen State'
 
-statement ok
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_origin_key"
 UPDATE volcano SET origin = 'Fought over Loowit and was transformed by Saghalie.' WHERE name = 'Mount St. Helens'
 
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "city_pkey"\nDETAIL: Key \(name, state_or_province\)=\('Vancouver', 'BC'\) already exists\.
@@ -189,12 +186,12 @@ UPDATE river SET region = 'us-east-1', outlet = 'Salish Sea' WHERE name = 'Skyko
 
 # Test conflicting INSERT ON CONFLICT DO UPDATE.
 
-statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_pkey"
 INSERT INTO university (name, mascot, postal_code)
 VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8'), ('Oregon Tech', 'owls', '97601')
 ON CONFLICT (mascot) DO UPDATE SET name = 'Evergreen State', mascot = 'banana slugs'
 
-statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_pkey"
 INSERT INTO volcano VALUES
 ('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2'),
 ('Mount Garibaldi', 'Lightning from thunderbird eyes struck the ground.', 'POINT(-123.004722 49.850278)', 'us-east-1')

@@ -175,6 +175,11 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 		rowVals = rowVals[:ord]
 	}
 
+	// This testing knob allows us to suspend execution to force a race condition.
+	if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
+		fn()
+	}
+
 	// Process the row. This is also where the tableWriter will accumulate
 	// the row for later.
 	return n.run.tw.row(params.ctx, rowVals, pm, n.run.traceKV)
