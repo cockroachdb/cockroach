@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 )
 
 var upsertNodePool = sync.Pool{
@@ -173,6 +174,13 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 			return err
 		}
 		rowVals = rowVals[:ord]
+	}
+
+	if buildutil.CrdbTestBuild {
+		// This testing knob allows us to suspend execution to force a race condition.
+		if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
+			fn()
+		}
 	}
 
 	// Process the row. This is also where the tableWriter will accumulate

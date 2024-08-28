@@ -22,7 +22,7 @@ CREATE TABLE t_double (
 )
 
 # Test that we don't allow writes to tables with multiple partition columns.
-statement error pgcode 0A000 pq: unimplemented: explicit unique checks are not yet supported under read committed isolation
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
 INSERT INTO t_double VALUES (1, 'one', 'one', 10), (2, 'two', 'two', 20)
 
 statement ok
@@ -37,7 +37,7 @@ CREATE TABLE t_int (
 )
 
 # Test that we don't allow writes to tables with non-enum partition columns.
-statement error pgcode 0A000 pq: unimplemented: explicit unique checks are not yet supported under read committed isolation
+statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
 INSERT INTO t_int VALUES (1, 1, 10), (2, 2, 20)
 
 statement ok
@@ -142,7 +142,34 @@ scan t
       └── a IN ('one', 'two', 'three', 'four', 'five')
 
 statement ok
+CREATE TABLE overwrite (
+  pk INT PRIMARY KEY,
+  a part_type,
+  b INT,
+  FAMILY (pk, a, b)
+) PARTITION ALL BY LIST(a) (
+  PARTITION one VALUES IN ('one'),
+  PARTITION two VALUES IN ('two'),
+  PARTITION three VALUES IN ('three'),
+  PARTITION four VALUES IN ('four'),
+  PARTITION five VALUES IN ('five')
+)
+
+statement ok
 SET tracing = kv
+
+# Test a blind write.
+statement ok
+UPSERT INTO overwrite VALUES (1, 'two', 3);
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'CPut%'
+----
+CPut /Table/111/1/"@"/1/0 -> /TUPLE/3:3:Int/3
+CPut /Table/111/1/" "/1/0 -> nil (tombstone)
+CPut /Table/111/1/"\x80"/1/0 -> nil (tombstone)
+CPut /Table/111/1/"\xa0"/1/0 -> nil (tombstone)
+CPut /Table/111/1/"\xc0"/1/0 -> nil (tombstone)
 
 statement ok
 INSERT INTO t VALUES (1, 'two', 3, 4, 5)
@@ -162,9 +189,23 @@ UPDATE t SET pk = 1 WHERE c = 6;
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "t_c_key"
 UPDATE t SET c = 4 WHERE pk = 2
 
+statement ok
+UPSERT INTO t VALUES (1, 'five', 3, 4, 15)
+
+statement ok
+INSERT INTO t VALUES (1, 'three', 3, 4, 15) ON CONFLICT DO NOTHING
+
+statement ok
+INSERT INTO t VALUES (1, 'one', 3, 4, 5) ON CONFLICT (pk) DO UPDATE SET d = t.d + 10
+
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'CPut%'
 ----
+CPut /Table/111/1/"@"/1/0 -> /TUPLE/3:3:Int/3
+CPut /Table/111/1/" "/1/0 -> nil (tombstone)
+CPut /Table/111/1/"\x80"/1/0 -> nil (tombstone)
+CPut /Table/111/1/"\xa0"/1/0 -> nil (tombstone)
+CPut /Table/111/1/"\xc0"/1/0 -> nil (tombstone)
 CPut /Table/110/1/"@"/1/0 -> /TUPLE/3:3:Int/3/1:4:Int/4/1:5:Int/5
 CPut /Table/110/1/" "/1/0 -> nil (tombstone)
 CPut /Table/110/1/"\x80"/1/0 -> nil (tombstone)
@@ -211,3 +252,18 @@ CPut /Table/110/2/" "/4/0 -> nil (tombstone)
 CPut /Table/110/2/"@"/4/0 -> nil (tombstone)
 CPut /Table/110/2/"\x80"/4/0 -> nil (tombstone)
 CPut /Table/110/2/"\xc0"/4/0 -> nil (tombstone)
+CPut /Table/110/1/"\xc0"/1/0 -> /TUPLE/3:3:Int/3/1:4:Int/4/1:5:Int/15
+CPut /Table/110/1/" "/1/0 -> nil (tombstone)
+CPut /Table/110/1/"@"/1/0 -> nil (tombstone)
+CPut /Table/110/1/"\x80"/1/0 -> nil (tombstone)
+CPut /Table/110/1/"\xa0"/1/0 -> nil (tombstone)
+CPut /Table/110/2/" "/4/0 -> nil (tombstone)
+CPut /Table/110/2/"@"/4/0 -> nil (tombstone)
+CPut /Table/110/2/"\x80"/4/0 -> nil (tombstone)
+CPut /Table/110/2/"\xa0"/4/0 -> nil (tombstone)
+
+query ITIIIT
+SELECT * FROM t ORDER BY pk
+----
+1  five  3  4  25  NULL
+2  four  3  6  5   NULL
