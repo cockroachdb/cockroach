@@ -16,10 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -253,7 +253,7 @@ func TestExplainGist(t *testing.T) {
 			if err != nil {
 				// We might be still in the process of cancelling the previous
 				// DROP operation - ignore this particular error.
-				if !errors.Is(err, catalog.ErrDescriptorDropped) {
+				if !testutils.IsError(err, "descriptor is being dropped") {
 					t.Fatal(err)
 				}
 				continue
