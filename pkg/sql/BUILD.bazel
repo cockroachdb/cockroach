@@ -277,7 +277,6 @@ go_library(
         "unsplit.go",
         "unsupported_vars.go",
         "update.go",
-        "update_table_metadata_cache_job.go",
         "upsert.go",
         "user.go",
         "values.go",
