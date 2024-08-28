@@ -532,6 +532,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 		updateColOrds,
 		returnColOrds,
 		checkOrds,
+		ups.UniqueWithTombstoneIndexes,
 		b.allowAutoCommit && len(ups.UniqueChecks) == 0 &&
 			len(ups.FKChecks) == 0 && len(ups.FKCascades) == 0,
 	)
