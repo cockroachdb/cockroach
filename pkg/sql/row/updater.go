@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
@@ -80,6 +81,7 @@ func MakeUpdater(
 	txn *kv.Txn,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
+	uniqueWithTombstoneIndexes []catalog.Index,
 	updateCols []catalog.Column,
 	requestedCols []catalog.Column,
 	updateType rowUpdaterType,
@@ -166,7 +168,7 @@ func MakeUpdater(
 	}
 
 	ru := Updater{
-		Helper:                NewRowHelper(codec, tableDesc, includeIndexes, nil /* uniqueWithTombstoneIndexes */, sv, internal, metrics),
+		Helper:                NewRowHelper(codec, tableDesc, includeIndexes, uniqueWithTombstoneIndexes, sv, internal, metrics),
 		DeleteHelper:          deleteOnlyHelper,
 		FetchCols:             requestedCols,
 		FetchColIDtoRowIndex:  ColIDtoRowIndexFromCols(requestedCols),
@@ -261,6 +263,7 @@ func (ru *Updater) UpdateRow(
 		rowPrimaryKeyChanged = !bytes.Equal(primaryIndexKey, newPrimaryIndexKey)
 	}
 
+	var writtenIndexes intsets.Fast
 	for i, index := range ru.Helper.Indexes {
 		// We don't want to insert any empty k/v's, so set includeEmpty to false.
 		// Consider the following case:
@@ -437,6 +440,7 @@ func (ru *Updater) UpdateRow(
 						}
 						batch.CPutAllowingIfNotExists(newEntry.Key, &newEntry.Value, expValue)
 					}
+					writtenIndexes.Add(i)
 				} else if oldEntry.Family < newEntry.Family {
 					if oldEntry.Family == descpb.FamilyID(0) {
 						return nil, errors.AssertionFailedf(
@@ -472,6 +476,7 @@ func (ru *Updater) UpdateRow(
 						}
 						batch.CPut(newEntry.Key, &newEntry.Value, nil)
 					}
+					writtenIndexes.Add(i)
 					newIdx++
 				}
 			}
@@ -505,6 +510,7 @@ func (ru *Updater) UpdateRow(
 					}
 					batch.CPut(newEntry.Key, &newEntry.Value, nil)
 				}
+				writtenIndexes.Add(i)
 				newIdx++
 			}
 		} else {
@@ -526,10 +532,18 @@ func (ru *Updater) UpdateRow(
 		}
 	}
 
+	writtenIndexes.ForEach(func(idx int) {
+		if err == nil {
+			err = ru.ri.writeTombstones(ctx, ru.Helper.Indexes[idx], putter, ru.newValues, traceKV)
+		}
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	// We're deleting indexes in a delete only state. We're bounding this by the number of indexes because inverted
 	// indexed will be handled separately.
 	if ru.DeleteHelper != nil {
-
 		// For determinism, add the entries for the secondary indexes in the same
 		// order as they appear in the helper.
 		for idx := range ru.DeleteHelper.Indexes {

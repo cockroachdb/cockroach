@@ -446,6 +446,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 		returnColOrds,
 		checkOrds,
 		passthroughCols,
+		upd.UniqueWithTombstoneIndexes,
 		b.allowAutoCommit && len(upd.UniqueChecks) == 0 &&
 			len(upd.FKChecks) == 0 && len(upd.FKCascades) == 0,
 	)

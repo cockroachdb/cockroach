@@ -105,6 +105,12 @@ func (mb *mutationBuilder) buildUniqueChecksForUpdate() {
 		if !mb.uniqueColsUpdated(i) {
 			continue
 		}
+		// For non-serializable transactions, we guarantee uniqueness by writing tombstones in all
+		// partitions of a unique index with implicit partitioning columns.
+		if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable && mb.tab.Unique(i).CanUseTombstones() {
+			mb.uniqueWithTombstoneIndexes.Add(i)
+			continue
+		}
 		if h.init(mb, i) {
 			// The insertion check works for updates too since it simply checks that
 			// the unique columns in the newly inserted or updated rows do not match

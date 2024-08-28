@@ -966,6 +966,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 	case updateOp:
 		a := n.args.(*updateArgs)
 		ob.Attrf("table", "%s", a.Table.Name())
+		if uniqWithTombstoneIndexes, ok := joinNames(a.Table, a.UniqueWithTombstonesIndexes, ", "); ok {
+			ob.Attr("uniqueness checks (tombstones)", uniqWithTombstoneIndexes)
+		}
 		ob.Attr("set", printColumns(tableColumns(a.Table, a.UpdateCols)))
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
