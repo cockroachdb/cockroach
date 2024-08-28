@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -94,6 +95,9 @@ var canaryRetryOptions = retry.Options{
 }
 
 // repeatRunE is the same function as c.RunE but with an automatic retry loop.
+//
+// NB: preferably call roachtestutil.RepeatRunE directly so that we can one day
+// remove repeatRunE.
 func repeatRunE(
 	ctx context.Context,
 	t test.Test,
@@ -102,24 +106,10 @@ func repeatRunE(
 	operation string,
 	args ...string,
 ) error {
-	var lastError error
-	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if t.Failed() {
-			return fmt.Errorf("test has failed")
-		}
-		attempt++
-		t.L().Printf("attempt %d - %s", attempt, operation)
-		lastError = c.RunE(ctx, option.WithNodes(node), args...)
-		if lastError != nil {
-			t.L().Printf("error - retrying: %s", lastError)
-			continue
-		}
-		return nil
-	}
-	return errors.Wrapf(lastError, "all attempts failed for %s", operation)
+	// NB: do not add custom code here. Instead, improve RepeatRunE.
+	// `repeatRunE` should be removed one day and all callers updated to
+	// call RepeatRunE directly.
+	return roachtestutil.RepeatRunE(ctx, t, c, node, operation, args...)
 }
 
 // repeatRunWithDetailsSingleNode is the same function as c.RunWithDetailsSingleNode but with an
