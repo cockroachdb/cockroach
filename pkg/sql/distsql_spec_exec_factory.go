@@ -1002,6 +1002,7 @@ func (e *distSQLSpecExecFactory) ConstructUpdate(
 	returnCols exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	passthrough colinfo.ResultColumns,
+	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: update")

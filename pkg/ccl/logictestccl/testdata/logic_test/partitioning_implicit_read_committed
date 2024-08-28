@@ -140,3 +140,12 @@ INSERT INTO t VALUES (1, 'one', 3, 6, 5)
 
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "t_c_key"
 INSERT INTO t VALUES (2, 'three', 3, 4, 5)
+
+statement ok
+INSERT INTO t VALUES (2, 'four', 3, 6, 5)
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "t_pkey"
+UPDATE t SET pk = 1 WHERE c = 6;
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "t_c_key"
+UPDATE t SET c = 4 WHERE pk = 2

@@ -520,6 +520,7 @@ define Update {
     ReturnCols exec.TableColumnOrdinalSet
     Checks exec.CheckOrdinalSet
     Passthrough colinfo.ResultColumns
+    UniqueWithTombstonesIndexes cat.IndexOrdinals
 
     # If set, the operator will commit the transaction as part of its execution.
     AutoCommit bool

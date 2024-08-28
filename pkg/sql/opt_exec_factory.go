@@ -1520,6 +1520,7 @@ func (ef *execFactory) ConstructUpdate(
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	passthrough colinfo.ResultColumns,
+	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	// TODO(radu): the execution code has an annoying limitation that the fetch
@@ -1547,6 +1548,7 @@ func (ef *execFactory) ConstructUpdate(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
+		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
 		updateCols,
 		fetchCols,
 		row.UpdaterDefault,
@@ -1651,6 +1653,7 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
+		nil, /* uniqueWithTombstoneIndexes */
 		updateCols,
 		fetchCols,
 		row.UpdaterDefault,
