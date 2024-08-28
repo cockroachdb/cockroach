@@ -176,6 +176,10 @@ define MutationPrivate {
 
     # FKCascades stores metadata necessary for building cascading queries.
     FKCascades FKCascades
+
+    # Unique indexes where uniqueness will be ensured by writing tombstones to
+    # all partitions.
+    UniqueWithTombstoneIndexes IndexOrdinals
 }
 
 # Update evaluates a relational input expression that fetches existing rows from

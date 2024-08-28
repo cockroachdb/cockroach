@@ -67,14 +67,14 @@ var maxRowSizeErr = settings.RegisterByteSizeSetting(
 	settings.WithPublic,
 )
 
-// Per-index data for writing tombstones to enforce a uniqueness constraint
+// Per-index data for writing tombstones to enforce a uniqueness constraint.
 type uniqueWithTombstoneEntry struct {
 	// implicitPartitionKeyValues contains the potential values for the
-	// partitioning column
+	// partitioning column.
 	implicitPartitionKeyVals []tree.Datum
 
 	// tmpTombstones contains the tombstones generated for this index by the last
-	// call to encodeTombstonesForIndex
+	// call to encodeTombstonesForIndex.
 	tmpTombstones [][]byte
 }
 
