@@ -11,6 +11,7 @@
 package row
 
 import (
+	"bytes"
 	"context"
 	"sort"
 
@@ -65,14 +66,20 @@ var maxRowSizeErr = settings.RegisterByteSizeSetting(
 	settings.WithPublic,
 )
 
+type tombstoneCacheEntry struct {
+	implicitPartitionKeyVals []tree.Datum
+	tombstones               [][]byte
+}
+
 // RowHelper has the common methods for table row manipulations.
 type RowHelper struct {
 	Codec keys.SQLCodec
 
 	TableDesc catalog.TableDescriptor
 	// Secondary indexes.
-	Indexes      []catalog.Index
-	indexEntries map[catalog.Index][]rowenc.IndexEntry
+	Indexes                    []catalog.Index
+	UniqueWithTombstoneIndexes intsets.Fast
+	indexEntries               map[catalog.Index][]rowenc.IndexEntry
 
 	// Computed during initialization for pretty-printing.
 	primIndexValDirs []encoding.Direction
@@ -84,6 +91,10 @@ type RowHelper struct {
 	primaryIndexValueCols catalog.TableColSet
 	sortedColumnFamilies  map[descpb.FamilyID][]descpb.ColumnID
 
+	// Used to build tombstones for non-Serializable uniqueness checks
+	tombstoneCache map[catalog.Index]*tombstoneCacheEntry
+	tmpRow         []tree.Datum
+
 	// Used to check row size.
 	maxRowSizeLog, maxRowSizeErr uint32
 	internal                     bool
@@ -94,16 +105,22 @@ func NewRowHelper(
 	codec keys.SQLCodec,
 	desc catalog.TableDescriptor,
 	indexes []catalog.Index,
+	uniqueWithTombstoneIndexes []catalog.Index,
 	sv *settings.Values,
 	internal bool,
 	metrics *rowinfra.Metrics,
 ) RowHelper {
+	var uniqueWithTombstoneIndexesSet intsets.Fast
+	for _, index := range uniqueWithTombstoneIndexes {
+		uniqueWithTombstoneIndexesSet.Add(index.Ordinal())
+	}
 	rh := RowHelper{
-		Codec:     codec,
-		TableDesc: desc,
-		Indexes:   indexes,
-		internal:  internal,
-		metrics:   metrics,
+		Codec:                      codec,
+		TableDesc:                  desc,
+		Indexes:                    indexes,
+		UniqueWithTombstoneIndexes: uniqueWithTombstoneIndexesSet,
+		internal:                   internal,
+		metrics:                    metrics,
 	}
 
 	// Pre-compute the encoding directions of the index key values for
@@ -168,6 +185,66 @@ func (rh *RowHelper) encodePrimaryIndex(
 		return nil, rowenc.MakeNullPKError(rh.TableDesc, idx, colIDtoRowIndex, values)
 	}
 	return primaryIndexKey, err
+}
+
+func (rh *RowHelper) encodeTombstonesForIndex(
+	ctx context.Context,
+	index catalog.Index,
+	colIDtoRowIndex catalog.TableColMap,
+	values []tree.Datum,
+) ([][]byte, error) {
+	if !rh.UniqueWithTombstoneIndexes.Contains(index.Ordinal()) {
+		return nil, nil
+	}
+
+	colIdx, ok := colIDtoRowIndex.Get(index.GetKeyColumnID((0)))
+	if !ok {
+		return nil, nil
+	}
+	colVal := values[colIdx]
+
+	if rh.tmpRow == nil {
+		rh.tmpRow = make([]tree.Datum, len(values))
+		copy(rh.tmpRow, values)
+	}
+	if rh.tombstoneCache == nil {
+		rh.tombstoneCache = make(map[catalog.Index]*tombstoneCacheEntry, len(rh.TableDesc.WritableNonPrimaryIndexes())+1)
+	}
+
+	cacheEntry, ok := rh.tombstoneCache[index]
+	if !ok {
+		implicitKeys := tree.MakeAllDEnumsInType(colVal.ResolvedType())
+		cacheEntry = &tombstoneCacheEntry{implicitPartitionKeyVals: implicitKeys, tombstones: make([][]byte, len(implicitKeys)-1)}
+		rh.tombstoneCache[index] = cacheEntry
+	}
+	cacheEntry.tombstones = cacheEntry.tombstones[:0]
+
+	for _, partVal := range cacheEntry.implicitPartitionKeyVals {
+		if bytes.Equal(colVal.(*tree.DEnum).PhysicalRep, partVal.(*tree.DEnum).PhysicalRep) {
+			continue
+		}
+		rh.tmpRow[colIdx] = partVal
+
+		if index.Primary() {
+			key, err := rh.encodePrimaryIndex(colIDtoRowIndex, rh.tmpRow)
+			if err != nil {
+				return nil, err
+			}
+			cacheEntry.tombstones = append(cacheEntry.tombstones, key)
+		} else {
+			keys, containsNull, err := rowenc.EncodeSecondaryIndexKey(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowIndex, rh.tmpRow)
+			if err != nil {
+				return nil, err
+			}
+			if containsNull {
+				cacheEntry.tombstones = cacheEntry.tombstones[:0]
+				break
+			}
+			cacheEntry.tombstones = append(cacheEntry.tombstones, keys...)
+		}
+	}
+
+	return cacheEntry.tombstones, nil
 }
 
 // encodeSecondaryIndexes encodes the secondary index keys based on a row's
