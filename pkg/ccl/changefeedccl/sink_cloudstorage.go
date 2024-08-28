@@ -539,6 +539,7 @@ func (s *cloudStorageSink) getOrCreateFile(
 		}
 		f.codec = codec
 	}
+
 	s.files.ReplaceOrInsert(f)
 	return f, nil
 }
@@ -563,6 +564,7 @@ func (s *cloudStorageSink) EmitRow(
 			retErr = ctx.Err()
 		}
 		if retErr != nil {
+			fmt.Println("error inside EmitRow: ", retErr)
 			// If we are returning an error, immediately close all compression
 			// codecs to release resources.  This step is also done in the
 			// Close() method, but doing this clean-up as soon as we know
@@ -587,12 +589,14 @@ func (s *cloudStorageSink) EmitRow(
 	}
 	file.numMessages++
 
-	if int64(file.buf.Len()) > s.targetMaxFileSize {
-		s.metrics.recordSizeBasedFlush()
-		if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
-			return err
-		}
-	}
+	// Force code to ignore this path since it is not relevant to bug we are
+	// testing. targetMaxFileSize can be set to any values.
+	//if int64(file.buf.Len()) > s.targetMaxFileSize {
+	//	s.metrics.recordSizeBasedFlush()
+	//	if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
+	//		return err
+	//	}
+	//}
 	return nil
 }
 
@@ -660,6 +664,7 @@ func (s *cloudStorageSink) flushTopicVersions(
 		return err == nil
 	})
 	for _, v := range toRemove {
+		fmt.Println("deleting: ", v)
 		s.files.Delete(cloudStorageSinkKey{topic: topic, schemaID: v})
 	}
 	return err
@@ -678,9 +683,11 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 		err = s.flushFile(ctx, i.(*cloudStorageSinkFile))
 		return err == nil
 	})
+	fmt.Println("flush")
 	if err != nil {
 		return err
 	}
+	fmt.Println("cleared during Flush")
 	s.files.Clear(true /* addNodesToFreeList */)
 	s.setDataFileTimestamp()
 	return s.waitAsyncFlush(ctx)
@@ -710,6 +717,7 @@ func (s *cloudStorageSink) waitAsyncFlush(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-s.asyncFlushTermCh:
+		fmt.Println("ended early")
 		return s.asyncFlushErr
 	case s.asyncFlushCh <- flushRequest{flush: done}:
 	}
@@ -718,8 +726,10 @@ func (s *cloudStorageSink) waitAsyncFlush(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-s.asyncFlushTermCh:
+		fmt.Println("ended early")
 		return s.asyncFlushErr
 	case <-done:
+		fmt.Println("waitAsyncFlush done")
 		return nil
 	}
 }
@@ -816,12 +826,16 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 				continue
 			}
 
+			time.Sleep(20 * time.Second)
 			// flush file to storage.
 			flushDone := s.metrics.recordFlushRequestCallback()
 			err := req.file.flushToStorage(ctx, s.es, req.dest, s.metrics)
 			flushDone()
-
+			if err == nil {
+				err = errors.New("injected error")
+			}
 			if err != nil {
+				fmt.Println(err)
 				log.Errorf(ctx, "error flushing file to storage: %s", err)
 				s.asyncFlushErr = err
 				return err
@@ -881,6 +895,7 @@ func (s *cloudStorageSink) closeAllCodecs() (err error) {
 
 // Close implements the Sink interface.
 func (s *cloudStorageSink) Close() error {
+	fmt.Println("closed again")
 	err := s.closeAllCodecs()
 	s.files = nil
 	err = errors.CombineErrors(err, s.waitAsyncFlush(context.Background()))
