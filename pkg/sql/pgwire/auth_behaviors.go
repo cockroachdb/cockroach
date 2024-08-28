@@ -30,12 +30,15 @@ type AuthBehaviors struct {
 	replacementIdentity username.SQLUsername
 	replacedIdentity    bool
 	roleMapper          RoleMapper
+	authorizer          Authorizer
+	roleGranter         RoleGranter
 }
 
 // Ensure that an AuthBehaviors is easily composable with itself.
 var _ Authenticator = (*AuthBehaviors)(nil).Authenticate
 var _ func() = (*AuthBehaviors)(nil).ConnClose
 var _ RoleMapper = (*AuthBehaviors)(nil).MapRole
+var _ RoleGranter = (*AuthBehaviors)(nil).GrantRole
 
 // This is a hack for the unused-symbols linter. These two functions
 // are, at present, only called by the GSSAPI integration. The code
@@ -44,9 +47,8 @@ var _ RoleMapper = (*AuthBehaviors)(nil).MapRole
 var _ = (*AuthBehaviors)(nil).SetConnClose
 var _ = (*AuthBehaviors)(nil).SetReplacementIdentity
 
-// Authenticate delegates to the Authenticator passed to
-// SetAuthenticator or returns an error if SetAuthenticator has not been
-// called.
+// Authenticate delegates to the Authenticator passed to SetAuthenticator or
+// returns an error if SetAuthenticator has not been called.
 func (b *AuthBehaviors) Authenticate(
 	ctx context.Context,
 	systemIdentity username.SQLUsername,
@@ -109,4 +111,40 @@ func (b *AuthBehaviors) MapRole(
 // SetRoleMapper updates the RoleMapper to be used.
 func (b *AuthBehaviors) SetRoleMapper(m RoleMapper) {
 	b.roleMapper = m
+}
+
+// SetAuthorizer updates the SetAuthorizer to be used.
+func (b *AuthBehaviors) SetAuthorizer(a Authorizer) {
+	b.authorizer = a
+}
+
+// MaybeAuthorize delegates to the Authorizer passed to SetAuthorizer and if
+// successful obtains the grants using RoleGranter passed to SetRoleGranter.
+func (b *AuthBehaviors) MaybeAuthorize(
+	ctx context.Context, systemIdentity username.SQLUsername, clientConnection bool,
+) error {
+	if b.authorizer != nil {
+		sqlGroups, err := b.authorizer(ctx, systemIdentity, clientConnection)
+		if err != nil {
+			return err
+		}
+		return b.GrantRole(ctx, systemIdentity, sqlGroups)
+	}
+	return nil
+}
+
+// GrantRole delegates to the RoleGranter passed to SetRoleGranter or
+// returns an error if SetRoleGranter has not been called.
+func (b *AuthBehaviors) GrantRole(
+	ctx context.Context, systemIdentity username.SQLUsername, sqlGroups []username.SQLUsername,
+) error {
+	if found := b.roleGranter; found != nil {
+		return found(ctx, systemIdentity, sqlGroups)
+	}
+	return errors.New("no RoleGranter provided to AuthBehaviors")
+}
+
+// SetRoleGranter updates the RoleMapper to be used.
+func (b *AuthBehaviors) SetRoleGranter(g RoleGranter) {
+	b.roleGranter = g
 }
