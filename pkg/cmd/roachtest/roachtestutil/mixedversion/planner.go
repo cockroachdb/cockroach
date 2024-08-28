@@ -204,12 +204,7 @@ const (
 // any mixedversion test plan.
 var planMutators = []mutator{
 	preserveDowngradeOptionRandomizerMutator{},
-	newClusterSettingMutator(
-		"kv.expiration_leases_only.enabled",
-		[]bool{true, false},
-		clusterSettingMinimumVersion("v23.1.0"),
-		clusterSettingSystemOnly,
-	),
+	// v23.2 cluster settings
 	newClusterSettingMutator(
 		"storage.ingest_split.enabled",
 		[]bool{true, false},
@@ -222,11 +217,18 @@ var planMutators = []mutator{
 		clusterSettingMinimumVersion("v23.2.0"),
 		clusterSettingSystemOnly,
 	),
+	// v24.1 cluster settings
 	newClusterSettingMutator(
 		"storage.sstable.compression_algorithm",
 		[]string{"snappy", "zstd"},
-		clusterSettingMinimumVersion("v24.1.0-alpha.0"),
+		clusterSettingMinimumVersion("v24.1.0"),
 		clusterSettingSystemOnly,
+	),
+	// v24.2 cluster settings
+	newClusterSettingMutator(
+		"kv.transaction.randomized_anchor_key.enabled",
+		[]bool{true, false},
+		clusterSettingMinimumVersion("v24.2.0"),
 	),
 }
 
