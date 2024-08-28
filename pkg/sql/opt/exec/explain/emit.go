@@ -37,6 +37,21 @@ func Emit(ctx context.Context, plan *Plan, ob *OutputBuilder, spanFormatFn SpanF
 	return emitInternal(ctx, plan, ob, spanFormatFn, nil /* visitedFKsByCascades */)
 }
 
+func joinNames(table cat.Table, ords cat.IndexOrdinals, sep string) (string, bool) {
+	if len(ords) > 0 {
+		var sb strings.Builder
+		for i, idx := range ords {
+			index := table.Index(idx)
+			if i > 0 {
+				sb.WriteString(sep)
+			}
+			sb.WriteString(string(index.Name()))
+		}
+		return sb.String(), true
+	}
+	return "", false
+}
+
 // - visitedFKsByCascades is updated on recursive calls for each cascade plan.
 // Can be nil if the plan doesn't have any cascades. In this map the key is the
 // "id" of the FK constraint that we construct as OriginTableID || Name.
@@ -876,16 +891,8 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
 		}
-		if len(a.ArbiterIndexes) > 0 {
-			var sb strings.Builder
-			for i, idx := range a.ArbiterIndexes {
-				index := a.Table.Index(idx)
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString(string(index.Name()))
-			}
-			ob.Attr("arbiter indexes", sb.String())
+		if arbind, ok := joinNames(a.Table, a.ArbiterIndexes, ", "); ok {
+			ob.Attr("arbiter indexes", arbind)
 		}
 		if len(a.ArbiterConstraints) > 0 {
 			var sb strings.Builder
@@ -897,6 +904,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 				sb.WriteString(uniqueConstraint.Name())
 			}
 			ob.Attr("arbiter constraints", sb.String())
+		}
+		if uniqWithTombstoneIndexes, ok := joinNames(a.Table, a.UniqueWithTombstonesIndexes, ", "); ok {
+			ob.Attr("uniqueness checks (tombstones)", uniqWithTombstoneIndexes)
 		}
 
 	case insertFastPathOp:
@@ -921,6 +931,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			)
 			e.emitLockingPolicyWithPrefix("uniqueness check ", uniq.Locking)
 		}
+		if uniqWithTombstoneIndexes, ok := joinNames(a.Table, a.UniqueWithTombstonesIndexes, ", "); ok {
+			ob.Attr("uniqueness checks (tombstones)", uniqWithTombstoneIndexes)
+		}
 		if len(a.Rows) > 0 {
 			e.emitTuples(tree.RawRows(a.Rows), len(a.Rows[0]))
 		}
@@ -935,16 +948,8 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
 		}
-		if len(a.ArbiterIndexes) > 0 {
-			var sb strings.Builder
-			for i, idx := range a.ArbiterIndexes {
-				index := a.Table.Index(idx)
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString(string(index.Name()))
-			}
-			ob.Attr("arbiter indexes", sb.String())
+		if arbind, ok := joinNames(a.Table, a.ArbiterIndexes, ", "); ok {
+			ob.Attr("arbiter indexes", arbind)
 		}
 		if len(a.ArbiterConstraints) > 0 {
 			var sb strings.Builder
