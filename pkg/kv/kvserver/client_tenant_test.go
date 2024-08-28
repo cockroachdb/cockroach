@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -173,7 +174,7 @@ func TestTenantRateLimiter(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TenantRateKnobs: tenantrate.TestingKnobs{
-					TimeSource: timeSource,
+					QuotaPoolOptions: []quotapool.Option{quotapool.WithTimeSource(timeSource)},
 				},
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
