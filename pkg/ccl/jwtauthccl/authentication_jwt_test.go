@@ -42,9 +42,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/redact"
-	"github.com/lestrrat-go/jwx/jwa"
-	"github.com/lestrrat-go/jwx/jwk"
-	"github.com/lestrrat-go/jwx/jwt"
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,8 +72,8 @@ func createJWKS(t *testing.T) (jwk.Set, jwk.Key, jwk.Key) {
 	pubKey2, err := key2.PublicKey()
 	require.NoError(t, err)
 	set := jwk.NewSet()
-	set.Add(pubKey1)
-	set.Add(pubKey2)
+	require.NoError(t, set.AddKey(pubKey1))
+	require.NoError(t, set.AddKey(pubKey2))
 
 	return set, key1, key2
 }
@@ -81,7 +81,7 @@ func createJWKS(t *testing.T) (jwk.Set, jwk.Key, jwk.Key) {
 func createECDSAKey(t *testing.T, keyID string) jwk.Key {
 	raw, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	require.NoError(t, err)
-	key, err := jwk.New(raw)
+	key, err := jwk.FromRaw(raw)
 	require.NoError(t, err)
 	require.NoError(t, key.Set(jwk.KeyIDKey, keyID))
 	require.NoError(t, key.Set(jwk.AlgorithmKey, jwa.ES384))
@@ -91,7 +91,7 @@ func createECDSAKey(t *testing.T, keyID string) jwk.Key {
 func createRSAKey(t *testing.T, keyID string) jwk.Key {
 	raw, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	key, err := jwk.New(raw)
+	key, err := jwk.FromRaw(raw)
 	require.NoError(t, err)
 	require.NoError(t, key.Set(jwk.KeyIDKey, keyID))
 	require.NoError(t, key.Set(jwk.AlgorithmKey, jwa.RS256))
@@ -117,7 +117,7 @@ func createJWT(
 	if customClaimName != "" {
 		require.NoError(t, token.Set(customClaimName, customClaimValue))
 	}
-	signedTokenBytes, err := jwt.Sign(token, algorithm, key)
+	signedTokenBytes, err := jwt.Sign(token, jwt.WithKey(algorithm, key))
 	require.NoError(t, err)
 	return signedTokenBytes
 }
@@ -257,7 +257,7 @@ func TestJWTMultiKey(t *testing.T) {
 	publicKey, err := key.PublicKey()
 	require.NoError(t, err)
 	keySetWithOneKey := jwk.NewSet()
-	keySetWithOneKey.Add(publicKey)
+	require.NoError(t, keySetWithOneKey.AddKey(publicKey))
 	// Set the JWKS to only include jwk1.
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySetWithOneKey))
 
@@ -301,7 +301,7 @@ func TestExpiredToken(t *testing.T) {
 	// Validation fails with an invalid token error for tokens with an expiration date in the past.
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid token")
-	require.EqualValues(t, "unable to parse token: exp not satisfied", errors.GetAllDetails(err)[0])
+	require.EqualValues(t, "unable to parse token: \"exp\" not satisfied", errors.GetAllDetails(err)[0])
 }
 
 func TestKeyIdMismatch(t *testing.T) {
@@ -701,7 +701,7 @@ func Test_JWKSFetchWorksWhenEnabled(t *testing.T) {
 	// Create key from a file. This key will be used to sign the token.
 	// Matching public key available in jwks URI is used to verify token.
 	keySet := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
-	key, _ := keySet.Get(0)
+	key, _ := keySet.Key(0)
 	validIssuer := "https://accounts.idp1.com"
 	token := createJWT(t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
 
@@ -755,7 +755,7 @@ func Test_JWKSFetchWorksWhenEnabledIgnoresTheStaticJWKS(t *testing.T) {
 	// Create key from a file. This key will be used to sign the token.
 	// Matching public key available in jwks URI is used to verify token.
 	keySetUsedForSigning := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
-	key, _ := keySetUsedForSigning.Get(0)
+	key, _ := keySetUsedForSigning.Key(0)
 	validIssuer := "https://accounts.idp1.com"
 	token := createJWT(t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
 
@@ -897,7 +897,7 @@ func TestJWTAuthWithCustomCACert(t *testing.T) {
 	// Create a key to sign the token using testdata.
 	// The same will be fetched through the JWKS URI to verify the token.
 	keySet := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
-	key, _ := keySet.Get(0)
+	key, _ := keySet.Key(0)
 	issuer := testServerURL
 	token := createJWT(
 		t, username1, audience1, issuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
@@ -1016,7 +1016,7 @@ func TestJWTAuthClientTimeout(t *testing.T) {
 	// Create a key to sign the token using testdata.
 	// The same will be fetched through the JWKS URI to verify the token.
 	keySet := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
-	key, _ := keySet.Get(0)
+	key, _ := keySet.Key(0)
 	validIssuer := "https://accounts.idp1.com"
 	token := createJWT(
 		t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
@@ -1087,7 +1087,7 @@ func TestJWTAuthWithIssuerJWKSConfAutoFetchJWKS(t *testing.T) {
 	// Create a key to sign the token using testdata.
 	// The same will be fetched through the JWKS URI to verify the token.
 	keySet := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
-	key, _ := keySet.Get(0)
+	key, _ := keySet.Key(0)
 	issuer := testServerURL
 	token := createJWT(
 		t, username1, audience1, issuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
