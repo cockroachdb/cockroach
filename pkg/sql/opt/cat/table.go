@@ -363,6 +363,10 @@ type UniqueConstraint interface {
 	// WithoutIndex is true if this unique constraint is not enforced by an index.
 	WithoutIndex() bool
 
+	// CanUseTombstones is true if this unique constraint can be enforced by
+	// writing tombstones to all partitions.
+	CanUseTombstones() bool
+
 	// Validated is true if the constraint is validated (i.e. we know that the
 	// existing data satisfies the constraint). It is possible to set up a unique
 	// constraint on existing tables without validating it, in which case we

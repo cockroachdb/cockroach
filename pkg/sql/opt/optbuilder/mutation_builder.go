@@ -209,6 +209,10 @@ type mutationBuilder struct {
 	// inputForInsertExpr stores the result of outscope.expr from the most
 	// recent call to buildInputForInsert.
 	inputForInsertExpr memo.RelExpr
+
+	// uniqueWithTombstoneIndexes is the set of unique indexes that ensure uniqueness
+	// by writing tombstones to all partitions
+	uniqueWithTombstoneIndexes intsets.Fast
 }
 
 func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias tree.TableName) {
@@ -1057,17 +1061,18 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 	}
 
 	private := &memo.MutationPrivate{
-		Table:               mb.tabID,
-		InsertCols:          checkEmptyList(mb.insertColIDs),
-		FetchCols:           checkEmptyList(mb.fetchColIDs),
-		UpdateCols:          checkEmptyList(mb.updateColIDs),
-		CanaryCol:           mb.canaryColID,
-		ArbiterIndexes:      mb.arbiters.IndexOrdinals(),
-		ArbiterConstraints:  mb.arbiters.UniqueConstraintOrdinals(),
-		CheckCols:           checkEmptyList(mb.checkColIDs),
-		PartialIndexPutCols: checkEmptyList(mb.partialIndexPutColIDs),
-		PartialIndexDelCols: checkEmptyList(mb.partialIndexDelColIDs),
-		FKCascades:          mb.cascades,
+		Table:                      mb.tabID,
+		InsertCols:                 checkEmptyList(mb.insertColIDs),
+		FetchCols:                  checkEmptyList(mb.fetchColIDs),
+		UpdateCols:                 checkEmptyList(mb.updateColIDs),
+		CanaryCol:                  mb.canaryColID,
+		ArbiterIndexes:             mb.arbiters.IndexOrdinals(),
+		ArbiterConstraints:         mb.arbiters.UniqueConstraintOrdinals(),
+		CheckCols:                  checkEmptyList(mb.checkColIDs),
+		PartialIndexPutCols:        checkEmptyList(mb.partialIndexPutColIDs),
+		PartialIndexDelCols:        checkEmptyList(mb.partialIndexDelColIDs),
+		FKCascades:                 mb.cascades,
+		UniqueWithTombstoneIndexes: mb.uniqueWithTombstoneIndexes.Ordered(),
 	}
 
 	// If we didn't actually plan any checks or cascades, don't buffer the input.
