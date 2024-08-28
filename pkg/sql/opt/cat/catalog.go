@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
@@ -45,6 +46,11 @@ import (
 // prepends the database ID, since the same descriptor ID is reused across
 // databases.
 type StableID uint64
+
+// DefaultStableID is the uninitialized stable ID, used to represent an
+// invalid or default state for catalog objects. GlobalPrivilege objects
+// always return this value as their ID.
+const DefaultStableID = StableID(catid.InvalidDescID)
 
 // SchemaName is an alias for tree.ObjectNamePrefix, since it consists of the
 // catalog + schema name.

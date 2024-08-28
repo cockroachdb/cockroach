@@ -404,7 +404,7 @@ func getDescForDataSource(o cat.DataSource) (catalog.TableDescriptor, error) {
 
 // CheckPrivilege is part of the cat.Catalog interface.
 func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
-	if o.ID() == 0 {
+	if o.ID() == cat.DefaultStableID {
 		return oc.planner.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, priv)
 	}
 	desc, err := getDescFromCatalogObjectForPermissions(o)
