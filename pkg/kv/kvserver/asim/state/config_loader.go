@@ -101,7 +101,7 @@ var ComplexConfig = ClusterInfo{
 				NewZoneWithSingleStore("US_East_1", 1),
 				NewZoneWithSingleStore("US_East_2", 2),
 				NewZoneWithSingleStore("US_East_3", 3),
-				NewZoneWithSingleStore("US_East_3", 10),
+				NewZoneWithSingleStore("US_East_4", 10),
 			},
 		},
 		{
