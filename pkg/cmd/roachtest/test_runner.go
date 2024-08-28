@@ -1131,7 +1131,8 @@ func (r *testRunner) runTest(
 			if t.Failed() {
 				failureMsg := t.failureMsg()
 				preemptedVMNames := getPreemptedVMNames(ctx, c, l)
-				if preemptedVMNames != "" {
+				preempted := preemptedVMNames != ""
+				if preempted {
 					// Note that this error message is referred for test selection in
 					// pkg/cmd/roachtest/testselector/snowflake_query.sql.
 					failureMsg = fmt.Sprintf("VMs preempted during the test run: %s\n\n**Other Failures:**\n%s", preemptedVMNames, failureMsg)
@@ -1165,10 +1166,18 @@ func (r *testRunner) runTest(
 					output += "\n" + issue.String()
 				}
 				if roachtestflags.TeamCity {
+					// Add a prefix when tests fail due to preemption to make
+					// them easy to spot when looking at a list of failures from
+					// a nightly build in the TeamCity UI.
+					testName := s.Name
+					if preempted {
+						testName = fmt.Sprintf("PREEMPTED_%s", s.Name)
+					}
+
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 					// TeamCity regards the test as successful.
 					shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
-						s.Name, TeamCityEscape(output), testRunID)
+						testName, TeamCityEscape(output), testRunID)
 				}
 
 				shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", testRunID, durationStr, output)
