@@ -28,6 +28,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/raft/confchange"
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -267,6 +268,10 @@ type Config struct {
 
 	// StoreLiveness is a reference to the store liveness fabric.
 	StoreLiveness raftstoreliveness.StoreLiveness
+
+	// CRDBVersion exposes the active version to Raft. This helps version-gating
+	// features.
+	CRDBVersion clusterversion.Handle
 }
 
 func (c *Config) validate() error {
@@ -408,6 +413,7 @@ type raft struct {
 
 	logger        Logger
 	storeLiveness raftstoreliveness.StoreLiveness
+	crdbVersion   clusterversion.Handle
 }
 
 func newRaft(c *Config) *raft {
@@ -438,6 +444,7 @@ func newRaft(c *Config) *raft {
 		disableConfChangeValidation: c.DisableConfChangeValidation,
 		stepDownOnRemoval:           c.StepDownOnRemoval,
 		storeLiveness:               c.StoreLiveness,
+		crdbVersion:                 c.CRDBVersion,
 	}
 	lastID := r.raftLog.lastEntryID()
 

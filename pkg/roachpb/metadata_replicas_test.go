@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/confchange"
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -188,8 +187,8 @@ func TestReplicaDescriptorsConfState(t *testing.T) {
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			r := MakeReplicaSet(test.in)
-			cs := r.ConfState()
-			require.Equal(t, test.out, raft.DescribeConfState(cs))
+			cs := r.ConfState().Describe()
+			require.Equal(t, test.out, cs)
 		})
 	}
 }

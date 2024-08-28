@@ -27,6 +27,7 @@ import (
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -3961,6 +3962,7 @@ func newTestConfig(
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
 		StoreLiveness:   storeLiveness,
+		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
 }
 
