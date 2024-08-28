@@ -23,4 +23,5 @@ func RegisterOperations(r registry.Registry) {
 	registerBackupRestore(r)
 	registerManualCompaction(r)
 	registerResize(r)
+	registerPauseLDRJob(r)
 }
