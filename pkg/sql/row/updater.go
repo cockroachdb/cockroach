@@ -161,12 +161,12 @@ func MakeUpdater(
 
 	var deleteOnlyHelper *RowHelper
 	if len(deleteOnlyIndexes) > 0 {
-		rh := NewRowHelper(codec, tableDesc, deleteOnlyIndexes, sv, internal, metrics)
+		rh := NewRowHelper(codec, tableDesc, deleteOnlyIndexes, nil /* uniqueWithTombstoneIndexes */, sv, internal, metrics)
 		deleteOnlyHelper = &rh
 	}
 
 	ru := Updater{
-		Helper:                NewRowHelper(codec, tableDesc, includeIndexes, sv, internal, metrics),
+		Helper:                NewRowHelper(codec, tableDesc, includeIndexes, nil /* uniqueWithTombstoneIndexes */, sv, internal, metrics),
 		DeleteHelper:          deleteOnlyHelper,
 		FetchCols:             requestedCols,
 		FetchColIDtoRowIndex:  ColIDtoRowIndexFromCols(requestedCols),
