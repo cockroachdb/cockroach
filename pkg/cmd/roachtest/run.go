@@ -322,37 +322,43 @@ func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegi
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 	go func() {
-		<-sig
-		shout(ctx, l, os.Stderr,
-			"Signaled received. Canceling workers and waiting up to 5s for them.")
-		// Signal runner.Run() to stop.
-		cancel()
-		<-time.After(5 * time.Second)
-		if cr == nil {
-			shout(ctx, l, os.Stderr, "5s elapsed. No clusters registered; nothing to destroy.")
+		select {
+		case <-ctx.Done():
+			shout(ctx, l, os.Stderr, "CtrlC handler context is completed, no SIGINT recieved")
+			l.Printf("CtrlC handler context is completed, no SIGINT recieved")
+			return
+		case <-sig:
+			shout(ctx, l, os.Stderr,
+				"Signaled received. Canceling workers and waiting up to 5s for them.")
+			// Signal runner.Run() to stop.
+			cancel()
+			<-time.After(5 * time.Second)
+			if cr == nil {
+				shout(ctx, l, os.Stderr, "5s elapsed. No clusters registered; nothing to destroy.")
+				l.Printf("all stacks:\n\n%s\n", allstacks.Get())
+				os.Exit(2)
+			}
+			shout(ctx, l, os.Stderr, "5s elapsed. Will brutally destroy all clusters.")
+			// Make sure there are no leftover clusters.
+			destroyCh := make(chan struct{})
+			go func() {
+				// Destroy all clusters. Don't wait more than 5 min for that though.
+				destroyCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				l.PrintfCtx(ctx, "CtrlC handler destroying all clusters")
+				cr.destroyAllClusters(destroyCtx, l)
+				cancel()
+				close(destroyCh)
+			}()
+			// If we get a second CTRL-C, exit immediately.
+			select {
+			case <-sig:
+				shout(ctx, l, os.Stderr, "Second SIGINT received. Quitting. Cluster might be left behind.")
+			case <-destroyCh:
+				shout(ctx, l, os.Stderr, "Done destroying all clusters.")
+			}
 			l.Printf("all stacks:\n\n%s\n", allstacks.Get())
 			os.Exit(2)
 		}
-		shout(ctx, l, os.Stderr, "5s elapsed. Will brutally destroy all clusters.")
-		// Make sure there are no leftover clusters.
-		destroyCh := make(chan struct{})
-		go func() {
-			// Destroy all clusters. Don't wait more than 5 min for that though.
-			destroyCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-			l.PrintfCtx(ctx, "CtrlC handler destroying all clusters")
-			cr.destroyAllClusters(destroyCtx, l)
-			cancel()
-			close(destroyCh)
-		}()
-		// If we get a second CTRL-C, exit immediately.
-		select {
-		case <-sig:
-			shout(ctx, l, os.Stderr, "Second SIGINT received. Quitting. Cluster might be left behind.")
-		case <-destroyCh:
-			shout(ctx, l, os.Stderr, "Done destroying all clusters.")
-		}
-		l.Printf("all stacks:\n\n%s\n", allstacks.Get())
-		os.Exit(2)
 	}()
 }
 
