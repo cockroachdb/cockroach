@@ -55,37 +55,33 @@ type TestDetails struct {
 
 // SelectTestsReq is the request for CategoriseTests
 type SelectTestsReq struct {
-	ForPastDays          int // number of days data to consider for test selection
-	FirstRunOn           int // number of days to consider for the first time the test is run
-	LastRunOn            int // number of days to consider for the last time the test is run
-	SelectFromSuccessPct int // percentage of tests to be Selected for running from the successful test list sorted by number of runs
+	ForPastDays int // number of days data to consider for test selection
+	FirstRunOn  int // number of days to consider for the first time the test is run
+	LastRunOn   int // number of days to consider for the last time the test is run
 
 	Cloud spec.Cloud // the cloud where the tests were run
 	Suite string     // the test suite for which the selection is done
 }
 
 // NewDefaultSelectTestsReq returns a new SelectTestsReq with default values populated
-func NewDefaultSelectTestsReq(
-	selectFromSuccessPct int, cloud spec.Cloud, suite string,
-) *SelectTestsReq {
+func NewDefaultSelectTestsReq(cloud spec.Cloud, suite string) *SelectTestsReq {
 	return &SelectTestsReq{
-		ForPastDays:          defaultForPastDays,
-		FirstRunOn:           defaultFirstRunOn,
-		LastRunOn:            defaultLastRunOn,
-		SelectFromSuccessPct: selectFromSuccessPct,
-		Cloud:                cloud,
-		Suite:                suite,
+		ForPastDays: defaultForPastDays,
+		FirstRunOn:  defaultFirstRunOn,
+		LastRunOn:   defaultLastRunOn,
+		Cloud:       cloud,
+		Suite:       suite,
 	}
 }
 
-// CategoriseTests returns the tests categorized based on the snowflake query
+// CategoriseTests returns the tests categorised based on the snowflake query
 // The tests are Selected by selector.go based on certain criteria:
 // 1. the number of time a test has been successfully running
 // 2. the test is new
 // 3. the test has not been run for a while
 // 4. a subset of the successful tests based on SelectTestReq.SelectFromSuccessPct
 // It returns all the tests. The selected tests have the value TestDetails.Selected as true
-func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, error) {
+func CategoriseTests(ctx context.Context, req *SelectTestsReq) (map[string]*TestDetails, error) {
 	db, err := getConnect(ctx)
 	if err != nil {
 		return nil, err
@@ -118,11 +114,8 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 	for i := range colPointers {
 		colPointers[i] = &colContainer[i]
 	}
-	// selectedTestDetails are all the tests that are selected from snowflake query
-	selectedTestDetails := make([]*TestDetails, 0)
-	// skipped tests are maintained separately
-	// this helps in considering them for running based on further select criteria like selectFromSuccessPct
-	skippedTests := make([]*TestDetails, 0)
+	// allTestDetails are all the tests that are returned by the snowflake query
+	allTestDetails := make(map[string]*TestDetails)
 	for rows.Next() {
 		err = rows.Scan(colPointers...)
 		if err != nil {
@@ -141,25 +134,9 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 			AvgDurationInMillis:  getDuration(testInfos[2]),
 			LastFailureIsPreempt: testInfos[3] == "yes",
 		}
-		if testDetails.Selected {
-			// selected for running
-			selectedTestDetails = append(selectedTestDetails, testDetails)
-		} else {
-			// skipped based on query
-			skippedTests = append(skippedTests, testDetails)
-		}
+		allTestDetails[testDetails.Name] = testDetails
 	}
-	if req.SelectFromSuccessPct > 0 && len(skippedTests) > 0 {
-		// need to select some tests from the skipped tests
-		numberOfTestsToSelect := len(skippedTests) * req.SelectFromSuccessPct / 100
-		// the tests are sorted by the number of runs. So, simply iterate over the list
-		// and select the first count of "numberOfTestsToSelect"
-		for i := 0; i < numberOfTestsToSelect; i++ {
-			skippedTests[i].Selected = true
-		}
-	}
-	// add all the test. The information can be used for further processing
-	return append(selectedTestDetails, skippedTests...), nil
+	return allTestDetails, nil
 }
 
 // getDuration extracts the duration from the snowflake query duration field

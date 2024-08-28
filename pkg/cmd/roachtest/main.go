@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"os/user"
@@ -302,25 +303,44 @@ func testsToRun(
 // based on the test categorization criteria.
 func updateSpecForSelectiveTests(ctx context.Context, specs []registry.TestSpec) {
 	selectedTestsCount := 0
-	// run and select 35% of successful tests which gives a window of 3 days for all tests to run
-	selectedTests, err := testselector.CategoriseTests(ctx,
-		testselector.NewDefaultSelectTestsReq(35, roachtestflags.Cloud, roachtestflags.Suite))
+	allTests, err := testselector.CategoriseTests(ctx,
+		testselector.NewDefaultSelectTestsReq(roachtestflags.Cloud, roachtestflags.Suite))
 	if err != nil {
 		fmt.Printf("running all tests! error selecting tests: %v\n", err)
 		return
 	}
-	tdMap := make(map[string]*testselector.TestDetails)
-	for _, td := range selectedTests {
-		tdMap[td.Name] = td
+
+	// successfulTests are the tests considered by snowflake to not run, but, part of the testSpecs.
+	// So, it is an intersection of all tests that are part of the run and all tests that are returned
+	// by snowflake as successful.
+	// This is why we need the intersection:
+	// - testSpec contains all the tests that are currently considered as a part of the current run.
+	// - The list of tests returned by selector can contain tests may not be part of the test spec. This can
+	//   be because of tests getting decommissioned.
+	// Now, we want to take the tests common to both. These are the tests from which we need to select
+	// "successfulTestsSelectPct" percent tests to run.
+	successfulTests := make([]*testselector.TestDetails, 0)
+	for _, spec := range specs {
+		if td, ok := allTests[spec.Name]; ok && !td.Selected {
+			// adding only the unselected tests that are part of the specs
+			// These are tests that have been running successfully
+			successfulTests = append(successfulTests, td)
+		}
 	}
+	// numberOfTestsToSelect is the number of tests to be selected from the successfulTests based on percentage selection
+	numberOfTestsToSelect := int(math.Ceil(float64(len(successfulTests)) * roachtestflags.SuccessfulTestsSelectPct))
+	for i := 0; i < numberOfTestsToSelect; i++ {
+		successfulTests[i].Selected = true
+	}
+	fmt.Printf("%d selected out of %d successful tests.\n", numberOfTestsToSelect, len(successfulTests))
 	for i := range specs {
-		if testShouldBeSkipped(tdMap, specs[i], roachtestflags.Suite) {
+		if testShouldBeSkipped(allTests, specs[i], roachtestflags.Suite) {
 			specs[i].Skip = "test selector"
 			specs[i].SkipDetails = "test skipped because it is stable and selective-tests is set."
 		} else {
 			selectedTestsCount++
 		}
-		if td, ok := tdMap[specs[i].Name]; ok {
+		if td, ok := allTests[specs[i].Name]; ok {
 			// populate the stats as obtained from the test selector
 			specs[i].SetStats(td.AvgDurationInMillis, td.LastFailureIsPreempt)
 		}
