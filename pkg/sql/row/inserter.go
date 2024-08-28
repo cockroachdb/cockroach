@@ -46,6 +46,7 @@ func MakeInserter(
 	txn *kv.Txn,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
+	uniqueWithTombstoneIndexes []catalog.Index,
 	insertCols []catalog.Column,
 	alloc *tree.DatumAlloc,
 	sv *settings.Values,
@@ -54,7 +55,7 @@ func MakeInserter(
 ) (Inserter, error) {
 	ri := Inserter{
 		Helper: NewRowHelper(
-			codec, tableDesc, tableDesc.WritableNonPrimaryIndexes(), nil /* uniqueWithTombstoneIndexes */, sv, internal, metrics,
+			codec, tableDesc, tableDesc.WritableNonPrimaryIndexes(), uniqueWithTombstoneIndexes, sv, internal, metrics,
 		),
 
 		InsertCols:            insertCols,
@@ -119,6 +120,23 @@ func insertInvertedPutFn(
 	b.InitPut(key, value, false)
 }
 
+func (ri *Inserter) writeTombstones(
+	ctx context.Context, index catalog.Index, b Putter, values []tree.Datum, traceKV bool,
+) error {
+	tombstones, err := ri.Helper.encodeTombstonesForIndex(ctx, index, ri.InsertColIDtoRowIndex, values)
+	if err != nil {
+		return err
+	}
+	for _, tombstone := range tombstones {
+		k := roachpb.Key(keys.MakeFamilyKey(tombstone, 0 /* famID */))
+		if traceKV {
+			log.VEventfDepth(ctx, 1, 2, "CPut %s -> nil (tombstone)", k)
+		}
+		b.CPut(k, nil, nil /* expValue */)
+	}
+	return nil
+}
+
 // InsertRow adds to the batch the kv operations necessary to insert a table row
 // with the given values.
 func (ri *Inserter) InsertRow(
@@ -167,13 +185,18 @@ func (ri *Inserter) InsertRow(
 		return err
 	}
 
+	if err := ri.writeTombstones(ctx, ri.Helper.TableDesc.GetPrimaryIndex(), b, values, traceKV); err != nil {
+		return err
+	}
+
 	putFn = insertInvertedPutFn
 
 	// For determinism, add the entries for the secondary indexes in the same
 	// order as they appear in the helper.
-	for idx := range ri.Helper.Indexes {
+	for idx, index := range ri.Helper.Indexes {
 		entries, ok := secondaryIndexEntries[ri.Helper.Indexes[idx]]
 		if ok {
+			wrote := false
 			for i := range entries {
 				e := &entries[i]
 
@@ -183,9 +206,16 @@ func (ri *Inserter) InsertRow(
 				} else {
 					putFn(ctx, b, &e.Key, &e.Value, traceKV)
 				}
+				wrote = true
+			}
+
+			if !wrote {
+				continue
+			}
+			if err := ri.writeTombstones(ctx, index, b, values, traceKV); err != nil {
+				return err
 			}
 		}
 	}
-
 	return nil
 }

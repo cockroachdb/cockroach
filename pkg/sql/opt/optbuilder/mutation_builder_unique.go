@@ -58,6 +58,14 @@ func (mb *mutationBuilder) buildUniqueChecksForInsert() {
 		if mb.uniqueConstraintIsArbiter(i) {
 			continue
 		}
+
+		// For non-serializable transactions, we guarantee uniqueness by writing tombstones in all
+		// partitions of a unique index with implicit partitioning columns.
+		if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable && mb.tab.Unique(i).CanUseTombstones() {
+			mb.uniqueWithTombstoneIndexes.Add(i)
+			continue
+		}
+
 		if h.init(mb, i) {
 			uniqueChecksItem, fastPathUniqueChecksItem := h.buildInsertionCheck(buildFastPathCheck)
 			if fastPathUniqueChecksItem == nil {
