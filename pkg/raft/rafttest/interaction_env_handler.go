@@ -159,6 +159,13 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		//
 		// Example: send-snapshot 1 3
 		env.handleSendSnapshot(t, d)
+	case "step-down":
+		// Steps down as the leader. No-op if not the leader.
+		//
+		// Example:
+		//
+		// step-down 1
+		err = env.handleStepDown(t, d)
 	case "propose":
 		// Propose an entry.
 		//

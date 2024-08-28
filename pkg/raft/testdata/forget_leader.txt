@@ -219,6 +219,32 @@ forget-leader 2
 ----
 INFO 2 forgetting leader 3 at term 2
 
+# Withdraw support for 3 from all peers so that they vote for 2 when 2 calls an
+# election.
+withdraw-support 1 3
+----
+  1 2 3 4
+1 1 1 x 1
+2 x 1 x 1
+3 x 1 1 1
+4 x 1 1 1
+
+withdraw-support 3 3
+----
+  1 2 3 4
+1 1 1 x 1
+2 x 1 x 1
+3 x 1 x 1
+4 x 1 1 1
+
+withdraw-support 4 3
+----
+  1 2 3 4
+1 1 1 x 1
+2 x 1 x 1
+3 x 1 x 1
+4 x 1 x 1
+
 tick-heartbeat 2
 ----
 INFO 2 is starting a new election at term 2

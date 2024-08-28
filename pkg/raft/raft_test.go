@@ -739,9 +739,9 @@ func TestDuelingCandidates(t *testing.T) {
 	s1 := newTestMemoryStorage(withPeers(1, 2, 3))
 	s2 := newTestMemoryStorage(withPeers(1, 2, 3))
 	s3 := newTestMemoryStorage(withPeers(1, 2, 3))
-	a := newTestRaft(1, 10, 1, s1)
-	b := newTestRaft(2, 10, 1, s2)
-	c := newTestRaft(3, 10, 1, s3)
+	a := newTestRaft(1, 10, 1, s1, withFortificationDisabled())
+	b := newTestRaft(2, 10, 1, s2, withFortificationDisabled())
+	c := newTestRaft(3, 10, 1, s3, withFortificationDisabled())
 
 	nt := newNetwork(a, b, c)
 	nt.cut(1, 3)
@@ -784,9 +784,9 @@ func TestDuelingCandidates(t *testing.T) {
 }
 
 func TestDuelingPreCandidates(t *testing.T) {
-	cfgA := newTestConfig(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	cfgB := newTestConfig(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	cfgC := newTestConfig(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	cfgA := newTestConfig(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	cfgB := newTestConfig(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	cfgC := newTestConfig(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
 	cfgA.PreVote = true
 	cfgB.PreVote = true
 	cfgC.PreVote = true
