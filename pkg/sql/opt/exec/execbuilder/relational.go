@@ -3107,9 +3107,7 @@ func (b *Builder) buildZigzagJoin(
 	return b.applySimpleProject(res, outputCols, join, join.Cols, join.ProvidedPhysical().Ordering)
 }
 
-func (b *Builder) buildLockingImpl(
-	toLock opt.TableID, locking opt.Locking, allowPredicateLocks bool,
-) (opt.Locking, error) {
+func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Locking, error) {
 	if b.forceForUpdateLocking.Contains(int(toLock)) {
 		locking = locking.Max(forUpdateLocking)
 	}
@@ -3120,14 +3118,9 @@ func (b *Builder) buildLockingImpl(
 				"cannot execute SELECT %s in a read-only transaction", locking.Strength.String(),
 			)
 		}
-		if !allowPredicateLocks && locking.Form == tree.LockPredicate {
+		if locking.Form == tree.LockPredicate {
 			return opt.Locking{}, unimplemented.NewWithIssuef(
 				110873, "explicit unique checks are not yet supported under read committed isolation",
-			)
-		}
-		if locking.Form == tree.LockPredicate && locking.WaitPolicy != tree.LockWaitBlock {
-			return opt.Locking{}, unimplemented.NewWithIssuef(
-				126592, "non-blocking predicate locks are not yet supported",
 			)
 		}
 		// Check if we can actually use shared locks here, or we need to use
@@ -3145,11 +3138,6 @@ func (b *Builder) buildLockingImpl(
 		b.flags.Set(exec.PlanFlagContainsLocking)
 	}
 	return locking, nil
-}
-
-// TODO (#126592): Delete this function once predicate locks are universally supported.
-func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Locking, error) {
-	return b.buildLockingImpl(toLock, locking, false /* allowPredicateLocks */)
 }
 
 func (b *Builder) buildMax1Row(
