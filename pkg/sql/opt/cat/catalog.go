@@ -46,6 +46,9 @@ import (
 // databases.
 type StableID uint64
 
+// InvalidStableID is the uninitialised stable id.
+const InvalidStableID StableID = 0
+
 // SchemaName is an alias for tree.ObjectNamePrefix, since it consists of the
 // catalog + schema name.
 type SchemaName = tree.ObjectNamePrefix
