@@ -303,14 +303,11 @@ type storesForRACv2 Stores
 func (ss *storesForRACv2) AdmittedLogEntry(
 	ctx context.Context, cbState admission.LogEntryAdmittedCallbackState,
 ) {
-	p := ss.lookup(cbState.StoreID, cbState.RangeID)
+	p := ss.lookup(cbState.StoreID, cbState.RangeID, cbState.ReplicaID)
 	if p == nil {
 		return
 	}
 	p.AdmittedLogEntry(ctx, replica_rac2.EntryForAdmissionCallbackState{
-		StoreID:    cbState.StoreID,
-		RangeID:    cbState.RangeID,
-		ReplicaID:  cbState.ReplicaID,
 		LeaderTerm: cbState.LeaderTerm,
 		Index:      cbState.Pos.Index,
 		Priority:   cbState.RaftPri,
@@ -318,7 +315,7 @@ func (ss *storesForRACv2) AdmittedLogEntry(
 }
 
 func (ss *storesForRACv2) lookup(
-	storeID roachpb.StoreID, rangeID roachpb.RangeID,
+	storeID roachpb.StoreID, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
 ) replica_rac2.Processor {
 	ls := (*Stores)(ss)
 	s, err := ls.GetStore(storeID)
@@ -327,7 +324,7 @@ func (ss *storesForRACv2) lookup(
 		panic(err)
 	}
 	r := s.GetReplicaIfExists(rangeID)
-	if r == nil {
+	if r == nil || r.replicaID != replicaID {
 		return nil
 	}
 	return r.flowControlV2
