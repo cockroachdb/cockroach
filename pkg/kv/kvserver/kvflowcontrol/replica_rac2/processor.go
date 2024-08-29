@@ -969,6 +969,8 @@ func admittedIncreased(prev, next [raftpb.NumPriorities]uint64) bool {
 //
 // TODO(sumeer): replace with real implementation once RangeController impl is
 // ready.
+// TODO(kvoli): Ensure that metrics, probe-to-close timer etc are threaded
+// through.
 type RangeControllerFactoryImpl struct {
 }
 
