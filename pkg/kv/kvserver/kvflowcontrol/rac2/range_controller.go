@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
@@ -172,6 +173,24 @@ func (rs ReplicaSet) String() string {
 	return redact.StringWithoutMarkers(rs)
 }
 
+// ProbeToCloseTimerScheduler is an interface for scheduling the closing of a
+// replica send stream.
+type ProbeToCloseTimerScheduler interface {
+	// ScheduleSendStreamCloseRaftMuLocked schedules a callback with a raft event
+	// after the given delay. This function may be used to handle send stream
+	// state transition, usually to close a send stream after the given delay.
+	// e.g.,
+	//
+	//   HandleRaftEventRaftMuLocked(ctx, RaftEvent{})
+	//
+	// Which will trigger handleReadyState to close the send stream if it hasn't
+	// transitioned to StateReplicate.
+	//
+	// Requires replica.raftMu to be held.
+	ScheduleSendStreamCloseRaftMuLocked(
+		ctx context.Context, rangeID roachpb.RangeID, delay time.Duration)
+}
+
 type RangeControllerOptions struct {
 	RangeID  roachpb.RangeID
 	TenantID roachpb.TenantID
@@ -180,10 +199,11 @@ type RangeControllerOptions struct {
 	LocalReplicaID roachpb.ReplicaID
 	// SSTokenCounter provides access to all the TokenCounters that will be
 	// needed (keyed by (tenantID, storeID)).
-	SSTokenCounter  *StreamTokenCounterProvider
-	RaftInterface   RaftInterface
-	Clock           *hlc.Clock
-	EvalWaitMetrics *EvalWaitMetrics
+	SSTokenCounter      *StreamTokenCounterProvider
+	RaftInterface       RaftInterface
+	Clock               *hlc.Clock
+	CloseTimerScheduler ProbeToCloseTimerScheduler
+	EvalWaitMetrics     *EvalWaitMetrics
 }
 
 // RangeControllerInitState is the initial state at the time of creation.
@@ -497,10 +517,19 @@ type replicaSendStream struct {
 
 	mu struct {
 		syncutil.Mutex
-		connectedState connectedState
-		tracker        Tracker
-		closed         bool
+		// connectedStateStart is the time when the connectedState was last
+		// transitioned from one state to another e.g., from replicate to
+		// probeRecentlyReplicate or snapshot to replicate.
+		connectedState      connectedState
+		connectedStateStart time.Time
+		tracker             Tracker
+		closed              bool
 	}
+}
+
+func (rss *replicaSendStream) changeConnectedStateLocked(state connectedState, now time.Time) {
+	rss.mu.connectedState = state
+	rss.mu.connectedStateStart = now
 }
 
 func (rs *replicaState) createReplicaSendStream() {
@@ -509,8 +538,9 @@ func (rs *replicaState) createReplicaSendStream() {
 		parent: rs,
 	}
 	rs.sendStream.mu.tracker.Init(rs.stream)
-	rs.sendStream.mu.connectedState = replicate
 	rs.sendStream.mu.closed = false
+	rs.sendStream.changeConnectedStateLocked(
+		replicate, rs.parent.opts.Clock.PhysicalTime())
 }
 
 func (rs *replicaState) isStateReplicate() bool {
@@ -559,6 +589,7 @@ func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []entryF
 	if rs.sendStream == nil {
 		return
 	}
+
 	rs.sendStream.mu.Lock()
 	defer rs.sendStream.mu.Unlock()
 
@@ -582,11 +613,39 @@ func (rs *replicaState) handleReadyState(
 ) (shouldWaitChange bool) {
 	switch info.State {
 	case tracker.StateProbe:
-		if rs.sendStream != nil {
-			// TODO(kvoli): delay this by 1s.
+		if rs.sendStream == nil {
+			// We have already closed the stream, nothing to do.
+			return false
+		}
+		if shouldClose := func() (should bool) {
+			now := rs.parent.opts.Clock.PhysicalTime()
+			rs.sendStream.mu.Lock()
+			defer rs.sendStream.mu.Unlock()
+
+			if state := rs.sendStream.mu.connectedState; state == probeRecentlyReplicate &&
+				!rs.sendStream.mu.connectedStateStart.Add(
+					probeRecentlyReplicateDuration()).Before(now) {
+				// The replica has been in StateProbe for at least
+				// probeRecentlyReplicateDuration (default 1s) second, close the
+				// stream.
+				should = true
+			} else if state != probeRecentlyReplicate {
+				// This is the first time we've seen the replica change to StateProbe,
+				// update the connected state and start time. If the state doesn't
+				// change within probeRecentlyReplicateDuration, we will close the
+				// stream. Also schedule an event, so that even if there are no
+				// entries, we will still reliably close the stream if still in
+				// StateProbe.
+				rs.sendStream.changeConnectedStateLocked(probeRecentlyReplicate, now)
+				rs.parent.opts.CloseTimerScheduler.ScheduleSendStreamCloseRaftMuLocked(
+					ctx, rs.parent.opts.RangeID, probeRecentlyReplicateDuration())
+			}
+			return should
+		}(); shouldClose {
 			rs.closeSendStream(ctx)
 			shouldWaitChange = true
 		}
+
 	case tracker.StateReplicate:
 		if rs.sendStream == nil {
 			rs.createReplicaSendStream()
@@ -594,6 +653,7 @@ func (rs *replicaState) handleReadyState(
 		} else {
 			shouldWaitChange = rs.sendStream.makeConsistentInStateReplicate(ctx, info)
 		}
+
 	case tracker.StateSnapshot:
 		if rs.sendStream != nil {
 			switch func() connectedState {
@@ -648,9 +708,12 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(
 	switch rss.mu.connectedState {
 	case replicate:
 	case probeRecentlyReplicate:
-		rss.mu.connectedState = replicate
+		// NB: We could re-use the current time and acquire it outside of the
+		// mutex, but we expect transitions to replicate to be rarer than replicas
+		// remaining in replicate.
+		rss.changeConnectedStateLocked(replicate, rss.parent.parent.opts.Clock.PhysicalTime())
 	case snapshot:
-		rss.mu.connectedState = replicate
+		rss.changeConnectedStateLocked(replicate, rss.parent.parent.opts.Clock.PhysicalTime())
 		shouldWaitChange = true
 	}
 	return shouldWaitChange
@@ -670,7 +733,7 @@ func (rss *replicaSendStream) changeToStateSnapshot(ctx context.Context) {
 //
 // Requires rs.mu to be held.
 func (rss *replicaSendStream) changeToStateSnapshotLocked(ctx context.Context) {
-	rss.mu.connectedState = snapshot
+	rss.changeConnectedStateLocked(snapshot, rss.parent.parent.opts.Clock.PhysicalTime())
 	// Since the replica is now in StateSnapshot, there is no need for Raft to
 	// send MsgApp pings to discover what has been missed. So there is no
 	// liveness guarantee on when these tokens will be returned, and therefore we
@@ -690,6 +753,15 @@ func (rss *replicaSendStream) returnTokens(
 			rss.parent.sendTokenCounter.Return(ctx, WorkClassFromRaftPriority(pri), tokens)
 		}
 	}
+}
+
+// probeRecentlyReplicateDuration is the duration the controller will wait
+// after observing a replica in StateProbe before closing the send stream if
+// the replica remains in StateProbe.
+//
+// TODO(kvoli): We will want to make this a cluster setting eventually.
+func probeRecentlyReplicateDuration() time.Duration {
+	return time.Second
 }
 
 type connectedState uint32
