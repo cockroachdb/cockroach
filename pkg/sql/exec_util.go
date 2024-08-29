@@ -3866,6 +3866,10 @@ func (m *sessionDataMutator) SetOptimizerUseConditionalHoistFix(val bool) {
 	m.data.OptimizerUseConditionalHoistFix = val
 }
 
+func (m *sessionDataMutator) SetOptimizerPushLimitIntoProjectFilteredScan(val bool) {
+	m.data.OptimizerPushLimitIntoProjectFilteredScan = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
