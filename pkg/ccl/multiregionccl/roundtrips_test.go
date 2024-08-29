@@ -125,7 +125,7 @@ func TestEnsureLocalReadsOnGlobalTables(t *testing.T) {
 			cache := tc.Server(i).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
 			entry, err := cache.TestingGetCached(context.Background(), tablePrefix, false /* inverted */)
 			require.NoError(t, err)
-			require.NotNil(t, entry.Lease.Empty())
+			require.False(t, entry.Lease.Empty())
 
 			if expected, got := roachpb.LEAD_FOR_GLOBAL_READS, entry.ClosedTimestampPolicy; got != expected {
 				return errors.Newf("expected closedts policy %s, got %s", expected, got)
