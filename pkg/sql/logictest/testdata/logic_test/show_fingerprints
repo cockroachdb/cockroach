@@ -18,6 +18,28 @@ SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
 t_pkey   -7903300865687235210
 t_b_idx  -5073888452016928166
 
+# Test excluded columns
+query TT rowsort
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t WITH EXCLUDE COLUMNS = ('c')
+----
+t_pkey   -2938394162542358272
+t_b_idx  -5073888452016928166
+
+# Test multiple excluded columns
+query TT rowsort
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t WITH EXCLUDE COLUMNS = ('a', 'b')
+----
+t_pkey   -3539648437866042702
+t_b_idx  590700560494856532
+
+# START TIMESTAMP is only for VIRTUAL CLUSTERS
+query error pgcode 22023 cannot use the START TIMESTAMP option when fingerprinting a table.
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t WITH START TIMESTAMP = '132412341234.000000'
+
+# EXCLUDE COLUMNS is only for tables
+query error pgcode 22023 cannot use the EXCLUDE COLUMNS option when fingerprinting a tenant.
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t WITH EXCLUDE COLUMNS = ('a', 'b')
+
 # Test a partial index. We expect this index to have the same fingerprint
 # as t_b_idx since the predicate covers all values.
 statement ok
