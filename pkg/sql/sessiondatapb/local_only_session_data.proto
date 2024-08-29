@@ -545,6 +545,9 @@ message LocalOnlySessionData {
   // hoisting a volatile expression that is conditionally executed by a CASE,
   // COALESCE, or IFERR expression.
   bool optimizer_use_conditional_hoist_fix = 138;
+  // OptimizerPushLimitIntoProjectFilteredScan, when true, indicates that the
+  // optimizer should push limit expressions into projects of filtered scans.
+  bool optimizer_push_limit_into_project_filtered_scan = 139;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
