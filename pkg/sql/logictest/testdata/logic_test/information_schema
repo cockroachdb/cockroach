@@ -6171,6 +6171,7 @@ optimizer_always_use_histograms                            on
 optimizer_hoist_uncorrelated_equality_subqueries           on
 optimizer_merge_joins_enabled                              on
 optimizer_prove_implication_with_virtual_computed_columns  on
+optimizer_push_limit_into_project_filtered_scan            off
 optimizer_push_offset_into_index_join                      on
 optimizer_use_forecasts                                    on
 optimizer_use_histograms                                   on
