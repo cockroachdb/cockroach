@@ -29,8 +29,8 @@ type RangefeedMetricsRecorder interface {
 // ServerStreamSender forwards MuxRangefeedEvents from UnbufferedSender to the
 // underlying grpc stream.
 type ServerStreamSender interface {
-	// Send must be thread-safe to be called concurrently.
-	Send(*kvpb.MuxRangeFeedEvent) error
+	// SendUnbuffered must be thread-safe to be called concurrently.
+	SendUnbuffered(*kvpb.MuxRangeFeedEvent) error
 	// SendIsThreadSafe is a no-op declaration method. It is a contract that the
 	// interface has a thread-safe Send method.
 	SendIsThreadSafe()
@@ -191,7 +191,7 @@ func (ubs *UnbufferedSender) SendUnbuffered(event *kvpb.MuxRangeFeedEvent) error
 	if event.Error != nil {
 		log.Fatalf(context.Background(), "unexpected: SendUnbuffered called with error event")
 	}
-	return ubs.sender.Send(event)
+	return ubs.sender.SendUnbuffered(event)
 }
 
 // run forwards rangefeed completion errors back to the client. run is expected
@@ -205,7 +205,7 @@ func (ubs *UnbufferedSender) run(ctx context.Context, stopper *stop.Stopper) err
 		case <-ubs.notifyMuxError:
 			toSend := ubs.detachMuxErrors()
 			for _, clientErr := range toSend {
-				if err := ubs.sender.Send(clientErr); err != nil {
+				if err := ubs.sender.SendUnbuffered(clientErr); err != nil {
 					log.Errorf(ctx,
 						"failed to send rangefeed completion error back to client due to broken stream: %v", err)
 					return err
