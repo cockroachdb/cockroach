@@ -1920,9 +1920,11 @@ func (s *SQLServer) startLicenseEnforcer(ctx context.Context, knobs base.Testing
 		if knobs.Server != nil {
 			s.execCfg.LicenseEnforcer.TestingKnobs = &knobs.Server.(*TestingKnobs).LicenseTestingKnobs
 		}
+		// TODO(spilchen): we need to tell the license enforcer about the
+		// diagnostics reporter. This will be handled in CRDB-39991
 		err := startup.RunIdempotentWithRetry(ctx, s.stopper.ShouldQuiesce(), "license enforcer start",
 			func(ctx context.Context) error {
-				return s.execCfg.LicenseEnforcer.Start(ctx, s.internalDB)
+				return s.execCfg.LicenseEnforcer.Start(ctx, s.cfg.Settings, s.internalDB)
 			})
 		// This is not a critical component. If it fails to start, we log a warning
 		// rather than prevent the entire server from starting.
