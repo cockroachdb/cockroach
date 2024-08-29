@@ -1129,10 +1129,8 @@ func (c *SyncedCluster) generateStartFlagsKV(node Node, startOpts StartOpts) []s
 
 	args = append(args, fmt.Sprintf("--cache=%d%%", c.maybeScaleMem(25)))
 
-	if locality := c.locality(node); locality != "" {
-		if idx := argExists(startOpts.ExtraArgs, "--locality"); idx == -1 {
-			args = append(args, "--locality="+locality)
-		}
+	if localityArg := c.generateLocalityArg(node, startOpts); localityArg != "" {
+		args = append(args, localityArg)
 	}
 	return args
 }
@@ -1163,8 +1161,22 @@ func (c *SyncedCluster) generateStartFlagsSQL(node Node, startOpts StartOpts) []
 
 	if startOpts.Target == StartServiceForVirtualCluster {
 		args = append(args, "--store", c.InstanceStoreDir(node, startOpts.VirtualClusterName, startOpts.SQLInstance))
+
+		if localityArg := c.generateLocalityArg(node, startOpts); localityArg != "" {
+			args = append(args, localityArg)
+		}
 	}
 	return args
+}
+
+func (c *SyncedCluster) generateLocalityArg(node Node, startOpts StartOpts) string {
+	if locality := c.locality(node); locality != "" {
+		if idx := argExists(startOpts.ExtraArgs, "--locality"); idx == -1 {
+			return "--locality=" + locality
+		}
+	}
+
+	return ""
 }
 
 // maybeScaleMem is used to scale down a memory percentage when the cluster is
