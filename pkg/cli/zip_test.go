@@ -121,7 +121,8 @@ table_name NOT IN (
 	'transaction_statistics_persisted_v22_2',
 	'transaction_statistics',
 	'tenant_usage_details',
-  'pg_catalog_table_is_implemented'
+  'pg_catalog_table_is_implemented',
+  'fully_qualified_names'
 )
 ORDER BY name ASC`)
 	assert.NoError(t, err)
