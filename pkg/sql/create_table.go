@@ -2058,13 +2058,6 @@ func NewTableDesc(
 		}
 	}
 
-	// If explicit primary keys are required, error out since a primary key was not supplied.
-	if desc.GetPrimaryIndex().NumKeyColumns() == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
-		evalCtx.SessionData() != nil && evalCtx.SessionData().RequireExplicitPrimaryKeys {
-		return nil, errors.Errorf(
-			"no primary key specified for table %s (require_explicit_primary_keys = true)", desc.Name)
-	}
-
 	for i := range desc.Columns {
 		if _, ok := primaryIndexColumnSet[desc.Columns[i].Name]; ok {
 			desc.Columns[i].Nullable = false
@@ -2084,6 +2077,13 @@ func NewTableDesc(
 	}
 	if err := desc.AllocateIDs(ctx, version); err != nil {
 		return nil, err
+	}
+
+	// If explicit primary keys are required, error out since a primary key was not supplied.
+	if desc.GetPrimaryIndex().NumKeyColumns() == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
+		evalCtx.SessionData() != nil && evalCtx.SessionData().RequireExplicitPrimaryKeys {
+		return nil, errors.Errorf(
+			"no primary key specified for table %s (require_explicit_primary_keys = true)", desc.Name)
 	}
 
 	for _, idx := range desc.PublicNonPrimaryIndexes() {

@@ -44,12 +44,18 @@ set require_explicit_primary_keys=true
 statement error pq: no primary key specified for table t \(require_explicit_primary_keys = true\)
 CREATE TABLE t (x INT, y INT)
 
+# Make sure the setting does not block a table that _does_ have a PK.
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT)
+
 # Regression for #45496.
 statement ok
 reset require_explicit_primary_keys;
 
 statement ok
 DROP TABLE IF EXISTS t;
+
+statement ok
 CREATE TABLE t (rowid INT, rowid_1 INT, FAMILY (rowid, rowid_1))
 
 query T rowsort
