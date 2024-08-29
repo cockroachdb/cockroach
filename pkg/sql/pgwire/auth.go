@@ -112,7 +112,7 @@ func (c *conn) handleAuthentication(
 	// Populate the AuthMethod with per-connection information so that it
 	// can compose the next layer of behaviors that we're going to apply
 	// to the incoming connection.
-	behaviors, err := authMethod(ctx, ac, tlsState, execCfg, hbaEntry, authOpt.identMap)
+	behaviors, err := authMethod(ctx, ac, c.sessionArgs.User, tlsState, execCfg, hbaEntry, authOpt.identMap)
 	connClose = behaviors.ConnClose
 	if err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_UNKNOWN, err)

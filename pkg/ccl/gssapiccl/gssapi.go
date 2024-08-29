@@ -41,6 +41,7 @@ const (
 func authGSS(
 	_ context.Context,
 	c pgwire.AuthConn,
+	_ username.SQLUsername,
 	_ tls.ConnectionState,
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
