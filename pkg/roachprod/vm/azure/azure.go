@@ -487,7 +487,7 @@ func (p *Provider) DeleteCluster(l *logger.Logger, name string) error {
 	for it.NotDone() {
 		group := it.Value()
 		// Don't bother waiting for the cluster to get torn down.
-		future, err := client.Delete(ctx, *group.Name)
+		future, err := client.Delete(ctx, *group.Name, "Microsoft.Compute/virtualMachines")
 		if err != nil {
 			return err
 		}
@@ -574,7 +574,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 		return nil, err
 	}
 
-	it, err := client.ListAllComplete(ctx, "false")
+	it, err := client.ListAllComplete(ctx, "false", "")
 	if err != nil {
 		return nil, err
 	}
@@ -744,10 +744,16 @@ func (p *Provider) createVM(
 		RemoteUser:           remoteUser,
 		DisksInitializedFile: vm.DisksInitializedFile,
 	}
+	useNVMe := MachineSupportsNVMe(providerOpts.MachineType)
+	if useNVMe {
+		startupArgs.DiskControllerNVMe = true
+	}
 	if !opts.SSDOpts.UseLocalSSD {
 		// We define lun42 explicitly in the data disk request below.
-		lun := 42
-		startupArgs.AttachedDiskLun = &lun
+		if !useNVMe {
+			lun := 42
+			startupArgs.AttachedDiskLun = &lun
+		}
 	}
 
 	startupScript, err := evalStartupTemplate(startupArgs)
@@ -862,6 +868,11 @@ func (p *Provider) createVM(
 			},
 		},
 	}
+
+	if useNVMe {
+		machine.VirtualMachineProperties.StorageProfile.DiskControllerType = compute.NVMe
+	}
+
 	if !opts.SSDOpts.UseLocalSSD {
 		caching := compute.CachingTypesNone
 
@@ -954,7 +965,7 @@ func (p *Provider) createNIC(
 					Name: to.StringPtr("ipConfig"),
 					InterfaceIPConfigurationPropertiesFormat: &network.InterfaceIPConfigurationPropertiesFormat{
 						Subnet:                    &subnet,
-						PrivateIPAllocationMethod: network.IPAllocationMethodDynamic,
+						PrivateIPAllocationMethod: network.Dynamic,
 						PublicIPAddress:           &ip,
 					},
 				},
@@ -1373,8 +1384,8 @@ func (p *Provider) createIP(
 			Location: group.Location,
 			Zones:    to.StringSlicePtr([]string{providerOpts.Zone}),
 			PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
-				PublicIPAddressVersion:   network.IPVersionIPv4,
-				PublicIPAllocationMethod: network.IPAllocationMethodStatic,
+				PublicIPAddressVersion:   network.IPv4,
+				PublicIPAllocationMethod: network.Static,
 			},
 		})
 	if err != nil {
@@ -1526,11 +1537,11 @@ func (p *Provider) createUltraDisk(
 			Zones:    to.StringSlicePtr([]string{providerOpts.Zone}),
 			Location: group.Location,
 			Sku: &compute.DiskSku{
-				Name: compute.DiskStorageAccountTypesUltraSSDLRS,
+				Name: compute.UltraSSDLRS,
 			},
 			DiskProperties: &compute.DiskProperties{
 				CreationData: &compute.CreationData{
-					CreateOption: compute.DiskCreateOptionEmpty,
+					CreateOption: compute.Empty,
 				},
 				DiskSizeGB:        to.Int32Ptr(providerOpts.NetworkDiskSize),
 				DiskIOPSReadWrite: to.Int64Ptr(providerOpts.UltraDiskIOPS),
@@ -1687,4 +1698,26 @@ func MachineFamilyVersionFromMachineType(machineType string) int {
 		}
 	}
 	return -1
+}
+
+// MachineSupportsNVMe Azure supports Nvme for E series v5 machine family.
+// OS disk and network disk support nvme. Local storage do not support nvme.
+func MachineSupportsNVMe(machineType string) bool {
+	version := MachineFamilyVersionFromMachineType(machineType)
+	if version == 5 {
+		matches := azureMachineTypes.FindStringSubmatch(machineType)
+		if len(matches) >= 4 {
+			family, features := matches[1], matches[3]
+			// additive features of azure vm are represented by lower case letter
+			// b = Block Storage performance
+			// d = diskful (that is, a local temp disk is present);
+			// s = Premium Storage capable, including possible use of Ultra SSD
+			// https://learn.microsoft.com/en-us/azure/virtual-machines/vm-naming-conventions
+			// example of supported machine types Standard_E2bds_v5, Standard_E2bs_v5
+			if family == "Standard_E" && (features == "bs" || features == "bds") {
+				return true
+			}
+		}
+	}
+	return false
 }

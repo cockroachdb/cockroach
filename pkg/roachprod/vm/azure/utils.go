@@ -25,6 +25,7 @@ type azureStartupArgs struct {
 	RemoteUser           string // The uname for /data* directories.
 	AttachedDiskLun      *int   // Use attached disk, with specified LUN; Use local ssd if nil.
 	DisksInitializedFile string // File to touch when disks are initialized.
+	DiskControllerNVMe   bool
 }
 
 const azureStartupTemplate = `#!/bin/bash
@@ -33,7 +34,10 @@ const azureStartupTemplate = `#!/bin/bash
 set -xe
 mount_opts="defaults"
 
-{{if .AttachedDiskLun}}
+{{if .DiskControllerNVMe}}
+# Setup nvme network storage, need to remove nvme OS disk from the device list.
+devices=($(realpath -qe /dev/disk/by-id/nvme-* | grep -v "nvme0n1" | sort -u))
+{{else if .AttachedDiskLun}}
 # Setup network attached storage
 devices=("/dev/disk/azure/scsi1/lun{{.AttachedDiskLun}}")
 {{else}}

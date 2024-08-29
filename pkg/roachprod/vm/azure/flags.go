@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-07-01/compute"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/spf13/pflag"
 )
@@ -46,7 +46,7 @@ var defaultZone = "1"
 func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
 		Locations:       nil,
-		MachineType:     string(compute.VirtualMachineSizeTypesStandardD4V3),
+		MachineType:     string(armcompute.VirtualMachineSizeTypesStandardD4V3),
 		VnetName:        "common",
 		Zone:            "",
 		NetworkDiskType: "premium-disk",
@@ -68,7 +68,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.BoolVar(&providerInstance.SyncDelete, ProviderName+"-sync-delete", providerInstance.SyncDelete,
 		"Wait for deletions to finish before returning")
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type",
-		string(compute.VirtualMachineSizeTypesStandardD4V3),
+		string(armcompute.VirtualMachineSizeTypesStandardD4V3),
 		"Machine type (see https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/)")
 	flags.StringSliceVar(&o.Locations, ProviderName+"-locations", nil,
 		fmt.Sprintf("Locations for cluster (see `az account list-locations`) (default\n[%s])",
