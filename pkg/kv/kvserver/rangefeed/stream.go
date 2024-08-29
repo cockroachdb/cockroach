@@ -55,10 +55,10 @@ func (s *PerRangeEventSink) Context() context.Context {
 	return s.ctx
 }
 
-// SendIsThreadSafe is a no-op declaration method. It is a contract that the
-// SendUnbuffered method is thread-safe. Note that
+// SendUnbufferedIsThreadSafe is a no-op declaration method. It is a contract
+// that the SendUnbuffered method is thread-safe. Note that
 // UnbufferedSender.SendUnbuffered is thread-safe.
-func (s *PerRangeEventSink) SendIsThreadSafe() {}
+func (s *PerRangeEventSink) SendUnbufferedIsThreadSafe() {}
 
 func (s *PerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 	response := &kvpb.MuxRangeFeedEvent{
