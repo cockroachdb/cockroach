@@ -12,7 +12,9 @@ package rac2
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/redact"
@@ -58,6 +60,37 @@ var (
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 	}
+	// WaitForEval metrics.
+	requestsWaiting = metric.Metadata{
+		Name:        "kvflowcontrol.eval_wait.%s.requests.waiting",
+		Help:        "Number of %s requests waiting for flow tokens",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	requestsAdmitted = metric.Metadata{
+		Name:        "kvflowcontrol.eval_wait.%s.requests.admitted",
+		Help:        "Number of %s requests admitted by the flow controller",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	requestsErrored = metric.Metadata{
+		Name:        "kvflowcontrol.eval_wait.%s.requests.errored",
+		Help:        "Number of %s requests that errored out while waiting for flow tokens",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	requestsBypassed = metric.Metadata{
+		Name:        "kvflowcontrol.eval_wait.%s.requests.bypassed",
+		Help:        "Number of waiting %s requests that bypassed the flow controller due to disconnecting streams",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	waitDuration = metric.Metadata{
+		Name:        "kvflowcontrol.eval_wait.%s.duration",
+		Help:        "Latency histogram for time %s requests spent waiting for flow tokens to evaluate",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // annotateMetricTemplateWithWorkClass uses the given metric template to build
@@ -68,6 +101,17 @@ func annotateMetricTemplateWithWorkClassAndType(
 	rv := tmpl
 	rv.Name = fmt.Sprintf(tmpl.Name, t, wc)
 	rv.Help = fmt.Sprintf(tmpl.Help, t, wc)
+	return rv
+}
+
+// annotateMetricTemplateWithWorkClass uses the given metric template to build
+// one suitable for the specific work class.
+func annotateMetricTemplateWithWorkClass(
+	wc admissionpb.WorkClass, tmpl metric.Metadata,
+) metric.Metadata {
+	rv := tmpl
+	rv.Name = fmt.Sprintf(tmpl.Name, wc)
+	rv.Help = fmt.Sprintf(tmpl.Help, wc)
 	return rv
 }
 
@@ -178,4 +222,64 @@ func newTokenStreamMetrics(t flowControlMetricType) *tokenStreamMetrics {
 		)
 	}
 	return m
+}
+
+type EvalWaitMetrics struct {
+	waiting  [admissionpb.NumWorkClasses]*metric.Gauge
+	admitted [admissionpb.NumWorkClasses]*metric.Counter
+	errored  [admissionpb.NumWorkClasses]*metric.Counter
+	bypassed [admissionpb.NumWorkClasses]*metric.Counter
+	duration [admissionpb.NumWorkClasses]metric.IHistogram
+}
+
+func NewEvalWaitMetrics() *EvalWaitMetrics {
+	m := &EvalWaitMetrics{}
+	for _, wc := range []admissionpb.WorkClass{
+		admissionpb.RegularWorkClass,
+		admissionpb.ElasticWorkClass,
+	} {
+		m.waiting[wc] = metric.NewGauge(
+			annotateMetricTemplateWithWorkClass(wc, requestsWaiting),
+		)
+		m.admitted[wc] = metric.NewCounter(
+			annotateMetricTemplateWithWorkClass(wc, requestsAdmitted),
+		)
+		m.errored[wc] = metric.NewCounter(
+			annotateMetricTemplateWithWorkClass(wc, requestsErrored),
+		)
+		m.bypassed[wc] = metric.NewCounter(
+			annotateMetricTemplateWithWorkClass(wc, requestsBypassed),
+		)
+		m.duration[wc] = metric.NewHistogram(
+			metric.HistogramOptions{
+				Metadata:     annotateMetricTemplateWithWorkClass(wc, waitDuration),
+				Duration:     base.DefaultHistogramWindowInterval(),
+				BucketConfig: metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePrometheus,
+			},
+		)
+	}
+	return m
+}
+
+func (e *EvalWaitMetrics) onWaiting(wc admissionpb.WorkClass) {
+	e.waiting[wc].Inc(1)
+}
+
+func (e *EvalWaitMetrics) onAdmitted(wc admissionpb.WorkClass, dur time.Duration) {
+	e.admitted[wc].Inc(1)
+	e.waiting[wc].Dec(1)
+	e.duration[wc].RecordValue(dur.Nanoseconds())
+}
+
+func (e *EvalWaitMetrics) onBypassed(wc admissionpb.WorkClass, dur time.Duration) {
+	e.bypassed[wc].Inc(1)
+	e.waiting[wc].Dec(1)
+	e.duration[wc].RecordValue(dur.Nanoseconds())
+}
+
+func (e *EvalWaitMetrics) onErrored(wc admissionpb.WorkClass, dur time.Duration) {
+	e.errored[wc].Inc(1)
+	e.waiting[wc].Dec(1)
+	e.duration[wc].RecordValue(dur.Nanoseconds())
 }
