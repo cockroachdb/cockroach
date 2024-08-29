@@ -432,7 +432,7 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 				if err := whenDisabled.withCancelOnDisabled(ctx, &s.Settings.SV, func(ctx context.Context) error {
 					return s.executeSchedules(ctx, maxSchedules)
 				}); err != nil {
-					log.Errorf(ctx, "error executing schedules: %+v", err)
+					log.Errorf(ctx, "error executing schedules: %v", err)
 				}
 			}
 		}
