@@ -71,6 +71,7 @@ func TestExplainRedactDDL(t *testing.T) {
 	// Perform a few random initial CREATE TABLEs.
 	setup := sqlsmith.RandTablesPrefixStringConsts(rng, pii)
 	setup = append(setup, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off;")
+	setup = append(setup, "SET CLUSTER SETTING sql.defaults.transaction_rows_written_err = 100;")
 	setup = append(setup, "SET statement_timeout = '5s';")
 	for _, stmt := range setup {
 		if _, err := conn.ExecContext(ctx, stmt); err != nil {
