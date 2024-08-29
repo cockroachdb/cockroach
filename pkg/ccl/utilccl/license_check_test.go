@@ -10,14 +10,18 @@ package utilccl
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -242,4 +246,79 @@ func setLicense(ctx context.Context, updater settings.Updater, val string) error
 		Value: val,
 		Type:  "s",
 	})
+}
+
+func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
+	ts1 := timeutil.Unix(1724329716, 0)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		// We are changing a cluster setting that can only be done at the system tenant.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				LicenseTestingKnobs: license.TestingKnobs{
+					OverrideStartTime: &ts1,
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	// All of the licenses that we install later depend on this org name.
+	_, err := srv.SystemLayer().SQLConn(t).Exec(
+		"SET CLUSTER SETTING cluster.organization = 'CRDB Unit Test'",
+	)
+	require.NoError(t, err)
+
+	// Test to ensure that the state is correctly registered on startup before
+	// changing the license.
+	enforcer := license.GetEnforcerInstance()
+	require.Equal(t, false, enforcer.GetHasLicense())
+	gracePeriodTS, hasGracePeriod := enforcer.GetGracePeriodEndTS()
+	require.True(t, hasGracePeriod)
+	require.Equal(t, ts1.Add(7*24*time.Hour), gracePeriodTS)
+
+	jan1st2000 := timeutil.Unix(946728000, 0)
+
+	for i, tc := range []struct {
+		license                string
+		expectedGracePeriodEnd time.Time
+	}{
+		// Note: all licenses below expire on Jan 1st 2000
+		//
+		// Free license - 30 days grace period
+		{"crl-0-EMDYt8MDGAMiDkNSREIgVW5pdCBUZXN0", jan1st2000.Add(30 * 24 * time.Hour)},
+		// Trial license - 7 days grace period
+		{"crl-0-EMDYt8MDGAQiDkNSREIgVW5pdCBUZXN0", jan1st2000.Add(7 * 24 * time.Hour)},
+		// Enterprise - no grace period
+		{"crl-0-EMDYt8MDGAEiDkNSREIgVW5pdCBUZXN0KAM", timeutil.UnixEpoch},
+		// No license - 7 days grace period
+		{"", ts1.Add(7 * 24 * time.Hour)},
+	} {
+		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
+			_, err := srv.SQLConn(t).Exec(
+				fmt.Sprintf("SET CLUSTER SETTING enterprise.license = '%s'", tc.license),
+			)
+			require.NoError(t, err)
+			// The SQL can return back before the callback has finished. So, we wait a
+			// bit to see if the desired state is reached.
+			var hasLicense bool
+			require.Eventually(t, func() bool {
+				hasLicense = enforcer.GetHasLicense()
+				return (tc.license != "") == hasLicense
+			}, 20*time.Second, time.Millisecond,
+				"GetHasLicense() last returned %t", hasLicense)
+			var ts time.Time
+			var hasGracePeriod bool
+			require.Eventually(t, func() bool {
+				ts, hasGracePeriod = enforcer.GetGracePeriodEndTS()
+				if tc.expectedGracePeriodEnd.Equal(timeutil.UnixEpoch) {
+					return !hasGracePeriod
+				}
+				return ts.Equal(tc.expectedGracePeriodEnd)
+			}, 20*time.Second, time.Millisecond,
+				"GetGracePeriodEndTS() last returned %v (%t)", ts, hasGracePeriod)
+		})
+	}
 }
