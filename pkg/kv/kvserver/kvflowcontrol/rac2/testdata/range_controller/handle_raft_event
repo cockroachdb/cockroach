@@ -84,7 +84,8 @@ NormalPri:
 ++++
 
 # Change the tracker state of s3 to be StateProbe, this should trigger token
-# return for s3 and untracking all entries and closing the stream.
+# return for s3 and untracking all entries and closing the stream after a 1s
+# delay.
 set_replicas
 range_id=1 tenant_id=1 local_replica_id=1
   store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
@@ -92,6 +93,31 @@ range_id=1 tenant_id=1 local_replica_id=1
   store_id=3 replica_id=3 type=VOTER_FULL state=StateProbe
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+
+# Tick the clock by less than the probe to close delay, the stream should still
+# be open in state probeRecentlyReplicate.
+tick duration=500ms
+----
+now=500ms
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false
+++++
+(n2,s2):2: state=replicate closed=false
+++++
+(n3,s3):3: state=probeRecentlyReplicate closed=false
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+
+# Tick the clock by the remaining probe to close delay, the stream should now
+# be closed and all tokens returned.
+tick duration=500ms
+----
+now=1s
 
 stream_state range_id=1
 ----
