@@ -79,7 +79,7 @@ func (s *BufferedPerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) e
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
 	}
-	return s.wrapped.SendUnbuffered(response, nil)
+	return s.wrapped.SendUnbuffered(response)
 }
 
 // SendError implements the Stream interface.
@@ -94,6 +94,12 @@ func (s *BufferedPerRangeEventSink) SendError(err *kvpb.Error) {
 	s.wrapped.SendBufferedError(ev)
 }
 
+// RegisterRangefeedCleanUp registers a cleanup callback to be called in a
+// background async job when the stream is disconnected. Note that the callback
+// will not be invoked immediately during  Disconnect and may not be called if
+// the BufferedSender.run has stopped. Caller needs to ensure that this is not
+// called after BufferedSender has stopped. For p.Register, it is currently done
+// by waiting for runRequest to complete for each stores.RangeFeed call.
 func (s *BufferedPerRangeEventSink) AddRegistration(r Disconnector) {
 	s.manager.AddStream(s.streamID, r)
 }
