@@ -132,7 +132,9 @@ func (c MajorityConfig) CommittedIndex(l AckedIndexer) Index {
 	// The commit index is the smallest index that's been acked by all replicas in
 	// a quorum. For the majority config, we want the largest such index across
 	// all quorums. quorumSupportedElement will give us that.
-	return computeElement(c, l)
+	return computeElement(c, l, func(arr []Index) {
+		slices.Sort(arr)
+	})
 }
 
 // VoteResult takes a mapping of voters to yes/no (true/false) votes and returns
@@ -196,7 +198,11 @@ func (c MajorityConfig) LeadSupportExpiration(supported supportMap) hlc.Timestam
 
 	// As per the definition of QSE above, quorumSupportedElement should give us
 	// what we need.
-	return computeElement(c, supported)
+	return computeElement(c, supported, func(arr []hlc.Timestamp) {
+		slices.SortFunc(arr, func(i, j hlc.Timestamp) int {
+			return i.Compare(j)
+		})
+	})
 }
 
 // Comparable is a thin interface that allows computeElement to compare
@@ -219,7 +225,7 @@ type ComparableMap[T Comparable[T]] interface {
 // Elements must be comparable to each other. If an element does not exist for
 // a peer then it is treated as the zero value and sorts before all other
 // elements.
-func computeElement[E Comparable[E], M ComparableMap[E]](c MajorityConfig, elems M) E {
+func computeElement[E Comparable[E], M ComparableMap[E]](c MajorityConfig, elems M, sortFunc func([]E)) E {
 	n := len(c)
 
 	// Use an on-stack slice whenever n <= 7 (otherwise we alloc). The assumption
@@ -247,9 +253,7 @@ func computeElement[E Comparable[E], M ComparableMap[E]](c MajorityConfig, elems
 		}
 	}
 
-	slices.SortFunc(srt, func(a, b E) int {
-		return a.Compare(b)
-	})
+	sortFunc(srt)
 
 	// We want the maximum element supported by the quorum, with the assumption
 	// that if an element is supported by a peer, so are all elements with smaller
