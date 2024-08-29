@@ -249,6 +249,50 @@ func TestGetCertificateUserScope(t *testing.T) {
 			require.True(t, userScopes[0].Global)
 		}
 	})
+
+	t.Run("extracts username, tenantName from tenant-name URI SAN", func(t *testing.T) {
+		state := makeFakeTLSState(t, "(CN=foo)uri:crdb://tenant-name/tenant10/user/foo;(CN=CA)")
+		cert := state.PeerCertificates[0]
+		if userScopes, err := security.GetCertificateUserScope(cert); err != nil {
+			t.Error(err)
+		} else {
+			require.Equal(t, 1, len(userScopes))
+			require.Equal(t, "foo", userScopes[0].Username)
+			require.Equal(t, roachpb.TenantName("tenant10"), userScopes[0].TenantName)
+			require.False(t, userScopes[0].Global)
+		}
+	})
+
+	t.Run("extracts username, tenantName from tenant-name URI SAN with URI scheme in upper case", func(t *testing.T) {
+		state := makeFakeTLSState(t, "(CN=foo)uri:CRDB://tenant-name/tenant10/user/foo;(CN=CA)")
+		cert := state.PeerCertificates[0]
+		if userScopes, err := security.GetCertificateUserScope(cert); err != nil {
+			t.Error(err)
+		} else {
+			require.Equal(t, 1, len(userScopes))
+			require.Equal(t, "foo", userScopes[0].Username)
+			require.Equal(t, roachpb.TenantName("tenant10"), userScopes[0].TenantName)
+			require.False(t, userScopes[0].Global)
+		}
+	})
+
+	t.Run("extracts both tenant URI SAN and tenant name URI SAN when both are present", func(t *testing.T) {
+		state := makeFakeTLSState(t, "(CN=foo)uri:crdb://tenant-name/tenant10/user/bar,uri:crdb://tenant/123/user/foo;(CN=CA)")
+		cert := state.PeerCertificates[0]
+		if userScopes, err := security.GetCertificateUserScope(cert); err != nil {
+			t.Error(err)
+		} else {
+			require.Equal(t, 2, len(userScopes))
+
+			require.Equal(t, "bar", userScopes[0].Username)
+			require.Equal(t, roachpb.TenantName("tenant10"), userScopes[0].TenantName)
+			require.False(t, userScopes[0].Global)
+
+			require.Equal(t, "foo", userScopes[1].Username)
+			require.Equal(t, roachpb.MustMakeTenantID(123), userScopes[1].TenantID)
+			require.False(t, userScopes[1].Global)
+		}
+	})
 }
 
 func TestSetCertPrincipalMap(t *testing.T) {
