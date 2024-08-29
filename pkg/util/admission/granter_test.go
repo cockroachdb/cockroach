@@ -487,6 +487,8 @@ func (m *testMetricsProvider) GetPebbleMetrics() []StoreMetrics {
 	return m.metrics
 }
 
+func (m *testMetricsProvider) Close() {}
+
 func (m *testMetricsProvider) UpdateIOThreshold(
 	id roachpb.StoreID, threshold *admissionpb.IOThreshold,
 ) {
