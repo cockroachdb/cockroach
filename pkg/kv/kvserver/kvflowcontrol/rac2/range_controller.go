@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -171,6 +173,23 @@ func (rs ReplicaSet) String() string {
 	return redact.StringWithoutMarkers(rs)
 }
 
+// ProbeToCloseTimerScheduler is an interface for scheduling the closing of a
+// replica send stream.
+type ProbeToCloseTimerScheduler interface {
+	// ScheduleSendStreamCloseRaftMuLocked schedules a callback with a raft event
+	// after the given delay. This function may be used to handle send stream
+	// state transition, usually to close a send stream after the given delay.
+	// e.g.,
+	//
+	//   HanldeRaftEventRaftMuLocked(ctx, RaftEvent{})
+	//
+	// Which will trigger handleReadyState to close the send stream if it hasn't
+	// transitioned to StateReplicate.
+	//
+	// Requires replica.raftMu to be held.
+	ScheduleSendStreamCloseRaftMuLocked(ctx context.Context, delay time.Duration)
+}
+
 type RangeControllerOptions struct {
 	RangeID  roachpb.RangeID
 	TenantID roachpb.TenantID
@@ -179,8 +198,10 @@ type RangeControllerOptions struct {
 	LocalReplicaID roachpb.ReplicaID
 	// SSTokenCounter provides access to all the TokenCounters that will be
 	// needed (keyed by (tenantID, storeID)).
-	SSTokenCounter *StreamTokenCounterProvider
-	RaftInterface  RaftInterface
+	SSTokenCounter      *StreamTokenCounterProvider
+	RaftInterface       RaftInterface
+	Clock               *hlc.Clock
+	CloseTimerScheduler ProbeToCloseTimerScheduler
 }
 
 // RangeControllerInitState is the initial state at the time of creation.
@@ -486,9 +507,10 @@ type replicaSendStream struct {
 
 	mu struct {
 		syncutil.Mutex
-		connectedState connectedState
-		tracker        Tracker
-		closed         bool
+		connectedState      connectedState
+		connectedStateStart time.Time
+		tracker             Tracker
+		closed              bool
 	}
 }
 
@@ -500,6 +522,7 @@ func (rs *replicaState) createReplicaSendStream() {
 	rs.sendStream.mu.tracker.Init(rs.stream)
 	rs.sendStream.mu.connectedState = replicate
 	rs.sendStream.mu.closed = false
+	rs.sendStream.mu.connectedStateStart = rs.parent.opts.Clock.PhysicalTime()
 }
 
 func (rs *replicaState) isStateReplicate() bool {
@@ -548,6 +571,7 @@ func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []entryF
 	if rs.sendStream == nil {
 		return
 	}
+
 	rs.sendStream.mu.Lock()
 	defer rs.sendStream.mu.Unlock()
 
@@ -571,11 +595,40 @@ func (rs *replicaState) handleReadyState(
 ) (shouldWaitChange bool) {
 	switch info.State {
 	case tracker.StateProbe:
-		if rs.sendStream != nil {
-			// TODO(kvoli): delay this by 1s.
+		if rs.sendStream == nil {
+			// We have already closed the stream, nothing to do.
+			return false
+		}
+		if shouldClose := func() (should bool) {
+			now := rs.parent.opts.Clock.PhysicalTime()
+			rs.sendStream.mu.Lock()
+			defer rs.sendStream.mu.Unlock()
+
+			if state := rs.sendStream.mu.connectedState; state == probeRecentlyReplicate &&
+				!rs.sendStream.mu.connectedStateStart.Add(
+					probeRecentlyReplicateDuration).Before(now) {
+				// The replica has been in StateProbe for at least
+				// probeRecentlyReplicateDuration (default 1s) second, close the
+				// stream.
+				should = true
+			} else if state != probeRecentlyReplicate {
+				// This is the first time we've seen the replica change to StateProbe,
+				// update the connected state and start time. If the state doesn't
+				// change within probeRecentlyReplicateDuration, we will close the
+				// stream. Also schedule an event, so that even if there are no
+				// entries, we will still reliably close the stream if still in
+				// StateProbe.
+				rs.sendStream.mu.connectedState = probeRecentlyReplicate
+				rs.sendStream.mu.connectedStateStart = now
+				rs.parent.opts.CloseTimerScheduler.ScheduleSendStreamCloseRaftMuLocked(
+					ctx, probeRecentlyReplicateDuration)
+			}
+			return should
+		}(); shouldClose {
 			rs.closeSendStream(ctx)
 			shouldWaitChange = true
 		}
+
 	case tracker.StateReplicate:
 		if rs.sendStream == nil {
 			rs.createReplicaSendStream()
@@ -583,6 +636,7 @@ func (rs *replicaState) handleReadyState(
 		} else {
 			shouldWaitChange = rs.sendStream.makeConsistentInStateReplicate(ctx, info)
 		}
+
 	case tracker.StateSnapshot:
 		if rs.sendStream != nil {
 			switch func() connectedState {
@@ -638,8 +692,10 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(
 	case replicate:
 	case probeRecentlyReplicate:
 		rss.mu.connectedState = replicate
+		rss.mu.connectedStateStart = rss.parent.parent.opts.Clock.PhysicalTime()
 	case snapshot:
 		rss.mu.connectedState = replicate
+		rss.mu.connectedStateStart = rss.parent.parent.opts.Clock.PhysicalTime()
 		shouldWaitChange = true
 	}
 	return shouldWaitChange
@@ -680,6 +736,11 @@ func (rss *replicaSendStream) returnTokens(
 		}
 	}
 }
+
+// probeRecentlyReplicateDuration is the duration the controller will wait
+// after observing a replica in StateProbe before closing the send stream if
+// the replica remains in StateProbe.
+const probeRecentlyReplicateDuration = time.Second
 
 type connectedState uint32
 

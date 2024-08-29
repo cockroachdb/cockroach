@@ -4,6 +4,7 @@ go_library(
     name = "replica_rac2",
     srcs = [
         "admission.go",
+        "close_scheduler.go",
         "doc.go",
         "processor.go",
     ],
@@ -18,7 +19,9 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
+        "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
