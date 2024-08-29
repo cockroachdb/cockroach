@@ -2932,11 +2932,10 @@ index-join b
  ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
  └── scan b@j_inv_idx,inverted
       ├── columns: k:1!null
-      ├── inverted constraint: /7/1
-      │    └── spans
-      │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
-      │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-      └── key: (1)
+      └── inverted constraint: /7/1
+           └── spans
+                ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+                └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
 
 # Disjunction.
 opt expect=GenerateInvertedIndexScans
@@ -2958,14 +2957,12 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
-           ├── inverted constraint: /7/1
-           │    └── spans
-           │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-           │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
-           │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-           │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-           ├── key: (1)
-           └── fd: (1)-->(7)
+           └── inverted constraint: /7/1
+                └── spans
+                     ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+                     ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+                     ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+                     └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
 
 # Disjunction with non-tight predicate.
 opt expect=GenerateInvertedIndexScans
@@ -3009,14 +3006,12 @@ select
  │         ├── key: (1)
  │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:7!null
- │              ├── inverted constraint: /7/1
- │              │    └── spans
- │              │         ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
- │              │         ├── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
- │              │         ├── ["7\x00\x03\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x03\x00\x01*\x06\x00"]
- │              │         └── ["7\x00\x03\x00\x03\x00\x01*\b\x00", "7\x00\x03\x00\x03\x00\x01*\b\x00"]
- │              ├── key: (1)
- │              └── fd: (1)-->(7)
+ │              └── inverted constraint: /7/1
+ │                   └── spans
+ │                        ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+ │                        ├── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
+ │                        ├── ["7\x00\x03\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x03\x00\x01*\x06\x00"]
+ │                        └── ["7\x00\x03\x00\x03\x00\x01*\b\x00", "7\x00\x03\x00\x03\x00\x01*\b\x00"]
  └── filters
       └── (j:4 @> '[[1, 2]]') OR (j:4 @> '[[3, 4]]') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -3038,12 +3033,10 @@ index-join b
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
-           ├── inverted constraint: /7/1
-           │    └── spans
-           │         ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
-           │         └── ["7\x00\x03\x00\xff", "7\x00\x04")
-           ├── key: (1)
-           └── fd: (1)-->(7)
+           └── inverted constraint: /7/1
+                └── spans
+                     ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
+                     └── ["7\x00\x03\x00\xff", "7\x00\x04")
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j @> '{"a": {}}'
@@ -3063,12 +3056,10 @@ index-join b
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
-           ├── inverted constraint: /7/1
-           │    └── spans
-           │         ├── ["7a\x00\x019", "7a\x00\x019"]
-           │         └── ["7a\x00\x02\x00\xff", "7a\x00\x03")
-           ├── key: (1)
-           └── fd: (1)-->(7)
+           └── inverted constraint: /7/1
+                └── spans
+                     ├── ["7a\x00\x019", "7a\x00\x019"]
+                     └── ["7a\x00\x02\x00\xff", "7a\x00\x03")
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j @> '{"a": []}'
@@ -3088,12 +3079,10 @@ index-join b
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
-           ├── inverted constraint: /7/1
-           │    └── spans
-           │         ├── ["7a\x00\x018", "7a\x00\x018"]
-           │         └── ["7a\x00\x02\x00\x03", "7a\x00\x02\x00\x03"]
-           ├── key: (1)
-           └── fd: (1)-->(7)
+           └── inverted constraint: /7/1
+                └── spans
+                     ├── ["7a\x00\x018", "7a\x00\x018"]
+                     └── ["7a\x00\x02\x00\x03", "7a\x00\x02\x00\x03"]
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j @> '{"a":[[{"b":{"c":[{"d":"e"}]}}]]}'
@@ -3192,12 +3181,10 @@ select
  │         ├── key: (1)
  │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:7!null
- │              ├── inverted constraint: /7/1
- │              │    └── spans
- │              │         ├── ["7\x00\x019", "7\x00\x019"]
- │              │         └── ["7a\x00\x018", "7a\x00\x018"]
- │              ├── key: (1)
- │              └── fd: (1)-->(7)
+ │              └── inverted constraint: /7/1
+ │                   └── spans
+ │                        ├── ["7\x00\x019", "7\x00\x019"]
+ │                        └── ["7a\x00\x018", "7a\x00\x018"]
  └── filters
       └── j:4 <@ '{"a": []}' [outer=(4), immutable]
 
@@ -3229,18 +3216,16 @@ select
  │         ├── key: (1)
  │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:7!null
- │              ├── inverted constraint: /7/1
- │              │    └── spans
- │              │         ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
- │              │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
- │              │         ├── ["7\x00\x018", "7\x00\x018"]
- │              │         ├── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
- │              │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
- │              │         ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
- │              │         ├── ["7\x00\x03a\x00\x019", "7\x00\x03a\x00\x019"]
- │              │         └── ["7\x00\x03a\x00\x02d\x00\x01\n", "7\x00\x03a\x00\x02d\x00\x01\n"]
- │              ├── key: (1)
- │              └── fd: (1)-->(7)
+ │              └── inverted constraint: /7/1
+ │                   └── spans
+ │                        ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
+ │                        ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+ │                        ├── ["7\x00\x018", "7\x00\x018"]
+ │                        ├── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
+ │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+ │                        ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
+ │                        ├── ["7\x00\x03a\x00\x019", "7\x00\x03a\x00\x019"]
+ │                        └── ["7\x00\x03a\x00\x02d\x00\x01\n", "7\x00\x03a\x00\x02d\x00\x01\n"]
  └── filters
       └── j:4 <@ '[{"a": {"d": true}}, 1, "b"]' [outer=(4), immutable]
 
@@ -3274,19 +3259,17 @@ select
  │         ├── key: (1)
  │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:7!null
- │              ├── inverted constraint: /7/1
- │              │    └── spans
- │              │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
- │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
- │              │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
- │              │         ├── ["7\x00\x018", "7\x00\x01:")
- │              │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
- │              │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
- │              │         ├── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
- │              │         ├── ["7a\x00\x018", "7a\x00\x018"]
- │              │         └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
- │              ├── key: (1)
- │              └── fd: (1)-->(7)
+ │              └── inverted constraint: /7/1
+ │                   └── spans
+ │                        ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+ │                        ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+ │                        ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
+ │                        ├── ["7\x00\x018", "7\x00\x01:")
+ │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+ │                        ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+ │                        ├── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │                        ├── ["7a\x00\x018", "7a\x00\x018"]
+ │                        └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
  └── filters
       └── (j:4 <@ '{"a": [3]}') OR (j:4 <@ '[1, 2, 3]') [outer=(4), immutable]
 
@@ -3328,19 +3311,17 @@ select
  │         ├── key: (1)
  │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:7!null
- │              ├── inverted constraint: /7/1
- │              │    └── spans
- │              │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
- │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
- │              │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
- │              │         ├── ["7\x00\x018", "7\x00\x01:")
- │              │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
- │              │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
- │              │         ├── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
- │              │         ├── ["7a\x00\x018", "7a\x00\x018"]
- │              │         └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
- │              ├── key: (1)
- │              └── fd: (1)-->(7)
+ │              └── inverted constraint: /7/1
+ │                   └── spans
+ │                        ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+ │                        ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+ │                        ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
+ │                        ├── ["7\x00\x018", "7\x00\x01:")
+ │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+ │                        ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+ │                        ├── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │                        ├── ["7a\x00\x018", "7a\x00\x018"]
+ │                        └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
  └── filters
       ├── j:4 <@ '{"a": [3]}' [outer=(4), immutable]
       └── j:4 <@ '[1, 2, 3]' [outer=(4), immutable]
@@ -3365,15 +3346,13 @@ project
       ├── fd: ()-->(4)
       ├── index-join b
       │    ├── columns: k:1!null j:4
-      │    ├── key: (1)
       │    ├── fd: (1)-->(4)
       │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
-      │         ├── inverted constraint: /7/1
-      │         │    └── spans
-      │         │         ├── ["7\x00\x01\x00", "7\x00\x01\x00"]
-      │         │         └── ["7\x00\x03\x00\x01\x00", "7\x00\x03\x00\x01\x00"]
-      │         └── key: (1)
+      │         └── inverted constraint: /7/1
+      │              └── spans
+      │                   ├── ["7\x00\x01\x00", "7\x00\x01\x00"]
+      │                   └── ["7\x00\x03\x00\x01\x00", "7\x00\x03\x00\x01\x00"]
       └── filters
            └── j:4 = 'null' [outer=(4), immutable, constraints=(/4: [/'null' - /'null']; tight), fd=()-->(4)]
 
@@ -3392,15 +3371,13 @@ project
       ├── fd: ()-->(4)
       ├── index-join b
       │    ├── columns: k:1!null j:4
-      │    ├── key: (1)
       │    ├── fd: (1)-->(4)
       │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
-      │         ├── inverted constraint: /7/1
-      │         │    └── spans
-      │         │         ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
-      │         │         └── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
-      │         └── key: (1)
+      │         └── inverted constraint: /7/1
+      │              └── spans
+      │                   ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
+      │                   └── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
       └── filters
            └── j:4 = '"b"' [outer=(4), immutable, constraints=(/4: [/'"b"' - /'"b"']; tight), fd=()-->(4)]
 
@@ -3419,15 +3396,13 @@ project
       ├── fd: ()-->(4)
       ├── index-join b
       │    ├── columns: k:1!null j:4
-      │    ├── key: (1)
       │    ├── fd: (1)-->(4)
       │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
-      │         ├── inverted constraint: /7/1
-      │         │    └── spans
-      │         │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │         │         └── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │         └── key: (1)
+      │         └── inverted constraint: /7/1
+      │              └── spans
+      │                   ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+      │                   └── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
       └── filters
            └── j:4 = '1' [outer=(4), immutable, constraints=(/4: [/'1' - /'1']; tight), fd=()-->(4)]
 
@@ -3446,15 +3421,13 @@ project
       ├── fd: ()-->(4)
       ├── index-join b
       │    ├── columns: k:1!null j:4
-      │    ├── key: (1)
       │    ├── fd: (1)-->(4)
       │    └── scan b@j_inv_idx,inverted
       │         ├── columns: k:1!null
-      │         ├── inverted constraint: /7/1
-      │         │    └── spans
-      │         │         ├── ["7\x00\x01\x12\x00\x01", "7\x00\x01\x12\x00\x01"]
-      │         │         └── ["7\x00\x03\x00\x01\x12\x00\x01", "7\x00\x03\x00\x01\x12\x00\x01"]
-      │         └── key: (1)
+      │         └── inverted constraint: /7/1
+      │              └── spans
+      │                   ├── ["7\x00\x01\x12\x00\x01", "7\x00\x01\x12\x00\x01"]
+      │                   └── ["7\x00\x03\x00\x01\x12\x00\x01", "7\x00\x03\x00\x01\x12\x00\x01"]
       └── filters
            └── j:4 = '""' [outer=(4), immutable, constraints=(/4: [/'""' - /'""']; tight), fd=()-->(4)]
 
@@ -3510,12 +3483,10 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x018", "7\x00\x018"]
-      │              │         └── ["7\x00\x03", "7\x00\x03"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x018", "7\x00\x018"]
+      │                        └── ["7\x00\x03", "7\x00\x03"]
       └── filters
            └── j:4 = '[]' [outer=(4), immutable, constraints=(/4: [/'[]' - /'[]']; tight), fd=()-->(4)]
 
@@ -3546,12 +3517,10 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x019", "7\x00\x019"]
-      │              │         └── ["7\x00\xff", "8")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x019", "7\x00\x019"]
+      │                        └── ["7\x00\xff", "8")
       └── filters
            └── j:4 = '{}' [outer=(4), immutable, constraints=(/4: [/'{}' - /'{}']; tight), fd=()-->(4)]
 
@@ -3832,13 +3801,11 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x018", "7\x00\x018"]
-      │              │         ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
-      │              │         └── ["7\x00\x03b\x00\x01\x12c\x00\x01", "7\x00\x03b\x00\x01\x12c\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x018", "7\x00\x018"]
+      │                        ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
+      │                        └── ["7\x00\x03b\x00\x01\x12c\x00\x01", "7\x00\x03b\x00\x01\x12c\x00\x01"]
       └── filters
            └── (j:4->0) <@ '{"b": "c"}' [outer=(4), immutable]
 
@@ -3876,18 +3843,16 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
-      │              │         ├── ["7\x00\x018", "7\x00\x018"]
-      │              │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │              │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-      │              │         ├── ["7\x00\x03\x00\x018", "7\x00\x03\x00\x018"]
-      │              │         ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
-      │              │         └── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+      │                        ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+      │                        ├── ["7\x00\x018", "7\x00\x018"]
+      │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │                        ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+      │                        ├── ["7\x00\x03\x00\x018", "7\x00\x03\x00\x018"]
+      │                        ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+      │                        └── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
       └── filters
            └── (j:4->0) <@ '[1, 2]' [outer=(4), immutable]
 
@@ -3945,12 +3910,10 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │              │         └── ["7\x00\x03\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x03\x00\x01\x12a\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
+      │                        └── ["7\x00\x03\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x03\x00\x01\x12a\x00\x01"]
       └── filters
            └── (j:4->0) @> '"a"' [outer=(4), immutable]
 
@@ -3983,13 +3946,11 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
-      │              │         ├── ["7\x00\x018", "7\x00\x018"]
-      │              │         └── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
+      │                        ├── ["7\x00\x018", "7\x00\x018"]
+      │                        └── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
       └── filters
            └── (j:4->0) <@ '"a"' [outer=(4), immutable]
 
@@ -4021,12 +3982,10 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │              │         └── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │                        └── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
       └── filters
            └── (j:4->0) @> '1' [outer=(4), immutable]
 
@@ -4059,13 +4018,11 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │              │         ├── ["7\x00\x018", "7\x00\x018"]
-      │              │         └── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+      │                        ├── ["7\x00\x018", "7\x00\x018"]
+      │                        └── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
       └── filters
            └── (j:4->0) <@ '1' [outer=(4), immutable]
 
@@ -4092,12 +4049,10 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
-           ├── inverted constraint: /7/1
-           │    └── spans
-           │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-           │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-           ├── key: (1)
-           └── fd: (1)-->(7)
+           └── inverted constraint: /7/1
+                └── spans
+                     ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+                     └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
 
 # Query using the fetch val and equality operators in a disjunction.
 opt expect=GenerateInvertedIndexScans
@@ -4117,12 +4072,10 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
-           ├── inverted constraint: /7/1
-           │    └── spans
-           │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-           │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-           ├── key: (1)
-           └── fd: (1)-->(7)
+           └── inverted constraint: /7/1
+                └── spans
+                     ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+                     └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
 
 # Generate an inverted scan when the index of the fetch val operator is
 # a string along with the IN operator consisting of JSON strings in
@@ -4146,13 +4099,11 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
-           ├── inverted constraint: /7/1
-           │    └── spans
-           │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-           │         ├── ["7a\x00\x01*\x04\x00", "7a\x00\x01*\x04\x00"]
-           │         └── ["7a\x00\x01*\x06\x00", "7a\x00\x01*\x06\x00"]
-           ├── key: (1)
-           └── fd: (1)-->(7)
+           └── inverted constraint: /7/1
+                └── spans
+                     ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+                     ├── ["7a\x00\x01*\x04\x00", "7a\x00\x01*\x04\x00"]
+                     └── ["7a\x00\x01*\x06\x00", "7a\x00\x01*\x06\x00"]
 
 
 # Testing the IN operator, without the fetch val operator,
@@ -4187,16 +4138,14 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
-      │              │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
-      │              │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │              │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-      │              │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+      │                        ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+      │                        ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
+      │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │                        ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+      │                        └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
       └── filters
            └── j:4 IN ('1', '2', '3') [outer=(4), constraints=(/4: [/'1' - /'1'] [/'2' - /'2'] [/'3' - /'3']; tight)]
 
@@ -4230,16 +4179,14 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
-      │              │         ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
-      │              │         ├── ["7\x00\x01\x12c\x00\x01", "7\x00\x01\x12c\x00\x01"]
-      │              │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │              │         ├── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
-      │              │         └── ["7\x00\x03\x00\x01\x12c\x00\x01", "7\x00\x03\x00\x01\x12c\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
+      │                        ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
+      │                        ├── ["7\x00\x01\x12c\x00\x01", "7\x00\x01\x12c\x00\x01"]
+      │                        ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
+      │                        ├── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
+      │                        └── ["7\x00\x03\x00\x01\x12c\x00\x01", "7\x00\x03\x00\x01\x12c\x00\x01"]
       └── filters
            └── j:4 IN ('"a"', '"b"', '"c"') [outer=(4), constraints=(/4: [/'"a"' - /'"a"'] [/'"b"' - /'"b"'] [/'"c"' - /'"c"']; tight)]
 
@@ -4297,12 +4244,10 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x018", "7\x00\x018"]
-      │              │         └── ["7\x00\x03", "7\x00\x03"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x018", "7\x00\x018"]
+      │                        └── ["7\x00\x03", "7\x00\x03"]
       └── filters
            └── j:4 IN ('[]', '[1]', '[1, 2]', '[1, 2, 3]') [outer=(4), constraints=(/4: [/'[]' - /'[]'] [/'[1]' - /'[1]'] [/'[1, 2]' - /'[1, 2]'] [/'[1, 2, 3]' - /'[1, 2, 3]']; tight)]
 
@@ -4359,12 +4304,10 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x019", "7\x00\x019"]
-      │              │         └── ["7\x00\xff", "8")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x019", "7\x00\x019"]
+      │                        └── ["7\x00\xff", "8")
       └── filters
            └── j:4 IN ('{}', '{"a": [1, 2, 3]}', '{"a": "b", "c": "d"}') [outer=(4), constraints=(/4: [/'{}' - /'{}'] [/'{"a": [1, 2, 3]}' - /'{"a": [1, 2, 3]}'] [/'{"a": "b", "c": "d"}' - /'{"a": "b", "c": "d"}']; tight)]
 
@@ -4406,18 +4349,16 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x01\x00", "7\x00\x01\x00"]
-      │              │         ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
-      │              │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
-      │              │         ├── ["7\x00\x019", "7\x00\x019"]
-      │              │         ├── ["7\x00\x03\x00\x01\x00", "7\x00\x03\x00\x01\x00"]
-      │              │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │              │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │              │         └── ["7\x00\xff", "8")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x01\x00", "7\x00\x01\x00"]
+      │                        ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
+      │                        ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+      │                        ├── ["7\x00\x019", "7\x00\x019"]
+      │                        ├── ["7\x00\x03\x00\x01\x00", "7\x00\x03\x00\x01\x00"]
+      │                        ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
+      │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │                        └── ["7\x00\xff", "8")
       └── filters
            └── j:4 IN ('null', '"a"', '1', '{}', '{"a": "b", "c": "d"}') [outer=(4), constraints=(/4: [/'null' - /'null'] [/'"a"' - /'"a"'] [/'1' - /'1'] [/'{}' - /'{}'] [/'{"a": "b", "c": "d"}' - /'{"a": "b", "c": "d"}']; tight)]
 
@@ -4442,12 +4383,10 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
-           ├── inverted constraint: /7/1
-           │    └── spans
-           │         ├── ["7a\x00\x01\x12a\x00\x01", "7a\x00\x01\x12a\x00\x01"]
-           │         └── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-           ├── key: (1)
-           └── fd: (1)-->(7)
+           └── inverted constraint: /7/1
+                └── spans
+                     ├── ["7a\x00\x01\x12a\x00\x01", "7a\x00\x01\x12a\x00\x01"]
+                     └── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
 
 
 # Generate an inverted scan when the index of the fetch val operator is
@@ -4480,12 +4419,10 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7a\x00\x02a\x00\x01\x12b\x00\x01", "7a\x00\x02a\x00\x01\x12b\x00\x01"]
-      │              │         └── ["7a\x00\x02c\x00\x01\x12d\x00\x01", "7a\x00\x02c\x00\x01\x12d\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7a\x00\x02a\x00\x01\x12b\x00\x01", "7a\x00\x02a\x00\x01\x12b\x00\x01"]
+      │                        └── ["7a\x00\x02c\x00\x01\x12d\x00\x01", "7a\x00\x02c\x00\x01\x12d\x00\x01"]
       └── filters
            └── (j:4->'a') IN ('{"a": "b"}', '{"c": "d"}') [outer=(4), immutable]
 
@@ -4521,14 +4458,12 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7a\x00\x01\x00", "7a\x00\x01\x00"]
-      │              │         ├── ["7a\x00\x01\x12a\x00\x01", "7a\x00\x01\x12a\x00\x01"]
-      │              │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-      │              │         └── ["7a\x00\x02a\x00\x01\x12b\x00\x01", "7a\x00\x02a\x00\x01\x12b\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7a\x00\x01\x00", "7a\x00\x01\x00"]
+      │                        ├── ["7a\x00\x01\x12a\x00\x01", "7a\x00\x01\x12a\x00\x01"]
+      │                        ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+      │                        └── ["7a\x00\x02a\x00\x01\x12b\x00\x01", "7a\x00\x02a\x00\x01\x12b\x00\x01"]
       └── filters
            └── (j:4->'a') IN ('null', '"a"', '1', '{"a": "b"}') [outer=(4), immutable]
 
@@ -4578,17 +4513,15 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7a\x00\x01\x00", "7a\x00\x01\x00"]
-      │              │         ├── ["7a\x00\x01\x12a\x00\x01", "7a\x00\x01\x12a\x00\x01"]
-      │              │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-      │              │         ├── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
-      │              │         ├── ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
-      │              │         ├── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
-      │              │         └── ["7a\x00\x02a\x00\x01\x12b\x00\x01", "7a\x00\x02a\x00\x01\x12b\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7a\x00\x01\x00", "7a\x00\x01\x00"]
+      │                        ├── ["7a\x00\x01\x12a\x00\x01", "7a\x00\x01\x12a\x00\x01"]
+      │                        ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+      │                        ├── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+      │                        ├── ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
+      │                        ├── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
+      │                        └── ["7a\x00\x02a\x00\x01\x12b\x00\x01", "7a\x00\x02a\x00\x01\x12b\x00\x01"]
       └── filters
            └── (j:4->'a') IN ('null', '"a"', '1', '[1, 2, 3]', '{"a": "b"}') [outer=(4), immutable]
 
@@ -4649,13 +4582,11 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
-      │              │         ├── ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
-      │              │         └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+      │                        ├── ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
+      │                        └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
       └── filters
            └── (j:4->'a') IN ('[1]', '[1, 2]', '[1, 2, 3]') [outer=(4), immutable]
 
@@ -4690,12 +4621,10 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │              │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │                        └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
       └── filters
            └── (j:4->0) IN ('1', '2') [outer=(4), immutable]
 
@@ -4729,12 +4658,10 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │              │         └── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
+      │                        └── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
       └── filters
            └── (j:4->0) IN ('"a"', '"b"') [outer=(4), immutable]
 
@@ -4768,12 +4695,10 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x03a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x01\x12b\x00\x01"]
-      │              │         └── ["7\x00\x03c\x00\x01\x12d\x00\x01", "7\x00\x03c\x00\x01\x12d\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x03a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x01\x12b\x00\x01"]
+      │                        └── ["7\x00\x03c\x00\x01\x12d\x00\x01", "7\x00\x03c\x00\x01\x12d\x00\x01"]
       └── filters
            └── (j:4->0) IN ('{"a": "b"}', '{"c": "d"}') [outer=(4), immutable]
 
@@ -4976,14 +4901,12 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x03\x00\x01\x00", "7\x00\x03\x00\x01\x00"]
-      │              │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
-      │              │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
-      │              │         └── ["7\x00\x03a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x01\x12b\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x03\x00\x01\x00", "7\x00\x03\x00\x01\x00"]
+      │                        ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
+      │                        ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │                        └── ["7\x00\x03a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x01\x12b\x00\x01"]
       └── filters
            └── (j:4->0) IN ('null', '"a"', '1', '{"a": "b"}') [outer=(4), immutable]
 
@@ -5044,13 +4967,11 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
-      │              │         ├── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
-      │              │         └── ["7\x00\x03\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x03\x00\x01*\x06\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+      │                        ├── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
+      │                        └── ["7\x00\x03\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x03\x00\x01*\x06\x00"]
       └── filters
            └── (j:4->0) IN ('[1]', '[1, 2]', '[1, 2, 3]') [outer=(4), immutable]
 
@@ -5087,14 +5008,12 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x03a\x00\x01\x00", "7\x00\x03a\x00\x01\x00"]
-      │              │         ├── ["7\x00\x03a\x00\x01\x12a\x00\x01", "7\x00\x03a\x00\x01\x12a\x00\x01"]
-      │              │         ├── ["7\x00\x03a\x00\x01*\x02\x00", "7\x00\x03a\x00\x01*\x02\x00"]
-      │              │         └── ["7\x00\x03a\x00\x02a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x02a\x00\x01\x12b\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x03a\x00\x01\x00", "7\x00\x03a\x00\x01\x00"]
+      │                        ├── ["7\x00\x03a\x00\x01\x12a\x00\x01", "7\x00\x03a\x00\x01\x12a\x00\x01"]
+      │                        ├── ["7\x00\x03a\x00\x01*\x02\x00", "7\x00\x03a\x00\x01*\x02\x00"]
+      │                        └── ["7\x00\x03a\x00\x02a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x02a\x00\x01\x12b\x00\x01"]
       └── filters
            └── ((j:4->0)->'a') IN ('null', '"a"', '1', '{"a": "b"}') [outer=(4), immutable]
 
@@ -5118,12 +5037,10 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
-           ├── inverted constraint: /7/1
-           │    └── spans
-           │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-           │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-           ├── key: (1)
-           └── fd: (1)-->(7)
+           └── inverted constraint: /7/1
+                └── spans
+                     ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+                     └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
 
 # Query using the fetch val and containment operators.
 opt expect=GenerateInvertedIndexScans
@@ -5143,12 +5060,10 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
-           ├── inverted constraint: /7/1
-           │    └── spans
-           │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-           │         └── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
-           ├── key: (1)
-           └── fd: (1)-->(7)
+           └── inverted constraint: /7/1
+                └── spans
+                     ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+                     └── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
 
 opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j->'a' <@ '"b"'
@@ -5176,12 +5091,10 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x019", "7\x00\x019"]
-      │              │         └── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x019", "7\x00\x019"]
+      │                        └── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── filters
            └── (j:4->'a') <@ '"b"' [outer=(4), immutable]
 
@@ -5203,12 +5116,10 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
-           ├── inverted constraint: /7/1
-           │    └── spans
-           │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
-           │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
-           ├── key: (1)
-           └── fd: (1)-->(7)
+           └── inverted constraint: /7/1
+                └── spans
+                     ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+                     └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
 
 opt expect=ConvertJSONSubscriptToFetchValue
 SELECT k FROM b WHERE j['a']['b'] @> '"c"'
@@ -5227,12 +5138,10 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
-           ├── inverted constraint: /7/1
-           │    └── spans
-           │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
-           │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
-           ├── key: (1)
-           └── fd: (1)-->(7)
+           └── inverted constraint: /7/1
+                └── spans
+                     ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+                     └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
 
 opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j->'a'->'b' <@ '"c"'
@@ -5261,13 +5170,11 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x019", "7\x00\x019"]
-      │              │         ├── ["7a\x00\x019", "7a\x00\x019"]
-      │              │         └── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x019", "7\x00\x019"]
+      │                        ├── ["7a\x00\x019", "7a\x00\x019"]
+      │                        └── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
       └── filters
            └── ((j:4->'a')->'b') <@ '"c"' [outer=(4), immutable]
 
@@ -5291,14 +5198,12 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
-           ├── inverted constraint: /7/1
-           │    └── spans
-           │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-           │         ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
-           │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-           │         └── ["7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
-           ├── key: (1)
-           └── fd: (1)-->(7)
+           └── inverted constraint: /7/1
+                └── spans
+                     ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+                     ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
+                     ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+                     └── ["7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
 
 # Query using the fetch val and contains operators in a disjunction with a
 # contained by operator.
@@ -5329,13 +5234,11 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x019", "7\x00\x019"]
-      │              │         ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
-      │              │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x019", "7\x00\x019"]
+      │                        ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
+      │                        └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
       └── filters
            └── ((j:4->'a') @> '["b"]') OR (j:4 <@ '{"c": "d"}') [outer=(4), immutable]
 
@@ -5366,14 +5269,12 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:7!null
-           ├── inverted constraint: /7/1
-           │    └── spans
-           │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-           │         ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
-           │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-           │         └── ["7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
-           ├── key: (1)
-           └── fd: (1)-->(7)
+           └── inverted constraint: /7/1
+                └── spans
+                     ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+                     ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
+                     ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+                     └── ["7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01", "7c\x00\x02\x00\x03\x00\x01\x12d\x00\x01"]
 
 # Query using the fetch val and contains operators in conjunction with a
 # contained by operator.
@@ -5410,13 +5311,11 @@ project
       │         ├── key: (1)
       │         └── scan b@j_inv_idx,inverted
       │              ├── columns: k:1!null j_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["7\x00\x019", "7\x00\x019"]
-      │              │         ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
-      │              │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["7\x00\x019", "7\x00\x019"]
+      │                        ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
+      │                        └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
       └── filters
            └── j:4 <@ '{"c": "d"}' [outer=(4), immutable]
 
@@ -5466,10 +5365,8 @@ project
       ├── key: (1)
       └── scan c@a_inv_idx,inverted
            ├── columns: k:1!null a_inverted_key:6!null
-           ├── inverted constraint: /6/1
-           │    └── spans: ["\x89", "\x8b")
-           ├── key: (1)
-           └── fd: (1)-->(6)
+           └── inverted constraint: /6/1
+                └── spans: ["\x89", "\x8b")
 
 opt expect=GenerateInvertedIndexScans
 SELECT k FROM c WHERE a @> ARRAY[]::INT[]
@@ -5530,12 +5427,10 @@ select
  │         ├── key: (1)
  │         └── scan c@a_inv_idx,inverted
  │              ├── columns: k:1!null a_inverted_key:6!null
- │              ├── inverted constraint: /6/1
- │              │    └── spans
- │              │         ├── ["C", "C"]
- │              │         └── ["\x89", "\x89"]
- │              ├── key: (1)
- │              └── fd: (1)-->(6)
+ │              └── inverted constraint: /6/1
+ │                   └── spans
+ │                        ├── ["C", "C"]
+ │                        └── ["\x89", "\x89"]
  └── filters
       └── a:2 <@ ARRAY[1] [outer=(2), immutable]
 
@@ -5601,12 +5496,10 @@ select
  │         ├── key: (1)
  │         └── scan c@a_inv_idx,inverted
  │              ├── columns: k:1!null a_inverted_key:6!null
- │              ├── inverted constraint: /6/1
- │              │    └── spans
- │              │         ├── ["C", "C"]
- │              │         └── ["\x89", "\x8b")
- │              ├── key: (1)
- │              └── fd: (1)-->(6)
+ │              └── inverted constraint: /6/1
+ │                   └── spans
+ │                        ├── ["C", "C"]
+ │                        └── ["\x89", "\x8b")
  └── filters
       └── (a:2 <@ ARRAY[1]) OR (a:2 <@ ARRAY[2]) [outer=(2), immutable]
 
@@ -5637,12 +5530,10 @@ select
  │         ├── key: (1)
  │         └── scan c@a_inv_idx,inverted
  │              ├── columns: k:1!null a_inverted_key:6!null
- │              ├── inverted constraint: /6/1
- │              │    └── spans
- │              │         ├── ["C", "C"]
- │              │         └── ["\x89", "\x8b")
- │              ├── key: (1)
- │              └── fd: (1)-->(6)
+ │              └── inverted constraint: /6/1
+ │                   └── spans
+ │                        ├── ["C", "C"]
+ │                        └── ["\x89", "\x8b")
  └── filters
       ├── a:2 <@ ARRAY[1] [outer=(2), immutable]
       └── a:2 <@ ARRAY[2] [outer=(2), immutable]
@@ -5680,9 +5571,7 @@ index-join c
            ├── columns: k:1!null a_inverted_key:6!null
            ├── inverted constraint: /6/1
            │    └── spans: ["\x89", "\x8b")
-           ├── flags: force-index=a_inv_idx
-           ├── key: (1)
-           └── fd: (1)-->(6)
+           └── flags: force-index=a_inv_idx
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM c WHERE a && ARRAY[1] AND a && ARRAY[2]
@@ -5808,12 +5697,10 @@ index-join b
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:8!null
-           ├── inverted constraint: /8/1
-           │    └── spans
-           │         ├── ["7\x00\x018", "7\x00\x018"]
-           │         └── ["7\x00\x03", "7\x00\x03"]
-           ├── key: (1)
-           └── fd: (1)-->(8)
+           └── inverted constraint: /8/1
+                └── spans
+                     ├── ["7\x00\x018", "7\x00\x018"]
+                     └── ["7\x00\x03", "7\x00\x03"]
 
 # The inverted index will never be used for <@ expressions if the index version
 # does not have empty arrays in the inverted index.
@@ -5878,13 +5765,11 @@ project
       │         ├── key: (1)
       │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
-      │              ├── inverted constraint: /8/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(8)
+      │              └── inverted constraint: /8/1
+      │                   └── spans
+      │                        ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
+      │                        └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       └── filters
            └── st_intersects('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -5918,13 +5803,11 @@ project
       │         ├── key: (1)
       │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
-      │              ├── inverted constraint: /8/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(8)
+      │              └── inverted constraint: /8/1
+      │                   └── spans
+      │                        ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
+      │                        └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       └── filters
            └── st_intersects(geog:4, '0101000020E61000009279E40F069E45C0BEE36FD63B1D5240') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -5957,13 +5840,11 @@ project
       │         ├── key: (1)
       │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+      │                        └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       └── filters
            └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
@@ -5994,10 +5875,8 @@ project
       │         ├── key: (1)
       │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
       └── filters
            └── st_coveredby(geom:3, '0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000') [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
@@ -6027,10 +5906,8 @@ project
       │         ├── key: (1)
       │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
       └── filters
            └── st_dwithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
@@ -6060,10 +5937,8 @@ project
       │         ├── key: (1)
       │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
       └── filters
            └── st_dfullywithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
@@ -6103,20 +5978,18 @@ project
       │         ├── key: (1)
       │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
-      │              ├── inverted constraint: /8/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x01", "B\xfdF\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x01", "B\xfdR\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdR\x00\x00\x00\x00\x00\x00\x01", "B\xfdT\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdT\x00\x00\x00\x00\x00\x00\x00", "B\xfdT\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdZ\x00\x00\x00\x00\x00\x00\x01", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfd\\\x00\x00\x00\x00\x00\x00\x00", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(8)
+      │              └── inverted constraint: /8/1
+      │                   └── spans
+      │                        ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x01", "B\xfdF\x00\x00\x00\x00\x00\x00\x00")
+      │                        ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
+      │                        ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
+      │                        ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x01", "B\xfdR\x00\x00\x00\x00\x00\x00\x00")
+      │                        ├── ["B\xfdR\x00\x00\x00\x00\x00\x00\x01", "B\xfdT\x00\x00\x00\x00\x00\x00\x00")
+      │                        ├── ["B\xfdT\x00\x00\x00\x00\x00\x00\x00", "B\xfdT\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfdZ\x00\x00\x00\x00\x00\x00\x01", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00")
+      │                        └── ["B\xfd\\\x00\x00\x00\x00\x00\x00\x00", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
       └── filters
            └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -6156,20 +6029,18 @@ project
       │         ├── key: (1)
       │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
-      │              ├── inverted constraint: /8/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x01", "B\xfdF\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x01", "B\xfdR\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdR\x00\x00\x00\x00\x00\x00\x01", "B\xfdT\x00\x00\x00\x00\x00\x00\x00")
-      │              │         ├── ["B\xfdT\x00\x00\x00\x00\x00\x00\x00", "B\xfdT\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdZ\x00\x00\x00\x00\x00\x00\x01", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00")
-      │              │         └── ["B\xfd\\\x00\x00\x00\x00\x00\x00\x00", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(8)
+      │              └── inverted constraint: /8/1
+      │                   └── spans
+      │                        ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x01", "B\xfdF\x00\x00\x00\x00\x00\x00\x00")
+      │                        ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
+      │                        ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
+      │                        ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x01", "B\xfdR\x00\x00\x00\x00\x00\x00\x00")
+      │                        ├── ["B\xfdR\x00\x00\x00\x00\x00\x00\x01", "B\xfdT\x00\x00\x00\x00\x00\x00\x00")
+      │                        ├── ["B\xfdT\x00\x00\x00\x00\x00\x00\x00", "B\xfdT\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfdZ\x00\x00\x00\x00\x00\x00\x01", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00")
+      │                        └── ["B\xfd\\\x00\x00\x00\x00\x00\x00\x00", "B\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
       └── filters
            └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0, false) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -6200,10 +6071,8 @@ project
       │         ├── key: (1)
       │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
       └── filters
            └── st_dwithinexclusive('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
@@ -6234,10 +6103,8 @@ project
       │         ├── key: (1)
       │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
       └── filters
            └── st_dwithinexclusive(geom:3, '0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', 2.0) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
@@ -6267,10 +6134,8 @@ project
       │         ├── key: (1)
       │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
       └── filters
            └── st_dfullywithinexclusive('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
@@ -6308,13 +6173,11 @@ project
       │         ├── key: (1)
       │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
-      │              ├── inverted constraint: /8/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdO\x00\x00\x00\x00\x00\x00\x00", "B\xfdO\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(8)
+      │              └── inverted constraint: /8/1
+      │                   └── spans
+      │                        ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfdO\x00\x00\x00\x00\x00\x00\x00", "B\xfdO\x00\x00\x00\x00\x00\x00\x00"]
+      │                        └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       └── filters
            ├── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
            └── st_coveredby('0101000020E61000009279E40F061E44C0BEE36FD63B9D5140', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
@@ -6347,12 +6210,10 @@ project
       │         ├── key: (1)
       │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
-      │              ├── inverted constraint: /8/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x01")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(8)
+      │              └── inverted constraint: /8/1
+      │                   └── spans
+      │                        ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │                        └── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x01")
       └── filters
            └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR st_coveredby('0101000020E61000009279E40F061E44C0BEE36FD63B9D5140', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -6409,17 +6270,15 @@ project
       │         ├── key: (1)
       │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
-      │              ├── inverted constraint: /8/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdG\x00\x00\x00\x00\x00\x00\x00", "B\xfdG\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x01")
-      │              │         ├── ["B\xfd\x81\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x81\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x84\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x84\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(8)
+      │              └── inverted constraint: /8/1
+      │                   └── spans
+      │                        ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfdG\x00\x00\x00\x00\x00\x00\x00", "B\xfdG\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x01")
+      │                        ├── ["B\xfd\x81\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x81\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfd\x84\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x84\x00\x00\x00\x00\x00\x00\x00"]
+      │                        └── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
       └── filters
            └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR (st_coveredby('0102000020E61000000200000075029A081B9A5DC0F085C954C1F840406DC5FEB27B720440454772F90F814840', geog:4) AND st_coveredby('0101000020E610000058569A94821E46C07BC7DFAC773A4E40', geog:4)) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -6452,10 +6311,8 @@ project
       │         ├── key: (1)
       │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
       └── filters
            ├── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
            └── st_overlaps('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3) [outer=(3), immutable, constraints=(/3: (/NULL - ])]
@@ -6503,13 +6360,11 @@ project
       │    │    │         ├── key: (9)
       │    │    │         └── scan g@geog_idx,inverted
       │    │    │              ├── columns: k:9!null geog_inverted_key:16!null
-      │    │    │              ├── inverted constraint: /16/9
-      │    │    │              │    └── spans
-      │    │    │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │    │    │              │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │    │    │              │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
-      │    │    │              ├── key: (9)
-      │    │    │              └── fd: (9)-->(16)
+      │    │    │              └── inverted constraint: /16/9
+      │    │    │                   └── spans
+      │    │    │                        ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │    │    │                        ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
+      │    │    │                        └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │    │    └── filters
       │    │         └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:12) [outer=(12), immutable, constraints=(/12: (/NULL - ])]
       │    └── select
@@ -6531,10 +6386,8 @@ project
       │         │         ├── key: (17)
       │         │         └── scan g@geom_idx,inverted
       │         │              ├── columns: k:17!null geom_inverted_key:23!null
-      │         │              ├── inverted constraint: /23/17
-      │         │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
-      │         │              ├── key: (17)
-      │         │              └── fd: (17)-->(23)
+      │         │              └── inverted constraint: /23/17
+      │         │                   └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
       │         └── filters
       │              └── st_touches('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:19) [outer=(19), immutable, constraints=(/19: (/NULL - ])]
       └── aggregations
@@ -6572,12 +6425,10 @@ project
       │         ├── key: (1)
       │         └── scan g@geog_idx,inverted
       │              ├── columns: k:1!null geog_inverted_key:8!null
-      │              ├── inverted constraint: /8/1
-      │              │    └── spans
-      │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x01")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(8)
+      │              └── inverted constraint: /8/1
+      │                   └── spans
+      │                        ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │                        └── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x01")
       └── filters
            └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR (st_intersects('0101000020E61000009279E40F061E44C0BEE36FD63B9D5140', geog:4) AND st_crosses('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3)) [outer=(3,4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -6613,17 +6464,13 @@ project
       │         ├── key: (1)
       │         └── select
       │              ├── columns: k:1!null geog_inverted_key:8!null
-      │              ├── key: (1)
-      │              ├── fd: (1)-->(8)
       │              ├── scan g@geog_idx,inverted
       │              │    ├── columns: k:1!null geog_inverted_key:8!null
-      │              │    ├── inverted constraint: /8/1
-      │              │    │    └── spans
-      │              │    │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │              │    │         ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
-      │              │    │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
-      │              │    ├── key: (1)
-      │              │    └── fd: (1)-->(8)
+      │              │    └── inverted constraint: /8/1
+      │              │         └── spans
+      │              │              ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+      │              │              ├── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x00")
+      │              │              └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              └── filters
       │                   └── k:1 > 100 [outer=(1), constraints=(/1: [/101 - ]; tight)]
       └── filters
@@ -6659,12 +6506,10 @@ project
       │         ├── key: (1)
       │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x18\x00\x00\x00\x00\x00\x00\x00")
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │                        └── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x18\x00\x00\x00\x00\x00\x00\x00")
       └── filters
            └── 'BOX(1 2,3 4)' ~ geom:3 [outer=(3), immutable]
 
@@ -6696,12 +6541,10 @@ project
       │         ├── key: (1)
       │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │                        └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       └── filters
            └── geom:3 ~ 'BOX(1 2,3 4)' [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
@@ -6740,14 +6583,12 @@ project
       │         ├── key: (1)
       │         └── scan g@geom_idx,inverted
       │              ├── columns: k:1!null geom_inverted_key:7!null
-      │              ├── inverted constraint: /7/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfd\x15\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x15\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── inverted constraint: /7/1
+      │                   └── spans
+      │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │                        └── ["B\xfd\x15\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x15\x00\x00\x00\x00\x00\x00\x00"]
       └── filters
            └── geom:3 ~ '01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840' [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
@@ -6868,8 +6709,7 @@ select
  │              │    └── spans
  │              │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
  │              │         └── ["7group\x00\x01*\x02\x00", "7group\x00\x01*\x02\x00"]
- │              ├── key: (1)
- │              └── fd: (1)-->(9)
+ │              └── key: (1,9)
  └── filters
       └── s:2 = 'foo' [outer=(2), constraints=(/2: [/'foo' - /'foo']; tight), fd=()-->(2)]
 
@@ -7028,13 +6868,11 @@ select
  │         └── scan m@multicol,inverted
  │              ├── columns: k:1!null geom_inverted_key:8!null
  │              ├── constraint: /2: [/'foo' - /'foo']
- │              ├── inverted constraint: /8/1
- │              │    └── spans
- │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
- │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── key: (1)
- │              └── fd: (1)-->(8)
+ │              └── inverted constraint: /8/1
+ │                   └── spans
+ │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │                        └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  └── filters
       └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5) [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
@@ -7067,13 +6905,11 @@ select
  │              ├── constraint: /2
  │              │    ├── [/'bar' - /'bar']
  │              │    └── [/'foo' - /'foo']
- │              ├── inverted constraint: /8/1
- │              │    └── spans
- │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
- │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── key: (1)
- │              └── fd: (1)-->(8)
+ │              └── inverted constraint: /8/1
+ │                   └── spans
+ │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │                        └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  └── filters
       └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5) [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
@@ -7147,13 +6983,11 @@ select
  │         └── scan m@multicol,inverted
  │              ├── columns: k:1!null geom_inverted_key:9!null
  │              ├── constraint: /2/3: [/'foo'/'bar' - /'foo'/'bar']
- │              ├── inverted constraint: /9/1
- │              │    └── spans
- │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
- │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── key: (1)
- │              └── fd: (1)-->(9)
+ │              └── inverted constraint: /9/1
+ │                   └── spans
+ │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │                        └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  └── filters
       └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5) [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
@@ -7188,13 +7022,11 @@ select
  │              │    ├── [/'bar'/'bob' - /'bar'/'bob']
  │              │    ├── [/'foo'/'baz' - /'foo'/'baz']
  │              │    └── [/'foo'/'bob' - /'foo'/'bob']
- │              ├── inverted constraint: /9/1
- │              │    └── spans
- │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
- │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── key: (1)
- │              └── fd: (1)-->(9)
+ │              └── inverted constraint: /9/1
+ │                   └── spans
+ │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │                        └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  └── filters
       └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5) [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
@@ -7331,13 +7163,11 @@ project
       │              │    ├── [/1 - /1]
       │              │    ├── [/2 - /2]
       │              │    └── [/3 - /3]
-      │              ├── inverted constraint: /10/1
-      │              │    └── spans
-      │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(10)
+      │              └── inverted constraint: /10/1
+      │                   └── spans
+      │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │                        ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+      │                        └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       └── filters
            └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5) [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
@@ -7386,13 +7216,11 @@ select
  │              │    ├── [/'bar' - /'bar']
  │              │    ├── [/'baz' - /'baz']
  │              │    └── [/'foo' - /'foo']
- │              ├── inverted constraint: /8/1
- │              │    └── spans
- │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
- │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── key: (1)
- │              └── fd: (1)-->(8)
+ │              └── inverted constraint: /8/1
+ │                   └── spans
+ │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │                        └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  └── filters
       └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5) [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
@@ -7434,13 +7262,11 @@ select
  │              │    ├── [/'x'/'bar' - /'x'/'bar']
  │              │    ├── [/'x'/'baz' - /'x'/'baz']
  │              │    └── [/'x'/'foo' - /'x'/'foo']
- │              ├── inverted constraint: /9/1
- │              │    └── spans
- │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
- │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── key: (1)
- │              └── fd: (1)-->(9)
+ │              └── inverted constraint: /9/1
+ │                   └── spans
+ │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │                        └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  └── filters
       └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5) [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
@@ -7480,13 +7306,11 @@ select
  │         └── scan mc@mc_idx,inverted
  │              ├── columns: k:1!null geom_inverted_key:10!null
  │              ├── constraint: /4: [/'FOO' - /'FOO']
- │              ├── inverted constraint: /10/1
- │              │    └── spans
- │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
- │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── key: (1)
- │              └── fd: (1)-->(10)
+ │              └── inverted constraint: /10/1
+ │                   └── spans
+ │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │                        └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  └── filters
       ├── a:2 = 'foo' [outer=(2), constraints=(/2: [/'foo' - /'foo']; tight), fd=()-->(2)]
       └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5) [outer=(5), immutable, constraints=(/5: (/NULL - ])]
@@ -7519,13 +7343,11 @@ select
  │         └── scan mc@mc_idx,inverted
  │              ├── columns: k:1!null geom_inverted_key:10!null
  │              ├── constraint: /4: [/'FOO' - /'FOO']
- │              ├── inverted constraint: /10/1
- │              │    └── spans
- │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
- │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── key: (1)
- │              └── fd: (1)-->(10)
+ │              └── inverted constraint: /10/1
+ │                   └── spans
+ │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │                        └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  └── filters
       └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5) [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
@@ -7673,10 +7495,8 @@ select
  │         ├── key: (4)
  │         └── scan geom_geog@geom_geog_geom_idx,inverted
  │              ├── columns: rowid:4!null geom_inverted_key:7!null
- │              ├── inverted constraint: /7/4
- │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
- │              ├── key: (4)
- │              └── fd: (4)-->(7)
+ │              └── inverted constraint: /7/4
+ │                   └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
  └── filters
       └── st_distance(geom:1, '010100000000000000000000000000000000000000') = 0.0 [outer=(1), immutable]
 
@@ -7699,10 +7519,8 @@ select
  │         ├── key: (4)
  │         └── scan geom_geog@geom_geog_geog_idx,inverted
  │              ├── columns: rowid:4!null geog_inverted_key:8!null
- │              ├── inverted constraint: /8/4
- │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
- │              ├── key: (4)
- │              └── fd: (4)-->(8)
+ │              └── inverted constraint: /8/4
+ │                   └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
  └── filters
       └── st_distance(geog:2, '0101000020E610000000000000000000000000000000000000', false) = 0.0 [outer=(2), immutable]
 
@@ -7765,12 +7583,10 @@ select
  │         ├── key: (4)
  │         └── scan geom_geog@geom_geog_geom_idx,inverted
  │              ├── columns: rowid:4!null geom_inverted_key:7!null
- │              ├── inverted constraint: /7/4
- │              │    └── spans
- │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
- │              │         └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
- │              ├── key: (4)
- │              └── fd: (4)-->(7)
+ │              └── inverted constraint: /7/4
+ │                   └── spans
+ │                        ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │                        └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
  └── filters
       └── st_distance(geom:1, '010100000000000000000000000000000000000000') <= 5.0 [outer=(1), immutable]
 
@@ -7795,12 +7611,10 @@ select
  │         ├── key: (4)
  │         └── scan geom_geog@geom_geog_geom_idx,inverted
  │              ├── columns: rowid:4!null geom_inverted_key:7!null
- │              ├── inverted constraint: /7/4
- │              │    └── spans
- │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
- │              │         └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
- │              ├── key: (4)
- │              └── fd: (4)-->(7)
+ │              └── inverted constraint: /7/4
+ │                   └── spans
+ │                        ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │                        └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
  └── filters
       └── st_distance('010100000000000000000000000000000000000000', geom:1) < 5.0 [outer=(1), immutable]
 
@@ -7879,39 +7693,37 @@ select
  │         ├── key: (4)
  │         └── scan geom_geog@geom_geog_geog_idx,inverted
  │              ├── columns: rowid:4!null geog_inverted_key:8!null
- │              ├── inverted constraint: /8/4
- │              │    └── spans
- │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
- │              │         └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
- │              ├── key: (4)
- │              └── fd: (4)-->(8)
+ │              └── inverted constraint: /8/4
+ │                   └── spans
+ │                        ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
+ │                        └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
  └── filters
       └── st_distance(geog:2, '0101000020E610000000000000000000000000000000000000') <= 5.0 [outer=(2), immutable]
 
@@ -7963,39 +7775,37 @@ select
  │         ├── key: (4)
  │         └── scan geom_geog@geom_geog_geog_idx,inverted
  │              ├── columns: rowid:4!null geog_inverted_key:8!null
- │              ├── inverted constraint: /8/4
- │              │    └── spans
- │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
- │              │         └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
- │              ├── key: (4)
- │              └── fd: (4)-->(8)
+ │              └── inverted constraint: /8/4
+ │                   └── spans
+ │                        ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
+ │                        └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
  └── filters
       └── st_distance(geog:2, '0101000020E610000000000000000000000000000000000000') < 5.0 [outer=(2), immutable]
 
@@ -8050,39 +7860,37 @@ select
  │         ├── key: (4)
  │         └── scan geom_geog@geom_geog_geog_idx,inverted
  │              ├── columns: rowid:4(int!null) geog_inverted_key:8(encodedkey!null)
- │              ├── inverted constraint: /8/4
- │              │    └── spans
- │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
- │              │         └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
- │              ├── key: (4)
- │              └── fd: (4)-->(8)
+ │              └── inverted constraint: /8/4
+ │                   └── spans
+ │                        ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
+ │                        └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
  └── filters
       └── lt [type=bool, outer=(2), immutable]
            ├── function: st_distance [type=float]
@@ -8156,39 +7964,37 @@ select
  │         ├── key: (4)
  │         └── scan geom_geog@geom_geog_geog_idx,inverted
  │              ├── columns: rowid:4!null geog_inverted_key:8!null
- │              ├── inverted constraint: /8/4
- │              │    └── spans
- │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
- │              │         ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
- │              │         └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
- │              ├── key: (4)
- │              └── fd: (4)-->(8)
+ │              └── inverted constraint: /8/4
+ │                   └── spans
+ │                        ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
+ │                        ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
+ │                        └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
  └── filters
       └── st_distance(geog:2, '0101000020E610000000000000000000000000000000000000', true) <= 5.0 [outer=(2), immutable]
 
@@ -8287,12 +8093,10 @@ select
  │         ├── key: (4)
  │         └── scan geom_geog@geom_geog_geom_idx,inverted
  │              ├── columns: rowid:4!null geom_inverted_key:7!null
- │              ├── inverted constraint: /7/4
- │              │    └── spans
- │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
- │              │         └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
- │              ├── key: (4)
- │              └── fd: (4)-->(7)
+ │              └── inverted constraint: /7/4
+ │                   └── spans
+ │                        ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │                        └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
  └── filters
       └── st_maxdistance(geom:1, '010100000000000000000000000000000000000000') <= 5.0 [outer=(1), immutable]
 
@@ -8317,12 +8121,10 @@ select
  │         ├── key: (4)
  │         └── scan geom_geog@geom_geog_geom_idx,inverted
  │              ├── columns: rowid:4!null geom_inverted_key:7!null
- │              ├── inverted constraint: /7/4
- │              │    └── spans
- │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
- │              │         └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
- │              ├── key: (4)
- │              └── fd: (4)-->(7)
+ │              └── inverted constraint: /7/4
+ │                   └── spans
+ │                        ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │                        └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
  └── filters
       └── st_maxdistance('010100000000000000000000000000000000000000', geom:1) < 5.0 [outer=(1), immutable]
 
@@ -8435,14 +8237,12 @@ select
  │         ├── key: (1)
  │         └── scan trgm@s_idx,inverted
  │              ├── columns: k:1!null s_inverted_key:5!null
- │              ├── inverted constraint: /5/1
- │              │    └── spans
- │              │         ├── ["\x12  f\x00\x01", "\x12  f\x00\x01"]
- │              │         ├── ["\x12 fo\x00\x01", "\x12 fo\x00\x01"]
- │              │         ├── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
- │              │         └── ["\x12oo \x00\x01", "\x12oo \x00\x01"]
- │              ├── key: (1)
- │              └── fd: (1)-->(5)
+ │              └── inverted constraint: /5/1
+ │                   └── spans
+ │                        ├── ["\x12  f\x00\x01", "\x12  f\x00\x01"]
+ │                        ├── ["\x12 fo\x00\x01", "\x12 fo\x00\x01"]
+ │                        ├── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │                        └── ["\x12oo \x00\x01", "\x12oo \x00\x01"]
  └── filters
       └── s:2 % 'foo' [outer=(2), stable]
 
@@ -8605,9 +8405,7 @@ project
  │    │    ├── fd: ()-->(9)
  │    │    └── select
  │    │         ├── columns: a:9!null b:10!null c_inverted_key:14!null
- │    │         ├── cardinality: [0 - 2]
- │    │         ├── key: (10)
- │    │         ├── fd: ()-->(9), (10)-->(14)
+ │    │         ├── fd: ()-->(9)
  │    │         ├── scan t122733@i122733,inverted
  │    │         │    ├── columns: a:9!null b:10!null c_inverted_key:14!null
  │    │         │    ├── constraint: /9: [/'foo' - /'foo']
@@ -8616,8 +8414,7 @@ project
  │    │         │    │         ├── ["\x12bar\x00\x01", "\x12bar\x00\x01"]
  │    │         │    │         └── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
  │    │         │    ├── flags: force-index=i122733
- │    │         │    ├── key: (10)
- │    │         │    └── fd: ()-->(9), (10)-->(14)
+ │    │         │    └── fd: ()-->(9)
  │    │         └── filters
  │    │              └── (b:10 = 'foo') OR (b:10 = 'bar') [outer=(10), constraints=(/10: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]
  │    └── filters (true)
@@ -8654,10 +8451,8 @@ project
  │    │    ├── fd: ()-->(9)
  │    │    └── select
  │    │         ├── columns: a:9!null b:10!null c_inverted_key:14!null
- │    │         ├── cardinality: [0 - 2]
  │    │         ├── immutable
- │    │         ├── key: (10)
- │    │         ├── fd: ()-->(9), (10)-->(14)
+ │    │         ├── fd: ()-->(9)
  │    │         ├── scan t122733@i122733,inverted
  │    │         │    ├── columns: a:9!null b:10!null c_inverted_key:14!null
  │    │         │    ├── constraint: /9: [/'foo' - /'foo']
@@ -8666,8 +8461,7 @@ project
  │    │         │    │         ├── ["\x12bar\x00\x01", "\x12bar\x00\x01"]
  │    │         │    │         └── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
  │    │         │    ├── flags: force-index=i122733
- │    │         │    ├── key: (10)
- │    │         │    └── fd: ()-->(9), (10)-->(14)
+ │    │         │    └── fd: ()-->(9)
  │    │         └── filters
  │    │              ├── (b:10 = 'foo') OR (b:10 = 'bar') [outer=(10), constraints=(/10: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]
  │    │              └── b:10::INT8 > 5 [outer=(10), immutable]
@@ -10064,13 +9858,11 @@ select
  │         ├── key: (1)
  │         └── scan b@j_inv_idx,inverted
  │              ├── columns: k:1!null j_inverted_key:9!null
- │              ├── inverted constraint: /9/1
- │              │    └── spans
- │              │         ├── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
- │              │         ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
- │              │         └── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
- │              ├── key: (1)
- │              └── fd: (1)-->(9)
+ │              └── inverted constraint: /9/1
+ │                   └── spans
+ │                        ├── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │                        ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+ │                        └── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
  └── filters
       └── (j:4 @> '[3]') OR (j:4 @> '[[1, 2]]') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -10123,9 +9915,7 @@ project
            │    └── spans
            │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
            │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
-           ├── flags: no-zigzag-join
-           ├── key: (1)
-           └── fd: (1)-->(9)
+           └── flags: no-zigzag-join
 
 exec-ddl
 CREATE TABLE inv_zz_partial (
@@ -10167,8 +9957,7 @@ project
            │    └── spans
            │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
            │         └── ["7b\x00\x01*\x04\x00", "7b\x00\x01*\x04\x00"]
-           ├── key: (1)
-           └── fd: (1)-->(7)
+           └── key: (1,7)
 
 # Generate a zigzag join on a single index with a remaining filter.
 opt expect=GenerateInvertedIndexZigzagJoins
