@@ -1,6 +1,8 @@
 # Intialize a range with voters on s1,s2 and s3. The local replica and
-# leaseholder will be s1. The leaseholder is denoted by the '*' suffix.
-init
+# leaseholder will be s1. The leaseholder is denoted by the '*' suffix. Also
+# set all streams to initially have 0 tokens and a limit of 1 token to simplify
+# the test, as evaluation requests only wait for positive tokens.
+init regular_limit=1 regular_init=0 elastic_limit=1 elastic_init=0
 range_id=1 tenant_id=1 local_replica_id=1
   store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
   store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
