@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -179,8 +180,10 @@ type RangeControllerOptions struct {
 	LocalReplicaID roachpb.ReplicaID
 	// SSTokenCounter provides access to all the TokenCounters that will be
 	// needed (keyed by (tenantID, storeID)).
-	SSTokenCounter *StreamTokenCounterProvider
-	RaftInterface  RaftInterface
+	SSTokenCounter  *StreamTokenCounterProvider
+	RaftInterface   RaftInterface
+	Clock           *hlc.Clock
+	EvalWaitMetrics *EvalWaitMetrics
 }
 
 // RangeControllerInitState is the initial state at the time of creation.
@@ -257,6 +260,8 @@ func (rc *rangeController) WaitForEval(
 	var handles []tokenWaitingHandleInfo
 	var scratch []reflect.SelectCase
 
+	rc.opts.EvalWaitMetrics.onWaiting(wc)
+	start := rc.opts.Clock.PhysicalTime()
 retry:
 	// Snapshot the voterSets and voterSetRefreshCh.
 	rc.mu.Lock()
@@ -266,6 +271,7 @@ retry:
 
 	if vssRefreshCh == nil {
 		// RangeControllerImpl is closed.
+		rc.opts.EvalWaitMetrics.onBypassed(wc, rc.opts.Clock.PhysicalTime().Sub(start))
 		return false, nil
 	}
 	for _, vs := range vss {
@@ -302,12 +308,14 @@ retry:
 			case WaitSuccess:
 				continue
 			case ContextCanceled:
+				rc.opts.EvalWaitMetrics.onErrored(wc, rc.opts.Clock.PhysicalTime().Sub(start))
 				return false, ctx.Err()
 			case RefreshWaitSignaled:
 				goto retry
 			}
 		}
 	}
+	rc.opts.EvalWaitMetrics.onAdmitted(wc, rc.opts.Clock.PhysicalTime().Sub(start))
 	return true, nil
 }
 
