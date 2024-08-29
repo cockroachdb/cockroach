@@ -228,6 +228,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalPCRStreamSpansTableID:              crdbInternalPCRStreamSpansTable,
 		catconstants.CrdbInternalPCRStreamCheckpointsTableID:        crdbInternalPCRStreamCheckpointsTable,
 		catconstants.CrdbInternalLDRProcessorTableID:                crdbInternalLDRProcessorTable,
+		catconstants.CrdbInternalFullyQualifiedNamesViewID:          crdbInternalFullyQualifiedNamesView,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -9274,5 +9275,39 @@ CREATE TABLE crdb_internal.logical_replication_node_processors (
 			}
 		}
 		return nil
+	},
+}
+
+var crdbInternalFullyQualifiedNamesView = virtualSchemaView{
+	schema: `
+		CREATE VIEW crdb_internal.fully_qualified_names (
+			object_id,
+			schema_id,
+			database_id,
+			object_name,
+			schema_name,
+			database_name,
+			fq_name
+		) AS
+			SELECT
+				t.id, sc.id, db.id,
+				t.name, sc.name, db.name,
+				quote_ident(db.name) || '.' || quote_ident(sc.name) || '.' || quote_ident(t.name)
+			FROM system.namespace t
+			JOIN system.namespace sc ON t."parentSchemaID" = sc.id
+			JOIN system.namespace db on t."parentID" = db.id
+			-- Filter out the synthetic public schema for the system database.
+			WHERE db."parentID" = 0
+			-- Filter rows that the user should not be able to see. This check matches
+			-- how metadata visibility works for pg_catalog tables.
+			AND has_database_privilege(db.name, 'CONNECT')`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "object_id", Typ: types.Int},
+		{Name: "schema_id", Typ: types.Int},
+		{Name: "database_id", Typ: types.Int},
+		{Name: "object_name", Typ: types.String},
+		{Name: "schema_name", Typ: types.String},
+		{Name: "database_name", Typ: types.String},
+		{Name: "fq_name", Typ: types.String},
 	},
 }
