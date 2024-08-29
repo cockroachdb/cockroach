@@ -311,3 +311,10 @@ check_workspace_clean() {
   fi
   echo "##teamcity[testFinished name='CheckGeneratedCode/$1']"
 }
+
+# Check if a given GCS path exists
+function check_gcs_path_exists() {
+  local path=$1
+  gsutil ls "$path" &>/dev/null
+  return
+}
