@@ -38,7 +38,8 @@ func TestGracePeriodInitTSCache(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				LicenseTestingKnobs: license.TestingKnobs{
-					OverrideStartTime: &ts1,
+					EnableGracePeriodInitTSWrite: true,
+					OverrideStartTime:            &ts1,
 				},
 			},
 		},
@@ -50,7 +51,8 @@ func TestGracePeriodInitTSCache(t *testing.T) {
 	enforcer := &license.Enforcer{}
 	ts2 := ts1.Add(1)
 	enforcer.TestingKnobs = &license.TestingKnobs{
-		OverrideStartTime: &ts2,
+		EnableGracePeriodInitTSWrite: true,
+		OverrideStartTime:            &ts2,
 	}
 	// Ensure request for the grace period init ts1 before start just returns the start
 	// time used when the enforcer was created.
