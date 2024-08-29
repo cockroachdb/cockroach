@@ -960,11 +960,11 @@ func (rq *replicateQueue) preProcessCheck(ctx context.Context, repl *Replica) er
 	// TODO(erikgrinaker): This is also done more eagerly during Raft ticks, but
 	// that doesn't work for quiesced epoch-based ranges, so we have a fallback
 	// here that usually runs within 10 minutes.
-	leaseStatus, pErr := repl.redirectOnOrAcquireLease(ctx)
+	_, pErr := repl.redirectOnOrAcquireLease(ctx)
 	if pErr != nil {
 		return pErr.GoError()
 	}
-	pErr = repl.maybeSwitchLeaseType(ctx, leaseStatus)
+	pErr = repl.maybeSwitchLeaseType(ctx)
 	if pErr != nil {
 		return pErr.GoError()
 	}

@@ -233,7 +233,6 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	nextLeaseHolder roachpb.ReplicaDescriptor,
 	status kvserverpb.LeaseStatus,
 	startKey roachpb.Key,
-	transfer bool,
 	bypassSafetyChecks bool,
 	limiter *quotapool.IntPool,
 ) *leaseRequestHandle {
@@ -252,10 +251,20 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			nextLeaseHolder.ReplicaID, nextLease.Replica.ReplicaID))
 	}
 
-	acquisition := !status.Lease.OwnedBy(p.repl.store.StoreID())
-	extension := !transfer && !acquisition
+	// Who owns the previous and next lease?
+	prevLocal := status.Lease.OwnedBy(p.repl.store.StoreID())
+	nextLocal := nextLeaseHolder.StoreID == p.repl.store.StoreID()
+
+	// Assert that the lease acquisition, extension, or transfer is valid.
+	acquisition := !prevLocal && nextLocal
+	extension := prevLocal && nextLocal
+	transfer := prevLocal && !nextLocal
+	remote := !prevLocal && !nextLocal
 	_ = extension // not used, just documentation
 
+	if remote {
+		log.Fatalf(ctx, "cannot acquire/extend lease for remote replica: %v -> %v", status, nextLeaseHolder)
+	}
 	if acquisition {
 		// If this is a non-cooperative lease change (i.e. an acquisition), it
 		// is up to us to ensure that Lease.Start is greater than the end time
@@ -294,6 +303,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		ProposedTS: &status.Now,
 	}
 
+	var reqLeaseLiveness livenesspb.Liveness
 	if p.repl.shouldUseExpirationLeaseRLocked() ||
 		(transfer &&
 			TransferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV)) {
@@ -324,6 +334,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			return llHandle
 		}
 		reqLease.Epoch = l.Epoch
+		reqLeaseLiveness = l.Liveness
 	}
 
 	var leaseReq kvpb.Request
@@ -354,7 +365,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		}
 	}
 
-	err := p.requestLeaseAsync(ctx, nextLeaseHolder, status, leaseReq, limiter)
+	err := p.requestLeaseAsync(ctx, status, reqLease, reqLeaseLiveness, leaseReq, limiter)
 	if err != nil {
 		if errors.Is(err, stop.ErrThrottled) {
 			llHandle.resolve(kvpb.NewError(err))
@@ -385,10 +396,14 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 //
 // The status argument is used as the expected value for liveness operations.
 // leaseReq must be consistent with the LeaseStatus.
+//
+// The reqLeaseLiveness argument is provided when reqLease is an epoch-based
+// lease.
 func (p *pendingLeaseRequest) requestLeaseAsync(
 	parentCtx context.Context,
-	nextLeaseHolder roachpb.ReplicaDescriptor,
 	status kvserverpb.LeaseStatus,
+	reqLease roachpb.Lease,
+	reqLeaseLiveness livenesspb.Liveness,
 	leaseReq kvpb.Request,
 	limiter *quotapool.IntPool,
 ) error {
@@ -424,7 +439,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			// RPC, but here we submit the request directly to the local replica.
 			growstack.Grow()
 
-			err := p.requestLease(ctx, nextLeaseHolder, status, leaseReq)
+			err := p.requestLease(ctx, status, reqLease, reqLeaseLiveness, leaseReq)
 			// Error will be handled below.
 
 			// We reset our state below regardless of whether we've gotten an error or
@@ -464,10 +479,14 @@ var logFailedHeartbeatOwnLiveness = log.Every(10 * time.Second)
 // requestLease sends a synchronous transfer lease or lease request to the
 // specified replica. It is only meant to be called from requestLeaseAsync,
 // since it does not coordinate with other in-flight lease requests.
+//
+// The reqLeaseLiveness argument is provided when reqLease is an epoch-based
+// lease.
 func (p *pendingLeaseRequest) requestLease(
 	ctx context.Context,
-	nextLeaseHolder roachpb.ReplicaDescriptor,
 	status kvserverpb.LeaseStatus,
+	reqLease roachpb.Lease,
+	reqLeaseLiveness livenesspb.Liveness,
 	leaseReq kvpb.Request,
 ) error {
 	started := timeutil.Now()
@@ -475,13 +494,53 @@ func (p *pendingLeaseRequest) requestLease(
 		p.repl.store.metrics.LeaseRequestLatency.RecordValue(timeutil.Since(started).Nanoseconds())
 	}()
 
+	nextLeaseHolder := reqLease.Replica
+	extension := status.OwnedBy(nextLeaseHolder.StoreID)
+
+	// If we are promoting an expiration-based lease to an epoch-based lease, we
+	// must make sure the expiration does not regress. We do this here because the
+	// expiration is stored directly in the lease for expiration-based leases but
+	// indirectly in liveness record for epoch-based leases. To ensure this, we
+	// manually heartbeat our liveness record if necessary. This is expected to
+	// work because the liveness record interval and the expiration-based lease
+	// interval are the same.
+	expToEpochPromo := extension && status.Lease.Type() == roachpb.LeaseExpiration && reqLease.Type() == roachpb.LeaseEpoch
+	if expToEpochPromo && reqLeaseLiveness.Expiration.ToTimestamp().Less(status.Lease.GetExpiration()) {
+		curLiveness := reqLeaseLiveness
+		for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+			err := p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, curLiveness)
+			if err != nil {
+				if logFailedHeartbeatOwnLiveness.ShouldLog() {
+					log.Errorf(ctx, "failed to heartbeat own liveness record: %s", err)
+				}
+				return kvpb.NewNotLeaseHolderError(roachpb.Lease{}, p.repl.store.StoreID(), p.repl.Desc(),
+					fmt.Sprintf("failed to manipulate liveness record: %s", err))
+			}
+			// Check whether the liveness record expiration is now greater than the
+			// expiration of the lease we're promoting. If not, we may have raced with
+			// another liveness heartbeat which did not extend the liveness expiration
+			// far enough and we should try again.
+			l, ok := p.repl.store.cfg.NodeLiveness.GetLiveness(reqLeaseLiveness.NodeID)
+			if !ok {
+				return errors.NewAssertionErrorWithWrappedErrf(liveness.ErrRecordCacheMiss, "after heartbeat")
+			}
+			if l.Expiration.ToTimestamp().Less(status.Lease.GetExpiration()) {
+				log.Infof(ctx, "expiration of liveness record %s is not greater than "+
+					"expiration of the previous lease %s after liveness heartbeat, retrying...", l, status.Lease)
+				curLiveness = l.Liveness
+				continue
+			}
+			break
+		}
+	}
+
 	// If we're replacing an expired epoch-based lease, we must increment the
 	// epoch of the prior owner to invalidate its leases. If we were the owner,
 	// then we instead heartbeat to become live.
 	if status.Lease.Type() == roachpb.LeaseEpoch && status.State == kvserverpb.LeaseState_EXPIRED {
 		var err error
 		// If this replica is previous & next lease holder, manually heartbeat to become live.
-		if status.OwnedBy(nextLeaseHolder.StoreID) && p.repl.store.StoreID() == nextLeaseHolder.StoreID {
+		if extension {
 			if err = p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.Liveness); err != nil && logFailedHeartbeatOwnLiveness.ShouldLog() {
 				log.Errorf(ctx, "failed to heartbeat own liveness record: %s", err)
 			}
@@ -882,7 +941,7 @@ func (r *Replica) requestLeaseLocked(
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
 		ctx, repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(),
-		false /* transfer */, false /* bypassSafetyChecks */, limiter)
+		false /* bypassSafetyChecks */, limiter)
 }
 
 // AdminTransferLease transfers the LeaderLease to another replica. Only the
@@ -976,7 +1035,7 @@ func (r *Replica) AdminTransferLease(
 		}
 
 		transfer = r.mu.pendingLeaseRequest.InitOrJoinRequest(ctx, nextLeaseHolder, status,
-			desc.StartKey.AsRawKey(), true /* transfer */, bypassSafetyChecks, nil /* limiter */)
+			desc.StartKey.AsRawKey(), bypassSafetyChecks, nil /* limiter */)
 		return nil, transfer, nil
 	}
 
@@ -1523,17 +1582,24 @@ func (r *Replica) shouldRequestLeaseRLocked(
 // maybeSwitchLeaseType will synchronously renew a lease using the appropriate
 // type if it is (or was) owned by this replica and has an incorrect type. This
 // typically happens when changing kv.expiration_leases_only.enabled.
-func (r *Replica) maybeSwitchLeaseType(ctx context.Context, st kvserverpb.LeaseStatus) *kvpb.Error {
-	if !st.OwnedBy(r.store.StoreID()) {
-		return nil
-	}
+func (r *Replica) maybeSwitchLeaseType(ctx context.Context) *kvpb.Error {
+	llHandle := func() *leaseRequestHandle {
+		now := r.store.Clock().NowAsClockTimestamp()
+		// The lease status needs to be checked and requested under the same lock,
+		// to avoid an interleaving lease request changing the lease between the
+		// two.
+		r.mu.Lock()
+		defer r.mu.Unlock()
 
-	var llHandle *leaseRequestHandle
-	r.mu.Lock()
-	if !r.hasCorrectLeaseTypeRLocked(st.Lease) {
-		llHandle = r.requestLeaseLocked(ctx, st, nil /* limiter */)
-	}
-	r.mu.Unlock()
+		st := r.leaseStatusAtRLocked(ctx, now)
+		if !st.OwnedBy(r.store.StoreID()) {
+			return nil
+		}
+		if r.hasCorrectLeaseTypeRLocked(st.Lease) {
+			return nil
+		}
+		return r.requestLeaseLocked(ctx, st, nil /* limiter */)
+	}()
 
 	if llHandle != nil {
 		select {
