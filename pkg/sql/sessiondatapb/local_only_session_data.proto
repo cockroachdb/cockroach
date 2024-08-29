@@ -537,6 +537,9 @@ message LocalOnlySessionData {
   // EnableCreateStatsUsingExtremesBoolEnum, when true, allows the use of CREATE
   // STATISTICS .. USING EXTREMES on bool and enum columns.
   bool enable_create_stats_using_extremes_bool_enum = 136;
+  // OptimizerPushLimitIntoProjectFilteredScan, when true, indicates that the
+  // optimizer should push limit expressions into projects of filtered scans.
+  bool optimizer_push_limit_into_project_filtered_scan = 139;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

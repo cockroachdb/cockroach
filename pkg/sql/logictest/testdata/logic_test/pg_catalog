@@ -2905,6 +2905,7 @@ optimizer_always_use_histograms                            on                  N
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL      NULL        NULL        string
 optimizer_merge_joins_enabled                              on                  NULL      NULL        NULL        string
 optimizer_prove_implication_with_virtual_computed_columns  on                  NULL      NULL        NULL        string
+optimizer_push_limit_into_project_filtered_scan            off                 NULL      NULL        NULL        string
 optimizer_push_offset_into_index_join                      on                  NULL      NULL        NULL        string
 optimizer_use_forecasts                                    on                  NULL      NULL        NULL        string
 optimizer_use_histograms                                   on                  NULL      NULL        NULL        string
@@ -3093,6 +3094,7 @@ optimizer_always_use_histograms                            on                  N
 optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL  user     NULL      on                  on
 optimizer_merge_joins_enabled                              on                  NULL  user     NULL      on                  on
 optimizer_prove_implication_with_virtual_computed_columns  on                  NULL  user     NULL      on                  on
+optimizer_push_limit_into_project_filtered_scan            off                 NULL  user     NULL      off                 off
 optimizer_push_offset_into_index_join                      on                  NULL  user     NULL      on                  on
 optimizer_use_forecasts                                    on                  NULL  user     NULL      on                  on
 optimizer_use_histograms                                   on                  NULL  user     NULL      on                  on
@@ -3280,6 +3282,7 @@ optimizer_always_use_histograms                            NULL    NULL     NULL
 optimizer_hoist_uncorrelated_equality_subqueries           NULL    NULL     NULL     NULL        NULL
 optimizer_merge_joins_enabled                              NULL    NULL     NULL     NULL        NULL
 optimizer_prove_implication_with_virtual_computed_columns  NULL    NULL     NULL     NULL        NULL
+optimizer_push_limit_into_project_filtered_scan            NULL    NULL     NULL     NULL        NULL
 optimizer_push_offset_into_index_join                      NULL    NULL     NULL     NULL        NULL
 optimizer_use_forecasts                                    NULL    NULL     NULL     NULL        NULL
 optimizer_use_histograms                                   NULL    NULL     NULL     NULL        NULL

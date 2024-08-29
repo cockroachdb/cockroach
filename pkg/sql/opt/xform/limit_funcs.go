@@ -74,6 +74,12 @@ func (c *CustomFuncs) CanLimitFilteredScan(
 	return ok
 }
 
+// PushLimitIntoProjectFilteredScanEnabled returns true if its eponymous rule is
+// enabled via its session setting.
+func (c *CustomFuncs) PushLimitIntoProjectFilteredScanEnabled() bool {
+	return c.e.evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan
+}
+
 // GenerateLimitedScans enumerates all non-inverted and non-partial secondary
 // indexes on the Scan operator's table and tries to create new limited Scan
 // operators from them. Since this only needs to be done once per table,
