@@ -223,6 +223,7 @@ func registerLatencyTests(r registry.Registry) {
 	addMetamorphic(r, partition{}, 1000)
 	addMetamorphic(r, addNode{}, 2.0)
 	addMetamorphic(r, decommission{}, 2.0)
+	addMetamorphic(r, backfill{}, 20.0)
 
 	// NB: If these tests fail, it likely signals a regression. Investigate the
 	// history of the test on roachperf to see what changed.
@@ -230,6 +231,7 @@ func registerLatencyTests(r registry.Registry) {
 	addFull(r, partition{}, 1000)
 	addFull(r, addNode{}, 2.0)
 	addFull(r, decommission{}, 2.0)
+	addFull(r, backfill{}, 20.0)
 
 	// NB: These tests will never fail and are not enabled, but they are useful
 	// for development.
@@ -237,6 +239,7 @@ func registerLatencyTests(r registry.Registry) {
 	addDev(r, partition{}, math.Inf(1))
 	addDev(r, addNode{}, math.Inf(1))
 	addDev(r, decommission{}, math.Inf(1))
+	addDev(r, backfill{}, math.Inf(1))
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
@@ -303,6 +306,69 @@ type perturbation interface {
 	// endPerturbation ends the system change. Not all perturbations do anything on stop.
 	// It returns the duration looking backwards to collect performance stats.
 	endPerturbation(ctx context.Context, l *logger.Logger, v variations) time.Duration
+}
+
+// backfill will create a backfill table during the startup and an index on it
+// during the perturbation. The table and index are configured to always have
+// one replica on the target node, but no leases. This stresses replication
+// admission control.
+type backfill struct{}
+
+var _ perturbation = backfill{}
+
+// startTargetNode starts the target node and creates the backfill table.
+func (b backfill) startTargetNode(ctx context.Context, l *logger.Logger, v variations) {
+	v.startNoBackup(ctx, l, v.targetNodes())
+
+	// Create enough splits to start with one replica on each store.
+	numSplits := v.vcpu * v.disks
+	// TODO(baptist): Handle multiple target nodes.
+	target := v.targetNodes()[0]
+	initCmd := fmt.Sprintf("./cockroach workload init kv --db backfill --splits %d {pgurl:1}", numSplits)
+	v.cluster.Run(ctx, option.WithNodes(v.cluster.Node(1)), initCmd)
+	db := v.cluster.Conn(ctx, l, 1)
+	defer db.Close()
+
+	cmd := fmt.Sprintf("ALTER DATABASE backfill CONFIGURE ZONE USING constraints = '[+node%d]', lease_preferences='[[-node%d]]'", target, target)
+	if _, err := db.ExecContext(ctx, cmd); err != nil {
+		panic(err)
+	}
+	l.Printf("waiting for replicas to be in place")
+	v.waitForRebalanceToStop(ctx, l)
+
+	// Create and fill the backfill kv database before the test starts. We don't
+	// want the fill to impact the test throughput. We use a larger block size
+	// to create a lot of SSTables and ranges in a short amount of time.
+	runCmd := fmt.Sprintf(
+		"./cockroach workload run kv --db backfill --duration=%s --max-block-bytes=%d --min-block-bytes=%d --concurrency=100 {pgurl%s}",
+		v.perturbationDuration, 10_000, 10_000, v.stableNodes())
+	v.cluster.Run(ctx, option.WithNodes(v.workloadNodes()), runCmd)
+
+	l.Printf("waiting for io overload to end")
+	v.waitForIOOverloadToEnd(ctx, l)
+	v.waitForRebalanceToStop(ctx, l)
+}
+
+// startPerturbation creates the index for the table.
+func (b backfill) startPerturbation(
+	ctx context.Context, l *logger.Logger, v variations,
+) time.Duration {
+	db := v.cluster.Conn(ctx, l, 1)
+	defer db.Close()
+	startTime := timeutil.Now()
+	cmd := "CREATE INDEX backfill_index ON backfill.kv (k, v)"
+	if _, err := db.ExecContext(ctx, cmd); err != nil {
+		panic(err)
+	}
+	return timeutil.Since(startTime)
+}
+
+// endPerturbation does nothing as the backfill database is already created.
+func (b backfill) endPerturbation(
+	ctx context.Context, l *logger.Logger, v variations,
+) time.Duration {
+	waitDuration(ctx, v.validationDuration)
+	return v.validationDuration
 }
 
 // restart will gracefully stop and then restart a node after a custom duration.
@@ -415,7 +481,7 @@ func (a addNode) startPerturbation(
 	// on the 10s server.time_after_store_suspect setting which we set below
 	// plus 1 sec for the store to propagate its gossip information.
 	waitDuration(ctx, 11*time.Second)
-	waitForRebalanceToStop(ctx, l, v.cluster)
+	v.waitForRebalanceToStop(ctx, l)
 	return timeutil.Since(startTime)
 }
 
@@ -488,32 +554,6 @@ func prettyPrint(title string, stats map[string]trackedStat) string {
 	return outputStr.String()
 }
 
-// waitForRebalanceToStop polls the system.rangelog every second to see if there
-// have been any transfers in the last 5 seconds. It returns once the system
-// stops transferring replicas.
-func waitForRebalanceToStop(ctx context.Context, l *logger.Logger, c cluster.Cluster) {
-	db := c.Conn(ctx, l, 1)
-	defer db.Close()
-	q := `SELECT extract_duration(seconds FROM now()-timestamp) FROM system.rangelog WHERE "eventType" = 'add_voter' ORDER BY timestamp DESC LIMIT 1`
-
-	opts := retry.Options{
-		InitialBackoff: 1 * time.Second,
-		Multiplier:     1,
-	}
-	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-		if row := db.QueryRow(q); row != nil {
-			var secondsSinceLastEvent int
-			if err := row.Scan(&secondsSinceLastEvent); err != nil && !errors.Is(err, gosql.ErrNoRows) {
-				panic(err)
-			}
-			if secondsSinceLastEvent > 5 {
-				return
-			}
-		}
-	}
-	panic("retry should not have exited")
-}
-
 // runTest is the main entry point for all the tests. Its ste
 func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster) {
 	r := histogram.CreateUdpReceiver()
@@ -552,8 +592,9 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 		}
 	}()
 
-	// Wait for rebalancing to finish before starting to fill. This minimizes the time to finish.
-	waitForRebalanceToStop(ctx, t.L(), v.cluster)
+	// Wait for rebalancing to finish before starting to fill. This minimizes
+	// the time to finish.
+	v.waitForRebalanceToStop(ctx, t.L())
 	require.NoError(t, v.workload.initWorkload(ctx, v))
 
 	// Start collecting latency measurements after the workload has been initialized.
@@ -826,6 +867,67 @@ func (v variations) startNoBackup(
 			fmt.Sprintf("--locality=region=fake-%d", (node-1)/nodesPerRegion))
 		v.cluster.Start(ctx, l, opts, install.MakeClusterSettings(), v.cluster.Node(node))
 	}
+}
+
+// waitForRebalanceToStop polls the system.rangelog every second to see if there
+// have been any transfers in the last 5 seconds. It returns once the system
+// stops transferring replicas.
+func (v variations) waitForRebalanceToStop(ctx context.Context, l *logger.Logger) {
+	db := v.cluster.Conn(ctx, l, 1)
+	defer db.Close()
+	q := `SELECT extract_duration(seconds FROM now()-timestamp) FROM system.rangelog WHERE "eventType" = 'add_voter' ORDER BY timestamp DESC LIMIT 1`
+
+	opts := retry.Options{
+		InitialBackoff: 1 * time.Second,
+		Multiplier:     1,
+	}
+	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		if row := db.QueryRow(q); row != nil {
+			var secondsSinceLastEvent int
+			if err := row.Scan(&secondsSinceLastEvent); err != nil && !errors.Is(err, gosql.ErrNoRows) {
+				panic(err)
+			}
+			if secondsSinceLastEvent > 5 {
+				return
+			}
+		}
+	}
+	panic("retry should not have exited")
+}
+
+// waitForIOOverloadToEnd polls the system.metrics every second to see if there
+// is any IO overload on the target nodes. It returns once the overload ends.
+func (v variations) waitForIOOverloadToEnd(ctx context.Context, l *logger.Logger) {
+	var dbs []*gosql.DB
+	for _, nodeId := range v.targetNodes() {
+		db := v.cluster.Conn(ctx, l, nodeId)
+		defer db.Close()
+		dbs = append(dbs, db)
+	}
+	q := `SELECT value FROM crdb_internal.node_metrics WHERE name = 'admission.io.overload'`
+
+	opts := retry.Options{
+		InitialBackoff: 1 * time.Second,
+		Multiplier:     1,
+	}
+	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		anyOverloaded := false
+		for _, db := range dbs {
+			if row := db.QueryRow(q); row != nil {
+				var overload float64
+				if err := row.Scan(&overload); err != nil && !errors.Is(err, gosql.ErrNoRows) {
+					panic(err)
+				}
+				if overload > 0.01 {
+					anyOverloaded = true
+				}
+			}
+		}
+		if !anyOverloaded {
+			return
+		}
+	}
+	panic("retry should not have exited")
 }
 
 func (v variations) workloadNodes() option.NodeListOption {
