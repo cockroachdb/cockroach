@@ -286,13 +286,17 @@ func TestRangeControllerWaitForEval(t *testing.T) {
 		sortedRanges := make([]*testingRCRange, 0, len(ranges))
 		for _, testRC := range ranges {
 			sortedRanges = append(sortedRanges, testRC)
-			// We retain the lock until the end of the function call.
-			testRC.mu.Lock()
-			defer testRC.mu.Unlock()
 		}
 		sort.Slice(sortedRanges, func(i, j int) bool {
 			return sortedRanges[i].mu.r.rangeID < sortedRanges[j].mu.r.rangeID
 		})
+		for _, testRC := range sortedRanges {
+			// We retain the lock until the end of the function call. We also ensure
+			// that locking is done in order of rangeID, to avoid inconsistent lock
+			// ordering leading to deadlocks.
+			testRC.mu.Lock()
+			defer testRC.mu.Unlock()
+		}
 
 		for _, testRC := range sortedRanges {
 			replicaIDs := make([]int, 0, len(testRC.mu.r.replicaSet))
@@ -334,22 +338,24 @@ func TestRangeControllerWaitForEval(t *testing.T) {
 	}
 
 	evalStateString := func() string {
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 		var b strings.Builder
 
 		// Sort the ranges by rangeID to ensure deterministic output.
 		sortedRanges := make([]*testingRCRange, 0, len(ranges))
 		for _, testRC := range ranges {
 			sortedRanges = append(sortedRanges, testRC)
-			// We retain the lock until the end of the function call.
-			testRC.mu.Lock()
-			defer testRC.mu.Unlock()
 		}
 		sort.Slice(sortedRanges, func(i, j int) bool {
 			return sortedRanges[i].mu.r.rangeID < sortedRanges[j].mu.r.rangeID
 		})
 
 		for _, testRC := range sortedRanges {
+			// We retain the lock until the end of the function call. Similar to
+			// above, we lock in order of rangeID.
+			testRC.mu.Lock()
+			defer testRC.mu.Unlock()
+
 			fmt.Fprintf(&b, "range_id=%d tenant_id=%d local_replica_id=%d\n",
 				testRC.mu.r.rangeID, testRC.mu.r.tenantID, testRC.mu.r.localReplicaID)
 			// Sort the evals by name to ensure deterministic output.
