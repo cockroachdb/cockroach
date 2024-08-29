@@ -26,6 +26,11 @@ type BufferedStream interface {
 	Stream
 	// SendBuffered buffers the event before sending it to the underlying Stream.
 	SendBuffered(*kvpb.RangeFeedEvent, *SharedBudgetAllocation) error
+	// RegisterRangefeedCleanUp is used to register a cleanup callback that will
+	// be invoked after Disconnect is called. It is up to the implementation on
+	// when or whether the callback is invoked. The caller should coordinate with
+	// the implementation.
+	RegisterRangefeedCleanUp(func())
 }
 
 // BufferedPerRangeEventSink is an implementation of BufferedStream which is
@@ -90,7 +95,7 @@ func (s *BufferedPerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) e
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
 	}
-	return s.wrapped.SendUnbuffered(response, nil)
+	return s.wrapped.SendUnbuffered(response)
 }
 
 // Disconnect implements the Stream interface. BufferedSender is then
@@ -107,4 +112,14 @@ func (s *BufferedPerRangeEventSink) Disconnect(err *kvpb.Error) {
 		Error: *transformRangefeedErrToClientError(err),
 	})
 	s.wrapped.SendBufferedError(ev)
+}
+
+// RegisterRangefeedCleanUp registers a cleanup callback to be called in a
+// background async job when the stream is disconnected. Note that the callback
+// will not be invoked immediately during  Disconnect and may not be called if
+// the BufferedSender.run has stopped. Caller needs to ensure that this is not
+// called after BufferedSender has stopped. For p.Register, it is currently done
+// by waiting for runRequest to complete for each stores.RangeFeed call.
+func (s *BufferedPerRangeEventSink) RegisterRangefeedCleanUp(f func()) {
+	s.wrapped.RegisterRangefeedCleanUp(s.streamID, f)
 }
