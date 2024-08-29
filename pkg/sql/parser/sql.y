@@ -9634,10 +9634,10 @@ show_locality_stmt:
   }
 
 show_fingerprints_stmt:
-  SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name
+  SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name opt_with_show_fingerprints_options
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName()}
+    $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName(), Options: *$6.showFingerprintOptions()}
   }
 | SHOW EXPERIMENTAL_FINGERPRINTS FROM virtual_cluster virtual_cluster_spec opt_with_show_fingerprints_options
   {
@@ -9678,6 +9678,11 @@ fingerprint_options:
   {
     $$.val = &tree.ShowFingerprintOptions{StartTimestamp: $4.expr()}
   }
+| EXCLUDE COLUMNS '=' string_or_placeholder_opt_list
+  {
+    $$.val = &tree.ShowFingerprintOptions{ExcludedUserColumns: $4.stringOrPlaceholderOptList()}
+  }
+
 
 
 show_full_scans_stmt:
