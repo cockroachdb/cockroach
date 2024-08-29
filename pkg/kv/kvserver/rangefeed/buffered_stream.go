@@ -83,7 +83,7 @@ func (s *BufferedPerRangeEventSink) SendBuffered(
 
 // Send bypass the buffer and sends the event to the underlying grpc stream
 // directly. It blocks until the event is sent or an error occurs.
-func (s *BufferedPerRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
+func (s *BufferedPerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 	response := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
 		RangeID:        s.rangeID,

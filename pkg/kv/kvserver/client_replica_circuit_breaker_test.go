@@ -468,7 +468,7 @@ func (s *dummyStream) Context() context.Context {
 
 func (s *dummyStream) SendIsThreadSafe() {}
 
-func (s *dummyStream) Send(ev *kvpb.RangeFeedEvent) error {
+func (s *dummyStream) SendUnbuffered(ev *kvpb.RangeFeedEvent) error {
 	if ev.Val == nil && ev.Error == nil {
 		return nil
 	}
@@ -495,7 +495,7 @@ func waitReplicaRangeFeed(
 		event.SetValue(&kvpb.RangeFeedError{
 			Error: *err,
 		})
-		return stream.Send(&event)
+		return stream.SendUnbuffered(&event)
 	}
 
 	err := r.RangeFeed(req, stream, nil /* pacer */)
