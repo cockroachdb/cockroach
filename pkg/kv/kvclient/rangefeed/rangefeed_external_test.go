@@ -1637,7 +1637,7 @@ func (c *channelSink) Context() context.Context {
 	return c.ctx
 }
 
-func (c *channelSink) SendIsThreadSafe() {}
+func (c *channelSink) SendUnbufferedIsThreadSafe() {}
 
 func (c *channelSink) SendUnbuffered(e *kvpb.RangeFeedEvent) error {
 	select {
