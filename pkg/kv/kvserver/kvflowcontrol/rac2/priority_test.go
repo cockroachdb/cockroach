@@ -15,10 +15,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPriority(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	var lastRaftPriority raftpb.Priority
 	lastConvertedBackPriority := admissionpb.LowPri
 	for i := int(admissionpb.LowPri); i < admissionpb.OneAboveHighPri; i++ {

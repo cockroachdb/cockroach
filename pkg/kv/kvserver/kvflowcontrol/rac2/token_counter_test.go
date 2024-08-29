@@ -462,6 +462,9 @@ func (ts *evalTestState) evalStatesString() string {
 //   - refresh <name>
 //     name: the name of the WaitForEval operation to refresh.
 func TestWaitForEval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ts := newTestState()
 	datadriven.RunTest(t, "testdata/wait_for_eval", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
