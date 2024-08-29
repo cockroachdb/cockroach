@@ -18,63 +18,105 @@ import (
 )
 
 func TestApply(t *testing.T) {
-	type container struct {
-		VirtualClusterName string
-		ConnectionOption   map[string]string
+	type validContainer struct {
+		VirtualClusterOptions
+		ConnectionOptions map[string]string
+	}
+
+	type wrongTypeContainer struct {
+		DBName int
+	}
+
+	type invalidOptionContainer struct {
+		DBName        string
+		InvalidOption string
 	}
 
 	testCases := []struct {
-		name        string
-		options     []CustomOption
-		expected    container
-		expectedErr string
+		name          string
+		optionsStruct string
+		options       []OptionFunc
+		expected      any
+		expectedErr   string
 	}{
 		{
-			name:     "no custom option",
-			expected: container{},
+			name:          "no custom option",
+			optionsStruct: "valid_container",
+			expected:      validContainer{},
 		},
 		{
-			name:     "setting a custom virtual cluster name",
-			options:  []CustomOption{VirtualClusterName("app")},
-			expected: container{VirtualClusterName: "app"},
+			name:          "setting a custom virtual cluster name",
+			optionsStruct: "valid_container",
+			options:       []OptionFunc{VirtualClusterName("app")},
+			expected: validContainer{
+				VirtualClusterOptions: VirtualClusterOptions{VirtualClusterName: "app"},
+			},
 		},
 		{
-			name:     "setting a single connection option",
-			options:  []CustomOption{ConnectionOption("name", "val")},
-			expected: container{ConnectionOption: map[string]string{"name": "val"}},
+			name:          "setting a single connection option",
+			optionsStruct: "valid_container",
+			options:       []OptionFunc{ConnectionOption("name", "val")},
+			expected:      validContainer{ConnectionOptions: map[string]string{"name": "val"}},
 		},
 		{
-			name:     "setting multiple connection options",
-			options:  []CustomOption{ConnectionOption("name", "val"), ConnectionOption("name2", "val2")},
-			expected: container{ConnectionOption: map[string]string{"name": "val", "name2": "val2"}},
+			name:          "setting multiple connection options",
+			optionsStruct: "valid_container",
+			options:       []OptionFunc{ConnectionOption("name", "val"), ConnectionOption("name2", "val2")},
+			expected:      validContainer{ConnectionOptions: map[string]string{"name": "val", "name2": "val2"}},
 		},
 		{
-			name:     "setting a connection option and a virtual cluster",
-			options:  []CustomOption{ConnectionOption("name", "val"), VirtualClusterName("app")},
-			expected: container{VirtualClusterName: "app", ConnectionOption: map[string]string{"name": "val"}},
+			name:          "setting a connection option and a virtual cluster",
+			optionsStruct: "valid_container",
+			options:       []OptionFunc{ConnectionOption("name", "val"), VirtualClusterName("app")},
+			expected: validContainer{
+				VirtualClusterOptions: VirtualClusterOptions{VirtualClusterName: "app"},
+				ConnectionOptions:     map[string]string{"name": "val"},
+			},
 		},
 		{
-			name: "using a wrong type for a supported option",
-			// Should not be possible using the public API, but we verify
-			// how this function behaves in this case anyway.
-			options:     []CustomOption{{name: "VirtualClusterName", apply: overwrite(10)}},
-			expectedErr: `failed to set "VirtualClusterName"`,
+			name:          "setting a non-applicable option",
+			optionsStruct: "valid_container",
+			options:       []OptionFunc{User("user")},
+			expectedErr:   `non-applicable option "User" for *option.validContainer`,
 		},
 		{
-			name:        "using an unsupported option",
-			options:     []CustomOption{DBName("mydb")},
-			expectedErr: "invalid option DBName for *option.container",
+			name:          "using a wrong type for a supported option",
+			optionsStruct: "wrong_type",
+			options:       []OptionFunc{DBName("hello")},
+			expectedErr:   `failed to set "DBName" on *option.wrongTypeContainer: reflect.Set: value of type string is not assignable to type int`,
+		},
+		{
+			name:          "using an unsupported option",
+			optionsStruct: "invalid_option",
+			options:       []OptionFunc{DBName("mydb")},
+			expectedErr:   `option.invalidOptionContainer has unknown option "InvalidOption"`,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var c container
-			err := Apply(&c, tc.options)
+			var err error
+			var container any
+			switch tc.optionsStruct {
+			case "valid_container":
+				var c validContainer
+				err = Apply(&c, tc.options...)
+				container = c
+			case "wrong_type":
+				var c wrongTypeContainer
+				err = Apply(&c, tc.options...)
+				container = c
+			case "invalid_option":
+				var c invalidOptionContainer
+				err = Apply(&c, tc.options...)
+				container = c
+			default:
+				t.Fatalf("invalid optionsStruct %s", tc.optionsStruct)
+			}
 
 			if tc.expectedErr == "" {
 				require.NoError(t, err)
-				require.Equal(t, tc.expected, c)
+				require.Equal(t, tc.expected, container)
 			} else {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.expectedErr)
@@ -104,8 +146,8 @@ func TestTimeoutCalculation(t *testing.T) {
 	} {
 		t.Run(d.t.String(), func(t *testing.T) {
 			o := ConnectTimeout(d.t)
-			require.NoError(t, Apply(&opts, []CustomOption{o}))
-			require.Equal(t, d.o, opts.ConnectionOption["connect_timeout"])
+			require.NoError(t, Apply(&opts, o))
+			require.Equal(t, d.o, opts.ConnectionOptions["connect_timeout"])
 		})
 	}
 }

@@ -18,62 +18,61 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
-type applyFunc func(any) any
-
-func overwrite(v any) applyFunc {
-	return func(_ any) any {
-		return v
-	}
+// GlobalOptions is the set of all options that cluster functions can
+// take. Specific functions should define their own options struct and
+// call the `Apply` function to get the options that apply to
+// them. Every options struct should contain, by necessity, a subset
+// of the fields defined here.
+type GlobalOptions struct {
+	VirtualClusterOptions
+	User              string
+	DBName            string
+	AuthMode          install.PGAuthMode
+	ConnectionOptions map[string]string
 }
 
-// CustomOption encodes an option provided by the user to a roachtest
-// cluster function. These options allow callers to customize certain
-// parameters, typically using the "functional options" pattern.
-type CustomOption struct {
-	name  string
-	apply applyFunc
-}
+type OptionFunc func(*GlobalOptions)
 
 // User allows the customization of the user to use when connecting to
 // crdb.
-func User(user string) CustomOption {
-	return CustomOption{name: "User", apply: overwrite(user)}
+func User(user string) OptionFunc {
+	return func(o *GlobalOptions) {
+		o.User = user
+	}
 }
 
 // VirtualClusterName allows the customization of the virtual cluster
 // to connect to. If not provided, it will default to the cluster's
 // default virtual cluster (or `system` if that's not set.)
-func VirtualClusterName(name string) CustomOption {
-	return CustomOption{name: "VirtualClusterName", apply: overwrite(name)}
+func VirtualClusterName(name string) OptionFunc {
+	return func(o *GlobalOptions) {
+		o.VirtualClusterName = name
+	}
 }
 
 // SQLInstance allows the caller to indicate which sql instance to
 // use. Only applicable in separate-process virtual clusters when more
 // than one instance is running on the same node.
-func SQLInstance(sqlInstance int) CustomOption {
-	return CustomOption{name: "SQLInstance", apply: overwrite(sqlInstance)}
+func SQLInstance(sqlInstance int) OptionFunc {
+	return func(o *GlobalOptions) {
+		o.SQLInstance = sqlInstance
+	}
 }
 
 // ConnectionOption allows the caller to provide a custom connection
 // option to be included in the pgurl.
-func ConnectionOption(key, value string) CustomOption {
-	// We use a custom `apply` function for this option since we want to
-	// extend our map if this option is called multiple times.
-	apply := func(existing any) any {
-		options := existing.(map[string]string)
-		if options == nil {
-			options = make(map[string]string)
+func ConnectionOption(key, value string) OptionFunc {
+	return func(o *GlobalOptions) {
+		if o.ConnectionOptions == nil {
+			o.ConnectionOptions = make(map[string]string)
 		}
 
-		options[key] = value
-		return options
+		o.ConnectionOptions[key] = value
 	}
-
-	return CustomOption{name: "ConnectionOption", apply: apply}
 }
 
 // ConnectTimeout allows callers to set a connection timeout.
-func ConnectTimeout(t time.Duration) CustomOption {
+func ConnectTimeout(t time.Duration) OptionFunc {
 	sec := int64(t.Seconds())
 	if sec < 1 {
 		sec = 1
@@ -82,26 +81,36 @@ func ConnectTimeout(t time.Duration) CustomOption {
 }
 
 // DBName changes the database name used when connecting to crdb.
-func DBName(dbName string) CustomOption {
-	return CustomOption{name: "DBName", apply: overwrite(dbName)}
+func DBName(dbName string) OptionFunc {
+	return func(o *GlobalOptions) {
+		o.DBName = dbName
+	}
 }
 
 // AuthMode allows the callers to change the authentication mode used
 // when connecting to crdb.
-func AuthMode(authMode install.PGAuthMode) CustomOption {
-	return CustomOption{name: "AuthMode", apply: overwrite(authMode)}
+func AuthMode(authMode install.PGAuthMode) OptionFunc {
+	return func(o *GlobalOptions) {
+		o.AuthMode = authMode
+	}
 }
 
-// Apply takes in a container data structure and a list of
-// user-provided options, and applies those options to the
-// container. The container should be a pointer to a struct containing
-// the relevant fields -- in other words, the struct actually defines
-// that custom options a function can take. The struct is expected to
-// have a field for each custom option passed. If an unrecognized
-// option is passed, an error is returned.
-func Apply(container any, opts []CustomOption) (retErr error) {
-	s := reflect.ValueOf(container)
+// Apply takes in an options struct and a list of user-provided
+// options, and applies those options to the container. The container
+// should be a pointer to a struct containing the relevant fields --
+// in other words, the struct actually defines that custom options a
+// function can take. The struct is expected to have a field for each
+// custom option passed. An error is returned if an unrecognized
+// option is passed.
+func Apply(container any, opts ...OptionFunc) (retErr error) {
+	var globalOptions GlobalOptions
+	for _, opt := range opts {
+		opt(&globalOptions)
+	}
 
+	// Many functions in the `reflect` package can panic if they
+	// parameters are of unexpected types, so we wrap these panics as
+	// errors to be returned to the caller.
 	var currentField string
 	defer func() {
 		if r := recover(); r != nil {
@@ -113,14 +122,44 @@ func Apply(container any, opts []CustomOption) (retErr error) {
 		}
 	}()
 
-	for _, opt := range opts {
-		currentField = opt.name
-		f := s.Elem().FieldByName(currentField)
-		if !f.IsValid() {
-			return fmt.Errorf("invalid option %s for %T", opt.name, container)
+	// Build a mapping from option to name to the corresponding
+	// `reflect.Value`.
+	globalOptionsValue := reflect.ValueOf(globalOptions)
+	globalFields := make(map[string]reflect.Value)
+	for _, f := range reflect.VisibleFields(reflect.TypeOf(globalOptions)) {
+		globalFields[f.Name] = globalOptionsValue.FieldByName(f.Name)
+	}
+
+	// We keep a set of fields from `globalOptions` that are actually
+	// used by the container struct so that we can validate that the
+	// caller didn't pass any options that are not applicable.
+	containerFields := make(map[string]struct{})
+
+	containerStruct := reflect.ValueOf(container).Elem()
+	containerType := reflect.TypeOf(containerStruct.Interface())
+	for _, structField := range reflect.VisibleFields(containerType) {
+		currentField = structField.Name
+		f := containerStruct.FieldByName(currentField)
+
+		// It is an error for the container struct to have fields that are
+		// not present in the `GlobalOptions` struct.
+		globalField, ok := globalFields[currentField]
+		if !ok {
+			return fmt.Errorf("options struct %T has unknown option %q", container, currentField)
 		}
 
-		f.Set(reflect.ValueOf(opt.apply(f.Interface())))
+		f.Set(globalField)
+		containerFields[currentField] = struct{}{}
+	}
+
+	for name, f := range globalFields {
+		if _, ok := containerFields[name]; ok {
+			continue
+		}
+
+		if !f.IsZero() {
+			return fmt.Errorf("non-applicable option %q for %T", name, container)
+		}
 	}
 
 	return nil
@@ -136,8 +175,8 @@ type VirtualClusterOptions struct {
 // ConnOptions contains connection-related options.
 type ConnOptions struct {
 	VirtualClusterOptions
-	User             string
-	DBName           string
-	AuthMode         install.PGAuthMode
-	ConnectionOption map[string]string
+	User              string
+	DBName            string
+	AuthMode          install.PGAuthMode
+	ConnectionOptions map[string]string
 }

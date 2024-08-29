@@ -2714,10 +2714,10 @@ func addrToHostPort(addr string) (string, int, error) {
 // InternalAdminUIAddr returns the internal Admin UI address in the form host:port
 // for the specified nodes.
 func (c *clusterImpl) InternalAdminUIAddr(
-	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts ...option.CustomOption,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts ...option.OptionFunc,
 ) ([]string, error) {
 	var virtualClusterOptions option.VirtualClusterOptions
-	if err := option.Apply(&virtualClusterOptions, opts); err != nil {
+	if err := option.Apply(&virtualClusterOptions, opts...); err != nil {
 		return nil, err
 	}
 
@@ -2727,10 +2727,10 @@ func (c *clusterImpl) InternalAdminUIAddr(
 // ExternalAdminUIAddr returns the external Admin UI address in the form host:port
 // for the specified nodes.
 func (c *clusterImpl) ExternalAdminUIAddr(
-	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts ...option.CustomOption,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts ...option.OptionFunc,
 ) ([]string, error) {
 	var virtualClusterOptions option.VirtualClusterOptions
-	if err := option.Apply(&virtualClusterOptions, opts); err != nil {
+	if err := option.Apply(&virtualClusterOptions, opts...); err != nil {
 		return nil, err
 	}
 
@@ -2875,7 +2875,7 @@ var _ = (&clusterImpl{}).ExternalIP
 
 // Conn returns a SQL connection to the specified node.
 func (c *clusterImpl) Conn(
-	ctx context.Context, l *logger.Logger, node int, opts ...option.CustomOption,
+	ctx context.Context, l *logger.Logger, node int, opts ...option.OptionFunc,
 ) *gosql.DB {
 	db, err := c.ConnE(ctx, l, node, opts...)
 	if err != nil {
@@ -2886,13 +2886,13 @@ func (c *clusterImpl) Conn(
 
 // ConnE returns a SQL connection to the specified node.
 func (c *clusterImpl) ConnE(
-	ctx context.Context, l *logger.Logger, node int, opts ...option.CustomOption,
+	ctx context.Context, l *logger.Logger, node int, opts ...option.OptionFunc,
 ) (_ *gosql.DB, retErr error) {
 	// NB: errors.Wrap returns nil if err is nil.
 	defer func() { retErr = errors.Wrapf(retErr, "connecting to node %d", node) }()
 
-	connOptions := &option.ConnOptions{}
-	if err := option.Apply(connOptions, opts); err != nil {
+	var connOptions option.ConnOptions
+	if err := option.Apply(&connOptions, opts...); err != nil {
 		return nil, err
 	}
 
@@ -2920,7 +2920,7 @@ func (c *clusterImpl) ConnE(
 	dataSourceName := u.String()
 
 	vals := make(url.Values)
-	for k, v := range connOptions.ConnectionOption {
+	for k, v := range connOptions.ConnectionOptions {
 		vals.Add(k, v)
 	}
 
