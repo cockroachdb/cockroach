@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
@@ -363,13 +364,13 @@ func testingCreateEntry(t *testing.T, info entryInfo) raftpb.Entry {
 //     range_id=<range_id>
 func TestRangeController(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "range_controller"), func(t *testing.T, path string) {
 		settings := cluster.MakeTestingClusterSettings()
 		ranges := make(map[roachpb.RangeID]*testingRCRange)
 		ssTokenCounter := NewStreamTokenCounterProvider(settings)
-
 		// setTokenCounters is used to ensure that we only set the initial token
 		// counts once per counter.
 		setTokenCounters := make(map[kvflowcontrol.Stream]struct{})
@@ -386,13 +387,27 @@ func TestRangeController(t *testing.T) {
 			return sorted
 		}
 
+		sortReplicas := func(r *testingRCRange) []roachpb.ReplicaDescriptor {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+
+			sorted := make([]roachpb.ReplicaDescriptor, 0, len(r.mu.r.replicaSet))
+			for _, replica := range r.mu.r.replicaSet {
+				sorted = append(sorted, replica.desc)
+			}
+			sort.Slice(sorted, func(i, j int) bool {
+				return sorted[i].ReplicaID < sorted[j].ReplicaID
+			})
+			return sorted
+		}
+
 		rangeStateString := func() string {
 			var b strings.Builder
 
-			// Sort the ranges by rangeID to ensure deterministic output.
-			sortedRanges := sortRanges()
-			for _, testRC := range sortedRanges {
-				// We retain the lock until the end of the function call.
+			for _, testRC := range sortRanges() {
+				// We retain the lock until the end of the function call. We also ensure
+				// that locking is done in order of rangeID, to avoid inconsistent lock
+				// ordering leading to deadlocks.
 				testRC.mu.Lock()
 				defer testRC.mu.Unlock()
 
@@ -420,6 +435,7 @@ func TestRangeController(t *testing.T) {
 
 		tokenCountsString := func() string {
 			var b strings.Builder
+
 			streams := make([]kvflowcontrol.Stream, 0, len(ssTokenCounter.mu.evalCounters))
 			for stream := range ssTokenCounter.mu.evalCounters {
 				streams = append(streams, stream)
@@ -435,13 +451,12 @@ func TestRangeController(t *testing.T) {
 		}
 
 		evalStateString := func() string {
-			time.Sleep(100 * time.Millisecond)
 			var b strings.Builder
 
-			// Sort the ranges by rangeID to ensure deterministic output.
-			sortedRanges := sortRanges()
-			for _, testRC := range sortedRanges {
-				// We retain the lock until the end of the function call.
+			time.Sleep(20 * time.Millisecond)
+			for _, testRC := range sortRanges() {
+				// We retain the lock until the end of the function call, similar to
+				// above.
 				testRC.mu.Lock()
 				defer testRC.mu.Unlock()
 
@@ -465,15 +480,9 @@ func TestRangeController(t *testing.T) {
 		sendStreamString := func(rangeID roachpb.RangeID) string {
 			var b strings.Builder
 
-			testRC := ranges[rangeID]
-			var replicaIDs []int
-			for replicaID := range testRC.mu.r.replicaSet {
-				replicaIDs = append(replicaIDs, int(replicaID))
-			}
-			sort.Ints(replicaIDs)
-			for _, replicaID := range replicaIDs {
-				replica := testRC.rc.replicaMap[roachpb.ReplicaID(replicaID)]
-				fmt.Fprintf(&b, "%v: ", replica.desc)
+			for _, desc := range sortReplicas(ranges[rangeID]) {
+				replica := ranges[rangeID].rc.replicaMap[desc.ReplicaID]
+				fmt.Fprintf(&b, "%v: ", desc)
 				if replica.sendStream == nil {
 					fmt.Fprintf(&b, "closed\n")
 					continue
@@ -566,7 +575,6 @@ func TestRangeController(t *testing.T) {
 					require.NoError(t, err)
 					initialRegularTokens = regularInit
 				}
-
 				if elasticInitString != "" {
 					elasticInit, err := humanizeutil.ParseBytes(elasticInitString)
 					require.NoError(t, err)
