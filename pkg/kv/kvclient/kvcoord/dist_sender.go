@@ -2670,6 +2670,20 @@ func (ds *DistSender) sendToReplicas(
 
 		// Communicate to the server the information our cache has about the
 		// range. If it's stale, the server will return an update.
+		sendLeaseSeq := routing.LeaseSeq()
+		sendCTPolicy := routing.ClosedTimestampPolicy(
+			rangecache.UnknownClosedTimestampPolicy,
+		)
+		if sendLeaseSeq != 0 && sendCTPolicy == rangecache.UnknownClosedTimestampPolicy {
+			// Unlike the lease sequence, we don't have a sentinel "unknown" value
+			// in the ClosedTimestampPolicy enum and would need a migration to introduce one.
+			// Instead, we clear the lease sequence which will prompt an updated RangeInfo
+			// to be sent back.
+			//
+			// See: https://github.com/cockroachdb/cockroach/issues/129783#issuecomment-2317216498
+			sendCTPolicy = roachpb.LEAD_FOR_GLOBAL_READS // arbitrary choice
+			sendLeaseSeq = 0
+		}
 		ba.ClientRangeInfo = roachpb.ClientRangeInfo{
 			// Note that DescriptorGeneration will be 0 if the cached descriptor
 			// is "speculative" (see DescSpeculative()). Even if the speculation
@@ -2679,13 +2693,8 @@ func (ds *DistSender) sendToReplicas(
 			// The LeaseSequence will be 0 if the cache doesn't have lease info,
 			// or has a speculative lease. Like above, this asks the server to
 			// return an update.
-			LeaseSequence: routing.LeaseSeq(),
-			// The ClosedTimestampPolicy will be the default if the cache
-			// doesn't have info. Like above, this asks the server to return an
-			// update.
-			ClosedTimestampPolicy: routing.ClosedTimestampPolicy(
-				defaultSendClosedTimestampPolicy,
-			),
+			LeaseSequence:         sendLeaseSeq,
+			ClosedTimestampPolicy: sendCTPolicy,
 
 			// Range info is only returned when ClientRangeInfo is non-empty.
 			// Explicitly request an update for speculative/missing leases and
