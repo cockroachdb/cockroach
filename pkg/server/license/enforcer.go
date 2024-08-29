@@ -43,6 +43,14 @@ type Enforcer struct {
 }
 
 type TestingKnobs struct {
+	// EnableGracePeriodInitTSWrite is a control knob for writing the grace period
+	// initialization timestamp. It is currently set to opt-in for writing the
+	// timestamp as a way to stage these changes. This ensures that the timestamp
+	// isn't written before the other license enforcement changes are complete.
+	// TODO(spilchen): Change this knob to opt-out as we approach the final stages
+	// of the core licensing deprecation work. This will be handled in CRDB-41758.
+	EnableGracePeriodInitTSWrite bool
+
 	// OverrideStartTime if set, overrides the time that's used to seed the
 	// grace period init timestamp.
 	OverrideStartTime *time.Time
@@ -75,6 +83,32 @@ func newEnforcer() *Enforcer {
 // passed in must have access to the system tenant.
 func (e *Enforcer) Start(ctx context.Context, db isql.DB) error {
 	e.db = db
+
+	// Writing the grace period initialization timestamp is currently opt-in. See
+	// the EnableGracePeriodInitTSWrite comment for details.
+	if e.TestingKnobs != nil && e.TestingKnobs.EnableGracePeriodInitTSWrite {
+		return e.maybeWriteGracePeriodInitTS(ctx)
+	}
+	return nil
+}
+
+// GetGracePeriodInitTS will return the timestamp of when the cluster first ran
+// on a version that requires a license.
+func (e *Enforcer) GetGracePeriodInitTS() time.Time {
+	// In the rare case that the grace period init timestamp has not been cached yet,
+	// we will return an approximate value, the start time of the server. This
+	// should only happen if we are in the process of caching the grace period init
+	// timestamp, or we failed to cache it. This is preferable to returning an
+	// error or a zero value.
+	if e.gracePeriodInitTS.Load() == 0 {
+		return e.getStartTime()
+	}
+	return timeutil.Unix(e.gracePeriodInitTS.Load(), 0)
+}
+
+// maybeWriteGracePeriodInitTS checks if the grace period initialization
+// timestamp needs to be written to the KV layer and writes it if needed.
+func (e *Enforcer) maybeWriteGracePeriodInitTS(ctx context.Context) error {
 	return e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// We could use a conditional put for this logic. However, we want to read
 		// and cache the value, and the common case is that the value will be read.
@@ -94,20 +128,6 @@ func (e *Enforcer) Start(ctx context.Context, db isql.DB) error {
 		log.Infof(ctx, "fetched existing grace period init time: %s", e.GetGracePeriodInitTS().String())
 		return nil
 	})
-}
-
-// GetGracePeriodInitTS will return the timestamp of when the cluster first ran
-// on a version that requires a license.
-func (e *Enforcer) GetGracePeriodInitTS() time.Time {
-	// In the rare case that the grace period init timestamp has not been cached yet,
-	// we will return an approximate value, the start time of the server. This
-	// should only happen if we are in the process of caching the grace period init
-	// timestamp, or we failed to cache it. This is preferable to returning an
-	// error or a zero value.
-	if e.gracePeriodInitTS.Load() == 0 {
-		return e.getStartTime()
-	}
-	return timeutil.Unix(e.gracePeriodInitTS.Load(), 0)
 }
 
 // getStartTime returns the time when the enforcer was created. This accounts
