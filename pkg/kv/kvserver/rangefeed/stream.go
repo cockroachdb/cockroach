@@ -56,11 +56,11 @@ func (s *PerRangeEventSink) Context() context.Context {
 }
 
 // SendIsThreadSafe is a no-op declaration method. It is a contract that the
-// Send method is thread-safe. Note that UnbufferedSender.SendUnbuffered is
-// thread-safe.
+// SendUnbuffered method is thread-safe. Note that
+// UnbufferedSender.SendUnbuffered is thread-safe.
 func (s *PerRangeEventSink) SendIsThreadSafe() {}
 
-func (s *PerRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
+func (s *PerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 	response := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
 		RangeID:        s.rangeID,

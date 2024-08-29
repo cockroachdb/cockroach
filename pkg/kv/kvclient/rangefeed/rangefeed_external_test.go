@@ -1639,7 +1639,7 @@ func (c *channelSink) Context() context.Context {
 
 func (c *channelSink) SendIsThreadSafe() {}
 
-func (c *channelSink) Send(e *kvpb.RangeFeedEvent) error {
+func (c *channelSink) SendUnbuffered(e *kvpb.RangeFeedEvent) error {
 	select {
 	case c.ch <- e:
 		return nil
