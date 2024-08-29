@@ -1652,13 +1652,11 @@ select
  │         ├── key: (1)
  │         └── scan index_tab@geomidx,inverted
  │              ├── columns: id:1!null geom_inverted_key:11!null
- │              ├── inverted constraint: /11/1
- │              │    └── spans
- │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x16\x00\x00\x00\x00\x00\x00\x00")
- │              ├── key: (1)
- │              └── fd: (1)-->(11)
+ │              └── inverted constraint: /11/1
+ │                   └── spans
+ │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │                        ├── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │                        └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x16\x00\x00\x00\x00\x00\x00\x00")
  └── filters
       └── st_intersects('010100000000000000000008400000000000000840', geom:8) [outer=(8), immutable, constraints=(/8: (/NULL - ])]
 

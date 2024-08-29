@@ -93,6 +93,7 @@ func (b *indexScanBuilder) AddConstProjections(proj memo.ProjectionsExpr) {
 func (b *indexScanBuilder) AddInvertedFilter(
 	spanExpr *inverted.SpanExpression,
 	pfState *invertedexpr.PreFiltererStateForInvertedFilterer,
+	pkCols opt.ColSet,
 	invertedCol opt.ColumnID,
 ) {
 	if spanExpr != nil {
@@ -105,6 +106,7 @@ func (b *indexScanBuilder) AddInvertedFilter(
 		b.invertedFilterPrivate = memo.InvertedFilterPrivate{
 			InvertedExpression: spanExpr,
 			PreFiltererState:   pfState,
+			PKCols:             pkCols,
 			InvertedColumn:     invertedCol,
 		}
 	}

@@ -7579,9 +7579,7 @@ project
       │    │    │              ├── columns: n.gid:14!null n.geom_inverted_key:20!null
       │    │    │              ├── inverted constraint: /20/14
       │    │    │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
-      │    │    │              ├── flags: force-index=nyc_neighborhoods_geo_idx
-      │    │    │              ├── key: (14)
-      │    │    │              └── fd: (14)-->(20)
+      │    │    │              └── flags: force-index=nyc_neighborhoods_geo_idx
       │    │    └── filters
       │    │         └── st_covers('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:17) [outer=(17), immutable, constraints=(/17: (/NULL - ])]
       │    └── filters (true)

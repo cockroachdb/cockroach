@@ -204,9 +204,7 @@ select
  │              │         ├── ["C", "C"]
  │              │         └── ["\x89", "\x8b")
  │              ├── locking: for-update
- │              ├── volatile
- │              ├── key: (1)
- │              └── fd: (1)-->(6)
+ │              └── volatile
  └── filters
       └── b:2 <@ ARRAY[1,2] [outer=(2), immutable]
 

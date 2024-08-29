@@ -114,9 +114,7 @@ select
  │              │    └── spans
  │              │         ├── ["\x12bla\x00\x01", "\x12bla\x00\x01"]
  │              │         └── ["\x12lah\x00\x01", "\x12lah\x00\x01"]
- │              ├── stats: [rows=111.1111, distinct(2)=111.111, null(2)=0, distinct(5)=100, null(5)=0]
- │              ├── key: (2)
- │              └── fd: (2)-->(5)
+ │              └── stats: [rows=111.1111, distinct(2)=111.111, null(2)=0, distinct(5)=100, null(5)=0]
  └── filters
       └── a:1 LIKE '%blah%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
 
@@ -248,11 +246,9 @@ select
  │              │    └── spans
  │              │         ├── ["\x12bla\x00\x01", "\x12bla\x00\x01"]
  │              │         └── ["\x12lah\x00\x01", "\x12lah\x00\x01"]
- │              ├── stats: [rows=20, distinct(2)=4, null(2)=0, distinct(5)=2, null(5)=0]
- │              │   histogram(5)=  0         10         0         10         0         0
- │              │                <--- '\x12626c610001' --- '\x126c61680001' --- '\x126c61680002'
- │              ├── key: (2)
- │              └── fd: (2)-->(5)
+ │              └── stats: [rows=20, distinct(2)=4, null(2)=0, distinct(5)=2, null(5)=0]
+ │                  histogram(5)=  0         10         0         10         0         0
+ │                               <--- '\x12626c610001' --- '\x126c61680001' --- '\x126c61680002'
  └── filters
       └── a:1 LIKE '%blah%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
 
@@ -287,11 +283,9 @@ select
  │              │         ├── ["\x12ooo\x00\x01", "\x12ooo\x00\x01"]
  │              │         └── ["\x12zoo\x00\x01", "\x12zoo\x00\x01"]
  │              ├── flags: force-index=inv
- │              ├── stats: [rows=1980, distinct(2)=396, null(2)=0, distinct(5)=2, null(5)=0]
- │              │   histogram(5)=  0        990         0        990
- │              │                <--- '\x126f6f6f0001' --- '\x127a6f6f0001'
- │              ├── key: (2)
- │              └── fd: (2)-->(5)
+ │              └── stats: [rows=1980, distinct(2)=396, null(2)=0, distinct(5)=2, null(5)=0]
+ │                  histogram(5)=  0        990         0        990
+ │                               <--- '\x126f6f6f0001' --- '\x127a6f6f0001'
  └── filters
       └── a:1 LIKE '%zooo%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
 
@@ -494,11 +488,9 @@ select
  │              │    └── spans
  │              │         ├── ["\x12bla\x00\x01", "\x12bla\x00\x01"]
  │              │         └── ["\x12lah\x00\x01", "\x12lah\x00\x01"]
- │              ├── stats: [rows=20, distinct(2)=4, null(2)=0, distinct(5)=2, null(5)=0]
- │              │   histogram(5)=  0         10         0         10         0         0
- │              │                <--- '\x12626c610001' --- '\x126c61680001' --- '\x126c61680002'
- │              ├── key: (2)
- │              └── fd: (2)-->(5)
+ │              └── stats: [rows=20, distinct(2)=4, null(2)=0, distinct(5)=2, null(5)=0]
+ │                  histogram(5)=  0         10         0         10         0         0
+ │                               <--- '\x12626c610001' --- '\x126c61680001' --- '\x126c61680002'
  └── filters
       └── a:1 LIKE '%blah%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
 
@@ -533,11 +525,9 @@ select
  │              │         ├── ["\x12ooo\x00\x01", "\x12ooo\x00\x01"]
  │              │         └── ["\x12zoo\x00\x01", "\x12zoo\x00\x01"]
  │              ├── flags: force-index=inv
- │              ├── stats: [rows=1980, distinct(2)=396, null(2)=0, distinct(5)=2, null(5)=0]
- │              │   histogram(5)=  0        990         0        990
- │              │                <--- '\x126f6f6f0001' --- '\x127a6f6f0001'
- │              ├── key: (2)
- │              └── fd: (2)-->(5)
+ │              └── stats: [rows=1980, distinct(2)=396, null(2)=0, distinct(5)=2, null(5)=0]
+ │                  histogram(5)=  0        990         0        990
+ │                               <--- '\x126f6f6f0001' --- '\x127a6f6f0001'
  └── filters
       └── a:1 LIKE '%zooo%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
 

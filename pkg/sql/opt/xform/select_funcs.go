@@ -921,7 +921,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 		// Add an inverted filter if needed.
 		if needInvertedFilter {
-			sb.AddInvertedFilter(spanExpr, pfState, invertedCol)
+			sb.AddInvertedFilter(spanExpr, pfState, pkCols, invertedCol)
 		}
 
 		// If remaining filters exists, split them into two parts: one that can
