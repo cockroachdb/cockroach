@@ -585,6 +585,7 @@ databases                                    NULL
 default_privileges                           NULL
 feature_usage                                NULL
 forward_dependencies                         NULL
+fully_qualified_names                        NULL
 gossip_alerts                                NULL
 gossip_liveness                              NULL
 gossip_network                               NULL

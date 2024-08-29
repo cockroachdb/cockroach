@@ -425,6 +425,7 @@ crdb_internal       databases
 crdb_internal       default_privileges
 crdb_internal       feature_usage
 crdb_internal       forward_dependencies
+crdb_internal       fully_qualified_names
 crdb_internal       gossip_alerts
 crdb_internal       gossip_liveness
 crdb_internal       gossip_network
@@ -783,6 +784,7 @@ databases
 default_privileges
 feature_usage
 forward_dependencies
+fully_qualified_names
 gossip_alerts
 gossip_liveness
 gossip_network
@@ -1225,6 +1227,7 @@ system         information_schema  foreign_servers                              
 system         information_schema  foreign_table_options                        SYSTEM VIEW  NO
 system         information_schema  foreign_tables                               SYSTEM VIEW  NO
 system         crdb_internal       forward_dependencies                         SYSTEM VIEW  NO
+system         crdb_internal       fully_qualified_names                        SYSTEM VIEW  NO
 system         pg_extension        geography_columns                            SYSTEM VIEW  NO
 system         pg_extension        geometry_columns                             SYSTEM VIEW  NO
 system         crdb_internal       gossip_alerts                                SYSTEM VIEW  NO
@@ -3944,6 +3947,7 @@ NULL     public   system         crdb_internal       databases                  
 NULL     public   system         crdb_internal       default_privileges                           SELECT          NO            YES
 NULL     public   system         crdb_internal       feature_usage                                SELECT          NO            YES
 NULL     public   system         crdb_internal       forward_dependencies                         SELECT          NO            YES
+NULL     public   system         crdb_internal       fully_qualified_names                        SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_alerts                                SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_liveness                              SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_network                               SELECT          NO            YES
@@ -4662,6 +4666,7 @@ NULL     public   system         crdb_internal       databases                  
 NULL     public   system         crdb_internal       default_privileges                           SELECT          NO            YES
 NULL     public   system         crdb_internal       feature_usage                                SELECT          NO            YES
 NULL     public   system         crdb_internal       forward_dependencies                         SELECT          NO            YES
+NULL     public   system         crdb_internal       fully_qualified_names                        SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_alerts                                SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_liveness                              SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_network                               SELECT          NO            YES
