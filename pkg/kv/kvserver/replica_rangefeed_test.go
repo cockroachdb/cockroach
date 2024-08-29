@@ -79,7 +79,7 @@ func (s *testStream) Cancel() {
 	s.cancel()
 }
 
-func (s *testStream) SendIsThreadSafe() {}
+func (s *testStream) SendUnbufferedIsThreadSafe() {}
 
 func (s *testStream) SendUnbuffered(e *kvpb.RangeFeedEvent) error {
 	s.mu.Lock()

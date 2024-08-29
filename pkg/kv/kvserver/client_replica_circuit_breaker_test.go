@@ -466,7 +466,7 @@ func (s *dummyStream) Context() context.Context {
 	return s.ctx
 }
 
-func (s *dummyStream) SendIsThreadSafe() {}
+func (s *dummyStream) SendUnbufferedIsThreadSafe() {}
 
 func (s *dummyStream) SendUnbuffered(ev *kvpb.RangeFeedEvent) error {
 	if ev.Val == nil && ev.Error == nil {

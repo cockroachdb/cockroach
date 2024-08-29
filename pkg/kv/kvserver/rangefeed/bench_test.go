@@ -206,9 +206,10 @@ func (s *noopStream) SendUnbuffered(*kvpb.RangeFeedEvent) error {
 	return nil
 }
 
-// Note that Send itself is not thread-safe, but it is written to be used only
-// in a single threaded environment in this test, ensuring thread-safety.
-func (s *noopStream) SendIsThreadSafe() {}
+// Note that SendUnbuffered itself is not thread-safe, but it is written to be
+// used only in a single threaded environment in this test, ensuring
+// thread-safety.
+func (s *noopStream) SendUnbufferedIsThreadSafe() {}
 
 // Disconnect implements the Stream interface. It mocks the disconnect behavior
 // by sending the error to the done channel.

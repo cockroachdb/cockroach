@@ -1342,7 +1342,7 @@ func newConsumer(blockAfter int) *consumer {
 	}
 }
 
-func (c *consumer) SendIsThreadSafe() {}
+func (c *consumer) SendUnbufferedIsThreadSafe() {}
 
 func (c *consumer) SendUnbuffered(e *kvpb.RangeFeedEvent) error {
 	if e.Val != nil {
