@@ -203,6 +203,14 @@ var ProtectTimestampInterval = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 	settings.WithPublic)
 
+// ProtectTimestampLag controls how much the protected timestamp record should lag behind the high watermark
+var ProtectTimestampLag = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"changefeed.protect_timestamp.lag",
+	"controls how far behind the checkpoint the changefeed's protected timestamp is",
+	10*time.Minute,
+	settings.PositiveDuration)
+
 // MaxProtectedTimestampAge controls the frequency of protected timestamp record updates
 var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
