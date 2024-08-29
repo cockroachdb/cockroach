@@ -90,7 +90,7 @@ func (s *testServerStream) String() string {
 	return str.String()
 }
 
-func (s *testServerStream) SendIsThreadSafe() {}
+func (s *testServerStream) SendUnbufferedIsThreadSafe() {}
 
 // SendUnbuffered mocks grpc.ServerStream Send method. It only counts events and
 // stores events by streamID in streamEvents.

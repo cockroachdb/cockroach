@@ -31,9 +31,9 @@ type RangefeedMetricsRecorder interface {
 type ServerStreamSender interface {
 	// SendUnbuffered must be thread-safe to be called concurrently.
 	SendUnbuffered(*kvpb.MuxRangeFeedEvent) error
-	// SendIsThreadSafe is a no-op declaration method. It is a contract that the
+	// SendUnbufferedIsThreadSafe is a no-op declaration method. It is a contract that the
 	// interface has a thread-safe Send method.
-	SendIsThreadSafe()
+	SendUnbufferedIsThreadSafe()
 }
 
 //			                            ┌───────────────────────────┐
