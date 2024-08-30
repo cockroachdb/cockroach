@@ -3102,6 +3102,10 @@ func (c *clusterImpl) WipeForReuse(
 	// particular, this overwrites the reuse policy to reflect what the test
 	// intends to do with it.
 	c.spec = newClusterSpec
+	// Reset the default virtual cluster before running a new test on
+	// this cluster.
+	c.defaultVirtualCluster = ""
+
 	return nil
 }
 
