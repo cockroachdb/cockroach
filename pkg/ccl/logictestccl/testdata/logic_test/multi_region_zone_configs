@@ -530,6 +530,19 @@ ALTER partition "us-east-1" of index regional_by_row@regional_by_row_pkey CONFIG
 statement ok
 SET override_multi_region_zone_config = false
 
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF INDEX regional_by_row@regional_by_row_pkey;
+----
+ PARTITION "us-east-1" OF INDEX regional_by_row@regional_by_row_pkey  ALTER PARTITION "us-east-1" OF INDEX regional_by_row@regional_by_row_pkey CONFIGURE ZONE USING
+                                                                        range_min_bytes = 1000,
+                                                                        range_max_bytes = 100000000,
+                                                                        gc.ttlseconds = 10,
+                                                                        num_replicas = 10,
+                                                                        num_voters = 3,
+                                                                        constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                                        voter_constraints = '[+region=us-east-1]',
+                                                                        lease_preferences = '[[+region=us-east-1]]'
+
 query TTT
 SELECT ZONE_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
 ORDER BY partition_name, index_name

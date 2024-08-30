@@ -21,101 +21,104 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// indexZoneConfigObj is used to represent a table-specific zone configuration
+// partitionZoneConfigObj is used to represent a table-specific zone configuration
 // object.
-type indexZoneConfigObj struct {
-	tableZoneConfigObj
-	indexID      catid.IndexID
-	indexSubzone *zonepb.Subzone
-	seqNum       uint32
+type partitionZoneConfigObj struct {
+	indexZoneConfigObj
+	partitionSubzone *zonepb.Subzone
+	partitionName    string
+	seqNum           uint32
 }
 
-var _ zoneConfigObject = &indexZoneConfigObj{}
+var _ zoneConfigObject = &partitionZoneConfigObj{}
 
-func (izo *indexZoneConfigObj) getTableZoneConfig() *zonepb.ZoneConfig {
-	return izo.tableZoneConfigObj.zoneConfig
+func (pzo *partitionZoneConfigObj) getTableZoneConfig() *zonepb.ZoneConfig {
+	return pzo.tableZoneConfigObj.zoneConfig
 }
 
-func (izo *indexZoneConfigObj) addZoneConfigToBuildCtx(b BuildCtx) scpb.Element {
-	izo.seqNum += 1
-	subzones := []zonepb.Subzone{*izo.indexSubzone}
+func (pzo *partitionZoneConfigObj) addZoneConfigToBuildCtx(b BuildCtx) scpb.Element {
+	pzo.seqNum += 1
+	subzones := []zonepb.Subzone{*pzo.partitionSubzone}
 
 	// Merge the new subzones with the old subzones so that we can generate
 	// accurate subzone spans.
-	parentZoneConfig := izo.getTableZoneConfig()
+	parentZoneConfig := pzo.getTableZoneConfig()
 	if parentZoneConfig != nil {
-		parentZoneConfig.SetSubzone(*izo.indexSubzone)
+		parentZoneConfig.SetSubzone(*pzo.partitionSubzone)
 		subzones = parentZoneConfig.Subzones
 	}
 
-	ss, err := generateSubzoneSpans(b, izo.tableID, subzones, izo.indexID, "")
+	ss, err := generateSubzoneSpans(b, pzo.tableID, subzones, pzo.indexID, pzo.partitionName)
 	if err != nil {
 		panic(err)
 	}
 
-	elem := &scpb.IndexZoneConfig{
-		TableID:      izo.tableID,
-		IndexID:      izo.indexID,
-		Subzone:      *izo.indexSubzone,
-		SubzoneSpans: ss,
-		SeqNum:       izo.seqNum,
+	elem := &scpb.PartitionZoneConfig{
+		TableID:       pzo.tableID,
+		IndexID:       pzo.indexID,
+		PartitionName: pzo.partitionName,
+		Subzone:       *pzo.partitionSubzone,
+		SubzoneSpans:  ss,
+		SeqNum:        pzo.seqNum,
 	}
 	b.Add(elem)
 	return elem
 }
 
-func (izo *indexZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.ZoneConfig {
-	sameIdx := func(e *scpb.IndexZoneConfig) bool {
-		return e.TableID == izo.getTargetID() && e.IndexID == izo.indexID
+func (pzo *partitionZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.ZoneConfig {
+	samePartition := func(e *scpb.PartitionZoneConfig) bool {
+		return e.TableID == pzo.getTargetID() && e.IndexID == pzo.indexID &&
+			e.PartitionName == pzo.partitionName
 	}
-	mostRecentElem := findMostRecentZoneConfig(izo,
-		func(id catid.DescID) *scpb.ElementCollection[*scpb.IndexZoneConfig] {
-			return b.QueryByID(id).FilterIndexZoneConfig()
-		}, sameIdx)
+	mostRecentElem := findMostRecentZoneConfig(pzo,
+		func(id catid.DescID) *scpb.ElementCollection[*scpb.PartitionZoneConfig] {
+			return b.QueryByID(id).FilterPartitionZoneConfig()
+		}, samePartition)
 
 	if mostRecentElem != nil {
-		idxZc := zonepb.NewZoneConfig()
-		idxZc.Subzones = []zonepb.Subzone{mostRecentElem.Subzone}
-		izo.zoneConfig = idxZc
-		izo.seqNum = mostRecentElem.SeqNum
+		partZc := zonepb.NewZoneConfig()
+		partZc.Subzones = []zonepb.Subzone{mostRecentElem.Subzone}
+		pzo.zoneConfig = partZc
+		pzo.seqNum = mostRecentElem.SeqNum
 	}
 
-	return izo.zoneConfig
+	return pzo.zoneConfig
 }
 
-func (izo *indexZoneConfigObj) retrieveCompleteZoneConfig(
+func (pzo *partitionZoneConfigObj) retrieveCompleteZoneConfig(
 	b BuildCtx, getInheritedDefault bool,
 ) (*zonepb.ZoneConfig, *zonepb.Subzone, error) {
 	var placeholder *zonepb.ZoneConfig
 	var err error
 	zc := &zonepb.ZoneConfig{}
 	if getInheritedDefault {
-		zc, err = izo.getInheritedDefaultZoneConfig(b)
+		zc, err = pzo.getInheritedDefaultZoneConfig(b)
 	} else {
-		zc, placeholder, err = izo.getZoneConfig(b, false /* inheritDefaultRange */)
+		zc, placeholder, err = pzo.getZoneConfig(b, false /* inheritDefaultRange */)
 	}
 	if err != nil {
 		return nil, nil, err
 	}
 
 	completeZc := *zc
-	if err = izo.completeZoneConfig(b, &completeZc); err != nil {
+	if err = pzo.completeZoneConfig(b, &completeZc); err != nil {
 		return nil, nil, err
 	}
 
 	var subzone *zonepb.Subzone
-	indexID := izo.indexID
+	indexID := pzo.indexID
+	partName := pzo.partitionName
 	if placeholder != nil {
-		if subzone = placeholder.GetSubzone(uint32(indexID), ""); subzone != nil {
-			if indexSubzone := placeholder.GetSubzone(uint32(indexID), ""); indexSubzone != nil {
+		if subzone = placeholder.GetSubzone(uint32(indexID), partName); subzone != nil {
+			if indexSubzone := placeholder.GetSubzone(uint32(indexID), partName); indexSubzone != nil {
 				subzone.Config.InheritFromParent(&indexSubzone.Config)
 			}
 			subzone.Config.InheritFromParent(zc)
 			return placeholder, subzone, nil
 		}
 	} else {
-		if subzone = zc.GetSubzone(uint32(indexID), ""); subzone != nil {
-			if indexSubzone := zc.GetSubzone(uint32(indexID), ""); indexSubzone != nil {
+		if subzone = zc.GetSubzone(uint32(indexID), pzo.partitionName); subzone != nil {
+			if indexSubzone := zc.GetSubzone(uint32(indexID), pzo.partitionName); indexSubzone != nil {
 				subzone.Config.InheritFromParent(&indexSubzone.Config)
 			}
 			subzone.Config.InheritFromParent(zc)
@@ -124,63 +127,34 @@ func (izo *indexZoneConfigObj) retrieveCompleteZoneConfig(
 	return zc, subzone, nil
 }
 
-func (izo *indexZoneConfigObj) setZoneConfigToWrite(zone *zonepb.ZoneConfig) {
+func (pzo *partitionZoneConfigObj) setZoneConfigToWrite(zone *zonepb.ZoneConfig) {
 	var subzoneToWrite *zonepb.Subzone
 	for _, subzone := range zone.Subzones {
-		if subzone.IndexID == uint32(izo.indexID) && len(subzone.PartitionName) == 0 {
+		if subzone.IndexID == uint32(pzo.indexID) && subzone.PartitionName == pzo.partitionName {
 			subzoneToWrite = &subzone
 			break
 		}
 	}
-	izo.indexSubzone = subzoneToWrite
+	pzo.partitionSubzone = subzoneToWrite
 }
 
 // getInheritedFieldsForPartialSubzone returns the set of inherited fields for
 // a partial subzone based off of its parent zone.
-func (izo *indexZoneConfigObj) getInheritedFieldsForPartialSubzone(
+func (pzo *partitionZoneConfigObj) getInheritedFieldsForPartialSubzone(
 	b BuildCtx, partialZone *zonepb.ZoneConfig,
 ) (*zonepb.ZoneConfig, error) {
 	// We are operating on a subZone and need to inherit all remaining
 	// unset fields in its parent zone, which is partialZone.
 	zoneInheritedFields := *partialZone
-	if err := izo.completeZoneConfig(b, &zoneInheritedFields); err != nil {
+	if err := pzo.completeZoneConfig(b, &zoneInheritedFields); err != nil {
 		return nil, err
 	}
-	// Since we have just an index, we should copy from the inherited
+	// Since we have just a partition, we should copy from the inherited
 	// zone's fields (whether that was the table or database).
 	return &zoneInheritedFields, nil
 }
 
-func (izo *indexZoneConfigObj) getZoneConfig(
-	b BuildCtx, inheritDefaultRange bool,
-) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, error) {
-	var subzones []zonepb.Subzone
-	zc, subzones, err := lookUpSystemZonesTable(b, izo, inheritDefaultRange)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// If the zone config exists, we know that it is not a subzone placeholder.
-	if zc != nil {
-		return zc, nil, err
-	}
-
-	zc = zonepb.NewZoneConfig()
-	zc.Subzones = subzones
-	subzone := zc
-
-	// Recursively get the zone config of its parent
-	// database.
-	parentDBID := mustRetrieveNamespaceElem(b, izo.getTargetID()).DatabaseID
-	dzo := databaseZoneConfigObj{databaseID: parentDBID}
-	zc, _, err = dzo.getZoneConfig(b, inheritDefaultRange)
-	if err != nil {
-		return nil, nil, err
-	}
-	return zc, subzone, nil
-}
-
-func (izo *indexZoneConfigObj) applyZoneConfig(
+func (pzo *partitionZoneConfigObj) applyZoneConfig(
 	b BuildCtx,
 	n *tree.SetZoneConfig,
 	copyFromParentList []tree.Name,
@@ -190,14 +164,14 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 	// we will need to guard against secondary tenants from configuring such
 	// ranges.
 
-	// We are configuring an index. Determine the index ID and fill this
+	// We are configuring a partition. Determine the index ID and fill this
 	// information out in our zoneConfigObject.
-	izo.fillIndexFromZoneSpecifier(b, n.ZoneSpecifier)
-	indexID := izo.indexID
-	tempIndexID := mustRetrieveIndexElement(b, izo.getTargetID(), indexID).TemporaryIndexID
+	pzo.indexZoneConfigObj.fillIndexFromZoneSpecifier(b, n.ZoneSpecifier)
+	indexID := pzo.indexID
+	tempIndexID := mustRetrieveIndexElement(b, pzo.getTargetID(), indexID).TemporaryIndexID
 
 	// Retrieve the partial zone configuration
-	partialZone := izo.retrievePartialZoneConfig(b)
+	partialZone := pzo.retrievePartialZoneConfig(b)
 
 	subzonePlaceholder := false
 	// No zone was found. Possibly a SubzonePlaceholder depending on the index.
@@ -222,7 +196,7 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 	// getInheritedDefault to retrieveCompleteZoneConfig().
 	// These zones are only used for validations. The merged zone will not
 	// be written.
-	completeZone, completeSubZone, err := izo.retrieveCompleteZoneConfig(b,
+	completeZone, completeSubZone, err := pzo.retrieveCompleteZoneConfig(b,
 		n.SetDefault /* getInheritedDefault */)
 	if err != nil {
 		return err
@@ -231,7 +205,7 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 	// We need to inherit zone configuration information from the correct zone,
 	// not completeZone.
 	{
-		zoneInheritedFields, err := izo.getInheritedFieldsForPartialSubzone(b, partialZone)
+		zoneInheritedFields, err := pzo.getInheritedFieldsForPartialSubzone(b, partialZone)
 		if err != nil {
 			return err
 		}
@@ -266,7 +240,7 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 	}
 
 	// Fill in the final zone config with subzones.
-	fillZoneConfigsForSubzones(indexID, "", tempIndexID, subzonePlaceholder, completeZone,
+	fillZoneConfigsForSubzones(indexID, pzo.partitionName, tempIndexID, subzonePlaceholder, completeZone,
 		partialZone, newZone, finalZone)
 
 	// Finally, revalidate everything. Validate only the completeZone config.
@@ -291,24 +265,6 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 				"populate the field")
 		return err
 	}
-	izo.setZoneConfigToWrite(partialZone)
+	pzo.setZoneConfigToWrite(partialZone)
 	return err
-}
-
-// fillIndexFromZoneSpecifier fills out the index id in the zone
-// specifier for a indexZoneConfigObj.
-func (izo *indexZoneConfigObj) fillIndexFromZoneSpecifier(b BuildCtx, zs tree.ZoneSpecifier) {
-	tableID := izo.getTargetID()
-
-	indexName := string(zs.TableOrIndex.Index)
-	var indexID catid.IndexID
-	if indexName == "" {
-		// Use the primary index if index name is unspecified.
-		primaryIndexElem := mustRetrieveCurrentPrimaryIndexElement(b, tableID)
-		indexID = primaryIndexElem.IndexID
-	} else {
-		indexElems := b.ResolveIndex(tableID, tree.Name(indexName), ResolveParams{})
-		indexID = indexElems.FilterIndexName().MustGetOneElement().IndexID
-	}
-	izo.indexID = indexID
 }

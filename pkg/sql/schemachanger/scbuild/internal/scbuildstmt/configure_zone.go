@@ -37,8 +37,8 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 	// - Database
 	// - Table
 	// - Index
-	// Left to support:
 	// - Partition/row
+	// Left to support:
 	// - System Ranges
 	if n.TargetsIndex() && n.ZoneSpecifier.TableOrIndex.Table.String() == "t36642" && n.ZoneSpecifier.TableOrIndex.Index == "secondary" {
 		fmt.Println("here")
@@ -123,7 +123,7 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 			"prefix is not supported in the DSC")
 	}
 
-	if !n.TargetsTable() || n.TargetsPartition() {
+	if !n.TargetsTable() {
 		return nil, scerrors.NotImplementedErrorf(n, "zone configurations on partitions "+
 			"and system ranges are not supported in the DSC")
 	}
@@ -152,9 +152,16 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 		return &tzo, nil
 	}
 
+	izo := indexZoneConfigObj{tableZoneConfigObj: tzo}
 	// We are an index object.
-	if targetsIndex {
-		return &indexZoneConfigObj{tableZoneConfigObj: tzo}, nil
+	if targetsIndex && !n.TargetsPartition() {
+		return &izo, nil
+	}
+
+	// We are a partition object.
+	if n.TargetsPartition() {
+		return &partitionZoneConfigObj{partitionName: n.ZoneSpecifier.Partition.String(),
+			indexZoneConfigObj: izo}, nil
 	}
 
 	return nil, errors.AssertionFailedf("unexpected zone config object")
