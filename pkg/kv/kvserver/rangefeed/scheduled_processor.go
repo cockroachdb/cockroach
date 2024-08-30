@@ -316,10 +316,12 @@ func (p *ScheduledProcessor) Register(
 	p.syncEventC()
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
+
 	var r registration
-	if _, ok := stream.(BufferedStream); ok {
-		log.Fatalf(context.Background(),
-			"unimplemented: unbuffered registrations for rangefeed, see #126560")
+	bufferedStream, isBufferedStream := stream.(BufferedStream)
+	if isBufferedStream {
+		r = newUnbufferedRegistration(span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+			p.Config.EventChanCap, p.Metrics, bufferedStream, disconnectFn)
 	} else {
 		r = newBufferedRegistration(
 			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
@@ -348,20 +350,44 @@ func (p *ScheduledProcessor) Register(
 		// once they observe the first checkpoint event.
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
-		if bs, ok := stream.(BufferedStream); ok {
-			bs.RegisterRangefeedCleanUp(func() {
-				log.Fatalf(context.Background(), "unimplemented: see #126560")
+		if ubr, ok := r.(*unbufferedRegistration); ok {
+			bufferedStream.RegisterRangefeedCleanUp(func() {
+				// BufferedRegistration has a dedicated goroutine watching for context
+				// cancellation and handles rangefeed cleanup. UnbufferedRegistration
+				// relies on this callback for rangefeed cleanup. In case that
+				// disconnect happens from rangefeed side, setDisconnectedIfNot is
+				// no-op. If StreamMuxer initiated the disconnect, it will be properly
+				// disconnected.
+				ubr.setDisconnectedIfNot()
+				// Unregister the registration from the processor. No more raft updates
+				// will be published to registration after this.
+				// TODO(wenyihu6): understand what happens if p is stopped here already
+				if p.unregisterClient(r) {
+					// unreg callback is set by replica to tear down processors that have
+					// zero registrations left and to update event filters.
+					if f := r.getUnreg(); f != nil {
+						f()
+					}
+				}
 			})
 		}
 
-		// Run an output loop for the registry.
+		// Run an output loop for the registry. For BufferedRegistration, this is
+		// long-running. For UnbufferedRegistration, this is short-lived (just for
+		// catch up scans).
 		runOutputLoop := func(ctx context.Context) {
 			r.runOutputLoop(ctx, p.RangeID)
-			if p.unregisterClient(r) {
-				// unreg callback is set by replica to tear down processors that have
-				// zero registrations left and to update event filters.
-				if f := r.getUnreg(); f != nil {
-					f()
+			if _, ok := r.(*bufferedRegistration); ok {
+				// If runOutputLoop ends, it means that the registration is disconnected
+				// for bufferedRegistration. This is not true for
+				// unbufferedRegistration. Instead, unbufferedRegistration relies on
+				// RegisterRangefeedCleanUp above.
+				if p.unregisterClient(r) {
+					// unreg callback is set by replica to tear down processors that have
+					// zero registrations left and to update event filters.
+					if f := r.getUnreg(); f != nil {
+						f()
+					}
 				}
 			}
 		}
@@ -371,6 +397,12 @@ func (p *ScheduledProcessor) Register(
 			// could only happen on shutdown. Disconnect stream and just remove
 			// registration.
 			r.disconnect(kvpb.NewError(err))
+			// Normally, ubr.runOutputLoop is responsible for draining catch up
+			// buffer. If it fails to start, we should drain it here. Double check if
+			// runOutputLoop is guaranteed to be invoked if err == nil here.
+			if ubr, ok := r.(*unbufferedRegistration); ok {
+				ubr.discardCatchUpBuffer(ctx)
+			}
 			p.reg.Unregister(ctx, r)
 		}
 		return f
