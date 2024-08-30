@@ -478,6 +478,16 @@ func NewProcessor(opts ProcessorOptions) Processor {
 	return p
 }
 
+// isLeaderUsingV2ProcLocked returns true if the current leader uses the V2
+// protocol.
+//
+// NB: the result of this method does not change while raftMu is held.
+func (p *processorImpl) isLeaderUsingV2ProcLocked() bool {
+	// We are the leader using V2, or a follower who learned that the leader is
+	// using the V2 protocol.
+	return p.mu.leader.rc != nil || p.mu.follower.isLeaderUsingV2Protocol
+}
+
 // OnDestroyRaftMuLocked implements Processor.
 func (p *processorImpl) OnDestroyRaftMuLocked(ctx context.Context) {
 	p.opts.Replica.RaftMuAssertHeld()
@@ -726,8 +736,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	p.makeStateConsistentRaftMuLockedProcLocked(
 		ctx, nextUnstableIndex, leaderID, leaseholderID, myLeaderTerm)
 
-	isLeaderUsingV2 := p.mu.leader.rc != nil || p.mu.follower.isLeaderUsingV2Protocol
-	if !isLeaderUsingV2 {
+	if !p.isLeaderUsingV2ProcLocked() {
 		return
 	}
 	// If there was a recent MsgStoreAppendResp that triggered this Ready
@@ -756,18 +765,15 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 
 // AdmitRaftEntriesRaftMuLocked implements Processor.
 func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2.RaftEvent) bool {
-	// NB: the state being read here is only modified under raftMu, so it will
-	// not become stale during this method.
-	var isLeaderUsingV2Protocol bool
-	func() {
+	destroyed, usingV2 := func() (bool, bool) {
 		p.mu.Lock()
 		defer p.mu.Unlock()
-		isLeaderUsingV2Protocol = !p.mu.destroyed &&
-			(p.mu.leader.rc != nil || p.mu.follower.isLeaderUsingV2Protocol)
+		return p.mu.destroyed, p.isLeaderUsingV2ProcLocked()
 	}()
-	if !isLeaderUsingV2Protocol {
-		return false
+	if destroyed || !usingV2 {
+		return usingV2
 	}
+
 	for _, entry := range e.Entries {
 		typ, priBits, err := raftlog.EncodingOf(entry)
 		if err != nil {
@@ -913,7 +919,7 @@ func (p *processorImpl) AdmittedLogEntry(
 	admittedMayAdvance :=
 		p.mu.waitingForAdmissionState.remove(state.LeaderTerm, state.Index, state.Priority)
 	if !admittedMayAdvance || state.Index > p.mu.lastObservedStableIndex ||
-		(p.mu.leader.rc == nil && !p.mu.follower.isLeaderUsingV2Protocol) {
+		!p.isLeaderUsingV2ProcLocked() {
 		return
 	}
 	// The lastObservedStableIndex has moved at or ahead of state.Index. This
