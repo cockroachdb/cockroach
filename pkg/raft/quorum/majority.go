@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // MajorityConfig is a set of IDs that uses majority quorums to make decisions.
@@ -118,6 +119,11 @@ func (c MajorityConfig) Slice() []pb.PeerID {
 	return sl
 }
 
+// NB: A lot of logic in CommittedIndex, VoteResult, and LeadSupportExpiration
+// can be de-duplicated by using generics. This was attempted in
+// https://github.com/cockroachdb/cockroach/pull/128054, but eventually
+// abandoned because of microbenchmark regressions.
+
 // CommittedIndex computes the committed index from those supplied via the
 // provided AckedIndexer (for the active config).
 func (c MajorityConfig) CommittedIndex(l AckedIndexer) Index {
@@ -177,7 +183,7 @@ func (c MajorityConfig) VoteResult(votes map[pb.PeerID]bool) VoteResult {
 		return VoteWon
 	}
 
-	var votedCnt int //vote counts for yes.
+	var votedCnt int // vote counts for yes.
 	var missing int
 	for id := range c {
 		v, ok := votes[id]
@@ -198,4 +204,58 @@ func (c MajorityConfig) VoteResult(votes map[pb.PeerID]bool) VoteResult {
 		return VotePending
 	}
 	return VoteLost
+}
+
+// LeadSupportExpiration takes a mapping of timestamps peers have promised a
+// fortified leader support until and returns the timestamp until which the
+// leader is guaranteed support until.
+func (c MajorityConfig) LeadSupportExpiration(supported map[pb.PeerID]hlc.Timestamp) hlc.Timestamp {
+	if len(c) == 0 {
+		// There are no peers in the config, and therefore no leader, so we return
+		// MaxTimestamp as a sentinel value. This also plays well with joint quorums
+		// when one half is the zero MajorityConfig. In such cases, the joint config
+		// should behave like the other half.
+		return hlc.MaxTimestamp
+	}
+
+	n := len(c)
+
+	// Use an on-stack slice whenever n <= 7 (otherwise we alloc). The assumption
+	// is that running with a replication factor of >7 is rare, and in cases in
+	// which it happens, performance is less of a concern (it's not like
+	// performance implications of an allocation here are drastic).
+	var stk [7]hlc.Timestamp
+	var srt []hlc.Timestamp
+	if len(stk) >= n {
+		srt = stk[:n]
+	} else {
+		srt = make([]hlc.Timestamp, n)
+	}
+
+	{
+		// Fill the slice with Timestamps for peers in the configuration. Any unused
+		// slots will be left as empty Timestamps  for our calculation. We fill from
+		// the right (since the zeros will end up on the left after sorting anyway).
+		i := n - 1
+		for id := range c {
+			if e, ok := supported[id]; ok {
+				srt[i] = e
+				i--
+			}
+		}
+	}
+
+	slices.SortFunc(srt, func(a hlc.Timestamp, b hlc.Timestamp) int {
+		return a.Compare(b)
+	})
+
+	// We want the maximum timestamp that's supported by the quorum. The
+	// assumption is that if a timestamp is supported by a peer, so are all
+	// timestamps less than that timestamp. For this, we can simply consider the
+	// quorum formed by picking the highest value elements and pick the minimum
+	// from this. In other words, from our sorted (in increasing order) array srt,
+	// we want to move n/2 + 1 to the left from the end (accounting for
+	// zero-indexing).
+	pos := n - (n/2 + 1)
+	return srt[pos]
 }
