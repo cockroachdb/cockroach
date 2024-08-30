@@ -310,3 +310,15 @@ func (br *bufferedRegistration) detachCatchUpIter() *CatchUpIterator {
 	br.mu.catchUpIter = nil
 	return catchUpIter
 }
+
+// Used for testing only.
+func (br *bufferedRegistration) getBuf() chan *sharedEvent {
+	return br.buf
+}
+
+// Used for testing only.
+func (br *bufferedRegistration) getOverflowed() bool {
+	br.mu.Lock()
+	defer br.mu.Unlock()
+	return br.mu.overflowed
+}
