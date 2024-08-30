@@ -698,3 +698,40 @@ BEGIN
   END IF;
 END;
 $$ LANGUAGE PLpgSQL;
+
+subtest multi_declare
+
+statement ok
+DROP FUNCTION IF EXISTS f;
+
+statement ok
+CREATE FUNCTION f() RETURNS INT AS $$
+DECLARE
+  x INT := 0;
+DECLARE
+  y INT := x + 1;
+BEGIN
+  RAISE NOTICE '% %', x, y;
+  RETURN 0;
+END;
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: 0 1
+
+statement ok
+DROP FUNCTION IF EXISTS f;
+
+statement error pgcode 42601 pq: duplicate declaration at or near "x"
+CREATE FUNCTION f() RETURNS INT AS $$
+DECLARE
+  x INT := 0;
+DECLARE
+  x INT := 1;
+BEGIN
+  RAISE NOTICE '%', x;
+  RETURN 0;
+END;
+$$ LANGUAGE PLpgSQL;
