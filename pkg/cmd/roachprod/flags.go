@@ -273,6 +273,8 @@ func initFlags() {
 	deployCmd.Flags().DurationVar(&pause, "pause", pause, "duration to pause between node restarts")
 
 	syncCmd.Flags().BoolVar(&listOpts.IncludeVolumes, "include-volumes", false, "Include volumes when syncing")
+	syncCmd.Flags().StringArrayVarP(&listOpts.IncludeProviders, "clouds", "c",
+		make([]string, 0), "Include the specific cloud providers when syncing")
 
 	wipeCmd.Flags().BoolVar(&wipePreserveCerts, "preserve-certs", false, "do not wipe certificates")
 
