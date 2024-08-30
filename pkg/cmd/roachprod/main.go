@@ -463,12 +463,12 @@ var bashCompletion = os.ExpandEnv("$HOME/.roachprod/bash-completion.sh")
 // a side-effect. If you don't care about the list output, just "roachprod list
 // &>/dev/null".
 var syncCmd = &cobra.Command{
-	Use:   "sync",
+	Use:   "sync [flags]",
 	Short: "sync ssh keys/config and hosts files",
 	Long:  ``,
 	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		_, err := roachprod.Sync(config.Logger, vm.ListOptions{IncludeVolumes: listOpts.IncludeVolumes})
+		_, err := roachprod.Sync(config.Logger, listOpts)
 		_ = rootCmd.GenBashCompletionFile(bashCompletion)
 		return err
 	}),
