@@ -98,9 +98,10 @@ func (dzo *databaseZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.
 	sameDB := func(e *scpb.DatabaseZoneConfig) bool {
 		return e.DatabaseID == dzo.getTargetID()
 	}
-	mostRecentElem := findMostRecentZoneConfig(dzo, func(id catid.DescID) *scpb.ElementCollection[*scpb.DatabaseZoneConfig] {
-		return b.QueryByID(id).FilterDatabaseZoneConfig()
-	}, sameDB)
+	mostRecentElem := findMostRecentZoneConfig(dzo,
+		func(id catid.DescID) *scpb.ElementCollection[*scpb.DatabaseZoneConfig] {
+			return b.QueryByID(id).FilterDatabaseZoneConfig()
+		}, sameDB)
 
 	if mostRecentElem != nil {
 		dzo.zoneConfig = mostRecentElem.ZoneConfig

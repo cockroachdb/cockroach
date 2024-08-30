@@ -528,7 +528,7 @@ statement ok
 ALTER partition "us-east-1" of index regional_by_row@regional_by_row_pkey CONFIGURE ZONE USING num_replicas = 10;
 
 statement ok
-SET override_multi_region_zone_config = false
+SET override_multi_region_zone_config = false;
 
 query TTT
 SELECT ZONE_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
