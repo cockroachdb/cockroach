@@ -174,6 +174,17 @@ func TestReaderCatalog(t *testing.T) {
 	compareEqual("SELECT * FROM t1 ORDER BY n")
 	compareEqual("SELECT * FROM v1 ORDER BY 1")
 	compareEqual("SELECT * FROM t2 ORDER BY j")
+
+	// Validate that schema changes are blocked.
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE SCHEMA sc1")
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE DATABASE db2")
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE SEQUENCE sq4")
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE VIEW v3 AS (SELECT n FROM t1)")
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE TABLE t4 AS (SELECT n FROM t1)")
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER TABLE t1 ADD COLUMN abc int")
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER SEQUENCE sq1 RENAME TO sq4")
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER TYPE status ADD VALUE 'newval' ")
+
 }
 
 func TestMain(m *testing.M) {
