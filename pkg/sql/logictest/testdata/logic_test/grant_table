@@ -60,6 +60,7 @@ test           crdb_internal       databases                                    
 test           crdb_internal       default_privileges                           table        public   SELECT          false
 test           crdb_internal       feature_usage                                table        public   SELECT          false
 test           crdb_internal       forward_dependencies                         table        public   SELECT          false
+test           crdb_internal       fully_qualified_names                        table        public   SELECT          false
 test           crdb_internal       gossip_alerts                                table        public   SELECT          false
 test           crdb_internal       gossip_liveness                              table        public   SELECT          false
 test           crdb_internal       gossip_network                               table        public   SELECT          false
