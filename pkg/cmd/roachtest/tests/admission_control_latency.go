@@ -572,21 +572,22 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 		})
 	})
 
+	// Capture the stable rate near the last 1/4 of the fill process.
+	clusterMaxRate := make(chan int)
+	m.Go(func(ctx context.Context) error {
+		waitDuration(ctx, 3*v.fillDuration/4)
+		clusterMaxRate <- v.measureQPS(ctx, t.L(), v.fillDuration/4)
+		return nil
+	})
 	// Start filling the system without a rate.
 	t.Status("T1: filling at full rate")
 	require.NoError(t, v.workload.runWorkload(ctx, v, v.fillDuration, 0))
 
-	// Capture the max rate near the last 1/4 of the fill process.
-	sampleWindow := v.fillDuration / 4
-	ratioOfWrites := 0.5
-	fillStats := lm.worstStats(sampleWindow)
-	stableRate := int(float64(fillStats[`write`].count)*v.ratioOfMax/ratioOfWrites) / v.numWorkloadNodes
-
 	// Start the consistent workload and begin collecting profiles.
-	t.L().Printf("stable rate for this cluster is %d per node", stableRate)
+	stableRatePerNode := int(float64(<-clusterMaxRate) * v.ratioOfMax / float64(v.numWorkloadNodes))
 	t.Status("T2: running workload at stable rate")
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
-		if err := v.workload.runWorkload(ctx, v, 0, stableRate); !errors.Is(err, context.Canceled) {
+		if err := v.workload.runWorkload(ctx, v, 0, stableRatePerNode); !errors.Is(err, context.Canceled) {
 			return err
 		}
 		return nil
@@ -625,7 +626,6 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	afterDuration := v.perturbation.endPerturbation(ctx, t.L(), v)
 	afterStats := lm.worstStats(afterDuration)
 
-	t.L().Printf("%s\n", prettyPrint("Fill stats", fillStats))
 	t.L().Printf("%s\n", prettyPrint("Baseline stats", baselineStats))
 	t.L().Printf("%s\n", prettyPrint("Perturbation stats", perturbationStats))
 	t.L().Printf("%s\n", prettyPrint("Recovery stats", afterStats))
@@ -700,7 +700,7 @@ func (lm *latencyMonitor) worstStats(window time.Duration) map[string]trackedSta
 	stats := make(map[string]trackedStat)
 	// startIndex is always between 0 and numOpsToTrack - 1.
 	startIndex := (lm.mu.index + numOpsToTrack - int(window.Seconds())) % numOpsToTrack
-	// endIndex is alwayss greater than startIndex.
+	// endIndex is always greater than startIndex.
 	endIndex := (lm.mu.index + numOpsToTrack) % numOpsToTrack
 	if endIndex < startIndex {
 		endIndex += numOpsToTrack
@@ -840,6 +840,55 @@ func (v variations) stableNodes() option.NodeListOption {
 // require multiple targets we could add multi-target support.
 func (v variations) targetNodes() option.NodeListOption {
 	return v.cluster.Node(v.numNodes)
+}
+
+// measureQPS will measure the approx QPS at the time this command is run. The
+// duration is the interval to measure over. Setting too short of an interval
+// can mean inaccuracy in results. Setting too long of an interval may mean the
+// impact is blurred out.
+func (v variations) measureQPS(ctx context.Context, l *logger.Logger, duration time.Duration) int {
+	stableNodes := v.stableNodes()
+
+	totalOpsCompleted := func() int {
+		// NB: We can't hold the connection open during the full duration.
+		var dbs []*gosql.DB
+		for _, nodeId := range stableNodes {
+			db := v.cluster.Conn(ctx, l, nodeId)
+			defer db.Close()
+			dbs = append(dbs, db)
+		}
+		rates := make(chan int, len(dbs))
+		// Count the inserts before sleeping.
+		for _, db := range dbs {
+			db := db
+			go func() {
+				var v float64
+				if err := db.QueryRowContext(
+					ctx, `SELECT sum(value) FROM crdb_internal.node_metrics WHERE name in ('sql.select.count', 'sql.insert.count')`,
+				).Scan(&v); err != nil {
+					panic(err)
+				}
+				rates <- int(v)
+			}()
+		}
+		var total int
+		for range dbs {
+			total += <-rates
+		}
+		return total
+	}
+
+	// Measure the current time and the QPS now.
+	startTime := timeutil.Now()
+	beforeOps := totalOpsCompleted()
+	// Wait for the duration minus the first query time.
+	select {
+	case <-ctx.Done():
+		return 0
+	case <-time.After(duration - timeutil.Since(startTime)):
+		afterOps := totalOpsCompleted()
+		return int(float64(afterOps-beforeOps) / duration.Seconds())
+	}
 }
 
 type workloadType interface {
