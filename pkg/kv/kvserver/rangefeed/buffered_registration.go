@@ -347,3 +347,15 @@ var overflowLogEvery = log.Every(5 * time.Second)
 func (br *bufferedRegistration) shouldLogOverflow(checkpointSent bool) bool {
 	return (!checkpointSent) || log.V(1) || overflowLogEvery.ShouldLog()
 }
+
+// Used for testing only.
+func (br *bufferedRegistration) getBuf() chan *sharedEvent {
+	return br.buf
+}
+
+// Used for testing only.
+func (br *bufferedRegistration) getOverflowed() bool {
+	br.mu.Lock()
+	defer br.mu.Unlock()
+	return br.mu.overflowed
+}
