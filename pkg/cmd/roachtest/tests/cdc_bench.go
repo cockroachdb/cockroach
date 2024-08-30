@@ -61,15 +61,16 @@ const (
 	// practice it can.
 	cdcBenchColdCatchupScan cdcBenchScanType = "catchup-cold"
 
-	cdcBenchNoServer        cdcBenchServer = ""
-	cdcBenchProcessorServer cdcBenchServer = "processor" // legacy processor
-	cdcBenchSchedulerServer cdcBenchServer = "scheduler" // new scheduler
+	cdcBenchNoServer                          cdcBenchServer = ""
+	cdcBenchProcessorServer                   cdcBenchServer = "processor"                      // legacy processor
+	cdcBenchSchedulerServer                   cdcBenchServer = "scheduler"                      // new scheduler
+	cdcBenchSchedulerServerWithBufferedSender cdcBenchServer = "scheduler_with_buffered_sender" // new scheduler
 )
 
 var (
 	cdcBenchScanTypes = []cdcBenchScanType{
 		cdcBenchInitialScan, cdcBenchCatchupScan, cdcBenchColdCatchupScan}
-	cdcBenchServers = []cdcBenchServer{cdcBenchProcessorServer, cdcBenchSchedulerServer}
+	cdcBenchServers = []cdcBenchServer{cdcBenchProcessorServer, cdcBenchSchedulerServer, cdcBenchSchedulerServerWithBufferedSender}
 )
 
 func registerCDCBench(r registry.Registry) {
@@ -425,6 +426,9 @@ func runCDCBenchWorkload(
 		settings.ClusterSettings["kv.rangefeed.scheduler.enabled"] = "false"
 	case cdcBenchSchedulerServer:
 		settings.ClusterSettings["kv.rangefeed.scheduler.enabled"] = "true"
+	case cdcBenchSchedulerServerWithBufferedSender:
+		settings.ClusterSettings["kv.rangefeed.scheduler.enabled"] = "true"
+		settings.ClusterSettings["kv.rangefeed.buffered_stream_sender.enabled"] = "true"
 	case cdcBenchNoServer:
 	default:
 		t.Fatalf("unknown server type %q", server)
