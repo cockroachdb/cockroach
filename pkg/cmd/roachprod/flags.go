@@ -273,6 +273,8 @@ func initFlags() {
 	deployCmd.Flags().DurationVar(&pause, "pause", pause, "duration to pause between node restarts")
 
 	syncCmd.Flags().BoolVar(&listOpts.IncludeVolumes, "include-volumes", false, "Include volumes when syncing")
+	syncCmd.Flags().StringArrayVarP(&listOpts.IncludeProviders, "clouds", "c",
+		make([]string, 0), "Specify the cloud providers when syncing. Important: Use this flag only if you are certain that you want to sync with a specific cloud. All DNS host entries for other clouds will be erased from the DNS zone.")
 
 	wipeCmd.Flags().BoolVar(&wipePreserveCerts, "preserve-certs", false, "do not wipe certificates")
 
