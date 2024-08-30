@@ -227,7 +227,7 @@ func (ssh *supporterStateHandler) checkInUpdate(ssfu *supporterStateForUpdate) {
 // handleHeartbeat handles a single heartbeat message. It updates the inProgress
 // view of supporterStateForUpdate only if there are any changes, and returns
 // a heartbeat response message.
-func (ssfu *supporterStateForUpdate) handleHeartbeat(msg slpb.Message) slpb.Message {
+func (ssfu *supporterStateForUpdate) handleHeartbeat(msg *slpb.Message) slpb.Message {
 	from := msg.From
 	ss, ok := ssfu.getSupportFor(from)
 	if !ok {
@@ -248,7 +248,7 @@ func (ssfu *supporterStateForUpdate) handleHeartbeat(msg slpb.Message) slpb.Mess
 
 // handleHeartbeat contains the core logic for updating the epoch and expiration
 // of a support requester upon receiving a heartbeat.
-func handleHeartbeat(ss slpb.SupportState, msg slpb.Message) slpb.SupportState {
+func handleHeartbeat(ss slpb.SupportState, msg *slpb.Message) slpb.SupportState {
 	if ss.Epoch == msg.Epoch {
 		ss.Expiration.Forward(msg.Expiration)
 	} else if ss.Epoch < msg.Epoch {

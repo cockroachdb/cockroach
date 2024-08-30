@@ -5,14 +5,17 @@
 # - withdrawing support.
 # -------------------------------------------------------------
 
-add-store node-id=1 store-id=2
+support-from node-id=1 store-id=2
 ----
+epoch: 0, expiration: 0,0, support provided: false
 
-add-store node-id=2 store-id=3
+support-from node-id=2 store-id=3
 ----
+epoch: 0, expiration: 0,0, support provided: false
 
-add-store node-id=2 store-id=4
+support-from node-id=2 store-id=4
 ----
+epoch: 0, expiration: 0,0, support provided: false
 
 send-heartbeats now=100 liveness-interval=10s
 ----
