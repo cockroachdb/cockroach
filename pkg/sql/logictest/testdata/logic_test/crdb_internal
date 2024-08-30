@@ -1710,3 +1710,36 @@ statement ok
 REVOKE SYSTEM VIEWCLUSTERMETADATA FROM testuser
 
 subtest end
+
+subtest test_crdb_internal_table_spans
+
+statement ok
+CREATE DATABASE test_table_spans;
+USE test_table_spans;
+
+statement ok
+CREATE TABLE foo (a INT PRIMARY KEY, INDEX idx(a)); INSERT INTO foo VALUES(1);
+
+statement ok
+CREATE TABLE bar (a INT PRIMARY KEY, INDEX idx(a));
+
+query TB rowsort
+SELECT name, dropped  
+FROM "".crdb_internal.table_spans s JOIN "".crdb_internal.tables t ON s.descriptor_id = t.table_id 
+WHERE t.database_name = 'test_table_spans';
+----
+foo    false
+bar    false
+
+statement ok
+DROP TABLE bar
+
+query TB rowsort
+SELECT name, dropped  
+FROM "".crdb_internal.table_spans s JOIN "".crdb_internal.tables t ON s.descriptor_id = t.table_id 
+WHERE t.database_name = 'test_table_spans';
+----
+foo    false
+bar    true
+
+subtest end

@@ -1903,7 +1903,8 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 					if err != nil {
 						return err
 					}
-					canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, fn, db, false /* allowAdding */)
+					canSeeDescriptor, err := userCanSeeDescriptor(
+						ctx, p, fn, db, false /* allowAdding */, false /* includeDropped */)
 					if err != nil {
 						return err
 					}
@@ -2467,7 +2468,8 @@ func forEachSchema(
 		var schemas []catalog.SchemaDescriptor
 		if err := c.ForEachDescriptor(func(desc catalog.Descriptor) error {
 			if requiresPrivileges {
-				canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, desc, db, false /* allowAdding */)
+				canSeeDescriptor, err := userCanSeeDescriptor(
+					ctx, p, desc, db, false /* allowAdding */, false /* includeDropped */)
 				if err != nil {
 					return err
 				}
@@ -2539,7 +2541,7 @@ func forEachDatabaseDesc(
 	for _, dbDesc := range dbDescs {
 		canSeeDescriptor := !requiresPrivileges
 		if requiresPrivileges {
-			hasPriv, err := userCanSeeDescriptor(ctx, p, dbDesc, nil /* parentDBDesc */, false /* allowAdding */)
+			hasPriv, err := userCanSeeDescriptor(ctx, p, dbDesc, nil /* parentDBDesc */, false /* allowAdding */, false /* includeDropped */)
 			if err != nil {
 				return err
 			}
@@ -2585,7 +2587,8 @@ func forEachTypeDesc(
 		if err != nil {
 			return err
 		}
-		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, typ, dbDesc, false /* allowAdding */)
+		canSeeDescriptor, err := userCanSeeDescriptor(
+			ctx, p, typ, dbDesc, false /* allowAdding */, false /* includeDropped */)
 		if err != nil {
 			return err
 		}
@@ -2613,6 +2616,11 @@ const (
 type forEachTableDescOptions struct {
 	virtualOpts virtualOpts
 	allowAdding bool
+	// Include dropped tables (but not garbage collected) when run at the cluster
+	// level (i.e., when database = ""). This only works when the scope is at the
+	// cluster level because `GetAllDescriptorsForDatabase` doesn't include such
+	// tables.
+	includeDropped bool
 }
 
 type tableDescContext struct {
@@ -2703,11 +2711,12 @@ func forEachTableDescFromDescriptors(
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
 		dbDesc, parentExists := lCtx.dbDescs[table.GetParentID()]
-		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, table, dbDesc, opts.allowAdding)
+		canSeeDescriptor, err := userCanSeeDescriptor(
+			ctx, p, table, dbDesc, opts.allowAdding, opts.includeDropped)
 		if err != nil {
 			return err
 		}
-		if table.Dropped() || !canSeeDescriptor {
+		if !canSeeDescriptor {
 			continue
 		}
 		var sc catalog.SchemaDescriptor
@@ -2767,7 +2776,8 @@ func forEachTypeDescWithTableLookupInternalFromDescriptors(
 		if err != nil {
 			return err
 		}
-		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, typDesc, dbDesc, allowAdding)
+		canSeeDescriptor, err := userCanSeeDescriptor(
+			ctx, p, typDesc, dbDesc, allowAdding, false /* includeDropped */)
 		if err != nil {
 			return err
 		}
@@ -2941,9 +2951,13 @@ func forEachRoleMembership(
 }
 
 func userCanSeeDescriptor(
-	ctx context.Context, p *planner, desc, parentDBDesc catalog.Descriptor, allowAdding bool,
+	ctx context.Context,
+	p *planner,
+	desc, parentDBDesc catalog.Descriptor,
+	allowAdding bool,
+	includeDropped bool,
 ) (bool, error) {
-	if !descriptorIsVisible(desc, allowAdding) {
+	if !descriptorIsVisible(desc, allowAdding, includeDropped) {
 		return false, nil
 	}
 
@@ -2975,8 +2989,8 @@ func userCanSeeDescriptor(
 	return false, nil
 }
 
-func descriptorIsVisible(desc catalog.Descriptor, allowAdding bool) bool {
-	return desc.Public() || (allowAdding && desc.Adding())
+func descriptorIsVisible(desc catalog.Descriptor, allowAdding bool, includeDropped bool) bool {
+	return desc.Public() || (allowAdding && desc.Adding()) || (includeDropped && desc.Dropped())
 }
 
 // nameConcatOid is a Go version of the nameconcatoid builtin function. The

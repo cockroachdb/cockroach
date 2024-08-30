@@ -163,7 +163,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	// privileges are added.
 	for _, tbID := range lCtx.tbIDs {
 		tableDescriptor := lCtx.tbDescs[tbID]
-		if !descriptorIsVisible(tableDescriptor, true /*allowAdding*/) {
+		if !descriptorIsVisible(tableDescriptor, true /*allowAdding*/, false /* includeDropped */) {
 			continue
 		}
 		if _, ok := userNames[tableDescriptor.GetPrivileges().Owner()]; ok {
@@ -192,7 +192,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 	}
 	for _, schemaDesc := range lCtx.schemaDescs {
-		if !descriptorIsVisible(schemaDesc, true /* allowAdding */) {
+		if !descriptorIsVisible(schemaDesc, true /* allowAdding */, false /* includeDropped */) {
 			continue
 		}
 		if _, ok := userNames[schemaDesc.GetPrivileges().Owner()]; ok {
@@ -235,7 +235,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	}
 	for _, typDesc := range lCtx.typDescs {
 		if _, ok := userNames[typDesc.GetPrivileges().Owner()]; ok {
-			if !descriptorIsVisible(typDesc, true /* allowAdding */) {
+			if !descriptorIsVisible(typDesc, true /* allowAdding */, false /* includeDropped */) {
 				continue
 			}
 			tn, err := getTypeNameFromTypeDescriptor(lCtx, typDesc)
@@ -265,7 +265,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	}
 	for _, fnDesc := range lCtx.fnDescs {
 		if _, ok := userNames[fnDesc.GetPrivileges().Owner()]; ok {
-			if !descriptorIsVisible(fnDesc, true /* allowAdding */) {
+			if !descriptorIsVisible(fnDesc, true /* allowAdding */, false /* includeDropped */) {
 				continue
 			}
 			name, err := getFunctionNameFromFunctionDescriptor(lCtx, fnDesc)
