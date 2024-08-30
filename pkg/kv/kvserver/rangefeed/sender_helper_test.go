@@ -64,6 +64,8 @@ type testServerStream struct {
 	streamEvents map[int64][]*kvpb.MuxRangeFeedEvent
 }
 
+var _ ServerStreamSender = &testServerStream{}
+
 func newTestServerStream() *testServerStream {
 	return &testServerStream{
 		streamEvents: make(map[int64][]*kvpb.MuxRangeFeedEvent),
@@ -74,6 +76,15 @@ func (s *testServerStream) totalEventsSent() int {
 	s.Lock()
 	defer s.Unlock()
 	return s.eventsSent
+}
+
+func (s *testServerStream) getEventsByStreamID(streamID int64) (res []*kvpb.RangeFeedEvent) {
+	s.Lock()
+	defer s.Unlock()
+	for _, ev := range s.streamEvents[streamID] {
+		res = append(res, &ev.RangeFeedEvent)
+	}
+	return res
 }
 
 func (s *testServerStream) waitForEvent(t *testing.T, ev *kvpb.MuxRangeFeedEvent) {
@@ -106,8 +117,28 @@ func (s *testServerStream) String() string {
 	s.Lock()
 	defer s.Unlock()
 	var str strings.Builder
+	fmt.Fprintf(&str, "Total Streams Sent: %d\n", len(s.streamEvents))
 	for streamID, eventList := range s.streamEvents {
-		fmt.Fprintf(&str, "StreamID:%d, Len:%d\n", streamID, len(eventList))
+		fmt.Fprintf(&str, "\tStreamID:%d, Len:%d", streamID, len(eventList))
+		for _, ev := range eventList {
+			switch {
+			case ev.Val != nil:
+				fmt.Fprintf(&str, "\t\tvalue")
+			case ev.Checkpoint != nil:
+				fmt.Fprintf(&str, "\t\tcheckpoint")
+			case ev.SST != nil:
+				fmt.Fprintf(&str, "\t\tsst")
+			case ev.DeleteRange != nil:
+				fmt.Fprintf(&str, "\t\tdelete")
+			case ev.Metadata != nil:
+				fmt.Fprintf(&str, "\t\tmetadata")
+			case ev.Error != nil:
+				fmt.Fprintf(&str, "\t\terror")
+			default:
+				panic("unknown event type")
+			}
+		}
+		fmt.Fprintf(&str, "\n")
 	}
 	return str.String()
 }
@@ -163,6 +194,16 @@ func (s *testServerStream) waitForEventCount(t *testing.T, count int) {
 		}
 		return errors.Newf("expected %d events, found %d", count, s.totalEventsSent())
 	})
+}
+
+func (s *testServerStream) iterateEventsByStreamID(
+	f func(id int64, events []*kvpb.MuxRangeFeedEvent),
+) {
+	s.Lock()
+	defer s.Unlock()
+	for id, v := range s.streamEvents {
+		f(id, v)
+	}
 }
 
 type cancelCtxDisconnector struct {
