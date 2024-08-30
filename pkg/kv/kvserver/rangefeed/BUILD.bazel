@@ -21,6 +21,7 @@ go_library(
         "stream_manager.go",
         "task.go",
         "test_helpers.go",
+        "unbuffered_registration.go",
         "unbuffered_sender.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed",
