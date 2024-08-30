@@ -71,7 +71,8 @@ func TestBufferedSenderDisconnectStream(t *testing.T) {
 		require.NoError(t, bs.waitForEmptyBuffer(ctx))
 		sm.DisconnectStream(int64(streamID), err)
 		require.NoError(t, bs.waitForEmptyBuffer(ctx))
-		require.Equal(t, 1, testServerStream.totalEventsSent())
+		require.Equalf(t, 1, testServerStream.totalEventsSent(),
+			"expected only 1 error event in %s", testServerStream.String())
 		testRangefeedCounter.waitForRangefeedCount(t, 0)
 	})
 }
