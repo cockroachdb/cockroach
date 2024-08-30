@@ -1001,6 +1001,7 @@ func changefeedJobDescription(
 		changefeedbase.SinkParamSASLPassword,
 		changefeedbase.SinkParamCACert,
 		changefeedbase.SinkParamClientCert,
+		changefeedbase.SinkParamClientKey,
 		changefeedbase.SinkParamConfluentAPISecret,
 	})
 	if err != nil {
