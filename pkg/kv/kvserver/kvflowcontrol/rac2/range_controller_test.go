@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -370,7 +371,8 @@ func TestRangeController(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "range_controller"), func(t *testing.T, path string) {
 		settings := cluster.MakeTestingClusterSettings()
 		ranges := make(map[roachpb.RangeID]*testingRCRange)
-		ssTokenCounter := NewStreamTokenCounterProvider(settings)
+		ssTokenCounter := NewStreamTokenCounterProvider(settings, hlc.NewClockForTesting(nil))
+
 		// setTokenCounters is used to ensure that we only set the initial token
 		// counts once per counter.
 		setTokenCounters := make(map[kvflowcontrol.Stream]struct{})
@@ -435,18 +437,17 @@ func TestRangeController(t *testing.T) {
 
 		tokenCountsString := func() string {
 			var b strings.Builder
-
-			streams := make([]kvflowcontrol.Stream, 0, len(ssTokenCounter.mu.evalCounters))
-			for stream := range ssTokenCounter.mu.evalCounters {
-				streams = append(streams, stream)
-			}
+			var streams []kvflowcontrol.Stream
+			ssTokenCounter.evalCounters.Range(func(k kvflowcontrol.Stream, v *tokenCounter) bool {
+				streams = append(streams, k)
+				return true
+			})
 			sort.Slice(streams, func(i, j int) bool {
 				return streams[i].StoreID < streams[j].StoreID
 			})
 			for _, stream := range streams {
 				fmt.Fprintf(&b, "%v: %v\n", stream, ssTokenCounter.Eval(stream))
 			}
-
 			return b.String()
 		}
 
@@ -507,15 +508,15 @@ func TestRangeController(t *testing.T) {
 				if _, ok := setTokenCounters[stream]; !ok {
 					setTokenCounters[stream] = struct{}{}
 					if initialRegularTokens != -1 {
-						ssTokenCounter.Eval(stream).(*tokenCounter).testingSetTokens(ctx,
+						ssTokenCounter.Eval(stream).testingSetTokens(ctx,
 							admissionpb.RegularWorkClass, kvflowcontrol.Tokens(initialRegularTokens))
-						ssTokenCounter.Send(stream).(*tokenCounter).testingSetTokens(ctx,
+						ssTokenCounter.Send(stream).testingSetTokens(ctx,
 							admissionpb.RegularWorkClass, kvflowcontrol.Tokens(initialRegularTokens))
 					}
 					if initialElasticTokens != -1 {
-						ssTokenCounter.Eval(stream).(*tokenCounter).testingSetTokens(ctx,
+						ssTokenCounter.Eval(stream).testingSetTokens(ctx,
 							admissionpb.ElasticWorkClass, kvflowcontrol.Tokens(initialElasticTokens))
-						ssTokenCounter.Send(stream).(*tokenCounter).testingSetTokens(ctx,
+						ssTokenCounter.Send(stream).testingSetTokens(ctx,
 							admissionpb.ElasticWorkClass, kvflowcontrol.Tokens(initialElasticTokens))
 					}
 				}
@@ -621,7 +622,7 @@ func TestRangeController(t *testing.T) {
 					ssTokenCounter.Eval(kvflowcontrol.Stream{
 						StoreID:  roachpb.StoreID(store),
 						TenantID: roachpb.SystemTenantID,
-					}).(*tokenCounter).adjust(ctx,
+					}).adjust(ctx,
 						admissionpb.WorkClassFromPri(pri),
 						kvflowcontrol.Tokens(tokens))
 				}
@@ -631,7 +632,6 @@ func TestRangeController(t *testing.T) {
 			case "cancel_context":
 				var rangeID int
 				var name string
-
 				d.ScanArgs(t, "range_id", &rangeID)
 				d.ScanArgs(t, "name", &name)
 				testRC := ranges[roachpb.RangeID(rangeID)]
