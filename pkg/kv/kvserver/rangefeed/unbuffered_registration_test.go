@@ -43,8 +43,9 @@ func TestUnbufferedRegOnConcurrentDisconnect(t *testing.T) {
 	testServerStream := newTestServerStream()
 	testRangefeedCounter := newTestRangefeedCounter()
 	bs := NewBufferedSender(testServerStream, testRangefeedCounter)
+	require.NoError(t, bs.Start(ctx, stopper))
 	defer func() {
-		bs.disconnectAll()
+		bs.Stop()
 		require.Equal(t, 0, p.Len())
 	}()
 
@@ -132,7 +133,8 @@ func TestUnbufferedRegOnDisconnect(t *testing.T) {
 	testServerStream := newTestServerStream()
 	testRangefeedCounter := newTestRangefeedCounter()
 	bs := NewBufferedSender(testServerStream, testRangefeedCounter)
-	defer bs.disconnectAll()
+	require.NoError(t, bs.Start(ctx, stopper))
+	defer bs.Stop()
 
 	startTs := hlc.Timestamp{WallTime: 4}
 	span := roachpb.Span{

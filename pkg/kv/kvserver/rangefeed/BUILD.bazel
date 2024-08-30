@@ -50,6 +50,7 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
+        "//pkg/util/queue",
         "//pkg/util/retry",
         "//pkg/util/stop",
         "//pkg/util/syncutil",

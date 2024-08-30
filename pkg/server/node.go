@@ -1983,7 +1983,7 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 	var sm streamManager
 	if kvserver.RangefeedUseBufferedSender.Get(&n.storeCfg.Settings.SV) {
 		sm = rangefeed.NewBufferedSender(lockedMuxStream, n.metrics)
-		log.Fatalf(ctx, "unimplemented: buffered sender for rangefeed #126560")
+		log.Infof(ctx, "using buffered sender for rangefeed")
 	} else {
 		sm = rangefeed.NewUnbufferedSender(lockedMuxStream, n.metrics)
 	}

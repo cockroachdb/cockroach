@@ -12,15 +12,17 @@ package rangefeed
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,8 +39,8 @@ func TestBufferedSenderWithSendBufferedError(t *testing.T) {
 	testServerStream := newTestServerStream()
 	testRangefeedCounter := newTestRangefeedCounter()
 	bs := NewBufferedSender(testServerStream, testRangefeedCounter)
-	// TODO(wenyihu6): change disconnectAll to Stop later on.
-	defer bs.disconnectAll()
+	require.NoError(t, bs.Start(ctx, stopper))
+	defer bs.Stop()
 
 	t.Run("basic operation", func(t *testing.T) {
 		const streamID = 0
@@ -49,7 +51,7 @@ func TestBufferedSenderWithSendBufferedError(t *testing.T) {
 			num.Add(1)
 		})
 		bs.SendBufferedError(makeMuxRangefeedErrorEvent(int64(streamID), 1, kvpb.NewError(nil)))
-		time.Sleep(10 * time.Millisecond)
+		require.NoError(t, bs.waitForEmptyBuffer(ctx))
 		// Ensure that the rangefeed clean up is called.
 		require.Equal(t, int32(1), num.Load())
 		// Ensure that the stream is properly disconnected.
@@ -66,6 +68,7 @@ func TestBufferedSenderWithSendBufferedError(t *testing.T) {
 		// Disconnect stream without registering clean up should still work.
 		bs.SendBufferedError(makeMuxRangefeedErrorEvent(int64(streamID), 1, kvpb.NewError(nil)))
 		require.Equal(t, context.Canceled, streamCtx.Err())
+		require.NoError(t, bs.waitForEmptyBuffer(ctx))
 		require.Equal(t, int32(0), num.Load())
 		require.Equal(t, int32(0), testRangefeedCounter.get())
 	})
@@ -80,13 +83,13 @@ func TestBufferedSenderWithSendBufferedError(t *testing.T) {
 		})
 
 		bs.SendBufferedError(makeMuxRangefeedErrorEvent(int64(streamID), 1, kvpb.NewError(nil)))
-		time.Sleep(10 * time.Millisecond)
+		require.NoError(t, bs.waitForEmptyBuffer(ctx))
 		require.Equal(t, int32(1), num.Load())
 		require.Equal(t, int32(0), testRangefeedCounter.get())
 
 		// Disconnecting the stream again should do nothing.
 		bs.SendBufferedError(makeMuxRangefeedErrorEvent(int64(streamID), 1, kvpb.NewError(nil)))
-		time.Sleep(10 * time.Millisecond)
+		require.NoError(t, bs.waitForEmptyBuffer(ctx))
 		require.Equal(t, int32(1), num.Load())
 		require.Equal(t, int32(0), testRangefeedCounter.get())
 	})
@@ -102,6 +105,7 @@ func TestBufferedSenderOnStop(t *testing.T) {
 	testServerStream := newTestServerStream()
 	testRangefeedCounter := newTestRangefeedCounter()
 	bs := NewBufferedSender(testServerStream, testRangefeedCounter)
+	require.NoError(t, bs.Start(ctx, stopper))
 
 	rng, _ := randutil.NewTestRand()
 	var actualSum atomic.Int32
@@ -113,12 +117,18 @@ func TestBufferedSenderOnStop(t *testing.T) {
 	streamIdEnd := int64(0)
 
 	defer func() {
-		bs.disconnectAll()
+		bs.Stop()
 		// Ensure that all streams are disconnected and cleanups are properly
 		// called.
 		require.Equal(t, int32(0), testRangefeedCounter.get())
 		require.Equal(t, int32(streamIdEnd), actualSum.Load())
 		require.Equal(t, streamIdStart, int64(testServerStream.totalEventsSent()))
+		val1 := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		ev1 := new(kvpb.RangeFeedEvent)
+		ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val1})
+		muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev1, RangeID: 0, StreamID: 1}
+		require.Equal(t, bs.SendBuffered(muxEv, nil).Error(),
+			errors.New("stream sender is stopped").Error())
 	}()
 
 	for i := 0; i < 100000; i++ {
@@ -136,8 +146,60 @@ func TestBufferedSenderOnStop(t *testing.T) {
 			streamIdStart++
 		}
 	}
-	time.Sleep(100 * time.Millisecond)
+	require.NoError(t, bs.waitForEmptyBuffer(ctx))
 	require.Equal(t, int32(streamIdStart), actualSum.Load())
 	require.Equal(t, streamIdStart, int64(testServerStream.totalEventsSent()))
 	require.Equal(t, int32(streamIdEnd-streamIdStart), testRangefeedCounter.get())
+}
+
+func TestBufferedSenderOnOverflow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	testServerStream := newTestServerStream()
+	testRangefeedCounter := newTestRangefeedCounter()
+	bufferedSenderCapacity = 10
+	bs := NewBufferedSender(testServerStream, testRangefeedCounter)
+	cancel()
+	
+	val1 := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
+	ev1 := new(kvpb.RangeFeedEvent)
+	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val1})
+	muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev1, RangeID: 0, StreamID: 1}
+	require.NoError(t, bs.Start(ctx, stopper))
+	defer func() {
+		bs.Stop()
+		require.True(t, bs.queueMu.buffer.Empty())
+		require.Equal(t, bs.SendBuffered(muxEv, nil).Error(),
+			errors.New("stream sender is stopped").Error())
+	}()
+
+	getLen := func() int64 {
+		bs.queueMu.Lock()
+		defer bs.queueMu.Unlock()
+		return bs.queueMu.buffer.Len()
+	}
+
+	for i := 0; i < 10; i++ {
+		require.NoError(t, bs.SendBuffered(muxEv, nil))
+	}
+	require.Equal(t, int64(10), getLen())
+	e, success, overflowed, remains := bs.popFront()
+	require.Equal(t, &sharedMuxEvent{
+		event: muxEv,
+		alloc: nil,
+	}, e)
+	require.True(t, success)
+	require.False(t, overflowed)
+	require.Equal(t, int64(9), remains)
+	require.Equal(t, int64(9), getLen())
+	require.NoError(t, bs.SendBuffered(muxEv, nil))
+	require.Equal(t, int64(10), getLen())
+
+	// Overflow now.
+	require.Equal(t, bs.SendBuffered(muxEv, nil).Error(),
+		newRetryErrBufferCapacityExceeded().Error())
 }
