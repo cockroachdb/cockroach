@@ -33,6 +33,7 @@ go_library(
         "drop_view.go",
         "helpers.go",
         "index_zone_config.go",
+        "partition_zone_config.go",
         "process.go",
         "statement_control.go",
         "table_zone_config.go",

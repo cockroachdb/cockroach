@@ -107,9 +107,10 @@ func (tzo *tableZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.Zon
 	sameTbl := func(e *scpb.TableZoneConfig) bool {
 		return e.TableID == tzo.getTargetID()
 	}
-	mostRecentElem := findMostRecentZoneConfig(tzo, func(id catid.DescID) *scpb.ElementCollection[*scpb.TableZoneConfig] {
-		return b.QueryByID(id).FilterTableZoneConfig()
-	}, sameTbl)
+	mostRecentElem := findMostRecentZoneConfig(tzo,
+		func(id catid.DescID) *scpb.ElementCollection[*scpb.TableZoneConfig] {
+			return b.QueryByID(id).FilterTableZoneConfig()
+		}, sameTbl)
 
 	if mostRecentElem != nil {
 		tzo.zoneConfig = mostRecentElem.ZoneConfig

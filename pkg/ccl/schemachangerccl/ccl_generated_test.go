@@ -32,6 +32,20 @@ func TestBackupRollbacks_ccl_alter_index_configure_zone_multiple(t *testing.T) {
 	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestBackupRollbacks_ccl_alter_partition_configure_zone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacks_ccl_alter_partition_configure_zone_multiple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone_multiple"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestBackupRollbacks_ccl_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -71,6 +85,20 @@ func TestBackupRollbacksMixedVersion_ccl_alter_index_configure_zone_multiple(t *
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_index_configure_zone_multiple"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacksMixedVersion_ccl_alter_partition_configure_zone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacksMixedVersion_ccl_alter_partition_configure_zone_multiple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone_multiple"
 	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -116,6 +144,20 @@ func TestBackupSuccess_ccl_alter_index_configure_zone_multiple(t *testing.T) {
 	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestBackupSuccess_ccl_alter_partition_configure_zone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccess_ccl_alter_partition_configure_zone_multiple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone_multiple"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestBackupSuccess_ccl_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -155,6 +197,20 @@ func TestBackupSuccessMixedVersion_ccl_alter_index_configure_zone_multiple(t *te
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_index_configure_zone_multiple"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccessMixedVersion_ccl_alter_partition_configure_zone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccessMixedVersion_ccl_alter_partition_configure_zone_multiple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone_multiple"
 	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -200,6 +256,20 @@ func TestEndToEndSideEffects_ccl_alter_index_configure_zone_multiple(t *testing.
 	sctest.EndToEndSideEffects(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestEndToEndSideEffects_ccl_alter_partition_configure_zone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone"
+	sctest.EndToEndSideEffects(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestEndToEndSideEffects_ccl_alter_partition_configure_zone_multiple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone_multiple"
+	sctest.EndToEndSideEffects(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestEndToEndSideEffects_ccl_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -239,6 +309,20 @@ func TestExecuteWithDMLInjection_ccl_alter_index_configure_zone_multiple(t *test
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_index_configure_zone_multiple"
+	sctest.ExecuteWithDMLInjection(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestExecuteWithDMLInjection_ccl_alter_partition_configure_zone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone"
+	sctest.ExecuteWithDMLInjection(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestExecuteWithDMLInjection_ccl_alter_partition_configure_zone_multiple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone_multiple"
 	sctest.ExecuteWithDMLInjection(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -284,6 +368,20 @@ func TestGenerateSchemaChangeCorpus_ccl_alter_index_configure_zone_multiple(t *t
 	sctest.GenerateSchemaChangeCorpus(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestGenerateSchemaChangeCorpus_ccl_alter_partition_configure_zone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone"
+	sctest.GenerateSchemaChangeCorpus(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestGenerateSchemaChangeCorpus_ccl_alter_partition_configure_zone_multiple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone_multiple"
+	sctest.GenerateSchemaChangeCorpus(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestGenerateSchemaChangeCorpus_ccl_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -323,6 +421,20 @@ func TestPause_ccl_alter_index_configure_zone_multiple(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_index_configure_zone_multiple"
+	sctest.Pause(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestPause_ccl_alter_partition_configure_zone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone"
+	sctest.Pause(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestPause_ccl_alter_partition_configure_zone_multiple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone_multiple"
 	sctest.Pause(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -368,6 +480,20 @@ func TestPauseMixedVersion_ccl_alter_index_configure_zone_multiple(t *testing.T)
 	sctest.PauseMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestPauseMixedVersion_ccl_alter_partition_configure_zone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone"
+	sctest.PauseMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestPauseMixedVersion_ccl_alter_partition_configure_zone_multiple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone_multiple"
+	sctest.PauseMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestPauseMixedVersion_ccl_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -407,6 +533,20 @@ func TestRollback_ccl_alter_index_configure_zone_multiple(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_index_configure_zone_multiple"
+	sctest.Rollback(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestRollback_ccl_alter_partition_configure_zone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone"
+	sctest.Rollback(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestRollback_ccl_alter_partition_configure_zone_multiple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_partition_configure_zone_multiple"
 	sctest.Rollback(t, path, MultiRegionTestClusterFactory{})
 }
 

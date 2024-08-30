@@ -660,11 +660,7 @@ func accumulateNewUniqueConstraints(currentZone, newZone *zonepb.ZoneConfig) []z
 // the common prefix (the encoded table ID) and if `EndKey` is equal to
 // `Key.PrefixEnd()` it is omitted.
 func generateSubzoneSpans(
-	b BuildCtx,
-	tableID catid.DescID,
-	subzones []zonepb.Subzone,
-	indexID catid.IndexID,
-	partitionName string,
+	b BuildCtx, tableID catid.DescID, subzones []zonepb.Subzone,
 ) ([]zonepb.SubzoneSpan, error) {
 	if err := base.CheckEnterpriseEnabled(b.ClusterSettings(),
 		"replication zones on indexes or partitions"); err != nil {
@@ -700,12 +696,21 @@ func generateSubzoneSpans(
 
 	var indexCovering covering.Covering
 	var partitionCoverings []covering.Covering
+	var err error
 	b.QueryByID(tableID).FilterIndexName().ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
-		newIndexCovering, newPartitionCoverings := getCoverings(b, subzoneIndexByIndexID,
-			subzoneIndexByPartition, tableID, e.IndexID, "")
+		var newIndexCovering covering.Covering
+		var newPartitionCoverings []covering.Covering
+		newIndexCovering, newPartitionCoverings, err = getCoverings(b, subzoneIndexByIndexID,
+			subzoneIndexByPartition, tableID, e.IndexID)
+		if err != nil {
+			return
+		}
 		indexCovering = append(indexCovering, newIndexCovering...)
 		partitionCoverings = append(partitionCoverings, newPartitionCoverings...)
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	// OverlapCoveringMerge returns the payloads for any coverings that overlap
 	// in the same order they were input. So, we require that they be ordered
@@ -750,8 +755,7 @@ func getCoverings(
 	subzoneIndexByPartition map[string]int32,
 	tableID catid.DescID,
 	indexID catid.IndexID,
-	partitionName string,
-) (covering.Covering, []covering.Covering) {
+) (covering.Covering, []covering.Covering, error) {
 	var indexCovering covering.Covering
 	var partitionCoverings []covering.Covering
 	a := &tree.DatumAlloc{}
@@ -777,12 +781,12 @@ func getCoverings(
 		partition := tabledesc.NewPartitioning(nil)
 		if idxPart != nil {
 			partition = tabledesc.NewPartitioning(&idxPart.PartitioningDescriptor)
-			partition = partition.FindPartitionByName(partitionName)
 		}
+		// should we iterate through each partition name here?
 		indexPartitionCoverings, err := indexCoveringsForPartitioning(
 			b, a, tableID, idxCols, partition, subzoneIndexByPartition, emptyPrefix)
 		if err != nil {
-			panic(err)
+			return nil, nil, err
 		}
 		// The returned indexPartitionCoverings are sorted with highest
 		// precedence first. They all start with the index prefix, so cannot
@@ -790,7 +794,7 @@ func getCoverings(
 		// precedence perspective) it's safe to append them all together.
 		partitionCoverings = append(partitionCoverings, indexPartitionCoverings...)
 	}
-	return indexCovering, partitionCoverings
+	return indexCovering, partitionCoverings, nil
 }
 
 // indexCoveringsForPartitioning returns span coverings representing the
