@@ -566,8 +566,8 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 			if t.count > 0 {
 				return time.Duration(math.Sqrt((float64(v.numWorkloadNodes+v.vcpu) * float64((t.p50 + t.p99/3 + t.p999/10)) / float64(t.count) * float64(time.Second))))
 			} else {
-
-				return time.Duration(math.Inf(1))
+				// Use a non-infinite score that is still very high if there was a period of no throughput.
+				return time.Hour
 			}
 		})
 	})
