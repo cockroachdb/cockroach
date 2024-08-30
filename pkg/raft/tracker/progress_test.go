@@ -36,7 +36,8 @@ func TestProgressString(t *testing.T) {
 		IsLearner:          true,
 		Inflights:          ins,
 	}
-	const exp = `StateSnapshot match=1 next=2 learner paused pendingSnap=123 inactive inflight=1[full]`
+	const exp = "StateSnapshot match=1 next=2 sentCommit=0 matchCommit=0 learner paused " +
+		"pendingSnap=123 inactive inflight=1[full]"
 	assert.Equal(t, exp, pr.String())
 }
 

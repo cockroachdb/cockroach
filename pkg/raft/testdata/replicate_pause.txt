@@ -46,9 +46,9 @@ ok
 # Expect that in-flight tracking to nodes 2 and 3 is saturated.
 status 1
 ----
-1: StateReplicate match=14 next=15
-2: StateReplicate match=11 next=15 paused inflight=3[full]
-3: StateReplicate match=11 next=15 paused inflight=3[full]
+1: StateReplicate match=14 next=15 sentCommit=0 matchCommit=11
+2: StateReplicate match=11 next=15 sentCommit=11 matchCommit=11 paused inflight=3[full]
+3: StateReplicate match=11 next=15 sentCommit=11 matchCommit=11 paused inflight=3[full]
 
 log-level none
 ----
@@ -66,9 +66,9 @@ ok
 # Expect that the entries are committed and stored on nodes 1 and 2.
 status 1
 ----
-1: StateReplicate match=14 next=15
-2: StateReplicate match=14 next=15
-3: StateReplicate match=11 next=15 paused inflight=3[full]
+1: StateReplicate match=14 next=15 sentCommit=0 matchCommit=11
+2: StateReplicate match=14 next=15 sentCommit=14 matchCommit=14
+3: StateReplicate match=11 next=15 sentCommit=14 matchCommit=11 paused inflight=3[full]
 
 # Drop append messages to node 3.
 deliver-msgs drop=3
@@ -97,9 +97,9 @@ ok
 # In-flight tracking to nodes 2 and 3 is saturated, but node 3 is behind.
 status 1
 ----
-1: StateReplicate match=14 next=18
-2: StateReplicate match=14 next=18 paused inflight=3[full]
-3: StateReplicate match=11 next=15 paused inflight=3[full]
+1: StateReplicate match=14 next=18 sentCommit=0 matchCommit=11
+2: StateReplicate match=14 next=18 sentCommit=14 matchCommit=14 paused inflight=3[full]
+3: StateReplicate match=11 next=15 sentCommit=14 matchCommit=11 paused inflight=3[full]
 
 log-level none
 ----
@@ -117,9 +117,9 @@ ok
 # Expect that the entries are committed and stored only on nodes 1 and 2.
 status 1
 ----
-1: StateReplicate match=17 next=18
-2: StateReplicate match=17 next=18
-3: StateReplicate match=11 next=15 paused inflight=3[full]
+1: StateReplicate match=17 next=18 sentCommit=0 matchCommit=14
+2: StateReplicate match=17 next=18 sentCommit=17 matchCommit=17
+3: StateReplicate match=11 next=15 sentCommit=14 matchCommit=11 paused inflight=3[full]
 
 # Make a heartbeat roundtrip.
 tick-heartbeat 1
@@ -188,6 +188,6 @@ ok
 # Eventually all nodes catch up on the committed state.
 status 1
 ----
-1: StateReplicate match=17 next=18
-2: StateReplicate match=17 next=18
-3: StateReplicate match=17 next=18
+1: StateReplicate match=17 next=18 sentCommit=0 matchCommit=14
+2: StateReplicate match=17 next=18 sentCommit=17 matchCommit=17
+3: StateReplicate match=17 next=18 sentCommit=17 matchCommit=17

@@ -43,9 +43,9 @@ ok
 # All nodes up-to-date.
 status 1
 ----
-1: StateReplicate match=14 next=15
-2: StateReplicate match=14 next=15
-3: StateReplicate match=14 next=15
+1: StateReplicate match=14 next=15 sentCommit=0 matchCommit=11
+2: StateReplicate match=14 next=15 sentCommit=14 matchCommit=14
+3: StateReplicate match=14 next=15 sentCommit=14 matchCommit=14
 
 log-level none
 ----
@@ -79,9 +79,9 @@ ok
 # Nodes 1 and 2 up-to-date, 3 is behind and MsgApp flow is throttled.
 status 1
 ----
-1: StateReplicate match=18 next=19
-2: StateReplicate match=18 next=19
-3: StateReplicate match=14 next=17 paused inflight=2[full]
+1: StateReplicate match=18 next=19 sentCommit=0 matchCommit=14
+2: StateReplicate match=18 next=19 sentCommit=18 matchCommit=18
+3: StateReplicate match=14 next=17 sentCommit=16 matchCommit=14 paused inflight=2[full]
 
 # Break the MsgApp flow from the leader to node 3.
 deliver-msgs drop=3
@@ -118,6 +118,6 @@ ok
 # All nodes caught up.
 status 1
 ----
-1: StateReplicate match=18 next=19
-2: StateReplicate match=18 next=19
-3: StateReplicate match=18 next=19
+1: StateReplicate match=18 next=19 sentCommit=0 matchCommit=14
+2: StateReplicate match=18 next=19 sentCommit=18 matchCommit=18
+3: StateReplicate match=18 next=19 sentCommit=18 matchCommit=18
