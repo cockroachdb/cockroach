@@ -15,3 +15,6 @@ package storelivenesspb
 // increment the epoch for which it requests support from another store (e.g.
 // after a restart).
 type Epoch int64
+
+// SafeValue implements the redact.SafeValue interface.
+func (e Epoch) SafeValue() {}
