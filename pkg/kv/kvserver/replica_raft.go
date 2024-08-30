@@ -1838,7 +1838,7 @@ func (r *Replica) deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(
 	for i, m := range localMsgs {
 		if err := raftGroup.Step(m); err != nil {
 			log.Fatalf(ctx, "unexpected error stepping local raft message [%s]: %v",
-				raftDescribeMessage(m, raftEntryFormatter), err)
+				raft.DescribeMessage(m, raftEntryFormatter), err)
 		}
 		// NB: we can reset messages in the localMsgs.recycled slice without holding
 		// the localMsgs mutex because no-one ever writes to localMsgs.recycled and
