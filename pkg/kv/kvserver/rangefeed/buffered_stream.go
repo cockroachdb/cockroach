@@ -57,10 +57,11 @@ func (s *BufferedPerRangeEventSink) Context() context.Context {
 	return s.ctx
 }
 
-// SendIsThreadSafe is a no-op declaration method. It is a contract that the
-// Send method is thread-safe. Note that BufferedSender.SendBuffered is
+// SendUnbufferedIsThreadSafe is a no-op declaration method. It is a contract
+// that the SendUnbuffered method is thread-safe. Note that
+// BufferedSender.SendBuffered and BufferedSender.SendUnbuffered are both
 // thread-safe.
-func (s *BufferedPerRangeEventSink) SendIsThreadSafe() {}
+func (s *BufferedPerRangeEventSink) SendUnbufferedIsThreadSafe() {}
 
 // SendBuffered buffers the event in BufferedSender and transfers the ownership
 // of SharedBudgetAllocation to BufferedSender. BufferedSender is responsible
@@ -81,9 +82,9 @@ func (s *BufferedPerRangeEventSink) SendBuffered(
 	return s.wrapped.SendBuffered(response, alloc)
 }
 
-// Send bypass the buffer and sends the event to the underlying grpc stream
-// directly. It blocks until the event is sent or an error occurs.
-func (s *BufferedPerRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
+// SendUnbuffered bypass the buffer and sends the event to the underlying grpc
+// stream directly. It blocks until the event is sent or an error occurs.
+func (s *BufferedPerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 	response := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
 		RangeID:        s.rangeID,

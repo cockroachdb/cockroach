@@ -6309,7 +6309,9 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 			if err != nil || dbDesc == nil {
 				return false, err
 			}
-			hasPriv, err := userCanSeeDescriptor(ctx, p, dbDesc, nil /* parentDBDesc */, false /* allowAdding */)
+			hasPriv, err := userCanSeeDescriptor(
+				ctx, p, dbDesc, nil /* parentDBDesc */, false /* allowAdding */, false /* includeDropped */)
+
 			if err != nil || !hasPriv {
 				return false, err
 			}
@@ -7813,6 +7815,7 @@ CREATE TABLE crdb_internal.table_spans (
   descriptor_id INT NOT NULL,
   start_key     BYTES NOT NULL,
   end_key       BYTES NOT NULL,
+  dropped       BOOL NOT NULL,
   INDEX(descriptor_id)
 );`,
 	indexes: []virtualIndex{
@@ -7834,7 +7837,11 @@ CREATE TABLE crdb_internal.table_spans (
 		},
 	},
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		opts := forEachTableDescOptions{virtualOpts: hideVirtual, allowAdding: true}
+		opts := forEachTableDescOptions{
+			virtualOpts:    hideVirtual,
+			allowAdding:    true,
+			includeDropped: true,
+		}
 		return forEachTableDesc(ctx, p, dbContext, opts,
 			func(ctx context.Context, descCtx tableDescContext) error {
 				table := descCtx.table
@@ -7853,6 +7860,7 @@ func generateTableSpan(
 		tree.NewDInt(tree.DInt(tabID)),
 		tree.NewDBytes(tree.DBytes(start)),
 		tree.NewDBytes(tree.DBytes(end)),
+		tree.MakeDBool(tree.DBool(table.Dropped())),
 	)
 }
 
