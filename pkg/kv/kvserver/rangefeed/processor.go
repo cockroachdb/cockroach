@@ -596,6 +596,9 @@ func (p *LegacyProcessor) Register(
 	stream Stream,
 	disconnectFn func(),
 ) (bool, *Filter) {
+	if bs, ok := stream.(BufferedStream); ok {
+		log.Fatalf(p.AnnotateCtx(context.Background()), "BufferedStream is not supported by LegacyProcessor: %s", bs)
+	}
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
 	// it should see these events during its catch up scan.
