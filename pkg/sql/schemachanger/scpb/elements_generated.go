@@ -1569,6 +1569,43 @@ func (c *ElementCollection[E]) FilterOwner() *ElementCollection[*Owner] {
 	return (*ElementCollection[*Owner])(ret)
 }
 
+func (e PartitionZoneConfig) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_PartitionZoneConfig) Element() Element {
+	return e.PartitionZoneConfig
+}
+
+// ForEachPartitionZoneConfig iterates over elements of type PartitionZoneConfig.
+// Deprecated
+func ForEachPartitionZoneConfig(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *PartitionZoneConfig),
+) {
+  c.FilterPartitionZoneConfig().ForEach(fn)
+}
+
+// FindPartitionZoneConfig finds the first element of type PartitionZoneConfig.
+// Deprecated
+func FindPartitionZoneConfig(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *PartitionZoneConfig) {
+	if tc := c.FilterPartitionZoneConfig(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*PartitionZoneConfig)
+	}
+	return current, target, element
+}
+
+// PartitionZoneConfigElements filters elements of type PartitionZoneConfig.
+func (c *ElementCollection[E]) FilterPartitionZoneConfig() *ElementCollection[*PartitionZoneConfig] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*PartitionZoneConfig)
+		return ok
+	})
+	return (*ElementCollection[*PartitionZoneConfig])(ret)
+}
+
 func (e PrimaryIndex) element() {}
 
 // Element implements ElementGetter.
@@ -2657,6 +2694,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_Namespace{ Namespace: t}
 		case *Owner:
 			e.ElementOneOf = &ElementProto_Owner{ Owner: t}
+		case *PartitionZoneConfig:
+			e.ElementOneOf = &ElementProto_PartitionZoneConfig{ PartitionZoneConfig: t}
 		case *PrimaryIndex:
 			e.ElementOneOf = &ElementProto_PrimaryIndex{ PrimaryIndex: t}
 		case *RowLevelTTL:
@@ -2759,6 +2798,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_IndexZoneConfig)(nil)),
 	((*ElementProto_Namespace)(nil)),
 	((*ElementProto_Owner)(nil)),
+	((*ElementProto_PartitionZoneConfig)(nil)),
 	((*ElementProto_PrimaryIndex)(nil)),
 	((*ElementProto_RowLevelTTL)(nil)),
 	((*ElementProto_Schema)(nil)),
@@ -2835,6 +2875,7 @@ func GetElementTypes() []interface{} {
 	((*IndexZoneConfig)(nil)),
 	((*Namespace)(nil)),
 	((*Owner)(nil)),
+	((*PartitionZoneConfig)(nil)),
 	((*PrimaryIndex)(nil)),
 	((*RowLevelTTL)(nil)),
 	((*Schema)(nil)),
