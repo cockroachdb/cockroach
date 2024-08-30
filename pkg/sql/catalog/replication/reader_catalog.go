@@ -160,6 +160,9 @@ func SetupOrAdvanceStandbyReaderCatalog(
 			}); err != nil {
 				return err
 			}
+			if err := maybeBlockSchemaChangesOnSystemDatabase(ctx, txn, b); err != nil {
+				return errors.Wrapf(err, "blocking schema changes")
+			}
 			return errors.Wrap(txn.KV().Run(ctx, b), "executing bach for updating catalog")
 		})
 }
@@ -309,4 +312,20 @@ func getCatalogForTenantAsOf(
 		return nil
 	})
 	return all, err
+}
+
+// maybeBlockSchemaChangesOnSystemDatabase blocks schema changes on the system
+// database.
+func maybeBlockSchemaChangesOnSystemDatabase(
+	ctx context.Context, txn descs.Txn, ba *kv.Batch,
+) error {
+	systemDatabase, err := txn.Descriptors().MutableByID(txn.KV()).Database(ctx, keys.SystemDatabaseID)
+	if err != nil {
+		return err
+	}
+	if systemDatabase.ReplicatedPCRVersion != 0 {
+		return nil
+	}
+	systemDatabase.ReplicatedPCRVersion = 1
+	return txn.Descriptors().WriteDescToBatch(ctx, true, systemDatabase, ba)
 }
