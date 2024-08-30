@@ -8837,12 +8837,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Body: `
-SELECT quote_ident(db.name) || '.' || quote_ident(sc.name) || '.' || quote_ident(t.name)
-FROM system.namespace t
-JOIN system.namespace sc
-ON t."parentSchemaID" = sc.id
-JOIN system.namespace db on t."parentID" = db.id
-WHERE t.id = table_descriptor_id
+SELECT fq_name
+FROM crdb_internal.fully_qualified_names
+WHERE object_id = table_descriptor_id
 `,
 			Info:       `This function is used to get the fully qualified table name given a table descriptor ID`,
 			Volatility: volatility.Stable,
