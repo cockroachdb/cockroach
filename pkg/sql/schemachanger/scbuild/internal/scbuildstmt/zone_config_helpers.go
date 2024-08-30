@@ -687,12 +687,21 @@ func generateSubzoneSpans(
 
 	var indexCovering covering.Covering
 	var partitionCoverings []covering.Covering
+	var err error
 	b.QueryByID(tableID).FilterIndexName().ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
-		newIndexCovering, newPartitionCoverings := getCoverings(b, subzoneIndexByIndexID,
-			subzoneIndexByPartition, tableID, e.IndexID, "")
+		var newIndexCovering covering.Covering
+		var newPartitionCoverings []covering.Covering
+		newIndexCovering, newPartitionCoverings, err = getCoverings(b, subzoneIndexByIndexID,
+			subzoneIndexByPartition, tableID, e.IndexID)
+		if err != nil {
+			return
+		}
 		indexCovering = append(indexCovering, newIndexCovering...)
 		partitionCoverings = append(partitionCoverings, newPartitionCoverings...)
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	// OverlapCoveringMerge returns the payloads for any coverings that overlap
 	// in the same order they were input. So, we require that they be ordered
@@ -737,8 +746,7 @@ func getCoverings(
 	subzoneIndexByPartition map[string]int32,
 	tableID catid.DescID,
 	indexID catid.IndexID,
-	partitionName string,
-) (covering.Covering, []covering.Covering) {
+) (covering.Covering, []covering.Covering, error) {
 	var indexCovering covering.Covering
 	var partitionCoverings []covering.Covering
 	a := &tree.DatumAlloc{}
@@ -764,12 +772,12 @@ func getCoverings(
 		partition := tabledesc.NewPartitioning(nil)
 		if idxPart != nil {
 			partition = tabledesc.NewPartitioning(&idxPart.PartitioningDescriptor)
-			partition = partition.FindPartitionByName(partitionName)
 		}
+		// should we iterate through each partition name here?
 		indexPartitionCoverings, err := indexCoveringsForPartitioning(
 			b, a, tableID, idxCols, partition, subzoneIndexByPartition, emptyPrefix)
 		if err != nil {
-			panic(err)
+			return nil, nil, err
 		}
 		// The returned indexPartitionCoverings are sorted with highest
 		// precedence first. They all start with the index prefix, so cannot
@@ -777,7 +785,7 @@ func getCoverings(
 		// precedence perspective) it's safe to append them all together.
 		partitionCoverings = append(partitionCoverings, indexPartitionCoverings...)
 	}
-	return indexCovering, partitionCoverings
+	return indexCovering, partitionCoverings, nil
 }
 
 // indexCoveringsForPartitioning returns span coverings representing the
@@ -1155,7 +1163,7 @@ func isCorrespondingTemporaryIndex(
 ) bool {
 	maybeCorresponding := b.QueryByID(tableID).FilterTemporaryIndex().
 		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
-			return idx+1 == e.IndexID && e.IndexID == otherIdx
+			return idx == e.IndexID && e.IndexID == otherIdx+1
 		}).MustGetZeroOrOneElement()
 	return maybeCorresponding != nil
 }

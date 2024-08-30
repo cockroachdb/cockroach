@@ -150,6 +150,7 @@ type ZoneConfigElement interface {
 var _ ZoneConfigElement = &DatabaseZoneConfig{}
 var _ ZoneConfigElement = &TableZoneConfig{}
 var _ ZoneConfigElement = &IndexZoneConfig{}
+var _ ZoneConfigElement = &PartitionZoneConfig{}
 
 func (e *DatabaseZoneConfig) GetSeqNum() uint32 {
 	return e.SeqNum
@@ -172,6 +173,14 @@ func (e *IndexZoneConfig) GetSeqNum() uint32 {
 }
 
 func (e *IndexZoneConfig) GetTargetID() catid.DescID {
+	return e.TableID
+}
+
+func (e *PartitionZoneConfig) GetSeqNum() uint32 {
+	return e.SeqNum
+}
+
+func (e *PartitionZoneConfig) GetTargetID() catid.DescID {
 	return e.TableID
 }
 
