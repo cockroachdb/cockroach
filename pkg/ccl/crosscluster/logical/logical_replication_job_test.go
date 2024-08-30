@@ -1031,6 +1031,155 @@ func TestHeartbeatCancel(t *testing.T) {
 	require.ErrorContains(t, <-retryErrorChan, fmt.Sprintf("replication stream %s is not running, status is STREAM_INACTIVE", prodAID))
 }
 
+// TestMultipleSourcesIntoSingleDest tests if one destination table can handle
+// conflicts streaming from multiple source tables
+func TestMultipleSourcesIntoSingleDest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				DistSQL:          &execinfra.TestingKnobs{},
+			},
+		},
+	}
+
+	server, s, runners, dbNames := setupServerWithNumDBs(t, ctx, clusterArgs, 1, 3)
+	defer server.Stopper().Stop(ctx)
+
+	PGURLs, cleanup := GetPGURLs(t, s, dbNames)
+	defer cleanup()
+
+	dbA, dbB, dbC := runners[0], runners[1], runners[2]
+
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+	dbC.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", PGURLs[0].String()).Scan(&jobAID)
+	dbC.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", PGURLs[1].String()).Scan(&jobBID)
+
+	// Insert into dest, then check source2 -> dest wins
+	dbC.Exec(t, "UPSERT INTO tab VALUES (1, 'hello')")
+	dbB.Exec(t, "UPSERT INTO tab VALUES (1, 'goodbye')")
+	now := s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbC, jobBID)
+	expectedRows := [][]string{
+		{"1", "goodbye"},
+	}
+	dbC.CheckQueryResults(t, "SELECT * from tab", expectedRows)
+
+	// Write to source1 and source2, which should keep their respective rows but dest should resolve a conflict
+	dbA.Exec(t, "UPSERT INTO tab VALUES (1, 'insertA')")
+	dbB.Exec(t, "UPSERT INTO tab VALUES (1, 'insertB')")
+
+	expectedRowsS1 := [][]string{
+		{"1", "insertA"},
+	}
+	expectedRowsDest := [][]string{
+		{"1", "insertB"},
+	}
+	now = s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbC, jobAID)
+	WaitUntilReplicatedTime(t, now, dbC, jobBID)
+	dbA.CheckQueryResults(t, "SELECT * from tab", expectedRowsS1)
+	dbB.CheckQueryResults(t, "SELECT * from tab", expectedRowsDest)
+	dbC.CheckQueryResults(t, "SELECT * from tab", expectedRowsDest)
+}
+
+// TestFullyConnectedReplication tests 4 tables that are all streaming
+// from each other and how they handle conflicts
+func TestFullyConnectedReplication(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "Replication doesn't complete in time")
+
+	ctx := context.Background()
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	verifyExpectedRowAllServers := func(
+		t *testing.T, runners []*sqlutils.SQLRunner, expectedRows [][]string, dbNames []string,
+	) {
+		for i, name := range dbNames {
+			runners[i].CheckQueryResults(t, fmt.Sprintf("SELECT * from %s.tab", name), expectedRows)
+		}
+	}
+
+	waitUntilReplicatedTimeAllServers := func(
+		t *testing.T,
+		targetTime hlc.Timestamp,
+		runners []*sqlutils.SQLRunner,
+		jobIDs [][]jobspb.JobID,
+		numDBs int,
+	) {
+		for destDB := range numDBs {
+			for srcDB := range numDBs {
+				if destDB == srcDB {
+					continue
+				}
+				WaitUntilReplicatedTime(t, targetTime, runners[destDB], jobIDs[destDB][srcDB])
+			}
+		}
+	}
+
+	numDBs := 4
+	server, s, runners, dbNames := setupServerWithNumDBs(t, ctx, clusterArgs, 1, numDBs)
+	defer server.Stopper().Stop(ctx)
+
+	PGURLs, cleanup := GetPGURLs(t, s, dbNames)
+	defer cleanup()
+
+	// Each row is a DB, each column is a jobID from another DB to that target DB
+	jobIDs := make([][]jobspb.JobID, numDBs)
+	for i := range numDBs {
+		jobIDs[i] = make([]jobspb.JobID, numDBs)
+		for j := range numDBs {
+			if i == j {
+				jobIDs[i][j] = jobspb.InvalidJobID
+				continue
+			}
+			runners[i].QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", PGURLs[j].String()).Scan(&jobIDs[i][j])
+		}
+	}
+
+	runners[0].Exec(t, "UPSERT INTO tab VALUES (1, 'celery')")
+	now := s.Clock().Now()
+	waitUntilReplicatedTimeAllServers(t, now, runners, jobIDs, 4)
+
+	expectedRows := [][]string{
+		{"1", "celery"},
+	}
+	verifyExpectedRowAllServers(t, runners, expectedRows, dbNames)
+
+	for i := range numDBs {
+		runners[i].Exec(t, fmt.Sprintf("UPSERT INTO tab VALUES (2, 'row%v')", i))
+	}
+	now = s.Clock().Now()
+	waitUntilReplicatedTimeAllServers(t, now, runners, jobIDs, 4)
+
+	// Depending on a race different rows can win. We care more that they all settled on the same one
+
+	expectedRows = [][]string{
+		{"1", "celery"},
+		{"2", "row3"},
+	}
+	verifyExpectedRowAllServers(t, runners, expectedRows, dbNames)
+}
+
 func TestForeignKeyConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1082,6 +1231,46 @@ func TestForeignKeyConstraints(t *testing.T) {
 	})
 }
 
+func setupServerWithNumDBs(
+	t *testing.T, ctx context.Context, clusterArgs base.TestClusterArgs, numNodes int, numDBs int,
+) (
+	*testcluster.TestCluster,
+	serverutils.ApplicationLayerInterface,
+	[]*sqlutils.SQLRunner,
+	[]string,
+) {
+	server := testcluster.StartTestCluster(t, numNodes, clusterArgs)
+	s := server.Server(0).ApplicationLayer()
+
+	_, err := server.Conns[0].Exec("SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'")
+	require.NoError(t, err)
+
+	runners := []*sqlutils.SQLRunner{}
+	dbNames := []string{}
+
+	for i := range numDBs {
+		dbName := string(rune('a' + i))
+		_, err = server.Conns[0].Exec(fmt.Sprintf("CREATE DATABASE %s", dbName))
+		require.NoError(t, err)
+		runners = append(runners, sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName(dbName))))
+		dbNames = append(dbNames, dbName)
+	}
+
+	sysDB := sqlutils.MakeSQLRunner(server.SystemLayer(0).SQLConn(t))
+	for _, s := range testClusterSystemSettings {
+		sysDB.Exec(t, s)
+	}
+
+	for _, s := range testClusterSettings {
+		runners[0].Exec(t, s)
+	}
+
+	for i := range numDBs {
+		createBasicTable(t, runners[i], "tab")
+	}
+	return server, s, runners, dbNames
+}
+
 func setupLogicalTestServer(
 	t *testing.T, ctx context.Context, clusterArgs base.TestClusterArgs, numNodes int,
 ) (
@@ -1090,30 +1279,8 @@ func setupLogicalTestServer(
 	*sqlutils.SQLRunner,
 	*sqlutils.SQLRunner,
 ) {
-	server := testcluster.StartTestCluster(t, numNodes, clusterArgs)
-	s := server.Server(0).ApplicationLayer()
-
-	_, err := server.Conns[0].Exec("SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'")
-	require.NoError(t, err)
-	_, err = server.Conns[0].Exec("CREATE DATABASE a")
-	require.NoError(t, err)
-	_, err = server.Conns[0].Exec("CREATE DATABASE B")
-	require.NoError(t, err)
-
-	dbA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("a")))
-	dbB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
-
-	sysDB := sqlutils.MakeSQLRunner(server.SystemLayer(0).SQLConn(t))
-	for _, s := range testClusterSystemSettings {
-		sysDB.Exec(t, s)
-	}
-
-	for _, s := range testClusterSettings {
-		dbA.Exec(t, s)
-	}
-	createBasicTable(t, dbA, "tab")
-	createBasicTable(t, dbB, "tab")
-	return server, s, dbA, dbB
+	server, s, runners, _ := setupServerWithNumDBs(t, ctx, clusterArgs, numNodes, 2)
+	return server, s, runners[0], runners[1]
 }
 
 func createBasicTable(t *testing.T, db *sqlutils.SQLRunner, tableName string) {
@@ -1178,6 +1345,24 @@ func CreateScatteredTable(t *testing.T, db *sqlutils.SQLRunner, numNodes int, db
 		}
 		return nil
 	}, timeout)
+}
+
+func GetPGURLs(
+	t *testing.T, s serverutils.ApplicationLayerInterface, dbNames []string,
+) ([]url.URL, func()) {
+	result := []url.URL{}
+	cleanups := []func(){}
+	for _, name := range dbNames {
+		resultURL, cleanup := s.PGUrl(t, serverutils.DBName(name))
+		result = append(result, resultURL)
+		cleanups = append(cleanups, cleanup)
+	}
+
+	return result, func() {
+		for _, f := range cleanups {
+			f()
+		}
+	}
 }
 
 func WaitUntilReplicatedTime(
