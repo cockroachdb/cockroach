@@ -23,6 +23,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type testBufferedStream struct {
+	Stream
+	cleanup func()
+}
+
+var _ BufferedStream = (*testBufferedStream)(nil)
+
+func (tb *testBufferedStream) SendBuffered(
+	e *kvpb.RangeFeedEvent, _ *SharedBudgetAllocation,
+) error {
+	// In production code, buffered stream would be responsible for properly using
+	// and releasing the alloc. We just ignore memory accounting here.
+	return tb.SendUnbuffered(e)
+}
+
+func (tb *testBufferedStream) Disconnect(err *kvpb.Error) {
+	tb.Stream.SendError(err)
+	if tb.cleanup != nil {
+		// In practise, StreamMuxer is responsible for invoking cleanup in the
+		// background. For simplicity, we call it directly here.
+		go tb.cleanup()
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func makeLogicalOp(val interface{}) enginepb.MVCCLogicalOp {
 	var op enginepb.MVCCLogicalOp
 	op.MustSetValue(val)
@@ -189,11 +214,12 @@ const testProcessorEventCCap = 16
 const testProcessorEventCTimeout = 10 * time.Millisecond
 
 type processorTestHelper struct {
-	span         roachpb.RSpan
-	rts          *resolvedTimestamp
-	syncEventC   func()
-	sendSpanSync func(*roachpb.Span)
-	scheduler    *ClientScheduler
+	span                     roachpb.RSpan
+	rts                      *resolvedTimestamp
+	syncEventC               func()
+	sendSpanSync             func(*roachpb.Span)
+	scheduler                *ClientScheduler
+	toBufferedStreamIfNeeded func(s Stream) Stream
 }
 
 // syncEventAndRegistrations waits for all previously sent events to be
@@ -233,18 +259,42 @@ func (h *processorTestHelper) triggerTxnPushUntilPushed(t *testing.T, pushedC <-
 	}
 }
 
-type rangefeedTestType struct{}
+type procType bool
 
-var (
-	scheduledProcessorWithBufferedReg = rangefeedTestType{}
+const (
+	scheduler procType = true
 )
 
-var testTypes = []rangefeedTestType{}
+type rangefeedTestType struct {
+	processorType procType
+	regType       registrationType
+}
 
-// NB: When adding new types, please keep make sure existing
-// benchmarks will keep their old name.
+var (
+	scheduledProcessorWithUnbufferedReg = rangefeedTestType{
+		processorType: scheduler,
+		regType:       unbuffered,
+	}
+
+	scheduledProcessorWithBufferedReg = rangefeedTestType{
+		processorType: scheduler,
+		regType:       buffered,
+	}
+
+	testTypes = []rangefeedTestType{
+		scheduledProcessorWithUnbufferedReg,
+		scheduledProcessorWithBufferedReg,
+	}
+)
+
 func (t rangefeedTestType) String() string {
-	return "scheduled"
+	switch t {
+	case scheduledProcessorWithBufferedReg:
+		return "scheduled processor with buffered registration"
+	case scheduledProcessorWithUnbufferedReg:
+		return "scheduled processor with unbuffered registration"
+	}
+	panic("unknown processor type")
 }
 
 type testConfig struct {
@@ -424,6 +474,17 @@ func newTestProcessor(
 			p.syncSendAndWait(&syncEvent{c: make(chan struct{}), testRegCatchupSpan: span})
 		}
 		h.scheduler = &p.scheduler
+		if cfg.feedType == scheduledProcessorWithUnbufferedReg {
+			h.toBufferedStreamIfNeeded = func(s Stream) Stream {
+				// Unbuffered registration processor should use buffered stream.
+				return &testBufferedStream{Stream: s}
+			}
+		} else {
+			// Buffered registration processor should use unbuffered stream.
+			h.toBufferedStreamIfNeeded = func(s Stream) Stream {
+				return s
+			}
+		}
 	default:
 		panic("unknown processor type")
 	}

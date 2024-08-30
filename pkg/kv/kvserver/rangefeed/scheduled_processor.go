@@ -327,10 +327,14 @@ func (p *ScheduledProcessor) Register(
 	p.syncEventC()
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
+
 	var r registration
-	if _, ok := stream.(BufferedStream); ok {
-		log.Fatalf(context.Background(),
-			"unimplemented: unbuffered registrations for rangefeed, see #126560")
+	bufferedStream, isBufferedStream := stream.(BufferedStream)
+	if isBufferedStream {
+		r = newUnbufferedRegistration(
+			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+			p.Config.EventChanCap, p.Metrics, bufferedStream, disconnectFn,
+			func(r registration) { p.unregisterClientAsync(r) })
 	} else {
 		r = newBufferedRegistration(
 			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
@@ -361,9 +365,11 @@ func (p *ScheduledProcessor) Register(
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
 		// Run an output loop for the registry.
-		runOutputLoop := func(ctx context.Context) {
-			streamCtx = p.AnnotateCtx(ctx)
-			r.runOutputLoop(streamCtx, p.RangeID)
+		runOutputLoop := func(_ context.Context) {
+			// This ctx is passed in solely for annotation purposes. We want the
+			// output loop to inherit the context passed from p.Register in case it is
+			// cancelled.
+			r.runOutputLoop(p.AnnotateCtx(streamCtx), p.RangeID)
 		}
 		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
 		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
@@ -371,7 +377,12 @@ func (p *ScheduledProcessor) Register(
 			// could only happen on shutdown. Disconnect stream and just remove
 			// registration.
 			r.Disconnect(kvpb.NewError(err))
-			p.reg.Unregister(ctx, r)
+			// Normally, ubr.runOutputLoop is responsible for draining catch up
+			// buffer. If it fails to start, we should drain it here. Double check if
+			// runOutputLoop is guaranteed to be invoked if err == nil here.
+			if ubr, ok := r.(*unbufferedRegistration); ok {
+				ubr.discardCatchUpBuffer(ctx)
+			}
 		}
 		return f
 	})
