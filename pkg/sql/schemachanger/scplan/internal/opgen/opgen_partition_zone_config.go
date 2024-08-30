@@ -16,7 +16,6 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.PartitionZoneConfig) *scop.AddPartitionZoneConfig {
-
 					return &scop.AddPartitionZoneConfig{
 						TableID:      this.TableID,
 						Subzone:      this.Subzone,
