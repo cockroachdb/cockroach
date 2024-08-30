@@ -533,18 +533,19 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 		// TODO(baptist): Remove this block once #120073 is fixed.
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
-		if _, err := db.Exec(
+		if _, err := db.ExecContext(ctx,
 			`SET CLUSTER SETTING kv.lease.reject_on_leader_unknown.enabled = true`); err != nil {
 			t.Fatal(err)
 		}
 		// This isn't strictly necessary, but it would be nice if this test passed at 10s (or lower).
-		if _, err := db.Exec(
+		if _, err := db.ExecContext(ctx,
 			`SET CLUSTER SETTING server.time_after_store_suspect = '10s'`); err != nil {
 			t.Fatal(err)
 		}
 		// Avoid stores up-replicating away from the target node, reducing the
 		// backlog of work.
-		if _, err := db.Exec(
+		if _, err := db.ExecContext(
+			ctx,
 			fmt.Sprintf(
 				`SET CLUSTER SETTING server.time_until_store_dead = '%s'`, v.perturbationDuration+time.Minute)); err != nil {
 			t.Fatal(err)
