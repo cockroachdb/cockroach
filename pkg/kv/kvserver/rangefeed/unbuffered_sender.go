@@ -87,7 +87,7 @@ type ServerStreamSender interface {
 //		                       │      								   │							 │						           				 │
 //			  	                 │                         │               │                               │
 //			         	 	         └─────────────────────────┘───────────────┘───────────────────────────────┘
-//			          			                            Stream.Send    Stream.Disconnect
+//			          			                  PerRangeEventSink.Send   PerRangeEventSink.Disconnect
 //
 // UnbufferedSender is embedded in every rangefeed.PerRangeEventSink, serving as
 // a helper to forward events to the underlying gRPC stream.
@@ -196,7 +196,7 @@ func (ubs *UnbufferedSender) SendUnbuffered(event *kvpb.MuxRangeFeedEvent) error
 
 // run forwards rangefeed completion errors back to the client. run is expected
 // to be called in a goroutine and will block until the context is done or the
-// stopper is quiesced. StreamMuxer will stop forward rangefeed completion
+// stopper is quiesced. UnbufferedSender will stop forward rangefeed completion
 // errors after run completes, but a node level shutdown from Node.MuxRangefeed
 // should happen soon.
 func (ubs *UnbufferedSender) run(ctx context.Context, stopper *stop.Stopper) error {
