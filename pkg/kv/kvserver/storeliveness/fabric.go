@@ -11,6 +11,8 @@
 package storeliveness
 
 import (
+	"context"
+
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -50,4 +52,11 @@ type Fabric interface {
 	// and S_local will initiate a heartbeat loop to S_remote in order to
 	// request support so that future calls to SupportFrom may succeed.
 	SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Timestamp, bool)
+
+	// SupportFromEnabled determines if Store Liveness requests support from
+	// other stores. If it returns true, then Store Liveness is sending
+	// heartbeats and responding to heartbeats. If it returns false, Store
+	// Liveness is not sending heartbeats but is still responding to heartbeats
+	// to ensure any promise by the local store to provide support is still kept.
+	SupportFromEnabled(ctx context.Context) bool
 }
