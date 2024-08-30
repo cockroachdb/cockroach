@@ -109,6 +109,12 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 	var iter scanIndexIter
 	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, filters, rejectNonPartialIndexes|rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, remainingFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
+		if scanPrivate.IsVirtualTable(c.e.mem.Metadata()) {
+			if !c.IsVirtualIndexScanSupported(index, scanPrivate.Constraint) {
+				return
+			}
+		}
+
 		var sb indexScanBuilder
 		sb.Init(c, scanPrivate.Table)
 		newScanPrivate := *scanPrivate
@@ -476,6 +482,12 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 						return
 					}
 				}
+			}
+		}
+
+		if scanPrivate.IsVirtualTable(c.e.mem.Metadata()) {
+			if !c.IsVirtualIndexScanSupported(index, combinedConstraint) {
+				return
 			}
 		}
 

@@ -561,6 +561,11 @@ func (c *CustomFuncs) GenerateLimitedGroupByScans(
 		if len(constProj) != 0 {
 			panic(errors.AssertionFailedf("expected constProj to be empty"))
 		}
+		if sp.IsVirtualTable(c.e.mem.Metadata()) {
+			if !c.IsVirtualIndexScanSupported(index, sp.Constraint) {
+				return
+			}
+		}
 
 		// If the secondary index includes the set of needed columns, then this
 		// case does not need a limited group by and will be covered in
