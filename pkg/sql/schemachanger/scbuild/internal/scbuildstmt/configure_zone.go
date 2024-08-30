@@ -37,8 +37,8 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 	// - Database
 	// - Table
 	// - Index
-	// Left to support:
 	// - Partition/row
+	// Left to support:
 	// - System Ranges
 	zco, err := astToZoneConfigObject(b, n)
 	if err != nil {
@@ -108,17 +108,23 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 	//
 	// TODO(annie): remove this when we have something equivalent to
 	// expandMutableIndexName in the DSC.
-	targetsIndex := n.TargetsIndex() && !n.TargetsPartition()
+	targetsIndex := n.TargetsIndex()
 	if targetsIndex && n.TableOrIndex.Table.Table() == "" {
 		return nil, scerrors.NotImplementedErrorf(n, "referencing an index without a table "+
 			"prefix is not supported in the DSC")
 	}
 
-	if !n.TargetsTable() || n.TargetsPartition() {
-		return nil, scerrors.NotImplementedErrorf(n, "zone configurations on partitions "+
-			"and system ranges are not supported in the DSC")
+	if !n.TargetsTable() {
+		return nil, scerrors.NotImplementedErrorf(n, "zone configurations on system ranges "+
+			"are not supported in the DSC")
 	}
 
+	// If this is an ALTER ALL PARTITIONS statement, fallback to the legacy schema
+	// changer.
+	if n.TargetsPartition() && n.ZoneSpecifier.StarIndex {
+		return nil, scerrors.NotImplementedErrorf(n, "zone configurations on ALL partitions "+
+			"are not supported in the DSC")
+	}
 	tblName := zs.TableOrIndex.Table.ToUnresolvedObjectName()
 	elems := b.ResolvePhysicalTable(tblName, ResolveParams{})
 	panicIfSchemaChangeIsDisallowed(elems, n)
@@ -151,6 +157,13 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 	izo.fillIndexFromZoneSpecifier(b, n.ZoneSpecifier)
 	if targetsIndex && !n.TargetsPartition() {
 		return &izo, nil
+	}
+
+	// We are a partition object.
+	if n.TargetsPartition() {
+		partObj := partitionZoneConfigObj{partitionName: string(n.ZoneSpecifier.Partition),
+			indexZoneConfigObj: izo}
+		return &partObj, nil
 	}
 
 	return nil, errors.AssertionFailedf("unexpected zone config object")

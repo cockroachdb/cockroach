@@ -63,9 +63,10 @@ func (izo *indexZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.Zon
 	sameIdx := func(e *scpb.IndexZoneConfig) bool {
 		return e.TableID == izo.getTargetID() && e.IndexID == izo.indexID
 	}
-	mostRecentElem := findMostRecentZoneConfig(izo, func(id catid.DescID) *scpb.ElementCollection[*scpb.IndexZoneConfig] {
-		return b.QueryByID(id).FilterIndexZoneConfig()
-	}, sameIdx)
+	mostRecentElem := findMostRecentZoneConfig(izo,
+		func(id catid.DescID) *scpb.ElementCollection[*scpb.IndexZoneConfig] {
+			return b.QueryByID(id).FilterIndexZoneConfig()
+		}, sameIdx)
 
 	// Since we will be performing a subzone config update, we need to retrieve
 	// its parent's (table's) zone config for later use. This is because we need
@@ -113,8 +114,6 @@ func (izo *indexZoneConfigObj) retrieveCompleteZoneConfig(
 	var subzone *zonepb.Subzone
 	indexID := izo.indexID
 	if placeholder != nil {
-		// TODO(annie): once we support partitions, we will need to pass in the
-		// actual partition name here.
 		if subzone = placeholder.GetSubzone(uint32(indexID), ""); subzone != nil {
 			if indexSubzone := placeholder.GetSubzone(uint32(indexID), ""); indexSubzone != nil {
 				subzone.Config.InheritFromParent(&indexSubzone.Config)
@@ -138,6 +137,7 @@ func (izo *indexZoneConfigObj) setZoneConfigToWrite(zone *zonepb.ZoneConfig) {
 	for _, subzone := range zone.Subzones {
 		if subzone.IndexID == uint32(izo.indexID) && len(subzone.PartitionName) == 0 {
 			subzoneToWrite = &subzone
+			break
 		}
 	}
 	izo.indexSubzone = subzoneToWrite
