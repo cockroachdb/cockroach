@@ -71,6 +71,15 @@ type createViewNode struct {
 func (n *createViewNode) ReadingOwnWrites() {}
 
 func (n *createViewNode) startExec(params runParams) error {
+	// Lease the system database to see if schema changes are blocked on reader
+	// catalogs.
+	systemDB, err := params.p.Descriptors().ByIDWithLeased(params.p.txn).Get().Database(params.ctx, keys.SystemDatabaseID)
+	if err != nil {
+		return err
+	}
+	if systemDB.GetReplicatedVersion() != 0 {
+		return pgerror.Newf(pgcode.ReadOnlySQLTransaction, "schema changes are not allowed on a reader catalog")
+	}
 	createView := n.createView
 	tableType := tree.GetTableType(
 		false /* isSequence */, true /* isView */, createView.Materialized,

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -246,6 +247,16 @@ func hasPrimaryKeySerialType(params runParams, colDef *tree.ColumnTableDef) (boo
 }
 
 func (n *createTableNode) startExec(params runParams) error {
+	// Lease the system database to see if schema changes are blocked on reader
+	// catalogs.
+	systemDB, err := params.p.Descriptors().ByIDWithLeased(params.p.txn).Get().Database(params.ctx, keys.SystemDatabaseID)
+	if err != nil {
+		return err
+	}
+	if systemDB.GetReplicatedVersion() != 0 {
+		return pgerror.Newf(pgcode.ReadOnlySQLTransaction, "schema changes are not allowed on a reader catalog")
+	}
+
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("table"))
 
 	colsWithPrimaryKeyConstraint := make(map[tree.Name]bool)
