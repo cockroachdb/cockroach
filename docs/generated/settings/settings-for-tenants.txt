@@ -24,7 +24,7 @@ changefeed.node_throttle_config	string		specifies node level throttling configur
 changefeed.protect_timestamp.max_age	duration	96h0m0s	fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration	application
 changefeed.protect_timestamp_interval	duration	10m0s	controls how often the changefeed forwards its protected timestamp to the resolved timestamp	application
 changefeed.schema_feed.read_with_priority_after	duration	1m0s	retry with high priority if we were not able to read descriptors for too long; 0 disables	application
-changefeed.sink_io_workers	integer	0	the number of workers used by changefeeds when sending requests to the sink (currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value	application
+changefeed.sink_io_workers	integer	0	the number of workers used by changefeeds when sending requests to the sink (currently the batching versions of webhook, pubsub, and kafka sinks that are enabled by changefeed.new_<sink type>_sink_enabled only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value	application
 cloudstorage.azure.concurrent_upload_buffers	integer	1	controls the number of concurrent buffers that will be used by the Azure client when uploading chunks.Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload	application
 cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage	application
 cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operations	application
