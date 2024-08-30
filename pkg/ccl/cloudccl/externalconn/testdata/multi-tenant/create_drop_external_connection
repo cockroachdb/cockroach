@@ -91,7 +91,7 @@ disable-check-external-storage
 ----
 
 exec-sql
-CREATE EXTERNAL CONNECTION "foo-s3" AS 's3://foo/bar?AUTH=implicit&AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456&ASSUME_ROLE=ronaldo,rashford,bruno';
+CREATE EXTERNAL CONNECTION "foo-s3" AS 's3://foo/bar?AUTH=specified&AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456&AWS_REGION=us-east-1ASSUME_ROLE=ronaldo,rashford,bruno';
 ----
 
 # Reject invalid S3 URIs.
@@ -107,7 +107,7 @@ pq: failed to construct External Connection details: failed to create s3 externa
 
 inspect-system-table
 ----
-foo-s3 STORAGE {"provider": "s3", "simpleUri": {"uri": "s3://foo/bar?AUTH=implicit&AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456&ASSUME_ROLE=ronaldo,rashford,bruno"}} root 1
+foo-s3 STORAGE {"provider": "s3", "simpleUri": {"uri": "s3://foo/bar?AUTH=specified&AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456&AWS_REGION=us-east-1ASSUME_ROLE=ronaldo,rashford,bruno"}} root 1
 
 exec-sql
 DROP EXTERNAL CONNECTION "foo-s3";

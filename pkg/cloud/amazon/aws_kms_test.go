@@ -17,7 +17,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
@@ -41,9 +41,10 @@ func TestEncryptDecryptAWS(t *testing.T) {
 	// If environment credentials are not present, we want to
 	// skip all AWS KMS tests, including auth-implicit, even though
 	// it is not used in auth-implicit.
-	_, err := credentials.NewEnvCredentials().Get()
-	if err != nil {
-		skip.IgnoreLint(t, "Test only works with AWS credentials")
+	envConfig, err := config.NewEnvConfig()
+	require.NoError(t, err)
+	if !envConfig.Credentials.HasKeys() {
+		skip.IgnoreLint(t, "No AWS credentials")
 	}
 
 	q := make(url.Values)
@@ -95,8 +96,11 @@ func TestEncryptDecryptAWS(t *testing.T) {
 		// in the AWS console, then set it up locally.
 		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
 		// We only run this test if default role exists.
-		credentialsProvider := credentials.SharedCredentialsProvider{}
-		_, err := credentialsProvider.Retrieve()
+		ctx := context.Background()
+		cfg, err := config.LoadDefaultConfig(ctx,
+			config.WithSharedConfigProfile(config.DefaultSharedConfigProfile))
+		require.NoError(t, err)
+		_, err = cfg.Credentials.Retrieve(ctx)
 		if err != nil {
 			skip.IgnoreLint(t, err)
 		}
@@ -130,9 +134,10 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 	// If environment credentials are not present, we want to
 	// skip all AWS KMS tests, including auth-implicit, even though
 	// it is not used in auth-implicit.
-	_, err := credentials.NewEnvCredentials().Get()
-	if err != nil {
-		skip.IgnoreLint(t, "Test only works with AWS credentials")
+	envConfig, err := config.NewEnvConfig()
+	require.NoError(t, err)
+	if !envConfig.Credentials.HasKeys() {
+		skip.IgnoreLint(t, "No AWS credentials")
 	}
 
 	q := make(url.Values)
@@ -172,8 +177,11 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 		// in the AWS console, then set it up locally.
 		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
 		// We only run this test if default role exists.
-		credentialsProvider := credentials.SharedCredentialsProvider{}
-		_, err := credentialsProvider.Retrieve()
+		ctx := context.Background()
+		cfg, err := config.LoadDefaultConfig(ctx,
+			config.WithSharedConfigProfile(config.DefaultSharedConfigProfile))
+		require.NoError(t, err)
+		_, err = cfg.Credentials.Retrieve(ctx)
 		if err != nil {
 			skip.IgnoreLint(t, err)
 		}
@@ -333,7 +341,7 @@ func TestAWSKMSInaccessibleError(t *testing.T) {
 		q2.Set(AWSSecretParam, q.Get(AWSSecretParam)+"garbage")
 		uri := fmt.Sprintf("%s:///%s?%s", awsKMSScheme, keyID, q2.Encode())
 
-		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "status code: 400")
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "StatusCode: 400")
 	})
 
 	t.Run("incorrect-kms", func(t *testing.T) {

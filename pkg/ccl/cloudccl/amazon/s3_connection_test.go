@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestS3ExternalConnection(t *testing.T) {
@@ -67,10 +68,13 @@ func TestS3ExternalConnection(t *testing.T) {
 	// If environment credentials are not present, we want to
 	// skip all S3 tests, including auth-implicit, even though
 	// it is not used in auth-implicit.
-	creds, err := credentials.NewEnvCredentials().Get()
-	if err != nil {
+	envConfig, err := config.NewEnvConfig()
+	require.NoError(t, err)
+	if !envConfig.Credentials.HasKeys() {
 		skip.IgnoreLint(t, "No AWS credentials")
 	}
+
+	creds := envConfig.Credentials
 	bucket := os.Getenv("AWS_S3_BUCKET")
 	if bucket == "" {
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
@@ -83,8 +87,11 @@ func TestS3ExternalConnection(t *testing.T) {
 		// in the AWS console, then set it up locally.
 		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
 		// We only run this test if default role exists.
-		credentialsProvider := credentials.SharedCredentialsProvider{}
-		_, err := credentialsProvider.Retrieve()
+		ctx := context.Background()
+		cfg, err := config.LoadDefaultConfig(ctx,
+			config.WithSharedConfigProfile(config.DefaultSharedConfigProfile))
+		require.NoError(t, err)
+		_, err = cfg.Credentials.Retrieve(ctx)
 		if err != nil {
 			skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
 				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
@@ -120,8 +127,11 @@ func TestS3ExternalConnection(t *testing.T) {
 		// in the AWS console, then set it up locally.
 		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
 		// We only run this test if default role exists.
-		credentialsProvider := credentials.SharedCredentialsProvider{}
-		_, err := credentialsProvider.Retrieve()
+		ctx := context.Background()
+		cfg, err := config.LoadDefaultConfig(ctx,
+			config.WithSharedConfigProfile(config.DefaultSharedConfigProfile))
+		require.NoError(t, err)
+		_, err = cfg.Credentials.Retrieve(ctx)
 		if err != nil {
 			skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
 				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
@@ -156,8 +166,11 @@ func TestS3ExternalConnection(t *testing.T) {
 		// in the AWS console, then set it up locally.
 		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
 		// We only run this test if default role exists.
-		credentialsProvider := credentials.SharedCredentialsProvider{}
-		_, err := credentialsProvider.Retrieve()
+		ctx := context.Background()
+		cfg, err := config.LoadDefaultConfig(ctx,
+			config.WithSharedConfigProfile(config.DefaultSharedConfigProfile))
+		require.NoError(t, err)
+		_, err = cfg.Credentials.Retrieve(ctx)
 		if err != nil {
 			skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
 				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
@@ -220,9 +233,10 @@ func TestAWSKMSExternalConnection(t *testing.T) {
 	// If environment credentials are not present, we want to
 	// skip all AWS KMS tests, including auth-implicit, even though
 	// it is not used in auth-implicit.
-	_, err := credentials.NewEnvCredentials().Get()
-	if err != nil {
-		skip.IgnoreLint(t, "Test only works with AWS credentials")
+	envConfig, err := config.NewEnvConfig()
+	require.NoError(t, err)
+	if !envConfig.Credentials.HasKeys() {
+		skip.IgnoreLint(t, "No AWS credentials")
 	}
 
 	q := make(url.Values)
@@ -331,9 +345,10 @@ func TestAWSKMSExternalConnectionAssumeRole(t *testing.T) {
 	// If environment credentials are not present, we want to
 	// skip all AWS KMS tests, including auth-implicit, even though
 	// it is not used in auth-implicit.
-	_, err := credentials.NewEnvCredentials().Get()
-	if err != nil {
-		skip.IgnoreLint(t, "Test only works with AWS credentials")
+	envConfig, err := config.NewEnvConfig()
+	require.NoError(t, err)
+	if !envConfig.Credentials.HasKeys() {
+		skip.IgnoreLint(t, "No AWS credentials")
 	}
 
 	q := make(url.Values)
@@ -380,8 +395,11 @@ func TestAWSKMSExternalConnectionAssumeRole(t *testing.T) {
 		// in the AWS console, then set it up locally.
 		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
 		// We only run this test if default role exists.
-		credentialsProvider := credentials.SharedCredentialsProvider{}
-		_, err := credentialsProvider.Retrieve()
+		ctx := context.Background()
+		cfg, err := config.LoadDefaultConfig(ctx,
+			config.WithSharedConfigProfile(config.DefaultSharedConfigProfile))
+		require.NoError(t, err)
+		_, err = cfg.Credentials.Retrieve(ctx)
 		if err != nil {
 			skip.IgnoreLint(t, err)
 		}
