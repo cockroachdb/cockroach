@@ -57,6 +57,10 @@ type Cluster interface {
 	// used by builds with runtime assertions enabled.
 	SetRandomSeed(seed int64)
 
+	// SetDefaultVirtualCluster changes the virtual cluster tests
+	// connect to by default.
+	SetDefaultVirtualCluster(string)
+
 	// Starting and stopping CockroachDB.
 
 	StartE(ctx context.Context, l *logger.Logger, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option) error
@@ -92,13 +96,13 @@ type Cluster interface {
 
 	// SQL clients to nodes.
 
-	Conn(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) *gosql.DB
-	ConnE(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) (*gosql.DB, error)
+	Conn(ctx context.Context, l *logger.Logger, node int, opts ...option.OptionFunc) *gosql.DB
+	ConnE(ctx context.Context, l *logger.Logger, node int, opts ...option.OptionFunc) (*gosql.DB, error)
 
 	// URLs and Ports for the Admin UI.
 
-	InternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
-	ExternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
+	InternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption, opts ...option.OptionFunc) ([]string, error)
+	ExternalAdminUIAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption, opts ...option.OptionFunc) ([]string, error)
 	AdminUIPorts(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]int, error)
 
 	// Running commands on nodes.

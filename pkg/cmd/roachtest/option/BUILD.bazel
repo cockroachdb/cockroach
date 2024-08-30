@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "option",
     srcs = [
-        "connection_options.go",
+        "cluster_options.go",
         "node_list_option.go",
         "node_lister.go",
         "option_interface.go",
@@ -19,7 +19,7 @@ go_library(
 
 go_test(
     name = "option_test",
-    srcs = ["connection_options_test.go"],
+    srcs = ["cluster_options_test.go"],
     embed = [":option"],
     deps = ["@com_github_stretchr_testify//require"],
 )

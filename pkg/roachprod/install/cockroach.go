@@ -1073,8 +1073,11 @@ func (c *SyncedCluster) generateStartArgs(
 	e := expander{
 		node: node,
 	}
+	// We currently don't accept any custom expander configurations in
+	// this function.
+	var expanderConfig ExpanderConfig
 	for i, arg := range args {
-		expandedArg, err := e.expand(ctx, l, c, arg)
+		expandedArg, err := e.expand(ctx, l, c, expanderConfig, arg)
 		if err != nil {
 			return nil, err
 		}
@@ -1376,7 +1379,10 @@ func (c *SyncedCluster) generateKeyCmd(
 	}
 
 	e := expander{node: node}
-	expanded, err := e.expand(ctx, l, c, keyCmd.String())
+	// We currently don't accept any custom expander configurations in
+	// this function.
+	var expanderConfig ExpanderConfig
+	expanded, err := e.expand(ctx, l, c, expanderConfig, keyCmd.String())
 	if err != nil {
 		return "", err
 	}
