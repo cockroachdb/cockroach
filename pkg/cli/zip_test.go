@@ -187,6 +187,12 @@ func TestZipQueryFallback(t *testing.T) {
 	skip.UnderRace(t, "test too slow under race")
 
 	existing := zipInternalTablesPerCluster["crdb_internal.transaction_contention_events"]
+
+	// Avoid leaking configuration changes after the tests end.
+	defer func() {
+		zipInternalTablesPerCluster["crdb_internal.transaction_contention_events"] = existing
+	}()
+
 	zipInternalTablesPerCluster["crdb_internal.transaction_contention_events"] = TableRegistryConfig{
 		nonSensitiveCols: existing.nonSensitiveCols,
 		// We want this to fail to trigger the fallback.
