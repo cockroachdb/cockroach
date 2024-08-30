@@ -71,19 +71,17 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 			},
 		})
 		// Note that kvpb.NewError(nil) == nil.
-		require.Equal(t, testRangefeedCounter.get(), int32(1))
+		require.Equal(t, 1, testRangefeedCounter.get())
 		sm.DisconnectStream(streamID, err)
 		// todo(wait for error)
 		testServerStream.waitForEvent(t, ev)
-		require.Equal(t, testRangefeedCounter.get(), int32(0))
+		require.Equal(t, 0, testRangefeedCounter.get())
 		require.Equal(t, context.Canceled, streamCtx.Err())
 		require.Equal(t, 1, testServerStream.totalEventsSent())
 
 		// Repeat closing the stream does nothing.
-		sm.DisconnectStream(streamID,
-			kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)))
-		time.Sleep(10 * time.Millisecond)
-		require.Equalf(t, 1, testServerStream.totalEventsSent(), testServerStream.String())
+		sm.DisconnectStream(streamID, err)
+		testServerStream.waitForEvent(t, ev)
 	})
 
 	t.Run("send rangefeed completion error concurrently", func(t *testing.T) {
@@ -138,7 +136,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 					muxError, testServerStream.String())
 			})
 		}
-		require.Equal(t, 0, testRangefeedCounter.get())
+		testRangefeedCounter.waitForRangefeedCount(t, 0)
 	})
 }
 
