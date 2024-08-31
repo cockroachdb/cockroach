@@ -189,14 +189,15 @@ func (bs *BufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
 		// Fine to skip nil checking here since that would be a programming error.
 		(*cancel)()
 		bs.metrics.UpdateMetricsOnRangefeedDisconnect()
-		// Ignore error since the stream is already disconnecting. There is nothing
-		// else that could be done. When SendBuffered is returning an error, a node
-		// level shutdown from node.MuxRangefeed is happening soon to let clients
-		// know that the rangefeed is shutting down.
-		log.Infof(context.Background(),
-			"failed to buffer rangefeed complete event for stream %d due to %s, "+
-				"but a node level shutdown should be happening", ev.StreamID, ev.Error)
-		_ = bs.SendBuffered(ev, nil)
+		if err := bs.SendBuffered(ev, nil); err != nil {
+			// Ignore error since the stream is already disconnecting. There is nothing
+			// else that could be done. When SendBuffered is returning an error, a node
+			// level shutdown from node.MuxRangefeed is happening soon to let clients
+			// know that the rangefeed is shutting down.
+			log.Infof(context.Background(),
+				"failed to buffer rangefeed complete event for stream %d due to %s, "+
+					"but a node level shutdown should be happening", ev.StreamID, ev.Error)
+		}
 	}
 }
 
@@ -258,8 +259,8 @@ func (bs *BufferedSender) run(ctx context.Context, stopper *stop.Stopper) error 
 			return nil
 		default:
 			e, success, overflowed, remains := bs.popFront()
-			bs.metrics.DecQueueSize()
 			if success {
+				bs.metrics.DecQueueSize()
 				err := bs.sender.Send(e.event)
 				e.alloc.Release(ctx)
 				if e.event.Error != nil {
