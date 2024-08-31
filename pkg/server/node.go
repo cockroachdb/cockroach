@@ -206,6 +206,18 @@ This metric is thus not an indicator of KV health.`,
 		Measurement: "Streams",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaQueueSize = metric.Metadata{
+		Name:        "rpc.streams.queue_size",
+		Help:        `Total number of MuxRangeFeed streams`,
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaNodeLevelErrors = metric.Metadata{
+		Name:        "node.level.errors",
+		Help:        "Number of errors at the node level",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Cluster settings.
@@ -263,6 +275,8 @@ type nodeMetrics struct {
 	CrossZoneBatchResponseBytes   *metric.Counter
 	NumMuxRangeFeed               *metric.Counter
 	ActiveMuxRangeFeed            *metric.Gauge
+	QueueSize                     *metric.Gauge
+	NodeLevelErrors               *metric.Counter
 }
 
 var _ rangefeed.RangefeedMetricsRecorder = &nodeMetrics{}
@@ -286,6 +300,8 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeM
 		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
 		ActiveMuxRangeFeed:            metric.NewGauge(metaActiveMuxRangeFeed),
 		NumMuxRangeFeed:               metric.NewCounter(metaTotalMuxRangeFeed),
+		QueueSize:                     metric.NewGauge(metaQueueSize),
+		NodeLevelErrors:               metric.NewCounter(metaNodeLevelErrors),
 	}
 
 	for i := range nm.MethodCounts {
@@ -359,6 +375,14 @@ func (nm *nodeMetrics) UpdateMetricsOnRangefeedConnect() {
 // rangefeed is disconnected.
 func (nm *nodeMetrics) UpdateMetricsOnRangefeedDisconnect() {
 	nm.ActiveMuxRangeFeed.Dec(1)
+}
+
+func (nm *nodeMetrics) IncQueueSize() {
+	nm.QueueSize.Inc(1)
+}
+
+func (nm *nodeMetrics) DecQueueSize() {
+	nm.QueueSize.Dec(1)
 }
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -1973,6 +1997,7 @@ type streamManager interface {
 
 // MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
+	defer n.metrics.NodeLevelErrors.Inc(1)
 	lockedMuxStream := &lockedMuxStream{wrapped: muxStream}
 
 	// All context created below should derive from this context, which is

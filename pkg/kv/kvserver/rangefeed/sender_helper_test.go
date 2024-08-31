@@ -26,6 +26,10 @@ type testRangefeedCounter struct {
 	count atomic.Int32
 }
 
+func (c *testRangefeedCounter) IncQueueSize() {}
+
+func (c *testRangefeedCounter) DecQueueSize() {}
+
 var _ RangefeedMetricsRecorder = &testRangefeedCounter{}
 
 func newTestRangefeedCounter() *testRangefeedCounter {

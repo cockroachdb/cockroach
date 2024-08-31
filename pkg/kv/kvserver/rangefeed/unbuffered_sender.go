@@ -24,6 +24,8 @@ import (
 type RangefeedMetricsRecorder interface {
 	UpdateMetricsOnRangefeedConnect()
 	UpdateMetricsOnRangefeedDisconnect()
+	IncQueueSize()
+	DecQueueSize()
 }
 
 // ServerStreamSender forwards MuxRangefeedEvents from UnbufferedSender to the

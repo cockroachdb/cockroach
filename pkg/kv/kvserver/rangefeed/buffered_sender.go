@@ -257,6 +257,7 @@ func (bs *BufferedSender) run(ctx context.Context, stopper *stop.Stopper) error 
 			return nil
 		default:
 			e, success, overflowed, remains := bs.popFront()
+			bs.metrics.UpdateMetricsOnRangefeedDisconnect()
 			if success {
 				err := bs.sender.Send(e.event)
 				e.alloc.Release(ctx)
@@ -288,6 +289,9 @@ func (bs *BufferedSender) popFront() (
 	bs.queueMu.Lock()
 	defer bs.queueMu.Unlock()
 	event, ok := bs.queueMu.buffer.Dequeue()
+	if ok {
+		bs.metrics.DecQueueSize()
+	}
 	return event, ok, bs.queueMu.overflow, bs.queueMu.buffer.Len()
 }
 
