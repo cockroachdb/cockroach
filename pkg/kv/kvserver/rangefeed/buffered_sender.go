@@ -12,12 +12,10 @@ package rangefeed
 
 import (
 	"context"
-	"math"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/queue"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -26,8 +24,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var bufferedSenderCapacity = envutil.EnvOrDefaultInt64(
-	"COCKROACH_BUFFERED_STREAM_CAPACITY_PER_STREAM", math.MaxInt64)
+//var bufferedSenderCapacity = envutil.EnvOrDefaultInt64(
+//	"COCKROACH_BUFFERED_STREAM_CAPACITY_PER_STREAM", math.MaxInt64)
 
 type sharedMuxEvent struct {
 	event *kvpb.MuxRangeFeedEvent
@@ -101,8 +99,8 @@ type BufferedSender struct {
 
 	queueMu struct {
 		syncutil.Mutex
-		stopped  bool
-		capacity int64
+		stopped bool
+		//capacity int64
 		buffer   *queue.QueueWithFixedChunkSize[*sharedMuxEvent]
 		overflow bool
 	}
@@ -116,7 +114,7 @@ func NewBufferedSender(
 		metrics: metrics,
 	}
 	bs.queueMu.buffer = queue.NewQueueWithFixedChunkSize[*sharedMuxEvent]()
-	bs.queueMu.capacity = bufferedSenderCapacity
+	//bs.queueMu.capacity = bufferedSenderCapacity
 	return bs
 }
 
@@ -140,10 +138,10 @@ func (bs *BufferedSender) SendBuffered(
 		return newRetryErrBufferCapacityExceeded()
 	}
 
-	if bs.queueMu.buffer.Len() >= bs.queueMu.capacity {
-		bs.queueMu.overflow = true
-		return newRetryErrBufferCapacityExceeded()
-	}
+	//if bs.queueMu.buffer.Len() >= bs.queueMu.capacity {
+	//	bs.queueMu.overflow = true
+	//	return newRetryErrBufferCapacityExceeded()
+	//}
 
 	bs.metrics.IncQueueSize()
 	bs.queueMu.buffer.Enqueue(&sharedMuxEvent{ev, alloc})
@@ -291,9 +289,6 @@ func (bs *BufferedSender) popFront() (
 	bs.queueMu.Lock()
 	defer bs.queueMu.Unlock()
 	event, ok := bs.queueMu.buffer.Dequeue()
-	if ok {
-		bs.metrics.DecQueueSize()
-	}
 	return event, ok, bs.queueMu.overflow, bs.queueMu.buffer.Len()
 }
 

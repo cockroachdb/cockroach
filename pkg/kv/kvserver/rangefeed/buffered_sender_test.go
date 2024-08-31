@@ -152,54 +152,54 @@ func TestBufferedSenderOnStop(t *testing.T) {
 	require.Equal(t, int32(streamIdEnd-streamIdStart), testRangefeedCounter.get())
 }
 
-func TestBufferedSenderOnOverflow(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx, cancel := context.WithCancel(context.Background())
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	testServerStream := newTestServerStream()
-	testRangefeedCounter := newTestRangefeedCounter()
-	bufferedSenderCapacity = 10
-	bs := NewBufferedSender(testServerStream, testRangefeedCounter)
-	cancel()
-	
-	val1 := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
-	ev1 := new(kvpb.RangeFeedEvent)
-	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val1})
-	muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev1, RangeID: 0, StreamID: 1}
-	require.NoError(t, bs.Start(ctx, stopper))
-	defer func() {
-		bs.Stop()
-		require.True(t, bs.queueMu.buffer.Empty())
-		require.Equal(t, bs.SendBuffered(muxEv, nil).Error(),
-			errors.New("stream sender is stopped").Error())
-	}()
-
-	getLen := func() int64 {
-		bs.queueMu.Lock()
-		defer bs.queueMu.Unlock()
-		return bs.queueMu.buffer.Len()
-	}
-
-	for i := 0; i < 10; i++ {
-		require.NoError(t, bs.SendBuffered(muxEv, nil))
-	}
-	require.Equal(t, int64(10), getLen())
-	e, success, overflowed, remains := bs.popFront()
-	require.Equal(t, &sharedMuxEvent{
-		event: muxEv,
-		alloc: nil,
-	}, e)
-	require.True(t, success)
-	require.False(t, overflowed)
-	require.Equal(t, int64(9), remains)
-	require.Equal(t, int64(9), getLen())
-	require.NoError(t, bs.SendBuffered(muxEv, nil))
-	require.Equal(t, int64(10), getLen())
-
-	// Overflow now.
-	require.Equal(t, bs.SendBuffered(muxEv, nil).Error(),
-		newRetryErrBufferCapacityExceeded().Error())
-}
+//func TestBufferedSenderOnOverflow(t *testing.T) {
+//	defer leaktest.AfterTest(t)()
+//	defer log.Scope(t).Close(t)
+//	ctx, cancel := context.WithCancel(context.Background())
+//
+//	stopper := stop.NewStopper()
+//	defer stopper.Stop(ctx)
+//	testServerStream := newTestServerStream()
+//	testRangefeedCounter := newTestRangefeedCounter()
+//	bufferedSenderCapacity = 10
+//	bs := NewBufferedSender(testServerStream, testRangefeedCounter)
+//	cancel()
+//
+//	val1 := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
+//	ev1 := new(kvpb.RangeFeedEvent)
+//	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val1})
+//	muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev1, RangeID: 0, StreamID: 1}
+//	require.NoError(t, bs.Start(ctx, stopper))
+//	defer func() {
+//		bs.Stop()
+//		require.True(t, bs.queueMu.buffer.Empty())
+//		require.Equal(t, bs.SendBuffered(muxEv, nil).Error(),
+//			errors.New("stream sender is stopped").Error())
+//	}()
+//
+//	getLen := func() int64 {
+//		bs.queueMu.Lock()
+//		defer bs.queueMu.Unlock()
+//		return bs.queueMu.buffer.Len()
+//	}
+//
+//	for i := 0; i < 10; i++ {
+//		require.NoError(t, bs.SendBuffered(muxEv, nil))
+//	}
+//	require.Equal(t, int64(10), getLen())
+//	e, success, overflowed, remains := bs.popFront()
+//	require.Equal(t, &sharedMuxEvent{
+//		event: muxEv,
+//		alloc: nil,
+//	}, e)
+//	require.True(t, success)
+//	require.False(t, overflowed)
+//	require.Equal(t, int64(9), remains)
+//	require.Equal(t, int64(9), getLen())
+//	require.NoError(t, bs.SendBuffered(muxEv, nil))
+//	require.Equal(t, int64(10), getLen())
+//
+//	// Overflow now.
+//	require.Equal(t, bs.SendBuffered(muxEv, nil).Error(),
+//		newRetryErrBufferCapacityExceeded().Error())
+//}
