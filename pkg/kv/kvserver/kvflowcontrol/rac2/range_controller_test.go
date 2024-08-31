@@ -363,15 +363,19 @@ func testingCreateEntry(t *testing.T, info entryInfo) raftpb.Entry {
 //   - stream_state: Prints the state of the stream(s) for the given range's
 //     replicas.
 //     range_id=<range_id>
+//
+//   - metrics: Prints the current state of the eval metrics.
 func TestRangeController(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "range_controller"), func(t *testing.T, path string) {
+		clock := hlc.NewClockForTesting(nil)
 		settings := cluster.MakeTestingClusterSettings()
 		ranges := make(map[roachpb.RangeID]*testingRCRange)
-		ssTokenCounter := NewStreamTokenCounterProvider(settings, hlc.NewClockForTesting(nil))
+		ssTokenCounter := NewStreamTokenCounterProvider(settings, clock)
+		evalMetrics := NewEvalWaitMetrics()
 
 		// setTokenCounters is used to ensure that we only set the initial token
 		// counts once per counter.
@@ -530,11 +534,13 @@ func TestRangeController(t *testing.T) {
 				testRC.mu.r = r
 				testRC.mu.evals = make(map[string]*testingRCEval)
 				options := RangeControllerOptions{
-					RangeID:        r.rangeID,
-					TenantID:       r.tenantID,
-					LocalReplicaID: r.localReplicaID,
-					SSTokenCounter: ssTokenCounter,
-					RaftInterface:  testRC,
+					RangeID:         r.rangeID,
+					TenantID:        r.tenantID,
+					LocalReplicaID:  r.localReplicaID,
+					SSTokenCounter:  ssTokenCounter,
+					RaftInterface:   testRC,
+					Clock:           clock,
+					EvalWaitMetrics: evalMetrics,
 				}
 
 				init := RangeControllerInitState{
@@ -804,6 +810,26 @@ func TestRangeController(t *testing.T) {
 				d.ScanArgs(t, "range_id", &rangeID)
 				return sendStreamString(roachpb.RangeID(rangeID))
 
+			case "metrics":
+				var buf strings.Builder
+
+				for _, wc := range []admissionpb.WorkClass{
+					admissionpb.RegularWorkClass,
+					admissionpb.ElasticWorkClass,
+				} {
+					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.waiting[wc].GetName(), evalMetrics.waiting[wc].Value())
+					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.admitted[wc].GetName(), evalMetrics.admitted[wc].Count())
+					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.errored[wc].GetName(), evalMetrics.errored[wc].Count())
+					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.bypassed[wc].GetName(), evalMetrics.bypassed[wc].Count())
+					// We only print the number of recorded durations, instead of any
+					// percentiles or cumulative wait times as these are
+					// non-deterministic in the test.
+					fmt.Fprintf(&buf, "%-50v: %v\n",
+						fmt.Sprintf("%v.count", evalMetrics.duration[wc].GetName()),
+						testingFirst(evalMetrics.duration[wc].CumulativeSnapshot().Total()))
+				}
+				return buf.String()
+
 			default:
 				panic(fmt.Sprintf("unknown command: %s", d.Cmd))
 			}
@@ -915,4 +941,11 @@ func TestGetEntryFCState(t *testing.T) {
 			require.Equal(t, tc.expectedFCState, fcState)
 		})
 	}
+}
+
+func testingFirst(args ...interface{}) interface{} {
+	if len(args) > 0 {
+		return args[0]
+	}
+	return nil
 }
