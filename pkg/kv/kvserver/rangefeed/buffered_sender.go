@@ -145,6 +145,7 @@ func (bs *BufferedSender) SendBuffered(
 		return newRetryErrBufferCapacityExceeded()
 	}
 
+	bs.metrics.IncQueueSize()
 	bs.queueMu.buffer.Enqueue(&sharedMuxEvent{ev, alloc})
 	return nil
 }
@@ -257,7 +258,7 @@ func (bs *BufferedSender) run(ctx context.Context, stopper *stop.Stopper) error 
 			return nil
 		default:
 			e, success, overflowed, remains := bs.popFront()
-			bs.metrics.UpdateMetricsOnRangefeedDisconnect()
+			bs.metrics.DecQueueSize()
 			if success {
 				err := bs.sender.Send(e.event)
 				e.alloc.Release(ctx)
