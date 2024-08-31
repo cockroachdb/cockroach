@@ -13,6 +13,19 @@ t1/s1: reg=+0 B/+1 B ela=+0 B/+1 B
 t1/s2: reg=+0 B/+1 B ela=+0 B/+1 B
 t1/s3: reg=+0 B/+1 B ela=+0 B/+1 B
 
+metrics
+----
+kvflowcontrol.eval_wait.regular.requests.waiting  : 0
+kvflowcontrol.eval_wait.regular.requests.admitted : 0
+kvflowcontrol.eval_wait.regular.requests.errored  : 0
+kvflowcontrol.eval_wait.regular.requests.bypassed : 0
+kvflowcontrol.eval_wait.regular.duration.count    : 0
+kvflowcontrol.eval_wait.elastic.requests.waiting  : 0
+kvflowcontrol.eval_wait.elastic.requests.admitted : 0
+kvflowcontrol.eval_wait.elastic.requests.errored  : 0
+kvflowcontrol.eval_wait.elastic.requests.bypassed : 0
+kvflowcontrol.eval_wait.elastic.duration.count    : 0
+
 # Start a high priority evaluation. It should not complete due to lack of
 # tokens.
 wait_for_eval name=a range_id=1 pri=HighPri
@@ -259,6 +272,19 @@ range_id=1 tenant_id={1} local_replica_id=1
 range_id=2 tenant_id={1} local_replica_id=1
   name=g pri=high-pri done=true  waited=true  err=<nil>
 
+metrics
+----
+kvflowcontrol.eval_wait.regular.requests.waiting  : 0
+kvflowcontrol.eval_wait.regular.requests.admitted : 4
+kvflowcontrol.eval_wait.regular.requests.errored  : 1
+kvflowcontrol.eval_wait.regular.requests.bypassed : 0
+kvflowcontrol.eval_wait.regular.duration.count    : 5
+kvflowcontrol.eval_wait.elastic.requests.waiting  : 0
+kvflowcontrol.eval_wait.elastic.requests.admitted : 2
+kvflowcontrol.eval_wait.elastic.requests.errored  : 0
+kvflowcontrol.eval_wait.elastic.requests.bypassed : 0
+kvflowcontrol.eval_wait.elastic.duration.count    : 2
+
 # Adjust the tokens so that r1 doesn't have tokens on s3 or s1, then transfer
 # s3 the lease for r1.
 adjust_tokens
@@ -386,3 +412,16 @@ range_id=1 tenant_id={1} local_replica_id=1
   name=j pri=high-pri done=true  waited=false err=<nil>
 range_id=2 tenant_id={1} local_replica_id=1
   name=g pri=high-pri done=true  waited=true  err=<nil>
+
+metrics
+----
+kvflowcontrol.eval_wait.regular.requests.waiting  : 0
+kvflowcontrol.eval_wait.regular.requests.admitted : 6
+kvflowcontrol.eval_wait.regular.requests.errored  : 1
+kvflowcontrol.eval_wait.regular.requests.bypassed : 1
+kvflowcontrol.eval_wait.regular.duration.count    : 8
+kvflowcontrol.eval_wait.elastic.requests.waiting  : 0
+kvflowcontrol.eval_wait.elastic.requests.admitted : 2
+kvflowcontrol.eval_wait.elastic.requests.errored  : 0
+kvflowcontrol.eval_wait.elastic.requests.bypassed : 0
+kvflowcontrol.eval_wait.elastic.duration.count    : 2
