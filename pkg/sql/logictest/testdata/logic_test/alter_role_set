@@ -374,3 +374,16 @@ use_declarative_schema_changer  off                NULL     true
 # We shouldn't be able to leave the role unspecified
 statement error pq: at or near "]": syntax error
 SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE]
+
+statement ok
+CREATE USER testuser2
+
+# set owner to a user that is not admin
+statement ok
+ALTER DATABASE test_db OWNER TO testuser2
+
+user testuser2
+
+# owner can set default session variables for a database
+statement ok
+ALTER ROLE ALL IN DATABASE test_db SET application_name = 'abc'
