@@ -94,6 +94,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.6.1
 	github.com/Azure/go-autorest/autorest/adal v0.9.15
 	github.com/BurntSushi/toml v1.2.1
+	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/DataDog/datadog-api-client-go/v2 v2.15.0
 	github.com/DataExMachina-dev/side-eye-go v0.0.0-20240528211710-5eb9c7a69e1d
 	github.com/IBM/sarama v1.42.1
