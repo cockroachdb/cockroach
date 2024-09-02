@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -1107,6 +1108,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				DisableSyncLogWriteToss: buildutil.CrdbTestBuild &&
 					r.store.TestingKnobs().DisableSyncLogWriteToss,
 			}
+			// TODO(pav-kv): make this branch unconditional.
 			if r.IsInitialized() && r.store.cfg.KVAdmissionController != nil {
 				// Enqueue raft log entries into admission queues. This is
 				// non-blocking; actual admission happens asynchronously.
@@ -1668,6 +1670,9 @@ func (r *replicaSyncCallback) OnLogSync(
 	ctx context.Context, done logstore.MsgStorageAppendDone, commitStats storage.BatchCommitStats,
 ) {
 	repl := (*Replica)(r)
+	if mark := done.Mark(); mark.Term != 0 {
+		repl.flowControlV2.SyncedLogStorage(ctx, mark, false /* snap */)
+	}
 	// Block sending the responses back to raft, if a test needs to.
 	if fn := repl.store.TestingKnobs().TestingAfterRaftLogSync; fn != nil {
 		fn(repl.ID())
@@ -1681,6 +1686,8 @@ func (r *replicaSyncCallback) OnLogSync(
 
 func (r *replicaSyncCallback) OnSnapSync(ctx context.Context, done logstore.MsgStorageAppendDone) {
 	repl := (*Replica)(r)
+	// NB: when storing snapshot, done always contains a non-zero log mark.
+	repl.flowControlV2.SyncedLogStorage(ctx, done.Mark(), true /* snap */)
 	repl.sendRaftMessages(ctx, done.Responses(), nil /* blocked */, true /* willDeliverLocal */)
 }
 
@@ -1915,6 +1922,18 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		FromReplica:   fromReplica,
 		Message:       msg,
 		RangeStartKey: startKey, // usually nil
+	}
+	// For RACv2, annotate successful MsgAppResp messages with the vector of
+	// admitted log indices, by priority.
+	if msg.Type == raftpb.MsgAppResp && !msg.Reject {
+		admitted := r.flowControlV2.AdmittedState()
+		// The admitted state must be in the coordinate system of the leader's log.
+		if admitted.Term == msg.Term {
+			req.AdmittedState = kvflowcontrolpb.AdmittedState{
+				Term:     admitted.Term,
+				Admitted: admitted.Admitted[:],
+			}
+		}
 	}
 	if !r.sendRaftMessageRequest(ctx, req) {
 		r.mu.Lock()

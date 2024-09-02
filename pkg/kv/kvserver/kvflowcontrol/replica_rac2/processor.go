@@ -108,10 +108,9 @@ type RaftNode interface {
 	// past the group membership state, so the leader returned here may not be
 	// known as a current group member.
 	LeaderLocked() roachpb.ReplicaID
+	// LogMarkLocked returns the current raft log mark.
+	LogMarkLocked() rac2.LogMark
 
-	// StableIndexLocked is the (inclusive) highest index that is known to be
-	// successfully persisted in local storage.
-	StableIndexLocked() uint64
 	// NextUnstableIndexLocked returns the index of the next entry that will
 	// be sent to local storage. All entries < this index are either stored,
 	// or have been sent to storage.
@@ -119,15 +118,9 @@ type RaftNode interface {
 	// NB: NextUnstableIndex can regress when the node accepts appends or
 	// snapshots from a newer leader.
 	NextUnstableIndexLocked() uint64
-	// GetAdmittedLocked returns the current value of the admitted array.
-	GetAdmittedLocked() [raftpb.NumPriorities]uint64
 
 	// Mutating methods.
 
-	// SetAdmittedLocked sets a new value for the admitted array. It is the
-	// caller's responsibility to ensure that it is not regressing admitted,
-	// and it is not advancing admitted beyond the stable index.
-	SetAdmittedLocked([raftpb.NumPriorities]uint64) raftpb.Message
 	// StepMsgAppRespForAdmittedLocked steps a MsgAppResp on the leader, which
 	// may advance its knowledge of a follower's admitted state.
 	StepMsgAppRespForAdmittedLocked(raftpb.Message) error
@@ -389,11 +382,18 @@ type Processor interface {
 		info SideChannelInfoUsingRaftMessageRequest,
 	)
 
+	// SyncedLogStorage is called when the log storage is synced, after writing a
+	// snapshot or log entries batch. It can be called synchronously from
+	// OnLogSync or OnSnapSync handlers if the write batch is blocking, or
+	// asynchronously from OnLogSync.
+	SyncedLogStorage(ctx context.Context, mark rac2.LogMark, snap bool)
 	// AdmittedLogEntry is called when an entry is admitted. It can be called
 	// synchronously from within ACWorkQueue.Admit if admission is immediate.
 	AdmittedLogEntry(
 		ctx context.Context, state EntryForAdmissionCallbackState,
 	)
+	// AdmittedState returns the vector of admitted log indices.
+	AdmittedState() rac2.AdmittedVector
 
 	// AdmitForEval is called to admit work that wants to evaluate at the
 	// leaseholder.
@@ -407,6 +407,9 @@ type Processor interface {
 
 type processorImpl struct {
 	opts ProcessorOptions
+
+	// State for tracking and advancing the log's admitted vector.
+	logTracker logTracker
 
 	// The fields below are accessed while holding the mutex. Lock ordering:
 	// Replica.raftMu < this.mu < Replica.mu.
@@ -423,10 +426,6 @@ type processorImpl struct {
 		leaderNodeID  roachpb.NodeID
 		leaderStoreID roachpb.StoreID
 		leaseholderID roachpb.ReplicaID
-		// State for advancing admitted.
-		lastObservedStableIndex     uint64
-		scheduledAdmittedProcessing bool
-		waitingForAdmissionState    waitingForAdmissionState
 		// State at a follower.
 		follower struct {
 			isLeaderUsingV2Protocol bool
@@ -503,7 +502,6 @@ func (p *processorImpl) OnDestroyRaftMuLocked(ctx context.Context) {
 	p.closeLeaderStateRaftMuLockedProcLocked(ctx)
 
 	// Release some memory.
-	p.mu.waitingForAdmissionState = waitingForAdmissionState{}
 	p.mu.follower.lowPriOverrideState = lowPriOverrideState{}
 }
 
@@ -562,9 +560,10 @@ func (p *processorImpl) OnDescChangedLocked(
 	initialization := p.raftMu.replicas == nil
 	if initialization {
 		// Replica is initialized, in that we have a descriptor and the tenant ID.
-		// Get the RaftNode.
+		// Get the RaftNode and initialize the LogTracker.
 		p.raftMu.raftNode = p.opts.Replica.RaftNodeMuLocked()
 		p.raftMu.tenantID = tenantID
+		p.logTracker.init(p.raftMu.raftNode.LogMarkLocked())
 	} else if p.raftMu.tenantID != tenantID {
 		panic(errors.AssertionFailedf("tenantId was changed from %s to %s",
 			p.raftMu.tenantID, tenantID))
@@ -717,18 +716,15 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	// leader may switch to v2.
 
 	// Grab the state we need in one shot after acquiring Replica mu.
-	var nextUnstableIndex, stableIndex uint64
+	var nextUnstableIndex uint64
 	var leaderID, leaseholderID roachpb.ReplicaID
-	var admitted [raftpb.NumPriorities]uint64
 	var myLeaderTerm uint64
 	func() {
 		p.opts.Replica.MuLock()
 		defer p.opts.Replica.MuUnlock()
 		nextUnstableIndex = p.raftMu.raftNode.NextUnstableIndexLocked()
-		stableIndex = p.raftMu.raftNode.StableIndexLocked()
 		leaderID = p.raftMu.raftNode.LeaderLocked()
 		leaseholderID = p.opts.Replica.LeaseholderMuLocked()
-		admitted = p.raftMu.raftNode.GetAdmittedLocked()
 		if leaderID == p.opts.ReplicaID {
 			myLeaderTerm = p.raftMu.raftNode.TermLocked()
 		}
@@ -736,37 +732,31 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	if len(e.Entries) > 0 {
 		nextUnstableIndex = e.Entries[0].Index
 	}
-	p.mu.lastObservedStableIndex = stableIndex
-	p.mu.scheduledAdmittedProcessing = false
 	p.makeStateConsistentRaftMuLockedProcLocked(
 		ctx, nextUnstableIndex, leaderID, leaseholderID, myLeaderTerm)
 
 	if !p.isLeaderUsingV2ProcLocked() {
 		return
 	}
-	// If there was a recent MsgStoreAppendResp that triggered this Ready
-	// processing, it has already been stepped, so the stable index would have
-	// advanced. So this is an opportune place to do Admitted processing.
-	nextAdmitted := p.mu.waitingForAdmissionState.computeAdmitted(stableIndex)
-	if admittedIncreased(admitted, nextAdmitted) {
-		p.opts.Replica.MuLock()
-		msgResp := p.raftMu.raftNode.SetAdmittedLocked(nextAdmitted)
-		p.opts.Replica.MuUnlock()
-		if p.mu.leader.rc == nil && p.mu.leaderNodeID != 0 {
-			// Follower, and know leaderNodeID, leaderStoreID.
-			// TODO(pav-kv): populate the message correctly.
+
+	// Piggyback admitted index advancement, if any, to the message stream going
+	// to the leader node, if we are not the leader. At the leader node, the
+	// admitted vector is read directly from the log tracker.
+	if p.mu.leader.rc == nil && p.mu.leaderNodeID != 0 {
+		// TODO(pav-kv): must make sure the leader term is the same.
+		if admitted, dirty := p.logTracker.admitted(); dirty {
 			p.opts.AdmittedPiggybacker.Add(p.mu.leaderNodeID, kvflowcontrolpb.PiggybackedAdmittedState{
 				RangeID:       p.opts.RangeID,
 				ToStoreID:     p.mu.leaderStoreID,
 				FromReplicaID: p.opts.ReplicaID,
-				ToReplicaID:   roachpb.ReplicaID(msgResp.To),
-				Admitted:      kvflowcontrolpb.AdmittedState{},
-			})
+				ToReplicaID:   p.mu.leaderID,
+				Admitted: kvflowcontrolpb.AdmittedState{
+					Term:     admitted.Term,
+					Admitted: admitted.Admitted[:],
+				}})
 		}
-		// Else if the local replica is the leader, we have already told it
-		// about the update by calling SetAdmittedLocked. If the leader is not
-		// known, we simply drop the message.
 	}
+
 	if p.mu.leader.rc != nil {
 		if err := p.mu.leader.rc.HandleRaftEventRaftMuLocked(ctx, e); err != nil {
 			log.Errorf(ctx, "error handling raft event: %v", err)
@@ -774,8 +764,22 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	}
 }
 
+func (p *processorImpl) registerLogAppend(ctx context.Context, e rac2.RaftEvent) {
+	if len(e.Entries) == 0 {
+		return
+	}
+	after := e.Entries[0].Index - 1
+	to := rac2.LogMark{Term: e.Term, Index: e.Entries[len(e.Entries)-1].Index}
+	p.logTracker.append(ctx, after, to)
+}
+
 // AdmitRaftEntriesRaftMuLocked implements Processor.
 func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2.RaftEvent) bool {
+	// Register all log appends without exception. If the replica is being
+	// destroyed, this should be a no-op, but there is no harm in registering the
+	// write just in case.
+	p.registerLogAppend(ctx, e)
+
 	// Return false only if we're not destroyed and not using V2.
 	if destroyed, usingV2 := func() (bool, bool) {
 		p.mu.Lock()
@@ -784,6 +788,8 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 	}(); destroyed || !usingV2 {
 		return destroyed
 	}
+	// NB: destroyed and "using v2" status does not change below since we are
+	// holding raftMu.
 
 	for _, entry := range e.Entries {
 		typ, priBits, err := raftlog.EncodingOf(entry)
@@ -810,7 +816,6 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 				p.mu.Lock()
 				defer p.mu.Unlock()
 				raftPri = p.mu.follower.lowPriOverrideState.getEffectivePriority(entry.Index, raftPri)
-				p.mu.waitingForAdmissionState.add(mark.Term, mark.Index, raftPri)
 			}()
 		} else {
 			raftPri = raftpb.LowPri
@@ -820,19 +825,16 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 					"do not use RACv1 for pri %s, which is regular work",
 					admissionpb.WorkPriority(meta.AdmissionPriority))
 			}
-			func() {
-				p.mu.Lock()
-				defer p.mu.Unlock()
-				p.mu.waitingForAdmissionState.add(mark.Term, mark.Index, raftPri)
-			}()
 		}
-		admissionPri := rac2.RaftToAdmissionPriority(raftPri)
-		// NB: cannot hold mu when calling Admit since the callback may
-		// execute from inside Admit, when the entry is immediately admitted.
+		// Register all entries subject to AC with the log tracker.
+		p.logTracker.register(ctx, mark, raftPri)
+
+		// NB: cannot hold mu when calling Admit since the callback may execute from
+		// inside Admit, when the entry is immediately admitted.
 		submitted := p.opts.ACWorkQueue.Admit(ctx, EntryForAdmission{
 			StoreID:        p.opts.StoreID,
 			TenantID:       p.raftMu.tenantID,
-			Priority:       admissionPri,
+			Priority:       rac2.RaftToAdmissionPriority(raftPri),
 			CreateTime:     meta.AdmissionCreateTime,
 			RequestedCount: int64(len(entry.Data)),
 			Ingested:       typ.IsSideloaded(),
@@ -843,13 +845,14 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 				Priority: raftPri,
 			},
 		})
+		// Failure is very rare and likely does not happen, e.g. store is not found.
+		// TODO(pav-kv): audit failure scenarios and minimize/eliminate them.
 		if !submitted {
-			// Very rare. e.g. store was not found.
-			func() {
-				p.mu.Lock()
-				defer p.mu.Unlock()
-				p.mu.waitingForAdmissionState.remove(mark.Term, mark.Index, raftPri)
-			}()
+			// NB: this also admits all previously registered entries.
+			// TODO(pav-kv): consider not registering this entry in the first place,
+			// instead of falsely admitting a prefix of the log. We don't want false
+			// admissions to reach the leader.
+			p.logTracker.logAdmitted(ctx, mark, raftPri)
 		}
 	}
 	return true
@@ -918,28 +921,42 @@ func (p *processorImpl) SideChannelForPriorityOverrideAtFollowerRaftMuLocked(
 	}
 }
 
+// SyncedLogStorage implements Processor.
+func (p *processorImpl) SyncedLogStorage(ctx context.Context, mark rac2.LogMark, snap bool) {
+	if snap {
+		p.logTracker.snapSynced(ctx, mark)
+	} else {
+		p.logTracker.logSynced(ctx, mark)
+	}
+	// NB: storage syncs will trigger raft Ready processing, so we don't need to
+	// explicitly schedule it here like in AdmittedLogEntry.
+}
+
 // AdmittedLogEntry implements Processor.
 func (p *processorImpl) AdmittedLogEntry(
 	ctx context.Context, state EntryForAdmissionCallbackState,
 ) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.mu.destroyed {
+	schedule := p.logTracker.logAdmitted(ctx, state.Mark, state.Priority)
+
+	// TODO(pav-kv): Can we avoid locking p.mu here?
+	if v2 := func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return p.isLeaderUsingV2ProcLocked()
+	}(); !v2 {
 		return
 	}
-	admittedMayAdvance :=
-		p.mu.waitingForAdmissionState.remove(state.Mark.Term, state.Mark.Index, state.Priority)
-	if !admittedMayAdvance || state.Mark.Index > p.mu.lastObservedStableIndex ||
-		!p.isLeaderUsingV2ProcLocked() {
-		return
-	}
-	// The lastObservedStableIndex has moved at or ahead of state.Index. This
-	// will happen when admission is not immediate. In this case we need to
-	// schedule processing.
-	if !p.mu.scheduledAdmittedProcessing {
-		p.mu.scheduledAdmittedProcessing = true
+	if schedule {
+		// Schedule a raft Ready cycle that will send the updated admitted vector to
+		// the leader via AdmittedPiggybacker if it hasn't been sent by then.
 		p.opts.RaftScheduler.EnqueueRaftReady(p.opts.RangeID)
 	}
+}
+
+// AdmittedState implements Processor.
+func (p *processorImpl) AdmittedState() rac2.AdmittedVector {
+	admitted, _ := p.logTracker.admitted()
+	return admitted
 }
 
 // AdmitForEval implements Processor.
@@ -966,15 +983,6 @@ func (p *processorImpl) AdmitForEval(
 		return false, nil
 	}
 	return p.mu.leader.rc.WaitForEval(ctx, pri)
-}
-
-func admittedIncreased(prev, next [raftpb.NumPriorities]uint64) bool {
-	for i := range prev {
-		if prev[i] < next[i] {
-			return true
-		}
-	}
-	return false
 }
 
 // GetAdmitted implements rac2.AdmittedTracker.
