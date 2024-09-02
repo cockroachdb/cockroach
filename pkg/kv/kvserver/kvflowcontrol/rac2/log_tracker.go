@@ -104,22 +104,24 @@ func (l *LogTracker) Admitted() AdmittedVector {
 // LogMark, with no gaps. Any entries in the (after, to.Index] batch, that are
 // subject to admission control, should be registered with the Register call
 // before the batch is sent to storage.
-func (l *LogTracker) Append(ctx context.Context, after uint64, to LogMark) {
+//
+// Returns true when the admitted vector might have changed.
+func (l *LogTracker) Append(ctx context.Context, after uint64, to LogMark) bool {
 	// Fast path. We are at the same term. The log must be contiguous.
 	if to.Term == l.last.Term {
 		if after != l.last.Index {
 			l.errorf(ctx, "append (%d,%d]@%d out of order", after, to.Index, to.Term)
-			return
+			return false
 		}
 		l.last.Index = to.Index
-		return
+		return false
 	}
 	if to.Term < l.last.Term || after > l.last.Index {
 		// Does not happen. Log writes are always ordered by LogMark, and have no
 		// gaps. Gaps can only appear when the log is cleared in response to storing
 		// a snapshot, which is handled by the SnapSynced method.
 		l.errorf(ctx, "append (%d,%d]@%d out of order", after, to.Index, to.Term)
-		return
+		return false
 	}
 	// Invariant: to.Term > l.last.Term && after <= l.last.Index.
 	l.last = to
@@ -130,6 +132,7 @@ func (l *LogTracker) Append(ctx context.Context, after uint64, to LogMark) {
 	for pri, marks := range l.waiting {
 		l.waiting[pri] = truncate(marks, after)
 	}
+	return true
 }
 
 // Register informs the tracker that the entry at the given log mark is about to
@@ -160,17 +163,21 @@ func (l *LogTracker) Register(ctx context.Context, at LogMark, pri raftpb.Priori
 // All writes are done in the LogMark order, but the corresponding LogSynced
 // calls can be skipped or invoked in any order, e.g. due to delivery
 // concurrency. The tracker keeps the latest (in the logical sense) stable mark.
-func (l *LogTracker) LogSynced(ctx context.Context, stable LogMark) {
+//
+// Returns true when the admitted vector might have changed.
+func (l *LogTracker) LogSynced(ctx context.Context, stable LogMark) bool {
 	if stable.After(l.last) {
 		// Does not happen. The write must have been registered with Append call.
 		l.errorf(ctx, "syncing mark %+v before appending it", stable)
-		return
+		return false
 	}
 	// TODO(pav-kv): we can move the stable index up for a stale Term too, if we
 	// track leader term for each entry (see LogAdmitted), or forks of the log.
 	if stable.Term == l.last.Term && stable.Index > l.stable {
 		l.stable = stable.Index
+		return true
 	}
+	return false
 }
 
 // LogAdmitted informs the tracker that the log up to the given LogMark has been
@@ -186,41 +193,49 @@ func (l *LogTracker) LogSynced(ctx context.Context, stable LogMark) {
 // there can be concurrency in the signal delivery. LogTracker dampens this by
 // capping admitted indices at stable index (see Admitted), so that admissions
 // appear to happen after log syncs.
-func (l *LogTracker) LogAdmitted(ctx context.Context, at LogMark, pri raftpb.Priority) {
+//
+// Returns true when the admitted vector might have changed.
+func (l *LogTracker) LogAdmitted(ctx context.Context, at LogMark, pri raftpb.Priority) bool {
 	if at.After(l.last) {
 		// Does not happen. The write must have been registered with Append call.
 		l.errorf(ctx, "admitting mark %+v before appending it", at)
-		return
+		return false
 	}
 	waiting := l.waiting[pri]
 	// There is nothing to admit, or it's a stale admission.
 	if len(waiting) == 0 || at.Index < waiting[0].Index {
-		return
+		return false
 	}
 	// Remove waiting entries preceding the admitted mark. Due to invariants, this
 	// is always a prefix of the queue.
 	for i, mark := range waiting {
 		if mark.After(at) {
 			l.waiting[pri] = waiting[i:]
-			return
+			return true
 		}
 	}
 	// The entire queue is admitted, clear it.
 	l.waiting[pri] = waiting[len(waiting):]
+	return true
 }
 
 // SnapSynced informs the tracker that a snapshot at the given log mark has been
 // stored/synced, and the log is cleared.
-func (l *LogTracker) SnapSynced(ctx context.Context, mark LogMark) {
+//
+// Returns true when the admitted vector might have changed.
+func (l *LogTracker) SnapSynced(ctx context.Context, mark LogMark) bool {
 	if !mark.After(l.last) {
 		l.errorf(ctx, "syncing stale snapshot %+v", mark)
-		return
+		return false
 	}
 	// Fake an append spanning the gap between the log and the snapshot. It will,
 	// if necessary, truncate the stable index and remove entries waiting for
 	// admission that became obsolete.
-	l.Append(ctx, min(l.last.Index, mark.Index), mark)
-	l.LogSynced(ctx, mark)
+	dirty := l.Append(ctx, min(l.last.Index, mark.Index), mark)
+	if l.LogSynced(ctx, mark) {
+		dirty = true
+	}
+	return dirty
 }
 
 // String returns a string representation of the LogTracker.
