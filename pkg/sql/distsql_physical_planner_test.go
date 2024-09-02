@@ -257,7 +257,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	}
 
 	for i := range descs {
-		ri, err := rangeCache.TestingGetCached(ctx, descs[i].StartKey, false /* inclusive */)
+		ri, err := rangeCache.TestingGetCached(ctx, descs[i].StartKey, false, roachpb.LAG_BY_CLUSTER_SETTING)
 		require.NoError(t, err)
 		require.Equal(t, descs[i], ri.Desc)
 		require.NotNil(t, ri.Lease)

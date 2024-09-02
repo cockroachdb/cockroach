@@ -1042,7 +1042,7 @@ func (rc *RangeCache) evictDescLocked(ctx context.Context, desc *roachpb.RangeDe
 // and `key` is the EndKey and StartKey of two adjacent ranges, the first range
 // is returned instead of the second (which technically contains the given key).
 func (rc *RangeCache) TestingGetCached(
-	ctx context.Context, key roachpb.RKey, inverted bool,
+	ctx context.Context, key roachpb.RKey, inverted bool, _default roachpb.RangeClosedTimestampPolicy,
 ) (roachpb.RangeInfo, error) {
 	rc.rangeCache.RLock()
 	defer rc.rangeCache.RUnlock()
