@@ -294,9 +294,10 @@ func New(
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	locality roachpb.Locality,
+	now func() int64,
 ) *Gossip {
 	g := &Gossip{
-		server:            newServer(ambient, clusterID, nodeID, stopper, registry),
+		server:            newServer(ambient, clusterID, nodeID, stopper, registry, now),
 		Connected:         make(chan struct{}),
 		outgoing:          makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsOutgoingGauge)),
 		bootstrapping:     map[string]struct{}{},
@@ -339,7 +340,7 @@ func NewTestWithLocality(
 	n := &base.NodeIDContainer{}
 	var ac log.AmbientContext
 	ac.AddLogTag("n", n)
-	gossip := New(ac, c, n, stopper, registry, locality)
+	gossip := New(ac, c, n, stopper, registry, locality, func() int64 { return timeutil.Now().UnixNano() })
 	if nodeID != 0 {
 		n.Set(context.TODO(), nodeID)
 	}
