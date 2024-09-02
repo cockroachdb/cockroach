@@ -6,6 +6,7 @@ go_library(
         "admission.go",
         "close_scheduler.go",
         "doc.go",
+        "log_tracker.go",
         "processor.go",
         "raft_node.go",
     ],
