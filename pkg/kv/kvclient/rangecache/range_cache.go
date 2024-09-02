@@ -99,6 +99,13 @@ const (
 // RangeInfo or any other message which uses the type.
 const UnknownClosedTimestampPolicy roachpb.RangeClosedTimestampPolicy = -1
 
+// DefaultSendClosedTimestampPolicy is used when the closed timestamp policy
+// is not known by the range cache. This choice prevents sending batch requests
+// to only voters when a perfectly good non-voter may exist in the local
+// region. It's defined as a constant here to ensure that we use the same
+// value when populating the batch header.
+const DefaultSendClosedTimestampPolicy = roachpb.LEAD_FOR_GLOBAL_READS
+
 // RangeDescriptorDB is a type which can query range descriptors from an
 // underlying datastore. This interface is used by RangeCache to
 // initially retrieve information which will be cached.
