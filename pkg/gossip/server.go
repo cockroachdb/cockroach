@@ -77,6 +77,7 @@ func newServer(
 	nodeID *base.NodeIDContainer,
 	stopper *stop.Stopper,
 	registry *metric.Registry,
+	now func() int64,
 ) *server {
 	s := &server{
 		AmbientContext: ambient,
@@ -88,7 +89,7 @@ func newServer(
 		serverMetrics:  makeMetrics(),
 	}
 
-	s.mu.is = newInfoStore(s.AmbientContext, nodeID, util.UnresolvedAddr{}, stopper, s.nodeMetrics)
+	s.mu.is = newInfoStore(s.AmbientContext, nodeID, util.UnresolvedAddr{}, stopper, s.nodeMetrics, now)
 	s.mu.incoming = makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsIncomingGauge))
 	s.mu.nodeMap = make(map[util.UnresolvedAddr]serverInfo)
 	s.ready.Store(make(chan struct{}))

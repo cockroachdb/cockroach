@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,7 +38,10 @@ func newTestInfoStore() (*infoStore, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	nc := &base.NodeIDContainer{}
 	nc.Set(context.Background(), 1)
-	is := newInfoStore(log.MakeTestingAmbientCtxWithNewTracer(), nc, emptyAddr, stopper, makeMetrics())
+	is := newInfoStore(
+		log.MakeTestingAmbientCtxWithNewTracer(), nc, emptyAddr, stopper, makeMetrics(),
+		func() int64 { return timeutil.Now().UnixNano() },
+	)
 	return is, stopper
 }
 
@@ -249,11 +253,12 @@ func TestCombineInfosRatchetMonotonic(t *testing.T) {
 			is, stopper := newTestInfoStore()
 			defer stopper.Stop(context.Background())
 
+			clock := func() int64 { return timeutil.Now().UnixNano() }
 			// Generate an info with a timestamp in the future.
 			info := &Info{
 				NodeID:    is.nodeID.Get(),
 				TTLStamp:  math.MaxInt64,
-				OrigStamp: monotonicUnixNano() + int64(time.Hour),
+				OrigStamp: monotonicUnixNano(clock) + int64(time.Hour),
 			}
 			if !local {
 				info.NodeID++
@@ -280,7 +285,7 @@ func TestCombineInfosRatchetMonotonic(t *testing.T) {
 			var expectedLast int64
 			if local {
 				expectedLast = info.OrigStamp
-				if now := monotonicUnixNano(); now <= last {
+				if now := monotonicUnixNano(clock); now <= last {
 					t.Fatalf("expected mono-time to increase: %d <= %d", now, last)
 				}
 			}
