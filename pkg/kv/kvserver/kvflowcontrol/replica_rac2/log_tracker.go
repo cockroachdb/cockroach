@@ -32,6 +32,9 @@ type logTracker struct {
 	// dirty is true when the admitted vector has changed and should be sent to
 	// the leader.
 	dirty bool
+	// scheduled is true when the admitted vector change has been scheduled for
+	// processing by raft Ready.
+	scheduled bool
 }
 
 func (l *logTracker) init(stable rac2.LogMark) {
@@ -44,6 +47,7 @@ func (l *logTracker) admitted() (av rac2.AdmittedVector, dirty bool) {
 	l.Lock()
 	defer l.Unlock()
 	dirty, l.dirty = l.dirty, false
+	l.scheduled = false
 	av = l.lt.Admitted()
 	return av, dirty
 }
@@ -70,12 +74,20 @@ func (l *logTracker) logSynced(ctx context.Context, stable rac2.LogMark) {
 	}
 }
 
-func (l *logTracker) logAdmitted(ctx context.Context, at rac2.LogMark, pri raftpb.Priority) {
+// logAdmitted returns true if the admitted vector has advanced and must be
+// scheduled for delivery to the leader.
+func (l *logTracker) logAdmitted(ctx context.Context, at rac2.LogMark, pri raftpb.Priority) bool {
 	l.Lock()
 	defer l.Unlock()
-	if l.lt.LogAdmitted(ctx, at, pri) {
-		l.dirty = true
+	if !l.lt.LogAdmitted(ctx, at, pri) {
+		return false
 	}
+	l.dirty = true
+	if !l.scheduled {
+		l.scheduled = true
+		return true
+	}
+	return false
 }
 
 func (l *logTracker) snapSynced(ctx context.Context, mark rac2.LogMark) {
@@ -92,6 +104,9 @@ func (l *logTracker) debugString() string {
 	var flags string
 	if l.dirty {
 		flags += "+dirty"
+	}
+	if l.scheduled {
+		flags += "+sched"
 	}
 	if len(flags) != 0 {
 		flags = " [" + flags + "]"
