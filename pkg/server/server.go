@@ -314,14 +314,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	nodeTombStorage, decommissionCheck := getPingCheckDecommissionFn(engines)
 
-	g := gossip.New(
-		cfg.AmbientCtx,
-		cfg.ClusterIDContainer,
-		nodeIDContainer,
-		stopper,
-		nodeRegistry,
-		cfg.Locality,
-	)
+	g := gossip.New(cfg.AmbientCtx, cfg.ClusterIDContainer, nodeIDContainer, stopper, nodeRegistry, cfg.Locality, clock.PhysicalNow)
 
 	tenantCapabilitiesTestingKnobs, _ := cfg.TestingKnobs.TenantCapabilitiesTestingKnobs.(*tenantcapabilities.TestingKnobs)
 	authorizer := tenantcapabilitiesauthorizer.New(cfg.Settings, tenantCapabilitiesTestingKnobs)

@@ -61,6 +61,8 @@ type callback struct {
 type infoStore struct {
 	log.AmbientContext
 
+	now func() int64
+
 	nodeID  *base.NodeIDContainer
 	stopper *stop.Stopper
 	metrics Metrics
@@ -88,16 +90,16 @@ var errNotFresh = errors.New("info not fresh")
 // newly created value in the event one is created within the same
 // nanosecond. Really unlikely except for the case of unittests, but
 // better safe than sorry.
-func monotonicUnixNano() int64 {
+func monotonicUnixNano(now func() int64) int64 {
 	monoTime.Lock()
 	defer monoTime.Unlock()
 
-	now := timeutil.Now().UnixNano()
-	if now <= monoTime.last {
-		now = monoTime.last + 1
+	wt := now()
+	if wt <= monoTime.last {
+		wt = monoTime.last + 1
 	}
-	monoTime.last = now
-	return now
+	monoTime.last = wt
+	return wt
 }
 
 // ratchetMonotonic increases the monotonic clock to be at least v. Used to
@@ -163,9 +165,11 @@ func newInfoStore(
 	nodeAddr util.UnresolvedAddr,
 	stopper *stop.Stopper,
 	metrics Metrics,
+	now func() int64,
 ) *infoStore {
 	is := &infoStore{
 		AmbientContext:  ambient,
+		now:             now,
 		nodeID:          nodeID,
 		stopper:         stopper,
 		metrics:         metrics,
@@ -209,7 +213,7 @@ func (is *infoStore) newInfo(val []byte, ttl time.Duration) *Info {
 	if nodeID == 0 {
 		panic("gossip infostore's NodeID is 0")
 	}
-	now := monotonicUnixNano()
+	now := monotonicUnixNano(is.now)
 	ttlStamp := now + int64(ttl)
 	if ttl == 0 {
 		ttlStamp = math.MaxInt64
@@ -227,7 +231,7 @@ func (is *infoStore) newInfo(val []byte, ttl time.Duration) *Info {
 func (is *infoStore) getInfo(key string) *Info {
 	if info, ok := is.Infos[key]; ok {
 		// Check TTL and ignore if too old.
-		if !info.expired(monotonicUnixNano()) {
+		if !info.expired(monotonicUnixNano(is.now)) {
 			return info
 		}
 	}
@@ -253,7 +257,7 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 	}
 	if i.OrigStamp == 0 {
 		i.Value.InitChecksum([]byte(key))
-		i.OrigStamp = monotonicUnixNano()
+		i.OrigStamp = monotonicUnixNano(is.now)
 		if highWaterStamp, ok := is.highWaterStamps[i.NodeID]; ok && highWaterStamp >= i.OrigStamp {
 			// Report both timestamps in the crash.
 			log.Fatalf(context.Background(),
@@ -397,7 +401,7 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 // infoStore. If it is specified as false, the method will ignore expired infos
 // without deleting them or modifying the infoStore.
 func (is *infoStore) visitInfos(visitInfo func(string, *Info) error, deleteExpired bool) error {
-	now := monotonicUnixNano()
+	now := monotonicUnixNano(is.now)
 
 	if visitInfo != nil {
 		for k, i := range is.Infos {
