@@ -478,7 +478,7 @@ func TestSendRPCOrder(t *testing.T) {
 				Lease: lease,
 			}
 			if tc.leaseHolder == 0 {
-				ri.ClosedTimestampPolicy = rangecache.UnknownClosedTimestampPolicy
+				ri.ClosedTimestampPolicy = -1 // rangecache.unknownClosedTimestampPolicy
 			}
 			ds.rangeCache.Insert(ctx, ri)
 

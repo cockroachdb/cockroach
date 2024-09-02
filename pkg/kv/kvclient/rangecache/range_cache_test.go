@@ -1503,7 +1503,7 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 
 	ri := roachpb.RangeInfo{
 		Desc:                  desc1,
-		ClosedTimestampPolicy: UnknownClosedTimestampPolicy,
+		ClosedTimestampPolicy: unknownClosedTimestampPolicy,
 	}
 	cache.Insert(ctx, ri)
 	const lag, lead = roachpb.LAG_BY_CLUSTER_SETTING, roachpb.LEAD_FOR_GLOBAL_READS
@@ -1517,7 +1517,7 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 	tokRI := tok.RangeInfo()
 	require.Equal(t, desc1, tokRI.Desc)
 	require.Equal(t, roachpb.Lease{}, tokRI.Lease)
-	require.Equal(t, UnknownClosedTimestampPolicy, tokRI.ClosedTimestampPolicy)
+	require.Equal(t, unknownClosedTimestampPolicy, tokRI.ClosedTimestampPolicy)
 
 	// EvictAndReplace() with a new descriptor.
 	ri.Desc = desc2
