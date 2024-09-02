@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -1444,9 +1445,6 @@ func (f *deadlockFailer) Fail(ctx context.Context, nodeID int) {
 		f.locks = map[int][]roachpb.RangeID{}
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 20*time.Second) // can take a while to lock
-	defer cancel()
-
 	var ranges []roachpb.RangeID
 	if f.onlyLeaseholders {
 		ranges = append(ranges, f.leases[nodeID]...)
@@ -1462,8 +1460,18 @@ func (f *deadlockFailer) Fail(ctx context.Context, nodeID int) {
 	for i := 0; i < len(ranges) && len(f.locks[nodeID]) < f.numReplicas; i++ {
 		rangeID := ranges[i]
 		var locked bool
-		require.NoError(f.t, conn.QueryRowContext(ctx,
-			`SELECT crdb_internal.unsafe_lock_replica($1::int, true)`, rangeID).Scan(&locked))
+		// Retry the lock acquisition for a bit. Transient errors are possible here
+		// if there is another failure in the system that hasn't cleared up yet; to
+		// run a SQL query we may need to run internal queries related to user auth.
+		//
+		// See: https://github.com/cockroachdb/cockroach/issues/129918
+		testutils.SucceedsSoon(f.t, func() error {
+			ctx, cancel := context.WithTimeout(ctx, 20*time.Second) // can take a while to lock
+			defer cancel()
+			return conn.QueryRowContext(ctx,
+				`SELECT crdb_internal.unsafe_lock_replica($1::int, true)`, rangeID).Scan(&locked)
+		})
+		// NB: `locked` is false if the replica moved off the node in the interim.
 		if locked {
 			f.locks[nodeID] = append(f.locks[nodeID], rangeID)
 			f.t.L().Printf("locked r%d on n%d", rangeID, nodeID)
