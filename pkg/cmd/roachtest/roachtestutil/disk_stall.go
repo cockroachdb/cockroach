@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
@@ -60,6 +61,10 @@ func (s *cgroupDiskStaller) LogDir() string {
 	return "logs"
 }
 func (s *cgroupDiskStaller) Setup(ctx context.Context) {
+	if _, ok := s.c.Spec().ReusePolicy.(spec.ReusePolicyNone); !ok {
+		// Safety measure.
+		s.f.Fatalf("cluster needs ReusePolicyNone to support disk stalls")
+	}
 	if s.logsToo {
 		s.c.Run(ctx, option.WithNodes(s.c.All()), "mkdir -p {store-dir}/logs")
 		s.c.Run(ctx, option.WithNodes(s.c.All()), "rm -f logs && ln -s {store-dir}/logs logs || true")
@@ -187,6 +192,10 @@ func (s *dmsetupDiskStaller) device(nodes option.NodeListOption) string {
 }
 
 func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
+	if _, ok := s.c.Spec().ReusePolicy.(spec.ReusePolicyNone); !ok {
+		// We disable journaling and do all kinds of things below.
+		s.f.Fatalf("cluster needs ReusePolicyNone to support disk stalls")
+	}
 	s.dev = s.device(s.c.All())
 	// snapd will run "snapd auto-import /dev/dm-0" via udev triggers when
 	// /dev/dm-0 is created. This possibly interferes with the dmsetup create
