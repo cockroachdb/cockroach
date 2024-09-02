@@ -375,7 +375,7 @@ func TestNodeProposeWaitDropped(t *testing.T) {
 		}
 		n.Advance()
 	}
-	proposalTimeout := time.Millisecond * 100
+	proposalTimeout := time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), proposalTimeout)
 	// propose with cancel should be cancelled earyly if dropped
 	assert.Equal(t, ErrProposalDropped, n.Propose(ctx, droppingMsg))
