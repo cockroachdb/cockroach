@@ -1046,7 +1046,14 @@ func (rc *RangeCache) TestingGetCached(
 	if entry == nil {
 		return roachpb.RangeInfo{}, errors.Newf("no entry found for %s in cache", key)
 	}
-	return entry.toRangeInfo(), nil
+	// NB: this is slightly awkward. In an ideal world, we wouldn't expose the internal
+	// -1 value for the closed timestamp policy at all. But at least we don't let it
+	// leak into any tests.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/129981
+	info := entry.toRangeInfo()
+	info.ClosedTimestampPolicy = entry.closedTimestampPolicy(_default)
+	return info, nil
 }
 
 // getCachedRLocked is like TestingGetCached, but it assumes that the caller holds a
