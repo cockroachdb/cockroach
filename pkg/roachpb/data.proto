@@ -833,6 +833,15 @@ message LeafTxnFinalState {
 enum RangeClosedTimestampPolicy {
   option (gogoproto.goproto_enum_prefix) = false;
 
+  // NB: there is a local-only enum value of -1, see `rangecache.UnknownClosedTimestampPolicy`.
+  // This value is used for the range cache as a placeholder.
+  //
+  // Whenever we send a RangeInfo via DistSender, this unknown policy
+  // instead defaults to `kvcoord.defaultSendClosedTimestampPolicy`.
+  //
+  // If we re-did this today, we'd reserve the zero value of the enum
+  // for an UNKNOWN value.
+
   // LAG_BY_CLUSTER_SETTING indicates that the range's closed timestamp is
   // configured to lag behind present time by the value configured for the
   // `kv.closed_timestamp.target_duration` cluster setting.
