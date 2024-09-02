@@ -866,6 +866,11 @@ enum RangeClosedTimestampPolicy {
 message ClientRangeInfo {
   int64 descriptor_generation = 1 [(gogoproto.casttype) = "RangeGeneration"];
   int64 lease_sequence = 2 [(gogoproto.casttype) = "LeaseSequence"];
+  // NB: This field may occasionally be constructed with the (wire-invalid)
+  // value of -1, corresponding to rangecache's unknownClosedTimestampPolicy.
+  // Before attaching to a request, it is coalesced to a valid enum value.
+  //
+  // See: https://github.com/cockroachdb/cockroach/issues/129981.
   RangeClosedTimestampPolicy closed_timestamp_policy = 3;
   // ExplicitlyRequested causes range info to be returned even if other fields
   // are up-to-date or empty.
