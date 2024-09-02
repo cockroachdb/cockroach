@@ -361,10 +361,7 @@ func (et EvictionToken) ClosedTimestampPolicy(
 	if !et.Valid() {
 		panic("invalid ClosedTimestampPolicy() call on empty EvictionToken")
 	}
-	if et.entry.closedts == unknownClosedTimestampPolicy {
-		return _default
-	}
-	return et.entry.closedts
+	return et.entry.closedTimestampPolicy(_default)
 }
 
 // syncRLocked syncs the token with the cache. If the cache has a newer, but
@@ -1329,6 +1326,15 @@ func (e *cacheEntry) LeaseSpeculative() bool {
 
 func (e cacheEntry) String() string {
 	return fmt.Sprintf("desc:%s, lease:%s", e.desc, e.lease)
+}
+
+func (e *cacheEntry) closedTimestampPolicy(
+	_default roachpb.RangeClosedTimestampPolicy,
+) roachpb.RangeClosedTimestampPolicy {
+	if e.closedts == unknownClosedTimestampPolicy {
+		return _default
+	}
+	return e.closedts
 }
 
 func (e *cacheEntry) toRangeInfo() roachpb.RangeInfo {
