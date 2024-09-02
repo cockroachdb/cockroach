@@ -37,9 +37,8 @@ func (rn raftNodeForRACv2) LeaderLocked() roachpb.ReplicaID {
 	return roachpb.ReplicaID(rn.Lead())
 }
 
-func (rn raftNodeForRACv2) StableIndexLocked() uint64 {
-	// TODO(pav-kv): implement.
-	return 0
+func (rn raftNodeForRACv2) LogMarkLocked() rac2.LogMark {
+	return rn.LogMark()
 }
 
 func (rn raftNodeForRACv2) NextUnstableIndexLocked() uint64 {
