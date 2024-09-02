@@ -97,7 +97,7 @@ const (
 // UnknownClosedTimestampPolicy is used to mark on a cacheEntry that the closed
 // timestamp policy is not known. This value is never serialized into
 // RangeInfo or any other message which uses the type.
-const UnknownClosedTimestampPolicy roachpb.RangeClosedTimestampPolicy = -1
+const unknownClosedTimestampPolicy roachpb.RangeClosedTimestampPolicy = -1
 
 // DefaultSendClosedTimestampPolicy is used when the closed timestamp policy
 // is not known by the range cache. This choice prevents sending batch requests
@@ -105,7 +105,7 @@ const UnknownClosedTimestampPolicy roachpb.RangeClosedTimestampPolicy = -1
 // region. It's defined as a constant here to ensure that we use the same
 // value when populating the batch header.
 //
-// In effect, we treat UnknownClosedTimestampPolicy as
+// In effect, we treat unknownClosedTimestampPolicy as
 // DefaultSendClosedTimestampPolicy whenever accessed (and in particular on the
 // wire).
 const DefaultSendClosedTimestampPolicy = roachpb.LEAD_FOR_GLOBAL_READS
@@ -362,7 +362,7 @@ func (et EvictionToken) ClosedTimestampPolicy(
 	if !et.Valid() {
 		panic("invalid ClosedTimestampPolicy() call on empty EvictionToken")
 	}
-	if et.entry.closedts == UnknownClosedTimestampPolicy {
+	if et.entry.closedts == unknownClosedTimestampPolicy {
 		return _default
 	}
 	return et.entry.closedts
@@ -923,7 +923,7 @@ func tryLookupImpl(
 		// We don't have any lease information.
 		lease: roachpb.Lease{},
 		// We don't know the closed timestamp policy.
-		closedts: UnknownClosedTimestampPolicy,
+		closedts: unknownClosedTimestampPolicy,
 	}
 	// speculativeDesc comes from intents. Being uncommitted, it is speculative.
 	// We reset its generation to indicate this fact and allow it to be easily
@@ -942,7 +942,7 @@ func tryLookupImpl(
 	newEntries := make([]*cacheEntry, len(preRs)+1)
 	newEntries[0] = &newEntry
 	for i, preR := range preRs {
-		newEntries[i+1] = &cacheEntry{desc: preR, closedts: UnknownClosedTimestampPolicy}
+		newEntries[i+1] = &cacheEntry{desc: preR, closedts: unknownClosedTimestampPolicy}
 	}
 	insertedEntries := rc.insertLockedInner(ctx, newEntries)
 	// entry corresponds to rs[0], which is the descriptor covering the key
