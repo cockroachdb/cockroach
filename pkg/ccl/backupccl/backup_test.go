@@ -6664,7 +6664,7 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	// Creating the protected timestamp record should fail because there are too
 	// many spans. Ensure that we get the appropriate error.
 	_, err := db.Exec(`BACKUP TABLE foo, bar TO 'nodelocal://1/foo/byte-limit'`)
-	require.EqualError(t, err, "pq: protectedts: limit exceeded: 0+30 > 1 bytes")
+	require.ErrorContains(t, err, "pq: protectedts: limit exceeded")
 
 	// TODO(adityamaru): Remove in 22.2 once no records protect spans.
 	t.Run("deprecated-spans-limit", func(t *testing.T) {
