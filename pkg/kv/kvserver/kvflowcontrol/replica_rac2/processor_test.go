@@ -57,11 +57,7 @@ func (r *testReplica) initRaft(stable rac2.LogMark) {
 		b: r.b, r: r,
 		term:              stable.Term,
 		mark:              stable,
-		stableIndex:       stable.Index,
 		nextUnstableIndex: stable.Index + 1,
-	}
-	for pri := range r.raftNode.admitted {
-		r.raftNode.admitted[pri] = stable.Index
 	}
 }
 
@@ -105,9 +101,7 @@ type testRaftNode struct {
 	leader roachpb.ReplicaID
 
 	mark              rac2.LogMark
-	stableIndex       uint64
 	nextUnstableIndex uint64
-	admitted          [raftpb.NumPriorities]uint64
 }
 
 func (rn *testRaftNode) EnablePingForAdmittedLaggingLocked() {
@@ -127,34 +121,16 @@ func (rn *testRaftNode) LeaderLocked() roachpb.ReplicaID {
 	return rn.leader
 }
 
-func (rn *testRaftNode) StableIndexLocked() uint64 {
+func (rn *testRaftNode) LogMarkLocked() rac2.LogMark {
 	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.StableIndexLocked() = %d\n", rn.stableIndex)
-	return rn.stableIndex
+	fmt.Fprintf(rn.b, " RaftNode.LogMarkLocked() = %+v\n", rn.mark)
+	return rn.mark
 }
 
 func (rn *testRaftNode) NextUnstableIndexLocked() uint64 {
 	rn.r.mu.AssertHeld()
 	fmt.Fprintf(rn.b, " RaftNode.NextUnstableIndexLocked() = %d\n", rn.nextUnstableIndex)
 	return rn.nextUnstableIndex
-}
-
-func (rn *testRaftNode) GetAdmittedLocked() [raftpb.NumPriorities]uint64 {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.GetAdmittedLocked = %s\n", admittedString(rn.admitted))
-	return rn.admitted
-}
-
-func (rn *testRaftNode) SetAdmittedLocked(admitted [raftpb.NumPriorities]uint64) raftpb.Message {
-	rn.r.mu.AssertHeld()
-	// TODO(sumeer): set more fields.
-	msg := raftpb.Message{
-		Type: raftpb.MsgAppResp,
-	}
-	fmt.Fprintf(rn.b, " RaftNode.SetAdmittedLocked(%s) = %s\n",
-		admittedString(admitted), msgString(msg))
-	rn.admitted = admitted
-	return msg
 }
 
 func (rn *testRaftNode) StepMsgAppRespForAdmittedLocked(msg raftpb.Message) error {
@@ -182,22 +158,12 @@ func (rn *testRaftNode) check(t *testing.T) {
 		return
 	}
 	require.LessOrEqual(t, rn.mark.Term, rn.term)
-	require.LessOrEqual(t, rn.stableIndex, rn.mark.Index)
-	require.Greater(t, rn.nextUnstableIndex, rn.stableIndex)
 	require.LessOrEqual(t, rn.nextUnstableIndex, rn.mark.Index+1)
-	for _, index := range rn.admitted {
-		require.LessOrEqual(t, index, rn.stableIndex)
-	}
 }
 
 func (rn *testRaftNode) print() {
-	fmt.Fprintf(rn.b, "Raft: term: %d leader: %d leaseholder: %d mark: %+v stable: %d next-unstable: %d admitted: %s",
-		rn.term, rn.leader, rn.r.leaseholder, rn.mark, rn.stableIndex, rn.nextUnstableIndex,
-		admittedString(rn.admitted))
-}
-
-func admittedString(admitted [raftpb.NumPriorities]uint64) string {
-	return fmt.Sprintf("[%d, %d, %d, %d]", admitted[0], admitted[1], admitted[2], admitted[3])
+	fmt.Fprintf(rn.b, "Raft: term: %d leader: %d leaseholder: %d mark: %+v next-unstable: %d",
+		rn.term, rn.leader, rn.r.leaseholder, rn.mark, rn.nextUnstableIndex)
 }
 
 func msgString(msg raftpb.Message) string {
@@ -211,7 +177,7 @@ type testAdmittedPiggybacker struct {
 func (p *testAdmittedPiggybacker) Add(
 	n roachpb.NodeID, m kvflowcontrolpb.PiggybackedAdmittedState,
 ) {
-	fmt.Fprintf(p.b, " Piggybacker.Add(n%s, %s)\n", n, m)
+	fmt.Fprintf(p.b, " Piggybacker.Add(n%d, %v)\n", n, m)
 }
 
 type testACWorkQueue struct {
@@ -346,6 +312,9 @@ func TestProcessorBasic(t *testing.T) {
 		b.Reset()
 		return str
 	}
+	printLogTracker := func() {
+		fmt.Fprint(&b, p.logTracker.debugString())
+	}
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "processor"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			defer func() { r.raftNode.check(t) }()
@@ -367,21 +336,10 @@ func TestProcessorBasic(t *testing.T) {
 				return builderStr()
 
 			case "set-raft-state":
-				if d.HasArg("admitted") {
-					var arg string
-					d.ScanArgs(t, "admitted", &arg)
-					admitted := parseAdmitted(t, arg)
-					r.raftNode.admitted = admitted
-				}
 				if d.HasArg("leader") {
 					var leaderID int
 					d.ScanArgs(t, "leader", &leaderID)
 					r.raftNode.leader = roachpb.ReplicaID(leaderID)
-				}
-				if d.HasArg("stable-index") {
-					var stableIndex uint64
-					d.ScanArgs(t, "stable-index", &stableIndex)
-					r.raftNode.stableIndex = stableIndex
 				}
 				if d.HasArg("next-unstable-index") {
 					var nextUnstableIndex uint64
@@ -411,9 +369,8 @@ func TestProcessorBasic(t *testing.T) {
 				var mark rac2.LogMark
 				d.ScanArgs(t, "term", &mark.Term)
 				d.ScanArgs(t, "index", &mark.Index)
-				// TODO(pav-kv): mark.Term should also be respected for correctness.
-				r.raftNode.stableIndex = mark.Index
-				r.raftNode.print()
+				p.SyncedLogStorage(ctx, mark, false /* snap */)
+				printLogTracker()
 				return builderStr()
 
 			case "on-destroy":
@@ -452,6 +409,7 @@ func TestProcessorBasic(t *testing.T) {
 					fmt.Fprintf(&b, "AdmitRaftEntries:\n")
 					destroyedOrV2 := p.AdmitRaftEntriesRaftMuLocked(ctx, event)
 					fmt.Fprintf(&b, "destroyed-or-leader-using-v2: %t\n", destroyedOrV2)
+					printLogTracker()
 				}
 				return builderStr()
 
@@ -503,6 +461,7 @@ func TestProcessorBasic(t *testing.T) {
 				d.ScanArgs(t, "pri", &pri)
 				cb.Priority = raftpb.Priority(pri)
 				p.AdmittedLogEntry(ctx, cb)
+				printLogTracker()
 				return builderStr()
 
 			case "set-flow-control-mode":
@@ -589,22 +548,6 @@ func enabledLevelString(enabledLevel EnabledWhenLeaderLevel) string {
 		return "v2-encoding"
 	}
 	return "unknown-level"
-}
-
-func parseAdmitted(t *testing.T, arg string) [raftpb.NumPriorities]uint64 {
-	n := len(arg)
-	require.LessOrEqual(t, 2, n)
-	require.Equal(t, uint8('['), arg[0])
-	require.Equal(t, uint8(']'), arg[n-1])
-	parts := strings.Split(arg[1:n-1], ",")
-	require.Equal(t, 4, len(parts))
-	var admitted [raftpb.NumPriorities]uint64
-	for i, part := range parts {
-		val, err := strconv.Atoi(strings.TrimSpace(part))
-		require.NoError(t, err)
-		admitted[i] = uint64(val)
-	}
-	return admitted
 }
 
 func parseRangeDescriptor(t *testing.T, td *datadriven.TestData) roachpb.RangeDescriptor {
