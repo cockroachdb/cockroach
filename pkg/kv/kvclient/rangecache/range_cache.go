@@ -104,6 +104,10 @@ const UnknownClosedTimestampPolicy roachpb.RangeClosedTimestampPolicy = -1
 // to only voters when a perfectly good non-voter may exist in the local
 // region. It's defined as a constant here to ensure that we use the same
 // value when populating the batch header.
+//
+// In effect, we treat UnknownClosedTimestampPolicy as
+// DefaultSendClosedTimestampPolicy whenever accessed (and in particular on the
+// wire).
 const DefaultSendClosedTimestampPolicy = roachpb.LEAD_FOR_GLOBAL_READS
 
 // RangeDescriptorDB is a type which can query range descriptors from an
