@@ -419,6 +419,13 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 		return err
 	}
 
+	ubr.mu.Lock()
+	defer ubr.mu.Unlock()
+
+	if err := publish(); err != nil {
+		return err
+	}
+
 	// Even if the catch-up buffer has overflowed, all events in it should still
 	// be published. But we should return an error here before setting catchUpBuf
 	// to nil. Doing so might be misinterpreted by publish as a successful
