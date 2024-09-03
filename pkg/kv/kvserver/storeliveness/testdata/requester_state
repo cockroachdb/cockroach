@@ -148,11 +148,11 @@ support from:
 # to SupportFrom for (n2, s2).
 #
 # SupportFrom was already called above, so the first call to
-# remove-idle-stores will reset recentlyQueried, and the
-# second call to remove-idle-stores will remove (n2, s2).
+# mark-idle-stores will set recentlyQueried to inactive, and
+# the second call to mark-idle-stores will set it to idle.
 # -------------------------------------------------------------
 
-remove-idle-stores
+mark-idle-stores
 ----
 
 debug-requester-state
@@ -162,7 +162,7 @@ meta:
 support from:
 {Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:410.000000000,0}
 
-remove-idle-stores
+mark-idle-stores
 ----
 
 debug-requester-state
@@ -170,7 +170,17 @@ debug-requester-state
 meta:
 {MaxEpoch:2 MaxRequested:510.000000000,0}
 support from:
+{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:410.000000000,0}
 
 send-heartbeats now=600 liveness-interval=10s
 ----
 heartbeats:
+
+support-from node-id=2 store-id=2
+----
+epoch: 2, expiration: 410.000000000,0, support provided: true
+
+send-heartbeats now=700 liveness-interval=10s
+----
+heartbeats:
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:2 Expiration:710.000000000,0}
