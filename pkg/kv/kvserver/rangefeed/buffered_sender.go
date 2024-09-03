@@ -163,6 +163,7 @@ func (bs *BufferedSender) SendUnbuffered(event *kvpb.MuxRangeFeedEvent) error {
 	if event.Error != nil {
 		log.Fatalf(context.Background(), "unexpected: SendUnbuffered called with error event")
 	}
+	bs.metrics.IncNodeLevelEvents()
 	return bs.sender.Send(event)
 }
 
@@ -219,6 +220,7 @@ func (bs *BufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
 // Shouldn't be possible since RegisterRangefeedCleanUp is blocking until
 // stores.Rangefeed returns.
 func (bs *BufferedSender) RegisterRangefeedCleanUp(streamID int64, cleanUp func()) {
+	bs.metrics.IncRangefeedCleanUp()
 	bs.rangefeedCleanup.Store(streamID, &cleanUp)
 }
 
@@ -235,6 +237,7 @@ func (bs *BufferedSender) disconnectAll() {
 
 	bs.rangefeedCleanup.Range(func(streamID int64, cleanUp *func()) bool {
 		(*cleanUp)()
+		bs.metrics.DecRangefeedCleanUp()
 		bs.rangefeedCleanup.Delete(streamID)
 		return true
 	})
@@ -267,11 +270,16 @@ func (bs *BufferedSender) run(ctx context.Context, stopper *stop.Stopper) error 
 			for {
 				e, success, overflowed, remains := bs.popFront()
 				if success {
+					bs.metrics.UpdateQueueSize(remains)
+					bs.metrics.IncEventsSentCount()
+					bs.metrics.IncNodeLevelEvents()
 					err := bs.sender.Send(e.event)
 					e.alloc.Release(ctx)
 					if e.event.Error != nil {
+						bs.metrics.IncErrorEvents()
 						// Add metrics here
 						if cleanUp, ok := bs.rangefeedCleanup.LoadAndDelete(e.event.StreamID); ok {
+							bs.metrics.DecRangefeedCleanUp()
 							// TODO(wenyihu6): add more observability metrics into how long the
 							// clean up call is taking
 							(*cleanUp)()

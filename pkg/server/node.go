@@ -206,6 +206,54 @@ This metric is thus not an indicator of KV health.`,
 		Measurement: "Streams",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaQueueSize = metric.Metadata{
+		Name:        "rpc.streams.queue_size",
+		Help:        `Total number of MuxRangeFeed streams`,
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaNodeLevelErrors = metric.Metadata{
+		Name:        "node.level.errors",
+		Help:        "Number of errors at the node level",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangefeedCleanUp = metric.Metadata{
+		Name:        "rangefeed.level.cleanup",
+		Help:        "Number of errors at the node level",
+		Measurement: "Counts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaEventsSentCount = metric.Metadata{
+		Name:        "node.events.sent.count",
+		Help:        "Number of errors at the node level",
+		Measurement: "Counts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaBufferedQueueEvent = metric.Metadata{
+		Name:        "node.buffered.events.sent.count",
+		Help:        "Number of events buffered at the node level",
+		Measurement: "Counts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaErrorEvents = metric.Metadata{
+		Name:        "node.error.events.sent.count",
+		Help:        "Number of events buffered at the node level",
+		Measurement: "Counts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaNodeLevelEvents = metric.Metadata{
+		Name:        "node.level.events.sent.count",
+		Help:        "Number of events buffered at the node level",
+		Measurement: "Counts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaCleanUpQueue = metric.Metadata{
+		Name:        "node.level.cleanup.queue.size",
+		Help:        "Number of events buffered at the node level",
+		Measurement: "Counts",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Cluster settings.
@@ -263,6 +311,14 @@ type nodeMetrics struct {
 	CrossZoneBatchResponseBytes   *metric.Counter
 	NumMuxRangeFeed               *metric.Counter
 	ActiveMuxRangeFeed            *metric.Gauge
+	QueueSize                     *metric.Gauge
+	NodeLevelErrors               *metric.Counter
+	RangefeedCleanUp              *metric.Gauge
+	EventsSentCount               *metric.Counter
+	BufferedQueueEvent            *metric.Counter
+	ErrorEvents                   *metric.Counter
+	NodeLevelEvents               *metric.Counter
+	CleanUpQueue                  *metric.Gauge
 }
 
 var _ rangefeed.RangefeedMetricsRecorder = &nodeMetrics{}
@@ -286,6 +342,14 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeM
 		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
 		ActiveMuxRangeFeed:            metric.NewGauge(metaActiveMuxRangeFeed),
 		NumMuxRangeFeed:               metric.NewCounter(metaTotalMuxRangeFeed),
+		QueueSize:                     metric.NewGauge(metaQueueSize),
+		NodeLevelErrors:               metric.NewCounter(metaNodeLevelErrors),
+		RangefeedCleanUp:              metric.NewGauge(metaRangefeedCleanUp),
+		EventsSentCount:               metric.NewCounter(metaEventsSentCount),
+		BufferedQueueEvent:            metric.NewCounter(metaBufferedQueueEvent),
+		ErrorEvents:                   metric.NewCounter(metaErrorEvents),
+		NodeLevelEvents:               metric.NewCounter(metaNodeLevelEvents),
+		CleanUpQueue:                  metric.NewGauge(metaCleanUpQueue),
 	}
 
 	for i := range nm.MethodCounts {
@@ -359,6 +423,46 @@ func (nm *nodeMetrics) UpdateMetricsOnRangefeedConnect() {
 // rangefeed is disconnected.
 func (nm *nodeMetrics) UpdateMetricsOnRangefeedDisconnect() {
 	nm.ActiveMuxRangeFeed.Dec(1)
+}
+
+func (nm *nodeMetrics) IncQueueSize() {
+	nm.QueueSize.Inc(1)
+}
+
+func (nm *nodeMetrics) DecQueueSize() {
+	nm.QueueSize.Dec(1)
+}
+
+func (nm *nodeMetrics) UpdateQueueSize(s int64) {
+	nm.QueueSize.Update(s)
+}
+
+func (nm *nodeMetrics) IncRangefeedCleanUp() {
+	nm.RangefeedCleanUp.Inc(1)
+}
+
+func (nm *nodeMetrics) DecRangefeedCleanUp() {
+	nm.RangefeedCleanUp.Dec(1)
+}
+
+func (nm *nodeMetrics) IncEventsSentCount() {
+	nm.EventsSentCount.Inc(1)
+}
+
+func (nm *nodeMetrics) IncErrorEvents() {
+	nm.ErrorEvents.Inc(1)
+}
+
+func (nm *nodeMetrics) IncBufferedQueueEventSize() {
+	nm.BufferedQueueEvent.Inc(1)
+}
+
+func (nm *nodeMetrics) IncNodeLevelEvents() {
+	nm.NodeLevelEvents.Inc(1)
+}
+
+func (nm *nodeMetrics) UpdateCleanUpQueue(s int64) {
+	nm.CleanUpQueue.Update(s)
 }
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -1972,7 +2076,12 @@ type streamManager interface {
 }
 
 // MuxRangeFeed implements the roachpb.InternalServer interface.
-func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
+func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) (err error) {
+	defer func() {
+		n.metrics.NodeLevelErrors.Inc(1)
+		log.Errorf(context.Background(),
+			"node mux rangefeed exited due to error: %v", err)
+	}()
 	lockedMuxStream := &lockedMuxStream{wrapped: muxStream}
 
 	// All context created below should derive from this context, which is

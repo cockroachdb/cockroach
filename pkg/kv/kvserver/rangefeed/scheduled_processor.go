@@ -12,6 +12,7 @@ package rangefeed
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -320,9 +321,11 @@ func (p *ScheduledProcessor) Register(
 	var r registration
 	bufferedStream, isBufferedStream := stream.(BufferedStream)
 	if isBufferedStream {
+		p.Metrics.RangefeedUnbufferedRegistration.Inc(1)
 		r = newUnbufferedRegistration(span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 			p.Config.EventChanCap, p.Metrics, bufferedStream, disconnectFn)
 	} else {
+		p.Metrics.RangefeedBufferedRegistration.Inc(1)
 		r = newBufferedRegistration(
 			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
@@ -376,7 +379,11 @@ func (p *ScheduledProcessor) Register(
 		// long-running. For UnbufferedRegistration, this is short-lived (just for
 		// catch up scans).
 		runOutputLoop := func(ctx context.Context) {
+			start := timeutil.Now()
 			r.runOutputLoop(ctx, p.RangeID)
+			if ubr, ok := r.(*unbufferedRegistration); ok {
+				ubr.metrics.RangefeedGoroutineNanos.Inc(timeutil.Since(start).Nanoseconds())
+			}
 			if _, ok := r.(*bufferedRegistration); ok {
 				// If runOutputLoop ends, it means that the registration is disconnected
 				// for bufferedRegistration. This is not true for

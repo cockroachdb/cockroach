@@ -389,6 +389,11 @@ func (ubr *unbufferedRegistration) discardCatchUpBufferWithLock(ctx context.Cont
 // error, it is safe to assume that catch-up buffer is empty and nil after this
 // call.
 func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) error {
+	start := timeutil.Now()
+	defer func() {
+		ubr.metrics.RangefeedCatachUpBufDrainingNanos.Inc(timeutil.Since(start).Nanoseconds())
+	}()
+
 	ubr.mu.Lock()
 	defer ubr.mu.Unlock()
 
@@ -448,6 +453,10 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 // disconnected to true before this call to make sure publish doesn't treat nil
 // catchUpBuf as a successful catch-up scan.
 func (ubr *unbufferedRegistration) discardCatchUpBuffer(ctx context.Context) {
+	start := timeutil.Now()
+	defer func() {
+		ubr.metrics.RangefeedCatachUpBufDiscardingNanos.Inc(timeutil.Since(start).Nanoseconds())
+	}()
 	ubr.mu.Lock()
 	defer ubr.mu.Unlock()
 	// TODO(wenyihu6): Check if we can just discard without holding the lock first
