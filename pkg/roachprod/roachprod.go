@@ -210,7 +210,7 @@ func newCluster(
 
 // userClusterNameRegexp returns a regexp that matches all clusters owned by the
 // current user.
-func userClusterNameRegexp(l *logger.Logger) (*regexp.Regexp, error) {
+func userClusterNameRegexp(l *logger.Logger, optionalUsername string) (*regexp.Regexp, error) {
 	// In general, we expect that users will have the same
 	// account name across the services they're using,
 	// but we still want to function even if this is not
@@ -220,7 +220,11 @@ func userClusterNameRegexp(l *logger.Logger) (*regexp.Regexp, error) {
 	if err != nil {
 		return nil, err
 	}
-	pattern := ""
+
+	var pattern string
+	if optionalUsername != "" {
+		pattern += fmt.Sprintf(`(^%s-)`, regexp.QuoteMeta(optionalUsername))
+	}
 	for _, account := range accounts {
 		if !seenAccounts[account] {
 			seenAccounts[account] = true
@@ -365,7 +369,7 @@ func List(
 	if clusterNamePattern == "" {
 		if listMine {
 			var err error
-			listPattern, err = userClusterNameRegexp(l)
+			listPattern, err = userClusterNameRegexp(l, opts.Username)
 			if err != nil {
 				return cloud.Cloud{}, err
 			}
@@ -1387,7 +1391,11 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 
 // Destroy TODO
 func Destroy(
-	l *logger.Logger, destroyAllMine bool, destroyAllLocal bool, clusterNames ...string,
+	l *logger.Logger,
+	optionalUsername string,
+	destroyAllMine bool,
+	destroyAllLocal bool,
+	clusterNames ...string,
 ) error {
 	if err := LoadClusters(); err != nil {
 		return errors.Wrap(err, "problem loading clusters")
@@ -1404,7 +1412,7 @@ func Destroy(
 		if destroyAllLocal {
 			return errors.New("--all-mine cannot be combined with --all-local")
 		}
-		destroyPattern, err := userClusterNameRegexp(l)
+		destroyPattern, err := userClusterNameRegexp(l, optionalUsername)
 		if err != nil {
 			return err
 		}
