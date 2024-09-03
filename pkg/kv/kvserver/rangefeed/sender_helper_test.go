@@ -106,3 +106,11 @@ func (s *testServerStream) BlockSend() (unblock func()) {
 		once.Do(s.Unlock) //nolint:deferunlockcheck
 	}
 }
+
+type cancelCtxDisconnector struct {
+	cancel func()
+}
+
+func (c *cancelCtxDisconnector) Disconnect(_ *kvpb.Error) {
+	c.cancel()
+}

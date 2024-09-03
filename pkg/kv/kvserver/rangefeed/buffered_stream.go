@@ -7,7 +7,6 @@ package rangefeed
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // BufferedStream is a Stream that can buffer events before sending them to the
@@ -25,32 +24,13 @@ type BufferedStream interface {
 // similar to PerRangeEventSink but buffers events in BufferedSender before
 // forwarding events to the underlying grpc stream.
 type BufferedPerRangeEventSink struct {
-	rangeID  roachpb.RangeID
-	streamID int64
-	wrapped  *BufferedSender
-	manager  StreamManager
-}
-
-func NewBufferedPerRangeEventSink(
-	rangeID roachpb.RangeID, streamID int64, wrapped *BufferedSender,
-) *BufferedPerRangeEventSink {
-	return &BufferedPerRangeEventSink{
-		rangeID:  rangeID,
-		streamID: streamID,
-		wrapped:  wrapped,
-		manager:  wrapped,
-	}
+	*PerRangeEventSink
+	sender
 }
 
 var _ kvpb.RangeFeedEventSink = (*BufferedPerRangeEventSink)(nil)
 var _ Stream = (*BufferedPerRangeEventSink)(nil)
 var _ BufferedStream = (*BufferedPerRangeEventSink)(nil)
-
-// SendUnbufferedIsThreadSafe is a no-op declaration method. It is a contract
-// that the SendUnbuffered method is thread-safe. Note that
-// BufferedSender.SendBuffered and BufferedSender.SendUnbuffered are both
-// thread-safe.
-func (s *BufferedPerRangeEventSink) SendUnbufferedIsThreadSafe() {}
 
 // SendBuffered buffers the event in BufferedSender and transfers the ownership
 // of SharedBudgetAllocation to BufferedSender. BufferedSender is responsible
@@ -68,32 +48,5 @@ func (s *BufferedPerRangeEventSink) SendBuffered(
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
 	}
-	return s.wrapped.SendBuffered(response, alloc)
-}
-
-// SendUnbuffered bypass the buffer and sends the event to the underlying grpc
-// stream directly. It blocks until the event is sent or an error occurs.
-func (s *BufferedPerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
-	response := &kvpb.MuxRangeFeedEvent{
-		RangeFeedEvent: *event,
-		RangeID:        s.rangeID,
-		StreamID:       s.streamID,
-	}
-	return s.wrapped.SendUnbuffered(response, nil)
-}
-
-// SendError implements the Stream interface.
-func (s *BufferedPerRangeEventSink) SendError(err *kvpb.Error) {
-	ev := &kvpb.MuxRangeFeedEvent{
-		StreamID: s.streamID,
-		RangeID:  s.rangeID,
-	}
-	ev.MustSetValue(&kvpb.RangeFeedError{
-		Error: *transformRangefeedErrToClientError(err),
-	})
-	s.wrapped.SendBufferedError(ev)
-}
-
-func (s *BufferedPerRangeEventSink) AddRegistration(r Disconnector) {
-	s.manager.AddStream(s.streamID, r)
+	return s.send(response, alloc)
 }
