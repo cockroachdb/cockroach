@@ -7,7 +7,6 @@ package rangefeed
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // BufferedStream is a Stream that can buffer events before sending them to the
@@ -25,30 +24,13 @@ type BufferedStream interface {
 // similar to PerRangeEventSink but buffers events in BufferedSender before
 // forwarding events to the underlying grpc stream.
 type BufferedPerRangeEventSink struct {
-	rangeID  roachpb.RangeID
-	streamID int64
-	wrapped  *BufferedSender
-}
-
-func NewBufferedPerRangeEventSink(
-	rangeID roachpb.RangeID, streamID int64, wrapped *BufferedSender,
-) *BufferedPerRangeEventSink {
-	return &BufferedPerRangeEventSink{
-		rangeID:  rangeID,
-		streamID: streamID,
-		wrapped:  wrapped,
-	}
+	*PerRangeEventSink
+	sender
 }
 
 var _ kvpb.RangeFeedEventSink = (*BufferedPerRangeEventSink)(nil)
 var _ Stream = (*BufferedPerRangeEventSink)(nil)
 var _ BufferedStream = (*BufferedPerRangeEventSink)(nil)
-
-// SendUnbufferedIsThreadSafe is a no-op declaration method. It is a contract
-// that the SendUnbuffered method is thread-safe. Note that
-// BufferedSender.SendBuffered and BufferedSender.SendUnbuffered are both
-// thread-safe.
-func (s *BufferedPerRangeEventSink) SendUnbufferedIsThreadSafe() {}
 
 // SendBuffered buffers the event in BufferedSender and transfers the ownership
 // of SharedBudgetAllocation to BufferedSender. BufferedSender is responsible
@@ -66,32 +48,5 @@ func (s *BufferedPerRangeEventSink) SendBuffered(
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
 	}
-	return s.wrapped.SendBuffered(response, alloc)
-}
-
-// SendUnbuffered bypass the buffer and sends the event to the underlying grpc
-// stream directly. It blocks until the event is sent or an error occurs.
-func (s *BufferedPerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
-	response := &kvpb.MuxRangeFeedEvent{
-		RangeFeedEvent: *event,
-		RangeID:        s.rangeID,
-		StreamID:       s.streamID,
-	}
-	return s.wrapped.SendUnbuffered(response, nil)
-}
-
-// Disconnect implements the Stream interface. BufferedSender is then
-// responsible for canceling the context of the stream. The actual rangefeed
-// disconnection from processor happens late when the error event popped from
-// the queue and about to be sent to the grpc stream. So caller should not rely
-// on immediate disconnection as cleanup takes place async.
-func (s *BufferedPerRangeEventSink) Disconnect(err *kvpb.Error) {
-	ev := &kvpb.MuxRangeFeedEvent{
-		StreamID: s.streamID,
-		RangeID:  s.rangeID,
-	}
-	ev.MustSetValue(&kvpb.RangeFeedError{
-		Error: *transformRangefeedErrToClientError(err),
-	})
-	s.wrapped.SendBufferedError(ev)
+	return s.send(response, alloc)
 }
