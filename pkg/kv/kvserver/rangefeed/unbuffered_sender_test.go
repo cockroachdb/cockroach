@@ -51,7 +51,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 	ubs := NewUnbufferedSender(testServerStream)
 	sm := NewStreamManager(ubs, testRangefeedCounter)
 	require.NoError(t, sm.Start(ctx, stopper))
-	defer sm.Stop()
+	defer sm.Stop(ctx)
 	t.Run("nil handling", func(t *testing.T) {
 		const streamID = 0
 		const rangeID = 1
@@ -161,7 +161,7 @@ func TestUnbufferedSenderDisconnectBlockingIO(t *testing.T) {
 	ubs := NewUnbufferedSender(testServerStream)
 	sm := NewStreamManager(ubs, testRangefeedCounter)
 	require.NoError(t, sm.Start(ctx, stopper))
-	defer sm.Stop()
+	defer sm.Stop(ctx)
 
 	disconnectErr := makeMuxRangefeedErrorEvent(streamID, rangeID,
 		kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER)))
@@ -217,7 +217,7 @@ func TestUnbufferedSenderWithConcurrentSend(t *testing.T) {
 	testRangefeedCounter := newTestRangefeedCounter()
 	sm := NewStreamManager(NewUnbufferedSender(testServerStream), testRangefeedCounter)
 	require.NoError(t, sm.Start(ctx, stopper))
-	defer sm.Stop()
+	defer sm.Stop(ctx)
 
 	sm.AddStream(1, &cancelCtxDisconnector{
 		cancel: func() {},

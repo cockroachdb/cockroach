@@ -81,7 +81,7 @@ type Disconnector interface {
 // baseRegistration is a common base for all registration types. It is intended
 // to be embedded in an actual registration struct.
 type baseRegistration struct {
-	streamCtx        context.Context
+	streamCtx      context.Context
 	span           roachpb.Span
 	withDiff       bool
 	withFiltering  bool
