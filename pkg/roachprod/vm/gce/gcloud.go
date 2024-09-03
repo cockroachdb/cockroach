@@ -953,7 +953,7 @@ type ProjectsVal struct {
 	AcceptMultipleProjects bool
 }
 
-// defaultZones is the list of  zones used by default for cluster creation.
+// DefaultZones is the list of  zones used by default for cluster creation.
 // If the geo flag is specified, nodes are distributed between zones.
 // These are GCP zones available according to this page:
 // https://cloud.google.com/compute/docs/regions-zones#available
@@ -963,7 +963,7 @@ type ProjectsVal struct {
 // ARM64 builds), but we randomize the specific zone. This is to avoid
 // "zone exhausted" errors in one particular zone, especially during
 // nightly roachtest runs.
-func defaultZones(arch string) []string {
+func DefaultZones(arch string) []string {
 	zones := []string{"us-east1-b", "us-east1-c", "us-east1-d"}
 	if vm.ParseArch(arch) == vm.ArchARM64 {
 		// T2A instances are only available in us-central1 in NA.
@@ -1063,7 +1063,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		fmt.Sprintf("Zones for cluster. If zones are formatted as AZ:N where N is an integer, the zone\n"+
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
-			strings.Join(defaultZones(string(vm.ArchAMD64)), ",")))
+			strings.Join(DefaultZones(string(vm.ArchAMD64)), ",")))
 	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false,
 		"use preemptible GCE instances (lifetime cannot exceed 24h)")
 	flags.BoolVar(&o.UseSpot, ProviderName+"-use-spot", false,
@@ -1272,9 +1272,9 @@ func computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, err
 	}
 	if len(zones) == 0 {
 		if opts.GeoDistributed {
-			zones = defaultZones(opts.Arch)
+			zones = DefaultZones(opts.Arch)
 		} else {
-			zones = []string{defaultZones(opts.Arch)[0]}
+			zones = []string{DefaultZones(opts.Arch)[0]}
 		}
 	}
 	if providerOpts.useArmAMI() {
