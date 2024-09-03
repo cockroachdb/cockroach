@@ -44,10 +44,28 @@ type requestedSupport struct {
 	// not updated as part of the support state and meta process; it updated in
 	// SupportFrom, so it's important that updating recentlyQueried doesn't lock
 	// requesterStateHandler.mu for writing. However, updating recentlyQueried
-	// needs to lock requesterStateHandler.mu for reading to ensure that the
-	// given store is not removed from the supportFrom map.
-	recentlyQueried atomic.Bool
+	// needs to lock requesterStateHandler.mu for reading to ensure that no new
+	// stores are added to the supportFrom map.
+	recentlyQueried atomic.Int32
 }
+
+// recentlyQueried transitions between three possible values to make sure stores
+// are not marked as idle prematurely. A store transitions from active to
+// inactive every IdleSupportFromInterval and back to active upon being queried
+// in a SupportFrom call. If another IdleSupportFromInterval expires after a
+// store was marked as inactive, it will be marked as idle and will not be sent
+// heartbeats until it transitions to active again.
+const (
+	// active indicates that the store has been queried in a SupportFrom call
+	// recently (within IdleSupportFromInterval).
+	active int32 = iota
+	// inactive indicates that the store has NOT been queried in a SupportFrom
+	// call recently (within IdleSupportFromInterval).
+	inactive
+	// idle indicates that it has been even longer since the store was queried
+	// in a SupportFrom (more than IdleSupportFromInterval).
+	idle
+)
 
 // requesterStateHandler is the main interface for handling support from other
 // stores. The typical interactions with requesterStateHandler are:
@@ -128,7 +146,7 @@ func (rsh *requesterStateHandler) getSupportFrom(id slpb.StoreIdent) (slpb.Suppo
 	if ok {
 		// If a store is present, set recentlyQueried to true. Otherwise, if
 		// this is a new store, recentlyQueried will be set to true in addStore.
-		rs.recentlyQueried.Store(true)
+		rs.recentlyQueried.Store(active)
 		supportState = rs.state
 	}
 	return supportState, ok
@@ -144,34 +162,30 @@ func (rsh *requesterStateHandler) addStore(id slpb.StoreIdent) {
 	defer rsh.mu.Unlock()
 	if _, ok := rsh.requesterState.supportFrom[id]; !ok {
 		rs := requestedSupport{
-			state: slpb.SupportState{Target: id, Epoch: rsh.requesterState.meta.MaxEpoch},
+			state:           slpb.SupportState{Target: id, Epoch: rsh.requesterState.meta.MaxEpoch},
 		}
 		// Adding a store is done in response to SupportFrom, so it's ok to set
-		// recentlyQueried to true here. This also ensures the store will not be
-		// removed immediately after adding.
-		rs.recentlyQueried.Store(true)
+		// recentlyQueried to active here. This also ensures the store will not
+		// be removed immediately after adding.
+		rs.recentlyQueried.Store(active)
 		rsh.requesterState.supportFrom[id] = &rs
 	}
 }
 
-// removeIdleStores removes all stores from the requesterState.supportFrom map
-// that have not appeared in a getSupportFrom call since the last time
-// removeIdleStores was called.
-func (rsh *requesterStateHandler) removeIdleStores() {
-	// Removing stores doesn't require persisting anything to disk, so it doesn't
+// markIdleStores marks all stores in the requesterState.supportFrom map as
+// idle if they have not appeared in a getSupportFrom call since the last time
+// markIdleStores was called.
+func (rsh *requesterStateHandler) markIdleStores() {
+	// Marking stores doesn't require persisting anything to disk, so it doesn't
 	// need to go through the full checkOut/checkIn process. However, we still
 	// check out the update to ensure that there are no concurrent updates.
 	defer rsh.checkInUpdate(rsh.checkOutUpdate())
-	// TODO(mira): If holding the write lock causes too much contention here,
-	// consider iterating through rsh.requesterState.supportFrom while holding a
-	// read lock to find all stores that need to be removed; then, iterate
-	// through that list of stores again while holding the write lock to
-	// actually remove them.
-	rsh.mu.Lock()
-	defer rsh.mu.Unlock()
-	for id, rs := range rsh.requesterState.supportFrom {
-		if !rs.recentlyQueried.Swap(false) {
-			delete(rsh.requesterState.supportFrom, id)
+
+	rsh.mu.RLock()
+	defer rsh.mu.RUnlock()
+	for _, rs := range rsh.requesterState.supportFrom {
+		if !rs.recentlyQueried.CompareAndSwap(active, inactive) {
+			rs.recentlyQueried.CompareAndSwap(inactive, idle)
 		}
 	}
 }
@@ -319,6 +333,10 @@ func (rsfu *requesterStateForUpdate) generateHeartbeats(from slpb.StoreIdent) []
 			"checkedIn.supportFrom while requesterStateForUpdate.inProgress.supportFrom is not empty",
 	)
 	for _, rs := range rsfu.checkedIn.supportFrom {
+		// Skip idle stores.
+		if rs.recentlyQueried.Load() == idle {
+			continue
+		}
 		heartbeat := slpb.Message{
 			Type:       slpb.MsgHeartbeat,
 			From:       from,
