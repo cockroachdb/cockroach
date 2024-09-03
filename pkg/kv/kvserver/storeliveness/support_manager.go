@@ -34,23 +34,6 @@ var Enabled = settings.RegisterBoolSetting(
 	true,
 )
 
-type Options struct {
-	// HeartbeatInterval determines how often Store Liveness sends heartbeats.
-	HeartbeatInterval time.Duration
-	// LivenessInterval determines the Store Liveness support expiration time.
-	LivenessInterval time.Duration
-	// SupportExpiryInterval determines how often Store Liveness checks if support
-	// should be withdrawn.
-	SupportExpiryInterval time.Duration
-	// IdleSupportFromInterval determines how ofter Store Liveness checks if any
-	// stores have not appeared in a SupportFrom call recently.
-	IdleSupportFromInterval time.Duration
-	// SupportWithdrawalGracePeriod determines how long Store Liveness should
-	// wait after restart before withdrawing support. It helps prevent support
-	// churn until the first heartbeats are delivered.
-	SupportWithdrawalGracePeriod time.Duration
-}
-
 // MessageSender is the interface that defines how Store Liveness messages are
 // sent. Transport is the production implementation of MessageSender.
 type MessageSender interface {
@@ -131,6 +114,9 @@ func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Times
 		// uses a map to avoid duplicates, and the requesterStateHandler's
 		// addStore checks if the store exists before adding it.
 		sm.storesToAdd.addStore(id)
+		log.VInfof(context.Background(), 2,
+			"store %d enqueued to add remote store %d", sm.storeID, id,
+		)
 		return 0, hlc.Timestamp{}, false
 	}
 	// An empty expiration implies support has expired.

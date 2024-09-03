@@ -60,7 +60,7 @@ const (
 	// See https://github.com/cockroachdb/cockroach/issues/20310.
 	DefaultMetricsSampleInterval = 10 * time.Second
 
-	// defaultRangeLeaseRenewalFraction specifies what fraction the range lease
+	// DefaultRangeLeaseRenewalFraction specifies what fraction the range lease
 	// renewal duration should be of the range lease active time. For example,
 	// with a value of 0.2 and a lease duration of 10 seconds, leases would be
 	// eagerly renewed 8 seconds into each lease.
@@ -71,7 +71,7 @@ const (
 	// uses the DefaultClass RPC class, and is thus subject to head-of-line
 	// blocking by other RPC traffic which can cause very high latencies under
 	// heavy load (several seconds).
-	defaultRangeLeaseRenewalFraction = 0.5
+	DefaultRangeLeaseRenewalFraction = 0.5
 
 	// livenessRenewalFraction specifies what fraction the node liveness renewal
 	// duration should be of the node liveness duration. For example, with a value
@@ -642,7 +642,7 @@ func (cfg *RaftConfig) SetDefaults() {
 		cfg.RangeLeaseDuration = defaultRangeLeaseDuration
 	}
 	if cfg.RangeLeaseRenewalFraction == 0 {
-		cfg.RangeLeaseRenewalFraction = defaultRangeLeaseRenewalFraction
+		cfg.RangeLeaseRenewalFraction = DefaultRangeLeaseRenewalFraction
 	}
 	if cfg.RaftReproposalTimeoutTicks == 0 {
 		cfg.RaftReproposalTimeoutTicks = defaultRaftReproposalTimeoutTicks

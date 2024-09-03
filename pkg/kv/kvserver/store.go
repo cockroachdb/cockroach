@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
@@ -1154,17 +1155,18 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
-	DefaultSpanConfig    roachpb.SpanConfig
-	Settings             *cluster.Settings
-	Clock                *hlc.Clock
-	Gossip               *gossip.Gossip
-	DB                   *kv.DB
-	NodeLiveness         *liveness.NodeLiveness
-	StorePool            *storepool.StorePool
-	Transport            *RaftTransport
-	NodeDialer           *nodedialer.Dialer
-	RPCContext           *rpc.Context
-	RangeDescriptorCache *rangecache.RangeCache
+	DefaultSpanConfig      roachpb.SpanConfig
+	Settings               *cluster.Settings
+	Clock                  *hlc.Clock
+	Gossip                 *gossip.Gossip
+	DB                     *kv.DB
+	NodeLiveness           *liveness.NodeLiveness
+	StorePool              *storepool.StorePool
+	Transport              *RaftTransport
+	StoreLivenessTransport *storeliveness.Transport
+	NodeDialer             *nodedialer.Dialer
+	RPCContext             *rpc.Context
+	RangeDescriptorCache   *rangecache.RangeCache
 
 	ClosedTimestampSender   *sidetransport.Sender
 	ClosedTimestampReceiver sidetransportReceiver
@@ -2174,8 +2176,21 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	)
 	s.metrics.registry.AddMetricStruct(s.recoveryMgr.Metrics())
 
-	// TODO(mira): create the store liveness support manager here.
-	// s.storeLiveness = ...
+	storeID := slpb.StoreIdent{NodeID: s.NodeID(), StoreID: s.StoreID()}
+	options := storeliveness.NewOptions(
+		s.cfg.RangeLeaseDuration,
+		s.cfg.RangeLeaseRenewalDuration(),
+		s.cfg.RPCContext.RPCHeartbeatInterval,
+	)
+	sm := storeliveness.NewSupportManager(
+		storeID, s.TODOEngine(), options, s.cfg.Settings, stopper,
+		s.cfg.Clock, s.cfg.StoreLivenessTransport,
+	)
+	s.cfg.StoreLivenessTransport.ListenMessages(storeID.StoreID, sm)
+	s.storeLiveness = sm
+	if err = sm.Start(ctx); err != nil {
+		log.Infof(ctx, "error starting store liveness %+v", err)
+	}
 
 	s.rangeIDAlloc = idAlloc
 
