@@ -186,9 +186,7 @@ func awsMachineSupportsSSD(machineType string) bool {
 	return false
 }
 
-func getAWSOpts(
-	machineType string, zones []string, volumeSize, ebsThroughput int, localSSD bool,
-) vm.ProviderOpts {
+func getAWSOpts(machineType string, volumeSize, ebsThroughput int, localSSD bool) vm.ProviderOpts {
 	opts := aws.DefaultProviderOpts()
 	if volumeSize != 0 {
 		opts.DefaultEBSVolume.Disk.VolumeSize = volumeSize
@@ -204,15 +202,11 @@ func getAWSOpts(
 	} else {
 		opts.MachineType = machineType
 	}
-	if len(zones) != 0 {
-		opts.CreateZones = zones
-	}
 	return opts
 }
 
 func getGCEOpts(
 	machineType string,
-	zones []string,
 	volumeSize, localSSDCount int,
 	localSSD bool,
 	RAID0 bool,
@@ -233,9 +227,6 @@ func getGCEOpts(
 	if volumeSize != 0 {
 		opts.PDVolumeSize = volumeSize
 	}
-	if len(zones) != 0 {
-		opts.Zones = zones
-	}
 	opts.SSDCount = localSSDCount
 	if localSSD && localSSDCount > 0 {
 		// NB: As the default behavior for _roachprod_ (at least in AWS/GCP) is
@@ -253,12 +244,9 @@ func getGCEOpts(
 	return opts
 }
 
-func getAzureOpts(machineType string, zones []string, volumeSize int) vm.ProviderOpts {
+func getAzureOpts(machineType string, volumeSize int) vm.ProviderOpts {
 	opts := azure.DefaultProviderOpts()
 	opts.MachineType = machineType
-	if len(zones) != 0 {
-		opts.Locations = zones
-	}
 	if volumeSize != 0 {
 		opts.NetworkDiskSize = int32(volumeSize)
 	}
@@ -418,25 +406,6 @@ func (s *ClusterSpec) RoachprodOpts(
 		}
 	}
 
-	zonesStr := params.Defaults.Zones
-	switch cloud {
-	case AWS:
-		if s.AWS.Zones != "" {
-			zonesStr = s.AWS.Zones
-		}
-	case GCE:
-		if s.GCE.Zones != "" {
-			zonesStr = s.GCE.Zones
-		}
-	}
-	var zones []string
-	if zonesStr != "" {
-		zones = strings.Split(zonesStr, ",")
-		if !s.Geo {
-			zones = zones[:1]
-		}
-	}
-
 	var workloadMachineType string
 	var err error
 	switch cloud {
@@ -460,25 +429,78 @@ func (s *ClusterSpec) RoachprodOpts(
 	var workloadProviderOpts vm.ProviderOpts
 	switch cloud {
 	case AWS:
-		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, s.AWS.VolumeThroughput,
+		providerOpts = getAWSOpts(machineType, s.VolumeSize, s.AWS.VolumeThroughput,
 			createVMOpts.SSDOpts.UseLocalSSD)
-		workloadProviderOpts = getAWSOpts(workloadMachineType, zones, s.VolumeSize, s.AWS.VolumeThroughput,
+		workloadProviderOpts = getAWSOpts(workloadMachineType, s.VolumeSize, s.AWS.VolumeThroughput,
 			createVMOpts.SSDOpts.UseLocalSSD)
 	case GCE:
-		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
+		providerOpts = getGCEOpts(machineType, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
 			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.UseSpotVMs,
 		)
-		workloadProviderOpts = getGCEOpts(workloadMachineType, zones, s.VolumeSize, ssdCount,
+		workloadProviderOpts = getGCEOpts(workloadMachineType, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
 			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.UseSpotVMs,
 		)
 	case Azure:
-		providerOpts = getAzureOpts(machineType, zones, s.VolumeSize)
-		workloadProviderOpts = getAzureOpts(workloadMachineType, zones, s.VolumeSize)
+		providerOpts = getAzureOpts(machineType, s.VolumeSize)
+		workloadProviderOpts = getAzureOpts(workloadMachineType, s.VolumeSize)
 	}
 
 	return createVMOpts, providerOpts, workloadProviderOpts, selectedArch, nil
+}
+
+// SetRoachprodOptsZones updates the providerOpts with the VM zones as specified in the params/spec.
+// We separate this logic from RoachprodOpts as we may need to call this multiple times in order to
+// randomize the default GCE zone.
+func (s *ClusterSpec) SetRoachprodOptsZones(
+	providerOpts, workloadProviderOpts vm.ProviderOpts, params RoachprodClusterConfig, arch string,
+) (vm.ProviderOpts, vm.ProviderOpts) {
+	zonesStr := params.Defaults.Zones
+	cloud := params.Cloud
+	switch cloud {
+	case AWS:
+		if s.AWS.Zones != "" {
+			zonesStr = s.AWS.Zones
+		}
+	case GCE:
+		if s.GCE.Zones != "" {
+			zonesStr = s.GCE.Zones
+		}
+	}
+	var zones []string
+	if zonesStr != "" {
+		zones = strings.Split(zonesStr, ",")
+		if !s.Geo {
+			zones = zones[:1]
+		}
+	}
+
+	switch cloud {
+	case AWS:
+		if len(zones) == 0 {
+			if !s.Geo {
+				zones = aws.DefaultZones[:1]
+			} else {
+				zones = aws.DefaultZones
+			}
+		}
+		providerOpts.(*aws.ProviderOpts).CreateZones = zones
+		workloadProviderOpts.(*aws.ProviderOpts).CreateZones = zones
+	case GCE:
+		// We randomize the list of default zones for GCE for quota reasons, so decide the zone
+		// early to ensure that the workload node and CRDB cluster have the same default zone.
+		if len(zones) == 0 {
+			if !s.Geo {
+				zones = gce.DefaultZones(arch)[:1]
+			} else {
+				zones = gce.DefaultZones(arch)
+			}
+		}
+		providerOpts.(*gce.ProviderOpts).Zones = zones
+		workloadProviderOpts.(*gce.ProviderOpts).Zones = zones
+	}
+	return providerOpts, workloadProviderOpts
 }
 
 // Expiration is the lifetime of the cluster. It may be destroyed after
