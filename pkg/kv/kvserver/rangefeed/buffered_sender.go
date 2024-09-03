@@ -7,11 +7,15 @@ package rangefeed
 
 import (
 	"context"
+	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 //	┌─────────────────────────────────────────┐                                      MuxRangefeedEvent
@@ -49,8 +53,25 @@ import (
 // Refer to the comments above UnbufferedSender for more details on the role of
 // senders in the entire rangefeed architecture.
 type BufferedSender struct {
+	// taskCancel is a function to cancel BufferedSender.run spawned in the
+	// background. It is called by BufferedSender.Stop. It is expected to be
+	// called after BufferedSender.Start.
+	taskCancel context.CancelFunc
+
+	// wg is used to coordinate async tasks spawned by BufferedSender. Currently,
+	// there is only one task spawned by BufferedSender.Start
+	// (BufferedSender.run).
+	wg sync.WaitGroup
+
+	// errCh is used to signal errors from BufferedSender.run back to the caller.
+	// If non-empty, the BufferedSender.run is finished and error should be
+	// handled. Note that it is possible for BufferedSender.run to be finished
+	// without sending an error to errCh. Other goroutines are expected to receive
+	// the same shutdown signal in this case and handle error appropriately.
+	errCh chan error
+
 	// streamID -> cleanup callback
-	activeStreams syncutil.Map[int64, Disconnector]
+	activeStreams syncutil.Map[int64, disconnector]
 
 	// Note that lockedMuxStream wraps the underlying grpc server stream, ensuring
 	// thread safety.
@@ -58,6 +79,16 @@ type BufferedSender struct {
 
 	// metrics is used to record rangefeed metrics for the node.
 	metrics RangefeedMetricsRecorder
+
+	queueMu struct {
+		syncutil.Mutex
+		stopped bool
+		buffer  *eventQueue
+	}
+
+	// Unblocking channel to notify the BufferedSender.run goroutine that there
+	// are events to send.
+	notifyDataC chan struct{}
 }
 
 func (bs *BufferedSender) Disconnect(ev *kvpb.MuxRangeFeedEvent) bool {
@@ -65,11 +96,10 @@ func (bs *BufferedSender) Disconnect(ev *kvpb.MuxRangeFeedEvent) bool {
 		log.Fatalf(context.Background(), "unexpected: SendWithoutBlocking called with non-error event")
 	}
 
-	if r, ok := bs.activeStreams.LoadAndDelete(ev.StreamID); ok {
+	if r, ok := bs.activeStreams.Load(ev.StreamID); ok {
 		// Fine to skip nil checking here since that would be a programming error.
 		log.Infof(context.Background(), "disconnect(%v)", &ev.Error.Error)
-		(*r).Disconnect(&ev.Error.Error)
-		bs.metrics.UpdateMetricsOnRangefeedDisconnect()
+		(*r).disconnect(&ev.Error.Error)
 		return true
 	}
 	return false
@@ -78,23 +108,37 @@ func (bs *BufferedSender) Disconnect(ev *kvpb.MuxRangeFeedEvent) bool {
 func NewBufferedSender(
 	sender ServerStreamSender, metrics RangefeedMetricsRecorder,
 ) *BufferedSender {
-	return &BufferedSender{
+	bs := &BufferedSender{
 		sender:  sender,
 		metrics: metrics,
 	}
+	bs.queueMu.buffer = newEventQueue()
+	bs.notifyDataC = make(chan struct{}, 1)
+	return bs
 }
 
 // SendBuffered buffers the event before sending them to the underlying
-// ServerStreamSender. Currently, this function is only used for testing
-// purposes, so it just mimics the behavior we’d expect from BufferedSender when
-// an event is ready to be sent to the underlying gRPC stream. We plan to
-// implement this fully by buffering the event in a queue in the future.
+// ServerStreamSender.
+//
+// alloc.Release is nil-safe. SendBuffered will take the ownership of the alloc
+// and release it if the return error is non-nil. Note that it is safe to send
+// error events without being blocked for too long.
 func (bs *BufferedSender) SendBuffered(
 	ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
-) error {
-	err := bs.sender.Send(ev)
-	alloc.Release(context.Background())
-	return err
+) (err error) {
+	bs.queueMu.Lock()
+	defer bs.queueMu.Unlock()
+	if bs.queueMu.stopped {
+		log.Errorf(context.Background(), "stream sender is stopped")
+		return errors.New("stream sender is stopped")
+	}
+	alloc.Use(context.Background())
+	bs.queueMu.buffer.pushBack(sharedMuxEvent{ev, alloc})
+	select {
+	case bs.notifyDataC <- struct{}{}:
+	default:
+	}
+	return nil
 }
 
 // SendUnbuffered bypasses the buffer and sends the event to the underlying
@@ -107,15 +151,33 @@ func (bs *BufferedSender) SendUnbuffered(event *kvpb.MuxRangeFeedEvent) error {
 	return bs.sender.Send(event)
 }
 
+func (bs *BufferedSender) waitForEmptyBuffer(ctx context.Context) error {
+	opts := retry.Options{
+		InitialBackoff: 5 * time.Millisecond,
+		Multiplier:     2,
+		MaxBackoff:     10 * time.Second,
+		MaxRetries:     50,
+	}
+	for re := retry.StartWithCtx(ctx, opts); re.Next(); {
+		bs.queueMu.Lock()
+		caughtUp := bs.queueMu.buffer.Len() == 0 // nolint:deferunlockcheck
+		bs.queueMu.Unlock()
+		if caughtUp {
+			return nil
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return errors.New("buffered sender failed to send in time")
+}
+
 func (bs *BufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
 	if ev.Error == nil {
 		log.Fatalf(context.Background(), "unexpected: SendWithoutBlocking called with non-error event")
 	}
-
-	if r, ok := bs.activeStreams.LoadAndDelete(ev.StreamID); ok {
+	if err := bs.SendBuffered(ev, nil); err != nil {
 		// Fine to skip nil checking here since that would be a programming error.
-		(*r).Disconnect(&ev.Error.Error)
-		bs.metrics.UpdateMetricsOnRangefeedDisconnect()
 		// Ignore error since the stream is already disconnecting. There is nothing
 		// else that could be done. When SendBuffered is returning an error, a node
 		// level shutdown from node.MuxRangefeed is happening soon to let clients
@@ -123,7 +185,6 @@ func (bs *BufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
 		log.Infof(context.Background(),
 			"failed to buffer rangefeed complete event for stream %d due to %s, "+
 				"but a node level shutdown should be happening", ev.StreamID, ev.Error)
-		_ = bs.SendBuffered(ev, nil)
 	}
 }
 
@@ -145,8 +206,8 @@ func (bs *BufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
 // disconnectAll disconnects all active streams and invokes all rangefeed clean
 // up callbacks. It is expected to be called during StreamMuxer.Stop.
 func (bs *BufferedSender) disconnectAll() {
-	bs.activeStreams.Range(func(streamID int64, r *Disconnector) bool {
-		(*r).Disconnect(nil)
+	bs.activeStreams.Range(func(streamID int64, r *disconnector) bool {
+		(*r).disconnect(nil)
 		// Remove the stream from the activeStreams map.
 		bs.activeStreams.Delete(streamID)
 		bs.metrics.UpdateMetricsOnRangefeedDisconnect()
@@ -161,8 +222,71 @@ func (bs *BufferedSender) AddStream(streamID int64, r Disconnector) {
 	bs.metrics.UpdateMetricsOnRangefeedConnect()
 }
 
+// run forwards buffered events back to the client. run is expected to be called
+// in a goroutine and will block until the context is done or the stopper is
+// quiesced. BufferedSender will stop forwarding events after run completes. It
+// may still buffer more events in the buffer, but they will be cleaned up soon
+// during bs.Stop(), and there should be no new events buffered after that.
+func (bs *BufferedSender) run(ctx context.Context, stopper *stop.Stopper) error {
+	for {
+		select {
+		case <-ctx.Done():
+			// Top level goroutine will receive the context cancellation and handle
+			// ctx.Err().
+			return nil
+		case <-stopper.ShouldQuiesce():
+			// Top level goroutine will receive the stopper quiesce signal and handle
+			// error.
+			return nil
+		case <-bs.notifyDataC:
+			for {
+				e, success := bs.popFront()
+				if success {
+					err := bs.sender.Send(e.ev)
+					e.alloc.Release(ctx)
+					if e.ev.Error != nil {
+						// Add metrics here
+						if r, ok := bs.activeStreams.LoadAndDelete(e.ev.StreamID); ok {
+							// TODO(wenyihu6): add more observability metrics into how long the
+							// clean up call is taking
+							// TODO(wenyihu): add to buffered sender memory queue now
+							bs.metrics.UpdateMetricsOnRangefeedDisconnect()
+							(*r).disconnect(&e.ev.Error.Error)
+						}
+					}
+					if err != nil {
+						return err
+					}
+				} else {
+					break
+				}
+			}
+		}
+	}
+}
+
+func (bs *BufferedSender) popFront() (e sharedMuxEvent, success bool) {
+	bs.queueMu.Lock()
+	defer bs.queueMu.Unlock()
+	event, ok := bs.queueMu.buffer.popFront()
+	return event, ok
+}
+
 func (bs *BufferedSender) Start(ctx context.Context, stopper *stop.Stopper) error {
-	panic("unimplemented: buffered sender for rangefeed #126560")
+	bs.errCh = make(chan error, 1)
+	bs.wg.Add(1)
+	ctx, bs.taskCancel = context.WithCancel(ctx)
+	if err := stopper.RunAsyncTask(ctx, "buffered stream output", func(ctx context.Context) {
+		defer bs.wg.Done()
+		if err := bs.run(ctx, stopper); err != nil {
+			bs.errCh <- err
+		}
+	}); err != nil {
+		bs.taskCancel()
+		bs.wg.Done()
+		return err
+	}
+	return nil
 }
 
 // Stop cancels the BufferedSender.run task, waits for it to complete, and
@@ -180,10 +304,19 @@ func (bs *BufferedSender) Start(ctx context.Context, stopper *stop.Stopper) erro
 // TODO(wenyihu6): add tests to make sure client treats node out of budget
 // errors as retryable and will restart all rangefeeds
 func (bs *BufferedSender) Stop() {
+	bs.taskCancel()
+	bs.wg.Wait()
 	bs.disconnectAll()
-	panic("unimplemented: buffered sender for rangefeed #126560")
+
+	bs.queueMu.Lock()
+	defer bs.queueMu.Unlock()
+	bs.queueMu.stopped = true
+	bs.queueMu.buffer.removeAll()
 }
 
 func (bs *BufferedSender) Error() chan error {
-	panic("unimplemented: buffered sender for rangefeed #126560")
+	if bs.errCh == nil {
+		log.Fatalf(context.Background(), "BufferedSender.Error called before BufferedSender.Start")
+	}
+	return bs.errCh
 }
