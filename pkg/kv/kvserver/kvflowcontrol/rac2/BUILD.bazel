@@ -30,6 +30,7 @@ go_library(
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_dustin_go_humanize//:go-humanize",
     ],
 )
 
@@ -39,6 +40,7 @@ go_test(
         "log_tracker_test.go",
         "priority_test.go",
         "range_controller_test.go",
+        "store_stream_test.go",
         "token_counter_test.go",
         "token_tracker_test.go",
     ],
@@ -62,6 +64,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_stretchr_testify//require",

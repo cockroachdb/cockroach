@@ -12,12 +12,18 @@ package rac2
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
 )
 
 // StreamTokenCounterProvider is the interface for retrieving token counters
@@ -28,6 +34,7 @@ type StreamTokenCounterProvider struct {
 	settings                   *cluster.Settings
 	clock                      *hlc.Clock
 	tokenMetrics               *tokenMetrics
+	sendLogger, evalLogger     *blockedStreamLogger
 	sendCounters, evalCounters syncutil.Map[kvflowcontrol.Stream, tokenCounter]
 }
 
@@ -39,6 +46,8 @@ func NewStreamTokenCounterProvider(
 		settings:     settings,
 		clock:        clock,
 		tokenMetrics: newTokenMetrics(),
+		sendLogger:   newBlockedStreamLogger(flowControlSendMetricType),
+		evalLogger:   newBlockedStreamLogger(flowControlEvalMetricType),
 	}
 }
 
@@ -62,7 +71,7 @@ func (p *StreamTokenCounterProvider) Send(stream kvflowcontrol.Stream) *tokenCou
 	return t
 }
 
-// UpdateMetricGauges updates the gauge token metrics.
+// UpdateMetricGauges updates the gauge token metrics and logs blocked streams.
 func (p *StreamTokenCounterProvider) UpdateMetricGauges() {
 	var (
 		count           [numFlowControlMetricTypes][admissionpb.NumWorkClasses]int64
@@ -89,12 +98,29 @@ func (p *StreamTokenCounterProvider) UpdateMetricGauges() {
 			if elasticStats.noTokenDuration > 0 {
 				blockedCount[metricType][elastic]++
 			}
+
+			// If either regular or elastic stats indicate that the stream was
+			// blocked in the last metrics interval, pass the stream and stats to
+			// the logger to be considered.
+			if regularStats.noTokenDuration > 0 || elasticStats.noTokenDuration > 0 {
+				switch metricType {
+				case flowControlEvalMetricType:
+					p.evalLogger.observeBlockedStream(stream, regularStats, elasticStats)
+				case flowControlSendMetricType:
+					p.sendLogger.observeBlockedStream(stream, regularStats, elasticStats)
+				default:
+					panic(fmt.Sprintf("unexpected metric type: %v", metricType))
+				}
+			}
+
 			return true
 		}
 	}
 
 	p.evalCounters.Range(gaugeUpdateFn(flowControlEvalMetricType))
+	p.evalLogger.flushLogs()
 	p.sendCounters.Range(gaugeUpdateFn(flowControlSendMetricType))
+	p.sendLogger.flushLogs()
 	for _, typ := range []flowControlMetricType{
 		flowControlEvalMetricType,
 		flowControlSendMetricType,
@@ -108,6 +134,122 @@ func (p *StreamTokenCounterProvider) UpdateMetricGauges() {
 			p.tokenMetrics.streamMetrics[typ].tokensAvailable[wc].Update(tokensAvailable[typ][wc])
 		}
 	}
+}
+
+// TODO(kvoli): Consider adjusting these limits and making them configurable.
+const (
+	// streamStatsCountCap is the maximum number of streams to log verbose stats
+	// for. Streams are only logged if they were blocked at some point in the
+	// last metrics interval.
+	streamStatsCountCap = 20
+	// blockedStreamCountCap is the maximum number of streams to log (compactly)
+	// as currently blocked.
+	blockedStreamCountCap = 100
+	// blockedStreamLoggingInterval is the interval at which blocked streams are
+	// logged. This interval applies independently to both eval and send streams
+	// i.e., we log both eval and send streams at this interval, independent of
+	// each other.
+	blockedStreamLoggingInterval = 30 * time.Second
+)
+
+type blockedStreamLogger struct {
+	metricType flowControlMetricType
+	limiter    log.EveryN
+	// blockedCount is the total number of unique streams blocked, regardless of
+	// the work class e.g., if 5 streams exist and all are blocked for both
+	// elastic and regular work classes, the counts would be:
+	//   blockedRegularCount=5
+	//   blockedElasticCount=5
+	//   blockedCount=5
+	blockedCount        int
+	blockedElasticCount int
+	blockedRegularCount int
+	elaBuf, regBuf      strings.Builder
+}
+
+func newBlockedStreamLogger(metricType flowControlMetricType) *blockedStreamLogger {
+	return &blockedStreamLogger{
+		metricType: metricType,
+		limiter:    log.Every(blockedStreamLoggingInterval),
+	}
+}
+
+func (b *blockedStreamLogger) flushLogs() {
+	if b.limiter.ShouldLog() {
+		if b.blockedRegularCount > 0 {
+			log.Warningf(context.Background(), "%d blocked %s regular replication stream(s): %s",
+				b.blockedRegularCount, b.metricType, redact.SafeString(b.regBuf.String()))
+		}
+		if b.blockedElasticCount > 0 {
+			log.Warningf(context.Background(), "%d blocked %s elastic replication stream(s): %s",
+				b.blockedElasticCount, b.metricType, redact.SafeString(b.elaBuf.String()))
+		}
+	}
+	// NB: The buffers get reset on next use, see logBlockedStream() below.
+	b.blockedCount = 0
+	b.blockedRegularCount = 0
+	b.blockedElasticCount = 0
+}
+
+func (b *blockedStreamLogger) observeBlockedStream(
+	stream kvflowcontrol.Stream, regularStats, elasticStats deltaStats,
+) {
+	b.blockedCount++
+	// Log stats, which reflect both elastic and regular at the interval defined
+	// by blockedStreamLoggingInteval. If a high-enough log verbosity is
+	// specified, shouldLogBacked will always be true, but since this method
+	// executes at the frequency of scraping the metric, we will still log at a
+	// reasonable rate.
+	logBlockedStream := func(stream kvflowcontrol.Stream, blockedCount int, buf *strings.Builder) {
+		if blockedCount == 1 {
+			buf.Reset()
+			buf.WriteString(stream.String())
+		} else if blockedCount <= blockedStreamCountCap {
+			buf.WriteString(", ")
+			buf.WriteString(stream.String())
+		} else if blockedCount == blockedStreamCountCap+1 {
+			buf.WriteString(" omitted some due to overflow")
+		}
+	}
+
+	if regularStats.noTokenDuration > 0 {
+		b.blockedRegularCount++
+		logBlockedStream(stream, b.blockedRegularCount, &b.regBuf)
+	}
+	if elasticStats.noTokenDuration > 0 {
+		b.blockedElasticCount++
+		logBlockedStream(stream, b.blockedElasticCount, &b.elaBuf)
+	}
+
+	if b.blockedCount <= streamStatsCountCap {
+		var bb strings.Builder
+		fmt.Fprintf(&bb, "%v stream %s was blocked: durations:", b.metricType, stream.String())
+		if regularStats.noTokenDuration > 0 {
+			fmt.Fprintf(&bb, " regular %s", regularStats.noTokenDuration.String())
+		}
+		if elasticStats.noTokenDuration > 0 {
+			fmt.Fprintf(&bb, " elastic %s", elasticStats.noTokenDuration.String())
+		}
+		regularDelta := regularStats.tokensReturned - regularStats.tokensDeducted
+		elasticDelta := elasticStats.tokensReturned - elasticStats.tokensDeducted
+		fmt.Fprintf(&bb, " tokens delta: regular %s (%s - %s) elastic %s (%s - %s)",
+			pprintTokens(regularDelta),
+			pprintTokens(regularStats.tokensReturned),
+			pprintTokens(regularStats.tokensDeducted),
+			pprintTokens(elasticDelta),
+			pprintTokens(elasticStats.tokensReturned),
+			pprintTokens(elasticStats.tokensDeducted))
+		log.Infof(context.Background(), "%s", redact.SafeString(bb.String()))
+	} else if b.blockedCount == streamStatsCountCap+1 {
+		log.Infof(context.Background(), "skipped logging some streams that were blocked")
+	}
+}
+
+func pprintTokens(t kvflowcontrol.Tokens) string {
+	if t < 0 {
+		return fmt.Sprintf("-%s", humanize.IBytes(uint64(-t)))
+	}
+	return humanize.IBytes(uint64(t))
 }
 
 // SendTokenWatcherHandleID is a unique identifier for a handle that is
