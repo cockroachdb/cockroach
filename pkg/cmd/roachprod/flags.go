@@ -403,7 +403,7 @@ func initFlags() {
 		cmd.Flags().BoolVar(&urlOpen, "open", false, "Open the url in a browser")
 	}
 
-	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
+	for _, cmd := range []*cobra.Command{createCmd, listCmd, destroyCmd, extendCmd, logsCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),
 			"Username to run under, detect if blank")
 	}

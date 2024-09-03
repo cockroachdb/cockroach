@@ -1843,7 +1843,9 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 			// We use a non-cancelable context for running this command. Once we got
 			// here, the cluster cannot be destroyed again, so we really want this
 			// command to succeed.
-			if err := roachprod.Destroy(l, false /* destroyAllMine */, false /* destroyAllLocal */, c.name); err != nil {
+			if err := roachprod.Destroy(l, "" /* optionalUsername */, false, /* destroyAllMine */
+				false, /* destroyAllLocal */
+				c.name); err != nil {
 				l.ErrorfCtx(ctx, "error destroying cluster %s: %s", c, err)
 			} else {
 				l.PrintfCtx(ctx, "destroying cluster %s... done", c)
