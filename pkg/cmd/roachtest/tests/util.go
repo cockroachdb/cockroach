@@ -253,12 +253,13 @@ func getMeanOverLastN(n int, items []float64) float64 {
 }
 
 // profileTopStatements enables profile collection on the top statements from
-// the cluster that exceed 10ms latency. Top statements are defined as ones that
-// have executed frequently enough to matter.
-// minDuration is the minimum duration a statement to be included in profiling. Typically
-// set this close to the 99.9 percentile for good results.
+// the cluster that exceed 10ms latency and are more than 10x the P99 up to this
+// point. Top statements are defined as ones that have executed frequently
+// enough to matter.
+// NB: This doesn't really work well. The data in statement_statistics is not
+// very accurate so we often use the minimum latency of 10ms.
 func profileTopStatements(
-	ctx context.Context, cluster cluster.Cluster, logger *logger.Logger, minDuration time.Duration,
+	ctx context.Context, cluster cluster.Cluster, logger *logger.Logger, dbName string,
 ) error {
 	db := cluster.Conn(ctx, logger, 1)
 	defer db.Close()
@@ -269,6 +270,7 @@ func profileTopStatements(
 		return err
 	}
 
+	// TODO(baptist): Make these 4 constants configurable using options.
 	// The probability that a statement will be included in the profile.
 	probabilityToInclude := .001
 
@@ -277,17 +279,41 @@ func profileTopStatements(
 	// out all the statements we need to capture.
 	minNumExpectedStmts := 1000
 
+	// minimumLatency is the minimum P99 latency in seconds. Anything lower than
+	// this is rounded up to this value.
+	minimumLatency := 0.001
+
+	// multipleFromP99 is the multiple of the P99 latency that the statement
+	// must exceed in order to be collected.
+	multipleFromP99 := 10
+
 	sql = fmt.Sprintf(`
 SELECT
-    crdb_internal.request_statement_bundle(statement, %f, '%s'::INTERVAL, '12h'::INTERVAL )
+    crdb_internal.request_statement_bundle(
+		statement,
+		%f,
+		(%d*CASE WHEN latency::FLOAT > %f THEN LATENCY::FLOAT ELSE %f END)::INTERVAL,
+		'12h'::INTERVAL
+	)
 FROM (
-	SELECT DISTINCT statement FROM (
-		SELECT metadata->>'query' AS statement, 
-			CAST(statistics->'execution_statistics'->>'cnt' AS int) AS cnt 
+	SELECT max(latency) as latency, statement FROM (
+		SELECT
+			metadata->>'db' AS db,
+			metadata->>'query' AS statement,
+			CAST(statistics->'execution_statistics'->>'cnt' AS int) AS cnt,
+			statistics->'statistics'->'latencyInfo'->'p99' AS latency
 			FROM crdb_internal.statement_statistics
 		) 
-	WHERE cnt > %d
-)`, probabilityToInclude, minDuration, minNumExpectedStmts)
+	WHERE db = '%s' AND cnt > %d AND latency::FLOAT > 0
+	GROUP BY statement
+)`,
+		probabilityToInclude,
+		multipleFromP99,
+		minimumLatency,
+		minimumLatency,
+		dbName,
+		minNumExpectedStmts,
+	)
 	if _, err := db.Exec(sql); err != nil {
 		return err
 	}
