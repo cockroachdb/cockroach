@@ -128,7 +128,7 @@ echo $delta`
 				}
 
 				return c.RunE(ctx, wln, fmt.Sprintf(
-					"./cockroach workload run kv --max-rate 100 --read-percent=50 --duration=60s --duration=10s {pgurl%s}",
+					"./cockroach workload run kv --max-rate 100 --read-percent=50 --duration=60s {pgurl%s}",
 					nodes,
 				))
 			}
