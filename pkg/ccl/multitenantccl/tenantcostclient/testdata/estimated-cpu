@@ -42,7 +42,7 @@ tenant.sql_usage.estimated_kv_cpu_seconds: 0.24
 tenant.sql_usage.estimated_cpu_seconds: 0.24
 tenant.sql_usage.estimated_replication_bytes: 145460
 tenant.sql_usage.provisioned_vcpus: 12
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 145460
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az1"}: 145460
 
 # Wait for the token bucket response triggered by low tokens. Not doing this
 # causes a race condition, since in some cases this response arrives after the
@@ -81,7 +81,7 @@ tenant.sql_usage.estimated_kv_cpu_seconds: 0.24
 tenant.sql_usage.estimated_cpu_seconds: 0.31
 tenant.sql_usage.estimated_replication_bytes: 145460
 tenant.sql_usage.provisioned_vcpus: 12
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 145460
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az1"}: 145460
 
 # Do same writes, but with a different write batch rate. This time, the
 # estimated CPU consumption should be less.
@@ -135,8 +135,8 @@ tenant.sql_usage.estimated_kv_cpu_seconds: 0.42
 tenant.sql_usage.estimated_cpu_seconds: 0.56
 tenant.sql_usage.estimated_replication_bytes: 290920
 tenant.sql_usage.provisioned_vcpus: 12
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 218190
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 72730
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az1"}: 218190
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az2"}: 72730
 
 # Advance time to next period and do same writes, with the same write batch
 # rate, but with a global estimated CPU rate. The estimated CPU rate should not
@@ -190,8 +190,8 @@ tenant.sql_usage.estimated_kv_cpu_seconds: 0.61
 tenant.sql_usage.estimated_cpu_seconds: 0.81
 tenant.sql_usage.estimated_replication_bytes: 436380
 tenant.sql_usage.provisioned_vcpus: 12
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 290920
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 145460
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az1"}: 290920
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az2"}: 145460
 
 # Update provisioned vCPUs.
 provisioned-vcpus count=48
@@ -228,8 +228,8 @@ tenant.sql_usage.estimated_kv_cpu_seconds: 0.62
 tenant.sql_usage.estimated_cpu_seconds: 0.82
 tenant.sql_usage.estimated_replication_bytes: 456480
 tenant.sql_usage.provisioned_vcpus: 48
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 311020
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 145460
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az1"}: 311020
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az2"}: 145460
 
 # Now perform some read operations.
 
@@ -264,8 +264,8 @@ tenant.sql_usage.estimated_kv_cpu_seconds: 2.24
 tenant.sql_usage.estimated_cpu_seconds: 2.97
 tenant.sql_usage.estimated_replication_bytes: 456480
 tenant.sql_usage.provisioned_vcpus: 48
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 311020
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 145460
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az1"}: 311020
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az2"}: 145460
 
 # KV CPU seconds should not change, only total CPU seconds. Background CPU usage
 # should be accounted for.
@@ -301,8 +301,8 @@ tenant.sql_usage.estimated_kv_cpu_seconds: 2.24
 tenant.sql_usage.estimated_cpu_seconds: 4.28
 tenant.sql_usage.estimated_replication_bytes: 456480
 tenant.sql_usage.provisioned_vcpus: 48
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 311020
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 145460
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az1"}: 311020
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az2"}: 145460
 
 # External I/O should not block or consume tokens.
 external-egress bytes=1024000
@@ -339,8 +339,8 @@ tenant.sql_usage.estimated_kv_cpu_seconds: 2.24
 tenant.sql_usage.estimated_cpu_seconds: 4.28
 tenant.sql_usage.estimated_replication_bytes: 456480
 tenant.sql_usage.provisioned_vcpus: 48
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 311020
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 145460
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az1"}: 311020
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az2"}: 145460
 
 # PGWire egress should not block or consume tokens.
 pgwire-egress
@@ -375,8 +375,8 @@ tenant.sql_usage.estimated_kv_cpu_seconds: 2.24
 tenant.sql_usage.estimated_cpu_seconds: 4.28
 tenant.sql_usage.estimated_replication_bytes: 456480
 tenant.sql_usage.provisioned_vcpus: 48
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 311020
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 145460
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az1"}: 311020
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az2"}: 145460
 
 # Ensure that token bucket request is made after 10 seconds (though it returns
 # no tokens).
@@ -426,9 +426,9 @@ tenant.sql_usage.estimated_kv_cpu_seconds: 2.27
 tenant.sql_usage.estimated_cpu_seconds: 4.32
 tenant.sql_usage.estimated_replication_bytes: 462080
 tenant.sql_usage.provisioned_vcpus: 48
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 2800
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 312420
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 146860
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="",destination_region="europe-west1",destination_zone=""}: 2800
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az1"}: 312420
+tenant.sql_usage.estimated_replication_bytes{source_region="us-central1",source_zone="az1",destination_region="us-central1",destination_zone="az2"}: 146860
 
 # Allow the provider to grant tokens again.
 configure
