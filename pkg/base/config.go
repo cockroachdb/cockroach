@@ -748,6 +748,16 @@ func (cfg RaftConfig) NodeLivenessDurations() (livenessActive, livenessRenewal t
 	return
 }
 
+// StoreLivenessDurations computes durations for store liveness heartbeat
+// interval and liveness interval.
+func (cfg RaftConfig) StoreLivenessDurations() (
+	livenessInterval, heartbeatInterval time.Duration,
+) {
+	livenessInterval = cfg.RangeLeaseDuration
+	heartbeatInterval = time.Duration(float64(livenessInterval) * livenessRenewalFraction)
+	return
+}
+
 // SentinelGossipTTL is time-to-live for the gossip sentinel. The sentinel
 // informs a node whether or not it's connected to the primary gossip network
 // and not just a partition. As such it must expire fairly quickly and be
