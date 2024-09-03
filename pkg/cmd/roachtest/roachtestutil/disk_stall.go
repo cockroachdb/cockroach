@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
@@ -60,6 +61,10 @@ func (s *cgroupDiskStaller) LogDir() string {
 	return "logs"
 }
 func (s *cgroupDiskStaller) Setup(ctx context.Context) {
+	if _, ok := s.c.Spec().ReusePolicy.(spec.ReusePolicyNone); !ok {
+		// Safety measure.
+		s.f.Fatalf("cluster needs ReusePolicyNone to support disk stalls")
+	}
 	if s.logsToo {
 		s.c.Run(ctx, option.WithNodes(s.c.All()), "mkdir -p {store-dir}/logs")
 		s.c.Run(ctx, option.WithNodes(s.c.All()), "rm -f logs && ln -s {store-dir}/logs logs || true")
@@ -176,6 +181,8 @@ func GetDiskDevice(f Fataler, c cluster.Cluster, nodes option.NodeListOption) st
 type dmsetupDiskStaller struct {
 	f Fataler
 	c cluster.Cluster
+
+	dev string // set in Setup; s.device() doesn't work when volume is not set up
 }
 
 var _ DiskStaller = (*dmsetupDiskStaller)(nil)
@@ -185,14 +192,20 @@ func (s *dmsetupDiskStaller) device(nodes option.NodeListOption) string {
 }
 
 func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
-	dev := s.device(s.c.All())
+	if _, ok := s.c.Spec().ReusePolicy.(spec.ReusePolicyNone); !ok {
+		// We disable journaling and do all kinds of things below.
+		s.f.Fatalf("cluster needs ReusePolicyNone to support disk stalls")
+	}
+	s.dev = s.device(s.c.All())
 	// snapd will run "snapd auto-import /dev/dm-0" via udev triggers when
 	// /dev/dm-0 is created. This possibly interferes with the dmsetup create
 	// reload, so uninstall snapd.
 	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo apt-get purge -y snapd`)
 	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo umount -f /mnt/data1 || true`)
 	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo dmsetup remove_all`)
-	err := s.c.RunE(ctx, option.WithNodes(s.c.All()), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
+	// See https://github.com/cockroachdb/cockroach/issues/129619#issuecomment-2316147244.
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo tune2fs -O ^has_journal `+s.dev)
+	err := s.c.RunE(ctx, option.WithNodes(s.c.All()), `echo "0 $(sudo blockdev --getsz `+s.dev+`) linear `+s.dev+` 0" | `+
 		`sudo dmsetup create data1`)
 	if err != nil {
 		// This has occasionally been seen to fail with "Device or resource busy",
@@ -207,6 +220,7 @@ func (s *dmsetupDiskStaller) Cleanup(ctx context.Context) {
 	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo dmsetup resume data1`)
 	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo umount /mnt/data1`)
 	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo dmsetup remove_all`)
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo tune2fs -O has_journal `+s.dev)
 	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo mount /mnt/data1`)
 	// Reinstall snapd in case subsequent tests need it.
 	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo apt-get install -y snapd`)
