@@ -336,6 +336,7 @@ type raft struct {
 	config          quorum.Config
 	trk             tracker.ProgressTracker
 	electionTracker tracker.ElectionTracker
+	supportTracker  tracker.SupportTracker
 
 	state StateType
 
@@ -450,6 +451,7 @@ func newRaft(c *Config) *raft {
 	lastID := r.raftLog.lastEntryID()
 
 	r.electionTracker = tracker.MakeElectionTracker(&r.config)
+	r.supportTracker = tracker.MakeSupportTracker(&r.config, r.storeLiveness)
 
 	cfg, progressMap, err := confchange.Restore(confchange.Changer{
 		Config:           quorum.MakeEmptyConfig(),
@@ -708,8 +710,14 @@ func (r *raft) sendFortify(to pb.PeerID) {
 		epoch, live := r.storeLiveness.SupportFor(r.lead)
 		if live {
 			r.leadEpoch = epoch
-			// TODO(arul): For now, we're not recording any support on the leader. Do
-			// this once we implement handleFortifyResp correctly.
+			// The leader needs to persist the LeadEpoch durably before it can start
+			// supporting itself. We do so by sending a self-addressed
+			// MsgFortifyLeaderResp message so that it is added to the msgsAfterAppend
+			// slice and delivered back to this node only after LeadEpoch is
+			// persisted. At that point, this node can record support without
+			// discrimination for who is providing support (itself vs. other
+			// follower).
+			r.send(pb.Message{To: r.id, Type: pb.MsgFortifyLeaderResp, LeadEpoch: epoch})
 		} else {
 			r.logger.Infof(
 				"%x leader at term %d does not support itself in the liveness fabric", r.id, r.Term,
@@ -836,6 +844,7 @@ func (r *raft) reset(term uint64) {
 	r.abortLeaderTransfer()
 
 	r.electionTracker.ResetVotes()
+	r.supportTracker.Reset()
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 		*pr = tracker.Progress{
 			Match:     0,
@@ -2067,8 +2076,14 @@ func (r *raft) handleFortify(m pb.Message) {
 
 func (r *raft) handleFortifyResp(m pb.Message) {
 	assertTrue(r.state == StateLeader, "only leaders should be handling fortification responses")
-	// TODO(arul): record support once
-	// https://github.com/cockroachdb/cockroach/issues/125264 lands.
+	if m.Reject {
+		// Couldn't successfully fortify the follower. Typically, this happens when
+		// the follower isn't supporting the leader's store in StoreLiveness or the
+		// follower is down. We'll try to fortify the follower again later in
+		// tickHeartbeat.
+		return
+	}
+	r.supportTracker.RecordSupport(m.From, m.LeadEpoch)
 }
 
 // deFortify (conceptually) revokes previously provided fortification support to

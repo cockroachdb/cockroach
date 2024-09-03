@@ -162,9 +162,10 @@ func TestNodePropose(t *testing.T) {
 	n.Propose(context.TODO(), []byte("somedata"))
 	n.Stop()
 
-	require.Len(t, msgs, 1)
-	assert.Equal(t, raftpb.MsgProp, msgs[0].Type)
-	assert.Equal(t, []byte("somedata"), msgs[0].Entries[0].Data)
+	require.Len(t, msgs, 2)
+	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
+	assert.Equal(t, raftpb.MsgProp, msgs[1].Type)
+	assert.Equal(t, []byte("somedata"), msgs[1].Entries[0].Data)
 }
 
 // TestDisableProposalForwarding ensures that proposals are not forwarded to
@@ -230,9 +231,10 @@ func TestNodeProposeConfig(t *testing.T) {
 	n.ProposeConfChange(context.TODO(), cc)
 	n.Stop()
 
-	require.Len(t, msgs, 1)
-	assert.Equal(t, raftpb.MsgProp, msgs[0].Type)
-	assert.Equal(t, ccdata, msgs[0].Entries[0].Data)
+	require.Len(t, msgs, 2)
+	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
+	assert.Equal(t, raftpb.MsgProp, msgs[1].Type)
+	assert.Equal(t, ccdata, msgs[1].Entries[0].Data)
 }
 
 // TestNodeProposeAddDuplicateNode ensures that two proposes to add the same node should
@@ -382,7 +384,8 @@ func TestNodeProposeWaitDropped(t *testing.T) {
 	cancel()
 
 	n.Stop()
-	require.Empty(t, msgs)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
 }
 
 // TestNodeTick ensures that node.Tick() will increase the
