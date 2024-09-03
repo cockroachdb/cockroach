@@ -65,6 +65,8 @@ case "${cmd}" in
     if [[ "$COCKROACH_DEV_LICENSE" ]]; then
       gcloud compute ssh "${NAME}" --command="echo COCKROACH_DEV_LICENSE=$COCKROACH_DEV_LICENSE >> ~/.bashrc_bootstrap"
     fi
+    # https://cockroachlabs.slack.com/archives/C023S0V4YEB/p1725353536265029?thread_ts=1673575342.188709&cid=C023S0V4YEB
+    gcloud compute ssh "${NAME}" --command="echo ROACHPROD_EMAIL_DOMAIN=developer.gserviceaccount.com >> ~/.bashrc_bootstrap"
 
     # Install automatic shutdown after ten minutes of operation without a
     # logged in user. To disable this, `sudo touch /.active`.
