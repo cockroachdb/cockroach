@@ -307,7 +307,8 @@ hosts file.
 		if listJSON && listDetails {
 			return errors.New("'json' option cannot be combined with 'details' option")
 		}
-		filteredCloud, err := roachprod.List(config.Logger, listMine, listPattern, vm.ListOptions{ComputeEstimatedCost: true})
+		filteredCloud, err := roachprod.List(config.Logger, listMine, listPattern,
+			vm.ListOptions{ComputeEstimatedCost: false})
 
 		if err != nil {
 			return err
