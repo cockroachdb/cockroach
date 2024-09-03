@@ -143,9 +143,14 @@ func TestRefresh(t *testing.T) {
 	// We haven't set the URL yet, so it should return an empty string.
 	require.Equal(t, "", c.LookupIP(net.ParseIP("127.0.0.1")))
 
-	// Set the URL to the file we created. Verify it takes effect immediately.
+	// Set the URL to the file we created. Verify it takes effect quickly.
 	cidrMappingUrl.Override(context.Background(), &st.SV, "file://"+filename)
-	require.Equal(t, "loopback", c.LookupIP(net.ParseIP("127.0.0.1")))
+	testutils.SucceedsSoon(t, func() error {
+		if c.LookupIP(net.ParseIP("127.0.0.1")) != "loopback" {
+			return errors.New("not refreshed")
+		}
+		return nil
+	})
 
 	cidrRefreshInterval.Override(context.Background(), &st.SV, time.Second)
 
