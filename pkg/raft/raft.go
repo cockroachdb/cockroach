@@ -449,7 +449,7 @@ func newRaft(c *Config) *raft {
 	}
 	lastID := r.raftLog.lastEntryID()
 
-	r.electionTracker = tracker.MakeVoteTracker(&r.config)
+	r.electionTracker = tracker.MakeElectionTracker(&r.config)
 
 	cfg, progressMap, err := confchange.Restore(confchange.Changer{
 		Config:           quorum.MakeEmptyConfig(),
