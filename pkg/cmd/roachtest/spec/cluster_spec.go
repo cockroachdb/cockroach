@@ -261,6 +261,8 @@ func getGCEOpts(
 	}
 	if len(zones) != 0 {
 		opts.Zones = zones
+	} else {
+		opts.UseSameDefaultZonesOrdering = true
 	}
 	opts.SSDCount = localSSDCount
 	if localSSD && localSSDCount > 0 {

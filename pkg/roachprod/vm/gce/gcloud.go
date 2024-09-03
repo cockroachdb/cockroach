@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -352,10 +353,16 @@ type ProviderOpts struct {
 	ManagedSpotZones []string
 	// Enable the cron service. It is disabled by default.
 	EnableCron bool
-
 	// GCE allows two availability policies in case of a maintenance event (see --maintenance-policy via gcloud),
 	// 'TERMINATE' or 'MIGRATE'. The default is 'MIGRATE' which we denote by 'TerminateOnMigration == false'.
 	TerminateOnMigration bool
+	// We randomize the default zone used to avoid "zone exhausted" errors. However, we sometimes
+	// want to maintain the same ordering for two parallel create calls. Setting this to true will
+	// seed the randomization of default zones based on the cluster name. Note that this means the
+	// same order will be used if retrying cluster creation with the same name, so this flag is not
+	// intended to be used by the CLI.
+	UseSameDefaultZonesOrdering bool
+
 	// useSharedUser indicates that the shared user rather than the personal
 	// user should be used to ssh into the remote machines.
 	useSharedUser bool
@@ -968,13 +975,28 @@ type ProjectsVal struct {
 // ARM64 builds), but we randomize the specific zone. This is to avoid
 // "zone exhausted" errors in one particular zone, especially during
 // nightly roachtest runs.
-func defaultZones(arch string) []string {
+func defaultZones(arch string, clusterName string) []string {
 	zones := []string{"us-east1-b", "us-east1-c", "us-east1-d"}
 	if vm.ParseArch(arch) == vm.ArchARM64 {
 		// T2A instances are only available in us-central1 in NA.
 		zones = []string{"us-central1-a", "us-central1-b", "us-central1-f"}
 	}
-	rand.Shuffle(len(zones), func(i, j int) { zones[i], zones[j] = zones[j], zones[i] })
+
+	// We want to return the same ordering of default zones for clusters so seed
+	// the rng using the cluster name if passed.
+	// This way create calls for the same cluster (i.e. workload node and CRDB cluster)
+	// can pick the same zone.
+	// N.B. To maintain randomization and avoid "zone exhausted", this logic assumes
+	// that the roachtest runner will change the cluster name on retries and roachprod
+	// CLI will call this function with clusterName == "".
+	if clusterName == "" {
+		rand.Shuffle(len(zones), func(i, j int) { zones[i], zones[j] = zones[j], zones[i] })
+	} else {
+		hash := fnv.New64a()
+		_, _ = hash.Write([]byte(clusterName))
+		src := rand.NewSource(int64(hash.Sum64()))
+		rand.New(src).Shuffle(len(zones), func(i, j int) { zones[i], zones[j] = zones[j], zones[i] })
+	}
 
 	return []string{
 		zones[0],
@@ -1070,7 +1092,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		fmt.Sprintf("Zones for cluster. If zones are formatted as AZ:N where N is an integer, the zone\n"+
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
-			strings.Join(defaultZones(string(vm.ArchAMD64)), ",")))
+			strings.Join(defaultZones(string(vm.ArchAMD64), "" /*clusterName*/), ",")))
 	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false,
 		"use preemptible GCE instances (lifetime cannot exceed 24h)")
 	flags.BoolVar(&o.UseSpot, ProviderName+"-use-spot", false,
@@ -1284,10 +1306,14 @@ func computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, err
 		return nil, err
 	}
 	if len(zones) == 0 {
+		var clusterName string
+		if providerOpts.UseSameDefaultZonesOrdering {
+			clusterName = opts.ClusterName
+		}
 		if opts.GeoDistributed {
-			zones = defaultZones(opts.Arch)
+			zones = defaultZones(opts.Arch, clusterName)
 		} else {
-			zones = []string{defaultZones(opts.Arch)[0]}
+			zones = []string{defaultZones(opts.Arch, clusterName)[0]}
 		}
 	}
 	if providerOpts.useArmAMI() {
