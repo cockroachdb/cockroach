@@ -185,6 +185,7 @@ func RandCreateTableWithName(
 type tableGenerationOptions struct {
 	primaryIndexRequired      bool
 	skipColumnFamilyMutations bool
+	requireNullableCols       bool
 }
 
 type TableGenerationOption func(*tableGenerationOptions)
@@ -195,6 +196,10 @@ func SkipColumnFamilyMutation() TableGenerationOption {
 
 func RequirePrimaryIndex() TableGenerationOption {
 	return func(o *tableGenerationOptions) { o.primaryIndexRequired = true }
+}
+
+func RequireNullableColumns() TableGenerationOption {
+	return func(o *tableGenerationOptions) { o.requireNullableCols = true }
 }
 
 func randCreateTableWithColumnIndexNumberGeneratorAndName(
@@ -231,7 +236,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	nComputedColumns := randutil.RandIntInRange(rng, 0, (nColumns+1)/2)
 	nNormalColumns := nColumns - nComputedColumns
 	for i := 0; i < nNormalColumns; i++ {
-		columnDef := randColumnTableDef(rng, tableIdx, colSuffix(i))
+		columnDef := randColumnTableDef(rng, tableIdx, colSuffix(i), options.requireNullableCols)
 		columnDefs = append(columnDefs, columnDef)
 		defs = append(defs, columnDef)
 	}
@@ -239,7 +244,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	// Make defs for computed columns.
 	normalColDefs := columnDefs
 	for i := nNormalColumns; i < nColumns; i++ {
-		columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colSuffix(i))
+		columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colSuffix(i), options.requireNullableCols)
 		columnDefs = append(columnDefs, columnDef)
 		defs = append(defs, columnDef)
 	}
@@ -248,7 +253,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	var pk *tree.IndexTableDef
 	if options.primaryIndexRequired || (rng.Intn(8) != 0) {
 		for {
-			indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, true /* isPrimaryIndex */, isMultiRegion)
+			indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, true /* isPrimaryIndex */, isMultiRegion, options.requireNullableCols)
 			canUseIndex := ok && !indexDef.Inverted
 			if canUseIndex {
 				// Although not necessary for Cockroach to function correctly,
@@ -277,7 +282,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	// Make indexes.
 	nIdxs := rng.Intn(10)
 	for i := 0; i < nIdxs; i++ {
-		indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, false /* isPrimaryIndex */, isMultiRegion)
+		indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, false /* isPrimaryIndex */, isMultiRegion, options.requireNullableCols)
 		if !ok {
 			continue
 		}
@@ -481,7 +486,9 @@ func PopulateTableWithRandData(
 
 // randColumnTableDef produces a random ColumnTableDef for a non-computed
 // column, with a random type and nullability.
-func randColumnTableDef(rng *rand.Rand, tableIdx int, colSuffix string) *tree.ColumnTableDef {
+func randColumnTableDef(
+	rng *rand.Rand, tableIdx int, colSuffix string, nullableColReq bool,
+) *tree.ColumnTableDef {
 	g := randident.NewNameGenerator(&nameGenCfg, rng, fmt.Sprintf("col%d", tableIdx))
 	colName := g.GenerateOne(colSuffix)
 	columnDef := &tree.ColumnTableDef{
@@ -490,6 +497,12 @@ func randColumnTableDef(rng *rand.Rand, tableIdx int, colSuffix string) *tree.Co
 		Name: tree.Name(colName),
 		Type: RandColumnType(rng),
 	}
+
+	if nullableColReq {
+		columnDef.Nullable.Nullability = tree.Null
+		return columnDef
+	}
+
 	// Slightly prefer non-nullable columns
 	if columnDef.Type.(*types.T).Family() == types.OidFamily {
 		// Make all OIDs nullable so they're not part of a PK or unique index.
@@ -509,9 +522,13 @@ func randColumnTableDef(rng *rand.Rand, tableIdx int, colSuffix string) *tree.Co
 // column (either STORED or VIRTUAL). The computed expressions refer to columns
 // in normalColDefs.
 func randComputedColumnTableDef(
-	rng *rand.Rand, normalColDefs []*tree.ColumnTableDef, tableIdx int, colSuffix string,
+	rng *rand.Rand,
+	normalColDefs []*tree.ColumnTableDef,
+	tableIdx int,
+	colSuffix string,
+	nullableColReq bool,
 ) *tree.ColumnTableDef {
-	newDef := randColumnTableDef(rng, tableIdx, colSuffix)
+	newDef := randColumnTableDef(rng, tableIdx, colSuffix, nullableColReq)
 	newDef.Computed.Computed = true
 	newDef.Computed.Virtual = rng.Intn(2) == 0
 
@@ -533,6 +550,7 @@ func randIndexTableDefFromCols(
 	tableName string,
 	isPrimaryIndex bool,
 	isMultiRegion bool,
+	nullableColReq bool,
 ) (def tree.IndexTableDef, ok bool) {
 	cpy := make([]*tree.ColumnTableDef, len(columnTableDefs))
 	copy(cpy, columnTableDefs)
@@ -599,7 +617,7 @@ func randIndexTableDefFromCols(
 		}
 
 		// Replace the column with an expression 10% of the time.
-		if !isPrimaryIndex && len(eligibleExprIndexRefs) > 0 && rng.Intn(10) == 0 {
+		if !nullableColReq && !isPrimaryIndex && len(eligibleExprIndexRefs) > 0 && rng.Intn(10) == 0 {
 			var expr tree.Expr
 			// Do not allow NULL in expressions to avoid expressions that have
 			// an ambiguous type.
