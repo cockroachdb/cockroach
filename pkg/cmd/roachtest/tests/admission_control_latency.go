@@ -27,12 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/cli"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -92,10 +90,8 @@ type variations struct {
 	acceptableChange     float64
 	cloud                registry.CloudSet
 
-	// These fields are set up at the start of the test run
-	cluster       cluster.Cluster
-	histogramPort int
-	roachtestAddr string
+	// cluster is set up at the start of the test run.
+	cluster cluster.Cluster
 }
 
 const NUM_REGIONS = 3
@@ -195,24 +191,6 @@ func setupDev(p perturbation) variations {
 	v.cloud = registry.AllClouds
 	v.perturbation = p
 	return v
-}
-
-// finishSetup is called after the cluster is defined to determine the running nodes.
-func (v *variations) finishSetup(c cluster.Cluster, port int) {
-	v.cluster = c
-	if c.Spec().NodeCount != v.numNodes+v.numWorkloadNodes {
-		panic(fmt.Sprintf("node count mismatch, %d != %d + %d", c.Spec().NodeCount, v.numNodes, v.numWorkloadNodes))
-	}
-	if c.IsLocal() {
-		v.roachtestAddr = "localhost"
-	} else {
-		listenerAddr, err := getListenAddr(context.Background())
-		if err != nil {
-			panic(err)
-		}
-		v.roachtestAddr = listenerAddr
-	}
-	v.histogramPort = port
 }
 
 func registerLatencyTests(r registry.Registry) {
@@ -514,16 +492,107 @@ func waitForRebalanceToStop(ctx context.Context, l *logger.Logger, c cluster.Clu
 	panic("retry should not have exited")
 }
 
+// interval is a time interval.
+type interval struct {
+	start time.Time
+	end   time.Time
+}
+
+func (i interval) String() string {
+	return fmt.Sprintf("%s -> %s", i.start, i.end)
+}
+
+func intervalSince(d time.Duration) interval {
+	now := timeutil.Now()
+	return interval{start: now.Add(-d), end: now}
+}
+
+type workloadData struct {
+	score scoreCalculator
+	data  map[string]map[time.Time]trackedStat
+}
+
+func (w workloadData) String() string {
+	var outputStr strings.Builder
+	for name, stats := range w.data {
+		outputStr.WriteString(name + "\n")
+		keys := sortedTimeKeys(stats)
+		for _, key := range keys {
+			outputStr.WriteString(fmt.Sprintf("%s: %s\n", key, stats[key]))
+		}
+	}
+	return outputStr.String()
+}
+
+func sortedTimeKeys(stats map[time.Time]trackedStat) []time.Time {
+	keys := make([]time.Time, 0, len(stats))
+	for k := range stats {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].Before(keys[j])
+	})
+	return keys
+}
+
+func (w workloadData) addTicks(ticks []cli.Tick) {
+	for _, tick := range ticks {
+		if _, ok := w.data[tick.Type]; !ok {
+			w.data[tick.Type] = make(map[time.Time]trackedStat)
+		}
+		stat := w.convert(tick)
+		if _, ok := w.data[tick.Type][tick.Time]; ok {
+			w.data[tick.Type][tick.Time] = w.data[tick.Type][tick.Time].merge(stat, w.score)
+		} else {
+			w.data[tick.Type][tick.Time] = stat
+		}
+	}
+}
+
+// calculateScore calculates the score for a given tick. It can be interpreted
+// as the single core operation latency.
+func (v variations) calculateScore(t cli.Tick) time.Duration {
+	if t.Throughput == 0 {
+		// Use a non-infinite score that is still very high if there was a period of no throughput.
+		return time.Hour
+	}
+	return time.Duration(math.Sqrt((float64(v.numNodes*v.vcpu) * float64((t.P50+t.P99)/2)) / t.Throughput * float64(time.Second)))
+}
+
+func (w workloadData) convert(t cli.Tick) trackedStat {
+	// Align to the second boundary to make the stats from different nodes overlap.
+	t.Time = t.Time.Truncate(time.Second)
+	return trackedStat{Tick: t, score: w.score(t)}
+}
+
+// worstStats returns the worst stats for a given interval for each of the
+// tracked data types.
+func (w workloadData) worstStats(i interval) map[string]trackedStat {
+	m := make(map[string]trackedStat)
+	for name, stats := range w.data {
+		for time, stat := range stats {
+			if time.After(i.start) && time.Before(i.end) {
+				if cur, ok := m[name]; ok {
+					if stat.score > cur.score {
+						m[name] = stat
+					}
+				} else {
+					m[name] = stat
+				}
+			}
+		}
+	}
+	return m
+}
+
 // runTest is the main entry point for all the tests. Its ste
 func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster) {
-	r := histogram.CreateUdpReceiver()
-	v.finishSetup(c, r.Port())
+	v.cluster = c
 	t.L().Printf("test variations are: %+v", v)
 	t.Status("T0: starting nodes")
 
 	// Track the three operations that we are sending in this test.
 	m := c.NewMonitor(ctx, v.stableNodes())
-	lm := newLatencyMonitor(v.workload.operations())
 
 	// Start the stable nodes and let the perturbation start the target node(s).
 	v.startNoBackup(ctx, t.L(), v.stableNodes())
@@ -556,23 +625,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	waitForRebalanceToStop(ctx, t.L(), v.cluster)
 	require.NoError(t, v.workload.initWorkload(ctx, v))
 
-	// Start collecting latency measurements after the workload has been initialized.
-	m.Go(r.Listen)
-	cancelReporter := m.GoWithCancel(func(ctx context.Context) error {
-		return lm.start(ctx, t.L(), r, func(t trackedStat) time.Duration {
-			// This is an ad-hoc score. The general idea is to weigh the p50, p99 and p99.9
-			// latency based on their relative values. Set the score to infinity if the
-			// throughput dropped to 0.
-			if t.count > 0 {
-				return time.Duration(math.Sqrt((float64(v.numWorkloadNodes+v.vcpu) * float64((t.p50 + t.p99/3 + t.p999/10)) / float64(t.count) * float64(time.Second))))
-			} else {
-				// Use a non-infinite score that is still very high if there was a period of no throughput.
-				return time.Hour
-			}
-		})
-	})
-
-	// This is the computed stable rate for this cluster.
+	// Capture the stable rate near the last 1/4 of the fill process.
 	clusterMaxRate := make(chan int)
 	m.Go(func(ctx context.Context) error {
 		// Wait for the first 3/4 of the duration and then measure the QPS in
@@ -583,13 +636,15 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	})
 	// Start filling the system without a rate.
 	t.Status("T1: filling at full rate")
-	require.NoError(t, v.workload.runWorkload(ctx, v, v.fillDuration, 0))
+	_, err := v.workload.runWorkload(ctx, v, v.fillDuration, 0)
+	require.NoError(t, err)
 
 	// Start the consistent workload and begin collecting profiles.
 	stableRatePerNode := int(float64(<-clusterMaxRate) * v.ratioOfMax / float64(v.numWorkloadNodes))
 	t.Status(fmt.Sprintf("T2: running workload at stable rate of %d per node", stableRatePerNode))
+	var data *workloadData
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
-		if err := v.workload.runWorkload(ctx, v, 0, stableRatePerNode); !errors.Is(err, context.Canceled) {
+		if data, err = v.workload.runWorkload(ctx, v, 0, stableRatePerNode); !errors.Is(err, context.Canceled) {
 			return err
 		}
 		return nil
@@ -602,106 +657,70 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	waitDuration(ctx, v.validationDuration/2)
 
 	// Collect the baseline after the workload has stabilized.
-	baselineStats := lm.worstStats(v.validationDuration / 2)
+	baselineInterval := intervalSince(v.validationDuration / 2)
 	// Now start the perturbation.
 	t.Status("T3: inducing perturbation")
 	perturbationDuration := v.perturbation.startPerturbation(ctx, t.L(), v)
-	perturbationStats := lm.worstStats(perturbationDuration)
+	perturbationInterval := intervalSince(perturbationDuration)
 
 	t.Status("T4: recovery from the perturbation")
 	afterDuration := v.perturbation.endPerturbation(ctx, t.L(), v)
-	afterStats := lm.worstStats(afterDuration)
+	afterInterval := intervalSince(afterDuration)
+
+	t.L().Printf("Baseline interval     : %s", baselineInterval)
+	t.L().Printf("Perturbation interval : %s", perturbationInterval)
+	t.L().Printf("Recovery interval     : %s", afterInterval)
+
+	cancelWorkload()
+	m.Wait()
+
+	baselineStats := data.worstStats(baselineInterval)
+	perturbationStats := data.worstStats(perturbationInterval)
+	afterStats := data.worstStats(afterInterval)
 
 	t.L().Printf("%s\n", prettyPrint("Baseline stats", baselineStats))
 	t.L().Printf("%s\n", prettyPrint("Perturbation stats", perturbationStats))
 	t.L().Printf("%s\n", prettyPrint("Recovery stats", afterStats))
 
 	t.Status("T5: validating results")
-	// Stop all the running threads and wait for them.
-	r.Close()
-	cancelReporter()
-	cancelWorkload()
-	m.Wait()
 	require.NoError(t, downloadProfiles(ctx, c, t.L(), t.ArtifactsDir()))
 
 	t.L().Printf("validating stats during the perturbation")
-	duringOK := v.isAcceptableChange(t.L(), baselineStats, perturbationStats)
+	duringOK := isAcceptableChange(t.L(), baselineStats, perturbationStats, v.acceptableChange)
 	t.L().Printf("validating stats after the perturbation")
-	afterOK := v.isAcceptableChange(t.L(), baselineStats, afterStats)
+	afterOK := isAcceptableChange(t.L(), baselineStats, afterStats, v.acceptableChange)
 	require.True(t, duringOK && afterOK)
 }
-
-// Track all histograms for up to one hour in the past.
-const numOpsToTrack = 3600
 
 // trackedStat is a collection of the relevant values from the histogram. The
 // score is a unitless composite measure representing the throughput and latency
 // of a histogram. Lower scores are better.
 type trackedStat struct {
-	clockTime time.Time
-	count     int64
-	mean      time.Duration
-	stddev    time.Duration
-	p50       time.Duration
-	p99       time.Duration
-	p999      time.Duration
-	score     time.Duration
+	cli.Tick
+	score time.Duration
 }
 
-type scoreCalculator func(trackedStat) time.Duration
+type scoreCalculator func(cli.Tick) time.Duration
 
 func (t trackedStat) String() string {
-	return fmt.Sprintf("%s: score: %s, count: %d, mean: %s, stddev: %s, p50: %s, p99: %s, p99.9: %s",
-		t.clockTime, t.score, t.count, t.mean.String(), t.stddev.String(), t.p50.String(), t.p99.String(), t.p999.String())
+	return fmt.Sprintf("%s: score: %s, qps: %d, p50: %s, p99: %s, pMax: %s",
+		t.Time, t.score, int(t.Throughput), t.P50, t.P99, t.PMax)
 }
 
-// latencyMonitor tracks the latency of operations ver a period of time. It has
-// a fixed number of operations to track and rolls the previous operations into
-// the buffer.
-type latencyMonitor struct {
-	statNames []string
-	// track the relevant stats for the last N operations in a circular buffer.
-	mu struct {
-		syncutil.Mutex
-		index   int
-		tracker map[string]*[numOpsToTrack]trackedStat
+// merge two stats together. Note that this isn't really a merge of the P99, but
+// the other merges are fairly accurate.
+func (t trackedStat) merge(o trackedStat, c scoreCalculator) trackedStat {
+	tick := cli.Tick{
+		Time:       t.Time,
+		Throughput: t.Throughput + o.Throughput,
+		P50:        (t.P50 + o.P50) / 2,
+		P99:        (t.P99 + o.P99) / 2,
+		PMax:       max(t.PMax, o.PMax),
 	}
-}
-
-func newLatencyMonitor(statNames []string) *latencyMonitor {
-	lm := latencyMonitor{}
-	lm.statNames = statNames
-	lm.mu.tracker = make(map[string]*[numOpsToTrack]trackedStat)
-	for _, name := range lm.statNames {
-		lm.mu.tracker[name] = &[numOpsToTrack]trackedStat{}
+	return trackedStat{
+		Tick:  tick,
+		score: max(t.score, o.score),
 	}
-	return &lm
-}
-
-// worstStats captures the worst case ver the relevant stats for the last N
-func (lm *latencyMonitor) worstStats(window time.Duration) map[string]trackedStat {
-	lm.mu.Lock()
-	defer lm.mu.Unlock()
-
-	stats := make(map[string]trackedStat)
-	// startIndex is always between 0 and numOpsToTrack - 1.
-	startIndex := (lm.mu.index + numOpsToTrack - int(window.Seconds())) % numOpsToTrack
-	// endIndex is always greater than startIndex.
-	endIndex := (lm.mu.index + numOpsToTrack) % numOpsToTrack
-	if endIndex < startIndex {
-		endIndex += numOpsToTrack
-	}
-
-	for name, stat := range lm.mu.tracker {
-		s := stat[startIndex]
-		for i := startIndex + 1; i < endIndex; i++ {
-			if stat[i%numOpsToTrack].score > s.score {
-				s = stat[i%numOpsToTrack]
-			}
-		}
-		stats[name] = s
-	}
-	return stats
 }
 
 // minAcceptableLatencyThreshold is the threshold below which we consider the
@@ -712,8 +731,8 @@ const minAcceptableLatencyThreshold = 10 * time.Millisecond
 // It compares all the metrics rather than failing fast. Normally multiple
 // metrics will fail at once if a test is going to fail and it is helpful to see
 // all the differences.
-func (v variations) isAcceptableChange(
-	logger *logger.Logger, baseline, other map[string]trackedStat,
+func isAcceptableChange(
+	logger *logger.Logger, baseline, other map[string]trackedStat, acceptableChange float64,
 ) bool {
 	// This can happen if we aren't measuring one of the phases.
 	if len(other) == 0 {
@@ -725,78 +744,14 @@ func (v variations) isAcceptableChange(
 		baseStat := baseline[name]
 		otherStat := other[name]
 		increase := float64(otherStat.score) / float64(baseStat.score)
-		if float64(otherStat.p99) > float64(minAcceptableLatencyThreshold) && increase > v.acceptableChange {
-			logger.Printf("FAILURE: %-15s: Increase %.4f > %.4f BASE: %v SCORE: %v\n", name, increase, v.acceptableChange, baseStat.score, otherStat.score)
+		if float64(otherStat.P99) > float64(minAcceptableLatencyThreshold) && increase > acceptableChange {
+			logger.Printf("FAILURE: %-15s: Increase %.4f > %.4f BASE: %v SCORE: %v\n", name, increase, acceptableChange, baseStat.score, otherStat.score)
 			allPassed = false
 		} else {
-			logger.Printf("PASSED : %-15s: Increase %.4f <= %.4f BASE: %v SCORE: %v\n", name, increase, v.acceptableChange, baseStat.score, otherStat.score)
+			logger.Printf("PASSED : %-15s: Increase %.4f <= %.4f BASE: %v SCORE: %v\n", name, increase, acceptableChange, baseStat.score, otherStat.score)
 		}
 	}
 	return allPassed
-}
-
-// start the latency monitor which will run until the context is cancelled.
-func (lm *latencyMonitor) start(
-	ctx context.Context, l *logger.Logger, r *histogram.UdpReceiver, c scoreCalculator,
-) error {
-outer:
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-time.After(time.Second):
-			histograms := r.Tick()
-			sMap := make(map[string]trackedStat)
-
-			// Pull out the relevant data from the stats.
-			for _, name := range lm.statNames {
-				if histograms[name] == nil {
-					l.Printf("no histogram for %s, %v", name, histograms)
-					continue outer
-				}
-				h := histograms[name]
-				stat := trackedStat{
-					clockTime: timeutil.Now(),
-					count:     h.TotalCount(),
-					mean:      time.Duration(h.Mean()),
-					stddev:    time.Duration(h.StdDev()),
-					p50:       time.Duration(h.ValueAtQuantile(50)),
-
-					p99:  time.Duration(h.ValueAtQuantile(99)),
-					p999: time.Duration(h.ValueAtQuantile(99.9)),
-				}
-				stat.score = c(stat)
-				sMap[name] = stat
-			}
-
-			// Roll the latest stats into the tracker under lock.
-			func() {
-				lm.mu.Lock()
-				defer lm.mu.Unlock()
-				for _, name := range lm.statNames {
-					lm.mu.tracker[name][lm.mu.index] = sMap[name]
-				}
-				lm.mu.index = (lm.mu.index + 1) % numOpsToTrack
-			}()
-
-			l.Printf("%s", shortString(sMap))
-		}
-	}
-}
-
-func shortString(sMap map[string]trackedStat) string {
-	var outputStr strings.Builder
-	var count int64
-
-	outputStr.WriteString("[op: p99(score)] ")
-	keys := sortedStringKeys(sMap)
-	for _, name := range keys {
-		hist := sMap[name]
-		outputStr.WriteString(fmt.Sprintf("%s: %s(%s), ", name, humanizeutil.Duration(hist.p99), humanizeutil.Duration(hist.score)))
-		count += hist.count
-	}
-	outputStr.WriteString(fmt.Sprintf("op/s: %d", count))
-	return outputStr.String()
 }
 
 // startNoBackup starts the nodes without enabling backup.
@@ -880,7 +835,7 @@ func (v variations) measureQPS(ctx context.Context, l *logger.Logger, duration t
 type workloadType interface {
 	operations() []string
 	initWorkload(ctx context.Context, v variations) error
-	runWorkload(ctx context.Context, v variations, duration time.Duration, maxRate int) error
+	runWorkload(ctx context.Context, v variations, duration time.Duration, maxRate int) (*workloadData, error)
 }
 
 type kvWorkload struct{}
@@ -897,11 +852,24 @@ func (w kvWorkload) initWorkload(ctx context.Context, v variations) error {
 // Don't run a workload against the node we're going to shut down.
 func (w kvWorkload) runWorkload(
 	ctx context.Context, v variations, duration time.Duration, maxRate int,
-) error {
+) (*workloadData, error) {
 	runCmd := fmt.Sprintf(
-		"./cockroach workload run kv --db target --duration=%s --max-rate=%d --tolerate-errors --max-block-bytes=%d --read-percent=50 --follower-read-percent=50 --concurrency=500 --operation-receiver=%s:%d {pgurl%s}",
-		duration, maxRate, v.maxBlockBytes, v.roachtestAddr, v.histogramPort, v.stableNodes())
-	return v.cluster.RunE(ctx, option.WithNodes(v.workloadNodes()), runCmd)
+		"./cockroach workload run kv --db target --display-format=incremental-json --duration=%s --max-rate=%d --tolerate-errors --max-block-bytes=%d --read-percent=50 --follower-read-percent=50 --concurrency=500 {pgurl%s}",
+		duration, maxRate, v.maxBlockBytes, v.stableNodes())
+	allOutput, err := v.cluster.RunWithDetails(ctx, nil, option.WithNodes(v.workloadNodes()), runCmd)
+	if err != nil {
+		return nil, err
+	}
+	wd := workloadData{
+		score: v.calculateScore,
+		data:  make(map[string]map[time.Time]trackedStat),
+	}
+	for _, output := range allOutput {
+		stdout := output.Stdout
+		ticks := cli.ParseOutput(strings.NewReader(stdout))
+		wd.addTicks(ticks)
+	}
+	return &wd, nil
 }
 
 // waitDuration waits until either the duration has passed or the context is cancelled.
