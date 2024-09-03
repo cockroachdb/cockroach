@@ -504,54 +504,6 @@ func TestLogicalStreamIngestionErrors(t *testing.T) {
 	dbB.Exec(t, createQ, urlA)
 }
 
-func TestLogicalStreamIngestionJobWithColumnFamilies(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	tc, s, serverASQL, serverBSQL := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
-	defer tc.Stopper().Stop(ctx)
-
-	createStmt := `CREATE TABLE tab_with_cf (
-pk int primary key,
-payload string,
-v1 int as (pk + 9000) virtual,
-v2 int as (pk + 42) stored,
-other_payload string,
-family f1(pk, payload),
-family f2(other_payload, v2))
-`
-	serverASQL.Exec(t, createStmt)
-	serverBSQL.Exec(t, createStmt)
-	serverASQL.Exec(t, "ALTER TABLE tab_with_cf "+lwwColumnAdd)
-	serverBSQL.Exec(t, "ALTER TABLE tab_with_cf "+lwwColumnAdd)
-
-	serverASQL.Exec(t, "INSERT INTO tab_with_cf(pk, payload, other_payload) VALUES (1, 'hello', 'ruroh1')")
-
-	serverAURL, cleanup := s.PGUrl(t)
-	serverAURL.Path = "a"
-	defer cleanup()
-
-	var jobBID jobspb.JobID
-	serverBSQL.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab_with_cf ON $1 INTO TABLE tab_with_cf", serverAURL.String()).Scan(&jobBID)
-
-	WaitUntilReplicatedTime(t, s.Clock().Now(), serverBSQL, jobBID)
-	serverASQL.Exec(t, "INSERT INTO tab_with_cf(pk, payload, other_payload) VALUES (2, 'potato', 'ruroh2')")
-	serverASQL.Exec(t, "INSERT INTO tab_with_cf(pk, payload, other_payload) VALUES (4, 'spud', 'shrub')")
-	serverASQL.Exec(t, "UPSERT INTO tab_with_cf(pk, payload, other_payload) VALUES (1, 'hello, again', 'ruroh3')")
-	serverASQL.Exec(t, "DELETE FROM tab_with_cf WHERE pk = 4")
-
-	WaitUntilReplicatedTime(t, s.Clock().Now(), serverBSQL, jobBID)
-
-	expectedRows := [][]string{
-		{"1", "hello, again", "9001", "43", "ruroh3"},
-		{"2", "potato", "9002", "44", "ruroh2"},
-	}
-	serverBSQL.CheckQueryResults(t, "SELECT * from tab_with_cf", expectedRows)
-	serverASQL.CheckQueryResults(t, "SELECT * from tab_with_cf", expectedRows)
-}
-
 func TestFilterRangefeedInReplicationStream(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -620,22 +572,45 @@ func TestRandomTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
 	ctx := context.Background()
-	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
 
 	sqlA := s.SQLConn(t, serverutils.DBName("a"))
 
 	tableName := "rand_table"
 	rng, _ := randutil.NewPseudoRand()
-	createStmt := randgen.RandCreateTableWithName(
-		ctx,
-		rng,
-		tableName,
-		1,
-		false, /* isMultiregion */
-		// We do not have full support for column families.
-		randgen.SkipColumnFamilyMutation())
+
+	var createStmt *tree.CreateTable
+	// Test with column families half the time
+	if rng.Intn(2) == 1 {
+		createStmt = randgen.RandCreateTableWithName(
+			ctx,
+			rng,
+			tableName,
+			1,
+			false, /* isMultiregion */
+			// Allow column families but require all cols to be null
+			randgen.RequireNullableColumns())
+	} else {
+		createStmt = randgen.RandCreateTableWithName(
+			ctx,
+			rng,
+			tableName,
+			1,
+			false, /* isMultiregion */
+			randgen.SkipColumnFamilyMutation())
+	}
+
 	stmt := tree.SerializeForDisplay(createStmt)
 	t.Log(stmt)
 	runnerA.Exec(t, stmt)
@@ -1001,6 +976,32 @@ func TestHeartbeatCancel(t *testing.T) {
 
 	// The ingestion job should eventually retry because it detects 2 nodes are dead
 	require.ErrorContains(t, <-retryErrorChan, fmt.Sprintf("replication stream %s is not running, status is STREAM_INACTIVE", prodAID))
+}
+
+func TestColumnFamilyNullableColumnCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	server, s, dbA, _ := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN data2 BYTES CREATE FAMILY testfam")
+	expectedErr := "pq: tables with multiple column families require all columns to be nullable. pk column is non-null."
+	dbA.ExpectErr(t, expectedErr, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String())
 }
 
 func setupLogicalTestServer(
