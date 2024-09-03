@@ -24,11 +24,6 @@ import (
 
 // Enforcer is responsible for enforcing license policies.
 type Enforcer struct {
-	// DB is used to access into the KV. This is set via Start. It must have
-	// access to the system tenant since it read/writes KV keys in the system
-	// keyspace.
-	db isql.DB
-
 	// TestingKnobs are used to control the behavior of the enforcer for testing.
 	TestingKnobs *TestingKnobs
 
@@ -62,12 +57,10 @@ var once sync.Once
 // GetEnforcerInstance returns the singleton instance of the Enforcer. The
 // Enforcer is responsible for license enforcement policies.
 func GetEnforcerInstance() *Enforcer {
-	if instance == nil {
-		once.Do(
-			func() {
-				instance = newEnforcer()
-			})
-	}
+	once.Do(
+		func() {
+			instance = newEnforcer()
+		})
 	return instance
 }
 
@@ -82,12 +75,10 @@ func newEnforcer() *Enforcer {
 // KV license metadata and will populate any missing data as needed. The DB
 // passed in must have access to the system tenant.
 func (e *Enforcer) Start(ctx context.Context, db isql.DB) error {
-	e.db = db
-
 	// Writing the grace period initialization timestamp is currently opt-in. See
 	// the EnableGracePeriodInitTSWrite comment for details.
 	if e.TestingKnobs != nil && e.TestingKnobs.EnableGracePeriodInitTSWrite {
-		return e.maybeWriteGracePeriodInitTS(ctx)
+		return e.maybeWriteGracePeriodInitTS(ctx, db)
 	}
 	return nil
 }
@@ -108,8 +99,8 @@ func (e *Enforcer) GetGracePeriodInitTS() time.Time {
 
 // maybeWriteGracePeriodInitTS checks if the grace period initialization
 // timestamp needs to be written to the KV layer and writes it if needed.
-func (e *Enforcer) maybeWriteGracePeriodInitTS(ctx context.Context) error {
-	return e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+func (e *Enforcer) maybeWriteGracePeriodInitTS(ctx context.Context, db isql.DB) error {
+	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// We could use a conditional put for this logic. However, we want to read
 		// and cache the value, and the common case is that the value will be read.
 		// Only during the initialization of the first node in the cluster will we
