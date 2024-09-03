@@ -319,9 +319,9 @@ func (p *Provider) Create(
 
 	if len(providerOpts.Locations) == 0 {
 		if opts.GeoDistributed {
-			providerOpts.Locations = defaultLocations
+			providerOpts.Locations = DefaultLocations
 		} else {
-			providerOpts.Locations = []string{defaultLocations[0]}
+			providerOpts.Locations = []string{DefaultLocations[0]}
 		}
 	}
 

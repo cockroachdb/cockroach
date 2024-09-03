@@ -290,8 +290,8 @@ func AWSZones(zones string) Option {
 // TODO(darrylwong): Something is not quite right when creating
 // zones that have overlapping address spaces, i.e. eastus and westus.
 // See: https://github.com/cockroachdb/cockroach/issues/124612
-func AzureZones(zones string) Option {
+func AzureZones(Zones string) Option {
 	return func(spec *ClusterSpec) {
-		spec.Azure.Zones = zones
+		spec.Azure.Zones = Zones
 	}
 }
