@@ -162,6 +162,18 @@ func TestSpanStatsFanOut(t *testing.T) {
 		)
 		require.NoError(t, err)
 
+		equalStoreIDs := func(a, b []roachpb.StoreID) bool {
+			if len(a) != len(b) {
+				return false
+			}
+			for i := range a {
+				if a[i] != b[i] {
+					return false
+				}
+			}
+			return true
+		}
+
 		// Verify stats across different spans.
 		for _, tcase := range testCases {
 			rSpan, err := keys.SpanAddr(tcase.span)
@@ -169,6 +181,14 @@ func TestSpanStatsFanOut(t *testing.T) {
 
 			// Assert expected values from multi-span request
 			spanStats := multiResult.SpanToStats[tcase.span.String()]
+			if !equalStoreIDs([]roachpb.StoreID{1, 2, 3}, spanStats.StoreIDs) {
+				return errors.Newf("Multi-span: expected storeIDs %v in span [%s - %s], found %v",
+					[]roachpb.StoreID{1},
+					rSpan.Key.String(),
+					rSpan.EndKey.String(),
+					spanStats.StoreIDs,
+				)
+			}
 			if tcase.expectedRanges != spanStats.RangeCount {
 				return errors.Newf("Multi-span: expected %d ranges in span [%s - %s], found %d",
 					tcase.expectedRanges,
