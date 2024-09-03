@@ -310,7 +310,7 @@ hosts file.
 		filteredCloud, err := roachprod.List(config.Logger, listMine, listPattern,
 			vm.ListOptions{
 				Username:             username,
-				ComputeEstimatedCost: true,
+				ComputeEstimatedCost: listCost,
 			})
 
 		if err != nil {
