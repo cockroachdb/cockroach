@@ -343,13 +343,9 @@ func TestLDROnNodeShutdown(
 	// Let workload run for a bit before we kill a node
 	time.Sleep(ldrWorkload.workload.(replicateKV).debugRunDuration / 10)
 
+	// Any node should be killable, including the coordinator
 	findNodeToStop := func(info *clusterInfo, rng *rand.Rand) int {
-		for {
-			anotherNode := info.nodes.SeededRandNode(rng)[0]
-			if anotherNode != info.gatewayNodes[0] {
-				return anotherNode
-			}
-		}
+		return info.nodes.SeededRandNode(rng)[0]
 	}
 
 	t.L().Printf("Finding node to stop Left")
@@ -357,18 +353,28 @@ func TestLDROnNodeShutdown(
 	t.L().Printf("Finding node to stop right")
 	nodeToStopR := findNodeToStop(setup.right, setup.rng)
 
-	// Graceful shutdown on both nodes
-	// TODO(naveen.setlur): maybe switch this to a less graceful shutdown via SIGKILL
-	stopOpts := option.NewStopOpts(option.Graceful(shutdownGracePeriod))
+	rng, _ := randutil.NewPseudoRand()
+	getStopOpts := func() option.StopOpts {
+		if rng.Intn(2) == 0 {
+			// Graceful stop
+			return option.NewStopOpts(option.Graceful(shutdownGracePeriod))
+		}
+		// Standard SIGKILL
+		return option.DefaultStopOpts()
+	}
+
 	t.L().Printf("Shutting down node-left: %d", nodeToStopL)
 	monitor.ExpectDeath()
-	if err := c.StopE(ctx, t.L(), stopOpts, c.Node(nodeToStopL)); err != nil {
+	if err := c.StopE(ctx, t.L(), getStopOpts(), c.Node(nodeToStopL)); err != nil {
 		t.Fatalf("Unable to shutdown node: %s", err)
 	}
 
+	// Sleep to stagger shutdown
+	time.Sleep(ldrWorkload.workload.(replicateKV).debugRunDuration / 20)
+
 	t.L().Printf("Shutting down node-right: %d", nodeToStopR)
 	monitor.ExpectDeath()
-	if err := c.StopE(ctx, t.L(), stopOpts, c.Node(nodeToStopR)); err != nil {
+	if err := c.StopE(ctx, t.L(), getStopOpts(), c.Node(nodeToStopR)); err != nil {
 		t.Fatalf("Unable to shutdown node: %s", err)
 	}
 
