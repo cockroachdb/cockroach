@@ -1380,6 +1380,7 @@ func (c *SyncedCluster) RunWithDetails(
 			includeRoachprodEnvVars: true,
 			stdout:                  l.Stdout,
 			stderr:                  l.Stderr,
+			expanderConfig:          options.ExpanderConfig,
 		}
 		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 		return result, err
