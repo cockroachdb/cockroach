@@ -136,25 +136,28 @@ func registerDisaggRebalance(r registry.Registry) {
 				t.Fatalf("did not replicate to n4 quickly enough, only found %d replicas", count)
 			}
 
-			var bytesInRanges int64
-			if err := db.QueryRow(
-				"SELECT metrics['livebytes']::INT FROM crdb_internal.kv_store_status WHERE node_id = $1 LIMIT 1",
-				4,
-			).Scan(&bytesInRanges); err != nil {
-				t.Fatal(err)
-			}
-			var bytesSnapshotted int64
-			if err := db.QueryRow(
-				"SELECT metrics['range.snapshots.rcvd-bytes']::INT FROM crdb_internal.kv_store_status WHERE node_id = $1 LIMIT 1",
-				4,
-			).Scan(&bytesSnapshotted); err != nil {
-				t.Fatal(err)
-			}
+			testutils.SucceedsWithin(t, func() error {
+				var bytesInRanges int64
+				if err := db.QueryRow(
+					"SELECT metrics['livebytes']::INT FROM crdb_internal.kv_store_status WHERE node_id = $1 LIMIT 1",
+					4,
+				).Scan(&bytesInRanges); err != nil {
+					t.Fatal(err)
+				}
+				var bytesSnapshotted int64
+				if err := db.QueryRow(
+					"SELECT metrics['range.snapshots.rcvd-bytes']::INT FROM crdb_internal.kv_store_status WHERE node_id = $1 LIMIT 1",
+					4,
+				).Scan(&bytesSnapshotted); err != nil {
+					t.Fatal(err)
+				}
 
-			t.L().PrintfCtx(ctx, "got snapshot received bytes = %s, logical bytes in ranges = %s", humanize.IBytes(uint64(bytesSnapshotted)), humanize.IBytes(uint64(bytesInRanges)))
-			if bytesSnapshotted > bytesInRanges {
-				t.Fatalf("unexpected snapshot received bytes %d > bytes in all replicas on n4 %d, did not do a disaggregated rebalance?", bytesSnapshotted, bytesInRanges)
-			}
+				t.L().PrintfCtx(ctx, "got snapshot received bytes = %s, logical bytes in ranges = %s", humanize.IBytes(uint64(bytesSnapshotted)), humanize.IBytes(uint64(bytesInRanges)))
+				if bytesSnapshotted > bytesInRanges {
+					return errors.Errorf("unexpected snapshot received bytes %d > bytes in all replicas on n4 %d, did not do a disaggregated rebalance?", bytesSnapshotted, bytesInRanges)
+				}
+				return nil
+			}, 5*time.Minute)
 
 			t.Status("continue tpcc")
 
