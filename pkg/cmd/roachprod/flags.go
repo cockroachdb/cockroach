@@ -47,6 +47,7 @@ var (
 	grafanaArch           string
 	grafanaDumpDir        string
 	jaegerConfigNodes     string
+	listCost              bool
 	listDetails           bool
 	listJSON              bool
 	listMine              bool
@@ -179,6 +180,10 @@ func initFlags() {
 	extendCmd.Flags().DurationVarP(&extendLifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
 
+	listCmd.Flags().BoolVarP(&listCost,
+		"cost", "c", os.Getenv("ROACHPROD_NO_COST_ESTIMATES") != "true",
+		"Show cost estimates",
+	)
 	listCmd.Flags().BoolVarP(&listDetails,
 		"details", "d", false, "Show cluster details")
 	listCmd.Flags().BoolVar(&listJSON,

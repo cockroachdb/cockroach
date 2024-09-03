@@ -2838,7 +2838,8 @@ func populateCostPerHour(l *logger.Logger, vms vm.List) error {
 				}
 				series, cpus, memory, err := decodeCustomType()
 				if err != nil {
-					l.Errorf("Error estimating VM costs (will continue without): %v", err)
+					l.Errorf("Error estimating VM costs, "+
+						"continuing without (consider ROACHPROD_NO_COST_ESTIMATES=true): %v", err)
 					continue
 				}
 				workload.ComputeVmWorkload.MachineType = &cloudbilling.MachineType{
