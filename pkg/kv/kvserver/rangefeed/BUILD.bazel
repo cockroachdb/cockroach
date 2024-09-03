@@ -8,6 +8,7 @@ go_library(
         "buffered_sender.go",
         "buffered_stream.go",
         "catchup_scan.go",
+        "event_queue.go",
         "event_size.go",
         "filter.go",
         "metrics.go",
