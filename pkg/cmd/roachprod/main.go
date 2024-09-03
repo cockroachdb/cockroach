@@ -230,7 +230,7 @@ directories inside ${HOME}/local directory are removed.
 `,
 	Args: cobra.ArbitraryArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Destroy(config.Logger, destroyAllMine, destroyAllLocal, args...)
+		return roachprod.Destroy(config.Logger, username, destroyAllMine, destroyAllLocal, args...)
 	}),
 }
 
@@ -307,7 +307,11 @@ hosts file.
 		if listJSON && listDetails {
 			return errors.New("'json' option cannot be combined with 'details' option")
 		}
-		filteredCloud, err := roachprod.List(config.Logger, listMine, listPattern, vm.ListOptions{ComputeEstimatedCost: true})
+		filteredCloud, err := roachprod.List(config.Logger, listMine, listPattern,
+			vm.ListOptions{
+				Username:             username,
+				ComputeEstimatedCost: true,
+			})
 
 		if err != nil {
 			return err

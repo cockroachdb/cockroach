@@ -441,6 +441,7 @@ type VolumeCreateOpts struct {
 }
 
 type ListOptions struct {
+	Username             string // if set, <username>-.* clusters are detected as 'mine'
 	IncludeVolumes       bool
 	IncludeEmptyClusters bool
 	ComputeEstimatedCost bool
