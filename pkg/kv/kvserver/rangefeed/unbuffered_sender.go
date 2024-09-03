@@ -24,6 +24,16 @@ import (
 type RangefeedMetricsRecorder interface {
 	UpdateMetricsOnRangefeedConnect()
 	UpdateMetricsOnRangefeedDisconnect()
+	IncQueueSize()
+	DecQueueSize()
+	UpdateQueueSize(int64)
+	IncRangefeedCleanUp()
+	DecRangefeedCleanUp()
+	IncEventsSentCount()
+	IncErrorEvents()
+	//IncBufferedQueueEventSize()
+	IncNodeLevelEvents()
+	UpdateCleanUpQueue(int64)
 }
 
 // ServerStreamSender forwards MuxRangefeedEvents from UnbufferedSender to the
@@ -191,6 +201,7 @@ func (ubs *UnbufferedSender) SendUnbuffered(event *kvpb.MuxRangeFeedEvent) error
 	if event.Error != nil {
 		log.Fatalf(context.Background(), "unexpected: SendUnbuffered called with error event")
 	}
+	ubs.metrics.IncNodeLevelEvents()
 	return ubs.sender.Send(event)
 }
 
@@ -205,6 +216,7 @@ func (ubs *UnbufferedSender) run(ctx context.Context, stopper *stop.Stopper) err
 		case <-ubs.notifyMuxError:
 			toSend := ubs.detachMuxErrors()
 			for _, clientErr := range toSend {
+				ubs.metrics.IncNodeLevelEvents()
 				if err := ubs.sender.Send(clientErr); err != nil {
 					log.Errorf(ctx,
 						"failed to send rangefeed completion error back to client due to broken stream: %v", err)
