@@ -63,6 +63,7 @@ go_test(
     srcs = [
         "bench_test.go",
         "budget_test.go",
+        "buffered_sender_test.go",
         "catchup_scan_bench_test.go",
         "catchup_scan_test.go",
         "event_queue_test.go",
