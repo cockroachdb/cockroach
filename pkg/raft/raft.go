@@ -2221,6 +2221,10 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 	// node is removed.
 	r.isLearner = pr != nil && pr.IsLearner
 
+	if pr == nil && r.state == StateLeader {
+		r.logger.Panicf("removed leader in config change")
+	}
+
 	if (pr == nil || r.isLearner) && r.state == StateLeader {
 		// This node is leader and was removed or demoted, step down if requested.
 		//
