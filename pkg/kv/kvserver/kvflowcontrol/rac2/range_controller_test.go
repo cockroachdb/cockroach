@@ -59,7 +59,7 @@ type testingRCRange struct {
 	}
 }
 
-func (r *testingRCRange) FollowerState(replicaID roachpb.ReplicaID) FollowerStateInfo {
+func (r *testingRCRange) FollowerStateRaftMuLocked(replicaID roachpb.ReplicaID) FollowerStateInfo {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -68,6 +68,17 @@ func (r *testingRCRange) FollowerState(replicaID roachpb.ReplicaID) FollowerStat
 		return FollowerStateInfo{}
 	}
 	return replica.info
+}
+
+func (r *testingRCRange) GetAdmitted(replicaID roachpb.ReplicaID) AdmittedVector {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	replica, ok := r.mu.r.replicaSet[replicaID]
+	if !ok {
+		return AdmittedVector{}
+	}
+	return replica.av
 }
 
 func (r *testingRCRange) startWaitForEval(name string, pri admissionpb.WorkPriority) {
@@ -107,8 +118,8 @@ func (r *testingRCRange) admit(
 	for _, replica := range r.mu.r.replicaSet {
 		if replica.desc.StoreID == storeID {
 			replica := replica
-			replica.info.Admitted[AdmissionToRaftPriority(pri)] = toIndex
-			replica.info.Term = term
+			replica.av.Admitted[AdmissionToRaftPriority(pri)] = toIndex
+			replica.av.Term = term
 			r.mu.r.replicaSet[replica.desc.ReplicaID] = replica
 			break
 		}
@@ -139,6 +150,7 @@ const invalidTrackerState = tracker.StateSnapshot + 1
 type testingReplica struct {
 	desc roachpb.ReplicaDescriptor
 	info FollowerStateInfo
+	av   AdmittedVector
 }
 
 func scanRanges(t *testing.T, input string) []testingRange {
@@ -539,6 +551,7 @@ func TestRangeController(t *testing.T) {
 					LocalReplicaID:  r.localReplicaID,
 					SSTokenCounter:  ssTokenCounter,
 					RaftInterface:   testRC,
+					AdmittedTracker: testRC,
 					Clock:           clock,
 					EvalWaitMetrics: evalMetrics,
 				}
