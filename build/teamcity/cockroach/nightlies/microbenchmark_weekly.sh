@@ -26,6 +26,7 @@ dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
 source "$dir/teamcity-support.sh"  # For $root
 source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 output_dir="./artifacts/microbench"
+remote_dir="/mnt/data1"
 benchmarks_commit=$(git rev-parse HEAD)
 exit_status=0
 
@@ -101,19 +102,21 @@ log_into_gcloud
   --gce-zones="$GCE_ZONE" \
   --gce-managed \
   --gce-use-spot \
-  --os-volume-size=384
+  --local-ssd=false \
+  --gce-pd-volume-size=384 \
+  --os-volume-size=10
 
 # Stage binaries on the cluster
 for sha in "${build_sha_arr[@]}"; do
   archive_name=${BENCH_PACKAGE//\//-}
   archive_name="$sha-${archive_name/.../all}.tar.gz"
-  ./bin/roachprod-microbench stage --quiet "$ROACHPROD_CLUSTER" "gs://$BENCH_BUCKET/builds/$archive_name" "$sha"
+  ./bin/roachprod-microbench stage --quiet "$ROACHPROD_CLUSTER" "gs://$BENCH_BUCKET/builds/$archive_name" "$remote_dir/$sha"
 done
 
 # Execute microbenchmarks
 ./bin/roachprod-microbench run "$ROACHPROD_CLUSTER" \
-  --binaries experiment="${build_sha_arr[0]}" \
-  ${build_sha_arr[1]:+--binaries baseline="${build_sha_arr[1]}"} \
+  --binaries experiment="$remote_dir/${build_sha_arr[0]}" \
+  ${build_sha_arr[1]:+--binaries baseline="$remote_dir/${build_sha_arr[1]}"} \
   --output-dir="$output_dir" \
   --iterations "$BENCH_ITERATIONS" \
   --shell="$BENCH_SHELL" \
