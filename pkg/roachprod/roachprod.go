@@ -380,6 +380,7 @@ func List(
 			return cloud.Cloud{}, errors.Wrapf(err, "could not compile regex pattern: %s", clusterNamePattern)
 		}
 	}
+	l.Printf("listing clusters matching %s", listPattern)
 
 	cld, err := Sync(l, opts)
 	if err != nil {
