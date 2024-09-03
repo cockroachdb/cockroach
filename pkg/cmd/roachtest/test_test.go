@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -479,6 +480,53 @@ func TestNewCluster(t *testing.T) {
 			_, _, err := factory.newCluster(ctx, cfg, setStatus, true)
 			require.Error(t, err)
 			require.Equal(t, c.expectedCreateCalls, createCallsCounter)
+		})
+	}
+}
+
+func TestGCESameDefaultZone(t *testing.T) {
+	ctx := context.Background()
+	factory := &clusterFactory{sem: make(chan struct{}, 1)}
+	cfg := clusterConfig{spec: spec.MakeClusterSpec(2, spec.WorkloadNode())}
+	setStatus := func(string) {}
+
+	defer func() {
+		create = roachprod.Create
+	}()
+
+	create = func(ctx context.Context, l *logger.Logger, username string, opts ...*cloud.ClusterCreateOpts) (retErr error) {
+		// Since we specified no zone for this cluster, roachtest should assign a default one for us.
+		// Check that it assigns the same default zone to both the CRDB cluster and the workload node.
+		require.Equal(t, len(opts), 2)
+		crdbZones := opts[0].ProviderOptsContainer[gce.ProviderName].(*gce.ProviderOpts).Zones
+		workloadZones := opts[1].ProviderOptsContainer[gce.ProviderName].(*gce.ProviderOpts).Zones
+		require.Equal(t, crdbZones, workloadZones)
+		// A bit of a workaround, we don't have a mock for registerCluster at this time which will panic if hit.
+		// Instead, just return an error to return early since we already tested the code paths we care about.
+		return &roachprod.ClusterAlreadyExistsError{}
+	}
+
+	testCases := []struct {
+		name       string
+		geo        bool
+		createMock func(ctx context.Context, l *logger.Logger, username string, opts ...*cloud.ClusterCreateOpts) (retErr error)
+	}{
+		{
+			name: "Separate GCE create calls for same cluster default to same zone",
+			geo:  false,
+		},
+		{
+			name: "Separate GCE create calls for same geo cluster default to same zones",
+			geo:  true,
+		},
+	}
+
+	for _, c := range testCases {
+		cfg.spec.Geo = c.geo
+		t.Run(c.name, func(t *testing.T) {
+			for i := 0; i < 100; i++ {
+				_, _, _ = factory.newCluster(ctx, cfg, setStatus, true)
+			}
 		})
 	}
 }
