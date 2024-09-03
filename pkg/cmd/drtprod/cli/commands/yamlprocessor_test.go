@@ -1,0 +1,157 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package commands
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func Test_processYaml(t *testing.T) {
+	ctx := context.Background()
+	// setting to nil as a precaution that the command execution does not invoke an
+	// actual command
+	commandExecutor = nil
+	t.Run("expect unmarshall to fail", func(t *testing.T) {
+		err := processYaml(ctx, []byte("invalid"), false, nil)
+		require.NotNil(t, err)
+		require.Contains(t, err.Error(), "cannot unmarshal")
+	})
+	t.Run("expect failure due to unwanted field", func(t *testing.T) {
+		err := processYaml(ctx, []byte(`
+unwanted: value
+environment:
+  NAME_1: name_value1
+  NAME_2: name_value2
+`), false, nil)
+		require.NotNil(t, err)
+		require.Contains(t, err.Error(), "field unwanted not found in type commands.yamlConfig")
+	})
+	t.Run("expect no command execution on display-only=true", func(t *testing.T) {
+		require.Nil(t, processYaml(ctx, getTestYaml(), true, nil))
+	})
+	t.Run("expect partial failure and rollback", func(t *testing.T) {
+		name1Commands := make([]string, 0)
+		name2Commands := make([]string, 0)
+		commandExecutor = func(ctx context.Context, logPrefix string, cmd string, args ...string) error {
+			if strings.HasPrefix(logPrefix, "name_value1") {
+				name1Commands = append(name1Commands, (&command{name: cmd, args: args}).String())
+			} else if strings.HasPrefix(logPrefix, "name_value2") {
+				name2Commands = append(name2Commands, (&command{name: cmd, args: args}).String())
+			}
+			if cmd == "dummy_script1" || cmd == "script33" || args[0] == "rb_dummy2" {
+				return fmt.Errorf("error while processing script %s", cmd)
+			}
+			return nil
+		}
+		require.Nil(t, processYaml(ctx, getTestYaml(), false, nil))
+		require.Equal(t, 8, len(name1Commands))
+		require.Equal(t, 1, len(name2Commands))
+		// the flags are maintained as map and can be in any sequence
+		require.True(t, strings.HasPrefix(name1Commands[0], "roachprod dummy1 name_value1 arg11"))
+		require.True(t, strings.Contains(name1Commands[0], "--clouds=gce"))
+		require.True(t, strings.Contains(name1Commands[0], "--nodes=1"))
+		require.Equal(t, []string{
+			"dummy_script1", "dummy_script2 arg11", "roachprod dummy2", "script33",
+		}, name1Commands[1:5])
+		// rollback
+		require.True(t, strings.HasPrefix(name1Commands[5], "roachprod rb_dummy2 arg1 arg2"))
+		require.True(t, strings.Contains(name1Commands[5], "--flag1=value1"))
+		require.True(t, strings.Contains(name1Commands[5], "--flag2=value2"))
+		require.True(t, strings.HasPrefix(name1Commands[6], "dummy_script22"))
+		require.True(t, strings.Contains(name1Commands[6], "--f1=\\\"v1 v2\\\""))
+		require.Equal(t, "roachprod rb_dummy1", name1Commands[7])
+		require.Equal(t, []string{
+			"roachprod dummy2 name_value2 arg12",
+		}, name2Commands)
+	})
+	t.Run("expect no failure", func(t *testing.T) {
+		name1Commands := make([]string, 0)
+		name2Commands := make([]string, 0)
+		commandExecutor = func(ctx context.Context, logPrefix string, cmd string, args ...string) error {
+			if strings.HasPrefix(logPrefix, "name_value1") {
+				name1Commands = append(name1Commands, (&command{name: cmd, args: args}).String())
+			} else if strings.HasPrefix(logPrefix, "name_value2") {
+				name2Commands = append(name2Commands, (&command{name: cmd, args: args}).String())
+			}
+			return nil
+		}
+		require.Nil(t, processYaml(ctx, getTestYaml(), false, nil))
+		require.Equal(t, 6, len(name1Commands))
+		require.Equal(t, 1, len(name2Commands))
+		// the flags are maintained as map and can be in any sequence
+		require.True(t, strings.HasPrefix(name1Commands[0], "roachprod dummy1 name_value1 arg11"))
+		require.True(t, strings.Contains(name1Commands[0], "--clouds=gce"))
+		require.True(t, strings.Contains(name1Commands[0], "--nodes=1"))
+		require.Equal(t, []string{
+			"dummy_script1", "dummy_script2 arg11", "roachprod dummy2", "script33", "last_script",
+		}, name1Commands[1:])
+		require.Equal(t, []string{
+			"roachprod dummy2 name_value2 arg12",
+		}, name2Commands)
+	})
+}
+
+func getTestYaml() []byte {
+	return []byte(`
+environment:
+  NAME_1: name_value1
+  NAME_2: name_value2
+
+targets:
+  - target_name: $NAME_1
+    steps:
+    - command: dummy1
+      args:
+        - $NAME_1
+        - arg11
+      flags:
+        clouds: gce
+        nodes: 1
+      on_rollback:
+      - command: rb_dummy1
+    - script: "dummy_script1"
+      continue_on_failure: True
+    - script: "dummy_script2"
+      args:
+      - arg11
+    - command: dummy2
+      on_rollback:
+      - command: rb_dummy2
+        flags:
+          flag1: value1
+          flag2: value2
+        args:
+          - arg1
+          - arg2
+      - script: "dummy_script22"
+        flags:
+          f1: \"v1 v2\"
+    - script: "script33"
+      on_rollback:
+      - command: script33_rb
+    - script: "last_script"
+      on_rollback:
+      - command: rb_last
+  - target_name: $NAME_2
+    steps:
+    - command: dummy2
+      args:
+        - $NAME_2
+        - arg12
+
+
+`)
+}
