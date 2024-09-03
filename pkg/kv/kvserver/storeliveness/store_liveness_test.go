@@ -53,8 +53,8 @@ func TestStoreLiveness(t *testing.T) {
 			datadriven.RunTest(
 				t, path, func(t *testing.T, d *datadriven.TestData) string {
 					switch d.Cmd {
-					case "remove-idle-stores":
-						sm.requesterStateHandler.removeIdleStores()
+					case "mark-idle-stores":
+						sm.requesterStateHandler.markIdleStores()
 						return ""
 
 					case "support-from":

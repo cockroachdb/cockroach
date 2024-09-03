@@ -237,7 +237,7 @@ func (sm *SupportManager) startLoop(ctx context.Context) {
 			sm.withdrawSupport(ctx)
 
 		case <-idleSupportFromTicker.C:
-			sm.requesterStateHandler.removeIdleStores()
+			sm.requesterStateHandler.markIdleStores()
 
 		case <-receiveQueueSig:
 			msgs := sm.receiveQueue.Drain()
