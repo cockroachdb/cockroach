@@ -207,7 +207,10 @@ echo $delta`
 					// what happened.
 					t.Fatalf("now() regressed, possibly using system clock instead of PTP: %s -> %s", tPre, tPost)
 				}
-				require.NoError(t, workload(ctx))
+				if err := workload(ctx); err != nil {
+					t.L().Printf("workload failed after rewinding clock: %+v", err)
+					time.Sleep(24 * time.Hour)
+				}
 				c.Stop(ctx, t.L(), option.DefaultStopOpts(), nodes)
 			}
 
