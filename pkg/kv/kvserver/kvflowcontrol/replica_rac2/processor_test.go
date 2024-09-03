@@ -390,8 +390,8 @@ func TestProcessorBasic(t *testing.T) {
 				fmt.Fprintf(&b, ".....\n")
 				if len(event.Entries) > 0 {
 					fmt.Fprintf(&b, "AdmitRaftEntries:\n")
-					isV2 := p.AdmitRaftEntriesRaftMuLocked(ctx, event)
-					fmt.Fprintf(&b, "leader-using-v2: %t\n", isV2)
+					destroyedOrV2 := p.AdmitRaftEntriesRaftMuLocked(ctx, event)
+					fmt.Fprintf(&b, "destroyed-or-leader-using-v2: %t\n", destroyedOrV2)
 				}
 				return builderStr()
 

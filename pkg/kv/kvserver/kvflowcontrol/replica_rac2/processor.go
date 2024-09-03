@@ -354,9 +354,12 @@ type Processor interface {
 	//
 	// It is split off from that function since it is natural to position the
 	// admission control processing when we are writing to the store in
-	// Replica.handleRaftReadyRaftMuLocked. This is a noop if the leader is not
-	// using the RACv2 protocol. Returns false if the leader is using RACv1, in
-	// which the caller should follow the RACv1 admission pathway.
+	// Replica.handleRaftReadyRaftMuLocked. This is mostly a noop if the leader is
+	// not using the RACv2 protocol.
+	//
+	// Returns false if the leader is using RACv1 and the replica is not
+	// destroyed, in which case the caller should follow the RACv1 admission
+	// pathway.
 	//
 	// raftMu is held.
 	AdmitRaftEntriesRaftMuLocked(
@@ -476,6 +479,16 @@ func NewProcessor(opts ProcessorOptions) Processor {
 	p.enabledWhenLeader.Store(uint32(opts.EnabledWhenLeaderLevel))
 	p.v1EncodingPriorityMismatch = log.Every(time.Minute)
 	return p
+}
+
+// isLeaderUsingV2ProcLocked returns true if the current leader uses the V2
+// protocol.
+//
+// NB: the result of this method does not change while raftMu is held.
+func (p *processorImpl) isLeaderUsingV2ProcLocked() bool {
+	// We are the leader using V2, or a follower who learned that the leader is
+	// using the V2 protocol.
+	return p.mu.leader.rc != nil || p.mu.follower.isLeaderUsingV2Protocol
 }
 
 // OnDestroyRaftMuLocked implements Processor.
@@ -726,8 +739,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	p.makeStateConsistentRaftMuLockedProcLocked(
 		ctx, nextUnstableIndex, leaderID, leaseholderID, myLeaderTerm)
 
-	isLeaderUsingV2 := p.mu.leader.rc != nil || p.mu.follower.isLeaderUsingV2Protocol
-	if !isLeaderUsingV2 {
+	if !p.isLeaderUsingV2ProcLocked() {
 		return
 	}
 	// If there was a recent MsgStoreAppendResp that triggered this Ready
@@ -756,18 +768,15 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 
 // AdmitRaftEntriesRaftMuLocked implements Processor.
 func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2.RaftEvent) bool {
-	// NB: the state being read here is only modified under raftMu, so it will
-	// not become stale during this method.
-	var isLeaderUsingV2Protocol bool
-	func() {
+	// Return false only if we're not destroyed and not using V2.
+	if destroyed, usingV2 := func() (bool, bool) {
 		p.mu.Lock()
 		defer p.mu.Unlock()
-		isLeaderUsingV2Protocol = !p.mu.destroyed &&
-			(p.mu.leader.rc != nil || p.mu.follower.isLeaderUsingV2Protocol)
-	}()
-	if !isLeaderUsingV2Protocol {
-		return false
+		return p.mu.destroyed, p.isLeaderUsingV2ProcLocked()
+	}(); destroyed || !usingV2 {
+		return destroyed
 	}
+
 	for _, entry := range e.Entries {
 		typ, priBits, err := raftlog.EncodingOf(entry)
 		if err != nil {
@@ -913,7 +922,7 @@ func (p *processorImpl) AdmittedLogEntry(
 	admittedMayAdvance :=
 		p.mu.waitingForAdmissionState.remove(state.LeaderTerm, state.Index, state.Priority)
 	if !admittedMayAdvance || state.Index > p.mu.lastObservedStableIndex ||
-		(p.mu.leader.rc == nil && !p.mu.follower.isLeaderUsingV2Protocol) {
+		!p.isLeaderUsingV2ProcLocked() {
 		return
 	}
 	// The lastObservedStableIndex has moved at or ahead of state.Index. This

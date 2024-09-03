@@ -77,7 +77,7 @@ HandleRaftReady:
  Replica.MuUnlock
 .....
 AdmitRaftEntries:
-leader-using-v2: false
+destroyed-or-leader-using-v2: false
 
 # Told that the leader is using v2. And that [25,25] has no low-pri override.
 side-channel v2 leader-term=50 first=25 last=25
@@ -107,7 +107,7 @@ HandleRaftReady:
 .....
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{LeaderTerm:50 Index:25 Priority:LowPri}}) = true
-leader-using-v2: true
+destroyed-or-leader-using-v2: true
 
 # Stable index is advanced to 25.
 set-raft-state stable-index=25 leader=11
@@ -158,7 +158,7 @@ HandleRaftReady:
 .....
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:user-high-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{LeaderTerm:50 Index:26 Priority:AboveNormalPri}}) = true
-leader-using-v2: true
+destroyed-or-leader-using-v2: true
 
 # handleRaftReady is a noop.
 handle-raft-ready-and-admit
@@ -247,7 +247,7 @@ HandleRaftReady:
 .....
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{LeaderTerm:50 Index:27 Priority:LowPri}}) = true
-leader-using-v2: true
+destroyed-or-leader-using-v2: true
 
 admitted-log-entry leader-term=50 index=27 pri=3
 ----
@@ -314,7 +314,7 @@ HandleRaftReady:
  Replica.MuUnlock
 .....
 AdmitRaftEntries:
-leader-using-v2: false
+destroyed-or-leader-using-v2: false
 
 # Noop.
 admitted-log-entry leader-term=50 index=27 pri=0
@@ -385,7 +385,7 @@ HandleRaftReady:
 .....
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{LeaderTerm:52 Index:28 Priority:LowPri}}) = true
-leader-using-v2: true
+destroyed-or-leader-using-v2: true
 
 # AdmitForEval returns true since there is a RangeController which admitted.
 admit-for-eval pri=low-pri
@@ -589,7 +589,7 @@ HandleRaftReady:
  Replica.RaftMuAssertHeld
 .....
 AdmitRaftEntries:
-leader-using-v2: false
+destroyed-or-leader-using-v2: true
 
 # Noop.
 admitted-log-entry leader-term=52 index=28 pri=0
@@ -655,7 +655,7 @@ HandleRaftReady:
  Replica.MuUnlock
 .....
 AdmitRaftEntries:
-leader-using-v2: false
+destroyed-or-leader-using-v2: false
 
 # RangeController is created.
 set-enabled-level enabled-level=v1-encoding
@@ -692,7 +692,7 @@ HandleRaftReady:
 .....
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{LeaderTerm:50 Index:26 Priority:LowPri}}) = true
-leader-using-v2: true
+destroyed-or-leader-using-v2: true
 
 # Entry is admitted.
 admitted-log-entry leader-term=50 index=26 pri=0
@@ -757,7 +757,7 @@ HandleRaftReady:
  RangeController.HandleRaftEventRaftMuLocked([27])
 .....
 AdmitRaftEntries:
-leader-using-v2: true
+destroyed-or-leader-using-v2: true
 
 set-raft-state stable-index=27
 ----

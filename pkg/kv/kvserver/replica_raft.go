@@ -1106,8 +1106,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			if r.IsInitialized() && r.store.cfg.KVAdmissionController != nil {
 				// Enqueue raft log entries into admission queues. This is
 				// non-blocking; actual admission happens asynchronously.
-				usingRACV2 := r.flowControlV2.AdmitRaftEntriesRaftMuLocked(ctx, raftEvent)
-				if !usingRACV2 {
+				isUsingV2OrDestroyed := r.flowControlV2.AdmitRaftEntriesRaftMuLocked(ctx, raftEvent)
+				if !isUsingV2OrDestroyed {
 					// Leader is using RACv1 protocol.
 					tenantID, _ := r.TenantID()
 					for _, entry := range raftEvent.Entries {
