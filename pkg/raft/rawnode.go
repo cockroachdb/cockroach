@@ -544,3 +544,7 @@ func (rn *RawNode) ForgetLeader() error {
 func (rn *RawNode) TestingStepDown() error {
 	return rn.raft.testingStepDown()
 }
+
+func (rn *RawNode) TestingSupportStateString() string {
+	return rn.raft.supportTracker.String()
+}

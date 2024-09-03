@@ -336,6 +336,7 @@ type raft struct {
 	config          quorum.Config
 	trk             tracker.ProgressTracker
 	electionTracker tracker.ElectionTracker
+	supportTracker  tracker.SupportTracker
 
 	state StateType
 
@@ -450,6 +451,7 @@ func newRaft(c *Config) *raft {
 	lastID := r.raftLog.lastEntryID()
 
 	r.electionTracker = tracker.MakeElectionTracker(&r.config)
+	r.supportTracker = tracker.MakeSupportTracker(&r.config, r.storeLiveness)
 
 	cfg, progressMap, err := confchange.Restore(confchange.Changer{
 		Config:           quorum.MakeEmptyConfig(),
@@ -708,8 +710,7 @@ func (r *raft) sendFortify(to pb.PeerID) {
 		epoch, live := r.storeLiveness.SupportFor(r.lead)
 		if live {
 			r.leadEpoch = epoch
-			// TODO(arul): For now, we're not recording any support on the leader. Do
-			// this once we implement handleFortifyResp correctly.
+			r.supportTracker.RecordSupport(r.id, epoch)
 		} else {
 			r.logger.Infof(
 				"%x leader at term %d does not support itself in the liveness fabric", r.id, r.Term,
@@ -2067,8 +2068,10 @@ func (r *raft) handleFortify(m pb.Message) {
 
 func (r *raft) handleFortifyResp(m pb.Message) {
 	assertTrue(r.state == StateLeader, "only leaders should be handling fortification responses")
-	// TODO(arul): record support once
-	// https://github.com/cockroachdb/cockroach/issues/125264 lands.
+	if m.Reject {
+		return // couldn't successfully fortify follower; we'll try again later
+	}
+	r.supportTracker.RecordSupport(m.From, m.LeadEpoch)
 }
 
 // deFortify (conceptually) revokes previously provided fortification support to

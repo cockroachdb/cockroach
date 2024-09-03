@@ -19,6 +19,8 @@ package rafttest
 
 import (
 	"fmt"
+	"github.com/cockroachdb/datadriven"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -49,5 +51,12 @@ func (env *InteractionEnv) handleRaftState() error {
 		fmt.Fprintf(env.Output, "%d: %s %s Term:%d Lead:%d\n",
 			st.ID, st.RaftState, voterStatus, st.Term, st.Lead)
 	}
+	return nil
+}
+
+// handleRaftState pretty-prints the support map being tracked by a raft peer.
+func (env *InteractionEnv) handlePrintSupportState(t *testing.T, d datadriven.TestData) error {
+	idx := firstAsNodeIdx(t, d)
+	fmt.Fprint(env.Output, env.Nodes[idx].TestingSupportStateString())
 	return nil
 }
