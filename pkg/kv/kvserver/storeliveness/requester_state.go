@@ -358,8 +358,10 @@ func (rsfu *requesterStateForUpdate) handleHeartbeatResponse(msg *slpb.Message) 
 	from := msg.From
 	meta := rsfu.getMeta()
 	ss, ok := rsfu.getSupportFrom(from)
+	// If the store is not present in the map, ignore the heartbeat response;
+	// it is likely an old heartbeat response before the local store restarted.
 	if !ok {
-		ss = slpb.SupportState{Target: from}
+		return
 	}
 	metaNew, ssNew := handleHeartbeatResponse(meta, ss, msg)
 	if meta != metaNew {
