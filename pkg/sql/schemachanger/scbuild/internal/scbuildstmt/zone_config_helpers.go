@@ -30,21 +30,114 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
+
+type zoneConfigAuthorizer interface {
+	// checkPrivilegeForSetZoneConfig checks whether the current user has the
+	// right privilege for configuring zone on the specified object.
+	checkPrivilegeForSetZoneConfig(b BuildCtx, zs tree.ZoneSpecifier) error
+
+	// checkZoneConfigChangePermittedForMultiRegion checks if a zone config
+	// change is permitted for a multi-region database or table.
+	// The change is permitted iff it is not modifying a protected multi-region
+	// field of the zone configs (as defined by
+	// zonepb.MultiRegionZoneConfigFields).
+	checkZoneConfigChangePermittedForMultiRegion(
+		b BuildCtx, zs tree.ZoneSpecifier, options tree.KVOptions) error
+}
+
+type zoneConfigObjBuilder interface {
+	// addZoneConfigToBuildCtx adds the zone config to the build context and
+	// returns the added element for logging.
+	addZoneConfigToBuildCtx(b BuildCtx) scpb.Element
+
+	// getTargetID returns the target ID of the zone config object. This is either
+	// a database or a table ID.
+	getTargetID() catid.DescID
+
+	// applyZoneConfig
+	applyZoneConfig(
+		b BuildCtx,
+		n *tree.SetZoneConfig,
+		copyFromParentList []tree.Name,
+		setters []func(c *zonepb.ZoneConfig),
+	) error
+
+	// setZoneConfigToWrite fills our object with the zone config/subzone config
+	// we will be writing to KV.
+	setZoneConfigToWrite(zone *zonepb.ZoneConfig)
+}
+
+type zoneConfigRetriever interface {
+	// retrievePartialZoneConfig retrieves the partial zone configuration of the
+	// ID of our object. This will either be a database ID or a table ID.
+	retrievePartialZoneConfig(b BuildCtx) *zonepb.ZoneConfig
+
+	// retrieveCompleteZoneConfig looks up the zone and subzone for the specified
+	// object ID, index, and partition.
+	//
+	// If `getInheritedDefault` is true, the direct zone configuration, if it exists,
+	// is ignored, and the default zone config that would apply if it did not exist
+	// is returned instead. This is because, if the stmt is `USING DEFAULT`, we want
+	// to ignore the zone config that exists on targetID and instead skip to the
+	// inherited default.
+	retrieveCompleteZoneConfig(
+		b BuildCtx, getInheritedDefault bool) (*zonepb.ZoneConfig, *zonepb.Subzone, error)
+
+	// getInheritedDefaultZoneConfig returns the inherited default zone config of
+	// the target. This means
+	//   - if the target is a table, it returns the zone config of its parent
+	//     database (if exists) or the DEFAULT RANGE.
+	//   - otherwise, it returns the zone config of the DEFAULT RANGE
+	getInheritedDefaultZoneConfig(b BuildCtx) (
+		zc *zonepb.ZoneConfig, err error,
+	)
+
+	// getZoneConfig attempts to find the zone config from `system.zones` with
+	// the target:
+	//   - If the zone config is found to be a subzone placeholder, then we
+	//     further go ahead to find the parent database zone config
+	//     (if our target is a table) or to find the DEFAULT RANGE zone config
+	//     (if our target is a database).
+	//   - Otherwise, we will just return the found zone config
+	//     (so `subzoneId` and `subzone` will be nil).
+	getZoneConfig(b BuildCtx, inheritDefaultRange bool) (
+		*zonepb.ZoneConfig,
+		*zonepb.ZoneConfig,
+		error,
+	)
+}
+
+type zoneConfigMutator interface {
+	// completeZoneConfig takes a zone config pointer and fills in the
+	// missing fields by following the chain of inheritance.
+	// In the worst case, will have to inherit from the default zone config.
+	// NOTE: This will not work for subzones. To complete subzones, find a
+	// complete parent zone (index or table) and apply InheritFromParent to it.
+	completeZoneConfig(b BuildCtx, zone *zonepb.ZoneConfig) error
+}
+
+// zoneConfigObject is used to represent various types of "objects" that are
+// supported by the CONFIGURE ZONE statement. This is used to determine the
+// scpb that will be generated.
+type zoneConfigObject interface {
+	zoneConfigAuthorizer
+	zoneConfigObjBuilder
+	zoneConfigRetriever
+	zoneConfigMutator
+}
 
 // resolvePhysicalTableName resolves the table name for a physical table
 // in the SetZoneConfig AST by directly modifying its TableOrIndex.Table.
@@ -69,113 +162,10 @@ func resolvePhysicalTableName(b BuildCtx, n *tree.SetZoneConfig) {
 	n.ZoneSpecifier.TableOrIndex.Table = tn
 }
 
-// checkPrivilegeForSetZoneConfig checks whether the current user has the right
-// privilege for configuring zone on the specified object(s).
-func checkPrivilegeForSetZoneConfig(
-	b BuildCtx, n *tree.SetZoneConfig, objType zoneConfigObjType,
-) error {
-	zs := n.ZoneSpecifier
-
-	// For the system database, the user must be an admin. Otherwise, we
-	// require CREATE or ZONECONFIG privilege on the database in question.
-	reqNonAdminPrivs := []privilege.Kind{privilege.ZONECONFIG, privilege.CREATE}
-	if objType == databaseObj {
-		return checkPrivilegeForDBSetZoneConfig(b, zs, reqNonAdminPrivs)
-	}
-
-	// TODO(#125882): currently, we fall back to the legacy schema changer below
-	// if the zone config target is a system table. The only thing the legacy
-	// schema changer will do is populate an error -- since configuring system
-	// tables is not allowed. We should add this a check
-	// (checkIfConfigurationAllowed) back in DSC-land when our builder doesn't
-	// panic on system tables.
-	tblID, err := getTargetIDFromZoneSpecifier(b, zs, objType)
-	if err != nil {
-		return err
-	}
-	tblElem := mustRetrievePhysicalTableElem(b, tblID)
-	tblNamespaceElem := mustRetrieveNamespaceElem(b, tblID)
-	if tblNamespaceElem.DatabaseID == keys.SystemDatabaseID {
-		return b.CheckGlobalPrivilege(privilege.REPAIRCLUSTER)
-	}
-	// Can configure zone of a table (or its index) if user has either CREATE or
-	// ZONECONFIG privilege on the table.
-	tableCreatePrivilegeErr := b.CheckPrivilege(tblElem, privilege.CREATE)
-	tableZoneConfigPrivilegeErr := b.CheckPrivilege(tblElem, privilege.ZONECONFIG)
-	if tableCreatePrivilegeErr == nil || tableZoneConfigPrivilegeErr == nil {
-		return nil
-	}
-
-	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(b.CurrentUser(),
-		reqNonAdminPrivs, string(catalog.Table), tblNamespaceElem.Name)
-}
-
-func checkPrivilegeForDBSetZoneConfig(
-	b BuildCtx, zs tree.ZoneSpecifier, reqNonAdminPrivs []privilege.Kind,
-) error {
-	if zs.Database == "system" {
-		return b.CheckGlobalPrivilege(privilege.REPAIRCLUSTER)
-	}
-
-	// Can configure zone of a database if user has either CREATE or ZONECONFIG
-	// privilege on the database.
-	dbElem := b.ResolveDatabase(zs.Database, ResolveParams{}).FilterDatabase().MustGetOneElement()
-	dbCreatePrivilegeErr := b.CheckPrivilege(dbElem, privilege.CREATE)
-	dbZoneConfigPrivilegeErr := b.CheckPrivilege(dbElem, privilege.ZONECONFIG)
-	if dbZoneConfigPrivilegeErr == nil || dbCreatePrivilegeErr == nil {
-		return nil
-	}
-
-	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(b.CurrentUser(),
-		reqNonAdminPrivs, string(catalog.Database), mustRetrieveNamespaceElem(b, dbElem.DatabaseID).Name)
-}
-
-// checkZoneConfigChangePermittedForMultiRegion checks if a zone config
-// change is permitted for a multi-region database or table.
-// The change is permitted iff it is not modifying a protected multi-region
-// field of the zone configs (as defined by zonepb.MultiRegionZoneConfigFields).
-func checkZoneConfigChangePermittedForMultiRegion(
-	b BuildCtx, zs tree.ZoneSpecifier, options tree.KVOptions, objType zoneConfigObjType,
-) error {
-	// If the user has specified that they're overriding, then the world is
-	// their oyster.
-	if b.SessionData().OverrideMultiRegionZoneConfigEnabled {
-		// Note that we increment the telemetry counter unconditionally here.
-		// It's possible that this will lead to over-counting as the user may
-		// have left the override on and is now updating a zone configuration
-		// that is not protected by the multi-region abstractions. To get finer
-		// grained counting however, would be more difficult to code, and may
-		// not even prove to be that valuable, so we have decided to live with
-		// the potential for over-counting.
-		telemetry.Inc(sqltelemetry.OverrideMultiRegionZoneConfigurationUser)
-		return nil
-	}
-
-	isDB := objType == databaseObj
-	// Check if what we're altering is a multi-region entity.
-	if isDB {
-		dbRegionConfigElem := b.ResolveDatabase(zs.Database,
-			ResolveParams{}).FilterDatabaseRegionConfig().MustGetZeroOrOneElement()
-		if dbRegionConfigElem == nil {
-			// Not a multi-region database, we're done here.
-			return nil
-		}
-	} else {
-		// We're dealing with a table or index zone configuration change. Get the
-		// table descriptor so we can determine if this is a multi-region
-		// table/index.
-		tableID, err := getTargetIDFromZoneSpecifier(b, zs, objType)
-		if err != nil {
-			return err
-		}
-		if !isMultiRegionTable(b, tableID) {
-			// Not a multi-region table, we're done here.
-			return nil
-		}
-	}
-
+// maybeMultiregionErrorWithHint returns an error if the user is trying to
+// update a zone config value that's protected for multi-region databases.
+func maybeMultiregionErrorWithHint(options tree.KVOptions) error {
 	hint := "to override this error, SET override_multi_region_zone_config = true and reissue the command"
-
 	// This is clearly an n^2 operation, but since there are only a single
 	// digit number of zone config keys, it's likely faster to do it this way
 	// than incur the memory allocation of creating a map.
@@ -191,7 +181,6 @@ func checkZoneConfigChangePermittedForMultiRegion(
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -205,56 +194,6 @@ func isMultiRegionTable(b BuildCtx, tableID catid.DescID) bool {
 	RBRElem := tableElems.FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
 	return globalElem != nil || primaryRegionElem != nil || secondaryRegionElem != nil ||
 		RBRElem != nil
-}
-
-// getTargetIDFromZoneSpecifier attempts to find the ID of the target by the
-// zone specifier.
-// Recall that a zone specifier specifies either a database or a table. This
-// function will return the ID of the database or the table.
-func getTargetIDFromZoneSpecifier(
-	b BuildCtx, zs tree.ZoneSpecifier, objType zoneConfigObjType,
-) (catid.DescID, error) {
-	if objType == databaseObj {
-		dbElem := b.ResolveDatabase(zs.Database, ResolveParams{}).FilterDatabase().MustGetOneElement()
-		return dbElem.DatabaseID, nil
-	}
-	return getTableIDFromZoneSpecifier(b, zs, objType)
-}
-
-// getTableIDFromZoneSpecifier attempts to find the table ID specified by the
-// zone specifier. If the zone does not specify a table, a non-nil error is
-// returned. Otherwise (for tables), the associated table ID is returned.
-func getTableIDFromZoneSpecifier(
-	b BuildCtx, zs tree.ZoneSpecifier, objType zoneConfigObjType,
-) (catid.DescID, error) {
-	if objType == databaseObj {
-		return 0, errors.AssertionFailedf("programming error: zone specifier is for a " +
-			"database; not a table")
-	}
-	if objType != tableObj && objType != idxObj {
-		return 0, errors.AssertionFailedf("programming error: zs does not specify a proper " +
-			"target")
-	}
-
-	tblName := zs.TableOrIndex.Table.ToUnresolvedObjectName()
-	elems := b.ResolvePhysicalTable(tblName, ResolveParams{})
-	var tableID catid.DescID
-	elems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-		switch e := e.(type) {
-		case *scpb.Table:
-			tableID = e.TableID
-		case *scpb.View:
-			if e.IsMaterialized {
-				tableID = e.ViewID
-			}
-		case *scpb.Sequence:
-			tableID = e.SequenceID
-		}
-	})
-	if tableID == catid.InvalidDescID {
-		panic("uh oh")
-	}
-	return tableID, nil
 }
 
 // getUpdatedZoneConfigOptions unpacks all kv options for a `CONFIGURE ZONE
@@ -309,6 +248,7 @@ func getUpdatedZoneConfigOptions(
 	return options, nil
 }
 
+// evaluateZoneOptions gets the input options map ready for use.
 func evaluateZoneOptions(
 	b BuildCtx, options map[tree.Name]zone.OptionValue,
 ) (
@@ -361,214 +301,6 @@ func evaluateZoneOptions(
 		}
 	}
 	return optionsStr, copyFromParentList, setters, nil
-}
-
-func applyZoneConfig(
-	b BuildCtx,
-	n *tree.SetZoneConfig,
-	copyFromParentList []tree.Name,
-	setters []func(c *zonepb.ZoneConfig),
-	objType zoneConfigObjType,
-) (*zonepb.ZoneConfig, uint32, bool, catid.IndexID, error) {
-	// Determines the ID of the target object of the zone specifier. This is the
-	// ID of either a database or a table.
-	targetID, err := getTargetIDFromZoneSpecifier(b, n.ZoneSpecifier, objType)
-	if err != nil {
-		return nil, 0, false, 0, err
-	}
-
-	// TODO(annie): once we allow configuring zones for named zones/system ranges,
-	// we will need to guard against secondary tenants from configuring such
-	// ranges.
-
-	// Are configuring an index or a partition? Determine the index ID and
-	// partition name as well.
-	indexID, partition, err := getIndexAndPartitionFromZoneSpecifier(b, n.ZoneSpecifier, objType)
-	if err != nil {
-		return nil, 0, false, 0, err
-	}
-	indexExists := indexID != 0
-
-	var tempIndexID catid.IndexID
-	if indexExists {
-		tempIndexID = mustRetrieveIndexElement(b, targetID, indexID).TemporaryIndexID
-	}
-
-	// Retrieve the partial zone configuration
-	partialZone, zc, _ := retrievePartialZoneConfig(b, targetID, indexID, objType)
-
-	subzonePlaceholder := false
-	// No zone was found. Possibly a SubzonePlaceholder depending on the index.
-	if partialZone == nil {
-		partialZone = zonepb.NewZoneConfig()
-		if indexExists {
-			subzonePlaceholder = true
-		}
-	}
-
-	var partialSubzone *zonepb.Subzone
-	var hasNewSubzones bool
-	if indexExists {
-		hasNewSubzones = true
-		partialSubzone = partialZone.GetSubzoneExact(uint32(indexID), partition)
-		if partialSubzone == nil {
-			partialSubzone = &zonepb.Subzone{Config: *zonepb.NewZoneConfig()}
-		}
-	}
-
-	// Retrieve the zone configuration.
-	//
-	// If the statement was USING DEFAULT, we want to ignore the zone
-	// config that exists on targetID and instead skip to the inherited
-	// default (whichever applies -- a database if targetID is a table, default
-	// if targetID is a database, etc.). For this, we use the last parameter
-	// getInheritedDefault to retrieveCompleteZoneConfig().
-	// These zones are only used for validations. The merged zone will not
-	// be written.
-	_, completeZone, completeSubZone, seqNum, err := retrieveCompleteZoneConfig(b, targetID, indexID,
-		partition, objType, n.SetDefault /* getInheritedDefault */)
-	if err != nil {
-		return nil, 0, false, 0, err
-	}
-
-	// We need to inherit zone configuration information from the correct zone,
-	// not completeZone.
-	{
-		if indexExists {
-			zoneInheritedFields, err := getInheritedFieldsForPartialSubzone(b, targetID, indexID,
-				partition, completeZone, partialZone, objType)
-			if err != nil {
-				return nil, 0, false, 0, err
-			}
-			partialSubzone.Config.CopyFromZone(*zoneInheritedFields, copyFromParentList)
-		} else {
-			// If we are operating on a zone, get all fields that the zone would
-			// inherit from its parent. We do this by using an empty zoneConfig
-			// and completing at the level of the current zone.
-			zoneInheritedFields := zonepb.ZoneConfig{}
-			if err := completeZoneConfig(b, targetID, indexID, &zoneInheritedFields, objType); err != nil {
-				return nil, 0, false, 0, err
-			}
-			partialZone.CopyFromZone(zoneInheritedFields, copyFromParentList)
-		}
-	}
-
-	// Determine where to load the configuration.
-	newZone := *completeZone
-	if completeSubZone != nil {
-		newZone = completeSubZone.Config
-	}
-
-	// Determine where to load the partial configuration.
-	// finalZone is where the new changes are unmarshalled onto.
-	// It must be a fresh ZoneConfig if a new subzone if being created.
-	// If an existing subzone is being modified, finalZone if overridden.
-	finalZone := *partialZone
-	if partialSubzone != nil {
-		finalZone = partialSubzone.Config
-	}
-
-	if n.SetDefault {
-		finalZone = *zonepb.NewZoneConfig()
-	}
-
-	// Fill in our zone configs with var = val assignments.
-	if err := loadSettingsToZoneConfigs(setters, &newZone, &finalZone); err != nil {
-		return nil, 0, false, 0, err
-	}
-
-	// Validate that there are no conflicts in the zone setup.
-	if err := zonepb.ValidateNoRepeatKeysInZone(&newZone); err != nil {
-		return nil, 0, false, 0, err
-	}
-
-	currentZone := zonepb.NewZoneConfig()
-	if zc != nil {
-		currentZone = zc
-	}
-	if err := validateZoneAttrsAndLocalities(b, currentZone, &newZone); err != nil {
-		return nil, 0, false, 0, err
-	}
-
-	// Are we operating on an index?
-	if indexExists {
-		// Yes: fill in the final zone config with subzones.
-		fillZoneConfigsForSubzones(indexID, partition, tempIndexID, subzonePlaceholder, completeZone,
-			partialZone, newZone, finalZone)
-	} else {
-		// No: the final zone config is the one we just processed.
-		completeZone = &newZone
-		partialZone = &finalZone
-		// Since we are writing to a zone that is not a subzone, we need to
-		// make sure that the zone config is not considered a placeholder
-		// anymore. If the settings applied to this zone don't touch the
-		// NumReplicas field, set it to nil so that the zone isn't considered a
-		// placeholder anymore.
-		if partialZone.IsSubzonePlaceholder() {
-			partialZone.NumReplicas = nil
-		}
-	}
-
-	// Finally, revalidate everything. Validate only the completeZone config.
-	if err := completeZone.Validate(); err != nil {
-		return nil, 0, false, 0,
-			pgerror.Wrap(err, pgcode.CheckViolation, "could not validate zone config")
-	}
-
-	// Finally, check for the extra protection partial zone configs would
-	// require from changes made to parent zones. The extra protections are:
-	//
-	// RangeMinBytes and RangeMaxBytes must be set together
-	// LeasePreferences cannot be set unless Constraints/VoterConstraints are
-	// explicitly set
-	// Per-replica constraints cannot be set unless num_replicas is explicitly
-	// set
-	// Per-voter constraints cannot be set unless num_voters is explicitly set
-	if err := finalZone.ValidateTandemFields(); err != nil {
-		err = errors.Wrap(err, "could not validate zone config")
-		err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
-		err = errors.WithHint(err,
-			"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] to "+
-				"populate the field")
-		return nil, 0, false, 0, err
-	}
-	return partialZone, seqNum, hasNewSubzones, indexID, nil
-}
-
-// getInheritedFieldsForPartialSubzone returns the set of inherited fields for
-// a partial subzone based off of its parent zone. If we are dealing with a
-// partition, we try inheriting fields from the subzone's index, and inherit
-// the remainder from the zone.
-func getInheritedFieldsForPartialSubzone(
-	b BuildCtx,
-	targetID catid.DescID,
-	indexID catid.IndexID,
-	partition string,
-	completeZone *zonepb.ZoneConfig,
-	partialZone *zonepb.ZoneConfig,
-	objType zoneConfigObjType,
-) (*zonepb.ZoneConfig, error) {
-	// We are operating on a subZone and need to inherit all remaining
-	// unset fields in its parent zone, which is partialZone.
-	zoneInheritedFields := *partialZone
-	if err := completeZoneConfig(b, targetID, indexID, &zoneInheritedFields, objType); err != nil {
-		return nil, err
-	}
-	// In the case we have just an index, we should copy from the inherited
-	// zone's fields (whether that was the table or database).
-	if partition == "" {
-		return &zoneInheritedFields, nil
-	}
-	// In the case of updating a partition, we need to try inheriting fields
-	// from the subzone's index, and inherit the remainder from the zone.
-	subzoneInheritedFields := zonepb.ZoneConfig{}
-	if indexSubzone := completeZone.GetSubzone(uint32(indexID), ""); indexSubzone != nil {
-		subzoneInheritedFields.InheritFromParent(&indexSubzone.Config)
-	}
-	subzoneInheritedFields.InheritFromParent(&zoneInheritedFields)
-	// After inheriting fields, return the requested ones for later use in the
-	// partialSubzone.Config.
-	return &subzoneInheritedFields, nil
 }
 
 // fillZoneConfigsForSubzones fills in the zone configs for subzones.
@@ -648,295 +380,52 @@ func loadSettingsToZoneConfigs(
 	return nil
 }
 
-// getIndexAndPartitionFromZoneSpecifier finds the index id and partition name
-// in the zone specifier. If the zone specifier targets other than an index or
-// partition, then the returned indexID is zero. If the zone specifier specifies
-// an index, then the returned partition is empty.
-func getIndexAndPartitionFromZoneSpecifier(
-	b BuildCtx, zs tree.ZoneSpecifier, objType zoneConfigObjType,
-) (indexID catid.IndexID, partitionName string, err error) {
-	if !zs.TargetsIndex() && !zs.TargetsPartition() {
-		return 0, "", nil
-	}
-
-	tableID, err := getTableIDFromZoneSpecifier(b, zs, objType)
-	if err != nil {
-		return 0, "", err
-	}
+// fillIndexAndPartitionFromZoneSpecifier fills out the index id in the zone
+// specifier for a indexZoneConfigObj.
+func fillIndexAndPartitionFromZoneSpecifier(
+	b BuildCtx, zs tree.ZoneSpecifier, idxObj *indexZoneConfigObj,
+) {
+	tableID := idxObj.getTargetID()
 
 	indexName := string(zs.TableOrIndex.Index)
+	var indexID catid.IndexID
 	if indexName == "" {
 		// Use the primary index if index name is unspecified.
 		primaryIndexElem := mustRetrieveCurrentPrimaryIndexElement(b, tableID)
 		indexID = primaryIndexElem.IndexID
-		indexName = mustRetrieveIndexNameElem(b, tableID, indexID).Name
 	} else {
 		indexElems := b.ResolveIndex(tableID, tree.Name(indexName), ResolveParams{})
 		indexID = indexElems.FilterIndexName().MustGetOneElement().IndexID
 	}
-
-	partitionName = string(zs.Partition)
-	if partitionName != "" {
-		indexPartitionElem := maybeRetrieveIndexPartitioningElem(b, tableID, indexID)
-		if indexPartitionElem == nil ||
-			tabledesc.NewPartitioning(&indexPartitionElem.PartitioningDescriptor).FindPartitionByName(partitionName) == nil {
-			return 0, "", errors.Newf("partitionName %q does not exist on index %q", partitionName, indexName)
-		}
-	}
-	return indexID, partitionName, nil
-}
-
-// retrievePartialZoneConfig retrieves the partial zone configuration of the
-// specified targetID.
-func retrievePartialZoneConfig(
-	b BuildCtx, targetID catid.DescID, idxID catid.IndexID, objectType zoneConfigObjType,
-) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, uint32) {
-	var partialZone *zonepb.ZoneConfig
-	var zc *zonepb.ZoneConfig
-	var seqNum uint32
-
-	// Retrieve the partial zone configuration for specified objectType.
-	switch objectType {
-	case databaseObj:
-		dbZoneElems := b.QueryByID(targetID).FilterDatabaseZoneConfig()
-		dbZoneConfigElem := findMostRecentZoneConfig(dbZoneElems, targetID, 0)
-		if dbZoneConfigElem != nil {
-			partialZone = dbZoneConfigElem.ZoneConfig
-			zc = dbZoneConfigElem.ZoneConfig
-			seqNum = dbZoneConfigElem.SeqNum
-		}
-	case tableObj:
-		tblZoneElems := b.QueryByID(targetID).FilterTableZoneConfig()
-		tblZoneConfigElem := findMostRecentZoneConfig(tblZoneElems, targetID, 0)
-		if tblZoneConfigElem != nil {
-			partialZone = tblZoneConfigElem.ZoneConfig
-			zc = tblZoneConfigElem.ZoneConfig
-			seqNum = tblZoneConfigElem.SeqNum
-		}
-	case idxObj:
-		if idxID == 0 {
-			panic(errors.AssertionFailedf("programming error: idxID is 0 for indexObj"))
-		}
-		idxZoneElems := b.QueryByID(targetID).FilterIndexZoneConfig()
-		idxZoneConfigElem := findMostRecentZoneConfig(idxZoneElems, targetID, idxID)
-		if idxZoneConfigElem != nil {
-			idxZc := zonepb.NewZoneConfig()
-			idxZc.Subzones = []zonepb.Subzone{idxZoneConfigElem.Subzone}
-			idxZc.SubzoneSpans = idxZoneConfigElem.SubzoneSpans
-			partialZone = idxZc
-			zc = idxZc
-			seqNum = idxZoneConfigElem.SeqNum
-		}
-	default:
-		panic(errors.AssertionFailedf("programming error: unsupported object type for " +
-			"CONFIGURE ZONE"))
-	}
-	return partialZone, zc, seqNum
-}
-
-// retrieveCompleteZoneConfig looks up the zone and subzone for the specified
-// object ID, index, and partition.
-//
-// If `getInheritedDefault` is true, the direct zone configuration, if it exists,
-// is ignored, and the default zone config that would apply if it did not exist
-// is returned instead. This is because, if the stmt is `USING DEFAULT`, we want
-// to ignore the zone config that exists on targetID and instead skip to the
-// inherited default.
-func retrieveCompleteZoneConfig(
-	b BuildCtx,
-	targetID catid.DescID,
-	indexID catid.IndexID,
-	partition string,
-	objType zoneConfigObjType,
-	getInheritedDefault bool,
-) (zoneID descpb.ID, zone *zonepb.ZoneConfig, subzone *zonepb.Subzone, seqNum uint32, err error) {
-	var placeholderID descpb.ID
-	var placeholder *zonepb.ZoneConfig
-	zc := &zonepb.ZoneConfig{}
-	if getInheritedDefault {
-		zoneID, zc, seqNum, err = getInheritedDefaultZoneConfig(b, targetID, indexID)
-	} else {
-		zoneID, zc, placeholderID, placeholder, seqNum, err = getZoneConfig(b, targetID, indexID, objType)
-	}
-	if err != nil {
-		return 0, nil, nil, 0, err
-	}
-
-	completeZc := *zc
-	if err = completeZoneConfig(b, targetID, indexID, &completeZc, objType); err != nil {
-		return 0, nil, nil, 0, err
-	}
-
-	if indexID != 0 {
-		if placeholder != nil {
-			if subzone = placeholder.GetSubzone(uint32(indexID), partition); subzone != nil {
-				if indexSubzone := placeholder.GetSubzone(uint32(indexID), ""); indexSubzone != nil {
-					subzone.Config.InheritFromParent(&indexSubzone.Config)
-				}
-				subzone.Config.InheritFromParent(zc)
-				return placeholderID, placeholder, subzone, seqNum, nil
-			}
-		} else {
-			if subzone = zc.GetSubzone(uint32(indexID), partition); subzone != nil {
-				if indexSubzone := zc.GetSubzone(uint32(indexID), ""); indexSubzone != nil {
-					subzone.Config.InheritFromParent(&indexSubzone.Config)
-				}
-				subzone.Config.InheritFromParent(zc)
-			}
-		}
-	}
-
-	return zoneID, zc, subzone, seqNum, nil
-}
-
-// getInheritedDefaultZoneConfig returns the inherited default zone config of
-// `targetID`. This means
-//   - if `targetID` is a table ID, returns the zone config of its parent database
-//     (if exists) or the DEFAULT RANGE.
-//   - otherwise, returns the zone config of the DEFAULT RANGE
-func getInheritedDefaultZoneConfig(
-	b BuildCtx, targetID catid.DescID, indexID catid.IndexID,
-) (zoneID catid.DescID, zc *zonepb.ZoneConfig, seqNum uint32, err error) {
-	// Is `targetID` a table?
-	maybeTblElem := retrievePhysicalTableElem(b, targetID)
-	// Yes: get the zone config of its parent database.
-	if maybeTblElem != nil {
-		parentDBID := mustRetrieveNamespaceElem(b, targetID).DatabaseID
-		zoneID, zc, _, _, seqNum, err = getZoneConfig(b, parentDBID, indexID, databaseObj)
-		return zoneID, zc, seqNum, err
-	}
-	// No: get the zone config of the DEFAULT RANGE.
-	zoneID, zc, _, _, seqNum, err = getZoneConfig(b, keys.RootNamespaceID, indexID, unspecifiedObj)
-	return zoneID, zc, seqNum, err
-}
-
-// getZoneConfig attempts to find the zone config from `system.zones` with
-// `targetID` (`targetID` is either a database ID or a table ID).
-//   - If the zone config is found to be a subzone placeholder, then we
-//     further go ahead to find the parent database zone config
-//     (if `targetID` is a table ID) or to find the DEFAULT RANGE zone config
-//     (if `targetID` is a database ID).
-//   - Otherwise, we will just return the found zone config
-//     (so `subzoneId` and `subzone` will be nil).
-func getZoneConfig(
-	b BuildCtx, targetID catid.DescID, indexID catid.IndexID, objType zoneConfigObjType,
-) (
-	zoneID catid.DescID,
-	zc *zonepb.ZoneConfig,
-	subzoneID catid.DescID,
-	subzone *zonepb.ZoneConfig,
-	seqNum uint32,
-	err error,
-) {
-	var subzones []zonepb.Subzone
-	zc, subzones, seqNum, err = lookUpSystemZonesTable(b, targetID, indexID, objType)
-	if err != nil {
-		return 0, nil, 0, nil, 0, err
-	}
-
-	// If the zone config exists, we know that it is not a subzone placeholder.
-	if zc != nil {
-		return zoneID, zc, 0, nil, seqNum, nil
-	}
-
-	zc = zonepb.NewZoneConfig()
-	zc.Subzones = subzones
-	subzone = zc
-	subzoneID = zoneID
-
-	// No zone config for this ID. If `targetID` is a table, then recursively
-	// get zone config of its parent database.
-	tblElem := retrievePhysicalTableElem(b, targetID)
-	if tblElem != nil {
-		parentDBID := mustRetrieveNamespaceElem(b, targetID).DatabaseID
-		zoneID, zc, _, _, maybeSeqNum, err := getZoneConfig(b, parentDBID, indexID, databaseObj)
-		if err != nil {
-			return 0, nil, 0, nil, 0, err
-		}
-		// If we are not dealing with subzones, the seqNum we got from above is the correct seqNum.
-		// Otherwise, we do not want to override our index/partition seqNum.
-		if subzones == nil {
-			seqNum = maybeSeqNum
-		}
-		return zoneID, zc, 0, nil, seqNum, nil
-	}
-
-	// Otherwise, retrieve the default zone config, but only as long as that
-	// wasn't the ID we were trying to retrieve (avoid infinite recursion).
-	if targetID != keys.RootNamespaceID {
-		zoneID, zc, _, _, maybeSeqNum, err := getZoneConfig(b, keys.RootNamespaceID, indexID, unspecifiedObj)
-		if err != nil {
-			return 0, nil, 0, nil, 0, err
-		}
-		// If we are not dealing with subzones, the seqNum we got from above is the corrent seqNum.
-		// Otherwise, we do not want to override our index/partition seqNum.
-		if subzones == nil {
-			seqNum = maybeSeqNum
-		}
-		return zoneID, zc, subzoneID, subzone, seqNum, nil
-	}
-
-	// `targetID == keys.RootNamespaceID` but that zc config is not found
-	// in `system.zones` table. Return a special, recognizable error!
-	return 0, nil, 0, nil, 0, sqlerrors.ErrNoZoneConfigApplies
+	idxObj.indexID = indexID
 }
 
 // lookUpSystemZonesTable attempts to look up the zone config in `system.zones`
 // table by `targetID`.
 // If `targetID` is not found, a nil `zone` is returned.
 func lookUpSystemZonesTable(
-	b BuildCtx, targetID catid.DescID, indexID catid.IndexID, objType zoneConfigObjType,
-) (zone *zonepb.ZoneConfig, subzones []zonepb.Subzone, seqNum uint32, err error) {
-	if keys.RootNamespaceID == uint32(targetID) {
-		zc, err := b.ZoneConfigGetter().GetZoneConfig(b, targetID)
+	b BuildCtx, objType zoneConfigObject, inheritDefaultRange bool,
+) (zone *zonepb.ZoneConfig, subzones []zonepb.Subzone, err error) {
+	// Get the zone config of the DEFAULT RANGE
+	if inheritDefaultRange {
+		zc, err := b.ZoneConfigGetter().GetZoneConfig(b, keys.RootNamespaceID)
 		if err != nil {
-			return nil, nil, 0, err
+			return nil, nil, err
 		}
 		zone = zc.ZoneConfigProto()
 	} else {
 		// It's a descriptor-backed target (i.e. a database ID or a table ID)
-		zone, _, seqNum = retrievePartialZoneConfig(b, targetID, indexID, objType)
-		if zone != nil && zone.Subzones != nil {
-			subzones = zone.Subzones
-			zone = nil
+		zone = objType.retrievePartialZoneConfig(b)
+		// If we are dealing with Index subzones, clear out the zone config and
+		// just use the subzones.
+		if _, ok := objType.(*indexZoneConfigObj); ok {
+			if zone != nil && zone.Subzones != nil {
+				subzones = zone.Subzones
+				zone = nil
+			}
 		}
 	}
-	return zone, subzones, seqNum, nil
-}
-
-// completeZoneConfig takes a zone config pointer and fills in the
-// missing fields by following the chain of inheritance.
-// In the worst case, will have to inherit from the default zone config.
-func completeZoneConfig(
-	b BuildCtx,
-	targetID catid.DescID,
-	indexID catid.IndexID,
-	zone *zonepb.ZoneConfig,
-	objType zoneConfigObjType,
-) error {
-	if zone.IsComplete() {
-		return nil
-	}
-	// Check to see if it's a table. If so, inherit from the database.
-	// For all other cases, inherit from the default.
-	if objType == tableObj {
-		dbID := mustRetrieveNamespaceElem(b, targetID).DatabaseID
-		_, dbZone, _, _, _, err := getZoneConfig(b, dbID, indexID, databaseObj)
-		if err != nil {
-			return err
-		}
-		zone.InheritFromParent(dbZone)
-	}
-	// Check if zone is complete. If not, inherit from the default zone config
-	if zone.IsComplete() {
-		return nil
-	}
-	_, defaultZone, _, _, _, err := getZoneConfig(b, keys.RootNamespaceID, indexID, unspecifiedObj)
-	if err != nil {
-		return err
-	}
-	zone.InheritFromParent(defaultZone)
-	return nil
+	return zone, subzones, nil
 }
 
 // validateZoneAttrsAndLocalities ensures that all constraints/lease preferences
@@ -1152,53 +641,6 @@ func accumulateNewUniqueConstraints(currentZone, newZone *zonepb.ZoneConfig) []z
 	return retConstraints
 }
 
-// fallBackIfNotSupportedZoneConfig determines if the table has a database
-// zone config.
-func fallBackIfNotSupportedZoneConfig(n *tree.SetZoneConfig) (zoneConfigObjType, error) {
-	if n.Discard {
-		return unspecifiedObj,
-			scerrors.NotImplementedErrorf(n, "CONFIGURE ZONE DISCARD is not supported in DSC")
-	}
-	if n.Database != "" {
-		return databaseObj, nil
-	}
-
-	if n.TargetsTable() && !n.TargetsIndex() && !n.TargetsPartition() {
-		return tableObj, nil
-	}
-	if n.TargetsIndex() && !n.TargetsPartition() {
-		return idxObj, nil
-	}
-	return unspecifiedObj, scerrors.NotImplementedErrorf(n, "unsupported CONFIGURE ZONE target")
-}
-
-func retrievePhysicalTableElem(b BuildCtx, tableID catid.DescID) scpb.Element {
-	return b.QueryByID(tableID).Filter(func(
-		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
-	) bool {
-		switch e := e.(type) {
-		case *scpb.Table:
-			return e.TableID == tableID
-		case *scpb.View:
-			if e.IsMaterialized {
-				return e.ViewID == tableID
-			}
-		case *scpb.Sequence:
-			return e.SequenceID == tableID
-		}
-		return false
-	}).MustGetZeroOrOneElement()
-}
-
-func mustRetrievePhysicalTableElem(b BuildCtx, tableID catid.DescID) scpb.Element {
-	physicalTableElem := retrievePhysicalTableElem(b, tableID)
-	if physicalTableElem == nil {
-		panic(errors.AssertionFailedf("programming error: cannot find a physical table "+
-			"element for table %v", tableID))
-	}
-	return physicalTableElem
-}
-
 // generateSubzoneSpans constructs from a TableID the entries mapping
 // zone config spans to subzones for use in the SubzoneSpans field of
 // zonepb.ZoneConfig. SubzoneSpans controls which splits are created, so only
@@ -1237,20 +679,17 @@ func mustRetrievePhysicalTableElem(b BuildCtx, tableID catid.DescID) scpb.Elemen
 // slice. As space optimizations, all `Key`s and `EndKey`s of `SubzoneSpan` omit
 // the common prefix (the encoded table ID) and if `EndKey` is equal to
 // `Key.PrefixEnd()` it is omitted.
-//
-// TODO(benesch): remove the hasNewSubzones parameter when a statement to clear
-// all subzones at once is introduced.
 func generateSubzoneSpans(
-	b BuildCtx, tableID catid.DescID, subzones []zonepb.Subzone, hasNewSubzones bool,
+	b BuildCtx,
+	tableID catid.DescID,
+	subzones []zonepb.Subzone,
+	indexID catid.IndexID,
+	partitionName string,
 ) ([]zonepb.SubzoneSpan, error) {
-	// Removing zone configs does not require a valid license.
-	if hasNewSubzones {
-		if err := base.CheckEnterpriseEnabled(b.ClusterSettings(),
-			"replication zones on indexes or partitions"); err != nil {
-			return nil, err
-		}
+	if err := base.CheckEnterpriseEnabled(b.ClusterSettings(),
+		"replication zones on indexes or partitions"); err != nil {
+		return nil, err
 	}
-
 	// We already completely avoid creating subzone spans for dropped indexes.
 	// Whether this was intentional is a different story, but it turns out to be
 	// pretty sane. Dropped elements may refer to dropped types and we aren't
@@ -1525,7 +964,6 @@ func decodePartitionTuple(
 			func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnType) bool {
 				return e.ColumnID == col.ColumnID
 			}).MustGetOneElement().Type
-		// TODO might need to check that column exists on table here
 		if _, dataOffset, _, typ, err := encoding.DecodeValueTag(valueEncBuf); err != nil {
 			return nil, nil, errors.Wrapf(err, "decoding")
 		} else if typ == encoding.NotNull {
@@ -1608,29 +1046,135 @@ func decodePartitionTuple(
 	return t, key, nil
 }
 
-// findMostRecentZoneConfig finds the most recent zone config (denoted by
-// highest seqNum) for the given targetID. If indexID is specified, we only
-// consider the most recent index with that given indexID.
-func findMostRecentZoneConfig[E scpb.ZoneConfigElement](
-	zoneElems *scpb.ElementCollection[E], targetID catid.DescID, indexID catid.IndexID,
-) E {
-	var mostRecentElem E
+// findMostRecentZoneConfig finds the most recent zone config for the targetID.
+// Here, "most recent" is defined by highest seqNum.
+func findMostRecentZoneConfig[T scpb.ZoneConfigElement](
+	obj zoneConfigObject,
+	zoneConfigElemFilter func(catid.DescID) *scpb.ElementCollection[T],
+	isSpecificZoneConfigElem func(elem T) bool,
+) T {
+	var mostRecentElem T
 	highestSeqNum := uint32(0)
+	targetID := obj.getTargetID()
+	elems := zoneConfigElemFilter(targetID)
 
-	zoneElems.ForEach(func(current scpb.Status, target scpb.TargetStatus, e E) {
-		if e.GetTargetID() == targetID {
-			switch ze := any(e).(type) {
-			case *scpb.IndexZoneConfig:
-				if indexID == 0 || ze.IndexID != indexID {
-					return
-				}
-			}
-			if highestSeqNum <= e.GetSeqNum() {
-				mostRecentElem = e
-				highestSeqNum = e.GetSeqNum()
+	elems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, elem T) {
+		if isSpecificZoneConfigElem(elem) {
+			if highestSeqNum <= elem.GetSeqNum() {
+				mostRecentElem = elem
+				highestSeqNum = elem.GetSeqNum()
 			}
 		}
 	})
 
 	return mostRecentElem
+}
+
+func prepareZoneConfig(
+	b BuildCtx,
+	n *tree.SetZoneConfig,
+	copyFromParentList []tree.Name,
+	setters []func(c *zonepb.ZoneConfig),
+	obj zoneConfigObject,
+) (*zonepb.ZoneConfig, error) {
+	// TODO(annie): once we allow configuring zones for named zones/system ranges,
+	// we will need to guard against secondary tenants from configuring such
+	// ranges.
+
+	// Retrieve the partial zone configuration
+	partialZone := obj.retrievePartialZoneConfig(b)
+
+	// No zone was found. Use an empty zone config that inherits from its parent.
+	if partialZone == nil {
+		partialZone = zonepb.NewZoneConfig()
+	}
+	currentZone := protoutil.Clone(partialZone).(*zonepb.ZoneConfig)
+
+	// Retrieve the zone configuration.
+	//
+	// If the statement was USING DEFAULT, we want to ignore the zone
+	// config that exists on targetID and instead skip to the inherited
+	// default (default since our target is a database). For this, we use the last
+	// parameter getInheritedDefault to retrieveCompleteZoneConfig().
+	// These zones are only used for validations. The merged zone will not
+	// be written.
+	completeZone, _, err := obj.retrieveCompleteZoneConfig(b,
+		n.SetDefault /* getInheritedDefault */)
+	if err != nil {
+		return nil, err
+	}
+
+	// We need to inherit zone configuration information from the correct zone,
+	// not completeZone.
+	{
+		// If we are operating on a zone, get all fields that the zone would
+		// inherit from its parent. We do this by using an empty zoneConfig
+		// and completing at the level of the current zone.
+		zoneInheritedFields := zonepb.ZoneConfig{}
+		if err := obj.completeZoneConfig(b, &zoneInheritedFields); err != nil {
+			return nil, err
+		}
+		partialZone.CopyFromZone(zoneInheritedFields, copyFromParentList)
+	}
+
+	// Determine where to load the configuration.
+	newZone := *completeZone
+
+	// Determine where to load the partial configuration.
+	// finalZone is where the new changes are unmarshalled onto.
+	finalZone := *partialZone
+
+	if n.SetDefault {
+		finalZone = *zonepb.NewZoneConfig()
+	}
+
+	// Fill in our zone configs with var = val assignments.
+	if err := loadSettingsToZoneConfigs(setters, &newZone, &finalZone); err != nil {
+		return nil, err
+	}
+
+	// Validate that there are no conflicts in the zone setup.
+	if err := zonepb.ValidateNoRepeatKeysInZone(&newZone); err != nil {
+		return nil, err
+	}
+
+	if err := validateZoneAttrsAndLocalities(b, currentZone, &newZone); err != nil {
+		return nil, err
+	}
+
+	// The final zone config is the one we just processed.
+	completeZone = &newZone
+	partialZone = &finalZone
+	// Since we are writing to a zone that is not a subzone, we need to
+	// make sure that the zone config is not considered a placeholder
+	// anymore. If the settings applied to this zone don't touch the
+	// NumReplicas field, set it to nil so that the zone isn't considered a
+	// placeholder anymore.
+	if partialZone.IsSubzonePlaceholder() {
+		partialZone.NumReplicas = nil
+	}
+
+	// Finally, revalidate everything. Validate only the completeZone config.
+	if err := completeZone.Validate(); err != nil {
+		return nil, pgerror.Wrap(err, pgcode.CheckViolation, "could not validate zone config")
+	}
+
+	// Finally, check for the extra protection partial zone configs would
+	// require from changes made to parent zones. The extra protections are:
+	//
+	// RangeMinBytes and RangeMaxBytes must be set together
+	// LeasePreferences cannot be set unless Constraints/VoterConstraints are
+	// explicitly set
+	// Per-replica constraints cannot be set unless num_replicas is explicitly
+	// set
+	// Per-voter constraints cannot be set unless num_voters is explicitly set
+	if err := finalZone.ValidateTandemFields(); err != nil {
+		err = errors.Wrap(err, "could not validate zone config")
+		err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+		err = errors.WithHint(err,
+			"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] to "+
+				"populate the field")
+		return nil, err
+	}
+	return partialZone, nil
 }
