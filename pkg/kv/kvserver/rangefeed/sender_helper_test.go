@@ -42,6 +42,15 @@ func (c *testRangefeedCounter) get() int {
 	return int(c.count.Load())
 }
 
+func (c *testRangefeedCounter) waitForRangefeedCount(t *testing.T, count int) {
+	testutils.SucceedsSoon(t, func() error {
+		if c.get() == count {
+			return nil
+		}
+		return errors.Newf("expected %d rangefeeds, found %d", count, c.get())
+	})
+}
+
 // testServerStream mocks grpc server stream for testing.
 type testServerStream struct {
 	syncutil.Mutex
@@ -70,6 +79,13 @@ func (s *testServerStream) waitForEvent(t *testing.T, ev *kvpb.MuxRangeFeedEvent
 		}
 		return errors.Newf("expected error %v not found in %s", *ev, s.String())
 	})
+}
+
+func (s *testServerStream) reset() {
+	s.Lock()
+	defer s.Unlock()
+	s.eventsSent = 0
+	s.streamEvents = make(map[int64][]*kvpb.MuxRangeFeedEvent)
 }
 
 // hasEvent returns true if the event is found in the streamEvents map. Note

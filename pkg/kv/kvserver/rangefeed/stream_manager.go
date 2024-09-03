@@ -77,7 +77,7 @@ type sender interface {
 	run(ctx context.Context, stopper *stop.Stopper, onError func(int64)) error
 	// cleanup is called when the sender is stopped. It is expected to clean up
 	// any resources used by the sender.
-	cleanup()
+	cleanup(ctx context.Context)
 }
 
 func NewStreamManager(sender sender, metrics RangefeedMetricsRecorder) *StreamManager {
@@ -182,10 +182,10 @@ func (sm *StreamManager) Start(ctx context.Context, stopper *stop.Stopper) error
 // Stop cancels the sender.run task and waits for it to complete. It does
 // nothing if sender.run is already finished. It is expected to be called after
 // StreamManager.Start.
-func (sm *StreamManager) Stop() {
+func (sm *StreamManager) Stop(ctx context.Context) {
 	sm.taskCancel()
 	sm.wg.Wait()
-	sm.sender.cleanup()
+	sm.sender.cleanup(ctx)
 	sm.streams.Lock()
 	defer sm.streams.Unlock()
 	for _, disconnector := range sm.streams.m {
@@ -206,4 +206,10 @@ func (sm *StreamManager) Error() chan error {
 		log.Fatalf(context.Background(), "StreamManager.Error called before StreamManager.Start")
 	}
 	return sm.errCh
+}
+
+func (sm *StreamManager) activeStreamCount() int {
+	sm.streams.Lock()
+	defer sm.streams.Unlock()
+	return len(sm.streams.m)
 }
