@@ -188,6 +188,15 @@ echo $delta`
 				conn.QueryRow(t, `SELECT now()`).Scan(&tPre)
 				t.L().Printf("rewinding system clock by an hour")
 				require.NoError(t, setOffset(ctx, -3600*time.Second))
+
+				// HACK: As discussed in [1], we aren't using the ptp device throughout,
+				// and it's also possible that gRPC and other libraries have dependencies
+				// on the system clock that cause a hiccup when we suddenly move the sys
+				// clock back by an hour. To make this test stable without boiling many
+				// an ocean, give the system 60s to recover.
+				time.Sleep(60 * time.Second)
+
+				// Now we assume the cluster is back on its feet.
 				var tPost time.Time
 				conn.QueryRow(t, `SELECT now()`).Scan(&tPost)
 				// It's normal for there to be a little difference, since changing the offset also takes
