@@ -281,6 +281,7 @@ go_library(
         "//pkg/util/uuid",
         "//pkg/util/version",
         "//pkg/workload",
+        "//pkg/workload/cli",
         "//pkg/workload/debug",
         "//pkg/workload/histogram",
         "//pkg/workload/querybench",
