@@ -562,7 +562,7 @@ user root
 
 awaitquery q18
 
-subtest skip_locked
+subtest skip_locked_nowait
 
 statement ok
 CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT, INDEX (y), FAMILY (x, y, z))
@@ -603,8 +603,8 @@ COMMIT;
 ----
 2  10  200
 
-# The unlocked reads in SKIP LOCKED should not block on locks, either, even
-# under serializable isolation.
+# Any unlocked reads underneath SKIP LOCKED or NOWAIT should not block on locks,
+# either, even under serializable isolation.
 
 statement ok
 SET optimizer_use_lock_op_for_serializable = true
@@ -616,6 +616,9 @@ query III
 SELECT * FROM xyz WHERE z = 100 ORDER BY x FOR UPDATE SKIP LOCKED
 ----
 3  30  100
+
+query error pgcode 55P03 could not obtain lock on row \(x\)=\(1\) in xyz@xyz_pkey
+SELECT * FROM xyz WHERE z = 100 ORDER BY x FOR UPDATE NOWAIT
 
 user testuser
 
