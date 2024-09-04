@@ -104,7 +104,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 		// Set the AUTH and REGION params.
 		params := make(url.Values)
 		params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
-		params.Add(KMSRegionParam, kmsRegion)
+		//params.Add(KMSRegionParam, kmsRegion)
 
 		uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
