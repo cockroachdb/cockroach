@@ -169,10 +169,8 @@ type EntryForAdmission struct {
 // EntryForAdmissionCallbackState is passed to the callback when the entry is
 // admitted.
 type EntryForAdmissionCallbackState struct {
-	// TODO(pav-kv): use LogMark.
-	LeaderTerm uint64
-	Index      uint64
-	Priority   raftpb.Priority
+	Mark     rac2.LogMark
+	Priority raftpb.Priority
 }
 
 // ACWorkQueue abstracts the behavior needed from admission.WorkQueue.
@@ -791,6 +789,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 		if err != nil {
 			panic(errors.Wrap(err, "unable to decode raft command admission data: %v"))
 		}
+		mark := rac2.LogMark{Term: e.Term, Index: entry.Index}
 		var raftPri raftpb.Priority
 		if isV2Encoding {
 			raftPri = raftpb.Priority(meta.AdmissionPriority)
@@ -801,7 +800,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 				p.mu.Lock()
 				defer p.mu.Unlock()
 				raftPri = p.mu.follower.lowPriOverrideState.getEffectivePriority(entry.Index, raftPri)
-				p.mu.waitingForAdmissionState.add(e.Term, entry.Index, raftPri)
+				p.mu.waitingForAdmissionState.add(mark.Term, mark.Index, raftPri)
 			}()
 		} else {
 			raftPri = raftpb.LowPri
@@ -814,7 +813,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 			func() {
 				p.mu.Lock()
 				defer p.mu.Unlock()
-				p.mu.waitingForAdmissionState.add(e.Term, entry.Index, raftPri)
+				p.mu.waitingForAdmissionState.add(mark.Term, mark.Index, raftPri)
 			}()
 		}
 		admissionPri := rac2.RaftToAdmissionPriority(raftPri)
@@ -830,9 +829,8 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 			RangeID:        p.opts.RangeID,
 			ReplicaID:      p.opts.ReplicaID,
 			CallbackState: EntryForAdmissionCallbackState{
-				LeaderTerm: e.Term,
-				Index:      entry.Index,
-				Priority:   raftPri,
+				Mark:     mark,
+				Priority: raftPri,
 			},
 		})
 		if !submitted {
@@ -840,7 +838,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 			func() {
 				p.mu.Lock()
 				defer p.mu.Unlock()
-				p.mu.waitingForAdmissionState.remove(e.Term, entry.Index, raftPri)
+				p.mu.waitingForAdmissionState.remove(mark.Term, mark.Index, raftPri)
 			}()
 		}
 	}
@@ -920,8 +918,8 @@ func (p *processorImpl) AdmittedLogEntry(
 		return
 	}
 	admittedMayAdvance :=
-		p.mu.waitingForAdmissionState.remove(state.LeaderTerm, state.Index, state.Priority)
-	if !admittedMayAdvance || state.Index > p.mu.lastObservedStableIndex ||
+		p.mu.waitingForAdmissionState.remove(state.Mark.Term, state.Mark.Index, state.Priority)
+	if !admittedMayAdvance || state.Mark.Index > p.mu.lastObservedStableIndex ||
 		!p.isLeaderUsingV2ProcLocked() {
 		return
 	}

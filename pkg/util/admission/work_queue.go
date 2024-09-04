@@ -2124,7 +2124,7 @@ type LogEntryAdmittedCallbackState struct {
 	// Pos is the position of the entry in the log.
 	//
 	// TODO(sumeer): when the RACv1 protocol is deleted, drop the Term from this
-	// struct.
+	// struct, and replace LeaderTerm/Pos.Index with a LogMark.
 	Pos LogPosition
 	// Pri is the admission priority used for admission.
 	Pri admissionpb.WorkPriority

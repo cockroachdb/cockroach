@@ -679,10 +679,10 @@ func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForA
 		Enabled:    true,
 		RangeID:    entry.RangeID,
 		ReplicaID:  entry.ReplicaID,
-		LeaderTerm: entry.CallbackState.LeaderTerm,
+		LeaderTerm: entry.CallbackState.Mark.Term,
 		LogPosition: admission.LogPosition{
 			Term:  0, // Ignored by callback in RACv2.
-			Index: entry.CallbackState.Index,
+			Index: entry.CallbackState.Mark.Index,
 		},
 		Origin:       0,
 		RaftPri:      entry.CallbackState.Priority,
