@@ -95,6 +95,8 @@ func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 				sessionExpiry,
 				roachpb.Locality{},
 				roachpb.Version{},
+				/* encodeIsDraining */ true,
+				/* isDraining */ false,
 			))
 		}
 
@@ -344,6 +346,8 @@ func TestReclaimAndGenerateInstanceRows(t *testing.T) {
 				sessionExpiry,
 				roachpb.Locality{},
 				roachpb.Version{},
+				/* encodeIsDraining */ true,
+				/* isDraining */ false,
 			))
 		}
 		for _, i := range []int{2, 3} {
@@ -476,6 +480,9 @@ func claim(
 	require.NoError(t, err)
 	require.NoError(t, slStorage.Insert(ctx, sessionID, sessionExpiration))
 	require.NoError(t, storage.CreateInstanceDataForTest(
-		ctx, region, instanceID, rpcAddr, sqlAddr, sessionID, sessionExpiration, roachpb.Locality{}, roachpb.Version{},
+		ctx, region, instanceID, rpcAddr, sqlAddr, sessionID,
+		sessionExpiration, roachpb.Locality{}, roachpb.Version{},
+		/* encodeIsDraining */ true,
+		/* isDraining */ false,
 	))
 }
