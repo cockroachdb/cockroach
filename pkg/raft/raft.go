@@ -634,7 +634,7 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 		Match:   pr.Match,
 	})
 	pr.SentEntries(len(entries), uint64(payloadsSize(entries)))
-	pr.SentCommit(commit)
+	pr.MaybeUpdateSentCommit(commit)
 	return true
 }
 
@@ -690,9 +690,7 @@ func (r *raft) sendHeartbeat(to pb.PeerID) {
 		Commit: commit,
 		Match:  pr.Match,
 	})
-	if commit != 0 {
-		pr.SentCommit(commit)
-	}
+	pr.MaybeUpdateSentCommit(commit)
 }
 
 // sendFortify sends a fortification RPC to the given peer.
