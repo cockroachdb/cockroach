@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -46,6 +47,8 @@ type TestingKnobs struct {
 	ContextTestingKnobs rpc.ContextTestingKnobs
 	// DiagnosticsTestingKnobs allows customization of diagnostics testing knobs.
 	DiagnosticsTestingKnobs diagnostics.TestingKnobs
+	// LicenseTestingKnobs allows customization of license testing knobs.
+	LicenseTestingKnobs license.TestingKnobs
 
 	// If set, use this listener for RPC (and possibly SQL, depending on
 	// the SplitListenSQL setting), instead of binding a new listener.
