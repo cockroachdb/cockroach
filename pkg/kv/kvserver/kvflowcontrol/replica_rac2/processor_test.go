@@ -172,11 +172,10 @@ type testAdmittedPiggybacker struct {
 	b *strings.Builder
 }
 
-func (p *testAdmittedPiggybacker) AddMsgAppRespForLeader(
-	n roachpb.NodeID, s roachpb.StoreID, r roachpb.RangeID, msg raftpb.Message,
+func (p *testAdmittedPiggybacker) Add(
+	n roachpb.NodeID, m kvflowcontrolpb.PiggybackedAdmittedState,
 ) {
-	fmt.Fprintf(p.b, " Piggybacker.AddMsgAppRespForLeader(leader=(n%s,s%s,r%s), msg=%s)\n",
-		n, s, r, msgString(msg))
+	fmt.Fprintf(p.b, " Piggybacker.Add(n%s, %s)\n", n, m)
 }
 
 type testACWorkQueue struct {
