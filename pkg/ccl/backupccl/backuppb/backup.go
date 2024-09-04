@@ -14,7 +14,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	_ "github.com/cockroachdb/cockroach/pkg/jobs/jobspb" // required for backup.proto
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
@@ -113,7 +113,7 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(marshaller *jsonpb.Marshaler
 		if !ok {
 			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
 		}
-		clean, err := cloud.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
+		clean, err := uris.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
 		if err != nil {
 			return nil, err
 		}
@@ -127,7 +127,7 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(marshaller *jsonpb.Marshaler
 		if !ok {
 			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
 		}
-		clean, err := cloud.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
+		clean, err := uris.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
 		if err != nil {
 			return nil, err
 		}
@@ -139,7 +139,7 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(marshaller *jsonpb.Marshaler
 		if !ok {
 			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
 		}
-		clean, err := cloud.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
+		clean, err := uris.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
 		if err != nil {
 			return nil, err
 		}
@@ -151,7 +151,7 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(marshaller *jsonpb.Marshaler
 		if !ok {
 			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
 		}
-		clean, err := cloud.RedactKMSURI(raw.RawString())
+		clean, err := uris.RedactKMSURI(raw.RawString())
 		if err != nil {
 			return nil, err
 		}

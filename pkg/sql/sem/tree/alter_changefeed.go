@@ -95,7 +95,7 @@ func (node *AlterChangefeedSetOptions) Format(ctx *FmtCtx) {
 		// The "sink" option is a URL. (Use a literal here to avoid pulling in
 		// changefeedbase as a dependency.)
 		if string(n.Key) == "sink" {
-			ctx.FormatURI(n.Value)
+			ctx.FormatURI(n.Value, false /* kms */)
 		} else {
 			ctx.FormatNode(n.Value)
 		}

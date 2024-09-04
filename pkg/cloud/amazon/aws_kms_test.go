@@ -20,7 +20,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -74,7 +76,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 	t.Run("auth-empty-no-cred", func(t *testing.T) {
 		// Set AUTH to specified but don't provide AccessKey params.
 		params := make(url.Values)
-		params.Add(cloud.AuthParam, cloud.AuthParamSpecified)
+		params.Add(uris.AuthParam, uris.AuthParamSpecified)
 		params.Add(KMSRegionParam, kmsRegion)
 
 		uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
@@ -84,8 +86,8 @@ func TestEncryptDecryptAWS(t *testing.T) {
 		})
 		require.EqualError(t, err, fmt.Sprintf(
 			`%s is set to '%s', but %s is not set`,
-			cloud.AuthParam,
-			cloud.AuthParamSpecified,
+			uris.AuthParam,
+			uris.AuthParamSpecified,
 			AWSAccessKeyParam,
 		))
 	})
@@ -103,7 +105,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 
 		// Set the AUTH and REGION params.
 		params := make(url.Values)
-		params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+		params.Add(uris.AuthParam, uris.AuthParamImplicit)
 		params.Add(KMSRegionParam, kmsRegion)
 
 		uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
@@ -115,7 +117,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 
 	t.Run("auth-specified", func(t *testing.T) {
 		// Set AUTH to specified.
-		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(uris.AuthParam, uris.AuthParamSpecified)
 		uri := fmt.Sprintf("aws:///%s?%s", keyID, q.Encode())
 
 		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
@@ -154,7 +156,7 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 		skip.IgnoreLint(t, "AWS_KMS_REGION env var must be set")
 	}
 	q.Add(KMSRegionParam, kmsRegion)
-	q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+	q.Set(uris.AuthParam, uris.AuthParamSpecified)
 
 	// Get AWS Key identifier from env variable.
 	keyID := os.Getenv("AWS_KMS_KEY_ARN")
@@ -180,7 +182,7 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 
 		// Create params for implicit user.
 		params := make(url.Values)
-		params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+		params.Add(uris.AuthParam, uris.AuthParamImplicit)
 		params.Add(AssumeRoleParam, q.Get(AssumeRoleParam))
 		params.Add(KMSRegionParam, kmsRegion)
 
@@ -195,7 +197,7 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 
 	t.Run("role-chaining-external-id", func(t *testing.T) {
 		roleChainStr := os.Getenv("AWS_ROLE_ARN_CHAIN")
-		assumeRoleProvider, delegateRoleProviders := cloud.ParseRoleProvidersString(roleChainStr)
+		assumeRoleProvider, delegateRoleProviders := cloudpb.ParseRoleProvidersString(roleChainStr)
 		providerChain := append(delegateRoleProviders, assumeRoleProvider)
 
 		// First verify that none of the individual roles in the chain can be used
@@ -275,7 +277,7 @@ func TestAWSKMSDisallowImplicitCredentials(t *testing.T) {
 	q.Add(KMSRegionParam, "region")
 
 	// Set AUTH to implicit
-	q.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+	q.Add(uris.AuthParam, uris.AuthParamImplicit)
 
 	keyARN := os.Getenv("AWS_KMS_KEY_ARN")
 	if keyARN == "" {
@@ -304,7 +306,7 @@ func TestAWSKMSInaccessibleError(t *testing.T) {
 		q.Add(param, v)
 	}
 
-	q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+	q.Set(uris.AuthParam, uris.AuthParamSpecified)
 
 	// Get AWS Key identifier from env variable.
 	keyID := os.Getenv("AWS_KMS_KEY_ARN")

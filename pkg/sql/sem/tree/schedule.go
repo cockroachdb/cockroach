@@ -60,7 +60,7 @@ func (node *ScheduledBackup) Format(ctx *FmtCtx) {
 	}
 
 	ctx.WriteString(" INTO ")
-	ctx.FormatURIs(node.To)
+	ctx.FormatURIs(node.To, false /* kms */)
 
 	if !node.BackupOptions.IsDefault() {
 		ctx.WriteString(" WITH ")

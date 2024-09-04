@@ -11,7 +11,7 @@ package changefeedpb
 import (
 	"encoding/json"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -34,7 +34,7 @@ func (m ScheduledChangefeedExecutionArgs) MarshalJSONPB(x *jsonpb.Marshaler) ([]
 	if !ok {
 		return nil, errors.Errorf("unexpected %T arg in export schedule: %v", rawURI, rawURI)
 	}
-	sinkURI, err := cloud.SanitizeExternalStorageURI(rawURI.RawString(), nil /* extraParams */)
+	sinkURI, err := uris.SanitizeExternalStorageURI(rawURI.RawString(), nil /* extraParams */)
 	if err != nil {
 		return nil, err
 	}

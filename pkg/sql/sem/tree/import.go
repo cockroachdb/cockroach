@@ -35,7 +35,7 @@ func (node *Import) Format(ctx *FmtCtx) {
 		}
 		ctx.WriteString(node.FileFormat)
 		ctx.WriteByte(' ')
-		ctx.FormatURIs(node.Files)
+		ctx.FormatURIs(node.Files, false /* kms */)
 	} else {
 		if node.Into {
 			ctx.WriteString("INTO ")
@@ -56,7 +56,7 @@ func (node *Import) Format(ctx *FmtCtx) {
 		if len(node.Files) == 1 {
 			ctx.WriteString("(")
 		}
-		ctx.FormatURIs(node.Files)
+		ctx.FormatURIs(node.Files, false /* kms */)
 		if len(node.Files) == 1 {
 			ctx.WriteString(")")
 		}

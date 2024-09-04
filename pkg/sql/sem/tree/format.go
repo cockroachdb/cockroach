@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -493,7 +494,7 @@ func (ctx *FmtCtx) FormatStringConstant(s string) {
 }
 
 // FormatURIs formats a list of string literals or placeholders containing URIs.
-func (ctx *FmtCtx) FormatURIs(uris []Expr) {
+func (ctx *FmtCtx) FormatURIs(uris []Expr, kms bool) {
 	if len(uris) > 1 {
 		ctx.WriteString("(")
 	}
@@ -501,7 +502,7 @@ func (ctx *FmtCtx) FormatURIs(uris []Expr) {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatURI(uri)
+		ctx.FormatURI(uri, kms)
 	}
 	if len(uris) > 1 {
 		ctx.WriteString(")")
@@ -510,7 +511,7 @@ func (ctx *FmtCtx) FormatURIs(uris []Expr) {
 
 // FormatURI formats a string literal or placeholder containing a URI. If the
 // node is a string literal, we redact the contents to avoid leaking secrets.
-func (ctx *FmtCtx) FormatURI(uri Expr) {
+func (ctx *FmtCtx) FormatURI(uri Expr, kms bool) {
 	switch n := uri.(type) {
 	case *StrVal, *DString:
 		if ctx.HasAnyFlags(
@@ -519,7 +520,7 @@ func (ctx *FmtCtx) FormatURI(uri Expr) {
 			ctx.FormatNode(n)
 			return
 		}
-		var raw, elided string
+		var raw string
 		if str, ok := n.(*StrVal); ok {
 			raw = str.RawString()
 		} else {
@@ -528,14 +529,23 @@ func (ctx *FmtCtx) FormatURI(uri Expr) {
 		if raw == "" || raw == "_" {
 			// Some commands treat empty URIs as special. And if we've re-parsed a URI
 			// formatted with FmtHideConstants, we should not try to interpret it as a
-			// URL but should leave it as-is.
+			// URI but should leave it as-is.
 			ctx.FormatNode(n)
 			return
 		}
-		// TODO(michae2): Call SanitizeExternalStorageURI for fine-grained
-		// sanitization.
-		elided = strings.Trim(PasswordSubstitution, "'")
-		ctx.FormatNode(NewStrVal(elided))
+		var sanitized string
+		var err error
+		if kms {
+			sanitized, err = uris.RedactKMSURI(raw)
+		} else {
+			sanitized, err = uris.SanitizeExternalStorageURI(raw, nil)
+		}
+		if err != nil {
+			// We couldn't interpret the string as a URI. Redact the entire thing in
+			// case it is a malformed URI containing secrets.
+			sanitized = strings.Trim(PasswordSubstitution, "'")
+		}
+		ctx.FormatNode(NewStrVal(sanitized))
 	case *Placeholder:
 		ctx.FormatNode(n)
 	default:

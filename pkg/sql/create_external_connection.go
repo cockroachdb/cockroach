@@ -14,8 +14,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -164,7 +164,7 @@ func (p *planner) createExternalConnection(
 }
 
 func logAndSanitizeExternalConnectionURI(ctx context.Context, externalConnectionURI string) error {
-	clean, err := cloud.SanitizeExternalStorageURI(externalConnectionURI, nil)
+	clean, err := uris.SanitizeExternalStorageURI(externalConnectionURI, nil)
 	if err != nil {
 		return err
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -83,7 +84,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 				parsedURI.Path = backuputils.JoinURLPath(parsedURI.Path, locality)
 			}
 			q := parsedURI.Query()
-			q.Add(cloud.LocalityURLParam, locality)
+			q.Add(uris.LocalityURLParam, locality)
 			parsedURI.RawQuery = q.Encode()
 			localizedURIs[i] = parsedURI.String()
 		}

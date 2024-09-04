@@ -16,6 +16,7 @@ go_library(
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/externalconn/connectionpb",
+        "//pkg/cloud/uris",
         "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",

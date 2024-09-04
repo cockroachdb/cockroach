@@ -136,7 +136,7 @@ func (o *CopyOptions) Format(ctx *FmtCtx) {
 		// by copy_file_upload.go, so this will provide backward
 		// compatibility with older servers.
 		ctx.WriteString("DESTINATION ")
-		ctx.FormatURI(o.Destination)
+		ctx.FormatURI(o.Destination, false /* kms */)
 		addSep = true
 	}
 	if o.Escape != nil {

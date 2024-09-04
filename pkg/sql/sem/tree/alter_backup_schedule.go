@@ -88,7 +88,7 @@ type AlterBackupScheduleSetInto struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterBackupScheduleSetInto) Format(ctx *FmtCtx) {
 	ctx.WriteString("SET INTO ")
-	ctx.FormatURIs(node.Into)
+	ctx.FormatURIs(node.Into, false /* kms */)
 }
 
 // AlterBackupScheduleSetWith represents an SET <options> command

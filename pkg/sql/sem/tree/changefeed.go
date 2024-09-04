@@ -44,7 +44,7 @@ func (node *CreateChangefeed) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Targets)
 	if node.SinkURI != nil {
 		ctx.WriteString(" INTO ")
-		ctx.FormatURI(node.SinkURI)
+		ctx.FormatURI(node.SinkURI, false /* kms */)
 	}
 	if node.Options != nil {
 		ctx.WriteString(" WITH OPTIONS (")
