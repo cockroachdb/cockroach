@@ -160,29 +160,7 @@ func (b *Builder) buildDataSource(
 		switch t := ds.(type) {
 		case cat.Table:
 			tabMeta := b.addTable(t, &resName)
-			locking := lockCtx.locking
-			if locking.isSet() {
-				lb := newLockBuilder(tabMeta)
-				for _, item := range locking {
-					item.builders = append(item.builders, lb)
-				}
-			}
-			if b.shouldBuildLockOp() {
-				// If we're implementing FOR UPDATE / FOR SHARE with a Lock operator on
-				// top of the plan, then this can be an unlocked scan. But if the
-				// locking uses SKIP LOCKED then we still need this scan to skip over
-				// locks even if it does not take any locks itself.
-				if locking.get().WaitPolicy == tree.LockWaitSkipLocked {
-					// Create a dummy lockingSpec to get just the skip locked behavior.
-					locking = lockingSpec{&lockingItem{
-						item: &tree.LockingItem{
-							WaitPolicy: tree.LockWaitSkipLocked,
-						},
-					}}
-				} else {
-					locking = nil
-				}
-			}
+			locking := b.lockingSpecForTableScan(lockCtx.locking, tabMeta)
 			return b.buildScan(
 				tabMeta,
 				tableOrdinals(t, columnKinds{
@@ -510,28 +488,7 @@ func (b *Builder) buildScanFromTableRef(
 
 	tn := tree.MakeUnqualifiedTableName(tab.Name())
 	tabMeta := b.addTable(tab, &tn)
-	if locking.isSet() {
-		lb := newLockBuilder(tabMeta)
-		for _, item := range locking {
-			item.builders = append(item.builders, lb)
-		}
-	}
-	if b.shouldBuildLockOp() {
-		// If we're implementing FOR UPDATE / FOR SHARE with a Lock operator on top
-		// of the plan, then this can be an unlocked scan. But if the locking uses
-		// SKIP LOCKED then we still need this scan to skip over locks even if it
-		// does not take any locks itself.
-		if locking.get().WaitPolicy == tree.LockWaitSkipLocked {
-			// Create a dummy lockingSpec to get just the skip locked behavior.
-			locking = lockingSpec{&lockingItem{
-				item: &tree.LockingItem{
-					WaitPolicy: tree.LockWaitSkipLocked,
-				},
-			}}
-		} else {
-			locking = nil
-		}
-	}
+	locking = b.lockingSpecForTableScan(locking, tabMeta)
 	return b.buildScan(
 		tabMeta, ordinals, indexFlags, locking, inScope, false, /* disableNotVisibleIndex */
 	)
