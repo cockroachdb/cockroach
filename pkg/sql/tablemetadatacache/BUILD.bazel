@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "tablemetadatacache",
     srcs = [
+        "cluster_settings.go",
         "table_metadata_batch_iterator.go",
         "table_metadata_updater.go",
         "update_table_metadata_cache_job.go",
@@ -13,6 +14,7 @@ go_library(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/isql",
@@ -47,12 +49,14 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
