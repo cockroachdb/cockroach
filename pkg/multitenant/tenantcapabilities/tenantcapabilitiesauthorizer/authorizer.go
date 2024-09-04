@@ -97,6 +97,11 @@ func New(settings *cluster.Settings, knobs *tenantcapabilities.TestingKnobs) *Au
 	return a
 }
 
+// HasCrossTenantRead returns true if a tenant can read from other tenants.
+func (a *Authorizer) HasCrossTenantRead(tenID roachpb.TenantID) bool {
+	return tenID.IsSystem()
+}
+
 // HasCapabilityForBatch implements the tenantcapabilities.Authorizer interface.
 func (a *Authorizer) HasCapabilityForBatch(
 	ctx context.Context, tenID roachpb.TenantID, ba *kvpb.BatchRequest,

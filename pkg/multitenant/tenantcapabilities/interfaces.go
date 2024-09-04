@@ -41,6 +41,9 @@ type Reader interface {
 // signals other than just the tenant capability state. For example, request
 // usage pattern over a timespan.
 type Authorizer interface {
+	// HasCrossTenantRead returns true if a tenant can read other tenant spans.
+	HasCrossTenantRead(tenID roachpb.TenantID) bool
+
 	// HasCapabilityForBatch returns an error if a tenant, referenced by its ID,
 	// is not allowed to execute the supplied batch request given the capabilities
 	// it possesses.
