@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -190,6 +191,40 @@ func ingestionPlanHook(
 			return nil
 		}
 
+		// TODO(dt): on by default? behind an option?
+		const makeReader = false
+
+		var readerID roachpb.TenantID
+		if makeReader {
+			var readerInfo mtinfopb.TenantInfoWithUsage
+			readerInfo.DataState = mtinfopb.DataStateAdd
+			readerInfo.Name = tenantInfo.Name + "-readonly"
+			readerInfo.ReadFromTenant = &destinationTenantID
+
+			readerZcfg, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.ExtendedEvalContext().Descs)
+			if err != nil {
+				return err
+			}
+
+			readerID, err = sql.CreateTenantRecord(
+				ctx, p.ExecCfg().Codec, p.ExecCfg().Settings,
+				p.InternalSQLTxn(),
+				p.ExecCfg().SpanConfigKVAccessor.WithISQLTxn(ctx, p.InternalSQLTxn()),
+				&readerInfo, readerZcfg,
+				false, p.ExecCfg().TenantTestingKnobs,
+			)
+			if err != nil {
+				return err
+			}
+
+			readerInfo.ID = readerID.ToUint64()
+			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				_, err := sql.BootstrapTenant(ctx, p.ExecCfg(), txn, readerInfo, readerZcfg)
+				return err
+			}); err != nil {
+				return err
+			}
+		}
 		// No revert required since this is a new tenant.
 		const noRevertFirst = false
 
@@ -205,6 +240,7 @@ func ingestionPlanHook(
 			noRevertFirst,
 			jobID,
 			ingestionStmt,
+			readerID,
 		)
 	}
 
@@ -223,6 +259,7 @@ func createReplicationJob(
 	revertFirst bool,
 	jobID jobspb.JobID,
 	stmt *tree.CreateTenantFromReplication,
+	readID roachpb.TenantID,
 ) error {
 
 	// Create a new stream with stream client.
@@ -266,6 +303,7 @@ func createReplicationJob(
 		SourceTenantID:       replicationProducerSpec.SourceTenantID,
 		SourceClusterID:      replicationProducerSpec.SourceClusterID,
 		ReplicationStartTime: replicationProducerSpec.ReplicationStartTime,
+		ReadTenantID:         readID,
 	}
 
 	jobDescription, err := streamIngestionJobDescription(p, string(streamAddress), stmt)

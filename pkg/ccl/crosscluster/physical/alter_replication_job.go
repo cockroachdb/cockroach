@@ -401,6 +401,7 @@ func alterTenantRestartReplication(
 			ReplicationSourceAddress:    alterTenantStmt.ReplicationSourceAddress,
 			Options:                     alterTenantStmt.Options,
 		},
+		roachpb.TenantID{},
 	), "creating replication job")
 }
 
