@@ -1003,6 +1003,57 @@ func TestHeartbeatCancel(t *testing.T) {
 	require.ErrorContains(t, <-retryErrorChan, fmt.Sprintf("replication stream %s is not running, status is STREAM_INACTIVE", prodAID))
 }
 
+func TestForeignKeyConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	server, s, dbA, _ := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	dbA.Exec(t, "CREATE TABLE test(a int primary key, b int)")
+
+	testutils.RunTrueAndFalse(t, "immediate-mode", func(t *testing.T, immediateMode bool) {
+		testutils.RunTrueAndFalse(t, "valid-foreign-key", func(t *testing.T, validForeignKey bool) {
+			fkStmt := "ALTER TABLE test ADD CONSTRAINT fkc FOREIGN KEY (b) REFERENCES tab(pk)"
+			if !validForeignKey {
+				fkStmt = fkStmt + " NOT VALID"
+			}
+			dbA.Exec(t, fkStmt)
+
+			var mode string
+			if immediateMode {
+				mode = "IMMEDIATE"
+			} else {
+				mode = "VALIDATED"
+			}
+
+			var jobID jobspb.JobID
+			stmt := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = " + mode
+			if immediateMode && validForeignKey {
+				dbA.ExpectErr(t, "only 'NOT VALID' foreign keys are only supported with MODE = 'validated'", stmt, dbBURL.String())
+			} else {
+				dbA.QueryRow(t, stmt, dbBURL.String()).Scan(&jobID)
+			}
+
+			dbA.Exec(t, "ALTER TABLE test DROP CONSTRAINT fkc")
+		})
+	})
+}
+
 func setupLogicalTestServer(
 	t *testing.T, ctx context.Context, clusterArgs base.TestClusterArgs, numNodes int,
 ) (
