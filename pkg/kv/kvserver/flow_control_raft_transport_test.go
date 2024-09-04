@@ -681,8 +681,9 @@ func TestFlowControlRaftTransportV2(t *testing.T) {
 						toNodeID := parseNodeID(t, d, "node")
 						toStoreID := parseStoreID(t, d, "store")
 						rangeID := parseRangeID(t, d, "range")
-						control.piggybacker.AddMsgAppRespForLeader(
-							toNodeID, toStoreID, rangeID, raftpb.Message{})
+						control.piggybacker.Add(toNodeID, kvflowcontrolpb.PiggybackedAdmittedState{
+							RangeID: rangeID, ToStoreID: toStoreID,
+						})
 						return ""
 
 					case "fallback-piggyback":
