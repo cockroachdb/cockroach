@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -113,11 +114,11 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx,
+	_, mockServer, addr, err := flowinfra.StartMockDistSQLServer(ctx,
 		hlc.NewClockForTesting(nil), stopper, execinfra.StaticSQLInstanceID,
 	)
 	require.NoError(t, err)
-	dialer := &execinfrapb.MockDialer{Addr: addr}
+	dialer := &flowinfra.MockDialer{Addr: addr}
 	defer dialer.Close()
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
