@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -926,6 +927,12 @@ type Replica struct {
 	// allocatorToken is acquired when planning and executing replica or lease
 	// changes for a range on the leaseholder.
 	allocatorToken *plan.AllocatorToken
+
+	// lastProblemRangeReplicateEnqueueTime is the last time this replica was
+	// eagerly enqueued into the replicate queue due to being underreplicated
+	// or having a decommissioning replica. This is used to throttle enqueue
+	// attempts.
+	lastProblemRangeReplicateEnqueueTime atomic.Value
 
 	// unreachablesMu contains a set of remote ReplicaIDs that are to be reported
 	// as unreachable on the next raft tick.
@@ -2556,4 +2563,58 @@ func racV2EnabledWhenLeaderLevel(
 ) replica_rac2.EnabledWhenLeaderLevel {
 	// TODO(sumeer): implement fully, once all the dependencies are implemented.
 	return replica_rac2.NotEnabledWhenLeader
+}
+
+// maybeEnqueueProblemRange will enqueue the replica for processing into the
+// replicate queue iff:
+//
+//   - The replica is the holder of a valid lease.
+//   - EnqueueProblemRangeInReplicateQueueInterval is enabled (set to a
+//     non-zero value)
+//   - The last time the replica was enqueued is longer than
+//     EnqueueProblemRangeInReplicateQueueInterval.
+//
+// The replica is enqueued at a decommissioning priority. Note that by default,
+// this behavior is disabled (zero interval). Also note that this method should
+// NOT be called unless the range is known to require action e.g.,
+// decommissioning|underreplicated.
+//
+// NOTE: This method is motivated by a bug where decommissioning stalls because
+// a decommissioning range is not enqueued in the replicate queue in a timely
+// manner via the replica scanner, see #130199. This functionality is disabled
+// by default for this reason.
+func (r *Replica) maybeEnqueueProblemRange(
+	ctx context.Context, now time.Time, leaseValid, isLeaseholder bool,
+) {
+	// The method expects the caller to provide whether the lease is valid and
+	// the replica is the leaseholder for the range, so that it can avoid
+	// unnecessary work. We expect this method to be called in the context of
+	// updating metrics.
+	if !isLeaseholder || !leaseValid {
+		// The replicate queue will not process the replica without a valid lease.
+		// Nothing to do.
+		return
+	}
+
+	interval := EnqueueProblemRangeInReplicateQueueInterval.Get(&r.store.cfg.Settings.SV)
+	if interval == 0 {
+		// The setting is disabled.
+		return
+	}
+	lastTime := r.lastProblemRangeReplicateEnqueueTime.Load().(time.Time)
+	if lastTime.Add(interval).After(now) {
+		// The last time the replica was enqueued is less than the interval ago,
+		// nothing to do.
+		return
+	}
+	// The replica is the leaseholder for a range which requires action and it
+	// has been longer than EnqueueProblemRangeInReplicateQueueInterval since the
+	// last time it was enqueued. Try to swap the last time with now. We don't
+	// expect a race, however if the value changed underneath us we won't enqueue
+	// the replica as we lost the race.
+	if !r.lastProblemRangeReplicateEnqueueTime.CompareAndSwap(lastTime, now) {
+		return
+	}
+	r.store.replicateQueue.AddAsync(ctx, r,
+		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
 }
