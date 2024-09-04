@@ -2217,8 +2217,9 @@ type CreateTenantFromReplication struct {
 
 // TenantReplicationOptions  options for the CREATE/ALTER VIRTUAL CLUSTER FROM REPLICATION command.
 type TenantReplicationOptions struct {
-	Retention        Expr
-	ExpirationWindow Expr
+	Retention          Expr
+	ExpirationWindow   Expr
+	EnableReaderTenant *DBool
 }
 
 var _ NodeFormatter = &TenantReplicationOptions{}
@@ -2286,6 +2287,10 @@ func (o *TenantReplicationOptions) Format(ctx *FmtCtx) {
 			ctx.WriteByte(')')
 		}
 	}
+	if o.EnableReaderTenant != nil {
+		maybeAddSep()
+		ctx.WriteString("READ CAPABILITIES")
+	}
 }
 
 // CombineWith merges other TenantReplicationOptions into this struct.
@@ -2307,6 +2312,14 @@ func (o *TenantReplicationOptions) CombineWith(other *TenantReplicationOptions) 
 		o.ExpirationWindow = other.ExpirationWindow
 	}
 
+	if o.EnableReaderTenant != nil {
+		if other.EnableReaderTenant != nil {
+			return errors.New("READ CAPABILITIES option specified multiple times")
+		} else {
+			o.EnableReaderTenant = other.EnableReaderTenant
+		}
+	}
+
 	return nil
 }
 
@@ -2314,7 +2327,8 @@ func (o *TenantReplicationOptions) CombineWith(other *TenantReplicationOptions) 
 func (o TenantReplicationOptions) IsDefault() bool {
 	options := TenantReplicationOptions{}
 	return o.Retention == options.Retention &&
-		o.ExpirationWindow == options.ExpirationWindow
+		o.ExpirationWindow == options.ExpirationWindow &&
+		o.EnableReaderTenant == options.EnableReaderTenant
 }
 
 func (o TenantReplicationOptions) ExpirationWindowSet() bool {

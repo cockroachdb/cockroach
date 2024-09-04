@@ -4826,6 +4826,10 @@ replication_options:
   {
       $$.val = &tree.TenantReplicationOptions{ExpirationWindow: $4.expr()}
   }
+| READ CAPABILITIES
+  {
+    $$.val = &tree.TenantReplicationOptions{EnableReaderTenant: tree.MakeDBool(true)}
+  }
 
 // %Help: CREATE SCHEDULE
 // %Category: Group
