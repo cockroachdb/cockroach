@@ -1052,12 +1052,22 @@ func newSingleStep(context *Context, impl singleStepProtocol, rng *rand.Rand) *s
 }
 
 // prefixedLogger returns a logger instance off of the given `l`
-// parameter, and adds a prefix to everything logged by the retured
-// logger.
+// parameter. The path and prefix are the same.
 func prefixedLogger(l *logger.Logger, prefix string) (*logger.Logger, error) {
-	fileName := strings.ReplaceAll(prefix, " ", "-")
-	formattedPrefix := fmt.Sprintf("[%s] ", fileName)
-	return l.ChildLogger(fileName, logger.LogPrefix(formattedPrefix))
+	filename := sanitizePath(prefix)
+	return prefixedLoggerWithFilename(l, filename, filename)
+}
+
+// prefixedLoggerWithFilename returns a logger instance with the given
+// prefix. The logger will write to a file on the given `path`,
+// relative to the logger `l`'s location.
+func prefixedLoggerWithFilename(l *logger.Logger, prefix, path string) (*logger.Logger, error) {
+	formattedPrefix := fmt.Sprintf("[%s] ", prefix)
+	return l.ChildLogger(path, logger.LogPrefix(formattedPrefix))
+}
+
+func sanitizePath(s string) string {
+	return strings.ReplaceAll(s, " ", "-")
 }
 
 func (h hooks) Filter(testContext Context) hooks {
