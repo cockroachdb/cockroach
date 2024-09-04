@@ -45,8 +45,12 @@ case $1 in
     case $cluster in
       "drt-large")
         shift
-        set -- start "--binary" "./cockroach" --args=--log="file-defaults: {dir: 'logs', max-group-size: 1GiB}" --store-count=16 --restart=false "$@"
+        set -- start "--binary" "./cockroach" --args=--log="file-defaults: {dir: 'logs', max-group-size: 1GiB}" --store-count=16 --restart=false --args="--wal-failover=among-stores" "$@"
         roachprod run $cluster -- "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
+        ;;
+      "drt-chaos")
+        shift
+        set -- start "--binary" "./cockroach" --args=--log="file-defaults: {dir: 'logs', max-group-size: 1GiB}" --store-count=4 --args="--wal-failover=among-stores" "$@"
         ;;
       "drt-ldr1"|"drt-ldr2")
         shift
