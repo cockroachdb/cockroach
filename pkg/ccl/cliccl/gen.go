@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/errors"
-	"github.com/lestrrat-go/jwx/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/spf13/cobra"
 )
 
@@ -62,8 +62,10 @@ func genEncryptionKey(
 			return fmt.Errorf("store key size should be 128, 192, or 256 bits, got %d", aesSize)
 		}
 
-		symKey := jwk.NewSymmetricKey()
-		if err := symKey.FromRaw(key); err != nil {
+		// FromRaw uses the input type to instantiate particular type of key.
+		// []byte input type is used to generate a symmetric key here.
+		symKey, err := jwk.FromRaw(key)
+		if err != nil {
 			return errors.Wrap(err, "error setting key bytes")
 		}
 		if err := symKey.Set(jwk.KeyIDKey, hex.EncodeToString(keyID)); err != nil {
@@ -78,7 +80,9 @@ func genEncryptionKey(
 		}
 
 		keySet := jwk.NewSet()
-		keySet.Add(symKey)
+		if err = keySet.AddKey(symKey); err != nil {
+			return err
+		}
 
 		b, err = json.Marshal(keySet)
 		if err != nil {
