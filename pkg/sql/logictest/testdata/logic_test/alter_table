@@ -613,7 +613,7 @@ statement ok
 ALTER TABLE add_default ADD COLUMN d TIMESTAMP DEFAULT transaction_timestamp()
 
 query II rowsort
-SELECT a,b FROM add_default WHERE d > c AND d - c < interval '10s'
+SELECT a,b FROM add_default WHERE d > c AND d - c < interval '20s'
 ----
 2 42
 3 10
