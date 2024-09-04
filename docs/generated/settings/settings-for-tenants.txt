@@ -390,6 +390,8 @@ storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process 
 storage.sstable.compression_algorithm	enumeration	snappy	determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store; [snappy = 1, zstd = 2, none = 3]	system-visible
 storage.sstable.compression_algorithm_backup_storage	enumeration	snappy	determines the compression algorithm to use when compressing sstable data blocks for backup row data storage; [snappy = 1, zstd = 2, none = 3]	system-visible
 storage.sstable.compression_algorithm_backup_transport	enumeration	snappy	determines the compression algorithm to use when compressing sstable data blocks for backup transport; [snappy = 1, zstd = 2, none = 3]	system-visible
+tablemetadatacache.automatic_updates.enabled	boolean	false	enables automatic updates of the table metadata cache system.table_metadata	application
+tablemetadatacache.data_valid_duration	duration	20m0s	the duration for which the data in system.table_metadata is considered valid	application
 timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.	system-visible
 timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.	system-visible
 trace.debug_http_endpoint.enabled (alias: trace.debug.enable)	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests	application

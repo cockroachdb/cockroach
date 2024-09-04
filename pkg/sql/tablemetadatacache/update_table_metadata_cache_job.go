@@ -26,6 +26,20 @@ import (
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
+// updateJobExecFn specifies the function that is run on each iteration of the
+// table metadata update job. It can be overriden in tests.
+var updateJobExecFn func(context.Context, isql.Executor) error = updateTableMetadataCache
+
+// MockJobExecFn sets the function that is run on each iteration of the
+// table metadata update job. It is not thread-safe and should only be used in
+// tests prior to starting the cluster.
+func MockJobExecFn(fn func(context.Context, isql.Executor) error) {
+	if fn == nil {
+		fn = updateTableMetadataCache
+	}
+	updateJobExecFn = fn
+}
+
 type tableMetadataUpdateJobResumer struct {
 	job *jobs.Job
 }
@@ -55,17 +69,46 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	// Channel used to signal the job should run.
 	signalCh := execCtx.ExecCfg().SQLStatusServer.GetUpdateTableMetadataCacheSignal()
 
-	for {
+	// Register callbacks to signal the job to reset the timer when timer related settings change.
+	scheduleSettingsCh := make(chan struct{})
+	tableMetadataCacheAutoUpdatesEnabled.SetOnChange(&execCtx.ExecCfg().Settings.SV, func(_ context.Context) {
 		select {
+		case scheduleSettingsCh <- struct{}{}:
+		default:
+		}
+	})
+	tableMetadataCacheValidDuration.SetOnChange(&execCtx.ExecCfg().Settings.SV, func(_ context.Context) {
+		select {
+		case scheduleSettingsCh <- struct{}{}:
+		default:
+		}
+	})
+
+	var timer timeutil.Timer
+	timer.Stop()
+
+	for {
+		if tableMetadataCacheAutoUpdatesEnabled.Get(&execCtx.ExecCfg().Settings.SV) {
+			timer.Reset(tableMetadataCacheValidDuration.Get(&execCtx.ExecCfg().Settings.SV))
+		}
+		select {
+		case <-scheduleSettingsCh:
+			// Restart the loop to recompute the timer.
+			timer.Stop()
+			continue
+		case <-timer.C:
+			timer.Read = true
 		case <-signalCh:
-			log.Infof(ctx, "running table metadata update job")
-			metrics.NumRuns.Inc(1)
-			j.updateLastRunTime(ctx)
-
-			// TODO(xinhaoz): implement the actual table metadata update logic.
-
 		case <-ctx.Done():
 			return ctx.Err()
+		}
+
+		// Run table metadata update job.
+		log.Infof(ctx, "running table metadata update job")
+		metrics.NumRuns.Inc(1)
+		j.updateLastRunTime(ctx)
+		if err := updateJobExecFn(ctx, execCtx.ExecCfg().InternalDB.Executor()); err != nil {
+			log.Errorf(ctx, "error running table metadata update job: %s", err)
 		}
 	}
 }
@@ -85,6 +128,10 @@ func (j *tableMetadataUpdateJobResumer) updateLastRunTime(ctx context.Context) {
 	}); err != nil {
 		log.Errorf(ctx, "%s", err.Error())
 	}
+}
+
+func updateTableMetadataCache(ctx context.Context, ie isql.Executor) error {
+	return nil
 }
 
 // OnFailOrCancel implements jobs.Resumer.
