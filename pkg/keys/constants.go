@@ -287,6 +287,11 @@ var (
 	// BootstrapVersionKey is the key at which clusters bootstrapped with a version
 	// > 1.0 persist the version at which they were bootstrapped.
 	BootstrapVersionKey = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("bootstrap-version")))
+	// GracePeriodInitTimestamp is used for license enforcement. It represents the timestamp
+	// of when the cluster first ran on a version requiring a license. This value
+	// is used to track the grace period before a license is needed. It is stored as
+	// the number of seconds since the Unix epoch.
+	GracePeriodInitTimestamp = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("lic-gpi-ts")))
 	//
 	// NodeIDGenerator is the global node ID generator sequence.
 	NodeIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("node-idgen")))
