@@ -12,6 +12,8 @@ package rac2
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -265,6 +267,22 @@ func (l *LogTracker) String() string {
 func (l *LogTracker) SafeFormat(w redact.SafePrinter, _ rune) {
 	admitted := l.Admitted().Admitted
 	w.Printf("mark:%+v, stable:%d, admitted:%v", l.last, l.stable, admitted)
+}
+
+// DebugString returns a debug string for this tracker.
+func (l *LogTracker) DebugString() string {
+	var b strings.Builder
+	fmt.Fprint(&b, l.String())
+	for pri, marks := range l.waiting {
+		if len(marks) == 0 {
+			continue
+		}
+		fmt.Fprintf(&b, "\n%s:", raftpb.Priority(pri))
+		for _, mark := range marks {
+			fmt.Fprintf(&b, " %+v", mark)
+		}
+	}
+	return b.String()
 }
 
 func (l *LogTracker) errorf(ctx context.Context, format string, args ...any) {
