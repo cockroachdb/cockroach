@@ -8029,3 +8029,52 @@ Support status: [reserved](#support-status)
 
 
 
+## ReadFromTenantInfo
+
+
+
+ReadFromTenantInfo returns the tenant from which the requesting tenant
+should read, if any.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+ReadFromTenantInfoRequest requests info, if any, on which tenant the caller
+should read from.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| tenant_id | [cockroach.roachpb.TenantID](#cockroach.server.serverpb.ReadFromTenantInfoRequest-cockroach.roachpb.TenantID) |  | TenantID should always be the ID of the tenant making the request. This duplicates the ID in the auth context that is added implicitly, and must always match that ID when that ID is present, however that ID is absent in insecure test clusters which is why we also specify it explicitly here. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+ReadFromTenantInfoResponse instructs a tenant as to which tenant, if any, it
+should configure itself to read from and the timestamp at which it should do
+so.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| read_from | [cockroach.roachpb.TenantID](#cockroach.server.serverpb.ReadFromTenantInfoResponse-cockroach.roachpb.TenantID) |  |  | [reserved](#support-status) |
+| read_at | [cockroach.util.hlc.Timestamp](#cockroach.server.serverpb.ReadFromTenantInfoResponse-cockroach.util.hlc.Timestamp) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+

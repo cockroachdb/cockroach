@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -4021,4 +4022,54 @@ func (s *systemAdminServer) ListTenants(
 	return &serverpb.ListTenantsResponse{
 		Tenants: tenantList,
 	}, nil
+}
+
+// ReadFromTenantInfo returns the read-from info for a tenant, if configured.
+func (s *systemAdminServer) ReadFromTenantInfo(
+	ctx context.Context, req *serverpb.ReadFromTenantInfoRequest,
+) (*serverpb.ReadFromTenantInfoResponse, error) {
+	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+	if ok && req.TenantID != tenantID {
+		return nil, errors.Errorf("mismatched tenant IDs")
+	}
+	tenantID = req.TenantID
+	if tenantID.IsSystem() {
+		return &serverpb.ReadFromTenantInfoResponse{}, nil
+	}
+
+	var dstID roachpb.TenantID
+	var dstTenant *mtinfopb.TenantInfo
+	if err := s.sqlServer.internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		found, err := sql.GetTenantRecordByID(ctx, txn, tenantID, s.st)
+		if err != nil {
+			return err
+		}
+		if found.ReadFromTenant == nil || !found.ReadFromTenant.IsSet() {
+			return nil
+		}
+		dstID = *found.ReadFromTenant
+		target, err := sql.GetTenantRecordByID(ctx, txn, dstID, s.st)
+		if err != nil {
+			return err
+		}
+		dstTenant = target
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if dstTenant == nil {
+		return &serverpb.ReadFromTenantInfoResponse{}, nil
+	}
+
+	if dstTenant.PhysicalReplicationConsumerJobID == 0 {
+		return nil, errors.Errorf("missing job ID")
+	}
+
+	progress, err := jobs.LoadJobProgress(ctx, s.sqlServer.internalDB, dstTenant.PhysicalReplicationConsumerJobID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &serverpb.ReadFromTenantInfoResponse{ReadFrom: dstID, ReadAt: progress.GetStreamIngest().ReplicatedTime}, nil
 }
