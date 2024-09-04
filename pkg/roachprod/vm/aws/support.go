@@ -37,7 +37,7 @@ const awsStartupScriptTemplate = `#!/usr/bin/env bash
 
 set -x
 
-if [ -e /mnt/data1/.roachprod-initialized ]; then
+if [ -e {{ .DisksInitializedFile }} ]; then
   echo "Already initialized, exiting."
   exit 0
 fi
@@ -208,7 +208,7 @@ sudo ua enable fips --assume-yes
 sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
 sudo service ssh restart
 
-sudo touch /mnt/data1/.roachprod-initialized
+sudo touch {{ .DisksInitializedFile }}
 `
 
 // writeStartupScript writes the startup script to a temp file.
@@ -221,17 +221,19 @@ func writeStartupScript(
 	name string, extraMountOpts string, useMultiple bool, enableFips bool,
 ) (string, error) {
 	type tmplParams struct {
-		VMName           string
-		ExtraMountOpts   string
-		UseMultipleDisks bool
-		EnableFIPS       bool
+		VMName               string
+		ExtraMountOpts       string
+		UseMultipleDisks     bool
+		EnableFIPS           bool
+		DisksInitializedFile string
 	}
 
 	args := tmplParams{
-		VMName:           name,
-		ExtraMountOpts:   extraMountOpts,
-		UseMultipleDisks: useMultiple,
-		EnableFIPS:       enableFips,
+		VMName:               name,
+		ExtraMountOpts:       extraMountOpts,
+		UseMultipleDisks:     useMultiple,
+		EnableFIPS:           enableFips,
+		DisksInitializedFile: vm.DisksInitializedFile,
 	}
 
 	tmpfile, err := os.CreateTemp("", "aws-startup-script")
