@@ -28,20 +28,20 @@ ok
 
 status 1
 ----
-1: StateReplicate match=11 next=12
-2: StateReplicate match=11 next=12
-3: StateReplicate match=11 next=12
+1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
+3: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 
 # On the first replica, report the second one as not reachable.
 report-unreachable 1 2
 ----
-DEBUG 1 failed to send message to 2 because it is unreachable [StateProbe match=11 next=12]
+DEBUG 1 failed to send message to 2 because it is unreachable [StateProbe match=11 next=12 sentCommit=11 matchCommit=11]
 
 status 1
 ----
-1: StateReplicate match=11 next=12
-2: StateProbe match=11 next=12
-3: StateReplicate match=11 next=12
+1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+2: StateProbe match=11 next=12 sentCommit=11 matchCommit=11
+3: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 
 tick-heartbeat 1
 ----
@@ -85,6 +85,6 @@ stabilize
 
 status 1
 ----
-1: StateReplicate match=11 next=12
-2: StateReplicate match=11 next=12
-3: StateReplicate match=11 next=12
+1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
+3: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
