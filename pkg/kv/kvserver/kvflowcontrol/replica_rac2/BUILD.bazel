@@ -4,6 +4,7 @@ go_library(
     name = "replica_rac2",
     srcs = [
         "admission.go",
+        "close_scheduler.go",
         "doc.go",
         "processor.go",
     ],
@@ -19,7 +20,9 @@ go_library(
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/log",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -28,6 +31,7 @@ go_test(
     name = "replica_rac2_test",
     srcs = [
         "admission_test.go",
+        "close_scheduler_test.go",
         "processor_test.go",
     ],
     data = glob(["testdata/**"]),
@@ -47,7 +51,9 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
