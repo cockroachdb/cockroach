@@ -216,6 +216,7 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/strutil",
         "//pkg/util/syncutil",
+        "//pkg/util/system",
         "//pkg/util/sysutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
@@ -261,10 +262,13 @@ go_library(
         "@com_github_spf13_cobra//:cobra",
         "@com_github_spf13_cobra//doc",
         "@com_github_spf13_pflag//:pflag",
+        "@com_google_cloud_go_storage//:storage",
         "@in_gopkg_yaml_v2//:yaml_v2",
+        "@org_golang_google_api//option",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//status",
+        "@org_golang_x_oauth2//google",
         "@org_golang_x_sync//errgroup",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
