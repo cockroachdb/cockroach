@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -308,9 +309,8 @@ func (ss *storesForRACv2) AdmittedLogEntry(
 		return
 	}
 	p.AdmittedLogEntry(ctx, replica_rac2.EntryForAdmissionCallbackState{
-		LeaderTerm: cbState.LeaderTerm,
-		Index:      cbState.Pos.Index,
-		Priority:   cbState.RaftPri,
+		Mark:     rac2.LogMark{Term: cbState.LeaderTerm, Index: cbState.Pos.Index},
+		Priority: cbState.RaftPri,
 	})
 }
 
