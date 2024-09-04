@@ -12,8 +12,6 @@ package rac2
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -191,22 +189,11 @@ func TestLogTracker(t *testing.T) {
 
 	var tracker LogTracker
 	state := func(updated bool) string {
-		var b strings.Builder
+		var s string
 		if updated {
-			fmt.Fprint(&b, "[upd] ")
+			s += "[upd] "
 		}
-		fmt.Fprintln(&b, tracker.String())
-		for pri, marks := range tracker.waiting {
-			if len(marks) == 0 {
-				continue
-			}
-			fmt.Fprintf(&b, "%s:", raftpb.Priority(pri))
-			for _, mark := range marks {
-				fmt.Fprintf(&b, " %+v", mark)
-			}
-			fmt.Fprintf(&b, "\n")
-		}
-		return b.String()
+		return s + tracker.DebugString()
 	}
 
 	ctx := context.Background()
