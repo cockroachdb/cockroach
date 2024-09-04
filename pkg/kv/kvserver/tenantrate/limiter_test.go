@@ -667,6 +667,10 @@ func (ts *testState) BindReader(tenantcapabilities.Reader) {}
 
 var _ tenantcapabilities.Authorizer = &testState{}
 
+func (ts *testState) HasCrossTenantRead(tenID roachpb.TenantID) bool {
+	return false
+}
+
 func (ts *testState) HasProcessDebugCapability(ctx context.Context, tenID roachpb.TenantID) error {
 	if ts.capabilities[tenID].CanDebugProcess {
 		return nil
@@ -784,6 +788,10 @@ func parseStrings(t *testing.T, d *datadriven.TestData) []string {
 type fakeAuthorizer struct{}
 
 var _ tenantcapabilities.Authorizer = &fakeAuthorizer{}
+
+func (fakeAuthorizer) HasCrossTenantRead(tenID roachpb.TenantID) bool {
+	return false
+}
 
 func (fakeAuthorizer) HasNodeStatusCapability(_ context.Context, tenID roachpb.TenantID) error {
 	return nil

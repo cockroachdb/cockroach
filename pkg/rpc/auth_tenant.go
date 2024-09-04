@@ -165,10 +165,18 @@ func (a tenantAuthorizer) authorize(
 }
 
 func checkSpanBounds(rSpan, tenSpan roachpb.RSpan) error {
-	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
-		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
+	if outsideTenant(rSpan, tenSpan) {
+		return spanErr(rSpan, tenSpan)
 	}
 	return nil
+}
+
+func outsideTenant(rSpan, tenSpan roachpb.RSpan) bool {
+	return !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey)
+}
+
+func spanErr(rSpan, tenSpan roachpb.RSpan) error {
+	return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
 }
 
 // authBatch authorizes the provided tenant to invoke the Batch RPC with the
@@ -189,20 +197,27 @@ func (a tenantAuthorizer) authBatch(
 		return authError(err.Error())
 	}
 	tenSpan := tenantPrefix(tenID)
-	return checkSpanBounds(rSpan, tenSpan)
+
+	if outsideTenant(rSpan, tenSpan) {
+		if args.IsReadOnly() && a.capabilitiesAuthorizer.HasCrossTenantRead(tenID) {
+			return nil
+		}
+		return spanErr(rSpan, tenSpan)
+	}
+	return nil
 }
 
 func (a tenantAuthorizer) authGetRangeDescriptors(
 	tenID roachpb.TenantID, args *kvpb.GetRangeDescriptorsRequest,
 ) error {
-	return validateSpan(tenID, args.Span)
+	return validateSpan(tenID, args.Span, true, a)
 }
 
 func (a tenantAuthorizer) authSpanStats(
 	tenID roachpb.TenantID, args *roachpb.SpanStatsRequest,
 ) error {
 	for _, span := range args.Spans {
-		err := validateSpan(tenID, span)
+		err := validateSpan(tenID, span, true, a)
 		if err != nil {
 			return err
 		}
@@ -217,6 +232,10 @@ func (a tenantAuthorizer) authRangeLookup(
 ) error {
 	tenSpan := tenantPrefix(tenID)
 	if !tenSpan.ContainsKey(args.Key) {
+		// Allow it anyway if the tenant can read other tenants.
+		if a.capabilitiesAuthorizer.HasCrossTenantRead(tenID) {
+			return nil
+		}
 		return authErrorf("requested key %s not fully contained in tenant keyspace %s", args.Key, tenSpan)
 	}
 	return nil
@@ -335,7 +354,7 @@ func (a tenantAuthorizer) authGetSpanConfigs(
 	tenID roachpb.TenantID, args *roachpb.GetSpanConfigsRequest,
 ) error {
 	for _, target := range args.Targets {
-		if err := validateSpanConfigTarget(tenID, target); err != nil {
+		if err := validateSpanConfigTarget(tenID, target, true, a); err != nil {
 			return err
 		}
 	}
@@ -348,12 +367,12 @@ func (a tenantAuthorizer) authUpdateSpanConfigs(
 	tenID roachpb.TenantID, args *roachpb.UpdateSpanConfigsRequest,
 ) error {
 	for _, entry := range args.ToUpsert {
-		if err := validateSpanConfigTarget(tenID, entry.Target); err != nil {
+		if err := validateSpanConfigTarget(tenID, entry.Target, false, a); err != nil {
 			return err
 		}
 	}
 	for _, target := range args.ToDelete {
-		if err := validateSpanConfigTarget(tenID, target); err != nil {
+		if err := validateSpanConfigTarget(tenID, target, false, a); err != nil {
 			return err
 		}
 	}
@@ -377,7 +396,7 @@ func (a tenantAuthorizer) authSpanConfigConformance(
 	tenID roachpb.TenantID, args *roachpb.SpanConfigConformanceRequest,
 ) error {
 	for _, sp := range args.Spans {
-		if err := validateSpan(tenID, sp); err != nil {
+		if err := validateSpan(tenID, sp, false, a); err != nil {
 			return err
 		}
 	}
@@ -415,7 +434,7 @@ func (a tenantAuthorizer) authTSDBQuery(
 // wholly contained within the tenant keyspace and system span config targets
 // must be well-formed.
 func validateSpanConfigTarget(
-	tenID roachpb.TenantID, spanConfigTarget roachpb.SpanConfigTarget,
+	tenID roachpb.TenantID, spanConfigTarget roachpb.SpanConfigTarget, read bool, a tenantAuthorizer,
 ) error {
 	validateSystemTarget := func(target roachpb.SystemSpanConfigTarget) error {
 		if target.SourceTenantID != tenID {
@@ -444,7 +463,7 @@ func validateSpanConfigTarget(
 
 	switch spanConfigTarget.Union.(type) {
 	case *roachpb.SpanConfigTarget_Span:
-		return validateSpan(tenID, *spanConfigTarget.GetSpan())
+		return validateSpan(tenID, *spanConfigTarget.GetSpan(), read, a)
 	case *roachpb.SpanConfigTarget_SystemSpanConfigTarget:
 		return validateSystemTarget(*spanConfigTarget.GetSystemSpanConfigTarget())
 	default:
@@ -452,13 +471,20 @@ func validateSpanConfigTarget(
 	}
 }
 
-func validateSpan(tenID roachpb.TenantID, sp roachpb.Span) error {
+func validateSpan(tenID roachpb.TenantID, sp roachpb.Span, isRead bool, a tenantAuthorizer) error {
 	tenSpan := tenantPrefix(tenID)
 	rSpan, err := keys.SpanAddr(sp)
 	if err != nil {
 		return authError(err.Error())
 	}
-	return checkSpanBounds(rSpan, tenSpan)
+	if outsideTenant(rSpan, tenSpan) {
+		// Allow it anyway if the tenant can read other tenants.
+		if isRead && a.capabilitiesAuthorizer.HasCrossTenantRead(tenID) {
+			return nil
+		}
+		return spanErr(rSpan, tenSpan)
+	}
+	return nil
 }
 
 const tenantLoggingTag = "client-tenant"
