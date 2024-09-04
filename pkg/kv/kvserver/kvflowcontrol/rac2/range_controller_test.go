@@ -239,6 +239,7 @@ func (s *testingRCState) getOrInitRange(r testingRange) *testingRCRange {
 			RaftInterface:       testRC,
 			Clock:               s.clock,
 			CloseTimerScheduler: s.probeToCloseScheduler,
+			AdmittedTracker:     testRC,
 			EvalWaitMetrics:     s.evalMetrics,
 		}
 
@@ -272,7 +273,7 @@ type testingRCRange struct {
 	}
 }
 
-func (r *testingRCRange) FollowerState(replicaID roachpb.ReplicaID) FollowerStateInfo {
+func (r *testingRCRange) FollowerStateRaftMuLocked(replicaID roachpb.ReplicaID) FollowerStateInfo {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -281,6 +282,17 @@ func (r *testingRCRange) FollowerState(replicaID roachpb.ReplicaID) FollowerStat
 		return FollowerStateInfo{}
 	}
 	return replica.info
+}
+
+func (r *testingRCRange) GetAdmitted(replicaID roachpb.ReplicaID) AdmittedVector {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	replica, ok := r.mu.r.replicaSet[replicaID]
+	if !ok {
+		return AdmittedVector{}
+	}
+	return replica.av
 }
 
 func (r *testingRCRange) startWaitForEval(name string, pri admissionpb.WorkPriority) {
@@ -320,8 +332,8 @@ func (r *testingRCRange) admit(
 	for _, replica := range r.mu.r.replicaSet {
 		if replica.desc.StoreID == storeID {
 			replica := replica
-			replica.info.Admitted[AdmissionToRaftPriority(pri)] = toIndex
-			replica.info.Term = term
+			replica.av.Admitted[AdmissionToRaftPriority(pri)] = toIndex
+			replica.av.Term = term
 			r.mu.r.replicaSet[replica.desc.ReplicaID] = replica
 			break
 		}
@@ -352,6 +364,7 @@ const invalidTrackerState = tracker.StateSnapshot + 1
 type testingReplica struct {
 	desc roachpb.ReplicaDescriptor
 	info FollowerStateInfo
+	av   AdmittedVector
 }
 
 func scanRanges(t *testing.T, input string) []testingRange {
@@ -796,6 +809,12 @@ func TestRangeController(t *testing.T) {
 						term, err = strconv.Atoi(parts[1])
 						require.NoError(t, err)
 
+						// TODO(sumeer): the test input only specifies an
+						// incremental change to the admitted vector, for a
+						// single priority. However, in practice, the whole
+						// vector will be updated, which also cleanly handles
+						// the case of an advancing term. Consider changing
+						// this to accept a non-incremental update.
 						parts[2] = strings.TrimSpace(parts[2])
 						require.True(t, strings.HasPrefix(parts[2], "to_index="))
 						parts[2] = strings.TrimPrefix(strings.TrimSpace(parts[2]), "to_index=")
