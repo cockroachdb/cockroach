@@ -271,10 +271,11 @@ func (c Changer) initProgress(
 		// at all (and will thus likely need a snapshot), though the app may
 		// have applied a snapshot out of band before adding the replica (thus
 		// making the first index the better choice).
-		Match:     0,
-		Next:      max(c.LastIndex, 1), // invariant: Match < Next
-		Inflights: tracker.NewInflights(c.MaxInflight, c.MaxInflightBytes),
-		IsLearner: isLearner,
+		Match:       0,
+		MatchCommit: 0,
+		Next:        max(c.LastIndex, 1), // invariant: Match < Next
+		Inflights:   tracker.NewInflights(c.MaxInflight, c.MaxInflightBytes),
+		IsLearner:   isLearner,
 		// When a node is first added, we should mark it as recently active.
 		// Otherwise, CheckQuorum may cause us to step down if it is invoked
 		// before the added node has had a chance to communicate with us.
