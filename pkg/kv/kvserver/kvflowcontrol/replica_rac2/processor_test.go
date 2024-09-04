@@ -436,17 +436,12 @@ func TestProcessorBasic(t *testing.T) {
 				return builderStr()
 
 			case "admitted-log-entry":
-				var leaderTerm uint64
-				d.ScanArgs(t, "leader-term", &leaderTerm)
-				var index uint64
-				d.ScanArgs(t, "index", &index)
+				var cb EntryForAdmissionCallbackState
+				d.ScanArgs(t, "leader-term", &cb.Mark.Term)
+				d.ScanArgs(t, "index", &cb.Mark.Index)
 				var pri int
 				d.ScanArgs(t, "pri", &pri)
-				cb := EntryForAdmissionCallbackState{
-					LeaderTerm: leaderTerm,
-					Index:      index,
-					Priority:   raftpb.Priority(pri),
-				}
+				cb.Priority = raftpb.Priority(pri)
 				p.AdmittedLogEntry(ctx, cb)
 				return builderStr()
 
