@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -170,13 +171,22 @@ func (b *Builder) buildDataSource(
 			if b.shouldBuildLockOp() {
 				// If we're implementing FOR UPDATE / FOR SHARE with a Lock operator on
 				// top of the plan, then this can be an unlocked scan. But if the
-				// locking uses SKIP LOCKED then we still need this scan to skip over
-				// locks even if it does not take any locks itself.
-				if locking.get().WaitPolicy == tree.LockWaitSkipLocked {
-					// Create a dummy lockingSpec to get just the skip locked behavior.
+				// locking uses SKIP LOCKED or NOWAIT then we still need this unlocked
+				// scan to use SKIP LOCKED or NOWAIT behavior, respectively, even if it
+				// does not take any locks itself.
+				if waitPolicy := locking.get().WaitPolicy; waitPolicy != tree.LockWaitBlock &&
+					// In isolation levels weaker than Serializable, unlocked scans read
+					// underneath locks without blocking. For these weaker isolation
+					// levels we do not strictly need unlocked scans to use SKIP LOCKED or
+					// NOWAIT behavior. We keep the SKIP LOCKED behavior anyway as an
+					// optimization, but avoid NOWAIT in order to prevent false positive
+					// locking errors.
+					(b.evalCtx.TxnIsoLevel == isolation.Serializable ||
+						waitPolicy == tree.LockWaitSkipLocked) {
+					// Create a dummy lockingSpec to get just the lock wait behavior.
 					locking = lockingSpec{&lockingItem{
 						item: &tree.LockingItem{
-							WaitPolicy: tree.LockWaitSkipLocked,
+							WaitPolicy: waitPolicy,
 						},
 					}}
 				} else {
@@ -519,13 +529,21 @@ func (b *Builder) buildScanFromTableRef(
 	if b.shouldBuildLockOp() {
 		// If we're implementing FOR UPDATE / FOR SHARE with a Lock operator on top
 		// of the plan, then this can be an unlocked scan. But if the locking uses
-		// SKIP LOCKED then we still need this scan to skip over locks even if it
-		// does not take any locks itself.
-		if locking.get().WaitPolicy == tree.LockWaitSkipLocked {
-			// Create a dummy lockingSpec to get just the skip locked behavior.
+		// SKIP LOCKED or NOWAIT then we still need this unlocked scan to use SKIP
+		// LOCKED or NOWAIT behavior, respectively, even if it does not take any
+		// locks itself.
+		if waitPolicy := locking.get().WaitPolicy; waitPolicy != tree.LockWaitBlock &&
+			// In isolation levels weaker than Serializable, unlocked scans read
+			// underneath locks without blocking. For these weaker isolation levels we
+			// do not strictly need unlocked scans to use SKIP LOCKED or NOWAIT
+			// behavior. We keep the SKIP LOCKED behavior anyway as an optimization,
+			// but avoid NOWAIT in order to prevent false positive locking errors.
+			(b.evalCtx.TxnIsoLevel == isolation.Serializable ||
+				waitPolicy == tree.LockWaitSkipLocked) {
+			// Create a dummy lockingSpec to get just the lock wait behavior.
 			locking = lockingSpec{&lockingItem{
 				item: &tree.LockingItem{
-					WaitPolicy: tree.LockWaitSkipLocked,
+					WaitPolicy: waitPolicy,
 				},
 			}}
 		} else {
