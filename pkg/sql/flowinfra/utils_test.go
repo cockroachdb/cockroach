@@ -43,7 +43,7 @@ func createDummyStream(
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	clock := hlc.NewClockForTesting(nil)
-	storageClusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
+	storageClusterID, mockServer, addr, err := StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
 	if err != nil {
 		t.Fatal(err)
 	}

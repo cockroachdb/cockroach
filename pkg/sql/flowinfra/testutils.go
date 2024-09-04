@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfrapb
+package flowinfra
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -52,7 +53,7 @@ func StartMockDistSQLServer(
 		return uuid.Nil, nil, nil, err
 	}
 	mock := newMockDistSQLServer()
-	RegisterDistSQLServer(server, mock)
+	execinfrapb.RegisterDistSQLServer(server, mock)
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
 	if err != nil {
 		return uuid.Nil, nil, nil, err
@@ -70,12 +71,12 @@ type MockDistSQLServer struct {
 // that a new gRPC call has arrived and thus a stream has arrived. The rpc
 // handler is blocked until Donec is signaled.
 type InboundStreamNotification struct {
-	Stream DistSQL_FlowStreamServer
+	Stream execinfrapb.DistSQL_FlowStreamServer
 	Donec  chan<- error
 }
 
 // MockDistSQLServer implements the DistSQLServer interface.
-var _ DistSQLServer = &MockDistSQLServer{}
+var _ execinfrapb.DistSQLServer = &MockDistSQLServer{}
 
 func newMockDistSQLServer() *MockDistSQLServer {
 	return &MockDistSQLServer{
@@ -85,20 +86,20 @@ func newMockDistSQLServer() *MockDistSQLServer {
 
 // SetupFlow is part of the DistSQLServer interface.
 func (ds *MockDistSQLServer) SetupFlow(
-	_ context.Context, req *SetupFlowRequest,
-) (*SimpleResponse, error) {
+	_ context.Context, req *execinfrapb.SetupFlowRequest,
+) (*execinfrapb.SimpleResponse, error) {
 	return nil, nil
 }
 
 // CancelDeadFlows is part of the DistSQLServer interface.
 func (ds *MockDistSQLServer) CancelDeadFlows(
-	_ context.Context, req *CancelDeadFlowsRequest,
-) (*SimpleResponse, error) {
+	_ context.Context, req *execinfrapb.CancelDeadFlowsRequest,
+) (*execinfrapb.SimpleResponse, error) {
 	return nil, nil
 }
 
 // FlowStream is part of the DistSQLServer interface.
-func (ds *MockDistSQLServer) FlowStream(stream DistSQL_FlowStreamServer) error {
+func (ds *MockDistSQLServer) FlowStream(stream execinfrapb.DistSQL_FlowStreamServer) error {
 	donec := make(chan error)
 	ds.InboundStreams <- InboundStreamNotification{Stream: stream, Donec: donec}
 	return <-donec
@@ -107,7 +108,7 @@ func (ds *MockDistSQLServer) FlowStream(stream DistSQL_FlowStreamServer) error {
 // MockDialer is a mocked implementation of the Outbox's `Dialer` interface.
 // Used to create a connection with a client stream.
 type MockDialer struct {
-	// Addr is assumed to be obtained from execinfrapb.StartMockDistSQLServer.
+	// Addr is assumed to be obtained from flowinfra.StartMockDistSQLServer.
 	Addr net.Addr
 	mu   struct {
 		syncutil.Mutex
