@@ -2,12 +2,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "tablemetadatacache",
-    srcs = ["update_table_metadata_cache_job.go"],
+    srcs = [
+        "cluster_settings.go",
+        "update_table_metadata_cache_job.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/isql",
@@ -34,13 +38,15 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/serverpb",
+        "//pkg/sql/isql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
-        "@com_github_cockroachdb_errors//:errors",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],
 )
