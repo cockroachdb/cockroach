@@ -41,7 +41,7 @@ ok
 
 status 1
 ----
-1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+1: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 3: StateProbe match=0 next=11 sentCommit=10 matchCommit=0 paused inactive
 
@@ -95,7 +95,7 @@ stabilize 1
 
 status 1
 ----
-1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+1: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 3: StateSnapshot match=0 next=12 sentCommit=11 matchCommit=0 paused pendingSnap=11
 
@@ -129,7 +129,7 @@ stabilize 1
 
 status 1
 ----
-1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+1: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 3: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 

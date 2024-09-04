@@ -28,7 +28,7 @@ ok
 
 status 1
 ----
-1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+1: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 3: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 
@@ -39,7 +39,7 @@ DEBUG 1 failed to send message to 2 because it is unreachable [StateProbe match=
 
 status 1
 ----
-1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+1: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 2: StateProbe match=11 next=12 sentCommit=11 matchCommit=11
 3: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 
@@ -85,6 +85,6 @@ stabilize
 
 status 1
 ----
-1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+1: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 3: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11

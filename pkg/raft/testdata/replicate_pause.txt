@@ -66,7 +66,7 @@ ok
 # Expect that the entries are committed and stored on nodes 1 and 2.
 status 1
 ----
-1: StateReplicate match=14 next=15 sentCommit=11 matchCommit=11
+1: StateReplicate match=14 next=15 sentCommit=14 matchCommit=14
 2: StateReplicate match=14 next=15 sentCommit=14 matchCommit=14
 3: StateReplicate match=11 next=15 sentCommit=14 matchCommit=11 paused inflight=3[full]
 
@@ -97,7 +97,7 @@ ok
 # In-flight tracking to nodes 2 and 3 is saturated, but node 3 is behind.
 status 1
 ----
-1: StateReplicate match=14 next=18 sentCommit=11 matchCommit=11
+1: StateReplicate match=14 next=18 sentCommit=14 matchCommit=14
 2: StateReplicate match=14 next=18 sentCommit=14 matchCommit=14 paused inflight=3[full]
 3: StateReplicate match=11 next=15 sentCommit=14 matchCommit=11 paused inflight=3[full]
 
@@ -117,7 +117,7 @@ ok
 # Expect that the entries are committed and stored only on nodes 1 and 2.
 status 1
 ----
-1: StateReplicate match=17 next=18 sentCommit=14 matchCommit=14
+1: StateReplicate match=17 next=18 sentCommit=17 matchCommit=17
 2: StateReplicate match=17 next=18 sentCommit=17 matchCommit=17
 3: StateReplicate match=11 next=15 sentCommit=14 matchCommit=11 paused inflight=3[full]
 
@@ -188,6 +188,6 @@ ok
 # Eventually all nodes catch up on the committed state.
 status 1
 ----
-1: StateReplicate match=17 next=18 sentCommit=14 matchCommit=14
+1: StateReplicate match=17 next=18 sentCommit=17 matchCommit=17
 2: StateReplicate match=17 next=18 sentCommit=17 matchCommit=17
 3: StateReplicate match=17 next=18 sentCommit=17 matchCommit=17

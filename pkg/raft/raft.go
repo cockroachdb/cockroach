@@ -723,6 +723,10 @@ func (r *raft) sendFortify(to pb.PeerID) {
 func (r *raft) bcastAppend() {
 	r.trk.Visit(func(id pb.PeerID, _ *tracker.Progress) {
 		if id == r.id {
+			// MatchCommit is updated when receiving a MsgAppResp. However, if this
+			// is the leader, we already know what is the most recent commit index.
+			r.trk.Progress(id).MaybeUpdateMatchCommit(r.raftLog.committed)
+			r.trk.Progress(id).MaybeUpdateSentCommit(r.raftLog.committed)
 			return
 		}
 		r.maybeSendAppend(id)

@@ -259,7 +259,7 @@ process-ready 1 2 3
 
 status 1
 ----
-1: StateReplicate match=11 next=13 sentCommit=10 matchCommit=10
+1: StateReplicate match=11 next=13 sentCommit=11 matchCommit=11
 2: StateReplicate match=11 next=13 sentCommit=11 matchCommit=11 inflight=1
 3: StateReplicate match=11 next=13 sentCommit=11 matchCommit=11 inflight=1
 
@@ -373,7 +373,7 @@ AppendThread->3 MsgStorageAppendResp Term:0 Log:1/12
 
 status 1
 ----
-1: StateReplicate match=12 next=14 sentCommit=11 matchCommit=11
+1: StateReplicate match=12 next=14 sentCommit=12 matchCommit=12
 2: StateReplicate match=12 next=14 sentCommit=12 matchCommit=11 inflight=1
 3: StateReplicate match=12 next=14 sentCommit=12 matchCommit=11 inflight=1
 

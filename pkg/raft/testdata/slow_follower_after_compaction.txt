@@ -43,7 +43,7 @@ ok
 # All nodes up-to-date.
 status 1
 ----
-1: StateReplicate match=14 next=15 sentCommit=11 matchCommit=11
+1: StateReplicate match=14 next=15 sentCommit=14 matchCommit=14
 2: StateReplicate match=14 next=15 sentCommit=14 matchCommit=14
 3: StateReplicate match=14 next=15 sentCommit=14 matchCommit=14
 
@@ -79,7 +79,7 @@ ok
 # Nodes 1 and 2 up-to-date, 3 is behind and MsgApp flow is throttled.
 status 1
 ----
-1: StateReplicate match=18 next=19 sentCommit=14 matchCommit=14
+1: StateReplicate match=18 next=19 sentCommit=18 matchCommit=18
 2: StateReplicate match=18 next=19 sentCommit=18 matchCommit=18
 3: StateReplicate match=14 next=17 sentCommit=16 matchCommit=14 paused inflight=2[full]
 
@@ -118,6 +118,6 @@ ok
 # All nodes caught up.
 status 1
 ----
-1: StateReplicate match=18 next=19 sentCommit=14 matchCommit=14
+1: StateReplicate match=18 next=19 sentCommit=18 matchCommit=18
 2: StateReplicate match=18 next=19 sentCommit=18 matchCommit=18
 3: StateReplicate match=18 next=19 sentCommit=18 matchCommit=18
