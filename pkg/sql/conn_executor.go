@@ -3537,6 +3537,7 @@ var allowRepeatableReadIsolation = settings.RegisterBoolSetting(
 		"CockroachDB developers.",
 	false,
 	settings.WithName("sql.txn.repeatable_read_isolation.enabled"),
+	settings.WithPublic,
 )
 
 var logIsolationLevelLimiter = log.Every(10 * time.Second)
