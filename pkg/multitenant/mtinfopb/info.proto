@@ -83,7 +83,12 @@ message ProtoInfo {
   // VIRTUAL CLUSTER FROM REPLICATION STREAM.
   optional util.hlc.Timestamp last_revert_tenant_timestamp = 8 [(gogoproto.nullable) = false];
 
-  // Next ID: 9
+  // ReadFromTenant is the ID, if any, of another tenant from which this tenant
+  // should be configured to serve read-only SQL requests (by configuring and
+  // maintaining its catalog accordingly).
+  optional roachpb.TenantID read_from_tenant = 9 ;
+
+  // Next ID: 10.
 }
 
 message PreviousSourceTenant {
