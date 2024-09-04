@@ -100,11 +100,12 @@ type testRaftNode struct {
 	b *strings.Builder
 	r *testReplica
 
-	admitted          [raftpb.NumPriorities]uint64
-	leader            roachpb.ReplicaID
+	term   uint64
+	leader roachpb.ReplicaID
+
 	stableIndex       uint64
 	nextUnstableIndex uint64
-	term              uint64
+	admitted          [raftpb.NumPriorities]uint64
 }
 
 func (rn *testRaftNode) EnablePingForAdmittedLaggingLocked() {
@@ -167,6 +168,12 @@ func (rn *testRaftNode) FollowerStateRaftMuLocked(
 	fmt.Fprintf(rn.b, " RaftNode.FollowerStateRaftMuLocked(%v)\n", replicaID)
 	// TODO(kvoli,sumeerbhola): implement.
 	return rac2.FollowerStateInfo{}
+}
+
+func (rn *testRaftNode) print() {
+	fmt.Fprintf(rn.b, "Raft: term: %d leader: %d leaseholder: %d stable: %d next-unstable: %d admitted: %s",
+		rn.term, rn.leader, rn.r.leaseholder, rn.stableIndex, rn.nextUnstableIndex,
+		admittedString(rn.admitted))
 }
 
 func admittedString(admitted [raftpb.NumPriorities]uint64) string {
@@ -319,11 +326,6 @@ func TestProcessorBasic(t *testing.T) {
 		b.Reset()
 		return str
 	}
-	printRaftState := func() {
-		fmt.Fprintf(&b, "Raft: leader: %d leaseholder: %d stable: %d next-unstable: %d term: %d admitted: %s",
-			r.raftNode.leader, r.leaseholder, r.raftNode.stableIndex, r.raftNode.nextUnstableIndex,
-			r.raftNode.term, admittedString(r.raftNode.admitted))
-	}
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "processor"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -354,17 +356,17 @@ func TestProcessorBasic(t *testing.T) {
 					d.ScanArgs(t, "next-unstable-index", &nextUnstableIndex)
 					r.raftNode.nextUnstableIndex = nextUnstableIndex
 				}
-				if d.HasArg("my-leader-term") {
-					var myLeaderTerm uint64
-					d.ScanArgs(t, "my-leader-term", &myLeaderTerm)
-					r.raftNode.term = myLeaderTerm
+				if d.HasArg("term") {
+					var term uint64
+					d.ScanArgs(t, "term", &term)
+					r.raftNode.term = term
 				}
 				if d.HasArg("leaseholder") {
 					var leaseholder int
 					d.ScanArgs(t, "leaseholder", &leaseholder)
 					r.leaseholder = roachpb.ReplicaID(leaseholder)
 				}
-				printRaftState()
+				r.raftNode.print()
 				return builderStr()
 
 			case "on-destroy":
