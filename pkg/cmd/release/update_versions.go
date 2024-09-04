@@ -102,6 +102,8 @@ type prRepo struct {
 	githubUsername string
 	prBranch       string
 	fn             func(gitDir string) error
+	// workOnRepoError is set to workOnRepo() result
+	workOnRepoError error
 }
 
 func (r prRepo) String() string {
@@ -283,26 +285,17 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 	log.Printf("repos to work on: %s\n", reposToWorkOn)
 	var prs []string
 	for _, repo := range reposToWorkOn {
-		log.Printf("Cloning repo %s", repo.name())
-		if err := repo.clone(); err != nil {
-			return fmt.Errorf("cannot clone %s: %w", repo.name(), err)
-		}
-		log.Printf("Branching repo %s", repo.name())
-		if err := repo.checkout(); err != nil {
-			return fmt.Errorf("cannot create branch %s: %w", repo.name(), err)
-		}
-		log.Printf("Munging repo %s", repo.name())
-		if err := repo.apply(); err != nil {
-			return fmt.Errorf("cannot mutate repo %s: %w", repo.name(), err)
-		}
-		log.Printf("commiting changes to repo %s", repo.name())
-		if err := repo.commit(); err != nil {
-			return fmt.Errorf("cannot commit changes in repo %s: %w", repo.name(), err)
+		repo.workOnRepoError = workOnRepo(repo)
+		if repo.workOnRepoError != nil {
+			log.Printf("workOnRepo: error occurred while working on %s: %s", repo.name(), repo.workOnRepoError)
 		}
 	}
 
 	// Now that our local changes are staged, we can try and publish them.
 	for _, repo := range reposToWorkOn {
+		if repo.workOnRepoError != nil {
+			continue
+		}
 		dest := path.Join(globalWorkDir, repo.checkoutDir())
 		// We avoid creating duplicated PRs to allow this command to be
 		// run multiple times.
@@ -550,6 +543,27 @@ func generateRepoList(
 		reposToWorkOn = append(reposToWorkOn, repo)
 	}
 	return reposToWorkOn, nil
+}
+
+func workOnRepo(repo prRepo) error {
+	log.Printf("Cloning repo %s", repo.name())
+	if err := repo.clone(); err != nil {
+		return fmt.Errorf("cannot clone %s: %w", repo.name(), err)
+	}
+	log.Printf("Branching repo %s", repo.name())
+	if err := repo.checkout(); err != nil {
+		return fmt.Errorf("cannot create branch %s: %w", repo.name(), err)
+	}
+	log.Printf("Munging repo %s", repo.name())
+	if err := repo.apply(); err != nil {
+		return fmt.Errorf("cannot mutate repo %s: %w", repo.name(), err)
+	}
+	log.Printf("commiting changes to repo %s", repo.name())
+	if err := repo.commit(); err != nil {
+		return fmt.Errorf("cannot commit changes in repo %s: %w", repo.name(), err)
+	}
+
+	return nil
 }
 
 func isLatestStableBranch(version *semver.Version) (bool, error) {
