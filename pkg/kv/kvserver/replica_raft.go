@@ -651,6 +651,11 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 					LowPriOverride:  req.LowPriorityOverride,
 				}
 			}
+		case raftpb.MsgAppResp:
+			if req.AdmittedState.Term != 0 {
+				// TODO(pav-kv): dispatch admitted vector to RACv2 if one is attached.
+				_ = 0
+			}
 		}
 		err := raftGroup.Step(req.Message)
 		if errors.Is(err, raft.ErrProposalDropped) {

@@ -131,7 +131,7 @@ HandleRaftReady:
  Replica.MuLock
  RaftNode.SetAdmittedLocked([24, 25, 25, 25]) = type: MsgAppResp from: 0 to: 0
  Replica.MuUnlock
- Piggybacker.AddMsgAppRespForLeader(leader=(n11,s11,r3), msg=type: MsgAppResp from: 0 to: 0)
+ Piggybacker.Add(n11, [r3,s11,5->0] admitted=t0/[])
 .....
 
 # Side channel for entries [26, 26] with no low-pri override.
@@ -197,7 +197,7 @@ HandleRaftReady:
  Replica.MuLock
  RaftNode.SetAdmittedLocked([24, 26, 25, 26]) = type: MsgAppResp from: 0 to: 0
  Replica.MuUnlock
- Piggybacker.AddMsgAppRespForLeader(leader=(n11,s11,r3), msg=type: MsgAppResp from: 0 to: 0)
+ Piggybacker.Add(n11, [r3,s11,5->0] admitted=t0/[])
 .....
 
 # Callback is accurate and index 25 is admitted.
@@ -220,7 +220,7 @@ HandleRaftReady:
  Replica.MuLock
  RaftNode.SetAdmittedLocked([26, 26, 25, 26]) = type: MsgAppResp from: 0 to: 0
  Replica.MuUnlock
- Piggybacker.AddMsgAppRespForLeader(leader=(n11,s11,r3), msg=type: MsgAppResp from: 0 to: 0)
+ Piggybacker.Add(n11, [r3,s11,5->0] admitted=t0/[])
 .....
 
 # Side channel for entries [27,27] indicate a low-pri override.
@@ -270,7 +270,7 @@ HandleRaftReady:
  Replica.MuLock
  RaftNode.SetAdmittedLocked([26, 26, 26, 26]) = type: MsgAppResp from: 0 to: 0
  Replica.MuUnlock
- Piggybacker.AddMsgAppRespForLeader(leader=(n11,s11,r3), msg=type: MsgAppResp from: 0 to: 0)
+ Piggybacker.Add(n11, [r3,s11,5->0] admitted=t0/[])
 .....
 
 # index 27 is still waiting for admission, but we switch to a new leader that
@@ -340,7 +340,7 @@ HandleRaftReady:
  Replica.MuLock
  RaftNode.SetAdmittedLocked([27, 27, 27, 27]) = type: MsgAppResp from: 0 to: 0
  Replica.MuUnlock
- Piggybacker.AddMsgAppRespForLeader(leader=(n11,s11,r3), msg=type: MsgAppResp from: 0 to: 0)
+ Piggybacker.Add(n11, [r3,s11,5->0] admitted=t0/[])
 .....
 
 # Noop, since not the leader.
