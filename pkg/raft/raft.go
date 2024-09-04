@@ -944,16 +944,15 @@ func (r *raft) tickHeartbeat() {
 		if r.checkQuorum {
 			if err := r.Step(pb.Message{From: r.id, Type: pb.MsgCheckQuorum}); err != nil {
 				r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
+			} else if r.state != StateLeader {
+				return // stepped down
 			}
 		}
-		// If current leader cannot transfer leadership in electionTimeout, it becomes leader again.
-		if r.state == StateLeader && r.leadTransferee != None {
+		// If current leader cannot transfer leadership in electionTimeout, it stops
+		// trying and begins accepting new proposals again.
+		if r.leadTransferee != None {
 			r.abortLeaderTransfer()
 		}
-	}
-
-	if r.state != StateLeader {
-		return
 	}
 
 	if r.heartbeatElapsed >= r.heartbeatTimeout {
