@@ -1558,6 +1558,7 @@ GO_TARGETS = [
     "//pkg/multitenant:multitenant",
     "//pkg/obs/eventagg:eventagg",
     "//pkg/obs/eventagg:eventagg_test",
+    "//pkg/obs/exectrace:exectrace",
     "//pkg/obs/logstream:logstream",
     "//pkg/obs/logstream:logstream_test",
     "//pkg/obs:obs",

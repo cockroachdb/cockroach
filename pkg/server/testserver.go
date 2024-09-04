@@ -285,6 +285,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			if cfg.CPUProfileDirName == "" {
 				cfg.CPUProfileDirName = filepath.Join(storeSpec.Path, "logs", base.CPUProfileDir)
 			}
+			if cfg.ExecutionTraceDumpDirName == "" {
+				cfg.ExecutionTraceDumpDirName = filepath.Join(storeSpec.Path, "logs", base.ExecutionTraceDumpDir)
+			}
 		}
 	}
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}

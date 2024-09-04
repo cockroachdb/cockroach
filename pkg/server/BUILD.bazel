@@ -155,6 +155,7 @@ go_library(
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher",
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/obs",
+        "//pkg/obs/exectrace",
         "//pkg/obsservice/obslib",
         "//pkg/obsservice/obslib/ingest",
         "//pkg/obsservice/obslib/migrations",

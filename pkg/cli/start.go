@@ -190,6 +190,22 @@ func initTraceDir(ctx context.Context, dir string) {
 	}
 }
 
+func initExecTraceDir(ctx context.Context, dir string) {
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		// This is possible when running with only in-memory stores;
+		// in that case the start-up code sets the output directory
+		// to the current directory (.). If running the process
+		// from a directory which is not writable, we won't
+		// be able to create a sub-directory here.
+		err = errors.WithHint(err, "Try changing the CWD of the cockroach process to a writable directory.")
+		log.Warningf(ctx, "cannot create exec trace dir; execution traces will not be dumped: %v", err)
+		return
+	}
+}
+
 func initTempStorageConfig(
 	ctx context.Context, st *cluster.Settings, stopper *stop.Stopper, stores base.StoreSpecList,
 ) (base.TempStorageConfig, error) {
@@ -1484,6 +1500,7 @@ func setupAndInitializeLoggingAndProfiling(
 	// provides).
 	stopper = stop.NewStopper()
 	initTraceDir(ctx, serverCfg.InflightTraceDirName)
+	initExecTraceDir(ctx, serverCfg.ExecutionTraceDumpDirName)
 	initBlockProfile()
 	initMutexProfile()
 	log.Event(ctx, "initialized profiles")

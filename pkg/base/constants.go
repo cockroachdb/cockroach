@@ -50,6 +50,11 @@ const (
 	// when a job opts in to dumping its execution traces.
 	InflightTraceDir = "inflight_trace_dump"
 
+	// ExecutionTraceDumpDir is the directory name where the flight
+	// recorder will dump execution traces when it receives a signal to
+	// do so.
+	ExecutionTraceDumpDir = "execution_trace_dump"
+
 	// ObsServiceEmbedFlagValue is the special value of the --obsservice-addr flag
 	// configuring the CRDB node to run the Obs Service internally.
 	ObsServiceEmbedFlagValue = "embed"
