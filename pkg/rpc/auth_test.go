@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -920,20 +921,46 @@ func TestTenantAuthRequest(t *testing.T) {
 			{req: "req", expErr: `unknown method "/cockroach.rpc.Testing/Foo"`},
 		},
 	} {
-		t.Run(method, func(t *testing.T) {
+		t.Run(strings.ReplaceAll(method, "/", "_"), func(t *testing.T) {
 			ctx := context.Background()
 			for _, tc := range tests {
 				t.Run("", func(t *testing.T) {
-					err := rpc.TestingAuthorizeTenantRequest(
-						ctx, &settings.Values{}, tenID, method, tc.req, tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer(),
-					)
-					if tc.expErr == noError {
-						require.NoError(t, err)
-					} else {
-						require.Error(t, err)
-						require.Equal(t, codes.Unauthenticated, status.Code(err))
-						require.Regexp(t, tc.expErr, err)
-					}
+					testutils.RunTrueAndFalse(t, "cross", func(t *testing.T, canCrossRead bool) {
+						err := rpc.TestingAuthorizeTenantRequest(ctx, &settings.Values{}, tenID, method, tc.req, mockAuthorizer{
+							hasCrossTenantRead:                 canCrossRead,
+							hasCapabilityForBatch:              true,
+							hasNodestatusCapability:            true,
+							hasTSDBQueryCapability:             true,
+							hasNodelocalStorageCapability:      true,
+							hasExemptFromRateLimiterCapability: true,
+							hasTSDBAllCapability:               true,
+						})
+
+						// If the "expected" error is about tenant bounds but the tenant has
+						// cross-read capability and the request is a read, expect no error.
+						if canCrossRead && strings.Contains(tc.expErr, "fully contained") {
+							switch method {
+							case "/cockroach.roachpb.Internal/Batch":
+								if tc.req.(*kvpb.BatchRequest).IsReadOnly() {
+									tc.expErr = noError
+								}
+							case "/cockroach.roachpb.Internal/GetRangeDescriptors":
+								tc.expErr = noError
+							case "/cockroach.roachpb.Internal/RangeLookup":
+								tc.expErr = noError
+							case "/cockroach.roachpb.Internal/GetSpanConfigs":
+								tc.expErr = noError
+							}
+						}
+
+						if tc.expErr == noError {
+							require.NoError(t, err)
+						} else {
+							require.Error(t, err)
+							require.Equal(t, codes.Unauthenticated, status.Code(err))
+							require.Regexp(t, tc.expErr, err)
+						}
+					})
 				})
 			}
 		})
@@ -1069,6 +1096,7 @@ func TestTenantAuthCapabilityChecks(t *testing.T) {
 }
 
 type mockAuthorizer struct {
+	hasCrossTenantRead                 bool
 	hasCapabilityForBatch              bool
 	hasNodestatusCapability            bool
 	hasTSDBQueryCapability             bool
@@ -1090,6 +1118,10 @@ func (m mockAuthorizer) HasProcessDebugCapability(
 	ctx context.Context, tenID roachpb.TenantID,
 ) error {
 	return errors.New("tenant does not have capability")
+}
+
+func (m mockAuthorizer) HasCrossTenantRead(tenID roachpb.TenantID) bool {
+	return m.hasCrossTenantRead
 }
 
 var _ tenantcapabilities.Authorizer = &mockAuthorizer{}

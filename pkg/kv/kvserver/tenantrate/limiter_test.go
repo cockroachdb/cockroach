@@ -785,6 +785,10 @@ type fakeAuthorizer struct{}
 
 var _ tenantcapabilities.Authorizer = &fakeAuthorizer{}
 
+func (fakeAuthorizer) HasCrossTenantRead(tenID roachpb.TenantID) bool {
+	return false
+}
+
 func (fakeAuthorizer) HasNodeStatusCapability(_ context.Context, tenID roachpb.TenantID) error {
 	return nil
 }
