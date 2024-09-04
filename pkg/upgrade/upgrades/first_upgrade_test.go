@@ -13,6 +13,7 @@ package upgrades_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -27,9 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -154,10 +158,19 @@ func TestFirstUpgradeRepair(t *testing.T) {
 
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettingsWithVersions(v1, v0, false /* initializeVersion */)
+	lease.LeaseDuration.Override(ctx, &settings.SV, time.Second*30)
 	require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
+	upgradePausePoint := make(chan struct{})
+	upgradeResumePoint := make(chan struct{})
+	upgradeCompleted := make(chan struct{})
 	testServer, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
 		Knobs: base.TestingKnobs{
+			UpgradeManager: &upgradebase.TestingKnobs{
+				InterlockPausePoint:               upgradebase.AfterMigration,
+				InterlockReachedPausePointChannel: &upgradePausePoint,
+				InterlockResumeChannel:            &upgradeResumePoint,
+			},
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 				ClusterVersionOverride:         v0,
@@ -269,13 +282,50 @@ func TestFirstUpgradeRepair(t *testing.T) {
 	const qWaitForAOST = "SELECT count(*) FROM [SHOW DATABASES] AS OF SYSTEM TIME '-10s'"
 	tdb.CheckQueryResultsRetry(t, qWaitForAOST, [][]string{{"5"}})
 
+	// Intentionally block any attempt to upgrade by holding the descriptors
+	// with another txn.
+	tdb.Exec(t, "CREATE TABLE t1(n int)")
+	grp := ctxgroup.WithContext(ctx)
+	locksHeld := make(chan struct{})
+	grp.GoCtx(func(ctx context.Context) error {
+		tx, err := sqlDB.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		for _, corruptDesc := range corruptDescs {
+			_, err = tx.Exec("SELECT crdb_internal.unsafe_upsert_descriptor($1, descriptor, true) FROM system.descriptor WHERE id=$1", corruptDesc.GetID())
+			if err != nil {
+				return err
+			}
+			_, err = tx.Exec("INSERT INTO t1 VALUES(5)")
+			if err != nil {
+				return err
+			}
+
+		}
+		close(locksHeld)
+		<-upgradePausePoint
+		doneUpgrade := false
+		for !doneUpgrade {
+			select {
+			case <-upgradePausePoint:
+			case <-upgradeCompleted:
+				doneUpgrade = true
+			case upgradeResumePoint <- struct{}{}:
+			}
+		}
+		return tx.Rollback()
+	})
+
 	// Try upgrading the cluster version.
 	// Precondition check should repair all corruptions and upgrade should succeed.
 	const qUpgrade = "SET CLUSTER SETTING version = crdb_internal.node_executable_version()"
+	<-locksHeld
 	tdb.Exec(t, qUpgrade)
 	tdb.CheckQueryResults(t, qDetectCorruption, [][]string{{"0"}})
 	tdb.CheckQueryResults(t, qDetectRepairableCorruption, [][]string{{"0"}})
-
+	close(upgradeCompleted)
+	require.NoError(t, grp.Wait())
 	// Assert that a version upgrade is reflected for repaired descriptors (stricly one version upgrade).
 	for _, d := range corruptDescs {
 		descId := d.GetID()

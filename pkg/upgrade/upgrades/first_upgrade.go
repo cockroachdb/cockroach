@@ -13,8 +13,10 @@ package upgrades
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -165,23 +168,49 @@ FROM
 		FROM
 			"".crdb_internal.kv_repairable_catalog_corruptions
 		LIMIT
-			1000
+			$1
 	)
 WHERE
 	was_repaired`
+		batchSize := 100
+		// Any batch size below this will use high priority.
+		const HighPriBatchSize = 25
+		const RepairBatchTimeLimit = time.Minute
 		for {
-			row, err := d.InternalExecutor.QueryRow(
-				ctx, "repair-catalog-corruptions", nil /* txn */, repairQuery,
-			)
+			var rowsUpdated tree.DInt
+			err := timeutil.RunWithTimeout(ctx, "descriptor-repair", RepairBatchTimeLimit, func(ctx context.Context) error {
+				return d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+					if batchSize <= HighPriBatchSize {
+						if err = txn.KV().SetUserPriority(roachpb.MaxUserPriority); err != nil {
+							return err
+						}
+					}
+					row, err := txn.QueryRow(
+						ctx, "repair-catalog-corruptions", txn.KV() /* txn */, repairQuery, batchSize,
+					)
+					if err != nil {
+						return err
+					}
+					rowsUpdated = tree.MustBeDInt(row[0])
+					return nil
+				})
+			})
 			if err != nil {
+				// If either the operation hits the retry limit or
+				// times out, then reduce the batch size.
+				if kv.IsAutoRetryLimitExhaustedError(err) ||
+					errors.HasType(err, (*timeutil.TimeoutError)(nil)) {
+					batchSize = max(batchSize/2, 1)
+					continue
+				}
+				// Otherwise, return any unknown errors.
 				return err
 			}
-			c := tree.MustBeDInt(row[0])
-			if c == 0 {
+			if rowsUpdated == 0 {
 				break
 			}
-			n += int(c)
-			log.Infof(ctx, "repaired %d catalog corruptions", c)
+			n += int(rowsUpdated)
+			log.Infof(ctx, "repaired %d catalog corruptions", rowsUpdated)
 		}
 		if n == 0 {
 			log.Info(ctx, "no catalog corruptions found to repair during upgrade attempt")
