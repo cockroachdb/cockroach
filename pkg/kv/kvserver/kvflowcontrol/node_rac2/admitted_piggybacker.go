@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -29,7 +28,7 @@ type PiggybackMsgReader interface {
 	// least one message will be popped.
 	PopMsgsForNode(
 		now time.Time, nodeID roachpb.NodeID, maxBytes int64,
-	) (msgs []kvflowcontrolpb.AdmittedResponseForRange, remainingMsgs int)
+	) (_ []kvflowcontrolpb.PiggybackedAdmittedState, remainingMsgs int)
 	// NodesWithMsgs is used to periodically drop msgs from disconnected nodes.
 	// See RaftTransport.dropFlowTokensForDisconnectedNodes.
 	NodesWithMsgs(now time.Time) []roachpb.NodeID
@@ -46,7 +45,7 @@ type AdmittedPiggybacker struct {
 }
 
 type rangeMap struct {
-	rangeMap              map[roachpb.RangeID]kvflowcontrolpb.AdmittedResponseForRange
+	rangeMap              map[roachpb.RangeID]kvflowcontrolpb.PiggybackedAdmittedState
 	transitionToEmptyTime time.Time
 }
 
@@ -59,32 +58,28 @@ func NewAdmittedPiggybacker() *AdmittedPiggybacker {
 var _ PiggybackMsgReader = &AdmittedPiggybacker{}
 var _ replica_rac2.AdmittedPiggybacker = &AdmittedPiggybacker{}
 
-// AddMsgAppRespForLeader implements replica_rac2.AdmittedPiggybacker.
-func (ap *AdmittedPiggybacker) AddMsgAppRespForLeader(
-	nodeID roachpb.NodeID, storeID roachpb.StoreID, rangeID roachpb.RangeID, msg raftpb.Message,
+// Add implements replica_rac2.AdmittedPiggybacker.
+func (ap *AdmittedPiggybacker) Add(
+	nodeID roachpb.NodeID, msg kvflowcontrolpb.PiggybackedAdmittedState,
 ) {
 	ap.mu.Lock()
 	defer ap.mu.Unlock()
 	rm, ok := ap.mu.msgsForNode[nodeID]
 	if !ok {
-		rm = &rangeMap{rangeMap: map[roachpb.RangeID]kvflowcontrolpb.AdmittedResponseForRange{}}
+		rm = &rangeMap{rangeMap: map[roachpb.RangeID]kvflowcontrolpb.PiggybackedAdmittedState{}}
 		ap.mu.msgsForNode[nodeID] = rm
 	}
-	rm.rangeMap[rangeID] = kvflowcontrolpb.AdmittedResponseForRange{
-		LeaderStoreID: storeID,
-		RangeID:       rangeID,
-		Msg:           msg,
-	}
+	rm.rangeMap[msg.RangeID] = msg
 }
 
-// Made-up number. There are 10+ integers, all varint encoded, many of which
+// Made-up number. There are < 10 integers, all varint encoded, many of which
 // like nodeID, storeID, replicaIDs etc. will be small.
-const admittedForRangeRACv2SizeBytes = 50
+const admittedForRangeRACv2SizeBytes = 40
 
 // PopMsgsForNode implements PiggybackMsgReader.
 func (ap *AdmittedPiggybacker) PopMsgsForNode(
 	now time.Time, nodeID roachpb.NodeID, maxBytes int64,
-) (msgs []kvflowcontrolpb.AdmittedResponseForRange, remainingMsgs int) {
+) (_ []kvflowcontrolpb.PiggybackedAdmittedState, remainingMsgs int) {
 	if ap == nil {
 		return nil, 0
 	}
@@ -94,13 +89,16 @@ func (ap *AdmittedPiggybacker) PopMsgsForNode(
 	if !ok || len(rm.rangeMap) == 0 {
 		return nil, 0
 	}
-	maxEntries := maxBytes / admittedForRangeRACv2SizeBytes
+	// NB: +1 to include at least one entry.
+	maxEntries := maxBytes/admittedForRangeRACv2SizeBytes + 1
+	msgs := make([]kvflowcontrolpb.PiggybackedAdmittedState, 0,
+		min(int64(len(rm.rangeMap)), maxEntries))
 	for rangeID, msg := range rm.rangeMap {
-		msgs = append(msgs, msg)
-		delete(rm.rangeMap, rangeID)
-		if int64(len(msgs)) > maxEntries {
+		if len(msgs) == cap(msgs) {
 			break
 		}
+		msgs = append(msgs, msg)
+		delete(rm.rangeMap, rangeID)
 	}
 	n := len(rm.rangeMap)
 	if n == 0 {
