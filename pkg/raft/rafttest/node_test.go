@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
 func TestBasicProgress(t *testing.T) {
@@ -54,9 +53,6 @@ func TestBasicProgress(t *testing.T) {
 }
 
 func TestRestart(t *testing.T) {
-	// TODO(pav-kv): de-flake it. See https://github.com/etcd-io/raft/issues/181.
-	skip.UnderStress(t, "the test is flaky")
-
 	peers := []raft.Peer{{ID: 1, Context: nil}, {ID: 2, Context: nil}, {ID: 3, Context: nil}, {ID: 4, Context: nil}, {ID: 5, Context: nil}}
 	nt := newRaftNetwork(1, 2, 3, 4, 5)
 
@@ -136,15 +132,14 @@ func TestPause(t *testing.T) {
 }
 
 func waitLeader(ns []*node) int {
-	var l map[pb.PeerID]struct{}
-	var lindex int
-
+	l := make(map[pb.PeerID]struct{})
 	for {
-		l = make(map[pb.PeerID]struct{})
+		clear(l)
+		lindex := -1
 
 		for i, n := range ns {
 			lead := n.Status().SoftState.Lead
-			if lead != 0 {
+			if lead != raft.None {
 				l[lead] = struct{}{}
 				if n.id == lead {
 					lindex = i
@@ -152,7 +147,7 @@ func waitLeader(ns []*node) int {
 			}
 		}
 
-		if len(l) == 1 {
+		if len(l) == 1 && lindex != -1 {
 			return lindex
 		}
 	}
