@@ -184,6 +184,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 			store.rebalanceObjManager.Objective().ToSplitObjective(),
 		)
 	}
+	r.lastProblemRangeReplicateEnqueueTime.Store(store.Clock().PhysicalTime())
 
 	// NB: the state will be loaded when the replica gets initialized.
 	r.mu.state = uninitState

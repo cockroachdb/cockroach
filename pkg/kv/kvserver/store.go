@@ -3238,6 +3238,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	)
 
 	now := s.cfg.Clock.NowAsClockTimestamp()
+	goNow := now.ToTimestamp().GoTime()
 	clusterNodes := s.ClusterNodeCount()
 
 	s.mu.RLock()
@@ -3302,6 +3303,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 				overreplicatedRangeCount++
 			}
 			if metrics.Decommissioning {
+				// NB: Enqueue is disabled by default from here and throttled async if
+				// enabled.
+				rep.maybeEnqueueProblemRange(ctx, goNow, metrics.LeaseValid, metrics.Leaseholder)
 				decommissioningRangeCount++
 			}
 		}
