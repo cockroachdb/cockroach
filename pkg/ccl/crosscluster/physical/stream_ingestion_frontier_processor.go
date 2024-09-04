@@ -17,8 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -318,6 +320,7 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 
 	replicatedTime := f.Frontier()
 	sf.lastPartitionUpdate = timeutil.Now()
+	var readerToActivate roachpb.TenantID
 	log.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime)
 	if err := registry.UpdateJobWithTxn(ctx, jobID, nil /* txn */, func(
 		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
@@ -359,6 +362,10 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 			return errors.AssertionFailedf("expected replication job to have a protected timestamp " +
 				"record over the destination tenant's keyspan")
 		}
+		if replicationDetails.ReadTenantID.IsSet() && sf.replicatedTimeAtStart.IsEmpty() && replicatedTime.IsSet() {
+			readerToActivate = replicationDetails.ReadTenantID
+		}
+
 		ptp := sf.FlowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
 		record, err := ptp.GetRecord(ctx, *replicationDetails.ProtectedTimestampRecordID)
 		if err != nil {
@@ -375,11 +382,27 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 		if record.Timestamp.Less(newProtectAbove) {
 			return ptp.UpdateTimestamp(ctx, *replicationDetails.ProtectedTimestampRecordID, newProtectAbove)
 		}
-
 		return nil
 	}); err != nil {
 		return err
 	}
+
+	if readerToActivate.IsSet() {
+		return sf.FlowCtx.Cfg.DB.Txn(ctx, func(
+			ctx context.Context, txn isql.Txn,
+		) error {
+			info, err := sql.GetTenantRecordByID(ctx, txn, readerToActivate, sf.FlowCtx.Cfg.Settings)
+			if err != nil {
+				return err
+			}
+
+			info.DataState = mtinfopb.DataStateReady
+			info.ServiceMode = mtinfopb.ServiceModeShared
+
+			return sql.UpdateTenantRecord(ctx, sf.FlowCtx.Cfg.Settings, txn, info)
+		})
+	}
+
 	sf.metrics.JobProgressUpdates.Inc(1)
 	sf.persistedReplicatedTime = f.Frontier()
 	sf.metrics.ReplicatedTimeSeconds.Update(sf.persistedReplicatedTime.GoTime().Unix())

@@ -1515,3 +1515,22 @@ func TestStreamingZoneConfigsMismatchedRegions(t *testing.T) {
 	c.DestTenantSQL.QueryRow(c.T, `SELECT raw_config_sql FROM [SHOW ZONE CONFIGURATION FROM DATABASE test]`).Scan(&zcfg)
 	require.NotContains(t, newZcfg, `region=mars`)
 }
+
+func TestReplicationJobWithReaderTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.EnableReaderTenant = true
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
+	require.NotNil(t, stats.IngestionDetails.ReadTenantID)
+}

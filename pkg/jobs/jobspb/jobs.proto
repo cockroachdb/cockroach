@@ -132,7 +132,10 @@ message StreamIngestionDetails {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.customname) = "SourceClusterID"];
 
+  roachpb.TenantID read_tenant_id = 15 [(gogoproto.customname) = "ReadTenantID", (gogoproto.nullable) = false];
+
   reserved 5, 6;
+  // Next ID: 16.
 }
 
 message StreamIngestionCheckpoint {
