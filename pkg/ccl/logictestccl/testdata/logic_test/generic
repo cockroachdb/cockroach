@@ -1,0 +1,1174 @@
+# LogicTest: local
+
+# Disable stats collection to prevent automatic stats collection from
+# invalidating plans.
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
+
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  s STRING,
+  t TIMESTAMPTZ,
+  INDEX (a),
+  INDEX (s),
+  INDEX (t)
+)
+
+statement ok
+CREATE TABLE c (
+  k INT PRIMARY KEY,
+  a INT,
+  INDEX (a)
+)
+
+statement ok
+CREATE TABLE g (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX (a, b)
+)
+
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+statement ok
+PREPARE p AS SELECT * FROM t WHERE a = 1 AND b = 2 AND c = 3
+
+# An ideal generic plan can be built during PREPARE for queries with no
+# placeholders nor stable expressions.
+query T
+EXPLAIN ANALYZE EXECUTE p
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• filter
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ filter: (b = 2) AND (c = 3)
+│
+└── • index join (streamer)
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ estimated max sql temp disk usage: 0 B
+    │ table: t@t_pkey
+    │
+    └── • scan
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 0
+          KV time: 0µs
+          KV contention time: 0µs
+          KV rows decoded: 0
+          KV bytes read: 0 B
+          KV gRPC calls: 0
+          estimated max memory allocated: 0 B
+          missing stats
+          table: t@t_a_idx
+          spans: [/1 - /1]
+
+statement ok
+SET plan_cache_mode = force_custom_plan
+
+# The ideal generic plan is reused even when forcing a custom plan because it
+# will always be optimal.
+query T
+EXPLAIN ANALYZE EXECUTE p
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• filter
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ filter: (b = 2) AND (c = 3)
+│
+└── • index join (streamer)
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ estimated max sql temp disk usage: 0 B
+    │ table: t@t_pkey
+    │
+    └── • scan
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 0
+          KV time: 0µs
+          KV contention time: 0µs
+          KV rows decoded: 0
+          KV bytes read: 0 B
+          KV gRPC calls: 0
+          estimated max memory allocated: 0 B
+          missing stats
+          table: t@t_a_idx
+          spans: [/1 - /1]
+
+statement ok
+DEALLOCATE p
+
+# Prepare the same query with plan_cache_mode set to force_custom_plan.
+statement ok
+PREPARE p AS SELECT * FROM t WHERE a = 1 AND b = 2 AND c = 3
+
+# Execute it once with plan_cache_mode set to force_custom_plan.
+query T
+EXPLAIN ANALYZE EXECUTE p
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• filter
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ filter: (b = 2) AND (c = 3)
+│
+└── • index join (streamer)
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ estimated max sql temp disk usage: 0 B
+    │ table: t@t_pkey
+    │
+    └── • scan
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 0
+          KV time: 0µs
+          KV contention time: 0µs
+          KV rows decoded: 0
+          KV bytes read: 0 B
+          KV gRPC calls: 0
+          estimated max memory allocated: 0 B
+          missing stats
+          table: t@t_a_idx
+          spans: [/1 - /1]
+
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+# The plan is an ideal generic plan (it has no placeholders), so it can be
+# reused with plan_cache_mode set to force_generic_plan.
+query T
+EXPLAIN ANALYZE EXECUTE p
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• filter
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ filter: (b = 2) AND (c = 3)
+│
+└── • index join (streamer)
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ estimated max sql temp disk usage: 0 B
+    │ table: t@t_pkey
+    │
+    └── • scan
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 0
+          KV time: 0µs
+          KV contention time: 0µs
+          KV rows decoded: 0
+          KV bytes read: 0 B
+          KV gRPC calls: 0
+          estimated max memory allocated: 0 B
+          missing stats
+          table: t@t_a_idx
+          spans: [/1 - /1]
+
+statement ok
+DEALLOCATE p
+
+statement ok
+PREPARE p AS SELECT * FROM t WHERE k = $1
+
+# An ideal generic plan can be built during PREPARE when the placeholder
+# fast-path can be used.
+query T
+EXPLAIN ANALYZE EXECUTE p(33)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• scan
+  nodes: <hidden>
+  regions: <hidden>
+  actual row count: 0
+  KV time: 0µs
+  KV contention time: 0µs
+  KV rows decoded: 0
+  KV bytes read: 0 B
+  KV gRPC calls: 0
+  estimated max memory allocated: 0 B
+  missing stats
+  table: t@t_pkey
+  spans: [/33 - /33]
+
+statement ok
+SET plan_cache_mode = force_custom_plan
+
+# The ideal generic plan is reused even when forcing a custom plan because it
+# will always be optimal.
+query T
+EXPLAIN ANALYZE EXECUTE p(33)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• scan
+  nodes: <hidden>
+  regions: <hidden>
+  actual row count: 0
+  KV time: 0µs
+  KV contention time: 0µs
+  KV rows decoded: 0
+  KV bytes read: 0 B
+  KV gRPC calls: 0
+  estimated max memory allocated: 0 B
+  missing stats
+  table: t@t_pkey
+  spans: [/33 - /33]
+
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+statement ok
+DEALLOCATE p
+
+statement ok
+PREPARE p AS SELECT * FROM t WHERE a = $1 AND c = $2
+
+# A simple generic plan can be built during EXECUTE.
+query T
+EXPLAIN ANALYZE EXECUTE p(1, 2)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• lookup join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ KV time: 0µs
+│ KV contention time: 0µs
+│ KV rows decoded: 0
+│ KV bytes read: 0 B
+│ KV gRPC calls: 0
+│ estimated max memory allocated: 0 B
+│ table: t@t_pkey
+│ equality: (k) = (k)
+│ equality cols are key
+│ pred: c = "$2"
+│
+└── • lookup join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ table: t@t_a_idx
+    │ equality: ($1) = (a)
+    │
+    └── • values
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 1
+          size: 2 columns, 1 row
+
+# The generic plan can be reused with different placeholder values.
+query T
+EXPLAIN ANALYZE EXECUTE p(11, 22)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• lookup join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ KV time: 0µs
+│ KV contention time: 0µs
+│ KV rows decoded: 0
+│ KV bytes read: 0 B
+│ KV gRPC calls: 0
+│ estimated max memory allocated: 0 B
+│ table: t@t_pkey
+│ equality: (k) = (k)
+│ equality cols are key
+│ pred: c = "$2"
+│
+└── • lookup join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ table: t@t_a_idx
+    │ equality: ($1) = (a)
+    │
+    └── • values
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 1
+          size: 2 columns, 1 row
+
+statement ok
+SET plan_cache_mode = force_custom_plan
+
+# The generic plan is not reused when forcing a custom plan.
+query T
+EXPLAIN ANALYZE EXECUTE p(1, 2)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• filter
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ filter: c = 2
+│
+└── • index join (streamer)
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ estimated max sql temp disk usage: 0 B
+    │ table: t@t_pkey
+    │
+    └── • scan
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 0
+          KV time: 0µs
+          KV contention time: 0µs
+          KV rows decoded: 0
+          KV bytes read: 0 B
+          KV gRPC calls: 0
+          estimated max memory allocated: 0 B
+          missing stats
+          table: t@t_a_idx
+          spans: [/1 - /1]
+
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+statement ok
+DEALLOCATE p
+
+statement ok
+PREPARE p AS SELECT * FROM t WHERE t = now()
+
+# A generic plan with a stable expression.
+query T
+EXPLAIN ANALYZE EXECUTE p
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• lookup join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ KV time: 0µs
+│ KV contention time: 0µs
+│ KV rows decoded: 0
+│ KV bytes read: 0 B
+│ KV gRPC calls: 0
+│ estimated max memory allocated: 0 B
+│ table: t@t_pkey
+│ equality: (k) = (k)
+│ equality cols are key
+│
+└── • lookup join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ table: t@t_t_idx
+    │ equality: (column9) = (t)
+    │
+    └── • values
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 1
+          size: 1 column, 1 row
+
+# The generic plan can be reused.
+query T
+EXPLAIN ANALYZE EXECUTE p
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• lookup join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ KV time: 0µs
+│ KV contention time: 0µs
+│ KV rows decoded: 0
+│ KV bytes read: 0 B
+│ KV gRPC calls: 0
+│ estimated max memory allocated: 0 B
+│ table: t@t_pkey
+│ equality: (k) = (k)
+│ equality cols are key
+│
+└── • lookup join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ table: t@t_t_idx
+    │ equality: (column9) = (t)
+    │
+    └── • values
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 1
+          size: 1 column, 1 row
+
+statement ok
+DEALLOCATE p
+
+statement ok
+PREPARE p AS SELECT k FROM t WHERE s LIKE $1
+
+# A suboptimal generic query plan is chosen if it is forced.
+query T
+EXPLAIN ANALYZE EXECUTE p('foo%')
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• filter
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ filter: s LIKE 'foo%'
+│
+└── • scan
+      nodes: <hidden>
+      regions: <hidden>
+      actual row count: 0
+      KV time: 0µs
+      KV contention time: 0µs
+      KV rows decoded: 0
+      KV bytes read: 0 B
+      KV gRPC calls: 0
+      estimated max memory allocated: 0 B
+      missing stats
+      table: t@t_s_idx
+      spans: (/NULL - ]
+
+statement ok
+DEALLOCATE p
+
+statement ok
+PREPARE p AS SELECT k FROM t WHERE c = $1
+
+# A simple generic plan.
+query T
+EXPLAIN ANALYZE EXECUTE p(1)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• filter
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ filter: c = 1
+│
+└── • scan
+      nodes: <hidden>
+      regions: <hidden>
+      actual row count: 0
+      KV time: 0µs
+      KV contention time: 0µs
+      KV rows decoded: 0
+      KV bytes read: 0 B
+      KV gRPC calls: 0
+      estimated max memory allocated: 0 B
+      missing stats
+      table: t@t_pkey
+      spans: FULL SCAN
+
+statement ok
+ALTER TABLE t ADD COLUMN z INT
+
+# A schema change invalidates the generic plan, and it must be re-optimized.
+query T
+EXPLAIN ANALYZE EXECUTE p(1)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• filter
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ filter: c = 1
+│
+└── • scan
+      nodes: <hidden>
+      regions: <hidden>
+      actual row count: 0
+      KV time: 0µs
+      KV contention time: 0µs
+      KV rows decoded: 0
+      KV bytes read: 0 B
+      KV gRPC calls: 0
+      estimated max memory allocated: 0 B
+      missing stats
+      table: t@t_pkey
+      spans: FULL SCAN
+
+statement ok
+DEALLOCATE p
+
+statement ok
+ALTER TABLE t DROP COLUMN z
+
+statement ok
+SET plan_cache_mode = auto
+
+statement ok
+PREPARE p AS SELECT * FROM t WHERE a = 1 AND b = 2 AND c = 3
+
+# An ideal generic plan is used immediately with plan_cache_mode=auto.
+query T
+EXPLAIN ANALYZE EXECUTE p
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• filter
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ filter: (b = 2) AND (c = 3)
+│
+└── • index join (streamer)
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ estimated max sql temp disk usage: 0 B
+    │ table: t@t_pkey
+    │
+    └── • scan
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 0
+          KV time: 0µs
+          KV contention time: 0µs
+          KV rows decoded: 0
+          KV bytes read: 0 B
+          KV gRPC calls: 0
+          estimated max memory allocated: 0 B
+          missing stats
+          table: t@t_a_idx
+          spans: [/1 - /1]
+
+statement ok
+DEALLOCATE p
+
+statement ok
+PREPARE p AS SELECT * FROM t WHERE a = $1 AND c = $2
+
+statement ok
+EXECUTE p(1, 2);
+EXECUTE p(10, 20);
+EXECUTE p(100, 200);
+EXECUTE p(1000, 2000);
+EXECUTE p(10000, 20000);
+
+# On the sixth execution a generic query plan will be generated. The cost of the
+# generic plan is more than the average cost of the five custom plans (plus some
+# overhead cost of optimization), so the custom plan is chosen.
+query T
+EXPLAIN ANALYZE EXECUTE p(10000, 20000)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• filter
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ filter: c = 20000
+│
+└── • index join (streamer)
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ estimated max sql temp disk usage: 0 B
+    │ table: t@t_pkey
+    │
+    └── • scan
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 0
+          KV time: 0µs
+          KV contention time: 0µs
+          KV rows decoded: 0
+          KV bytes read: 0 B
+          KV gRPC calls: 0
+          estimated max memory allocated: 0 B
+          missing stats
+          table: t@t_a_idx
+          spans: [/10000 - /10000]
+
+statement ok
+DEALLOCATE p
+
+# Now use a more complex query that could have multiple join orderings.
+statement ok
+PREPARE p AS
+SELECT * FROM t
+JOIN c ON t.k = c.a
+JOIN g ON c.k = g.a
+WHERE t.a = $1 AND t.c = $2
+
+statement ok
+EXECUTE p(1, 2);
+EXECUTE p(10, 20);
+EXECUTE p(100, 200);
+EXECUTE p(1000, 2000);
+
+# The first five executions will use a custom plan. This is the fifth.
+query T
+EXPLAIN ANALYZE EXECUTE p(10000, 20000)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• lookup join (streamer)
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ KV time: 0µs
+│ KV contention time: 0µs
+│ KV rows decoded: 0
+│ KV bytes read: 0 B
+│ KV gRPC calls: 0
+│ estimated max memory allocated: 0 B
+│ table: g@g_a_b_idx
+│ equality: (k) = (a)
+│
+└── • lookup join (streamer)
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ table: c@c_a_idx
+    │ equality: (k) = (a)
+    │
+    └── • filter
+        │ nodes: <hidden>
+        │ regions: <hidden>
+        │ actual row count: 0
+        │ filter: c = 20000
+        │
+        └── • index join (streamer)
+            │ nodes: <hidden>
+            │ regions: <hidden>
+            │ actual row count: 0
+            │ KV time: 0µs
+            │ KV contention time: 0µs
+            │ KV rows decoded: 0
+            │ KV bytes read: 0 B
+            │ KV gRPC calls: 0
+            │ estimated max memory allocated: 0 B
+            │ estimated max sql temp disk usage: 0 B
+            │ table: t@t_pkey
+            │
+            └── • scan
+                  nodes: <hidden>
+                  regions: <hidden>
+                  actual row count: 0
+                  KV time: 0µs
+                  KV contention time: 0µs
+                  KV rows decoded: 0
+                  KV bytes read: 0 B
+                  KV gRPC calls: 0
+                  estimated max memory allocated: 0 B
+                  missing stats
+                  table: t@t_a_idx
+                  spans: [/10000 - /10000]
+
+# On the sixth execution a generic query plan will be generated. The cost of the
+# generic plan is less than the average cost of the five custom plans (plus some
+# overhead cost of optimization), so the generic plan is chosen.
+query T
+EXPLAIN ANALYZE EXECUTE p(10000, 20000)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• lookup join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ KV time: 0µs
+│ KV contention time: 0µs
+│ KV rows decoded: 0
+│ KV bytes read: 0 B
+│ KV gRPC calls: 0
+│ estimated max memory allocated: 0 B
+│ table: g@g_a_b_idx
+│ equality: (k) = (a)
+│
+└── • lookup join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ table: c@c_a_idx
+    │ equality: (k) = (a)
+    │
+    └── • lookup join
+        │ nodes: <hidden>
+        │ regions: <hidden>
+        │ actual row count: 0
+        │ KV time: 0µs
+        │ KV contention time: 0µs
+        │ KV rows decoded: 0
+        │ KV bytes read: 0 B
+        │ KV gRPC calls: 0
+        │ estimated max memory allocated: 0 B
+        │ table: t@t_pkey
+        │ equality: (k) = (k)
+        │ equality cols are key
+        │ pred: c = "$2"
+        │
+        └── • lookup join
+            │ nodes: <hidden>
+            │ regions: <hidden>
+            │ actual row count: 0
+            │ KV time: 0µs
+            │ KV contention time: 0µs
+            │ KV rows decoded: 0
+            │ KV bytes read: 0 B
+            │ KV gRPC calls: 0
+            │ estimated max memory allocated: 0 B
+            │ table: t@t_a_idx
+            │ equality: ($1) = (a)
+            │
+            └── • values
+                  nodes: <hidden>
+                  regions: <hidden>
+                  actual row count: 1
+                  size: 2 columns, 1 row
+
+# On the seventh execution the generic plan is reused.
+query T
+EXPLAIN ANALYZE EXECUTE p(10000, 20000)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• lookup join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ KV time: 0µs
+│ KV contention time: 0µs
+│ KV rows decoded: 0
+│ KV bytes read: 0 B
+│ KV gRPC calls: 0
+│ estimated max memory allocated: 0 B
+│ table: g@g_a_b_idx
+│ equality: (k) = (a)
+│
+└── • lookup join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ table: c@c_a_idx
+    │ equality: (k) = (a)
+    │
+    └── • lookup join
+        │ nodes: <hidden>
+        │ regions: <hidden>
+        │ actual row count: 0
+        │ KV time: 0µs
+        │ KV contention time: 0µs
+        │ KV rows decoded: 0
+        │ KV bytes read: 0 B
+        │ KV gRPC calls: 0
+        │ estimated max memory allocated: 0 B
+        │ table: t@t_pkey
+        │ equality: (k) = (k)
+        │ equality cols are key
+        │ pred: c = "$2"
+        │
+        └── • lookup join
+            │ nodes: <hidden>
+            │ regions: <hidden>
+            │ actual row count: 0
+            │ KV time: 0µs
+            │ KV contention time: 0µs
+            │ KV rows decoded: 0
+            │ KV bytes read: 0 B
+            │ KV gRPC calls: 0
+            │ estimated max memory allocated: 0 B
+            │ table: t@t_a_idx
+            │ equality: ($1) = (a)
+            │
+            └── • values
+                  nodes: <hidden>
+                  regions: <hidden>
+                  actual row count: 1
+                  size: 2 columns, 1 row
+
+statement ok
+DEALLOCATE p
+
+# Now use a query with a bad generic query plan.
+statement ok
+PREPARE p AS
+SELECT * FROM g WHERE a = $1 ORDER BY b LIMIT 10
+
+statement ok
+EXECUTE p(1);
+EXECUTE p(10);
+EXECUTE p(100);
+EXECUTE p(1000);
+EXECUTE p(10000);
+
+# The generic plan is generated on the sixth execution, but is more expensive
+# than the average custom plan.
+query T
+EXPLAIN ANALYZE EXECUTE p(10)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• scan
+  nodes: <hidden>
+  regions: <hidden>
+  actual row count: 0
+  KV time: 0µs
+  KV contention time: 0µs
+  KV rows decoded: 0
+  KV bytes read: 0 B
+  KV gRPC calls: 0
+  estimated max memory allocated: 0 B
+  missing stats
+  table: g@g_a_b_idx
+  spans: [/10 - /10]
+  limit: 10
+
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+# The generic plan previously generated is reused when forcing a generic plan.
+query T
+EXPLAIN ANALYZE EXECUTE p(10)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• limit
+│ count: 10
+│
+└── • lookup join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ estimated max sql temp disk usage: 0 B
+    │ table: g@g_a_b_idx
+    │ equality: ($1) = (a)
+    │
+    └── • values
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 1
+          size: 1 column, 1 row

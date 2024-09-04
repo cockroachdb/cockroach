@@ -105,6 +105,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
@@ -145,6 +146,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
@@ -164,6 +166,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
@@ -183,6 +186,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
@@ -205,6 +209,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
@@ -236,6 +241,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
@@ -259,6 +265,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
@@ -285,6 +292,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
@@ -311,6 +319,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
