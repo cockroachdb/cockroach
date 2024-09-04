@@ -63,7 +63,7 @@ kvflowcontrol.tokens.eval.regular.deducted      : 16777216
 kvflowcontrol.tokens.eval.regular.returned      : 16777216
 kvflowcontrol.tokens.eval.regular.unaccounted   : 0
 kvflowcontrol.streams.eval.elastic.total_count  : 1
-kvflowcontrol.streams.eval.elastic.blocked_count: 1
+kvflowcontrol.streams.eval.elastic.blocked_count: 0
 kvflowcontrol.tokens.eval.elastic.available     : 8388608
 kvflowcontrol.tokens.eval.elastic.deducted      : 18874368
 kvflowcontrol.tokens.eval.elastic.returned      : 18874368
@@ -120,14 +120,33 @@ history
 metrics
 ----
 kvflowcontrol.streams.eval.regular.total_count  : 2
-kvflowcontrol.streams.eval.regular.blocked_count: 1
+kvflowcontrol.streams.eval.regular.blocked_count: 0
 kvflowcontrol.tokens.eval.regular.available     : 33554432
 kvflowcontrol.tokens.eval.regular.deducted      : 40894464
 kvflowcontrol.tokens.eval.regular.returned      : 40894464
 kvflowcontrol.tokens.eval.regular.unaccounted   : 0
 kvflowcontrol.streams.eval.elastic.total_count  : 2
-kvflowcontrol.streams.eval.elastic.blocked_count: 1
+kvflowcontrol.streams.eval.elastic.blocked_count: 0
 kvflowcontrol.tokens.eval.elastic.available     : 16777216
 kvflowcontrol.tokens.eval.elastic.deducted      : 50331648
+kvflowcontrol.tokens.eval.elastic.returned      : 50331648
+kvflowcontrol.tokens.eval.elastic.unaccounted   : 0
+
+adjust
+class=regular delta=-16MiB
+----
+
+metrics
+----
+kvflowcontrol.streams.eval.regular.total_count  : 2
+kvflowcontrol.streams.eval.regular.blocked_count: 1
+kvflowcontrol.tokens.eval.regular.available     : 16777216
+kvflowcontrol.tokens.eval.regular.deducted      : 57671680
+kvflowcontrol.tokens.eval.regular.returned      : 40894464
+kvflowcontrol.tokens.eval.regular.unaccounted   : 0
+kvflowcontrol.streams.eval.elastic.total_count  : 2
+kvflowcontrol.streams.eval.elastic.blocked_count: 1
+kvflowcontrol.tokens.eval.elastic.available     : 0
+kvflowcontrol.tokens.eval.elastic.deducted      : 67108864
 kvflowcontrol.tokens.eval.elastic.returned      : 50331648
 kvflowcontrol.tokens.eval.elastic.unaccounted   : 0
