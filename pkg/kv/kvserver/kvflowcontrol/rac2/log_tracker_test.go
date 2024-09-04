@@ -12,8 +12,6 @@ package rac2
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -190,22 +188,6 @@ func TestLogTracker(t *testing.T) {
 	}
 
 	var tracker LogTracker
-	state := func() string {
-		var b strings.Builder
-		fmt.Fprintln(&b, tracker.String())
-		for pri, marks := range tracker.waiting {
-			if len(marks) == 0 {
-				continue
-			}
-			fmt.Fprintf(&b, "%s:", raftpb.Priority(pri))
-			for _, mark := range marks {
-				fmt.Fprintf(&b, " %+v", mark)
-			}
-			fmt.Fprintf(&b, "\n")
-		}
-		return b.String()
-	}
-
 	ctx := context.Background()
 	run := func(t *testing.T, d *datadriven.TestData) (out string) {
 		defer func() {
@@ -218,31 +200,31 @@ func TestLogTracker(t *testing.T) {
 		case "reset": // Example: reset term=1 index=10
 			stable := readMark(t, d, "index")
 			tracker = NewLogTracker(stable)
-			return state()
+			return tracker.DebugString()
 
 		case "append": // Example: append term=10 after=100 to=200
 			var after uint64
 			d.ScanArgs(t, "after", &after)
 			to := readMark(t, d, "to")
 			tracker.Append(ctx, after, to)
-			return state()
+			return tracker.DebugString()
 
 		case "sync": // Example: sync term=10 index=100
 			mark := readMark(t, d, "index")
 			tracker.LogSynced(ctx, mark)
-			return state()
+			return tracker.DebugString()
 
 		case "register": // Example: register term=10 index=100 pri=LowPri
 			mark := readMark(t, d, "index")
 			pri := readPri(t, d)
 			tracker.Register(ctx, mark, pri)
-			return state()
+			return tracker.DebugString()
 
 		case "admit": // Example: admit term=10 index=100 pri=LowPri
 			mark := readMark(t, d, "index")
 			pri := readPri(t, d)
 			tracker.LogAdmitted(ctx, mark, pri)
-			return state()
+			return tracker.DebugString()
 
 		default:
 			t.Fatalf("unknown command: %s", d.Cmd)
