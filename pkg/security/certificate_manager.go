@@ -14,10 +14,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -43,6 +43,7 @@ import (
 //     fall back on 'node.crt'.
 type CertificateManager struct {
 	tenantIdentifier uint64
+	timeSource       timeutil.TimeSource
 	certnames.Locator
 
 	tlsSettings TLSSettings
@@ -95,8 +96,8 @@ func makeCertificateManager(
 	return &CertificateManager{
 		Locator:          certnames.MakeLocator(certsDir),
 		tenantIdentifier: o.tenantIdentifier,
+		timeSource:       o.timeSource,
 		tlsSettings:      tlsSettings,
-		certMetrics:      makeMetrics(),
 	}
 }
 
@@ -104,6 +105,9 @@ type cmOptions struct {
 	// tenantIdentifier, if set, specifies the tenant to use for loading tenant
 	// client certs.
 	tenantIdentifier uint64
+
+	// timeSource, if set, specifies the time source with which the metrics are set.
+	timeSource timeutil.TimeSource
 }
 
 // Option is an option to NewCertificateManager.
@@ -115,6 +119,14 @@ type Option func(*cmOptions)
 func ForTenant(tenantIdentifier uint64) Option {
 	return func(opts *cmOptions) {
 		opts.tenantIdentifier = tenantIdentifier
+	}
+}
+
+// WithTimeSource allows the caller to pass a time source to be used
+// by the Metrics struct (mostly for testing).
+func WithTimeSource(ts timeutil.TimeSource) Option {
+	return func(opts *cmOptions) {
+		opts.timeSource = ts
 	}
 }
 
@@ -196,6 +208,7 @@ func (cm *CertificateManager) MaybeUpsertClientExpiration(
 			identity.Normalized(),
 			expiration,
 			cm.certMetrics.ClientExpiration,
+			cm.certMetrics.ClientTTL,
 		)
 	}
 }
@@ -391,46 +404,8 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.tenantCert = tenantCert
 	cm.tenantSigningCert = tenantSigningCert
 
-	cm.updateMetricsLocked()
+	cm.certMetrics = cm.createMetricsLocked()
 	return nil
-}
-
-// updateMetricsLocked updates the values on the certificate metrics.
-// The metrics may not exist (eg: in tests that build their own CertificateManager).
-// If the corresponding certificate is missing or invalid (Error != nil), we reset the
-// metric to zero.
-// cm.mu must be held to protect the certificates. Metrics do their own atomicity.
-func (cm *CertificateManager) updateMetricsLocked() {
-	maybeSetMetric := func(m *metric.Gauge, ci *CertInfo) {
-		if m == nil {
-			return
-		}
-		if ci != nil && ci.Error == nil {
-			m.Update(ci.ExpirationTime.Unix())
-		} else {
-			m.Update(0)
-		}
-	}
-
-	// CA certificate expiration.
-	maybeSetMetric(cm.certMetrics.CAExpiration, cm.caCert)
-
-	// Client CA certificate expiration.
-	maybeSetMetric(cm.certMetrics.ClientCAExpiration, cm.clientCACert)
-
-	// UI CA certificate expiration.
-	maybeSetMetric(cm.certMetrics.UICAExpiration, cm.uiCACert)
-
-	// Node certificate expiration.
-	// TODO(marc): we need to examine the entire certificate chain here, if the CA cert
-	// used to sign the node cert expires sooner, then that is the expiration time to report.
-	maybeSetMetric(cm.certMetrics.NodeExpiration, cm.nodeCert)
-
-	// Node client certificate expiration.
-	maybeSetMetric(cm.certMetrics.NodeClientExpiration, cm.nodeClientCert)
-
-	// UI certificate expiration.
-	maybeSetMetric(cm.certMetrics.UIExpiration, cm.uiCert)
 }
 
 // GetServerTLSConfig returns a server TLS config with a callback to fetch the

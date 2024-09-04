@@ -65,6 +65,7 @@ go_test(
         "cert_expiry_cache_test.go",
         "certificate_loader_test.go",
         "certificate_manager_test.go",
+        "certificate_metrics_test.go",
         "certs_rotation_test.go",
         "certs_tenant_test.go",
         "certs_test.go",

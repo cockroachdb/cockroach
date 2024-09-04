@@ -175,6 +175,11 @@ func (g *Gauge) Update(val int64) {
 	g.parent.g.Inc(val - old)
 }
 
+// UpdateFn updates the function on the gauge.
+func (g *Gauge) UpdateFn(fn func() int64) {
+	g.fn = fn
+}
+
 // AggGaugeFloat64 maintains a value as the sum of its children. The gauge will
 // report to crdb-internal time series only the aggregate sum of all of its
 // children, while its children are additionally exported to prometheus via the
