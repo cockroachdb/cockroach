@@ -58,6 +58,7 @@ type Progress struct {
 
 	// matchCommit is the commit index at which the follower is known to match the
 	// leader. It is durable on the follower.
+	// Invariant: matchCommit <= sentCommit
 	matchCommit uint64
 
 	// State defines how the leader should interact with the follower.
@@ -208,9 +209,11 @@ func (pr *Progress) IsFollowerCommitStale(index uint64) bool {
 	return index > pr.matchCommit && pr.matchCommit+1 < pr.Next
 }
 
-// SentCommit updates the sentCommit.
-func (pr *Progress) SentCommit(commit uint64) {
-	pr.sentCommit = commit
+// MaybeUpdateSentCommit updates the sentCommit if it needs to be updated.
+func (pr *Progress) MaybeUpdateSentCommit(commit uint64) {
+	if commit > pr.sentCommit {
+		pr.sentCommit = commit
+	}
 }
 
 // MaybeUpdate is called when an MsgAppResp arrives from the follower, with the
@@ -226,10 +229,11 @@ func (pr *Progress) MaybeUpdate(n uint64) bool {
 }
 
 // MaybeUpdateMatchCommit updates the match commit from a follower if it's
-// larger than the previous received commit.
+// larger than the previous match commit.
 func (pr *Progress) MaybeUpdateMatchCommit(commit uint64) {
 	if commit > pr.matchCommit {
 		pr.matchCommit = commit
+		pr.sentCommit = max(pr.sentCommit, commit) // Invariant: SentCommit >= MatchCommit
 	}
 }
 
