@@ -367,8 +367,28 @@ type raft struct {
 	//
 	// TODO(arul): This should be populated when responding to a MsgFortify.
 	leadEpoch pb.Epoch
-	// leadTransferee is id of the leader transfer target when its value is not zero.
-	// Follow the procedure defined in raft thesis 3.10.
+	// leadTransferee, if set, is the id of the leader transfer target during a
+	// pending leadership transfer. The value is set while the outgoing leader
+	// (this node) is catching the target up on its log. During this time, the
+	// leader will drop incoming proposals to give the transfer target time to
+	// catch up. Once the transfer target is caught up, the leader will send it
+	// a MsgTimeoutNow to encourage it to campaign immediately while bypassing
+	// pre-vote and leader support safeguards. As soon as the MsgTimeoutNow is
+	// sent, the leader will step down to a follower, as it has irrevocably
+	// compromised its leadership term by giving the target permission to
+	// overthrow it.
+	//
+	// For cases where the transfer target is already caught up on the log at the
+	// time that the leader receives a MsgTransferLeader, the MsgTimeoutNow will
+	// be sent immediately and the leader will step down to a follower without
+	// ever setting this field.
+	//
+	// In either case, if the transfer fails after the MsgTimeoutNow has been
+	// sent, the leader (who has stepped down to a follower) must call a new
+	// election at a new term in order to reestablish leadership.
+	//
+	// This roughly follows the procedure defined in the raft thesis, section
+	// 3.10: Leadership transfer extension.
 	leadTransferee pb.PeerID
 	// Only one conf change may be pending (in the log, but not yet
 	// applied) at a time. This is enforced via pendingConfIndex, which
@@ -1683,7 +1703,7 @@ func stepLeader(r *raft, m pb.Message) error {
 				// Transfer leadership is in progress.
 				if m.From == r.leadTransferee && pr.Match == r.raftLog.lastIndex() {
 					r.logger.Infof("%x sent MsgTimeoutNow to %x after received MsgAppResp", r.id, m.From)
-					r.sendTimeoutNow(m.From)
+					r.transferLeader(m.From)
 				}
 			}
 		}
@@ -1739,13 +1759,23 @@ func stepLeader(r *raft, m pb.Message) error {
 		}
 		// Transfer leadership to third party.
 		r.logger.Infof("%x [term %d] starts to transfer leadership to %x", r.id, r.Term, leadTransferee)
-		// Transfer leadership should be finished in one electionTimeout, so reset r.electionElapsed.
+		// Transfer leadership should be finished in one electionTimeout, so reset
+		// r.electionElapsed. If the transfer target is not caught up on its log by
+		// then, the transfer is aborted and the leader can resume normal operation.
+		// See raft.abortLeaderTransfer.
 		r.electionElapsed = 0
 		r.leadTransferee = leadTransferee
 		if pr.Match == r.raftLog.lastIndex() {
-			r.sendTimeoutNow(leadTransferee)
 			r.logger.Infof("%x sends MsgTimeoutNow to %x immediately as %x already has up-to-date log", r.id, leadTransferee, leadTransferee)
+			r.transferLeader(leadTransferee)
 		} else {
+			// If the transfer target is not initially caught up on its log, we don't
+			// sent it a MsgTimeoutNow immediately. Instead, we eagerly try to catch
+			// it up on its log so that it will be able to win the election when it
+			// campaigns (recall that a candidate can only win an election if its log
+			// is up-to-date). If we are able to successfully catch it up in time,
+			// before the electionElapsed timeout fires, we call raft.transferLeader
+			// in response to receiving the final MsgAppResp.
 			pr.MsgAppProbesPaused = false
 			r.maybeSendAppend(leadTransferee)
 		}
@@ -1876,6 +1906,8 @@ func stepFollower(r *raft, m pb.Message) error {
 		//	r.logger.Infof("%x [term %d] ignored MsgTimeoutNow from %x due to leader fortification", r.id, r.Term, m.From)
 		//	return nil
 		//}
+		// TODO(nvanbenschoten): a MsgTimeoutNow is only valid to replace the
+		// leader in the term that sent it.
 		r.logger.Infof("%x [term %d] received MsgTimeoutNow from %x and starts an election to get leadership", r.id, r.Term, m.From)
 		// Leadership transfers never use pre-vote even if r.preVote is true; we
 		// know we are not recovering from a partition so there is no need for the
@@ -2278,8 +2310,10 @@ func (r *raft) resetRandomizedElectionTimeout() {
 	r.randomizedElectionTimeout = r.electionTimeout + globalRand.Intn(r.electionTimeout)
 }
 
-func (r *raft) sendTimeoutNow(to pb.PeerID) {
+func (r *raft) transferLeader(to pb.PeerID) {
+	assertTrue(r.state == StateLeader, "only the leader can transfer leadership")
 	r.send(pb.Message{To: to, Type: pb.MsgTimeoutNow})
+	r.becomeFollower(r.Term, r.lead)
 }
 
 func (r *raft) abortLeaderTransfer() {
