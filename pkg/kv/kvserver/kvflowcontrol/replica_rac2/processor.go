@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -132,13 +133,13 @@ type RaftNode interface {
 	StepMsgAppRespForAdmittedLocked(raftpb.Message) error
 }
 
-// AdmittedPiggybacker is used to enqueue MsgAppResp messages whose purpose is
-// to advance Admitted. For efficiency, these need to be piggybacked on other
-// messages being sent to the given leader node. The StoreID and RangeID are
-// provided so that the leader node can route the incoming message to the
-// relevant range.
+// AdmittedPiggybacker is used to enqueue admitted vector messages addressed to
+// replicas on a particular node. For efficiency, these need to be piggybacked
+// on other messages being sent to the given leader node. The store / range /
+// replica IDs are provided so that the leader node can route the incoming
+// message to the relevant range.
 type AdmittedPiggybacker interface {
-	AddMsgAppRespForLeader(roachpb.NodeID, roachpb.StoreID, roachpb.RangeID, raftpb.Message)
+	Add(roachpb.NodeID, kvflowcontrolpb.PiggybackedAdmittedState)
 }
 
 // EntryForAdmission is the information provided to the admission control (AC)
@@ -750,8 +751,14 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 		p.opts.Replica.MuUnlock()
 		if p.mu.leader.rc == nil && p.mu.leaderNodeID != 0 {
 			// Follower, and know leaderNodeID, leaderStoreID.
-			p.opts.AdmittedPiggybacker.AddMsgAppRespForLeader(
-				p.mu.leaderNodeID, p.mu.leaderStoreID, p.opts.RangeID, msgResp)
+			// TODO(pav-kv): populate the message correctly.
+			p.opts.AdmittedPiggybacker.Add(p.mu.leaderNodeID, kvflowcontrolpb.PiggybackedAdmittedState{
+				RangeID:       p.opts.RangeID,
+				ToStoreID:     p.mu.leaderStoreID,
+				FromReplicaID: p.opts.ReplicaID,
+				ToReplicaID:   roachpb.ReplicaID(msgResp.To),
+				Admitted:      kvflowcontrolpb.AdmittedState{},
+			})
 		}
 		// Else if the local replica is the leader, we have already told it
 		// about the update by calling SetAdmittedLocked. If the leader is not
