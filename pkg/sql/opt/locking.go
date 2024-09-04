@@ -91,9 +91,10 @@ func (l Locking) IsLocking() bool {
 // IsNoOp returns true if none of the locking properties are set. It differs
 // from IsLocking in that it considers all of the locking properties, instead of
 // only Strength. Currently, the only locking property that can be set when
-// Strength=ForNone is WaitPolicy=LockWaitSkipLocked. So we can say: IsNoOp
-// returns false if IsLocking returns true OR the SKIP LOCKED wait policy is in
-// effect.
+// Strength=ForNone is WaitPolicy=LockWaitSkipLocked or
+// WaitPolicy=LockWaitError. So we can say: IsNoOp returns false if IsLocking
+// returns true OR the SKIP LOCKED wait policy is in effect OR the NOWAIT wait
+// policy is in effect.
 func (l Locking) IsNoOp() bool {
 	return l == Locking{}
 }
