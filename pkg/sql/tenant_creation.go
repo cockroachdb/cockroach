@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -140,9 +141,21 @@ func (p *planner) createTenantInternal(
 		return tid, nil
 	}
 
+	return BootstrapTenant(ctx, p.execCfg, p.Txn(), info, initialTenantZoneConfig)
+}
+
+// BootstrapTenant bootstraps the span of the newly created tenant identified in
+// the passed tenant info using the passed zone config.
+func BootstrapTenant(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	txn *kv.Txn,
+	info mtinfopb.TenantInfoWithUsage,
+	zfcg *zonepb.ZoneConfig,
+) (roachpb.TenantID, error) {
 	// Retrieve the possibly auto-generated ID.
-	tenantID = info.ID
-	tid = roachpb.MustMakeTenantID(tenantID)
+	tenantID := info.ID
+	tid := roachpb.MustMakeTenantID(tenantID)
 
 	// Initialize the tenant's keyspace.
 	var tenantVersion clusterversion.ClusterVersion
@@ -152,18 +165,18 @@ func (p *planner) createTenantInternal(
 
 	var bootstrapVersionOverride clusterversion.Key
 	switch {
-	case p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride != 0:
+	case execCfg.EvalContextTestingKnobs.TenantLogicalVersionKeyOverride != 0:
 		// An override was passed using testing knobs. Bootstrap the cluster
 		// using this override.
-		tenantVersion.Version = p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride.Version()
-		bootstrapVersionOverride = p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride
-	case p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.Latest):
+		tenantVersion.Version = execCfg.EvalContextTestingKnobs.TenantLogicalVersionKeyOverride.Version()
+		bootstrapVersionOverride = execCfg.EvalContextTestingKnobs.TenantLogicalVersionKeyOverride
+	case execCfg.Settings.Version.IsActive(ctx, clusterversion.Latest):
 		// The cluster is running the latest version.
 		// Use this version to create the tenant and bootstrap it using the host
 		// cluster's bootstrapping logic.
 		tenantVersion.Version = clusterversion.Latest.Version()
 		bootstrapVersionOverride = 0
-	case p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.PreviousRelease):
+	case execCfg.Settings.Version.IsActive(ctx, clusterversion.PreviousRelease):
 		// If the previous major version is active, use that version to create the
 		// tenant and bootstrap it just like the previous major version binary
 		// would, using hardcoded initial values.
@@ -176,12 +189,12 @@ func (p *planner) createTenantInternal(
 	}
 
 	initialValuesOpts := bootstrap.InitialValuesOpts{
-		DefaultZoneConfig:       initialTenantZoneConfig,
-		DefaultSystemZoneConfig: initialTenantZoneConfig,
+		DefaultZoneConfig:       zfcg,
+		DefaultSystemZoneConfig: zfcg,
 		OverrideKey:             bootstrapVersionOverride,
 		Codec:                   codec,
 	}
-	kvs, splits, err = initialValuesOpts.GenerateInitialValues()
+	kvs, splits, err := initialValuesOpts.GenerateInitialValues()
 	if err != nil {
 		return tid, err
 	}
@@ -201,11 +214,11 @@ func (p *planner) createTenantInternal(
 		kvs = append(kvs, tenantSettingKV)
 	}
 
-	b := p.Txn().NewBatch()
+	b := txn.NewBatch()
 	for _, kv := range kvs {
 		b.CPut(kv.Key, &kv.Value, nil)
 	}
-	if err := p.Txn().Run(ctx, b); err != nil {
+	if err := txn.Run(ctx, b); err != nil {
 		if errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
 			return tid, errors.Wrap(err, "programming error: "+
 				"tenant already exists but was not in system.tenants table")
@@ -226,9 +239,9 @@ func (p *planner) createTenantInternal(
 	// quickly (but asynchronously) be recreated once the KV layer notices the
 	// updated system.tenants table in the gossipped SystemConfig, or if using
 	// the span configs infrastructure, in `system.span_configurations`.
-	expTime := p.ExecCfg().Clock.Now().Add(time.Hour.Nanoseconds(), 0)
+	expTime := execCfg.Clock.Now().Add(time.Hour.Nanoseconds(), 0)
 	for _, key := range splits {
-		if err := p.ExecCfg().DB.AdminSplit(ctx, key, expTime); err != nil {
+		if err := execCfg.DB.AdminSplit(ctx, key, expTime); err != nil {
 			return tid, err
 		}
 	}
