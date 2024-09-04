@@ -26,6 +26,10 @@ import (
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
+// updateJobExecFn specifies the function that is run on each iteration of the
+// table metadata update job. It can be overriden in tests.
+var updateJobExecFn func(context.Context, isql.Executor) error = updateTableMetadataCache
+
 type tableMetadataUpdateJobResumer struct {
 	job *jobs.Job
 }
@@ -55,19 +59,45 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	// Channel used to signal the job should run.
 	signalCh := execCtx.ExecCfg().SQLStatusServer.GetUpdateTableMetadataCacheSignal()
 
-	for {
+	settings := execCtx.ExecCfg().Settings
+	// Register callbacks to signal the job to reset the timer when timer related settings change.
+	scheduleSettingsCh := make(chan struct{})
+	tableMetadataCacheAutoUpdatesEnabled.SetOnChange(&settings.SV, func(_ context.Context) {
 		select {
+		case scheduleSettingsCh <- struct{}{}:
+		default:
+		}
+	})
+	tableMetadataCacheValidDuration.SetOnChange(&settings.SV, func(_ context.Context) {
+		select {
+		case scheduleSettingsCh <- struct{}{}:
+		default:
+		}
+	})
+
+	var timer timeutil.Timer
+	for {
+		if tableMetadataCacheAutoUpdatesEnabled.Get(&settings.SV) {
+			timer.Reset(tableMetadataCacheValidDuration.Get(&settings.SV))
+		}
+		select {
+		case <-scheduleSettingsCh:
+			timer.Stop()
+			continue
+		case <-timer.C:
+			timer.Read = true
+			log.Info(ctx, "running table metadata update job after data cache expiration")
 		case <-signalCh:
-			log.Infof(ctx, "running table metadata update job")
-			metrics.NumRuns.Inc(1)
-			j.updateLastRunTime(ctx)
-
-			if err := updateTableMetadataCache(ctx, execCtx.ExecCfg().InternalDB.Executor()); err != nil {
-				log.Errorf(ctx, "%s", err.Error())
-			}
-
+			log.Info(ctx, "running table metadata update job via grpc signal")
 		case <-ctx.Done():
 			return ctx.Err()
+		}
+
+		// Run table metadata update job.
+		metrics.NumRuns.Inc(1)
+		j.updateLastRunTime(ctx)
+		if err := updateJobExecFn(ctx, execCtx.ExecCfg().InternalDB.Executor()); err != nil {
+			log.Errorf(ctx, "error running table metadata update job: %s", err)
 		}
 	}
 }
@@ -132,7 +162,7 @@ func (m TableMetadataUpdateJobMetrics) MetricStruct() {}
 func newTableMetadataUpdateJobMetrics() metric.Struct {
 	return TableMetadataUpdateJobMetrics{
 		NumRuns: metric.NewCounter(metric.Metadata{
-			Name:        "tablemetadatacache.update_job.runs",
+			Name:        "obs.tablemetadata.update_job.runs",
 			Help:        "The total number of runs of the update table metadata job.",
 			Measurement: "Executions",
 			Unit:        metric.Unit_COUNT,
