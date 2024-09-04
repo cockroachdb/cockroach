@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -24,12 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/decommissioning"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -38,12 +41,35 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 )
 
+// DecommissioningPeriodicNudgeInterval is the interval at which to nudge the
+// progress of decommissioning nodes by enqueueing their replicas into the
+// replicate queue. When set to a zero value, nudging is disabled.
+var DecommissioningPeriodicNudgeInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"server.decommissioning.periodic_nudge_interval",
+	"the interval at which to nudge the progress of decommissioning nodes by "+
+		"enqueuing their replicas for decommissioning, when set to a non-zero value, "+
+		"otherwise no nudging will occur other than when a node is first marked as "+
+		"decommissioning",
+	0, /* disabled by default */
+	settings.NonNegativeDuration,
+)
+
 // decommissioningNodeMap tracks the set of nodes that we know are
 // decommissioning. This map is used to inform whether we need to proactively
 // enqueue some decommissioning node's ranges for rebalancing.
 type decommissioningNodeMap struct {
 	syncutil.RWMutex
-	nodes map[roachpb.NodeID]interface{}
+	stopper *stop.Stopper
+	sv      *settings.Values
+	nodes   map[roachpb.NodeID]DecommissioningNodeInfo
+}
+
+type DecommissioningNodeInfo struct {
+	// LastReplicaCount is the number of replicas that were enqueued for
+	// processing the last time we checked the decommissioning node.
+	LastReplicaCount int
+	checking         bool
 }
 
 // makeOnNodeDecommissioningCallback returns a callback that enqueues the
@@ -54,58 +80,124 @@ func (t *decommissioningNodeMap) makeOnNodeDecommissioningCallback(
 ) func(id roachpb.NodeID) {
 	return func(decommissioningNodeID roachpb.NodeID) {
 		ctx := context.Background()
-		t.Lock()
-		defer t.Unlock()
-		if _, ok := t.nodes[decommissioningNodeID]; ok {
-			// We've already enqueued this node's replicas up for processing.
-			// Nothing more to do.
+		// Attempt to process the decommissioning replicas once immediately. If the
+		// check interval is non-zero, then we also kick off a periodic ticker to
+		// check for any decommissioning replicas remaining on the decommissioning
+		// node, which the stores have a lease for.
+		t.processDecommissioningReplicas(ctx, stores, decommissioningNodeID)
+
+		checkDuration := DecommissioningPeriodicNudgeInterval.Get(t.sv)
+		if checkDuration == 0 {
+			// If nudging is disabled, we're done.
 			return
 		}
-		t.nodes[decommissioningNodeID] = struct{}{}
 
-		logLimiter := log.Every(5 * time.Second) // avoid log spam
-		if err := stores.VisitStores(func(store *kvserver.Store) error {
-			// For each range that we have a lease for, check if it has a replica
-			// on the decommissioning node. If so, proactively enqueue this replica
-			// into our local replicateQueue.
-			store.VisitReplicas(
-				func(replica *kvserver.Replica) (wantMore bool) {
-					shouldEnqueue := replica.Desc().Replicas().HasReplicaOnNode(decommissioningNodeID) &&
-						// Only bother enqueuing if we own the lease for this replica.
-						replica.OwnsValidLease(ctx, replica.Clock().NowAsClockTimestamp())
-					if !shouldEnqueue {
-						return true /* wantMore */
+		if shouldTick := func() bool {
+			t.Lock()
+			defer t.Unlock()
+
+			if info, ok := t.nodes[decommissioningNodeID]; ok && !info.checking && info.LastReplicaCount > 0 {
+				// We aren't already checking this node, so we should.
+				info.checking = true
+				t.nodes[decommissioningNodeID] = info
+				return true
+			}
+			// The node is either already decomissioned or we're already checking
+			// it. In either case, we don't need to schedule another check
+			// ticker.
+			return false
+		}(); !shouldTick {
+			return
+		}
+
+		// Schedule a periodic check to ensure that we've processed all replicas
+		// on the decommissioning node.
+		if err := t.stopper.RunAsyncTask(ctx,
+			fmt.Sprintf("decommissioning-node-check n%d", decommissioningNodeID),
+			func(ctx context.Context) {
+				ticker := time.NewTicker(checkDuration)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-t.stopper.ShouldQuiesce():
+						return
+					case <-ticker.C:
+						if replicaCount := t.processDecommissioningReplicas(
+							ctx, stores, decommissioningNodeID); replicaCount == 0 {
+							// Nothing more to do.
+							return
+						}
 					}
-					_, processErr, enqueueErr := store.Enqueue(
-						// NB: We elide the shouldQueue check since we _know_ that the
-						// range being enqueued has replicas on a decommissioning node.
-						// Unfortunately, until
-						// https://github.com/cockroachdb/cockroach/issues/79266 is fixed,
-						// the shouldQueue() method can return false negatives (i.e. it
-						// would return false when it really shouldn't).
-						ctx, "replicate", replica, true /* skipShouldQueue */, true, /* async */
-					)
-					if processErr != nil && logLimiter.ShouldLog() {
-						// NB: The only case where we would expect to see a processErr when
-						// enqueuing a replica async is if it does not have the lease. We
-						// are checking that above, but that check is inherently racy.
-						log.Warningf(
-							ctx, "unexpected processing error when enqueuing replica asynchronously: %v", processErr,
-						)
-					}
-					if enqueueErr != nil && logLimiter.ShouldLog() {
-						log.Warningf(ctx, "unable to enqueue replica: %s", enqueueErr)
-					}
-					return true /* wantMore */
-				})
-			return nil
-		}); err != nil {
-			// We're swallowing any errors above, so this shouldn't ever happen.
-			log.Fatalf(
-				ctx, "error while nudging replicas for decommissioning node n%d", decommissioningNodeID,
-			)
+				}
+			}); err != nil {
+			log.Errorf(ctx, "failed to start decommissioning node check for n%d: %v",
+				decommissioningNodeID, err)
 		}
 	}
+}
+
+func (t *decommissioningNodeMap) processDecommissioningReplicas(
+	ctx context.Context, stores *kvserver.Stores, decommissioningNodeID roachpb.NodeID,
+) (replicaCount int) {
+	t.Lock()
+	defer t.Unlock()
+
+	info, ok := t.nodes[decommissioningNodeID]
+	if ok && info.LastReplicaCount == 0 {
+		// We've already enqueued this node's replicas up for processing and
+		// there are no replicas remaining on the store.
+		return 0
+	}
+
+	log.Infof(ctx, "processing replicas for decommissioning node n%d", decommissioningNodeID)
+	logLimiter := log.Every(5 * time.Second) // avoid log spam
+	if err := stores.VisitStores(func(store *kvserver.Store) error {
+		// For each range that we have a lease for, check if it has a replica
+		// on the decommissioning node. If so, proactively enqueue this replica
+		// into our local replicateQueue.
+		store.VisitReplicas(
+			func(replica *kvserver.Replica) (wantMore bool) {
+				shouldEnqueue := replica.Desc().Replicas().HasReplicaOnNode(decommissioningNodeID) &&
+					// Only bother enqueuing if we own the lease for this replica.
+					replica.OwnsValidLease(ctx, replica.Clock().NowAsClockTimestamp())
+				if !shouldEnqueue {
+					return true /* wantMore */
+				}
+				replicaCount++
+				_, processErr, enqueueErr := store.Enqueue(
+					// NB: We elide the shouldQueue check since we _know_ that the
+					// range being enqueued has replicas on a decommissioning node.
+					// Unfortunately, until
+					// https://github.com/cockroachdb/cockroach/issues/79266 is fixed,
+					// the shouldQueue() method can return false negatives (i.e. it
+					// would return false when it really shouldn't).
+					ctx, "replicate", replica, true /* skipShouldQueue */, true, /* async */
+				)
+				if processErr != nil && logLimiter.ShouldLog() {
+					// NB: The only case where we would expect to see a processErr when
+					// enqueuing a replica async is if it does not have the lease. We
+					// are checking that above, but that check is inherently racy.
+					log.Warningf(
+						ctx, "unexpected processing error when enqueuing replica asynchronously: %v", processErr,
+					)
+				}
+				if enqueueErr != nil && logLimiter.ShouldLog() {
+					log.Warningf(ctx, "unable to enqueue replica: %s", enqueueErr)
+				}
+				return true /* wantMore */
+			})
+		return nil
+	}); err != nil {
+		// We're swallowing any errors above, so this shouldn't ever happen.
+		log.Fatalf(
+			ctx, "error while nudging replicas for decommissioning node n%d", decommissioningNodeID,
+		)
+	}
+	info.LastReplicaCount = replicaCount
+	t.nodes[decommissioningNodeID] = info
+	return replicaCount
 }
 
 func (t *decommissioningNodeMap) onNodeDecommissioned(nodeID roachpb.NodeID) {

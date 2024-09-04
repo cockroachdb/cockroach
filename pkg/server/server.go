@@ -508,7 +508,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	stores := kvserver.NewStores(cfg.AmbientCtx, clock)
 
 	decomNodeMap := &decommissioningNodeMap{
-		nodes: make(map[roachpb.NodeID]interface{}),
+		stopper: stopper,
+		sv:      &st.SV,
+		nodes:   make(map[roachpb.NodeID]DecommissioningNodeInfo),
 	}
 	nodeLiveness := liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
 		AmbientCtx:              cfg.AmbientCtx,

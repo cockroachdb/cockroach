@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/decommissioning"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -734,7 +735,7 @@ func TestDecommissionEnqueueReplicas(t *testing.T) {
 	skip.UnderRace(t) // can't handle 7-node clusters
 
 	ctx := context.Background()
-	enqueuedRangeIDs := make(chan roachpb.RangeID)
+	enqueuedRangeIDs := make(chan roachpb.RangeID, 1)
 	tc := serverutils.StartCluster(t, 7, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
@@ -791,6 +792,110 @@ func TestDecommissionEnqueueReplicas(t *testing.T) {
 	decommissionAndCheck(2 /* decommissioningSrvIdx */)
 	decommissionAndCheck(3 /* decommissioningSrvIdx */)
 	decommissionAndCheck(5 /* decommissioningSrvIdx */)
+}
+
+// TestDecommissionEnqueueReplicas tests that a decommissioning node's replicas
+// are proactively enqueued into their replicateQueues by the other nodes in
+// the system periodically until decommissioned. This is similar to
+// TestDecommissionEnqueueReplicas, however it requires the replica is enqueued
+// multiple times, instead of just once.
+func TestDecommissionNudgeReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t) // can't handle 7-node clusters
+
+	settings := cluster.MakeTestingClusterSettings()
+	// Enable the nudger by setting a small interval of 50ms.
+	server.DecommissioningPeriodicNudgeInterval.Override(
+		context.Background(), &settings.SV, 50*time.Millisecond)
+	ctx := context.Background()
+	enqueuedRangeIDs := make(chan roachpb.RangeID)
+	tc := serverutils.StartCluster(t, 7, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings:          settings,
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					EnqueueReplicaInterceptor: func(
+						queueName string, repl *kvserver.Replica,
+					) {
+						require.Equal(t, queueName, "replicate")
+						enqueuedRangeIDs <- repl.RangeID
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	decommissionAndCheck := func(decommissioningSrvIdx int) {
+		t.Logf("decommissioning n%d", tc.Target(decommissioningSrvIdx).NodeID)
+		// Add a scratch range's replica to a node we will decommission.
+		scratchKey := tc.ScratchRange(t)
+		decommissioningSrv := tc.Server(decommissioningSrvIdx)
+		tc.AddVotersOrFatal(t, scratchKey, tc.Target(decommissioningSrvIdx))
+
+		adminClient := decommissioningSrv.GetAdminClient(t)
+		decomNodeIDs := []roachpb.NodeID{tc.Server(decommissioningSrvIdx).NodeID()}
+		_, err := adminClient.Decommission(
+			ctx,
+			&serverpb.DecommissionRequest{
+				NodeIDs:          decomNodeIDs,
+				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
+			},
+		)
+		require.NoError(t, err)
+
+		for i := 0; i < 10; i++ {
+			// Ensure that the scratch range's replica was proactively enqueued
+			// periodically, i.e. more than once.
+			require.Equal(t, <-enqueuedRangeIDs, tc.LookupRangeOrFatal(t, scratchKey).RangeID)
+
+		}
+		testutils.SucceedsSoon(t, func() error {
+			for i := 0; i < tc.NumServers(); i++ {
+				srv := tc.Server(i)
+				if _, exists := srv.DecommissioningNodeMap()[decommissioningSrv.NodeID()]; !exists {
+					return errors.Newf("node %d not detected to be decommissioning", decommissioningSrv.NodeID())
+				}
+			}
+			return nil
+		})
+
+		// Now remove the replica from the decommissioning node and complete the
+		// decommission.
+		tc.RemoveVotersOrFatal(t, scratchKey, tc.Target(decommissioningSrvIdx))
+		_, err = adminClient.Decommission(
+			ctx,
+			&serverpb.DecommissionRequest{
+				NodeIDs:          decomNodeIDs,
+				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
+			},
+		)
+		require.NoError(t, err)
+
+		// Check that the node was removed from the decommissioning node map, being
+		// successfully decommissioned and therefore no longer nudging replicas.
+		testutils.SucceedsSoon(t, func() error {
+			for i := 0; i < tc.NumServers(); i++ {
+				srv := tc.Server(i)
+				if info, exists := srv.DecommissioningNodeMap()[decommissioningSrv.NodeID()]; exists &&
+					info.(server.DecommissioningNodeInfo).LastReplicaCount > 0 {
+					return errors.Newf("node %d not detected to be decommissioned replicas=%v",
+						decommissioningSrv.NodeID(), info.(server.DecommissioningNodeInfo).LastReplicaCount)
+				}
+			}
+			return nil
+		})
+
+		close(enqueuedRangeIDs)
+		enqueuedRangeIDs = make(chan roachpb.RangeID)
+	}
+
+	decommissionAndCheck(5 /* decommissioningSrvIdx */)
+	decommissionAndCheck(6 /* decommissioningSrvIdx */)
 }
 
 func TestAdminDecommissionedOperations(t *testing.T) {
