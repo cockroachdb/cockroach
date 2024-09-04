@@ -67,9 +67,7 @@ func (p *planner) CreateTenant(
 		return tid, pgerror.Newf(pgcode.ProgramLimitExceeded, "tenant ID %d out of range", *ctcfg.ID)
 	}
 
-	configTemplate := mtinfopb.TenantInfoWithUsage{}
-
-	return p.createTenantInternal(ctx, ctcfg, &configTemplate)
+	return p.createTenantInternal(ctx, ctcfg)
 }
 
 type createTenantConfig struct {
@@ -80,7 +78,7 @@ type createTenantConfig struct {
 }
 
 func (p *planner) createTenantInternal(
-	ctx context.Context, ctcfg createTenantConfig, configTemplate *mtinfopb.TenantInfoWithUsage,
+	ctx context.Context, ctcfg createTenantConfig,
 ) (tid roachpb.TenantID, err error) {
 	if p.EvalContext().TxnReadOnly {
 		return tid, readOnlyError("create_tenant()")
@@ -109,11 +107,7 @@ func (p *planner) createTenantInternal(
 		serviceMode = v
 	}
 
-	info := configTemplate
-
-	// Override the template fields for a fresh tenant. The other
-	// template fields remain unchanged (i.e. we reuse the template's
-	// configuration).
+	var info mtinfopb.TenantInfoWithUsage
 	info.ID = tenantID
 	info.Name = name
 	// We synchronously initialize the tenant's keyspace below, so
@@ -134,7 +128,7 @@ func (p *planner) createTenantInternal(
 		p.ExecCfg().Settings,
 		p.InternalSQLTxn(),
 		p.ExecCfg().SpanConfigKVAccessor.WithISQLTxn(ctx, p.InternalSQLTxn()),
-		info,
+		&info,
 		initialTenantZoneConfig,
 		ctcfg.IfNotExists,
 		p.ExecCfg().TenantTestingKnobs,

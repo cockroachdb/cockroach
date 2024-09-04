@@ -472,6 +472,8 @@ type processorImpl struct {
 
 var _ Processor = &processorImpl{}
 
+var _ rac2.AdmittedTracker = &processorImpl{}
+
 func NewProcessor(opts ProcessorOptions) Processor {
 	p := &processorImpl{opts: opts}
 	p.mu.enabledWhenLeader = opts.EnabledWhenLeaderLevel
@@ -968,6 +970,12 @@ func admittedIncreased(prev, next [raftpb.NumPriorities]uint64) bool {
 		}
 	}
 	return false
+}
+
+// GetAdmitted implements rac2.AdmittedTracker.
+func (p *processorImpl) GetAdmitted(replicaID roachpb.ReplicaID) rac2.AdmittedVector {
+	// TODO(pav-kv): implement
+	return rac2.AdmittedVector{}
 }
 
 // RangeControllerFactoryImpl implements RangeControllerFactory.

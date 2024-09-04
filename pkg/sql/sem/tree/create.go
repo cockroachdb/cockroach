@@ -2184,7 +2184,6 @@ func (node *CreateExternalConnection) Format(ctx *FmtCtx) {
 type CreateTenant struct {
 	IfNotExists bool
 	TenantSpec  *TenantSpec
-	Like        *LikeTenantSpec
 }
 
 // Format implements the NodeFormatter interface.
@@ -2194,20 +2193,6 @@ func (node *CreateTenant) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
 	ctx.FormatNode(node.TenantSpec)
-	ctx.FormatNode(node.Like)
-}
-
-// LikeTenantSpec represents a LIKE clause in CREATE VIRTUAL CLUSTER.
-type LikeTenantSpec struct {
-	OtherTenant *TenantSpec
-}
-
-func (node *LikeTenantSpec) Format(ctx *FmtCtx) {
-	if node.OtherTenant == nil {
-		return
-	}
-	ctx.WriteString(" LIKE ")
-	ctx.FormatNode(node.OtherTenant)
 }
 
 // CreateTenantFromReplication represents a CREATE VIRTUAL CLUSTER...FROM REPLICATION
@@ -2228,8 +2213,6 @@ type CreateTenantFromReplication struct {
 	ReplicationSourceAddress Expr
 
 	Options TenantReplicationOptions
-
-	Like *LikeTenantSpec
 }
 
 // TenantReplicationOptions  options for the CREATE/ALTER VIRTUAL CLUSTER FROM REPLICATION command.
@@ -2249,9 +2232,6 @@ func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 	// NB: we do not anonymize the tenant name because we assume that tenant names
 	// do not contain sensitive information.
 	ctx.FormatNode(node.TenantSpec)
-	if node.Like != nil {
-		ctx.FormatNode(node.Like)
-	}
 
 	if node.ReplicationSourceAddress != nil {
 		ctx.WriteString(" FROM REPLICATION OF ")

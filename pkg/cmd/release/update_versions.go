@@ -289,8 +289,9 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 	for _, repo := range reposToWorkOn {
 		repo.workOnRepoError = workOnRepo(repo)
 		if repo.workOnRepoError != nil {
-			log.Printf("workOnRepo: error occurred while working on %s: %s", repo.name(), repo.workOnRepoError)
-			workOnRepoErrors = append(workOnRepoErrors, repo.workOnRepoError)
+			err = fmt.Errorf("workOnRepo: error occurred while working on repo %s: %w", repo.name(), err)
+			workOnRepoErrors = append(workOnRepoErrors, err)
+			log.Printf("%s", err)
 		}
 	}
 
@@ -305,7 +306,10 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 		// run multiple times.
 		prDesc, err := repo.prExists()
 		if err != nil {
-			return fmt.Errorf("checking pr: %w", err)
+			err = fmt.Errorf("error while checking if pull request exists for repo %s: %w", repo.name(), err)
+			workOnRepoErrors = append(workOnRepoErrors, err)
+			log.Printf("%s", err)
+			continue
 		}
 		if prDesc != "" {
 			log.Printf("pull request for %s already exists: %s", repo.name(), prDesc)
@@ -313,19 +317,27 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 		}
 		log.Printf("pushing changes to repo %s in %s", repo.name(), dest)
 		if err := repo.push(); err != nil {
-			return fmt.Errorf("cannot push changes for %s: %w", repo.name(), err)
+			err = fmt.Errorf("error while pushing changes to repo %s: %w", repo.name(), err)
+			workOnRepoErrors = append(workOnRepoErrors, err)
+			log.Printf("%s", err)
+			continue
 		}
 		log.Printf("creating pull request for %s in %s", repo.name(), dest)
 		pr, err := repo.createPullRequest()
 		if err != nil {
-			return fmt.Errorf("cannot create pull request for %s: %w", repo.name(), err)
+			err = fmt.Errorf("error creating pull request for %s: %w", repo.name(), err)
+			workOnRepoErrors = append(workOnRepoErrors, err)
+			log.Printf("%s", err)
+			continue
 		}
 		log.Printf("Created PR: %s\n", pr)
 		prs = append(prs, pr)
 	}
 
 	if err := sendPrReport(releasedVersion, prs, smtpPassword); err != nil {
-		return fmt.Errorf("cannot send email: %w", err)
+		err = fmt.Errorf("error sending email: %w", err)
+		workOnRepoErrors = append(workOnRepoErrors, err)
+		log.Printf("%s", err)
 	}
 	if len(workOnRepoErrors) > 0 {
 		return errors.Join(workOnRepoErrors...)
