@@ -3533,10 +3533,10 @@ var allowRepeatableReadIsolation = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.txn.snapshot_isolation.enabled",
 	"set to true to allow transactions to use the REPEATABLE READ isolation "+
-		"level. At the time of writing, this setting is intended only for usage by "+
-		"CockroachDB developers.",
+		"level if specified by BEGIN/SET commands",
 	false,
 	settings.WithName("sql.txn.repeatable_read_isolation.enabled"),
+	settings.WithPublic,
 )
 
 var logIsolationLevelLimiter = log.Every(10 * time.Second)
