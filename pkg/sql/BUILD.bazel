@@ -542,6 +542,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/cache",
         "//pkg/util/cancelchecker",
+        "//pkg/util/cidr",
         "//pkg/util/collatedstring",
         "//pkg/util/ctxgroup",
         "//pkg/util/ctxlog",

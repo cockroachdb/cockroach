@@ -3737,6 +3737,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			JobsProfiler:                   p,
 			RNGFactory:                     &ex.rng.external,
 			ULIDEntropyFactory:             &ex.rng.ulidEntropy,
+			CidrLookup:                     p.execCfg.CidrLookup,
 		},
 		Tracing:              &ex.sessionTracing,
 		MemMetrics:           &ex.memMetrics,
