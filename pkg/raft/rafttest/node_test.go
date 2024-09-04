@@ -137,7 +137,7 @@ func TestPause(t *testing.T) {
 
 func waitLeader(ns []*node) int {
 	var l map[pb.PeerID]struct{}
-	var lindex int
+	var lindex = -1
 
 	for {
 		l = make(map[pb.PeerID]struct{})
@@ -152,7 +152,7 @@ func waitLeader(ns []*node) int {
 			}
 		}
 
-		if len(l) == 1 {
+		if len(l) == 1 && lindex != -1 {
 			return lindex
 		}
 	}
