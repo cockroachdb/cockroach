@@ -3069,6 +3069,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 				overreplicatedRangeCount++
 			}
 			if metrics.Decommissioning {
+				// NB: Enqueue is disabled by default from here and throttled async if
+				// enabled.
+				rep.maybeEnqueueProblemRange(ctx, now.ToTimestamp().GoTime(), metrics.LeaseValid, metrics.Leaseholder)
 				decommissioningRangeCount++
 			}
 		}
