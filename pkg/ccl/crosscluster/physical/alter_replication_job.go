@@ -51,9 +51,10 @@ var alterReplicationCutoverHeader = colinfo.ResultColumns{
 // ResolvedTenantReplicationOptions represents options from an
 // evaluated CREATE/ALTER VIRTUAL CLUSTER FROM REPLICATION command.
 type resolvedTenantReplicationOptions struct {
-	resumeTimestamp  hlc.Timestamp
-	retention        *int32
-	expirationWindow *time.Duration
+	resumeTimestamp    hlc.Timestamp
+	retention          *int32
+	expirationWindow   *time.Duration
+	enableReaderTenant bool
 }
 
 func evalTenantReplicationOptions(
@@ -89,6 +90,13 @@ func evalTenantReplicationOptions(
 		expirationWindow := time.Duration(dur.Nanos())
 		r.expirationWindow = &expirationWindow
 	}
+	if options.EnableReaderTenant != nil {
+		enabled, err := eval.Bool(ctx, options.EnableReaderTenant)
+		if err != nil {
+			return nil, err
+		}
+		r.enableReaderTenant = enabled
+	}
 	return r, nil
 }
 
@@ -108,6 +116,13 @@ func (r *resolvedTenantReplicationOptions) GetExpirationWindow() (time.Duration,
 
 func (r *resolvedTenantReplicationOptions) DestinationOptionsSet() bool {
 	return r != nil && (r.retention != nil || r.resumeTimestamp.IsSet())
+}
+
+func (r *resolvedTenantReplicationOptions) ReaderTenantEnabled() bool {
+	if r == nil || !r.enableReaderTenant {
+		return false
+	}
+	return true
 }
 
 func alterReplicationJobTypeCheck(
@@ -401,6 +416,7 @@ func alterTenantRestartReplication(
 			ReplicationSourceAddress:    alterTenantStmt.ReplicationSourceAddress,
 			Options:                     alterTenantStmt.Options,
 		},
+		roachpb.TenantID{},
 	), "creating replication job")
 }
 
