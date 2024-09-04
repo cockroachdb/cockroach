@@ -895,6 +895,8 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 
 // tickElection is run by followers and candidates after r.electionTimeout.
 func (r *raft) tickElection() {
+	assertTrue(r.state != StateLeader, "tickElection called by leader")
+
 	if r.leadEpoch != 0 {
 		if r.supportingFortifiedLeader() {
 			// There's a fortified leader and we're supporting it. Reset the
@@ -936,6 +938,8 @@ func (r *raft) tickElection() {
 
 // tickHeartbeat is run by leaders to send a MsgBeat after r.heartbeatTimeout.
 func (r *raft) tickHeartbeat() {
+	assertTrue(r.state == StateLeader, "tickHeartbeat called by non-leader")
+
 	r.heartbeatElapsed++
 	r.electionElapsed++
 
