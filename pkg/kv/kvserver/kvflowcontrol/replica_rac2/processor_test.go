@@ -160,6 +160,15 @@ func (rn *testRaftNode) StepMsgAppRespForAdmittedLocked(msg raftpb.Message) erro
 	return nil
 }
 
+func (rn *testRaftNode) FollowerStateRaftMuLocked(
+	replicaID roachpb.ReplicaID,
+) rac2.FollowerStateInfo {
+	rn.r.mu.AssertHeld()
+	fmt.Fprintf(rn.b, " RaftNode.FollowerStateRaftMuLocked(%v)\n", replicaID)
+	// TODO(kvoli,sumeerbhola): implement.
+	return rac2.FollowerStateInfo{}
+}
+
 func admittedString(admitted [raftpb.NumPriorities]uint64) string {
 	return fmt.Sprintf("[%d, %d, %d, %d]", admitted[0], admitted[1], admitted[2], admitted[3])
 }
