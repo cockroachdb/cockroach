@@ -2566,12 +2566,20 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 				AND index_columns.column_id = (columns.col->'id')::int8
 			)) AS is_in_inverted_index,
 			(EXISTS(
-				SELECT *
-				FROM crdb_internal.table_indexes
-				JOIN crdb_internal.index_columns USING (descriptor_id)
-				WHERE table_indexes.is_unique
-				AND table_indexes.descriptor_id = columns.table_id
-				AND index_columns.column_id = (columns.col->'id')::int8
+				SELECT 
+    tc.constraint_name, 
+    kcu.column_name
+		FROM 
+		    information_schema.table_constraints AS tc
+		JOIN 
+		    information_schema.key_column_usage AS kcu
+		ON 
+		    tc.constraint_name = kcu.constraint_name
+		WHERE 
+    tc.constraint_type = 'UNIQUE' 
+    AND kcu.column_name = col->>'name'
+		AND kcu.table_schema = quote_ident(schema_id::REGNAMESPACE::TEXT)
+    AND kcu.table_name = quote_ident(columns.table_name)
 			)) AS is_unique
 		FROM columns
 		WHERE NOT (
