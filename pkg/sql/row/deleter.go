@@ -137,7 +137,7 @@ func (rd *Deleter) DeleteRow(
 		}
 	}
 
-	primaryIndexKey, err := rd.Helper.encodePrimaryIndex(rd.FetchColIDtoRowIndex, values)
+	primaryIndexKey, err := rd.Helper.encodePrimaryIndexKey(rd.FetchColIDtoRowIndex, values)
 	if err != nil {
 		return err
 	}
