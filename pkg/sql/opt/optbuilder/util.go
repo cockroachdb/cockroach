@@ -710,7 +710,7 @@ func (b *Builder) resolveDataSourceRef(
 // of the memo.
 func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv privilege.Kind) {
 	if !(priv == privilege.SELECT && b.skipSelectPrivilegeChecks) {
-		err := b.catalog.CheckPrivilege(b.ctx, ds, b.catalog.GetCurrentUser(), priv)
+		err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser, priv)
 		if err != nil {
 			panic(err)
 		}

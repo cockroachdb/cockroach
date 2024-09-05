@@ -15,6 +15,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
@@ -184,6 +185,12 @@ type Builder struct {
 	// subqueryNameIdx helps generate unique subquery names during star
 	// expansion.
 	subqueryNameIdx int
+
+	// checkPrivilegeUser helps identify the username.SQLUsername for privilege
+	// checks performed. For routines that are specified with SECURITY
+	// DEFINER, the owner of the routine is checked. Otherwise, the check is
+	// against the user of the current session.
+	checkPrivilegeUser username.SQLUsername
 }
 
 // New creates a new Builder structure initialized with the given
@@ -197,13 +204,14 @@ func New(
 	stmt tree.Statement,
 ) *Builder {
 	return &Builder{
-		factory:        factory,
-		stmt:           stmt,
-		ctx:            ctx,
-		verboseTracing: log.ExpensiveLogEnabled(ctx, 2),
-		semaCtx:        semaCtx,
-		evalCtx:        evalCtx,
-		catalog:        catalog,
+		factory:            factory,
+		stmt:               stmt,
+		ctx:                ctx,
+		verboseTracing:     log.ExpensiveLogEnabled(ctx, 2),
+		semaCtx:            semaCtx,
+		evalCtx:            evalCtx,
+		catalog:            catalog,
+		checkPrivilegeUser: catalog.GetCurrentUser(),
 	}
 }
 
