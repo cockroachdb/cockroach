@@ -209,4 +209,8 @@ type Catalog interface {
 
 	// GetCurrentUser returns the username.SQLUsername of the current session.
 	GetCurrentUser() username.SQLUsername
+
+	// GetRoutineOwner returns the username.SQLUsername of the routine's
+	// (specified by routineOid) owner.
+	GetRoutineOwner(ctx context.Context, routineOid oid.Oid) (username.SQLUsername, error)
 }

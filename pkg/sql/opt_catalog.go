@@ -508,6 +508,17 @@ func (oc *optCatalog) GetCurrentUser() username.SQLUsername {
 	return oc.planner.User()
 }
 
+// GetRoutineOwner is part of the cat.Catalog interface.
+func (oc *optCatalog) GetRoutineOwner(
+	ctx context.Context, routineOid oid.Oid,
+) (username.SQLUsername, error) {
+	fnDesc, err := oc.planner.FunctionDesc(ctx, routineOid)
+	if err != nil {
+		return username.EmptyRoleName(), err
+	}
+	return fnDesc.FuncDesc().Privileges.Owner(), nil
+}
+
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
 // The wrapper might come from the cache, or it may be created now.
 func (oc *optCatalog) dataSourceForDesc(
