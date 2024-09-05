@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -1280,6 +1281,12 @@ type StoreConfig struct {
 	KVFlowHandleMetrics *kvflowhandle.Metrics
 	// KVFlowAdmittedPiggybacker is used for replication AC (flow control) v2.
 	KVFlowAdmittedPiggybacker replica_rac2.AdmittedPiggybacker
+	// KVFlowStreamTokenProvider is used for replication AC (flow control) v2 to
+	// provide token counters for replication streams.
+	KVFlowStreamTokenProvider *rac2.StreamTokenCounterProvider
+	// KVFlowEvalWaitMetrics is used for replication AC (flow control) v2 to
+	// track requests waiting for evaluation.
+	KVFlowEvalWaitMetrics *rac2.EvalWaitMetrics
 
 	// SchedulerLatencyListener listens in on scheduling latencies, information
 	// that's then used to adjust various admission control components (like how
