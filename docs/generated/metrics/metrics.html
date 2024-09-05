@@ -567,6 +567,7 @@
 <tr><td>STORAGE</td><td>rangekeybytes</td><td>Number of bytes taken up by range keys (e.g. MVCC range tombstones)</td><td>Storage</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>rangekeycount</td><td>Count of all range keys (e.g. MVCC range tombstones)</td><td>Keys</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>ranges</td><td>Number of ranges</td><td>Ranges</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>STORAGE</td><td>ranges.decommissioning</td><td>Number of ranges with at lease one replica on a decommissioning node</td><td>Ranges</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>ranges.overreplicated</td><td>Number of ranges with more live replicas than the replication target</td><td>Ranges</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>ranges.unavailable</td><td>Number of ranges with fewer live replicas than needed for quorum</td><td>Ranges</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>ranges.underreplicated</td><td>Number of ranges with fewer live replicas than the replication target</td><td>Ranges</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
