@@ -757,34 +757,6 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 	return opc.reuseMemo(ctx, newMemo)
 }
 
-// fetchPreparedMemoLegacy attempts to fetch a prepared memo. If a valid (i.e.,
-// non-stale) memo is found, it is used. Otherwise, a new statement will be
-// built. If memo reuse is not allowed, nil is returned.
-func (opc *optPlanningCtx) fetchPreparedMemoLegacy(ctx context.Context) (_ *memo.Memo, err error) {
-	prepared := opc.p.stmt.Prepared
-	p := opc.p
-	if opc.allowMemoReuse && prepared != nil && prepared.BaseMemo != nil {
-		// We are executing a previously prepared statement and a reusable memo is
-		// available.
-
-		// If the prepared memo has been invalidated by schema or other changes,
-		// re-prepare it.
-		if isStale, err := prepared.BaseMemo.IsStale(ctx, p.EvalContext(), opc.catalog); err != nil {
-			return nil, err
-		} else if isStale {
-			opc.log(ctx, "rebuilding cached memo")
-			prepared.BaseMemo, _, err = opc.buildReusableMemo(ctx, false /* buildGeneric */)
-			if err != nil {
-				return nil, err
-			}
-		}
-		opc.log(ctx, "reusing cached memo")
-		return opc.reuseMemo(ctx, prepared.BaseMemo)
-	}
-
-	return nil, nil
-}
-
 // buildExecMemo creates a fully optimized memo, possibly reusing a previously
 // cached memo as a starting point.
 //
@@ -799,29 +771,16 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		return opc.reuseMemo(ctx, resumeProc)
 	}
 
-	p := opc.p
-	if p.SessionData().PlanCacheMode == sessiondatapb.PlanCacheModeForceCustom {
-		// Fallback to the legacy logic for reusing memos if plan_cache_mode is
-		// set to force_custom_plan.
-		m, err := opc.fetchPreparedMemoLegacy(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if m != nil {
-			return m, nil
-		}
-	} else {
-		// Use new logic for reusing memos if plan_cache_mode is set to
-		// force_generic_plan or auto.
-		m, err := opc.fetchPreparedMemo(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if m != nil {
-			return m, nil
-		}
+	// Fetch and reuse a memo if a valid one is available.
+	m, err := opc.fetchPreparedMemo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if m != nil {
+		return m, nil
 	}
 
+	p := opc.p
 	if opc.useCache {
 		// Consult the query cache.
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, opc.p.stmt.SQL)
