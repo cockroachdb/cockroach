@@ -236,6 +236,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		RangeControllerFactory: replica_rac2.RangeControllerFactoryImpl{},
 		EnabledWhenLeaderLevel: r.raftMu.flowControlLevel,
 	})
+	r.raftMu.msgAppScratchForFlowControl = map[roachpb.ReplicaID]raftpb.Message{}
 	return r
 }
 
