@@ -127,7 +127,7 @@ func NewRowHelper(
 // include empty secondary index k/v pairs.
 func (rh *RowHelper) encodeIndexes(
 	ctx context.Context,
-	colIDtoRowIndex catalog.TableColMap,
+	colIDtoRowPosition catalog.TableColMap,
 	values []tree.Datum,
 	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
@@ -136,11 +136,11 @@ func (rh *RowHelper) encodeIndexes(
 	secondaryIndexEntries map[catalog.Index][]rowenc.IndexEntry,
 	err error,
 ) {
-	primaryIndexKey, err = rh.encodePrimaryIndex(colIDtoRowIndex, values)
+	primaryIndexKey, err = rh.encodePrimaryIndexKey(colIDtoRowPosition, values)
 	if err != nil {
 		return nil, nil, err
 	}
-	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(ctx, colIDtoRowIndex, values, ignoreIndexes, includeEmpty)
+	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(ctx, colIDtoRowPosition, values, ignoreIndexes, includeEmpty)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -154,7 +154,7 @@ func (rh *RowHelper) Init() {
 }
 
 // encodePrimaryIndex encodes the primary index key.
-func (rh *RowHelper) encodePrimaryIndex(
+func (rh *RowHelper) encodePrimaryIndexKey(
 	colIDtoRowIndex catalog.TableColMap, values []tree.Datum,
 ) (primaryIndexKey []byte, err error) {
 	if rh.PrimaryIndexKeyPrefix == nil {
@@ -183,7 +183,7 @@ func (rh *RowHelper) encodePrimaryIndex(
 // k/v pairs.
 func (rh *RowHelper) encodeSecondaryIndexes(
 	ctx context.Context,
-	colIDtoRowIndex catalog.TableColMap,
+	colIDtoRowPosition catalog.TableColMap,
 	values []tree.Datum,
 	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
@@ -200,7 +200,7 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 	for i := range rh.Indexes {
 		index := rh.Indexes[i]
 		if !ignoreIndexes.Contains(int(index.GetID())) {
-			entries, err := rowenc.EncodeSecondaryIndex(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowIndex, values, includeEmpty)
+			entries, err := rowenc.EncodeSecondaryIndex(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowPosition, values, includeEmpty)
 			if err != nil {
 				return nil, err
 			}

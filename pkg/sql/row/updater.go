@@ -218,7 +218,7 @@ func (ru *Updater) UpdateRow(
 		return nil, errors.Errorf("got %d values but expected %d", len(updateValues), len(ru.UpdateCols))
 	}
 
-	primaryIndexKey, err := ru.Helper.encodePrimaryIndex(ru.FetchColIDtoRowIndex, oldValues)
+	primaryIndexKey, err := ru.Helper.encodePrimaryIndexKey(ru.FetchColIDtoRowIndex, oldValues)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +254,7 @@ func (ru *Updater) UpdateRow(
 	if ru.primaryKeyColChange {
 		var newPrimaryIndexKey []byte
 		newPrimaryIndexKey, err =
-			ru.Helper.encodePrimaryIndex(ru.FetchColIDtoRowIndex, ru.newValues)
+			ru.Helper.encodePrimaryIndexKey(ru.FetchColIDtoRowIndex, ru.newValues)
 		if err != nil {
 			return nil, err
 		}
