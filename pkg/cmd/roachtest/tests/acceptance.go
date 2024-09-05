@@ -21,13 +21,14 @@ import (
 
 func registerAcceptance(r registry.Registry) {
 	testCases := map[registry.Owner][]struct {
-		name              string
-		fn                func(ctx context.Context, t test.Test, c cluster.Cluster)
-		skip              string
-		numNodes          int
-		timeout           time.Duration
-		encryptionSupport registry.EncryptionSupport
-		defaultLeases     bool
+		name               string
+		fn                 func(ctx context.Context, t test.Test, c cluster.Cluster)
+		skip               string
+		numNodes           int
+		timeout            time.Duration
+		encryptionSupport  registry.EncryptionSupport
+		defaultLeases      bool
+		incompatibleClouds []string // Already assumes AWS is incompatible.
 	}{
 		registry.OwnerKV: {
 			{name: "decommission-self", fn: runDecommissionSelf},
@@ -107,7 +108,7 @@ func registerAcceptance(r registry.Registry) {
 				Skip:              tc.skip,
 				EncryptionSupport: tc.encryptionSupport,
 				Timeout:           10 * time.Minute,
-				CompatibleClouds:  registry.AllExceptAWS,
+				CompatibleClouds:  registry.AllExceptAWS.Remove(tc.incompatibleClouds...),
 				Suites:            registry.Suites(registry.Nightly, registry.Quick),
 			}
 

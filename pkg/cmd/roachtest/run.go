@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -113,6 +114,8 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	if literalArtifactsDir == "" {
 		literalArtifactsDir = artifactsDir
 	}
+
+	roachprod.ClearClusterCache = roachtestflags.ClearClusterCache
 
 	setLogConfig(artifactsDir)
 	runnerDir := filepath.Join(artifactsDir, runnerLogsDir)
