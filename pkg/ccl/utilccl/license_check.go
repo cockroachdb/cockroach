@@ -237,15 +237,15 @@ func GetLicenseType(st *cluster.Settings) (string, error) {
 	return license.Type.String(), nil
 }
 
-// GetLicenseUsage returns the license usage.
-func GetLicenseUsage(st *cluster.Settings) (string, error) {
+// GetLicenseEnvironment returns the license environment.
+func GetLicenseEnvironment(st *cluster.Settings) (string, error) {
 	license, err := getLicense(st)
 	if err != nil {
 		return "", err
 	} else if license == nil {
 		return "", nil
 	}
-	return license.Usage.String(), nil
+	return license.Environment.String(), nil
 }
 
 // decode attempts to read a base64 encoded License.
