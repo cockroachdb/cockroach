@@ -66,10 +66,10 @@ func TestSettingAndCheckingLicense(t *testing.T) {
 func TestGetLicenseTypePresent(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range []struct {
-		typ           licenseccl.License_Type
-		expectedType  string
-		usage         licenseccl.License_Usage
-		expectedUsage string
+		typ                 licenseccl.License_Type
+		expectedType        string
+		environment         licenseccl.License_Environment
+		expectedEnvironment string
 	}{
 		{licenseccl.License_NonCommercial, "NonCommercial", licenseccl.PreProduction, "pre-production"},
 		{licenseccl.License_Enterprise, "Enterprise", licenseccl.Production, "production"},
@@ -83,7 +83,7 @@ func TestGetLicenseTypePresent(t *testing.T) {
 		lic, _ := (&licenseccl.License{
 			Type:              tc.typ,
 			ValidUntilUnixSec: 0,
-			Usage:             tc.usage,
+			Environment:       tc.environment,
 		}).Encode()
 		if err := setLicense(ctx, updater, lic); err != nil {
 			t.Fatal(err)
@@ -95,19 +95,19 @@ func TestGetLicenseTypePresent(t *testing.T) {
 		if actualType != tc.expectedType {
 			t.Fatalf("expected license type %s, got %s", tc.expectedType, actualType)
 		}
-		actualUsage, err := GetLicenseUsage(st)
+		actualEnvironment, err := GetLicenseEnvironment(st)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if actualUsage != tc.expectedUsage {
-			t.Fatalf("expected license usage %s, got %s", tc.expectedUsage, actualUsage)
+		if actualEnvironment != tc.expectedEnvironment {
+			t.Fatalf("expected license environment %s, got %s", tc.expectedEnvironment, actualEnvironment)
 		}
 	}
 }
 
-func TestUnknownUsageEnum(t *testing.T) {
-	// This literal was generated with an enum value of 100 for usage, to show
-	// what happens if we add more usages later and then try to apply one to an
+func TestUnknownEnvironmentEnum(t *testing.T) {
+	// This literal was generated with an enum value of 100 for environment, to show
+	// what happens if we add more environments later and then try to apply one to an
 	// older node which does not include it.
 	l, err := decode(`crl-0-GAIoZA`)
 	if err != nil {
@@ -116,8 +116,8 @@ func TestUnknownUsageEnum(t *testing.T) {
 	if expected, got := "Evaluation", l.Type.String(); got != expected {
 		t.Fatalf("expected license type %s, got %s", expected, got)
 	}
-	if expected, got := "other", l.Usage.String(); got != expected {
-		t.Fatalf("expected license usage %q, got %q", expected, got)
+	if expected, got := "other", l.Environment.String(); got != expected {
+		t.Fatalf("expected license environment %q, got %q", expected, got)
 	}
 }
 
