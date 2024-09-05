@@ -94,14 +94,14 @@ type DeadLetterQueueClient interface {
 	) error
 }
 
-type loggingDeadLetterQueueClient struct {
+type noopDeadLetterQueueClient struct {
 }
 
-func (dlq *loggingDeadLetterQueueClient) Create(ctx context.Context) error {
+func (dlq *noopDeadLetterQueueClient) Create(_ context.Context) error {
 	return nil
 }
 
-func (dlq *loggingDeadLetterQueueClient) Log(
+func (dlq *noopDeadLetterQueueClient) Log(
 	ctx context.Context,
 	ingestionJobID int64,
 	kv streampb.StreamEvent_KV,
@@ -169,7 +169,7 @@ func (dlq *deadLetterQueueClient) Log(
 	kv streampb.StreamEvent_KV,
 	cdcEventRow cdcevent.Row,
 	reason error,
-	stoppedRetyingReason retryEligibility,
+	stoppedRetryingReason retryEligibility,
 ) error {
 	if !cdcEventRow.IsInitialized() {
 		return errors.New("cdc event row not initialized")
@@ -177,11 +177,11 @@ func (dlq *deadLetterQueueClient) Log(
 
 	// TableID in cdcEventRow is the source table ID.
 	srcTableID := cdcEventRow.TableID
-	dstTableMd, ok := dlq.srcTableIDToDestMeta[srcTableID]
+	dstTableMeta, ok := dlq.srcTableIDToDestMeta[srcTableID]
 	if !ok {
-		return errors.Newf("failed to look up fully qualified name for table %d", dstTableMd.tableID)
+		return errors.Newf("failed to look up fully qualified name for table %d", dstTableMeta.tableID)
 	}
-	dlqTableName := dstTableMd.toDLQTableName()
+	dlqTableName := dstTableMeta.toDLQTableName()
 
 	bytes, err := protoutil.Marshal(&kv)
 	if err != nil {
@@ -205,8 +205,8 @@ func (dlq *deadLetterQueueClient) Log(
 			nil, /* txn */
 			fmt.Sprintf(insertRowStmtFallBack, dlqTableName),
 			ingestionJobID,
-			dstTableMd.tableID,
-			fmt.Sprintf("%s (%s)", reason, stoppedRetyingReason),
+			dstTableMeta.tableID,
+			fmt.Sprintf("%s (%s)", reason, stoppedRetryingReason),
 			mutationType.String(),
 			bytes,
 		); err != nil {
@@ -221,8 +221,8 @@ func (dlq *deadLetterQueueClient) Log(
 		nil, /* txn */
 		fmt.Sprintf(insertBaseStmt, dlqTableName),
 		ingestionJobID,
-		dstTableMd.tableID,
-		fmt.Sprintf("%s (%s)", reason, stoppedRetyingReason),
+		dstTableMeta.tableID,
+		fmt.Sprintf("%s (%s)", reason, stoppedRetryingReason),
 		mutationType.String(),
 		bytes,
 		jsonRow,
@@ -254,6 +254,6 @@ func TestingSetDLQ(d DeadLetterQueueClient) func() {
 	return func() { testingDLQ = v }
 }
 
-func InitLoggingDeadLetterQueueClient() DeadLetterQueueClient {
-	return &loggingDeadLetterQueueClient{}
+func InitNoopDeadLetterQueueClient() DeadLetterQueueClient {
+	return &noopDeadLetterQueueClient{}
 }
