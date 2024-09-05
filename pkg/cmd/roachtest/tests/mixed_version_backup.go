@@ -2555,8 +2555,9 @@ func registerBackupMixedVersion(r registry.Registry) {
 		NativeLibs:        registry.LibGEOS,
 		// Uses gs://cockroach-fixtures-us-east1. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
-		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
-		Suites:           registry.Suites(registry.Nightly),
+		CompatibleClouds:          registry.Clouds(spec.GCE, spec.Local),
+		Suites:                    registry.Suites(registry.Nightly),
+		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			mvt := mixedversion.NewTest(
 				ctx, t, t.L(), c, c.CRDBNodes(),

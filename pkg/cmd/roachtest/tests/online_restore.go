@@ -123,10 +123,11 @@ func registerOnlineRestorePerf(r registry.Registry) {
 						Timeout:   sp.timeout,
 						// These tests measure performance. To ensure consistent perf,
 						// disable metamorphic encryption.
-						EncryptionSupport: registry.EncryptionAlwaysDisabled,
-						CompatibleClouds:  registry.Clouds(sp.backup.cloud),
-						Suites:            sp.suites,
-						Skip:              sp.skip,
+						EncryptionSupport:         registry.EncryptionAlwaysDisabled,
+						CompatibleClouds:          registry.Clouds(sp.backup.cloud),
+						Suites:                    sp.suites,
+						TestSelectionOptOutSuites: sp.suites,
+						Skip:                      sp.skip,
 						// Takes 10 minutes on OR tests for some reason.
 						SkipPostValidations: registry.PostValidationReplicaDivergence,
 						Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -174,14 +175,15 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 	sp.initTestName()
 	r.Add(
 		registry.TestSpec{
-			Name:                sp.testName,
-			Owner:               registry.OwnerDisasterRecovery,
-			Cluster:             sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
-			Timeout:             sp.timeout,
-			CompatibleClouds:    registry.Clouds(sp.backup.cloud),
-			Suites:              sp.suites,
-			SkipPostValidations: registry.PostValidationReplicaDivergence,
-			Skip:                sp.skip,
+			Name:                      sp.testName,
+			Owner:                     registry.OwnerDisasterRecovery,
+			Cluster:                   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+			Timeout:                   sp.timeout,
+			CompatibleClouds:          registry.Clouds(sp.backup.cloud),
+			Suites:                    sp.suites,
+			TestSelectionOptOutSuites: sp.suites,
+			SkipPostValidations:       registry.PostValidationReplicaDivergence,
+			Skip:                      sp.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				defaultSeed := crdbworkload.NewUint64RandomSeed().Seed()
 				var defaultFakeTime uint32 = 1713818229 // Set to a fixed value for reproducibility
