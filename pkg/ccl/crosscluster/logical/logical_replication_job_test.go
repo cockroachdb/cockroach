@@ -648,57 +648,95 @@ func TestRandomTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
 	ctx := context.Background()
-	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
 
-	sqlA := s.SQLConn(t, serverutils.DBName("a"))
-
 	tableName := "rand_table"
-	rng, _ := randutil.NewPseudoRand()
-	createStmt := randgen.RandCreateTableWithName(
-		ctx,
-		rng,
-		tableName,
-		1,
-		false, /* isMultiregion */
-		// We do not have full support for column families.
-		randgen.SkipColumnFamilyMutation())
-	stmt := tree.SerializeForDisplay(createStmt)
-	t.Log(stmt)
-	runnerA.Exec(t, stmt)
-	runnerB.Exec(t, stmt)
-
-	// TODO(ssd): We have to turn off randomized_anchor_key
-	// because this, in combination of optimizer difference that
-	// might prevent CommitInBatch, could result in the replicated
-	// transaction being too large to commit.
-	runnerA.Exec(t, "SET CLUSTER SETTING kv.transaction.randomized_anchor_key.enabled=false")
-
-	// Workaround for the behaviour described in #127321. This
-	// ensures that we are generating rows using similar
-	// optimization decisions to our replication process.
-	runnerA.Exec(t, "SET plan_cache_mode=force_generic_plan")
-
-	numInserts := 20
-	_, err := randgen.PopulateTableWithRandData(rng,
-		sqlA, tableName, numInserts, nil)
-	require.NoError(t, err)
-
-	addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
-	runnerA.Exec(t, addCol)
-	runnerB.Exec(t, addCol)
+	SetupTablePair(t, ctx, s, runnerA, runnerB, tableName)
 
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
 
-	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
 	var jobBID jobspb.JobID
+	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
 	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
-
 	compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
+}
+
+func TestMultipleRandomTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	rng, _ := randutil.NewPseudoRand()
+	with := false
+	maybeAddWith := func(stmt string) string {
+		if !with {
+			stmt = stmt + " WITH"
+		}
+		with = true
+		return stmt
+	}
+
+	maybeAddUDF := func(stmt, tableName string) string {
+		if rng.Intn(2) == 0 {
+			// Already added an option, add comma
+			if with {
+				stmt = stmt + ","
+			}
+			stmt = maybeAddWith(stmt) + fmt.Sprintf(" FUNCTION repl_apply FOR TABLE %s", tableName)
+		}
+		return stmt
+	}
+
+	ctx := context.Background()
+	server, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	tableName1 := "rand_table_1"
+	tableName2 := "rand_table_2"
+	SetupTablePair(t, ctx, s, runnerA, runnerB, tableName1)
+	SetupTablePair(t, ctx, s, runnerA, runnerB, tableName2)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+
+	runnerB.Exec(t, fmt.Sprintf(testingUDFAcceptProposedBase, tableName1))
+
+	var jobBID jobspb.JobID
+	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLES (%[1]s, %[2]s) ON $1 INTO TABLES (%[1]s, %[2]s)", tableName1, tableName2)
+	streamStartStmt = maybeAddUDF(streamStartStmt, tableName1)
+	streamStartStmt = maybeAddUDF(streamStartStmt, tableName2)
+
+	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
+	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
+
+	compareReplicatedTables(t, s, "a", "b", tableName1, runnerA, runnerB)
+	compareReplicatedTables(t, s, "a", "b", tableName2, runnerA, runnerB)
+
+	var showJobID jobspb.JobID
+	runnerA.QueryRow(t, "SELECT job_id FROM [SHOW LOGICAL REPLICATION JOBS]").Scan(&showJobID)
+	require.Equal(t, jobBID, showJobID)
 }
 
 func TestRandomStream(t *testing.T) {
@@ -1379,6 +1417,49 @@ func WaitUntilReplicatedTime(
 		}
 		return nil
 	})
+}
+
+func SetupTablePair(
+	t *testing.T,
+	ctx context.Context,
+	s serverutils.ApplicationLayerInterface,
+	runnerA, runnerB *sqlutils.SQLRunner,
+	tableName string,
+) {
+	sqlA := s.SQLConn(t, serverutils.DBName("a"))
+
+	rng, _ := randutil.NewPseudoRand()
+	createStmt := randgen.RandCreateTableWithName(
+		ctx,
+		rng,
+		tableName,
+		1,
+		false, /* isMultiregion */
+		// We do not have full support for column families.
+		randgen.SkipColumnFamilyMutation())
+	stmt := tree.SerializeForDisplay(createStmt)
+	runnerA.Exec(t, stmt)
+	runnerB.Exec(t, stmt)
+
+	// TODO(ssd): We have to turn off randomized_anchor_key
+	// because this, in combination of optimizer difference that
+	// might prevent CommitInBatch, could result in the replicated
+	// transaction being too large to commit.
+	runnerA.Exec(t, "SET CLUSTER SETTING kv.transaction.randomized_anchor_key.enabled=false")
+
+	// Workaround for the behaviour described in #127321. This
+	// ensures that we are generating rows using similar
+	// optimization decisions to our replication process.
+	runnerA.Exec(t, "SET plan_cache_mode=force_generic_plan")
+
+	numInserts := 20
+	_, err := randgen.PopulateTableWithRandData(rng,
+		sqlA, tableName, numInserts, nil)
+	require.NoError(t, err)
+
+	addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
+	runnerA.Exec(t, addCol)
+	runnerB.Exec(t, addCol)
 }
 
 type mockBatchHandler bool
