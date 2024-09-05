@@ -551,9 +551,11 @@ func registerKVGracefulDraining(r registry.Registry) {
 			workloadStartTime := timeutil.Now()
 			desiredRunDuration := 5 * time.Minute
 			m.Go(func(ctx context.Context) error {
+				// TODO(baptist): Remove --tolerate-errors once #129427 is addressed.
+				// Don't connect to the node we are going to shut down.
 				cmd := fmt.Sprintf(
-					"./cockroach workload run kv --duration=%s --read-percent=0 --concurrency=100 --max-rate=%d {pgurl%s}",
-					desiredRunDuration, specifiedQPS, c.CRDBNodes())
+					"./cockroach workload run kv --tolerate-errors --duration=%s --read-percent=0 --concurrency=100 --max-rate=%d {pgurl%s}",
+					desiredRunDuration, specifiedQPS, c.Range(1, nodes-1))
 				t.WorkerStatus(cmd)
 				defer func() {
 					t.WorkerStatus("workload command completed")
