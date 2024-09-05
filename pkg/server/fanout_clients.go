@@ -145,7 +145,7 @@ func (t *tenantFanoutClient) dialNode(
 	if err != nil {
 		return nil, err
 	}
-	return t.rpcCtx.GRPCDialPod(instance.InstanceRPCAddr, id, instance.Locality, rpc.DefaultClass).Connect(ctx)
+	return t.rpcCtx.GRPCDialInstance(instance.InstanceRPCAddr, id, instance.Locality, rpc.DefaultClass).Connect(ctx)
 }
 
 func (t *tenantFanoutClient) getAllNodes(
