@@ -192,13 +192,13 @@ func (l *LogTracker) LogAdmitted(ctx context.Context, at LogMark, pri raftpb.Pri
 	}
 	waiting := l.waiting[pri]
 	// There is nothing to admit, or it's a stale admission.
-	if len(waiting) == 0 || at.Index < waiting[0].Index {
+	if len(waiting) == 0 || waiting[0].After(at) {
 		return
 	}
-	// Remove waiting entries preceding the admitted mark. Due to invariants, this
-	// is always a prefix of the queue.
-	for i, mark := range waiting {
-		if mark.After(at) {
+	// At least one waiting entry can be admitted. Remove all entries up to the
+	// admitted mark. Due to invariants, this is always a prefix of the queue.
+	for i, ln := 1, len(waiting); i < ln; i++ {
+		if waiting[i].After(at) {
 			l.waiting[pri] = waiting[i:]
 			return
 		}
