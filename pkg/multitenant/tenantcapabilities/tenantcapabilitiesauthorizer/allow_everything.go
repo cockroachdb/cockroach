@@ -30,7 +30,9 @@ func NewAllowEverythingAuthorizer() *AllowEverythingAuthorizer {
 }
 
 // HasCrossTenantRead returns true if a tenant can read from other tenants.
-func (n *AllowEverythingAuthorizer) HasCrossTenantRead(tenID roachpb.TenantID) bool {
+func (n *AllowEverythingAuthorizer) HasCrossTenantRead(
+	ctx context.Context, tenID roachpb.TenantID,
+) bool {
 	return true
 }
 
