@@ -288,6 +288,16 @@ func (c *Context) SetLoopbackDialer(loopbackDialFn func(context.Context) (net.Co
 	c.loopbackDialFn = loopbackDialFn
 }
 
+// StoreLivenessGracePeriod computes the grace period after a store restarts before which it will
+// not withdraw support from other stores.
+func (c *Context) StoreLivenessWithdrawalGracePeriod() time.Duration {
+	// RPCHeartbeatInterval and RPCHeartbeatTimeout ensure the remote store
+	// probes the RPC connection to the local store. DialTimeout ensures the
+	// remote store has enough time to dial the local store, and NetworkTimeout
+	// ensures the remote store's heartbeat is received by the local store.
+	return c.RPCHeartbeatInterval + c.RPCHeartbeatTimeout + base.DialTimeout + base.NetworkTimeout
+}
+
 // ContextOptions are passed to NewContext to set up a new *Context.
 // All pointer fields and TenantID are required.
 type ContextOptions struct {
