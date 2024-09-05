@@ -192,7 +192,7 @@ type rangeControllerInitState struct {
 // RangeControllerFactory abstracts RangeController creation for testing.
 type RangeControllerFactory interface {
 	// New creates a new RangeController.
-	New(state rangeControllerInitState) rac2.RangeController
+	New(ctx context.Context, state rangeControllerInitState) rac2.RangeController
 }
 
 // EnabledWhenLeaderLevel captures the level at which RACv2 is enabled when
@@ -226,6 +226,7 @@ type ProcessorOptions struct {
 	ACWorkQueue            ACWorkQueue
 	RangeControllerFactory RangeControllerFactory
 	Settings               *cluster.Settings
+	EvalWaitMetrics        *rac2.EvalWaitMetrics
 
 	EnabledWhenLeaderLevel EnabledWhenLeaderLevel
 }
@@ -310,7 +311,7 @@ type Processor interface {
 	// This may be a noop if the level has already been reached.
 	//
 	// raftMu is held.
-	SetEnabledWhenLeaderRaftMuLocked(level EnabledWhenLeaderLevel)
+	SetEnabledWhenLeaderRaftMuLocked(ctx context.Context, level EnabledWhenLeaderLevel)
 	// GetEnabledWhenLeader returns the current level. It may be used in
 	// highly concurrent settings at the leaseholder, when waiting for eval,
 	// and when encoding a proposal. Note that if the leaseholder is not the
@@ -507,7 +508,9 @@ func (p *processorImpl) OnDestroyRaftMuLocked(ctx context.Context) {
 }
 
 // SetEnabledWhenLeaderRaftMuLocked implements Processor.
-func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(level EnabledWhenLeaderLevel) {
+func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(
+	ctx context.Context, level EnabledWhenLeaderLevel,
+) {
 	p.opts.Replica.RaftMuAssertHeld()
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -533,7 +536,7 @@ func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(level EnabledWhenLeader
 		}
 	}()
 	if leaderID == p.opts.ReplicaID {
-		p.createLeaderStateRaftMuLockedProcLocked(term, nextUnstableIndex)
+		p.createLeaderStateRaftMuLockedProcLocked(ctx, term, nextUnstableIndex)
 	}
 }
 
@@ -650,7 +653,7 @@ func (p *processorImpl) makeStateConsistentRaftMuLockedProcLocked(
 		p.closeLeaderStateRaftMuLockedProcLocked(ctx)
 	}
 	if p.mu.leader.rc == nil {
-		p.createLeaderStateRaftMuLockedProcLocked(myLeaderTerm, nextUnstableIndex)
+		p.createLeaderStateRaftMuLockedProcLocked(ctx, myLeaderTerm, nextUnstableIndex)
 		return
 	}
 	// Existing RangeController.
@@ -677,7 +680,7 @@ func (p *processorImpl) closeLeaderStateRaftMuLockedProcLocked(ctx context.Conte
 }
 
 func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
-	term uint64, nextUnstableIndex uint64,
+	ctx context.Context, term uint64, nextUnstableIndex uint64,
 ) {
 	if p.mu.leader.rc != nil {
 		panic("RangeController already exists")
@@ -685,7 +688,7 @@ func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
 	func() {
 		p.mu.leader.rcReferenceUpdateMu.Lock()
 		defer p.mu.leader.rcReferenceUpdateMu.Unlock()
-		p.mu.leader.rc = p.opts.RangeControllerFactory.New(rangeControllerInitState{
+		p.mu.leader.rc = p.opts.RangeControllerFactory.New(ctx, rangeControllerInitState{
 			replicaSet:    p.raftMu.replicas,
 			leaseholder:   p.mu.leaseholderID,
 			nextRaftIndex: nextUnstableIndex,
@@ -949,6 +952,8 @@ func (p *processorImpl) AdmitForEval(
 	mode := kvflowcontrol.Mode.Get(&p.opts.Settings.SV)
 	bypass := mode == kvflowcontrol.ApplyToElastic && workClass == admissionpb.RegularWorkClass
 	if bypass {
+		p.opts.EvalWaitMetrics.OnWaiting(workClass)
+		p.opts.EvalWaitMetrics.OnBypassed(workClass, 0 /* duration */)
 		return false, nil
 	}
 	var rc rac2.RangeController
@@ -958,6 +963,8 @@ func (p *processorImpl) AdmitForEval(
 		rc = p.mu.leader.rc
 	}()
 	if rc == nil {
+		p.opts.EvalWaitMetrics.OnWaiting(workClass)
+		p.opts.EvalWaitMetrics.OnBypassed(workClass, 0 /* duration */)
 		return false, nil
 	}
 	return p.mu.leader.rc.WaitForEval(ctx, pri)
@@ -982,11 +989,34 @@ func (p *processorImpl) GetAdmitted(replicaID roachpb.ReplicaID) rac2.AdmittedVe
 //
 // TODO(sumeer): replace with real implementation once RangeController impl is
 // ready.
-// TODO(kvoli): Ensure that metrics, probe-to-close timer etc are threaded
-// through.
 type RangeControllerFactoryImpl struct {
+	evalWaitMetrics            *rac2.EvalWaitMetrics
+	streamTokenCounterProvider *rac2.StreamTokenCounterProvider
 }
 
-func (f RangeControllerFactoryImpl) New(state rangeControllerInitState) rac2.RangeController {
-	return nil
+func NewRangeControllerFactoryImpl(
+	evalWaitMetrics *rac2.EvalWaitMetrics,
+	streamTokenCounterProvider *rac2.StreamTokenCounterProvider,
+) RangeControllerFactoryImpl {
+	return RangeControllerFactoryImpl{
+		evalWaitMetrics:            evalWaitMetrics,
+		streamTokenCounterProvider: streamTokenCounterProvider,
+	}
+}
+
+func (f RangeControllerFactoryImpl) New(
+	ctx context.Context, state rangeControllerInitState,
+) rac2.RangeController {
+	return rac2.NewRangeController(
+		ctx,
+		// TODO(kvoli): Thread through other required init state and options.
+		rac2.RangeControllerOptions{
+			SSTokenCounter:  f.streamTokenCounterProvider,
+			EvalWaitMetrics: f.evalWaitMetrics,
+		},
+		rac2.RangeControllerInitState{
+			ReplicaSet:  state.replicaSet,
+			Leaseholder: state.leaseholder,
+		},
+	)
 }

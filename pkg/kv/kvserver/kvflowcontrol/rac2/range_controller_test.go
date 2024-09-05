@@ -920,16 +920,16 @@ func TestRangeController(t *testing.T) {
 					admissionpb.RegularWorkClass,
 					admissionpb.ElasticWorkClass,
 				} {
-					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.waiting[wc].GetName(), evalMetrics.waiting[wc].Value())
-					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.admitted[wc].GetName(), evalMetrics.admitted[wc].Count())
-					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.errored[wc].GetName(), evalMetrics.errored[wc].Count())
-					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.bypassed[wc].GetName(), evalMetrics.bypassed[wc].Count())
+					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Waiting[wc].GetName(), evalMetrics.Waiting[wc].Value())
+					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Admitted[wc].GetName(), evalMetrics.Admitted[wc].Count())
+					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Errored[wc].GetName(), evalMetrics.Errored[wc].Count())
+					fmt.Fprintf(&buf, "%-50v: %v\n", evalMetrics.Bypassed[wc].GetName(), evalMetrics.Bypassed[wc].Count())
 					// We only print the number of recorded durations, instead of any
 					// percentiles or cumulative wait times as these are
 					// non-deterministic in the test.
 					fmt.Fprintf(&buf, "%-50v: %v\n",
-						fmt.Sprintf("%v.count", evalMetrics.duration[wc].GetName()),
-						testingFirst(evalMetrics.duration[wc].CumulativeSnapshot().Total()))
+						fmt.Sprintf("%v.count", evalMetrics.Duration[wc].GetName()),
+						testingFirst(evalMetrics.Duration[wc].CumulativeSnapshot().Total()))
 				}
 				return buf.String()
 

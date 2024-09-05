@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -629,6 +630,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	})
 
 	admittedPiggybacker := node_rac2.NewAdmittedPiggybacker()
+	streamTokenCounterProvider := rac2.NewStreamTokenCounterProvider(st, clock)
+	evalWaitMetrics := rac2.NewEvalWaitMetrics()
+	nodeRegistry.AddMetricStruct(evalWaitMetrics)
+	nodeRegistry.AddMetricStruct(streamTokenCounterProvider.Metrics())
+
 	var raftTransportKnobs *kvserver.RaftTransportTestingKnobs
 	if knobs := cfg.TestingKnobs.RaftTransport; knobs != nil {
 		raftTransportKnobs = knobs.(*kvserver.RaftTransportTestingKnobs)
@@ -886,6 +892,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowHandles:                admissionControl.storesFlowControl,
 		KVFlowHandleMetrics:          admissionControl.kvFlowHandleMetrics,
 		KVFlowAdmittedPiggybacker:    admittedPiggybacker,
+		KVFlowStreamTokenProvider:    streamTokenCounterProvider,
+		KVFlowEvalWaitMetrics:        evalWaitMetrics,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
 		RangeCount:                   &atomic.Int64{},
 	}

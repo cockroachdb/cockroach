@@ -20,6 +20,10 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// TODO(kvoli):
+// - hookup the metrics to the registry
+// - call onBypassed etc in replica_rac2.Processor
+
 // Aliases to make the code below slightly easier to read.
 const regular, elastic = admissionpb.RegularWorkClass, admissionpb.ElasticWorkClass
 
@@ -140,85 +144,100 @@ func (f flowControlMetricType) SafeFormat(p redact.SafePrinter, _ rune) {
 	}
 }
 
-type tokenMetrics struct {
-	counterMetrics [numFlowControlMetricTypes]*tokenCounterMetrics
-	streamMetrics  [numFlowControlMetricTypes]*tokenStreamMetrics
+type TokenMetrics struct {
+	CounterMetrics [numFlowControlMetricTypes]*TokenCounterMetrics
+	StreamMetrics  [numFlowControlMetricTypes]*TokenStreamMetrics
 }
 
-func newTokenMetrics() *tokenMetrics {
-	m := &tokenMetrics{}
+var _ metric.Struct = &TokenMetrics{}
+
+// TokenMetrics implements the metric.Struct interface.
+func (m *TokenMetrics) MetricStruct() {}
+
+func NewTokenMetrics() *TokenMetrics {
+	m := &TokenMetrics{}
 	for _, typ := range []flowControlMetricType{
 		flowControlEvalMetricType,
 		flowControlSendMetricType,
 	} {
-		m.counterMetrics[typ] = newTokenCounterMetrics(typ)
-		m.streamMetrics[typ] = newTokenStreamMetrics(typ)
+		m.CounterMetrics[typ] = newTokenCounterMetrics(typ)
+		m.StreamMetrics[typ] = newTokenStreamMetrics(typ)
 	}
 	return m
 }
 
-type tokenCounterMetrics struct {
-	deducted    [admissionpb.NumWorkClasses]*metric.Counter
-	returned    [admissionpb.NumWorkClasses]*metric.Counter
-	unaccounted [admissionpb.NumWorkClasses]*metric.Counter
+type TokenCounterMetrics struct {
+	Deducted    [admissionpb.NumWorkClasses]*metric.Counter
+	Returned    [admissionpb.NumWorkClasses]*metric.Counter
+	Unaccounted [admissionpb.NumWorkClasses]*metric.Counter
 }
 
-func newTokenCounterMetrics(t flowControlMetricType) *tokenCounterMetrics {
-	m := &tokenCounterMetrics{}
+var _ metric.Struct = &TokenCounterMetrics{}
+
+// TokenCounterMetrics implements the metric.Struct interface.
+func (m *TokenCounterMetrics) MetricStruct() {}
+
+func newTokenCounterMetrics(t flowControlMetricType) *TokenCounterMetrics {
+	m := &TokenCounterMetrics{}
 	for _, wc := range []admissionpb.WorkClass{
 		admissionpb.RegularWorkClass,
 		admissionpb.ElasticWorkClass,
 	} {
-		m.deducted[wc] = metric.NewCounter(
+		m.Deducted[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClassAndType(wc, flowTokensDeducted, t),
 		)
-		m.returned[wc] = metric.NewCounter(
+		m.Returned[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClassAndType(wc, flowTokensReturned, t),
 		)
-		m.unaccounted[wc] = metric.NewCounter(
+		m.Unaccounted[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClassAndType(wc, flowTokensUnaccounted, t),
 		)
 	}
 	return m
 }
 
-func (m *tokenCounterMetrics) onTokenAdjustment(adjustment tokensPerWorkClass) {
+func (m *TokenCounterMetrics) onTokenAdjustment(adjustment tokensPerWorkClass) {
 	if adjustment.regular < 0 {
-		m.deducted[regular].Inc(-int64(adjustment.regular))
+		m.Deducted[regular].Inc(-int64(adjustment.regular))
 	} else if adjustment.regular > 0 {
-		m.returned[regular].Inc(int64(adjustment.regular))
+		m.Returned[regular].Inc(int64(adjustment.regular))
 	}
 	if adjustment.elastic < 0 {
-		m.deducted[elastic].Inc(-int64(adjustment.elastic))
+		m.Deducted[elastic].Inc(-int64(adjustment.elastic))
 	} else if adjustment.elastic > 0 {
-		m.returned[elastic].Inc(int64(adjustment.elastic))
+		m.Returned[elastic].Inc(int64(adjustment.elastic))
 	}
 }
 
-func (m *tokenCounterMetrics) onUnaccounted(unaccounted tokensPerWorkClass) {
-	m.unaccounted[regular].Inc(int64(unaccounted.regular))
-	m.unaccounted[elastic].Inc(int64(unaccounted.elastic))
+func (m *TokenCounterMetrics) onUnaccounted(unaccounted tokensPerWorkClass) {
+	m.Unaccounted[regular].Inc(int64(unaccounted.regular))
+	m.Unaccounted[elastic].Inc(int64(unaccounted.elastic))
 }
 
-type tokenStreamMetrics struct {
-	count           [admissionpb.NumWorkClasses]*metric.Gauge
-	blockedCount    [admissionpb.NumWorkClasses]*metric.Gauge
-	tokensAvailable [admissionpb.NumWorkClasses]*metric.Gauge
+type TokenStreamMetrics struct {
+	Count           [admissionpb.NumWorkClasses]*metric.Gauge
+	BlockedCount    [admissionpb.NumWorkClasses]*metric.Gauge
+	TokensAvailable [admissionpb.NumWorkClasses]*metric.Gauge
 }
 
-func newTokenStreamMetrics(t flowControlMetricType) *tokenStreamMetrics {
-	m := &tokenStreamMetrics{}
+var _ metric.Struct = &TokenStreamMetrics{}
+
+// TokenCounterMetrics implements the metric.Struct interface.
+func (m *TokenStreamMetrics) MetricStruct() {}
+
+func newTokenStreamMetrics(t flowControlMetricType) *TokenStreamMetrics {
+	m := &TokenStreamMetrics{}
 	for _, wc := range []admissionpb.WorkClass{
 		admissionpb.RegularWorkClass,
 		admissionpb.ElasticWorkClass,
 	} {
-		m.count[wc] = metric.NewGauge(
+		m.Count[wc] = metric.NewGauge(
 			annotateMetricTemplateWithWorkClassAndType(wc, totalStreamCount, t),
 		)
-		m.blockedCount[wc] = metric.NewGauge(
+		m.BlockedCount[wc] = metric.NewGauge(
 			annotateMetricTemplateWithWorkClassAndType(wc, blockedStreamCount, t),
 		)
-		m.tokensAvailable[wc] = metric.NewGauge(
+		m.TokensAvailable[wc] = metric.NewGauge(
 			annotateMetricTemplateWithWorkClassAndType(wc, flowTokensAvailable, t),
 		)
 	}
@@ -226,12 +245,17 @@ func newTokenStreamMetrics(t flowControlMetricType) *tokenStreamMetrics {
 }
 
 type EvalWaitMetrics struct {
-	waiting  [admissionpb.NumWorkClasses]*metric.Gauge
-	admitted [admissionpb.NumWorkClasses]*metric.Counter
-	errored  [admissionpb.NumWorkClasses]*metric.Counter
-	bypassed [admissionpb.NumWorkClasses]*metric.Counter
-	duration [admissionpb.NumWorkClasses]metric.IHistogram
+	Waiting  [admissionpb.NumWorkClasses]*metric.Gauge
+	Admitted [admissionpb.NumWorkClasses]*metric.Counter
+	Errored  [admissionpb.NumWorkClasses]*metric.Counter
+	Bypassed [admissionpb.NumWorkClasses]*metric.Counter
+	Duration [admissionpb.NumWorkClasses]metric.IHistogram
 }
+
+var _ metric.Struct = &EvalWaitMetrics{}
+
+// EvalWaitMetrics implements the metric.Struct interface.
+func (m *EvalWaitMetrics) MetricStruct() {}
 
 func NewEvalWaitMetrics() *EvalWaitMetrics {
 	m := &EvalWaitMetrics{}
@@ -239,19 +263,19 @@ func NewEvalWaitMetrics() *EvalWaitMetrics {
 		admissionpb.RegularWorkClass,
 		admissionpb.ElasticWorkClass,
 	} {
-		m.waiting[wc] = metric.NewGauge(
+		m.Waiting[wc] = metric.NewGauge(
 			annotateMetricTemplateWithWorkClass(wc, requestsWaiting),
 		)
-		m.admitted[wc] = metric.NewCounter(
+		m.Admitted[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClass(wc, requestsAdmitted),
 		)
-		m.errored[wc] = metric.NewCounter(
+		m.Errored[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClass(wc, requestsErrored),
 		)
-		m.bypassed[wc] = metric.NewCounter(
+		m.Bypassed[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClass(wc, requestsBypassed),
 		)
-		m.duration[wc] = metric.NewHistogram(
+		m.Duration[wc] = metric.NewHistogram(
 			metric.HistogramOptions{
 				Metadata:     annotateMetricTemplateWithWorkClass(wc, waitDuration),
 				Duration:     base.DefaultHistogramWindowInterval(),
@@ -263,24 +287,24 @@ func NewEvalWaitMetrics() *EvalWaitMetrics {
 	return m
 }
 
-func (e *EvalWaitMetrics) onWaiting(wc admissionpb.WorkClass) {
-	e.waiting[wc].Inc(1)
+func (e *EvalWaitMetrics) OnWaiting(wc admissionpb.WorkClass) {
+	e.Waiting[wc].Inc(1)
 }
 
-func (e *EvalWaitMetrics) onAdmitted(wc admissionpb.WorkClass, dur time.Duration) {
-	e.admitted[wc].Inc(1)
-	e.waiting[wc].Dec(1)
-	e.duration[wc].RecordValue(dur.Nanoseconds())
+func (e *EvalWaitMetrics) OnAdmitted(wc admissionpb.WorkClass, dur time.Duration) {
+	e.Admitted[wc].Inc(1)
+	e.Waiting[wc].Dec(1)
+	e.Duration[wc].RecordValue(dur.Nanoseconds())
 }
 
-func (e *EvalWaitMetrics) onBypassed(wc admissionpb.WorkClass, dur time.Duration) {
-	e.bypassed[wc].Inc(1)
-	e.waiting[wc].Dec(1)
-	e.duration[wc].RecordValue(dur.Nanoseconds())
+func (e *EvalWaitMetrics) OnBypassed(wc admissionpb.WorkClass, dur time.Duration) {
+	e.Bypassed[wc].Inc(1)
+	e.Waiting[wc].Dec(1)
+	e.Duration[wc].RecordValue(dur.Nanoseconds())
 }
 
-func (e *EvalWaitMetrics) onErrored(wc admissionpb.WorkClass, dur time.Duration) {
-	e.errored[wc].Inc(1)
-	e.waiting[wc].Dec(1)
-	e.duration[wc].RecordValue(dur.Nanoseconds())
+func (e *EvalWaitMetrics) OnErrored(wc admissionpb.WorkClass, dur time.Duration) {
+	e.Errored[wc].Inc(1)
+	e.Waiting[wc].Dec(1)
+	e.Duration[wc].RecordValue(dur.Nanoseconds())
 }
