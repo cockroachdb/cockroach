@@ -67,14 +67,15 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 	} {
 		sp := sp
 		r.Add(registry.TestSpec{
-			Name:              sp.name,
-			Timeout:           4 * time.Hour,
-			Owner:             registry.OwnerDisasterRecovery,
-			Cluster:           r.MakeClusterSpec(4),
-			EncryptionSupport: registry.EncryptionMetamorphic,
-			RequiresLicense:   true,
-			CompatibleClouds:  registry.OnlyGCE,
-			Suites:            registry.Suites(registry.Nightly),
+			Name:                      sp.name,
+			Timeout:                   4 * time.Hour,
+			Owner:                     registry.OwnerDisasterRecovery,
+			Cluster:                   r.MakeClusterSpec(4),
+			EncryptionSupport:         registry.EncryptionMetamorphic,
+			RequiresLicense:           true,
+			CompatibleClouds:          registry.OnlyGCE,
+			Suites:                    registry.Suites(registry.Nightly),
+			TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				backupRestoreRoundTrip(ctx, t, c, sp.metamorphicRangeSize)
 			},
