@@ -45,6 +45,7 @@ func registerCostFuzz(r registry.Registry) {
 			Suites:           registry.Suites(registry.Weekly),
 			Leases:           registry.MetamorphicLeases,
 			NativeLibs:       registry.LibGEOS,
+			Randomized:       true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runQueryComparison(ctx, t, c, &queryComparisonTest{
 					name: "costfuzz", setupName: setupName, run: runCostFuzzQuery,
