@@ -407,6 +407,15 @@ func TestProcessorBasic(t *testing.T) {
 				r.raftNode.print()
 				return builderStr()
 
+			case "synced-log":
+				var mark rac2.LogMark
+				d.ScanArgs(t, "term", &mark.Term)
+				d.ScanArgs(t, "index", &mark.Index)
+				// TODO(pav-kv): mark.Term should also be respected for correctness.
+				r.raftNode.stableIndex = mark.Index
+				r.raftNode.print()
+				return builderStr()
+
 			case "on-destroy":
 				p.OnDestroyRaftMuLocked(ctx)
 				return builderStr()
