@@ -244,7 +244,11 @@ func (l *LogTracker) LogAdmitted(ctx context.Context, at LogMark, pri raftpb.Pri
 //
 // Returns true if the admitted vector has changed.
 func (l *LogTracker) SnapSynced(ctx context.Context, mark LogMark) bool {
-	if !mark.After(l.last) {
+	// TODO(pav-kv): this should be !mark.After(l.last). We allow mark == l.last
+	// only because there is a scenario in which raft is initialized from inside
+	// applySnapshot and then this snapshot is registered again in Ready handler.
+	// Once we move initialization closer to NewRawNode, this check can be strict.
+	if l.last.After(mark) {
 		l.errorf(ctx, "syncing stale snapshot %+v", mark)
 		return false
 	}
