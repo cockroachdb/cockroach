@@ -222,7 +222,7 @@ func TestGetCheckpointSpans(t *testing.T) {
 	j := 0
 	for _, s := range spans {
 		catchupFromHWM += s.ts.GoTime().Sub(hwm.GoTime())
-		if cpSpans[j].Equal(s.span) {
+		if j < len(cpSpans) && cpSpans[j].Equal(s.span) {
 			catchupFromCheckpoint += s.ts.GoTime().Sub(cpTS.GoTime())
 			j++
 		}
