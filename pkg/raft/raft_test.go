@@ -3170,17 +3170,60 @@ func checkLeaderTransferState(t *testing.T, r *raft, state StateType, lead pb.Pe
 	require.Equal(t, None, r.leadTransferee)
 }
 
-// TestTransferNonMember verifies that when a MsgTimeoutNow arrives at
-// a node that has been removed from the group, nothing happens.
-// (previously, if the node also got votes, it would panic as it
-// transitioned to StateLeader)
-func TestTransferNonMember(t *testing.T) {
+// TestLeaderTransferNonMember verifies that when a MsgTimeoutNow arrives at a
+// node that has been removed from the group, nothing happens. (previously, if
+// the node also got votes, it would panic as it transitioned to StateLeader).
+func TestLeaderTransferNonMember(t *testing.T) {
 	r := newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(2, 3, 4)))
 	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgTimeoutNow})
 
 	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgVoteResp})
 	r.Step(pb.Message{From: 3, To: 1, Type: pb.MsgVoteResp})
 	require.Equal(t, StateFollower, r.state)
+}
+
+// TestLeaderTransferDifferentTerms verifies that a MsgTimeoutNow will only be
+// respected if it is from the current term or from a new term.
+func TestLeaderTransferDifferentTerms(t *testing.T) {
+	nt := newNetwork(nil, nil, nil)
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+
+	// Transfer leadership to node 2, then 3, to drive up the term.
+	nt.send(pb.Message{From: 2, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(pb.Message{From: 3, To: 2, Type: pb.MsgTransferLeader})
+	for i, p := range nt.peers {
+		r := p.(*raft)
+		expState := StateFollower
+		if i == 3 {
+			expState = StateLeader
+		}
+		require.Equal(t, expState, r.state)
+		require.Equal(t, uint64(3), r.Term)
+	}
+
+	// Send a MsgTimeoutNow to node 1 from an old term. This should be ignored.
+	// This is important, as a MsgTimeoutNow allows a follower to call a "force"
+	// election, which bypasses pre-vote and leader support safeguards. We don't
+	// want a stale MsgTimeoutNow sent from an old leader giving a follower
+	// permission to overthrow a newer leader.
+	nt.send(pb.Message{From: 2, To: 1, Term: 2, Type: pb.MsgTimeoutNow})
+	n1 := nt.peers[1].(*raft)
+	require.Equal(t, StateFollower, n1.state)
+	require.Equal(t, uint64(3), n1.Term)
+
+	// Send a MsgTimeoutNow to node 1 from the current term. This should cause it
+	// to call an election for the _next_ term, which it will win.
+	nt.send(pb.Message{From: 3, To: 1, Term: 3, Type: pb.MsgTimeoutNow})
+	require.Equal(t, StateLeader, n1.state)
+	require.Equal(t, uint64(4), n1.Term)
+
+	// Send a MsgTimeoutNow to node 2 from a new term. This should advance the
+	// term on node 2 and cause it to call an election for the _next_ term, which
+	// it will win.
+	nt.send(pb.Message{From: 1, To: 2, Term: 5, Type: pb.MsgTimeoutNow})
+	n2 := nt.peers[2].(*raft)
+	require.Equal(t, StateLeader, n2.state)
+	require.Equal(t, uint64(6), n2.Term)
 }
 
 // TestNodeWithSmallerTermCanCompleteElection tests the scenario where a node

@@ -1894,8 +1894,6 @@ func stepFollower(r *raft, m pb.Message) error {
 		//	r.logger.Infof("%x [term %d] ignored MsgTimeoutNow from %x due to leader fortification", r.id, r.Term, m.From)
 		//	return nil
 		//}
-		// TODO(nvanbenschoten): a MsgTimeoutNow is only valid to replace the
-		// leader in the term that sent it.
 		r.logger.Infof("%x [term %d] received MsgTimeoutNow from %x and starts an election to get leadership", r.id, r.Term, m.From)
 		// Leadership transfers never use pre-vote even if r.preVote is true; we
 		// know we are not recovering from a partition so there is no need for the
