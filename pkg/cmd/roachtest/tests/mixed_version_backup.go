@@ -2538,14 +2538,15 @@ func registerBackupMixedVersion(r registry.Registry) {
 	// different set of events. Reusing the same seed will produce the
 	// same test.
 	r.Add(registry.TestSpec{
-		Name:              "backup-restore/mixed-version",
-		Timeout:           8 * time.Hour,
-		Owner:             registry.OwnerDisasterRecovery,
-		Cluster:           r.MakeClusterSpec(5),
-		EncryptionSupport: registry.EncryptionMetamorphic,
-		RequiresLicense:   true,
-		CompatibleClouds:  registry.AllExceptAWS,
-		Suites:            registry.Suites(registry.Nightly),
+		Name:                      "backup-restore/mixed-version",
+		Timeout:                   8 * time.Hour,
+		Owner:                     registry.OwnerDisasterRecovery,
+		Cluster:                   r.MakeClusterSpec(5),
+		EncryptionSupport:         registry.EncryptionMetamorphic,
+		RequiresLicense:           true,
+		CompatibleClouds:          registry.AllExceptAWS,
+		Suites:                    registry.Suites(registry.Nightly),
+		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Cloud() != spec.GCE && !c.IsLocal() {
 				t.Skip("uses gs://cockroachdb-backup-testing-long-ttl; see https://github.com/cockroachdb/cockroach/issues/105968")
