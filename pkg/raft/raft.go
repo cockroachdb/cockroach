@@ -1234,6 +1234,10 @@ func (r *raft) Step(m pb.Message) error {
 				}
 				return nil // don't update term/grant vote; early return
 			}
+			// If we're willing to vote in this election at a higher term, then make
+			// sure we have withdrawn our support for the current leader, if we're
+			// still providing it support.
+			r.deFortify(m.From, m.Term)
 		}
 
 		switch {
@@ -1248,24 +1252,13 @@ func (r *raft) Step(m pb.Message) error {
 		default:
 			r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d]",
 				r.id, r.Term, m.Type, m.From, m.Term)
-			switch m.Type {
-			case pb.MsgApp, pb.MsgHeartbeat, pb.MsgSnap, pb.MsgFortifyLeader:
+			if IsMsgFromLeader(m.Type) {
 				// We've just received a message from the new leader which was elected
 				// at a higher term. The old leader's fortification support has expired,
 				// so it's safe to defortify at this point.
 				r.deFortify(m.From, m.Term)
 				r.becomeFollower(m.Term, m.From)
-			case pb.MsgVote:
-				force := bytes.Equal(m.Context, []byte(campaignTransfer))
-				if force || m.From == r.lead {
-					// The leader has asked another follower to campaign or is trying to
-					// bump its term knowing fully well it'll no longer be fortified at
-					// the higher term. Both these cases can be considered the leader
-					// explicitly "defortifying".
-					r.deFortify(r.lead, m.Term)
-				}
-				r.becomeFollower(m.Term, None)
-			default:
+			} else {
 				r.becomeFollower(m.Term, None)
 			}
 		}
