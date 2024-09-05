@@ -225,18 +225,16 @@ func newUninitializedReplicaWithoutRaftGroup(
 	)
 	r.raftMu.flowControlLevel = racV2EnabledWhenLeaderLevel(r.raftCtx, store.cfg.Settings)
 	r.flowControlV2 = replica_rac2.NewProcessor(replica_rac2.ProcessorOptions{
-		NodeID:              store.NodeID(),
-		StoreID:             r.StoreID(),
-		RangeID:             r.RangeID,
-		ReplicaID:           r.replicaID,
-		Replica:             (*replicaForRACv2)(r),
-		RaftScheduler:       r.store.scheduler,
-		AdmittedPiggybacker: r.store.cfg.KVFlowAdmittedPiggybacker,
-		ACWorkQueue:         r.store.cfg.KVAdmissionController,
-		EvalWaitMetrics:     r.store.cfg.KVFlowEvalWaitMetrics,
-		RangeControllerFactory: replica_rac2.NewRangeControllerFactoryImpl(
-			r.store.cfg.KVFlowEvalWaitMetrics,
-			r.store.cfg.KVFlowStreamTokenProvider),
+		NodeID:                 store.NodeID(),
+		StoreID:                r.StoreID(),
+		RangeID:                r.RangeID,
+		ReplicaID:              r.replicaID,
+		Replica:                (*replicaForRACv2)(r),
+		RaftScheduler:          r.store.scheduler,
+		AdmittedPiggybacker:    r.store.cfg.KVFlowAdmittedPiggybacker,
+		ACWorkQueue:            r.store.cfg.KVAdmissionController,
+		EvalWaitMetrics:        r.store.cfg.KVFlowEvalWaitMetrics,
+		RangeControllerFactory: r.store.kvflowRangeControllerFactory,
 		EnabledWhenLeaderLevel: r.raftMu.flowControlLevel,
 	})
 	return r
