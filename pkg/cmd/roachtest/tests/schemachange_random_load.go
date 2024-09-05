@@ -96,7 +96,12 @@ func runSchemaChangeRandomLoad(
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 
 	t.Status("starting cockroach nodes")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
+
+	settings := install.MakeClusterSettings(install.ClusterSettingsOption{
+		"sql.log.all_statements.enabled": "true",
+	})
+
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, roachNodes)
 
 	c.Run(ctx, option.WithNodes(loadNode), "./workload init schemachange {pgurl:1}")
 
