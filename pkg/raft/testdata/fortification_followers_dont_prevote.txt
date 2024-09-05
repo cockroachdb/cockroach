@@ -231,7 +231,8 @@ stabilize
   2->3 MsgPreVote Term:2 Log:1/11
   INFO 3 [logterm: 1, index: 11, vote: 1] cast MsgPreVote for 2 [logterm: 1, index: 11] at term 1
 > 3 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
   Messages:
   3->2 MsgPreVoteResp Term:2 Log:0/0
 > 2 receiving messages
@@ -377,11 +378,13 @@ stabilize
   2->3 MsgPreVote Term:3 Log:2/12
   INFO 3 [logterm: 2, index: 12, vote: 2] cast MsgPreVote for 2 [logterm: 2, index: 12] at term 2
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
+  HardState Term:2 Commit:12 Lead:2 LeadEpoch:0
   Messages:
   1->2 MsgPreVoteResp Term:3 Log:0/0
 > 3 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
+  HardState Term:2 Vote:2 Commit:12 Lead:2 LeadEpoch:0
   Messages:
   3->2 MsgPreVoteResp Term:3 Log:0/0
 > 2 receiving messages
