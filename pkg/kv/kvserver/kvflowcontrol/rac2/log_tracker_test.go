@@ -190,8 +190,11 @@ func TestLogTracker(t *testing.T) {
 	}
 
 	var tracker LogTracker
-	state := func() string {
+	state := func(updated bool) string {
 		var b strings.Builder
+		if updated {
+			fmt.Fprint(&b, "[upd] ")
+		}
 		fmt.Fprintln(&b, tracker.String())
 		for pri, marks := range tracker.waiting {
 			if len(marks) == 0 {
@@ -218,31 +221,31 @@ func TestLogTracker(t *testing.T) {
 		case "reset": // Example: reset term=1 index=10
 			stable := readMark(t, d, "index")
 			tracker = NewLogTracker(stable)
-			return state()
+			return state(false)
 
 		case "append": // Example: append term=10 after=100 to=200
 			var after uint64
 			d.ScanArgs(t, "after", &after)
 			to := readMark(t, d, "to")
-			tracker.Append(ctx, after, to)
-			return state()
+			updated := tracker.Append(ctx, after, to)
+			return state(updated)
 
 		case "sync": // Example: sync term=10 index=100
 			mark := readMark(t, d, "index")
-			tracker.LogSynced(ctx, mark)
-			return state()
+			updated := tracker.LogSynced(ctx, mark)
+			return state(updated)
 
 		case "register": // Example: register term=10 index=100 pri=LowPri
 			mark := readMark(t, d, "index")
 			pri := readPri(t, d)
 			tracker.Register(ctx, mark, pri)
-			return state()
+			return state(false)
 
 		case "admit": // Example: admit term=10 index=100 pri=LowPri
 			mark := readMark(t, d, "index")
 			pri := readPri(t, d)
-			tracker.LogAdmitted(ctx, mark, pri)
-			return state()
+			updated := tracker.LogAdmitted(ctx, mark, pri)
+			return state(updated)
 
 		default:
 			t.Fatalf("unknown command: %s", d.Cmd)
