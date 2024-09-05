@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -125,6 +126,7 @@ type SystemDeps struct {
 	Stopper       *stop.Stopper
 	KeyVisKnobs   *keyvisualizer.TestingKnobs
 	SQLStatsKnobs *sqlstats.TestingKnobs
+	ReaderTenant  mtinfo.ReadFromTenantInfoAccessor
 }
 
 // SystemUpgrade is an implementation of Upgrade for system-level
