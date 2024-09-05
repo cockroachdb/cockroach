@@ -84,6 +84,34 @@ var (
 	}
 
 	lwwColumnAdd = "ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL"
+	lwwFunc      = `CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tab, existing tab, prev tab, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL,proposed_mvcc_timestamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
+	RETURNS string
+	AS $$
+	BEGIN
+	SELECT crdb_internal.log((proposed).payload);
+        IF existing IS NULL THEN
+            RETURN 'accept_proposed';
+        END IF;
+
+	IF existing_origin_timestamp IS NULL THEN
+	    IF existing_mvcc_timestamp < proposed_mvcc_timestamp THEN
+			SELECT crdb_internal.log('case 1');
+			RETURN 'accept_proposed';
+		ELSE
+			SELECT crdb_internal.log('case 2');
+			RETURN 'ignore_proposed';
+		END IF;
+	ELSE
+		IF existing_origin_timestamp < proposed_mvcc_timestamp THEN
+			SELECT crdb_internal.log('case 3');
+			RETURN 'accept_proposed';
+		ELSE
+			SELECT crdb_internal.log('case 4');
+			RETURN 'ignore_proposed';
+		END IF;
+	END IF;
+	END
+	$$ LANGUAGE plpgsql`
 )
 
 func TestLogicalStreamIngestionJobNameResolution(t *testing.T) {
@@ -620,46 +648,21 @@ func TestRandomTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
 	ctx := context.Background()
-	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
 
-	sqlA := s.SQLConn(t, serverutils.DBName("a"))
-
 	tableName := "rand_table"
-	rng, _ := randutil.NewPseudoRand()
-	createStmt := randgen.RandCreateTableWithName(
-		ctx,
-		rng,
-		tableName,
-		1,
-		false, /* isMultiregion */
-		// We do not have full support for column families.
-		randgen.SkipColumnFamilyMutation())
-	stmt := tree.SerializeForDisplay(createStmt)
-	t.Log(stmt)
-	runnerA.Exec(t, stmt)
-	runnerB.Exec(t, stmt)
-
-	// TODO(ssd): We have to turn off randomized_anchor_key
-	// because this, in combination of optimizer difference that
-	// might prevent CommitInBatch, could result in the replicated
-	// transaction being too large to commit.
-	runnerA.Exec(t, "SET CLUSTER SETTING kv.transaction.randomized_anchor_key.enabled=false")
-
-	// Workaround for the behaviour described in #127321. This
-	// ensures that we are generating rows using similar
-	// optimization decisions to our replication process.
-	runnerA.Exec(t, "SET plan_cache_mode=force_generic_plan")
-
-	numInserts := 20
-	_, err := randgen.PopulateTableWithRandData(rng,
-		sqlA, tableName, numInserts, nil)
-	require.NoError(t, err)
-
-	addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
-	runnerA.Exec(t, addCol)
-	runnerB.Exec(t, addCol)
+	SetupRandomTablePair(t, ctx, s, runnerA, runnerB, tableName)
 
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
@@ -669,8 +672,46 @@ func TestRandomTables(t *testing.T) {
 	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
-
 	compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
+}
+
+func TestMultipleRandomTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	ctx := context.Background()
+	server, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	tableName1 := "rand_table_1"
+	tableName2 := "rand_table_2"
+	SetupRandomTablePair(t, ctx, s, runnerA, runnerB, tableName1)
+	SetupRandomTablePair(t, ctx, s, runnerA, runnerB, tableName2)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+
+	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLES (%[1]s, %[2]s) ON $1 INTO TABLES (%[1]s, %[2]s)", tableName1, tableName2)
+	var jobBID jobspb.JobID
+	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
+
+	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
+
+	compareReplicatedTables(t, s, "a", "b", tableName1, runnerA, runnerB)
+	compareReplicatedTables(t, s, "a", "b", tableName2, runnerA, runnerB)
+
+	var showJobID jobspb.JobID
+	runnerA.QueryRow(t, "SELECT job_id FROM [SHOW LOGICAL REPLICATION JOBS]").Scan(&showJobID)
+	require.Equal(t, jobBID, showJobID)
 }
 
 func TestRandomStream(t *testing.T) {
@@ -1298,6 +1339,49 @@ func WaitUntilReplicatedTime(
 	})
 }
 
+func SetupRandomTablePair(
+	t *testing.T,
+	ctx context.Context,
+	s serverutils.ApplicationLayerInterface,
+	runnerA, runnerB *sqlutils.SQLRunner,
+	tableName string,
+) {
+	sqlA := s.SQLConn(t, serverutils.DBName("a"))
+
+	rng, _ := randutil.NewPseudoRand()
+	createStmt := randgen.RandCreateTableWithName(
+		ctx,
+		rng,
+		tableName,
+		1,
+		false, /* isMultiregion */
+		// We do not have full support for column families.
+		randgen.SkipColumnFamilyMutation())
+	stmt := tree.SerializeForDisplay(createStmt)
+	runnerA.Exec(t, stmt)
+	runnerB.Exec(t, stmt)
+
+	// TODO(ssd): We have to turn off randomized_anchor_key
+	// because this, in combination of optimizer difference that
+	// might prevent CommitInBatch, could result in the replicated
+	// transaction being too large to commit.
+	runnerA.Exec(t, "SET CLUSTER SETTING kv.transaction.randomized_anchor_key.enabled=false")
+
+	// Workaround for the behaviour described in #127321. This
+	// ensures that we are generating rows using similar
+	// optimization decisions to our replication process.
+	runnerA.Exec(t, "SET plan_cache_mode=force_generic_plan")
+
+	numInserts := 20
+	_, err := randgen.PopulateTableWithRandData(rng,
+		sqlA, tableName, numInserts, nil)
+	require.NoError(t, err)
+
+	addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
+	runnerA.Exec(t, addCol)
+	runnerB.Exec(t, addCol)
+}
+
 type mockBatchHandler bool
 
 var _ BatchHandler = mockBatchHandler(true)
@@ -1387,34 +1471,6 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 	}, 1)
 	defer server.Stopper().Stop(ctx)
 
-	lwwFunc := `CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tab, existing tab, prev tab, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL,proposed_mvcc_timestamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
-	RETURNS string
-	AS $$
-	BEGIN
-	SELECT crdb_internal.log((proposed).payload);
-        IF existing IS NULL THEN
-            RETURN 'accept_proposed';
-        END IF;
-
-	IF existing_origin_timestamp IS NULL THEN
-	    IF existing_mvcc_timestamp < proposed_mvcc_timestamp THEN
-			SELECT crdb_internal.log('case 1');
-			RETURN 'accept_proposed';
-		ELSE
-			SELECT crdb_internal.log('case 2');
-			RETURN 'ignore_proposed';
-		END IF;
-	ELSE
-		IF existing_origin_timestamp < proposed_mvcc_timestamp THEN
-			SELECT crdb_internal.log('case 3');
-			RETURN 'accept_proposed';
-		ELSE
-			SELECT crdb_internal.log('case 4');
-			RETURN 'ignore_proposed';
-		END IF;
-	END IF;
-	END
-	$$ LANGUAGE plpgsql`
 	dbB.Exec(t, lwwFunc)
 	dbA.Exec(t, lwwFunc)
 
