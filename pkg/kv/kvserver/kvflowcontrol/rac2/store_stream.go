@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
@@ -33,7 +34,7 @@ import (
 type StreamTokenCounterProvider struct {
 	settings                   *cluster.Settings
 	clock                      *hlc.Clock
-	tokenMetrics               *tokenMetrics
+	tokenMetrics               *TokenMetrics
 	sendLogger, evalLogger     *blockedStreamLogger
 	sendCounters, evalCounters syncutil.Map[kvflowcontrol.Stream, tokenCounter]
 }
@@ -45,7 +46,7 @@ func NewStreamTokenCounterProvider(
 	return &StreamTokenCounterProvider{
 		settings:     settings,
 		clock:        clock,
-		tokenMetrics: newTokenMetrics(),
+		tokenMetrics: NewTokenMetrics(),
 		sendLogger:   newBlockedStreamLogger(flowControlSendMetricType),
 		evalLogger:   newBlockedStreamLogger(flowControlEvalMetricType),
 	}
@@ -57,7 +58,7 @@ func (p *StreamTokenCounterProvider) Eval(stream kvflowcontrol.Stream) *tokenCou
 		return t
 	}
 	t, _ := p.evalCounters.LoadOrStore(stream, newTokenCounter(
-		p.settings, p.clock, p.tokenMetrics.counterMetrics[flowControlEvalMetricType]))
+		p.settings, p.clock, p.tokenMetrics.CounterMetrics[flowControlEvalMetricType]))
 	return t
 }
 
@@ -67,7 +68,7 @@ func (p *StreamTokenCounterProvider) Send(stream kvflowcontrol.Stream) *tokenCou
 		return t
 	}
 	t, _ := p.sendCounters.LoadOrStore(stream, newTokenCounter(
-		p.settings, p.clock, p.tokenMetrics.counterMetrics[flowControlSendMetricType]))
+		p.settings, p.clock, p.tokenMetrics.CounterMetrics[flowControlSendMetricType]))
 	return t
 }
 
@@ -114,9 +115,9 @@ func (p *StreamTokenCounterProvider) UpdateMetricGauges() {
 			admissionpb.RegularWorkClass,
 			admissionpb.ElasticWorkClass,
 		} {
-			p.tokenMetrics.streamMetrics[typ].count[wc].Update(count[typ][wc])
-			p.tokenMetrics.streamMetrics[typ].blockedCount[wc].Update(blockedCount[typ][wc])
-			p.tokenMetrics.streamMetrics[typ].tokensAvailable[wc].Update(tokensAvailable[typ][wc])
+			p.tokenMetrics.StreamMetrics[typ].Count[wc].Update(count[typ][wc])
+			p.tokenMetrics.StreamMetrics[typ].BlockedCount[wc].Update(blockedCount[typ][wc])
+			p.tokenMetrics.StreamMetrics[typ].TokensAvailable[wc].Update(tokensAvailable[typ][wc])
 		}
 	}
 
@@ -142,6 +143,11 @@ func (p *StreamTokenCounterProvider) UpdateMetricGauges() {
 		p.sendCounters.Range(logStreamFn(p.sendLogger))
 		p.sendLogger.flushLogs()
 	}
+}
+
+// Metrics returns metrics tracking the token counters and streams.
+func (p *StreamTokenCounterProvider) Metrics() metric.Struct {
+	return p.tokenMetrics
 }
 
 // TODO(kvoli): Consider adjusting these limits and making them configurable.
