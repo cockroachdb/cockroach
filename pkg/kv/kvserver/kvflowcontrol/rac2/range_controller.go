@@ -14,6 +14,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"math"
 	"reflect"
 	"slices"
 	"time"
@@ -123,19 +124,49 @@ type RaftEvent struct {
 	Snap *raftpb.Snapshot
 	// Entries contains the log entries to be written to storage.
 	Entries []raftpb.Entry
+	// Only populated on leader when operating in MsgAppPush mode. This is
+	// informational, for bookkeeping in the callee. These are MsgApps to
+	// followers.
+	//
+	// NB: these MsgApps can be for entries in Entries, or for earlier ones.
+	MsgApps map[roachpb.ReplicaID]raftpb.Message
 }
 
-// RaftEventFromMsgStorageAppend constructs a RaftEvent from the given raft
-// MsgStorageAppend message. Returns zero value if the message is empty.
-func RaftEventFromMsgStorageAppend(msg raftpb.Message) RaftEvent {
-	if msg.Type != raftpb.MsgStorageAppend {
-		return RaftEvent{}
+// RaftEventFromMsgStorageAppendAndMsgApps constructs a RaftEvent from the
+// given raft MsgStorageAppend message. Returns zero value if the message is
+// empty.
+func RaftEventFromMsgStorageAppendAndMsgApps(
+	replicaID roachpb.ReplicaID,
+	append raftpb.Message,
+	outboundMsgs []raftpb.Message,
+	msgAppScratch map[roachpb.ReplicaID]raftpb.Message,
+) RaftEvent {
+	var event RaftEvent
+	if append.Type == raftpb.MsgStorageAppend {
+		event = RaftEvent{
+			Term:    append.LogTerm,
+			Snap:    append.Snapshot,
+			Entries: append.Entries,
+		}
 	}
-	return RaftEvent{
-		Term:    msg.LogTerm,
-		Snap:    msg.Snapshot,
-		Entries: msg.Entries,
+	if len(outboundMsgs) == 0 {
+		return event
 	}
+	for k := range msgAppScratch {
+		delete(msgAppScratch, k)
+	}
+	for _, msg := range outboundMsgs {
+		if msg.Type != raftpb.MsgApp || roachpb.ReplicaID(msg.To) == replicaID {
+			continue
+		}
+		_, ok := msgAppScratch[roachpb.ReplicaID(msg.To)]
+		if ok {
+			panic(errors.AssertionFailedf("more than one MsgApp for same peer %d", msg.To))
+		}
+		msgAppScratch[roachpb.ReplicaID(msg.To)] = msg
+	}
+	event.MsgApps = msgAppScratch
+	return event
 }
 
 // NoReplicaID is a special value of roachpb.ReplicaID, which can never be a
@@ -213,14 +244,19 @@ type RangeControllerInitState struct {
 	// Leaseholder may be set to NoReplicaID, in which case the leaseholder is
 	// unknown.
 	Leaseholder roachpb.ReplicaID
+
+	NextRaftIndex uint64
 }
 
+// The rangeController exists for a single leader term, when this replica is
+// the leader.
 type rangeController struct {
 	opts       RangeControllerOptions
 	replicaSet ReplicaSet
 	// leaseholder can be NoReplicaID or not be in ReplicaSet, i.e., it is
 	// eventually consistent with the set of replicas.
-	leaseholder roachpb.ReplicaID
+	leaseholder   roachpb.ReplicaID
+	nextRaftIndex uint64
 
 	mu struct {
 		syncutil.Mutex
@@ -342,29 +378,99 @@ retry:
 	return true, nil
 }
 
+type raftEventForReplica struct {
+	// Match and Next represent the state preceding this raft event.
+	FollowerStateInfo
+	nextRaftIndex  uint64
+	newEntries     []entryFCState
+	sendingEntries []entryFCState
+}
+
+func constructSendingEntries(
+	ctx context.Context, msgApp raftpb.Message, newEntries []entryFCState,
+) []entryFCState {
+	n := len(msgApp.Entries)
+	if n == 0 {
+		return nil
+	}
+	firstNewEntryIndex := uint64(math.MaxUint64)
+	if len(newEntries) > 0 {
+		firstNewEntryIndex = newEntries[0].index
+	}
+	if msgApp.Entries[0].Index > firstNewEntryIndex {
+		panic("")
+	}
+	if msgApp.Entries[0].Index == firstNewEntryIndex {
+		// Common case. Sub-slice
+		if n > len(newEntries) {
+			panic("")
+		}
+		return newEntries[:n]
+	}
+	// Starts before the first new entry.
+	sendingEntries := make([]entryFCState, 0, len(msgApp.Entries))
+	for _, entry := range msgApp.Entries {
+		if entry.Index >= firstNewEntryIndex {
+			sendingEntries = append(sendingEntries, newEntries[entry.Index-firstNewEntryIndex])
+		} else {
+			// Need to decode.
+			sendingEntries = append(sendingEntries, getEntryFCStateOrFatal(ctx, entry))
+		}
+	}
+	return sendingEntries
+}
+
 // HandleRaftEventRaftMuLocked handles the provided raft event for the range.
 //
 // Requires replica.raftMu to be held.
 func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e RaftEvent) error {
+	// Compute the flow control state for each new entry. We do this once
+	// here, instead of decoding each entry multiple times for all replicas.
+	newEntries := make([]entryFCState, len(e.Entries))
+	for i, entry := range e.Entries {
+		newEntries[i] = getEntryFCStateOrFatal(ctx, entry)
+	}
+	nextRaftIndex := rc.nextRaftIndex
+	if n := len(e.Entries); n > 0 {
+		rc.nextRaftIndex = e.Entries[n-1].Index
+	}
 	shouldWaitChange := false
 	for r, rs := range rc.replicaMap {
 		info := rc.opts.RaftInterface.FollowerState(r)
-		shouldWaitChange = rs.handleReadyState(ctx, info) || shouldWaitChange
+		eventForReplica := raftEventForReplica{
+			FollowerStateInfo: info,
+			nextRaftIndex:     nextRaftIndex,
+			newEntries:        newEntries,
+		}
+		if r == rc.opts.LocalReplicaID {
+			// Everything is considered sent.
+			eventForReplica.sendingEntries = newEntries
+		} else {
+			msgApp, ok := e.MsgApps[r]
+			if ok {
+				if eventForReplica.FollowerStateInfo.State != tracker.StateReplicate {
+					panic("")
+				}
+				eventForReplica.sendingEntries = constructSendingEntries(ctx, msgApp, newEntries)
+			}
+		}
+		if n := len(eventForReplica.sendingEntries); n > 0 {
+			next := eventForReplica.sendingEntries[0].index
+			expectedNext := eventForReplica.sendingEntries[n-1].index + 1
+			if expectedNext != eventForReplica.Next {
+				panic("")
+			}
+			// Rewind Next.
+			eventForReplica.Next = next
+		}
+		shouldWaitChange = rs.handleReadyState(
+			ctx, nextRaftIndex, eventForReplica.FollowerStateInfo) || shouldWaitChange
+		rs.handleReadyEntries(ctx, eventForReplica)
 	}
 	// If there was a quorum change, update the voter sets, triggering the
 	// refresh channel for any requests waiting for eval tokens.
 	if shouldWaitChange {
 		rc.updateVoterSets()
-	}
-
-	// Compute the flow control state for each entry. We do this once here,
-	// instead of decoding each entry multiple times for all replicas.
-	entryStates := make([]entryFCState, len(e.Entries))
-	for i, entry := range e.Entries {
-		entryStates[i] = getEntryFCStateOrFatal(ctx, entry)
-	}
-	for _, rs := range rc.replicaMap {
-		rs.handleReadyEntries(ctx, entryStates)
 	}
 	return nil
 }
@@ -504,14 +610,13 @@ func NewReplicaState(
 		sendTokenCounter: parent.opts.SSTokenCounter.Send(stream),
 		desc:             desc,
 	}
-	state := parent.opts.RaftInterface.FollowerState(desc.ReplicaID)
-	if state.State == tracker.StateReplicate {
-		rs.createReplicaSendStream()
-	}
-
+	// Don't bother creating the replicaSendStream here. We will do this in
+	// the next Ready which will be called immediately after. This centralizes
+	// the logic of replicaSendStream creation.
 	return rs
 }
 
+// replicaSendStream exists only in StateReplicate, and briefly in StateProbe.
 type replicaSendStream struct {
 	parent *replicaState
 
@@ -519,11 +624,52 @@ type replicaSendStream struct {
 		syncutil.Mutex
 		// connectedStateStart is the time when the connectedState was last
 		// transitioned from one state to another e.g., from replicate to
-		// probeRecentlyReplicate or snapshot to replicate.
+		// probeRecentlyReplicate or vice versa.
 		connectedState      connectedState
 		connectedStateStart time.Time
-		tracker             Tracker
-		closed              bool
+
+		// nextRaftIndexInitial is the value of nextRaftIndex when this
+		// replicaSendStream was created, or transitioned into replicate.
+		nextRaftIndexInitial uint64
+
+		// tracker contains entries that have been sent, and have had
+		// send-tokens deducted (and will have had eval-tokens deducted iff
+		// index >= nextRaftIndexInitial).
+		//
+		// Contains no entries in probeRecentlyReplicate.
+		tracker Tracker
+
+		// Eval state.
+		//
+		// Contains no tokens in probeRecentlyReplicate.
+		eval struct {
+			// Only for indices >= nextRaftIndexInitial. These are either in
+			// the send-queue, or in the tracker.
+			tokensDeducted [admissionpb.NumWorkClasses]kvflowcontrol.Tokens
+		}
+		// When the presence of a sendQueue is due to Raft flow control, which
+		// does not take store overload into account, we consider that the delay
+		// in reaching quorum due to the send-queue is acceptable. The state is
+		// maintained here so that we can transition between Raft flow control caused
+		// send-queue and replication flow control caused send-queue, and vice versa.
+		//
+		// Say we pretended that there was no send-queue when using Raft flow
+		// control. Then send tokens would have been deducted and entries
+		// placed in tracker at eval time. When transitioning from replication
+		// flow control to Raft flow control we would need to iterate over all
+		// entries in the send-queue, read them from storage, and place them
+		// in the tracker.
+		//
+		// Not updated in state probeRecentlyReplicate.
+		sendQueue struct {
+			// State of send-queue. [indexToSend, nextRaftIndex) have not been
+			// sent. indexToSend == FollowerStateInfo.Next. nextRaftIndex is
+			// the current value of NextUnstableIndex at the leader. The
+			// send-queue is always empty for the leader.
+			indexToSend   uint64
+			nextRaftIndex uint64
+		}
+		closed bool
 	}
 }
 
@@ -532,25 +678,23 @@ func (rss *replicaSendStream) changeConnectedStateLocked(state connectedState, n
 	rss.mu.connectedStateStart = now
 }
 
-func (rs *replicaState) createReplicaSendStream() {
+func (rs *replicaState) createReplicaSendStream(indexToSend uint64, nextRaftIndex uint64) {
 	// Must be in StateReplicate on creation.
 	rs.sendStream = &replicaSendStream{
 		parent: rs,
 	}
-	rs.sendStream.mu.tracker.Init(rs.stream)
-	rs.sendStream.mu.closed = false
 	rs.sendStream.changeConnectedStateLocked(
 		replicate, rs.parent.opts.Clock.PhysicalTime())
+	rs.sendStream.mu.nextRaftIndexInitial = nextRaftIndex
+	rs.sendStream.mu.tracker.Init(rs.stream)
+	rs.sendStream.mu.sendQueue.indexToSend = indexToSend
+	rs.sendStream.mu.sendQueue.nextRaftIndex = nextRaftIndex
+	rs.sendStream.mu.closed = false
 }
 
 func (rs *replicaState) isStateReplicate() bool {
-	if rs.sendStream == nil {
-		return false
-	}
-	rs.sendStream.mu.Lock()
-	defer rs.sendStream.mu.Unlock()
-
-	return rs.sendStream.mu.connectedState.shouldWaitForElasticEvalTokens()
+	// probeRecentlyReplicate is also included in this state.
+	return rs.sendStream != nil
 }
 
 type entryFCState struct {
@@ -585,31 +729,23 @@ func getEntryFCStateOrFatal(ctx context.Context, entry raftpb.Entry) entryFCStat
 	}
 }
 
-func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []entryFCState) {
+func (rs *replicaState) handleReadyEntries(ctx context.Context, event raftEventForReplica) {
 	if rs.sendStream == nil {
 		return
 	}
-
 	rs.sendStream.mu.Lock()
 	defer rs.sendStream.mu.Unlock()
-
-	for _, entry := range entries {
-		if !entry.usesFlowControl {
-			continue
-		}
-		rs.sendStream.mu.tracker.Track(ctx, entry.term, entry.index, entry.pri, entry.tokens)
-		rs.evalTokenCounter.Deduct(
-			ctx, WorkClassFromRaftPriority(entry.pri), entry.tokens)
-		rs.sendTokenCounter.Deduct(
-			ctx, WorkClassFromRaftPriority(entry.pri), entry.tokens)
+	if rs.sendStream.mu.connectedState != replicate {
+		return
 	}
+	rs.sendStream.handleReadyEntriesLocked(ctx, event)
 }
 
 // handleReadyState handles state management for the replica based on the
 // provided follower state information. If the state changes in a way that
 // affects requests waiting for evaluation, returns true.
 func (rs *replicaState) handleReadyState(
-	ctx context.Context, info FollowerStateInfo,
+	ctx context.Context, nextRaftIndex uint64, info FollowerStateInfo,
 ) (shouldWaitChange bool) {
 	switch info.State {
 	case tracker.StateProbe:
@@ -629,20 +765,7 @@ func (rs *replicaState) handleReadyState(
 				// stream.
 				should = true
 			} else if state != probeRecentlyReplicate {
-				// This is the first time we've seen the replica change to StateProbe,
-				// update the connected state and start time. If the state doesn't
-				// change within probeRecentlyReplicateDuration, we will close the
-				// stream. Also schedule an event, so that even if there are no
-				// entries, we will still reliably close the stream if still in
-				// StateProbe.
-				//
-				// TODO(sumeer): think through whether we should actually be returning
-				// tokens immediately here. Currently we are not. e.g.,
-				// probeRecentlyReplicate only affects whether to wait on this replica
-				// for eval, and otherwise it behaves like a closed replicaSendStream.
-				rs.sendStream.changeConnectedStateLocked(probeRecentlyReplicate, now)
-				rs.parent.opts.CloseTimerScheduler.ScheduleSendStreamCloseRaftMuLocked(
-					ctx, rs.parent.opts.RangeID, probeRecentlyReplicateDuration())
+				rs.sendStream.changeToProbeLocked(ctx, now)
 			}
 			return should
 		}(); shouldClose {
@@ -652,27 +775,16 @@ func (rs *replicaState) handleReadyState(
 
 	case tracker.StateReplicate:
 		if rs.sendStream == nil {
-			rs.createReplicaSendStream()
+			rs.createReplicaSendStream(info.Next, nextRaftIndex)
 			shouldWaitChange = true
 		} else {
-			shouldWaitChange = rs.sendStream.makeConsistentInStateReplicate(ctx, info)
+			rs.sendStream.makeConsistentInStateReplicate(ctx, info, nextRaftIndex)
 		}
 
 	case tracker.StateSnapshot:
 		if rs.sendStream != nil {
-			switch func() connectedState {
-				rs.sendStream.mu.Lock()
-				defer rs.sendStream.mu.Unlock()
-				return rs.sendStream.mu.connectedState
-			}() {
-			case replicate:
-				rs.sendStream.changeToStateSnapshot(ctx)
-				shouldWaitChange = true
-			case probeRecentlyReplicate:
-				rs.closeSendStream(ctx)
-				shouldWaitChange = true
-			case snapshot:
-			}
+			rs.closeSendStream(ctx)
+			shouldWaitChange = true
 		}
 	}
 	return shouldWaitChange
@@ -682,21 +794,22 @@ func (rss *replicaState) closeSendStream(ctx context.Context) {
 	rss.sendStream.mu.Lock()
 	defer rss.sendStream.mu.Unlock()
 
-	if rss.sendStream.mu.connectedState != snapshot {
-		// changeToStateSnapshot returns all tokens, as we have no liveness
-		// guarantee of their return with the send stream now closed.
-		rss.sendStream.changeToStateSnapshotLocked(ctx)
-	}
-	rss.sendStream.mu.closed = true
+	rss.sendStream.close(ctx)
 	rss.sendStream = nil
 }
 
+// Next can move forward because of the push. Need to handle that too!!
 func (rss *replicaSendStream) makeConsistentInStateReplicate(
-	ctx context.Context, info FollowerStateInfo,
-) (shouldWaitChange bool) {
+	ctx context.Context, info FollowerStateInfo, nextRaftIndex uint64,
+) {
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
-	defer rss.returnTokens(ctx, rss.mu.tracker.Untrack(info.Term, info.Admitted))
+	defer func() {
+		returnedSend, returnedEval :=
+			rss.mu.tracker.Untrack(info.Term, info.Admitted, rss.mu.nextRaftIndexInitial)
+		rss.returnSendTokens(ctx, returnedSend)
+		rss.returnEvalTokens(ctx, returnedEval)
+	}()
 
 	// The leader is always in state replicate.
 	if rss.parent.parent.opts.LocalReplicaID == rss.parent.desc.ReplicaID {
@@ -705,56 +818,222 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(
 				"leader should always be in state replicate but found in %v",
 				rss.mu.connectedState))
 		}
-		return false
 	}
 
 	// Follower replica case. Update the connected state.
 	switch rss.mu.connectedState {
 	case replicate:
+		if info.Match >= rss.mu.sendQueue.indexToSend {
+			// Some things got popped without us sending. Must be old
+			// MsgAppResp. Next cannot have moved past Match, since Next used
+			// to be equal to indexToSend.
+			if info.Next != info.Match+1 {
+				log.Fatalf(ctx, "%v", errors.AssertionFailedf(
+					"next=%d != match+1=%d [info=%v send_stream=<TODO>]",
+					info.Next, info.Match+1, info))
+			}
+			rss.makeConsistentWhenUnexpectedPopLocked(ctx, info.Next)
+		} else if info.Next == rss.mu.sendQueue.indexToSend {
+			// Everything is as expected.
+		} else if info.Next > rss.mu.sendQueue.indexToSend {
+			// We've already covered the case where Next moves ahead, along
+			// with Match earlier. This can never happen.
+			log.Fatalf(ctx, "%v", errors.AssertionFailedf(
+				"next=%d > index_to_send=%d [info=%v send_stream=<TODO>]",
+				info.Next, rss.mu.sendQueue.indexToSend, info))
+		} else {
+			// info.Next < rss.sendQueue.indexToSend.
+			//
+			// Must have transitioned to StateProbe and back, and we did not
+			// observe it.
+			if info.Next != info.Match+1 {
+				log.Fatalf(ctx, "%v", errors.AssertionFailedf(
+					"next=%d != match+1=%d [info=%v send_stream=<TODO>]",
+					info.Next, info.Match+1, info))
+			}
+			rss.makeConsistentWhenUnexpectedProbeToReplicateLocked(ctx, info.Next)
+		}
+
 	case probeRecentlyReplicate:
-		// NB: We could re-use the current time and acquire it outside of the
-		// mutex, but we expect transitions to replicate to be rarer than replicas
-		// remaining in replicate.
-		rss.changeConnectedStateLocked(replicate, rss.parent.parent.opts.Clock.PhysicalTime())
-	case snapshot:
-		rss.changeConnectedStateLocked(replicate, rss.parent.parent.opts.Clock.PhysicalTime())
-		shouldWaitChange = true
+		// Returned from StateProbe => StateReplicate.
+		if info.Next != info.Match+1 {
+			log.Fatalf(ctx, "%v", errors.AssertionFailedf(
+				"next=%d != match+1=%d [info=%v send_stream=<TODO>]",
+				info.Next, info.Match+1, info))
+		}
+		rss.makeConsistentWhenProbeToReplicateLocked(ctx, info.Next, nextRaftIndex)
 	}
-	return shouldWaitChange
 }
 
-// changeToStateSnapshot changes the connected state to snapshot and returns
-// all tracked entries' tokens.
-func (rss *replicaSendStream) changeToStateSnapshot(ctx context.Context) {
+func (rss *replicaSendStream) makeConsistentWhenProbeToReplicateLocked(
+	ctx context.Context, indexToSend uint64, nextRaftIndex uint64,
+) {
+	rss.mu.AssertHeld()
+	rss.mu.sendQueue.indexToSend = indexToSend
+	rss.mu.sendQueue.nextRaftIndex = nextRaftIndex
+	rss.mu.nextRaftIndexInitial = rss.mu.sendQueue.nextRaftIndex
+
+	// NB: We could re-use the current time and acquire it outside of the
+	// mutex, but we expect transitions to replicate to be rarer than replicas
+	// remaining in replicate.
+	rss.changeConnectedStateLocked(replicate, rss.parent.parent.opts.Clock.PhysicalTime())
+}
+
+// REQUIRES: indexToSend < sendQueue.indexToSend.
+func (rss *replicaSendStream) makeConsistentWhenUnexpectedProbeToReplicateLocked(
+	ctx context.Context, indexToSend uint64,
+) {
+	// A regression in indexToSend necessarily means a MsgApp constructed by
+	// this replicaSendStream was dropped.
+	//
+	// The messages in [indexToSend, rss.sendQueue.indexToSend) must be in
+	// the tracker. They can't have been removed since Match < indexToSend.
+	// We will be resending these, so we should return the send tokens for
+	// them. We don't need to adjust eval.tokensDeducted since even though we
+	// are returning these send tokens, all of them are now in the send-queue,
+	// and the eval.tokensDeducted includes the send-queue.
+	returnedSend, _ := rss.mu.tracker.UntrackGE(indexToSend, rss.mu.nextRaftIndexInitial)
+	rss.returnSendTokens(ctx, returnedSend)
+	rss.mu.sendQueue.indexToSend = indexToSend
+	rss.changeConnectedStateLocked(replicate, rss.parent.parent.opts.Clock.PhysicalTime())
+}
+
+// While in StateReplicate, send-queue could have some elements popped
+// (indexToSend advanced) because there could have been some inflight MsgApps
+// that we forgot about due to a transition out of StateReplicate and back
+// into StateReplicate, and we got acks for them (Match advanced past
+// indexToSend).
+func (rss *replicaSendStream) makeConsistentWhenUnexpectedPopLocked(
+	ctx context.Context, indexToSend uint64,
+) {
+	rss.mu.AssertHeld()
+
+	// When we start maintaining send-queue stats we will have accurate stats
+	// for indices that are both >= nextRaftIndexInitial and >= indexToSend.
+	// Also, we have eval tokens deducted for indices >= nextRaftIndexInitial.
+	//
+	// This unexpected pop should typically not happen for any index >=
+	// nextRaftIndexInitial since these were proposed after this
+	// replicaSendStream was created. However, it may be rarely possible for
+	// this to happen: we advance nextRaftIndexInitial on snapshot
+	// application, and if an old (pre-snapshot) message that comes after the
+	// snapshot shows up at the follower, it could advance Match.
+	//
+	// In that case, the popped entries have had eval tokens deducted, and
+	// were never in the tracker and are no longer in the send-queue. We don't
+	// know their size, so the simplest thing is to return all eval tokens.
+	for wc := range rss.mu.eval.tokensDeducted {
+		if rss.mu.eval.tokensDeducted[wc] > 0 {
+			rss.parent.evalTokenCounter.Return(
+				ctx, admissionpb.WorkClass(wc), rss.mu.eval.tokensDeducted[wc])
+			rss.mu.eval.tokensDeducted[wc] = 0
+		}
+	}
+	// We don't need to touch the tracker since we still expect admission for
+	// entries that were inflight.
+
+	rss.mu.sendQueue.indexToSend = indexToSend
+	rss.mu.nextRaftIndexInitial = rss.mu.sendQueue.nextRaftIndex
+}
+
+// close returns all tokens and closes the replicaSendStream.
+func (rss *replicaSendStream) close(ctx context.Context) {
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
-
-	rss.changeToStateSnapshotLocked(ctx)
+	// Return all tokens.
+	returnedSend, returnedEval := rss.mu.tracker.UntrackAll(rss.mu.nextRaftIndexInitial)
+	rss.returnSendTokens(ctx, returnedSend)
+	rss.returnEvalTokens(ctx, returnedEval)
+	rss.mu.closed = true
 }
 
-// changeToStateSnapshot changes the connected state to snapshot and returns
-// all tracked entries' tokens.
-//
-// Requires rs.mu to be held.
-func (rss *replicaSendStream) changeToStateSnapshotLocked(ctx context.Context) {
-	rss.changeConnectedStateLocked(snapshot, rss.parent.parent.opts.Clock.PhysicalTime())
-	// Since the replica is now in StateSnapshot, there is no need for Raft to
-	// send MsgApp pings to discover what has been missed. So there is no
-	// liveness guarantee on when these tokens will be returned, and therefore we
-	// return all tokens in the tracker.
-	rss.returnTokens(ctx, rss.mu.tracker.UntrackAll())
+func (rss *replicaSendStream) changeToProbeLocked(ctx context.Context, now time.Time) {
+	// This is the first time we've seen the replica change to StateProbe,
+	// update the connected state and start time. If the state doesn't
+	// change within probeRecentlyReplicateDuration, we will close the
+	// stream. Also schedule an event, so that even if there are no
+	// entries, we will still reliably close the stream if still in
+	// StateProbe.
+	rss.changeConnectedStateLocked(probeRecentlyReplicate, now)
+	rss.parent.parent.opts.CloseTimerScheduler.ScheduleSendStreamCloseRaftMuLocked(
+		ctx, rss.parent.parent.opts.RangeID, probeRecentlyReplicateDuration())
+	// Return all tokens since other ranges may need them, and it may be some
+	// time before this replica transitions back to StateReplicate.
+	returnedSend, returnedEval := rss.mu.tracker.UntrackAll(rss.mu.nextRaftIndexInitial)
+	rss.returnSendTokens(ctx, returnedSend)
+	rss.returnEvalTokens(ctx, returnedEval)
 }
 
-// returnTokens takes the tokens untracked by the tracker and returns them to
-// the eval and send token counters.
-func (rss *replicaSendStream) returnTokens(
-	ctx context.Context, returned [raftpb.NumPriorities]kvflowcontrol.Tokens,
+// returnSendTokens returns tokens to the send token counters.
+func (rss *replicaSendStream) returnSendTokens(
+	ctx context.Context, returnedSend [raftpb.NumPriorities]kvflowcontrol.Tokens,
 ) {
-	for pri, tokens := range returned {
+	for pri, tokens := range returnedSend {
+		pri := raftpb.Priority(pri)
+		if tokens > 0 {
+			rss.parent.sendTokenCounter.Return(ctx, WorkClassFromRaftPriority(pri), tokens)
+		}
+	}
+}
+
+// returnEvalTokens returns tokens to the eval token counters.
+func (rss *replicaSendStream) returnEvalTokens(
+	ctx context.Context, returnedEval [raftpb.NumPriorities]kvflowcontrol.Tokens,
+) {
+	for pri, tokens := range returnedEval {
 		pri := raftpb.Priority(pri)
 		if tokens > 0 {
 			rss.parent.evalTokenCounter.Return(ctx, WorkClassFromRaftPriority(pri), tokens)
-			rss.parent.sendTokenCounter.Return(ctx, WorkClassFromRaftPriority(pri), tokens)
+		}
+	}
+}
+
+// REQUIRES: rss.mu.connectedState = replicate.
+func (rss *replicaSendStream) handleReadyEntriesLocked(
+	ctx context.Context, event raftEventForReplica,
+) {
+	if n := len(event.sendingEntries); n > 0 {
+		rss.mu.sendQueue.indexToSend = event.sendingEntries[n-1].index
+		for _, entry := range event.sendingEntries {
+			if !entry.usesFlowControl {
+				continue
+			}
+			var pri raftpb.Priority
+			if entry.index >= rss.mu.sendQueue.nextRaftIndex {
+				// Was never in the send-queue.
+				pri = entry.pri
+
+			} else {
+				// Was in the send-queue.
+				pri = raftpb.LowPri
+			}
+			rss.parent.sendTokenCounter.Deduct(ctx, WorkClassFromRaftPriority(pri), entry.tokens)
+			rss.mu.tracker.Track(ctx, entry.term, entry.index, pri, entry.tokens)
+		}
+	}
+	if n := len(event.newEntries); n > 0 {
+		if event.newEntries[0].index != rss.mu.sendQueue.nextRaftIndex {
+			panic("")
+		}
+		rss.mu.sendQueue.nextRaftIndex = event.newEntries[n-1].index + 1
+		for _, entry := range event.newEntries {
+			if !entry.usesFlowControl {
+				continue
+			}
+			var pri raftpb.Priority
+			if entry.index >= rss.mu.sendQueue.indexToSend {
+				// Being added to the send-queue.
+				//
+				// NB: we deduct elastic eval tokens, but we are not yet
+				// taking into account whether the replica has a send-queue or
+				// not in deciding whether it can be part of the quorum in
+				// WaitForEval. This is ok, since in this mode only elastic
+				// work will be subject to replication flow control.
+				pri = raftpb.LowPri
+			} else {
+				pri = entry.pri
+			}
+			rss.parent.evalTokenCounter.Deduct(ctx, WorkClassFromRaftPriority(pri), entry.tokens)
 		}
 	}
 }
@@ -797,20 +1076,11 @@ type connectedState uint32
 // latter.
 //
 // Initial states: replicate
-// State transitions:
-//
-//	replicate <=> {probeRecentlyReplicate, snapshot}
-//	snapshot => replicaSendStream closed (when observe StateProbe)
-//	probeRecentlyReplicate => replicaSendStream closed (after short delay)
+// State transitions: replicate <=> probeRecentlyReplicate
 const (
 	replicate connectedState = iota
 	probeRecentlyReplicate
-	snapshot
 )
-
-func (cs connectedState) shouldWaitForElasticEvalTokens() bool {
-	return cs == replicate || cs == probeRecentlyReplicate
-}
 
 func (cs connectedState) String() string {
 	return redact.StringWithoutMarkers(cs)
@@ -823,8 +1093,6 @@ func (cs connectedState) SafeFormat(w redact.SafePrinter, _ rune) {
 		w.SafeString("replicate")
 	case probeRecentlyReplicate:
 		w.SafeString("probeRecentlyReplicate")
-	case snapshot:
-		w.SafeString("snapshot")
 	default:
 		panic(fmt.Sprintf("unknown connectedState %v", cs))
 	}
