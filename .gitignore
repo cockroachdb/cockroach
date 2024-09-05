@@ -21,6 +21,7 @@ artifacts
 /certs
 # make stress, acceptance produce stress.test, acceptance.test
 *.test*
+pkg/cmd/roachtest/_runner-logs
 # fuzz tests
 work-Fuzz*
 *-fuzz.zip
