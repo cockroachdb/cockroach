@@ -29,6 +29,7 @@ func registerImportMixedVersions(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(4),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
+		Randomized:       true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			warehouses := 100
 			if c.IsLocal() {
