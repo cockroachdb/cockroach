@@ -52,6 +52,14 @@ var isResponseMsg = [...]bool{
 	pb.MsgFortifyLeaderResp: true,
 }
 
+var isMsgFromLeader = [...]bool{
+	pb.MsgApp:           true,
+	pb.MsgSnap:          true,
+	pb.MsgHeartbeat:     true,
+	pb.MsgFortifyLeader: true,
+	pb.MsgTimeoutNow:    true,
+}
+
 func isMsgInArray(msgt pb.MessageType, arr []bool) bool {
 	i := int(msgt)
 	return i < len(arr) && arr[i]
@@ -63,6 +71,10 @@ func IsLocalMsg(msgt pb.MessageType) bool {
 
 func IsResponseMsg(msgt pb.MessageType) bool {
 	return isMsgInArray(msgt, isResponseMsg[:])
+}
+
+func IsMsgFromLeader(msgt pb.MessageType) bool {
+	return isMsgInArray(msgt, isMsgFromLeader[:])
 }
 
 func IsLocalMsgTarget(id pb.PeerID) bool {
