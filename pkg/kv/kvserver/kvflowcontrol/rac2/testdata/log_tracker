@@ -117,11 +117,10 @@ append term=3 after=3 to=5
 mark:{Term:3 Index:5}, stable:1, admitted:[1 1 1 1]
 LowPri: {Term:1 Index:3}
 
-# TODO(pav-kv): this should admit the term 1 LowPri entry.
+# The term 1 entry is admitted because the admission mark is at term 3.
 admit term=3 index=2 pri=LowPri
 ----
 mark:{Term:3 Index:5}, stable:1, admitted:[1 1 1 1]
-LowPri: {Term:1 Index:3}
 
 # ------------------------------------------------------------------------------
 # Port of waiting_for_admission_state test.
