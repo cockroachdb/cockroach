@@ -1233,6 +1233,7 @@ func (n *Node) computeMetricsPeriodically(
 		return nil
 	})
 	n.updateNodeRangeCount()
+	n.storeCfg.KVFlowStreamTokenProvider.UpdateMetricGauges()
 	return err
 }
 

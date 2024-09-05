@@ -837,7 +837,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				}()
 			}
 			r.raftMu.flowControlLevel = level
-			r.flowControlV2.SetEnabledWhenLeaderRaftMuLocked(level)
+			r.flowControlV2.SetEnabledWhenLeaderRaftMuLocked(ctx, level)
 		}
 	}
 

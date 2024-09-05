@@ -175,7 +175,7 @@ type tokensPerWorkClass struct {
 type tokenCounter struct {
 	settings *cluster.Settings
 	clock    *hlc.Clock
-	metrics  *tokenCounterMetrics
+	metrics  *TokenCounterMetrics
 
 	mu struct {
 		syncutil.RWMutex
@@ -186,7 +186,7 @@ type tokenCounter struct {
 
 // newTokenCounter creates a new TokenCounter.
 func newTokenCounter(
-	settings *cluster.Settings, clock *hlc.Clock, metrics *tokenCounterMetrics,
+	settings *cluster.Settings, clock *hlc.Clock, metrics *TokenCounterMetrics,
 ) *tokenCounter {
 	t := &tokenCounter{
 		settings: settings,

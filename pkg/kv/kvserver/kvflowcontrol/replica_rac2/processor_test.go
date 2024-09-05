@@ -194,7 +194,9 @@ type testRangeControllerFactory struct {
 	rcs []*testRangeController
 }
 
-func (f *testRangeControllerFactory) New(state rangeControllerInitState) rac2.RangeController {
+func (f *testRangeControllerFactory) New(
+	ctx context.Context, state rangeControllerInitState,
+) rac2.RangeController {
 	fmt.Fprintf(f.b, " RangeControllerFactory.New(replicaSet=%s, leaseholder=%s, nextRaftIndex=%d)\n",
 		state.replicaSet, state.leaseholder, state.nextRaftIndex)
 	rc := &testRangeController{b: f.b, waited: true}
@@ -297,6 +299,7 @@ func TestProcessorBasic(t *testing.T) {
 			RangeControllerFactory: &rcFactory,
 			Settings:               st,
 			EnabledWhenLeaderLevel: enabled,
+			EvalWaitMetrics:        rac2.NewEvalWaitMetrics(),
 		}).(*processorImpl)
 		fmt.Fprintf(&b, "n%s,s%s,r%s: replica=%s, tenant=%s, enabled-level=%s\n",
 			p.opts.NodeID, p.opts.StoreID, p.opts.RangeID, p.opts.ReplicaID, tenantID,
@@ -361,7 +364,7 @@ func TestProcessorBasic(t *testing.T) {
 
 			case "set-enabled-level":
 				enabledLevel := parseEnabledLevel(t, d)
-				p.SetEnabledWhenLeaderRaftMuLocked(enabledLevel)
+				p.SetEnabledWhenLeaderRaftMuLocked(ctx, enabledLevel)
 				return builderStr()
 
 			case "get-enabled-level":

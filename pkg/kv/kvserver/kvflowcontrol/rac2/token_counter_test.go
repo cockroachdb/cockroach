@@ -132,18 +132,18 @@ func TestTokenAdjustment(t *testing.T) {
 				provider.UpdateMetricGauges()
 				var buf strings.Builder
 				// We are only using the eval token counter in this test.
-				counterMetrics := provider.tokenMetrics.counterMetrics[flowControlEvalMetricType]
-				streamMetrics := provider.tokenMetrics.streamMetrics[flowControlEvalMetricType]
+				counterMetrics := provider.tokenMetrics.CounterMetrics[flowControlEvalMetricType]
+				streamMetrics := provider.tokenMetrics.StreamMetrics[flowControlEvalMetricType]
 				for _, wc := range []admissionpb.WorkClass{
 					admissionpb.RegularWorkClass,
 					admissionpb.ElasticWorkClass,
 				} {
-					fmt.Fprintf(&buf, "%-48v: %v\n", streamMetrics.count[wc].GetName(), streamMetrics.count[wc].Value())
-					fmt.Fprintf(&buf, "%-48v: %v\n", streamMetrics.blockedCount[wc].GetName(), streamMetrics.blockedCount[wc].Value())
-					fmt.Fprintf(&buf, "%-48v: %v\n", streamMetrics.tokensAvailable[wc].GetName(), streamMetrics.tokensAvailable[wc].Value())
-					fmt.Fprintf(&buf, "%-48v: %v\n", counterMetrics.deducted[wc].GetName(), counterMetrics.deducted[wc].Count())
-					fmt.Fprintf(&buf, "%-48v: %v\n", counterMetrics.returned[wc].GetName(), counterMetrics.returned[wc].Count())
-					fmt.Fprintf(&buf, "%-48v: %v\n", counterMetrics.unaccounted[wc].GetName(), counterMetrics.unaccounted[wc].Count())
+					fmt.Fprintf(&buf, "%-48v: %v\n", streamMetrics.Count[wc].GetName(), streamMetrics.Count[wc].Value())
+					fmt.Fprintf(&buf, "%-48v: %v\n", streamMetrics.BlockedCount[wc].GetName(), streamMetrics.BlockedCount[wc].Value())
+					fmt.Fprintf(&buf, "%-48v: %v\n", streamMetrics.TokensAvailable[wc].GetName(), streamMetrics.TokensAvailable[wc].Value())
+					fmt.Fprintf(&buf, "%-48v: %v\n", counterMetrics.Deducted[wc].GetName(), counterMetrics.Deducted[wc].Count())
+					fmt.Fprintf(&buf, "%-48v: %v\n", counterMetrics.Returned[wc].GetName(), counterMetrics.Returned[wc].Count())
+					fmt.Fprintf(&buf, "%-48v: %v\n", counterMetrics.Unaccounted[wc].GetName(), counterMetrics.Unaccounted[wc].Count())
 				}
 				return buf.String()
 

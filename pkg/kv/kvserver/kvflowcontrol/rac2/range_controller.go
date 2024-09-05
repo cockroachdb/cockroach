@@ -278,7 +278,7 @@ func (rc *rangeController) WaitForEval(
 	var handles []tokenWaitingHandleInfo
 	var scratch []reflect.SelectCase
 
-	rc.opts.EvalWaitMetrics.onWaiting(wc)
+	rc.opts.EvalWaitMetrics.OnWaiting(wc)
 	start := rc.opts.Clock.PhysicalTime()
 retry:
 	// Snapshot the voterSets and voterSetRefreshCh.
@@ -292,7 +292,7 @@ retry:
 		// TODO(kvoli): We also need to do this in the replica_rac2.Processor,
 		// which will allow requests to bypass when a replica is not the leader and
 		// therefore the controller is closed.
-		rc.opts.EvalWaitMetrics.onBypassed(wc, rc.opts.Clock.PhysicalTime().Sub(start))
+		rc.opts.EvalWaitMetrics.OnBypassed(wc, rc.opts.Clock.PhysicalTime().Sub(start))
 		return false, nil
 	}
 	for _, vs := range vss {
@@ -329,14 +329,14 @@ retry:
 			case WaitSuccess:
 				continue
 			case ContextCanceled:
-				rc.opts.EvalWaitMetrics.onErrored(wc, rc.opts.Clock.PhysicalTime().Sub(start))
+				rc.opts.EvalWaitMetrics.OnErrored(wc, rc.opts.Clock.PhysicalTime().Sub(start))
 				return false, ctx.Err()
 			case RefreshWaitSignaled:
 				goto retry
 			}
 		}
 	}
-	rc.opts.EvalWaitMetrics.onAdmitted(wc, rc.opts.Clock.PhysicalTime().Sub(start))
+	rc.opts.EvalWaitMetrics.OnAdmitted(wc, rc.opts.Clock.PhysicalTime().Sub(start))
 	return true, nil
 }
 
