@@ -35,6 +35,59 @@
 =>
 (Scan (LimitScanPrivate $scanPrivate $limit $ordering))
 
+# PushLimitIntoProjectFilteredScan is similar to PushLimitIntoFilteredScan, but
+# matches when there is a Project expression between the Limit and the filtered
+# Scan.
+#
+# This rule is useful when GenerateConstrainedScans generates a Project above a
+# partial index Scan that produces a column(s) held constant by the partial
+# index predicate. For example, consider the schema and query:
+#
+#   CREATE TABLE t (a INT PRIMARY KEY, b INT, INDEX a_b_idx (a) WHERE b = 1)
+#   SELECT * FROM t WHERE a > 0 AND b = 1 LIMIT 1
+#
+# After GenerateConstrainedScans fires the memo will contain an expression tree
+# like:
+#
+#   limit
+#    ├── columns: a:1 b:2
+#    ├── project
+#    │    ├── columns: a:1 b:2 a:1
+#    │    ├── scan t@a_b_idx,partial
+#    │    │    ├── columns: a:1
+#    │    │    └── constraint: /1: [/1 - ]
+#    │    └── projections
+#    │         └── 1 [as=b:2]
+#    └── 5
+#
+# While the Project producing b:2 is beneficial because it eliminates the need
+# for an IndexJoin, it also prevents PushLimitIntoFilteredScan from pushing the
+# limit into the scan. PushLimitIntoProjectFilteredScan matches this specific
+# pattern to solve the issue.
+#
+# This rule is similar to the PushLimitIntoProject normalization rule.
+# Unfortunately, that rule does not apply here because normalization rules
+# cannot not fire on parent expressions when alternative expressions are
+# generated for their child groups during exploration. So, an exploration rule
+# with similar behavior is necessary.
+[PushLimitIntoProjectFilteredScan, Explore]
+(Limit
+    (Project
+            (Scan $scanPrivate:*)
+            $projections:*
+            $passthrough:*
+        ) &
+        (PushLimitIntoProjectFilteredScanEnabled)
+    (Const $limit:* & (IsPositiveInt $limit))
+    $ordering:* & (CanLimitFilteredScan $scanPrivate $ordering)
+)
+=>
+(Project
+    (Scan (LimitScanPrivate $scanPrivate $limit $ordering))
+    $projections
+    $passthrough
+)
+
 # PushLimitIntoIndexJoin pushes a limit through an index join. Since index
 # lookup can be expensive, it's always better to discard rows beforehand.
 [PushLimitIntoIndexJoin, Explore]
