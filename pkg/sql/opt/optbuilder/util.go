@@ -710,9 +710,21 @@ func (b *Builder) resolveDataSourceRef(
 // of the memo.
 func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv privilege.Kind) {
 	if !(priv == privilege.SELECT && b.skipSelectPrivilegeChecks) {
-		err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
-		if err != nil {
-			panic(err)
+		// If we are inside a routine, we check the privilege override to determine
+		// whether to run the privilege check against the current user. If
+		// privilegeOverride's securityMode is RoutineDefiner, we will run the
+		// privilege check against the owner of the routine.
+		if b.insideSQLRoutine && b.privilegeOverride.SecurityMode == tree.RoutineDefiner {
+			err := b.catalog.CheckPrivilegeForRoutineOwner(b.ctx, ds, priv, b.privilegeOverride.RoutineOid)
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			// Otherwise, we will run the privilege check against the current user.
+			err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
+			if err != nil {
+				panic(err)
+			}
 		}
 	} else {
 		// The check is skipped, so don't recheck when dependencies are checked.

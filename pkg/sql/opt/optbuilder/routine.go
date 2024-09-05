@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -55,7 +56,11 @@ func (b *Builder) buildUDF(
 	// Check for execution privileges for user-defined overloads. Built-in
 	// overloads do not need to be checked.
 	if o.Type == tree.UDFRoutine {
-		if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid); err != nil {
+		var privilegeOverride *cat.PrivilegeOverride
+		if b.insideSQLRoutine {
+			privilegeOverride = &b.privilegeOverride
+		}
+		if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, privilegeOverride); err != nil {
 			panic(err)
 		}
 	}
@@ -191,7 +196,7 @@ func (b *Builder) resolveProcedureDefinition(
 	}
 
 	// Check for execution privileges.
-	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid); err != nil {
+	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, nil); err != nil {
 		panic(err)
 	}
 	return f, def
@@ -359,6 +364,10 @@ func (b *Builder) buildRoutine(
 	b.insideUDF = true
 	b.insideSQLRoutine = o.Language == tree.RoutineLangSQL
 	isSetReturning := o.Class == tree.GeneratorClass
+	b.privilegeOverride = cat.PrivilegeOverride{
+		SecurityMode: o.SecurityMode,
+		RoutineOid:   o.Oid,
+	}
 
 	// Build an expression for each statement in the function body.
 	var body []memo.RelExpr

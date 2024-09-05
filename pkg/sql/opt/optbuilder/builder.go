@@ -184,6 +184,12 @@ type Builder struct {
 	// subqueryNameIdx helps generate unique subquery names during star
 	// expansion.
 	subqueryNameIdx int
+
+	// privilegeOverride helps identify the security mode for privilege checks
+	// performed in a routine. For routines that are specified with SECURITY
+	// DEFINER, the owner of the routine is checked. Otherwise, the check is
+	// against the current user (the invoker).
+	privilegeOverride cat.PrivilegeOverride
 }
 
 // New creates a new Builder structure initialized with the given

@@ -509,7 +509,7 @@ func (md *Metadata) CheckDependencies(
 		return false, err
 	}
 	for _, dep := range md.udfDeps {
-		if err := optCatalog.CheckExecutionPrivilege(ctx, dep.overload.Oid); err != nil {
+		if err := optCatalog.CheckExecutionPrivilege(ctx, dep.overload.Oid, nil); err != nil {
 			return false, err
 		}
 	}

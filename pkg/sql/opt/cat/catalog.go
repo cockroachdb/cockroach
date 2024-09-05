@@ -175,6 +175,12 @@ type Catalog interface {
 	// the given catalog object. If not, then CheckPrivilege returns an error.
 	CheckPrivilege(ctx context.Context, o Object, priv privilege.Kind) error
 
+	// CheckPrivilegeForRoutineOwner is like CheckPrivilege, but specialized
+	// to run the given privilege check on the owner of the routineOid.
+	CheckPrivilegeForRoutineOwner(
+		ctx context.Context, o Object, priv privilege.Kind, routineOid oid.Oid,
+	) error
+
 	// CheckAnyPrivilege verifies that the current user has any privilege on
 	// the given catalog object. If not, then CheckAnyPrivilege returns an error.
 	CheckAnyPrivilege(ctx context.Context, o Object) error
@@ -182,7 +188,7 @@ type Catalog interface {
 	// CheckExecutionPrivilege verifies that the current user has execution
 	// privileges for the UDF with the given OID. If not, then CheckPrivilege
 	// returns an error.
-	CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error
+	CheckExecutionPrivilege(ctx context.Context, oid oid.Oid, privilegeOverride *PrivilegeOverride) error
 
 	// HasAdminRole checks that the current user has admin privileges. If yes,
 	// returns true. Returns an error if query on the `system.users` table failed
@@ -211,4 +217,13 @@ type Catalog interface {
 	// Optimizer returns the query Optimizer used to optimize SQL statements
 	// referencing objects in this catalog, if any.
 	Optimizer() interface{}
+}
+
+type PrivilegeOverride struct {
+	// SecurityMode specifies whether the routine uses SECURITY DEFINER or
+	// SECURITY INVOKER for privilege checks.
+	SecurityMode tree.RoutineSecurity
+	// RoutineOid is the OID of the routine used to identify its owner for
+	// SECURITY DEFINER checks.
+	RoutineOid oid.Oid
 }

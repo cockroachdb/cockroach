@@ -414,6 +414,26 @@ func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv pri
 	return oc.planner.CheckPrivilege(ctx, desc, priv)
 }
 
+// CheckPrivilegeForRoutineOwner is part of the cat.Catalog interface.
+func (oc *optCatalog) CheckPrivilegeForRoutineOwner(
+	ctx context.Context, o cat.Object, priv privilege.Kind, routineOid oid.Oid,
+) error {
+	if o.ID() == cat.DefaultStableID {
+		return errors.AssertionFailedf("object with invalid id [%d] in "+
+			"CheckPrivilegeForRoutineOwner", o.ID())
+	}
+	funcDesc, err := oc.planner.FunctionDesc(ctx, routineOid)
+	if err != nil {
+		return err
+	}
+	owner := funcDesc.FuncDesc().Privileges.Owner()
+	desc, err := getDescFromCatalogObjectForPermissions(o)
+	if err != nil {
+		return err
+	}
+	return oc.planner.CheckPrivilegeForUser(ctx, desc, priv, owner)
+}
+
 // CheckAnyPrivilege is part of the cat.Catalog interface.
 func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 	desc, err := getDescFromCatalogObjectForPermissions(o)
@@ -424,10 +444,20 @@ func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error
 }
 
 // CheckExecutionPrivilege is part of the cat.Catalog interface.
-func (oc *optCatalog) CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error {
+func (oc *optCatalog) CheckExecutionPrivilege(
+	ctx context.Context, oid oid.Oid, privilegeOverride *cat.PrivilegeOverride,
+) error {
 	desc, err := oc.planner.FunctionDesc(ctx, oid)
 	if err != nil {
 		return errors.WithAssertionFailure(err)
+	}
+	var outerFuncDesc catalog.FunctionDescriptor
+	if privilegeOverride != nil && privilegeOverride.SecurityMode == tree.RoutineDefiner {
+		outerFuncDesc, err = oc.planner.FunctionDesc(ctx, privilegeOverride.RoutineOid)
+		if err != nil {
+			return errors.WithAssertionFailure(err)
+		}
+		return oc.planner.CheckPrivilegeForUser(ctx, desc, privilege.EXECUTE, outerFuncDesc.FuncDesc().GetPrivileges().Owner())
 	}
 	return oc.planner.CheckPrivilege(ctx, desc, privilege.EXECUTE)
 }

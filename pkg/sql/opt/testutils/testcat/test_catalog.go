@@ -270,6 +270,13 @@ func (tc *Catalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privil
 	return tc.CheckAnyPrivilege(ctx, o)
 }
 
+// CheckPrivilegeForRoutineOwner is part of the cat.Catalog interface.
+func (tc *Catalog) CheckPrivilegeForRoutineOwner(
+	ctx context.Context, o cat.Object, priv privilege.Kind, routineOid oid.Oid,
+) error {
+	return tc.CheckAnyPrivilege(ctx, o)
+}
+
 // CheckAnyPrivilege is part of the cat.Catalog interface.
 func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 	switch t := o.(type) {
@@ -298,7 +305,9 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 }
 
 // CheckExecutionPrivilege is part of the cat.Catalog interface.
-func (tc *Catalog) CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error {
+func (tc *Catalog) CheckExecutionPrivilege(
+	ctx context.Context, oid oid.Oid, securityMode tree.RoutineSecurity, outerFuncOid *oid.Oid,
+) error {
 	if tc.revokedUDFOids.Contains(int(oid)) {
 		return pgerror.Newf(pgcode.InsufficientPrivilege, "user does not have privilege to execute function with OID %d", oid)
 	}
