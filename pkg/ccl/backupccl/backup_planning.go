@@ -638,6 +638,15 @@ func backupPlanHook(
 			return errors.AssertionFailedf("unexpected descriptor coverage %v", backupStmt.Coverage())
 		}
 
+		for _, t := range targetDescs {
+			if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
+				if tbl.ExternalRowData().TenantID.IsSet() {
+					return errors.UnimplementedError(errors.IssueLink{}, "backing up from a replication target is not supported")
+				}
+				return errors.UnimplementedError(errors.IssueLink{}, "backing up from external tables is not supported")
+			}
+		}
+
 		// Check BACKUP privileges.
 		err = checkPrivilegesForBackup(ctx, backupStmt, p, targetDescs, to)
 		if err != nil {
