@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -161,9 +162,10 @@ func TestNodePropose(t *testing.T) {
 	n.Propose(context.TODO(), []byte("somedata"))
 	n.Stop()
 
-	require.Len(t, msgs, 1)
-	assert.Equal(t, raftpb.MsgProp, msgs[0].Type)
-	assert.Equal(t, []byte("somedata"), msgs[0].Entries[0].Data)
+	require.Len(t, msgs, 2)
+	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
+	assert.Equal(t, raftpb.MsgProp, msgs[1].Type)
+	assert.Equal(t, []byte("somedata"), msgs[1].Entries[0].Data)
 }
 
 // TestDisableProposalForwarding ensures that proposals are not forwarded to
@@ -229,9 +231,10 @@ func TestNodeProposeConfig(t *testing.T) {
 	n.ProposeConfChange(context.TODO(), cc)
 	n.Stop()
 
-	require.Len(t, msgs, 1)
-	assert.Equal(t, raftpb.MsgProp, msgs[0].Type)
-	assert.Equal(t, ccdata, msgs[0].Entries[0].Data)
+	require.Len(t, msgs, 2)
+	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
+	assert.Equal(t, raftpb.MsgProp, msgs[1].Type)
+	assert.Equal(t, ccdata, msgs[1].Entries[0].Data)
 }
 
 // TestNodeProposeAddDuplicateNode ensures that two proposes to add the same node should
@@ -374,14 +377,11 @@ func TestNodeProposeWaitDropped(t *testing.T) {
 		}
 		n.Advance()
 	}
-	proposalTimeout := time.Millisecond * 100
-	ctx, cancel := context.WithTimeout(context.Background(), proposalTimeout)
-	// propose with cancel should be cancelled earyly if dropped
-	assert.Equal(t, ErrProposalDropped, n.Propose(ctx, droppingMsg))
-	cancel()
+	assert.Equal(t, ErrProposalDropped, n.Propose(context.Background(), droppingMsg))
 
 	n.Stop()
-	require.Empty(t, msgs)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
 }
 
 // TestNodeTick ensures that node.Tick() will increase the
@@ -462,7 +462,7 @@ func TestNodeStart(t *testing.T) {
 			HardState:        raftpb.HardState{Term: 2, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
 			Entries:          nil,
 			CommittedEntries: []raftpb.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
-			MustSync:         false,
+			MustSync:         true,
 		},
 	}
 	storage := NewMemoryStorage()
@@ -474,6 +474,7 @@ func TestNodeStart(t *testing.T) {
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
+		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
 	StartNode(c, []Peer{{ID: 1}})
 	ctx, cancel, n := newNodeTestHarness(context.Background(), t, c, Peer{ID: 1})
@@ -548,6 +549,7 @@ func TestNodeRestart(t *testing.T) {
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
+		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
 	n := RestartNode(c)
 	defer n.Stop()
@@ -597,6 +599,7 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
+		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
 	n := RestartNode(c)
 	defer n.Stop()
@@ -621,6 +624,7 @@ func TestNodeAdvance(t *testing.T) {
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
+		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
 	ctx, cancel, n := newNodeTestHarness(context.Background(), t, c)
 	defer cancel()

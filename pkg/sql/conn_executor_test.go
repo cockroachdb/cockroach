@@ -428,7 +428,7 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	for _, s := range []string{
-		`SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true;`,
+		`SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true;`,
 		`CREATE DATABASE t;`,
 		`CREATE TABLE t.test (x FLOAT);`,
 	} {
@@ -439,7 +439,7 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 
 	for _, isoLevel := range []tree.IsolationLevel{
 		tree.ReadCommittedIsolation,
-		tree.SnapshotIsolation,
+		tree.RepeatableReadIsolation,
 		tree.SerializableIsolation,
 	} {
 		t.Run(isoLevel.String(), func(t *testing.T) {

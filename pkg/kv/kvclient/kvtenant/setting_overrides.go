@@ -18,7 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
@@ -195,6 +198,27 @@ func (c *connector) TenantInfo() (tenantcapabilities.Entry, <-chan struct{}) {
 		DataState:          c.metadataMu.dataState,
 		ServiceMode:        c.metadataMu.serviceMode,
 	}, c.metadataMu.notifyCh
+}
+
+// ReadFromTenantInfo allows retrieving the other tenant, if any, from which the
+// calling tenant should configure itself to read, along with the latest
+// timestamp at which it should perform such reads at this time.
+func (c *connector) ReadFromTenantInfo(
+	ctx context.Context,
+) (roachpb.TenantID, hlc.Timestamp, error) {
+	if c.tenantID.IsSystem() {
+		return roachpb.TenantID{}, hlc.Timestamp{}, nil
+	}
+
+	client, err := c.getClient(ctx)
+	if err != nil {
+		return roachpb.TenantID{}, hlc.Timestamp{}, err
+	}
+	resp, err := client.ReadFromTenantInfo(ctx, &serverpb.ReadFromTenantInfoRequest{TenantID: c.tenantID})
+	if err != nil {
+		return roachpb.TenantID{}, hlc.Timestamp{}, err
+	}
+	return resp.ReadFrom, resp.ReadAt, nil
 }
 
 // processSettingsEvent updates the setting overrides based on the event.

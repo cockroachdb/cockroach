@@ -45,6 +45,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
@@ -55,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
@@ -415,6 +418,7 @@ func newRaftConfig(
 
 		PreVote:     true,
 		CheckQuorum: storeCfg.RaftEnableCheckQuorum,
+		CRDBVersion: storeCfg.Settings.Version,
 	}
 }
 
@@ -912,6 +916,12 @@ type Store struct {
 	// transport is connected to, and is used by the canonical
 	// replicaFlowControlIntegration implementation.
 	raftTransportForFlowControl raftTransportForFlowControl
+
+	// kvflowRangeControllerFactory is used for replication AC (flow control) V2
+	// to create new range controllers which mediate the flow of requests to
+	// replicas.
+	kvflowRangeControllerFactory replica_rac2.RangeControllerFactory
+
 	// metricsMu protects the collection and update of engine metrics.
 	metricsMu syncutil.Mutex
 
@@ -1152,17 +1162,18 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
-	DefaultSpanConfig    roachpb.SpanConfig
-	Settings             *cluster.Settings
-	Clock                *hlc.Clock
-	Gossip               *gossip.Gossip
-	DB                   *kv.DB
-	NodeLiveness         *liveness.NodeLiveness
-	StorePool            *storepool.StorePool
-	Transport            *RaftTransport
-	NodeDialer           *nodedialer.Dialer
-	RPCContext           *rpc.Context
-	RangeDescriptorCache *rangecache.RangeCache
+	DefaultSpanConfig      roachpb.SpanConfig
+	Settings               *cluster.Settings
+	Clock                  *hlc.Clock
+	Gossip                 *gossip.Gossip
+	DB                     *kv.DB
+	NodeLiveness           *liveness.NodeLiveness
+	StorePool              *storepool.StorePool
+	Transport              *RaftTransport
+	StoreLivenessTransport *storeliveness.Transport
+	NodeDialer             *nodedialer.Dialer
+	RPCContext             *rpc.Context
+	RangeDescriptorCache   *rangecache.RangeCache
 
 	ClosedTimestampSender   *sidetransport.Sender
 	ClosedTimestampReceiver sidetransportReceiver
@@ -1274,6 +1285,14 @@ type StoreConfig struct {
 	// KVFlowHandleMetrics is a shared metrics struct for all
 	// kvflowcontrol.Handles.
 	KVFlowHandleMetrics *kvflowhandle.Metrics
+	// KVFlowAdmittedPiggybacker is used for replication AC (flow control) v2.
+	KVFlowAdmittedPiggybacker replica_rac2.AdmittedPiggybacker
+	// KVFlowStreamTokenProvider is used for replication AC (flow control) v2 to
+	// provide token counters for replication streams.
+	KVFlowStreamTokenProvider *rac2.StreamTokenCounterProvider
+	// KVFlowEvalWaitMetrics is used for replication AC (flow control) v2 to
+	// track requests waiting for evaluation.
+	KVFlowEvalWaitMetrics *rac2.EvalWaitMetrics
 
 	// SchedulerLatencyListener listens in on scheduling latencies, information
 	// that's then used to adjust various admission control components (like how
@@ -1531,6 +1550,17 @@ func NewStore(
 	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s,
 		cfg.RaftSchedulerConcurrency, cfg.RaftSchedulerShardSize, cfg.RaftSchedulerConcurrencyPriority,
 		cfg.RaftElectionTimeoutTicks)
+
+	// kvflowRangeControllerFactory depends on the raft scheduler, so it must be
+	// created per-store rather than per-node like other replication admission
+	// control (flow control) v2 components.
+	s.kvflowRangeControllerFactory = replica_rac2.NewRangeControllerFactoryImpl(
+		s.Clock(),
+		s.cfg.KVFlowEvalWaitMetrics,
+		s.cfg.KVFlowStreamTokenProvider,
+		replica_rac2.NewStreamCloseScheduler(
+			s.stopper, timeutil.DefaultTimeSource{}, s.scheduler),
+	)
 
 	// Run a log SyncWaiter loop for every 32 raft scheduler goroutines.
 	// Experiments on c5d.12xlarge instances (48 vCPUs, the largest single-socket
@@ -2170,8 +2200,18 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	)
 	s.metrics.registry.AddMetricStruct(s.recoveryMgr.Metrics())
 
-	// TODO(mira): create the store liveness support manager here.
-	// s.storeLiveness = ...
+	heartbeatInterval, livenessInterval := s.cfg.StoreLivenessDurations()
+	supportGracePeriod := s.cfg.RPCContext.StoreLivenessWithdrawalGracePeriod()
+	options := storeliveness.NewOptions(heartbeatInterval, livenessInterval, supportGracePeriod)
+	sm := storeliveness.NewSupportManager(
+		slpb.StoreIdent{NodeID: s.nodeDesc.NodeID}, s.StateEngine(), options,
+		s.cfg.Settings, s.stopper, s.cfg.Clock, s.cfg.StoreLivenessTransport,
+	)
+	s.cfg.StoreLivenessTransport.ListenMessages(s.StoreID(), sm)
+	s.storeLiveness = sm
+	if err = sm.Start(ctx); err != nil {
+		return errors.Wrap(err, "starting store liveness")
+	}
 
 	s.rangeIDAlloc = idAlloc
 
@@ -3214,6 +3254,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		unavailableRangeCount     int64
 		underreplicatedRangeCount int64
 		overreplicatedRangeCount  int64
+		decommissioningRangeCount int64
 		behindCount               int64
 		pausedFollowerCount       int64
 		ioOverload                float64
@@ -3233,6 +3274,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	)
 
 	now := s.cfg.Clock.NowAsClockTimestamp()
+	goNow := now.ToTimestamp().GoTime()
 	clusterNodes := s.ClusterNodeCount()
 
 	s.mu.RLock()
@@ -3295,6 +3337,12 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 			if metrics.Overreplicated {
 				overreplicatedRangeCount++
+			}
+			if metrics.Decommissioning {
+				// NB: Enqueue is disabled by default from here and throttled async if
+				// enabled.
+				rep.maybeEnqueueProblemRange(ctx, goNow, metrics.LeaseValid, metrics.Leaseholder)
+				decommissioningRangeCount++
 			}
 		}
 		pausedFollowerCount += metrics.PausedFollowerCount
@@ -3359,6 +3407,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.UnavailableRangeCount.Update(unavailableRangeCount)
 	s.metrics.UnderReplicatedRangeCount.Update(underreplicatedRangeCount)
 	s.metrics.OverReplicatedRangeCount.Update(overreplicatedRangeCount)
+	s.metrics.DecommissioningRangeCount.Update(decommissioningRangeCount)
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
 	s.metrics.RaftPausedFollowerCount.Update(pausedFollowerCount)
 	s.metrics.IOOverload.Update(ioOverload)

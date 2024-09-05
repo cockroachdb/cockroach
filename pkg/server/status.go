@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -488,6 +489,10 @@ type statusServer struct {
 	// take 2^16 seconds (18 hours) to hit any one of them.
 	cancelSemaphore *quotapool.IntPool
 
+	// updateTableMetadataJobSignal is used to signal the updateTableMetadataCacheJob
+	// to execute.
+	updateTableMetadataJobSignal chan struct{}
+
 	knobs *TestingKnobs
 }
 
@@ -604,8 +609,9 @@ func newStatusServer(
 		internalExecutor: internalExecutor,
 
 		// See the docstring on cancelSemaphore for details about this initialization.
-		cancelSemaphore: quotapool.NewIntPool("pgwire-cancel", 256),
-		knobs:           knobs,
+		cancelSemaphore:              quotapool.NewIntPool("pgwire-cancel", 256),
+		updateTableMetadataJobSignal: make(chan struct{}),
+		knobs:                        knobs,
 	}
 
 	return server
@@ -733,7 +739,7 @@ func (s *systemStatusServer) Gossip(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	if local {
@@ -779,7 +785,7 @@ func (s *systemStatusServer) EngineStats(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -815,7 +821,7 @@ func (s *systemStatusServer) Allocator(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -1044,7 +1050,7 @@ func (s *statusServer) Certificates(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	if s.cfg.Insecure {
@@ -1165,7 +1171,7 @@ func (s *statusServer) Details(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
@@ -1229,7 +1235,7 @@ func (s *statusServer) GetFiles(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
@@ -1289,7 +1295,7 @@ func (s *statusServer) LogFilesList(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
@@ -1324,7 +1330,7 @@ func (s *statusServer) LogFile(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
@@ -1430,7 +1436,7 @@ func (s *statusServer) Logs(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
@@ -1518,7 +1524,7 @@ func (s *statusServer) Stacks(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -1594,7 +1600,7 @@ func (s *statusServer) processProfileProtoGoroutines(
 	}
 
 	if err := mergedProfiles.Write(res); err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	return res.Bytes(), nil
@@ -1650,7 +1656,7 @@ func (s *statusServer) processCPUProfilesFromAllNodes(
 
 	var buf bytes.Buffer
 	if err := mergedProfiles.Write(&buf); err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return buf.Bytes(), nil
 }
@@ -1747,7 +1753,7 @@ func (s *statusServer) Profile(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -2040,7 +2046,7 @@ func (s *statusServer) nodeStatus(
 ) (*statuspb.NodeStatus, error) {
 	nodeID, _, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	key := keys.NodeStatusKey(nodeID)
@@ -2209,7 +2215,7 @@ func (s *statusServer) Metrics(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -2385,7 +2391,7 @@ func (s *systemStatusServer) rangesHelper(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, 0, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, 0, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -2495,6 +2501,7 @@ func (s *systemStatusServer) rangesHelper(
 				NoLease:                metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
 				QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
 				RaftLogTooLarge:        metrics.RaftLogTooLarge,
+				RangeTooLarge:          metrics.RangeTooLarge,
 				CircuitBreakerError:    len(state.CircuitBreakerError) > 0,
 				PausedFollowers:        metrics.PausedFollowerCount > 0,
 			},
@@ -2564,7 +2571,7 @@ func (s *systemStatusServer) rangesHelper(
 		return nil
 	})
 	if err != nil {
-		return nil, 0, status.Errorf(codes.Internal, err.Error())
+		return nil, 0, status.Error(codes.Internal, err.Error())
 	}
 	var next int
 	if limit > 0 {
@@ -2641,7 +2648,7 @@ func (s *systemStatusServer) TenantRanges(
 		nodeIDString := nodeID.String()
 		_, local, err := s.parseNodeID(nodeIDString)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, err.Error())
+			return nil, status.Error(codes.Internal, err.Error())
 		}
 
 		nodeReq := &serverpb.RangesRequest{
@@ -2753,7 +2760,7 @@ func (s *systemStatusServer) HotRanges(
 	if len(req.NodeID) > 0 {
 		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 
 		// Only hot ranges from the local node.
@@ -3247,7 +3254,7 @@ func iterateNodes[Client, Result any](
 				responseFn(res.nodeID, res.response)
 			}
 		case <-ctx.Done():
-			resultErr = errors.Errorf("request of %s canceled before completion", errorCtx)
+			resultErr = errors.Wrapf(ctx.Err(), "request of %s canceled before completion", errorCtx)
 		}
 		numNodes--
 	}
@@ -3438,7 +3445,7 @@ func (s *statusServer) CancelSession(
 
 	reqUsername, err := username.MakeSQLUsernameFromPreNormalizedStringChecked(req.Username)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	session, ok := s.sessionRegistry.GetSessionByID(sessionID)
@@ -3491,7 +3498,7 @@ func (s *statusServer) CancelQuery(
 
 	reqUsername, err := username.MakeSQLUsernameFromPreNormalizedStringChecked(req.Username)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	session, ok := s.sessionRegistry.GetSessionByQueryID(queryID)
@@ -3679,7 +3686,7 @@ func (s *statusServer) ListExecutionInsights(
 	if len(req.NodeID) > 0 {
 		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		if local {
 			return s.localExecutionInsights(ctx)
@@ -3770,7 +3777,7 @@ func (s *systemStatusServer) TenantServiceStatus(
 	if len(req.NodeID) > 0 {
 		reqNodeID, local, err := s.parseNodeID(req.NodeID)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 
 		if local {
@@ -3840,7 +3847,7 @@ func (s *statusServer) Diagnostics(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -3869,7 +3876,7 @@ func (s *systemStatusServer) Stores(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -3998,7 +4005,7 @@ func (s *statusServer) JobRegistryStatus(
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
@@ -4066,7 +4073,7 @@ func (s *statusServer) TxnIDResolution(
 
 	requestedNodeID, local, err := s.parseNodeID(req.CoordinatorID)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if local {
 		return s.localTxnIDResolution(req), nil
@@ -4110,7 +4117,7 @@ func (s *statusServer) TransactionContentionEvents(
 	if len(req.NodeID) > 0 {
 		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		if local {
 			return s.localTransactionContentionEvents(shouldRedactContendingKey), nil
@@ -4194,4 +4201,56 @@ func (s *statusServer) ListJobProfilerExecutionDetails(
 		return nil, err
 	}
 	return &serverpb.ListJobProfilerExecutionDetailsResponse{Files: files}, nil
+}
+
+func (s *statusServer) localUpdateTableMetadataCache() (
+	*serverpb.UpdateTableMetadataCacheResponse,
+	error,
+) {
+	select {
+	case s.updateTableMetadataJobSignal <- struct{}{}:
+	default:
+		return nil, status.Errorf(codes.Unavailable, "update table metadata cache job is not ready to start execution")
+	}
+	return &serverpb.UpdateTableMetadataCacheResponse{}, nil
+}
+
+func (s *statusServer) UpdateTableMetadataCache(
+	ctx context.Context, req *serverpb.UpdateTableMetadataCacheRequest,
+) (*serverpb.UpdateTableMetadataCacheResponse, error) {
+	if req.Local {
+		return s.localUpdateTableMetadataCache()
+	}
+	ctx = s.AnnotateCtx(ctx)
+
+	// Get the node id for the job.
+	row, err := s.internalExecutor.QueryRow(ctx, "get-node-id", nil, `
+SELECT claim_instance_id
+FROM system.jobs
+WHERE id = $1
+`, jobs.UpdateTableMetadataCacheJobID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "%s", err.Error())
+	}
+	if row == nil {
+		return nil, status.Error(codes.FailedPrecondition, "no job record found")
+	}
+	if row[0] == tree.DNull {
+		return nil, status.Error(codes.Unavailable, "update table metadata cache job is unclaimed")
+	}
+
+	nodeID := roachpb.NodeID(*row[0].(*tree.DInt))
+	statusClient, err := s.dialNode(ctx, nodeID)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+	return statusClient.UpdateTableMetadataCache(ctx, &serverpb.UpdateTableMetadataCacheRequest{
+		Local: true,
+	})
+}
+
+// GetUpdateTableMetadataCacheSignal returns the signal channel used
+// in the UpdateTableMetadataCache rpc.
+func (s *statusServer) GetUpdateTableMetadataCacheSignal() chan struct{} {
+	return s.updateTableMetadataJobSignal
 }

@@ -71,6 +71,17 @@ Messages:
 
 # Step 4: node 3 becomes the leader after getting a vote from nodes 4, 5, and 6.
 
+bump-epoch 2
+----
+  1 2 3 4 5 6 7
+1 1 2 1 1 1 1 1
+2 1 2 1 1 1 1 1
+3 1 2 1 1 1 1 1
+4 1 2 1 1 1 1 1
+5 1 2 1 1 1 1 1
+6 1 2 1 1 1 1 1
+7 1 2 1 1 1 1 1
+
 campaign 3
 ----
 INFO 3 is starting a new election at term 1
@@ -86,7 +97,7 @@ process-ready 3
 ----
 Ready MustSync=true:
 State:StateCandidate
-HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:1
+HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
 Messages:
 3->1 MsgVote Term:2 Log:1/11
 3->2 MsgVote Term:2 Log:1/11
@@ -94,7 +105,7 @@ Messages:
 3->5 MsgVote Term:2 Log:1/11
 3->6 MsgVote Term:2 Log:1/11
 3->7 MsgVote Term:2 Log:1/11
-3->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 LeadEpoch:1 Responses:[
+3->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
   3->3 MsgVoteResp Term:2 Log:0/0
 ]
 
@@ -117,23 +128,23 @@ process-ready 4 5 6
 ----
 > 4 handling Ready
   Ready MustSync=true:
-  HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:1
+  HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
   Messages:
-  4->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 LeadEpoch:1 Responses:[
+  4->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
     4->3 MsgVoteResp Term:2 Log:0/0
   ]
 > 5 handling Ready
   Ready MustSync=true:
-  HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:1
+  HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
   Messages:
-  5->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 LeadEpoch:1 Responses:[
+  5->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
     5->3 MsgVoteResp Term:2 Log:0/0
   ]
 > 6 handling Ready
   Ready MustSync=true:
-  HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:1
+  HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
   Messages:
-  6->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 LeadEpoch:1 Responses:[
+  6->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
     6->3 MsgVoteResp Term:2 Log:0/0
   ]
 
@@ -141,22 +152,22 @@ process-append-thread 3 4 5 6
 ----
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 LeadEpoch:1
+  3->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3
   Responses:
   3->3 MsgVoteResp Term:2 Log:0/0
 > 4 processing append thread
   Processing:
-  4->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 LeadEpoch:1
+  4->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3
   Responses:
   4->3 MsgVoteResp Term:2 Log:0/0
 > 5 processing append thread
   Processing:
-  5->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 LeadEpoch:1
+  5->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3
   Responses:
   5->3 MsgVoteResp Term:2 Log:0/0
 > 6 processing append thread
   Processing:
-  6->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 LeadEpoch:1
+  6->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3
   Responses:
   6->3 MsgVoteResp Term:2 Log:0/0
 
@@ -203,6 +214,7 @@ Messages:
 3->7 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 3->AppendThread MsgStorageAppend Term:2 Log:2/12 Commit:11 Vote:3 Lead:3 LeadEpoch:1 Entries:[2/12 EntryNormal ""] Responses:[
   3->3 MsgAppResp Term:2 Log:0/12 Commit:11
+  3->3 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   AppendThread->3 MsgStorageAppendResp Term:0 Log:2/12
 ]
 
@@ -260,7 +272,7 @@ process-ready 4
 ----
 Ready MustSync=true:
 State:StateCandidate
-HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:1
+HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
 Messages:
 4->1 MsgVote Term:3 Log:1/11
 4->2 MsgVote Term:3 Log:1/11
@@ -268,7 +280,7 @@ Messages:
 4->5 MsgVote Term:3 Log:1/11
 4->6 MsgVote Term:3 Log:1/11
 4->7 MsgVote Term:3 Log:1/11
-4->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 LeadEpoch:1 Responses:[
+4->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
   4->4 MsgVoteResp Term:3 Log:0/0
 ]
 
@@ -291,23 +303,23 @@ process-ready 5 6 7
 ----
 > 5 handling Ready
   Ready MustSync=true:
-  HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:1
+  HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
   Messages:
-  5->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 LeadEpoch:1 Responses:[
+  5->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
     5->4 MsgVoteResp Term:3 Log:0/0
   ]
 > 6 handling Ready
   Ready MustSync=true:
-  HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:1
+  HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
   Messages:
-  6->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 LeadEpoch:1 Responses:[
+  6->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
     6->4 MsgVoteResp Term:3 Log:0/0
   ]
 > 7 handling Ready
   Ready MustSync=true:
-  HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:1
+  HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
   Messages:
-  7->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 LeadEpoch:1 Responses:[
+  7->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
     7->4 MsgVoteResp Term:3 Log:0/0
   ]
 
@@ -315,22 +327,22 @@ process-append-thread 4 5 6 7
 ----
 > 4 processing append thread
   Processing:
-  4->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 LeadEpoch:1
+  4->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4
   Responses:
   4->4 MsgVoteResp Term:3 Log:0/0
 > 5 processing append thread
   Processing:
-  5->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 LeadEpoch:1
+  5->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4
   Responses:
   5->4 MsgVoteResp Term:3 Log:0/0
 > 6 processing append thread
   Processing:
-  6->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 LeadEpoch:1
+  6->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4
   Responses:
   6->4 MsgVoteResp Term:3 Log:0/0
 > 7 processing append thread
   Processing:
-  7->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 LeadEpoch:1
+  7->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4
   Responses:
   7->4 MsgVoteResp Term:3 Log:0/0
 
@@ -372,6 +384,7 @@ Messages:
 4->7 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->AppendThread MsgStorageAppend Term:3 Log:3/12 Commit:11 Vote:4 Lead:4 LeadEpoch:1 Entries:[3/12 EntryNormal ""] Responses:[
   4->4 MsgAppResp Term:3 Log:0/12 Commit:11
+  4->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   AppendThread->4 MsgStorageAppendResp Term:0 Log:3/12
 ]
 
@@ -411,10 +424,10 @@ INFO 1 became follower at term 3
 process-ready 1
 ----
 Ready MustSync=true:
-HardState Term:3 Commit:11 Lead:4 LeadEpoch:1
+HardState Term:3 Commit:11 Lead:4 LeadEpoch:0
 Messages:
 1->4 MsgHeartbeatResp Term:3 Log:0/0
-1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Lead:4 LeadEpoch:1
+1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Lead:4
 
 deliver-msgs 4
 ----
@@ -500,7 +513,7 @@ INFO mark (term,index)=(2,12) mismatched the last accepted term 3 in unstable lo
 process-append-thread 1
 ----
 Processing:
-1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Lead:4 LeadEpoch:1
+1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Lead:4
 Responses:
 
 raft-log 1

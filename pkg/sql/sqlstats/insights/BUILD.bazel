@@ -13,6 +13,7 @@ go_library(
         "provider.go",
         "registry.go",
         "store.go",
+        "test_utils.go",
     ],
     embed = [":insights_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights",

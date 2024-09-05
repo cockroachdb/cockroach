@@ -251,6 +251,17 @@ message LogicalReplicationDetails {
     int32 function_id = 2;
   }
   DefaultConflictResolution default_conflict_resolution = 7 [(gogoproto.nullable) = false];
+
+  bool ignore_cdc_ignored_ttl_deletes = 8 [(gogoproto.customname) = "IgnoreCDCIgnoredTTLDeletes"];
+
+  enum ApplyMode {
+    Immediate = 0;
+    Validated = 1;
+  }
+
+  ApplyMode mode = 9;
+
+  // Next ID: 10.
 }
 
 message LogicalReplicationProgress {
@@ -1332,6 +1343,15 @@ message MVCCStatisticsJobProgress {
 
 }
 
+message UpdateTableMetadataCacheDetails {}
+message UpdateTableMetadataCacheProgress {
+  // The time at which the job last started a run.
+  google.protobuf.Timestamp last_run_time = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.stdtime) = true
+  ];
+}
+
 message ImportRollbackDetails {
   // TableID is the descriptor ID of table that should be rolled back.
   //
@@ -1411,6 +1431,7 @@ message Payload {
     ImportRollbackDetails import_rollback_details = 46;
     HistoryRetentionDetails history_retention_details = 47;
     LogicalReplicationDetails logical_replication_details = 48;
+    UpdateTableMetadataCacheDetails update_table_metadata_cache_details = 49;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1488,6 +1509,7 @@ message Progress {
     ImportRollbackProgress import_rollback_progress = 34;
     HistoryRetentionProgress HistoryRetentionProgress = 35;
     LogicalReplicationProgress LogicalReplication = 36;
+    UpdateTableMetadataCacheProgress table_metadata_cache = 37;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -1527,6 +1549,8 @@ enum Type {
   IMPORT_ROLLBACK = 25 [(gogoproto.enumvalue_customname) = "TypeImportRollback"];
   HISTORY_RETENTION = 26 [(gogoproto.enumvalue_customname) = "TypeHistoryRetention"];
   LOGICAL_REPLICATION = 27 [(gogoproto.enumvalue_customname) = "TypeLogicalReplication"];
+  AUTO_CREATE_PARTIAL_STATS = 28 [(gogoproto.enumvalue_customname) = "TypeAutoCreatePartialStats"];
+  UPDATE_TABLE_METADATA_CACHE = 29 [(gogoproto.enumvalue_customname) = "TypeUpdateTableMetadataCache"];
 }
 
 message Job {

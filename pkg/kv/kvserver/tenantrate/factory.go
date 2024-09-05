@@ -19,13 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 // TestingKnobs configures a LimiterFactory for testing.
 type TestingKnobs struct {
-	TimeSource timeutil.TimeSource
+	QuotaPoolOptions []quotapool.Option
 
 	// Authorizer, if set, replaces the authorizer in the RPCContext.
 	Authorizer tenantcapabilities.Authorizer
@@ -95,9 +94,7 @@ func (rl *LimiterFactory) GetTenant(
 	rcLim, ok := rl.mu.tenants[tenantID]
 	if !ok {
 		var options []quotapool.Option
-		if rl.knobs.TimeSource != nil {
-			options = append(options, quotapool.WithTimeSource(rl.knobs.TimeSource))
-		}
+		options = append(options, rl.knobs.QuotaPoolOptions...)
 		if closer != nil {
 			options = append(options, quotapool.WithCloser(closer))
 		}

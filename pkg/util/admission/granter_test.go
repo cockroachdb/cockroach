@@ -487,6 +487,8 @@ func (m *testMetricsProvider) GetPebbleMetrics() []StoreMetrics {
 	return m.metrics
 }
 
+func (m *testMetricsProvider) Close() {}
+
 func (m *testMetricsProvider) UpdateIOThreshold(
 	id roachpb.StoreID, threshold *admissionpb.IOThreshold,
 ) {
@@ -504,14 +506,7 @@ func (m *testMetricsProvider) setMetricsForStores(stores []int32, metrics pebble
 
 type noopOnLogEntryAdmitted struct{}
 
-func (n *noopOnLogEntryAdmitted) AdmittedLogEntry(
-	context.Context,
-	roachpb.NodeID,
-	admissionpb.WorkPriority,
-	roachpb.StoreID,
-	roachpb.RangeID,
-	LogPosition,
-) {
+func (n *noopOnLogEntryAdmitted) AdmittedLogEntry(context.Context, LogEntryAdmittedCallbackState) {
 }
 
 var _ OnLogEntryAdmitted = &noopOnLogEntryAdmitted{}

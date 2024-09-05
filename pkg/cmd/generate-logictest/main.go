@@ -366,6 +366,22 @@ func generate() error {
 		if err != nil {
 			return err
 		}
+		err = t.addLogicTests("TestReadCommittedLogic", readCommittedCalc)
+		if err != nil {
+			return err
+		}
+		repeatableReadCalc := logictestbase.ConfigCalculator{
+			ConfigOverrides: []string{"local-repeatable-read"},
+			RunCCLConfigs:   true,
+		}
+		err = t.addCclLogicTests("TestRepeatableReadLogicCCL", repeatableReadCalc)
+		if err != nil {
+			return err
+		}
+		err = t.addLogicTests("TestRepeatableReadLogic", repeatableReadCalc)
+		if err != nil {
+			return err
+		}
 		tenantCalc := logictestbase.ConfigCalculator{
 			ConfigOverrides:       []string{"3node-tenant"},
 			ConfigFilterOverrides: []string{"3node-tenant-multiregion"},
@@ -380,6 +396,10 @@ func generate() error {
 			return err
 		}
 		err = t.addExecBuildLogicTests("TestReadCommittedExecBuild", readCommittedCalc)
+		if err != nil {
+			return err
+		}
+		err = t.addExecBuildLogicTests("TestRepeatableReadExecBuild", repeatableReadCalc)
 		if err != nil {
 			return err
 		}

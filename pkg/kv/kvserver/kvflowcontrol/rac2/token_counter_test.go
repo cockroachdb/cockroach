@@ -13,15 +13,20 @@ package rac2
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
@@ -41,6 +46,10 @@ func TestTokenAdjustment(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	provider := NewStreamTokenCounterProvider(
+		cluster.MakeTestingClusterSettings(),
+		hlc.NewClockForTesting(nil),
+	)
 	var (
 		ctx         = context.Background()
 		counter     *tokenCounter
@@ -51,7 +60,9 @@ func TestTokenAdjustment(t *testing.T) {
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
-				counter = newTokenCounter(cluster.MakeTestingClusterSettings())
+				var stream int
+				d.ScanArgs(t, "stream", &stream)
+				counter = provider.Eval(kvflowcontrol.Stream{StoreID: roachpb.StoreID(stream)})
 				adjustments = nil
 				return ""
 
@@ -117,6 +128,25 @@ func TestTokenAdjustment(t *testing.T) {
 				}
 				return buf.String()
 
+			case "metrics":
+				provider.UpdateMetricGauges()
+				var buf strings.Builder
+				// We are only using the eval token counter in this test.
+				counterMetrics := provider.tokenMetrics.CounterMetrics[flowControlEvalMetricType]
+				streamMetrics := provider.tokenMetrics.StreamMetrics[flowControlEvalMetricType]
+				for _, wc := range []admissionpb.WorkClass{
+					admissionpb.RegularWorkClass,
+					admissionpb.ElasticWorkClass,
+				} {
+					fmt.Fprintf(&buf, "%-48v: %v\n", streamMetrics.Count[wc].GetName(), streamMetrics.Count[wc].Value())
+					fmt.Fprintf(&buf, "%-48v: %v\n", streamMetrics.BlockedCount[wc].GetName(), streamMetrics.BlockedCount[wc].Value())
+					fmt.Fprintf(&buf, "%-48v: %v\n", streamMetrics.TokensAvailable[wc].GetName(), streamMetrics.TokensAvailable[wc].Value())
+					fmt.Fprintf(&buf, "%-48v: %v\n", counterMetrics.Deducted[wc].GetName(), counterMetrics.Deducted[wc].Count())
+					fmt.Fprintf(&buf, "%-48v: %v\n", counterMetrics.Returned[wc].GetName(), counterMetrics.Returned[wc].Count())
+					fmt.Fprintf(&buf, "%-48v: %v\n", counterMetrics.Unaccounted[wc].GetName(), counterMetrics.Unaccounted[wc].Count())
+				}
+				return buf.String()
+
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
@@ -169,7 +199,11 @@ func TestTokenCounter(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &settings.SV, int64(limits.elastic))
 	kvflowcontrol.RegularTokensPerStream.Override(ctx, &settings.SV, int64(limits.regular))
-	counter := newTokenCounter(settings)
+	counter := newTokenCounter(
+		settings,
+		hlc.NewClockForTesting(nil),
+		newTokenCounterMetrics(flowControlEvalMetricType),
+	)
 
 	assertStateReset := func(t *testing.T) {
 		available, handle := counter.TokensAvailable(admissionpb.ElasticWorkClass)
@@ -290,5 +324,259 @@ func TestTokenCounter(t *testing.T) {
 		}
 		wg.Wait()
 		assertStateReset(t)
+	})
+}
+
+func (t *tokenCounter) testingHandle() waitHandle {
+	return waitHandle{wc: admissionpb.RegularWorkClass, b: t}
+}
+
+type namedTokenCounter struct {
+	*tokenCounter
+	parent *evalTestState
+	stream string
+}
+
+type evalTestState struct {
+	settings *cluster.Settings
+	mu       struct {
+		syncutil.Mutex
+		counters map[string]*namedTokenCounter
+		evals    map[string]*testEval
+	}
+}
+
+type testEval struct {
+	state     WaitEndState
+	handles   []tokenWaitingHandleInfo
+	quorum    int
+	cancel    context.CancelFunc
+	refreshCh chan struct{}
+}
+
+func newTestState() *evalTestState {
+	ts := &evalTestState{
+		settings: cluster.MakeTestingClusterSettings(),
+	}
+	// We will only use at most one token per stream, as we only require positive
+	// / non-positive token counts.
+	kvflowcontrol.RegularTokensPerStream.Override(context.Background(), &ts.settings.SV, 1)
+	ts.mu.counters = make(map[string]*namedTokenCounter)
+	ts.mu.evals = make(map[string]*testEval)
+	return ts
+}
+
+func (ts *evalTestState) getOrCreateTC(stream string) *namedTokenCounter {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	tc, exists := ts.mu.counters[stream]
+	if !exists {
+		tc = &namedTokenCounter{
+			parent: ts,
+			tokenCounter: newTokenCounter(
+				ts.settings,
+				hlc.NewClockForTesting(nil),
+				newTokenCounterMetrics(flowControlEvalMetricType),
+			),
+			stream: stream,
+		}
+		// Ensure the token counter starts with no tokens initially.
+		tc.adjust(context.Background(),
+			admissionpb.RegularWorkClass,
+			-kvflowcontrol.Tokens(kvflowcontrol.RegularTokensPerStream.Get(&ts.settings.SV)),
+		)
+		ts.mu.counters[stream] = tc
+	}
+	return tc
+}
+
+func (ts *evalTestState) startWaitForEval(
+	name string, handles []tokenWaitingHandleInfo, quorum int,
+) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	refreshCh := make(chan struct{})
+	ts.mu.evals[name] = &testEval{
+		state:     -1,
+		handles:   handles,
+		quorum:    quorum,
+		cancel:    cancel,
+		refreshCh: refreshCh,
+	}
+
+	go func() {
+		state, _ := WaitForEval(ctx, refreshCh, handles, quorum, nil)
+		ts.mu.Lock()
+		defer ts.mu.Unlock()
+
+		ts.mu.evals[name].state = state
+	}()
+}
+
+func (ts *evalTestState) setCounterTokens(stream string, positive bool) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	tc, exists := ts.mu.counters[stream]
+	if !exists {
+		panic(fmt.Sprintf("no token counter found for stream: %s", stream))
+	}
+
+	wasPositive := tc.tokens(admissionpb.RegularWorkClass) > 0
+	if !wasPositive && positive {
+		tc.tokenCounter.adjust(context.Background(), admissionpb.RegularWorkClass, +1)
+	} else if wasPositive && !positive {
+		tc.tokenCounter.adjust(context.Background(), admissionpb.RegularWorkClass, -1)
+	}
+}
+
+func (ts *evalTestState) tokenCountsString() string {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	var streams []string
+	for stream := range ts.mu.counters {
+		streams = append(streams, stream)
+	}
+	sort.Strings(streams)
+
+	var b strings.Builder
+	for _, stream := range streams {
+		tc := ts.mu.counters[stream]
+		posString := "non-positive"
+		if tc.tokens(admissionpb.RegularWorkClass) > 0 {
+			posString = "positive"
+		}
+		b.WriteString(fmt.Sprintf("%s: %s\n", stream, posString))
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func (ts *evalTestState) evalStatesString() string {
+	// Introduce a sleep here to ensure that any evaluation which complete update
+	// state before we lock the mutex.
+	time.Sleep(100 * time.Millisecond)
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	var states []string
+	for name, op := range ts.mu.evals {
+		switch op.state {
+		case -1:
+			states = append(states, fmt.Sprintf("%s: waiting", name))
+		default:
+			states = append(states, fmt.Sprintf("%s: %s", name, op.state))
+		}
+	}
+	sort.Strings(states)
+	return strings.Join(states, "\n")
+}
+
+// TestWaitForEval is a datadriven test that exercises the WaitForEval function.
+//
+//   - wait_for_eval <name> <quorum> [handle: <stream> required=<true|false>]
+//     name: the name of the WaitForEval operation.
+//     quorum: the number of handles that must be unblocked for the operation to
+//     succeed.
+//     stream: the stream name.
+//     required: whether the handle is required for the operation to succeed.
+//
+//   - set_tokens <stream> <positive>
+//     stream: the stream name.
+//     positive: whether the stream should have positive tokens.
+//
+//   - check_state
+//     Prints the current state of all WaitForEval operations.
+//
+//   - cancel <name>
+//     name: the name of the WaitForEval operation to cancel.
+//
+//   - refresh <name>
+//     name: the name of the WaitForEval operation to refresh.
+func TestWaitForEval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts := newTestState()
+	datadriven.RunTest(t, "testdata/wait_for_eval", func(t *testing.T, d *datadriven.TestData) string {
+		switch d.Cmd {
+		case "wait_for_eval":
+			var name string
+			var quorum int
+			var handles []tokenWaitingHandleInfo
+
+			d.ScanArgs(t, "name", &name)
+			d.ScanArgs(t, "quorum", &quorum)
+			for _, line := range strings.Split(d.Input, "\n") {
+				require.True(t, strings.HasPrefix(line, "handle:"))
+				line = strings.TrimPrefix(line, "handle:")
+				line = strings.TrimSpace(line)
+				parts := strings.Split(line, " ")
+				require.Len(t, parts, 2)
+
+				parts[0] = strings.TrimSpace(parts[0])
+				require.True(t, strings.HasPrefix(parts[0], "stream="))
+				parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "stream=")
+				stream := parts[0]
+
+				parts[1] = strings.TrimSpace(parts[1])
+				require.True(t, strings.HasPrefix(parts[1], "required="))
+				parts[1] = strings.TrimPrefix(strings.TrimSpace(parts[1]), "required=")
+				required := parts[1] == "true"
+
+				handleInfo := tokenWaitingHandleInfo{
+					handle:       ts.getOrCreateTC(stream).testingHandle(),
+					requiredWait: required,
+				}
+				handles = append(handles, handleInfo)
+			}
+
+			ts.startWaitForEval(name, handles, quorum)
+			return ts.evalStatesString()
+
+		case "set_tokens":
+			for _, arg := range d.CmdArgs {
+				require.Equal(t, 1, len(arg.Vals))
+				ts.setCounterTokens(arg.Key, arg.Vals[0] == "positive")
+			}
+			return ts.tokenCountsString()
+
+		case "check_state":
+			return ts.evalStatesString()
+
+		case "cancel":
+			var name string
+			d.ScanArgs(t, "name", &name)
+			func() {
+				ts.mu.Lock()
+				defer ts.mu.Unlock()
+				if op, exists := ts.mu.evals[name]; exists {
+					op.cancel()
+				} else {
+					panic(fmt.Sprintf("no WaitForEval operation with name: %s", name))
+				}
+			}()
+			return ts.evalStatesString()
+
+		case "refresh":
+			var name string
+			d.ScanArgs(t, "name", &name)
+			func() {
+				ts.mu.Lock()
+				defer ts.mu.Unlock()
+				if op, exists := ts.mu.evals[name]; exists {
+					op.refreshCh <- struct{}{}
+				} else {
+					panic(fmt.Sprintf("no WaitForEval operation with name: %s", name))
+				}
+			}()
+			return ts.evalStatesString()
+
+		default:
+			panic(fmt.Sprintf("unknown command: %s", d.Cmd))
+		}
 	})
 }

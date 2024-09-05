@@ -15,15 +15,23 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestLicense(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	t0 := timeutil.Unix(0, 0)
 	ts := t0.AddDate(40, 0, 0)
 	after := ts.Add(time.Hour * 24)
 	before := ts.Add(time.Hour * -24)
 	wayAfter := ts.Add(time.Hour * 24 * 365 * 200)
+
+	// Generate random, yet deterministic, values for the two byte fields.
+	// The first byte of each will be incremented after each test to ensure variation.
+	orgID := []byte{0}
+	licenseID := []byte{0}
 
 	for i, tc := range []struct {
 		licType    licenseccl.License_Type
@@ -54,6 +62,14 @@ func TestLicense(t *testing.T) {
 		{licenseccl.License_Enterprise, ts, "tc-13", ts, ""},
 		{licenseccl.License_Enterprise, ts, "", ts, "license valid only for"},
 		{licenseccl.License_Enterprise, ts, "tc-15", ts, ""},
+
+		// free license.
+		{licenseccl.License_Free, ts, "tc-16", ts, ""},
+		{licenseccl.License_Free, after, "tc-17", wayAfter, "expired"},
+
+		// trial license.
+		{licenseccl.License_Trial, wayAfter, "tc-18", before, ""},
+		{licenseccl.License_Trial, ts, "unmatched org", ts, "license valid only for"},
 	} {
 		t.Run("", func(t *testing.T) {
 			var lic *licenseccl.License
@@ -62,6 +78,8 @@ func TestLicense(t *testing.T) {
 					ValidUntilUnixSec: tc.expiration.Unix(),
 					Type:              tc.licType,
 					OrganizationName:  fmt.Sprintf("tc-%d", i),
+					OrganizationId:    orgID,
+					LicenseId:         licenseID,
 				}).Encode()
 				if err != nil {
 					t.Fatal(err)
@@ -78,11 +96,15 @@ func TestLicense(t *testing.T) {
 				t.Fatalf("%d: lic to %s, checked at %s.\n got %q", i,
 					tc.expiration, tc.checkTime, err)
 			}
+			orgID[0]++
+			licenseID[0]++
 		})
 	}
 }
 
 func TestBadLicenseStrings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	for _, tc := range []struct{ lic, err string }{
 		{"blah", "invalid license string"},
 		{"crl-0-&&&&&", "invalid license string"},
@@ -95,6 +117,8 @@ func TestBadLicenseStrings(t *testing.T) {
 }
 
 func TestExpiredLicenseLanguage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	lic := &licenseccl.License{
 		Type:              licenseccl.License_Evaluation,
 		ValidUntilUnixSec: 1,

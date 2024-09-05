@@ -165,7 +165,7 @@ func TestFlowControlRaftTransport(t *testing.T) {
 							controlM[nodeID].dispatch,
 							kvserver.NoopStoresFlowControlIntegration{},
 							controlM[nodeID].disconnectListener,
-							controlM[nodeID].piggybacker,
+							controlM[nodeID].piggybacker, nil,
 							controlM[nodeID].knobs,
 						)
 						rttc.GossipNode(nodeID, addr)
@@ -631,6 +631,7 @@ func TestFlowControlRaftTransportV2(t *testing.T) {
 							kvserver.NoopStoresFlowControlIntegration{},
 							controlM[nodeID].disconnectListener,
 							controlM[nodeID].piggybacker,
+							noopPiggybackedAdmittedResponseScheduler{},
 							controlM[nodeID].knobs,
 						)
 						rttc.GossipNode(nodeID, addr)
@@ -680,8 +681,11 @@ func TestFlowControlRaftTransportV2(t *testing.T) {
 						toNodeID := parseNodeID(t, d, "node")
 						toStoreID := parseStoreID(t, d, "store")
 						rangeID := parseRangeID(t, d, "range")
-						control.piggybacker.AddMsgAppRespForLeader(
-							toNodeID, toStoreID, rangeID, raftpb.Message{})
+						// TODO(pav-kv): test that these messages are actually sent in
+						// RaftMessageRequestBatch.
+						control.piggybacker.Add(toNodeID, kvflowcontrolpb.PiggybackedAdmittedState{
+							RangeID: rangeID, ToStoreID: toStoreID,
+						})
 						return ""
 
 					case "fallback-piggyback":
@@ -787,4 +791,11 @@ func TestFlowControlRaftTransportV2(t *testing.T) {
 				})
 		},
 	)
+}
+
+type noopPiggybackedAdmittedResponseScheduler struct{}
+
+func (s noopPiggybackedAdmittedResponseScheduler) ScheduleAdmittedResponseForRangeRACv2(
+	ctx context.Context, msgs []kvflowcontrolpb.AdmittedResponseForRange,
+) {
 }

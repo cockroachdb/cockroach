@@ -3,7 +3,7 @@ SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = false
 ----
 
 exec
-SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = false
+SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = false
 ----
 
 feature-list
@@ -95,7 +95,7 @@ SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
 ----
 
 exec
-SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
+SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
 ----
 
 feature-usage
@@ -112,7 +112,6 @@ feature-usage
 SET default_transaction_isolation = 'repeatable read'
 ----
 sql.txn.isolation.executed_at.read_committed
-sql.txn.isolation.upgraded_from.repeatable_read
 
 feature-usage
 SET default_transaction_isolation = 'snapshot'
@@ -134,7 +133,6 @@ feature-usage
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
 ----
 sql.txn.isolation.executed_at.read_committed
-sql.txn.isolation.upgraded_from.repeatable_read
 
 feature-usage
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SNAPSHOT
@@ -156,7 +154,6 @@ feature-usage
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; COMMIT
 ----
 sql.txn.isolation.executed_at.snapshot
-sql.txn.isolation.upgraded_from.repeatable_read
 
 feature-usage
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT; COMMIT
@@ -180,7 +177,6 @@ feature-usage
 BEGIN; SET TRANSACTION ISOLATION LEVEL REPEATABLE READ; COMMIT
 ----
 sql.txn.isolation.executed_at.snapshot
-sql.txn.isolation.upgraded_from.repeatable_read
 
 feature-usage
 BEGIN; SET TRANSACTION ISOLATION LEVEL SNAPSHOT; COMMIT

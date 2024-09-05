@@ -82,6 +82,7 @@ const (
 	pubsubSink             sinkType = "pubsub"
 	kafkaSink              sinkType = "kafka"
 	azureEventHubKafkaSink sinkType = "azure-event-hub"
+	mskSink                sinkType = "msk"
 	nullSink               sinkType = "null"
 )
 
@@ -271,6 +272,13 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 			`azure-event-hub://cdc-roachtest.servicebus.windows.net:9093?shared_access_key_name=%s&shared_access_key=%s&topic_name=testing`,
 			url.QueryEscape(accessKeyName), url.QueryEscape(accessKey),
 		)
+	case mskSink:
+		// Currently, the only msk tests are manual tests. When they are run,
+		// this placeholder should be replaced with the actual bootstrap server
+		// for the cluster being used.
+		// TODO(yang): If we want to run msk roachtests nightly, replace this
+		// with a long-running MSK cluster or maybe create a fresh cluster.
+		sinkURI = "kafka://placeholder"
 	default:
 		ct.t.Fatalf("unknown sink provided: %s", args.sinkType)
 	}
@@ -1370,7 +1378,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(16)),
 		Leases:           registry.MetamorphicLeases,
 		RequiresLicense:  true,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
@@ -1385,6 +1393,38 @@ func registerCDC(r registry.Registry) {
 					validateOrder: true,
 				},
 				opts: map[string]string{"initial_scan": "'no'"},
+			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 3 * time.Minute,
+				steadyLatency:      10 * time.Minute,
+			})
+			ct.waitForWorkload()
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/tpcc-1000/sink=msk",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		RequiresLicense:  true,
+		CompatibleClouds: registry.OnlyAWS,
+		Suites:           registry.ManualOnly,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1000, duration: "60m"})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: mskSink,
+				targets:  allTpccTargets,
+				opts: map[string]string{
+					"initial_scan": "'no'",
+					// updated is specified so that we can compare emitted bytes with
+					// cdc/tpcc-1000/sink=kafka.
+					"updated": "",
+				},
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 3 * time.Minute,

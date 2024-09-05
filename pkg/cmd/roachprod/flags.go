@@ -47,6 +47,7 @@ var (
 	grafanaArch           string
 	grafanaDumpDir        string
 	jaegerConfigNodes     string
+	listCost              bool
 	listDetails           bool
 	listJSON              bool
 	listMine              bool
@@ -68,10 +69,10 @@ var (
 	useTreeDist           = true
 	sig                   = 9
 	waitFlag              = false
-	maxWait               = 0
+	gracePeriod           = 0
 	deploySig             = 15
 	deployWaitFlag        = true
-	deployMaxWait         = 300
+	deployGracePeriod     = 300
 	pause                 = time.Duration(0)
 	createVMOpts          = vm.DefaultCreateOpts()
 	startOpts             = roachprod.DefaultStartOpts()
@@ -179,6 +180,10 @@ func initFlags() {
 	extendCmd.Flags().DurationVarP(&extendLifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
 
+	listCmd.Flags().BoolVarP(&listCost,
+		"cost", "c", os.Getenv("ROACHPROD_NO_COST_ESTIMATES") != "true",
+		"Show cost estimates",
+	)
 	listCmd.Flags().BoolVarP(&listDetails,
 		"details", "d", false, "Show cluster details")
 	listCmd.Flags().BoolVar(&listJSON,
@@ -258,21 +263,23 @@ func initFlags() {
 		// See: https://github.com/spf13/cobra/issues/1398
 		sigPtr := &sig
 		waitPtr := &waitFlag
-		maxWaitPtr := &maxWait
+		gracePeriodPtr := &gracePeriod
 		// deployCmd is a special case, because it is used to stop processes in a
 		// rolling restart, and we want to drain the nodes by default.
 		if stopProcessesCmd == deployCmd {
 			sigPtr = &deploySig
 			waitPtr = &deployWaitFlag
-			maxWaitPtr = &deployMaxWait
+			gracePeriodPtr = &deployGracePeriod
 		}
 		stopProcessesCmd.Flags().IntVar(sigPtr, "sig", *sigPtr, "signal to pass to kill")
 		stopProcessesCmd.Flags().BoolVar(waitPtr, "wait", *waitPtr, "wait for processes to exit")
-		stopProcessesCmd.Flags().IntVar(maxWaitPtr, "max-wait", *maxWaitPtr, "approx number of seconds to wait for processes to exit")
+		stopProcessesCmd.Flags().IntVar(gracePeriodPtr, "grace-period", *gracePeriodPtr, "approx number of seconds to wait for processes to exit, before a forceful shutdown (SIGKILL) is performed")
 	}
 	deployCmd.Flags().DurationVar(&pause, "pause", pause, "duration to pause between node restarts")
 
 	syncCmd.Flags().BoolVar(&listOpts.IncludeVolumes, "include-volumes", false, "Include volumes when syncing")
+	syncCmd.Flags().StringArrayVarP(&listOpts.IncludeProviders, "clouds", "c",
+		make([]string, 0), "Specify the cloud providers when syncing. Important: Use this flag only if you are certain that you want to sync with a specific cloud. All DNS host entries for other clouds will be erased from the DNS zone.")
 
 	wipeCmd.Flags().BoolVar(&wipePreserveCerts, "preserve-certs", false, "do not wipe certificates")
 
@@ -403,7 +410,7 @@ func initFlags() {
 		cmd.Flags().BoolVar(&urlOpen, "open", false, "Open the url in a browser")
 	}
 
-	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
+	for _, cmd := range []*cobra.Command{createCmd, listCmd, destroyCmd, extendCmd, logsCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),
 			"Username to run under, detect if blank")
 	}

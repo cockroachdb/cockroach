@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -42,6 +43,7 @@ type kvRowProcessor struct {
 	dstBySrc map[descpb.ID]descpb.ID
 	writers  map[descpb.ID]*kvTableWriter
 
+	fallback *sqlRowProcessor
 	failureInjector
 }
 
@@ -52,6 +54,7 @@ func newKVRowProcessor(
 	cfg *execinfra.ServerConfig,
 	evalCtx *eval.Context,
 	srcTablesByDestID map[descpb.ID]sqlProcessorTableConfig,
+	fallback *sqlRowProcessor,
 ) (*kvRowProcessor, error) {
 	cdcEventTargets := changefeedbase.Targets{}
 	srcTablesBySrcID := make(map[descpb.ID]catalog.TableDescriptor, len(srcTablesByDestID))
@@ -82,6 +85,7 @@ func newKVRowProcessor(
 		writers:  make(map[descpb.ID]*kvTableWriter, len(srcTablesByDestID)),
 		decoder:  cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false),
 		alloc:    &tree.DatumAlloc{},
+		fallback: fallback,
 	}
 	return p, nil
 }
@@ -91,10 +95,6 @@ var originID1Options = &kvpb.WriteOptions{OriginID: 1}
 func (p *kvRowProcessor) ProcessRow(
 	ctx context.Context, txn isql.Txn, keyValue roachpb.KeyValue, prevValue roachpb.Value,
 ) (batchStats, error) {
-	if err := p.injectFailure(); err != nil {
-		return batchStats{}, err
-	}
-
 	var err error
 	keyValue.Key, err = keys.StripTenantPrefix(keyValue.Key)
 	if err != nil {
@@ -108,8 +108,29 @@ func (p *kvRowProcessor) ProcessRow(
 	}
 	p.lastRow = row
 
-	if err := p.processParsedRow(ctx, txn, row, keyValue, prevValue); err != nil {
+	if err = p.injectFailure(); err != nil {
 		return batchStats{}, err
+	}
+
+	// TODO(dt, ssd): the rangefeed prev value does not include its mvcc ts, which
+	// is a problem for us if we want to use CPut to replace the old row with the
+	// new row, because our local version of the old row is likely to have the
+	// remote version's mvcc timestamp in its origin ts column, i.e. in the value.
+	// Without knowing the remote previous row's ts, we cannot exactly reconstruct
+	// the value of our local row to put in the expected value for a CPut.
+	// Instead, for now, we just don't use the direct CPut for anything other than
+	// inserts. If/when we have a LDR-flavor CPut (or if we move the TS out and
+	// decide that equal values negate LWW) we can remove this.
+	if prevValue.IsPresent() {
+		return p.fallback.processParsedRow(ctx, txn, row, keyValue.Key, prevValue)
+	}
+
+	if err := p.processParsedRow(ctx, txn, row, keyValue, prevValue); err != nil {
+		stats, err := p.fallback.processParsedRow(ctx, txn, row, keyValue.Key, prevValue)
+		if err == nil {
+			stats.kvWriteFallbacks += 1
+		}
+		return stats, err
 	}
 	return batchStats{}, nil
 
@@ -123,10 +144,17 @@ func (p *kvRowProcessor) processParsedRow(
 		return errors.AssertionFailedf("replication configuration missing for table %d / %q", row.TableID, row.TableName)
 	}
 
+	makeBatch := func(txn *kv.Txn) *kv.Batch {
+		b := txn.NewBatch()
+		b.Header.WriteOptions = originID1Options
+		b.AdmissionHeader.Priority = int32(admissionpb.BulkLowPri)
+		b.AdmissionHeader.Source = kvpb.AdmissionHeader_FROM_SQL
+		return b
+	}
+
 	if txn == nil {
 		if err := p.cfg.DB.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			b := txn.NewBatch()
-			b.Header.WriteOptions = originID1Options
+			b := makeBatch(txn)
 
 			if err := p.addToBatch(ctx, txn, b, dstTableID, row, k, prevValue); err != nil {
 				return err
@@ -140,8 +168,7 @@ func (p *kvRowProcessor) processParsedRow(
 	}
 
 	kvTxn := txn.KV()
-	b := kvTxn.NewBatch()
-	b.Header.WriteOptions = originID1Options
+	b := makeBatch(kvTxn)
 
 	if err := p.addToBatch(ctx, kvTxn, b, dstTableID, row, k, prevValue); err != nil {
 		return err
@@ -200,7 +227,7 @@ func (p *kvRowProcessor) GetLastRow() cdcevent.Row {
 
 // SetSyntheticFailurePercent implements the RowProcessor interface.
 func (p *kvRowProcessor) SetSyntheticFailurePercent(rate uint32) {
-	// TODO(dt): support failure injection.
+	p.rate = rate
 }
 
 func (p *kvRowProcessor) Close(ctx context.Context) {
@@ -254,6 +281,7 @@ type kvTableWriter struct {
 	ru               row.Updater
 	ri               row.Inserter
 	rd               row.Deleter
+	scratchTS        tree.DDecimal
 }
 
 func newKVTableWriter(
@@ -348,6 +376,10 @@ func (p *kvTableWriter) fillNew(vals cdcevent.Row) error {
 	p.newVals = p.newVals[:0]
 	if err := vals.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		// TODO(dt): add indirection from col ID to offset.
+		if col.Name == originTimestampColumnName {
+			p.scratchTS.Decimal = eval.TimestampToDecimal(vals.MvccTimestamp)
+			d = &p.scratchTS
+		}
 		p.newVals = append(p.newVals, d)
 		return nil
 	}); err != nil {

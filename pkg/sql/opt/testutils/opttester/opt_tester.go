@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
@@ -167,6 +168,9 @@ type Flags struct {
 	// DisableCheckExpr indicates that a test should skip the assertions in
 	// memo/check_expr.go.
 	DisableCheckExpr bool
+
+	// Generic enables optimizations for generic query plans.
+	Generic bool
 
 	// ExploreTraceRule restricts the ExploreTrace output to only show the effects
 	// of a specific rule.
@@ -477,6 +481,11 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //
 //   - disable-check-expr: skips the assertions in memo/check_expr.go.
 //
+//   - generic: enables optimizations for generic query plans.
+//     NOTE: This flag sets the plan_cache_mode session setting to "auto", which
+//     cannot be done via the "set" flag because it requires a CCL license,
+//     which optimizer tests are not set up to utilize.
+//
 //   - rule: used with exploretrace; the value is the name of a rule. When
 //     specified, the exploretrace output is filtered to only show expression
 //     changes due to that specific rule.
@@ -502,12 +511,6 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //   - table: used to set the current table used by the command. This is used by
 //     the inject-stats command.
 //
-//   - stats-quality-prefix: must be used with the stats-quality command. If
-//     rewriteActualFlag=true, indicates that a table should be created with the
-//     given prefix for the output of each subexpression in the query. Otherwise,
-//     outputs the name of the table that would be created for each
-//     subexpression.
-//
 //   - ignore-tables: specifies the set of stats tables for which stats quality
 //     comparisons should not be outputted. Only used with the stats-quality
 //     command. Note that tables can always be added to the `ignore-tables` set
@@ -522,16 +525,6 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //   - import: the file path is relative to opttester/testfixtures;
 //
 //   - inject-stats: the file path is relative to the test file.
-//
-//   - join-limit: sets the value for SessionData.ReorderJoinsLimit, which
-//     indicates the number of joins at which the optimizer should stop
-//     attempting to reorder.
-//
-//   - prefer-lookup-joins-for-fks: sets SessionData.PreferLookupJoinsForFKs to
-//     true, causing foreign key operations to prefer lookup joins.
-//
-//   - null-ordered-last: sets SessionData.NullOrderedLast to true, which orders
-//     NULL values last in ascending order.
 //
 //   - cascade-levels: used to limit the depth of recursive cascades for
 //     build-cascades.
@@ -1002,6 +995,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 	case "disable-check-expr":
 		f.DisableCheckExpr = true
+
+	case "generic":
+		f.evalCtx.SessionData().PlanCacheMode = sessiondatapb.PlanCacheModeAuto
 
 	case "rule":
 		if len(arg.Vals) != 1 {

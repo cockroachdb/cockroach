@@ -1577,17 +1577,20 @@ func (m *Manager) checkRangeFeedStatus(ctx context.Context) (forceRefresh bool) 
 // range feed progress / recovery, and supporting legacy expiry
 // based leases.
 func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
-	_ = m.stopper.RunAsyncTask(ctx, "lease-refresher", func(ctx context.Context) {
-		refreshTimerDuration := LeaseDuration.Get(&m.storage.settings.SV)
-		renewalsDisabled := false
-		if refreshTimerDuration <= 0 {
+	renewalsDisabled := false
+	getRefreshTimerDuration := func() time.Duration {
+		if LeaseDuration.Get(&m.storage.settings.SV) <= 0 {
 			// Session based leasing still needs a refresh loop to expire
 			// leases, so we will execute that without any renewals.
-			refreshTimerDuration = time.Millisecond * 200
 			renewalsDisabled = true
+			return 200 * time.Millisecond
 		} else {
-			refreshTimerDuration = m.storage.jitteredLeaseDuration()
+			renewalsDisabled = false
+			return m.storage.jitteredLeaseDuration()
 		}
+	}
+	_ = m.stopper.RunAsyncTask(ctx, "lease-refresher", func(ctx context.Context) {
+		refreshTimerDuration := getRefreshTimerDuration()
 		var refreshTimer timeutil.Timer
 		defer refreshTimer.Stop()
 		refreshTimer.Reset(refreshTimerDuration / 2)
@@ -1624,7 +1627,7 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 				m.refreshSomeLeases(ctx, true /*refreshAll*/)
 			case <-refreshTimer.C:
 				refreshTimer.Read = true
-				refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
+				refreshTimer.Reset(getRefreshTimerDuration() / 2)
 
 				// Check for any react to any range feed availability problems, and
 				// if needed refresh the full set of descriptors.

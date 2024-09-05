@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -526,10 +527,11 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 // n1-n3: system and liveness ranges, SQL gateway
 // n4-n6: user ranges
 //
-// The cluster runs with COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER, which
-// will place Raft leaders and leases independently of each other. We can then
-// assume that some number of user ranges will randomly have split leader/lease,
-// and simply create partial partitions between each of n4-n6 in sequence.
+// We then create partial partitions where one of n4-n6 is unable to reach the
+// other two nodes but is still able to reach the liveness range. This will
+// cause split leader/leaseholder scenarios if raft leadership fails over from a
+// partitioned node but the lease does not. We expect this to be a problem for
+// epoch-based leases, but not for other types of leases.
 //
 // We run a kv50 workload on SQL gateways and collect pMax latency for graphing.
 func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -537,11 +539,9 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 
 	rng, _ := randutil.NewTestRand()
 
-	// Create cluster, disabling leader/leaseholder colocation. We only start
-	// n1-n3, to precisely place system ranges, since we'll have to disable the
-	// replicate queue shortly.
+	// Create cluster. We only start n1-n3, to precisely place system ranges,
+	// since we'll have to disable the replicate queue shortly.
 	settings := install.MakeClusterSettings()
-	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	m := c.NewMonitor(ctx, c.CRDBNodes())
@@ -578,22 +578,6 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3}, []int{4, 5, 6})
 	relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{4, 5, 6}, []int{1, 2, 3})
 
-	// Check that we have a few split leaders/leaseholders on n4-n6. We give
-	// it a few seconds, since metrics are updated every 10 seconds.
-	for i := 0; ; i++ {
-		var count float64
-		for _, node := range []int{4, 5, 6} {
-			count += nodeMetric(ctx, t, c, node, "replicas.leaders_not_leaseholders")
-		}
-		t.L().Printf("%.0f split leaders/leaseholders", count)
-		if count >= 3 {
-			break
-		} else if i >= 10 {
-			t.Fatalf("timed out waiting for 3 split leaders/leaseholders")
-		}
-		time.Sleep(time.Second)
-	}
-
 	// Run workload on n7 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
@@ -606,13 +590,21 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 		return err
 	})
 
-	// Start a worker to fail and recover partial partitions between each pair of
-	// n4-n6 for 3 cycles (9 failures total).
+	// Start a worker to fail and recover partial partitions between each of n4-n6
+	// and the other two nodes for 3 cycles (9 failures total).
 	m.Go(func(ctx context.Context) error {
 		defer cancelWorkload()
 
+		nodes := []int{4, 5, 6}
 		for i := 0; i < 3; i++ {
-			for _, node := range []int{4, 5, 6} {
+			for _, node := range nodes {
+				var peers []int
+				for _, peer := range nodes {
+					if peer != node {
+						peers = append(peers, peer)
+					}
+				}
+
 				sleepFor(ctx, t, time.Minute)
 
 				// Ranges may occasionally escape their constraints. Move them to where
@@ -626,17 +618,17 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 
 				failer.Ready(ctx, node)
 
-				peer := node + 1
-				if peer > 6 {
-					peer = 4
+				for _, peer := range peers {
+					t.L().Printf("failing n%d to n%d (%s lease/leader)", node, peer, failer)
+					failer.FailPartial(ctx, node, []int{peer})
 				}
-				t.L().Printf("failing n%d to n%d (%s lease/leader)", node, peer, failer)
-				failer.FailPartial(ctx, node, []int{peer})
 
 				sleepFor(ctx, t, time.Minute)
 
-				t.L().Printf("recovering n%d to n%d (%s lease/leader)", node, peer, failer)
-				failer.Recover(ctx, node)
+				for _, peer := range peers {
+					t.L().Printf("recovering n%d to n%d (%s lease/leader)", node, peer, failer)
+					failer.Recover(ctx, node)
+				}
 			}
 		}
 
@@ -1444,9 +1436,6 @@ func (f *deadlockFailer) Fail(ctx context.Context, nodeID int) {
 		f.locks = map[int][]roachpb.RangeID{}
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 20*time.Second) // can take a while to lock
-	defer cancel()
-
 	var ranges []roachpb.RangeID
 	if f.onlyLeaseholders {
 		ranges = append(ranges, f.leases[nodeID]...)
@@ -1462,8 +1451,18 @@ func (f *deadlockFailer) Fail(ctx context.Context, nodeID int) {
 	for i := 0; i < len(ranges) && len(f.locks[nodeID]) < f.numReplicas; i++ {
 		rangeID := ranges[i]
 		var locked bool
-		require.NoError(f.t, conn.QueryRowContext(ctx,
-			`SELECT crdb_internal.unsafe_lock_replica($1::int, true)`, rangeID).Scan(&locked))
+		// Retry the lock acquisition for a bit. Transient errors are possible here
+		// if there is another failure in the system that hasn't cleared up yet; to
+		// run a SQL query we may need to run internal queries related to user auth.
+		//
+		// See: https://github.com/cockroachdb/cockroach/issues/129918
+		testutils.SucceedsSoon(f.t, func() error {
+			ctx, cancel := context.WithTimeout(ctx, 20*time.Second) // can take a while to lock
+			defer cancel()
+			return conn.QueryRowContext(ctx,
+				`SELECT crdb_internal.unsafe_lock_replica($1::int, true)`, rangeID).Scan(&locked)
+		})
+		// NB: `locked` is false if the replica moved off the node in the interim.
 		if locked {
 			f.locks[nodeID] = append(f.locks[nodeID], rangeID)
 			f.t.L().Printf("locked r%d on n%d", rangeID, nodeID)

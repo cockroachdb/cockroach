@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -482,7 +483,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	earlyBootAccessor := cloud.NewEarlyBootExternalStorageAccessor(serverCfg.Settings, serverCfg.ExternalIODirConfig)
+	earlyBootAccessor := cloud.NewEarlyBootExternalStorageAccessor(serverCfg.Settings, serverCfg.ExternalIODirConfig, cidr.NewLookup(&serverCfg.Settings.SV))
 	opts := []storage.ConfigOption{storage.MustExist, storage.RemoteStorageFactory(earlyBootAccessor)}
 	if serverCfg.SharedStorage != "" {
 		es, err := cloud.ExternalStorageFromURI(ctx, serverCfg.SharedStorage,
@@ -1575,6 +1576,10 @@ func init() {
 	f = debugZipUploadCmd.Flags()
 	f.StringVar(&debugZipUploadOpts.ddAPIKey, "dd-api-key", "",
 		"Datadog API key to use to send debug.zip artifacts to datadog")
+	f.StringVar(&debugZipUploadOpts.ddAPPKey, "dd-app-key", "",
+		"Datadog APP key to use to send debug.zip artifacts to datadog")
+	f.StringVar(&debugZipUploadOpts.ddSite, "dd-site", defaultDDSite,
+		"Datadog site to use to send debug.zip artifacts to datadog")
 	f.StringSliceVar(&debugZipUploadOpts.include, "include", nil,
 		"The debug zip artifacts to include. Possible values: "+strings.Join(zipArtifactTypes, ", "))
 	f.StringSliceVar(&debugZipUploadOpts.tags, "tags", nil,
@@ -1582,6 +1587,12 @@ func init() {
 			"\nExample: --tags \"env:prod,customer:xyz\"")
 	f.StringVar(&debugZipUploadOpts.clusterName, "cluster", "",
 		"Name of the cluster to associate with the debug zip artifacts. This can be used to identify data in the upstream observability tool.")
+	f.Var(&debugZipUploadOpts.from, "from", "oldest timestamp to include (inclusive)")
+	f.Var(&debugZipUploadOpts.to, "to", "newest timestamp to include (inclusive)")
+	f.StringVar(&debugZipUploadOpts.logFormat, "log-format", "",
+		"log format of the input files")
+	f.StringVar(&debugZipUploadOpts.gcpProjectID, "gcp-project-id",
+		defaultGCPProjectID, "GCP project ID to use to send debug.zip logs to GCS")
 
 	f = debugDecodeKeyCmd.Flags()
 	f.Var(&decodeKeyOptions.encoding, "encoding", "key argument encoding")

@@ -644,6 +644,8 @@ TABLE system.public.tenant_usage                                                
 TABLE system.public.transaction_activity                                           NULL        system       transaction_activity          NULL           NULL
 TABLE system.public.transaction_statistics                                         NULL        system       transaction_statistics        NULL           NULL
 TABLE test.public.t                                                                NULL        test         t                             NULL           NULL
+TABLE test.public.t36642                                                           NULL      test         t36642                        NULL           NULL
+TABLE test.public.t36644                                                           NULL      test         t36644                        NULL           NULL
 
 # Test the zone information being displayed in SHOW CREATE
 statement ok

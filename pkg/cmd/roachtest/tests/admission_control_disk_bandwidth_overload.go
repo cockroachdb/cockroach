@@ -44,7 +44,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 		Owner:            registry.OwnerAdmissionControl,
 		Timeout:          time.Hour,
 		Benchmark:        true,
-		CompatibleClouds: registry.AllClouds,
+		CompatibleClouds: registry.AllExceptAzure,
 		// TODO(aaditya): change to weekly once the test stabilizes.
 		Suites:          registry.Suites(registry.Nightly),
 		Cluster:         r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode()),
@@ -76,47 +76,8 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 
 			setAdmissionControl(ctx, t, c, true)
 
-			// TODO(aaditya): This function shares some of the logic with roachtestutil.DiskStaller. Consider merging the two.
-			setBandwidthLimit := func(nodes option.NodeListOption, rw string, bw int, max bool) error {
-				dataMount := "/mnt/data1"
-				if c.Cloud() == spec.Azure {
-					dataMount = "sda1"
-				}
-				res, err := c.RunWithDetailsSingleNode(context.TODO(), t.L(), option.WithNodes(nodes[:1]),
-					fmt.Sprintf("lsblk | grep %s | awk '{print $2}'", dataMount),
-				)
-				if err != nil {
-					t.Fatalf("error when determining block device: %s", err)
-				}
-				parts := strings.Split(strings.TrimSpace(res.Stdout), ":")
-				if len(parts) != 2 {
-					t.Fatalf("unexpected output from lsblk: %s", res.Stdout)
-				}
-				major, err := strconv.Atoi(parts[0])
-				if err != nil {
-					t.Fatalf("error when determining block device: %s", err)
-				}
-				minor, err := strconv.Atoi(parts[1])
-				if err != nil {
-					t.Fatalf("error when determining block device: %s", err)
-				}
-
-				cockroachIOController := filepath.Join("/sys/fs/cgroup/system.slice", roachtestutil.SystemInterfaceSystemdUnitName()+".service", "io.max")
-				bytesPerSecondStr := "max"
-				if !max {
-					bytesPerSecondStr = fmt.Sprintf("%d", bw)
-				}
-				return c.RunE(ctx, option.WithNodes(nodes), "sudo", "/bin/bash", "-c", fmt.Sprintf(
-					`'echo %d:%d %s=%s > %s'`,
-					major,
-					minor,
-					rw,
-					bytesPerSecondStr,
-					cockroachIOController,
-				))
-			}
-
-			if err := setBandwidthLimit(c.CRDBNodes(), "wbps", 128<<20 /* 128MiB */, false); err != nil {
+			dataDir := "/mnt/data1"
+			if err := setBandwidthLimit(ctx, t, c, c.CRDBNodes(), "wbps", 128<<20 /* 128MiB */, false, dataDir); err != nil {
 				t.Fatal(err)
 			}
 
@@ -233,4 +194,49 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			m.Wait()
 		},
 	})
+}
+
+// TODO(aaditya): This function shares some of the logic with roachtestutil.DiskStaller. Consider merging the two.
+func setBandwidthLimit(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	nodes option.NodeListOption,
+	rw string,
+	bw int,
+	max bool,
+	dataDir string,
+) error {
+	res, err := c.RunWithDetailsSingleNode(context.TODO(), t.L(), option.WithNodes(nodes[:1]),
+		fmt.Sprintf("lsblk | grep %s | awk '{print $2}'", dataDir),
+	)
+	if err != nil {
+		t.Fatalf("error when determining block device: %s", err)
+	}
+	parts := strings.Split(strings.TrimSpace(res.Stdout), ":")
+	if len(parts) != 2 {
+		t.Fatalf("unexpected output from lsblk: %s", res.Stdout)
+	}
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		t.Fatalf("error when determining block device: %s", err)
+	}
+	minor, err := strconv.Atoi(parts[1])
+	if err != nil {
+		t.Fatalf("error when determining block device: %s", err)
+	}
+
+	cockroachIOController := filepath.Join("/sys/fs/cgroup/system.slice", roachtestutil.SystemInterfaceSystemdUnitName()+".service", "io.max")
+	bytesPerSecondStr := "max"
+	if !max {
+		bytesPerSecondStr = fmt.Sprintf("%d", bw)
+	}
+	return c.RunE(ctx, option.WithNodes(nodes), "sudo", "/bin/bash", "-c", fmt.Sprintf(
+		`'echo %d:%d %s=%s > %s'`,
+		major,
+		minor,
+		rw,
+		bytesPerSecondStr,
+		cockroachIOController,
+	))
 }

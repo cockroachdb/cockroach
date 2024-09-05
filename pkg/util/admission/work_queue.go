@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -215,13 +216,22 @@ type ReplicatedWorkInfo struct {
 	// RangeID identifies the raft group on behalf of which work is being
 	// admitted.
 	RangeID roachpb.RangeID
+	// Replica that asked for admission.
+	ReplicaID roachpb.ReplicaID
+	// LeaderTerm is the term of the leader that asked for this entry to be
+	// appended.
+	LeaderTerm uint64
+	// LogPosition is the point on the raft log where the write was replicated.
+	LogPosition LogPosition
 	// Origin is the node at which this work originated. It's used for
 	// replication admission control to inform the origin of admitted work
 	// (after which flow tokens are released, permitting more replicated
-	// writes).
+	// writes). Only populated for RACv1.
 	Origin roachpb.NodeID
-	// LogPosition is the point on the raft log where the write was replicated.
-	LogPosition LogPosition
+	// RaftPri is the raft priority of the entry. Only populated for RACv2.
+	RaftPri raftpb.Priority
+	// IsV2Protocol is true iff the v2 protocol requested this admission.
+	IsV2Protocol bool
 	// Ingested captures whether the write work corresponds to an ingest
 	// (for sstables, for example). This is used alongside RequestedCount to
 	// maintain accurate linear models for L0 growth due to ingests and
@@ -284,12 +294,7 @@ type WorkQueue struct {
 
 	onAdmittedReplicatedWork onAdmittedReplicatedWork
 
-	// Prevents more than one caller to be in Admit and calling tryGet or adding
-	// to the queue. It allows WorkQueue to release mu before calling tryGet and
-	// be assured that it is not competing with another Admit.
-	// Lock ordering is admitMu < mu.
-	admitMu syncutil.Mutex
-	mu      struct {
+	mu struct {
 		syncutil.Mutex
 		// Tenants with waiting work.
 		tenantHeap tenantHeap
@@ -597,11 +602,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	q.metrics.incRequested(info.Priority)
 	tenantID := info.TenantID.ToUint64()
 
-	// The code in this method does not use defer to unlock the mutexes because
-	// it needs the flexibility of selectively unlocking one of these on a
-	// certain code path. When changing the code, be careful in making sure the
-	// mutexes are properly unlocked on all code paths.
-	q.admitMu.Lock()
+	// The code in this method does not use defer to unlock the mutex because it
+	// needs the flexibility of selectively unlocking on a certain code path.
+	// When changing the code, be careful in making sure the mutex is properly
+	// unlocked on all code paths.
 	q.mu.Lock()
 	tenant, ok := q.mu.tenants[tenantID]
 	if !ok {
@@ -629,7 +633,6 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			q.mu.tenantHeap.fix(tenant)
 		}
 		q.mu.Unlock()
-		q.admitMu.Unlock()
 		q.granter.tookWithoutPermission(info.RequestedCount)
 		q.metrics.incAdmitted(info.Priority)
 		q.metrics.recordBypassedAdmission(info.Priority)
@@ -647,8 +650,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		// Optimistically update used to avoid locking again.
 		tenant.used += uint64(info.RequestedCount)
 		q.mu.Unlock()
+		// We have unlocked q.mu, so another concurrent request can also do tryGet
+		// and get ahead of this request. We don't need to be fair for such
+		// concurrent requests.
 		if q.granter.tryGet(info.RequestedCount) {
-			q.admitMu.Unlock()
 			q.metrics.incAdmitted(info.Priority)
 			if info.ReplicatedWorkInfo.Enabled {
 				// TODO(irfansharif): There's a race here, and could lead to
@@ -723,7 +728,6 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		// Already canceled. More likely to happen if cpu starvation is
 		// causing entering into the work queue to be delayed.
 		q.mu.Unlock()
-		q.admitMu.Unlock()
 		q.metrics.incErrored(info.Priority)
 		deadline, _ := ctx.Deadline()
 		return true,
@@ -749,9 +753,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	}
 	// Else already in tenantHeap.
 
-	// Release all locks.
+	// Release the lock.
 	q.mu.Unlock()
-	q.admitMu.Unlock()
 
 	q.metrics.recordStartWait(info.Priority)
 	if info.ReplicatedWorkInfo.Enabled {
@@ -2085,29 +2088,59 @@ func (q *StoreWorkQueue) admittedReplicatedWork(
 	// revisit -- one possibility is to add this to a notification queue and
 	// have a separate goroutine invoke these callbacks (without holding
 	// coord.mu). We could directly invoke here too if not holding the lock.
-	q.onLogEntryAdmitted.AdmittedLogEntry(
-		q.q[wc].ambientCtx,
-		rwi.Origin,
-		pri,
-		q.storeID,
-		rwi.RangeID,
-		rwi.LogPosition,
-	)
+	cbState := LogEntryAdmittedCallbackState{
+		StoreID:      q.storeID,
+		RangeID:      rwi.RangeID,
+		ReplicaID:    rwi.ReplicaID,
+		LeaderTerm:   rwi.LeaderTerm,
+		Pos:          rwi.LogPosition,
+		Pri:          pri,
+		Origin:       rwi.Origin,
+		RaftPri:      rwi.RaftPri,
+		IsV2Protocol: rwi.IsV2Protocol,
+	}
+	q.onLogEntryAdmitted.AdmittedLogEntry(q.q[wc].ambientCtx, cbState)
 }
 
-// OnLogEntryAdmitted is used to observe the specific entries (identified by
-// rangeID + log position) that were admitted. Since admission control for log
-// entries is asynchronous/non-blocking, this allows callers to do requisite
+// OnLogEntryAdmitted is used to observe the specific entries that were
+// admitted. Since admission control for log entries is
+// asynchronous/non-blocking, this allows callers to do requisite
 // post-admission bookkeeping.
 type OnLogEntryAdmitted interface {
-	AdmittedLogEntry(
-		ctx context.Context,
-		origin roachpb.NodeID, /* node where the entry originated */
-		pri admissionpb.WorkPriority, /* admission priority of the entry */
-		storeID roachpb.StoreID, /* store on which the entry was admitted */
-		rangeID roachpb.RangeID, /* identifying range for the log entry */
-		pos LogPosition, /* log position of the entry that was admitted*/
-	)
+	AdmittedLogEntry(ctx context.Context, cbState LogEntryAdmittedCallbackState)
+}
+
+// LogEntryAdmittedCallbackState is passed to AdmittedLogEntry.
+type LogEntryAdmittedCallbackState struct {
+	// Store on which the entry was admitted.
+	StoreID roachpb.StoreID
+	// Range that contained that entry.
+	RangeID roachpb.RangeID
+	// Replica that asked for admission.
+	ReplicaID roachpb.ReplicaID
+	// LeaderTerm is the term of the leader that asked for this entry to be
+	// appended.
+	LeaderTerm uint64
+	// Pos is the position of the entry in the log.
+	//
+	// TODO(sumeer): when the RACv1 protocol is deleted, drop the Term from this
+	// struct, and replace LeaderTerm/Pos.Index with a LogMark.
+	Pos LogPosition
+	// Pri is the admission priority used for admission.
+	Pri admissionpb.WorkPriority
+	// Origin is the node where the entry originated. It is only populated for
+	// replication admission control v1 (RACv1).
+	Origin roachpb.NodeID
+	// RaftPri is only populated for replication admission control v2 (RACv2).
+	// It is the raft priority for the entry. Technically, it could be derived
+	// from Pri, but we do not want the admission package to be aware of this
+	// translation.
+	RaftPri raftpb.Priority
+	// IsV2Protocol is true iff the v2 protocol requested this admission. It is
+	// used for de-multiplexing the callback correctly.
+	//
+	// TODO(sumeer): remove when the RACv1 protocol is deleted.
+	IsV2Protocol bool
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has completed.

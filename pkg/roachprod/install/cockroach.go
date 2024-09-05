@@ -139,7 +139,7 @@ type StartOpts struct {
 	StorageCluster         *SyncedCluster
 
 	// IsRestart allows skipping steps that are used during initial start like
-	// initialization and sequential node starts.
+	// initialization and sequential node starts and also reuses the previous start script.
 	IsRestart bool
 
 	// EnableFluentSink determines whether to enable the fluent-servers attribute
@@ -750,7 +750,7 @@ func (c *SyncedCluster) ExecSQL(
 			if c.IsLocal() {
 				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 			}
-			cmd += cockroachNodeBinary(c, node) + " sql --url " +
+			cmd += SuppressMetamorphicConstantsEnvVar() + " " + cockroachNodeBinary(c, node) + " sql --url " +
 				c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, authMode, database) + " " +
 				ssh.Escape(args)
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
@@ -762,30 +762,35 @@ func (c *SyncedCluster) ExecSQL(
 func (c *SyncedCluster) startNodeWithResult(
 	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts,
 ) (*RunResultDetails, error) {
-	startCmd, err := c.generateStartCmd(ctx, l, node, startOpts)
-	if err != nil {
-		return newRunResultDetails(node, err), err
-	}
-	var uploadCmd string
-	if c.IsLocal() {
-		uploadCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
-	}
 	startScriptPath := StartScriptPath(startOpts.VirtualClusterName, startOpts.SQLInstance)
-	uploadCmd += fmt.Sprintf(`cat > %[1]s && chmod +x %[1]s`, startScriptPath)
-
-	var res = &RunResultDetails{}
-	uploadOpts := defaultCmdOpts("upload-start-script")
-	uploadOpts.stdin = strings.NewReader(startCmd)
-	res, err = c.runCmdOnSingleNode(ctx, l, node, uploadCmd, uploadOpts)
-	if err != nil || res.Err != nil {
-		return res, err
-	}
-
 	var runScriptCmd string
 	if c.IsLocal() {
 		runScriptCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
 	runScriptCmd += "./" + startScriptPath
+
+	// If we are performing a restart, the start script should already
+	// exist, and we are going to reuse it.
+	if !startOpts.IsRestart {
+		startCmd, err := c.generateStartCmd(ctx, l, node, startOpts)
+		if err != nil {
+			return newRunResultDetails(node, err), err
+		}
+		var uploadCmd string
+		if c.IsLocal() {
+			uploadCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
+		}
+		uploadCmd += fmt.Sprintf(`cat > %[1]s && chmod +x %[1]s`, startScriptPath)
+
+		var res = &RunResultDetails{}
+		uploadOpts := defaultCmdOpts("upload-start-script")
+		uploadOpts.stdin = strings.NewReader(startCmd)
+		res, err = c.runCmdOnSingleNode(ctx, l, node, uploadCmd, uploadOpts)
+		if err != nil || res.Err != nil {
+			return res, err
+		}
+	}
+
 	return c.runCmdOnSingleNode(ctx, l, node, runScriptCmd, defaultCmdOpts("run-start-script"))
 }
 
@@ -1068,8 +1073,11 @@ func (c *SyncedCluster) generateStartArgs(
 	e := expander{
 		node: node,
 	}
+	// We currently don't accept any custom expander configurations in
+	// this function.
+	var expanderConfig ExpanderConfig
 	for i, arg := range args {
-		expandedArg, err := e.expand(ctx, l, c, arg)
+		expandedArg, err := e.expand(ctx, l, c, expanderConfig, arg)
 		if err != nil {
 			return nil, err
 		}
@@ -1312,8 +1320,8 @@ func (c *SyncedCluster) generateClusterSettingCmd(
 	// store is used.
 	clusterSettingsCmd += fmt.Sprintf(`
 		if ! test -e %s ; then
-			COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e "%s" && mkdir -p %s && touch %s
-		fi`, path, startSQLTimeout, binary, url, clusterSettingsString, c.NodeDir(node, 1 /* storeIndex */), path)
+			%s COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e "%s" && mkdir -p %s && touch %s
+		fi`, path, SuppressMetamorphicConstantsEnvVar(), startSQLTimeout, binary, url, clusterSettingsString, c.NodeDir(node, 1 /* storeIndex */), path)
 	return clusterSettingsCmd, nil
 }
 
@@ -1332,8 +1340,8 @@ func (c *SyncedCluster) generateInitCmd(ctx context.Context, node Node) (string,
 	binary := cockroachNodeBinary(c, node)
 	initCmd += fmt.Sprintf(`
 		if ! test -e %[1]s ; then
-			COCKROACH_CONNECT_TIMEOUT=%[4]d %[2]s init --url %[3]s && touch %[1]s
-		fi`, path, binary, url, startSQLTimeout)
+			%[2]s COCKROACH_CONNECT_TIMEOUT=%[5]d %[3]s init --url %[4]s && touch %[1]s
+		fi`, path, SuppressMetamorphicConstantsEnvVar(), binary, url, startSQLTimeout)
 	return initCmd, nil
 }
 
@@ -1371,7 +1379,10 @@ func (c *SyncedCluster) generateKeyCmd(
 	}
 
 	e := expander{node: node}
-	expanded, err := e.expand(ctx, l, c, keyCmd.String())
+	// We currently don't accept any custom expander configurations in
+	// this function.
+	var expanderConfig ExpanderConfig
+	expanded, err := e.expand(ctx, l, c, expanderConfig, keyCmd.String())
 	if err != nil {
 		return "", err
 	}
@@ -1530,8 +1541,8 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 	}
 
 	url := c.NodeURL("localhost", port, startOpts.VirtualClusterName, serviceMode, AuthRootCert, "" /* database */)
-	fullCmd := fmt.Sprintf(`COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e %q`,
-		startSQLTimeout, binary, url, createScheduleCmd)
+	fullCmd := fmt.Sprintf(`%s COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e %q`,
+		SuppressMetamorphicConstantsEnvVar(), startSQLTimeout, binary, url, createScheduleCmd)
 	// Instead of using `c.ExecSQL()`, use `c.runCmdOnSingleNode()`, which allows us to
 	// 1) prefix the schedule backup cmd with COCKROACH_CONNECT_TIMEOUT.
 	// 2) run the command against the first node in the cluster target.
@@ -1560,4 +1571,17 @@ func getEnvVars() []string {
 		}
 	}
 	return sl
+}
+
+// SuppressMetamorphicConstantsEnvVar returns the env var to disable metamorphic testing.
+// This doesn't actually disable metamorphic constants for a test **unless** it is used
+// when starting the cluster. This does however suppress the metamorphic constants being
+// logged for every cockroach invocation, which while benign, can be very confusing as the
+// constants will be different than what the cockroach cluster is actually using.
+//
+// TODO(darrylwong): Ideally, the metamorphic constants framework would be smarter and only
+// log constants when asked for instead of unconditionally on init(). That way we can remove
+// this workaround and just log the constants once when the cluster is started.
+func SuppressMetamorphicConstantsEnvVar() string {
+	return config.DisableMetamorphicTestingEnvVar
 }

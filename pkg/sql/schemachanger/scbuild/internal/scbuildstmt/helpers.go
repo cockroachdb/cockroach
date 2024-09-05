@@ -1679,3 +1679,43 @@ func retrieveColumnComputeExpression(
 	columnType := mustRetrieveColumnTypeElem(b, tableID, columnID)
 	return columnType.ComputeExpr
 }
+
+// mustRetrieveColumnTypeElem retrieves the index column elements associated
+// with the given indexID.
+func mustRetrieveIndexColumnElements(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) []*scpb.IndexColumn {
+	// Get the index columns for indexID.
+	var idxCols []*scpb.IndexColumn
+	b.QueryByID(tableID).FilterIndexColumn().
+		Filter(func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn) bool {
+			return e.IndexID == indexID
+		}).ForEach(func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn) {
+		idxCols = append(idxCols, e)
+	})
+	if len(idxCols) == 0 {
+		panic(errors.AssertionFailedf("programming error: cannot find a IndexColumn "+
+			"element for index ID %v", indexID))
+	}
+	return idxCols
+}
+
+// mustRetrievePhysicalTableElem will resolve a tableID to a physical table
+// element. A "physical" table element includes tables, views, and sequences.
+func mustRetrievePhysicalTableElem(b BuildCtx, descID catid.DescID) scpb.Element {
+	return b.QueryByID(descID).Filter(func(
+		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
+	) bool {
+		switch e := e.(type) {
+		case *scpb.Table:
+			return e.TableID == descID
+		case *scpb.View:
+			if e.IsMaterialized {
+				return e.ViewID == descID
+			}
+		case *scpb.Sequence:
+			return e.SequenceID == descID
+		}
+		return false
+	}).MustGetOneElement()
+}

@@ -128,6 +128,7 @@ optimizer_always_use_histograms                            on
 optimizer_hoist_uncorrelated_equality_subqueries           on
 optimizer_merge_joins_enabled                              on
 optimizer_prove_implication_with_virtual_computed_columns  on
+optimizer_push_limit_into_project_filtered_scan            on
 optimizer_push_offset_into_index_join                      on
 optimizer_use_conditional_hoist_fix                        on
 optimizer_use_forecasts                                    on
@@ -352,6 +353,7 @@ public       statement_diagnostics            table     node   NULL
 public       statement_diagnostics_requests   table     node   NULL
 public       statement_execution_insights     table     node   NULL
 public       statement_statistics             table     node   NULL
+public       table_metadata                   table     node   NULL
 public       table_statistics                 table     node   NULL
 public       task_payloads                    table     node   NULL
 public       tenant_id_seq                    sequence  node   NULL
@@ -414,6 +416,7 @@ public       statement_diagnostics            table     node   NULL      ·
 public       statement_diagnostics_requests   table     node   NULL      ·
 public       statement_execution_insights     table     node   NULL      ·
 public       statement_statistics             table     node   NULL      ·
+public       table_metadata                   table     node   NULL      ·
 public       table_statistics                 table     node   NULL      ·
 public       task_payloads                    table     node   NULL      ·
 public       tenant_id_seq                    sequence  node   NULL      ·
@@ -561,7 +564,7 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM CURRENT_CATALOG WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
-/Table/66  /Max     {1}       1
+/Table/67  /Max     {1}       1
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE system.descriptor WITH DETAILS]

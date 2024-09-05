@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/raft"
@@ -245,7 +246,11 @@ func createTestStoreWithoutStart(
 		NoopStoresFlowControlIntegration{},
 		NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
+		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
+	)
+	cfg.StoreLivenessTransport = storeliveness.NewTransport(
+		cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, server,
 	)
 
 	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
@@ -929,7 +934,11 @@ func TestMarkReplicaInitialized(t *testing.T) {
 		ReplicaID: 1,
 	}}
 	desc.NextReplicaID = 2
-	r.setDescRaftMuLocked(ctx, desc)
+	func() {
+		r.raftMu.Lock()
+		defer r.raftMu.Unlock()
+		r.setDescRaftMuLocked(ctx, desc)
+	}()
 	expectedResult = "not in uninitReplicas"
 	func() {
 		r.mu.Lock()

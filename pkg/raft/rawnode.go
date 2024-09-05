@@ -176,6 +176,7 @@ func (rn *RawNode) readyWithoutAccept() Ready {
 
 // MustSync returns true if the hard state and count of Raft entries indicate
 // that a synchronous write to persistent storage is required.
+// NOTE: MustSync isn't used under AsyncStorageWrites mode.
 func MustSync(st, prevst pb.HardState, entsnum int) bool {
 	// Persistent state on all servers:
 	// (Updated on stable storage before responding to RPCs)
@@ -185,7 +186,7 @@ func MustSync(st, prevst pb.HardState, entsnum int) bool {
 	// votedFor
 	// log entries[]
 	return entsnum != 0 || st.Vote != prevst.Vote || st.Term != prevst.Term ||
-		st.Lead != prevst.Lead || st.LeadEpoch != prevst.LeadEpoch
+		st.Lead != prevst.Lead || st.LeadEpoch != prevst.LeadEpoch || st.Commit != prevst.Commit
 }
 
 func needStorageAppendMsg(r *raft, rd Ready) bool {
@@ -217,6 +218,7 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 		Entries: rd.Entries,
 	}
 	if ln := len(rd.Entries); ln != 0 {
+		// See comment in newStorageAppendRespMsg for why the accTerm is attached.
 		m.LogTerm = r.raftLog.accTerm()
 		m.Index = rd.Entries[ln-1].Index
 	}
@@ -237,6 +239,8 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 	if !IsEmptySnap(rd.Snapshot) {
 		snap := rd.Snapshot
 		m.Snapshot = &snap
+		// See comment in newStorageAppendRespMsg for why the accTerm is attached.
+		m.LogTerm = r.raftLog.accTerm()
 	}
 	// Attach all messages in msgsAfterAppend as responses to be delivered after
 	// the message is processed, along with a self-directed MsgStorageAppendResp
@@ -248,6 +252,9 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 	// handling to use a fast-path in r.raftLog.term() before the newly appended
 	// entries are removed from the unstable log.
 	m.Responses = r.msgsAfterAppend
+	// Warning: there is code outside raft package depending on the order of
+	// Responses, particularly MsgStorageAppendResp being last in this list.
+	// Change this with caution.
 	if needStorageAppendRespMsg(rd) {
 		m.Responses = append(m.Responses, newStorageAppendRespMsg(r, rd))
 	}
@@ -321,6 +328,7 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 	if !IsEmptySnap(rd.Snapshot) {
 		snap := rd.Snapshot
 		m.Snapshot = &snap
+		m.LogTerm = r.raftLog.accTerm()
 	}
 	return m
 }
@@ -445,6 +453,27 @@ func (rn *RawNode) Advance(_ Ready) {
 	rn.stepsOnAdvance = rn.stepsOnAdvance[:0]
 }
 
+// Term returns the current in-memory term of this RawNode. This term may not
+// yet have been persisted in storage.
+func (rn *RawNode) Term() uint64 {
+	return rn.raft.Term
+}
+
+// Lead returns the leader of Term(), or None if the leader is unknown.
+func (rn *RawNode) Lead() pb.PeerID {
+	return rn.raft.lead
+}
+
+// NextUnstableIndex returns the index of the next entry that will be sent to
+// local storage, if there are any. All entries < this index are either stored,
+// or have been sent to storage.
+//
+// NB: NextUnstableIndex can regress when the node accepts appends or snapshots
+// from a newer leader.
+func (rn *RawNode) NextUnstableIndex() uint64 {
+	return rn.raft.raftLog.unstable.entryInProgress + 1
+}
+
 // Status returns the current status of the given group. This allocates, see
 // SparseStatus, BasicStatus and WithProgress for allocation-friendlier choices.
 func (rn *RawNode) Status() Status {
@@ -469,9 +498,6 @@ func (rn *RawNode) SparseStatus() SparseStatus {
 func (rn *RawNode) LeadSupportStatus() LeadSupportStatus {
 	return getLeadSupportStatus(rn.raft)
 }
-
-// TODO(nvanbenschoten): remove this one the method is used.
-var _ = (*RawNode).LeadSupportStatus
 
 // ProgressType indicates the type of replica a Progress corresponds to.
 type ProgressType byte
@@ -510,4 +536,12 @@ func (rn *RawNode) TransferLeader(transferee pb.PeerID) {
 // See (Node).ForgetLeader for details.
 func (rn *RawNode) ForgetLeader() error {
 	return rn.raft.Step(pb.Message{Type: pb.MsgForgetLeader})
+}
+
+func (rn *RawNode) TestingStepDown() error {
+	return rn.raft.testingStepDown()
+}
+
+func (rn *RawNode) TestingSupportStateString() string {
+	return rn.raft.supportTracker.String()
 }

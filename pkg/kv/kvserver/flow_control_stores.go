@@ -12,10 +12,16 @@ package kvserver
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -48,6 +54,14 @@ func (sh *storesForFlowControl) Lookup(
 		return nil, false
 	}
 	return handle, found
+}
+
+// LookupReplicationAdmissionHandle is part of the StoresForFlowControl
+// interface.
+func (sh *storesForFlowControl) LookupReplicationAdmissionHandle(
+	rangeID roachpb.RangeID,
+) (kvflowcontrol.ReplicationAdmissionHandle, bool) {
+	return sh.Lookup(rangeID)
 }
 
 // Inspect is part of the StoresForFlowControl interface.
@@ -107,21 +121,57 @@ func makeStoreForFlowControl(store *Store) *storeForFlowControl {
 func (sh *storeForFlowControl) Lookup(
 	rangeID roachpb.RangeID,
 ) (_ kvflowcontrol.Handle, found bool) {
-	s := (*Store)(sh)
-	repl := s.GetReplicaIfExists(rangeID)
+	repl := sh.lookupReplica(rangeID)
 	if repl == nil {
 		return nil, false
 	}
-
-	if knobs := s.TestingKnobs().FlowControlTestingKnobs; knobs != nil &&
-		knobs.UseOnlyForScratchRanges &&
-		!repl.IsScratchRange() {
-		return nil, false
-	}
-
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
 	return repl.mu.replicaFlowControlIntegration.handle()
+}
+
+// LookupReplicationAdmissionHandle is part of the StoresForFlowControl
+// interface.
+func (sh *storeForFlowControl) LookupReplicationAdmissionHandle(
+	rangeID roachpb.RangeID,
+) (kvflowcontrol.ReplicationAdmissionHandle, bool) {
+	repl := sh.lookupReplica(rangeID)
+	if repl == nil {
+		return nil, false
+	}
+	// NB: Admit is called soon after this lookup.
+	level := repl.flowControlV2.GetEnabledWhenLeader()
+	useV1 := level == replica_rac2.NotEnabledWhenLeader
+	var v1Handle kvflowcontrol.ReplicationAdmissionHandle
+	if useV1 {
+		repl.mu.Lock()
+		var found bool
+		v1Handle, found = repl.mu.replicaFlowControlIntegration.handle()
+		repl.mu.Unlock()
+		if !found {
+			return nil, found
+		}
+	}
+	// INVARIANT: useV1 => v1Handle was found.
+	return admissionDemuxHandle{
+		v1Handle: v1Handle,
+		r:        repl,
+		useV1:    useV1,
+	}, true
+}
+
+func (sh *storeForFlowControl) lookupReplica(rangeID roachpb.RangeID) *Replica {
+	s := (*Store)(sh)
+	repl := s.GetReplicaIfExists(rangeID)
+	if repl == nil {
+		return nil
+	}
+	if knobs := s.TestingKnobs().FlowControlTestingKnobs; knobs != nil &&
+		knobs.UseOnlyForScratchRanges &&
+		!repl.IsScratchRange() {
+		return nil
+	}
+	return repl
 }
 
 // ResetStreams is part of the StoresForFlowControl interface.
@@ -205,6 +255,14 @@ func (l NoopStoresFlowControlIntegration) Lookup(roachpb.RangeID) (kvflowcontrol
 	return nil, false
 }
 
+// LookupReplicationAdmissionHandle is part of the StoresForFlowControl
+// interface.
+func (l NoopStoresFlowControlIntegration) LookupReplicationAdmissionHandle(
+	rangeID roachpb.RangeID,
+) (kvflowcontrol.ReplicationAdmissionHandle, bool) {
+	return l.Lookup(rangeID)
+}
+
 // ResetStreams is part of the StoresForFlowControl interface.
 func (l NoopStoresFlowControlIntegration) ResetStreams(context.Context) {
 }
@@ -219,4 +277,107 @@ func (l NoopStoresFlowControlIntegration) Inspect() []roachpb.RangeID {
 func (NoopStoresFlowControlIntegration) OnRaftTransportDisconnected(
 	context.Context, ...roachpb.StoreID,
 ) {
+}
+
+// StoresForRACv2 implements various interfaces to route to the relevant
+// range's Processor.
+type StoresForRACv2 interface {
+	admission.OnLogEntryAdmitted
+	PiggybackedAdmittedResponseScheduler
+}
+
+// PiggybackedAdmittedResponseScheduler routes followers piggybacked admitted
+// response messages to the relevant ranges, and schedules those ranges for
+// processing.
+type PiggybackedAdmittedResponseScheduler interface {
+	ScheduleAdmittedResponseForRangeRACv2(
+		ctx context.Context, msgs []kvflowcontrolpb.AdmittedResponseForRange)
+}
+
+func MakeStoresForRACv2(stores *Stores) StoresForRACv2 {
+	return (*storesForRACv2)(stores)
+}
+
+type storesForRACv2 Stores
+
+// AdmittedLogEntry implements admission.OnLogEntryAdmitted.
+func (ss *storesForRACv2) AdmittedLogEntry(
+	ctx context.Context, cbState admission.LogEntryAdmittedCallbackState,
+) {
+	p := ss.lookup(cbState.StoreID, cbState.RangeID, cbState.ReplicaID)
+	if p == nil {
+		return
+	}
+	p.AdmittedLogEntry(ctx, replica_rac2.EntryForAdmissionCallbackState{
+		Mark:     rac2.LogMark{Term: cbState.LeaderTerm, Index: cbState.Pos.Index},
+		Priority: cbState.RaftPri,
+	})
+}
+
+func (ss *storesForRACv2) lookup(
+	storeID roachpb.StoreID, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
+) replica_rac2.Processor {
+	ls := (*Stores)(ss)
+	s, err := ls.GetStore(storeID)
+	if err != nil {
+		// Store has disappeared!
+		panic(err)
+	}
+	r := s.GetReplicaIfExists(rangeID)
+	if r == nil || r.replicaID != replicaID {
+		return nil
+	}
+	return r.flowControlV2
+}
+
+// ScheduleAdmittedResponseForRangeRACv2 implements PiggybackedAdmittedResponseScheduler.
+func (ss *storesForRACv2) ScheduleAdmittedResponseForRangeRACv2(
+	ctx context.Context, msgs []kvflowcontrolpb.AdmittedResponseForRange,
+) {
+	ls := (*Stores)(ss)
+	for _, m := range msgs {
+		s, err := ls.GetStore(m.LeaderStoreID)
+		if err != nil {
+			log.Errorf(ctx, "store %s not found", m.LeaderStoreID)
+			continue
+		}
+		repl := s.GetReplicaIfExists(m.RangeID)
+		if repl == nil {
+			continue
+		}
+		repl.flowControlV2.EnqueuePiggybackedAdmittedAtLeader(m.Msg)
+		s.scheduler.EnqueueRACv2PiggybackAdmitted(m.RangeID)
+	}
+}
+
+type admissionDemuxHandle struct {
+	v1Handle kvflowcontrol.ReplicationAdmissionHandle
+	r        *Replica
+	useV1    bool
+}
+
+// Admit implements kvflowcontrol.ReplicationAdmissionHandle.
+func (h admissionDemuxHandle) Admit(
+	ctx context.Context, pri admissionpb.WorkPriority, ct time.Time,
+) (admitted bool, err error) {
+	if h.useV1 {
+		admitted, err = h.v1Handle.Admit(ctx, pri, ct)
+		if err != nil {
+			return admitted, err
+		}
+		// It is possible a transition from v1 => v2 happened while waiting, which
+		// can cause either value of admitted. See the comment in
+		// ReplicationAdmissionHandle.
+		level := h.r.flowControlV2.GetEnabledWhenLeader()
+		if level == replica_rac2.NotEnabledWhenLeader {
+			return admitted, err
+		}
+		// Transition from v1 => v2 happened while waiting. Fall through to wait
+		// on v2, since it is possible that nothing was waited on, or the
+		// overloaded stream was not waited on. This double wait is acceptable
+		// since during the transition from v1 => v2 only elastic work should be
+		// subject to replication AC, and we would like to err towards not
+		// overloading.
+	}
+	return h.r.flowControlV2.AdmitForEval(ctx, pri, ct)
 }

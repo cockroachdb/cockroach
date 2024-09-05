@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -169,9 +170,9 @@ func TestSyncAllEngines(t *testing.T) {
 	// will have been lost.
 	{
 		memFS := vfsRegistry.Get(storeSpec.StickyVFSID)
-		memFS.SetIgnoreSyncs(true)
+		crashFS := memFS.CrashClone(vfs.CrashCloneCfg{})
 		s.Stopper().Stop(ctx)
-		memFS.ResetToSyncedState()
+		vfsRegistry.Set(storeSpec.StickyVFSID, crashFS)
 	}
 
 	// Restart the server.

@@ -94,6 +94,12 @@ var (
 		Usage: `Use selective tests to run based on previous test execution. this is considered only if the select-probability is 1.0`,
 	})
 
+	SuccessfulTestsSelectPct = 0.35
+	_                        = registerRunFlag(&SuccessfulTestsSelectPct, FlagInfo{
+		Name:  "successful-test-select-pct",
+		Usage: `The percent of test that should be selected from the tests that have been running successfully as per test selection. Default is 0.35`,
+	})
+
 	Username string = os.Getenv("ROACHPROD_USER")
 	_               = registerRunFlag(&Username, FlagInfo{
 		Name:      "user",
@@ -183,6 +189,15 @@ var (
 		Usage: `
 			Probability that clusters will be created with 'arm64' CPU architecture
 			for tests that support 'arm64' (default 0)`,
+	})
+
+	CockroachEAProbability float64 = defaultCockroachEAProbability
+	_                              = registerRunFlag(&CockroachEAProbability, FlagInfo{
+		Name: "metamorphic-cockroach-ea-probability",
+		Usage: `
+			Probability that tests will be run with assertions enabled. A cockroach
+      binary built with the --crdb_test flag must be passed to --cockroach-ea
+      for assertions to be enabled.`,
 	})
 
 	// ArtifactsDir is a path to a local dir where the test logs and artifacts
@@ -473,12 +488,13 @@ var (
 )
 
 const (
-	defaultEncryptionProbability = 1
-	defaultFIPSProbability       = 0
-	defaultARM64Probability      = 0
-	NeverUseSpot                 = "never"
-	AlwaysUseSpot                = "always"
-	AutoUseSpot                  = "auto"
+	defaultEncryptionProbability  = 1
+	defaultFIPSProbability        = 0
+	defaultARM64Probability       = 0
+	defaultCockroachEAProbability = 0
+	NeverUseSpot                  = "never"
+	AlwaysUseSpot                 = "always"
+	AutoUseSpot                   = "auto"
 )
 
 // FlagInfo contains the name and usage of a flag. Used to make the code

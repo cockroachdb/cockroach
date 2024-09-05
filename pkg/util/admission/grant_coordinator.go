@@ -66,10 +66,10 @@ type StoreGrantCoordinators struct {
 	// numStores is used to track the number of stores which have been added
 	// to the gcMap. This is used because the IntMap doesn't expose a size
 	// api.
-	numStores             int
-	pebbleMetricsProvider PebbleMetricsProvider
-	onLogEntryAdmitted    OnLogEntryAdmitted
-	closeCh               chan struct{}
+	numStores                      int
+	setPebbleMetricsProviderCalled bool
+	onLogEntryAdmitted             OnLogEntryAdmitted
+	closeCh                        chan struct{}
 
 	disableTickerForTesting bool // TODO(irfansharif): Fold into the testing knobs struct below.
 	knobs                   *TestingKnobs
@@ -80,12 +80,13 @@ type StoreGrantCoordinators struct {
 func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	startupCtx context.Context, pmp PebbleMetricsProvider, iotc IOThresholdConsumer,
 ) {
-	if sgc.pebbleMetricsProvider != nil {
+	if sgc.setPebbleMetricsProviderCalled {
 		panic(errors.AssertionFailedf("SetPebbleMetricsProvider called more than once"))
 	}
-	sgc.pebbleMetricsProvider = pmp
+	sgc.setPebbleMetricsProviderCalled = true
+	pebbleMetricsProvider := pmp
 	sgc.closeCh = make(chan struct{})
-	metrics := sgc.pebbleMetricsProvider.GetPebbleMetrics()
+	metrics := pebbleMetricsProvider.GetPebbleMetrics()
 	for _, m := range metrics {
 		gc := sgc.initGrantCoordinator(m.StoreID)
 		// Defensive call to LoadAndStore even though Store ought to be sufficient
@@ -115,7 +116,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 			select {
 			default:
 				if remainingTicks == 0 {
-					metrics := sgc.pebbleMetricsProvider.GetPebbleMetrics()
+					metrics := pebbleMetricsProvider.GetPebbleMetrics()
 					if len(metrics) != sgc.numStores {
 						log.Warningf(ctx,
 							"expected %d store metrics and found %d metrics", sgc.numStores, len(metrics))
@@ -146,6 +147,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 				})
 			case <-sgc.closeCh:
 				done = true
+				pebbleMetricsProvider.Close()
 			}
 		}
 		ticker.stop()
@@ -457,7 +459,7 @@ func makeStoresGrantCoordinators(
 			admissionpb.NormalPri, admissionpb.LockingNormalPri)
 	elasticStoreWorkQueueMetrics :=
 		makeWorkQueueMetrics(fmt.Sprintf("%s-stores", admissionpb.ElasticWorkClass), registry,
-			admissionpb.TTLLowPri, admissionpb.BulkNormalPri)
+			admissionpb.BulkLowPri, admissionpb.BulkNormalPri)
 	storeWorkQueueMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{
 		regularStoreWorkQueueMetrics, elasticStoreWorkQueueMetrics,
 	}

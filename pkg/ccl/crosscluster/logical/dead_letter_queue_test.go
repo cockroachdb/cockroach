@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,8 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -41,9 +45,111 @@ import (
 const (
 	defaultDbName = "defaultdb"
 	publicScName  = "public"
+	dbAName       = "a"
 )
 
-func TestLoggingDLQClient(t *testing.T) {
+func setupDLQTestTables(
+	ctx context.Context,
+	t *testing.T,
+	sqlDB *sqlutils.SQLRunner,
+	kvDB *kv.DB,
+	srv serverutils.TestServerInterface,
+) (
+	tableNameToDesc map[string]catalog.TableDescriptor,
+	srcTableIDToName map[descpb.ID]dstTableMetadata,
+	expectedDLQTables []string,
+	ie isql.Executor,
+) {
+	s := srv.ApplicationLayer()
+	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
+	ie = s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd))
+
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT)`)
+
+	sqlDB.Exec(t, `CREATE SCHEMA baz`)
+	sqlDB.Exec(t, `CREATE TABLE baz.foo (a INT)`)
+	sqlDB.Exec(t, `CREATE SCHEMA bar_`)
+	sqlDB.Exec(t, `CREATE TABLE bar_.foo (a INT)`)
+	sqlDB.Exec(t, `CREATE SCHEMA bar`)
+	sqlDB.Exec(t, `CREATE TABLE bar._foo (a INT)`)
+
+	sqlDB.Exec(t, `CREATE DATABASE a`)
+	sqlDB.Exec(t, `CREATE SCHEMA a.baz`)
+	sqlDB.Exec(t, `CREATE TABLE a.public.bar (a INT)`)
+	sqlDB.Exec(t, `CREATE TABLE a.baz.foo (a INT)`)
+
+	dstTableMeta := []dstTableMetadata{
+		// Base test case.
+		{
+			database: defaultDbName,
+			schema:   publicScName,
+			table:    "foo",
+			tableID:  1,
+		},
+		// Verify that distinct DLQ tables are created for tables
+		// in different databases with identical schema and table
+		// names.
+		{
+			database: defaultDbName,
+			schema:   "baz",
+			table:    "foo",
+			tableID:  1,
+		},
+		{
+			database: dbAName,
+			schema:   "baz",
+			table:    "foo",
+			tableID:  1,
+		},
+		// Verify that distinct DLQ tables are created for tables
+		// with identical fully qualified names and distinct
+		// table IDs.
+		{
+			database: defaultDbName,
+			schema:   "bar",
+			table:    "_foo",
+			tableID:  1,
+		},
+		{
+			database: defaultDbName,
+			schema:   "bar_",
+			table:    "foo",
+			tableID:  2,
+		},
+	}
+
+	tableNameToDesc = make(map[string]catalog.TableDescriptor)
+	srcTableIDToName = make(map[descpb.ID]dstTableMetadata)
+	expectedDLQTables = []string{}
+
+	for _, md := range dstTableMeta {
+		desc := desctestutils.TestingGetTableDescriptor(kvDB, s.Codec(), md.database, md.schema, md.table)
+		srcTableID := desc.GetID()
+		srcTableIDToName[srcTableID] = md
+		fullyQualifiedName := fmt.Sprintf("%s.%s.%s", md.database, md.schema, md.table)
+		tableNameToDesc[fullyQualifiedName] = desc
+		expectedDLQTables = append(expectedDLQTables, fmt.Sprintf("dlq_%d_%s_%s", md.tableID, md.schema, md.table))
+	}
+	return tableNameToDesc, srcTableIDToName, expectedDLQTables, ie
+}
+
+func WaitForDLQLogs(t *testing.T, db *sqlutils.SQLRunner, tableName string, numRowsExpected int) {
+	t.Logf("waiting for write conflicts to be logged in DLQ table %s", tableName)
+	testutils.SucceedsSoon(t, func() error {
+		query := fmt.Sprintf("SELECT count(*) FROM %s", tableName)
+		var numRows int
+		db.QueryRow(t, query).Scan(&numRows)
+		if numRows != numRowsExpected {
+			return errors.Newf("Expected DLQ table '%s' to have %d rows, received %d rows instead",
+				tableName,
+				numRowsExpected,
+				numRows)
+		}
+		return nil
+	})
+}
+
+func TestNoopDLQClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -65,7 +171,7 @@ func TestLoggingDLQClient(t *testing.T) {
 	ed, err := cdcevent.NewEventDescriptor(tableDesc, familyDesc, false, false, hlc.Timestamp{})
 	require.NoError(t, err)
 
-	dlqClient := InitLoggingDeadLetterQueueClient()
+	dlqClient := InitNoopDeadLetterQueueClient()
 	require.NoError(t, dlqClient.Create(ctx))
 
 	type testCase struct {
@@ -105,88 +211,18 @@ func TestLoggingDLQClient(t *testing.T) {
 	}
 }
 
-func TestDLQClient(t *testing.T) {
+func TestDLQCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(context.Background())
-	s := srv.ApplicationLayer()
-
-	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
-	ie := s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd))
+	defer srv.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `CREATE TABLE foo (a INT)`)
+	_, srcTableIDToName, expectedDLQTables, ie := setupDLQTestTables(ctx, t, sqlDB, kvDB, srv)
 
-	sqlDB.Exec(t, `CREATE SCHEMA baz`)
-	sqlDB.Exec(t, `CREATE TABLE baz.foo (a INT)`)
-	sqlDB.Exec(t, `CREATE SCHEMA bar_`)
-	sqlDB.Exec(t, `CREATE TABLE bar_.foo (a INT)`)
-	sqlDB.Exec(t, `CREATE SCHEMA bar`)
-	sqlDB.Exec(t, `CREATE TABLE bar._foo (a INT)`)
-
-	sqlDB.Exec(t, `CREATE DATABASE a`)
-	sqlDB.Exec(t, `CREATE SCHEMA a.baz`)
-	sqlDB.Exec(t, `CREATE TABLE a.public.bar (a INT)`)
-	sqlDB.Exec(t, `CREATE TABLE a.baz.foo (a INT)`)
-
-	dbAName := "a"
-
-	tableNames := []fullyQualifiedTableName{
-		{
-			database: defaultDbName,
-			schema:   publicScName,
-			table:    "foo",
-		},
-		{
-			database: defaultDbName,
-			schema:   "baz",
-			table:    "foo",
-		},
-		{
-			database: defaultDbName,
-			schema:   "bar",
-			table:    "_foo",
-		},
-		{
-			database: defaultDbName,
-			schema:   "bar_",
-			table:    "foo",
-		},
-		{
-			database: dbAName,
-			schema:   publicScName,
-			table:    "bar",
-		},
-		{
-			database: dbAName,
-			schema:   "baz",
-			table:    "foo",
-		},
-	}
-
-	tableNameToDesc := make(map[string]catalog.TableDescriptor)
-	tableIDToName := make(map[int32]fullyQualifiedTableName)
-	var expectedDLQTables []string
-
-	for _, name := range tableNames {
-		desc := desctestutils.TestingGetTableDescriptor(kvDB, s.Codec(), name.database, name.schema, name.table)
-		tableID := int32(desc.GetID())
-		tableIDToName[tableID] = name
-		fullyQualifiedName := fmt.Sprintf("%s.%s.%s", name.database, name.schema, name.table)
-		tableNameToDesc[fullyQualifiedName] = desc
-		expectedDLQTables = append(expectedDLQTables, fmt.Sprintf("dlq_%d_%s_%s", tableID, name.schema, name.table))
-	}
-
-	// Build family desc for cdc event row
-	familyDesc := &descpb.ColumnFamilyDescriptor{
-		ID:   descpb.FamilyID(1),
-		Name: "",
-	}
-
-	dlqClient := InitDeadLetterQueueClient(ie, tableIDToName)
+	dlqClient := InitDeadLetterQueueClient(ie, srcTableIDToName)
 	require.NoError(t, dlqClient.Create(ctx))
 
 	// Verify DLQ tables are created with their expected names
@@ -212,6 +248,27 @@ func TestDLQClient(t *testing.T) {
 		fmt.Sprintf(`SELECT schema, name, values FROM [SHOW ENUMS FROM %s.%s]`, defaultDbName, dlqSchemaName), enumRow)
 	sqlDB.CheckQueryResults(t,
 		fmt.Sprintf(`SELECT schema, name, values FROM [SHOW ENUMS FROM %s.%s]`, dbAName, dlqSchemaName), enumRow)
+}
+
+func TestDLQLogging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	tableNameToDesc, srcTableIDToName, _, ie := setupDLQTestTables(ctx, t, sqlDB, kvDB, srv)
+
+	// Build family desc for cdc event row
+	familyDesc := &descpb.ColumnFamilyDescriptor{
+		ID:   descpb.FamilyID(1),
+		Name: "",
+	}
+
+	dlqClient := InitDeadLetterQueueClient(ie, srcTableIDToName)
+	require.NoError(t, dlqClient.Create(ctx))
 
 	type testCase struct {
 		name           string
@@ -255,13 +312,6 @@ func TestDLQClient(t *testing.T) {
 			mutationType: insertMutation,
 		},
 		{
-			name:         "insert dlq fallback row for a.public.bar",
-			jobID:        1,
-			tableDesc:    tableNameToDesc["a.public.bar"],
-			dlqReason:    noSpace,
-			mutationType: insertMutation,
-		},
-		{
 			name:         "insert dlq fallback row for a.baz.foo",
 			jobID:        1,
 			tableDesc:    tableNameToDesc["a.baz.foo"],
@@ -276,7 +326,7 @@ func TestDLQClient(t *testing.T) {
 
 	type dlqRow struct {
 		jobID        int64
-		tableID      int32
+		tableID      descpb.ID
 		dlqReason    string
 		mutationType string
 		kv           []byte
@@ -300,8 +350,8 @@ func TestDLQClient(t *testing.T) {
 			if tc.expectedErrMsg == "" {
 				require.NoError(t, err)
 
-				tableID := int32(tc.tableDesc.GetID())
-				name, ok := tableIDToName[tableID]
+				srcTableID := tc.tableDesc.GetID()
+				md, ok := srcTableIDToName[srcTableID]
 				require.True(t, ok)
 
 				actualRow := dlqRow{}
@@ -312,7 +362,7 @@ func TestDLQClient(t *testing.T) {
 						mutation_type,
 						key_value_bytes,
 						incoming_row
-				FROM %s`, name.toDLQTableName(tableID))).Scan(
+				FROM %s`, md.toDLQTableName())).Scan(
 					&actualRow.jobID,
 					&actualRow.tableID,
 					&actualRow.dlqReason,
@@ -326,7 +376,7 @@ func TestDLQClient(t *testing.T) {
 
 				expectedRow := dlqRow{
 					jobID:        tc.jobID,
-					tableID:      tableID,
+					tableID:      md.tableID,
 					dlqReason:    fmt.Sprintf("%s (%s)", tc.applyError.Error(), tc.dlqReason),
 					mutationType: tc.mutationType.String(),
 					kv:           bytes,
@@ -377,13 +427,13 @@ func TestDLQJSONQuery(t *testing.T) {
 	ie := srv.InternalDB().(isql.DB).Executor()
 	defer cleanup()
 
-	tableID := int32(tableDesc.GetID())
-	tableName := fullyQualifiedTableName{
+	tableID := tableDesc.GetID()
+	tableName := dstTableMetadata{
 		database: defaultDbName,
 		schema:   publicScName,
 		table:    "foo",
 	}
-	dlqClient := InitDeadLetterQueueClient(ie, map[int32]fullyQualifiedTableName{
+	dlqClient := InitDeadLetterQueueClient(ie, map[descpb.ID]dstTableMetadata{
 		tableID: tableName,
 	})
 	require.NoError(t, dlqClient.Create(ctx))
@@ -398,7 +448,7 @@ func TestDLQJSONQuery(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, dlqClient.Log(ctx, 1, streampb.StreamEvent_KV{KeyValue: kv}, updatedRow, errInjected, noSpace))
 
-	dlqtableName := tableName.toDLQTableName(tableID)
+	dlqtableName := tableName.toDLQTableName()
 
 	var (
 		a     int
@@ -409,4 +459,93 @@ func TestDLQJSONQuery(t *testing.T) {
 	require.Equal(t, 1, a)
 	require.Equal(t, "hello", b)
 	require.NotZero(t, rowID)
+}
+
+// TestEndToEndDLQ tests that write conflicts that occur during an
+// LDR job are persisted to its corresponding DLQ table
+func TestEndToEndDLQ(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	testDLQClusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(127241),
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				DistSQL: &execinfra.TestingKnobs{
+					StreamingTestingKnobs: &sql.StreamingTestingKnobs{
+						FailureRate: 100,
+					},
+				},
+			},
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testDLQClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	_, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	var expectedJobID jobspb.JobID
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DEFAULT FUNCTION = 'dlq'", dbBURL.String()).Scan(&expectedJobID)
+
+	now := s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbA, expectedJobID)
+
+	dbB.Exec(t, "INSERT INTO tab VALUES (3, 'celeriac')")
+	dbB.Exec(t, "UPSERT INTO tab VALUES (1, 'goodbye, again')")
+
+	expectedTableID := sqlutils.QueryTableID(t, server.Conns[0], "a", "public", "tab")
+	dlqTableName := fmt.Sprintf("crdb_replication.dlq_%d_public_tab", expectedTableID)
+	WaitForDLQLogs(t, dbA, dlqTableName, 2)
+
+	var (
+		jobID        jobspb.JobID
+		tableID      uint32
+		dlqReason    string
+		mutationType string
+	)
+
+	dbA.QueryRow(t, fmt.Sprintf(`
+	SELECT
+		ingestion_job_id,
+		table_id,
+		dlq_reason,
+		mutation_type
+	FROM %s
+	`, dlqTableName)).Scan(
+		&jobID,
+		&tableID,
+		&dlqReason,
+		&mutationType,
+	)
+
+	require.Equal(t, expectedJobID, jobID)
+	require.Equal(t, expectedTableID, tableID)
+	// DLQ reason is set to `tooOld` when `errInjected` is thrown by `failureInjector`
+	require.Equal(t, fmt.Sprintf("%s (%s)", errInjected, tooOld), dlqReason)
+	require.Equal(t, insertMutation.String(), mutationType)
+
+	dbA.CheckQueryResults(
+		t,
+		fmt.Sprintf(`
+	SELECT
+		incoming_row->>'payload' AS payload,
+		incoming_row->>'pk' AS pk
+	FROM %s
+	ORDER BY pk
+	`, dlqTableName),
+		[][]string{
+			{
+				"goodbye, again", "1",
+			},
+			{
+				"celeriac", "3",
+			},
+		},
+	)
 }

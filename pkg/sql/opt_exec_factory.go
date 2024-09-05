@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -1524,10 +1523,6 @@ func (ef *execFactory) ConstructUpdate(
 	// since it compiles tuples and subqueries into a simple sequence of target
 	// columns.
 	updateCols := makeColList(table, updateColOrdSet)
-	sourceSlots := make([]sourceSlot, len(updateCols))
-	for i := range sourceSlots {
-		sourceSlots[i] = scalarSlot{column: updateCols[i], sourceIndex: len(fetchCols) + i}
-	}
 
 	// Create the table updater, which does the bulk of the work.
 	internal := ef.planner.SessionData().Internal
@@ -1548,28 +1543,12 @@ func (ef *execFactory) ConstructUpdate(
 		return nil, err
 	}
 
-	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
-	// the explanatory comments in updateRun.
-	var updateColsIdx catalog.TableColMap
-	for i := range ru.UpdateCols {
-		id := ru.UpdateCols[i].GetID()
-		updateColsIdx.Set(id, i)
-	}
-
 	upd := updateNodePool.Get().(*updateNode)
 	*upd = updateNode{
 		source: input.(planNode),
 		run: updateRun{
-			tu:        tableUpdater{ru: ru},
-			checkOrds: checks,
-			iVarContainerForComputedCols: schemaexpr.RowIndexedVarContainer{
-				CurSourceRow: make(tree.Datums, len(ru.FetchCols)),
-				Cols:         ru.FetchCols,
-				Mapping:      ru.FetchColIDtoRowIndex,
-			},
-			sourceSlots:    sourceSlots,
-			updateValues:   make(tree.Datums, len(ru.UpdateCols)),
-			updateColsIdx:  updateColsIdx,
+			tu:             tableUpdater{ru: ru},
+			checkOrds:      checks,
 			numPassthrough: len(passthrough),
 		},
 	}

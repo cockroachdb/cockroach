@@ -30,6 +30,13 @@ func NewAllowNothingAuthorizer() *AllowNothingAuthorizer {
 	return &AllowNothingAuthorizer{}
 }
 
+// HasCrossTenantRead returns true if a tenant can read from other tenants.
+func (n *AllowNothingAuthorizer) HasCrossTenantRead(
+	ctx context.Context, tenID roachpb.TenantID,
+) bool {
+	return false
+}
+
 // HasCapabilityForBatch implements the tenantcapabilities.Authorizer interface.
 func (n *AllowNothingAuthorizer) HasCapabilityForBatch(
 	context.Context, roachpb.TenantID, *kvpb.BatchRequest,

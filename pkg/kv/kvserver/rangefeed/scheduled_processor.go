@@ -316,16 +316,22 @@ func (p *ScheduledProcessor) Register(
 	p.syncEventC()
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
-	r := newBufferedRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
-	)
+	var r registration
+	if _, ok := stream.(BufferedStream); ok {
+		log.Fatalf(context.Background(),
+			"unimplemented: unbuffered registrations for rangefeed, see #126560")
+	} else {
+		r = newBufferedRegistration(
+			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
+		)
+	}
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
 		if p.stopping {
 			return nil
 		}
-		if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
+		if !p.Span.AsRawSpanWithNoLocals().Contains(r.getSpan()) {
 			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 		}
 
@@ -348,8 +354,8 @@ func (p *ScheduledProcessor) Register(
 			if p.unregisterClient(r) {
 				// unreg callback is set by replica to tear down processors that have
 				// zero registrations left and to update event filters.
-				if r.unreg != nil {
-					r.unreg()
+				if f := r.getUnreg(); f != nil {
+					f()
 				}
 			}
 		}

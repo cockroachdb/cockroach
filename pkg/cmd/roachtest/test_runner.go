@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -343,11 +344,11 @@ func (r *testRunner) Run(
 			}
 			//  TODO(bhaskar): remove this once we have more usage details
 			//  and more convinced about using spot VMs for all the runs.
-			if (roachtestflags.Cloud == spec.GCE || roachtestflags.Cloud == spec.AWS) &&
-				tests[i].Benchmark &&
+			if (roachtestflags.Cloud == spec.GCE || (roachtestflags.Cloud == spec.AWS &&
+				tests[i].Benchmark)) &&
 				!tests[i].Suites.Contains(registry.Weekly) &&
 				!tests[i].IsLastFailurePreempt() &&
-				rand.Float64() <= 0.8 {
+				rand.Float64() <= 0.75 {
 				lopt.l.PrintfCtx(ctx, "using spot VMs to run test %s", tests[i].Name)
 				tests[i].Cluster.UseSpotVMs = true
 			}
@@ -1309,7 +1310,21 @@ func (r *testRunner) runTest(
 	case <-time.After(timeout):
 		// NB: We're adding the timeout failure intentionally without cancelling the context
 		// to capture as much state as possible during artifact collection.
-		t.addFailure(0, "test timed out (%s)", timeout)
+		//
+		// Temporarily route all runtime assertion timeouts to test-eng while
+		// we gauge the frequency they occur and adjust test timeouts accordingly.
+		// TODO(darryl): once we are more confident in the stability of runtime
+		// assertions we can remove this.
+		if tests.UsingRuntimeAssertions(t) {
+			timeoutErr := registry.ErrorWithOwnership{
+				Err:   errors.Newf("test timed out (%s)", timeout),
+				Owner: registry.OwnerTestEng,
+			}
+			t.addFailure(0, "", timeoutErr)
+		} else {
+			t.addFailure(0, "test timed out (%s)", timeout)
+		}
+
 		// We suppress other failures from being surfaced to the top as the timeout is always going
 		// to be the main error and subsequent errors (i.e. context cancelled) add noise.
 		t.suppressFailures()

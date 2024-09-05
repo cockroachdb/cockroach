@@ -195,11 +195,19 @@ func (tr *testRunner) run() (retErr error) {
 	stepsErr := make(chan error)
 	defer func() { tr.teardown(stepsErr, retErr != nil) }()
 	defer func() {
-		// If the test failed an we haven't run any user hooks up to this
-		// point, redirect the failure to Test Eng, as this indicates a
-		// setup problem that should be investigated separately.
-		if retErr != nil && !tr.ranUserHooks.Load() {
-			retErr = registry.ErrorWithOwner(registry.OwnerTestEng, retErr)
+		if retErr != nil {
+			// If the test failed an we haven't run any user hooks up to this
+			// point, redirect the failure to Test Eng, as this indicates a
+			// setup problem that should be investigated separately.
+			if !tr.ranUserHooks.Load() {
+				retErr = registry.ErrorWithOwner(registry.OwnerTestEng, retErr)
+			}
+
+			// If this test run had a tag assigned, wrap the error with that
+			// tag to make it more immediately clear which run failed.
+			if tr.tag != "" {
+				retErr = errors.Wrapf(retErr, "%s", tr.tag)
+			}
 		}
 	}()
 
@@ -240,13 +248,13 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 	if ss, ok := step.(*singleStep); ok {
 		if ss.ID > tr.plan.startSystemID {
 			if err := tr.refreshServiceData(ctx, tr.systemService); err != nil {
-				return err
+				return errors.Wrapf(err, "preparing to run step %d", ss.ID)
 			}
 		}
 
 		if ss.ID > tr.plan.startTenantID && tr.tenantService != nil {
 			if err := tr.refreshServiceData(ctx, tr.tenantService); err != nil {
-				return err
+				return errors.Wrapf(err, "preparing to run step %d", ss.ID)
 			}
 		}
 	}
@@ -525,9 +533,7 @@ func (tr *testRunner) loggerFor(step *singleStep) (*logger.Logger, error) {
 	name = fmt.Sprintf("%d_%s", step.ID, name)
 	prefix := filepath.Join(tr.tag, logPrefix, name)
 
-	// Use the root logger here as the `prefix` passed will already
-	// include the full path from the root, including the tag.
-	return prefixedLogger(tr.logger.RootLogger(), prefix)
+	return prefixedLoggerWithFilename(tr.logger, prefix, filepath.Join(logPrefix, name))
 }
 
 // refreshBinaryVersions updates the `binaryVersions` field for every

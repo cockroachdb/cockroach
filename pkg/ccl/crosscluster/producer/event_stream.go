@@ -150,6 +150,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		rangefeed.WithOnValues(s.onValues),
 		rangefeed.WithDiff(s.spec.WithDiff),
 		rangefeed.WithInvoker(func(fn func() error) error { return fn() }),
+		rangefeed.WithFiltering(s.spec.WithFiltering),
 	}
 	if emitMetadata.Get(&s.execCfg.Settings.SV) {
 		opts = append(opts, rangefeed.WithOnMetadata(s.onMetadata))

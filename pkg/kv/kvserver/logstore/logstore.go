@@ -73,6 +73,54 @@ func MakeMsgStorageAppend(m raftpb.Message) MsgStorageAppend {
 	return MsgStorageAppend(m)
 }
 
+// HardState returns the hard state assembled from the message.
+func (m *MsgStorageAppend) HardState() raftpb.HardState {
+	return raftpb.HardState{
+		Term:      m.Term,
+		Vote:      m.Vote,
+		Commit:    m.Commit,
+		Lead:      m.Lead,
+		LeadEpoch: m.LeadEpoch,
+	}
+}
+
+// MustSync returns true if this storage write must be synced.
+func (m *MsgStorageAppend) MustSync() bool {
+	return len(m.Responses) != 0
+}
+
+// OnDone returns the storage write post-processing information.
+func (m *MsgStorageAppend) OnDone() MsgStorageAppendDone { return m.Responses }
+
+// MsgStorageAppendDone encapsulates the actions to do after MsgStorageAppend is
+// done, such as sending messages back to raft node and its peers.
+type MsgStorageAppendDone []raftpb.Message
+
+// Responses returns the messages to send after the write/sync is completed.
+func (m MsgStorageAppendDone) Responses() []raftpb.Message { return m }
+
+// Mark returns the LogMark of the raft log in storage after the write/sync is
+// completed. Returns zero value if the write does not update the log mark.
+func (m MsgStorageAppendDone) Mark() raft.LogMark {
+	if len(m) == 0 {
+		return raft.LogMark{}
+	}
+	// Optimization: the MsgStorageAppendResp message, if any, is always the last
+	// one in the list.
+	// TODO(pav-kv): this is an undocumented API quirk. Refactor the raft write
+	// API to be more digestible outside the package.
+	msg := m[len(m)-1]
+	if msg.Type != raftpb.MsgStorageAppendResp {
+		return raft.LogMark{}
+	}
+	if len(msg.Entries) != 0 {
+		return raft.LogMark{Term: msg.LogTerm, Index: msg.Index}
+	} else if msg.Snapshot != nil {
+		return raft.LogMark{Term: msg.LogTerm, Index: msg.Snapshot.Metadata.Index}
+	}
+	return raft.LogMark{}
+}
+
 // RaftState stores information about the last entry and the size of the log.
 type RaftState struct {
 	LastIndex kvpb.RaftIndex
@@ -126,7 +174,7 @@ type LogStore struct {
 // are associated with the MsgStorageAppend that triggered the fsync.
 // commitStats is populated iff this was a non-blocking sync.
 type SyncCallback interface {
-	OnLogSync(context.Context, []raftpb.Message, storage.BatchCommitStats)
+	OnLogSync(context.Context, MsgStorageAppendDone, storage.BatchCommitStats)
 }
 
 func newStoreEntriesBatch(eng storage.Engine) storage.Batch {
@@ -198,14 +246,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		stats.End = timeutil.Now()
 	}
 
-	hs := raftpb.HardState{
-		Term:      m.Term,
-		Vote:      m.Vote,
-		Commit:    m.Commit,
-		Lead:      m.Lead,
-		LeadEpoch: m.LeadEpoch,
-	}
-	if !raft.IsEmptyHardState(hs) {
+	if hs := m.HardState(); !raft.IsEmptyHardState(hs) {
 		// NB: Note that without additional safeguards, it's incorrect to write
 		// the HardState before appending m.Entries. When catching up, a follower
 		// will receive Entries that are immediately Committed in the same
@@ -239,7 +280,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	// (Replica), so this comment might need to move.
 	stats.PebbleBegin = timeutil.Now()
 	stats.PebbleBytes = int64(batch.Len())
-	wantsSync := len(m.Responses) > 0
+	wantsSync := m.MustSync()
 	willSync := wantsSync && !DisableSyncRaftLog.Get(&s.Settings.SV)
 	// Use the non-blocking log sync path if we are performing a log sync ...
 	nonBlockingSync := willSync &&
@@ -271,7 +312,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		*waiterCallback = nonBlockingSyncWaiterCallback{
 			ctx:            ctx,
 			cb:             cb,
-			msgs:           m.Responses,
+			onDone:         m.OnDone(),
 			batch:          batch,
 			metrics:        s.Metrics,
 			logCommitBegin: stats.PebbleBegin,
@@ -289,7 +330,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		if wantsSync {
 			logCommitEnd := stats.PebbleEnd
 			s.Metrics.RaftLogCommitLatency.RecordValue(logCommitEnd.Sub(stats.PebbleBegin).Nanoseconds())
-			cb.OnLogSync(ctx, m.Responses, storage.BatchCommitStats{})
+			cb.OnLogSync(ctx, m.OnDone(), storage.BatchCommitStats{})
 		}
 	}
 	stats.Sync = wantsSync
@@ -339,9 +380,9 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 // callback.
 type nonBlockingSyncWaiterCallback struct {
 	// Used to run SyncCallback.
-	ctx  context.Context
-	cb   SyncCallback
-	msgs []raftpb.Message
+	ctx    context.Context
+	cb     SyncCallback
+	onDone MsgStorageAppendDone
 	// Used to extract stats. This is the batch that has been synced.
 	batch storage.WriteBatch
 	// Used to record Metrics.
@@ -354,7 +395,7 @@ func (cb *nonBlockingSyncWaiterCallback) run() {
 	dur := timeutil.Since(cb.logCommitBegin).Nanoseconds()
 	cb.metrics.RaftLogCommitLatency.RecordValue(dur)
 	commitStats := cb.batch.CommitStats()
-	cb.cb.OnLogSync(cb.ctx, cb.msgs, commitStats)
+	cb.cb.OnLogSync(cb.ctx, cb.onDone, commitStats)
 	cb.release()
 }
 

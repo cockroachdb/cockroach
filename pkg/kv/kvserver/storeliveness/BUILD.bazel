@@ -3,20 +3,25 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "storeliveness",
     srcs = [
+        "config.go",
         "fabric.go",
         "persist.go",
         "requester_state.go",
+        "support_manager.go",
         "supporter_state.go",
         "transport.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver/storeliveness/storelivenesspb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -26,6 +31,7 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_x_exp//maps",
     ],
 )
 
@@ -34,6 +40,7 @@ go_test(
     srcs = [
         "persist_test.go",
         "store_liveness_test.go",
+        "support_manager_test.go",
         "transport_test.go",
     ],
     data = glob(["testdata/**"]),
@@ -55,6 +62,8 @@ go_test(
         "//pkg/util/metric",
         "//pkg/util/netutil",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

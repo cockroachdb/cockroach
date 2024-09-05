@@ -464,7 +464,7 @@ message GenerativeSplitAndScatterSpec {
   // MaxFileCount is the max number of files in an extending restore span entry.
   optional int64 max_file_count = 23[(gogoproto.nullable) = false];
   // SQLInstanceIDs is a slice of SQL instance IDs available for dist restore.
-  repeated int32 sql_instance_ids = 24[(gogoproto.nullable) = false, (gogoproto.customname) = "SQLInstanceIDs"];
+  repeated int32 sql_instance_ids = 24[(gogoproto.customname) = "SQLInstanceIDs"];
   reserved 19;
 }
 
@@ -530,4 +530,12 @@ message LogicalReplicationWriterSpec {
     // TableReplicationMetadata is a map from destination table IDs to metadata
     // containing source table descriptors and fully qualified destination table names.
     map<int32, TableReplicationMetadata> table_metadata = 8 [(gogoproto.nullable) = false];
+
+    // IgnoreCDCIgnoredTTLDeletes is an option on whether to filter out 'OmitinRangefeed' events
+    // when processing changes in LDR
+    optional bool ignore_cdc_ignored_ttl_deletes = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoreCDCIgnoredTTLDeletes"];
+
+    optional jobs.jobspb.LogicalReplicationDetails.ApplyMode mode = 10 [(gogoproto.nullable) = false];
+
+    // Next ID: 11.
 }

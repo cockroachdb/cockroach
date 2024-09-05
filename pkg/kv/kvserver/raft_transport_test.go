@@ -166,7 +166,7 @@ func (rttc *raftTransportTestContext) AddNode(nodeID roachpb.NodeID) *kvserver.R
 		kvflowdispatch.NewDummyDispatch(), kvserver.NoopStoresFlowControlIntegration{},
 		kvserver.NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
-		nil,
+		nil, nil,
 	)
 	rttc.GossipNode(nodeID, addr)
 	return transport
@@ -184,6 +184,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	kvflowHandles kvflowcontrol.Handles,
 	disconnectListener kvserver.RaftTransportDisconnectListener,
 	piggybacker node_rac2.PiggybackMsgReader,
+	piggybackedResponseScheduler kvserver.PiggybackedAdmittedResponseScheduler,
 	knobs *kvserver.RaftTransportTestingKnobs,
 ) (*kvserver.RaftTransport, net.Addr) {
 	manual := hlc.NewHybridManualClock()
@@ -202,6 +203,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 		kvflowHandles,
 		disconnectListener,
 		piggybacker,
+		piggybackedResponseScheduler,
 		knobs,
 	)
 	rttc.transports[nodeID] = transport
@@ -474,7 +476,7 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 		kvserver.NoopStoresFlowControlIntegration{},
 		kvserver.NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
-		nil,
+		nil, nil,
 	)
 	serverChannel := rttc.ListenStore(serverReplica.NodeID, serverReplica.StoreID)
 
@@ -589,7 +591,7 @@ func TestReopenConnection(t *testing.T) {
 			kvserver.NoopStoresFlowControlIntegration{},
 			kvserver.NoopRaftTransportDisconnectListener{},
 			(*node_rac2.AdmittedPiggybacker)(nil),
-			nil,
+			nil, nil,
 		)
 	rttc.GossipNode(serverReplica.NodeID, serverAddr)
 	rttc.ListenStore(serverReplica.NodeID, serverReplica.StoreID)
@@ -629,7 +631,7 @@ func TestReopenConnection(t *testing.T) {
 		kvserver.NoopStoresFlowControlIntegration{},
 		kvserver.NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
-		nil,
+		nil, nil,
 	)
 	replacementChannel := rttc.ListenStore(replacementReplica.NodeID, replacementReplica.StoreID)
 

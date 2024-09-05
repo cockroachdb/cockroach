@@ -36,7 +36,6 @@ func registerAcceptance(r registry.Registry) {
 		defaultLeases      bool
 		requiresLicense    bool
 		randomized         bool
-		nativeLibs         []string
 		workloadNode       bool
 		incompatibleClouds registry.CloudSet
 	}{
@@ -82,7 +81,6 @@ func registerAcceptance(r registry.Registry) {
 				timeout:       2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
 				defaultLeases: true,
 				randomized:    true,
-				nativeLibs:    registry.LibGEOS,
 			},
 		},
 		registry.OwnerDisasterRecovery: {
@@ -163,9 +161,6 @@ func registerAcceptance(r registry.Registry) {
 			}
 			if !tc.defaultLeases {
 				testSpec.Leases = registry.MetamorphicLeases
-			}
-			if len(tc.nativeLibs) > 0 {
-				testSpec.NativeLibs = tc.nativeLibs
 			}
 			testSpec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				tc.fn(ctx, t, c)

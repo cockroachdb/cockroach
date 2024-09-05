@@ -39,7 +39,8 @@ import (
 )
 
 const (
-	defaultSubscription = "e2e-infra"
+	defaultSubscription  = "e2e-adhoc"
+	SubscriptionIDEnvVar = "AZURE_SUBSCRIPTION_ID"
 	// ProviderName is "azure".
 	ProviderName = "azure"
 	remoteUser   = "ubuntu"
@@ -85,6 +86,9 @@ type Provider struct {
 	OperationTimeout time.Duration
 	// Wait for deletions to finish before returning.
 	SyncDelete bool
+	// The list of subscription names to use. Currently only used by GC.
+	// If left empty then falls back to env var then default subscription.
+	SubscriptionNames []string
 
 	mu struct {
 		syncutil.Mutex
@@ -315,9 +319,9 @@ func (p *Provider) Create(
 
 	if len(providerOpts.Locations) == 0 {
 		if opts.GeoDistributed {
-			providerOpts.Locations = defaultLocations
+			providerOpts.Locations = DefaultLocations
 		} else {
-			providerOpts.Locations = []string{defaultLocations[0]}
+			providerOpts.Locations = []string{DefaultLocations[0]}
 		}
 	}
 
@@ -499,7 +503,7 @@ func (p *Provider) DeleteCluster(l *logger.Logger, name string) error {
 		// We have seen occurrences of Azure resource groups losing the necessary tags
 		// needed for roachprod to find them. The cluster may need to be manually deleted
 		// through the Azure portal.
-		return errors.Newf("**** MANUAL INTERVENTION REQUIRED ****\nDeleteCluster: Found no azure resource groups with tag cluster: %s", name)
+		return errors.Newf("**** MANUAL INTERVENTION REQUIRED IF ERROR SEEN MULTIPLE TIMES ****\nDeleteCluster: Found no azure resource groups with tag cluster: %s", name)
 	}
 
 	if !p.SyncDelete {
@@ -1546,6 +1550,57 @@ func (p *Provider) createUltraDisk(
 	return disk, err
 }
 
+// SetSubscription takes in a subscription name then finds and stores the ID
+// in the Provider instance.
+func (p *Provider) SetSubscription(ctx context.Context, subscription string) error {
+	subscriptionId, err := p.findSubscriptionID(ctx, subscription)
+	if err != nil {
+		return err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.subscriptionId = subscriptionId
+
+	return nil
+}
+
+// findSubscriptionID takes in a subscription name and returns the ID.
+func (p *Provider) findSubscriptionID(ctx context.Context, subscription string) (string, error) {
+	authorizer, err := p.getAuthorizer()
+	if err != nil {
+		return "", err
+	}
+	sc := subscriptions.NewClient()
+	sc.Authorizer = authorizer
+
+	it, err := sc.ListComplete(ctx)
+	if err != nil {
+		return "", errors.Wrapf(err, "error listing Azure subscriptions")
+	}
+
+	var subscriptionId string
+
+	// Iterate through all subscriptions to find the matching subscription name.
+	for it.NotDone() {
+		s := it.Value().SubscriptionID
+		name := it.Value().DisplayName
+		if s != nil && name != nil {
+			if *name == subscription {
+				subscriptionId = *s
+				break
+			}
+		}
+		if err = it.NextWithContext(ctx); err != nil {
+			return "", err
+		}
+	}
+	if subscriptionId == "" {
+		return "", errors.Newf("could not find Azure subscription: %s", subscription)
+	}
+
+	return subscriptionId, nil
+}
+
 // getSubscription returns env.AZURE_SUBSCRIPTION_ID if it exists
 // or the ID of the defaultSubscription.
 // The value is memoized in the Provider instance.
@@ -1556,43 +1611,19 @@ func (p *Provider) getSubscription(ctx context.Context) (string, error) {
 		return p.mu.subscriptionId
 	}()
 
+	// Use the saved subscriptionID.
 	if subscriptionId != "" {
 		return subscriptionId, nil
 	}
 
-	subscriptionId = os.Getenv("AZURE_SUBSCRIPTION_ID")
+	subscriptionId = os.Getenv(SubscriptionIDEnvVar)
 
 	// Fallback to retrieving the defaultSubscription.
 	if subscriptionId == "" {
-		authorizer, err := p.getAuthorizer()
+		var err error
+		subscriptionId, err = p.findSubscriptionID(ctx, defaultSubscription)
 		if err != nil {
-			return "", err
-		}
-		sc := subscriptions.NewClient()
-		sc.Authorizer = authorizer
-
-		it, err := sc.ListComplete(ctx)
-		if err != nil {
-			return "", errors.Wrapf(err, "error listing Azure subscriptions")
-		}
-
-		// Iterate through all subscriptions to find the defaultSubscription.
-		// We have to do this as Azure requires the ID not just the name.
-		for it.NotDone() {
-			s := it.Value().SubscriptionID
-			name := it.Value().DisplayName
-			if s != nil && name != nil {
-				if *name == defaultSubscription {
-					subscriptionId = *s
-					break
-				}
-			}
-			if err = it.NextWithContext(ctx); err != nil {
-				return "", err
-			}
-		}
-		if subscriptionId == "" {
-			return "", errors.Newf("Could not find default subscription: %s", defaultSubscription)
+			return "", errors.Wrapf(err, "Error finding default Azure subscription. Check that you have permission to view the subscription or use a different subscription by specifying the %s env var", SubscriptionIDEnvVar)
 		}
 	}
 

@@ -2527,13 +2527,13 @@ func (s *ScanStats) String() string {
 type RangeFeedEventSink interface {
 	// Context returns the context for this stream.
 	Context() context.Context
-	// Send blocks until it sends the RangeFeedEvent, the stream is done, or the
-	// stream breaks. Send must be safe to call on the same stream in different
-	// goroutines.
-	Send(*RangeFeedEvent) error
-	// SendIsThreadSafe is a no-op declaration method. It is a contract that the
-	// interface has a thread-safe Send method.
-	SendIsThreadSafe()
+	// SendUnbuffered blocks until it sends the RangeFeedEvent, the stream is
+	// done, or the stream breaks. Send must be safe to call on the same stream in
+	// different goroutines.
+	SendUnbuffered(*RangeFeedEvent) error
+	// SendUnbufferedIsThreadSafe is a no-op declaration method. It is a contract
+	// that the interface has a thread-safe Send method.
+	SendUnbufferedIsThreadSafe()
 }
 
 // RangeFeedEventProducer is an adapter for receiving rangefeed events with either

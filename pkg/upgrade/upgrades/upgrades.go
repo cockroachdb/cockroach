@@ -107,6 +107,30 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("this zone config isn't necessary for restore"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"add new table_metadata table and job to the system tenant",
+		clusterversion.V24_3_TableMetadata.Version(),
+		upgrade.NoPrecondition,
+		addTableMetadataTableAndJob,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"add exclude_data_from_backup to certain system tables on tenants",
+		clusterversion.V24_3_TenantExcludeDataFromBackup.Version(),
+		upgrade.NoPrecondition,
+		tenantExcludeDataFromBackup,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore affected tables"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"add new column to the system.sql_instances table to store whether a node is draining",
+		clusterversion.V24_3_SQLInstancesAddDraining.Version(),
+		upgrade.NoPrecondition,
+		sqlInstancesAddDrainingMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new field"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

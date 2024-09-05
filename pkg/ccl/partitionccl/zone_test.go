@@ -273,6 +273,9 @@ func TestInvalidIndexPartitionSetShowZones(t *testing.T) {
 			"SHOW ZONE CONFIGURATION FOR INDEX foo",
 			`index "foo" does not exist`,
 		},
+		// N.B. The following will always fallback to the legacy schema changer
+		// because multi-statement txns are not yet supported by our declarative
+		// schema changer.
 		{
 			"USE system; ALTER INDEX foo CONFIGURE ZONE USING DEFAULT",
 			`index "foo" does not exist`,

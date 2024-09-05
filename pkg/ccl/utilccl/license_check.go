@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
+	licenseserver "github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -22,8 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -145,49 +144,24 @@ func IsEnterpriseEnabled(st *cluster.Settings, feature string) bool {
 		st, timeutil.Now(), feature, false /* withDetails */) == nil
 }
 
-var licenseMetricUpdateFrequency = 1 * time.Minute
-
-// UpdateMetricOnLicenseChange starts a task to periodically update
-// the given metric with the seconds remaining until license expiry.
-func UpdateMetricOnLicenseChange(
+// GetLicenseTTL is a function which returns the TTL for the active cluster.
+// This is done by reading the license information from the cluster settings
+// and subtracting the epoch from the expiry timestamp.
+var GetLicenseTTL = func(
 	ctx context.Context,
 	st *cluster.Settings,
-	metric *metric.Gauge,
 	ts timeutil.TimeSource,
-	stopper *stop.Stopper,
-) error {
-	enterpriseLicense.SetOnChange(&st.SV, func(ctx context.Context) {
-		updateMetricWithLicenseTTL(ctx, st, metric, ts)
-	})
-	return stopper.RunAsyncTask(ctx, "write-license-expiry-metric", func(ctx context.Context) {
-		ticker := time.NewTicker(licenseMetricUpdateFrequency)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				updateMetricWithLicenseTTL(ctx, st, metric, ts)
-			case <-stopper.ShouldQuiesce():
-				return
-			}
-		}
-	})
-}
-
-func updateMetricWithLicenseTTL(
-	ctx context.Context, st *cluster.Settings, metric *metric.Gauge, ts timeutil.TimeSource,
-) {
+) int64 {
 	license, err := getLicense(st)
 	if err != nil {
-		log.Errorf(ctx, "unable to update license expiry metric: %v", err)
-		metric.Update(0)
-		return
+		log.Errorf(ctx, "unable to find license: %v", err)
+		return 0
 	}
 	if license == nil {
-		metric.Update(0)
-		return
+		return 0
 	}
 	sec := timeutil.Unix(license.ValidUntilUnixSec, 0).Sub(ts.Now()).Seconds()
-	metric.Update(int64(sec))
+	return int64(sec)
 }
 
 // AllCCLCodeImported is set by the `ccl` pkg in an init(), thereby
@@ -263,15 +237,15 @@ func GetLicenseType(st *cluster.Settings) (string, error) {
 	return license.Type.String(), nil
 }
 
-// GetLicenseUsage returns the license usage.
-func GetLicenseUsage(st *cluster.Settings) (string, error) {
+// GetLicenseEnvironment returns the license environment.
+func GetLicenseEnvironment(st *cluster.Settings) (string, error) {
 	license, err := getLicense(st)
 	if err != nil {
 		return "", err
 	} else if license == nil {
 		return "", nil
 	}
-	return license.Usage.String(), nil
+	return license.Environment.String(), nil
 }
 
 // decode attempts to read a base64 encoded License.
@@ -334,4 +308,38 @@ func check(l *licenseccl.License, at time.Time, org, feature string, withDetails
 	}
 	return pgerror.Newf(pgcode.CCLValidLicenseRequired,
 		"license valid only for %q", l.OrganizationName)
+}
+
+// RegisterCallbackOnLicenseChange will register a callback to update the
+// license enforcer whenever the license changes.
+func RegisterCallbackOnLicenseChange(ctx context.Context, st *cluster.Settings) {
+	refreshFunc := func(ctx context.Context) {
+		lic, err := getLicense(st)
+		if err != nil {
+			log.Errorf(ctx, "unable to refresh license enforcer for license change: %v", err)
+			return
+		}
+		var licenseType licenseserver.LicType
+		var licenseExpiry time.Time
+		if lic == nil {
+			licenseType = licenseserver.LicTypeNone
+		} else {
+			licenseExpiry = timeutil.Unix(lic.ValidUntilUnixSec, 0)
+			switch lic.Type {
+			case licenseccl.License_Free:
+				licenseType = licenseserver.LicTypeFree
+			case licenseccl.License_Trial:
+				licenseType = licenseserver.LicTypeTrial
+			case licenseccl.License_Evaluation:
+				licenseType = licenseserver.LicTypeEvaluation
+			default:
+				licenseType = licenseserver.LicTypeEnterprise
+			}
+		}
+		licenseserver.GetEnforcerInstance().RefreshForLicenseChange(licenseType, licenseExpiry)
+	}
+	// Install the hook so that we refresh license details when the license changes.
+	enterpriseLicense.SetOnChange(&st.SV, refreshFunc)
+	// Call the refresh function for the current license.
+	refreshFunc(ctx)
 }

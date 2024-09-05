@@ -126,6 +126,7 @@ type ImmediateMutationVisitor interface {
 	SetFunctionLeakProof(context.Context, SetFunctionLeakProof) error
 	SetFunctionNullInputBehavior(context.Context, SetFunctionNullInputBehavior) error
 	SetFunctionBody(context.Context, SetFunctionBody) error
+	SetFunctionSecurity(context.Context, SetFunctionSecurity) error
 	UpdateFunctionTypeReferences(context.Context, UpdateFunctionTypeReferences) error
 	UpdateFunctionRelationReferences(context.Context, UpdateFunctionRelationReferences) error
 	SetObjectParentID(context.Context, SetObjectParentID) error
@@ -138,6 +139,7 @@ type ImmediateMutationVisitor interface {
 	CreateDatabaseDescriptor(context.Context, CreateDatabaseDescriptor) error
 	AddDatabaseZoneConfig(context.Context, AddDatabaseZoneConfig) error
 	AddTableZoneConfig(context.Context, AddTableZoneConfig) error
+	AddIndexZoneConfig(context.Context, AddIndexZoneConfig) error
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -661,6 +663,11 @@ func (op SetFunctionBody) Visit(ctx context.Context, v ImmediateMutationVisitor)
 }
 
 // Visit is part of the ImmediateMutationOp interface.
+func (op SetFunctionSecurity) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetFunctionSecurity(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
 func (op UpdateFunctionTypeReferences) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.UpdateFunctionTypeReferences(ctx, op)
 }
@@ -718,4 +725,9 @@ func (op AddDatabaseZoneConfig) Visit(ctx context.Context, v ImmediateMutationVi
 // Visit is part of the ImmediateMutationOp interface.
 func (op AddTableZoneConfig) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.AddTableZoneConfig(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op AddIndexZoneConfig) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddIndexZoneConfig(ctx, op)
 }

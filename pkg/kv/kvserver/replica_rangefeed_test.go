@@ -79,9 +79,9 @@ func (s *testStream) Cancel() {
 	s.cancel()
 }
 
-func (s *testStream) SendIsThreadSafe() {}
+func (s *testStream) SendUnbufferedIsThreadSafe() {}
 
-func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
+func (s *testStream) SendUnbuffered(e *kvpb.RangeFeedEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.events = append(s.mu.events, e)
@@ -1521,8 +1521,6 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 123551)
-
 	ctx := context.Background()
 	var scratchRangeID int64 // accessed atomically
 	// nudgeSeen will be set if a request filter sees the signature of the
@@ -1663,13 +1661,25 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	// Expire the lease. Given that the Raft leadership is on n2, only n2 will be
 	// eligible to acquire a new lease.
 	log.Infof(ctx, "test expiring lease")
-	nl := n2.NodeLiveness().(*liveness.NodeLiveness)
-	resumeHeartbeats := nl.PauseAllHeartbeatsForTest()
-	n2Liveness, ok := nl.Self()
+	nl2 := n2.NodeLiveness().(*liveness.NodeLiveness)
+	resumeHeartbeats := nl2.PauseAllHeartbeatsForTest()
+	n2Liveness, ok := nl2.Self()
 	require.True(t, ok)
-	manualClock.Increment(n2Liveness.Expiration.ToTimestamp().Add(1, 0).WallTime - manualClock.UnixNano())
+	manualClock.Increment(max(firstLease.MinExpiration.WallTime, n2Liveness.Expiration.ToTimestamp().
+		Add(1, 0).WallTime) - manualClock.UnixNano())
 	atomic.StoreInt64(&rejectExtraneousRequests, 1)
-	// Ask another node to increment n2's liveness record.
+
+	// Ask another node to increment n2's liveness record, but first, wait until
+	// n1's liveness state is the same as n2's. Otherwise, the epoch below might
+	// get rejected because of mismatching liveness records.
+	testutils.SucceedsSoon(t, func() error {
+		nl1 := n1.NodeLiveness().(*liveness.NodeLiveness)
+		n2LivenessFromN1, _ := nl1.GetLiveness(n2.NodeID())
+		if n2Liveness != n2LivenessFromN1.Liveness {
+			return errors.Errorf("waiting for node 2 liveness to converge on both nodes 1 and 2")
+		}
+		return nil
+	})
 	require.NoError(t, n1.NodeLiveness().(*liveness.NodeLiveness).IncrementEpoch(ctx, n2Liveness))
 	resumeHeartbeats()
 

@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -108,6 +109,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilegecache"
@@ -1057,6 +1059,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		NodeDescs:                  cfg.nodeDescs,
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
 		CidrLookup:                 cfg.BaseConfig.CidrLookup,
+		LicenseEnforcer:            license.GetEnforcerInstance(),
 	}
 
 	if codec.ForSystemTenant() {
@@ -1136,6 +1139,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	if externalConnKnobs := cfg.TestingKnobs.ExternalConnection; externalConnKnobs != nil {
 		execCfg.ExternalConnectionTestingKnobs = externalConnKnobs.(*externalconn.TestingKnobs)
+	}
+
+	if insightsKnobs := cfg.TestingKnobs.Insights; insightsKnobs != nil {
+		execCfg.InsightsTestingKnobs = insightsKnobs.(*insights.TestingKnobs)
+
 	}
 	var tableStatsTestingKnobs *stats.TableStatsTestingKnobs
 	if tableStatsKnobs := cfg.TestingKnobs.TableStatsKnobs; tableStatsKnobs != nil {
@@ -1232,10 +1240,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 		// Job internal operations use the node principal.
 		sd.UserProto = username.NodeUserName().EncodeProto()
-
-		// The following should not apply to SQL operations performed by the jobs
-		// subsystem.
-		sd.StmtTimeout = 0
 	})
 	jobRegistry.SetInternalDB(jobsInternalDB)
 
@@ -1440,6 +1444,7 @@ func (s *SQLServer) preStart(
 	stopper *stop.Stopper,
 	knobs base.TestingKnobs,
 	orphanedLeasesTimeThresholdNanos int64,
+	initialStart bool,
 ) error {
 	// If necessary, start the tenant proxy first, to ensure all other
 	// components can properly route to KV nodes. The Start method will block
@@ -1757,6 +1762,8 @@ func (s *SQLServer) preStart(
 	)
 	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
 
+	s.startLicenseEnforcer(ctx, knobs, initialStart)
+
 	// Report a warning if the server is being shut down via the stopper
 	// before it was gracefully drained. This warning may be innocuous
 	// in tests where there is no use of the test server/cluster after
@@ -1904,6 +1911,34 @@ func (s *SQLServer) SQLInstanceID() base.SQLInstanceID {
 // testing.
 func (s *SQLServer) StartDiagnostics(ctx context.Context) {
 	s.diagnosticsReporter.PeriodicallyReportDiagnostics(ctx, s.stopper)
+}
+
+func (s *SQLServer) startLicenseEnforcer(
+	ctx context.Context, knobs base.TestingKnobs, initialStart bool,
+) {
+	// Start the license enforcer. This is only started for the system tenant since
+	// it requires access to the system keyspace. For secondary tenants, this struct
+	// is shared to provide access to the values cached from the KV read.
+	if s.execCfg.Codec.ForSystemTenant() {
+		if knobs.Server != nil {
+			s.execCfg.LicenseEnforcer.TestingKnobs = &knobs.Server.(*TestingKnobs).LicenseTestingKnobs
+		}
+		// TODO(spilchen): we need to tell the license enforcer about the
+		// diagnostics reporter. This will be handled in CRDB-39991
+		err := startup.RunIdempotentWithRetry(ctx, s.stopper.ShouldQuiesce(), "license enforcer start",
+			func(ctx context.Context) error {
+				return s.execCfg.LicenseEnforcer.Start(ctx, s.cfg.Settings, s.internalDB, initialStart)
+			})
+		// This is not a critical component. If it fails to start, we log a warning
+		// rather than prevent the entire server from starting.
+		if err != nil {
+			log.Warningf(ctx, "failed to start the license enforcer: %v", err)
+		}
+	}
+}
+
+func (s *SQLServer) disableLicenseEnforcement(ctx context.Context) {
+	s.execCfg.LicenseEnforcer.Disable(ctx)
 }
 
 // AnnotateCtx annotates the given context with the server tracer and tags.

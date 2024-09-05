@@ -10,6 +10,7 @@ test       root  NULL  NULL  {}  NULL
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
 skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTT
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system] ORDER BY 2
 ----
@@ -55,6 +56,7 @@ public  statement_diagnostics            table     node  NULL
 public  statement_diagnostics_requests   table     node  NULL
 public  statement_execution_insights     table     node  NULL
 public  statement_statistics             table     node  NULL
+public  table_metadata                   table     node  NULL
 public  table_statistics                 table     node  NULL
 public  task_payloads                    table     node  NULL
 public  tenant_id_seq                    sequence  node  NULL
@@ -116,6 +118,7 @@ public  statement_diagnostics            table     node  NULL
 public  statement_diagnostics_requests   table     node  NULL
 public  statement_execution_insights     table     node  NULL
 public  statement_statistics             table     node  NULL
+public  table_metadata                   table     node  NULL
 public  table_statistics                 table     node  NULL
 public  task_payloads                    table     node  NULL
 public  tenant_id_seq                    sequence  node  NULL
@@ -135,6 +138,8 @@ public  zones                            table     node  NULL
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query I rowsort
 SELECT id FROM system.descriptor ORDER BY 1
 ----
@@ -195,6 +200,7 @@ SELECT id FROM system.descriptor ORDER BY 1
 64
 65
 66
+67
 100
 101
 102
@@ -263,6 +269,7 @@ SELECT id FROM system.descriptor ORDER BY 1
 64
 65
 66
+67
 100
 101
 102
@@ -399,6 +406,8 @@ system  root   CONNECT  true
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TTTTTB rowsort
 SHOW GRANTS ON system.*
 ----
@@ -695,6 +704,14 @@ system  public  statement_execution_insights     root    SELECT  true
 system  public  statement_execution_insights     root    UPDATE  true
 system  public  statement_statistics             admin   SELECT  true
 system  public  statement_statistics             root    SELECT  true
+system  public  table_metadata                   admin   DELETE  true
+system  public  table_metadata                   admin   INSERT  true
+system  public  table_metadata                   admin   SELECT  true
+system  public  table_metadata                   admin   UPDATE  true
+system  public  table_metadata                   root    DELETE  true
+system  public  table_metadata                   root    INSERT  true
+system  public  table_metadata                   root    SELECT  true
+system  public  table_metadata                   root    UPDATE  true
 system  public  table_statistics                 admin   DELETE  true
 system  public  table_statistics                 admin   INSERT  true
 system  public  table_statistics                 admin   SELECT  true
@@ -1081,6 +1098,14 @@ system  public  statement_execution_insights     root    SELECT  true
 system  public  statement_execution_insights     root    UPDATE  true
 system  public  statement_statistics             admin   SELECT  true
 system  public  statement_statistics             root    SELECT  true
+system  public  table_metadata                   admin   DELETE  true
+system  public  table_metadata                   admin   INSERT  true
+system  public  table_metadata                   admin   SELECT  true
+system  public  table_metadata                   admin   UPDATE  true
+system  public  table_metadata                   root    DELETE  true
+system  public  table_metadata                   root    INSERT  true
+system  public  table_metadata                   root    SELECT  true
+system  public  table_metadata                   root    UPDATE  true
 system  public  table_statistics                 admin   DELETE  true
 system  public  table_statistics                 admin   INSERT  true
 system  public  table_statistics                 admin   SELECT  true
@@ -1299,6 +1324,7 @@ WHERE name NOT LIKE 'sql.defaults%'
 AND name NOT LIKE 'sql.distsql%'
 AND name NOT LIKE 'sql.testing%'
 AND name NOT LIKE 'sql.stats%'
+AND name NOT LIKE 'sql.txn.%_isolation.enabled'
 AND name != 'kv.range_merge.queue_enabled'
 ORDER BY name
 ----
@@ -1315,6 +1341,7 @@ WHERE name NOT LIKE 'sql.defaults%'
 AND name NOT LIKE 'sql.distsql%'
 AND name NOT LIKE 'sql.testing%'
 AND name NOT LIKE 'sql.stats%'
+AND name NOT LIKE 'sql.txn.%_isolation.enabled'
 ORDER BY name
 ----
 cluster.secret
@@ -1335,6 +1362,7 @@ WHERE name NOT LIKE 'sql.defaults%'
 AND name NOT LIKE 'sql.distsql%'
 AND name NOT LIKE 'sql.testing%'
 AND name NOT LIKE 'sql.stats%'
+AND name NOT LIKE 'sql.txn.%_isolation.enabled'
 AND name NOT IN ('version', 'cluster.secret', 'kv.range_merge.queue_enabled')
 ORDER BY name
 ----
@@ -1350,6 +1378,7 @@ WHERE name NOT LIKE 'sql.defaults%'
 AND name NOT LIKE 'sql.distsql%'
 AND name NOT LIKE 'sql.testing%'
 AND name NOT LIKE 'sql.stats%'
+AND name NOT LIKE 'sql.txn.%_isolation.enabled'
 AND name NOT IN ('version', 'cluster.secret')
 ORDER BY name
 ----

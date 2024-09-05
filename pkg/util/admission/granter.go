@@ -648,6 +648,7 @@ func (sg *kvStoreTokenGranter) storeReplicatedWorkAdmittedLocked(
 // PebbleMetricsProvider provides the pebble.Metrics for all stores.
 type PebbleMetricsProvider interface {
 	GetPebbleMetrics() []StoreMetrics
+	Close()
 }
 
 // IOThresholdConsumer is informed about updated IOThresholds.

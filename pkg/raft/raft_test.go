@@ -27,6 +27,7 @@ import (
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -353,8 +354,9 @@ func TestLearnerElectionTimeout(t *testing.T) {
 // TestLearnerPromotion verifies that the learner should not election until
 // it is promoted to a normal peer.
 func TestLearnerPromotion(t *testing.T) {
-	n1 := newTestLearnerRaft(1, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)))
-	n2 := newTestLearnerRaft(2, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)))
+	n1 := newTestLearnerRaft(1, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)), withFortificationDisabled())
+
+	n2 := newTestLearnerRaft(2, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)), withFortificationDisabled())
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
@@ -420,9 +422,9 @@ func TestLeaderCyclePreVote(t *testing.T) {
 // pre-vote) work when not starting from a clean slate (as they do in
 // TestLeaderElection)
 func testLeaderCycle(t *testing.T, preVote bool) {
-	var cfg func(*Config)
+	cfg := fortificationDisabledConfig
 	if preVote {
-		cfg = preVoteConfig
+		cfg = preVoteConfigWithFortificationDisabled
 	}
 	n := newNetworkWithConfig(cfg, nil, nil, nil)
 	for campaignerID := pb.PeerID(1); campaignerID <= 3; campaignerID++ {
@@ -570,14 +572,14 @@ func TestLogReplication(t *testing.T) {
 		wcommitted uint64
 	}{
 		{
-			newNetwork(nil, nil, nil),
+			newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil),
 			[]pb.Message{
 				{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}},
 			},
 			2,
 		},
 		{
-			newNetwork(nil, nil, nil),
+			newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil),
 			[]pb.Message{
 				{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}},
 				{From: 1, To: 2, Type: pb.MsgHup},
@@ -671,7 +673,7 @@ func TestSingleNodeCommit(t *testing.T) {
 // when leader changes, no new proposal comes in and ChangeTerm proposal is
 // filtered.
 func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
-	tt := newNetwork(nil, nil, nil, nil, nil)
+	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil, nil, nil)
 	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	// 0 cannot reach 2,3,4
@@ -709,7 +711,7 @@ func TestCannotCommitWithoutNewTermEntry(t *testing.T) {
 // TestCommitWithoutNewTermEntry tests the entries could be committed
 // when leader changes, no new proposal comes in.
 func TestCommitWithoutNewTermEntry(t *testing.T) {
-	tt := newNetwork(nil, nil, nil, nil, nil)
+	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil, nil, nil)
 	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	// 0 cannot reach 3,4,5
@@ -738,9 +740,9 @@ func TestDuelingCandidates(t *testing.T) {
 	s1 := newTestMemoryStorage(withPeers(1, 2, 3))
 	s2 := newTestMemoryStorage(withPeers(1, 2, 3))
 	s3 := newTestMemoryStorage(withPeers(1, 2, 3))
-	a := newTestRaft(1, 10, 1, s1)
-	b := newTestRaft(2, 10, 1, s2)
-	c := newTestRaft(3, 10, 1, s3)
+	a := newTestRaft(1, 10, 1, s1, withFortificationDisabled())
+	b := newTestRaft(2, 10, 1, s2, withFortificationDisabled())
+	c := newTestRaft(3, 10, 1, s3, withFortificationDisabled())
 
 	nt := newNetwork(a, b, c)
 	nt.cut(1, 3)
@@ -783,9 +785,9 @@ func TestDuelingCandidates(t *testing.T) {
 }
 
 func TestDuelingPreCandidates(t *testing.T) {
-	cfgA := newTestConfig(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	cfgB := newTestConfig(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	cfgC := newTestConfig(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	cfgA := newTestConfig(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	cfgB := newTestConfig(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	cfgC := newTestConfig(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
 	cfgA.PreVote = true
 	cfgB.PreVote = true
 	cfgC.PreVote = true
@@ -884,7 +886,7 @@ func TestSingleNodePreCandidate(t *testing.T) {
 }
 
 func TestOldMessages(t *testing.T) {
-	tt := newNetwork(nil, nil, nil)
+	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil)
 	// make 0 leader @ term 3
 	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
@@ -1132,7 +1134,7 @@ func TestHandleMsgApp(t *testing.T) {
 	}
 }
 
-// TestHandleHeartbeat ensures that the follower commits to the commit in the message.
+// TestHandleHeartbeat ensures that the follower handles heartbeats properly.
 func TestHandleHeartbeat(t *testing.T) {
 	commit := uint64(2)
 	tests := []struct {
@@ -1157,9 +1159,8 @@ func TestHandleHeartbeat(t *testing.T) {
 		require.NoError(t, storage.Append(init.entries))
 		sm := newTestRaft(1, 5, 1, storage)
 		sm.becomeFollower(init.term, 2)
-		sm.raftLog.commitTo(logMark{term: init.term, index: commit})
+		sm.raftLog.commitTo(LogMark{Term: init.term, Index: commit})
 		sm.handleHeartbeat(tt.m)
-		assert.Equal(t, tt.wCommit, sm.raftLog.committed, "#%d", i)
 		m := sm.readMessages()
 		require.Len(t, m, 1, "#%d", i)
 		assert.Equal(t, pb.MsgHeartbeatResp, m[0].Type, "#%d", i)
@@ -1174,7 +1175,7 @@ func TestHandleHeartbeatResp(t *testing.T) {
 	sm := newTestRaft(1, 5, 1, storage)
 	sm.becomeCandidate()
 	sm.becomeLeader()
-	sm.raftLog.commitTo(logMark{term: 3, index: sm.raftLog.lastIndex()})
+	sm.raftLog.commitTo(LogMark{Term: 3, Index: sm.raftLog.lastIndex()})
 
 	// A heartbeat response from a node that is behind; re-send MsgApp
 	sm.Step(pb.Message{From: 2, Type: pb.MsgHeartbeatResp})
@@ -1190,9 +1191,10 @@ func TestHandleHeartbeatResp(t *testing.T) {
 
 	// Once we have an MsgAppResp, heartbeats no longer send MsgApp.
 	sm.Step(pb.Message{
-		From:  2,
-		Type:  pb.MsgAppResp,
-		Index: msgs[0].Index + uint64(len(msgs[0].Entries)),
+		From:   2,
+		Type:   pb.MsgAppResp,
+		Index:  msgs[0].Index + uint64(len(msgs[0].Entries)),
+		Commit: sm.raftLog.lastIndex(),
 	})
 	// Consume the message sent in response to MsgAppResp
 	sm.readMessages()
@@ -1448,9 +1450,15 @@ func TestCandidateResetTermMsgApp(t *testing.T) {
 // MsgHeartbeat or MsgApp from leader, "Step" resets the term
 // with leader's and reverts back to follower.
 func testCandidateResetTerm(t *testing.T, mt pb.MessageType) {
-	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	a := newTestRaft(
+		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	b := newTestRaft(
+		2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	c := newTestRaft(
+		3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
 
 	nt := newNetwork(a, b, c)
 
@@ -1614,9 +1622,14 @@ func TestLeaderStepdownWhenQuorumLost(t *testing.T) {
 }
 
 func TestLeaderSupersedingWithCheckQuorum(t *testing.T) {
-	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	a := newTestRaft(
+		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	b := newTestRaft(
+		2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	c := newTestRaft(
+		3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
 
 	a.checkQuorum = true
 	b.checkQuorum = true
@@ -1648,9 +1661,15 @@ func TestLeaderSupersedingWithCheckQuorum(t *testing.T) {
 }
 
 func TestLeaderElectionWithCheckQuorum(t *testing.T) {
-	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	a := newTestRaft(
+		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	b := newTestRaft(
+		2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	c := newTestRaft(
+		3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
 
 	a.checkQuorum = true
 	b.checkQuorum = true
@@ -1687,9 +1706,15 @@ func TestLeaderElectionWithCheckQuorum(t *testing.T) {
 // can disrupt the leader even if the leader still "officially" holds the lease, The
 // leader is expected to step down and adopt the candidate's term
 func TestFreeStuckCandidateWithCheckQuorum(t *testing.T) {
-	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	a := newTestRaft(
+		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	b := newTestRaft(
+		2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	c := newTestRaft(
+		3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
 
 	a.checkQuorum = true
 	b.checkQuorum = true
@@ -1760,9 +1785,15 @@ func TestNonPromotableVoterWithCheckQuorum(t *testing.T) {
 // candiate's response to late leader heartbeat forces the leader
 // to step down.
 func TestDisruptiveFollower(t *testing.T) {
-	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	n1 := newTestRaft(
+		1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	n2 := newTestRaft(
+		2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
+	n3 := newTestRaft(
+		3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled(),
+	)
 
 	n1.checkQuorum = true
 	n2.checkQuorum = true
@@ -1838,9 +1869,9 @@ func TestDisruptiveFollower(t *testing.T) {
 // Then pre-vote phase prevents this isolated node from forcing
 // current leader to step down, thus less disruptions.
 func TestDisruptiveFollowerPreVote(t *testing.T) {
-	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
 
 	n1.checkQuorum = true
 	n2.checkQuorum = true
@@ -1976,20 +2007,10 @@ func TestBcastBeat(t *testing.T) {
 	msgs := sm.readMessages()
 	require.Len(t, msgs, 2)
 
-	wantCommitMap := map[pb.PeerID]uint64{
-		2: min(sm.raftLog.committed, sm.trk.Progress(2).Match),
-		3: min(sm.raftLog.committed, sm.trk.Progress(3).Match),
-	}
 	for i, m := range msgs {
 		require.Equal(t, pb.MsgHeartbeat, m.Type, "#%d", i)
 		require.Zero(t, m.Index, "#%d", i)
 		require.Zero(t, m.LogTerm, "#%d", i)
-
-		commit, ok := wantCommitMap[m.To]
-		require.True(t, ok, "#%d", i)
-		require.Equal(t, commit, m.Commit, "#%d", i)
-		delete(wantCommitMap, m.To)
-
 		require.Empty(t, m.Entries, "#%d", i)
 	}
 }
@@ -2329,7 +2350,7 @@ func TestRestoreIgnoreSnapshot(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
 	require.True(t, sm.raftLog.append(init))
-	sm.raftLog.commitTo(logMark{term: init.term, index: commit})
+	sm.raftLog.commitTo(LogMark{Term: init.term, Index: commit})
 
 	s := snapshot{
 		term: 1,
@@ -2726,8 +2747,9 @@ func TestCommitAfterRemoveNode(t *testing.T) {
 	require.Equal(t, []byte("hello"), ents[0].Data)
 }
 
-// TestLeaderTransferToUpToDateNode verifies transferring should succeed
-// if the transferee has the most up-to-date log entries when transfer starts.
+// TestLeaderTransferToUpToDateNode verifies transferring should start
+// immediately if the transferee has the most up-to-date log entries when
+// transfer is requested.
 func TestLeaderTransferToUpToDateNode(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
@@ -2749,11 +2771,11 @@ func TestLeaderTransferToUpToDateNode(t *testing.T) {
 	checkLeaderTransferState(t, lead, StateLeader, 1)
 }
 
-// TestLeaderTransferToUpToDateNodeFromFollower verifies transferring should succeed
-// if the transferee has the most up-to-date log entries when transfer starts.
-// Not like TestLeaderTransferToUpToDateNode, where the leader transfer message
-// is sent to the leader, in this test case every leader transfer message is sent
-// to the follower.
+// TestLeaderTransferToUpToDateNodeFromFollower verifies transferring should
+// start immediately if the transferee has the most up-to-date log entries when
+// transfer starts. Unlike TestLeaderTransferToUpToDateNode, where the leader
+// transfer message is sent to the leader, in this test case every leader
+// transfer message is sent to the follower and is redirected to the leader.
 func TestLeaderTransferToUpToDateNodeFromFollower(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
@@ -2775,8 +2797,47 @@ func TestLeaderTransferToUpToDateNodeFromFollower(t *testing.T) {
 	checkLeaderTransferState(t, lead, StateLeader, 1)
 }
 
+// TestLeaderTransferLeaderStepsDownImmediately verifies that the outgoing
+// leader steps down to a follower as soon as it sends a MsgTimeoutNow to the
+// transfer target, even before (and regardless of if) the target receives the
+// MsgTimeoutNow and campaigns.
+func TestLeaderTransferLeaderStepsDownImmediately(t *testing.T) {
+	nt := newNetwork(nil, nil, nil)
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+
+	// Isolate node 3. It is up-to-date, so the leadership transfer will be
+	// initiated immediately, but node 3 will never receive the MsgTimeoutNow and
+	// call an election.
+	nt.isolate(3)
+
+	lead := nt.peers[1].(*raft)
+	require.Equal(t, uint64(1), lead.Term)
+	require.Equal(t, pb.PeerID(1), lead.lead)
+
+	// Transfer leadership to 3. The leader steps down immediately in the same
+	// term, waiting for the transfer target to call an election.
+	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
+
+	require.Equal(t, uint64(1), lead.Term)
+	checkLeaderTransferState(t, lead, StateFollower, 1)
+
+	// TODO(arul): a leader that steps down will currently never campaign due to
+	// the fortification promise that it made to itself. We'll need to fix this.
+	lead.deFortify(lead.lead, lead.Term)
+
+	// Eventually, the previous leader gives up on waiting and calls an election
+	// to reestablish leadership at the next term.
+	for i := 0; i < lead.randomizedElectionTimeout; i++ {
+		lead.tick()
+	}
+	nt.send(lead.readMessages()...)
+
+	require.Equal(t, uint64(2), lead.Term)
+	checkLeaderTransferState(t, lead, StateLeader, 1)
+}
+
 // TestLeaderTransferWithCheckQuorum ensures transferring leader still works
-// even the current leader is still under its leader lease
+// even the current leader is still under its leader lease.
 func TestLeaderTransferWithCheckQuorum(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
 	for i := 1; i < 4; i++ {
@@ -2811,18 +2872,23 @@ func TestLeaderTransferWithCheckQuorum(t *testing.T) {
 }
 
 func TestLeaderTransferToSlowFollower(t *testing.T) {
-	defaultLogger.EnableDebug()
 	nt := newNetwork(nil, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
+	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
+	// behind on its log, so that the leadership transfer won't be initiated
+	// immediately.
 	nt.isolate(3)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 
-	nt.recover()
 	lead := nt.peers[1].(*raft)
+	require.Equal(t, uint64(2), lead.trk.Progress(1).Match)
 	require.Equal(t, uint64(1), lead.trk.Progress(3).Match)
 
-	// Transfer leadership to 3 when node 3 is lack of log.
+	// Reconnect node 3 and initiate a transfer of leadership from node 1 to node
+	// 3. The leader (node 1) will catch it up on log entries using MsgApps before
+	// transferring it leadership using MsgTimeoutNow.
+	nt.recover()
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 
 	checkLeaderTransferState(t, lead, StateFollower, 3)
@@ -2844,7 +2910,7 @@ func TestLeaderTransferAfterSnapshot(t *testing.T) {
 	require.Equal(t, uint64(1), lead.trk.Progress(3).Match)
 
 	filtered := pb.Message{}
-	// Snapshot needs to be applied before sending MsgAppResp
+	// Snapshot needs to be applied before sending MsgAppResp.
 	nt.msgHook = func(m pb.Message) bool {
 		if m.Type != pb.MsgAppResp || m.From != 3 || m.Reject {
 			return true
@@ -2852,12 +2918,12 @@ func TestLeaderTransferAfterSnapshot(t *testing.T) {
 		filtered = m
 		return false
 	}
-	// Transfer leadership to 3 when node 3 is lack of snapshot.
+	// Transfer leadership to 3 when node 3 is missing a snapshot.
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 	require.Equal(t, StateLeader, lead.state)
 	require.NotEqual(t, pb.Message{}, filtered)
 
-	// Apply snapshot and resume progress
+	// Apply snapshot and resume progress.
 	follower := nt.peers[3].(*raft)
 	snap := follower.raftLog.nextUnstableSnapshot()
 	nt.storage[3].ApplySnapshot(*snap)
@@ -2893,7 +2959,11 @@ func TestLeaderTransferTimeout(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
+	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
+	// behind on its log, so that the leadership transfer won't be initiated
+	// immediately. If it were, we couldn't test the timeout.
 	nt.isolate(3)
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 
 	lead := nt.peers[1].(*raft)
 
@@ -2919,32 +2989,40 @@ func TestLeaderTransferIgnoreProposal(t *testing.T) {
 	nt := newNetwork(r, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
+	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
+	// behind on its log, so that the leadership transfer won't be initiated
+	// immediately.
 	nt.isolate(3)
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 
-	lead := nt.peers[1].(*raft)
-
-	nextEnts(r, s) // handle empty entry
-
-	// Transfer leadership to isolated node to let transfer pending, then send proposal.
+	// Transfer leadership to the isolated, behind node. This will leave the
+	// transfer in a pending state as the leader tries to catch up the target.
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
+	lead := nt.peers[1].(*raft)
 	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
+	// Then send proposal. This should be dropped.
 	err := lead.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 	require.Equal(t, ErrProposalDropped, err)
+	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
-	require.Equal(t, uint64(1), lead.trk.Progress(1).Match)
+	require.Equal(t, uint64(2), lead.trk.Progress(1).Match)
 }
 
 func TestLeaderTransferReceiveHigherTermVote(t *testing.T) {
-	nt := newNetwork(nil, nil, nil)
+	nt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
+	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
+	// behind on its log, so that the leadership transfer won't be initiated
+	// immediately.
 	nt.isolate(3)
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 
 	lead := nt.peers[1].(*raft)
 
-	// Transfer leadership to isolated node to let transfer pending.
+	// Transfer leadership to the isolated, behind node. This will leave the
+	// transfer in a pending state as the leader tries to catch up the target.
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
@@ -2957,11 +3035,15 @@ func TestLeaderTransferRemoveNode(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
-	nt.ignore(pb.MsgTimeoutNow)
+	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
+	// behind on its log, so that the leadership transfer won't be initiated
+	// immediately.
+	nt.isolate(3)
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 
 	lead := nt.peers[1].(*raft)
 
-	// The leadTransferee is removed when leadship transferring.
+	// The leadTransferee is removed with leadership transfer in progress.
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
@@ -2974,11 +3056,15 @@ func TestLeaderTransferDemoteNode(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
-	nt.ignore(pb.MsgTimeoutNow)
+	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
+	// behind on its log, so that the leadership transfer won't be initiated
+	// immediately.
+	nt.isolate(3)
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 
 	lead := nt.peers[1].(*raft)
 
-	// The leadTransferee is demoted when leadship transferring.
+	// The leadTransferee is demoted with leadership transfer in progress.
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
@@ -3000,12 +3086,17 @@ func TestLeaderTransferDemoteNode(t *testing.T) {
 	checkLeaderTransferState(t, lead, StateLeader, 1)
 }
 
-// TestLeaderTransferBack verifies leadership can transfer back to self when last transfer is pending.
+// TestLeaderTransferBack verifies leadership can transfer back to self when
+// last transfer is pending, which cancels the transfer attempt.
 func TestLeaderTransferBack(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
+	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
+	// behind on its log, so that the leadership transfer won't be initiated
+	// immediately.
 	nt.isolate(3)
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 
 	lead := nt.peers[1].(*raft)
 
@@ -3018,13 +3109,18 @@ func TestLeaderTransferBack(t *testing.T) {
 	checkLeaderTransferState(t, lead, StateLeader, 1)
 }
 
-// TestLeaderTransferSecondTransferToAnotherNode verifies leader can transfer to another node
-// when last transfer is pending.
+// TestLeaderTransferSecondTransferToAnotherNode verifies leader can transfer to
+// another node when last transfer is pending, which cancels the previous
+// transfer attempt and starts a new one.
 func TestLeaderTransferSecondTransferToAnotherNode(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
+	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
+	// behind on its log, so that the leadership transfer won't be initiated
+	// immediately.
 	nt.isolate(3)
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 
 	lead := nt.peers[1].(*raft)
 
@@ -3037,13 +3133,18 @@ func TestLeaderTransferSecondTransferToAnotherNode(t *testing.T) {
 	checkLeaderTransferState(t, lead, StateFollower, 2)
 }
 
-// TestLeaderTransferSecondTransferToSameNode verifies second transfer leader request
-// to the same node should not extend the timeout while the first one is pending.
+// TestLeaderTransferSecondTransferToSameNode verifies second transfer leader
+// request to the same node should not extend the timeout while the first one is
+// pending.
 func TestLeaderTransferSecondTransferToSameNode(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
+	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
+	// behind on its log, so that the leadership transfer won't be initiated
+	// immediately.
 	nt.isolate(3)
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 
 	lead := nt.peers[1].(*raft)
 
@@ -3069,11 +3170,10 @@ func checkLeaderTransferState(t *testing.T, r *raft, state StateType, lead pb.Pe
 	require.Equal(t, None, r.leadTransferee)
 }
 
-// TestTransferNonMember verifies that when a MsgTimeoutNow arrives at
-// a node that has been removed from the group, nothing happens.
-// (previously, if the node also got votes, it would panic as it
-// transitioned to StateLeader)
-func TestTransferNonMember(t *testing.T) {
+// TestLeaderTransferNonMember verifies that when a MsgTimeoutNow arrives at a
+// node that has been removed from the group, nothing happens. (previously, if
+// the node also got votes, it would panic as it transitioned to StateLeader).
+func TestLeaderTransferNonMember(t *testing.T) {
 	r := newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(2, 3, 4)))
 	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgTimeoutNow})
 
@@ -3082,15 +3182,119 @@ func TestTransferNonMember(t *testing.T) {
 	require.Equal(t, StateFollower, r.state)
 }
 
+// TestLeaderTransferDifferentTerms verifies that a MsgTimeoutNow will only be
+// respected if it is from the current term or from a new term.
+func TestLeaderTransferDifferentTerms(t *testing.T) {
+	nt := newNetwork(nil, nil, nil)
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+
+	// Transfer leadership to node 2, then 3, to drive up the term.
+	nt.send(pb.Message{From: 2, To: 1, Type: pb.MsgTransferLeader})
+	nt.send(pb.Message{From: 3, To: 2, Type: pb.MsgTransferLeader})
+	for i, p := range nt.peers {
+		r := p.(*raft)
+		expState := StateFollower
+		if i == 3 {
+			expState = StateLeader
+		}
+		require.Equal(t, expState, r.state)
+		require.Equal(t, uint64(3), r.Term)
+	}
+
+	// Send a MsgTimeoutNow to node 1 from an old term. This should be ignored.
+	// This is important, as a MsgTimeoutNow allows a follower to call a "force"
+	// election, which bypasses pre-vote and leader support safeguards. We don't
+	// want a stale MsgTimeoutNow sent from an old leader giving a follower
+	// permission to overthrow a newer leader.
+	nt.send(pb.Message{From: 2, To: 1, Term: 2, Type: pb.MsgTimeoutNow})
+	n1 := nt.peers[1].(*raft)
+	require.Equal(t, StateFollower, n1.state)
+	require.Equal(t, uint64(3), n1.Term)
+
+	// Send a MsgTimeoutNow to node 1 from the current term. This should cause it
+	// to call an election for the _next_ term, which it will win.
+	nt.send(pb.Message{From: 3, To: 1, Term: 3, Type: pb.MsgTimeoutNow})
+	require.Equal(t, StateLeader, n1.state)
+	require.Equal(t, uint64(4), n1.Term)
+
+	// Send a MsgTimeoutNow to node 2 from a new term. This should advance the
+	// term on node 2 and cause it to call an election for the _next_ term, which
+	// it will win.
+	nt.send(pb.Message{From: 1, To: 2, Term: 5, Type: pb.MsgTimeoutNow})
+	n2 := nt.peers[2].(*raft)
+	require.Equal(t, StateLeader, n2.state)
+	require.Equal(t, uint64(6), n2.Term)
+}
+
+// TestLeaderTransferStaleFollower verifies that a MsgTimeoutNow received by a
+// stale follower (a follower still at an earlier term) will cause the follower
+// to call an election which it can not win.
+func TestLeaderTransferStaleFollower(t *testing.T) {
+	nt := newNetwork(nil, nil, nil)
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	n1 := nt.peers[1].(*raft)
+	n2 := nt.peers[2].(*raft)
+	n3 := nt.peers[3].(*raft)
+	nodes := []*raft{n1, n2, n3}
+
+	// Attempt to transfer leadership to node 3. The MsgTimeoutNow is sent
+	// immediately and node 1 steps down as leader, but node 3 does not receive
+	// the message due to a network partition.
+	nt.isolate(3)
+	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
+	for _, n := range nodes {
+		require.Equal(t, StateFollower, n.state)
+		require.Equal(t, uint64(1), n.Term)
+	}
+
+	// TODO(arul): a leader that steps down will currently never campaign due to
+	// the fortification promise that it made to itself. We'll need to fix this.
+	n1.deFortify(n1.lead, n1.Term)
+
+	// Eventually, the previous leader gives up on waiting and calls an election
+	// to reestablish leadership at the next term. Node 3 does not hear about this
+	// either.
+	for i := 0; i < n1.randomizedElectionTimeout; i++ {
+		n1.tick()
+	}
+	nt.send(nt.filter(n1.readMessages())...)
+	for _, n := range nodes {
+		expState := StateFollower
+		if n == n1 {
+			expState = StateLeader
+		}
+		expTerm := uint64(2)
+		if n == n3 {
+			expTerm = 1
+		}
+		require.Equal(t, expState, n.state)
+		require.Equal(t, expTerm, n.Term)
+	}
+
+	// The network partition heals and n3 receives the lost MsgTimeoutNow that n1
+	// had previously tried to send to it back in term 1. It calls an unsuccessful
+	// election, through which it learns about the new leadership term.
+	nt.recover()
+	nt.send(pb.Message{From: 1, To: 3, Term: 1, Type: pb.MsgTimeoutNow})
+	for _, n := range nodes {
+		expState := StateFollower
+		if n == n1 {
+			expState = StateLeader
+		}
+		require.Equal(t, expState, n.state)
+		require.Equal(t, uint64(2), n.Term)
+	}
+}
+
 // TestNodeWithSmallerTermCanCompleteElection tests the scenario where a node
 // that has been partitioned away (and fallen behind) rejoins the cluster at
 // about the same time the leader node gets partitioned away.
 // Previously the cluster would come to a standstill when run with PreVote
 // enabled.
 func TestNodeWithSmallerTermCanCompleteElection(t *testing.T) {
-	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
@@ -3155,9 +3359,9 @@ func TestNodeWithSmallerTermCanCompleteElection(t *testing.T) {
 // TestPreVoteWithSplitVote verifies that after split vote, cluster can complete
 // election in next round.
 func TestPreVoteWithSplitVote(t *testing.T) {
-	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
@@ -3278,9 +3482,9 @@ func TestLearnerCampaign(t *testing.T) {
 // n2 is follower with term 2
 // n3 is partitioned, with term 4 and less log, state is candidate
 func newPreVoteMigrationCluster(t *testing.T) *network {
-	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
@@ -3377,7 +3581,7 @@ func TestPreVoteMigrationWithFreeStuckPreCandidate(t *testing.T) {
 }
 
 func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool) {
-	nt := newNetwork(nil, nil, nil)
+	nt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil)
 	n1 := nt.peers[1].(*raft)
 	n2 := nt.peers[2].(*raft)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
@@ -3418,29 +3622,34 @@ func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool) {
 
 	// Transfer leadership to peer 2.
 	nt.send(pb.Message{From: 2, To: 1, Type: pb.MsgTransferLeader})
-	assert.Equal(t, StateLeader, n1.state)
-	// It's still follower because committed conf change is not applied.
+	// The outgoing leader steps down immediately.
+	assert.Equal(t, StateFollower, n1.state)
+	// The transfer target does not campaign immediately because the committed
+	// conf change is not applied.
 	assert.Equal(t, StateFollower, n2.state)
 
-	// Abort transfer leader
-	for i := 0; i < n1.electionTimeout; i++ {
+	// TODO(arul): a leader that steps down will currently never campaign due to
+	// the fortification promise that it made to itself. We'll need to fix this.
+	n1.deFortify(n1.lead, n1.Term)
+
+	// Advance apply on node 1 and re-establish leadership.
+	nextEnts(n1, nt.storage[1])
+	for i := 0; i < n1.randomizedElectionTimeout; i++ {
 		n1.tick()
 	}
+	nt.send(n1.readMessages()...)
+	assert.Equal(t, StateLeader, n1.state)
 
-	// Advance apply
+	// Advance apply on node 2.
 	nextEnts(n2, nt.storage[2])
 
 	// Transfer leadership to peer 2 again.
 	nt.send(pb.Message{From: 2, To: 1, Type: pb.MsgTransferLeader})
+	// The outgoing leader steps down immediately.
 	assert.Equal(t, StateFollower, n1.state)
+	// The transfer target campaigns immediately now that the committed conf
+	// change is applied.
 	assert.Equal(t, StateLeader, n2.state)
-
-	nextEnts(n1, nt.storage[1])
-	// Trigger campaign in node 2
-	for i := 0; i < n1.randomizedElectionTimeout; i++ {
-		n1.tick()
-	}
-	assert.Equal(t, StateCandidate, n1.state)
 }
 
 // TestConfChangeCheckBeforeCampaign tests if unapplied ConfChange is checked before campaign.
@@ -3785,6 +3994,15 @@ func preVoteConfig(c *Config) {
 	c.PreVote = true
 }
 
+func fortificationDisabledConfig(c *Config) {
+	c.StoreLiveness = raftstoreliveness.Disabled{}
+}
+
+func preVoteConfigWithFortificationDisabled(c *Config) {
+	c.PreVote = true
+	c.StoreLiveness = raftstoreliveness.Disabled{}
+}
+
 func (nw *network) send(msgs ...pb.Message) {
 	for len(msgs) > 0 {
 		m := msgs[0]
@@ -3885,7 +4103,35 @@ func SetRandomizedElectionTimeout(r *RawNode, v int) {
 	setRandomizedElectionTimeout(r.raft, v)
 }
 
-func newTestConfig(id pb.PeerID, election, heartbeat int, storage Storage) *Config {
+// testConfigModifiers allows callers to optionally modify newTestConfig.
+type testConfigModifiers struct {
+	testingDisableFortification bool
+}
+
+// testConfigModifierOpt is the type of an optional parameter to newTestConfig
+// that may be used to modify the config.
+type testConfigModifierOpt func(*testConfigModifiers)
+
+// withRaftFortification disables raft fortification.
+func withFortificationDisabled() testConfigModifierOpt {
+	return func(modifier *testConfigModifiers) {
+		modifier.testingDisableFortification = true
+	}
+}
+
+func newTestConfig(
+	id pb.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
+) *Config {
+	modifiers := testConfigModifiers{}
+	for _, opt := range opts {
+		opt(&modifiers)
+	}
+	var storeLiveness raftstoreliveness.StoreLiveness
+	if modifiers.testingDisableFortification {
+		storeLiveness = raftstoreliveness.Disabled{}
+	} else {
+		storeLiveness = raftstoreliveness.AlwaysLive{}
+	}
 	return &Config{
 		ID:              id,
 		ElectionTick:    election,
@@ -3893,7 +4139,8 @@ func newTestConfig(id pb.PeerID, election, heartbeat int, storage Storage) *Conf
 		Storage:         storage,
 		MaxSizePerMsg:   noLimit,
 		MaxInflightMsgs: 256,
-		StoreLiveness:   raftstoreliveness.AlwaysLive{},
+		StoreLiveness:   storeLiveness,
+		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
 	}
 }
 
@@ -3919,12 +4166,16 @@ func newTestMemoryStorage(opts ...testMemoryStorageOptions) *MemoryStorage {
 	return ms
 }
 
-func newTestRaft(id pb.PeerID, election, heartbeat int, storage Storage) *raft {
-	return newRaft(newTestConfig(id, election, heartbeat, storage))
+func newTestRaft(
+	id pb.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
+) *raft {
+	return newRaft(newTestConfig(id, election, heartbeat, storage, opts...))
 }
 
-func newTestLearnerRaft(id pb.PeerID, election, heartbeat int, storage Storage) *raft {
-	cfg := newTestConfig(id, election, heartbeat, storage)
+func newTestLearnerRaft(
+	id pb.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
+) *raft {
+	cfg := newTestConfig(id, election, heartbeat, storage, opts...)
 	return newRaft(cfg)
 }
 

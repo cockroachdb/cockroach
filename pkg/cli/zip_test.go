@@ -121,7 +121,8 @@ table_name NOT IN (
 	'transaction_statistics_persisted_v22_2',
 	'transaction_statistics',
 	'tenant_usage_details',
-  'pg_catalog_table_is_implemented'
+  'pg_catalog_table_is_implemented',
+  'fully_qualified_names'
 )
 ORDER BY name ASC`)
 	assert.NoError(t, err)
@@ -186,6 +187,12 @@ func TestZipQueryFallback(t *testing.T) {
 	skip.UnderRace(t, "test too slow under race")
 
 	existing := zipInternalTablesPerCluster["crdb_internal.transaction_contention_events"]
+
+	// Avoid leaking configuration changes after the tests end.
+	defer func() {
+		zipInternalTablesPerCluster["crdb_internal.transaction_contention_events"] = existing
+	}()
+
 	zipInternalTablesPerCluster["crdb_internal.transaction_contention_events"] = TableRegistryConfig{
 		nonSensitiveCols: existing.nonSensitiveCols,
 		// We want this to fail to trigger the fallback.
@@ -1194,4 +1201,54 @@ func TestZipJobTrace(t *testing.T) {
 	close(blockCh)
 	jobutils.WaitForJobToSucceed(t, runner, importJobID)
 	jobutils.WaitForJobToSucceed(t, runner, importJobID2)
+}
+
+// This test the command flags values set during command execution.
+func TestCommandFlags(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+	c := NewCLITest(TestCLIParams{
+		StoreSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
+	})
+	defer c.Cleanup()
+
+	_, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0 --exclude-nodes=1" +
+		" --redact --nodes=1 --exclude-files=*.log --include-goroutine-stacks --include-running-job-traces " + dir + "/debug.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := zip.OpenReader(dir + "/debug.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, f := range r.File {
+		if f.Name == "debug/debug_zip_command_flags.txt" {
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rc.Close()
+
+			actualFlags, err := io.ReadAll(rc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assert.Equal(t, " --concurrency=1 --cpu-profile-duration=0s --exclude-files=[*.log] --exclude-nodes=1"+
+				" --include-goroutine-stacks=true --include-running-job-traces=true --insecure=false --nodes=1 --redact=true",
+				string(actualFlags))
+			return
+		}
+	}
+	assert.Fail(t, "debug/debug_zip_command_flags.txt is not generated")
+
+	if err = r.Close(); err != nil {
+		t.Fatal(err)
+	}
 }

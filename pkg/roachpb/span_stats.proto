@@ -70,7 +70,11 @@ message SpanStats {
   // stale.
   cockroach.storage.enginepb.MVCCStats approximate_total_stats = 7 [(gogoproto.nullable) = false];
 
-  // NEXT ID: 8.
+
+  // Unique store ids for the requested span.
+  repeated int32 store_ids = 8 [(gogoproto.customname) = "StoreIDs", (gogoproto.casttype) = "StoreID"];
+
+  // NEXT ID: 9.
 }
 
 message SpanStatsResponse {

@@ -409,6 +409,7 @@ message RangeProblems {
   bool raft_log_too_large = 7;
   bool circuit_breaker_error = 9;
   bool paused_followers = 10;
+  bool range_too_large = 11;
 }
 
 // RangeStatistics describes statistics reported by a range. For internal use
@@ -1324,6 +1325,11 @@ message ProblemRangesResponse {
       (gogoproto.casttype) =
           "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];
+    repeated int64 too_large_range_ids = 12 [
+      (gogoproto.customname) = "TooLargeRangeIds",
+      (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+    ];
   }
   reserved 1 to 7;
   // NodeID is the node that submitted all the requests.
@@ -2179,6 +2185,16 @@ message RequestJobProfilerExecutionDetailsResponse {}
    repeated string files = 1;
  }
 
+ message UpdateTableMetadataCacheRequest {
+  // If true, the server will attempt to send a signal to the
+   // table metadata job by notifying the channel set on the
+   // status server.
+   bool local = 1;
+ }
+
+ message UpdateTableMetadataCacheResponse {
+ }
+
 
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
@@ -2666,5 +2682,8 @@ service Status {
     option (google.api.http) = {
       get: "/_status/list_job_profiler_execution_details/{job_id}"
     };
+  }
+
+  rpc UpdateTableMetadataCache(UpdateTableMetadataCacheRequest) returns (UpdateTableMetadataCacheResponse) {
   }
 }

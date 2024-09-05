@@ -10,7 +10,7 @@
 #    --from-literal azure_password=XYZZY
 #    --from-literal azure_tenant_id=XYZZY
 #    --from-literal slack_token=XYZZY
-apiVersion: batch/v1beta1
+apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: roachprod-gc-cronjob
@@ -31,13 +31,14 @@ spec:
         spec:
           containers:
             - name: roachprod-gc-cronjob
-              image: gcr.io/cockroach-dev-inf/cockroachlabs/roachprod:485975b3a82
+              image: gcr.io/cockroach-dev-inf/cockroachlabs/roachprod:1d01263b3a4
               args:
                 - gc
                 - --gce-project=cockroach-ephemeral,cockroach-roachstress
                 - --slack-token
                 - $(SLACK_TOKEN)
                 - --aws-account-ids=541263489771,337380398238
+                - --azure-subscription-names=e2e-adhoc,e2e-infra,Microsoft Azure Sponsorship
               env:
                 - name: SLACK_TOKEN
                   valueFrom:

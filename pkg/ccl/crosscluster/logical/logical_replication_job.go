@@ -158,7 +158,7 @@ func (r *logicalReplicationResumer) ingest(
 	}
 
 	// TODO(azhu): add a flag to avoid recreating dlq tables during replanning
-	dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB.Executor(), planInfo.tableIDsToNames)
+	dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB.Executor(), planInfo.srcTableIDsToDestMeta)
 	if err := dlqClient.Create(ctx); err != nil {
 		return errors.Wrap(err, "failed to create dead letter queue")
 	}
@@ -292,9 +292,9 @@ type logicalReplicationPlanner struct {
 }
 
 type logicalReplicationPlanInfo struct {
-	sourceSpans     []roachpb.Span
-	streamAddress   []string
-	tableIDsToNames map[int32]fullyQualifiedTableName
+	sourceSpans           []roachpb.Span
+	streamAddress         []string
+	srcTableIDsToDestMeta map[descpb.ID]dstTableMetadata
 }
 
 func makeLogicalReplicationPlanner(
@@ -331,7 +331,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		progress = p.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 		payload  = p.job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
 		info     = logicalReplicationPlanInfo{
-			tableIDsToNames: make(map[int32]fullyQualifiedTableName),
+			srcTableIDsToDestMeta: make(map[descpb.ID]dstTableMetadata),
 		}
 	)
 	asOf := progress.ReplicatedTime
@@ -390,10 +390,11 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 				DestinationTableName:          dstTableDesc.GetName(),
 				DestinationFunctionOID:        uint32(fnOID),
 			}
-			info.tableIDsToNames[pair.DstDescriptorID] = fullyQualifiedTableName{
+			info.srcTableIDsToDestMeta[descpb.ID(pair.SrcDescriptorID)] = dstTableMetadata{
 				database: dbDesc.GetName(),
 				schema:   scDesc.GetName(),
 				table:    dstTableDesc.GetName(),
+				tableID:  descpb.ID(pair.DstDescriptorID),
 			}
 		}
 		return nil
@@ -419,7 +420,10 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		progress.Checkpoint,
 		tablesMd,
 		p.job.ID(),
-		streampb.StreamID(payload.StreamID))
+		streampb.StreamID(payload.StreamID),
+		payload.IgnoreCDCIgnoredTTLDeletes,
+		payload.Mode,
+	)
 	if err != nil {
 		return nil, nil, info, err
 	}
@@ -575,6 +579,9 @@ func (r *logicalReplicationResumer) ingestWithRetries(
 func loadOnlineReplicatedTime(
 	ctx context.Context, db isql.DB, ingestionJob *jobs.Job,
 ) hlc.Timestamp {
+	// TODO(ssd): Isn't this load redundant? The Update API for
+	// the job also updates the local copy of the job with the
+	// latest progress.
 	progress, err := jobs.LoadJobProgress(ctx, db, ingestionJob.ID())
 	if err != nil {
 		log.Warningf(ctx, "error loading job progress: %s", err)
@@ -588,18 +595,54 @@ func loadOnlineReplicatedTime(
 }
 
 // OnFailOrCancel implements jobs.Resumer interface
-func (h *logicalReplicationResumer) OnFailOrCancel(
+func (r *logicalReplicationResumer) OnFailOrCancel(
 	ctx context.Context, execCtx interface{}, _ error,
 ) error {
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
 	metrics := execCfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
 	metrics.ReplicatedTimeSeconds.Update(0)
+	r.completeProducerJob(ctx, execCfg.InternalDB)
 	return nil
 }
 
 // CollectProfile implements jobs.Resumer interface
-func (h *logicalReplicationResumer) CollectProfile(_ context.Context, _ interface{}) error {
+func (r *logicalReplicationResumer) CollectProfile(_ context.Context, _ interface{}) error {
 	return nil
+}
+
+func (r *logicalReplicationResumer) completeProducerJob(
+	ctx context.Context, internalDB *sql.InternalDB,
+) {
+	var (
+		progress = r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+		payload  = r.job.Details().(jobspb.LogicalReplicationDetails)
+	)
+
+	streamID := streampb.StreamID(payload.StreamID)
+	log.Infof(ctx, "attempting to update producer job %d", streamID)
+	if err := timeutil.RunWithTimeout(ctx, "complete producer job", 30*time.Second,
+		func(ctx context.Context) error {
+			client, err := streamclient.GetFirstActiveClient(ctx,
+				append([]string{payload.SourceClusterConnStr}, progress.StreamAddresses...),
+				internalDB,
+				streamclient.WithStreamID(streamID),
+				streamclient.WithLogical(),
+			)
+			if err != nil {
+				return err
+			}
+			defer closeAndLog(ctx, client)
+			return client.Complete(ctx, streamID, false /* successfulIngestion */)
+		},
+	); err != nil {
+		log.Warningf(ctx, "error completing the source cluster producer job %d: %s", streamID, err.Error())
+	}
+}
+
+func closeAndLog(ctx context.Context, d streamclient.Dialer) {
+	if err := d.Close(ctx); err != nil {
+		log.Warningf(ctx, "error closing stream client: %s", err.Error())
+	}
 }
 
 func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {

@@ -39,26 +39,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 const (
 	originTimestampColumnName = "crdb_replication_origin_timestamp"
 )
-
-type processorType string
-
-// SafeValue implements the redact.SafeValue interface.
-func (p processorType) SafeValue() {}
-
-var _ redact.SafeValue = defaultSQLProcessor
-
-const (
-	lwwProcessor        processorType = "last-write-wins"
-	udfApplierProcessor processorType = "applier-udf"
-)
-
-var defaultSQLProcessor = lwwProcessor
 
 // A sqlRowProcessor is a RowProcessor that handles rows using the
 // provided querier.
@@ -79,7 +64,7 @@ type querier interface {
 	AddTable(targetDescID int32, tc sqlProcessorTableConfig) error
 	InsertRow(ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevRow *cdcevent.Row, likelyInsert bool) (batchStats, error)
 	DeleteRow(ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevRow *cdcevent.Row) (batchStats, error)
-	RequiresParsedBeforeRow() bool
+	RequiresParsedBeforeRow(catid.DescID) bool
 }
 
 type queryBuilder struct {
@@ -205,23 +190,6 @@ type sqlProcessorTableConfig struct {
 	dstOID  uint32
 }
 
-func makeSQLProcessor(
-	ctx context.Context,
-	settings *cluster.Settings,
-	tableConfigs map[descpb.ID]sqlProcessorTableConfig,
-	jobID jobspb.JobID,
-	ie isql.Executor,
-) (*sqlRowProcessor, error) {
-	switch defaultSQLProcessor {
-	case lwwProcessor:
-		return makeSQLLastWriteWinsHandler(ctx, settings, tableConfigs, jobID, ie)
-	case udfApplierProcessor:
-		return makeUDFApplierProcessor(ctx, settings, tableConfigs, jobID, ie)
-	default:
-		return nil, errors.AssertionFailedf("unknown SQL processor: %s", defaultSQLProcessor)
-	}
-}
-
 func makeSQLProcessorFromQuerier(
 	ctx context.Context,
 	settings *cluster.Settings,
@@ -271,7 +239,7 @@ func (p *failureInjector) SetSyntheticFailurePercent(rate uint32) {
 	p.rate = rate
 }
 
-func (p failureInjector) injectFailure() error {
+func (p *failureInjector) injectFailure() error {
 	if p.rate != 0 {
 		if randutil.FastUint32()%100 < p.rate {
 			return errInjected
@@ -299,10 +267,16 @@ func (srp *sqlRowProcessor) ProcessRow(
 	}
 	srp.lastRow = row
 
+	return srp.processParsedRow(ctx, txn, row, kv.Key, prevValue)
+}
+
+func (srp *sqlRowProcessor) processParsedRow(
+	ctx context.Context, txn isql.Txn, row cdcevent.Row, key roachpb.Key, prevValue roachpb.Value,
+) (batchStats, error) {
 	var parsedBeforeRow *cdcevent.Row
-	if srp.querier.RequiresParsedBeforeRow() {
+	if srp.querier.RequiresParsedBeforeRow(row.TableID) {
 		before, err := srp.decoder.DecodeKV(ctx, roachpb.KeyValue{
-			Key:   kv.Key,
+			Key:   key,
 			Value: prevValue,
 		}, cdcevent.PrevRow, prevValue.Timestamp, false)
 		if err != nil {
@@ -311,13 +285,10 @@ func (srp *sqlRowProcessor) ProcessRow(
 		parsedBeforeRow = &before
 	}
 
-	var stats batchStats
 	if row.IsDeleted() {
-		stats, err = srp.querier.DeleteRow(ctx, txn, srp.ie, row, parsedBeforeRow)
-	} else {
-		stats, err = srp.querier.InsertRow(ctx, txn, srp.ie, row, parsedBeforeRow, prevValue.RawBytes == nil)
+		return srp.querier.DeleteRow(ctx, txn, srp.ie, row, parsedBeforeRow)
 	}
-	return stats, err
+	return srp.querier.InsertRow(ctx, txn, srp.ie, row, parsedBeforeRow, prevValue.RawBytes == nil)
 }
 
 func (srp *sqlRowProcessor) GetLastRow() cdcevent.Row {
@@ -394,7 +365,7 @@ const (
 	insertQueriesPessimisticIndex = 1
 )
 
-func makeSQLLastWriteWinsHandler(
+func makeSQLProcessor(
 	ctx context.Context,
 	settings *cluster.Settings,
 	tableConfigs map[descpb.ID]sqlProcessorTableConfig,
@@ -402,32 +373,76 @@ func makeSQLLastWriteWinsHandler(
 	ie isql.Executor,
 ) (*sqlRowProcessor, error) {
 
-	needFallback := false
-	shouldUseFallback := make(map[catid.DescID]bool, len(tableConfigs))
+	needUDFQuerier := false
+	shouldUseUDF := make(map[catid.DescID]bool, len(tableConfigs))
 	for _, tc := range tableConfigs {
-		shouldUseFallback[tc.srcDesc.GetID()] = tc.dstOID != 0
-		needFallback = needFallback || tc.dstOID != 0
+		shouldUseUDF[tc.srcDesc.GetID()] = tc.dstOID != 0
+		needUDFQuerier = needUDFQuerier || tc.dstOID != 0
 	}
 
-	var fallbackQuerier querier
-	if needFallback {
-		fallbackQuerier = makeApplierQuerier(ctx, settings, tableConfigs, jobID, ie)
+	lwwQuerier := &lwwQuerier{
+		settings: settings,
+		queryBuffer: queryBuffer{
+			deleteQueries: make(map[catid.DescID]queryBuilder, len(tableConfigs)),
+			insertQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
+		},
+		ieOverrideOptimisticInsert: getIEOverride(replicatedOptimisticInsertOpName, jobID),
+		ieOverrideInsert:           getIEOverride(replicatedInsertOpName, jobID),
+		ieOverrideDelete:           getIEOverride(replicatedDeleteOpName, jobID),
+	}
+	var udfQuerier querier
+	if needUDFQuerier {
+		udfQuerier = makeApplierQuerier(ctx, settings, tableConfigs, jobID, ie)
 	}
 
-	qb := queryBuffer{
-		deleteQueries: make(map[catid.DescID]queryBuilder, len(tableConfigs)),
-		insertQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
+	return makeSQLProcessorFromQuerier(ctx, settings, tableConfigs, ie, &muxQuerier{
+		shouldUseUDF: shouldUseUDF,
+		lwwQuerier:   lwwQuerier,
+		udfQuerier:   udfQuerier,
+	})
+
+}
+
+// muxQuerier is a querier that dispatches to either an LWW querier or a UDF
+// querier.
+type muxQuerier struct {
+	shouldUseUDF map[catid.DescID]bool
+	lwwQuerier   querier
+	udfQuerier   querier
+}
+
+func (m *muxQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) error {
+	if m.shouldUseUDF[tc.srcDesc.GetID()] {
+		return m.udfQuerier.AddTable(targetDescID, tc)
 	}
-	return makeSQLProcessorFromQuerier(ctx, settings, tableConfigs, ie,
-		&lwwQuerier{
-			settings:                   settings,
-			queryBuffer:                qb,
-			shouldUseFallback:          shouldUseFallback,
-			fallbackQuerier:            fallbackQuerier,
-			ieOverrideOptimisticInsert: getIEOverride(replicatedOptimisticInsertOpName, jobID),
-			ieOverrideInsert:           getIEOverride(replicatedInsertOpName, jobID),
-			ieOverrideDelete:           getIEOverride(replicatedDeleteOpName, jobID),
-		})
+	return m.lwwQuerier.AddTable(targetDescID, tc)
+}
+
+func (m *muxQuerier) InsertRow(
+	ctx context.Context,
+	txn isql.Txn,
+	ie isql.Executor,
+	row cdcevent.Row,
+	prevRow *cdcevent.Row,
+	likelyInsert bool,
+) (batchStats, error) {
+	if m.shouldUseUDF[row.TableID] {
+		return m.udfQuerier.InsertRow(ctx, txn, ie, row, prevRow, likelyInsert)
+	}
+	return m.lwwQuerier.InsertRow(ctx, txn, ie, row, prevRow, likelyInsert)
+}
+
+func (m *muxQuerier) DeleteRow(
+	ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevRow *cdcevent.Row,
+) (batchStats, error) {
+	if m.shouldUseUDF[row.TableID] {
+		return m.udfQuerier.DeleteRow(ctx, txn, ie, row, prevRow)
+	}
+	return m.lwwQuerier.DeleteRow(ctx, txn, ie, row, prevRow)
+}
+
+func (m *muxQuerier) RequiresParsedBeforeRow(id catid.DescID) bool {
+	return m.shouldUseUDF[id]
 }
 
 // lwwQuerier is a querier that implements partial
@@ -450,9 +465,6 @@ type lwwQuerier struct {
 	settings    *cluster.Settings
 	queryBuffer queryBuffer
 
-	shouldUseFallback map[catid.DescID]bool
-	fallbackQuerier   querier
-
 	ieOverrideOptimisticInsert sessiondata.InternalExecutorOverride
 	ieOverrideInsert           sessiondata.InternalExecutorOverride
 	ieOverrideDelete           sessiondata.InternalExecutorOverride
@@ -469,26 +481,10 @@ func (lww *lwwQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) 
 	if err != nil {
 		return err
 	}
-
-	if lww.shouldUseFallbackQuerier(td.GetID()) {
-		if err := lww.fallbackQuerier.AddTable(targetDescID, tc); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
-func (lww *lwwQuerier) shouldUseFallbackQuerier(id catid.DescID) bool {
-	if lww.fallbackQuerier == nil {
-		return false
-	}
-	return lww.shouldUseFallback[id]
-}
-
-func (lww *lwwQuerier) RequiresParsedBeforeRow() bool {
-	if lww.fallbackQuerier != nil {
-		return lww.fallbackQuerier.RequiresParsedBeforeRow()
-	}
+func (lww *lwwQuerier) RequiresParsedBeforeRow(catid.DescID) bool {
 	return false
 }
 
@@ -512,9 +508,7 @@ func (lww *lwwQuerier) InsertRow(
 		return batchStats{}, err
 	}
 
-	fallbackSpecified := lww.shouldUseFallbackQuerier(row.TableID)
 	shouldTryOptimisticInsert := likelyInsert && tryOptimisticInsertEnabled.Get(&lww.settings.SV)
-	shouldTryOptimisticInsert = shouldTryOptimisticInsert || fallbackSpecified
 	var optimisticInsertConflicts int64
 	if shouldTryOptimisticInsert {
 		stmt, datums, err := insertQueryBuilder.Query(insertQueriesOptimisticIndex)
@@ -534,15 +528,6 @@ func (lww *lwwQuerier) InsertRow(
 			// There was no conflict - we're done.
 			return batchStats{}, nil
 		}
-	}
-
-	if fallbackSpecified {
-		s, err := lww.fallbackQuerier.InsertRow(ctx, txn, ie, row, prevRow, likelyInsert)
-		if err != nil {
-			return batchStats{}, err
-		}
-		s.optimisticInsertConflicts += optimisticInsertConflicts
-		return s, err
 	}
 
 	stmt, datums, err := insertQueryBuilder.Query(insertQueriesPessimisticIndex)

@@ -147,6 +147,45 @@ func TestIsResponseMsg(t *testing.T) {
 	}
 }
 
+func TestMsgFromLeader(t *testing.T) {
+	tests := []struct {
+		msgt       pb.MessageType
+		isResponse bool
+	}{
+		{pb.MsgHup, false},
+		{pb.MsgBeat, false},
+		{pb.MsgUnreachable, false},
+		{pb.MsgSnapStatus, false},
+		{pb.MsgCheckQuorum, false},
+		{pb.MsgTransferLeader, false},
+		{pb.MsgProp, false},
+		{pb.MsgApp, true},
+		{pb.MsgAppResp, false},
+		{pb.MsgVote, false},
+		{pb.MsgVoteResp, false},
+		{pb.MsgSnap, true},
+		{pb.MsgHeartbeat, true},
+		{pb.MsgHeartbeatResp, false},
+		{pb.MsgTimeoutNow, true},
+		{pb.MsgPreVote, false},
+		{pb.MsgPreVoteResp, false},
+		{pb.MsgStorageAppend, false},
+		{pb.MsgStorageAppendResp, false},
+		{pb.MsgStorageApply, false},
+		{pb.MsgStorageApplyResp, false},
+		{pb.MsgForgetLeader, false},
+		{pb.MsgFortifyLeader, true},
+		{pb.MsgFortifyLeaderResp, false},
+	}
+
+	for i, tt := range tests {
+		got := IsMsgFromLeader(tt.msgt)
+		if got != tt.isResponse {
+			t.Errorf("#%d: got %v, want %v", i, got, tt.isResponse)
+		}
+	}
+}
+
 // TestPayloadSizeOfEmptyEntry ensures that payloadSize of empty entry is always zero.
 // This property is important because new leaders append an empty entry to their log,
 // and we don't want this to count towards the uncommitted log quota.

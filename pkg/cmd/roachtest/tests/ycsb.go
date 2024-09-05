@@ -193,6 +193,8 @@ func enableIsolationLevels(ctx context.Context, t test.Test, db *gosql.DB) error
 		// master, we should keep these to ensure that the settings are configured
 		// properly in mixed-version roachtests.
 		`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = 'true';`,
+		// NOTE: for a similar reason, we use the deprecated name for this setting
+		// to ensure that it is properly configured in mixed-version roachtests.
 		`SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = 'true';`,
 	} {
 		if _, err := db.ExecContext(ctx, cmd); err != nil {

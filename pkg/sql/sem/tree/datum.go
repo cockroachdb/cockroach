@@ -87,8 +87,14 @@ var (
 	// postgres 4714 BC (JULIAN = 0) - 4713 in their docs - and 294276 AD.
 
 	// MaxSupportedTime is the maximum time we support parsing.
+	//
+	// Refer to the doc comments of the function "timeutil.Unix" for the process of
+	// deriving the arguments to construct a specific time.Time.
 	MaxSupportedTime = timeutil.Unix(9224318016000-1, 999999000) // 294276-12-31 23:59:59.999999
 	// MinSupportedTime is the minimum time we support parsing.
+	//
+	// Refer to the doc comments of the function "timeutil.Unix" for the process of
+	// deriving the arguments to construct a specific time.Time.
 	MinSupportedTime = timeutil.Unix(-210866803200, 0) // 4714-11-24 00:00:00+00 BC
 )
 
@@ -2592,12 +2598,11 @@ type DTimestamp struct {
 }
 
 // MakeDTimestamp creates a DTimestamp with specified precision.
-func MakeDTimestamp(t time.Time, precision time.Duration) (*DTimestamp, error) {
-	ret := t.Round(precision)
-	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
-		return nil, NewTimestampExceedsBoundsError(ret)
+func MakeDTimestamp(t time.Time, precision time.Duration) (_ *DTimestamp, err error) {
+	if t, err = checkTimeBounds(t, precision); err != nil {
+		return nil, err
 	}
-	return &DTimestamp{Time: ret}, nil
+	return &DTimestamp{Time: t}, nil
 }
 
 // MustMakeDTimestamp wraps MakeDTimestamp but panics if there is an error.
@@ -2871,6 +2876,10 @@ type DTimestampTZ struct {
 func checkTimeBounds(t time.Time, precision time.Duration) (time.Time, error) {
 	ret := t.Round(precision)
 	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
+		if t == pgdate.TimeInfinity || t == pgdate.TimeNegativeInfinity {
+			return t, nil
+		}
+
 		return time.Time{}, NewTimestampExceedsBoundsError(ret)
 	}
 	return ret, nil

@@ -270,7 +270,7 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	lastClientStart := make(map[string]hlc.Timestamp)
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		BeforeClientSubscribe: func(addr string, token string, clientStartTimes span.Frontier) {
+		BeforeClientSubscribe: func(addr string, token string, clientStartTimes span.Frontier, _ bool) {
 			lastClientStart[token] = clientStartTimes.Frontier()
 		},
 	}
@@ -685,7 +685,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 		clientAddresses := make(map[string]struct{})
 		var addressesMu syncutil.Mutex
 		args.TestingKnobs = &sql.StreamingTestingKnobs{
-			BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
+			BeforeClientSubscribe: func(addr string, token string, _ span.Frontier, _ bool) {
 				addressesMu.Lock()
 				defer addressesMu.Unlock()
 				clientAddresses[addr] = struct{}{}
@@ -797,7 +797,7 @@ func TestStreamingAutoReplan(t *testing.T) {
 	clientAddresses := make(map[string]struct{})
 	var addressesMu syncutil.Mutex
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
+		BeforeClientSubscribe: func(addr string, token string, _ span.Frontier, _ bool) {
 			addressesMu.Lock()
 			defer addressesMu.Unlock()
 			clientAddresses[addr] = struct{}{}
@@ -880,7 +880,7 @@ func TestStreamingReplanOnLag(t *testing.T) {
 	clientAddresses := make(map[string]struct{})
 	var addressesMu syncutil.Mutex
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
+		BeforeClientSubscribe: func(addr string, token string, _ span.Frontier, _ bool) {
 			addressesMu.Lock()
 			defer addressesMu.Unlock()
 			clientAddresses[addr] = struct{}{}

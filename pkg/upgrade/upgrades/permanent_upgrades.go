@@ -76,6 +76,7 @@ func bootstrapCluster(
 		{"create jobs metrics polling job", createJobsMetricsPollingJob},
 		{"create sql activity updater job", createActivityUpdateJobMigration},
 		{"create mvcc stats job", createMVCCStatisticsJob},
+		{"create update cached table metadata job", createUpdateTableMetadataCacheJob},
 	} {
 		log.Infof(ctx, "executing bootstrap step %q", u.name)
 		if err := u.fn(ctx, cv, deps); err != nil {

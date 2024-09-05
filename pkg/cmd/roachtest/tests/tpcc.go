@@ -159,7 +159,7 @@ func tpccImportCmdWithCockroachBinary(
 	return roachtestutil.NewCommand("%s workload fixtures import %s", crdbBinary, workloadCmd).
 		MaybeFlag(db != "", "db", db).
 		Flag("warehouses", warehouses).
-		Arg(strings.Join(extraArgs, " ")).
+		Arg("%s", strings.Join(extraArgs, " ")).
 		String()
 }
 
@@ -221,8 +221,8 @@ func setupTPCC(
 			cmd := roachtestutil.NewCommand("%s workload init %s", test.DefaultCockroachPath, opts.getWorkloadCmd()).
 				MaybeFlag(opts.DB != "", "db", opts.DB).
 				Flag("warehouses", opts.Warehouses).
-				Arg(extraArgs).
-				Arg("{pgurl:1}")
+				Arg("%s", extraArgs).
+				Arg("%s", "{pgurl:1}")
 
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
 		default:
@@ -308,9 +308,9 @@ func runTPCC(
 				Flag("duration", opts.Duration).
 				Flag("prometheus-port", workloadInstances[i].prometheusPort).
 				Flag("pprofport", workloadPProfStartPort+i).
-				Arg(opts.ExtraRunArgs).
-				Arg(workloadInstances[i].extraRunArgs).
-				Arg(pgURLs[i])
+				Arg("%s", opts.ExtraRunArgs).
+				Arg("%s", workloadInstances[i].extraRunArgs).
+				Arg("%s", pgURLs[i])
 
 			err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
 			// Don't fail the test if we are running the workload throughout
@@ -433,12 +433,23 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	mvt := mixedversion.NewTest(
 		ctx, t, t.L(), c, c.CRDBNodes(),
+		// We test only upgrades from 23.2 in this test because it uses
+		// the `workload fixtures import` command, which is only supported
+		// reliably multi-tenant mode starting from that version.
+		mixedversion.MinimumSupportedVersion("v23.2.0"),
 		mixedversion.MaxUpgrades(3),
-		// Multi-tenant deployments are currently unsupported. See #127378.
-		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 	)
 
+	tenantFeaturesEnabled := make(chan struct{})
+	enableTenantFeatures := func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+		defer close(tenantFeaturesEnabled)
+		return enableTenantSplitScatter(l, rng, h)
+	}
+
 	importTPCC := func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+		l.Printf("waiting for tenant features to be enabled")
+		<-tenantFeaturesEnabled
+
 		randomNode := c.Node(c.CRDBNodes().SeededRandNode(rng)[0])
 		cmd := tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, "", "tpcc", headroomWarehouses, fmt.Sprintf("{pgurl%s}", randomNode))
 		return c.RunE(ctx, option.WithNodes(randomNode), cmd)
@@ -448,8 +459,11 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// upgrade machinery, in which a) all ranges are touched and b) work proportional
 	// to the amount data may be carried out.
 	importLargeBank := func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+		l.Printf("waiting for tenant features to be enabled")
+		<-tenantFeaturesEnabled
+
 		randomNode := c.Node(c.CRDBNodes().SeededRandNode(rng)[0])
-		cmd := roachtestutil.NewCommand(fmt.Sprintf("%s workload fixtures import bank", test.DefaultCockroachPath)).
+		cmd := roachtestutil.NewCommand("%s workload fixtures import bank", test.DefaultCockroachPath).
 			Arg("{pgurl%s}", randomNode).
 			Flag("payload-bytes", 10240).
 			Flag("rows", bankRows).
@@ -491,7 +505,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	checkTPCCWorkload := func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-		cmd := roachtestutil.NewCommand(fmt.Sprintf("%s workload check tpcc", test.DefaultCockroachPath)).
+		cmd := roachtestutil.NewCommand("%s workload check tpcc", test.DefaultCockroachPath).
 			Arg("{pgurl:1}").
 			Flag("warehouses", headroomWarehouses).
 			String()
@@ -499,6 +513,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	uploadCockroach(ctx, t, c, c.WorkloadNode(), clusterupgrade.CurrentVersion())
+	mvt.OnStartup("maybe enable tenant features", enableTenantFeatures)
 	mvt.OnStartup("load TPCC dataset", importTPCC)
 	mvt.OnStartup("load bank dataset", importLargeBank)
 	mvt.InMixedVersion("TPCC workload", runTPCCWorkload)

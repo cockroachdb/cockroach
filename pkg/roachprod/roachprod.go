@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"golang.org/x/sys/unix"
 )
 
 // MalformedClusterNameError is returned when the cluster name passed to Create is invalid.
@@ -209,7 +210,7 @@ func newCluster(
 
 // userClusterNameRegexp returns a regexp that matches all clusters owned by the
 // current user.
-func userClusterNameRegexp(l *logger.Logger) (*regexp.Regexp, error) {
+func userClusterNameRegexp(l *logger.Logger, optionalUsername string) (*regexp.Regexp, error) {
 	// In general, we expect that users will have the same
 	// account name across the services they're using,
 	// but we still want to function even if this is not
@@ -219,7 +220,11 @@ func userClusterNameRegexp(l *logger.Logger) (*regexp.Regexp, error) {
 	if err != nil {
 		return nil, err
 	}
-	pattern := ""
+
+	var pattern string
+	if optionalUsername != "" {
+		pattern += fmt.Sprintf(`(^%s-)`, regexp.QuoteMeta(optionalUsername))
+	}
 	for _, account := range accounts {
 		if !seenAccounts[account] {
 			seenAccounts[account] = true
@@ -364,7 +369,7 @@ func List(
 	if clusterNamePattern == "" {
 		if listMine {
 			var err error
-			listPattern, err = userClusterNameRegexp(l)
+			listPattern, err = userClusterNameRegexp(l, opts.Username)
 			if err != nil {
 				return cloud.Cloud{}, err
 			}
@@ -881,9 +886,10 @@ type StopOpts struct {
 	// If Wait is set, roachprod waits until the PID disappears (i.e. the
 	// process has terminated).
 	Wait bool // forced to true when Sig == 9
-	// If MaxWait is set, roachprod waits that approximate number of seconds
-	// until the PID disappears.
-	MaxWait int
+	// GracePeriod is the mount of time (in seconds) roachprod will wait
+	// until the PID disappears. If the process is not terminated after
+	// that time, a hard stop (SIGKILL) is performed.
+	GracePeriod int
 
 	// Options that only apply to StopServiceForVirtualCluster
 	VirtualClusterID   int
@@ -894,10 +900,10 @@ type StopOpts struct {
 // DefaultStopOpts returns StopOpts populated with the default values used by Stop.
 func DefaultStopOpts() StopOpts {
 	return StopOpts{
-		ProcessTag: "",
-		Sig:        9,
-		Wait:       false,
-		MaxWait:    0,
+		ProcessTag:  "",
+		Sig:         int(unix.SIGKILL),
+		Wait:        false,
+		GracePeriod: 0,
 	}
 }
 
@@ -908,7 +914,7 @@ func Stop(ctx context.Context, l *logger.Logger, clusterName string, opts StopOp
 		return err
 	}
 
-	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait, "")
+	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.GracePeriod, "")
 }
 
 // Signal sends a signal to nodes in the cluster.
@@ -994,7 +1000,7 @@ func Install(ctx context.Context, l *logger.Logger, clusterName string, software
 		err := install.Install(ctx, l, c, software)
 		err = errors.Wrapf(err, "retryable infrastructure error: could not install %s", software)
 		if err != nil {
-			l.Printf(err.Error())
+			l.Printf("%s", err)
 		}
 		return err
 	})
@@ -1385,7 +1391,11 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 
 // Destroy TODO
 func Destroy(
-	l *logger.Logger, destroyAllMine bool, destroyAllLocal bool, clusterNames ...string,
+	l *logger.Logger,
+	optionalUsername string,
+	destroyAllMine bool,
+	destroyAllLocal bool,
+	clusterNames ...string,
 ) error {
 	if err := LoadClusters(); err != nil {
 		return errors.Wrap(err, "problem loading clusters")
@@ -1402,7 +1412,7 @@ func Destroy(
 		if destroyAllLocal {
 			return errors.New("--all-mine cannot be combined with --all-local")
 		}
-		destroyPattern, err := userClusterNameRegexp(l)
+		destroyPattern, err := userClusterNameRegexp(l, optionalUsername)
 		if err != nil {
 			return err
 		}
@@ -1731,9 +1741,13 @@ func GC(l *logger.Logger, dryrun bool) error {
 		return cloud.GCAWS(l, dryrun)
 	})
 
+	addOpFn(func() error {
+		return cloud.GCAzure(l, dryrun)
+	})
+
 	// ListCloud may fail for a provider, but we can still attempt GC on
 	// the clusters we do have.
-	cld, _ := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{gce.ProviderName, azure.ProviderName}})
+	cld, _ := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{gce.ProviderName}})
 	addOpFn(func() error {
 		return cloud.GCClusters(l, cld, dryrun)
 	})
@@ -2796,7 +2810,7 @@ func Deploy(
 	pauseDuration time.Duration,
 	sig int,
 	wait bool,
-	maxWait int,
+	gracePeriod int,
 	secure bool,
 ) error {
 	// Stage supports `workload` as well, so it needs to be excluded here. This
@@ -2825,7 +2839,7 @@ func Deploy(
 	for _, node := range c.TargetNodes() {
 		curNode := []install.Node{node}
 
-		err = c.WithNodes(curNode).Stop(ctx, l, sig, wait, maxWait, "")
+		err = c.WithNodes(curNode).Stop(ctx, l, sig, wait, gracePeriod, "")
 		if err != nil {
 			return err
 		}

@@ -48,13 +48,21 @@ type Progress struct {
 	// In StateSnapshot, Next == PendingSnapshot + 1.
 	Next uint64
 
-	// sentCommit is the highest commit index in flight to the follower.
+	// SentCommit is the highest commit index in flight to the follower.
 	//
 	// Generally, it is monotonic, but con regress in some cases, e.g. when
 	// converting to `StateProbe` or when receiving a rejection from a follower.
 	//
-	// In StateSnapshot, sentCommit == PendingSnapshot == Next-1.
-	sentCommit uint64
+	// In StateSnapshot, SentCommit == PendingSnapshot == Next-1.
+	SentCommit uint64
+
+	// MatchCommit is the commit index at which the follower is known to match the
+	// leader. It is durable on the follower.
+	// Best-effort invariant: MatchCommit <= SentCommit
+	// It's a best-effort invariant because it doesn't really affect correctness.
+	// The worst case if MatchCommit > SentCommit is that the leader will send
+	// and extra MsgApp to the follower.
+	MatchCommit uint64
 
 	// State defines how the leader should interact with the follower.
 	//
@@ -147,7 +155,7 @@ func (pr *Progress) BecomeProbe() {
 		pr.ResetState(StateProbe)
 		pr.Next = pr.Match + 1
 	}
-	pr.sentCommit = min(pr.sentCommit, pr.Next-1)
+	pr.SentCommit = min(pr.SentCommit, pr.Next-1)
 }
 
 // BecomeReplicate transitions into StateReplicate, resetting Next to Match+1.
@@ -162,7 +170,7 @@ func (pr *Progress) BecomeSnapshot(snapshoti uint64) {
 	pr.ResetState(StateSnapshot)
 	pr.PendingSnapshot = snapshoti
 	pr.Next = snapshoti + 1
-	pr.sentCommit = snapshoti
+	pr.SentCommit = snapshoti
 }
 
 // SentEntries updates the progress on the given number of consecutive entries
@@ -193,12 +201,22 @@ func (pr *Progress) CanBumpCommit(index uint64) bool {
 	// Next-1 in normal operation, or higher in some rare cases. Allow sending a
 	// commit index eagerly only if we haven't already sent one that bumps the
 	// follower's commit all the way to Next-1.
-	return index > pr.sentCommit && pr.sentCommit < pr.Next-1
+	return index > pr.SentCommit && pr.SentCommit < pr.Next-1
 }
 
-// SentCommit updates the sentCommit.
-func (pr *Progress) SentCommit(commit uint64) {
-	pr.sentCommit = commit
+// IsFollowerCommitStale returns true if the follower's commit index it less
+// than index.
+// If the follower's commit index+1 is pr.Next, it means that sending a larger
+// commit index won't change anything, therefore we don't send it.
+func (pr *Progress) IsFollowerCommitStale(index uint64) bool {
+	return index > pr.MatchCommit && pr.MatchCommit+1 < pr.Next
+}
+
+// MaybeUpdateSentCommit updates the SentCommit if it needs to be updated.
+func (pr *Progress) MaybeUpdateSentCommit(commit uint64) {
+	if commit > pr.SentCommit {
+		pr.SentCommit = commit
+	}
 }
 
 // MaybeUpdate is called when an MsgAppResp arrives from the follower, with the
@@ -211,6 +229,15 @@ func (pr *Progress) MaybeUpdate(n uint64) bool {
 	pr.Match = n
 	pr.Next = max(pr.Next, n+1) // invariant: Match < Next
 	return true
+}
+
+// MaybeUpdateMatchCommit updates the match commit from a follower if it's
+// larger than the previous match commit.
+func (pr *Progress) MaybeUpdateMatchCommit(commit uint64) {
+	if commit > pr.MatchCommit {
+		pr.MatchCommit = commit
+		pr.SentCommit = max(pr.SentCommit, commit) // Best-effort invariant: SentCommit >= MatchCommit
+	}
 }
 
 // MaybeDecrTo adjusts the Progress to the receipt of a MsgApp rejection. The
@@ -235,8 +262,8 @@ func (pr *Progress) MaybeDecrTo(rejected, matchHint uint64) bool {
 		//
 		// TODO(tbg): why not use matchHint if it's larger?
 		pr.Next = pr.Match + 1
-		// Regress the sentCommit since it unlikely has been applied.
-		pr.sentCommit = min(pr.sentCommit, pr.Next-1)
+		// Regress the SentCommit since it unlikely has been applied.
+		pr.SentCommit = min(pr.SentCommit, pr.Next-1)
 		return true
 	}
 
@@ -248,8 +275,8 @@ func (pr *Progress) MaybeDecrTo(rejected, matchHint uint64) bool {
 	}
 
 	pr.Next = max(min(rejected, matchHint+1), pr.Match+1)
-	// Regress the sentCommit since it unlikely has been applied.
-	pr.sentCommit = min(pr.sentCommit, pr.Next-1)
+	// Regress the SentCommit since it unlikely has been applied.
+	pr.SentCommit = min(pr.SentCommit, pr.Next-1)
 	pr.MsgAppProbesPaused = false
 	return true
 }
@@ -295,7 +322,11 @@ func (pr *Progress) IsPaused() bool {
 // to guarantee that eventually the flow is either accepted or rejected.
 //
 // In StateSnapshot, we do not send append messages.
-func (pr *Progress) ShouldSendMsgApp(last, commit uint64) bool {
+//
+// If advanceCommit is true, it means that MsgApp owns the responsibility of
+// closing the followers' commit index gap even if some MsgApp messages gets
+// dropped. If it's false, it means that the responsibility is on MsgHeartbeat.
+func (pr *Progress) ShouldSendMsgApp(last, commit uint64, advanceCommit bool) bool {
 	switch pr.State {
 	case StateProbe:
 		return !pr.MsgAppProbesPaused
@@ -320,7 +351,26 @@ func (pr *Progress) ShouldSendMsgApp(last, commit uint64) bool {
 		//	- our commit index exceeds the in-flight commit index, and
 		//	- sending it can commit at least one of the follower's entries
 		//	  (including the ones still in flight to it).
-		return pr.CanBumpCommit(commit)
+		if pr.CanBumpCommit(commit) {
+			return true
+		}
+
+		// Send an empty MsgApp containing the latest commit index if we know that
+		// the follower's commit index is stale and we haven't recently sent a
+		// MsgApp (according to the MsgAppProbesPaused flag).
+
+		// NOTE: This is a different condition than the one above because we only
+		// send this message if pr.MsgAppProbesPaused is false. After this message,
+		// pr.MsgAppProbesPaused will be set to true until we receive a heartbeat
+		// response from the follower. In contrast, the condition above can keep
+		// sending empty MsgApps eagerly until we have sent the latest commit index
+		// to the follower.
+		// TODO(iskettaneh): Remove the dependency on MsgAppProbesPaused to send
+		// MsgApps.
+		if advanceCommit {
+			return pr.IsFollowerCommitStale(commit) && !pr.MsgAppProbesPaused
+		}
+		return false
 
 	case StateSnapshot:
 		return false
@@ -331,7 +381,8 @@ func (pr *Progress) ShouldSendMsgApp(last, commit uint64) bool {
 
 func (pr *Progress) String() string {
 	var buf strings.Builder
-	fmt.Fprintf(&buf, "%s match=%d next=%d", pr.State, pr.Match, pr.Next)
+	fmt.Fprintf(&buf, "%s match=%d next=%d sentCommit=%d matchCommit=%d", pr.State, pr.Match,
+		pr.Next, pr.SentCommit, pr.MatchCommit)
 	if pr.IsLearner {
 		fmt.Fprint(&buf, " learner")
 	}

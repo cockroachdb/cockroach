@@ -1707,7 +1707,7 @@ func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) 
 	}
 
 	stmt := makeOpStmt(OpStmtDDL)
-	stmt.expectedExecErrors.addAll(codesWithConditions{
+	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 		{code: pgcode.Syntax, condition: colIsVirtualComputed || colIsStoredComputed},
 	})
@@ -4066,7 +4066,8 @@ FROM
 		if typeVal.Identical(types.AnyTuple) ||
 			typeVal.IsWildcardType() ||
 			typeVal == types.RegClass ||
-			typeVal.Family() == types.OidFamily {
+			typeVal.Family() == types.OidFamily ||
+			typeVal.Family() == types.VoidFamily {
 			continue
 		}
 		if pgVectorNotSupported && typeVal.Family() == types.PGVectorFamily {

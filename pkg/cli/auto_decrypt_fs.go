@@ -252,6 +252,11 @@ func (afs *autoDecryptFS) GetDiskUsage(path string) (vfs.DiskUsage, error) {
 	return fs.GetDiskUsage(path)
 }
 
+// Unwrap is part of the vfs.FS interface.
+func (afs *autoDecryptFS) Unwrap() vfs.FS {
+	return nil
+}
+
 // maybeSwitchFS finds the first ancestor of path that is registered as an
 // encrypted FS; if there is such a path, returns the decrypted FS for that
 // path. Otherwise, returns the default FS.

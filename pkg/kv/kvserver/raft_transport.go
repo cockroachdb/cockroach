@@ -271,7 +271,8 @@ type RaftTransport struct {
 	}
 	// kvflowcontrol2 is used for replication admission control v2.
 	kvflowcontrol2 struct {
-		piggybackReader node_rac2.PiggybackMsgReader
+		piggybackReader              node_rac2.PiggybackMsgReader
+		piggybackedResponseScheduler PiggybackedAdmittedResponseScheduler
 	}
 
 	knobs *RaftTransportTestingKnobs
@@ -297,7 +298,7 @@ func NewDummyRaftTransport(
 	}
 	return NewRaftTransport(ambient, st, nil, clock, nodedialer.New(nil, resolver), nil,
 		kvflowdispatch.NewDummyDispatch(), NoopStoresFlowControlIntegration{},
-		NoopRaftTransportDisconnectListener{}, nil, nil,
+		NoopRaftTransportDisconnectListener{}, nil, nil, nil,
 	)
 }
 
@@ -313,6 +314,7 @@ func NewRaftTransport(
 	kvflowHandles kvflowcontrol.Handles,
 	disconnectListener RaftTransportDisconnectListener,
 	piggybackReader node_rac2.PiggybackMsgReader,
+	piggybackedResponseScheduler PiggybackedAdmittedResponseScheduler,
 	knobs *RaftTransportTestingKnobs,
 ) *RaftTransport {
 	if knobs == nil {
@@ -331,6 +333,7 @@ func NewRaftTransport(
 	t.kvflowControl.disconnectListener = disconnectListener
 	t.kvflowControl.mu.connectionTracker = newConnectionTrackerForFlowControl()
 	t.kvflowcontrol2.piggybackReader = piggybackReader
+	t.kvflowcontrol2.piggybackedResponseScheduler = piggybackedResponseScheduler
 
 	t.initMetrics()
 	if grpcServer != nil {
@@ -530,6 +533,16 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 					t.kvflowControl.mu.Lock()
 					t.kvflowControl.mu.connectionTracker.markStoresConnected(storeIDs)
 					t.kvflowControl.mu.Unlock()
+					if len(batch.AdmittedStates) != 0 {
+						// TODO(pav-kv): dispatch admitted vectors to RACv2.
+						// NB: we do this via this special path instead of using the
+						// handleRaftRequest path since we don't have a full-fledged
+						// RaftMessageRequest for each range (each of these responses could
+						// be for a different range), and because what we need to do w.r.t.
+						// queueing is much simpler (we don't need to worry about queue size
+						// since we only keep the latest message from each replica).
+						_ = t.kvflowcontrol2.piggybackedResponseScheduler.ScheduleAdmittedResponseForRangeRACv2
+					}
 					if len(batch.Requests) == 0 {
 						continue
 					}
@@ -732,9 +745,14 @@ func (t *RaftTransport) processQueue(
 	}
 
 	// For replication admission control v2.
-	maybeAnnotateWithAdmittedResponses := func(
-		req *kvserverpb.RaftMessageRequest, admitted []kvflowcontrolpb.AdmittedResponseForRange) {
-		req.AdmittedResponse = append(req.AdmittedResponse, admitted...)
+	maybeAnnotateWithAdmittedStates := func(
+		batch *kvserverpb.RaftMessageRequestBatch, admitted []kvflowcontrolpb.PiggybackedAdmittedState,
+	) {
+		// TODO(pav-kv): send these protos once they are populated correctly.
+		if true {
+			return
+		}
+		batch.AdmittedStates = append(batch.AdmittedStates, admitted...)
 	}
 
 	annotateWithClockTimestamp := func(batch *kvserverpb.RaftMessageRequestBatch) {
@@ -750,6 +768,10 @@ func (t *RaftTransport) processQueue(
 		batch.Requests = batch.Requests[:0]
 		batch.StoreIDs = nil
 		batch.Now = hlc.ClockTimestamp{}
+		for i := range batch.AdmittedStates {
+			batch.AdmittedStates[i] = kvflowcontrolpb.PiggybackedAdmittedState{}
+		}
+		batch.AdmittedStates = batch.AdmittedStates[:0]
 	}
 
 	var raftIdleTimer timeutil.Timer
@@ -789,7 +811,7 @@ func (t *RaftTransport) processQueue(
 			budget := targetRaftOutgoingBatchSize.Get(&t.st.SV) - size
 
 			var pendingDispatches []kvflowcontrolpb.AdmittedRaftLogEntries
-			var admittedResponses []kvflowcontrolpb.AdmittedResponseForRange
+			var admittedStates []kvflowcontrolpb.PiggybackedAdmittedState
 			if disableFn := t.knobs.DisablePiggyBackedFlowTokenDispatch; disableFn == nil || !disableFn() {
 				// RACv1.
 				//
@@ -813,9 +835,9 @@ func (t *RaftTransport) processQueue(
 				maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
 
 				// RACv2.
-				admittedResponses, _ = t.kvflowcontrol2.piggybackReader.PopMsgsForNode(
+				admittedStates, _ = t.kvflowcontrol2.piggybackReader.PopMsgsForNode(
 					timeutil.Now(), q.nodeID, kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV))
-				maybeAnnotateWithAdmittedResponses(req, admittedResponses)
+				maybeAnnotateWithAdmittedStates(batch, admittedStates)
 			}
 
 			batch.Requests = append(batch.Requests, *req)
@@ -837,9 +859,10 @@ func (t *RaftTransport) processQueue(
 
 			maybeAnnotateWithStoreIDs(batch)
 			annotateWithClockTimestamp(batch)
+
 			if err := stream.Send(batch); err != nil {
 				t.metrics.FlowTokenDispatchesDropped.Inc(int64(
-					len(pendingDispatches) + len(admittedResponses)))
+					len(pendingDispatches) + len(admittedStates)))
 				return err
 			}
 			t.metrics.MessagesSent.Inc(int64(len(batch.Requests)))
@@ -859,9 +882,9 @@ func (t *RaftTransport) processQueue(
 				kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV),
 			)
 			// RACv2.
-			admittedResponses, remainingAdmittedResponses := t.kvflowcontrol2.piggybackReader.PopMsgsForNode(
+			admittedStates, remainingAdmittedResponses := t.kvflowcontrol2.piggybackReader.PopMsgsForNode(
 				timeutil.Now(), q.nodeID, kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV))
-			if len(pendingDispatches) == 0 && len(admittedResponses) == 0 {
+			if len(pendingDispatches) == 0 && len(admittedStates) == 0 {
 				continue // nothing to do
 			}
 			// If there are remaining dispatches/responses, schedule them
@@ -872,15 +895,16 @@ func (t *RaftTransport) processQueue(
 
 			req := newRaftMessageRequest()
 			maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
-			maybeAnnotateWithAdmittedResponses(req, admittedResponses)
 			batch.Requests = append(batch.Requests, *req)
 			releaseRaftMessageRequest(req)
 
 			maybeAnnotateWithStoreIDs(batch)
 			annotateWithClockTimestamp(batch)
+			maybeAnnotateWithAdmittedStates(batch, admittedStates)
+
 			if err := stream.Send(batch); err != nil {
 				t.metrics.FlowTokenDispatchesDropped.Inc(int64(
-					len(pendingDispatches) + len(admittedResponses)))
+					len(pendingDispatches) + len(admittedStates)))
 				return err
 			}
 			t.metrics.MessagesSent.Inc(int64(len(batch.Requests)))

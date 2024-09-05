@@ -55,20 +55,21 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 		}))
 
 	{
-		ctr, down, under, over := calcRangeCounter(1100, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
+		ctr, down, under, over, _, decom := calcRangeCounter(1100, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
 			1000: livenesspb.FakeNodeVitality(true), // by NodeID
-		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
+		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */, 0 /* rangeTooLargeThreshold */, 0 /* rangeSize */)
 
 		require.True(t, ctr)
 		require.True(t, down)
 		require.True(t, under)
 		require.False(t, over)
+		require.False(t, decom)
 	}
 
 	{
-		ctr, down, under, over := calcRangeCounter(1000, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
+		ctr, down, under, over, _, decom := calcRangeCounter(1000, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
 			1000: livenesspb.FakeNodeVitality(false),
-		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
+		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */, 0 /* rangeTooLargeThreshold */, 0 /* rangeSize */)
 
 		// Does not confuse a non-live entry for a live one. In other words,
 		// does not think that the liveness map has only entries for live nodes.
@@ -76,65 +77,104 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 		require.False(t, down)
 		require.False(t, under)
 		require.False(t, over)
+		require.False(t, decom)
 	}
 
 	{
-		ctr, down, under, over := calcRangeCounter(11, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
+		ctr, down, under, over, _, decom := calcRangeCounter(11, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
 			10:   livenesspb.FakeNodeVitality(true),
 			100:  livenesspb.FakeNodeVitality(true),
 			1000: livenesspb.FakeNodeVitality(true),
 			2000: livenesspb.FakeNodeVitality(true),
-		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
+		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */, 0 /* rangeTooLargeThreshold */, 0 /* rangeSize */)
 
 		require.True(t, ctr)
 		require.False(t, down)
 		require.False(t, under)
 		require.False(t, over)
+		require.False(t, decom)
 	}
 
 	{
 		// Single non-voter dead
-		ctr, down, under, over := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.NodeVitalityMap{
+		ctr, down, under, over, _, decom := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.NodeVitalityMap{
 			10:   livenesspb.FakeNodeVitality(true),
 			100:  livenesspb.FakeNodeVitality(true),
 			1000: livenesspb.FakeNodeVitality(false),
 			2000: livenesspb.FakeNodeVitality(true),
-		}, 1 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
+		}, 1 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */, 0 /* rangeTooLargeThreshold */, 0 /* rangeSize */)
 
 		require.True(t, ctr)
 		require.False(t, down)
 		require.True(t, under)
 		require.False(t, over)
+		require.False(t, decom)
 	}
 
 	{
 		// All non-voters are dead, but range is not unavailable
-		ctr, down, under, over := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.NodeVitalityMap{
+		ctr, down, under, over, _, decom := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.NodeVitalityMap{
 			10:   livenesspb.FakeNodeVitality(true),
 			100:  livenesspb.FakeNodeVitality(false),
 			1000: livenesspb.FakeNodeVitality(false),
 			2000: livenesspb.FakeNodeVitality(false),
-		}, 1 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
+		}, 1 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */, 0 /* rangeTooLargeThreshold */, 0 /* rangeSize */)
 
 		require.True(t, ctr)
 		require.False(t, down)
 		require.True(t, under)
 		require.False(t, over)
+		require.False(t, decom)
 	}
 
 	{
 		// More non-voters than needed
-		ctr, down, under, over := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.NodeVitalityMap{
+		ctr, down, under, over, _, decom := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.NodeVitalityMap{
 			10:   livenesspb.FakeNodeVitality(true),
 			100:  livenesspb.FakeNodeVitality(true),
 			1000: livenesspb.FakeNodeVitality(true),
 			2000: livenesspb.FakeNodeVitality(true),
-		}, 1 /* numVoters */, 3 /* numReplicas */, 4 /* clusterNodes */)
+		}, 1 /* numVoters */, 3 /* numReplicas */, 4 /* clusterNodes */, 0 /* rangeTooLargeThreshold */, 0 /* rangeSize */)
 
 		require.True(t, ctr)
 		require.False(t, down)
 		require.False(t, under)
 		require.True(t, over)
+		require.False(t, decom)
+	}
+
+	{
+		// Range larger than the threshold.
+		ctr, _, _, _, large, _ := calcRangeCounter(1100, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
+			1000: livenesspb.FakeNodeVitality(true), // by NodeID
+		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */, 1000 /* rangeTooLargeThreshold */, 2000 /* rangeSize */)
+
+		require.True(t, ctr)
+		require.True(t, large)
+	}
+
+	{
+		ctr, _, _, _, large, _ := calcRangeCounter(1000, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
+			1000: livenesspb.FakeNodeVitality(false),
+		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */, 1000 /* rangeTooLargeThreshold */, 2000 /* rangeSize */)
+		require.False(t, ctr)
+		// Only the node responsible for the range can report if the range is too
+		// large.
+		require.False(t, large)
+	}
+
+	{
+		// Decommissioning node.
+		vitality := livenesspb.TestCreateNodeVitality(10, 100, 1000, 2000)
+		vitality.Decommissioning(100, true /* alive */)
+		ctr, down, under, over, _, decom := calcRangeCounter(11, threeVotersAndSingleNonVoter, leaseStatus, vitality.ScanNodeVitalityFromCache(),
+			3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */, 0 /* rangeTooLargeThreshold */, 0 /* rangeSize */)
+
+		require.True(t, ctr)
+		require.False(t, down)
+		require.False(t, under)
+		require.False(t, over)
+		require.True(t, decom)
 	}
 }
 
@@ -242,8 +282,8 @@ func TestCalcRangeCounterLeaseHolder(t *testing.T) {
 			for _, nodeID := range tc.liveNodes {
 				livenessMap[nodeID] = livenesspb.FakeNodeVitality(true)
 			}
-			ctr, _, _, _ := calcRangeCounter(tc.storeID, rangeDesc, tc.leaseStatus, livenessMap,
-				3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
+			ctr, _, _, _, _, _ := calcRangeCounter(tc.storeID, rangeDesc, tc.leaseStatus, livenessMap,
+				3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */, 0 /* rangeTooLargeThreshold */, 0 /* rangeSize */)
 			require.Equal(t, tc.expectCounter, ctr)
 		})
 	}

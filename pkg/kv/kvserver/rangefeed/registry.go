@@ -22,16 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// Stream is a object capable of transmitting RangeFeedEvents.
-type Stream interface {
-	kvpb.RangeFeedEventSink
-	// Disconnect disconnects the stream with the provided error. Note that this
-	// function can be called by the processor worker while holding raftMu, so it
-	// is important that this function doesn't block IO or try acquiring locks
-	// that could lead to deadlocks.
-	Disconnect(err *kvpb.Error)
-}
-
 // registration defines an interface for registration that can be added to a
 // processor registry. Implemented by bufferedRegistration.
 type registration interface {

@@ -34,7 +34,7 @@ type ProviderOpts struct {
 // These default locations support availability zones. At the time of
 // this comment, `westus` did not and `westus2` is consistently out of
 // capacity.
-var defaultLocations = []string{
+var DefaultLocations = []string{
 	"eastus",
 	"canadacentral",
 	"westus3",
@@ -72,7 +72,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Machine type (see https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/)")
 	flags.StringSliceVar(&o.Locations, ProviderName+"-locations", nil,
 		fmt.Sprintf("Locations for cluster (see `az account list-locations`) (default\n[%s])",
-			strings.Join(defaultLocations, ",")))
+			strings.Join(DefaultLocations, ",")))
 	flags.StringVar(&o.VnetName, ProviderName+"-vnet-name", "common",
 		"The name of the VNet to use")
 	flags.StringVar(&o.Zone, ProviderName+"-availability-zone", "", "Availability Zone to create VMs in")
@@ -90,6 +90,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 func (o *ProviderOpts) ConfigureClusterFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
 }
 
-// ConfigureClusterCleanupFlags is part of ProviderOpts. This implementation is a no-op.
+// ConfigureClusterCleanupFlags is part of ProviderOpts.
 func (o *ProviderOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
+	flags.StringSliceVar(&providerInstance.SubscriptionNames, ProviderName+"-subscription-names", []string{},
+		"Azure subscription names as a comma-separated string")
 }

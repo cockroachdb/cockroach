@@ -107,8 +107,6 @@ var (
 	_ execinfra.RowSource = &logicalReplicationWriterProcessor{}
 )
 
-const useKVWriter = false
-
 const logicalReplicationWriterProcessorName = "logical-replication-writer-processor"
 
 func newLogicalReplicationWriterProcessor(
@@ -129,40 +127,50 @@ func newLogicalReplicationWriterProcessor(
 	}
 
 	tableConfigs := make(map[descpb.ID]sqlProcessorTableConfig)
-	tableIDToName := make(map[int32]fullyQualifiedTableName)
-	for tableID, md := range spec.TableMetadata {
+	srcTableIDToDstMeta := make(map[descpb.ID]dstTableMetadata)
+	for dstTableID, md := range spec.TableMetadata {
 		desc := md.SourceDescriptor
-		tableConfigs[descpb.ID(tableID)] = sqlProcessorTableConfig{
+		tableConfigs[descpb.ID(dstTableID)] = sqlProcessorTableConfig{
 			srcDesc: tabledesc.NewBuilder(&desc).BuildImmutableTable(),
 			dstOID:  md.DestinationFunctionOID,
 		}
 
-		tableIDToName[tableID] = fullyQualifiedTableName{
+		srcTableID := desc.GetID()
+		srcTableIDToDstMeta[srcTableID] = dstTableMetadata{
 			database: md.DestinationParentDatabaseName,
 			schema:   md.DestinationParentSchemaName,
 			table:    md.DestinationTableName,
+			tableID:  descpb.ID(dstTableID),
 		}
 	}
 	bhPool := make([]BatchHandler, maxWriterWorkers)
 	for i := range bhPool {
+		sqlRP, err := makeSQLProcessor(
+			ctx, flowCtx.Cfg.Settings, tableConfigs,
+			jobspb.JobID(spec.JobID),
+			// Initialize the executor with a fresh session data - this will
+			// avoid creating a new copy on each executor usage.
+			flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
+		)
+		if err != nil {
+			return nil, err
+		}
 		var rp RowProcessor
-		if useKVWriter {
-			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, tableConfigs)
+		if spec.Mode == jobspb.LogicalReplicationDetails_Immediate {
+			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, tableConfigs, sqlRP)
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			rp, err = makeSQLProcessor(
-				ctx, flowCtx.Cfg.Settings, tableConfigs,
-				jobspb.JobID(spec.JobID),
-				// Initialize the executor with a fresh session data - this will
-				// avoid creating a new copy on each executor usage.
-				flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
-			)
-			if err != nil {
-				return nil, err
+			rp = sqlRP
+		}
+
+		if streamingKnobs, ok := flowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
+			if streamingKnobs != nil && streamingKnobs.FailureRate != 0 {
+				rp.SetSyntheticFailurePercent(streamingKnobs.FailureRate)
 			}
 		}
+
 		bhPool[i] = &txnBatch{
 			db:       flowCtx.Cfg.DB,
 			rp:       rp,
@@ -215,7 +223,7 @@ func newLogicalReplicationWriterProcessor(
 			StreamID:    streampb.StreamID(spec.StreamID),
 			ProcessorID: processorID,
 		},
-		dlqClient: InitDeadLetterQueueClient(dlqDbExec, tableIDToName),
+		dlqClient: InitDeadLetterQueueClient(dlqDbExec, srcTableIDToDstMeta),
 		metrics:   flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
 	}
 	lrw.purgatory = purgatory{
@@ -288,7 +296,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 
 	if streamingKnobs, ok := lrw.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 		if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
-			streamingKnobs.BeforeClientSubscribe(addr, string(token), lrw.frontier)
+			streamingKnobs.BeforeClientSubscribe(addr, string(token), lrw.frontier, lrw.spec.IgnoreCDCIgnoredTTLDeletes)
 		}
 	}
 	sub, err := streamClient.Subscribe(ctx,
@@ -296,7 +304,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 		int32(lrw.FlowCtx.NodeID.SQLInstanceID()), lrw.ProcessorID,
 		token,
 		lrw.spec.InitialScanTimestamp, lrw.frontier,
-		streamclient.WithFiltering(true),
+		streamclient.WithFiltering(lrw.spec.IgnoreCDCIgnoredTTLDeletes),
 		streamclient.WithDiff(true),
 	)
 	if err != nil {
@@ -388,11 +396,6 @@ func (lrw *logicalReplicationWriterProcessor) close() {
 	if lrw.Closed {
 		return
 	}
-
-	for _, b := range lrw.bh {
-		b.Close(lrw.Ctx())
-	}
-
 	defer lrw.frontier.Release()
 
 	if lrw.streamPartitionClient != nil {
@@ -410,6 +413,10 @@ func (lrw *logicalReplicationWriterProcessor) close() {
 	// in exit signals being sent to all relevant goroutines.
 	if err := lrw.workerGroup.Wait(); err != nil {
 		log.Errorf(lrw.Ctx(), "error on close(): %s", err)
+	}
+
+	for _, b := range lrw.bh {
+		b.Close(lrw.Ctx())
 	}
 
 	// Update the global retry queue gauges to reflect that this queue is going
@@ -638,6 +645,14 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		todo = todo[len(chunk):]
 		bh := lrw.bh[worker]
 
+		if err := ctx.Err(); err != nil {
+			// Bail early if ctx is canceled. NB: we break rather than return the err
+			// now since we still need to Wait() to avoid leaking a goroutine. We will
+			// re-check for any ctx errors after the Wait() in case all workers had
+			// completed without error as of this break.
+			break
+		}
+
 		g.GoCtx(func(ctx context.Context) error {
 			s, err := lrw.flushChunk(ctx, bh, chunk, canRetry)
 			if err != nil {
@@ -645,11 +660,16 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 			}
 			perChunkStats[worker] = s
 			lrw.metrics.OptimisticInsertConflictCount.Inc(s.optimisticInsertConflicts)
+			lrw.metrics.KVWriteFallbackCount.Inc(s.kvWriteFallbacks)
 			return nil
 		})
 	}
 
 	if err := g.Wait(); err != nil {
+		return nil, 0, err
+	}
+
+	if err := ctx.Err(); err != nil {
 		return nil, 0, err
 	}
 
@@ -763,6 +783,10 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 		preBatchTime := timeutil.Now()
 
 		if s, err := bh.HandleBatch(ctx, batch); err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return flushStats{}, ctxErr
+			}
+
 			// If it already failed while applying on its own, handle the failure.
 			if len(batch) == 1 {
 				if eligibility := lrw.shouldRetryLater(err, canRetry); eligibility != retryAllowed {
@@ -779,6 +803,9 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 				// to apply on its own before switching to handle its failure.
 				for i := range batch {
 					if singleStats, err := bh.HandleBatch(ctx, batch[i:i+1]); err != nil {
+						if ctxErr := ctx.Err(); ctxErr != nil {
+							return flushStats{}, ctxErr
+						}
 						if eligibility := lrw.shouldRetryLater(err, canRetry); eligibility != retryAllowed {
 							if err := lrw.dlq(ctx, batch[i], bh.GetLastRow(), err, eligibility); err != nil {
 								return flushStats{}, err
@@ -790,6 +817,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 						}
 					} else {
 						stats.optimisticInsertConflicts += singleStats.optimisticInsertConflicts
+						stats.kvWriteFallbacks += singleStats.kvWriteFallbacks
 						batch[i] = streampb.StreamEvent_KV{}
 						stats.processed.success++
 						stats.processed.bytes += int64(batch[i].Size())
@@ -798,6 +826,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 			}
 		} else {
 			stats.optimisticInsertConflicts += s.optimisticInsertConflicts
+			stats.kvWriteFallbacks += s.kvWriteFallbacks
 			stats.processed.success += int64(len(batch))
 			// Clear the event to indicate successful application.
 			for i := range batch {
@@ -823,6 +852,11 @@ func (lrw *logicalReplicationWriterProcessor) shouldRetryLater(
 	if eligibility != retryAllowed {
 		return eligibility
 	}
+
+	if errors.Is(err, errInjected) {
+		return tooOld
+	}
+
 	// TODO(dt): maybe this should only be constraint violation errors?
 	return retryAllowed
 }
@@ -867,6 +901,7 @@ func (lrw *logicalReplicationWriterProcessor) dlq(
 
 type batchStats struct {
 	optimisticInsertConflicts int64
+	kvWriteFallbacks          int64
 }
 type flushStats struct {
 	processed struct {
@@ -875,7 +910,7 @@ type flushStats struct {
 	notProcessed struct {
 		count, bytes int64
 	}
-	optimisticInsertConflicts int64
+	optimisticInsertConflicts, kvWriteFallbacks int64
 }
 
 func (b *flushStats) Add(o flushStats) {
@@ -885,6 +920,7 @@ func (b *flushStats) Add(o flushStats) {
 	b.notProcessed.count += o.notProcessed.count
 	b.notProcessed.bytes += o.notProcessed.bytes
 	b.optimisticInsertConflicts += o.optimisticInsertConflicts
+	b.kvWriteFallbacks += o.kvWriteFallbacks
 }
 
 type BatchHandler interface {

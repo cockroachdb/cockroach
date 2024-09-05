@@ -882,21 +882,6 @@ func spansForAllRestoreTableIndexes(
 		})
 		return false
 	})
-
-	if forOnlineRestore {
-		spans, _ = roachpb.MergeSpans(&spans)
-		tableIDMap := make(map[uint32]struct{}, len(spans))
-		for _, sp := range spans {
-			_, tableID, err := codec.DecodeTablePrefix(sp.Key)
-			if err != nil {
-				return nil, err
-			}
-			if _, exists := tableIDMap[tableID]; exists {
-				return nil, errors.Newf("restore target contains two distinct spans with table id %d. Online restore cannot handle this as it may make an empty file span", tableID)
-			}
-			tableIDMap[tableID] = struct{}{}
-		}
-	}
 	return spans, nil
 }
 

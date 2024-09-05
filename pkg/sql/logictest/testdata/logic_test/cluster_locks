@@ -1,6 +1,8 @@
 # LogicTest: local-read-committed
 
-# Begin with SERIALIZABLE; later in the test the default is changed to READ COMMITTED
+# This test uses local-read-committed so that it can also test locking behavior
+# with READ COMMITTED transactions. However, we'll use a default of SERIALIZABLE
+# for all transactions.
 statement ok
 SET default_transaction_isolation = 'SERIALIZABLE'
 
@@ -25,7 +27,7 @@ query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t WITH DETAILS]
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/65>  …/1/"d"       {1}       1
+<before:/Table/67>  …/1/"d"       {1}       1
 …/1/"d"             …/1/"r"       {1}       1
 …/1/"r"             <after:/Max>  {1}       1
 
@@ -53,6 +55,9 @@ let $root_session
 SHOW session_id
 
 user testuser
+
+statement ok
+SET default_transaction_isolation = 'SERIALIZABLE'
 
 let $testuser_session
 SHOW session_id
@@ -355,7 +360,7 @@ SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name IN ('t','t2')
 # Test with different isolation levels.
 
 statement ok
-SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
+SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
@@ -405,11 +410,11 @@ SELECT * FROM t WHERE k = 'a' FOR UPDATE;
 user root
 
 query TTTTTTTBB colnames,rowsort,retry
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, regexp_replace(isolation_level, 'READ COMMITTED', 'READ_COMMITTED') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE table_name = 't'
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, regexp_replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE table_name = 't'
 ----
 database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability  isolation_level  granted  contended
-test           public       t           /Table/106/1/"a"/0  Exclusive      Replicated  SNAPSHOT           true     true
-test           public       t           /Table/106/1/"a"/0  Exclusive      Replicated  READ_COMMITTED     false    true
+test           public       t           /Table/106/1/"a"/0  Exclusive      Replicated  REPEATABLE_READ  true     true
+test           public       t           /Table/106/1/"a"/0  Exclusive      Replicated  READ_COMMITTED   false    true
 
 statement ok
 COMMIT

@@ -230,7 +230,7 @@ directories inside ${HOME}/local directory are removed.
 `,
 	Args: cobra.ArbitraryArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Destroy(config.Logger, destroyAllMine, destroyAllLocal, args...)
+		return roachprod.Destroy(config.Logger, username, destroyAllMine, destroyAllLocal, args...)
 	}),
 }
 
@@ -307,7 +307,11 @@ hosts file.
 		if listJSON && listDetails {
 			return errors.New("'json' option cannot be combined with 'details' option")
 		}
-		filteredCloud, err := roachprod.List(config.Logger, listMine, listPattern, vm.ListOptions{ComputeEstimatedCost: true})
+		filteredCloud, err := roachprod.List(config.Logger, listMine, listPattern,
+			vm.ListOptions{
+				Username:             username,
+				ComputeEstimatedCost: listCost,
+			})
 
 		if err != nil {
 			return err
@@ -463,12 +467,12 @@ var bashCompletion = os.ExpandEnv("$HOME/.roachprod/bash-completion.sh")
 // a side-effect. If you don't care about the list output, just "roachprod list
 // &>/dev/null".
 var syncCmd = &cobra.Command{
-	Use:   "sync",
+	Use:   "sync [flags]",
 	Short: "sync ssh keys/config and hosts files",
 	Long:  ``,
 	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		_, err := roachprod.Sync(config.Logger, vm.ListOptions{IncludeVolumes: listOpts.IncludeVolumes})
+		_, err := roachprod.Sync(config.Logger, listOpts)
 		_ = rootCmd.GenBashCompletionFile(bashCompletion)
 		return err
 	}),
@@ -674,7 +678,7 @@ SIGHUP), unless you also configure --max-wait.
 		if sig == 9 /* SIGKILL */ && !cmd.Flags().Changed("wait") {
 			wait = true
 		}
-		stopOpts := roachprod.StopOpts{Wait: wait, MaxWait: maxWait, ProcessTag: tag, Sig: sig}
+		stopOpts := roachprod.StopOpts{Wait: wait, GracePeriod: gracePeriod, ProcessTag: tag, Sig: sig}
 		return roachprod.Stop(context.Background(), config.Logger, args[0], stopOpts)
 	}),
 }
@@ -759,7 +763,7 @@ non-terminating signal (e.g. SIGHUP), unless you also configure --max-wait.
 		}
 		stopOpts := roachprod.StopOpts{
 			Wait:               wait,
-			MaxWait:            maxWait,
+			GracePeriod:        gracePeriod,
 			Sig:                sig,
 			VirtualClusterName: virtualClusterName,
 			SQLInstance:        sqlInstance,
@@ -803,7 +807,7 @@ Currently available application options are:
 			versionArg = args[2]
 		}
 		return roachprod.Deploy(context.Background(), config.Logger, args[0], args[1],
-			versionArg, pause, deploySig, deployWaitFlag, deployMaxWait, secure)
+			versionArg, pause, deploySig, deployWaitFlag, deployGracePeriod, secure)
 	}),
 }
 

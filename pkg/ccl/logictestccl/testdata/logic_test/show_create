@@ -76,6 +76,7 @@ r1  CREATE FUNCTION public.r1()
       NOT LEAKPROOF
       CALLED ON NULL INPUT
       LANGUAGE SQL
+      SECURITY INVOKER
       AS $$
       SELECT 1;
     $$
@@ -85,6 +86,7 @@ r1  CREATE FUNCTION public.r1(i INT8)
       NOT LEAKPROOF
       CALLED ON NULL INPUT
       LANGUAGE SQL
+      SECURITY INVOKER
       AS $$
       SELECT 1;
     $$
@@ -95,11 +97,13 @@ SELECT * FROM [SHOW CREATE PROCEDURE r1] ORDER BY 2
 ----
 r1  CREATE PROCEDURE public.r1(s STRING)
       LANGUAGE SQL
+      SECURITY INVOKER
       AS $$
       SELECT 1;
     $$
 r1  CREATE PROCEDURE public.r1(s STRING, i INT8)
       LANGUAGE SQL
+      SECURITY INVOKER
       AS $$
       SELECT 1;
     $$
@@ -131,6 +135,7 @@ r2  CREATE FUNCTION sc.r2()
       NOT LEAKPROOF
       CALLED ON NULL INPUT
       LANGUAGE SQL
+      SECURITY INVOKER
       AS $$
       SELECT 1;
     $$
@@ -140,6 +145,7 @@ SHOW CREATE PROCEDURE r2
 ----
 r2  CREATE PROCEDURE sc.r2(s STRING)
       LANGUAGE SQL
+      SECURITY INVOKER
       AS $$
       SELECT 1;
     $$
@@ -169,6 +175,7 @@ f112134  CREATE FUNCTION sc.f112134()
            NOT LEAKPROOF
            CALLED ON NULL INPUT
            LANGUAGE plpgsql
+           SECURITY INVOKER
            AS $$
            DECLARE
            x INT8 := 0;

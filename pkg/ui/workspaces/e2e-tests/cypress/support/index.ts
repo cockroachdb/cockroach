@@ -24,6 +24,7 @@
 // ***********************************************************
 
 import "./commands";
+import { SQLPrivilege, User } from "./types";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace -- required for declaration merging
@@ -33,10 +34,11 @@ declare global {
        * Sets a session cookie for the demo user on the current
        * database.
        * @example
-       * cy.login();
+       * cy.login("cypress", "tests");
        * cy.visit("#/some/authenticated/route");
        */
-      login(): void;
+      login(username: string, password: string): Chainable<void>;
+      getUserWithExactPrivileges(privs: SQLPrivilege[]): Chainable<User>;
     }
   }
 }

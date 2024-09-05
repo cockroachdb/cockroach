@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,7 +37,7 @@ const (
 			dlq_timestamp     	TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
   		dlq_reason					STRING NOT NULL,
 			mutation_type				%s.%s.mutation_type,       
-  		key_value_bytes			BYTES NOT NULL,
+  		key_value_bytes			BYTES NOT NULL NOT VISIBLE,
 			incoming_row     		JSONB,
   		-- PK should be unique based on the ID, job ID and timestamp at which the 
   		-- row was written to the table.
@@ -62,21 +63,22 @@ const (
 		) VALUES ($1, $2, $3, $4, $5)`
 )
 
-type fullyQualifiedTableName struct {
+type dstTableMetadata struct {
 	database string
 	schema   string
 	table    string
+	tableID  descpb.ID
 }
 
-func (f fullyQualifiedTableName) getDatabase() string {
+func (f dstTableMetadata) getDatabaseName() string {
 	return lexbase.EscapeSQLIdent(f.database)
 }
 
-func (f fullyQualifiedTableName) toDLQTableName(tableID int32) string {
+func (f dstTableMetadata) toDLQTableName() string {
 	return fmt.Sprintf(dlqBaseTableName,
-		f.getDatabase(),
+		f.getDatabaseName(),
 		dlqSchemaName,
-		lexbase.EscapeSQLIdent(fmt.Sprintf("dlq_%d_%s_%s", tableID, f.schema, f.table)))
+		lexbase.EscapeSQLIdent(fmt.Sprintf("dlq_%d_%s_%s", f.tableID, f.schema, f.table)))
 }
 
 type DeadLetterQueueClient interface {
@@ -92,14 +94,14 @@ type DeadLetterQueueClient interface {
 	) error
 }
 
-type loggingDeadLetterQueueClient struct {
+type noopDeadLetterQueueClient struct {
 }
 
-func (dlq *loggingDeadLetterQueueClient) Create(ctx context.Context) error {
+func (dlq *noopDeadLetterQueueClient) Create(_ context.Context) error {
 	return nil
 }
 
-func (dlq *loggingDeadLetterQueueClient) Log(
+func (dlq *noopDeadLetterQueueClient) Log(
 	ctx context.Context,
 	ingestionJobID int64,
 	kv streampb.StreamEvent_KV,
@@ -135,27 +137,27 @@ func (dlq *loggingDeadLetterQueueClient) Log(
 }
 
 type deadLetterQueueClient struct {
-	ie            isql.Executor
-	tableIDToName map[int32]fullyQualifiedTableName
+	ie                   isql.Executor
+	srcTableIDToDestMeta map[descpb.ID]dstTableMetadata
 }
 
 func (dlq *deadLetterQueueClient) Create(ctx context.Context) error {
 	// Create a dlq table for each table to be replicated.
-	for tableID, name := range dlq.tableIDToName {
-		dlqTableName := name.toDLQTableName(tableID)
-		createSchemaStmt := fmt.Sprintf(createSchemaBaseStmt, name.getDatabase(), dlqSchemaName)
+	for _, dstTableMeta := range dlq.srcTableIDToDestMeta {
+		dlqTableName := dstTableMeta.toDLQTableName()
+		createSchemaStmt := fmt.Sprintf(createSchemaBaseStmt, dstTableMeta.getDatabaseName(), dlqSchemaName)
 		if _, err := dlq.ie.Exec(ctx, "create-dlq-schema", nil, createSchemaStmt); err != nil {
-			return errors.Wrapf(err, "failed to create crdb_replication schema in database %s", name.getDatabase())
+			return errors.Wrapf(err, "failed to create crdb_replication schema in database %s", dstTableMeta.getDatabaseName())
 		}
 
-		createEnumStmt := fmt.Sprintf(createEnumBaseStmt, name.getDatabase(), dlqSchemaName)
+		createEnumStmt := fmt.Sprintf(createEnumBaseStmt, dstTableMeta.getDatabaseName(), dlqSchemaName)
 		if _, err := dlq.ie.Exec(ctx, "create-dlq-enum", nil, createEnumStmt); err != nil {
-			return errors.Wrapf(err, "failed to create mutation_type enum in database %s", name.getDatabase())
+			return errors.Wrapf(err, "failed to create mutation_type enum in database %s", dstTableMeta.getDatabaseName())
 		}
 
-		createTableStmt := fmt.Sprintf(createTableBaseStmt, dlqTableName, name.getDatabase(), dlqSchemaName)
+		createTableStmt := fmt.Sprintf(createTableBaseStmt, dlqTableName, dstTableMeta.getDatabaseName(), dlqSchemaName)
 		if _, err := dlq.ie.Exec(ctx, "create-dlq-table", nil, createTableStmt); err != nil {
-			return errors.Wrapf(err, "failed to create dlq for table %d", tableID)
+			return errors.Wrapf(err, "failed to create dlq for table %d", dstTableMeta.tableID)
 		}
 	}
 	return nil
@@ -167,18 +169,19 @@ func (dlq *deadLetterQueueClient) Log(
 	kv streampb.StreamEvent_KV,
 	cdcEventRow cdcevent.Row,
 	reason error,
-	stoppedRetyingReason retryEligibility,
+	stoppedRetryingReason retryEligibility,
 ) error {
 	if !cdcEventRow.IsInitialized() {
 		return errors.New("cdc event row not initialized")
 	}
 
-	tableID := int32(cdcEventRow.TableID)
-	qualifiedName, ok := dlq.tableIDToName[tableID]
+	// TableID in cdcEventRow is the source table ID.
+	srcTableID := cdcEventRow.TableID
+	dstTableMeta, ok := dlq.srcTableIDToDestMeta[srcTableID]
 	if !ok {
-		return errors.Newf("failed to look up fully qualified name for table %d", tableID)
+		return errors.Newf("failed to look up fully qualified name for table %d", dstTableMeta.tableID)
 	}
-	dlqTableName := qualifiedName.toDLQTableName(tableID)
+	dlqTableName := dstTableMeta.toDLQTableName()
 
 	bytes, err := protoutil.Marshal(&kv)
 	if err != nil {
@@ -202,8 +205,8 @@ func (dlq *deadLetterQueueClient) Log(
 			nil, /* txn */
 			fmt.Sprintf(insertRowStmtFallBack, dlqTableName),
 			ingestionJobID,
-			tableID,
-			fmt.Sprintf("%s (%s)", reason, stoppedRetyingReason),
+			dstTableMeta.tableID,
+			fmt.Sprintf("%s (%s)", reason, stoppedRetryingReason),
 			mutationType.String(),
 			bytes,
 		); err != nil {
@@ -218,8 +221,8 @@ func (dlq *deadLetterQueueClient) Log(
 		nil, /* txn */
 		fmt.Sprintf(insertBaseStmt, dlqTableName),
 		ingestionJobID,
-		tableID,
-		fmt.Sprintf("%s (%s)", reason, stoppedRetyingReason),
+		dstTableMeta.tableID,
+		fmt.Sprintf("%s (%s)", reason, stoppedRetryingReason),
 		mutationType.String(),
 		bytes,
 		jsonRow,
@@ -230,14 +233,14 @@ func (dlq *deadLetterQueueClient) Log(
 }
 
 func InitDeadLetterQueueClient(
-	ie isql.Executor, tableIDToName map[int32]fullyQualifiedTableName,
+	ie isql.Executor, srcTableIDToDestMeta map[descpb.ID]dstTableMetadata,
 ) DeadLetterQueueClient {
 	if testingDLQ != nil {
 		return testingDLQ
 	}
 	return &deadLetterQueueClient{
-		ie:            ie,
-		tableIDToName: tableIDToName,
+		ie:                   ie,
+		srcTableIDToDestMeta: srcTableIDToDestMeta,
 	}
 }
 
@@ -251,6 +254,6 @@ func TestingSetDLQ(d DeadLetterQueueClient) func() {
 	return func() { testingDLQ = v }
 }
 
-func InitLoggingDeadLetterQueueClient() DeadLetterQueueClient {
-	return &loggingDeadLetterQueueClient{}
+func InitNoopDeadLetterQueueClient() DeadLetterQueueClient {
+	return &noopDeadLetterQueueClient{}
 }

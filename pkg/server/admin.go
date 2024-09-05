@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -81,6 +82,7 @@ import (
 	gwutil "github.com/grpc-ecosystem/grpc-gateway/utilities"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 )
 
@@ -275,13 +277,15 @@ func (s *adminServer) RegisterGateway(
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
-		// Add default user when running in Insecure mode because we don't
-		// retrieve the user from gRPC metadata (which falls back to `root`)
-		// but from HTTP metadata (which does not).
-		if s.sqlServer.cfg.Insecure {
-			ctx := req.Context()
-			ctx = authserver.ContextWithHTTPAuthInfo(ctx, username.RootUser, 0)
-			req = req.WithContext(ctx)
+
+		// The privilege checks in the privilege checker below checks the user in the incoming
+		// gRPC metadata.
+		md := authserver.TranslateHTTPAuthInfoToGRPCMetadata(req.Context(), req)
+		authCtx := metadata.NewIncomingContext(req.Context(), md)
+		authCtx = s.AnnotateCtx(authCtx)
+		if err := s.privilegeChecker.RequireViewActivityAndNoViewActivityRedactedPermission(authCtx); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
 		}
 		s.getStatementBundle(req.Context(), id, w)
 	})
@@ -2601,12 +2605,12 @@ func (s *adminServer) QueryPlan(
 }
 
 // getStatementBundle retrieves the statement bundle with the given id and
-// writes it out as an attachment.
+// writes it out as an attachment. Note this function assumes the user has
+// permission to access the statement bundle.
 func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.ResponseWriter) {
-	sqlUsername := authserver.UserFromHTTPAuthInfoContext(ctx)
 	row, err := s.internalExecutor.QueryRowEx(
 		ctx, "admin-stmt-bundle", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: sqlUsername},
+		sessiondata.NodeUserSessionDataOverride,
 		"SELECT bundle_chunks FROM system.statement_diagnostics WHERE id=$1 AND bundle_chunks IS NOT NULL",
 		id,
 	)
@@ -2625,7 +2629,7 @@ func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.R
 	for _, chunkID := range chunkIDs {
 		chunkRow, err := s.internalExecutor.QueryRowEx(
 			ctx, "admin-stmt-bundle", nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: sqlUsername},
+			sessiondata.NodeUserSessionDataOverride,
 			"SELECT data FROM system.statement_bundle_chunks WHERE id=$1",
 			chunkID,
 		)
@@ -4018,4 +4022,54 @@ func (s *systemAdminServer) ListTenants(
 	return &serverpb.ListTenantsResponse{
 		Tenants: tenantList,
 	}, nil
+}
+
+// ReadFromTenantInfo returns the read-from info for a tenant, if configured.
+func (s *systemAdminServer) ReadFromTenantInfo(
+	ctx context.Context, req *serverpb.ReadFromTenantInfoRequest,
+) (*serverpb.ReadFromTenantInfoResponse, error) {
+	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+	if ok && req.TenantID != tenantID {
+		return nil, errors.Errorf("mismatched tenant IDs")
+	}
+	tenantID = req.TenantID
+	if tenantID.IsSystem() {
+		return &serverpb.ReadFromTenantInfoResponse{}, nil
+	}
+
+	var dstID roachpb.TenantID
+	var dstTenant *mtinfopb.TenantInfo
+	if err := s.sqlServer.internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		found, err := sql.GetTenantRecordByID(ctx, txn, tenantID, s.st)
+		if err != nil {
+			return err
+		}
+		if found.ReadFromTenant == nil || !found.ReadFromTenant.IsSet() {
+			return nil
+		}
+		dstID = *found.ReadFromTenant
+		target, err := sql.GetTenantRecordByID(ctx, txn, dstID, s.st)
+		if err != nil {
+			return err
+		}
+		dstTenant = target
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if dstTenant == nil {
+		return &serverpb.ReadFromTenantInfoResponse{}, nil
+	}
+
+	if dstTenant.PhysicalReplicationConsumerJobID == 0 {
+		return nil, errors.Errorf("missing job ID")
+	}
+
+	progress, err := jobs.LoadJobProgress(ctx, s.sqlServer.internalDB, dstTenant.PhysicalReplicationConsumerJobID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &serverpb.ReadFromTenantInfoResponse{ReadFrom: dstID, ReadAt: progress.GetStreamIngest().ReplicatedTime}, nil
 }

@@ -428,6 +428,11 @@ func TestSchemaChangeComparator_distsql_agg(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/distsql_agg"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_distsql_automatic_partial_stats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/distsql_automatic_partial_stats"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_distsql_automatic_stats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/distsql_automatic_stats"

@@ -23,10 +23,6 @@ filter suite=orm
 ----
 error: no tests in suite "orm"
 
-filter owner=replication
-----
-error: no tests with owner "replication"
-
 filter benchmarks
 component_blargle
 ----

@@ -228,6 +228,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalPCRStreamSpansTableID:              crdbInternalPCRStreamSpansTable,
 		catconstants.CrdbInternalPCRStreamCheckpointsTableID:        crdbInternalPCRStreamCheckpointsTable,
 		catconstants.CrdbInternalLDRProcessorTableID:                crdbInternalLDRProcessorTable,
+		catconstants.CrdbInternalFullyQualifiedNamesViewID:          crdbInternalFullyQualifiedNamesView,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -756,7 +757,7 @@ CREATE TABLE crdb_internal.table_row_statistics (
   table_name                 STRING      NOT NULL,
   estimated_row_count        INT
 )`,
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// Collect the statistics for all tables AS OF 10 seconds ago to avoid
 		// contention on the stats table. We pass a nil transaction so that the AS
 		// OF clause can be independent of any outer query.
@@ -793,8 +794,10 @@ CREATE TABLE crdb_internal.table_row_statistics (
 
 		// Walk over all available tables and show row count for each of them
 		// using collected statistics.
-		return forEachTableDescAll(ctx, p, db, virtualMany,
-			func(ctx context.Context, db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+		opts := forEachTableDescOptions{virtualOpts: virtualMany, allowAdding: true}
+		return forEachTableDesc(ctx, p, dbContext, opts,
+			func(ctx context.Context, descCtx tableDescContext) error {
+				table := descCtx.table
 				tableID := tree.DInt(table.GetID())
 				rowCount := tree.DNull
 				// For Virtual Tables report NULL row count.
@@ -966,32 +969,14 @@ const (
 	// so we perform a LEFT JOIN to get a NULL value when no progress row is
 	// found.
 	systemJobsAndJobInfoBaseQuery = `
-WITH
-	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' ORDER BY written DESC),
-	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' ORDER BY written DESC)
-	SELECT
-		DISTINCT(id), status, created, payload.value AS payload, progress.value AS progress,
-		created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
-	FROM system.jobs AS j
-	INNER JOIN latestpayload AS payload ON j.id = payload.job_id
-	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
+SELECT
+DISTINCT(id), status, created, payload.value AS payload, progress.value AS progress,
+created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
+FROM
+system.jobs AS j
+LEFT JOIN system.job_info AS progress ON j.id = progress.job_id AND progress.info_key = 'legacy_progress'
+INNER JOIN system.job_info AS payload ON j.id = payload.job_id AND payload.info_key = 'legacy_payload'
 `
-
-	// systemJobsAndJobInfoBaseQueryWithIDPredicate is the same as
-	// systemJobsAndJobInfoBaseQuery but with a predicate on `job_id` in the CTE
-	// queries.
-	systemJobsAndJobInfoBaseQueryWithIDPredicate = `
-WITH
-	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' AND job_id = $1 ORDER BY written DESC LIMIT 1),
-	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' AND job_id = $1 ORDER BY written DESC LIMIT 1)
-	SELECT
-		id, status, created, payload.value AS payload, progress.value AS progress,
-		created_by_type, created_by_id, claim_session_id, claim_instance_id, num_runs, last_run, job_type
-	FROM system.jobs AS j
-	INNER JOIN latestpayload AS payload ON j.id = payload.job_id
-	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
-`
-
 	systemJobsIDPredicate     = ` WHERE id = $1`
 	systemJobsTypePredicate   = ` WHERE job_type = $1`
 	systemJobsStatusPredicate = ` WHERE status = $1`
@@ -1011,7 +996,7 @@ func getInternalSystemJobsQuery(predicate systemJobsPredicate) string {
 	case noPredicate:
 		return systemJobsAndJobInfoBaseQuery
 	case jobID:
-		return systemJobsAndJobInfoBaseQueryWithIDPredicate + systemJobsIDPredicate
+		return systemJobsAndJobInfoBaseQuery + systemJobsIDPredicate
 	case jobType:
 		return systemJobsAndJobInfoBaseQuery + systemJobsTypePredicate
 	case jobStatus:
@@ -1439,7 +1424,7 @@ const crdbInternalKVProtectedTSTableQuery = `
 		  	'cockroach.protectedts.Target',
 		  	target,
 		    false /* emit defaults */,
-		    false /* include redaction marker */ 
+		    false /* include redaction marker */
 		          /* NB: redactions in the debug zip are handled elsewhere by marking columns as sensitive */
 		) as decoded_targets,
 	    crdb_internal_mvcc_timestamp
@@ -1458,11 +1443,11 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
    num_spans 			INT8 NOT NULL,
    spans     			BYTES NOT NULL, -- We do not decode this column since it is deprecated in 22.2+.
    verified  			BOOL NOT NULL,
-   target    			BYTES,  
+   target    			BYTES,
    decoded_meta 		JSON,   -- Decoded data from the meta column above.
-                                -- This data can have different structures depending on the meta_type. 
+                                -- This data can have different structures depending on the meta_type.
    decoded_target 		JSON,   -- Decoded data from the target column above.
-   internal_meta        JSON,   -- Additional metadata added by this virtual table (ex. job owner for job meta_type) 
+   internal_meta        JSON,   -- Additional metadata added by this virtual table (ex. job owner for job meta_type)
    num_ranges  			INT,     -- Number of ranges protected by this PTS record.
    last_updated         DECIMAL -- crdb_internal_mvcc_timestamp of the row
 )`,
@@ -2845,7 +2830,7 @@ func formatActiveQuery(query serverpb.ActiveQuery) string {
 				ctx.Printf("$%d", p.Idx+1)
 				return
 			}
-			ctx.Printf(query.Placeholders[p.Idx])
+			ctx.Printf("%s", query.Placeholders[p.Idx])
 		}),
 	)
 	sb.WriteString(sql)
@@ -3617,12 +3602,21 @@ CREATE TABLE crdb_internal.create_schema_statements (
 							ExplicitSchema: true,
 						},
 					}
+
+					createStatement := tree.AsString(node)
+
+					comment, ok := p.Descriptors().GetSchemaComment(schemaDesc.GetID())
+					if ok {
+						commentOnSchema := tree.CommentOnSchema{Comment: &comment, Name: tree.ObjectNamePrefix{SchemaName: tree.Name(schemaDesc.GetName()), ExplicitSchema: true}}
+						createStatement += ";\n" + tree.AsString(&commentOnSchema)
+					}
+
 					if err := addRow(
 						tree.NewDInt(tree.DInt(db.GetID())),         // database_id
 						tree.NewDString(db.GetName()),               // database_name
 						tree.NewDString(schemaDesc.GetName()),       // schema_name
 						tree.NewDInt(tree.DInt(schemaDesc.GetID())), // descriptor_id (schema_id)
-						tree.NewDString(tree.AsString(node)),        // create_statement
+						tree.NewDString(createStatement),            // create_statement
 					); err != nil {
 						return err
 					}
@@ -3949,8 +3943,10 @@ CREATE TABLE crdb_internal.table_columns (
 		const numDatums = 8
 		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
-			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(ctx context.Context, db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+			opts := forEachTableDescOptions{virtualOpts: hideVirtual, allowAdding: true}
+			return forEachTableDesc(ctx, p, dbContext, opts,
+				func(ctx context.Context, descCtx tableDescContext) error {
+					table := descCtx.table
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
 					tableName := tree.NewDString(table.GetName())
 					columns := table.PublicColumns()
@@ -4019,8 +4015,10 @@ CREATE TABLE crdb_internal.table_indexes (
 		row := make([]tree.Datum, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			alloc := &tree.DatumAlloc{}
-			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+			opts := forEachTableDescOptions{virtualOpts: hideVirtual, allowAdding: true}
+			return forEachTableDesc(ctx, p, dbContext, opts,
+				func(ctx context.Context, descCtx tableDescContext) error {
+					sc, table := descCtx.schema, descCtx.table
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
 					tableName := tree.NewDString(table.GetName())
 					// We report the primary index of non-physical tables here. These
@@ -4134,8 +4132,10 @@ CREATE TABLE crdb_internal.index_columns (
 			catenumpb.IndexColumn_DESC: tree.NewDString(catenumpb.IndexColumn_DESC.String()),
 		}
 
-		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-			func(ctx context.Context, parent catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual, allowAdding: true}
+		return forEachTableDesc(ctx, p, dbContext, opts,
+			func(ctx context.Context, descCtx tableDescContext) error {
+				parent, table := descCtx.database, descCtx.table
 				tableID := tree.NewDInt(tree.DInt(table.GetID()))
 				parentName := parent.GetName()
 				tableName := tree.NewDString(table.GetName())
@@ -4250,9 +4250,10 @@ CREATE TABLE crdb_internal.backward_dependencies (
 		viewDep := tree.NewDString("view")
 		sequenceDep := tree.NewDString("sequence")
 
-		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual, func(
-			ctx context.Context, db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor, tableLookup tableLookupFn,
-		) error {
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual, allowAdding: true}
+		return forEachTableDesc(ctx, p, dbContext, opts, func(
+			ctx context.Context, descCtx tableDescContext) error {
+			table, tableLookup := descCtx.table, descCtx.tableLookup
 			tableID := tree.NewDInt(tree.DInt(table.GetID()))
 			tableName := tree.NewDString(table.GetName())
 
@@ -4384,8 +4385,12 @@ CREATE TABLE crdb_internal.forward_dependencies (
 		fkDep := tree.NewDString("fk")
 		viewDep := tree.NewDString("view")
 		sequenceDep := tree.NewDString("sequence")
-		return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no backward/forward dependencies*/
-			func(ctx context.Context, db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+		opts := forEachTableDescOptions{
+			virtualOpts: hideVirtual, /* virtual tables have no backward/forward dependencies*/
+			allowAdding: true}
+		return forEachTableDesc(ctx, p, dbContext, opts,
+			func(ctx context.Context, descCtx tableDescContext) error {
+				table := descCtx.table
 				tableID := tree.NewDInt(tree.DInt(table.GetID()))
 				tableName := tree.NewDString(table.GetName())
 				for _, fk := range table.InboundForeignKeys() {
@@ -5493,8 +5498,10 @@ CREATE TABLE crdb_internal.partitions (
 			dbName = dbContext.GetName()
 		}
 		worker := func(ctx context.Context, pusher rowPusher) error {
-			return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
-				func(ctx context.Context, db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+			opts := forEachTableDescOptions{virtualOpts: hideVirtual /* virtual tables have no partitions*/, allowAdding: true}
+			return forEachTableDesc(ctx, p, dbContext, opts,
+				func(ctx context.Context, descCtx tableDescContext) error {
+					table := descCtx.table
 					return catalog.ForEachIndex(table, catalog.IndexOpts{
 						AddMutations: true,
 					}, func(index catalog.Index) error {
@@ -6221,10 +6228,11 @@ CREATE TABLE crdb_internal.invalid_objects (
 
 		// Validate table descriptors
 		const allowAdding = true
-		if err := forEachTableDescWithTableLookupInternalFromDescriptors(
-			ctx, p, dbContext, hideVirtual, allowAdding, c, func(
-				ctx context.Context, _ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, descriptor catalog.TableDescriptor, lCtx tableLookupFn,
-			) error {
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual, allowAdding: allowAdding}
+		if err := forEachTableDescFromDescriptors(
+			ctx, p, dbContext, c, opts,
+			func(ctx context.Context, descCtx tableDescContext) error {
+				descriptor, lCtx := descCtx.table, descCtx.tableLookup
 				return doDescriptorValidationErrors(ctx, descriptor, lCtx)
 			}); err != nil {
 			return err
@@ -6310,7 +6318,9 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 			if err != nil || dbDesc == nil {
 				return false, err
 			}
-			hasPriv, err := userCanSeeDescriptor(ctx, p, dbDesc, nil /* parentDBDesc */, false /* allowAdding */)
+			hasPriv, err := userCanSeeDescriptor(
+				ctx, p, dbDesc, nil /* parentDBDesc */, false /* allowAdding */, false /* includeDropped */)
+
 			if err != nil || !hasPriv {
 				return false, err
 			}
@@ -6384,8 +6394,10 @@ CREATE TABLE crdb_internal.cross_db_references (
 		STRING NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual,
-			func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor, lookupFn tableLookupFn) error {
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual, allowAdding: true}
+		return forEachTableDesc(ctx, p, dbContext, opts,
+			func(ctx context.Context, descCtx tableDescContext) error {
+				sc, table, lookupFn := descCtx.schema, descCtx.table, descCtx.tableLookup
 				// For tables detect if foreign key references point at a different
 				// database. Additionally, check if any of the columns have sequence
 				// references to a different database.
@@ -6865,8 +6877,10 @@ CREATE TABLE crdb_internal.index_usage_statistics (
 		const numDatums = 4
 		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
-			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(ctx context.Context, db catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+			opts := forEachTableDescOptions{virtualOpts: hideVirtual, allowAdding: true}
+			return forEachTableDesc(ctx, p, dbContext, opts,
+				func(ctx context.Context, descCtx tableDescContext) error {
+					table := descCtx.table
 					tableID := table.GetID()
 					return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(idx catalog.Index) error {
 						indexID := idx.GetID()
@@ -7151,7 +7165,7 @@ CREATE VIEW crdb_internal.statement_activity AS
 				contention_time_avg_seconds,
 				cpu_sql_avg_nanos,
 				service_latency_avg_seconds,
-				service_latency_p99_seconds 
+				service_latency_p99_seconds
       FROM
           system.statement_activity`,
 	resultColumns: colinfo.ResultColumns{
@@ -7640,10 +7654,10 @@ CREATE TABLE crdb_internal.transaction_contention_events (
     contention_duration          INTERVAL NOT NULL,
     contending_key               BYTES NOT NULL,
     contending_pretty_key     	 STRING NOT NULL,
-		    
+
     waiting_stmt_id              string NOT NULL,
     waiting_stmt_fingerprint_id  BYTES NOT NULL,
-    
+
     database_name                STRING NOT NULL,
     schema_name                  STRING NOT NULL,
     table_name                   STRING NOT NULL,
@@ -7776,9 +7790,11 @@ CREATE TABLE crdb_internal.index_spans (
 			},
 		},
 	},
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescAll(ctx, p, db, hideVirtual,
-			func(ctx context.Context, _ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual, allowAdding: true}
+		return forEachTableDesc(ctx, p, dbContext, opts,
+			func(ctx context.Context, descCtx tableDescContext) error {
+				table := descCtx.table
 				return generateIndexSpans(ctx, p, table, addRow)
 			})
 	},
@@ -7808,6 +7824,7 @@ CREATE TABLE crdb_internal.table_spans (
   descriptor_id INT NOT NULL,
   start_key     BYTES NOT NULL,
   end_key       BYTES NOT NULL,
+  dropped       BOOL NOT NULL,
   INDEX(descriptor_id)
 );`,
 	indexes: []virtualIndex{
@@ -7828,9 +7845,15 @@ CREATE TABLE crdb_internal.table_spans (
 			},
 		},
 	},
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDescAll(ctx, p, db, hideVirtual,
-			func(ctx context.Context, _ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		opts := forEachTableDescOptions{
+			virtualOpts:    hideVirtual,
+			allowAdding:    true,
+			includeDropped: true,
+		}
+		return forEachTableDesc(ctx, p, dbContext, opts,
+			func(ctx context.Context, descCtx tableDescContext) error {
+				table := descCtx.table
 				return generateTableSpan(ctx, p, table, addRow)
 			})
 	},
@@ -7846,6 +7869,7 @@ func generateTableSpan(
 		tree.NewDInt(tree.DInt(tabID)),
 		tree.NewDBytes(tree.DBytes(start)),
 		tree.NewDBytes(tree.DBytes(end)),
+		tree.MakeDBool(tree.DBool(table.Dropped())),
 	)
 }
 
@@ -8097,7 +8121,7 @@ func genClusterLocksGenerator(
 				if curLock.LockHolder != nil {
 					txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: curLock.LockHolder.ID})
 					tsDatum = eval.TimestampToInexactDTimestamp(curLock.LockHolder.WriteTimestamp)
-					isolationLevelDatum = tree.NewDString(tree.IsolationLevelFromKVTxnIsolationLevel(curLock.LockHolder.IsoLevel).String())
+					isolationLevelDatum = tree.NewDString(tree.FromKVIsoLevel(curLock.LockHolder.IsoLevel).String())
 					strengthDatum = tree.NewDString(curLock.LockStrength.String())
 					durationDatum = tree.NewDInterval(
 						duration.MakeDuration(curLock.HoldDuration.Nanoseconds(), 0 /* days */, 0 /* months */),
@@ -8110,7 +8134,7 @@ func genClusterLocksGenerator(
 				if waiter.WaitingTxn != nil {
 					txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: waiter.WaitingTxn.ID})
 					tsDatum = eval.TimestampToInexactDTimestamp(waiter.WaitingTxn.WriteTimestamp)
-					isolationLevelDatum = tree.NewDString(tree.IsolationLevelFromKVTxnIsolationLevel(waiter.WaitingTxn.IsoLevel).String())
+					isolationLevelDatum = tree.NewDString(tree.FromKVIsoLevel(waiter.WaitingTxn.IsoLevel).String())
 				}
 				strengthDatum = tree.NewDString(waiter.Strength.String())
 				durationDatum = tree.NewDInterval(
@@ -9015,7 +9039,7 @@ var crdbInternalClusterReplicationResolvedView = virtualSchemaView{
 		CREATE VIEW crdb_internal.cluster_replication_spans AS WITH spans AS (
 			SELECT
 				j.id AS job_id, jsonb_array_elements(crdb_internal.pb_to_json('progress', i.value)->'streamIngest'->'checkpoint'->'resolvedSpans') AS s
-			FROM system.jobs j LEFT JOIN system.job_info i ON j.id = i.job_id AND i.info_key = 'legacy_progress' 
+			FROM system.jobs j LEFT JOIN system.job_info i ON j.id = i.job_id AND i.info_key = 'legacy_progress'
 			WHERE j.job_type = 'REPLICATION STREAM INGESTION'
 			) SELECT
 				job_id,
@@ -9048,7 +9072,7 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 	checkpoints INT,
 	megabytes FLOAT,
 	last_checkpoint INTERVAL,
-	
+
 	produce_wait INTERVAL,
 	emit_wait INTERVAL,
 	last_produce_wait INTERVAL,
@@ -9059,7 +9083,7 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 	rf_last_advance INTERVAL,
 
 	rf_resolved DECIMAL,
-	rf_resolved_age INTERVAL	
+	rf_resolved_age INTERVAL
 	);`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		sm, err := p.EvalContext().StreamManagerFactory.GetReplicationStreamManager(ctx)
@@ -9292,5 +9316,42 @@ CREATE TABLE crdb_internal.logical_replication_node_processors (
 			}
 		}
 		return nil
+	},
+}
+
+// crdbInternalFullyQualifiedNamesView is a view on system.namespace that
+// provides fully qualified names for objects in the cluster. A row is only
+// visible if the querying user has the CONNECT privilege on the database.
+var crdbInternalFullyQualifiedNamesView = virtualSchemaView{
+	schema: `
+		CREATE VIEW crdb_internal.fully_qualified_names (
+			object_id,
+			schema_id,
+			database_id,
+			object_name,
+			schema_name,
+			database_name,
+			fq_name
+		) AS
+			SELECT
+				t.id, sc.id, db.id,
+				t.name, sc.name, db.name,
+				quote_ident(db.name) || '.' || quote_ident(sc.name) || '.' || quote_ident(t.name)
+			FROM system.namespace t
+			JOIN system.namespace sc ON t."parentSchemaID" = sc.id
+			JOIN system.namespace db on t."parentID" = db.id
+			-- Filter out the synthetic public schema for the system database.
+			WHERE db."parentID" = 0
+			-- Filter rows that the user should not be able to see. This check matches
+			-- how metadata visibility works for pg_catalog tables.
+			AND pg_catalog.has_database_privilege(db.name, 'CONNECT')`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "object_id", Typ: types.Int},
+		{Name: "schema_id", Typ: types.Int},
+		{Name: "database_id", Typ: types.Int},
+		{Name: "object_name", Typ: types.String},
+		{Name: "schema_name", Typ: types.String},
+		{Name: "database_name", Typ: types.String},
+		{Name: "fq_name", Typ: types.String},
 	},
 }

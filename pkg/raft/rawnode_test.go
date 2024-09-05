@@ -350,7 +350,7 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 	exp2Cs := pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}}
 
 	s := newTestMemoryStorage(withPeers(1))
-	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
+	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s, withFortificationDisabled()))
 	require.NoError(t, err)
 
 	rawNode.Campaign()
@@ -524,7 +524,7 @@ func TestRawNodeStart(t *testing.T) {
 		HardState:        pb.HardState{Term: 1, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
 		Entries:          nil, // emitted & checked in intermediate Ready cycle
 		CommittedEntries: entries,
-		MustSync:         false, // since we're only applying, not appending
+		MustSync:         true, // because we are advancing the commit index
 	}
 
 	storage := NewMemoryStorage()
@@ -596,7 +596,7 @@ func TestRawNodeStart(t *testing.T) {
 	require.True(t, rawNode.HasReady())
 	rd = rawNode.Ready()
 	require.Empty(t, rd.Entries)
-	require.False(t, rd.MustSync)
+	require.True(t, rd.MustSync)
 	rawNode.Advance(rd)
 
 	rd.SoftState, want.SoftState = nil, nil
@@ -637,6 +637,9 @@ func TestRawNodeRestart(t *testing.T) {
 
 	// Ensure we campaign after the election timeout has elapsed.
 	for i := 0; i < rawNode.raft.randomizedElectionTimeout; i++ {
+		// TODO(arul): consider getting rid of this hack to reset the epoch so that
+		// we can call an election without panicking.
+		rawNode.raft.leadEpoch = 0
 		rawNode.raft.tick()
 	}
 	assert.Equal(t, StateCandidate, rawNode.raft.state)
@@ -767,11 +770,13 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 		highestApplied = rd.CommittedEntries[n-1].Index
 		rawNode.Advance(rd)
 		rawNode.Step(pb.Message{
-			Type:   pb.MsgHeartbeat,
-			To:     1,
-			From:   2, // illegal, but we get away with it
-			Term:   1,
-			Commit: 11,
+			Type:    pb.MsgApp,
+			To:      1,
+			From:    2, // illegal, but we get away with it
+			Term:    1,
+			LogTerm: 1,
+			Index:   11,
+			Commit:  11,
 		})
 	}
 }

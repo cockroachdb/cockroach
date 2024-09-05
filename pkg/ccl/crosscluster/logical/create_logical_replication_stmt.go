@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -99,6 +100,30 @@ func createLogicalReplicationStreamPlanHook(
 			return pgerror.New(pgcode.InvalidParameterValue, "the same number of source and destination tables must be specified")
 		}
 
+		options, err := evalLogicalReplicationOptions(ctx, stmt.Options, exprEval, p)
+		if err != nil {
+			return err
+		}
+
+		hasUDF := len(options.userFunctions) > 0 || options.defaultFunction != nil && options.defaultFunction.FunctionId != 0
+
+		mode := jobspb.LogicalReplicationDetails_Immediate
+		if m, ok := options.GetMode(); ok {
+			switch m {
+			case "immediate":
+				if hasUDF {
+					return pgerror.Newf(pgcode.InvalidParameterValue, "MODE = 'immediate' cannot be used with user-defined functions")
+				}
+			case "validated":
+				mode = jobspb.LogicalReplicationDetails_Validated
+			default:
+				return pgerror.Newf(pgcode.InvalidParameterValue, "unknown mode %q", m)
+			}
+		} else if hasUDF {
+			// UDFs imply applying changes via SQL, which implies validation.
+			mode = jobspb.LogicalReplicationDetails_Validated
+		}
+
 		var (
 			targetsDescription string
 			srcTableNames      = make([]string, len(stmt.From.Tables))
@@ -152,6 +177,16 @@ func createLogicalReplicationStreamPlanHook(
 			} else {
 				targetsDescription += ", " + tbNameWithSchema.FQString()
 			}
+
+			if mode != jobspb.LogicalReplicationDetails_Validated {
+				fks := td.OutboundForeignKeys()
+				for _, fk := range append(fks[:len(fks):len(fks)], td.InboundForeignKeys()...) {
+					// TODO(dt): move the constraint to un-validated for them.
+					if fk.IsConstraintValidated() {
+						return pgerror.Newf(pgcode.InvalidParameterValue, "only 'NOT VALID' foreign keys are only supported with MODE = 'validated'")
+					}
+				}
+			}
 		}
 
 		streamAddress := crosscluster.StreamAddress(from)
@@ -160,6 +195,11 @@ func createLogicalReplicationStreamPlanHook(
 			return err
 		}
 		streamAddress = crosscluster.StreamAddress(streamURL.String())
+
+		cleanedURI, err := cloud.SanitizeExternalStorageURI(from, nil)
+		if err != nil {
+			return err
+		}
 
 		client, err := streamclient.NewStreamClient(ctx, streamAddress, p.ExecCfg().InternalDB, streamclient.WithLogical())
 		if err != nil {
@@ -184,10 +224,6 @@ func createLogicalReplicationStreamPlanHook(
 			repPairs[i].SrcDescriptorID = int32(spec.TableDescriptors[name].ID)
 		}
 
-		options, err := evalLogicalReplicationOptions(ctx, stmt.Options, exprEval, p)
-		if err != nil {
-			return err
-		}
 		replicationStartTime := spec.ReplicationStartTime
 		progress := jobspb.LogicalReplicationProgress{}
 		if cursor, ok := options.GetCursor(); ok {
@@ -210,16 +246,18 @@ func createLogicalReplicationStreamPlanHook(
 
 		jr := jobs.Record{
 			JobID:       p.ExecCfg().JobRegistry.MakeJobID(),
-			Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", targetsDescription, streamAddress),
+			Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", targetsDescription, cleanedURI),
 			Username:    p.User(),
 			Details: jobspb.LogicalReplicationDetails{
-				StreamID:                  uint64(spec.StreamID),
-				SourceClusterID:           spec.SourceClusterID,
-				ReplicationStartTime:      replicationStartTime,
-				SourceClusterConnStr:      string(streamAddress),
-				ReplicationPairs:          repPairs,
-				TableNames:                srcTableNames,
-				DefaultConflictResolution: defaultConflictResolution,
+				StreamID:                   uint64(spec.StreamID),
+				SourceClusterID:            spec.SourceClusterID,
+				ReplicationStartTime:       replicationStartTime,
+				SourceClusterConnStr:       string(streamAddress),
+				ReplicationPairs:           repPairs,
+				TableNames:                 srcTableNames,
+				DefaultConflictResolution:  defaultConflictResolution,
+				IgnoreCDCIgnoredTTLDeletes: options.IgnoreCDCIgnoredTTLDeletes(),
+				Mode:                       mode,
 			},
 			Progress: progress,
 		}
@@ -248,6 +286,9 @@ func createLogicalReplicationStreamTypeCheck(
 			stmt.Options.DefaultFunction,
 			stmt.Options.Mode,
 		},
+		exprutil.Bools{
+			stmt.Options.IgnoreCDCIgnoredTTLDeletes,
+		},
 	}
 	if err := exprutil.TypeCheck(ctx, "LOGICAL REPLICATION STREAM", p.SemaCtx(),
 		toTypeCheck...,
@@ -259,11 +300,12 @@ func createLogicalReplicationStreamTypeCheck(
 }
 
 type resolvedLogicalReplicationOptions struct {
-	cursor          *hlc.Timestamp
-	mode            *string
+	cursor          hlc.Timestamp
+	mode            string
 	defaultFunction *jobspb.LogicalReplicationDetails_DefaultConflictResolution
 	// Mapping of table name to function descriptor
-	userFunctions map[string]int32
+	userFunctions              map[string]int32
+	ignoreCDCIgnoredTTLDeletes bool
 }
 
 func evalLogicalReplicationOptions(
@@ -278,7 +320,7 @@ func evalLogicalReplicationOptions(
 		if err != nil {
 			return nil, err
 		}
-		r.mode = &mode
+		r.mode = mode
 	}
 	if options.Cursor != nil {
 		cursor, err := eval.String(ctx, options.Cursor)
@@ -290,7 +332,7 @@ func evalLogicalReplicationOptions(
 		if err != nil {
 			return nil, err
 		}
-		r.cursor = &asOf.Timestamp
+		r.cursor = asOf.Timestamp
 	}
 	if options.DefaultFunction != nil {
 		defaultResolution := &jobspb.LogicalReplicationDetails_DefaultConflictResolution{}
@@ -337,6 +379,10 @@ func evalLogicalReplicationOptions(
 			r.userFunctions[objName.String()] = descID
 		}
 	}
+
+	if options.IgnoreCDCIgnoredTTLDeletes == tree.DBoolTrue {
+		r.ignoreCDCIgnoredTTLDeletes = true
+	}
 	return r, nil
 }
 
@@ -359,17 +405,17 @@ func lookupFunctionID(
 }
 
 func (r *resolvedLogicalReplicationOptions) GetCursor() (hlc.Timestamp, bool) {
-	if r == nil || r.cursor == nil {
+	if r == nil || r.cursor.IsEmpty() {
 		return hlc.Timestamp{}, false
 	}
-	return *r.cursor, true
+	return r.cursor, true
 }
 
 func (r *resolvedLogicalReplicationOptions) GetMode() (string, bool) {
-	if r == nil || r.mode == nil {
+	if r == nil || r.mode == "" {
 		return "", false
 	}
-	return *r.mode, true
+	return r.mode, true
 }
 
 func (r *resolvedLogicalReplicationOptions) GetDefaultFunction() (
@@ -387,4 +433,11 @@ func (r *resolvedLogicalReplicationOptions) GetUserFunctions() (map[string]int32
 		return map[string]int32{}, false
 	}
 	return r.userFunctions, true
+}
+
+func (r *resolvedLogicalReplicationOptions) IgnoreCDCIgnoredTTLDeletes() bool {
+	if r == nil {
+		return false
+	}
+	return r.ignoreCDCIgnoredTTLDeletes
 }

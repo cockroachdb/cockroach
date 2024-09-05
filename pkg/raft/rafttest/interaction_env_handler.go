@@ -47,7 +47,8 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 	case "add-nodes":
 		// Example:
 		//
-		// add-nodes <number-of-nodes-to-add> voters=(1 2 3) learners=(4 5) index=2 content=foo async-storage-writes=true
+		// add-nodes <number-of-nodes-to-add> voters=(1 2 3) learners=(4 5) index=2
+		// content=foo async-storage-writes=true crdb-version=24.3
 		err = env.handleAddNodes(t, d)
 	case "campaign":
 		// Example:
@@ -159,6 +160,13 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		//
 		// Example: send-snapshot 1 3
 		env.handleSendSnapshot(t, d)
+	case "step-down":
+		// Steps down as the leader. No-op if not the leader.
+		//
+		// Example:
+		//
+		// step-down 1
+		err = env.handleStepDown(t, d)
 	case "propose":
 		// Propose an entry.
 		//
@@ -254,6 +262,17 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		// Explanation:
 		// 1 (from_store) grants support for 2 (for_store) at a higher epoch.
 		err = env.handleGrantSupport(t, d)
+	case "print-support-state":
+		// Prints the support state being tracked by a raft leader. Empty on a
+		// follower.
+		//
+		// print-support-state id
+		// Arguments are:
+		//    id - id of the raft peer whose support map to print.
+		//
+		// Example:
+		// print-support-state 1
+		err = env.handlePrintSupportState(t, d)
 
 	default:
 		err = fmt.Errorf("unknown command")

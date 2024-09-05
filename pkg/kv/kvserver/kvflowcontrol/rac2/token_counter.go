@@ -12,38 +12,20 @@ package rac2
 
 import (
 	"context"
+	"fmt"
+	"reflect"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
-
-// TokenCounter is the interface for a token counter that can be used to deduct
-// and return flow control tokens. Additionally, it can be used to wait for
-// tokens to become available, and to check if tokens are available without
-// blocking.
-//
-// TODO(kvoli): Consider de-interfacing if not necessary for testing.
-type TokenCounter interface {
-	// TokensAvailable returns true if tokens are available. If false, it returns
-	// a handle that may be used for waiting for tokens to become available.
-	TokensAvailable(admissionpb.WorkClass) (available bool, tokenWaitingHandle TokenWaitingHandle)
-	// TryDeduct attempts to deduct flow tokens for the given work class. If
-	// there are no tokens available, 0 tokens are returned. When less than the
-	// requested token count is available, partial tokens are returned
-	// corresponding to this partial amount.
-	TryDeduct(
-		context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens) kvflowcontrol.Tokens
-	// Deduct deducts (without blocking) flow tokens for the given work class. If
-	// there are not enough available tokens, the token counter will go into debt
-	// (negative available count) and still issue the requested number of tokens.
-	Deduct(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
-	// Return returns flow tokens for the given work class.
-	Return(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
-}
 
 // TokenWaitingHandle is the interface for waiting for positive tokens from a
 // token counter.
@@ -100,50 +82,67 @@ type tokenCounterPerWorkClass struct {
 	// needs to schedule the goroutine that got the entry for it to unblock
 	// another.
 	signalCh chan struct{}
+	stats    struct {
+		deltaStats
+		noTokenStartTime time.Time
+	}
+}
+
+type deltaStats struct {
+	noTokenDuration                time.Duration
+	tokensDeducted, tokensReturned kvflowcontrol.Tokens
 }
 
 func makeTokenCounterPerWorkClass(
-	wc admissionpb.WorkClass, limit kvflowcontrol.Tokens,
+	wc admissionpb.WorkClass, limit kvflowcontrol.Tokens, now time.Time,
 ) tokenCounterPerWorkClass {
-	return tokenCounterPerWorkClass{
+	twc := tokenCounterPerWorkClass{
 		wc:       wc,
 		tokens:   limit,
 		limit:    limit,
 		signalCh: make(chan struct{}, 1),
 	}
+	twc.stats.noTokenStartTime = now
+	return twc
 }
 
 // adjustTokensLocked adjusts the tokens for the given work class by delta.
 func (twc *tokenCounterPerWorkClass) adjustTokensLocked(
-	ctx context.Context, delta kvflowcontrol.Tokens,
-) {
-	var unaccounted kvflowcontrol.Tokens
+	ctx context.Context, delta kvflowcontrol.Tokens, now time.Time,
+) (adjustment, unaccounted kvflowcontrol.Tokens) {
 	before := twc.tokens
 	twc.tokens += delta
-
-	if delta <= 0 {
-		// Nothing left to do, since we know tokens didn't increase.
-		return
-	}
-	if twc.tokens > twc.limit {
-		unaccounted = twc.tokens - twc.limit
-		twc.tokens = twc.limit
-	}
-	if before <= 0 && twc.tokens > 0 {
-		twc.signal()
+	if delta > 0 {
+		twc.stats.tokensReturned += delta
+		if twc.tokens > twc.limit {
+			unaccounted = twc.tokens - twc.limit
+			twc.tokens = twc.limit
+		}
+		if before <= 0 && twc.tokens > 0 {
+			twc.signal()
+			twc.stats.noTokenDuration += now.Sub(twc.stats.noTokenStartTime)
+		}
+	} else {
+		twc.stats.tokensDeducted -= delta
+		if before > 0 && twc.tokens <= 0 {
+			twc.stats.noTokenStartTime = now
+		}
 	}
 	if buildutil.CrdbTestBuild && unaccounted != 0 {
 		log.Fatalf(ctx, "unaccounted[%s]=%d delta=%d limit=%d",
 			twc.wc, unaccounted, delta, twc.limit)
 	}
+
+	adjustment = twc.tokens - before
+	return adjustment, unaccounted
 }
 
 func (twc *tokenCounterPerWorkClass) setLimitLocked(
-	ctx context.Context, limit kvflowcontrol.Tokens,
+	ctx context.Context, limit kvflowcontrol.Tokens, now time.Time,
 ) {
 	before := twc.limit
 	twc.limit = limit
-	twc.adjustTokensLocked(ctx, twc.limit-before)
+	twc.adjustTokensLocked(ctx, twc.limit-before, now)
 }
 
 func (twc *tokenCounterPerWorkClass) signal() {
@@ -152,6 +151,18 @@ func (twc *tokenCounterPerWorkClass) signal() {
 	case twc.signalCh <- struct{}{}:
 	default:
 	}
+}
+
+func (twc *tokenCounterPerWorkClass) getAndResetStats(now time.Time) deltaStats {
+	stats := twc.stats.deltaStats
+	if twc.tokens <= 0 {
+		stats.noTokenDuration += now.Sub(twc.stats.noTokenStartTime)
+	}
+	twc.stats.deltaStats = deltaStats{}
+	// Doesn't matter if bwc.tokens is actually > 0 since in that case we won't
+	// use this value.
+	twc.stats.noTokenStartTime = now
+	return stats
 }
 
 type tokensPerWorkClass struct {
@@ -163,6 +174,8 @@ type tokensPerWorkClass struct {
 // returning and waiting for flow tokens.
 type tokenCounter struct {
 	settings *cluster.Settings
+	clock    *hlc.Clock
+	metrics  *TokenCounterMetrics
 
 	mu struct {
 		syncutil.RWMutex
@@ -171,34 +184,56 @@ type tokenCounter struct {
 	}
 }
 
-var _ TokenCounter = &tokenCounter{}
-
-func newTokenCounter(settings *cluster.Settings) *tokenCounter {
+// newTokenCounter creates a new TokenCounter.
+func newTokenCounter(
+	settings *cluster.Settings, clock *hlc.Clock, metrics *TokenCounterMetrics,
+) *tokenCounter {
 	t := &tokenCounter{
 		settings: settings,
+		clock:    clock,
+		metrics:  metrics,
 	}
 	limit := tokensPerWorkClass{
 		regular: kvflowcontrol.Tokens(kvflowcontrol.RegularTokensPerStream.Get(&settings.SV)),
 		elastic: kvflowcontrol.Tokens(kvflowcontrol.ElasticTokensPerStream.Get(&settings.SV)),
 	}
+	now := clock.PhysicalTime()
+
 	t.mu.counters[admissionpb.RegularWorkClass] = makeTokenCounterPerWorkClass(
-		admissionpb.RegularWorkClass, limit.regular)
+		admissionpb.RegularWorkClass, limit.regular, now)
 	t.mu.counters[admissionpb.ElasticWorkClass] = makeTokenCounterPerWorkClass(
-		admissionpb.ElasticWorkClass, limit.elastic)
+		admissionpb.ElasticWorkClass, limit.elastic, now)
 
 	onChangeFunc := func(ctx context.Context) {
+		now := t.clock.PhysicalTime()
 		t.mu.Lock()
 		defer t.mu.Unlock()
 
 		t.mu.counters[admissionpb.RegularWorkClass].setLimitLocked(
-			ctx, kvflowcontrol.Tokens(kvflowcontrol.RegularTokensPerStream.Get(&settings.SV)))
+			ctx, kvflowcontrol.Tokens(kvflowcontrol.RegularTokensPerStream.Get(&settings.SV)), now)
 		t.mu.counters[admissionpb.ElasticWorkClass].setLimitLocked(
-			ctx, kvflowcontrol.Tokens(kvflowcontrol.ElasticTokensPerStream.Get(&settings.SV)))
+			ctx, kvflowcontrol.Tokens(kvflowcontrol.ElasticTokensPerStream.Get(&settings.SV)), now)
 	}
 
 	kvflowcontrol.RegularTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
 	kvflowcontrol.ElasticTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
 	return t
+}
+
+// String returns a string representation of the token counter.
+func (b *tokenCounter) String() string {
+	return redact.StringWithoutMarkers(b)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (b *tokenCounter) SafeFormat(w redact.SafePrinter, _ rune) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	w.Printf("reg=%v/%v ela=%v/%v",
+		b.mu.counters[admissionpb.RegularWorkClass].tokens,
+		b.mu.counters[admissionpb.RegularWorkClass].limit,
+		b.mu.counters[admissionpb.ElasticWorkClass].tokens,
+		b.mu.counters[admissionpb.ElasticWorkClass].limit)
 }
 
 func (t *tokenCounter) tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
@@ -229,6 +264,7 @@ func (t *tokenCounter) TokensAvailable(
 func (t *tokenCounter) TryDeduct(
 	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
 ) kvflowcontrol.Tokens {
+	now := t.clock.PhysicalTime()
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -238,7 +274,7 @@ func (t *tokenCounter) TryDeduct(
 	}
 
 	adjust := min(tokensAvailable, tokens)
-	t.adjustLocked(ctx, wc, -adjust)
+	t.adjustLocked(ctx, wc, -adjust, now)
 	return adjust
 }
 
@@ -302,27 +338,175 @@ func (wh waitHandle) ConfirmHaveTokensAndUnblockNextWaiter() (haveTokens bool) {
 	return haveTokens
 }
 
+type tokenWaitingHandleInfo struct {
+	handle TokenWaitingHandle
+	// For regular work, this will be set for the leaseholder and leader. For
+	// elastic work this will be set for the aforementioned, and all replicas
+	// which are in StateReplicate.
+	requiredWait bool
+}
+
+// WaitEndState is the state returned by WaitForEval and indicates the result
+// of waiting.
+type WaitEndState int32
+
+const (
+	// WaitSuccess indicates that the required quorum and required wait handles
+	// were signaled and had tokens available.
+	WaitSuccess WaitEndState = iota
+	// ContextCanceled indicates that the context was canceled.
+	ContextCanceled
+	// RefreshWaitSignaled indicates that the refresh channel was signaled.
+	RefreshWaitSignaled
+)
+
+func (s WaitEndState) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s WaitEndState) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch s {
+	case WaitSuccess:
+		w.Print("wait_success")
+	case ContextCanceled:
+		w.Print("context_cancelled")
+	case RefreshWaitSignaled:
+		w.Print("refresh_wait_signaled")
+	default:
+		panic(fmt.Sprintf("unknown wait_end_state(%d)", int(s)))
+	}
+}
+
+// WaitForEval waits for a quorum of handles to be signaled and have tokens
+// available, including all the required wait handles. The caller can provide a
+// refresh channel, which when signaled will cause the function to return
+// RefreshWaitSignaled, allowing the caller to retry waiting with updated
+// handles.
+func WaitForEval(
+	ctx context.Context,
+	refreshWaitCh <-chan struct{},
+	handles []tokenWaitingHandleInfo,
+	requiredQuorum int,
+	scratch []reflect.SelectCase,
+) (state WaitEndState, scratch2 []reflect.SelectCase) {
+	scratch = scratch[:0]
+	if len(handles) < requiredQuorum {
+		log.Fatalf(ctx, "%v", errors.AssertionFailedf(
+			"invalid arguments to WaitForEval: len(handles)=%d < required_quorum=%d",
+			len(handles), requiredQuorum))
+	}
+
+	scratch = append(scratch,
+		reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ctx.Done())})
+	scratch = append(scratch,
+		reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(refreshWaitCh)})
+
+	requiredWaitCount := 0
+	for _, h := range handles {
+		if h.requiredWait {
+			requiredWaitCount++
+		}
+		scratch = append(scratch,
+			reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(h.handle.WaitChannel())})
+	}
+	if requiredQuorum == 0 && requiredWaitCount == 0 {
+		log.Fatalf(ctx, "both requiredQuorum and requiredWaitCount are zero")
+	}
+
+	// m is the current length of the scratch slice.
+	m := len(scratch)
+	signaledCount := 0
+
+	// Wait for (1) at least a quorumCount of handles to be signaled and have
+	// available tokens; as well as (2) all of the required wait handles to be
+	// signaled and have tokens available.
+	for signaledCount < requiredQuorum || requiredWaitCount > 0 {
+		chosen, _, _ := reflect.Select(scratch)
+		switch chosen {
+		case 0:
+			return ContextCanceled, scratch
+		case 1:
+			return RefreshWaitSignaled, scratch
+		default:
+			handleInfo := handles[chosen-2]
+			if available := handleInfo.handle.ConfirmHaveTokensAndUnblockNextWaiter(); !available {
+				// The handle was signaled but does not currently have tokens
+				// available. Continue waiting on this handle.
+				continue
+			}
+
+			signaledCount++
+			if handleInfo.requiredWait {
+				requiredWaitCount--
+			}
+			m--
+			scratch[chosen], scratch[m] = scratch[m], scratch[chosen]
+			scratch = scratch[:m]
+			handles[chosen-2], handles[m-2] = handles[m-2], handles[chosen-2]
+		}
+	}
+
+	return WaitSuccess, scratch
+}
+
 // adjust the tokens for the given work class by delta. The adjustment is
 // performed atomically.
 func (t *tokenCounter) adjust(
 	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens,
 ) {
+	now := t.clock.PhysicalTime()
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.adjustLocked(ctx, class, delta)
+	t.adjustLocked(ctx, class, delta, now)
 }
 
 func (t *tokenCounter) adjustLocked(
-	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens,
+	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens, now time.Time,
 ) {
+	var adjustment, unaccounted tokensPerWorkClass
 	switch class {
 	case admissionpb.RegularWorkClass:
-		t.mu.counters[admissionpb.RegularWorkClass].adjustTokensLocked(ctx, delta)
-		// Regular {deductions,returns} also affect elastic flow tokens.
-		t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta)
+		adjustment.regular, unaccounted.regular =
+			t.mu.counters[admissionpb.RegularWorkClass].adjustTokensLocked(ctx, delta, now)
+			// Regular {deductions,returns} also affect elastic flow tokens.
+		adjustment.elastic, unaccounted.elastic =
+			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta, now)
+
 	case admissionpb.ElasticWorkClass:
 		// Elastic {deductions,returns} only affect elastic flow tokens.
-		t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta)
+		adjustment.elastic, unaccounted.elastic =
+			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta, now)
 	}
+
+	// Adjust metrics if any tokens were actually adjusted or unaccounted for
+	// tokens were detected.
+	if adjustment.regular != 0 || adjustment.elastic != 0 {
+		t.metrics.onTokenAdjustment(adjustment)
+	}
+	if unaccounted.regular != 0 || unaccounted.elastic != 0 {
+		t.metrics.onUnaccounted(unaccounted)
+	}
+}
+
+// testingSetTokens is used in tests to set the tokens for a given work class,
+// ignoring any adjustments.
+func (t *tokenCounter) testingSetTokens(
+	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
+) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.mu.counters[wc].adjustTokensLocked(ctx,
+		tokens-t.mu.counters[wc].tokens, t.clock.PhysicalTime())
+}
+
+func (t *tokenCounter) GetAndResetStats(now time.Time) (regularStats, elasticStats deltaStats) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	regularStats = t.mu.counters[admissionpb.RegularWorkClass].getAndResetStats(now)
+	elasticStats = t.mu.counters[admissionpb.ElasticWorkClass].getAndResetStats(now)
+	return regularStats, elasticStats
 }

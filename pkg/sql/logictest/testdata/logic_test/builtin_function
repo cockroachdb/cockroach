@@ -3864,6 +3864,72 @@ select crdb_internal.job_payload_type('invalid'::BYTES);
 query error pgcode 22023 pq: crdb_internal.job_payload_type\(\): invalid type in job payload protocol message: Payload.Type called on a payload with an unknown details type: <nil>
 select crdb_internal.job_payload_type('');
 
+subtest crdb_internal.get_fully_qualified_table_name
+query T
+SELECT crdb_internal.get_fully_qualified_table_name(NULL)
+----
+NULL
+
+query T
+SELECT crdb_internal.get_fully_qualified_table_name(9999999)
+----
+NULL
+
+statement ok
+CREATE DATABASE "testDatabase"
+
+query T
+SELECT crdb_internal.get_fully_qualified_table_name((SELECT id FROM system.namespace WHERE name = 'foo'))
+----
+test.public.foo
+
+statement error unknown signature: crdb_internal.get_fully_qualified_table_name\(string\)
+SELECT crdb_internal.get_fully_qualified_table_name('')
+
+statement ok
+USE "testDatabase"
+
+statement ok
+CREATE SCHEMA "testSchema"
+
+statement ok
+CREATE TABLE "testSchema"."testTable" (a INT)
+
+let $testTableID
+SELECT id FROM system.namespace WHERE name = 'testTable'
+
+statement ok
+USE test
+
+query T
+SELECT crdb_internal.get_fully_qualified_table_name($testTableID)
+----
+"testDatabase"."testSchema"."testTable"
+
+user testuser
+
+# Verify that testuser has permissions to use the builtin function, and the
+# backing view.
+query T
+SELECT crdb_internal.get_fully_qualified_table_name($testTableID)
+----
+"testDatabase"."testSchema"."testTable"
+
+user root
+
+statement ok
+REVOKE CONNECT ON DATABASE "testDatabase" FROM public
+
+user testuser
+
+# testuser should no longer be able to see the name.
+query T
+SELECT crdb_internal.get_fully_qualified_table_name($testTableID)
+----
+NULL
+
+user root
+
 subtest crdb_internal.redactable_sql_constants
 query T
 SELECT crdb_internal.redactable_sql_constants(NULL)

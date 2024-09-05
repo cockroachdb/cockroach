@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 6
+const configIdx = 7
 
 var logicTestDir string
 
@@ -594,6 +594,13 @@ func TestLogic_distinct_on(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "distinct_on")
+}
+
+func TestLogic_distsql_automatic_partial_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "distsql_automatic_partial_stats")
 }
 
 func TestLogic_distsql_automatic_stats(

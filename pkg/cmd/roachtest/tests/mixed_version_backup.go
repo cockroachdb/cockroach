@@ -2661,8 +2661,6 @@ func registerBackupMixedVersion(r registry.Registry) {
 					mixedversion.ClusterSettingMutator("storage.ingest_split.enabled"),
 					mixedversion.ClusterSettingMutator("storage.sstable.compression_algorithm"),
 				),
-				// Multi-tenant deployments are currently unsupported. See #127378.
-				mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 			)
 			testRNG := mvt.RNG()
 
@@ -2778,7 +2776,7 @@ func schemaChangeWorkloadCmd(
 	// TODO (msbutler): ideally we'd use the `db` flag to explicitly set the
 	// database, but it is currently broken:
 	// https://github.com/cockroachdb/cockroach/issues/115545
-	runCmd := roachtestutil.NewCommand(fmt.Sprintf("COCKROACH_RANDOM_SEED=%d ./workload run schemachange", testRNG.Int63())).
+	runCmd := roachtestutil.NewCommand("COCKROACH_RANDOM_SEED=%d ./workload run schemachange", testRNG.Int63()).
 		Flag("verbose", 1).
 		Flag("max-ops", maxOps).
 		Flag("concurrency", concurrency).

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfo"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
@@ -75,6 +76,11 @@ type Connector interface {
 	// TenantInfo retrieves current metadata about the tenant record and
 	// an update channel to track changes
 	TenantInfo() (tenantcapabilities.Entry, <-chan struct{})
+
+	// ReadFromTenantInfoAccessor allows retrieving the other tenant, if any, from
+	// which the calling tenant should configure itself to read, along with the
+	// latest timestamp at which it should perform such reads at this time.
+	mtinfo.ReadFromTenantInfoAccessor
 
 	// NodeDescStore provides information on each of the KV nodes in the cluster
 	// in the form of NodeDescriptors and StoreDescriptors. This obviates the

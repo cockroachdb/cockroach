@@ -48,7 +48,7 @@ func Decode(s string) (*License, error) {
 	return &lic, nil
 }
 
-func (u License_Usage) String() string {
+func (u License_Environment) String() string {
 	switch u {
 	case Unspecified:
 		return ""

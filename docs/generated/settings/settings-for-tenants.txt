@@ -340,6 +340,9 @@ sql.stats.activity.persisted_rows.max	integer	200000	maximum number of rows of s
 sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode	application
 sql.stats.automatic_collection.fraction_stale_rows	float	0.2	target fraction of stale rows per table that will trigger a statistics refresh	application
 sql.stats.automatic_collection.min_stale_rows	integer	500	target minimum number of stale rows per table that will trigger a statistics refresh	application
+sql.stats.automatic_partial_collection.enabled	boolean	false	automatic partial statistics collection mode	application
+sql.stats.automatic_partial_collection.fraction_stale_rows	float	0.05	target fraction of stale rows per table that will trigger a partial statistics refresh	application
+sql.stats.automatic_partial_collection.min_stale_rows	integer	100	target minimum number of stale rows per table that will trigger a partial statistics refresh	application
 sql.stats.cleanup.recurrence	string	@hourly	cron-tab recurrence for SQL Stats cleanup job	application
 sql.stats.flush.enabled	boolean	true	if set, SQL execution statistics are periodically flushed to disk	application
 sql.stats.flush.interval	duration	10m0s	the interval at which SQL execution statistics are flushed to disk, this value must be less than or equal to 1 hour	application
@@ -348,6 +351,8 @@ sql.stats.forecasts.max_decrease	float	0.3333333333333333	the most a prediction 
 sql.stats.forecasts.min_goodness_of_fit	float	0.95	the minimum R² (goodness of fit) measurement required from all predictive models to use a forecast	application
 sql.stats.forecasts.min_observations	integer	3	the mimimum number of observed statistics required to produce a statistics forecast	application
 sql.stats.histogram_buckets.count	integer	200	maximum number of histogram buckets to build during table statistics collection	application
+sql.stats.histogram_buckets.include_most_common_values.enabled	boolean	true	whether to include most common values as histogram buckets	application
+sql.stats.histogram_buckets.max_fraction_most_common_values	float	0.1	maximum fraction of histogram buckets to use for most common values	application
 sql.stats.histogram_collection.enabled	boolean	true	histogram collection mode	application
 sql.stats.histogram_samples.count	integer	0	number of rows sampled for histogram construction during table statistics collection. Not setting this or setting a value of 0 means that a reasonable sample size will be automatically picked based on the table size.	application
 sql.stats.multi_column_collection.enabled	boolean	true	multi-column statistics collection mode	application
@@ -377,6 +382,7 @@ sql.ttl.default_select_batch_size	integer	500	default amount of rows to select i
 sql.ttl.default_select_rate_limit	integer	0	default select rate limit (rows per second) per node for each TTL job. Use 0 to signify no rate limit.	application
 sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled	application
 sql.txn.read_committed_isolation.enabled	boolean	true	set to true to allow transactions to use the READ COMMITTED isolation level if specified by BEGIN/SET commands	application
+sql.txn.repeatable_read_isolation.enabled (alias: sql.txn.snapshot_isolation.enabled)	boolean	false	set to true to allow transactions to use the REPEATABLE READ isolation level if specified by BEGIN/SET commands	application
 sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored	application
 storage.ingestion.value_blocks.enabled	boolean	true	set to true to enable writing of value blocks in ingestion sstables	application
 storage.max_sync_duration	duration	20s	maximum duration for disk operations; any operations that take longer than this setting trigger a warning log entry or process crash	system-visible
@@ -392,4 +398,4 @@ trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace 
 trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez	application
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui [etc/utc = 0, america/new_york = 1]	application
-version	version	1000024.2-upgrading-to-1000024.3-step-006	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000024.2-upgrading-to-1000024.3-step-014	set the active cluster version in the format '<major>.<minor>'	application

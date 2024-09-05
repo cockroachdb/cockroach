@@ -41,7 +41,7 @@ func (s *systemStatusServer) ProblemRanges(
 	if len(req.NodeID) > 0 {
 		requestedNodeID, _, err := s.parseNodeID(req.NodeID)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		isLiveMap = map[roachpb.NodeID]livenesspb.NodeVitality{requestedNodeID: s.nodeLiveness.GetNodeVitalityFromCache(requestedNodeID)}
 	} else {
@@ -80,7 +80,7 @@ func (s *systemStatusServer) ProblemRanges(
 					// Context completed, response no longer needed.
 				}
 			}); err != nil {
-			return nil, status.Errorf(codes.Internal, err.Error())
+			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
 
@@ -141,6 +141,10 @@ func (s *systemStatusServer) ProblemRanges(
 					problems.PausedReplicaIDs =
 						append(problems.PausedReplicaIDs, info.State.Desc.RangeID)
 				}
+				if info.Problems.RangeTooLarge {
+					problems.TooLargeRangeIds =
+						append(problems.TooLargeRangeIds, info.State.Desc.RangeID)
+				}
 			}
 			slices.Sort(problems.UnavailableRangeIDs)
 			slices.Sort(problems.RaftLeaderNotLeaseHolderRangeIDs)
@@ -152,9 +156,10 @@ func (s *systemStatusServer) ProblemRanges(
 			slices.Sort(problems.RaftLogTooLargeRangeIDs)
 			slices.Sort(problems.CircuitBreakerErrorRangeIDs)
 			slices.Sort(problems.PausedReplicaIDs)
+			slices.Sort(problems.TooLargeRangeIds)
 			response.ProblemsByNodeID[resp.nodeID] = problems
 		case <-ctx.Done():
-			return nil, status.Errorf(codes.DeadlineExceeded, ctx.Err().Error())
+			return nil, status.Error(codes.DeadlineExceeded, ctx.Err().Error())
 		}
 	}
 

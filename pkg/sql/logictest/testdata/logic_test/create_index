@@ -159,19 +159,19 @@ subtest create_index_concurrently
 statement ok
 CREATE TABLE create_index_concurrently_tbl (a int)
 
-onlyif config local-read-committed
+onlyif config weak-iso-level-configs
 statement ok
 CREATE INDEX CONCURRENTLY create_index_concurrently_idx ON create_index_concurrently_tbl(a)
 
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 query T noticetrace
 CREATE INDEX CONCURRENTLY create_index_concurrently_idx ON create_index_concurrently_tbl(a)
 ----
 NOTICE: CONCURRENTLY is not required as all indexes are created concurrently
 
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 query T noticetrace
 CREATE INDEX CONCURRENTLY IF NOT EXISTS create_index_concurrently_idx ON create_index_concurrently_tbl(a)
 ----
@@ -186,8 +186,8 @@ create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl
                                  INDEX create_index_concurrently_idx (a ASC)
                                )
 
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 query T noticetrace
 DROP INDEX CONCURRENTLY create_index_concurrently_idx
 ----
@@ -195,14 +195,14 @@ NOTICE: CONCURRENTLY is not required as all indexes are dropped concurrently
 NOTICE: the data for dropped indexes is reclaimed asynchronously
 HINT: The reclamation delay can be customized in the zone configuration for the table.
 
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 query T noticetrace
 DROP INDEX CONCURRENTLY IF EXISTS create_index_concurrently_idx
 ----
 NOTICE: CONCURRENTLY is not required as all indexes are dropped concurrently
 
-onlyif config local-read-committed
+onlyif config weak-iso-level-configs
 statement ok
 DROP INDEX CONCURRENTLY create_index_concurrently_idx
 

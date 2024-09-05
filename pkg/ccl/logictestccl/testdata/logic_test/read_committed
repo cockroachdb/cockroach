@@ -84,12 +84,12 @@ SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
 statement ok
 ROLLBACK
 
-# Use SELECT FOR UPDATE under snapshot isolation.
+# Use SELECT FOR UPDATE under repeatable read isolation.
 statement ok
-SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
+SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
 
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ
 
 query I
 SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
@@ -100,7 +100,7 @@ statement ok
 ROLLBACK
 
 statement ok
-RESET CLUSTER SETTING sql.txn.snapshot_isolation.enabled
+RESET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled
 
 # Use SELECT FOR UPDATE in a subquery under read committed isolation.
 statement ok

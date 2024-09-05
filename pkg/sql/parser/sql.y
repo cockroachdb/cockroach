@@ -872,9 +872,6 @@ func (u *sqlSymUnion) showRangesOpts() *tree.ShowRangesOptions {
 func (u *sqlSymUnion) tenantSpec() *tree.TenantSpec {
     return u.val.(*tree.TenantSpec)
 }
-func (u *sqlSymUnion) likeTenantSpec() *tree.LikeTenantSpec {
-    return u.val.(*tree.LikeTenantSpec)
-}
 func (u *sqlSymUnion) cteMaterializeClause() tree.CTEMaterializeClause {
     return u.val.(tree.CTEMaterializeClause)
 }
@@ -977,7 +974,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %token <str> HAVING HASH HEADER HIGH HISTOGRAM HOLD HOUR
 
 %token <str> IDENTITY
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMEDIATELY IMMUTABLE IMPORT IN INCLUDE
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS IGNORE_CDC_IGNORED_TTL_DELETES ILIKE IMMEDIATE IMMEDIATELY IMMUTABLE IMPORT IN INCLUDE
 %token <str> INCLUDING INCLUDE_ALL_SECONDARY_TENANTS INCLUDE_ALL_VIRTUAL_CLUSTERS INCREMENT INCREMENTAL INCREMENTAL_LOCATION
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
@@ -1238,7 +1235,6 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <tree.Statement> create_proc_stmt
 %type <tree.Statement> create_trigger_stmt
 
-%type <*tree.LikeTenantSpec> opt_like_virtual_cluster
 %type <tree.LogicalReplicationResources> logical_replication_resources, logical_replication_resources_list
 %type <*tree.LogicalReplicationOptions> opt_logical_replication_options logical_replication_options logical_replication_options_list
 
@@ -1725,7 +1721,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <tree.ObjectNamePrefixList>  opt_in_schemas
 %type <privilege.TargetObjectType> target_object_type
 
-// User defined function relevant components.
+// Routine (UDF/SP) relevant components.
 %type <bool> opt_or_replace opt_return_table opt_return_set opt_no
 %type <str> param_name routine_as
 %type <tree.RoutineParams> opt_routine_param_with_default_list routine_param_with_default_list func_params func_params_list
@@ -4634,10 +4630,11 @@ create_stmt:
 //  ON 'stream_uri'
 //  INTO <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name>
 //  [WITH
-//  < MODE = immediate | transactional > |
+//  < MODE = immediate | validated > |
 //  < CURSOR = start_time > |
 //  < DEFAULT FUNCTION = lww | dlq | udf
-//  < FUNCTION 'udf' FOR TABLE local_name  , ... >
+//  < FUNCTION 'udf' FOR TABLE local_name  , ... > |
+//  < IGNORE_CDC_IGNORED_TTL_DELETES >
 // ]
 create_logical_replication_stream_stmt:
   CREATE LOGICAL REPLICATION STREAM FROM logical_replication_resources ON string_or_placeholder INTO logical_replication_resources opt_logical_replication_options
@@ -4735,53 +4732,53 @@ logical_replication_options:
   {
      $$.val = &tree.LogicalReplicationOptions{UserFunctions: map[tree.UnresolvedName]tree.RoutineName{*$5.unresolvedObjectName().ToUnresolvedName():$2.unresolvedObjectName().ToRoutineName()}}
   }
+| IGNORE_CDC_IGNORED_TTL_DELETES
+  {
+    $$.val = &tree.LogicalReplicationOptions{IgnoreCDCIgnoredTTLDeletes: tree.MakeDBool(true)}
+  }
 
 // %Help: CREATE VIRTUAL CLUSTER - create a new virtual cluster
 // %Category: Experimental
 // %Text:
-// CREATE VIRTUAL CLUSTER [ IF NOT EXISTS ] name [ LIKE <virtual_cluster_spec> ] [ <replication> ]
+// CREATE VIRTUAL CLUSTER [ IF NOT EXISTS ] name [ <replication> ]
 //
 // Replication option:
 //    FROM REPLICATION OF <virtual_cluster_spec> ON <location> [ WITH OPTIONS ... ]
 create_virtual_cluster_stmt:
-  CREATE virtual_cluster d_expr opt_like_virtual_cluster
+  CREATE virtual_cluster d_expr
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()},
-      Like: $4.likeTenantSpec(),
     }
   }
-| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_virtual_cluster
+| CREATE virtual_cluster IF NOT EXISTS d_expr
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
       IfNotExists: true,
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
-      Like: $7.likeTenantSpec(),
     }
   }
-| CREATE virtual_cluster d_expr opt_like_virtual_cluster FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
+| CREATE virtual_cluster d_expr FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()},
-      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $8.expr()},
-      ReplicationSourceAddress: $10.expr(),
-      Options: *$11.tenantReplicationOptions(),
-      Like: $4.likeTenantSpec(),
+      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $7.expr()},
+      ReplicationSourceAddress: $9.expr(),
+      Options: *$10.tenantReplicationOptions(),
     }
   }
-| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_virtual_cluster FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
+| CREATE virtual_cluster IF NOT EXISTS d_expr FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
       IfNotExists: true,
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
-      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $11.expr()},
-      ReplicationSourceAddress: $13.expr(),
-      Options: *$14.tenantReplicationOptions(),
-      Like: $7.likeTenantSpec(),
+      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $10.expr()},
+      ReplicationSourceAddress: $12.expr(),
+      Options: *$13.tenantReplicationOptions(),
     }
   }
 | CREATE virtual_cluster error // SHOW HELP: CREATE VIRTUAL CLUSTER
@@ -4789,19 +4786,6 @@ create_virtual_cluster_stmt:
 virtual_cluster:
   TENANT { /* SKIP DOC */ }
 | VIRTUAL CLUSTER
-
-// opt_like_virtual_cluster defines a LIKE clause for CREATE VIRTUAL CLUSTER.
-// Eventually this can grow to support INCLUDING/EXCLUDING options
-// like in CREATE TABLE.
-opt_like_virtual_cluster:
-  /* EMPTY */
-  {
-     $$.val = &tree.LikeTenantSpec{}
-  }
-| LIKE virtual_cluster_spec
-  {
-      $$.val = &tree.LikeTenantSpec{OtherTenant: $2.tenantSpec()}
-  }
 
 // Optional tenant replication options.
 opt_with_replication_options:
@@ -4884,6 +4868,7 @@ create_extension_stmt:
 //    | [ NOT ] LEAKPROOF
 //    | { CALLED ON NULL INPUT | RETURNS NULL ON NULL INPUT | STRICT }
 //    | AS 'definition'
+//    | { [ EXTERNAL ] SECURITY DEFINER }
 //  } ...
 // %SeeAlso: WEBDOCS/create-function.html
 create_func_stmt:
@@ -5099,19 +5084,19 @@ common_routine_opt_item:
   }
 | EXTERNAL SECURITY DEFINER
   {
-    return unimplemented(sqllex, "create function...security")
+    $$.val = tree.RoutineDefiner
   }
 | EXTERNAL SECURITY INVOKER
   {
-    return unimplemented(sqllex, "create function...security")
+    $$.val = tree.RoutineInvoker
   }
 | SECURITY DEFINER
   {
-    return unimplemented(sqllex, "create function...security")
+    $$.val = tree.RoutineDefiner
   }
 | SECURITY INVOKER
   {
-    return unimplemented(sqllex, "create function...security")
+    $$.val = tree.RoutineInvoker
   }
 | LEAKPROOF
   {
@@ -7567,7 +7552,7 @@ set_exprs_internal:
 // %Text:
 // SET [SESSION] <var> { TO | = } <values...>
 // SET [SESSION] TIME ZONE <tz>
-// SET [SESSION] CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL { READ COMMITTED | SERIALIZABLE }
+// SET [SESSION] CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL { READ COMMITTED | REPEATABLE READ | SERIALIZABLE }
 // SET [SESSION] TRACING { TO | = } { on | off | cluster | kv | results } [,...]
 //
 // %SeeAlso: SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION, SET LOCAL
@@ -7624,7 +7609,7 @@ set_local_stmt:
 // SET [SESSION] TRANSACTION <txnparameters...>
 //
 // Transaction parameters:
-//    ISOLATION LEVEL { READ COMMITTED | SERIALIZABLE }
+//    ISOLATION LEVEL { READ COMMITTED | REPEATABLE READ | SERIALIZABLE }
 //    PRIORITY { LOW | NORMAL | HIGH }
 //    AS OF SYSTEM TIME <expr>
 //    [NOT] DEFERRABLE
@@ -9628,10 +9613,10 @@ show_locality_stmt:
   }
 
 show_fingerprints_stmt:
-  SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name
+  SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name opt_with_show_fingerprints_options
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName()}
+    $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName(), Options: *$6.showFingerprintOptions()}
   }
 | SHOW EXPERIMENTAL_FINGERPRINTS FROM virtual_cluster virtual_cluster_spec opt_with_show_fingerprints_options
   {
@@ -9672,6 +9657,11 @@ fingerprint_options:
   {
     $$.val = &tree.ShowFingerprintOptions{StartTimestamp: $4.expr()}
   }
+| EXCLUDE COLUMNS '=' string_or_placeholder_opt_list
+  {
+    $$.val = &tree.ShowFingerprintOptions{ExcludedUserColumns: $4.stringOrPlaceholderOptList()}
+  }
+
 
 
 show_full_scans_stmt:
@@ -12530,7 +12520,7 @@ transaction_stmt:
 // START TRANSACTION [ <txnparameter> [[,] ...] ]
 //
 // Transaction parameters:
-//    ISOLATION LEVEL { READ COMMITTED | SERIALIZABLE }
+//    ISOLATION LEVEL { READ COMMITTED | REPEATABLE READ | SERIALIZABLE }
 //    PRIORITY { LOW | NORMAL | HIGH }
 //
 // %SeeAlso: COMMIT, ROLLBACK, WEBDOCS/begin-transaction.html
@@ -17742,6 +17732,7 @@ unreserved_keyword:
 | NOWAIT
 | NULLS
 | IGNORE_FOREIGN_KEYS
+| IGNORE_CDC_IGNORED_TTL_DELETES
 | INSENSITIVE
 | OF
 | OFF
@@ -18169,6 +18160,7 @@ bare_label_keywords:
 | IFERROR
 | IFNULL
 | IGNORE_FOREIGN_KEYS
+| IGNORE_CDC_IGNORED_TTL_DELETES
 | ILIKE
 | IMMEDIATE
 | IMMEDIATELY

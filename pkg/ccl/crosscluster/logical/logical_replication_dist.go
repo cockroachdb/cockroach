@@ -35,6 +35,8 @@ func constructLogicalReplicationWriterSpecs(
 	tableMd map[int32]execinfrapb.TableReplicationMetadata,
 	jobID jobspb.JobID,
 	streamID streampb.StreamID,
+	ignoreCDCIgnoredTTLDeletes bool,
+	mode jobspb.LogicalReplicationDetails_ApplyMode,
 ) (map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, error) {
 	spanGroup := roachpb.SpanGroup{}
 	baseSpec := execinfrapb.LogicalReplicationWriterSpec{
@@ -45,6 +47,8 @@ func constructLogicalReplicationWriterSpecs(
 		Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
 		StreamAddress:               string(streamAddress),
 		TableMetadata:               tableMd,
+		IgnoreCDCIgnoredTTLDeletes:  ignoreCDCIgnoredTTLDeletes,
+		Mode:                        mode,
 	}
 
 	writerSpecs := make(map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, len(destSQLInstances))
@@ -55,7 +59,7 @@ func constructLogicalReplicationWriterSpecs(
 		destID := matcher.FindMatch(candidate.ClosestDestIDs)
 		partition := candidate.Partition
 
-		log.Infof(ctx, "logical replication src-dst pair candidate: %s (locality %s) - %d ("+
+		log.VInfof(ctx, 2, "logical replication src-dst pair candidate: %s (locality %s) - %d ("+
 			"locality %s)",
 			partition.ID,
 			partition.SrcLocality,

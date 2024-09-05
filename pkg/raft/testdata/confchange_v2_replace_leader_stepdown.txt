@@ -111,7 +111,7 @@ stabilize
   3->1 MsgAppResp Term:1 Log:0/5 Commit:4
   4->1 MsgAppResp Term:1 Log:0/5 Commit:4
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:5 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/5 EntryConfChangeV2
@@ -131,7 +131,7 @@ stabilize
   Ready MustSync=false:
   State:StateFollower
 > 2 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:5 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/5 EntryConfChangeV2
@@ -139,7 +139,7 @@ stabilize
   2->1 MsgAppResp Term:1 Log:0/5 Commit:5
   INFO 2 switched to configuration voters=(2 3 4)
 > 3 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:5 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/5 EntryConfChangeV2
@@ -147,7 +147,7 @@ stabilize
   3->1 MsgAppResp Term:1 Log:0/5 Commit:5
   INFO 3 switched to configuration voters=(2 3 4)
 > 4 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   HardState Term:1 Commit:5 Lead:1 LeadEpoch:0
   CommittedEntries:
   1/5 EntryConfChangeV2
@@ -171,6 +171,16 @@ raft-state
 campaign 1
 ----
 WARN 1 is unpromotable and can not campaign
+
+# TODO(arul): this is a hack until
+# https://github.com/cockroachdb/cockroach/issues/129098 is fixed.
+bump-epoch 1
+----
+  1 2 3 4
+1 2 1 1 1
+2 2 1 1 1
+3 2 1 1 1
+4 2 1 1 1
 
 # Campaign the dedicated voter n2 to become the new leader.
 campaign 2

@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"net"
 	"sort"
 	"strings"
@@ -241,6 +242,13 @@ var (
 		`duration spent in processing above any available stack history is appended to its trace, if automatic trace snapshots are enabled`,
 		time.Second*30,
 	)
+
+	livenessRangeCompactInterval = settings.RegisterDurationSetting(
+		settings.SystemOnly,
+		"kv.liveness_range_compact.interval",
+		`interval at which the liveness range is compacted. A value of 0 disables the periodic compaction`,
+		0,
+	)
 )
 
 // By default, stores will be started concurrently.
@@ -401,8 +409,6 @@ type Node struct {
 	// Turns `Node.writeNodeStatus` into a no-op. This is a hack to enable the
 	// COCKROACH_DEBUG_TS_IMPORT_FILE env var.
 	suppressNodeStatus atomic.Bool
-
-	diskStatsMap diskStatsMap
 
 	testingErrorEvent func(context.Context, *kvpb.BatchRequest, error)
 
@@ -812,6 +818,8 @@ func (n *Node) start(
 		log.Infof(ctx, "started with engine type %v", &t)
 	}
 	log.Infof(ctx, "started with attributes %v", attrs.Attrs)
+
+	n.startPeriodicLivenessCompaction(n.stopper, livenessRangeCompactInterval)
 	return nil
 }
 
@@ -1103,6 +1111,87 @@ func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.
 	})
 }
 
+// startPeriodicLivenessCompaction starts a loop where it periodically compacts
+// the liveness range.
+func (n *Node) startPeriodicLivenessCompaction(
+	stopper *stop.Stopper, livenessRangeCompactInterval *settings.DurationSetting,
+) {
+	ctx := n.AnnotateCtx(context.Background())
+
+	// getCompactionInterval() returns the interval at which the liveness range is
+	// set to be compacted. If the interval is set to 0, the period is set to the
+	// max possible duration because a value of 0 cause the ticker to panic.
+	getCompactionInterval := func() time.Duration {
+		interval := livenessRangeCompactInterval.Get(&n.storeCfg.Settings.SV)
+		if interval == 0 {
+			interval = math.MaxInt64
+		}
+		return interval
+	}
+
+	if err := stopper.RunAsyncTask(ctx, "liveness-compaction", func(ctx context.Context) {
+		interval := getCompactionInterval()
+		ticker := time.NewTicker(interval)
+
+		intervalChangeChan := make(chan time.Duration)
+
+		// Update the compaction interval when the setting changes.
+		livenessRangeCompactInterval.SetOnChange(&n.storeCfg.Settings.SV, func(ctx context.Context) {
+			// intervalChangeChan is used to signal the compaction loop that the
+			// interval has changed. Avoid blocking the main goroutine that is
+			// responsible for handling all settings updates.
+			select {
+			case intervalChangeChan <- getCompactionInterval():
+			default:
+			}
+		})
+
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				// Find the liveness replica in order to compact it.
+				_ = n.stores.VisitStores(func(store *kvserver.Store) error {
+					store.VisitReplicas(func(repl *kvserver.Replica) bool {
+						span := repl.Desc().KeySpan().AsRawSpanWithNoLocals()
+						if keys.NodeLivenessSpan.Overlaps(span) {
+
+							// The CompactRange() method expects the start and end keys to be
+							// encoded.
+							startEngineKey :=
+								storage.EngineKey{
+									Key: span.Key,
+								}.Encode()
+
+							endEngineKey :=
+								storage.EngineKey{
+									Key: span.EndKey,
+								}.Encode()
+
+							timeBeforeCompaction := timeutil.Now()
+							if err := store.StateEngine().CompactRange(startEngineKey, endEngineKey); err != nil {
+								log.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
+							}
+
+							log.Infof(ctx, "finished compacting liveness replica: %+v and it took: %+v",
+								repl, timeutil.Since(timeBeforeCompaction))
+						}
+						return true
+					})
+					return nil
+				})
+			case newInterval := <-intervalChangeChan:
+				ticker.Reset(newInterval)
+			case <-stopper.ShouldQuiesce():
+				return
+			}
+		}
+	}); err != nil {
+		log.Errorf(ctx, "failed to start the async liveness compaction task")
+	}
+
+}
+
 // updateNodeRangeCount updates the internal counter of the total ranges across
 // all stores. This value is used to make a decision on whether the node should
 // use expiration leases (see Replica.shouldUseExpirationLeaseRLocked).
@@ -1144,6 +1233,7 @@ func (n *Node) computeMetricsPeriodically(
 		return nil
 	})
 	n.updateNodeRangeCount()
+	n.storeCfg.KVFlowStreamTokenProvider.UpdateMetricGauges()
 	return err
 }
 
@@ -1240,27 +1330,33 @@ func (mm *diskMonitorManager) Monitor(path string) (kvserver.DiskStatsMonitor, e
 
 func (n *Node) registerEnginesForDiskStatsMap(
 	specs []base.StoreSpec, engines []storage.Engine, diskManager *diskMonitorManager,
-) error {
-	if err := n.diskStatsMap.initDiskStatsMap(specs, engines, diskManager); err != nil {
-		return err
+) (admission.PebbleMetricsProvider, error) {
+	pmp := &nodePebbleMetricsProvider{n: n}
+	if err := pmp.diskStatsMap.initDiskStatsMap(specs, engines, diskManager); err != nil {
+		return nil, err
 	}
-	if err := n.stores.RegisterDiskMonitors(n.diskStatsMap.diskMonitors); err != nil {
-		return err
+	if err := n.stores.RegisterDiskMonitors(pmp.diskStatsMap.diskMonitors); err != nil {
+		return nil, err
 	}
-	return nil
+	return pmp, nil
+}
+
+type nodePebbleMetricsProvider struct {
+	n            *Node
+	diskStatsMap diskStatsMap
 }
 
 // GetPebbleMetrics implements admission.PebbleMetricsProvider.
-func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
+func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetrics {
 	clusterProvisionedBandwidth := kvadmission.ProvisionedBandwidth.Get(
-		&n.storeCfg.Settings.SV)
-	storeIDToDiskStats, err := n.diskStatsMap.tryPopulateAdmissionDiskStats(clusterProvisionedBandwidth)
+		&pmp.n.storeCfg.Settings.SV)
+	storeIDToDiskStats, err := pmp.diskStatsMap.tryPopulateAdmissionDiskStats(clusterProvisionedBandwidth)
 	if err != nil {
 		log.Warningf(context.Background(), "%v",
 			errors.Wrapf(err, "unable to populate disk stats"))
 	}
 	var metrics []admission.StoreMetrics
-	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
+	_ = pmp.n.stores.VisitStores(func(store *kvserver.Store) error {
 		m := store.TODOEngine().GetMetrics()
 		diskStats := admission.DiskStats{ProvisionedBandwidth: clusterProvisionedBandwidth}
 		if s, ok := storeIDToDiskStats[store.StoreID()]; ok {
@@ -1274,6 +1370,11 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 		return nil
 	})
 	return metrics
+}
+
+// Close implements admission.PebbleMetricsProvider.
+func (pmp *nodePebbleMetricsProvider) Close() {
+	pmp.diskStatsMap.closeDiskMonitors()
 }
 
 // GetTenantWeights implements kvserver.TenantWeightProvider.
@@ -1925,44 +2026,6 @@ func (n *Node) RangeLookup(
 	return resp, nil
 }
 
-// perRangeEventSink is an implementation of rangefeed.Stream which annotates
-// each response with rangeID and streamID. It is used by MuxRangeFeed.
-type perRangeEventSink struct {
-	ctx      context.Context
-	rangeID  roachpb.RangeID
-	streamID int64
-	wrapped  *rangefeed.StreamMuxer
-}
-
-var _ kvpb.RangeFeedEventSink = (*perRangeEventSink)(nil)
-var _ rangefeed.Stream = (*perRangeEventSink)(nil)
-
-func (s *perRangeEventSink) Context() context.Context {
-	return s.ctx
-}
-
-// SendIsThreadSafe is a no-op declaration method. It is a contract that the
-// Send method is thread-safe. Note that Send wraps rangefeed.StreamMuxer which
-// declares its Send method to be thread-safe.
-func (s *perRangeEventSink) SendIsThreadSafe() {}
-
-func (s *perRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
-	response := &kvpb.MuxRangeFeedEvent{
-		RangeFeedEvent: *event,
-		RangeID:        s.rangeID,
-		StreamID:       s.streamID,
-	}
-	return s.wrapped.Send(response)
-}
-
-// Disconnect implements the rangefeed.Stream interface. It requests the
-// StreamMuxer to detach the stream. The StreamMuxer is then responsible for
-// handling the actual disconnection and additional cleanup. Note that Caller
-// should not rely on immediate disconnection as cleanup takes place async.
-func (s *perRangeEventSink) Disconnect(err *kvpb.Error) {
-	s.wrapped.DisconnectStreamWithError(s.streamID, s.rangeID, err)
-}
-
 // lockedMuxStream provides support for concurrent calls to Send. The underlying
 // MuxRangeFeedServer (default grpc.Stream) is not safe for concurrent calls to
 // Send.
@@ -1979,55 +2042,100 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	return s.wrapped.Send(e)
 }
 
+// streamManager is an interface that defines the methods required to manage a
+// rangefeed.Stream at the node level. Implemented by rangefeed.BufferedSender
+// and rangefeed.UnbufferedSender.
+type streamManager interface {
+	// SendBufferedError disconnects the stream with the ev.StreamID and sends
+	// error back to client. This call is un-blocking, and additional clean-up
+	// takes place async. Caller cannot expect immediate disconnection.
+	SendBufferedError(ev *kvpb.MuxRangeFeedEvent)
+	// AddStream adds a new per-range stream for the streamManager to manage.
+	AddStream(streamID int64, cancel context.CancelFunc)
+	// Start starts the streamManager background job to manage all active streams.
+	// It continues until it errors or Stop is called. It is not valid to call
+	// Start multiple times or restart after Stop.
+	Start(ctx context.Context, stopper *stop.Stopper) error
+	// Stop streamManager background job if it is still running.
+	Stop()
+	// Error returns a channel that will be non-empty if the streamManager
+	// encounters an error and a node level shutdown is required.
+	Error() chan error
+}
+
 // MuxRangeFeed implements the roachpb.InternalServer interface.
-func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
-	muxStream := &lockedMuxStream{wrapped: stream}
+func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
+	lockedMuxStream := &lockedMuxStream{wrapped: muxStream}
 
 	// All context created below should derive from this context, which is
 	// cancelled once MuxRangeFeed exits.
-	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
+	ctx, cancel := context.WithCancel(n.AnnotateCtx(muxStream.Context()))
 	defer cancel()
-	streamMuxer := rangefeed.NewStreamMuxer(muxStream, n.metrics)
-	if err := streamMuxer.Start(ctx, n.stopper); err != nil {
+
+	var sm streamManager
+	if kvserver.RangefeedUseBufferedSender.Get(&n.storeCfg.Settings.SV) {
+		sm = rangefeed.NewBufferedSender(lockedMuxStream, n.metrics)
+		log.Fatalf(ctx, "unimplemented: buffered sender for rangefeed #126560")
+	} else {
+		sm = rangefeed.NewUnbufferedSender(lockedMuxStream, n.metrics)
+	}
+
+	if err := sm.Start(ctx, n.stopper); err != nil {
 		return err
 	}
-	defer streamMuxer.Stop()
+	defer sm.Stop()
+
+	makeMuxRangefeedErrorEvent := func(
+		streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
+	) *kvpb.MuxRangeFeedEvent {
+		ev := &kvpb.MuxRangeFeedEvent{
+			StreamID: streamID,
+			RangeID:  rangeID,
+		}
+		ev.MustSetValue(&kvpb.RangeFeedError{
+			Error: *err,
+		})
+		return ev
+	}
 
 	for {
 		select {
-		case err := <-streamMuxer.Error():
+		case err := <-sm.Error():
 			return err
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-n.stopper.ShouldQuiesce():
 			return stop.ErrUnavailable
 		default:
-			req, err := stream.Recv()
+			req, err := muxStream.Recv()
 			if err != nil {
 				return err
 			}
 
 			if req.CloseStream {
+				// For client close stream requests, we now shut down at a later time. Check if that is okay.
 				// Note that we will call DisconnectStreamWithError again when
 				// registration.disconnect happens, but DisconnectStreamWithError will
 				// ignore subsequent errors.
-				streamMuxer.DisconnectStreamWithError(req.StreamID, req.RangeID,
-					kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)))
+				sm.SendBufferedError(makeMuxRangefeedErrorEvent(req.StreamID, req.RangeID,
+					kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))))
 				continue
 			}
 
 			streamCtx, cancel := context.WithCancel(ctx)
 			streamCtx = logtags.AddTag(streamCtx, "r", req.RangeID)
-			streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
+			streamCtx = logtags.AddTag(streamCtx, "sm", req.Replica.StoreID)
 			streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
 
-			streamSink := &perRangeEventSink{
-				ctx:      streamCtx,
-				rangeID:  req.RangeID,
-				streamID: req.StreamID,
-				wrapped:  streamMuxer,
+			var streamSink rangefeed.Stream
+			if ubs, ok := sm.(*rangefeed.UnbufferedSender); ok {
+				streamSink = rangefeed.NewPerRangeEventSink(streamCtx, req.RangeID, req.StreamID, ubs)
+			} else if bs, ok := sm.(*rangefeed.BufferedSender); ok {
+				streamSink = rangefeed.NewBufferedPerRangeEventSink(streamCtx, req.RangeID, req.StreamID, bs)
+			} else {
+				log.Fatalf(streamCtx, "unknown sender type %T", sm)
 			}
-			streamMuxer.AddStream(req.StreamID, req.RangeID, cancel)
+			sm.AddStream(req.StreamID, cancel)
 
 			// Rangefeed attempts to register rangefeed a request over the specified
 			// span. If registration fails, it returns an error. Otherwise, it returns
@@ -2035,7 +2143,8 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			// the provided streamSink. If the rangefeed disconnects after being
 			// successfully registered, it calls streamSink.Disconnect with the error.
 			if err := n.stores.RangeFeed(req, streamSink); err != nil {
-				streamMuxer.DisconnectStreamWithError(req.StreamID, req.RangeID, kvpb.NewError(err))
+				sm.SendBufferedError(
+					makeMuxRangefeedErrorEvent(req.StreamID, req.RangeID, kvpb.NewError(err)))
 			}
 		}
 	}

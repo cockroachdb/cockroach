@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -63,6 +64,7 @@ import (
 	serverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/reports"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
@@ -420,11 +422,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	// started via the server controller.
 	cfg.RuntimeStatSampler = runtimeSampler
 
-	appRegistry.AddMetric(base.LicenseTTL)
-	err = base.UpdateMetricOnLicenseChange(ctx, cfg.Settings, base.LicenseTTL, timeutil.DefaultTimeSource{}, stopper)
-	if err != nil {
-		log.Errorf(ctx, "unable to initialize periodic license metric update: %v", err)
-	}
+	appRegistry.AddMetric(metric.NewFunctionalGauge(base.LicenseTTLMetadata, func() int64 {
+		return base.GetLicenseTTL(ctx, cfg.Settings, timeutil.DefaultTimeSource{})
+	}))
+	appRegistry.AddMetric(metric.NewFunctionalGauge(base.AdditionalLicenseTTLMetadata, func() int64 {
+		return base.GetLicenseTTL(ctx, cfg.Settings, timeutil.DefaultTimeSource{})
+	}))
 
 	// Create and add KV metric rules.
 	kvserver.CreateAndAddRules(ctx, ruleRegistry)
@@ -577,8 +580,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 
 	storesForFlowControl := kvserver.MakeStoresForFlowControl(stores)
+	storesForRACv2 := kvserver.MakeStoresForRACv2(stores)
 	kvflowTokenDispatch := kvflowdispatch.New(nodeRegistry, storesForFlowControl, nodeIDContainer)
-	admittedEntryAdaptor := newAdmittedLogEntryAdaptor(kvflowTokenDispatch)
+	admittedEntryAdaptor := newAdmittedLogEntryAdaptor(kvflowTokenDispatch, storesForRACv2)
 	admissionKnobs, ok := cfg.TestingKnobs.AdmissionControl.(*admission.TestingKnobs)
 	if !ok {
 		admissionKnobs = &admission.TestingKnobs{}
@@ -625,6 +629,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		admissionControl.storesFlowControl.ResetStreams(ctx)
 	})
 
+	admittedPiggybacker := node_rac2.NewAdmittedPiggybacker()
+	streamTokenCounterProvider := rac2.NewStreamTokenCounterProvider(st, clock)
+	evalWaitMetrics := rac2.NewEvalWaitMetrics()
+	nodeRegistry.AddMetricStruct(evalWaitMetrics)
+	nodeRegistry.AddMetricStruct(streamTokenCounterProvider.Metrics())
+
 	var raftTransportKnobs *kvserver.RaftTransportTestingKnobs
 	if knobs := cfg.TestingKnobs.RaftTransport; knobs != nil {
 		raftTransportKnobs = knobs.(*kvserver.RaftTransportTestingKnobs)
@@ -639,10 +649,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		admissionControl.kvflowTokenDispatch,
 		admissionControl.storesFlowControl,
 		admissionControl.storesFlowControl,
-		(*node_rac2.AdmittedPiggybacker)(nil),
+		admittedPiggybacker,
+		storesForRACv2,
 		raftTransportKnobs,
 	)
 	nodeRegistry.AddMetricStruct(raftTransport.Metrics())
+
+	storeLivenessTransport := storeliveness.NewTransport(
+		cfg.AmbientCtx, stopper, clock, kvNodeDialer, grpcServer.Server,
+	)
 
 	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer)
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
@@ -850,6 +865,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		Gossip:                       g,
 		NodeLiveness:                 nodeLiveness,
 		Transport:                    raftTransport,
+		StoreLivenessTransport:       storeLivenessTransport,
 		NodeDialer:                   kvNodeDialer,
 		RPCContext:                   rpcContext,
 		ScanInterval:                 cfg.ScanInterval,
@@ -875,6 +891,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowController:             admissionControl.kvflowController,
 		KVFlowHandles:                admissionControl.storesFlowControl,
 		KVFlowHandleMetrics:          admissionControl.kvFlowHandleMetrics,
+		KVFlowAdmittedPiggybacker:    admittedPiggybacker,
+		KVFlowStreamTokenProvider:    streamTokenCounterProvider,
+		KVFlowEvalWaitMetrics:        evalWaitMetrics,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
 		RangeCount:                   &atomic.Int64{},
 	}
@@ -1971,10 +1990,11 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// wholly initialized stores (it reads the StoreIdentKeys). It also needs
 	// to come before the call into SetPebbleMetricsProvider, which internally
 	// uses the disk stats map we're initializing.
-	if err := s.node.registerEnginesForDiskStatsMap(s.cfg.Stores.Specs, s.engines, (*diskMonitorManager)(s.cfg.DiskMonitorManager)); err != nil {
+	var pmp admission.PebbleMetricsProvider
+	if pmp, err = s.node.registerEnginesForDiskStatsMap(
+		s.cfg.Stores.Specs, s.engines, (*diskMonitorManager)(s.cfg.DiskMonitorManager)); err != nil {
 		return errors.Wrapf(err, "failed to register engines for the disk stats map")
 	}
-	s.stopper.AddCloser(stop.CloserFn(func() { s.node.diskStatsMap.closeDiskMonitors() }))
 
 	// Stores have been initialized, so Node can now provide Pebble metrics.
 	//
@@ -1984,7 +2004,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// existing stores shouldn’t be able to acquire leases yet. Although, below
 	// Raft commands like log application and snapshot application may be able
 	// to bypass admission control.
-	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, s.node, s.node)
+	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, pmp, s.node)
 
 	// Once all stores are initialized, check if offline storage recovery
 	// was done prior to start and record any actions appropriately.
@@ -2072,6 +2092,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 			s.stopper,
 			s.cfg.TestingKnobs,
 			orphanedLeasesTimeThresholdNanos,
+			s.InitialStart(),
 		); err != nil {
 			return err
 		}

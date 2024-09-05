@@ -13,6 +13,7 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 )
@@ -47,7 +48,7 @@ func init() {
 			connectionpb.ConnectionProvider_sql,
 			externalconn.SimpleURIFactory,
 		)
-
+		cloud.RegisterRedactedParams(cloud.RedactedParams(streamclient.SslInlineURLParam))
 		externalconn.RegisterDefaultValidation(scheme, validatePostgresConnectionURI)
 	}
 

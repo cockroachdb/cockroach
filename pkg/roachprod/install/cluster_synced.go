@@ -392,14 +392,15 @@ func (c *SyncedCluster) newSession(
 // for shared-process configurations.)
 //
 // When Stop needs to kill a process without other flags, the signal
-// is 9 (SIGKILL) and wait is true. If maxWait is non-zero, Stop stops
-// waiting after that approximate number of seconds.
+// is 9 (SIGKILL) and wait is true. If gracePeriod is non-zero, Stop
+// stops waiting after that approximate number of seconds, sending a
+// SIGKILL if the process is still running after that time.
 func (c *SyncedCluster) Stop(
 	ctx context.Context,
 	l *logger.Logger,
 	sig int,
 	wait bool,
-	maxWait int,
+	gracePeriod int,
 	virtualClusterLabel string,
 ) error {
 	// virtualClusterDisplay includes information about the virtual
@@ -443,7 +444,7 @@ func (c *SyncedCluster) Stop(
 		if wait {
 			display += " and waiting"
 		}
-		return c.kill(ctx, l, "stop", display, sig, wait, maxWait, virtualClusterLabel)
+		return c.kill(ctx, l, "stop", display, sig, wait, gracePeriod, virtualClusterLabel)
 	} else {
 		cmd := fmt.Sprintf("ALTER TENANT '%s' STOP SERVICE", virtualClusterName)
 		res, err := c.ExecSQL(ctx, l, c.Nodes[:1], "", 0, DefaultAuthMode(), "", /* database */
@@ -463,25 +464,25 @@ func (c *SyncedCluster) Stop(
 // Signal sends a signal to the CockroachDB process.
 func (c *SyncedCluster) Signal(ctx context.Context, l *logger.Logger, sig int) error {
 	display := fmt.Sprintf("%s: sending signal %d", c.Name, sig)
-	return c.kill(ctx, l, "signal", display, sig, false /* wait */, 0 /* maxWait */, "")
+	return c.kill(ctx, l, "signal", display, sig, false /* wait */, 0 /* gracePeriod */, "")
 }
 
 // kill sends the signal sig to all nodes in the cluster using the kill command.
 // cmdName and display specify the roachprod subcommand and a status message,
 // for output/logging. If wait is true, the command will wait for the processes
-// to exit, up to maxWait seconds.
+// to exit, up to gracePeriod seconds.
 func (c *SyncedCluster) kill(
 	ctx context.Context,
 	l *logger.Logger,
 	cmdName, display string,
 	sig int,
 	wait bool,
-	maxWait int,
+	gracePeriod int,
 	virtualClusterLabel string,
 ) error {
 	const timedOutMessage = "timed out"
 
-	if sig == 9 {
+	if sig == int(unix.SIGKILL) {
 		// `kill -9` without wait is never what a caller wants. See #77334.
 		wait = true
 	}
@@ -508,7 +509,7 @@ func (c *SyncedCluster) kill(
     echo "${pid}: dead" >> %[1]s/roachprod.log
   done`,
 					c.LogDir(node, "", 0), // [1]
-					maxWait,               // [2]
+					gracePeriod,           // [2]
 					timedOutMessage,       // [3]
 				)
 			}
@@ -549,10 +550,13 @@ fi`,
 				return res, err
 			}
 
-			if wait && strings.Contains(res.CombinedOut, timedOutMessage) {
-				return res, fmt.Errorf(
-					"timed out after %ds waiting for n%d to drain and shutdown",
-					maxWait, node,
+			// If the process has not terminated after the grace period,
+			// perform a forceful termination.
+			if wait && sig != int(unix.SIGKILL) && strings.Contains(res.CombinedOut, timedOutMessage) {
+				l.Printf("n%d did not shutdown after %ds, performing a SIGKILL", node, gracePeriod)
+				return res, errors.Wrapf(
+					c.kill(ctx, l, cmdName, display, int(unix.SIGKILL), true, 0, virtualClusterLabel),
+					"failed to forcefully terminate n%d", node,
 				)
 			}
 
@@ -563,7 +567,7 @@ fi`,
 // Wipe TODO(peter): document
 func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCerts bool) error {
 	display := fmt.Sprintf("%s: wiping", c.Name)
-	if err := c.Stop(ctx, l, 9, true /* wait */, 0 /* maxWait */, ""); err != nil {
+	if err := c.Stop(ctx, l, int(unix.SIGKILL), true /* wait */, 0 /* gracePeriod */, ""); err != nil {
 		return err
 	}
 	return c.Parallel(ctx, l, WithNodes(c.Nodes).WithDisplay(display), func(ctx context.Context, node Node) (*RunResultDetails, error) {
@@ -1147,6 +1151,7 @@ type RunCmdOptions struct {
 	stdin                   io.Reader
 	stdout, stderr          io.Writer
 	remoteOptions           []remoteSessionOption
+	expanderConfig          ExpanderConfig
 }
 
 // Default RunCmdOptions enable combining output (stdout and stderr) and capturing ssh (verbose) debug output.
@@ -1183,7 +1188,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	var noResult RunResultDetails
 	// Argument template expansion is node specific (e.g. for {store-dir}).
 	e := expander{node: node}
-	expandedCmd, err := e.expand(ctx, l, c, cmd)
+	expandedCmd, err := e.expand(ctx, l, c, opts.expanderConfig, cmd)
 	if err != nil {
 		return &noResult, errors.WithDetailf(err, "error expanding command: %s", cmd)
 	}
@@ -1291,6 +1296,7 @@ func (c *SyncedCluster) Run(
 			includeRoachprodEnvVars: true,
 			stdout:                  stdout,
 			stderr:                  stderr,
+			expanderConfig:          options.ExpanderConfig,
 		}
 		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 		return result, err
@@ -1672,6 +1678,7 @@ func (c *SyncedCluster) DistributeCerts(
 				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
 			}
 			cmd += fmt.Sprintf(`
+%[6]s
 rm -fr %[2]s
 mkdir -p %[2]s
 VERSION=$(%[1]s version --build-tag)
@@ -1685,7 +1692,7 @@ fi
 %[1]s cert create-client %[3]s --certs-dir=%[2]s --ca-key=%[2]s/ca.key $TENANT_SCOPE_OPT
 %[1]s cert create-node %[4]s --certs-dir=%[2]s --ca-key=%[2]s/ca.key
 tar cvf %[5]s %[2]s
-`, cockroachNodeBinary(c, 1), CockroachNodeCertsDir, DefaultUser, strings.Join(nodeNames, " "), certsTarName)
+`, cockroachNodeBinary(c, 1), CockroachNodeCertsDir, DefaultUser, strings.Join(nodeNames, " "), certsTarName, SuppressMetamorphicConstantsEnvVar())
 
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("init-certs"))
 		},
@@ -1729,11 +1736,12 @@ func (c *SyncedCluster) RedistributeNodeCert(ctx context.Context, l *logger.Logg
 				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
 			}
 			cmd += fmt.Sprintf(`
+%[6]s
 rm -fr %[2]s/node*
 mkdir -p %[2]s
 %[1]s cert create-node %[4]s --certs-dir=%[2]s --ca-key=%[2]s/ca.key
 tar cvf %[5]s %[2]s
-`, cockroachNodeBinary(c, 1), CockroachNodeCertsDir, DefaultUser, strings.Join(nodeNames, " "), certsTarName)
+`, cockroachNodeBinary(c, 1), CockroachNodeCertsDir, DefaultUser, strings.Join(nodeNames, " "), certsTarName, SuppressMetamorphicConstantsEnvVar())
 
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("redist-node-cert"))
 		},
@@ -1811,6 +1819,7 @@ func (c *SyncedCluster) createTenantCertBundle(
 				cmd += fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
 			}
 			cmd += fmt.Sprintf(`
+%[7]s
 CERT_DIR=%[1]s-%[5]d/certs
 CA_KEY=%[2]s/ca.key
 
@@ -1835,6 +1844,7 @@ tar cvf %[6]s $CERT_DIR
 				strings.Join(nodeNames, " "),
 				virtualClusterID,
 				bundleName,
+				SuppressMetamorphicConstantsEnvVar(),
 			)
 
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("create-tenant-cert-bundle"))
@@ -2076,6 +2086,10 @@ func (c *SyncedCluster) Put(
 	var wg sync.WaitGroup
 	wg.Add(len(nodes))
 
+	// We currently don't accept any custom expander configurations in
+	// this function.
+	var expanderConfig ExpanderConfig
+
 	// Each destination for the copy needs a source to copy from. We create a
 	// channel that has capacity for each destination. If we try to add a source
 	// and the channel is full we can simply drop that source as we know we won't
@@ -2108,7 +2122,7 @@ func (c *SyncedCluster) Put(
 		e := expander{
 			node: nodes[i],
 		}
-		dest, err := e.expand(ctx, l, c, dest)
+		dest, err := e.expand(ctx, l, c, expanderConfig, dest)
 		if err != nil {
 			return "", err
 		}
@@ -2131,7 +2145,7 @@ func (c *SyncedCluster) Put(
 					node: nodes[i],
 				}
 				var err error
-				dest, err = e.expand(ctx, l, c, dest)
+				dest, err = e.expand(ctx, l, c, expanderConfig, dest)
 				if err != nil {
 					results <- result{i, err}
 					return
@@ -2421,6 +2435,10 @@ func (c *SyncedCluster) Get(
 		spinner.TaskStatus(nodeID, fmt.Sprintf("  %2d: %s", nodeID, msg), done)
 	}
 
+	// We currently don't accept any custom expander configurations in
+	// this function.
+	var expanderConfig ExpanderConfig
+
 	var wg sync.WaitGroup
 	for i := range nodes {
 		nodeTaskStatus(nodes[i], "copying", false)
@@ -2439,7 +2457,7 @@ func (c *SyncedCluster) Get(
 			e := expander{
 				node: nodes[i],
 			}
-			src, err := e.expand(ctx, l, c, src)
+			src, err := e.expand(ctx, l, c, expanderConfig, src)
 			if err != nil {
 				results <- result{i, err}
 				return
@@ -2674,8 +2692,11 @@ func (c *SyncedCluster) SSH(ctx context.Context, l *logger.Logger, sshArgs, args
 		node: targetNode,
 	}
 	var expandedArgs []string
+	// We currently don't accept any custom expander configurations in
+	// this function.
+	var expanderConfig ExpanderConfig
 	for _, arg := range args {
-		expandedArg, err := e.expand(ctx, l, c, arg)
+		expandedArg, err := e.expand(ctx, l, c, expanderConfig, arg)
 		if err != nil {
 			return err
 		}

@@ -267,7 +267,7 @@ func (tu *optTableUpserter) updateConflictingRow(
 	//   via GenerateInsertRow().
 	// - for the fetched part, we assume that the data in the table is
 	//   correct already.
-	if err := enforceLocalColumnConstraints(updateValues, tu.updateCols); err != nil {
+	if err := enforceNotNullConstraints(updateValues, tu.updateCols); err != nil {
 		return err
 	}
 

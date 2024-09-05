@@ -106,6 +106,7 @@ const (
 	MVCCStatistics                         SystemTableName = "mvcc_statistics"
 	StmtExecInsightsTableName              SystemTableName = "statement_execution_insights"
 	TxnExecInsightsTableName               SystemTableName = "transaction_execution_insights"
+	TableMetadata                          SystemTableName = "table_metadata"
 )
 
 // Oid for virtual database and table.
@@ -215,6 +216,7 @@ const (
 	CrdbInternalPCRStreamSpansTableID
 	CrdbInternalPCRStreamCheckpointsTableID
 	CrdbInternalLDRProcessorTableID
+	CrdbInternalFullyQualifiedNamesViewID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
