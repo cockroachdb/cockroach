@@ -55,7 +55,7 @@ func (b *Builder) buildUDF(
 	// Check for execution privileges for user-defined overloads. Built-in
 	// overloads do not need to be checked.
 	if o.Type == tree.UDFRoutine {
-		if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.catalog.GetCurrentUser()); err != nil {
+		if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkPrivilegeUser); err != nil {
 			panic(err)
 		}
 	}
@@ -191,7 +191,7 @@ func (b *Builder) resolveProcedureDefinition(
 	}
 
 	// Check for execution privileges.
-	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.catalog.GetCurrentUser()); err != nil {
+	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkPrivilegeUser); err != nil {
 		panic(err)
 	}
 	return f, def
@@ -221,6 +221,15 @@ func (b *Builder) buildRoutine(
 		invocationTypes[i] = texpr.ResolvedType()
 	}
 	b.factory.Metadata().AddUserDefinedFunction(o, invocationTypes, f.Func.ReferenceByName)
+	// If this is a user-defined routine that has a security mode of DEFINER, we
+	// need to override our checkPrivilegeUser to be the owner of the routine.
+	if o.Type != tree.BuiltinRoutine && o.SecurityMode == tree.RoutineDefiner {
+		checkPrivUser, err := b.catalog.GetRoutineOwner(b.ctx, o.Oid)
+		if err != nil {
+			panic(err)
+		}
+		b.checkPrivilegeUser = checkPrivUser
+	}
 
 	// Validate that the return types match the original return types defined in
 	// the function. Return types like user defined return types may change

@@ -836,6 +836,7 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	if desc.ReturnType.ReturnSet {
 		ret.Class = tree.GeneratorClass
 	}
+	ret.SecurityMode = desc.getCreateExprSecurity()
 
 	return ret, nil
 }

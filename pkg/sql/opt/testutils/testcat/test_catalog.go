@@ -341,6 +341,13 @@ func (tc *Catalog) GetCurrentUser() username.SQLUsername {
 	return username.EmptyRoleName()
 }
 
+// GetRoutineOwner is part of the cat.Catalog interface.
+func (tc *Catalog) GetRoutineOwner(
+	ctx context.Context, routineOid oid.Oid,
+) (username.SQLUsername, error) {
+	return tc.GetCurrentUser(), nil
+}
+
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
 	if string(toResolve.CatalogName) != testDB {
 		return nil, cat.SchemaName{}, pgerror.Newf(pgcode.InvalidSchemaName,
