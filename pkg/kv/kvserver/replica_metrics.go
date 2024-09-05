@@ -51,6 +51,7 @@ type ReplicaMetrics struct {
 	Unavailable              bool
 	Underreplicated          bool
 	Overreplicated           bool
+	Decommissioning          bool
 	RaftLogTooLarge          bool
 	RangeTooLarge            bool
 	BehindCount              int64
@@ -172,7 +173,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		rangeTooLargeMultiple   = 2
 	)
 	largeRangeThreshold := rangeTooLargeMultiple * d.conf.RangeMaxBytes
-	rangeCounter, unavailable, underreplicated, overreplicated, tooLarge := calcRangeCounter(
+	rangeCounter, unavailable, underreplicated, overreplicated, tooLarge, decommissioning := calcRangeCounter(
 		d.storeID, d.desc, d.leaseStatus, d.vitalityMap, d.conf.GetNumVoters(), d.conf.NumReplicas,
 		d.clusterNodes, largeRangeThreshold, d.rangeSize)
 
@@ -200,6 +201,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		Unavailable:               unavailable,
 		Underreplicated:           underreplicated,
 		Overreplicated:            overreplicated,
+		Decommissioning:           decommissioning,
 		RaftLogTooLarge: d.raftLogSizeTrusted &&
 			d.raftLogSize > raftLogTooLargeMultiple*d.raftCfg.RaftLogTruncationThreshold,
 		RangeTooLarge:            tooLarge,
@@ -243,7 +245,7 @@ func calcRangeCounter(
 	numVoters, numReplicas int32,
 	clusterNodes int,
 	rangeTooLargeThreshold, rangeSize int64,
-) (rangeCounter, unavailable, underreplicated, overreplicated, tooLarge bool) {
+) (rangeCounter, unavailable, underreplicated, overreplicated, tooLarge, decommissioning bool) {
 	// If there is a live leaseholder (regardless of whether the lease is still
 	// valid) that leaseholder is responsible for range-level metrics.
 	if vitalityMap[leaseStatus.Lease.Replica.NodeID].IsLive(livenesspb.Metrics) {
@@ -279,6 +281,7 @@ func calcRangeCounter(
 			overreplicated = true
 		}
 		tooLarge = rangeSize > rangeTooLargeThreshold
+		decommissioning = calcDecommissioningCount(desc, vitalityMap) > 0
 	}
 	return
 }
@@ -331,6 +334,18 @@ func calcBehindCount(
 	}
 
 	return behindCount
+}
+
+func calcDecommissioningCount(
+	desc *roachpb.RangeDescriptor, vitalityMap livenesspb.NodeVitalityMap,
+) int {
+	var decommissioningCount int
+	for _, rd := range desc.Replicas().Descriptors() {
+		if vitalityMap[rd.NodeID].IsDecommissioning() {
+			decommissioningCount++
+		}
+	}
+	return decommissioningCount
 }
 
 // LoadStats returns the load statistics for the replica.
