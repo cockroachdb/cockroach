@@ -3298,7 +3298,7 @@ func (og *operationGenerator) randColumn(
 	q := fmt.Sprintf(`
   SELECT column_name
     FROM [SHOW COLUMNS FROM %s]
-   WHERE column_name != 'rowid'
+   WHERE NOT is_hidden
 ORDER BY random()
    LIMIT 1;
 `, tableName.String())
