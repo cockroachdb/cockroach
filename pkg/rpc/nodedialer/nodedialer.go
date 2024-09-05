@@ -240,7 +240,7 @@ func (n *Dialer) ConnHealthTryDialInstance(id base.SQLInstanceID, addr string) e
 		addr, roachpb.NodeID(id), rpc.DefaultClass); err == nil {
 		return nil
 	}
-	return n.rpcContext.GRPCDialPod(addr, id, roachpb.Locality{}, rpc.DefaultClass).Health()
+	return n.rpcContext.GRPCDialInstance(addr, id, roachpb.Locality{}, rpc.DefaultClass).Health()
 }
 
 // GetCircuitBreaker retrieves the circuit breaker for connections to the
