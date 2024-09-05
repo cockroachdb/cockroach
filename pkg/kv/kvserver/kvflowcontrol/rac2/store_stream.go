@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
 )
@@ -32,7 +32,7 @@ import (
 // TODO(kvoli): Add stream deletion upon decommissioning a store.
 type StreamTokenCounterProvider struct {
 	settings                   *cluster.Settings
-	clock                      *hlc.Clock
+	clock                      timeutil.TimeSource
 	tokenMetrics               *tokenMetrics
 	sendLogger, evalLogger     *blockedStreamLogger
 	sendCounters, evalCounters syncutil.Map[kvflowcontrol.Stream, tokenCounter]
@@ -40,7 +40,7 @@ type StreamTokenCounterProvider struct {
 
 // NewStreamTokenCounterProvider creates a new StreamTokenCounterProvider.
 func NewStreamTokenCounterProvider(
-	settings *cluster.Settings, clock *hlc.Clock,
+	settings *cluster.Settings, clock timeutil.TimeSource,
 ) *StreamTokenCounterProvider {
 	return &StreamTokenCounterProvider{
 		settings:     settings,
@@ -78,7 +78,7 @@ func (p *StreamTokenCounterProvider) UpdateMetricGauges() {
 		blockedCount    [numFlowControlMetricTypes][admissionpb.NumWorkClasses]int64
 		tokensAvailable [numFlowControlMetricTypes][admissionpb.NumWorkClasses]int64
 	)
-	now := p.clock.PhysicalTime()
+	now := p.clock.Now()
 
 	// First aggregate the metrics across all streams, by (eval|send) types and
 	// (regular|elastic) work classes, then using the aggregate update the

@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -174,7 +174,7 @@ type tokensPerWorkClass struct {
 // returning and waiting for flow tokens.
 type tokenCounter struct {
 	settings *cluster.Settings
-	clock    *hlc.Clock
+	clock    timeutil.TimeSource
 	metrics  *tokenCounterMetrics
 
 	mu struct {
@@ -186,7 +186,7 @@ type tokenCounter struct {
 
 // newTokenCounter creates a new TokenCounter.
 func newTokenCounter(
-	settings *cluster.Settings, clock *hlc.Clock, metrics *tokenCounterMetrics,
+	settings *cluster.Settings, clock timeutil.TimeSource, metrics *tokenCounterMetrics,
 ) *tokenCounter {
 	t := &tokenCounter{
 		settings: settings,
@@ -197,7 +197,7 @@ func newTokenCounter(
 		regular: kvflowcontrol.Tokens(kvflowcontrol.RegularTokensPerStream.Get(&settings.SV)),
 		elastic: kvflowcontrol.Tokens(kvflowcontrol.ElasticTokensPerStream.Get(&settings.SV)),
 	}
-	now := clock.PhysicalTime()
+	now := clock.Now()
 
 	t.mu.counters[admissionpb.RegularWorkClass] = makeTokenCounterPerWorkClass(
 		admissionpb.RegularWorkClass, limit.regular, now)
@@ -205,7 +205,7 @@ func newTokenCounter(
 		admissionpb.ElasticWorkClass, limit.elastic, now)
 
 	onChangeFunc := func(ctx context.Context) {
-		now := t.clock.PhysicalTime()
+		now := t.clock.Now()
 		t.mu.Lock()
 		defer t.mu.Unlock()
 
@@ -264,7 +264,7 @@ func (t *tokenCounter) TokensAvailable(
 func (t *tokenCounter) TryDeduct(
 	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
 ) kvflowcontrol.Tokens {
-	now := t.clock.PhysicalTime()
+	now := t.clock.Now()
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -455,7 +455,7 @@ func WaitForEval(
 func (t *tokenCounter) adjust(
 	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens,
 ) {
-	now := t.clock.PhysicalTime()
+	now := t.clock.Now()
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -499,7 +499,7 @@ func (t *tokenCounter) testingSetTokens(
 	defer t.mu.Unlock()
 
 	t.mu.counters[wc].adjustTokensLocked(ctx,
-		tokens-t.mu.counters[wc].tokens, t.clock.PhysicalTime())
+		tokens-t.mu.counters[wc].tokens, t.clock.Now())
 }
 
 func (t *tokenCounter) GetAndResetStats(now time.Time) (regularStats, elasticStats deltaStats) {

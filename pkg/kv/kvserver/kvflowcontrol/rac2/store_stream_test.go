@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -51,7 +50,7 @@ func TestBlockedStreamLogging(t *testing.T) {
 	const numTokens = 1 << 20 /* 1 MiB */
 	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &st.SV, numTokens)
 	kvflowcontrol.RegularTokensPerStream.Override(ctx, &st.SV, numTokens)
-	p := NewStreamTokenCounterProvider(st, hlc.NewClockForTesting(nil))
+	p := NewStreamTokenCounterProvider(st, timeutil.DefaultTimeSource{})
 
 	numBlocked := 0
 	createStreamAndExhaustTokens := func(id uint64, checkMetric bool) {

@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -50,8 +49,7 @@ type testingRCState struct {
 	testCtx               context.Context
 	settings              *cluster.Settings
 	stopper               *stop.Stopper
-	ts                    *timeutil.ManualTime
-	clock                 *hlc.Clock
+	clock                 *timeutil.ManualTime
 	ssTokenCounter        *StreamTokenCounterProvider
 	probeToCloseScheduler ProbeToCloseTimerScheduler
 	evalMetrics           *EvalWaitMetrics
@@ -70,8 +68,7 @@ func (s *testingRCState) init(t *testing.T, ctx context.Context) {
 	s.testCtx = ctx
 	s.settings = cluster.MakeTestingClusterSettings()
 	s.stopper = stop.NewStopper()
-	s.ts = timeutil.NewManualTime(timeutil.UnixEpoch)
-	s.clock = hlc.NewClockForTesting(s.ts)
+	s.clock = timeutil.NewManualTime(timeutil.UnixEpoch)
 	s.ssTokenCounter = NewStreamTokenCounterProvider(s.settings, s.clock)
 	s.probeToCloseScheduler = &testingProbeToCloseTimerScheduler{state: s}
 	s.evalMetrics = NewEvalWaitMetrics()
@@ -562,7 +559,7 @@ func (t *testingProbeToCloseTimerScheduler) ScheduleSendStreamCloseRaftMuLocked(
 	// separate pkg, or bring it into this package. For now, just do something
 	// simple, which is to send raft events to each range on a tick.
 	go func() {
-		timer := t.state.ts.NewTimer()
+		timer := t.state.clock.NewTimer()
 		defer timer.Stop()
 		timer.Reset(delay)
 
@@ -681,11 +678,11 @@ func TestRangeController(t *testing.T) {
 				d.ScanArgs(t, "duration", &durationStr)
 				duration, err := time.ParseDuration(durationStr)
 				require.NoError(t, err)
-				state.ts.Advance(duration)
+				state.clock.Advance(duration)
 				// Sleep for a bit to allow any timers to fire.
 				time.Sleep(20 * time.Millisecond)
 				return fmt.Sprintf("now=%v", humanizeutil.Duration(
-					state.ts.Now().Sub(timeutil.UnixEpoch)))
+					state.clock.Now().Sub(timeutil.UnixEpoch)))
 
 			case "wait_for_eval":
 				var rangeID int

@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -198,7 +198,7 @@ type RangeControllerOptions struct {
 	// needed (keyed by (tenantID, storeID)).
 	SSTokenCounter      *StreamTokenCounterProvider
 	RaftInterface       RaftInterface
-	Clock               *hlc.Clock
+	Clock               timeutil.TimeSource
 	CloseTimerScheduler ProbeToCloseTimerScheduler
 	AdmittedTracker     AdmittedTracker
 	EvalWaitMetrics     *EvalWaitMetrics
@@ -279,7 +279,7 @@ func (rc *rangeController) WaitForEval(
 	var scratch []reflect.SelectCase
 
 	rc.opts.EvalWaitMetrics.onWaiting(wc)
-	start := rc.opts.Clock.PhysicalTime()
+	start := rc.opts.Clock.Now()
 retry:
 	// Snapshot the voterSets and voterSetRefreshCh.
 	rc.mu.Lock()
@@ -292,7 +292,7 @@ retry:
 		// TODO(kvoli): We also need to do this in the replica_rac2.Processor,
 		// which will allow requests to bypass when a replica is not the leader and
 		// therefore the controller is closed.
-		rc.opts.EvalWaitMetrics.onBypassed(wc, rc.opts.Clock.PhysicalTime().Sub(start))
+		rc.opts.EvalWaitMetrics.onBypassed(wc, rc.opts.Clock.Now().Sub(start))
 		return false, nil
 	}
 	for _, vs := range vss {
@@ -329,14 +329,14 @@ retry:
 			case WaitSuccess:
 				continue
 			case ContextCanceled:
-				rc.opts.EvalWaitMetrics.onErrored(wc, rc.opts.Clock.PhysicalTime().Sub(start))
+				rc.opts.EvalWaitMetrics.onErrored(wc, rc.opts.Clock.Now().Sub(start))
 				return false, ctx.Err()
 			case RefreshWaitSignaled:
 				goto retry
 			}
 		}
 	}
-	rc.opts.EvalWaitMetrics.onAdmitted(wc, rc.opts.Clock.PhysicalTime().Sub(start))
+	rc.opts.EvalWaitMetrics.onAdmitted(wc, rc.opts.Clock.Now().Sub(start))
 	return true, nil
 }
 
@@ -538,7 +538,7 @@ func (rs *replicaState) createReplicaSendStream() {
 	rs.sendStream.mu.tracker.Init(rs.stream)
 	rs.sendStream.mu.closed = false
 	rs.sendStream.changeConnectedStateLocked(
-		replicate, rs.parent.opts.Clock.PhysicalTime())
+		replicate, rs.parent.opts.Clock.Now())
 }
 
 func (rs *replicaState) isStateReplicate() bool {
@@ -616,7 +616,7 @@ func (rs *replicaState) handleReadyState(
 			return false
 		}
 		if shouldClose := func() (should bool) {
-			now := rs.parent.opts.Clock.PhysicalTime()
+			now := rs.parent.opts.Clock.Now()
 			rs.sendStream.mu.Lock()
 			defer rs.sendStream.mu.Unlock()
 
@@ -714,9 +714,9 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(
 		// NB: We could re-use the current time and acquire it outside of the
 		// mutex, but we expect transitions to replicate to be rarer than replicas
 		// remaining in replicate.
-		rss.changeConnectedStateLocked(replicate, rss.parent.parent.opts.Clock.PhysicalTime())
+		rss.changeConnectedStateLocked(replicate, rss.parent.parent.opts.Clock.Now())
 	case snapshot:
-		rss.changeConnectedStateLocked(replicate, rss.parent.parent.opts.Clock.PhysicalTime())
+		rss.changeConnectedStateLocked(replicate, rss.parent.parent.opts.Clock.Now())
 		shouldWaitChange = true
 	}
 	return shouldWaitChange
@@ -736,7 +736,7 @@ func (rss *replicaSendStream) changeToStateSnapshot(ctx context.Context) {
 //
 // Requires rs.mu to be held.
 func (rss *replicaSendStream) changeToStateSnapshotLocked(ctx context.Context) {
-	rss.changeConnectedStateLocked(snapshot, rss.parent.parent.opts.Clock.PhysicalTime())
+	rss.changeConnectedStateLocked(snapshot, rss.parent.parent.opts.Clock.Now())
 	// Since the replica is now in StateSnapshot, there is no need for Raft to
 	// send MsgApp pings to discover what has been missed. So there is no
 	// liveness guarantee on when these tokens will be returned, and therefore we

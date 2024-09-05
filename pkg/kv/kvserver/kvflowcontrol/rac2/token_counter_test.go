@@ -23,10 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
@@ -48,7 +48,7 @@ func TestTokenAdjustment(t *testing.T) {
 
 	provider := NewStreamTokenCounterProvider(
 		cluster.MakeTestingClusterSettings(),
-		hlc.NewClockForTesting(nil),
+		timeutil.DefaultTimeSource{},
 	)
 	var (
 		ctx         = context.Background()
@@ -201,7 +201,7 @@ func TestTokenCounter(t *testing.T) {
 	kvflowcontrol.RegularTokensPerStream.Override(ctx, &settings.SV, int64(limits.regular))
 	counter := newTokenCounter(
 		settings,
-		hlc.NewClockForTesting(nil),
+		timeutil.DefaultTimeSource{},
 		newTokenCounterMetrics(flowControlEvalMetricType),
 	)
 
@@ -376,7 +376,7 @@ func (ts *evalTestState) getOrCreateTC(stream string) *namedTokenCounter {
 			parent: ts,
 			tokenCounter: newTokenCounter(
 				ts.settings,
-				hlc.NewClockForTesting(nil),
+				timeutil.DefaultTimeSource{},
 				newTokenCounterMetrics(flowControlEvalMetricType),
 			),
 			stream: stream,
