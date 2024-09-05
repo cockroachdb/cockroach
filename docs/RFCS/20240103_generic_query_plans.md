@@ -313,16 +313,6 @@ some of this work if a normalized, base query plan is available. The base plan
 can be used as a starting point for building the generic plan, eliminating some
 of the overhead of `optbuilder` and normalization.
 
-### Adding Generic Plans to the Query Cache
-
-A notable divergence of CockroachDB from Postgres is that CockroachDB has a
-query cache which is used across sessions of the same gateway node. Storing
-generic query plans in the query cache would allow sessions to reuse generic
-plans across sessions, reducing planning overhead further. This will bring the
-benefits of generic query plans to applications using client libraries and ORMs
-that don't use proper, named prepared statements, such as
-[knex.js](https://github.com/knex/knex/issues/802).
-
 ### Replacing the placeholder fast path
 
 Generic query plans should make the placeholder fast path obsolete. Once we have
