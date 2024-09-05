@@ -1472,9 +1472,11 @@ func Create(
 	for _, o := range opts {
 		if o.CreateOpts.SSDOpts.FileSystem == vm.Zfs {
 			for _, provider := range o.CreateOpts.VMProviders {
-				if provider != gce.ProviderName {
+				// TODO(DarrylWong): support zfs on other providers, see: #123775.
+				// Once done, revisit all tests that set zfs to see if they can run on non GCE.
+				if !(provider == gce.ProviderName || provider == aws.ProviderName) {
 					return fmt.Errorf(
-						"creating a node with --filesystem=zfs is currently only supported on gce",
+						"creating a node with --filesystem=zfs is currently not supported in %q", provider,
 					)
 				}
 			}
