@@ -52,6 +52,19 @@ func newTestReplica(b *strings.Builder) *testReplica {
 	return &testReplica{b: b}
 }
 
+func (r *testReplica) initRaft(stable rac2.LogMark) {
+	r.raftNode = &testRaftNode{
+		b: r.b, r: r,
+		term:              stable.Term,
+		mark:              stable,
+		stableIndex:       stable.Index,
+		nextUnstableIndex: stable.Index + 1,
+	}
+	for pri := range r.raftNode.admitted {
+		r.raftNode.admitted[pri] = stable.Index
+	}
+}
+
 func (r *testReplica) RaftMuAssertHeld() {
 	fmt.Fprintf(r.b, " Replica.RaftMuAssertHeld\n")
 }
@@ -91,6 +104,7 @@ type testRaftNode struct {
 	term   uint64
 	leader roachpb.ReplicaID
 
+	mark              rac2.LogMark
 	stableIndex       uint64
 	nextUnstableIndex uint64
 	admitted          [raftpb.NumPriorities]uint64
@@ -158,9 +172,27 @@ func (rn *testRaftNode) FollowerStateRaftMuLocked(
 	return rac2.FollowerStateInfo{}
 }
 
+func (rn *testRaftNode) setMark(t *testing.T, mark rac2.LogMark) {
+	require.True(t, mark.After(rn.mark))
+	rn.mark = mark
+}
+
+func (rn *testRaftNode) check(t *testing.T) {
+	if rn == nil {
+		return
+	}
+	require.LessOrEqual(t, rn.mark.Term, rn.term)
+	require.LessOrEqual(t, rn.stableIndex, rn.mark.Index)
+	require.Greater(t, rn.nextUnstableIndex, rn.stableIndex)
+	require.LessOrEqual(t, rn.nextUnstableIndex, rn.mark.Index+1)
+	for _, index := range rn.admitted {
+		require.LessOrEqual(t, index, rn.stableIndex)
+	}
+}
+
 func (rn *testRaftNode) print() {
-	fmt.Fprintf(rn.b, "Raft: term: %d leader: %d leaseholder: %d stable: %d next-unstable: %d admitted: %s",
-		rn.term, rn.leader, rn.r.leaseholder, rn.stableIndex, rn.nextUnstableIndex,
+	fmt.Fprintf(rn.b, "Raft: term: %d leader: %d leaseholder: %d mark: %+v stable: %d next-unstable: %d admitted: %s",
+		rn.term, rn.leader, rn.r.leaseholder, rn.mark, rn.stableIndex, rn.nextUnstableIndex,
 		admittedString(rn.admitted))
 }
 
@@ -316,6 +348,8 @@ func TestProcessorBasic(t *testing.T) {
 	}
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "processor"),
 		func(t *testing.T, d *datadriven.TestData) string {
+			defer func() { r.raftNode.check(t) }()
+
 			switch d.Cmd {
 			case "reset":
 				enabledLevel := parseEnabledLevel(t, d)
@@ -326,8 +360,10 @@ func TestProcessorBasic(t *testing.T) {
 				var mark rac2.LogMark
 				d.ScanArgs(t, "log-term", &mark.Term)
 				d.ScanArgs(t, "log-index", &mark.Index)
-				r.raftNode = &testRaftNode{b: &b, r: r, term: mark.Term, stableIndex: mark.Index}
+				r.MuLock()
+				r.initRaft(mark)
 				p.InitRaftLocked(ctx, r.raftNode)
+				r.MuUnlock()
 				return builderStr()
 
 			case "set-raft-state":
@@ -361,6 +397,12 @@ func TestProcessorBasic(t *testing.T) {
 					var leaseholder int
 					d.ScanArgs(t, "leaseholder", &leaseholder)
 					r.leaseholder = roachpb.ReplicaID(leaseholder)
+				}
+				if d.HasArg("log-term") {
+					var mark rac2.LogMark
+					d.ScanArgs(t, "log-term", &mark.Term)
+					d.ScanArgs(t, "log-index", &mark.Index)
+					r.raftNode.setMark(t, mark)
 				}
 				r.raftNode.print()
 				return builderStr()
