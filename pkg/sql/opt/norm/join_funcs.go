@@ -261,6 +261,17 @@ func (c *CustomFuncs) mapJoinOpEquivalenceGroup(
 	return newFilters
 }
 
+func (c *CustomFuncs) PossibleMapFilterCycle(
+	src *memo.FiltersItem, leftCols, rightCols opt.ColSet,
+) bool {
+	if c.f.evalCtx.SessionData().OptimizerAllowDuplicateSubquery {
+		return false
+	}
+	return src.ScalarProps().HasSubquery &&
+		c.IsBoundBy(src, leftCols) &&
+		!c.IsBoundBy(src, rightCols)
+}
+
 // CanMapJoinOpFilter returns true if it is possible to map a boolean expression
 // src, which is a conjunct in the given filters expression, to use the output
 // columns of the relational expression dst.
@@ -280,11 +291,14 @@ func (c *CustomFuncs) mapJoinOpEquivalenceGroup(
 // to the right side of the join. In this case, CanMapJoinOpFilter returns true
 // when src is a.x + b.y = 5 and dst is (Scan b), but false when src is
 // a.x + b.y = 5 and dst is (Scan a).
+// TODO: I think this previous sentence is incorrect. Fix it.
 //
 // If src has a correlated subquery, CanMapJoinOpFilter returns false.
 func (c *CustomFuncs) CanMapJoinOpFilter(
 	src *memo.FiltersItem, dstCols opt.ColSet, equivSet props.EquivSet,
 ) bool {
+	equivSetStr := equivSet.String()
+	_ = equivSetStr
 	// Fast path if src is already bound by dst.
 	if c.IsBoundBy(src, dstCols) {
 		return true
