@@ -4836,19 +4836,19 @@ statement ok
 CREATE SEQUENCE test_seq_3 AS smallint
 
 statement ok
-CREATE SEQUENCE test_seq_4 AS integer 
+CREATE SEQUENCE test_seq_4 AS integer
 
 statement ok
 CREATE SEQUENCE test_seq_5 AS bigint
 
 statement ok
-CREATE SEQUENCE test_seq_6 AS INT2 
+CREATE SEQUENCE test_seq_6 AS INT2
 
 statement ok
 CREATE SEQUENCE test_seq_7 AS INT4
 
 statement ok
-CREATE SEQUENCE test_seq_8 AS INT8 
+CREATE SEQUENCE test_seq_8 AS INT8
 
 query TTTTIIITTTTT colnames,rowsort
 SELECT * FROM information_schema.sequences
@@ -5591,6 +5591,7 @@ override_multi_region_zone_config                          off
 parallelize_multi_key_lookup_joins_enabled                 off
 password_encryption                                        scram-sha-256
 pg_trgm.similarity_threshold                               0.3
+plan_cache_mode                                            force_custom_plan
 prefer_lookup_joins_for_fks                                off
 prepared_statements_cache_size                             0 B
 propagate_input_ordering                                   off

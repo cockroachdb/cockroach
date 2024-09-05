@@ -886,7 +886,7 @@ project
       └── filters
            └── min:14 = $1 [outer=(14), constraints=(/14: (/NULL - ]), fd=()-->(14)]
 
-opt
+opt generic
 select
     person0_.id as id1_2_,
     person0_.address as address2_2_,
@@ -951,7 +951,7 @@ project
       └── filters
            └── max:16 = 0 [outer=(16), constraints=(/16: [/0 - /0]; tight), fd=()-->(16)]
 
-opt
+opt generic
 select
     person0_.id as id1_2_,
     person0_.address as address2_2_,
@@ -991,21 +991,32 @@ project
            ├── has-placeholder
            ├── key: ()
            ├── fd: ()-->(1-6,9,12), (12)==(1), (1)==(12)
-           ├── select
+           ├── project
            │    ├── columns: phones1_.id:9!null person_id:12
            │    ├── cardinality: [0 - 1]
            │    ├── has-placeholder
            │    ├── key: ()
            │    ├── fd: ()-->(9,12)
-           │    ├── scan phone [as=phones1_]
-           │    │    ├── columns: phones1_.id:9!null person_id:12
-           │    │    ├── key: (9)
-           │    │    └── fd: (9)-->(12)
-           │    └── filters
-           │         └── phones1_.id:9 = $1 [outer=(9), constraints=(/9: (/NULL - ]), fd=()-->(9)]
+           │    └── inner-join (lookup phone [as=phones1_])
+           │         ├── columns: phones1_.id:9!null person_id:12 "$1":16!null
+           │         ├── flags: disallow merge join
+           │         ├── key columns: [16] = [9]
+           │         ├── lookup columns are key
+           │         ├── cardinality: [0 - 1]
+           │         ├── has-placeholder
+           │         ├── key: ()
+           │         ├── fd: ()-->(9,12,16), (16)==(9), (9)==(16)
+           │         ├── values
+           │         │    ├── columns: "$1":16
+           │         │    ├── cardinality: [1 - 1]
+           │         │    ├── has-placeholder
+           │         │    ├── key: ()
+           │         │    ├── fd: ()-->(16)
+           │         │    └── ($1,)
+           │         └── filters (true)
            └── filters (true)
 
-opt
+opt generic
 select
     person0_.id as id1_2_,
     person0_.address as address2_2_,
@@ -1045,18 +1056,29 @@ project
            ├── has-placeholder
            ├── key: ()
            ├── fd: ()-->(1-6,9,12), (12)==(1), (1)==(12)
-           ├── select
+           ├── project
            │    ├── columns: phones1_.id:9!null person_id:12
            │    ├── cardinality: [0 - 1]
            │    ├── has-placeholder
            │    ├── key: ()
            │    ├── fd: ()-->(9,12)
-           │    ├── scan phone [as=phones1_]
-           │    │    ├── columns: phones1_.id:9!null person_id:12
-           │    │    ├── key: (9)
-           │    │    └── fd: (9)-->(12)
-           │    └── filters
-           │         └── phones1_.id:9 = $1 [outer=(9), constraints=(/9: (/NULL - ]), fd=()-->(9)]
+           │    └── inner-join (lookup phone [as=phones1_])
+           │         ├── columns: phones1_.id:9!null person_id:12 "$1":16!null
+           │         ├── flags: disallow merge join
+           │         ├── key columns: [16] = [9]
+           │         ├── lookup columns are key
+           │         ├── cardinality: [0 - 1]
+           │         ├── has-placeholder
+           │         ├── key: ()
+           │         ├── fd: ()-->(9,12,16), (16)==(9), (9)==(16)
+           │         ├── values
+           │         │    ├── columns: "$1":16
+           │         │    ├── cardinality: [1 - 1]
+           │         │    ├── has-placeholder
+           │         │    ├── key: ()
+           │         │    ├── fd: ()-->(16)
+           │         │    └── ($1,)
+           │         └── filters (true)
            └── filters (true)
 
 opt
@@ -1863,30 +1885,31 @@ project
  │    ├── has-placeholder
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2-4,15)
- │    ├── right-join (hash)
- │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null successfulbid:10 true:14
+ │    ├── project
+ │    │    ├── columns: true:14 bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null successfulbid:10
  │    │    ├── has-placeholder
  │    │    ├── fd: ()-->(4), (1)-->(2,3)
- │    │    ├── project
- │    │    │    ├── columns: true:14!null successfulbid:10
- │    │    │    ├── fd: ()-->(14)
+ │    │    ├── right-join (hash)
+ │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null successfulbid:10
+ │    │    │    ├── has-placeholder
+ │    │    │    ├── fd: ()-->(4), (1)-->(2,3)
  │    │    │    ├── scan tauction2 [as=a]
  │    │    │    │    └── columns: successfulbid:10
- │    │    │    └── projections
- │    │    │         └── true [as=true:14]
- │    │    ├── select
- │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null
- │    │    │    ├── has-placeholder
- │    │    │    ├── key: (1)
- │    │    │    ├── fd: ()-->(4), (1)-->(2,3)
- │    │    │    ├── scan tbid2 [as=bids0_]
- │    │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null
+ │    │    │    │    ├── has-placeholder
  │    │    │    │    ├── key: (1)
- │    │    │    │    └── fd: (1)-->(2-4)
+ │    │    │    │    ├── fd: ()-->(4), (1)-->(2,3)
+ │    │    │    │    ├── scan tbid2 [as=bids0_]
+ │    │    │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4
+ │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    └── fd: (1)-->(2-4)
+ │    │    │    │    └── filters
+ │    │    │    │         └── auctionid:4 = $1 [outer=(4), constraints=(/4: (/NULL - ]), fd=()-->(4)]
  │    │    │    └── filters
- │    │    │         └── auctionid:4 = $1 [outer=(4), constraints=(/4: (/NULL - ]), fd=()-->(4)]
- │    │    └── filters
- │    │         └── successfulbid:10 = bids0_.id:1 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │    │    │         └── successfulbid:10 = bids0_.id:1 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │    │    └── projections
+ │    │         └── CASE successfulbid:10 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE true END [as=true:14, outer=(10)]
  │    └── aggregations
  │         ├── const-not-null-agg [as=true_agg:15, outer=(14)]
  │         │    └── true:14

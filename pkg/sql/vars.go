@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/gpq"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -3349,6 +3350,38 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerPushOffsetIntoIndexJoin), nil
 		},
 		GlobalDefault: globalFalse,
+	},
+
+	`plan_cache_mode`: {
+		SetWithPlanner: func(ctx context.Context, p *planner, local bool, s string) error {
+			mode, ok := sessiondatapb.PlanCacheModeFromString(s)
+			if !ok {
+				return newVarValueError(
+					`plan_cache_mode`,
+					s,
+					sessiondatapb.PlanCacheModeForceCustom.String(),
+					sessiondatapb.PlanCacheModeForceGeneric.String(),
+					sessiondatapb.PlanCacheModeAuto.String(),
+				)
+			}
+			if mode == sessiondatapb.PlanCacheModeForceGeneric ||
+				mode == sessiondatapb.PlanCacheModeAuto {
+				evalCtx := p.EvalContext()
+				if err := gpq.CheckClusterSupportsGenericQueryPlans(evalCtx.Settings, evalCtx.ClusterID); err != nil {
+					return err
+				}
+			}
+			return p.applyOnSessionDataMutators(ctx, local, func(m sessionDataMutator) error {
+				m.SetPlanCacheMode(mode)
+				return nil
+			})
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return evalCtx.SessionData().PlanCacheMode.String(), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return sessiondatapb.PlanCacheModeForceCustom.String()
+		},
 	},
 }
 

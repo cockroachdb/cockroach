@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
@@ -164,6 +165,9 @@ type Flags struct {
 
 	// DisableRules is a set of rules that are not allowed to run.
 	DisableRules RuleSet
+
+	// Generic enables optimizations for generic query plans.
+	Generic bool
 
 	// ExploreTraceRule restricts the ExploreTrace output to only show the effects
 	// of a specific rule.
@@ -463,7 +467,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //     modifies the existing set of the flags.
 //
 //   - no-stable-folds: disallows constant folding for stable operators; only
-//     used with "norm".
+//     used with "norm", "opt", "exprnorm", and "expropt".
 //
 //   - fully-qualify-names: fully qualify all column names in the test output.
 //
@@ -478,6 +482,11 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //   - disable: disables optimizer rules by name. Examples:
 //     opt disable=ConstrainScan
 //     norm disable=(NegateOr,NegateAnd)
+//
+//   - generic: enables optimizations for generic query plans.
+//     NOTE: This flag sets the plan_cache_mode session setting to "auto", which
+//     cannot be done via the "set" flag because it requires a CCL license,
+//     which optimizer tests are not set up to utilize.
 //
 //   - rule: used with exploretrace; the value is the name of a rule. When
 //     specified, the exploretrace output is filtered to only show expression
@@ -988,6 +997,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			f.DisableRules.Add(int(r))
 		}
 
+	case "generic":
+		f.evalCtx.SessionData().PlanCacheMode = sessiondatapb.PlanCacheModeAuto
+
 	case "rule":
 		if len(arg.Vals) != 1 {
 			return fmt.Errorf("rule requires one argument")
@@ -1209,7 +1221,9 @@ func (ot *OptTester) OptimizeWithTables(tables map[cat.StableID]cat.Table) (opt.
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		return !ot.Flags.DisableRules.Contains(int(ruleName))
 	})
-	o.Factory().FoldingControl().AllowStableFolds()
+	if !ot.Flags.NoStableFolds {
+		o.Factory().FoldingControl().AllowStableFolds()
+	}
 	return ot.optimizeExpr(o, tables)
 }
 
