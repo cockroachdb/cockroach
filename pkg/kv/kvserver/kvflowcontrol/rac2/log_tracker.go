@@ -244,7 +244,7 @@ func (l *LogTracker) LogAdmitted(ctx context.Context, at LogMark, pri raftpb.Pri
 //
 // Returns true if the admitted vector has changed.
 func (l *LogTracker) SnapSynced(ctx context.Context, mark LogMark) bool {
-	if !mark.After(l.last) {
+	if l.last.After(mark) {
 		l.errorf(ctx, "syncing stale snapshot %+v", mark)
 		return false
 	}
