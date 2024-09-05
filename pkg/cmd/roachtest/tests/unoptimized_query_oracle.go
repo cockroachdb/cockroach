@@ -61,6 +61,7 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 				Cluster:          clusterSpec,
 				CompatibleClouds: registry.AllExceptAWS,
 				Suites:           registry.Suites(registry.Nightly),
+				Randomized:       true,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runQueryComparison(ctx, t, c, &queryComparisonTest{
 						name:      "unoptimized-query-oracle",

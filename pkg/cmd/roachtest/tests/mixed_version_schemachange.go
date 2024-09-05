@@ -34,6 +34,7 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 		Cluster:                    r.MakeClusterSpec(4, spec.WorkloadNode()),
 		CompatibleClouds:           registry.AllExceptAWS,
 		Suites:                     registry.Suites(registry.Nightly),
+		Randomized:                 true,
 		NativeLibs:                 registry.LibGEOS,
 		RequiresDeprecatedWorkload: true, // uses schemachange
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

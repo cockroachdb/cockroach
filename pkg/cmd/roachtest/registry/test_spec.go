@@ -168,6 +168,15 @@ type TestSpec struct {
 	// explaining why the test has been chosen for opting out of test selection.
 	TestSelectionOptOutSuites SuiteSet
 
+	// Randomized indicates if the test performs randomized
+	// actions. These tests are prioritized and not subject to test
+	// selection, as a passing run does not indicate that the same run
+	// will pass again due to the non-deterministic nature of the test.
+	// We have also seen cases where a randomized test takes a long time
+	// (sometimes months) to hit a bug, so running them consistently is
+	// important.
+	Randomized bool
+
 	// stats are populated by test selector based on previous execution data
 	stats *testStats
 }
