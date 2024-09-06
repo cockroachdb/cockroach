@@ -70,6 +70,9 @@ import (
 //
 // TODO(baptist): Add a timeline describing the test in more detail.
 type variations struct {
+	// cluster is set up at the start of the test run.
+	cluster.Cluster
+
 	// These fields are set up during construction.
 	seed                 int64
 	fillDuration         time.Duration
@@ -89,9 +92,6 @@ type variations struct {
 	workload             workloadType
 	acceptableChange     float64
 	cloud                registry.CloudSet
-
-	// cluster is set up at the start of the test run.
-	cluster cluster.Cluster
 }
 
 const NUM_REGIONS = 3
@@ -305,7 +305,7 @@ func (r restart) startPerturbation(
 		gracefulOpts.RoachprodOpts.Sig = 9
 	}
 	gracefulOpts.RoachprodOpts.Wait = true
-	v.cluster.Stop(ctx, l, gracefulOpts, v.targetNodes())
+	v.Stop(ctx, l, gracefulOpts, v.targetNodes())
 	waitDuration(ctx, v.perturbationDuration)
 	if v.cleanRestart {
 		return timeutil.Since(startTime)
@@ -346,15 +346,15 @@ func (p partition) startTargetNode(ctx context.Context, l *logger.Logger, v vari
 func (p partition) startPerturbation(
 	ctx context.Context, l *logger.Logger, v variations,
 ) time.Duration {
-	targetIPs, err := v.cluster.InternalIP(ctx, l, v.targetNodes())
+	targetIPs, err := v.InternalIP(ctx, l, v.targetNodes())
 	if err != nil {
 		panic(err)
 	}
 
-	if !v.cluster.IsLocal() {
-		v.cluster.Run(
+	if !v.IsLocal() {
+		v.Run(
 			ctx,
-			v.withPartitionedNodes(v.cluster),
+			v.withPartitionedNodes(v),
 			fmt.Sprintf(
 				`sudo iptables -A INPUT -p tcp -s %s -j DROP`, targetIPs[0]))
 	}
@@ -368,8 +368,8 @@ func (p partition) endPerturbation(
 	ctx context.Context, l *logger.Logger, v variations,
 ) time.Duration {
 	startTime := timeutil.Now()
-	if !v.cluster.IsLocal() {
-		v.cluster.Run(ctx, v.withPartitionedNodes(v.cluster), `sudo iptables -F`)
+	if !v.IsLocal() {
+		v.Run(ctx, v.withPartitionedNodes(v), `sudo iptables -F`)
 	}
 	waitDuration(ctx, v.validationDuration)
 	return timeutil.Since(startTime)
@@ -393,7 +393,7 @@ func (a addNode) startPerturbation(
 	// on the 10s server.time_after_store_suspect setting which we set below
 	// plus 1 sec for the store to propagate its gossip information.
 	waitDuration(ctx, 11*time.Second)
-	waitForRebalanceToStop(ctx, l, v.cluster)
+	waitForRebalanceToStop(ctx, l, v)
 	return timeutil.Since(startTime)
 }
 
@@ -426,7 +426,7 @@ func (d decommission) startPerturbation(
 			install.CockroachNodeCertsDir,
 			node,
 		)
-		v.cluster.Run(ctx, option.WithNodes(v.cluster.Node(node)), drainCmd)
+		v.Run(ctx, option.WithNodes(v.Node(node)), drainCmd)
 	}
 
 	// Wait for all the other nodes to see the drain over gossip.
@@ -439,11 +439,11 @@ func (d decommission) startPerturbation(
 			install.CockroachNodeCertsDir,
 			node,
 		)
-		v.cluster.Run(ctx, option.WithNodes(v.cluster.Node(node)), decommissionCmd)
+		v.Run(ctx, option.WithNodes(v.Node(node)), decommissionCmd)
 	}
 
 	l.Printf("stopping decommissioned nodes")
-	v.cluster.Stop(ctx, l, option.DefaultStopOpts(), v.targetNodes())
+	v.Stop(ctx, l, option.DefaultStopOpts(), v.targetNodes())
 	return timeutil.Since(startTime)
 }
 
@@ -587,7 +587,7 @@ func (w workloadData) worstStats(i interval) map[string]trackedStat {
 
 // runTest is the main entry point for all the tests. Its ste
 func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster) {
-	v.cluster = c
+	v.Cluster = c
 	t.L().Printf("test variations are: %+v", v)
 	t.Status("T0: starting nodes")
 
@@ -622,7 +622,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	}()
 
 	// Wait for rebalancing to finish before starting to fill. This minimizes the time to finish.
-	waitForRebalanceToStop(ctx, t.L(), v.cluster)
+	waitForRebalanceToStop(ctx, t.L(), v)
 	require.NoError(t, v.workload.initWorkload(ctx, v))
 
 	// Capture the stable rate near the last 1/4 of the fill process.
@@ -765,22 +765,22 @@ func (v variations) startNoBackup(
 		opts.RoachprodOpts.StoreCount = v.disks
 		opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs,
 			fmt.Sprintf("--locality=region=fake-%d", (node-1)/nodesPerRegion))
-		v.cluster.Start(ctx, l, opts, install.MakeClusterSettings(), v.cluster.Node(node))
+		v.Start(ctx, l, opts, install.MakeClusterSettings(), v.Node(node))
 	}
 }
 
 func (v variations) workloadNodes() option.NodeListOption {
-	return v.cluster.Range(v.numNodes+1, v.numNodes+v.numWorkloadNodes)
+	return v.Range(v.numNodes+1, v.numNodes+v.numWorkloadNodes)
 }
 
 func (v variations) stableNodes() option.NodeListOption {
-	return v.cluster.Range(1, v.numNodes-1)
+	return v.Range(1, v.numNodes-1)
 }
 
 // Note this is always only a single node today. If we have perturbations that
 // require multiple targets we could add multi-target support.
 func (v variations) targetNodes() option.NodeListOption {
-	return v.cluster.Node(v.numNodes)
+	return v.Node(v.numNodes)
 }
 
 // measureQPS will measure the approx QPS at the time this command is run. The
@@ -794,7 +794,7 @@ func (v variations) measureQPS(ctx context.Context, l *logger.Logger, duration t
 		// NB: We can't hold the connection open during the full duration.
 		var dbs []*gosql.DB
 		for _, nodeId := range stableNodes {
-			db := v.cluster.Conn(ctx, l, nodeId)
+			db := v.Conn(ctx, l, nodeId)
 			defer db.Close()
 			dbs = append(dbs, db)
 		}
@@ -846,7 +846,7 @@ func (w kvWorkload) operations() []string {
 
 func (w kvWorkload) initWorkload(ctx context.Context, v variations) error {
 	initCmd := fmt.Sprintf("./cockroach workload init kv --db target --splits %d {pgurl:1}", v.splits)
-	return v.cluster.RunE(ctx, option.WithNodes(v.cluster.Node(1)), initCmd)
+	return v.RunE(ctx, option.WithNodes(v.Node(1)), initCmd)
 }
 
 // Don't run a workload against the node we're going to shut down.
@@ -856,7 +856,7 @@ func (w kvWorkload) runWorkload(
 	runCmd := fmt.Sprintf(
 		"./cockroach workload run kv --db target --display-format=incremental-json --duration=%s --max-rate=%d --tolerate-errors --max-block-bytes=%d --read-percent=50 --follower-read-percent=50 --concurrency=500 {pgurl%s}",
 		duration, maxRate, v.maxBlockBytes, v.stableNodes())
-	allOutput, err := v.cluster.RunWithDetails(ctx, nil, option.WithNodes(v.workloadNodes()), runCmd)
+	allOutput, err := v.RunWithDetails(ctx, nil, option.WithNodes(v.workloadNodes()), runCmd)
 	if err != nil {
 		return nil, err
 	}
