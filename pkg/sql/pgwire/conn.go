@@ -69,6 +69,9 @@ type conn struct {
 	sessionArgs sql.SessionArgs
 	metrics     *tenantSpecificMetrics
 
+	curDestMetrics atomic.Pointer[destinationMetrics]
+	destMetrics    func() *destinationMetrics
+
 	// startTime is the time when the connection attempt was first received
 	// by the server.
 	startTime time.Time
@@ -1432,14 +1435,14 @@ var _ pgwirebase.BufferedReader = &pgwireReader{}
 // Read is part of the pgwirebase.BufferedReader interface.
 func (r *pgwireReader) Read(p []byte) (int, error) {
 	n, err := r.conn.rd.Read(p)
-	r.conn.metrics.BytesInCount.Inc(int64(n))
+	r.conn.destMetrics().BytesInCount.Inc(int64(n))
 	return n, err
 }
 
 // ReadString is part of the pgwirebase.BufferedReader interface.
 func (r *pgwireReader) ReadString(delim byte) (string, error) {
 	s, err := r.conn.rd.ReadString(delim)
-	r.conn.metrics.BytesInCount.Inc(int64(len(s)))
+	r.conn.destMetrics().BytesInCount.Inc(int64(len(s)))
 	return s, err
 }
 
@@ -1447,7 +1450,7 @@ func (r *pgwireReader) ReadString(delim byte) (string, error) {
 func (r *pgwireReader) ReadByte() (byte, error) {
 	b, err := r.conn.rd.ReadByte()
 	if err == nil {
-		r.conn.metrics.BytesInCount.Inc(1)
+		r.conn.destMetrics().BytesInCount.Inc(1)
 	}
 	return b, err
 }

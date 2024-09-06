@@ -46,10 +46,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -60,6 +62,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
+
+var nilStat = func(int64) {}
 
 // Test the conn struct: check that it marshalls the correct commands to the
 // stmtBuf.
@@ -690,12 +694,20 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 func newTestServer() *Server {
 	sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 	metrics := newTenantSpecificMetrics(sqlMetrics /* sqlMemMetrics */, metric.TestSampleInterval)
-	return &Server{
+	st := cluster.MakeTestingClusterSettings()
+	s := &Server{
 		tenantMetrics: metrics,
+		destinationMetrics: destinationAggMetrics{
+			BytesInCount:  aggmetric.NewCounter(MetaBytesIn, "remote"),
+			BytesOutCount: aggmetric.NewCounter(MetaBytesOut, "remote"),
+		},
 		execCfg: &sql.ExecutorConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
+			Settings:   st,
+			CidrLookup: cidr.NewLookup(&st.SV),
 		},
 	}
+	s.mu.destinations = make(map[string]*destinationMetrics)
+	return s
 }
 
 // waitForClientConn blocks until a client connects and performs the pgwire
@@ -743,7 +755,7 @@ func getSessionArgs(
 			// Implement a fake pgwire connection handshake. Send the response
 			// after parsing the client-sent parameters.
 			c := &conn{conn: netConn}
-			c.msgBuilder.init(metric.NewCounter(metric.Metadata{}))
+			c.msgBuilder.init(nilStat)
 			if err := c.authOKMessage(); err != nil {
 				retErr = errors.CombineErrors(retErr, err)
 				return
