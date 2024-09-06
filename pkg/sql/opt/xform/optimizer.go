@@ -851,14 +851,45 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 	return parent
 }
 
-// ratchetCost computes the cost of the candidate expression, and then checks
-// whether it's lower than the cost of the existing best expression in the
-// group. If so, then the candidate becomes the new lowest cost expression.
+// ratchetCost updates the group with the best candidate expression encountered
+// so far. The rules are as follows:
+//   - If there is no existing expression, accept the candidate.
+//   - If the candidate dominates the existing expression (determined by
+//     heuristics), accept the candidate.
+//   - If the existing expression does not dominate the candidate and the cost
+//     of the candidate is less than the cost of the existing expression, accept
+//     the candidate.
+//
 // ratchetCost returns true if the candidate is the new lowest-cost expression.
 func (o *Optimizer) ratchetCost(state *groupState, candidate memo.RelExpr, cost memo.Cost) bool {
-	if state.best == nil || cost.Less(state.cost) {
+	if state.best == nil || planIsDominant(candidate, state.best) ||
+		(!planIsDominant(state.best, candidate) && cost.Less(state.cost)) {
 		state.best = candidate
 		state.cost = cost
+		return true
+	}
+	return false
+}
+
+// planIsDominant indicates whether the left expression "dominates" the right
+// expression, assuming they are part of the same memo group. This is determined
+// through a set of heuristic rules.
+func planIsDominant(left, right memo.RelExpr) bool {
+	// TODO(drewk): if more rules are added, consider generating them via optgen.
+	//
+	// Rule 1: A Select or IndexJoin is dominated by a Scan.
+	//
+	// Justification: It is generally cheaper to filter rows via a Scan
+	// constraint than by materializing them and passing them through a Select
+	// or IndexJoin operator. The rule may not hold if very few rows are
+	// scanned, since the lone Scan may perform more lookups. However, this
+	// overhead is expected to be very small in comparison to the worst case
+	// when the Select plan has to produce and process many more rows.
+	if _, leftIsScan := left.(*memo.ScanExpr); !leftIsScan {
+		return false
+	}
+	switch right.(type) {
+	case *memo.SelectExpr, *memo.IndexJoinExpr:
 		return true
 	}
 	return false
