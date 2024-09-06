@@ -268,7 +268,7 @@ func getSink(
 				}
 				return makeCloudStorageSink(
 					ctx, sinkURL{URL: u}, nodeID, serverCfg.Settings, encodingOpts,
-					timestampOracle, serverCfg.ExternalStorageFromURI, user, metricsBuilder,
+					timestampOracle, serverCfg.ExternalStorageFromURI, user, metricsBuilder, nil,
 				)
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:

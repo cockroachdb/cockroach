@@ -314,6 +314,9 @@ type cloudStorageSink struct {
 	asyncFlushCh     chan flushRequest // channel for submitting flush requests.
 	asyncFlushTermCh chan struct{}     // channel closed by async flusher to indicate an error
 	asyncFlushErr    error             // set by async flusher, prior to closing asyncFlushTermCh
+
+	// testingKnobs may be nil if no knobs are set.
+	testingKnobs *TestingKnobs
 }
 
 type flushRequest struct {
@@ -359,6 +362,7 @@ func makeCloudStorageSink(
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	user username.SQLUsername,
 	mb metricsRecorderBuilder,
+	testingKnobs *TestingKnobs,
 ) (Sink, error) {
 	var targetMaxFileSize int64 = 16 << 20 // 16MB
 	if fileSizeParam := u.consumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
@@ -399,6 +403,7 @@ func makeCloudStorageSink(
 		flushGroup:       ctxgroup.WithContext(ctx),
 		asyncFlushCh:     make(chan flushRequest, flushQueueDepth),
 		asyncFlushTermCh: make(chan struct{}),
+		testingKnobs:     testingKnobs,
 	}
 	s.flushGroup.GoCtx(s.asyncFlusher)
 
@@ -625,9 +630,17 @@ func (s *cloudStorageSink) flushTopicVersions(
 		}
 		return err == nil
 	})
+
+	// Files need to be cleared after the flush completes, otherwise file resources
 	for _, v := range toRemove {
 		s.files.Delete(cloudStorageSinkKey{topic: topic, schemaID: v})
 	}
+
+	// Allow synchronization with the async flusher to happen.
+	if s.testingKnobs != nil && s.testingKnobs.AsyncFlushSync != nil {
+		s.testingKnobs.AsyncFlushSync()
+	}
+
 	return err
 }
 
@@ -648,6 +661,11 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 		return err
 	}
 	s.files.Clear(true /* addNodesToFreeList */)
+	// Allow synchronization with the async flusher to happen.
+	if s.testingKnobs != nil && s.testingKnobs.AsyncFlushSync != nil {
+		s.testingKnobs.AsyncFlushSync()
+	}
+
 	s.setDataFileTimestamp()
 	return s.waitAsyncFlush(ctx)
 }
@@ -776,6 +794,12 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 			if req.flush != nil {
 				close(req.flush)
 				continue
+			}
+
+			// Allow synchronization with the flushing routine to happen between getting
+			// the flush request from the channel and completing the flush.
+			if s.testingKnobs != nil && s.testingKnobs.AsyncFlushSync != nil {
+				s.testingKnobs.AsyncFlushSync()
 			}
 
 			// flush file to storage.
