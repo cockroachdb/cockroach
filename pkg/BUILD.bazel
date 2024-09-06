@@ -1059,6 +1059,7 @@ GO_TARGETS = [
     "//pkg/cloud/httpsink:httpsink_test",
     "//pkg/cloud/impl/cloudimpltests:cloudimpltests_test",
     "//pkg/cloud/impl:cloudimpl",
+    "//pkg/cloud/mocksink:mocksink",
     "//pkg/cloud/nodelocal:nodelocal",
     "//pkg/cloud/nodelocal:nodelocal_test",
     "//pkg/cloud/nullsink:nullsink",
