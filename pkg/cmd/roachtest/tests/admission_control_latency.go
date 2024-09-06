@@ -11,10 +11,13 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"math"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -31,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/cli"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -235,6 +239,7 @@ func addMetamorphic(r registry.Registry, p perturbation, acceptableChange float6
 		Cluster:          v.makeClusterSpec(),
 		Leases:           v.leaseType,
 		Randomized:       true,
+		Benchmark:        true,
 		Run:              v.runTest,
 	})
 }
@@ -685,6 +690,8 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.Status("T5: validating results")
 	require.NoError(t, downloadProfiles(ctx, c, t.L(), t.ArtifactsDir()))
 
+	require.NoError(t, v.writePerfArtifacts(ctx, t.Name(), t.ArtifactsDir(), baselineStats, perturbationStats, afterStats))
+
 	t.L().Printf("validating stats during the perturbation")
 	duringOK := isAcceptableChange(t.L(), baselineStats, perturbationStats, v.acceptableChange)
 	t.L().Printf("validating stats after the perturbation")
@@ -889,4 +896,43 @@ func sortedStringKeys(m map[string]trackedStat) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// writePerfArtifacts writes the stats.json in the right format to node 1 so it
+// can be picked up by roachperf. Currently it only writes the write stats since
+// there would be too many lines on the graph otherwise.
+func (v variations) writePerfArtifacts(
+	ctx context.Context,
+	name string,
+	perfDir string,
+	baseline, perturbation, recovery map[string]trackedStat,
+) error {
+	reg := histogram.NewRegistry(
+		time.Second,
+		histogram.MockWorkloadName,
+	)
+	reg.GetHandle().Get("baseline").Record(baseline["write"].score)
+	reg.GetHandle().Get("perturbation").Record(perturbation["write"].score)
+	reg.GetHandle().Get("recovery").Record(recovery["write"].score)
+
+	bytesBuf := bytes.NewBuffer([]byte{})
+	jsonEnc := json.NewEncoder(bytesBuf)
+	var err error
+	reg.Tick(func(tick histogram.Tick) {
+		err = jsonEnc.Encode(tick.Snapshot())
+	})
+	if err != nil {
+		return err
+	}
+
+	node := v.Node(1)
+	// Upload the perf artifacts to the given node.
+	if err := v.RunE(ctx, option.WithNodes(node), "mkdir -p "+perfDir); err != nil {
+		return err
+	}
+	path := filepath.Join(perfDir, "stats.json")
+	if err := v.PutString(ctx, bytesBuf.String(), path, 0755, node); err != nil {
+		return err
+	}
+	return nil
 }
