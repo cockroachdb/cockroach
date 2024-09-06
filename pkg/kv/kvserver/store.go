@@ -3532,8 +3532,18 @@ func (s *Store) ComputeMetricsPeriodically(
 
 	// Get disk stats for the disk associated with this store.
 	if s.diskMonitor != nil {
+		// IncrementalStats returns the stats captured in the tracer since the
+		// last call to incremental stats. These are useful for computing
+		// functions like max over an interval. We could use rollingStats.Latest()
+		// for cumulative stats, but there is no guarantee that slowness in
+		// capturing traces or other timing issues will not cause rollingStats to
+		// be empty, in which case rollingStats.Latest() will be empty. For the
+		// real cumulative stats we use Monitor.CumulativeStats which is robust to
+		// such slowness (since it will return the latest value even if it is the
+		// same as the last call).
 		rollingStats := s.diskMonitor.IncrementalStats()
-		s.metrics.updateDiskStats(rollingStats)
+		cumulativeStats, cumulativeStatsErr := s.diskMonitor.CumulativeStats()
+		s.metrics.updateDiskStats(ctx, rollingStats, cumulativeStats, cumulativeStatsErr)
 	}
 
 	wt := m.Flush.WriteThroughput
