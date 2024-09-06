@@ -235,7 +235,12 @@ func testClockOffsetInPingRequestInternal(t *testing.T, clientOnly bool) {
 	t.Logf("client dial")
 	// Dial: this causes the heartbeats to start.
 	remoteAddr := ln.Addr().String()
-	_, err = rpcCtxClient.GRPCDialNode(remoteAddr, 1, roachpb.Locality{}, SystemClass).Connect(ctx)
+	testutils.SucceedsSoon(t, func() error {
+		_, err = rpcCtxClient.GRPCDialNode(
+			remoteAddr, 1, roachpb.Locality{}, SystemClass,
+		).Connect(ctx)
+		return err
+	})
 	require.NoError(t, err)
 
 	// The first ping establishes the TCP+TLS connection and uses a blocking dialback,
