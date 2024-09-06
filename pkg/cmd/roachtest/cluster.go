@@ -904,10 +904,6 @@ func (f *clusterFactory) newCluster(
 	if err != nil {
 		return nil, nil, err
 	}
-	if clusterCloud != spec.Local {
-		providerOptsContainer.SetProviderOpts(clusterCloud, providerOpts)
-		workloadProviderOptsContainer.SetProviderOpts(clusterCloud, workloadProviderOpts)
-	}
 
 	createFlagsOverride(&createVMOpts)
 	// Make sure expiration is changed if --lifetime override flag
@@ -930,6 +926,15 @@ func (f *clusterFactory) newCluster(
 		//
 		// https://github.com/cockroachdb/cockroach/issues/67906#issuecomment-887477675
 		genName := f.genName(cfg)
+
+		// Set the zones used for the cluster. We call this in the loop as the default GCE zone
+		// is randomized to avoid zone exhaustion errors.
+		providerOpts, workloadProviderOpts = cfg.spec.SetRoachprodOptsZones(providerOpts, workloadProviderOpts, params, string(selectedArch))
+		if clusterCloud != spec.Local {
+			providerOptsContainer.SetProviderOpts(clusterCloud, providerOpts)
+			workloadProviderOptsContainer.SetProviderOpts(clusterCloud, workloadProviderOpts)
+		}
+
 		// Logs for creating a new cluster go to a dedicated log file.
 		var retryStr string
 		if i > 1 {
