@@ -8865,8 +8865,8 @@ CREATE TABLE crdb_internal.kv_flow_controller (
 			if err := addRow(
 				tree.NewDInt(tree.DInt(stream.TenantID.ToUint64())),
 				tree.NewDInt(tree.DInt(stream.StoreID)),
-				tree.NewDInt(tree.DInt(stream.AvailableRegularTokens)),
-				tree.NewDInt(tree.DInt(stream.AvailableElasticTokens)),
+				tree.NewDInt(tree.DInt(stream.AvailableEvalRegularTokens)),
+				tree.NewDInt(tree.DInt(stream.AvailableEvalElasticTokens)),
 			); err != nil {
 				return err
 			}
