@@ -3226,6 +3226,66 @@ func TestLeaderTransferDifferentTerms(t *testing.T) {
 	require.Equal(t, uint64(6), n2.Term)
 }
 
+// TestLeaderTransferStaleFollower verifies that a MsgTimeoutNow received by a
+// stale follower (a follower still at an earlier term) will cause the follower
+// to call an election which it can not win.
+func TestLeaderTransferStaleFollower(t *testing.T) {
+	nt := newNetwork(nil, nil, nil)
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	n1 := nt.peers[1].(*raft)
+	n2 := nt.peers[2].(*raft)
+	n3 := nt.peers[3].(*raft)
+	nodes := []*raft{n1, n2, n3}
+
+	// Attempt to transfer leadership to node 3. The MsgTimeoutNow is sent
+	// immediately and node 1 steps down as leader, but node 3 does not receive
+	// the message due to a network partition.
+	nt.isolate(3)
+	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
+	for _, n := range nodes {
+		require.Equal(t, StateFollower, n.state)
+		require.Equal(t, uint64(1), n.Term)
+	}
+
+	// TODO(arul): a leader that steps down will currently never campaign due to
+	// the fortification promise that it made to itself. We'll need to fix this.
+	n1.deFortify(n1.lead, n1.Term)
+
+	// Eventually, the previous leader gives up on waiting and calls an election
+	// to reestablish leadership at the next term. Node 3 does not hear about this
+	// either.
+	for i := 0; i < n1.randomizedElectionTimeout; i++ {
+		n1.tick()
+	}
+	nt.send(nt.filter(n1.readMessages())...)
+	for _, n := range nodes {
+		expState := StateFollower
+		if n == n1 {
+			expState = StateLeader
+		}
+		expTerm := uint64(2)
+		if n == n3 {
+			expTerm = 1
+		}
+		require.Equal(t, expState, n.state)
+		require.Equal(t, expTerm, n.Term)
+	}
+
+	// The network partition heals and n3 receives the lost MsgTimeoutNow that n1
+	// had previously tried to send to it back in term 1. It calls an unsuccessful
+	// election, through which it learns about the new leadership term.
+	nt.recover()
+	nt.send(pb.Message{From: 1, To: 3, Term: 1, Type: pb.MsgTimeoutNow})
+	for _, n := range nodes {
+		expState := StateFollower
+		if n == n1 {
+			expState = StateLeader
+		}
+		require.Equal(t, expState, n.state)
+		require.Equal(t, uint64(2), n.Term)
+	}
+}
+
 // TestNodeWithSmallerTermCanCompleteElection tests the scenario where a node
 // that has been partitioned away (and fallen behind) rejoins the cluster at
 // about the same time the leader node gets partitioned away.
