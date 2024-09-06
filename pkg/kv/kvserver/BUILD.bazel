@@ -12,7 +12,6 @@ go_library(
         "debug_print.go",
         "doc.go",
         "flow_control_integration.go",
-        "flow_control_raft.go",
         "flow_control_raft_transport.go",
         "flow_control_replica.go",
         "flow_control_replica_integration.go",

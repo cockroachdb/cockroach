@@ -484,7 +484,7 @@ func (r *replicaForRACv2) MuUnlock() {
 
 // RaftNodeMuLocked implements replica_rac2.Replica.
 func (r *replicaForRACv2) RaftNodeMuLocked() replica_rac2.RaftNode {
-	return raftNodeForRACv2{RawNode: r.mu.internalRaftGroup}
+	return replica_rac2.NewRaftNode(r.mu.internalRaftGroup)
 }
 
 // LeaseholderMuLocked implements replica_rac2.Replica.
