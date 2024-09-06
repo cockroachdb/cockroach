@@ -916,6 +916,12 @@ type Store struct {
 	// transport is connected to, and is used by the canonical
 	// replicaFlowControlIntegration implementation.
 	raftTransportForFlowControl raftTransportForFlowControl
+
+	// kvflowRangeControllerFactory is used for replication AC (flow control) V2
+	// to create new range controllers which mediate the flow of requests to
+	// replicas.
+	kvflowRangeControllerFactory replica_rac2.RangeControllerFactory
+
 	// metricsMu protects the collection and update of engine metrics.
 	metricsMu syncutil.Mutex
 
@@ -1544,6 +1550,17 @@ func NewStore(
 	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s,
 		cfg.RaftSchedulerConcurrency, cfg.RaftSchedulerShardSize, cfg.RaftSchedulerConcurrencyPriority,
 		cfg.RaftElectionTimeoutTicks)
+
+	// kvflowRangeControllerFactory depends on the raft scheduler, so it must be
+	// created per-store rather than per-node like other replication admission
+	// control (flow control) v2 components.
+	s.kvflowRangeControllerFactory = replica_rac2.NewRangeControllerFactoryImpl(
+		s.Clock(),
+		s.cfg.KVFlowEvalWaitMetrics,
+		s.cfg.KVFlowStreamTokenProvider,
+		replica_rac2.NewStreamCloseScheduler(
+			s.stopper, timeutil.DefaultTimeSource{}, s.scheduler),
+	)
 
 	// Run a log SyncWaiter loop for every 32 raft scheduler goroutines.
 	// Experiments on c5d.12xlarge instances (48 vCPUs, the largest single-socket
