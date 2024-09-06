@@ -2509,9 +2509,12 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 			// We're about to perform one work cycle, where we go through all replicas
 			// that have an active rangefeed on them and update them with the current
 			// closed timestamp for their range. While doing so, we'll keep track of
-			// the earliest closed timestamp we've seen per-work cycle; we'll then use
-			// this to update a metric when the work cycle completes.
+			// the earliest closed timestamp we've seen and the number of ranges whose
+			// closed timestamp is lagging excessively; we'll then use these to update
+			// some metrics when the work cycle completes.
 			var earliestClosedTS hlc.Timestamp
+			var numExcessivelyLaggingClosedTS int64
+
 			for work, startAt := updateRangeIDs(), now; len(work) != 0; {
 				if waitErr = wait(ctx, startAt, conf.changed); waitErr != nil {
 					// NB: a configuration change abandons the update loop
@@ -2524,7 +2527,9 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 						if earliestClosedTS.IsEmpty() || cts.Less(earliestClosedTS) {
 							earliestClosedTS = cts
 						}
-						r.handleClosedTimestampUpdate(ctx, cts)
+						if exceedsSlowLagThresh := r.handleClosedTimestampUpdate(ctx, cts); exceedsSlowLagThresh {
+							numExcessivelyLaggingClosedTS++
+						}
 					}
 				}
 				work = work[todo:]
@@ -2548,6 +2553,7 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 				nanos := timeutil.Since(earliestClosedTS.GoTime()).Nanoseconds()
 				s.metrics.RangeFeedMetrics.RangeFeedClosedTimestampMaxBehindNanos.Update(nanos)
 			}
+			s.metrics.RangeFeedMetrics.RangeFeedSlowClosedTimestampRanges.Update(numExcessivelyLaggingClosedTS)
 		}
 	})
 }

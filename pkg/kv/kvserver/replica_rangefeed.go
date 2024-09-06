@@ -825,27 +825,30 @@ func (r *Replica) handleSSTableRaftMuLocked(
 }
 
 // handleClosedTimestampUpdate takes the a closed timestamp for the replica
-// and informs the rangefeed, if one is running. No-op if a
-// rangefeed is not active.
+// and informs the rangefeed, if one is running. No-op if a rangefeed is not
+// active. Returns true if the closed timestamp lag is considered slow (i.e.,
+// the range's closed timestamp lag > 5x the target lag); false otherwise.
 //
 // closeTS is generally expected to be the highest closed timestamp known, but
 // it doesn't need to be - handleClosedTimestampUpdate can be called with
 // updates out of order.
-func (r *Replica) handleClosedTimestampUpdate(ctx context.Context, closedTS hlc.Timestamp) {
+func (r *Replica) handleClosedTimestampUpdate(
+	ctx context.Context, closedTS hlc.Timestamp,
+) (exceedsSlowLagThresh bool) {
 	ctx = r.AnnotateCtx(ctx)
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	r.handleClosedTimestampUpdateRaftMuLocked(ctx, closedTS)
+	return r.handleClosedTimestampUpdateRaftMuLocked(ctx, closedTS)
 }
 
 // handleClosedTimestampUpdateRaftMuLocked is like handleClosedTimestampUpdate,
 // but it requires raftMu to be locked.
 func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 	ctx context.Context, closedTS hlc.Timestamp,
-) {
+) (exceedsSlowLagThresh bool) {
 	p := r.getRangefeedProcessor()
 	if p == nil {
-		return
+		return false
 	}
 
 	// If the closed timestamp is sufficiently stale, signal that we want an
@@ -853,7 +856,8 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 	// again.
 	behind := r.Clock().PhysicalTime().Sub(closedTS.GoTime())
 	slowClosedTSThresh := 5 * closedts.TargetDuration.Get(&r.store.cfg.Settings.SV)
-	if behind > slowClosedTSThresh {
+	exceedsSlowLagThresh = behind > slowClosedTSThresh
+	if exceedsSlowLagThresh {
 		m := r.store.metrics.RangeFeedMetrics
 		if m.RangeFeedSlowClosedTimestampLogN.ShouldLog() {
 			if closedTS.IsEmpty() {
@@ -892,14 +896,16 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 			})
 	}
 
-	// If the closed timestamp is not empty, inform the Processor.
+	// If the closed timestamp is empty, inform the Processor.
 	if closedTS.IsEmpty() {
-		return
+		return false
 	}
 	if !p.ForwardClosedTS(ctx, closedTS) {
 		// Consumption failed and the rangefeed was stopped.
 		r.unsetRangefeedProcessor(p)
 	}
+
+	return exceedsSlowLagThresh
 }
 
 // ensureClosedTimestampStarted does its best to make sure that this node is
