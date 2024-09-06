@@ -668,7 +668,7 @@ func (ts *testState) BindReader(tenantcapabilities.Reader) {}
 
 var _ tenantcapabilities.Authorizer = &testState{}
 
-func (ts *testState) HasCrossTenantRead(tenID roachpb.TenantID) bool {
+func (ts *testState) HasCrossTenantRead(ctx context.Context, tenID roachpb.TenantID) bool {
 	return false
 }
 
@@ -790,7 +790,7 @@ type fakeAuthorizer struct{}
 
 var _ tenantcapabilities.Authorizer = &fakeAuthorizer{}
 
-func (fakeAuthorizer) HasCrossTenantRead(tenID roachpb.TenantID) bool {
+func (fakeAuthorizer) HasCrossTenantRead(ctx context.Context, tenID roachpb.TenantID) bool {
 	return false
 }
 

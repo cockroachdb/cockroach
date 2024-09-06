@@ -98,8 +98,22 @@ func New(settings *cluster.Settings, knobs *tenantcapabilities.TestingKnobs) *Au
 }
 
 // HasCrossTenantRead returns true if a tenant can read from other tenants.
-func (a *Authorizer) HasCrossTenantRead(tenID roachpb.TenantID) bool {
-	return tenID.IsSystem()
+func (a *Authorizer) HasCrossTenantRead(ctx context.Context, tenID roachpb.TenantID) bool {
+	if tenID.IsSystem() {
+		// The system tenant has access to all request types.
+		return true
+	}
+	_, mode := a.getMode(ctx, tenID)
+	switch mode {
+	case authorizerModeOn, authorizerModeV222:
+		return false
+	case authorizerModeAllowAll:
+		return true
+	default:
+		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
+		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
+		return false
+	}
 }
 
 // HasCapabilityForBatch implements the tenantcapabilities.Authorizer interface.
