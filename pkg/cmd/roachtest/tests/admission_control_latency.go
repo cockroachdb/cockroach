@@ -11,10 +11,13 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"math"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -638,6 +641,8 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	m.Wait()
 	require.NoError(t, downloadProfiles(ctx, c, t.L(), t.ArtifactsDir()))
 
+	require.NoError(t, v.writePerfArtifacts(ctx, t.Name(), t.ArtifactsDir(), baselineStats, perturbationStats, afterStats))
+
 	t.L().Printf("validating stats during the perturbation")
 	duringOK := v.isAcceptableChange(t.L(), baselineStats, perturbationStats)
 	t.L().Printf("validating stats after the perturbation")
@@ -886,4 +891,39 @@ func sortedStringKeys(m map[string]trackedStat) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// writePerfArtifacts writes the stats.json in the right format to node 1 so it
+// can be picked up by roachperf. Currently it only writes the write stats since
+// there would be too many lines on the graph otherwise.
+func (v variations) writePerfArtifacts(
+	ctx context.Context,
+	name string,
+	perfDir string,
+	baseline, perturbation, recovery map[string]trackedStat,
+) error {
+	reg := histogram.NewRegistry(
+		time.Second,
+		histogram.MockWorkloadName,
+	)
+	reg.GetHandle().Get("baseline").Record(baseline["write"].score)
+	reg.GetHandle().Get("perturbation").Record(perturbation["write"].score)
+	reg.GetHandle().Get("recovery").Record(recovery["write"].score)
+
+	bytesBuf := bytes.NewBuffer([]byte{})
+	jsonEnc := json.NewEncoder(bytesBuf)
+	reg.Tick(func(tick histogram.Tick) {
+		_ = jsonEnc.Encode(tick.Snapshot())
+	})
+
+	node := v.cluster.Node(1)
+	// Upload the perf artifacts to the given node.
+	if err := v.cluster.RunE(ctx, option.WithNodes(node), "mkdir -p "+perfDir); err != nil {
+		return err
+	}
+	path := filepath.Join(perfDir, "stats.json")
+	if err := v.cluster.PutString(ctx, bytesBuf.String(), path, 0755, node); err != nil {
+		return err
+	}
+	return nil
 }
