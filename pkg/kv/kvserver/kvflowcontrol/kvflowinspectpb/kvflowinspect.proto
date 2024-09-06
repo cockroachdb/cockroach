@@ -80,7 +80,8 @@ message ConnectedStream {
 }
 
 // Stream represents a given kvflowcontrol.Stream and the number of tokens
-// available for it (as maintained by the node-level kvflowcontrol.Controller).
+// available for it (as maintained by the node-level kvflowcontrol.Controller,
+// or in >= v24.3, by the node level StreamTokenCounterProvider).
 message Stream {
   roachpb.TenantID tenant_id = 1 [
     (gogoproto.nullable) = false,
@@ -88,8 +89,18 @@ message Stream {
   uint64 store_id = 2 [
     (gogoproto.customname) = "StoreID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
-  int64 available_regular_tokens = 3;
-  int64 available_elastic_tokens = 4;
+  // AvailableEvalRegularTokens represents the currently available tokens for
+  // regular replication traffic, deducted for evaluation.
+  int64 available_eval_regular_tokens = 3;
+  // AvailableEvalElasticTokens represents the currently available tokens for
+  // elastic replication traffic, deducted for evaluation.
+  int64 available_eval_elastic_tokens = 4;
+  // AvailableSendRegularTokens represents the currently available tokens for
+  // regular replication traffic, deducted before sending.
+  int64 available_send_regular_tokens = 5;
+  // AvailableSendElasticTokens represents the currently available tokens for
+  // elastic replication traffic, deducted before sending.
+  int64 available_send_elastic_tokens = 6;
 }
 
 // TrackedDeductions represents a tracked token deduction, as typically done by
