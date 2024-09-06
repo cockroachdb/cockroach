@@ -682,6 +682,11 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 		return err
 	}
 	s.files.Clear(true /* addNodesToFreeList */)
+	// Allow synchronization with the async flusher to happen.
+	if s.testingKnobs.AsyncFlushSync != nil {
+		s.testingKnobs.AsyncFlushSync()
+	}
+
 	s.setDataFileTimestamp()
 	return s.waitAsyncFlush(ctx)
 }
@@ -814,6 +819,12 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 			if req.flush != nil {
 				close(req.flush)
 				continue
+			}
+
+			// Allow synchronization with the flushing routine to happen between getting
+			// the flush request from the channel and completing the flush.
+			if s.testingKnobs.AsyncFlushSync != nil {
+				s.testingKnobs.AsyncFlushSync()
 			}
 
 			// flush file to storage.
