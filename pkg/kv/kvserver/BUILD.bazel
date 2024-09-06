@@ -448,6 +448,7 @@ go_test(
         "//pkg/kv/kvserver/tscache",
         "//pkg/kv/kvserver/txnwait",
         "//pkg/kv/kvserver/uncertainty",
+        "//pkg/multitenant",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
         "//pkg/raft",
         "//pkg/raft/confchange",
