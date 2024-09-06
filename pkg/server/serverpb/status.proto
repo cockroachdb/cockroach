@@ -2185,6 +2185,16 @@ message RequestJobProfilerExecutionDetailsResponse {}
    repeated string files = 1;
  }
 
+ message UpdateTableMetadataCacheRequest {
+  // If true, the server will attempt to send a signal to the
+   // table metadata job by notifying the channel set on the
+   // status server.
+   bool local = 1;
+ }
+
+ message UpdateTableMetadataCacheResponse {
+ }
+
 
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
@@ -2672,5 +2682,8 @@ service Status {
     option (google.api.http) = {
       get: "/_status/list_job_profiler_execution_details/{job_id}"
     };
+  }
+
+  rpc UpdateTableMetadataCache(UpdateTableMetadataCacheRequest) returns (UpdateTableMetadataCacheResponse) {
   }
 }
