@@ -22,7 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -51,8 +55,8 @@ func TestGracePeriodInitTSCache(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				LicenseTestingKnobs: license.TestingKnobs{
-					EnableGracePeriodInitTSWrite: true,
-					OverrideStartTime:            &ts1,
+					Enable:            true,
+					OverrideStartTime: &ts1,
 				},
 			},
 		},
@@ -65,8 +69,8 @@ func TestGracePeriodInitTSCache(t *testing.T) {
 	ts2 := ts1.Add(1)
 	ts2End := ts2.Add(7 * 24 * time.Hour) // Calculate the end of the grace period
 	enforcer.SetTestingKnobs(&license.TestingKnobs{
-		EnableGracePeriodInitTSWrite: true,
-		OverrideStartTime:            &ts2,
+		Enable:            true,
+		OverrideStartTime: &ts2,
 	})
 	// Ensure request for the grace period init ts1 before start just returns the start
 	// time used when the enforcer was created.
@@ -115,36 +119,36 @@ func TestThrottle(t *testing.T) {
 	}{
 		// Expired free license but under the transaction threshold
 		{UnderTxnThreshold, license.LicTypeFree, t0, t1d, t8d, t45d, ""},
-		// Expired trial license but under the transaction threshold
-		{UnderTxnThreshold, license.LicTypeTrial, t0, t30d, t8d, t45d, ""},
+		// Expired trial license but at the transaction threshold
+		{AtTxnThreshold, license.LicTypeTrial, t0, t30d, t8d, t45d, ""},
 		// Over the transaction threshold but not expired
 		{OverTxnThreshold, license.LicTypeFree, t0, t10d, t45d, t10d, ""},
 		// Expired free license, past the grace period
-		{AtTxnThreshold, license.LicTypeFree, t0, t30d, t10d, t45d, "License expired"},
+		{OverTxnThreshold, license.LicTypeFree, t0, t30d, t10d, t45d, "License expired"},
 		// Expired free license, but not past the grace period
 		{OverTxnThreshold, license.LicTypeFree, t0, t30d, t10d, t17d, ""},
 		// Valid free license, but telemetry ping hasn't been received in 7 days.
-		{AtTxnThreshold, license.LicTypeFree, t0, t10d, t45d, t17d, ""},
+		{OverTxnThreshold, license.LicTypeFree, t0, t10d, t45d, t17d, ""},
 		// Valid free license, but telemetry ping hasn't been received in 8 days.
 		{OverTxnThreshold, license.LicTypeFree, t0, t10d, t45d, t18d, "diagnostic reporting"},
 		// No license but within grace period still
-		{AtTxnThreshold, license.LicTypeNone, t0, t0, t0, t1d, ""},
+		{OverTxnThreshold, license.LicTypeNone, t0, t0, t0, t1d, ""},
 		// No license but beyond grace period
 		{OverTxnThreshold, license.LicTypeNone, t0, t0, t0, t8d, "No license installed"},
 		// Trial license has expired but still within grace period
-		{AtTxnThreshold, license.LicTypeTrial, t0, t30d, t10d, t15d, ""},
+		{OverTxnThreshold, license.LicTypeTrial, t0, t30d, t10d, t15d, ""},
 		// Trial license has expired and just at the edge of the grace period.
 		{OverTxnThreshold, license.LicTypeTrial, t0, t45d, t10d, t17d, ""},
 		// Trial license has expired and just beyond the grace period.
-		{AtTxnThreshold, license.LicTypeTrial, t0, t45d, t10d, t18d, "License expired"},
+		{OverTxnThreshold, license.LicTypeTrial, t0, t45d, t10d, t18d, "License expired"},
 		// No throttling if past the expiry of an enterprise license
 		{OverTxnThreshold, license.LicTypeEnterprise, t0, t0, t8d, t46d, ""},
 		// Telemetry isn't needed for enterprise license
-		{AtTxnThreshold, license.LicTypeEnterprise, t0, t0, t45d, t30d, ""},
+		{OverTxnThreshold, license.LicTypeEnterprise, t0, t0, t45d, t30d, ""},
 		// Telemetry isn't needed for evaluation license
 		{OverTxnThreshold, license.LicTypeEvaluation, t0, t0, t45d, t30d, ""},
 		// Evaluation license doesn't throttle if expired but within grace period.
-		{AtTxnThreshold, license.LicTypeEvaluation, t0, t0, t15d, t30d, ""},
+		{OverTxnThreshold, license.LicTypeEvaluation, t0, t0, t15d, t30d, ""},
 		// Evaluation license does throttle if expired and beyond grace period.
 		{OverTxnThreshold, license.LicTypeEvaluation, t0, t0, t15d, t46d, "License expired"},
 	} {
@@ -157,7 +161,7 @@ func TestThrottle(t *testing.T) {
 			e.SetTelemetryStatusReporter(&mockTelemetryStatusReporter{
 				lastPingTime: tc.lastTelemetryPingTime,
 			})
-			e.RefreshForLicenseChange(tc.licType, tc.licExpiry)
+			e.RefreshForLicenseChange(ctx, tc.licType, tc.licExpiry)
 			err := e.MaybeFailIfThrottled(ctx, tc.openTxnsCount)
 			if tc.expectedErrRegex == "" {
 				require.NoError(t, err)
@@ -168,6 +172,142 @@ func TestThrottle(t *testing.T) {
 				require.NotNil(t, match, "Error text %q doesn't match the expected regexp of %q",
 					err.Error(), tc.expectedErrRegex)
 			}
+		})
+	}
+}
+
+func TestThrottleErrorMsg(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Set of times that we'll use in the test.
+	//
+	// Initial time that other timestamps are derived from
+	t0d := timeutil.Unix(1724329716, 0)
+	// 10 days after start. License is valid.
+	t10d := t0d.Add(10 * 24 * time.Hour)
+	// 30 days after start. This is when the license will expire.
+	t30d := t0d.Add(30 * 24 * time.Hour)
+	// 55 days after initial time. This is still within grace period.
+	t55d := t0d.Add(55 * 24 * time.Hour)
+	// 60 days after initial time. This is the end of the grace period. Throttling
+	// may happen anytime after this.
+	t60d := t0d.Add(60 * 24 * time.Hour)
+	// 1ms past the grace period end time.
+	t60d1ms := t60d.Add(time.Millisecond)
+
+	// Pointer to the timestamp that we'll use for the throttle check. This is
+	// modified for every test unit.
+	throttleCheckTS := &time.Time{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				LicenseTestingKnobs: license.TestingKnobs{
+					Enable: true,
+					// The mock server we bring up is single-node, which disables all
+					// throttling checks. We need to avoid that for this test to verify
+					// the throttle message.
+					SkipDisable: true,
+					// We are going to modify the throttle check timestamp in each test
+					// unit.
+					OverrideThrottleCheckTime: throttleCheckTS,
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	// Set up a free license that will expire in 30 days
+	licenseEnforcer := srv.SystemLayer().ExecutorConfig().(sql.ExecutorConfig).LicenseEnforcer
+	licenseEnforcer.RefreshForLicenseChange(ctx, license.LicTypeFree, t30d)
+
+	for _, tc := range []struct {
+		desc string
+		// concurrentQueries is the number of background transactions opened before
+		// starting foreground transaction
+		concurrentQueries int
+		throttleCheckTS   time.Time
+		telemetryTS       time.Time
+		errRE             string
+	}{
+		// NB: license expires at t30d and grace period ends at t60d.
+		{"at-threshold-valid-license-and-telemetry", 5, t10d, t10d, ""},
+		{"at-threshold-expired-license-in-grace-valid-telemetry", 5, t60d, t55d, ""},
+		{"at-threshold-expired-license-past-grace-valid-telemetry", 5, t60d1ms, t55d,
+			"License expired. The maximum number of open transactions has been reached"},
+		{"below-threshold-expired-license-past-grace-valid-telemetry", 3, t60d1ms, t55d, ""},
+		{"at-threshold-expired-license-in-grace-invalid-telemetry", 5, t55d, t10d,
+			"The maximum number of open transactions has been reached because the license requires diagnostic reporting"},
+		{"at-threshold-valid-license-invalid-telemetry", 5, t10d, t0d,
+			"The maximum number of open transactions has been reached because the license requires diagnostic reporting"},
+		{"below-threshold-invalid-telemetry", 4, t10d, t0d, ""},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			// Adjust the throttle check time for this test unit
+			*throttleCheckTS = tc.throttleCheckTS
+
+			// Override the telemetry server so we have control of what the last ping
+			// time was.
+			licenseEnforcer.SetTelemetryStatusReporter(&mockTelemetryStatusReporter{lastPingTime: tc.telemetryTS})
+
+			// All but one of the queries will be run in a background Go routine.
+			startSignal := make(chan any, tc.concurrentQueries)
+			unblockSignal := make(chan any)
+
+			// Open up multiple background connections. They each will start a
+			// transaction and pause.
+			g := ctxgroup.WithContext(ctx)
+			for i := 0; i < tc.concurrentQueries; i++ {
+				g.GoCtx(func(ctx context.Context) error {
+					tx, err := sqlDB.BeginTx(ctx, nil)
+					if err != nil {
+						return err
+					}
+
+					_, err = tx.Exec("SELECT 1")
+					if err != nil {
+						return err
+					}
+
+					// Notify foreground that we have the transaction opened
+					startSignal <- true
+					// Wait for the foreground to get throttled.
+					<-unblockSignal
+					return tx.Commit()
+				})
+			}
+
+			// Wait for each background task to start their transaction
+			for i := 0; i < tc.concurrentQueries; i++ {
+				<-startSignal
+			}
+
+			// Open final connection in the foreground. First, check external
+			// connections. If may or may not be throttled, depending on tc parms.
+			tdb := sqlutils.MakeSQLRunner(sqlDB)
+			if tc.errRE != "" {
+				tdb.ExpectErr(t, tc.errRE, "SELECT 1")
+			} else {
+				tdb.Exec(t, "SELECT 1")
+			}
+
+			// Confirm that internal connections are never throttled
+			idb := srv.InternalDB().(isql.DB)
+			err := idb.Txn(ctx, func(ctx context.Context, tx isql.Txn) error {
+				_, err := tx.ExecEx(ctx, "internal query throttle test", tx.KV(),
+					sessiondata.NodeUserSessionDataOverride, "SELECT 1")
+				return err
+			})
+			require.NoError(t, err)
+
+			// Unblock the background Go routines and wait for them to finish.
+			close(unblockSignal)
+			err = g.Wait()
+			require.NoError(t, err)
 		})
 	}
 }

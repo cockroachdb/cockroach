@@ -45,7 +45,7 @@ type Enforcer struct {
 	// telemetryStatusReporter is an interface for getting the timestamp of the
 	// last successful ping to the telemetry server. For some licenses, sending
 	// telemetry data is required to avoid throttling.
-	telemetryStatusReporter TelemetryStatusReporter
+	telemetryStatusReporter atomic.Pointer[TelemetryStatusReporter]
 
 	// clusterInitGracePeriodEndTS marks the end of the grace period when a
 	// license is required. It is set during the cluster's initial startup. The
@@ -86,13 +86,18 @@ type Enforcer struct {
 }
 
 type TestingKnobs struct {
-	// EnableGracePeriodInitTSWrite is a control knob for writing the grace period
-	// initialization timestamp. It is currently set to opt-in for writing the
-	// timestamp as a way to stage these changes. This ensures that the timestamp
-	// isn't written before the other license enforcement changes are complete.
-	// TODO(spilchen): Change this knob to opt-out as we approach the final stages
-	// of the core licensing deprecation work. This will be handled in CRDB-41758.
-	EnableGracePeriodInitTSWrite bool
+	// Enable controls whether the enforcer writes the grace period end time to KV
+	// and performs throttle checks. This is currently opt-in to allow for a gradual
+	// rollout of these changes. It will be removed or changed to opt-out as we near
+	// the final stages of the CockroachDB core licensing deprecation.
+	// TODO(spilchen): Update or remove this knob closer to the completion of the
+	// core licensing deprecation work (CRDB-41758).
+	Enable bool
+
+	// SkipDisable makes the Disable() function a no-op. This is separate from Enable
+	// because we perform additional checks during server startup that may automatically
+	// disable enforcement based on configuration (e.g., for single-node instances).
+	SkipDisable bool
 
 	// OverrideStartTime if set, overrides the time that's used to seed the
 	// grace period init timestamp.
@@ -126,14 +131,16 @@ func GetEnforcerInstance() *Enforcer {
 
 // newEnforcer creates a new Enforcer object.
 func newEnforcer() *Enforcer {
-	return &Enforcer{
+	e := &Enforcer{
 		startTime: timeutil.Now(),
 	}
+	e.isDisabled.Store(true) // Start disabled until Start() is called
+	return e
 }
 
 // SetTelemetryStatusReporter will set the pointer to the telemetry status reporter.
 func (e *Enforcer) SetTelemetryStatusReporter(reporter TelemetryStatusReporter) {
-	e.telemetryStatusReporter = reporter
+	e.telemetryStatusReporter.Store(&reporter)
 }
 
 // SetTesting Knobs will set the pointer to the testing knobs.
@@ -155,17 +162,34 @@ func (e *Enforcer) GetTestingKnobs() *TestingKnobs {
 func (e *Enforcer) Start(
 	ctx context.Context, st *cluster.Settings, db isql.DB, initialStart bool,
 ) error {
+	// We always start disabled. If an error occurs, the enforcer setup will be
+	// incomplete, but the server will continue to start. To ensure stability in
+	// that case, we leave throttling disabled.
+	e.isDisabled.Store(true)
+	startDisabled := e.getInitialIsDisabledValue()
+
 	e.maybeLogActiveOverrides(ctx)
 
-	// Add a hook into the license setting so that we refresh our state whenever
-	// the license changes.
-	RegisterCallbackOnLicenseChange(ctx, st)
-
-	// Writing the grace period initialization timestamp is currently opt-in. See
-	// the EnableGracePeriodInitTSWrite comment for details.
-	if tk := e.GetTestingKnobs(); tk != nil && tk.EnableGracePeriodInitTSWrite {
-		return e.maybeWriteClusterInitGracePeriodTS(ctx, db, initialStart)
+	if !startDisabled {
+		if err := e.maybeWriteClusterInitGracePeriodTS(ctx, db, initialStart); err != nil {
+			return err
+		}
 	}
+
+	// Initialize assuming there is no license. This seeds necessary values. It
+	// must be done after setting the cluster init grace period timestamp. And it
+	// is needed for testing that may be running this in isolation to the license
+	// ccl package.
+	e.RefreshForLicenseChange(ctx, LicTypeNone, time.Time{})
+
+	// Add a hook into the license setting so that we refresh our state whenever
+	// the license changes. This will also update the state for the current
+	// license if not in test.
+	RegisterCallbackOnLicenseChange(ctx, st, e)
+
+	// This should be the final step after all error checks are completed.
+	e.isDisabled.Store(startDisabled)
+
 	return nil
 }
 
@@ -192,6 +216,7 @@ func (e *Enforcer) maybeWriteClusterInitGracePeriodTS(
 			if initialStart {
 				gracePeriodLength = 7 * 24 * time.Hour
 			}
+			gracePeriodLength = e.getGracePeriodDuration(gracePeriodLength) // Allow the value to be shortened by env var
 			end := e.getStartTime().Add(gracePeriodLength)
 			log.Infof(ctx, "generated new cluster init grace period end time: %s", end.UTC().String())
 			e.clusterInitGracePeriodEndTS.Store(end.Unix())
@@ -237,14 +262,15 @@ func (e *Enforcer) GetGracePeriodEndTS() (time.Time, bool) {
 // GetTelemetryDeadline returns a timestamp of when telemetry
 // data needs to be received before we start to throttle. If the license doesn't
 // require telemetry, then false is returned for second return value.
-func (e *Enforcer) GetTelemetryDeadline() (time.Time, bool) {
-	if !e.licenseRequiresTelemetry.Load() || e.telemetryStatusReporter == nil {
-		return time.Time{}, false
+func (e *Enforcer) GetTelemetryDeadline() (deadline, lastPing time.Time, ok bool) {
+	if !e.licenseRequiresTelemetry.Load() || e.telemetryStatusReporter.Load() == nil {
+		return time.Time{}, time.Time{}, false
 	}
 
-	lastTelemetryDataReceived := e.telemetryStatusReporter.GetLastSuccessfulTelemetryPing()
+	ptr := e.telemetryStatusReporter.Load()
+	lastTelemetryDataReceived := (*ptr).GetLastSuccessfulTelemetryPing()
 	throttleTS := lastTelemetryDataReceived.Add(e.getMaxTelemetryInterval())
-	return throttleTS, true
+	return throttleTS, lastTelemetryDataReceived, true
 }
 
 // MaybeFailIfThrottled evaluates the current transaction count and license state,
@@ -254,7 +280,7 @@ func (e *Enforcer) GetTelemetryDeadline() (time.Time, bool) {
 func (e *Enforcer) MaybeFailIfThrottled(ctx context.Context, txnsOpened int64) (err error) {
 	// Early out if the number of transactions is below the max allowed or
 	// everything has been disabled.
-	if txnsOpened < e.getMaxOpenTransactions() || e.isDisabled.Load() {
+	if txnsOpened <= e.getMaxOpenTransactions() || e.isDisabled.Load() {
 		return
 	}
 
@@ -274,7 +300,7 @@ func (e *Enforcer) MaybeFailIfThrottled(ctx context.Context, txnsOpened int64) (
 		return
 	}
 
-	if ts, ok := e.GetTelemetryDeadline(); ok && now.After(ts) {
+	if deadlineTS, lastPingTS, ok := e.GetTelemetryDeadline(); ok && now.After(deadlineTS) {
 		err = errors.WithHintf(pgerror.Newf(pgcode.CCLValidLicenseRequired,
 			"The maximum number of open transactions has been reached because the license requires "+
 				"diagnostic reporting, but none has been received by Cockroach Labs."),
@@ -282,8 +308,7 @@ func (e *Enforcer) MaybeFailIfThrottled(ctx context.Context, txnsOpened int64) (
 				"Cockroach Labs reporting server. You can also consider changing your license to one that doesn't "+
 				"require diagnostic reporting to be emitted.")
 		e.maybeLogError(ctx, err, &e.lastTelemetryThrottlingLogTime,
-			fmt.Sprintf("due to no telemetry data received, last received at %s",
-				e.telemetryStatusReporter.GetLastSuccessfulTelemetryPing()))
+			fmt.Sprintf("due to no telemetry data received, last received at %s", lastPingTS))
 		return
 	}
 	return
@@ -293,7 +318,9 @@ func (e *Enforcer) MaybeFailIfThrottled(ctx context.Context, txnsOpened int64) (
 // information to optimize enforcement. Instead of reading the license from the
 // settings, unmarshaling it, and checking its type and expiry each time,
 // caching the information improves efficiency since licenses change infrequently.
-func (e *Enforcer) RefreshForLicenseChange(licType LicType, licenseExpiry time.Time) {
+func (e *Enforcer) RefreshForLicenseChange(
+	ctx context.Context, licType LicType, licenseExpiry time.Time,
+) {
 	e.hasLicense.Store(licType != LicTypeNone)
 
 	switch licType {
@@ -313,6 +340,10 @@ func (e *Enforcer) RefreshForLicenseChange(licType LicType, licenseExpiry time.T
 		e.storeNewGracePeriodEndDate(timeutil.UnixEpoch, 0)
 		e.licenseRequiresTelemetry.Store(false)
 	}
+
+	gpEnd, _ := e.GetGracePeriodEndTS()
+	log.Infof(ctx, "enforcer license updated: grace period ends at %q, telemetry required: %t",
+		gpEnd, e.licenseRequiresTelemetry.Load())
 }
 
 // Disable turns off all license enforcement for the lifetime of this object.
@@ -320,7 +351,8 @@ func (e *Enforcer) Disable(ctx context.Context) {
 	// We provide an override so that we can continue to test license enforcement
 	// policies in single-node clusters.
 	skipDisable := envutil.EnvOrDefaultBool("COCKROACH_SKIP_LICENSE_ENFORCEMENT_DISABLE", false)
-	if skipDisable {
+	tk := e.GetTestingKnobs()
+	if skipDisable || (tk != nil && tk.SkipDisable) {
 		return
 	}
 	log.Infof(ctx, "disable all license enforcement")
@@ -421,4 +453,19 @@ func (e *Enforcer) maybeLogActiveOverrides(ctx context.Context) {
 	if curTelemetryInterval != defaultMaxTelemetryInterval {
 		log.Infof(ctx, "max telemetry interval has changed to %v", curTelemetryInterval)
 	}
+}
+
+// getInitialIsDisabledValue returns bool indicating what the initial value
+// should be for e.isDisabled
+func (e *Enforcer) getInitialIsDisabledValue() bool {
+	// The enforcer is currently opt-in. This will change as we approach the
+	// final stages of CockroachDB core license deprecation.
+	// TODO(spilchen): Enable the enforcer by default in CRDB-41758.
+	tk := e.GetTestingKnobs()
+	if tk == nil {
+		// TODO(spilchen): In CRDB-41758, remove the use of an environment variable
+		// as we want to avoid providing an easy way to disable the enforcer.
+		return !envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LICENSE_ENFORCER", false)
+	}
+	return !tk.Enable
 }
