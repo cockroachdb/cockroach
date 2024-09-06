@@ -2480,6 +2480,40 @@ func (r *Replica) forgetLeaderLocked(ctx context.Context) {
 	}
 }
 
+// maybeTransferRaftLeadershipToLeaseholderLocked attempts to transfer the
+// leadership away from this node to the leaseholder, if this node is the
+// current raft leader but not the leaseholder. We don't attempt to transfer
+// leadership if the leaseholder is behind on applying the log.
+//
+// We like it when leases and raft leadership are collocated because that
+// facilitates quick command application (requests generally need to make it to
+// both the lease holder and the raft leader before being applied by other
+// replicas).
+func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
+	ctx context.Context, status kvserverpb.LeaseStatus,
+) {
+	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
+		return
+	}
+	if !r.isRaftLeaderRLocked() { // fast path
+		return
+	}
+	if !status.IsValid() || status.OwnedBy(r.StoreID()) {
+		return
+	}
+	raftStatus := r.raftSparseStatusRLocked()
+	if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
+		return
+	}
+	lhReplicaID := raftpb.PeerID(status.Lease.Replica.ReplicaID)
+	lhProgress, ok := raftStatus.Progress[lhReplicaID]
+	if (ok && lhProgress.Match >= raftStatus.Commit) || r.store.IsDraining() {
+		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", lhReplicaID)
+		r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
+		r.mu.internalRaftGroup.TransferLeader(lhReplicaID)
+	}
+}
+
 // a lastUpdateTimesMap is maintained on the Raft leader to keep track of the
 // last communication received from followers, which in turn informs the quota
 // pool and log truncations.
