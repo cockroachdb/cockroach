@@ -40,7 +40,7 @@ func TestStoreLiveness(t *testing.T) {
 		t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 			ctx := context.Background()
 			storeID := slpb.StoreIdent{NodeID: roachpb.NodeID(1), StoreID: roachpb.StoreID(1)}
-			engine := storage.NewDefaultInMemForTesting()
+			engine := &testEngine{Engine: storage.NewDefaultInMemForTesting()}
 			defer engine.Close()
 			settings := clustersettings.MakeTestingClusterSettings()
 			stopper := stop.NewStopper()
@@ -53,8 +53,8 @@ func TestStoreLiveness(t *testing.T) {
 			datadriven.RunTest(
 				t, path, func(t *testing.T, d *datadriven.TestData) string {
 					switch d.Cmd {
-					case "remove-idle-stores":
-						sm.requesterStateHandler.removeIdleStores()
+					case "mark-idle-stores":
+						sm.requesterStateHandler.markIdleStores()
 						return ""
 
 					case "support-from":
@@ -108,6 +108,13 @@ func TestStoreLiveness(t *testing.T) {
 						manual.AdvanceTo(now.GoTime())
 						require.NoError(t, sm.onRestart(ctx))
 						return ""
+
+					case "error-on-write":
+						var errorOnWrite bool
+						d.ScanArgs(t, "on", &errorOnWrite)
+						engine.errorOnWrite = errorOnWrite
+						return ""
+
 					case "debug-requester-state":
 						var sortedSupportMap []string
 						for _, support := range sm.requesterStateHandler.requesterState.supportFrom {

@@ -65,7 +65,7 @@ func TestSupportManagerRequestsSupport(t *testing.T) {
 	require.False(t, supported)
 
 	// Ensure heartbeats are sent.
-	msgs := ensureHeartbeats(t, sender)
+	msgs := ensureHeartbeats(t, sender, 10)
 	require.Equal(t, slpb.MsgHeartbeat, msgs[0].Type)
 	require.Equal(t, sm.storeID, msgs[0].From)
 	require.Equal(t, remoteStore, msgs[0].To)
@@ -180,15 +180,16 @@ func TestSupportManagerEnableDisable(t *testing.T) {
 	// Start sending heartbeats by calling SupportFrom.
 	_, _, supported := sm.SupportFrom(remoteStore)
 	require.False(t, supported)
-	ensureHeartbeats(t, sender)
+	ensureHeartbeats(t, sender, 10)
 
 	// Disable Store Liveness and make sure heartbeats stop.
 	Enabled.Override(ctx, &settings.SV, false)
-	ensureNoHeartbeats(t, sender, sm.options.HeartbeatInterval)
+	// One heartbeat may race in while heartbeats are being disabled.
+	ensureNoHeartbeats(t, sender, sm.options.HeartbeatInterval, 1)
 
 	// Enable Store Liveness again and make sure heartbeats are sent.
 	Enabled.Override(ctx, &settings.SV, true)
-	ensureHeartbeats(t, sender)
+	ensureHeartbeats(t, sender, 10)
 }
 
 // TestSupportManagerRestart tests that the SupportManager adjusts the clock
@@ -256,11 +257,82 @@ func TestSupportManagerRestart(t *testing.T) {
 	require.True(t, withdrawalTime.Less(now))
 }
 
-func ensureHeartbeats(t *testing.T, sender *testMessageSender) []slpb.Message {
+func TestSupportManagerDiskStall(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	engine := &testEngine{
+		Engine:     storage.NewDefaultInMemForTesting(),
+		blockingCh: make(chan struct{}, 1),
+	}
+	defer engine.Close()
+	settings := clustersettings.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	manual := hlc.NewHybridManualClock()
+	clock := hlc.NewClockForTesting(manual)
+	sender := &testMessageSender{}
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender)
+	// Initialize the SupportManager without starting the main goroutine.
+	require.NoError(t, sm.onRestart(ctx))
+
+	// Establish support for and from the remote store.
+	sm.SupportFrom(remoteStore)
+	sm.maybeAddStores()
+	sm.sendHeartbeats(ctx)
+	requestedTime := sm.requesterStateHandler.requesterState.meta.MaxRequested
+	heartbeatResp := &slpb.Message{
+		Type:       slpb.MsgHeartbeatResp,
+		From:       remoteStore,
+		To:         sm.storeID,
+		Epoch:      slpb.Epoch(1),
+		Expiration: requestedTime,
+	}
+	heartbeat := &slpb.Message{
+		Type:       slpb.MsgHeartbeat,
+		From:       remoteStore,
+		To:         sm.storeID,
+		Epoch:      slpb.Epoch(1),
+		Expiration: clock.Now().AddDuration(sm.options.LivenessInterval),
+	}
+	sm.handleMessages(ctx, []*slpb.Message{heartbeatResp, heartbeat})
+
+	// Start blocking writes.
+	engine.setBlockOnWrite(true)
+	sender.drainSentMessages()
+
+	// Send heartbeats in a separate goroutine. It will block on writing the
+	// requester meta.
+	require.NoError(
+		t, sm.stopper.RunAsyncTask(
+			ctx, "heartbeat", sm.sendHeartbeats,
+		),
+	)
+	ensureNoHeartbeats(t, sender, sm.options.HeartbeatInterval, 0)
+
+	// SupportFrom and SupportFor calls are still being answered.
+	epoch, _, supported := sm.SupportFrom(remoteStore)
+	require.Equal(t, slpb.Epoch(1), epoch)
+	require.True(t, supported)
+
+	epoch, supported = sm.SupportFor(remoteStore)
+	require.Equal(t, slpb.Epoch(1), epoch)
+	require.True(t, supported)
+
+	// Stop blocking writes.
+	engine.blockingCh <- struct{}{}
+	engine.setBlockOnWrite(false)
+
+	// Ensure the heartbeat is unblocked and sent out.
+	ensureHeartbeats(t, sender, 1)
+}
+
+func ensureHeartbeats(t *testing.T, sender *testMessageSender, expectedNum int) []slpb.Message {
 	var msgs []slpb.Message
 	testutils.SucceedsSoon(
 		t, func() error {
-			if sender.getNumSentMessages() < 10 {
+			if sender.getNumSentMessages() < expectedNum {
 				return errors.New("not enough heartbeats")
 			}
 			msgs = sender.drainSentMessages()
@@ -271,12 +343,13 @@ func ensureHeartbeats(t *testing.T, sender *testMessageSender) []slpb.Message {
 	return msgs
 }
 
-func ensureNoHeartbeats(t *testing.T, sender *testMessageSender, hbInterval time.Duration) {
+func ensureNoHeartbeats(
+	t *testing.T, sender *testMessageSender, hbInterval time.Duration, slack int,
+) {
 	sender.drainSentMessages()
 	err := testutils.SucceedsWithinError(
 		func() error {
-			// One heartbeat may race in while heartbeats are being disabled.
-			if sender.getNumSentMessages() > 2 {
+			if sender.getNumSentMessages() > slack {
 				return errors.New("heartbeats are sent")
 			} else {
 				return errors.New("no heartbeats")
@@ -315,3 +388,57 @@ func (tms *testMessageSender) getNumSentMessages() int {
 }
 
 var _ MessageSender = (*testMessageSender)(nil)
+
+// testEngine is a wrapper around storage.Engine that helps simulate failed and
+// stalled writes.
+type testEngine struct {
+	storage.Engine
+	mu           syncutil.Mutex
+	blockingCh   chan struct{}
+	blockOnWrite bool
+	errorOnWrite bool
+}
+
+func (te *testEngine) NewBatch() storage.Batch {
+	return testBatch{
+		Batch:        te.Engine.NewBatch(),
+		blockingCh:   te.blockingCh,
+		blockOnWrite: te.blockOnWrite,
+		errorOnWrite: te.errorOnWrite,
+	}
+}
+
+func (te *testEngine) setBlockOnWrite(bow bool) {
+	te.mu.Lock()
+	defer te.mu.Unlock()
+	te.blockOnWrite = bow
+}
+
+func (te *testEngine) PutUnversioned(key roachpb.Key, value []byte) error {
+	te.mu.Lock()
+	defer te.mu.Unlock()
+	if te.blockOnWrite {
+		<-te.blockingCh
+	}
+	if te.errorOnWrite {
+		return errors.New("error writing")
+	}
+	return te.Engine.PutUnversioned(key, value)
+}
+
+type testBatch struct {
+	storage.Batch
+	blockingCh   chan struct{}
+	blockOnWrite bool
+	errorOnWrite bool
+}
+
+func (tb testBatch) Commit(sync bool) error {
+	if tb.blockOnWrite {
+		<-tb.blockingCh
+	}
+	if tb.errorOnWrite {
+		return errors.New("error committing batch")
+	}
+	return tb.Batch.Commit(sync)
+}

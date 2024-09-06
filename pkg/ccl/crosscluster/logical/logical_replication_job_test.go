@@ -1483,9 +1483,9 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 		require.Equal(t, jobs.StatusRunning, jobs.Status(status))
 
 		if expectedJobID == jobAID {
-			require.Equal(t, pq.StringArray{"b.public.tab"}, targets)
-		} else if expectedJobID == jobBID {
 			require.Equal(t, pq.StringArray{"a.public.tab"}, targets)
+		} else if expectedJobID == jobBID {
+			require.Equal(t, pq.StringArray{"b.public.tab"}, targets)
 		}
 
 		// `SHOW LOGICAL REPLICATION JOBS` query runs after the job query in `jobutils.GetJobProgress()`,

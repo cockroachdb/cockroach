@@ -74,6 +74,22 @@ support for:
 {Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:300.000000000,0}
 
 # -------------------------------------------------------------
+# Store (n1, s1) receives an old heartbeat response from store
+# (n2, s2) after restarting. It's ignored
+# -------------------------------------------------------------
+
+handle-messages
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=4 expiration=200
+----
+
+debug-requester-state
+----
+meta:
+{MaxEpoch:3 MaxRequested:110.000000000,0}
+support from:
+
+
+# -------------------------------------------------------------
 # Store (n1, s1) attempts to withdraw support before the grace
 # period has elapsed.
 # -------------------------------------------------------------
