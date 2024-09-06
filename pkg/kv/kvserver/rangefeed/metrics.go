@@ -50,6 +50,13 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaRangefeedSlowClosedTimestampRanges = metric.Metadata{
+		Name: "kv.rangefeed.closed_timestamp.slow_ranges",
+		Help: "Number of ranges that have a closed timestamp lagging by more than 5x target lag. " +
+			"Periodically re-calculated",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRangeFeedProcessorsGO = metric.Metadata{
 		Name:        "kv.rangefeed.processors_goroutine",
 		Help:        "Number of active RangeFeed processors using goroutines",
@@ -83,6 +90,7 @@ type Metrics struct {
 	RangeFeedBudgetBlocked                 *metric.Counter
 	RangeFeedRegistrations                 *metric.Gauge
 	RangeFeedClosedTimestampMaxBehindNanos *metric.Gauge
+	RangeFeedSlowClosedTimestampRanges     *metric.Gauge
 	RangeFeedSlowClosedTimestampLogN       log.EveryN
 	// RangeFeedSlowClosedTimestampNudgeSem bounds the amount of work that can be
 	// spun up on behalf of the RangeFeed nudger. We don't expect to hit this
@@ -107,6 +115,7 @@ func NewMetrics() *Metrics {
 		RangeFeedBudgetBlocked:                 metric.NewCounter(metaRangeFeedBudgetBlocked),
 		RangeFeedRegistrations:                 metric.NewGauge(metaRangeFeedRegistrations),
 		RangeFeedClosedTimestampMaxBehindNanos: metric.NewGauge(metaRangeFeedClosedTimestampMaxBehindNanos),
+		RangeFeedSlowClosedTimestampRanges:     metric.NewGauge(metaRangefeedSlowClosedTimestampRanges),
 		RangeFeedSlowClosedTimestampLogN:       log.Every(5 * time.Second),
 		RangeFeedSlowClosedTimestampNudgeSem:   make(chan struct{}, 1024),
 		RangeFeedProcessorsGO:                  metric.NewGauge(metaRangeFeedProcessorsGO),
