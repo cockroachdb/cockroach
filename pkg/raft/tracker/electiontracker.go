@@ -23,7 +23,7 @@ type ElectionTracker struct {
 	votes map[pb.PeerID]bool
 }
 
-func MakeVoteTracker(config *quorum.Config) ElectionTracker {
+func MakeElectionTracker(config *quorum.Config) ElectionTracker {
 	return ElectionTracker{
 		config: config,
 		votes:  map[pb.PeerID]bool{},

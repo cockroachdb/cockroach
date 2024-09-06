@@ -8,12 +8,15 @@ go_library(
         "progress.go",
         "progresstracker.go",
         "state.go",
+        "supporttracker.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/raft/tracker",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
+        "//pkg/raft/raftstoreliveness",
+        "//pkg/util/hlc",
     ],
 )
 
@@ -22,9 +25,16 @@ go_test(
     srcs = [
         "inflights_test.go",
         "progress_test.go",
+        "supporttracker_test.go",
     ],
     embed = [":tracker"],
     deps = [
+        "//pkg/raft/quorum",
+        "//pkg/raft/raftpb",
+        "//pkg/raft/raftstoreliveness",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
