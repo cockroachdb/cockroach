@@ -142,6 +142,9 @@ func createLogicalReplicationStreamPlanHook(
 			}
 			repPairs[i].DstDescriptorID = int32(td.GetID())
 
+			// If we have more than 1 column family, all columns must be non-null so updates can be applied by the LDR row processor
+			requireNotNull := len(td.GetFamilies()) > 1
+
 			// TODO(dt): remove when we support this via KV metadata.
 			var foundTSCol bool
 			for _, col := range td.GetColumns() {
@@ -153,6 +156,10 @@ func createLogicalReplicationStreamPlanHook(
 						)
 					}
 					break
+				}
+				// The rowid column is always NOT NULL and is never explicitly set by the row processor, so ignore it
+				if requireNotNull && !col.Nullable && col.Name != "rowid" {
+					return errors.Newf("tables with multiple column families require all columns to be nullable. %s column is non-null.", col.Name)
 				}
 			}
 			if !foundTSCol {
