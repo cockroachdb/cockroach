@@ -654,7 +654,7 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 		Match:   pr.Match,
 	})
 	pr.SentEntries(len(entries), uint64(payloadsSize(entries)))
-	pr.SentCommit(commit)
+	pr.MaybeUpdateSentCommit(commit)
 	return true
 }
 
@@ -710,9 +710,7 @@ func (r *raft) sendHeartbeat(to pb.PeerID) {
 		Commit: commit,
 		Match:  pr.Match,
 	})
-	if commit != 0 {
-		pr.SentCommit(commit)
-	}
+	pr.MaybeUpdateSentCommit(commit)
 }
 
 // sendFortify sends a fortification RPC to the given peer.
@@ -745,6 +743,10 @@ func (r *raft) sendFortify(to pb.PeerID) {
 func (r *raft) bcastAppend() {
 	r.trk.Visit(func(id pb.PeerID, _ *tracker.Progress) {
 		if id == r.id {
+			// NB: the leader doesn't send MsgAppResp to itself here. This means that
+			// the leader will not have a chance to update its own
+			// MatchCommit/SentCommit. That is fine because the leader doesn't use
+			// MatchCommit/SentCommit for itself. It only uses the followers' values.
 			return
 		}
 		r.maybeSendAppend(id)
@@ -858,10 +860,11 @@ func (r *raft) reset(term uint64) {
 	r.electionTracker.ResetVotes()
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 		*pr = tracker.Progress{
-			Match:     0,
-			Next:      r.raftLog.lastIndex() + 1,
-			Inflights: tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
-			IsLearner: pr.IsLearner,
+			Match:       0,
+			MatchCommit: 0,
+			Next:        r.raftLog.lastIndex() + 1,
+			Inflights:   tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
+			IsLearner:   pr.IsLearner,
 		}
 		if id == r.id {
 			pr.Match = r.raftLog.lastIndex()

@@ -15,7 +15,7 @@ simple
 v1
 ----
 voters=(1)
-1: StateProbe match=0 next=3
+1: StateProbe match=0 next=3 sentCommit=0 matchCommit=0
 
 leave-joint
 ----
@@ -25,7 +25,7 @@ can't leave a non-joint config
 enter-joint
 ----
 voters=(1)&&(1)
-1: StateProbe match=0 next=3
+1: StateProbe match=0 next=3 sentCommit=0 matchCommit=0
 
 enter-joint
 ----
@@ -34,7 +34,7 @@ config is already joint
 leave-joint
 ----
 voters=(1)
-1: StateProbe match=0 next=3
+1: StateProbe match=0 next=3 sentCommit=0 matchCommit=0
 
 leave-joint
 ----
@@ -45,10 +45,10 @@ enter-joint
 r1 v2 v3 l4
 ----
 voters=(2 3)&&(1) learners=(4)
-1: StateProbe match=0 next=3
-2: StateProbe match=0 next=9
-3: StateProbe match=0 next=9
-4: StateProbe match=0 next=9 learner
+1: StateProbe match=0 next=3 sentCommit=0 matchCommit=0
+2: StateProbe match=0 next=9 sentCommit=0 matchCommit=0
+3: StateProbe match=0 next=9 sentCommit=0 matchCommit=0
+4: StateProbe match=0 next=9 sentCommit=0 matchCommit=0 learner
 
 enter-joint
 ----
@@ -67,15 +67,15 @@ can't apply simple config change in joint config
 leave-joint
 ----
 voters=(2 3) learners=(4)
-2: StateProbe match=0 next=9
-3: StateProbe match=0 next=9
-4: StateProbe match=0 next=9 learner
+2: StateProbe match=0 next=9 sentCommit=0 matchCommit=0
+3: StateProbe match=0 next=9 sentCommit=0 matchCommit=0
+4: StateProbe match=0 next=9 sentCommit=0 matchCommit=0 learner
 
 simple
 l9
 ----
 voters=(2 3) learners=(4 9)
-2: StateProbe match=0 next=9
-3: StateProbe match=0 next=9
-4: StateProbe match=0 next=9 learner
-9: StateProbe match=0 next=14 learner
+2: StateProbe match=0 next=9 sentCommit=0 matchCommit=0
+3: StateProbe match=0 next=9 sentCommit=0 matchCommit=0
+4: StateProbe match=0 next=9 sentCommit=0 matchCommit=0 learner
+9: StateProbe match=0 next=14 sentCommit=0 matchCommit=0 learner
