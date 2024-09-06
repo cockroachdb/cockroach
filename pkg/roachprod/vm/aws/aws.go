@@ -352,7 +352,7 @@ var defaultConfig = func() (cfg *awsConfig) {
 	return cfg
 }()
 
-// defaultZones is the list of availability zones used by default for
+// DefaultZones is the list of availability zones used by default for
 // cluster creation. If the geo flag is specified, nodes are
 // distributed between zones.
 //
@@ -361,7 +361,7 @@ var defaultConfig = func() (cfg *awsConfig) {
 // doesn't support multi-regional buckets, thus resulting in material
 // egress cost if the test loads from a different region. See
 // https://github.com/cockroachdb/cockroach/issues/105968.
-var defaultZones = []string{
+var DefaultZones = []string{
 	"us-east-2a",
 	"us-west-2b",
 	"eu-west-2b",
@@ -428,7 +428,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		fmt.Sprintf("aws availability zones to use for cluster creation. If zones are formatted\n"+
 			"as AZ:N where N is an integer, the zone will be repeated N times. If > 1\n"+
 			"zone specified, the cluster will be spread out evenly by zone regardless\n"+
-			"of geo (default [%s])", strings.Join(defaultZones, ",")))
+			"of geo (default [%s])", strings.Join(DefaultZones, ",")))
 	flags.StringVar(&o.ImageAMI, ProviderName+"-image-ami",
 		o.ImageAMI, "Override image AMI to use.  See https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/describe-images.html")
 	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
@@ -603,7 +603,7 @@ func (p *Provider) Create(
 	}
 
 	if len(expandedZones) == 0 {
-		expandedZones = defaultZones
+		expandedZones = DefaultZones
 	}
 
 	// We need to make sure that the SSH keys have been distributed to all regions.
