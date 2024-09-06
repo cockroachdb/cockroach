@@ -927,3 +927,13 @@ type AddIndexZoneConfig struct {
 	Subzone      zonepb.Subzone
 	SubzoneSpans []zonepb.SubzoneSpan
 }
+
+// AddPartitionZoneConfig adds a zone config to a partition.
+type AddPartitionZoneConfig struct {
+	immediateMutationOp
+	TableID       descpb.ID
+	IndexID       descpb.IndexID
+	PartitionName string
+	Subzone       zonepb.Subzone
+	SubzoneSpans  []zonepb.SubzoneSpan
+}
