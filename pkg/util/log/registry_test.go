@@ -32,6 +32,7 @@ func TestIterFileSinks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
+
 	// Set up a log config containing a file sink.
 	cfg := logconfig.DefaultConfig()
 
@@ -82,6 +83,7 @@ func TestIterFileSinks(t *testing.T) {
 	// Apply the configuration
 	TestingResetActive()
 	cleanup, err := ApplyConfig(cfg)
+
 	require.NoError(t, err)
 	defer cleanup()
 
