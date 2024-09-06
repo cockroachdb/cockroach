@@ -197,9 +197,10 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) er
 	return n.rpcContext.ConnHealth(addr.String(), nodeID, class)
 }
 
-// ConnHealthTryDial returns nil if we have an open connection of the request
-// class to the given node that succeeded on its most recent heartbeat. If no
-// healthy connection is found, it will attempt to dial the node.
+// ConnHealthTryDial returns nil if we have an open connection of the
+// rpc.DefaultClass to the given sqlinstance that succeeded on its most recent
+// heartbeat. If no healthy connection is found, it will attempt to dial the
+// instance.
 //
 // This exists for components that do not themselves actively maintain RPC
 // connections to remote nodes, e.g. DistSQL. However, it can cause significant
@@ -212,27 +213,11 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) er
 // a connection attempt in the background if it doesn't and always return
 // immediately. It is only used today by DistSQL and it should probably be
 // removed and moved into that code. Also, as of #99191, we have stateful
-// circuit breakers that probe in the background and so whatever exactly it
-// is the caller really wants can likely be achieved by more direct means.
-func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpc.ConnectionClass) error {
-	err := n.ConnHealth(nodeID, class)
-	if err == nil {
-		return err
-	}
-	addr, locality, err := n.resolver(nodeID)
-	if err != nil {
-		return err
-	}
-	// NB: This will always return `ErrNotHeartbeated` since the heartbeat will
-	// not be done by the time `Health` is called since GRPCDialNode is async.
-	return n.rpcContext.GRPCDialNode(addr.String(), nodeID, locality, class).Health()
-}
-
-// ConnHealthTryDialInstance returns nil if we have an open connection of the
-// rpc.DefaultClass to the given sqlinstance that succeeded on its most recent
-// heartbeat. If no healthy connection is found, it will attempt to dial the
-// instance.
-func (n *Dialer) ConnHealthTryDialInstance(id base.SQLInstanceID, addr string) error {
+// circuit breakers that probe in the background and so whatever exactly it is
+// the caller really wants can likely be achieved by more direct means.
+func (n *Dialer) ConnHealthTryDial(
+	id base.SQLInstanceID, addr string, locality roachpb.Locality,
+) error {
 	if n == nil {
 		return errors.New("no node dialer configured")
 	}
@@ -240,7 +225,24 @@ func (n *Dialer) ConnHealthTryDialInstance(id base.SQLInstanceID, addr string) e
 		addr, roachpb.NodeID(id), rpc.DefaultClass); err == nil {
 		return nil
 	}
-	return n.rpcContext.GRPCDialInstance(addr, id, roachpb.Locality{}, rpc.DefaultClass).Health()
+	// NB: This will always return `ErrNotHeartbeated` since the heartbeat will
+	// not be done by the time `Health` is called since GRPCDialNode is async.
+	return n.rpcContext.GRPCDialInstance(addr, id, locality, rpc.DefaultClass).Health()
+}
+
+// ConnHealthTryDialWithResolve returns nil if we have an open connection of the
+// request class to the given node that succeeded on its most recent heartbeat.
+// If no healthy connection is found, it will attempt to dial the node.
+func (n *Dialer) ConnHealthTryDialWithResolve(id base.SQLInstanceID) error {
+	if n == nil || n.resolver == nil {
+		return errors.New("no node dialer configured")
+	}
+	addr, locality, err := n.resolver(roachpb.NodeID(id))
+	if err != nil {
+		return err
+	}
+
+	return n.ConnHealthTryDial(id, addr.String(), locality)
 }
 
 // GetCircuitBreaker retrieves the circuit breaker for connections to the

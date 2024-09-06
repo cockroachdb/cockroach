@@ -171,8 +171,6 @@ func NewDistSQLPlanner(
 	gw gossip.OptionalGossip,
 	stopper *stop.Stopper,
 	isAvailable func(base.SQLInstanceID) bool,
-	connHealthCheckerSystem func(roachpb.NodeID, rpc.ConnectionClass) error, // will only be used by the system tenant
-	instanceConnHealthChecker func(base.SQLInstanceID, string) error,
 	sqlInstanceDialer *nodedialer.Dialer,
 	codec keys.SQLCodec,
 	sqlAddressResolver sqlinstance.AddressResolver,
@@ -186,10 +184,10 @@ func NewDistSQLPlanner(
 		gossip:               gw,
 		sqlInstanceDialer:    sqlInstanceDialer,
 		nodeHealth: distSQLNodeHealth{
-			gossip:             gw,
-			connHealthSystem:   connHealthCheckerSystem,
-			connHealthInstance: instanceConnHealthChecker,
-			isAvailable:        isAvailable,
+			gossip:                gw,
+			connHealth:            sqlInstanceDialer.ConnHealthTryDial,
+			connHealthWithResolve: sqlInstanceDialer.ConnHealthTryDialWithResolve,
+			isAvailable:           isAvailable,
 		},
 		distSender:         distSender,
 		nodeDescs:          nodeDescs,
@@ -1260,10 +1258,10 @@ func MakeSpanPartitionWithRangeCount(
 }
 
 type distSQLNodeHealth struct {
-	gossip             gossip.OptionalGossip
-	isAvailable        func(base.SQLInstanceID) bool
-	connHealthSystem   func(roachpb.NodeID, rpc.ConnectionClass) error
-	connHealthInstance func(base.SQLInstanceID, string) error
+	gossip                gossip.OptionalGossip
+	isAvailable           func(base.SQLInstanceID) bool
+	connHealth            func(id base.SQLInstanceID, addr string, locality roachpb.Locality) error
+	connHealthWithResolve func(base.SQLInstanceID) error
 }
 
 func (h *distSQLNodeHealth) checkSystem(
@@ -1277,7 +1275,7 @@ func (h *distSQLNodeHealth) checkSystem(
 		// artifact of rpcContext's reconnection mechanism at the time of
 		// writing). This is better than having it used in 100% of cases
 		// (until the liveness check below kicks in).
-		if err := h.connHealthSystem(roachpb.NodeID(sqlInstanceID), rpc.DefaultClass); err != nil {
+		if err := h.connHealthWithResolve(sqlInstanceID); err != nil {
 			// This host isn't known to be healthy. Don't use it (use the gateway
 			// instead). Note: this can never happen for our sqlInstanceID (which
 			// always has its address in the nodeMap).
@@ -1614,20 +1612,19 @@ func (dsp *DistSQLPlanner) deprecatedHealthySQLInstanceIDForKVNodeIDSystem(
 // checkInstanceHealth returns the instance health status by dialing the node.
 // It also caches the result to avoid redialing for a query.
 func (dsp *DistSQLPlanner) checkInstanceHealth(
-	instanceID base.SQLInstanceID,
-	instanceRPCAddr string,
-	isDraining bool,
-	nodeStatusesCache map[base.SQLInstanceID]NodeStatus,
+	instance *sqlinstance.InstanceInfo, nodeStatusesCache map[base.SQLInstanceID]NodeStatus,
 ) NodeStatus {
+	instanceID := instance.InstanceID
 	if nodeStatusesCache != nil {
 		if status, ok := nodeStatusesCache[instanceID]; ok {
 			return status
 		}
 	}
 	status := NodeOK
-	if isDraining {
+	if instance.IsDraining {
 		status = NodeDraining
-	} else if err := dsp.nodeHealth.connHealthInstance(instanceID, instanceRPCAddr); err != nil {
+	} else if err := dsp.nodeHealth.connHealth(
+		instanceID, instance.InstanceRPCAddr, instance.Locality); err != nil {
 		if errors.Is(err, rpc.ErrNotHeartbeated) {
 			// Consider ErrNotHeartbeated as a temporary error (see its description) and
 			// avoid caching its result, as it can resolve to a more accurate result soon.
@@ -1675,8 +1672,7 @@ func (dsp *DistSQLPlanner) healthySQLInstanceIDForKVNodeHostedInstanceResolver(
 	return func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
 		sqlInstance := base.SQLInstanceID(nodeID)
 		if n, ok := instances[sqlInstance]; ok {
-			if status := dsp.checkInstanceHealth(
-				sqlInstance, n.InstanceRPCAddr, n.IsDraining, planCtx.nodeStatuses); status == NodeOK {
+			if status := dsp.checkInstanceHealth(&n, planCtx.nodeStatuses); status == NodeOK {
 				return sqlInstance, SpanPartitionReason_TARGET_HEALTHY
 			}
 		}
@@ -1740,8 +1736,7 @@ func (dsp *DistSQLPlanner) filterUnhealthyInstances(
 	for _, n := range instances {
 		// Gateway is always considered healthy
 		if n.InstanceID == dsp.gatewaySQLInstanceID ||
-			dsp.checkInstanceHealth(n.InstanceID, n.InstanceRPCAddr,
-				n.IsDraining, nodeStatusesCache) == NodeOK {
+			dsp.checkInstanceHealth(&n, nodeStatusesCache) == NodeOK {
 			instances[j] = n
 			j++
 		} else {

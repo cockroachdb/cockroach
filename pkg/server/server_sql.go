@@ -598,26 +598,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.db,
 	)
 
-	// We can't use the nodeDialer as the sqlInstanceDialer unless we
-	// are serving the system tenant despite the fact that we've
-	// arranged for pod IDs and instance IDs to match since the
-	// secondary tenant gRPC servers currently live on a different
-	// port.
-	canUseNodeDialerAsSQLInstanceDialer := isMixedSQLAndKVNode && codec.ForSystemTenant()
-	if canUseNodeDialerAsSQLInstanceDialer {
-		cfg.sqlInstanceDialer = cfg.kvNodeDialer
-	} else {
-		// In a multi-tenant environment, use the sqlInstanceReader to resolve
-		// SQL pod addresses.
-		addressResolver := func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
-			info, err := cfg.sqlInstanceReader.GetInstance(cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
-			if err != nil {
-				return nil, roachpb.Locality{}, errors.Wrapf(err, "unable to look up descriptor for n%d", nodeID)
-			}
-			return &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}, info.Locality, nil
+	addressResolver := func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
+		info, err := cfg.sqlInstanceReader.GetInstance(cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
+		if err != nil {
+			return nil, roachpb.Locality{}, errors.Wrapf(err, "unable to look up descriptor for n%d", nodeID)
 		}
-		cfg.sqlInstanceDialer = nodedialer.New(cfg.rpcContext, addressResolver)
+		return &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}, info.Locality, nil
 	}
+	cfg.sqlInstanceDialer = nodedialer.New(cfg.rpcContext, addressResolver)
 
 	jobRegistry := cfg.circularJobRegistry
 	{
@@ -1020,8 +1008,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.gossip,
 			cfg.stopper,
 			isAvailable,
-			cfg.kvNodeDialer.ConnHealthTryDial, // only used by system tenant
-			cfg.sqlInstanceDialer.ConnHealthTryDialInstance,
 			cfg.sqlInstanceDialer,
 			codec,
 			cfg.sqlInstanceReader,
@@ -1265,12 +1251,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				DB:               cfg.db,
 			})
 		} else {
-			c = upgradecluster.NewTenantCluster(
-				upgradecluster.TenantClusterConfig{
-					Dialer:         cfg.sqlInstanceDialer,
-					InstanceReader: cfg.sqlInstanceReader,
-					DB:             cfg.db,
-				})
+			c = upgradecluster.NewTenantCluster(upgradecluster.TenantClusterConfig{
+				Dialer:         cfg.sqlInstanceDialer,
+				InstanceReader: cfg.sqlInstanceReader,
+				DB:             cfg.db,
+			})
 		}
 		systemDeps = upgrade.SystemDeps{
 			Cluster:            c,
