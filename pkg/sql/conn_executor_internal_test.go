@@ -330,8 +330,6 @@ func startConnExecutor(
 			gw,
 			stopper,
 			func(base.SQLInstanceID) bool { return true }, // everybody is available
-			nil, /* connHealthCheckerSystem */
-			nil, /* instanceConnHealthChecker */
 			nil, /* sqlInstanceDialer */
 			keys.SystemSQLCodec,
 			nil, /* sqlAddressResolver */

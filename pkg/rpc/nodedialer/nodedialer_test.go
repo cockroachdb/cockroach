@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -190,28 +191,28 @@ func TestConnHealthTryDial(t *testing.T) {
 	// When no connection exists, we expect ConnHealthTryDial to dial the node,
 	// which will return ErrNoHeartbeat at first but eventually succeed.
 	require.Eventually(t, func() bool {
-		return nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass) == nil
+		return nd.ConnHealthTryDialWithResolve(base.SQLInstanceID(staticNodeID)) == nil
 	}, time.Second, 10*time.Millisecond)
 
 	// But it should error for other node ID.
-	require.Error(t, nd.ConnHealthTryDial(9, rpc.DefaultClass))
+	require.Error(t, nd.ConnHealthTryDialWithResolve(base.SQLInstanceID(9)))
 
 	// When the heartbeat errors, ConnHealthTryDial should eventually error too.
 	hb.setErr(errors.New("boom"))
 	require.Eventually(t, func() bool {
-		return nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass) != nil
+		return nd.ConnHealthTryDialWithResolve(base.SQLInstanceID(staticNodeID)) == nil
 	}, time.Second, 10*time.Millisecond)
 
 	// When the heartbeat recovers, ConnHealthTryDial should too.
 	hb.setErr(nil)
 	require.Eventually(t, func() bool {
-		return nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass) == nil
+		return nd.ConnHealthTryDialWithResolve(base.SQLInstanceID(staticNodeID)) == nil
 	}, time.Second, 10*time.Millisecond)
 
 	// Closing the remote connection should eventually recover.
 	require.NoError(t, ln.popConn().Close())
 	require.Eventually(t, func() bool {
-		return nd.ConnHealthTryDial(staticNodeID, rpc.DefaultClass) == nil
+		return nd.ConnHealthTryDialWithResolve(base.SQLInstanceID(staticNodeID)) == nil
 	}, time.Second, 10*time.Millisecond)
 }
 
