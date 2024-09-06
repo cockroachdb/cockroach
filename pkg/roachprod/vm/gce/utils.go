@@ -296,10 +296,13 @@ func writeStartupScript(
 	extraMountOpts string, fileSystem string, useMultiple bool, enableFIPS bool, enableRSAForSSH bool,
 ) (string, error) {
 	type tmplParams struct {
-		ExtraMountOpts       string
-		UseMultipleDisks     bool
-		Zfs                  bool
-		EnableFIPS           bool
+		ExtraMountOpts   string
+		UseMultipleDisks bool
+		Zfs              bool
+		EnableFIPS       bool
+		// TODO(DarrylWong): In the future, when all tests are run on Ubuntu 22.04, we can remove this check and default true.
+		// See: https://github.com/cockroachdb/cockroach/issues/112112
+		EnableRSAForSSH      bool
 		SharedUser           string
 		PublicKey            string
 		EnableCron           bool
@@ -317,6 +320,7 @@ func writeStartupScript(
 		UseMultipleDisks:     useMultiple,
 		Zfs:                  fileSystem == vm.Zfs,
 		EnableFIPS:           enableFIPS,
+		EnableRSAForSSH:      enableRSAForSSH,
 		SharedUser:           config.SharedUser,
 		PublicKey:            publicKey,
 		OSInitializedFile:    vm.OSInitializedFile,
