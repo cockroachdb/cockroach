@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -102,6 +103,9 @@ type RaftNode interface {
 
 	// Read-only methods.
 
+	// rac2.RaftInterface is an interface that abstracts the raft.RawNode for use
+	// in the RangeController.
+	rac2.RaftInterface
 	// TermLocked returns the current term of this replica.
 	TermLocked() uint64
 	// LeaderLocked returns the current known leader. This state can advance
@@ -181,12 +185,18 @@ type ACWorkQueue interface {
 	Admit(ctx context.Context, entry EntryForAdmission) bool
 }
 
-// TODO(sumeer): temporary placeholder, until RangeController is more fully
-// fleshed out.
 type rangeControllerInitState struct {
 	replicaSet    rac2.ReplicaSet
 	leaseholder   roachpb.ReplicaID
 	nextRaftIndex uint64
+	// These fields are required options for the RangeController specific to the
+	// replica and range, rather than the store or node, so we pass them as part
+	// of the range controller init state.
+	rangeID         roachpb.RangeID
+	tenantID        roachpb.TenantID
+	localReplicaID  roachpb.ReplicaID
+	raftInterface   rac2.RaftInterface
+	admittedTracker rac2.AdmittedTracker
 }
 
 // RangeControllerFactory abstracts RangeController creation for testing.
@@ -689,9 +699,14 @@ func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
 		p.mu.leader.rcReferenceUpdateMu.Lock()
 		defer p.mu.leader.rcReferenceUpdateMu.Unlock()
 		p.mu.leader.rc = p.opts.RangeControllerFactory.New(ctx, rangeControllerInitState{
-			replicaSet:    p.raftMu.replicas,
-			leaseholder:   p.mu.leaseholderID,
-			nextRaftIndex: nextUnstableIndex,
+			replicaSet:      p.raftMu.replicas,
+			leaseholder:     p.mu.leaseholderID,
+			nextRaftIndex:   nextUnstableIndex,
+			rangeID:         p.opts.RangeID,
+			tenantID:        p.raftMu.tenantID,
+			localReplicaID:  p.opts.ReplicaID,
+			raftInterface:   p.raftMu.raftNode,
+			admittedTracker: p,
 		})
 	}()
 	p.mu.leader.term = term
@@ -985,34 +1000,49 @@ func (p *processorImpl) GetAdmitted(replicaID roachpb.ReplicaID) rac2.AdmittedVe
 	return rac2.AdmittedVector{}
 }
 
-// RangeControllerFactoryImpl implements RangeControllerFactory.
-//
-// TODO(sumeer): replace with real implementation once RangeController impl is
-// ready.
+// RangeControllerFactoryImpl implements the RangeControllerFactory interface.
+var _ RangeControllerFactory = RangeControllerFactoryImpl{}
+
+// RangeControllerFactoryImpl is a factory to create RangeControllers. There
+// should be one per-store. When a new RangeController is created, the caller
+// provides the range specific information as part of rangeControllerInitState.
 type RangeControllerFactoryImpl struct {
+	clock                      *hlc.Clock
 	evalWaitMetrics            *rac2.EvalWaitMetrics
 	streamTokenCounterProvider *rac2.StreamTokenCounterProvider
+	closeTimerScheduler        rac2.ProbeToCloseTimerScheduler
 }
 
 func NewRangeControllerFactoryImpl(
+	clock *hlc.Clock,
 	evalWaitMetrics *rac2.EvalWaitMetrics,
 	streamTokenCounterProvider *rac2.StreamTokenCounterProvider,
+	closeTimerScheduler rac2.ProbeToCloseTimerScheduler,
 ) RangeControllerFactoryImpl {
 	return RangeControllerFactoryImpl{
+		clock:                      clock,
 		evalWaitMetrics:            evalWaitMetrics,
 		streamTokenCounterProvider: streamTokenCounterProvider,
+		closeTimerScheduler:        closeTimerScheduler,
 	}
 }
 
+// New creates a new RangeController.
 func (f RangeControllerFactoryImpl) New(
 	ctx context.Context, state rangeControllerInitState,
 ) rac2.RangeController {
 	return rac2.NewRangeController(
 		ctx,
-		// TODO(kvoli): Thread through other required init state and options.
 		rac2.RangeControllerOptions{
-			SSTokenCounter:  f.streamTokenCounterProvider,
-			EvalWaitMetrics: f.evalWaitMetrics,
+			RangeID:             state.rangeID,
+			TenantID:            state.tenantID,
+			LocalReplicaID:      state.localReplicaID,
+			SSTokenCounter:      f.streamTokenCounterProvider,
+			RaftInterface:       state.raftInterface,
+			Clock:               f.clock,
+			CloseTimerScheduler: f.closeTimerScheduler,
+			AdmittedTracker:     state.admittedTracker,
+			EvalWaitMetrics:     f.evalWaitMetrics,
 		},
 		rac2.RangeControllerInitState{
 			ReplicaSet:  state.replicaSet,
