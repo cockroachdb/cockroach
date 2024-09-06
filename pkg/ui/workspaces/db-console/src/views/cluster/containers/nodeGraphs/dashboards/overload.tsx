@@ -247,7 +247,7 @@ export default function (props: GraphDashboardProps) {
           <>
             <Metric
               key={nid}
-              name="cr.node.kvadmission.flow_controller.regular_wait_duration-p99"
+              name="cr.node.kvflowcontrol.eval_wait.regular.duration-p99"
               title={
                 "Regular " +
                 nodeDisplayName(nodeDisplayNameByID, nid)
@@ -257,7 +257,7 @@ export default function (props: GraphDashboardProps) {
             />
             <Metric
               key={nid}
-              name="cr.node.kvadmission.flow_controller.elastic_wait_duration-p99"
+              name="cr.node.kvflowcontrol.eval_wait.elastic.duration-p99"
               title={
                 "Elastic " +
                 nodeDisplayName(nodeDisplayNameByID, nid)
@@ -282,7 +282,7 @@ export default function (props: GraphDashboardProps) {
           <>
             <Metric
               key={nid}
-              name="cr.node.kvadmission.flow_controller.regular_blocked_stream_count"
+              name="cr.node.kvflowcontrol.streams.eval.regular.blocked_count"
               title={
                 "Regular " +
                 nodeDisplayName(nodeDisplayNameByID, nid)
@@ -291,7 +291,7 @@ export default function (props: GraphDashboardProps) {
             />
             <Metric
               key={nid}
-              name="cr.node.kvadmission.flow_controller.elastic_blocked_stream_count"
+              name="cr.node.kvflowcontrol.streams.eval.elastic.blocked_count"
               title={
                 "Elastic " +
                 nodeDisplayName(nodeDisplayNameByID, nid)
