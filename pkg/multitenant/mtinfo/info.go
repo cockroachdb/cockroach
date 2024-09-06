@@ -11,13 +11,20 @@
 package mtinfo
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
+
+type ReadFromTenantInfoAccessor interface {
+	ReadFromTenantInfo(context.Context) (roachpb.TenantID, hlc.Timestamp, error)
+}
 
 // GetTenantInfoFromSQLRow synthetizes a TenantInfo from a SQL row
 // extracted from system.tenants. The caller is responsible for
