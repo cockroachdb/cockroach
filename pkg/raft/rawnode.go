@@ -499,9 +499,6 @@ func (rn *RawNode) LeadSupportStatus() LeadSupportStatus {
 	return getLeadSupportStatus(rn.raft)
 }
 
-// TODO(nvanbenschoten): remove this one the method is used.
-var _ = (*RawNode).LeadSupportStatus
-
 // ProgressType indicates the type of replica a Progress corresponds to.
 type ProgressType byte
 
@@ -543,4 +540,8 @@ func (rn *RawNode) ForgetLeader() error {
 
 func (rn *RawNode) TestingStepDown() error {
 	return rn.raft.testingStepDown()
+}
+
+func (rn *RawNode) TestingSupportStateString() string {
+	return rn.raft.supportTracker.String()
 }

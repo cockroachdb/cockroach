@@ -214,6 +214,7 @@ Messages:
 3->7 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 3->AppendThread MsgStorageAppend Term:2 Log:2/12 Commit:11 Vote:3 Lead:3 LeadEpoch:1 Entries:[2/12 EntryNormal ""] Responses:[
   3->3 MsgAppResp Term:2 Log:0/12 Commit:11
+  3->3 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   AppendThread->3 MsgStorageAppendResp Term:0 Log:2/12
 ]
 
@@ -383,6 +384,7 @@ Messages:
 4->7 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->AppendThread MsgStorageAppend Term:3 Log:3/12 Commit:11 Vote:4 Lead:4 LeadEpoch:1 Entries:[3/12 EntryNormal ""] Responses:[
   4->4 MsgAppResp Term:3 Log:0/12 Commit:11
+  4->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   AppendThread->4 MsgStorageAppendResp Term:0 Log:3/12
 ]
 
