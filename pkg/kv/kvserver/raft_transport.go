@@ -284,8 +284,8 @@ type raftSendQueue struct {
 // NewDummyRaftTransport returns a dummy raft transport for use in tests which
 // need a non-nil raft transport that need not function.
 func NewDummyRaftTransport(st *cluster.Settings, tracer *tracing.Tracer) *RaftTransport {
-	resolver := func(roachpb.NodeID) (net.Addr, error) {
-		return nil, errors.New("dummy resolver")
+	resolver := func(roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
+		return nil, roachpb.Locality{}, errors.New("dummy resolver")
 	}
 	return NewRaftTransport(log.MakeTestingAmbientContext(tracer), st, tracer,
 		nodedialer.New(nil, resolver), nil, nil,
