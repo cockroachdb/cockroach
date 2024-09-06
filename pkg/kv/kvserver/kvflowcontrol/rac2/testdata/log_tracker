@@ -97,6 +97,33 @@ admit term=1 index=5 pri=HighPri
 mark:{Term:1 Index:10}, stable:10, admitted:[10 10 10 10]
 
 # ------------------------------------------------------------------------------
+# Regression test with admitting an entry missing in the queue.
+
+reset term=1 index=1
+----
+mark:{Term:1 Index:1}, stable:1, admitted:[1 1 1 1]
+
+append term=1 after=1 to=3
+----
+mark:{Term:1 Index:3}, stable:1, admitted:[1 1 1 1]
+
+register term=1 index=3 pri=LowPri
+----
+mark:{Term:1 Index:3}, stable:1, admitted:[1 1 1 1]
+LowPri: {Term:1 Index:3}
+
+append term=3 after=3 to=5
+----
+mark:{Term:3 Index:5}, stable:1, admitted:[1 1 1 1]
+LowPri: {Term:1 Index:3}
+
+# TODO(pav-kv): this should admit the term 1 LowPri entry.
+admit term=3 index=2 pri=LowPri
+----
+mark:{Term:3 Index:5}, stable:1, admitted:[1 1 1 1]
+LowPri: {Term:1 Index:3}
+
+# ------------------------------------------------------------------------------
 # Port of waiting_for_admission_state test.
 
 reset term=3 index=1
