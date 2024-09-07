@@ -118,5 +118,5 @@ func (Disabled) SupportFromEnabled() bool {
 
 // SupportExpired implements the StoreLiveness interface.
 func (Disabled) SupportExpired(hlc.Timestamp) bool {
-	panic("unimplemented")
+	return true
 }

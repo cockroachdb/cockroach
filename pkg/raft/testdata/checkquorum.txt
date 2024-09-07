@@ -59,10 +59,12 @@ stabilize
 # interval (see messages above).
 tick-election 1
 ----
-ok
+DEBUG 1 does not have store liveness support from a quorum of peers
 
 tick-election 1
 ----
+DEBUG 1 has not received messages from a quorum peers in the last election timeout
+DEBUG 1 does not have store liveness support from a quorum of peers
 WARN 1 stepped down to follower since quorum is not active
 INFO 1 became follower at term 1
 

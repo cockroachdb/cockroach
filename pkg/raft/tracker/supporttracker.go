@@ -81,6 +81,12 @@ func (st *SupportTracker) LeadSupportUntil() hlc.Timestamp {
 	return st.config.Voters.LeadSupportExpiration(supportExpMap)
 }
 
+// QuorumActive returns whether the leader's currently supported by a quorum or
+// not.
+func (st *SupportTracker) QuorumActive() bool {
+	return !st.storeLiveness.SupportExpired(st.LeadSupportUntil())
+}
+
 func (st *SupportTracker) String() string {
 	if len(st.support) == 0 {
 		return "empty"
