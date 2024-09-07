@@ -48,8 +48,8 @@ func (env *InteractionEnv) handleRaftState() error {
 		} else {
 			voterStatus = "(Non-Voter)"
 		}
-		fmt.Fprintf(env.Output, "%d: %s %s Term:%d Lead:%d\n",
-			st.ID, st.RaftState, voterStatus, st.Term, st.Lead)
+		fmt.Fprintf(env.Output, "%d: %s %s Term:%d Lead:%d LeadEpoch: %d\n",
+			st.ID, st.RaftState, voterStatus, st.Term, st.Lead, st.LeadEpoch)
 	}
 	return nil
 }
