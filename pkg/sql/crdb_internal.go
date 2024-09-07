@@ -3602,12 +3602,21 @@ CREATE TABLE crdb_internal.create_schema_statements (
 							ExplicitSchema: true,
 						},
 					}
+
+					createStatement := tree.AsString(node)
+
+					comment, ok := p.Descriptors().GetSchemaComment(schemaDesc.GetID())
+					if ok {
+						commentOnSchema := tree.CommentOnSchema{Comment: &comment, Name: tree.ObjectNamePrefix{SchemaName: tree.Name(schemaDesc.GetName()), ExplicitSchema: true}}
+						createStatement += ";\n" + tree.AsString(&commentOnSchema)
+					}
+
 					if err := addRow(
 						tree.NewDInt(tree.DInt(db.GetID())),         // database_id
 						tree.NewDString(db.GetName()),               // database_name
 						tree.NewDString(schemaDesc.GetName()),       // schema_name
 						tree.NewDInt(tree.DInt(schemaDesc.GetID())), // descriptor_id (schema_id)
-						tree.NewDString(tree.AsString(node)),        // create_statement
+						tree.NewDString(createStatement),            // create_statement
 					); err != nil {
 						return err
 					}
