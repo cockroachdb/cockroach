@@ -552,6 +552,34 @@ family f2(other_payload, v2))
 	serverASQL.CheckQueryResults(t, "SELECT * from tab_with_cf", expectedRows)
 }
 
+func TestLogicalReplicationWithPhantomDelete(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	tc, s, serverASQL, serverBSQL := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer tc.Stopper().Stop(ctx)
+
+	serverAURL, cleanup := s.PGUrl(t)
+	serverAURL.Path = "a"
+	defer cleanup()
+
+	for _, mode := range []string{"validated", "immediate"} {
+		t.Run(mode, func(t *testing.T) {
+			serverASQL.Exec(t, "TRUNCATE tab")
+			serverBSQL.Exec(t, "TRUNCATE tab")
+			var jobBID jobspb.JobID
+			serverBSQL.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = $2", serverAURL.String(), mode).Scan(&jobBID)
+			serverASQL.Exec(t, "DELETE FROM tab WHERE pk = 4")
+			WaitUntilReplicatedTime(t, s.Clock().Now(), serverBSQL, jobBID)
+			expectedRows := [][]string{}
+			serverASQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)
+			serverBSQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)
+		})
+	}
+}
+
 func TestFilterRangefeedInReplicationStream(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
