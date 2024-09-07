@@ -144,9 +144,15 @@ func (s *storeLiveness) SupportFromEnabled() bool {
 }
 
 // SupportExpired implements the StoreLiveness interface.
-func (s *storeLiveness) SupportExpired(hlc.Timestamp) bool {
-	// TODO(arul): we may need to implement this if we start injecting timestamps.
-	return false
+func (s *storeLiveness) SupportExpired(ts hlc.Timestamp) bool {
+	switch ts {
+	case hlc.Timestamp{}:
+		return true
+	case hlc.MaxTimestamp:
+		return false
+	default:
+		panic("unexpected timestamp")
+	}
 }
 
 // handleBumpEpoch handles the case where the epoch of a store is bumped and the
