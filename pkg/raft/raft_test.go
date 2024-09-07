@@ -1607,7 +1607,7 @@ func TestLeaderStepdownWhenQuorumActive(t *testing.T) {
 }
 
 func TestLeaderStepdownWhenQuorumLost(t *testing.T) {
-	sm := newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	sm := newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(1, 2, 3)), withFortificationDisabled())
 
 	sm.checkQuorum = true
 
@@ -2568,7 +2568,7 @@ func TestAddLearner(t *testing.T) {
 // TestAddNodeCheckQuorum tests that addNode does not trigger a leader election
 // immediately when checkQuorum is set.
 func TestAddNodeCheckQuorum(t *testing.T) {
-	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)))
+	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)), withFortificationDisabled())
 	r.checkQuorum = true
 
 	r.becomeCandidate()
