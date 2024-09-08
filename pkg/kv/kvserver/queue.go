@@ -1175,15 +1175,13 @@ func (bq *baseQueue) finishProcessingReplica(
 	// Handle failures.
 	if err != nil {
 		benign := benignerror.IsBenign(err)
-		storeBenign := benignerror.IsStoreBenign(err)
 
 		// Increment failures metric.
 		//
 		// TODO(tschottdorf): once we start asserting zero failures in tests
 		// (and production), move benign failures into a dedicated category.
 		bq.failures.Inc(1)
-		if storeBenign {
-			bq.storeFailures.Inc(1)
+		if benign {
 			requeue = true
 		}
 

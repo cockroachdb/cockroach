@@ -1568,7 +1568,7 @@ func TestBaseQueueRequeue(t *testing.T) {
 	// Reset shouldQueueCount so we actually process the replica. Then return
 	// a StoreBenign error. It should requeue the replica.
 	atomic.StoreInt64(&shouldQueueCount, 0)
-	pQueue.err = benignerror.NewStoreBenign(errors.New("test"))
+	pQueue.err = benignerror.New(errors.New("test"))
 	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	assertShouldQueueCount(1)
 	assertProcessedAndProcessing(2, 1)
