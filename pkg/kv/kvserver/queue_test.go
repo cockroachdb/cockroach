@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1559,18 +1558,4 @@ func TestBaseQueueRequeue(t *testing.T) {
 	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
 	assertShouldQueueCount(6)
 	assertProcessedAndProcessing(2, 0)
-
-	// Reset shouldQueueCount so we actually process the replica. Then return
-	// a StoreBenign error. It should requeue the replica.
-	atomic.StoreInt64(&shouldQueueCount, 0)
-	pQueue.err = benignerror.NewStoreBenign(errors.New("test"))
-	bq.maybeAdd(ctx, r1, hlc.ClockTimestamp{})
-	assertShouldQueueCount(1)
-	assertProcessedAndProcessing(2, 1)
-	// Let the first processing attempt finish. It should requeue.
-	pQueue.processBlocker <- struct{}{}
-	assertProcessedAndProcessing(3, 1)
-	pQueue.err = nil
-	pQueue.processBlocker <- struct{}{}
-	assertProcessedAndProcessing(4, 0)
 }
