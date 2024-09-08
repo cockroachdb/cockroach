@@ -17,6 +17,7 @@ go_library(
         "//pkg/raft/raftpb",
         "//pkg/raft/raftstoreliveness",
         "//pkg/util/hlc",
+        "@org_golang_x_exp//maps",
     ],
 )
 
