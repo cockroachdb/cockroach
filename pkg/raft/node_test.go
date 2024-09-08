@@ -38,7 +38,8 @@ import (
 // select.
 func readyWithTimeout(n Node) Ready {
 	select {
-	case rd := <-n.Ready():
+	case <-n.AcceptReady():
+		rd := <-n.Ready()
 		if nn, ok := n.(*nodeTestHarness); ok {
 			n = nn.node
 		}
@@ -148,7 +149,7 @@ func TestNodePropose(t *testing.T) {
 	r := rn.raft
 	go n.run()
 	require.NoError(t, n.Campaign(context.TODO()))
-	for {
+	for range n.AcceptReady() {
 		rd := <-n.Ready()
 		s.Append(rd.Entries)
 		// change the step function to appendStep until this raft becomes leader
@@ -214,7 +215,7 @@ func TestNodeProposeConfig(t *testing.T) {
 	r := rn.raft
 	go n.run()
 	n.Campaign(context.TODO())
-	for {
+	for range n.AcceptReady() {
 		rd := <-n.Ready()
 		s.Append(rd.Entries)
 		// change the step function to appendStep until this raft becomes leader
@@ -263,7 +264,8 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 				return
 			case <-ticker.C:
 				n.Tick()
-			case rd := <-n.Ready():
+			case <-n.AcceptReady():
+				rd = <-n.Ready()
 				t.Log(DescribeReady(rd, nil))
 				s.Append(rd.Entries)
 				applied := false
@@ -333,6 +335,7 @@ func TestBlockProposal(t *testing.T) {
 	}
 
 	n.Campaign(context.TODO())
+	<-n.AcceptReady()
 	rd := <-n.Ready()
 	s.Append(rd.Entries)
 	n.Advance()
@@ -366,7 +369,7 @@ func TestNodeProposeWaitDropped(t *testing.T) {
 	r := rn.raft
 	go n.run()
 	n.Campaign(context.TODO())
-	for {
+	for range n.AcceptReady() {
 		rd := <-n.Ready()
 		s.Append(rd.Entries)
 		// change the step function to dropStep until this raft becomes leader
@@ -481,6 +484,7 @@ func TestNodeStart(t *testing.T) {
 	defer cancel()
 
 	{
+		<-n.AcceptReady()
 		rd := <-n.Ready()
 		require.Equal(t, wants[0], rd)
 		storage.Append(rd.Entries)
@@ -491,10 +495,12 @@ func TestNodeStart(t *testing.T) {
 
 	{
 		// Persist vote.
+		<-n.AcceptReady()
 		rd := <-n.Ready()
 		storage.Append(rd.Entries)
 		n.Advance()
 		// Append empty entry.
+		<-n.AcceptReady()
 		rd = <-n.Ready()
 		storage.Append(rd.Entries)
 		n.Advance()
@@ -502,6 +508,7 @@ func TestNodeStart(t *testing.T) {
 
 	n.Propose(ctx, []byte("foo"))
 	{
+		<-n.AcceptReady()
 		rd := <-n.Ready()
 		assert.Equal(t, wants[1], rd)
 		storage.Append(rd.Entries)
@@ -509,6 +516,7 @@ func TestNodeStart(t *testing.T) {
 	}
 
 	{
+		<-n.AcceptReady()
 		rd := <-n.Ready()
 		assert.Equal(t, wants[2], rd)
 		storage.Append(rd.Entries)
@@ -516,8 +524,8 @@ func TestNodeStart(t *testing.T) {
 	}
 
 	select {
-	case rd := <-n.Ready():
-		t.Errorf("unexpected Ready: %+v", rd)
+	case <-n.AcceptReady():
+		t.Error("unexpected AcceptReady")
 	case <-time.After(time.Millisecond):
 	}
 }
@@ -553,12 +561,14 @@ func TestNodeRestart(t *testing.T) {
 	}
 	n := RestartNode(c)
 	defer n.Stop()
-	assert.Equal(t, want, <-n.Ready())
+	<-n.AcceptReady()
+	rd := <-n.Ready()
+	assert.Equal(t, want, rd)
 	n.Advance()
 
 	select {
-	case rd := <-n.Ready():
-		t.Errorf("unexpected Ready: %+v", rd)
+	case <-n.AcceptReady():
+		t.Error("unexpected AcceptReady")
 	case <-time.After(time.Millisecond):
 	}
 }
@@ -603,13 +613,16 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 	}
 	n := RestartNode(c)
 	defer n.Stop()
-	if assert.Equal(t, want, <-n.Ready()) {
+
+	<-n.AcceptReady()
+	rd := <-n.Ready()
+	if assert.Equal(t, want, rd) {
 		n.Advance()
 	}
 
 	select {
-	case rd := <-n.Ready():
-		t.Errorf("unexpected Ready: %+v", rd)
+	case <-n.AcceptReady():
+		t.Error("unexpected AcceptReady")
 	case <-time.After(time.Millisecond):
 	}
 }
@@ -643,8 +656,9 @@ func TestNodeAdvance(t *testing.T) {
 	rd = readyWithTimeout(n)
 	storage.Append(rd.Entries)
 	n.Advance()
+
 	select {
-	case <-n.Ready():
+	case <-n.AcceptReady():
 	case <-time.After(100 * time.Millisecond):
 		t.Errorf("expect Ready after Advance, but there is no Ready available")
 	}
@@ -699,7 +713,8 @@ func TestNodeProposeAddLearnerNode(t *testing.T) {
 				return
 			case <-ticker.C:
 				n.Tick()
-			case rd := <-n.Ready():
+			case <-n.AcceptReady():
+				rd := <-n.Ready()
 				s.Append(rd.Entries)
 				t.Logf("raft: %v", rd.Entries)
 				for _, ent := range rd.Entries {
@@ -928,7 +943,8 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	drain := true
 	for drain {
 		select {
-		case rd := <-n.Ready():
+		case <-n.AcceptReady():
+			rd := <-n.Ready()
 			for _, m := range rd.Messages {
 				require.NotEqual(t, raftpb.MsgStorageApply, m.Type, "unexpected message: %v", m)
 			}
