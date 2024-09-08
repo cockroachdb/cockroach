@@ -233,7 +233,7 @@ func initFlags() {
 	startCmd.Flags().IntVarP(&numRacks,
 		"racks", "r", 0, "the number of racks to partition the nodes into")
 	startCmd.Flags().StringArrayVarP(&startOpts.ExtraArgs,
-		"args", "a", nil, "node arguments")
+		"args", "a", nil, `node arguments (example: --args "--cache=25%" --args "--max-sql-memory=25%")`)
 	startCmd.Flags().StringArrayVarP(&nodeEnv,
 		"env", "e", config.DefaultEnvVars(), "node environment variables")
 	startCmd.Flags().BoolVar(&startOpts.EncryptedStores,
