@@ -31,7 +31,8 @@ package raft
 
 import (
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 	"testing"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -117,7 +118,7 @@ func TestLeaderBcastBeat(t *testing.T) {
 	}
 
 	msgs := r.readMessages()
-	sort.Sort(messageSlice(msgs))
+	slices.SortFunc(msgs, cmpMessages)
 	assert.Equal(t, []pb.Message{
 		{From: 1, To: 2, Term: 1, Type: pb.MsgHeartbeat},
 		{From: 1, To: 3, Term: 1, Type: pb.MsgHeartbeat},
@@ -162,7 +163,7 @@ func testNonleaderStartElection(t *testing.T, state StateType) {
 	assert.True(t, r.electionTracker.TestingGetVotes()[r.id])
 
 	msgs := r.readMessages()
-	sort.Sort(messageSlice(msgs))
+	slices.SortFunc(msgs, cmpMessages)
 	assert.Equal(t, []pb.Message{
 		{From: 1, To: 2, Term: 2, Type: pb.MsgVote},
 		{From: 1, To: 3, Term: 2, Type: pb.MsgVote},
@@ -377,7 +378,7 @@ func TestLeaderStartReplication(t *testing.T) {
 	assert.Equal(t, li+1, r.raftLog.lastIndex())
 	assert.Equal(t, li, r.raftLog.committed)
 	msgs := r.readMessages()
-	sort.Sort(messageSlice(msgs))
+	slices.SortFunc(msgs, cmpMessages)
 	wents := []pb.Entry{{Index: li + 1, Term: 1, Data: []byte("some data")}}
 	assert.Equal(t, []pb.Message{
 		{From: 1, To: 2, Term: 1, Type: pb.MsgApp, Index: li, LogTerm: 1, Entries: wents, Commit: li, Match: li},
@@ -413,7 +414,7 @@ func TestLeaderCommitEntry(t *testing.T) {
 		{Index: li + 1, Term: 1, Data: []byte("some data")},
 	}, r.raftLog.nextCommittedEnts(true))
 	msgs := r.readMessages()
-	sort.Sort(messageSlice(msgs))
+	slices.SortFunc(msgs, cmpMessages)
 	for i, m := range msgs {
 		assert.Equal(t, pb.PeerID(i+2), m.To)
 		assert.Equal(t, pb.MsgApp, m.Type)
@@ -689,7 +690,7 @@ func TestVoteRequest(t *testing.T) {
 		}
 
 		msgs := r.readMessages()
-		sort.Sort(messageSlice(msgs))
+		slices.SortFunc(msgs, cmpMessages)
 		require.Len(t, msgs, 2, "#%d", j)
 		for i, m := range msgs {
 			assert.Equal(t, pb.MsgVote, m.Type, "#%d.%d", j, i)
@@ -775,11 +776,9 @@ func TestLeaderOnlyCommitsLogFromCurrentTerm(t *testing.T) {
 	}
 }
 
-type messageSlice []pb.Message
-
-func (s messageSlice) Len() int           { return len(s) }
-func (s messageSlice) Less(i, j int) bool { return fmt.Sprint(s[i]) < fmt.Sprint(s[j]) }
-func (s messageSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func cmpMessages(a, b pb.Message) int {
+	return strings.Compare(fmt.Sprint(a), fmt.Sprint(b))
+}
 
 func commitNoopEntry(r *raft, s *MemoryStorage) {
 	if r.state != StateLeader {

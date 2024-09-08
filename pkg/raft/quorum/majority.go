@@ -18,32 +18,30 @@
 package quorum
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"slices"
-	"sort"
 	"strings"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"golang.org/x/exp/maps"
 )
 
 // MajorityConfig is a set of IDs that uses majority quorums to make decisions.
 type MajorityConfig map[pb.PeerID]struct{}
 
 func (c MajorityConfig) String() string {
-	sl := make([]pb.PeerID, 0, len(c))
-	for id := range c {
-		sl = append(sl, id)
-	}
-	sort.Slice(sl, func(i, j int) bool { return sl[i] < sl[j] })
+	peers := maps.Keys(c)
+	slices.Sort(peers)
 	var buf strings.Builder
 	buf.WriteByte('(')
-	for i := range sl {
+	for i, id := range peers {
 		if i > 0 {
 			buf.WriteByte(' ')
 		}
-		fmt.Fprint(&buf, sl[i])
+		fmt.Fprint(&buf, id)
 	}
 	buf.WriteByte(')')
 	return buf.String()
@@ -72,51 +70,45 @@ func (c MajorityConfig) Describe(l AckedIndexer) string {
 		idx, ok := l.AckedIndex(id)
 		info = append(info, tup{id: id, idx: idx, ok: ok})
 	}
-
-	// Sort by index
-	sort.Slice(info, func(i, j int) bool {
-		if info[i].idx == info[j].idx {
-			return info[i].id < info[j].id
+	// Sort by (index, ID).
+	slices.SortFunc(info, func(a, b tup) int {
+		if a.idx == b.idx {
+			return cmp.Compare(a.id, b.id)
 		}
-		return info[i].idx < info[j].idx
+		return cmp.Compare(a.idx, b.idx)
 	})
-
 	// Populate .bar.
 	for i := range info {
 		if i > 0 && info[i-1].idx < info[i].idx {
 			info[i].bar = i
 		}
 	}
-
 	// Sort by ID.
-	sort.Slice(info, func(i, j int) bool {
-		return info[i].id < info[j].id
-	})
+	slices.SortFunc(info, func(a, b tup) int { return cmp.Compare(a.id, b.id) })
 
 	var buf strings.Builder
 
 	// Print.
 	fmt.Fprint(&buf, strings.Repeat(" ", n)+"    idx\n")
-	for i := range info {
-		bar := info[i].bar
-		if !info[i].ok {
+	for _, t := range info {
+		if !t.ok {
 			fmt.Fprint(&buf, "?"+strings.Repeat(" ", n))
 		} else {
-			fmt.Fprint(&buf, strings.Repeat("x", bar)+">"+strings.Repeat(" ", n-bar))
+			fmt.Fprint(&buf, strings.Repeat("x", t.bar)+">"+strings.Repeat(" ", n-t.bar))
 		}
-		fmt.Fprintf(&buf, " %5d    (id=%d)\n", info[i].idx, info[i].id)
+		fmt.Fprintf(&buf, " %5d    (id=%d)\n", t.idx, t.id)
 	}
 	return buf.String()
 }
 
 // Slice returns the MajorityConfig as a sorted slice.
 func (c MajorityConfig) Slice() []pb.PeerID {
-	var sl []pb.PeerID
-	for id := range c {
-		sl = append(sl, id)
+	if len(c) == 0 {
+		return nil
 	}
-	sort.Slice(sl, func(i, j int) bool { return sl[i] < sl[j] })
-	return sl
+	peers := maps.Keys(c)
+	slices.Sort(peers)
+	return peers
 }
 
 // NB: A lot of logic in CommittedIndex, VoteResult, and LeadSupportExpiration

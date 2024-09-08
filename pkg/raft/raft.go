@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -35,6 +35,7 @@ import (
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"golang.org/x/exp/maps"
 )
 
 const (
@@ -1182,15 +1183,8 @@ func (r *raft) campaign(t CampaignType) {
 		voteMsg = pb.MsgVote
 		term = r.Term
 	}
-	var ids []pb.PeerID
-	{
-		idMap := r.config.Voters.IDs()
-		ids = make([]pb.PeerID, 0, len(idMap))
-		for id := range idMap {
-			ids = append(ids, id)
-		}
-		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	}
+	ids := maps.Keys(r.config.Voters.IDs())
+	slices.Sort(ids)
 	for _, id := range ids {
 		if id == r.id {
 			// The candidate votes for itself and should account for this self
