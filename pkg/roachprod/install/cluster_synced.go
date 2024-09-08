@@ -2253,7 +2253,7 @@ func (c *SyncedCluster) Put(
 	return nil
 }
 
-// Logs will sync the logs from c to dest with each nodes logs under dest in
+// Logs will sync the logs from src to dest with each node's logs under dest in
 // directories per node and stream the merged logs to out.
 // For example, if dest is "tpcc-test.logs" then the logs for each node will be
 // stored like:
@@ -2269,13 +2269,10 @@ func (c *SyncedCluster) Put(
 // iterations and takes some care with the from/to flags in merge-logs to make
 // new logs appear to be streamed. If <from> is zero streaming begins from now.
 // If to is non-zero, when the stream of logs passes to, the function returns.
-// <user> allows retrieval of logs from a roachprod cluster being run by another
-// user and assumes that the current user used to create c has the ability to
-// sudo into <user>.
 // TODO(herko): This command does not support virtual clusters yet.
 func (c *SyncedCluster) Logs(
 	l *logger.Logger,
-	src, dest, user, filter, programFilter string,
+	src, dest, filter, programFilter string,
 	interval time.Duration,
 	from, to time.Time,
 	out io.Writer,
@@ -2283,12 +2280,14 @@ func (c *SyncedCluster) Logs(
 	if err := c.validateHost(context.TODO(), l, c.Nodes[0]); err != nil {
 		return err
 	}
-
 	rsyncNodeLogs := func(ctx context.Context, node Node) error {
 		base := fmt.Sprintf("%d.logs", node)
 		local := filepath.Join(dest, base) + "/"
-		sshUser := c.user(node)
 		rsyncArgs := []string{"-az", "--size-only"}
+		userHomeDir := ""
+		if !config.UseSharedUser {
+			userHomeDir = config.OSUser.HomeDir
+		}
 		var remote string
 		if c.IsLocal() {
 			// This here is a bit of a hack to guess that the parent of the log dir is
@@ -2297,8 +2296,8 @@ func (c *SyncedCluster) Logs(
 			remote = filepath.Join(localHome, src) + "/"
 		} else {
 			logDir := src
-			if !filepath.IsAbs(logDir) && user != "" && user != sshUser {
-				logDir = "~" + user + "/" + logDir
+			if !filepath.IsAbs(logDir) && userHomeDir != "" {
+				logDir = filepath.Join(userHomeDir, logDir)
 			}
 			remote = fmt.Sprintf("%s@%s:%s/", c.user(node), c.Host(node), logDir)
 			// Use control master to mitigate SSH connection setup cost.
@@ -2309,11 +2308,6 @@ func (c *SyncedCluster) Logs(
 				"-o UserKnownHostsFile=/dev/null "+
 				"-o ControlPersist=2m "+
 				strings.Join(sshAuthArgs(), " "))
-			// Use rsync-path flag to sudo into user if different from sshUser.
-			if user != "" && user != sshUser {
-				rsyncArgs = append(rsyncArgs, "--rsync-path",
-					fmt.Sprintf("sudo -u %s rsync", user))
-			}
 		}
 		rsyncArgs = append(rsyncArgs, remote, local)
 		cmd := exec.CommandContext(ctx, "rsync", rsyncArgs...)
@@ -2361,7 +2355,6 @@ func (c *SyncedCluster) Logs(
 		cmd.Stdout = out
 		var errBuf bytes.Buffer
 		cmd.Stderr = &errBuf
-
 		if err := cmd.Run(); err != nil && ctx.Err() == nil {
 			return errors.Wrapf(err, "failed to run cockroach debug merge-logs:\n%v", errBuf.String())
 		}
