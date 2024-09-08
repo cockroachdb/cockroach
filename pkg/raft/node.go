@@ -151,12 +151,21 @@ type Node interface {
 	// Step advances the state machine using the given message. ctx.Err() will be returned, if any.
 	Step(ctx context.Context, msg pb.Message) error
 
+	// AcceptReady returns a channel which signals its reader when the RawNode has
+	// pending work to do, i.e. its HasReady method returns true.
+	//
+	// If the reader of this channel is signaled, the Node sends its current Ready
+	// struct to the channel returned by Ready() method. The user must read from
+	// the Ready() channel, handle Ready, and call Advance (if required).
+	AcceptReady() <-chan struct{}
 	// Ready returns a channel that returns the current point-in-time state.
 	// Users of the Node must call Advance after retrieving the state returned by Ready (unless
 	// async storage writes is enabled, in which case it should never be called).
 	//
 	// NOTE: No committed entries from the next Ready may be applied until all committed entries
 	// and snapshots from the previous one have finished.
+	//
+	// TODO(pav-kv): don't return the channel, it can be dealt with internally.
 	Ready() <-chan Ready
 
 	// Advance notifies the Node that the application has saved progress up to the last Ready.
@@ -278,18 +287,47 @@ type msgWithResult struct {
 	result chan error
 }
 
+type readyWaiter struct {
+	req         chan struct{}
+	resp        chan Ready
+	adv         chan struct{}
+	needAdvance bool
+}
+
+func makeReadyWaiter() readyWaiter {
+	return readyWaiter{
+		req:  make(chan struct{}),
+		resp: make(chan Ready, 1), // must not block when sent to
+		adv:  make(chan struct{}),
+	}
+}
+
+func (r readyWaiter) reqC(n *node) chan struct{} {
+	if r.needAdvance || !n.rn.HasReady() {
+		return nil
+	}
+	return r.req
+}
+
+func (r readyWaiter) advC() chan struct{} {
+	if r.needAdvance {
+		return r.adv
+	}
+	return nil
+}
+
 // node is the canonical implementation of the Node interface
 type node struct {
 	propc      chan msgWithResult
 	recvc      chan pb.Message
 	confc      chan pb.ConfChangeV2
 	confstatec chan pb.ConfState
-	readyc     chan Ready
-	advancec   chan struct{}
 	tickc      chan struct{}
 	done       chan struct{}
 	stop       chan struct{}
 	status     chan chan Status
+
+	readyW readyWaiter
 
 	rn *RawNode
 }
@@ -300,8 +338,6 @@ func newNode(rn *RawNode) node {
 		recvc:      make(chan pb.Message),
 		confc:      make(chan pb.ConfChangeV2),
 		confstatec: make(chan pb.ConfState),
-		readyc:     make(chan Ready),
-		advancec:   make(chan struct{}),
 		// make tickc a buffered chan, so raft node can buffer some ticks when the node
 		// is busy processing raft messages. Raft node will resume process buffered
 		// ticks when it becomes idle.
@@ -309,6 +345,7 @@ func newNode(rn *RawNode) node {
 		done:   make(chan struct{}),
 		stop:   make(chan struct{}),
 		status: make(chan chan Status),
+		readyW: makeReadyWaiter(),
 		rn:     rn,
 	}
 }
@@ -327,27 +364,13 @@ func (n *node) Stop() {
 
 func (n *node) run() {
 	var propc chan msgWithResult
-	var readyc chan Ready
-	var advancec chan struct{}
 	var rd Ready
 
 	r := n.rn.raft
-
 	lead := None
 
 	for {
-		if advancec == nil && n.rn.HasReady() {
-			// Populate a Ready. Note that this Ready is not guaranteed to
-			// actually be handled. We will arm readyc, but there's no guarantee
-			// that we will actually send on it. It's possible that we will
-			// service another channel instead, loop around, and then populate
-			// the Ready again. We could instead force the previous Ready to be
-			// handled first, but it's generally good to emit larger Readys plus
-			// it simplifies testing (by emitting less frequently and more
-			// predictably).
-			rd = n.rn.readyWithoutAccept()
-			readyc = n.readyc
-		}
+		acceptReadyC := n.readyW.reqC(n)
 
 		if lead != r.lead {
 			if r.hasLeader() {
@@ -417,18 +440,19 @@ func (n *node) run() {
 			}
 		case <-n.tickc:
 			n.rn.Tick()
-		case readyc <- rd:
-			n.rn.acceptReady(rd)
-			if !n.rn.asyncStorageWrites {
-				advancec = n.advancec
-			} else {
+		case acceptReadyC <- struct{}{}:
+			// Invariant: n.rn.HasReady() == true.
+			rd = n.rn.Ready()
+			n.readyW.resp <- rd // never blocks
+			if n.rn.asyncStorageWrites {
 				rd = Ready{}
+			} else {
+				n.readyW.needAdvance = true
 			}
-			readyc = nil
-		case <-advancec:
+		case <-n.readyW.advC():
 			n.rn.Advance(rd)
 			rd = Ready{}
-			advancec = nil
+			n.readyW.needAdvance = false
 		case c := <-n.status:
 			c <- getStatus(r)
 		case <-n.stop:
@@ -529,11 +553,13 @@ func (n *node) stepWithWaitOption(ctx context.Context, m pb.Message, wait bool) 
 	return nil
 }
 
-func (n *node) Ready() <-chan Ready { return n.readyc }
+func (n *node) AcceptReady() <-chan struct{} { return n.readyW.req }
+
+func (n *node) Ready() <-chan Ready { return n.readyW.resp }
 
 func (n *node) Advance() {
 	select {
-	case n.advancec <- struct{}{}:
+	case n.readyW.adv <- struct{}{}:
 	case <-n.done:
 	}
 }

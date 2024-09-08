@@ -57,6 +57,8 @@ func (a *rawNodeAdapter) Status() Status { return a.RawNode.Status() }
 // to it internally. But maybe that approach is frail.
 func (a *rawNodeAdapter) Advance() { a.RawNode.Advance(Ready{}) }
 
+func (a *rawNodeAdapter) AcceptReady() <-chan struct{} { return nil }
+
 // Ready when RawNode returns a Ready, not a chan of one.
 func (a *rawNodeAdapter) Ready() <-chan Ready { return nil }
 
