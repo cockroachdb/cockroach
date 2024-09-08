@@ -220,80 +220,75 @@ func (rn *RawNode) SendMsgApp(to pb.PeerID, slice LogSlice) (pb.Message, bool) {
 func (rn *RawNode) Ready() Ready {
 	r := rn.raft
 
-	rd := Ready{
-		Entries:          r.raftLog.nextUnstableEnts(),
-		CommittedEntries: r.raftLog.nextCommittedEnts(rn.applyUnstableEntries()),
-		Messages:         r.msgs,
-	}
+	var rd Ready
+	rd.Messages, r.msgs = r.msgs, nil
+
 	if softSt := r.softState(); !softSt.equal(rn.prevSoftSt) {
 		// Allocate only when SoftState changes.
 		escapingSoftSt := softSt
 		rd.SoftState = &escapingSoftSt
+		rn.prevSoftSt = &escapingSoftSt
 	}
-	if hardSt := r.hardState(); !isHardStateEqual(hardSt, rn.prevHardSt) {
+	hardSt, prevHardSt := r.hardState(), rn.prevHardSt
+	if !isHardStateEqual(hardSt, prevHardSt) {
 		rd.HardState = hardSt
+		rn.prevHardSt = hardSt
 	}
+
 	if r.raftLog.hasNextUnstableSnapshot() {
 		rd.Snapshot = *r.raftLog.nextUnstableSnapshot()
 	}
-	rd.MustSync = MustSync(r.hardState(), rn.prevHardSt, len(rd.Entries))
+	if r.raftLog.hasNextUnstableEnts() {
+		rd.Entries = r.raftLog.nextUnstableEnts()
+	}
+	// TODO(pav-kv): remove "accept" methods down the stack, since we now accept
+	// all updates unconditionally.
+	r.raftLog.acceptUnstable()
+	rd.MustSync = MustSync(hardSt, prevHardSt, len(rd.Entries))
+
+	allowUnstable := rn.applyUnstableEntries()
+	if r.raftLog.hasNextCommittedEnts(allowUnstable) {
+		entries := r.raftLog.nextCommittedEnts(allowUnstable)
+		index := entries[len(entries)-1].Index
+		r.raftLog.acceptApplying(index, entsSize(entries), allowUnstable)
+		rd.CommittedEntries = entries
+	}
 
 	if rn.asyncStorageWrites {
-		// If async storage writes are enabled, enqueue messages to
-		// local storage threads, where applicable.
+		// If async storage writes are enabled, enqueue messages to local storage
+		// threads, where applicable.
 		if needStorageAppendMsg(r, rd) {
-			m := newStorageAppendMsg(r, rd)
-			rd.Messages = append(rd.Messages, m)
+			rd.Messages = append(rd.Messages, newStorageAppendMsg(r, rd))
 		}
 		if needStorageApplyMsg(rd) {
-			m := newStorageApplyMsg(r, rd)
-			rd.Messages = append(rd.Messages, m)
+			rd.Messages = append(rd.Messages, newStorageApplyMsg(r, rd))
 		}
 	} else {
-		// If async storage writes are disabled, immediately enqueue
-		// msgsAfterAppend to be sent out. The Ready struct contract
-		// mandates that Messages cannot be sent until after Entries
-		// are written to stable storage.
-		for _, m := range r.msgsAfterAppend {
-			if m.To != r.id {
-				rd.Messages = append(rd.Messages, m)
-			}
-		}
-	}
-	// Accept the Ready now.
-
-	if rd.SoftState != nil {
-		rn.prevSoftSt = rd.SoftState
-	}
-	if !IsEmptyHardState(rd.HardState) {
-		rn.prevHardSt = rd.HardState
-	}
-	if !rn.asyncStorageWrites {
+		// TODO(pav-kv): remove this branch and synchronous log writes.
 		if len(rn.stepsOnAdvance) != 0 {
 			r.logger.Panicf("two accepted Ready structs without call to Advance")
 		}
+		// If async storage writes are disabled, immediately enqueue msgsAfterAppend
+		// to be sent out. The Ready struct contract mandates that Messages cannot
+		// be sent until after Entries are written to stable storage. Enqueue the
+		// self-directed messages to be processed after Ready/Advance.
 		for _, m := range r.msgsAfterAppend {
-			if m.To == r.id {
+			if m.To != r.id {
+				rd.Messages = append(rd.Messages, m)
+			} else {
 				rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
 			}
 		}
 		if needStorageAppendRespMsg(rd) {
-			m := newStorageAppendRespMsg(r, rd)
-			rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
+			rn.stepsOnAdvance = append(rn.stepsOnAdvance,
+				newStorageAppendRespMsg(r, rd))
 		}
 		if needStorageApplyRespMsg(rd) {
-			m := newStorageApplyRespMsg(r, rd.CommittedEntries)
-			rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
+			rn.stepsOnAdvance = append(rn.stepsOnAdvance,
+				newStorageApplyRespMsg(r, rd.CommittedEntries))
 		}
 	}
-	r.msgs = nil
 	r.msgsAfterAppend = nil
-	r.raftLog.acceptUnstable()
-	if len(rd.CommittedEntries) > 0 {
-		ents := rd.CommittedEntries
-		index := ents[len(ents)-1].Index
-		r.raftLog.acceptApplying(index, entsSize(ents), rn.applyUnstableEntries())
-	}
 
 	return rd
 }
