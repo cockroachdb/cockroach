@@ -39,80 +39,80 @@ def c_deps():
     archived_cdep_repository(
         lib = "libgeos",
         config = "linux",
-        sha256 = "3c5ffe12ea3e1b92f80f98e509c206b66a780b175c9aba2b085f1c39377c982f",
+        sha256 = "23f80b64a2699929e90e0842e9bd4921caef84caf1de30922e76b8a8747acf7c",
     )
     archived_cdep_repository(
         lib = "libjemalloc",
         config = "linux",
-        sha256 = "282967fa0b7ab2d134da7485239ea0e816b4c2b0ca2b59a7fcd30f6d7d0fce3c",
+        sha256 = "0c70d905856015438c021e997aed14e16ed3bba48f0f878583ea8e3938437e80",
     )
     archived_cdep_repository(
         lib = "libkrb5",
         config = "linux",
-        sha256 = "5e392cd33a5c16ed8f618a21f311cee0518fbfa2fbc7800c819cb0d0aacf833b",
+        sha256 = "3aead8da993877f39e9be44e7b5cab7dd3134aea7f616d9c88b3fea11f6a4c8e",
     )
     archived_cdep_repository(
         lib = "libproj",
         config = "linux",
-        sha256 = "94f62ceaad3ca235ff932b2256b314a21a62774efc3e0d898c05f5d1d74b7578",
+        sha256 = "6de66b050784c45dcbcd934e3a4b4d1bc6c9eb9adbfb0a8f9873615593858601",
     )
     archived_cdep_repository(
         lib = "libgeos",
         config = "linuxarm",
-        sha256 = "820b804268e8f69a9f5592d03a5834bb202939184c623f6aca8a00863c4755fd",
+        sha256 = "b4cf94bfe7441ee99a035f47cf99f8de9f067d3ae41f3c03aa654320162cdd85",
     )
     archived_cdep_repository(
         lib = "libjemalloc",
         config = "linuxarm",
-        sha256 = "2eb8217364c5592ea8061ee1aef7406c034cc43a543fb7871fd28c59b5765a5c",
+        sha256 = "ba5f76bcd0650f59f4829ef32c2b9dcae033b469eb0ffdcd44a8d1bad10fe420",
     )
     archived_cdep_repository(
         lib = "libkrb5",
         config = "linuxarm",
-        sha256 = "6796b65289835622ee1b634a47cc784c5b764ca63959d77ccc54c66c5afd708d",
+        sha256 = "e4bcf141ec06e10ec6c9267ee8263922991b7f9ce0b6c7a854683bc30233c8fc",
     )
     archived_cdep_repository(
         lib = "libproj",
         config = "linuxarm",
-        sha256 = "06eedc730402719f444349935ca3db928e510cfd95f3aa32eafbc3fdcc10c5b2",
+        sha256 = "c134475f9b98eabb1d9849161710cbb88e41053cbe6297818105b88190b371d5",
     )
     archived_cdep_repository(
         lib = "libgeos",
         config = "macos",
-        sha256 = "ad84331c25abae7bec02e54556e38804d5eab1f14c542a369660b040ca25ee14",
+        sha256 = "badb26eecf059304197a79e9e1af20ca375b5062d838dccc30003f402316acb0",
     )
     archived_cdep_repository(
         lib = "libjemalloc",
         config = "macos",
-        sha256 = "180dbd0156b89079fedacc9f2d8f0fb3082616ee21ffc1a3f6d1a99a67dfc56d",
+        sha256 = "7883064d61e996198c9375d185022fa9d46e48ea1f634683773a8cdd1664860f",
     )
     archived_cdep_repository(
         lib = "libproj",
         config = "macos",
-        sha256 = "4b4dadf30e225693723612ede7fc5138eb1ad1b863db744c52099535dbdc3c00",
+        sha256 = "21c9aa75b7f0f6f94bb24bf5fadc4bd3c3e6e7a944db91ca2941b4bf40a6bacd",
     )
     archived_cdep_repository(
         lib = "libgeos",
         config = "macosarm",
-        sha256 = "9ec86dcf655cb441a3dbed29897b27b2fbc37830816d07f1da58e197c332a3bb",
+        sha256 = "203d371a21f2982bee2863da665b687916a9a23893e29cc467722379fa4c2947",
     )
     archived_cdep_repository(
         lib = "libjemalloc",
         config = "macosarm",
-        sha256 = "9a3fae2482dd837842e755a10b70d7a15b3ff9f431b81e63efc2f20a1885d174",
+        sha256 = "5f4524c5f97e9f88b553dafc2a320f0c30784af0678b0b3f732662495227be4d",
     )
     archived_cdep_repository(
         lib = "libproj",
         config = "macosarm",
-        sha256 = "3e3220bd83009de29185772be26022ae219cb006eae1d8dba87292206ce9f4ea",
+        sha256 = "ac909be9739baac1aafcaa7fdf12837dc0c284a8c31c8362d38d03b318b86aea",
     )
     archived_cdep_repository(
         lib = "libjemalloc",
         config = "windows",
-        sha256 = "4197f25032d45b6e8acb6446914f6153c0fc48e0d75d2eba99d58806622fcc98",
+        sha256 = "54d47c2bd65127a0f485d0a10821617233f37363b58fa3d24b2a08cc4973889d",
     )
     archived_cdep_repository(
         lib = "libproj",
         config = "windows",
-        sha256 = "8284b57f832ab3c5353860ad715e8844c93bf6822b01cb5108b5b494ea90a2dc",
+        sha256 = "0eb7874843712734708b2dbe002329a6d0d7370fde9df13b972472fd6f867f82",
     )
