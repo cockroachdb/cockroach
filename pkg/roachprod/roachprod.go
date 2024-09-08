@@ -1776,13 +1776,13 @@ type LogsOpts struct {
 }
 
 // Logs TODO
-func Logs(l *logger.Logger, clusterName, dest, username string, logsOpts LogsOpts) error {
+func Logs(l *logger.Logger, clusterName, dest string, logsOpts LogsOpts) error {
 	c, err := getClusterFromCache(l, clusterName)
 	if err != nil {
 		return err
 	}
 	return c.Logs(
-		l, logsOpts.Dir, dest, username, logsOpts.Filter, logsOpts.ProgramFilter,
+		l, logsOpts.Dir, dest, logsOpts.Filter, logsOpts.ProgramFilter,
 		logsOpts.Interval, logsOpts.From, logsOpts.To, logsOpts.Out,
 	)
 }

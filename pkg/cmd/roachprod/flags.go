@@ -120,6 +120,10 @@ func initFlags() {
 		term.IsTerminal(int(os.Stdout.Fd())), "enable fast DNS resolution via the standard Go net package")
 	rootCmd.PersistentFlags().StringVarP(&config.EmailDomain, "email-domain", "",
 		config.DefaultEmailDomain, "email domain for users")
+	rootCmd.PersistentFlags().BoolVar(&config.UseSharedUser,
+		"use-shared-user", true,
+		fmt.Sprintf("use the shared user %q for ssh rather than your user %q",
+			config.SharedUser, config.OSUser.Username))
 
 	createCmd.Flags().DurationVarP(&createVMOpts.Lifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
@@ -157,9 +161,11 @@ func initFlags() {
 		if vm.Providers[providerName].Active() {
 			providerOptsContainer[providerName].ConfigureCreateFlags(createCmd.Flags())
 
-			for _, cmd := range []*cobra.Command{
-				destroyCmd, extendCmd, listCmd, syncCmd, gcCmd, setupSSHCmd, startCmd, pgurlCmd, adminurlCmd,
-			} {
+			for _, cmd := range rootCmd.Commands() {
+				if cmd == createCmd {
+					// createCmd is handled below
+					continue
+				}
 				providerOptsContainer[providerName].ConfigureClusterFlags(cmd.Flags(), vm.AcceptMultipleProjects)
 			}
 
@@ -298,9 +304,9 @@ func initFlags() {
 	logsCmd.Flags().StringVar(&logsFilter,
 		"filter", "", "re to filter log messages")
 	logsCmd.Flags().Var(flagutil.Time(&logsFrom),
-		"from", "time from which to stream logs")
+		"from", "time from which to stream logs (e.g., 2024-09-07T16:05:06Z)")
 	logsCmd.Flags().Var(flagutil.Time(&logsTo),
-		"to", "time to which to stream logs")
+		"to", "time to which to stream logs (e.g., 2024-09-07T17:05:06Z); if ommitted, command streams without returning")
 	logsCmd.Flags().DurationVar(&logsInterval,
 		"interval", 200*time.Millisecond, "interval to poll logs from host")
 	logsCmd.Flags().StringVar(&logsDir,
@@ -410,7 +416,7 @@ func initFlags() {
 		cmd.Flags().BoolVar(&urlOpen, "open", false, "Open the url in a browser")
 	}
 
-	for _, cmd := range []*cobra.Command{createCmd, listCmd, destroyCmd, extendCmd, logsCmd} {
+	for _, cmd := range []*cobra.Command{createCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),
 			"Username to run under, detect if blank")
 	}
