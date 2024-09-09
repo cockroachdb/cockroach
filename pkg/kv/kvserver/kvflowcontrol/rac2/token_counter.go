@@ -236,6 +236,15 @@ func (b *tokenCounter) SafeFormat(w redact.SafePrinter, _ rune) {
 		b.mu.counters[admissionpb.ElasticWorkClass].limit)
 }
 
+func (t *tokenCounter) tokensPerWorkClass() tokensPerWorkClass {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return tokensPerWorkClass{
+		regular: t.tokensLocked(admissionpb.RegularWorkClass),
+		elastic: t.tokensLocked(admissionpb.ElasticWorkClass),
+	}
+}
+
 func (t *tokenCounter) tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
 	t.mu.RLock()
 	defer t.mu.RUnlock()

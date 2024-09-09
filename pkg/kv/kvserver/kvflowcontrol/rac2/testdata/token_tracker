@@ -39,6 +39,58 @@ NormalPri:
 HighPri:
   term=1 index=30 tokens=300
 
+# The inspect state should match up with the formatted state printed above.
+inspect
+----
+{
+  "priority": -128,
+  "tokens": "100",
+  "raft_log_position": {
+    "term": "1",
+    "index": "10"
+  }
+}
+{
+  "priority": -128,
+  "tokens": "400",
+  "raft_log_position": {
+    "term": "2",
+    "index": "40"
+  }
+}
+{
+  "priority": -128,
+  "tokens": "400",
+  "raft_log_position": {
+    "term": "2",
+    "index": "51"
+  }
+}
+{
+  "priority": 0,
+  "tokens": "200",
+  "raft_log_position": {
+    "term": "1",
+    "index": "20"
+  }
+}
+{
+  "priority": 0,
+  "tokens": "500",
+  "raft_log_position": {
+    "term": "2",
+    "index": "50"
+  }
+}
+{
+  "priority": 127,
+  "tokens": "300",
+  "raft_log_position": {
+    "term": "1",
+    "index": "30"
+  }
+}
+
 track
 term=3 index=60 tokens=600 pri=HighPri
 term=3 index=70 tokens=700 pri=LowPri
@@ -93,6 +145,18 @@ state
 LowPri:
   term=3 index=70 tokens=700
 
+# The inspect state should match up with the formatted state printed above.
+inspect
+----
+{
+  "priority": -128,
+  "tokens": "700",
+  "raft_log_position": {
+    "term": "3",
+    "index": "70"
+  }
+}
+
 untrack_ge index=40
 ----
 returned: tokens=700  pri=LowPri
@@ -143,6 +207,11 @@ returned: tokens=900  pri=NormalPri
 returned: tokens=999  pri=HighPri
 
 state
+----
+
+# The inspect state should match up with the formatted state printed above
+# (nothing).
+inspect
 ----
 
 # vim:ft=sh
