@@ -381,6 +381,10 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	mvt := mixedversion.NewTest(
 		ctx, t, t.L(), c, crdbNodes,
+		// We avoid multi-tenant deployments in 23.2 because this test
+		// uses the `workload fixtures import` command, which is only
+		// supported reliably multi-tenant mode starting on 23.2+.
+		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 	)
 
 	tenantFeaturesEnabled := make(chan struct{})
