@@ -63,10 +63,10 @@ func TestGracePeriodInitTSCache(t *testing.T) {
 	enforcer := &license.Enforcer{}
 	ts2 := ts1.Add(1)
 	ts2End := ts2.Add(7 * 24 * time.Hour) // Calculate the end of the grace period
-	enforcer.TestingKnobs = &license.TestingKnobs{
+	enforcer.SetTestingKnobs(&license.TestingKnobs{
 		EnableGracePeriodInitTSWrite: true,
 		OverrideStartTime:            &ts2,
-	}
+	})
 	// Ensure request for the grace period init ts1 before start just returns the start
 	// time used when the enforcer was created.
 	require.Equal(t, ts2End, enforcer.GetClusterInitGracePeriodEndTS())
@@ -143,12 +143,11 @@ func TestThrottle(t *testing.T) {
 		{OverTxnThreshold, license.LicTypeEvaluation, t0, t0, t15d, t46d, "License expired"},
 	} {
 		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
-			e := license.Enforcer{
-				TestingKnobs: &license.TestingKnobs{
-					OverrideStartTime:         &tc.gracePeriodInit,
-					OverrideThrottleCheckTime: &tc.checkTs,
-				},
-			}
+			e := license.Enforcer{}
+			e.SetTestingKnobs(&license.TestingKnobs{
+				OverrideStartTime:         &tc.gracePeriodInit,
+				OverrideThrottleCheckTime: &tc.checkTs,
+			})
 			e.SetTelemetryStatusReporter(&mockTelemetryStatusReporter{
 				lastPingTime: tc.lastTelemetryPingTime,
 			})
