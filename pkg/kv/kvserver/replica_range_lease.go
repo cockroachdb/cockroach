@@ -632,15 +632,13 @@ func (p *pendingLeaseRequest) JoinRequest() *leaseRequestHandle {
 // replica.mu.minLeaseProposedTS).
 //
 // It is assumed that the replica owning this pendingLeaseRequest owns the
-// LeaderLease.
-//
-// replicaID is the ID of the parent replica.
+// lease.
 //
 // Requires repl.mu is read locked.
-func (p *pendingLeaseRequest) TransferInProgress(replicaID roachpb.ReplicaID) bool {
+func (p *pendingLeaseRequest) TransferInProgress() bool {
 	if nextLease, ok := p.RequestPending(); ok {
 		// Is the lease being transferred? (as opposed to just extended)
-		return replicaID != nextLease.Replica.ReplicaID
+		return p.repl.ReplicaID() != nextLease.Replica.ReplicaID
 	}
 	return false
 }
@@ -1228,11 +1226,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 			// commands - see comments on AdminTransferLease and TransferLease.
 			// So wait on the lease transfer to complete either successfully or
 			// unsuccessfully before redirecting or retrying.
-			repDesc, err := r.getReplicaDescriptorRLocked()
-			if err != nil {
-				return nil, kvserverpb.LeaseStatus{}, false, kvpb.NewError(err)
-			}
-			if ok := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID); ok {
+			if ok := r.mu.pendingLeaseRequest.TransferInProgress(); ok {
 				return r.mu.pendingLeaseRequest.JoinRequest(), kvserverpb.LeaseStatus{}, true /* transfer */, nil
 			}
 

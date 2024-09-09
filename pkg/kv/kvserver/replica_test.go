@@ -715,12 +715,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 		<-transferSem
 		// Check that a transfer is indeed on-going.
 		tc.repl.mu.Lock()
-		repDesc, err := tc.repl.getReplicaDescriptorRLocked()
-		if err != nil {
-			tc.repl.mu.Unlock()
-			t.Fatal(err)
-		}
-		pending := tc.repl.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID)
+		pending := tc.repl.mu.pendingLeaseRequest.TransferInProgress()
 		tc.repl.mu.Unlock()
 		if !pending {
 			t.Fatalf("expected transfer to be in progress, and it wasn't")
@@ -761,7 +756,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			tc.repl.mu.Lock()
 			defer tc.repl.mu.Unlock()
-			pending := tc.repl.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID)
+			pending := tc.repl.mu.pendingLeaseRequest.TransferInProgress()
 			if pending {
 				return errors.New("transfer pending")
 			}
