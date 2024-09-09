@@ -258,8 +258,8 @@ func (c *testRangeController) CloseRaftMuLocked(ctx context.Context) {
 	fmt.Fprintf(c.b, " RangeController.CloseRaftMuLocked\n")
 }
 
-func (c *testRangeController) Inspect(ctx context.Context) kvflowinspectpb.Handle {
-	fmt.Fprintf(c.b, " RangeController.Inspect\n")
+func (c *testRangeController) InspectRaftMuLocked(ctx context.Context) kvflowinspectpb.Handle {
+	fmt.Fprintf(c.b, " RangeController.InspectRaftMuLocked\n")
 	return kvflowinspectpb.Handle{}
 }
 
@@ -505,6 +505,10 @@ func TestProcessorBasic(t *testing.T) {
 					d.ScanArgs(t, "err", &errStr)
 					rc.waitForEvalErr = errors.Errorf("%s", errStr)
 				}
+				return builderStr()
+
+			case "inspect":
+				p.InspectRaftMuLocked(ctx)
 				return builderStr()
 
 			default:

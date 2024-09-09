@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -404,6 +405,11 @@ type Processor interface {
 	// and error will be nil.
 	AdmitForEval(
 		ctx context.Context, pri admissionpb.WorkPriority, ct time.Time) (admitted bool, err error)
+
+	// InspectRaftMuLocked returns a handle to inspect the state of the
+	// underlying range controller. It is used to power /inspectz-style debugging
+	// pages.
+	InspectRaftMuLocked(ctx context.Context) (kvflowinspectpb.Handle, bool)
 }
 
 type processorImpl struct {
@@ -1002,6 +1008,26 @@ func (p *processorImpl) AdmitForEval(
 		return false, nil
 	}
 	return rc.WaitForEval(ctx, pri)
+}
+
+func admittedIncreased(prev, next [raftpb.NumPriorities]uint64) bool {
+	for i := range prev {
+		if prev[i] < next[i] {
+			return true
+		}
+	}
+	return false
+}
+
+// InspectRaftMuLocked implements Processor.
+func (p *processorImpl) InspectRaftMuLocked(ctx context.Context) (kvflowinspectpb.Handle, bool) {
+	p.opts.Replica.RaftMuAssertHeld()
+	p.mu.leader.rcReferenceUpdateMu.RLock()
+	defer p.mu.leader.rcReferenceUpdateMu.RUnlock()
+	if p.mu.leader.rc == nil {
+		return kvflowinspectpb.Handle{}, false
+	}
+	return p.mu.leader.rc.InspectRaftMuLocked(ctx), true
 }
 
 // RangeControllerFactoryImpl implements the RangeControllerFactory interface.

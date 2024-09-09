@@ -150,6 +150,7 @@ type Tokens int64
 // Controller provides flow control for replication traffic in KV, held at the
 // node-level.
 type Controller interface {
+	InspectController
 	// Admit seeks admission to replicate data, regardless of size, for work with
 	// the given priority, create-time, and over the given stream. This blocks
 	// until there are flow tokens available or the stream disconnects, subject to
@@ -167,9 +168,6 @@ type Controller interface {
 	// expected to have been deducted earlier with the same priority provided
 	// here.
 	ReturnTokens(context.Context, admissionpb.WorkPriority, Tokens, Stream)
-	// Inspect returns a snapshot of all underlying streams and their available
-	// {regular,elastic} tokens. It's used to power /inspectz.
-	Inspect(context.Context) []kvflowinspectpb.Stream
 	// InspectStream returns a snapshot of a specific underlying stream and its
 	// available {regular,elastic} tokens. It's used to power /inspectz.
 	InspectStream(context.Context, Stream) kvflowinspectpb.Stream
@@ -179,6 +177,12 @@ type Controller interface {
 	// replication to a specific store is paused due to follower-pausing.
 	// That'll have to show up between the Handler and the Controller somehow.
 	// See I2, I3a and [^7] in kvflowcontrol/doc.go.
+}
+
+type InspectController interface {
+	// Inspect returns a snapshot of all underlying streams and their available
+	// {regular,elastic} tokens. It's used to power /inspectz.
+	Inspect(context.Context) []kvflowinspectpb.Stream
 }
 
 // ReplicationAdmissionHandle abstracts waiting for admission across RACv1 and RACv2.
@@ -218,6 +222,7 @@ type ReplicationAdmissionHandle interface {
 // kvflowcontrolpb.AdmittedRaftLogEntries for more details).
 type Handle interface {
 	ReplicationAdmissionHandle
+	InspectHandle
 	// DeductTokensFor deducts (without blocking) flow tokens for replicating
 	// work with given priority along connected streams. The deduction is
 	// tracked with respect to the specific raft log position it's expecting it
@@ -267,9 +272,6 @@ type Handle interface {
 	// Admit(). It's only used when cluster settings change, settings that
 	// affect all work waiting for flow tokens.
 	ResetStreams(ctx context.Context)
-	// Inspect returns a serialized form of the underlying handle. It's used to
-	// power /inspectz.
-	Inspect(context.Context) kvflowinspectpb.Handle
 	// Close closes the handle and returns all held tokens back to the
 	// underlying controller. Typically used when the replica loses its lease
 	// and/or raft leadership, or ends up getting GC-ed (if it's being
@@ -277,10 +279,17 @@ type Handle interface {
 	Close(context.Context)
 }
 
+type InspectHandle interface {
+	// Inspect returns a serialized form of the underlying handle. It's used to
+	// power /inspectz.
+	Inspect(context.Context) kvflowinspectpb.Handle
+}
+
 // Handles represent a set of flow control handles. Note that handles are
 // typically held on replicas initiating replication traffic, so on a given node
 // they're uniquely identified by their range ID.
 type Handles interface {
+	InspectHandles
 	// Lookup the kvflowcontrol.Handle for the specific range (or rather, the
 	// replica of the specific range that's locally held).
 	Lookup(roachpb.RangeID) (Handle, bool)
@@ -288,9 +297,6 @@ type Handles interface {
 	// kvflowcontrol.Handles, i.e. disconnect and reconnect each one. It
 	// effectively unblocks all requests waiting in Admit().
 	ResetStreams(ctx context.Context)
-	// Inspect returns the set of ranges that have an embedded
-	// kvflowcontrol.Handle. It's used to power /inspectz.
-	Inspect() []roachpb.RangeID
 	// TODO(irfansharif): When fixing I1 and I2 from kvflowcontrol/node.go,
 	// we'll want to disconnect all streams for a specific node. Expose
 	// something like the following to disconnect all replication streams bound
@@ -306,6 +312,15 @@ type Handles interface {
 	// that's locally held). The bool is false if no handle was found, in which
 	// case the caller must use the pre-replication-admission-control path.
 	LookupReplicationAdmissionHandle(roachpb.RangeID) (ReplicationAdmissionHandle, bool)
+}
+
+type InspectHandles interface {
+	// LookupInspect the serialized form of a handle for the specific range (or
+	// rather, the replica of the specific range that's locally held).
+	LookupInspect(roachpb.RangeID) (kvflowinspectpb.Handle, bool)
+	// Inspect returns the set of ranges that have an embedded
+	// kvflowcontrol.Handle. It's used to power /inspectz.
+	Inspect() []roachpb.RangeID
 }
 
 // HandleFactory is used to construct new Handles.
