@@ -13,6 +13,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"hash/fnv"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -356,7 +358,7 @@ func makeKafkaSinkV2(
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
 
-	clientOpts, err := buildKgoConfig(ctx, u, jsonConfig)
+	clientOpts, err := buildKgoConfig(ctx, u, jsonConfig, mb(true).netMetrics())
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +387,10 @@ func makeKafkaSinkV2(
 }
 
 func buildKgoConfig(
-	ctx context.Context, u sinkURL, jsonStr changefeedbase.SinkSpecificJSONConfig,
+	ctx context.Context,
+	u sinkURL,
+	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	netMetrics *cidr.NetMetrics,
 ) ([]kgo.Opt, error) {
 	var opts []kgo.Opt
 
@@ -415,7 +420,12 @@ func buildKgoConfig(
 			}
 			tlsCfg.Certificates = []tls.Certificate{cert}
 		}
-		opts = append(opts, kgo.DialTLSConfig(tlsCfg))
+		// The 10s dial timeout is the default in kgo if you don't manually
+		// specify a Dialer. Since we are creating one we want to match the
+		// default behavior. See kgo.NewClient.
+		dialer := &net.Dialer{Timeout: 10 * time.Second}
+		tlsDialer := &tls.Dialer{NetDialer: dialer, Config: tlsCfg}
+		opts = append(opts, kgo.Dialer(netMetrics.Wrap(tlsDialer.DialContext, "kafka")))
 	} else {
 		if dialConfig.caCert != nil {
 			return nil, errors.Errorf(`%s requires %s=true`, changefeedbase.SinkParamCACert, changefeedbase.SinkParamTLSEnabled)
@@ -423,6 +433,11 @@ func buildKgoConfig(
 		if dialConfig.clientCert != nil {
 			return nil, errors.Errorf(`%s requires %s=true`, changefeedbase.SinkParamClientCert, changefeedbase.SinkParamTLSEnabled)
 		}
+		// The 10s dial timeout is the default in kgo if you don't manually
+		// specify a Dialer. Since we are creating one we want to match the
+		// default behavior. See kgo.NewClient.
+		dialer := &net.Dialer{Timeout: 10 * time.Second}
+		opts = append(opts, kgo.Dialer(netMetrics.Wrap(dialer.DialContext, "kafka")))
 	}
 
 	if dialConfig.saslEnabled {
