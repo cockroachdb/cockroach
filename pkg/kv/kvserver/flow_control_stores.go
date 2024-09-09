@@ -56,6 +56,13 @@ func (sh *storesForFlowControl) Lookup(
 	return handle, found
 }
 
+// LookupInspect is part of the StoresForFlowControl interface.
+func (sh *storesForFlowControl) LookupInspect(
+	rangeID roachpb.RangeID,
+) (handle kvflowcontrol.InspectHandle, found bool) {
+	return sh.Lookup(rangeID)
+}
+
 // LookupReplicationAdmissionHandle is part of the StoresForFlowControl
 // interface.
 func (sh *storesForFlowControl) LookupReplicationAdmissionHandle(
@@ -128,6 +135,13 @@ func (sh *storeForFlowControl) Lookup(
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
 	return repl.mu.replicaFlowControlIntegration.handle()
+}
+
+// LookupInspect is part of the StoresForFlowControl interface.
+func (sh *storeForFlowControl) LookupInspect(
+	rangeID roachpb.RangeID,
+) (kvflowcontrol.InspectHandle, bool) {
+	return sh.Lookup(rangeID)
 }
 
 // LookupReplicationAdmissionHandle is part of the StoresForFlowControl
@@ -267,6 +281,13 @@ func (l NoopStoresFlowControlIntegration) LookupReplicationAdmissionHandle(
 func (l NoopStoresFlowControlIntegration) ResetStreams(context.Context) {
 }
 
+// LookupInspect is part of the StoresForFlowControl interface.
+func (l NoopStoresFlowControlIntegration) LookupInspect(
+	roachpb.RangeID,
+) (kvflowcontrol.InspectHandle, bool) {
+	return nil, false
+}
+
 // Inspect is part of the StoresForFlowControl interface.
 func (l NoopStoresFlowControlIntegration) Inspect() []roachpb.RangeID {
 	return nil
@@ -284,6 +305,7 @@ func (NoopStoresFlowControlIntegration) OnRaftTransportDisconnected(
 type StoresForRACv2 interface {
 	admission.OnLogEntryAdmitted
 	PiggybackedAdmittedResponseScheduler
+	kvflowcontrol.InspectHandles
 }
 
 // PiggybackedAdmittedResponseScheduler routes followers piggybacked admitted
@@ -348,6 +370,43 @@ func (ss *storesForRACv2) ScheduleAdmittedResponseForRangeRACv2(
 		repl.flowControlV2.EnqueuePiggybackedAdmittedAtLeader(m.Msg)
 		s.scheduler.EnqueueRACv2PiggybackAdmitted(m.RangeID)
 	}
+}
+
+// LookupInspect implements kvflowcontrol.InspectHandles.
+func (ss *storesForRACv2) LookupInspect(
+	rangeID roachpb.RangeID,
+) (handle kvflowcontrol.InspectHandle, found bool) {
+	ls := (*Stores)(ss)
+	if err := ls.VisitStores(func(s *Store) error {
+		if found {
+			return nil
+		}
+		if r := s.GetReplicaIfExists(rangeID); r != nil {
+			handle, found = r.flowControlV2.Inspect(context.Background())
+		}
+		return nil
+	}); err != nil {
+		log.Errorf(ls.AnnotateCtx(context.Background()),
+			"unexpected error iterating stores: %s", err)
+	}
+	return handle, found
+}
+
+// Inspect implements kvflowcontrol.InspectHandles.
+func (ss *storesForRACv2) Inspect() []roachpb.RangeID {
+	ls := (*Stores)(ss)
+	var rangeIDs []roachpb.RangeID
+	if err := ls.VisitStores(func(s *Store) error {
+		s.VisitReplicas(func(r *Replica) (wantMore bool) {
+			rangeIDs = append(rangeIDs, r.RangeID)
+			return true
+		})
+		return nil
+	}); err != nil {
+		log.Errorf(ls.AnnotateCtx(context.Background()),
+			"unexpected error iterating stores: %s", err)
+	}
+	return rangeIDs
 }
 
 type admissionDemuxHandle struct {

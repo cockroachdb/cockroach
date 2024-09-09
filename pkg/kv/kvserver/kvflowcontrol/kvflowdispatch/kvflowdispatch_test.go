@@ -238,4 +238,8 @@ func (d dummyHandles) Inspect() []roachpb.RangeID {
 	return nil
 }
 
+func (d dummyHandles) LookupInspect(id roachpb.RangeID) (kvflowcontrol.InspectHandle, bool) {
+	return nil, false
+}
+
 var _ kvflowcontrol.Handles = dummyHandles{}

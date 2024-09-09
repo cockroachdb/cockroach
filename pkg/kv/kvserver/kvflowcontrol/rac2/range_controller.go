@@ -39,6 +39,7 @@ import (
 // None of the methods are called with Replica.mu held. The caller should
 // typically order its mutexes before Replica.mu.
 type RangeController interface {
+	kvflowcontrol.InspectHandle
 	// WaitForEval seeks admission to evaluate a request at the given priority.
 	// This blocks until there are positive tokens available for the request to
 	// be admitted for evaluation, or the context is canceled (which returns an
@@ -75,9 +76,6 @@ type RangeController interface {
 	//
 	// Requires replica.raftMu to be held.
 	CloseRaftMuLocked(ctx context.Context)
-	// Inspect returns a handle containing the state of the range controller.
-	// It's used to power /inspectz-style debugging pages.
-	Inspect(ctx context.Context) kvflowinspectpb.Handle
 }
 
 // TODO(pav-kv): This interface a placeholder for the interface containing raft

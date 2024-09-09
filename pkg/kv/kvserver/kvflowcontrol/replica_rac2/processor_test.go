@@ -500,6 +500,11 @@ func TestProcessorBasic(t *testing.T) {
 				}
 				return builderStr()
 
+			case "inspect":
+				rc := rcFactory.rcs[len(rcFactory.rcs)-1]
+				rc.Inspect(ctx)
+				return builderStr()
+
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}

@@ -413,6 +413,10 @@ type Processor interface {
 	// and error will be nil.
 	AdmitForEval(
 		ctx context.Context, pri admissionpb.WorkPriority, ct time.Time) (admitted bool, err error)
+
+	// Inspect returns a handle to inspect the state of the underlying range
+	// controller. It is used to power /inspectz-style debugging pages.
+	Inspect(ctx context.Context) (kvflowcontrol.InspectHandle, bool)
 }
 
 type processorImpl struct {
@@ -983,6 +987,17 @@ func (p *processorImpl) AdmitForEval(
 		return false, nil
 	}
 	return p.mu.leader.rc.WaitForEval(ctx, pri)
+}
+
+// Inspect returns a handle containing the state of the range controller. It's
+// used to power /inspectz-style debugging pages.
+func (p *processorImpl) Inspect(ctx context.Context) (kvflowcontrol.InspectHandle, bool) {
+	p.mu.leader.rcReferenceUpdateMu.RLock()
+	defer p.mu.leader.rcReferenceUpdateMu.RUnlock()
+	if p.mu.leader.rc == nil {
+		return nil, false
+	}
+	return p.mu.leader.rc, true
 }
 
 func admittedIncreased(prev, next [raftpb.NumPriorities]uint64) bool {

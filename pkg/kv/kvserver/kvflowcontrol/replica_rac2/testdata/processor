@@ -800,3 +800,7 @@ HandleRaftReady:
  Replica.MuUnlock
  RangeController.CloseRaftMuLocked
 .....
+
+inspect
+----
+ RangeController.Inspect
