@@ -1131,7 +1131,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	inspectzServer := inspectz.NewServer(
 		cfg.BaseConfig.AmbientCtx,
 		node.storeCfg.KVFlowHandles,
+		kvserver.MakeStoresForRACv2(stores),
 		node.storeCfg.KVFlowController,
+		node.storeCfg.KVFlowStreamTokenProvider,
 	)
 	cfg.CidrLookup.Start(ctx, stopper)
 
