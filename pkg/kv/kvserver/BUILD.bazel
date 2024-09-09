@@ -145,6 +145,7 @@ go_library(
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowdispatch",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowhandle",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
         "//pkg/kv/kvserver/kvflowcontrol/node_rac2",
         "//pkg/kv/kvserver/kvflowcontrol/rac2",
         "//pkg/kv/kvserver/kvflowcontrol/replica_rac2",
