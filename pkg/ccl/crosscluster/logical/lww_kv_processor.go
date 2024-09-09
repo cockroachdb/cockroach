@@ -121,7 +121,7 @@ func (p *kvRowProcessor) ProcessRow(
 	// Instead, for now, we just don't use the direct CPut for anything other than
 	// inserts. If/when we have a LDR-flavor CPut (or if we move the TS out and
 	// decide that equal values negate LWW) we can remove this.
-	if prevValue.IsPresent() {
+	if prevValue.IsPresent() || row.IsDeleted() {
 		return p.fallback.processParsedRow(ctx, txn, row, keyValue.Key, prevValue)
 	}
 
@@ -194,29 +194,31 @@ func (p *kvRowProcessor) addToBatch(
 	if err := txn.UpdateDeadline(ctx, w.leased.Expiration(ctx)); err != nil {
 		return err
 	}
-	if prevValue.IsPresent() {
-		prevRow, err := p.decoder.DecodeKV(ctx, roachpb.KeyValue{
-			Key:   keyValue.Key,
-			Value: prevValue,
-		}, cdcevent.PrevRow, prevValue.Timestamp, false)
-		if err != nil {
+
+	prevRow, err := p.decoder.DecodeKV(ctx, roachpb.KeyValue{
+		Key:   keyValue.Key,
+		Value: prevValue,
+	}, cdcevent.PrevRow, prevValue.Timestamp, false)
+	if err != nil {
+		return err
+	}
+
+	if row.IsDeleted() {
+		if err := w.deleteRow(ctx, b, prevRow, row); err != nil {
 			return err
 		}
-
-		if row.IsDeleted() {
-			if err := w.deleteRow(ctx, b, prevRow, row); err != nil {
-				return err
-			}
-		} else {
+	} else {
+		if prevValue.IsPresent() {
 			if err := w.updateRow(ctx, b, prevRow, row); err != nil {
 				return err
 			}
-		}
-	} else {
-		if err := w.insertRow(ctx, b, row); err != nil {
-			return err
+		} else {
+			if err := w.insertRow(ctx, b, row); err != nil {
+				return err
+			}
 		}
 	}
+
 	return nil
 }
 

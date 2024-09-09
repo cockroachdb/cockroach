@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -35,8 +36,11 @@ const (
 
 // Enforcer is responsible for enforcing license policies.
 type Enforcer struct {
-	// TestingKnobs are used to control the behavior of the enforcer for testing.
-	TestingKnobs *TestingKnobs
+	mu struct {
+		syncutil.Mutex
+		// testingKnobs are used to control the behavior of the enforcer for testing.
+		testingKnobs *TestingKnobs
+	}
 
 	// telemetryStatusReporter is an interface for getting the timestamp of the
 	// last successful ping to the telemetry server. For some licenses, sending
@@ -132,6 +136,19 @@ func (e *Enforcer) SetTelemetryStatusReporter(reporter TelemetryStatusReporter) 
 	e.telemetryStatusReporter = reporter
 }
 
+// SetTesting Knobs will set the pointer to the testing knobs.
+func (e *Enforcer) SetTestingKnobs(k *TestingKnobs) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.mu.testingKnobs = k
+}
+
+func (e *Enforcer) GetTestingKnobs() *TestingKnobs {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.mu.testingKnobs
+}
+
 // Start will load the necessary metadata for the enforcer. It reads from the
 // KV license metadata and will populate any missing data as needed. The DB
 // passed in must have access to the system tenant.
@@ -146,7 +163,7 @@ func (e *Enforcer) Start(
 
 	// Writing the grace period initialization timestamp is currently opt-in. See
 	// the EnableGracePeriodInitTSWrite comment for details.
-	if e.TestingKnobs != nil && e.TestingKnobs.EnableGracePeriodInitTSWrite {
+	if tk := e.GetTestingKnobs(); tk != nil && tk.EnableGracePeriodInitTSWrite {
 		return e.maybeWriteClusterInitGracePeriodTS(ctx, db, initialStart)
 	}
 	return nil
@@ -313,8 +330,8 @@ func (e *Enforcer) Disable(ctx context.Context) {
 // getStartTime returns the time when the enforcer was created. This accounts
 // for testing knobs that may override the time.
 func (e *Enforcer) getStartTime() time.Time {
-	if e.TestingKnobs != nil && e.TestingKnobs.OverrideStartTime != nil {
-		return *e.TestingKnobs.OverrideStartTime
+	if tk := e.GetTestingKnobs(); tk != nil && tk.OverrideStartTime != nil {
+		return *tk.OverrideStartTime
 	}
 	return e.startTime
 }
@@ -322,8 +339,8 @@ func (e *Enforcer) getStartTime() time.Time {
 // getThrottleCheckTS returns the time to use when checking if we should
 // throttle the new transaction.
 func (e *Enforcer) getThrottleCheckTS() time.Time {
-	if e.TestingKnobs != nil && e.TestingKnobs.OverrideThrottleCheckTime != nil {
-		return *e.TestingKnobs.OverrideThrottleCheckTime
+	if tk := e.GetTestingKnobs(); tk != nil && tk.OverrideThrottleCheckTime != nil {
+		return *tk.OverrideThrottleCheckTime
 	}
 	return timeutil.Now()
 }
