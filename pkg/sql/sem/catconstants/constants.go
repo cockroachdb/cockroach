@@ -206,8 +206,11 @@ const (
 	CrdbInternalInheritedRoleMembersTableID
 	CrdbInternalKVSystemPrivilegesViewID
 	CrdbInternalKVFlowControllerID
+	CrdbInternalKVFlowControllerIDV2
 	CrdbInternalKVFlowHandlesID
+	CrdbInternalKVFlowHandlesIDV2
 	CrdbInternalKVFlowTokenDeductions
+	CrdbInternalKVFlowTokenDeductionsV2
 	CrdbInternalRepairableCatalogCorruptionsViewID
 	CrdbInternalKVProtectedTS
 	CrdbInternalKVSessionBasedLeases
