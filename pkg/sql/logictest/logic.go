@@ -1253,26 +1253,30 @@ func (t *logicTest) getOrOpenClient(user string, nodeIdx int, newSession bool) *
 	}
 	pgURL.Path = "test"
 
-	db := t.openDB(pgURL)
-
-	// The default value for extra_float_digits assumed by tests is
-	// 1. However, lib/pq by default configures this to 2 during
-	// connection initialization, so we need to set it back to 1 before
-	// we run anything.
-	if _, err := db.Exec("SET extra_float_digits = 1"); err != nil {
+	// Set some session variables to non-default values in every connection. We do
+	// this via PG URL options rather than SET SQL statements because we need
+	// lib/pq to set these session variables in every new connection created for
+	// the database/sql connection pool.
+	opts, err := url.ParseQuery(pgURL.RawQuery)
+	if err != nil {
 		t.Fatal(err)
 	}
+	// The default value for extra_float_digits assumed by tests is 1. However,
+	// lib/pq by default configures this to 2 during connection initialization, so
+	// we need to set it back to 1 before we run anything.
+	opts.Add("extra_float_digits", "1")
 	// The default setting for index_recommendations_enabled is true. We do not
 	// want to display index recommendations in logic tests, so we disable them
 	// here.
-	if _, err := db.Exec("SET index_recommendations_enabled = false"); err != nil {
-		t.Fatal(err)
-	}
+	opts.Add("index_recommendations_enabled", "false")
+	// Set default transaction isolation if it is not serializable.
 	if iso := t.cfg.EnableDefaultIsolationLevel; iso != 0 {
-		if _, err := db.Exec(fmt.Sprintf("SET default_transaction_isolation = '%s'", iso)); err != nil {
-			t.Fatal(err)
-		}
+		opts.Add("default_transaction_isolation", iso.String())
 	}
+	pgURL.RawQuery = opts.Encode()
+
+	db := t.openDB(pgURL)
+
 	if t.clients == nil {
 		t.clients = make(map[string]map[int]*gosql.DB)
 	}
