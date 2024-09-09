@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -271,6 +272,11 @@ func (c *testRangeController) SetLeaseholderRaftMuLocked(
 
 func (c *testRangeController) CloseRaftMuLocked(ctx context.Context) {
 	fmt.Fprintf(c.b, " RangeController.CloseRaftMuLocked\n")
+}
+
+func (c *testRangeController) Inspect(ctx context.Context) kvflowinspectpb.Handle {
+	fmt.Fprintf(c.b, " RangeController.Inspect\n")
+	return kvflowinspectpb.Handle{}
 }
 
 func TestProcessorBasic(t *testing.T) {

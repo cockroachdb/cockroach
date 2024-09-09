@@ -16,6 +16,8 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
         "//pkg/kv/kvserver/raftlog",
         "//pkg/raft",
         "//pkg/raft/raftpb",
@@ -57,6 +59,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/echotest",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
@@ -68,6 +71,7 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_github_gogo_protobuf//jsonpb",
         "@com_github_stretchr_testify//require",
     ],
 )

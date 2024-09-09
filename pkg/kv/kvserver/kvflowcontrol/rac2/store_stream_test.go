@@ -15,16 +15,20 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -202,4 +206,68 @@ func TestBlockedStreamLogging(t *testing.T) {
 	require.True(t, foundBlockedElastic, "unable to find %v", blocked105ElasticRegexp)
 	require.True(t, foundBlockedRegular, "unable to find %v", blocked105RegularRegexp)
 	require.True(t, foundBlockedStreamSkipped, "unable to find %v", blockedStreamSkippedRegexp)
+}
+
+func TestStreamTokenCounterProviderInspect(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	stream := func(i uint64) kvflowcontrol.Stream {
+		return kvflowcontrol.Stream{
+			TenantID: roachpb.MustMakeTenantID(1),
+			StoreID:  roachpb.StoreID(i),
+		}
+	}
+
+	marshaller := jsonpb.Marshaler{
+		Indent:       "  ",
+		EmitDefaults: true,
+		OrigName:     true,
+	}
+
+	p := NewStreamTokenCounterProvider(
+		cluster.MakeTestingClusterSettings(), hlc.NewClockForTesting(nil))
+
+	var buf strings.Builder
+	defer func() { echotest.Require(t, buf.String(), datapathutils.TestDataPath(t, "stream_inspect")) }()
+
+	record := func(header string) {
+		if buf.Len() > 0 {
+			buf.WriteString("\n\n")
+		}
+		buf.WriteString(fmt.Sprintf("# %s\n", header))
+		for _, state := range p.Inspect(ctx) {
+			marshaled, err := marshaller.MarshalToString(&state)
+			require.NoError(t, err)
+			buf.WriteString(marshaled)
+			buf.WriteString("\n")
+		}
+	}
+
+	record("No streams.")
+
+	p.Eval(stream(1)).Deduct(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */)
+	record("Single stream with 1 MiB of eval regular tokens deducted.")
+
+	p.Send(stream(1)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
+	record("Single stream with 1 MiB of elastic+regular (send+eval) tokens deducted.")
+
+	p.Send(stream(1)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
+	p.Eval(stream(2)).Deduct(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */)
+	p.Eval(stream(3)).Deduct(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */)
+	record("Three streams, with 1 MiB of regular tokens deducted each.")
+
+	p.Send(stream(1)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
+	p.Send(stream(2)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
+	p.Send(stream(3)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
+	record("Three streams, with 1 MiB of elastic send tokens deducted from each.")
+
+	p.Eval(stream(1)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */)
+	p.Eval(stream(2)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */)
+	p.Eval(stream(3)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */)
+	p.Send(stream(1)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
+	p.Send(stream(2)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
+	p.Send(stream(3)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */)
+	record("Three streams, all tokens returned.")
 }
