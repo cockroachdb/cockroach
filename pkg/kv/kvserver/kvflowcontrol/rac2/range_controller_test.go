@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -600,10 +601,22 @@ func (t *testingProbeToCloseTimerScheduler) ScheduleSendStreamCloseRaftMuLocked(
 //     range_id=<range_id>
 //
 //   - metrics: Prints the current state of the eval metrics.
+//
+//   - inspect: Prints the result of an Inspect() call to the RangeController
+//     for a range.
+//     range_id=<range_id>
 func TestRangeController(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+
+	// Used to marshal the output of the Inspect() method into a human-readable
+	// formatted JSON string. See case "inspect" below.
+	marshaller := jsonpb.Marshaler{
+		Indent:       "  ",
+		EmitDefaults: true,
+		OrigName:     true,
+	}
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "range_controller"), func(t *testing.T, path string) {
 		state := &testingRCState{}
@@ -908,6 +921,14 @@ func TestRangeController(t *testing.T) {
 						testingFirst(evalMetrics.Duration[wc].CumulativeSnapshot().Total()))
 				}
 				return buf.String()
+
+			case "inspect":
+				var rangeID int
+				d.ScanArgs(t, "range_id", &rangeID)
+				handle := state.ranges[roachpb.RangeID(rangeID)].rc.InspectRaftMuLocked(ctx)
+				marshaled, err := marshaller.MarshalToString(&handle)
+				require.NoError(t, err)
+				return fmt.Sprintf("%v", marshaled)
 
 			default:
 				panic(fmt.Sprintf("unknown command: %s", d.Cmd))

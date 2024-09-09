@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -79,6 +80,9 @@ type RangeController interface {
 	//
 	// Requires replica.raftMu to be held.
 	CloseRaftMuLocked(ctx context.Context)
+	// InspectRaftMuLocked returns a handle containing the state of the range
+	// controller. It's used to power /inspectz-style debugging pages.
+	InspectRaftMuLocked(ctx context.Context) kvflowinspectpb.Handle
 }
 
 // TODO(pav-kv): This interface a placeholder for the interface containing raft
@@ -451,6 +455,41 @@ func (rc *rangeController) CloseRaftMuLocked(ctx context.Context) {
 	rc.mu.voterSets = nil
 	close(rc.mu.waiterSetRefreshCh)
 	rc.mu.waiterSetRefreshCh = nil
+}
+
+// InspectRaftMuLocked returns a handle containing the state of the range
+// controller. It's used to power /inspectz-style debugging pages.
+//
+// Requires replica.raftMu to be held.
+func (rc *rangeController) InspectRaftMuLocked(ctx context.Context) kvflowinspectpb.Handle {
+	var streams []kvflowinspectpb.ConnectedStream
+	for _, rs := range rc.replicaMap {
+		if rs.sendStream == nil {
+			continue
+		}
+
+		func() {
+			rs.sendStream.mu.Lock()
+			defer rs.sendStream.mu.Unlock()
+			streams = append(streams, kvflowinspectpb.ConnectedStream{
+				Stream:            rc.opts.SSTokenCounter.InspectStream(rs.stream),
+				TrackedDeductions: rs.sendStream.mu.tracker.Inspect(),
+			})
+		}()
+	}
+
+	// Sort the connected streams for determinism, which some tests rely on.
+	slices.SortFunc(streams, func(a, b kvflowinspectpb.ConnectedStream) int {
+		return cmp.Or(
+			cmp.Compare(a.Stream.TenantID.ToUint64(), b.Stream.TenantID.ToUint64()),
+			cmp.Compare(a.Stream.StoreID, b.Stream.StoreID),
+		)
+	})
+
+	return kvflowinspectpb.Handle{
+		RangeID:          rc.opts.RangeID,
+		ConnectedStreams: streams,
+	}
 }
 
 func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaSet) {
