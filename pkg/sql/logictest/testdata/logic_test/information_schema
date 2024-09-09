@@ -442,8 +442,11 @@ crdb_internal       kv_catalog_namespace
 crdb_internal       kv_catalog_zones
 crdb_internal       kv_dropped_relations
 crdb_internal       kv_flow_control_handles
+crdb_internal       kv_flow_control_handles_v2
 crdb_internal       kv_flow_controller
+crdb_internal       kv_flow_controller_v2
 crdb_internal       kv_flow_token_deductions
+crdb_internal       kv_flow_token_deductions_v2
 crdb_internal       kv_inherited_role_members
 crdb_internal       kv_node_liveness
 crdb_internal       kv_node_status
@@ -801,8 +804,11 @@ kv_catalog_namespace
 kv_catalog_zones
 kv_dropped_relations
 kv_flow_control_handles
+kv_flow_control_handles_v2
 kv_flow_controller
+kv_flow_controller_v2
 kv_flow_token_deductions
+kv_flow_token_deductions_v2
 kv_inherited_role_members
 kv_node_liveness
 kv_node_status
@@ -1252,8 +1258,11 @@ system         crdb_internal       kv_catalog_namespace                         
 system         crdb_internal       kv_catalog_zones                             SYSTEM VIEW  NO
 system         crdb_internal       kv_dropped_relations                         SYSTEM VIEW  NO
 system         crdb_internal       kv_flow_control_handles                      SYSTEM VIEW  NO
+system         crdb_internal       kv_flow_control_handles_v2                   SYSTEM VIEW  NO
 system         crdb_internal       kv_flow_controller                           SYSTEM VIEW  NO
+system         crdb_internal       kv_flow_controller_v2                        SYSTEM VIEW  NO
 system         crdb_internal       kv_flow_token_deductions                     SYSTEM VIEW  NO
+system         crdb_internal       kv_flow_token_deductions_v2                  SYSTEM VIEW  NO
 system         crdb_internal       kv_inherited_role_members                    SYSTEM VIEW  NO
 system         crdb_internal       kv_node_liveness                             SYSTEM VIEW  NO
 system         crdb_internal       kv_node_status                               SYSTEM VIEW  NO
@@ -3965,8 +3974,11 @@ NULL     public   system         crdb_internal       kv_catalog_namespace       
 NULL     public   system         crdb_internal       kv_catalog_zones                             SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_dropped_relations                         SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_flow_control_handles                      SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_control_handles_v2                   SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_flow_controller                           SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_controller_v2                        SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_flow_token_deductions                     SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_token_deductions_v2                  SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_inherited_role_members                    SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_liveness                             SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_status                               SELECT          NO            YES
@@ -4684,8 +4696,11 @@ NULL     public   system         crdb_internal       kv_catalog_namespace       
 NULL     public   system         crdb_internal       kv_catalog_zones                             SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_dropped_relations                         SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_flow_control_handles                      SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_control_handles_v2                   SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_flow_controller                           SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_controller_v2                        SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_flow_token_deductions                     SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_token_deductions_v2                  SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_inherited_role_members                    SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_liveness                             SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_status                               SELECT          NO            YES
