@@ -320,12 +320,23 @@ func updateSpecForSelectiveTests(ctx context.Context, specs []registry.TestSpec)
 	// Now, we want to take the tests common to both. These are the tests from which we need to select
 	// "successfulTestsSelectPct" percent tests to run.
 	successfulTests := make([]*testselector.TestDetails, 0)
-	for _, spec := range specs {
-		if td, ok := allTests[spec.Name]; ok && !td.Selected {
+
+	// specsMap contains a map of all the test names that are in specs
+	specsMap := make(map[string]struct{})
+	for _, test := range specs {
+		specsMap[test.Name] = struct{}{}
+	}
+
+	// allTestsMap is maintained to check for the test details while skipping a test
+	allTestsMap := make(map[string]*testselector.TestDetails)
+	for i := 0; i < len(allTests); i++ {
+		td := allTests[i]
+		if _, ok := specsMap[td.Name]; ok && !td.Selected {
 			// adding only the unselected tests that are part of the specs
 			// These are tests that have been running successfully
 			successfulTests = append(successfulTests, td)
 		}
+		allTestsMap[td.Name] = td
 	}
 	// numberOfTestsToSelect is the number of tests to be selected from the successfulTests based on percentage selection
 	numberOfTestsToSelect := int(math.Ceil(float64(len(successfulTests)) * roachtestflags.SuccessfulTestsSelectPct))
@@ -334,13 +345,13 @@ func updateSpecForSelectiveTests(ctx context.Context, specs []registry.TestSpec)
 	}
 	fmt.Printf("%d selected out of %d successful tests.\n", numberOfTestsToSelect, len(successfulTests))
 	for i := range specs {
-		if testShouldBeSkipped(allTests, specs[i], roachtestflags.Suite) {
+		if testShouldBeSkipped(allTestsMap, specs[i], roachtestflags.Suite) {
 			specs[i].Skip = "test selector"
 			specs[i].SkipDetails = "test skipped because it is stable and selective-tests is set."
 		} else {
 			selectedTestsCount++
 		}
-		if td, ok := allTests[specs[i].Name]; ok {
+		if td, ok := allTestsMap[specs[i].Name]; ok {
 			// populate the stats as obtained from the test selector
 			specs[i].SetStats(td.AvgDurationInMillis, td.LastFailureIsPreempt)
 		}

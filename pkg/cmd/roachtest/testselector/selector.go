@@ -81,7 +81,7 @@ func NewDefaultSelectTestsReq(cloud spec.Cloud, suite string) *SelectTestsReq {
 // 3. the test has not been run for a while
 // 4. a subset of the successful tests based on SelectTestReq.SelectFromSuccessPct
 // It returns all the tests. The selected tests have the value TestDetails.Selected as true
-func CategoriseTests(ctx context.Context, req *SelectTestsReq) (map[string]*TestDetails, error) {
+func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, error) {
 	db, err := getConnect(ctx)
 	if err != nil {
 		return nil, err
@@ -115,7 +115,7 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) (map[string]*Test
 		colPointers[i] = &colContainer[i]
 	}
 	// allTestDetails are all the tests that are returned by the snowflake query
-	allTestDetails := make(map[string]*TestDetails)
+	allTestDetails := make([]*TestDetails, 0)
 	for rows.Next() {
 		err = rows.Scan(colPointers...)
 		if err != nil {
@@ -134,7 +134,7 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) (map[string]*Test
 			AvgDurationInMillis:  getDuration(testInfos[2]),
 			LastFailureIsPreempt: testInfos[3] == "yes",
 		}
-		allTestDetails[testDetails.Name] = testDetails
+		allTestDetails = append(allTestDetails, testDetails)
 	}
 	return allTestDetails, nil
 }
