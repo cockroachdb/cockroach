@@ -223,11 +223,13 @@ type rangeController struct {
 	mu struct {
 		syncutil.Mutex
 
-		// State for waiters. When anything in voterSets changes, voterSetRefreshCh
-		// is closed, and replaced with a new channel. The voterSets is
-		// copy-on-write, so waiters make a shallow copy.
-		voterSets         []voterSet
-		voterSetRefreshCh chan struct{}
+		// State for waiters. When anything in voterSets or nonVoterSets changes,
+		// waiterSetRefreshCh is closed, and replaced with a new channel. The
+		// voterSets and nonVoterSets is copy-on-write, so waiters make a shallow
+		// copy.
+		voterSets          []voterSet
+		nonVoterSet        []stateForWaiters
+		waiterSetRefreshCh chan struct{}
 	}
 
 	replicaMap map[roachpb.ReplicaID]*replicaState
@@ -236,9 +238,15 @@ type rangeController struct {
 // voterStateForWaiters informs whether WaitForEval is required to wait for
 // eval-tokens for a voter.
 type voterStateForWaiters struct {
+	stateForWaiters
+	isLeader      bool
+	isLeaseHolder bool
+}
+
+// stateForWaiters informs whether WaitForEval is required to wait for
+// eval-tokens for a replica.
+type stateForWaiters struct {
 	replicaID        roachpb.ReplicaID
-	isLeader         bool
-	isLeaseHolder    bool
 	isStateReplicate bool
 	evalTokenCounter *tokenCounter
 }
@@ -255,9 +263,9 @@ func NewRangeController(
 		leaseholder: init.Leaseholder,
 		replicaMap:  make(map[roachpb.ReplicaID]*replicaState),
 	}
-	rc.mu.voterSetRefreshCh = make(chan struct{})
+	rc.mu.waiterSetRefreshCh = make(chan struct{})
 	rc.updateReplicaSet(ctx, init.ReplicaSet)
-	rc.updateVoterSets()
+	rc.updateWaiterSets()
 	return rc
 }
 
@@ -281,29 +289,28 @@ func (rc *rangeController) WaitForEval(
 	rc.opts.EvalWaitMetrics.OnWaiting(wc)
 	start := rc.opts.Clock.PhysicalTime()
 retry:
-	// Snapshot the voterSets and voterSetRefreshCh.
+	// Snapshot the waiter sets and the refresh channel.
 	rc.mu.Lock()
 	vss := rc.mu.voterSets
-	vssRefreshCh := rc.mu.voterSetRefreshCh
+	nvs := rc.mu.nonVoterSet
+	refreshCh := rc.mu.waiterSetRefreshCh
 	rc.mu.Unlock()
 
-	if vssRefreshCh == nil {
+	if refreshCh == nil {
 		// RangeControllerImpl is closed.
-		// TODO(kvoli): We also need to do this in the replica_rac2.Processor,
-		// which will allow requests to bypass when a replica is not the leader and
-		// therefore the controller is closed.
 		rc.opts.EvalWaitMetrics.OnBypassed(wc, rc.opts.Clock.PhysicalTime().Sub(start))
 		return false, nil
 	}
 	for _, vs := range vss {
 		quorumCount := (len(vs) + 2) / 2
-		haveEvalTokensCount := 0
+		votersHaveEvalTokensCount := 0
 		handles = handles[:0]
 		requiredWait := false
+		// First check the voter set, which participate in quorum.
 		for _, v := range vs {
 			available, handle := v.evalTokenCounter.TokensAvailable(wc)
 			if available {
-				haveEvalTokensCount++
+				votersHaveEvalTokensCount++
 				continue
 			}
 
@@ -318,13 +325,41 @@ retry:
 				requiredWait = true
 			}
 		}
-		remainingForQuorum := quorumCount - haveEvalTokensCount
+		// Next check the non-voter set, which are only required to wait on when
+		// waitForAllReplicateHandles is true.
+		for _, nv := range nvs {
+			if !waitForAllReplicateHandles {
+				// If we don't need to wait for all replicate handles, then we will
+				// never wait the non-voter streams having positive tokens. Break early
+				// to avoid the non-voter handles being added to the handles slice and
+				// therefore counted towards the quorum.
+				break
+			}
+
+			available, handle := nv.evalTokenCounter.TokensAvailable(wc)
+			if available {
+				// NB: We don't count non-voters towards the quorum count, so
+				// votersHaveEvalTokensCount is not incremented.
+				continue
+			}
+			// Don't have eval tokens, and have a handle for the non-voter.
+			handleInfo := tokenWaitingHandleInfo{
+				handle:       handle,
+				requiredWait: waitForAllReplicateHandles && nv.isStateReplicate,
+			}
+			handles = append(handles, handleInfo)
+			if !requiredWait && handleInfo.requiredWait {
+				requiredWait = true
+			}
+		}
+
+		remainingForQuorum := quorumCount - votersHaveEvalTokensCount
 		if remainingForQuorum < 0 {
 			remainingForQuorum = 0
 		}
 		if remainingForQuorum > 0 || requiredWait {
 			var state WaitEndState
-			state, scratch = WaitForEval(ctx, vssRefreshCh, handles, remainingForQuorum, scratch)
+			state, scratch = WaitForEval(ctx, refreshCh, handles, remainingForQuorum, scratch)
 			switch state {
 			case WaitSuccess:
 				continue
@@ -352,7 +387,7 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 	// If there was a quorum change, update the voter sets, triggering the
 	// refresh channel for any requests waiting for eval tokens.
 	if shouldWaitChange {
-		rc.updateVoterSets()
+		rc.updateWaiterSets()
 	}
 
 	// Compute the flow control state for each entry. We do this once here,
@@ -381,7 +416,7 @@ func (rc *rangeController) HandleSchedulerEventRaftMuLocked(ctx context.Context)
 // Requires replica.raftMu to be held.
 func (rc *rangeController) SetReplicasRaftMuLocked(ctx context.Context, replicas ReplicaSet) error {
 	rc.updateReplicaSet(ctx, replicas)
-	rc.updateVoterSets()
+	rc.updateWaiterSets()
 	return nil
 }
 
@@ -395,7 +430,7 @@ func (rc *rangeController) SetLeaseholderRaftMuLocked(
 		return
 	}
 	rc.leaseholder = replica
-	rc.updateVoterSets()
+	rc.updateWaiterSets()
 }
 
 // CloseRaftMuLocked closes the range controller.
@@ -406,8 +441,8 @@ func (rc *rangeController) CloseRaftMuLocked(ctx context.Context) {
 	defer rc.mu.Unlock()
 
 	rc.mu.voterSets = nil
-	close(rc.mu.voterSetRefreshCh)
-	rc.mu.voterSetRefreshCh = nil
+	close(rc.mu.waiterSetRefreshCh)
+	rc.mu.waiterSetRefreshCh = nil
 }
 
 func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaSet) {
@@ -432,7 +467,7 @@ func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaS
 	rc.replicaSet = newSet
 }
 
-func (rc *rangeController) updateVoterSets() {
+func (rc *rangeController) updateWaiterSets() {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
@@ -449,23 +484,34 @@ func (rc *rangeController) updateVoterSets() {
 		}
 	}
 	var voterSets []voterSet
+	var nonVoterSet []stateForWaiters
 	for len(voterSets) < setCount {
 		voterSets = append(voterSets, voterSet{})
 	}
 	for _, r := range rc.replicaSet {
 		isOld := r.IsVoterOldConfig()
 		isNew := r.IsVoterNewConfig()
+
+		rs := rc.replicaMap[r.ReplicaID]
+		waiterState := stateForWaiters{
+			replicaID:        r.ReplicaID,
+			isStateReplicate: rs.isStateReplicate(),
+			evalTokenCounter: rs.evalTokenCounter,
+		}
+
+		if r.IsNonVoter() {
+			nonVoterSet = append(nonVoterSet, waiterState)
+		}
+
 		if !isOld && !isNew {
 			continue
 		}
+
 		// Is a voter.
-		rs := rc.replicaMap[r.ReplicaID]
 		vsfw := voterStateForWaiters{
-			replicaID:        r.ReplicaID,
-			isLeader:         r.ReplicaID == rc.opts.LocalReplicaID,
-			isLeaseHolder:    r.ReplicaID == rc.leaseholder,
-			isStateReplicate: rs.isStateReplicate(),
-			evalTokenCounter: rs.evalTokenCounter,
+			stateForWaiters: waiterState,
+			isLeader:        r.ReplicaID == rc.opts.LocalReplicaID,
+			isLeaseHolder:   r.ReplicaID == rc.leaseholder,
 		}
 		if isOld {
 			voterSets[0] = append(voterSets[0], vsfw)
@@ -475,8 +521,9 @@ func (rc *rangeController) updateVoterSets() {
 		}
 	}
 	rc.mu.voterSets = voterSets
-	close(rc.mu.voterSetRefreshCh)
-	rc.mu.voterSetRefreshCh = make(chan struct{})
+	rc.mu.nonVoterSet = nonVoterSet
+	close(rc.mu.waiterSetRefreshCh)
+	rc.mu.waiterSetRefreshCh = make(chan struct{})
 }
 
 type replicaState struct {
