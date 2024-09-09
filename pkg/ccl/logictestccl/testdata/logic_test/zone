@@ -889,6 +889,8 @@ ALTER TABLE auth.t3 CONFIGURE ZONE USING num_replicas = 3
 # Index and rows (partitions) should inherit table permissions
 statement ok
 ALTER INDEX auth.t3@x CONFIGURE ZONE USING num_replicas=5;
+
+statement ok
 ALTER PARTITION p OF INDEX auth.t3@x CONFIGURE ZONE USING num_replicas = 3
 
 # Granting the admin role should allow configuring zones on system tables and
@@ -911,8 +913,12 @@ ALTER TABLE system.jobs CONFIGURE ZONE USING num_replicas = 3
 # zone configuration does not appear in partition p1 of infect@infect_pkey's zone config.
 statement ok
 CREATE TABLE infect (x INT PRIMARY KEY);
-ALTER TABLE infect PARTITION BY LIST (x) ( PARTITION p1 VALUES IN (1));
+ALTER TABLE infect PARTITION BY LIST (x) (PARTITION p1 VALUES IN (1));
+
+statement ok
 ALTER INDEX infect@infect_pkey CONFIGURE ZONE USING num_replicas=5;
+
+statement ok
 ALTER PARTITION p1 OF TABLE infect CONFIGURE ZONE USING constraints='[+dc=dc1]'
 
 query TT
@@ -1073,7 +1079,11 @@ WHERE table_name = 'copy_from_parent' AND index_name = 'primary' AND partition_n
 # check that copy from parent on a subzone doesn't accidentally modify the parent zone.
 statement ok
 CREATE TABLE parent_modify (x INT, INDEX idx (x));
+
+statement ok
 ALTER TABLE parent_modify CONFIGURE ZONE USING gc.ttlseconds = 700;
+
+statement ok
 ALTER INDEX parent_modify@idx CONFIGURE ZONE USING num_replicas = COPY FROM PARENT
 
 query TTT
@@ -1118,8 +1128,14 @@ ALTER INDEX t@i2 PARTITION BY LIST (w) (
 
 statement ok
 ALTER PARTITION p1 OF INDEX t@i1 CONFIGURE ZONE USING gc.ttlseconds = 15210;
+
+statement ok
 ALTER PARTITION p2 OF INDEX t@i1 CONFIGURE ZONE USING gc.ttlseconds = 15213;
+
+statement ok
 ALTER PARTITION p3 OF INDEX t@i2 CONFIGURE ZONE USING gc.ttlseconds = 15411;
+
+statement ok
 ALTER PARTITION p4 OF INDEX t@i2 CONFIGURE ZONE USING gc.ttlseconds = 15418;
 
 statement ok
@@ -1191,6 +1207,8 @@ subtest regression_69647
 statement ok
 CREATE table t_69647(pk INT PRIMARY KEY, i INT);
 CREATE INDEX i_69647 ON t_69647(i);
+
+statement ok
 ALTER TABLE t_69647 CONFIGURE ZONE USING global_reads=true;
 
 query TT
