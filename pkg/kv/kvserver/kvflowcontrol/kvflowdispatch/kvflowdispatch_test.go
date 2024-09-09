@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -236,6 +237,10 @@ func (d dummyHandles) ResetStreams(ctx context.Context) {}
 
 func (d dummyHandles) Inspect() []roachpb.RangeID {
 	return nil
+}
+
+func (d dummyHandles) LookupInspect(id roachpb.RangeID) (kvflowinspectpb.Handle, bool) {
+	return kvflowinspectpb.Handle{}, false
 }
 
 var _ kvflowcontrol.Handles = dummyHandles{}

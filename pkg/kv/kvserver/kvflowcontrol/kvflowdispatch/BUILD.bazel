@@ -30,6 +30,7 @@ go_test(
         "//pkg/base",
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
         "//pkg/roachpb",
         "//pkg/testutils/datapathutils",
         "//pkg/util/admission/admissionpb",
