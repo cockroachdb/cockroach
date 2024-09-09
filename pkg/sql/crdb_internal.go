@@ -218,8 +218,11 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalInheritedRoleMembersTableID:        crdbInternalInheritedRoleMembers,
 		catconstants.CrdbInternalKVSystemPrivilegesViewID:           crdbInternalKVSystemPrivileges,
 		catconstants.CrdbInternalKVFlowHandlesID:                    crdbInternalKVFlowHandles,
+		catconstants.CrdbInternalKVFlowHandlesIDV2:                  crdbInternalKVFlowHandlesV2,
 		catconstants.CrdbInternalKVFlowControllerID:                 crdbInternalKVFlowController,
+		catconstants.CrdbInternalKVFlowControllerIDV2:               crdbInternalKVFlowControllerV2,
 		catconstants.CrdbInternalKVFlowTokenDeductions:              crdbInternalKVFlowTokenDeductions,
+		catconstants.CrdbInternalKVFlowTokenDeductionsV2:            crdbInternalKVFlowTokenDeductionsV2,
 		catconstants.CrdbInternalRepairableCatalogCorruptionsViewID: crdbInternalRepairableCatalogCorruptions,
 		catconstants.CrdbInternalKVProtectedTS:                      crdbInternalKVProtectedTSTable,
 		catconstants.CrdbInternalKVSessionBasedLeases:               crdbInternalSessionBasedLeases,
@@ -8874,6 +8877,45 @@ CREATE TABLE crdb_internal.kv_flow_controller (
 		return nil
 	},
 }
+var crdbInternalKVFlowControllerV2 = virtualSchemaTable{
+	comment: `node-level view of the kv flow controller v2, its active streams and available tokens state`,
+	schema: `
+CREATE TABLE crdb_internal.kv_flow_controller_v2 (
+  tenant_id                     INT NOT NULL,
+  store_id                      INT NOT NULL,
+  available_eval_regular_tokens INT NOT NULL,
+  available_eval_elastic_tokens INT NOT NULL,
+  available_send_regular_tokens INT NOT NULL,
+  available_send_elastic_tokens INT NOT NULL
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		if err != nil {
+			return err
+		}
+		if !hasRoleOption {
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		}
+
+		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowControllerV2(ctx, &kvflowinspectpb.ControllerRequest{})
+		if err != nil {
+			return err
+		}
+		for _, stream := range resp.Streams {
+			if err := addRow(
+				tree.NewDInt(tree.DInt(stream.TenantID.ToUint64())),
+				tree.NewDInt(tree.DInt(stream.StoreID)),
+				tree.NewDInt(tree.DInt(stream.AvailableEvalRegularTokens)),
+				tree.NewDInt(tree.DInt(stream.AvailableEvalElasticTokens)),
+				tree.NewDInt(tree.DInt(stream.AvailableSendRegularTokens)),
+				tree.NewDInt(tree.DInt(stream.AvailableSendElasticTokens)),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
 
 var crdbInternalKVFlowHandles = virtualSchemaTable{
 	comment: `node-level view of active kv flow control handles, their underlying streams, and tracked state`,
@@ -8919,6 +8961,56 @@ CREATE TABLE crdb_internal.kv_flow_control_handles (
 		}
 
 		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowHandles(ctx, &kvflowinspectpb.HandlesRequest{})
+		if err != nil {
+			return err
+		}
+		return populateFlowHandlesResponse(resp, addRow)
+	},
+}
+var crdbInternalKVFlowHandlesV2 = virtualSchemaTable{
+	comment: `node-level view of active kv flow range controllers, their underlying streams, and tracked state`,
+	schema: `
+CREATE TABLE crdb_internal.kv_flow_control_handles_v2 (
+  range_id                 INT NOT NULL,
+  tenant_id                INT NOT NULL,
+  store_id                 INT NOT NULL,
+  total_tracked_tokens     INT NOT NULL,
+  INDEX(range_id)
+);`,
+
+	indexes: []virtualIndex{
+		{
+			populate: func(ctx context.Context, constraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+				if err != nil {
+					return false, err
+				}
+				if !hasRoleOption {
+					return false, noViewActivityOrViewActivityRedactedRoleError(p.User())
+				}
+
+				rangeID := roachpb.RangeID(tree.MustBeDInt(constraint))
+				resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowHandlesV2(
+					ctx, &kvflowinspectpb.HandlesRequest{
+						RangeIDs: []roachpb.RangeID{rangeID},
+					})
+				if err != nil {
+					return false, err
+				}
+				return true, populateFlowHandlesResponse(resp, addRow)
+			},
+		},
+	},
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		if err != nil {
+			return err
+		}
+		if !hasRoleOption {
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		}
+
+		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowHandlesV2(ctx, &kvflowinspectpb.HandlesRequest{})
 		if err != nil {
 			return err
 		}
@@ -8995,6 +9087,60 @@ CREATE TABLE crdb_internal.kv_flow_token_deductions (
 		}
 
 		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowHandles(ctx, &kvflowinspectpb.HandlesRequest{})
+		if err != nil {
+			return err
+		}
+		return populateFlowTokensResponse(resp, addRow)
+	},
+}
+
+var crdbInternalKVFlowTokenDeductionsV2 = virtualSchemaTable{
+	comment: `node-level view of tracked kv flow tokens`,
+	schema: `
+CREATE TABLE crdb_internal.kv_flow_token_deductions_v2 (
+  range_id  INT NOT NULL,
+  tenant_id INT NOT NULL,
+  store_id  INT NOT NULL,
+  priority  STRING NOT NULL,
+  log_term  INT NOT NULL,
+  log_index INT NOT NULL,
+  tokens    INT NOT NULL,
+  INDEX(range_id)
+);`,
+
+	indexes: []virtualIndex{
+		{
+			populate: func(ctx context.Context, constraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+				if err != nil {
+					return false, err
+				}
+				if !hasRoleOption {
+					return false, noViewActivityOrViewActivityRedactedRoleError(p.User())
+				}
+
+				rangeID := roachpb.RangeID(tree.MustBeDInt(constraint))
+				resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowHandlesV2(
+					ctx, &kvflowinspectpb.HandlesRequest{
+						RangeIDs: []roachpb.RangeID{rangeID},
+					})
+				if err != nil {
+					return false, err
+				}
+				return true, populateFlowTokensResponse(resp, addRow)
+			},
+		},
+	},
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		if err != nil {
+			return err
+		}
+		if !hasRoleOption {
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		}
+
+		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowHandlesV2(ctx, &kvflowinspectpb.HandlesRequest{})
 		if err != nil {
 			return err
 		}

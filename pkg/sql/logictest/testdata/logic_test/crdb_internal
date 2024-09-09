@@ -64,8 +64,11 @@ crdb_internal  kv_catalog_namespace                         table  node  NULL  N
 crdb_internal  kv_catalog_zones                             table  node  NULL  NULL
 crdb_internal  kv_dropped_relations                         view   node  NULL  NULL
 crdb_internal  kv_flow_control_handles                      table  node  NULL  NULL
+crdb_internal  kv_flow_control_handles_v2                   table  node  NULL  NULL
 crdb_internal  kv_flow_controller                           table  node  NULL  NULL
+crdb_internal  kv_flow_controller_v2                        table  node  NULL  NULL
 crdb_internal  kv_flow_token_deductions                     table  node  NULL  NULL
+crdb_internal  kv_flow_token_deductions_v2                  table  node  NULL  NULL
 crdb_internal  kv_inherited_role_members                    table  node  NULL  NULL
 crdb_internal  kv_node_liveness                             table  node  NULL  NULL
 crdb_internal  kv_node_status                               table  node  NULL  NULL
