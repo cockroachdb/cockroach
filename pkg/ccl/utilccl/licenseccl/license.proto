@@ -17,7 +17,7 @@ message License {
     int64 valid_until_unix_sec = 2;
 
     enum Type {
-      NonCommercial = 0;
+      NonCommercial = 0 [deprecated = true];
       Enterprise = 1;
       Evaluation = 2;
       Free = 3;
@@ -28,7 +28,7 @@ message License {
 
     string organization_name = 4;
 
-    enum Usage {
+    enum Environment {
       option (gogoproto.goproto_enum_prefix) = false;
       option (gogoproto.goproto_enum_stringer) = false;
 
@@ -38,7 +38,7 @@ message License {
       Development = 3;
     }
 
-    Usage usage = 5;
+    Environment environment = 5;
 
     // Two UUIDs uniquely identify this license and the associated organization.
     // They are stored as bytes to align with the server's typical usage. We
