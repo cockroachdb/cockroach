@@ -1118,7 +1118,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	// When an index exists, but `IF NOT EXISTS` is used, then
 	// the index will not be created and the op will complete without errors.
 	if !(indexExists && def.IfNotExists) {
-		stmt.potentialExecErrors.addAll(codesWithConditions{
+		og.potentialCommitErrors.addAll(codesWithConditions{
 			// If there is data in the table such that a unique index cannot be created,
 			// a pgcode.UniqueViolation will occur and will be wrapped in a
 			// pgcode.TransactionCommittedWithSchemaChangeFailure. The schemachange worker
