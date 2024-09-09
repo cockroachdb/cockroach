@@ -2488,30 +2488,56 @@ func (r *Replica) forgetLeaderLocked(ctx context.Context) {
 // We like it when leases and raft leadership are collocated because that
 // facilitates quick command application (requests generally need to make it to
 // both the lease holder and the raft leader before being applied by other
-// replicas).
+// replicas). Collocation also permits the use of Leader leases, which are more
+// efficient than expiration-based leases.
 func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
-	ctx context.Context, status kvserverpb.LeaseStatus,
+	ctx context.Context, leaseStatus kvserverpb.LeaseStatus,
 ) {
 	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		return
 	}
-	if !r.isRaftLeaderRLocked() { // fast path
-		return
-	}
-	if !status.IsValid() || status.OwnedBy(r.StoreID()) {
-		return
-	}
-	raftStatus := r.raftSparseStatusRLocked()
-	if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
-		return
-	}
-	lhReplicaID := raftpb.PeerID(status.Lease.Replica.ReplicaID)
-	lhProgress, ok := raftStatus.Progress[lhReplicaID]
-	if (ok && lhProgress.Match >= raftStatus.Commit) || r.store.IsDraining() {
+	ok := shouldTransferRaftLeadershipToLeaseholderLocked(
+		r.mu.internalRaftGroup.SparseStatus(), leaseStatus, r.StoreID(), r.store.IsDraining())
+	if ok {
+		lhReplicaID := raftpb.PeerID(leaseStatus.Lease.Replica.ReplicaID)
 		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", lhReplicaID)
 		r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
 		r.mu.internalRaftGroup.TransferLeader(lhReplicaID)
 	}
+}
+
+func shouldTransferRaftLeadershipToLeaseholderLocked(
+	raftStatus raft.SparseStatus,
+	leaseStatus kvserverpb.LeaseStatus,
+	storeID roachpb.StoreID,
+	draining bool,
+) bool {
+	// If we're not the leader, there's nothing to do.
+	if raftStatus.RaftState != raft.StateLeader {
+		return false
+	}
+
+	// The status is invalid or its owned locally, there's nothing to do.
+	// Otherwise, the lease is valid and owned by another store.
+	if !leaseStatus.IsValid() || leaseStatus.OwnedBy(storeID) {
+		return false
+	}
+
+	// If we're draining, begin the transfer regardless of the leaseholder's raft
+	// progress. The leadership transfer itself will still need to wait for the
+	// target replica to catch up on its log before it can tell the target to
+	// campaign, but this ensures that we don't have to wait for another call to
+	// maybeTransferRaftLeadershipToLeaseholderLocked after the target is caught
+	// up before starting the process. See 68577d74.
+	if draining {
+		return true
+	}
+
+	// Otherwise, only transfer if the leaseholder is caught up on the raft log.
+	lhReplicaID := raftpb.PeerID(leaseStatus.Lease.Replica.ReplicaID)
+	lhProgress, ok := raftStatus.Progress[lhReplicaID]
+	lhCaughtUp := ok && lhProgress.Match >= raftStatus.Commit
+	return lhCaughtUp
 }
 
 // a lastUpdateTimesMap is maintained on the Raft leader to keep track of the
