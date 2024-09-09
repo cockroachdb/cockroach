@@ -19,7 +19,7 @@ message License {
     int64 valid_until_unix_sec = 2;
 
     enum Type {
-      NonCommercial = 0;
+      NonCommercial = 0 [deprecated = true];
       Enterprise = 1;
       Evaluation = 2;
       Free = 3;
