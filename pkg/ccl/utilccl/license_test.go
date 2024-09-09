@@ -15,11 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func TestLicense(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	t0 := timeutil.Unix(0, 0)
 	ts := t0.AddDate(40, 0, 0)
 	after := ts.Add(time.Hour * 24)
@@ -101,6 +104,8 @@ func TestLicense(t *testing.T) {
 }
 
 func TestBadLicenseStrings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	for _, tc := range []struct{ lic, err string }{
 		{"blah", "invalid license string"},
 		{"crl-0-&&&&&", "invalid license string"},
@@ -113,6 +118,8 @@ func TestBadLicenseStrings(t *testing.T) {
 }
 
 func TestExpiredLicenseLanguage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	lic := &licenseccl.License{
 		Type:              licenseccl.License_Evaluation,
 		ValidUntilUnixSec: 1,
