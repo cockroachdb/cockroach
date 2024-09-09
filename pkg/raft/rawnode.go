@@ -218,14 +218,6 @@ func (rn *RawNode) SendMsgApp(to pb.PeerID, slice LogSlice) (pb.Message, bool) {
 // The returned Ready struct *must* be handled and subsequently passed back via
 // Advance(), unless async storage writes are enabled.
 func (rn *RawNode) Ready() Ready {
-	rd := rn.readyWithoutAccept()
-	rn.acceptReady(rd)
-	return rd
-}
-
-// readyWithoutAccept returns a Ready. This is a read-only operation, i.e. there
-// is no obligation that the Ready must be handled.
-func (rn *RawNode) readyWithoutAccept() Ready {
 	r := rn.raft
 
 	rd := Ready{
@@ -268,14 +260,8 @@ func (rn *RawNode) readyWithoutAccept() Ready {
 			}
 		}
 	}
+	// Accept the Ready now.
 
-	return rd
-}
-
-// acceptReady is called when the consumer of the RawNode has decided to go
-// ahead and handle a Ready. Nothing must alter the state of the RawNode between
-// this call and the prior call to Ready().
-func (rn *RawNode) acceptReady(rd Ready) {
 	if rd.SoftState != nil {
 		rn.prevSoftSt = rd.SoftState
 	}
@@ -284,30 +270,32 @@ func (rn *RawNode) acceptReady(rd Ready) {
 	}
 	if !rn.asyncStorageWrites {
 		if len(rn.stepsOnAdvance) != 0 {
-			rn.raft.logger.Panicf("two accepted Ready structs without call to Advance")
+			r.logger.Panicf("two accepted Ready structs without call to Advance")
 		}
-		for _, m := range rn.raft.msgsAfterAppend {
-			if m.To == rn.raft.id {
+		for _, m := range r.msgsAfterAppend {
+			if m.To == r.id {
 				rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
 			}
 		}
 		if needStorageAppendRespMsg(rd) {
-			m := newStorageAppendRespMsg(rn.raft, rd)
+			m := newStorageAppendRespMsg(r, rd)
 			rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
 		}
 		if needStorageApplyRespMsg(rd) {
-			m := newStorageApplyRespMsg(rn.raft, rd.CommittedEntries)
+			m := newStorageApplyRespMsg(r, rd.CommittedEntries)
 			rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
 		}
 	}
-	rn.raft.msgs = nil
-	rn.raft.msgsAfterAppend = nil
-	rn.raft.raftLog.acceptUnstable()
+	r.msgs = nil
+	r.msgsAfterAppend = nil
+	r.raftLog.acceptUnstable()
 	if len(rd.CommittedEntries) > 0 {
 		ents := rd.CommittedEntries
 		index := ents[len(ents)-1].Index
-		rn.raft.raftLog.acceptApplying(index, entsSize(ents), rn.applyUnstableEntries())
+		r.raftLog.acceptApplying(index, entsSize(ents), rn.applyUnstableEntries())
 	}
+
+	return rd
 }
 
 // MustSync returns true if the hard state and count of Raft entries indicate
