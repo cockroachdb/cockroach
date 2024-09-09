@@ -14,6 +14,7 @@ import (
 	"crypto/x509"
 	"hash/fnv"
 	"io"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -340,6 +342,7 @@ func makeKafkaSinkV2(
 	settings *cluster.Settings,
 	mb metricsRecorderBuilder,
 	knobs kafkaSinkV2Knobs,
+	netMetrics *cidr.NetMetrics,
 ) (Sink, error) {
 	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonConfig, sinkJSONConfig{
 		// Defaults from the v1 sink - flush immediately.
@@ -353,14 +356,13 @@ func makeKafkaSinkV2(
 	if err != nil {
 		return nil, err
 	}
-
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
 	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)
 	if schemaTopic := u.consumeParam(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
 
-	clientOpts, err := buildKgoConfig(ctx, u, jsonConfig)
+	clientOpts, err := buildKgoConfig(ctx, u, jsonConfig, netMetrics)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +391,10 @@ func makeKafkaSinkV2(
 }
 
 func buildKgoConfig(
-	ctx context.Context, u sinkURL, jsonStr changefeedbase.SinkSpecificJSONConfig,
+	ctx context.Context,
+	u sinkURL,
+	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	netMetrics *cidr.NetMetrics,
 ) ([]kgo.Opt, error) {
 	var opts []kgo.Opt
 
@@ -419,7 +424,9 @@ func buildKgoConfig(
 			}
 			tlsCfg.Certificates = []tls.Certificate{cert}
 		}
-		opts = append(opts, kgo.DialTLSConfig(tlsCfg))
+
+		dialer := &net.Dialer{Timeout: 10 * time.Second}
+		opts = append(opts, kgo.Dialer(netMetrics.WrapTLS(dialer.DialContext, tlsCfg, "kafka_v2")))
 	} else {
 		if dialConfig.caCert != nil {
 			return nil, errors.Errorf(`%s requires %s=true`, changefeedbase.SinkParamCACert, changefeedbase.SinkParamTLSEnabled)
@@ -427,6 +434,8 @@ func buildKgoConfig(
 		if dialConfig.clientCert != nil {
 			return nil, errors.Errorf(`%s requires %s=true`, changefeedbase.SinkParamClientCert, changefeedbase.SinkParamTLSEnabled)
 		}
+		dialer := &net.Dialer{Timeout: 10 * time.Second}
+		opts = append(opts, kgo.Dialer(netMetrics.Wrap(dialer.DialContext, "kafka_v2")))
 	}
 
 	if dialConfig.saslEnabled {

@@ -255,7 +255,9 @@ func getSink(
 				if KafkaV2Enabled.Get(&serverCfg.Settings.SV) {
 					return makeKafkaSinkV2(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(),
 						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
-						serverCfg.Settings, metricsBuilder, kafkaSinkV2Knobs{})
+						serverCfg.Settings, metricsBuilder, kafkaSinkV2Knobs{},
+						m.netMetrics(),
+					)
 				} else {
 					return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), serverCfg.Settings, metricsBuilder)
 				}
