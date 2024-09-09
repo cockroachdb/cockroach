@@ -530,6 +530,7 @@ func TestWaitForEval(t *testing.T) {
 				handleInfo := tokenWaitingHandleInfo{
 					handle:       ts.getOrCreateTC(stream).testingHandle(),
 					requiredWait: required,
+					partOfQuorum: true,
 				}
 				handles = append(handles, handleInfo)
 			}
