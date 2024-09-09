@@ -19,13 +19,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // Enforcer is responsible for enforcing license policies.
 type Enforcer struct {
-	// TestingKnobs are used to control the behavior of the enforcer for testing.
-	TestingKnobs *TestingKnobs
+	mu struct {
+		syncutil.Mutex
+		// testingKnobs are used to control the behavior of the enforcer for testing.
+		testingKnobs *TestingKnobs
+	}
 
 	// gracePeriodInitTS is the timestamp of when the cluster first ran on a
 	// version that requires a license. It is stored as the number of seconds
@@ -71,13 +75,26 @@ func newEnforcer() *Enforcer {
 	}
 }
 
+// SetTesting Knobs will set the pointer to the testing knobs.
+func (e *Enforcer) SetTestingKnobs(k *TestingKnobs) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.mu.testingKnobs = k
+}
+
+func (e *Enforcer) GetTestingKnobs() *TestingKnobs {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.mu.testingKnobs
+}
+
 // Start will load the necessary metadata for the enforcer. It reads from the
 // KV license metadata and will populate any missing data as needed. The DB
 // passed in must have access to the system tenant.
 func (e *Enforcer) Start(ctx context.Context, db isql.DB) error {
 	// Writing the grace period initialization timestamp is currently opt-in. See
 	// the EnableGracePeriodInitTSWrite comment for details.
-	if e.TestingKnobs != nil && e.TestingKnobs.EnableGracePeriodInitTSWrite {
+	if tk := e.GetTestingKnobs(); tk != nil && tk.EnableGracePeriodInitTSWrite {
 		return e.maybeWriteGracePeriodInitTS(ctx, db)
 	}
 	return nil
@@ -124,8 +141,8 @@ func (e *Enforcer) maybeWriteGracePeriodInitTS(ctx context.Context, db isql.DB) 
 // getStartTime returns the time when the enforcer was created. This accounts
 // for testing knobs that may override the time.
 func (e *Enforcer) getStartTime() time.Time {
-	if e.TestingKnobs != nil && e.TestingKnobs.OverrideStartTime != nil {
-		return *e.TestingKnobs.OverrideStartTime
+	if tk := e.GetTestingKnobs(); tk != nil && tk.OverrideStartTime != nil {
+		return *tk.OverrideStartTime
 	}
 	return e.startTime
 }
