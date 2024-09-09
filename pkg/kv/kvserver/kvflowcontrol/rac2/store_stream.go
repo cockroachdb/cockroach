@@ -11,12 +11,15 @@
 package rac2
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -70,6 +73,48 @@ func (p *StreamTokenCounterProvider) Send(stream kvflowcontrol.Stream) *tokenCou
 	t, _ := p.sendCounters.LoadOrStore(stream, newTokenCounter(
 		p.settings, p.clock, p.tokenMetrics.CounterMetrics[flowControlSendMetricType]))
 	return t
+}
+
+func makeInspectStream(
+	stream kvflowcontrol.Stream, evalCounter, sendCounter *tokenCounter,
+) kvflowinspectpb.Stream {
+	evalTokens := evalCounter.tokensPerWorkClass()
+	sendTokens := sendCounter.tokensPerWorkClass()
+	return kvflowinspectpb.Stream{
+		TenantID:                   stream.TenantID,
+		StoreID:                    stream.StoreID,
+		AvailableEvalRegularTokens: int64(evalTokens.regular),
+		AvailableEvalElasticTokens: int64(evalTokens.elastic),
+		AvailableSendRegularTokens: int64(sendTokens.regular),
+		AvailableSendElasticTokens: int64(sendTokens.elastic),
+	}
+}
+
+// InspectStream returns a snapshot of a specific underlying {eval,send} stream
+// and its available {regular,elastic} tokens. It's used to power
+// /inspectz.
+func (p *StreamTokenCounterProvider) InspectStream(
+	stream kvflowcontrol.Stream,
+) kvflowinspectpb.Stream {
+	return makeInspectStream(stream, p.Eval(stream), p.Send(stream))
+}
+
+// Inspect returns a snapshot of all underlying (eval|send) streams and their
+// available {regular,elastic} tokens. It's used to power /inspectz.
+func (p *StreamTokenCounterProvider) Inspect(_ context.Context) []kvflowinspectpb.Stream {
+	var streams []kvflowinspectpb.Stream
+	p.evalCounters.Range(func(stream kvflowcontrol.Stream, eval *tokenCounter) bool {
+		streams = append(streams, makeInspectStream(stream, eval, p.Send(stream)))
+		return true
+	})
+	// Sort the connected streams for determinism, which some tests rely on.
+	slices.SortFunc(streams, func(a, b kvflowinspectpb.Stream) int {
+		return cmp.Or(
+			cmp.Compare(a.TenantID.ToUint64(), b.TenantID.ToUint64()),
+			cmp.Compare(a.StoreID, b.StoreID),
+		)
+	})
+	return streams
 }
 
 // UpdateMetricGauges updates the gauge token metrics and logs blocked streams.

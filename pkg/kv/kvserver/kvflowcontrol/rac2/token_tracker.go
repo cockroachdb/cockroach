@@ -14,6 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -126,4 +128,23 @@ func (t *Tracker) UntrackAll() (returned [raftpb.NumPriorities]kvflowcontrol.Tok
 	t.tracked = [raftpb.NumPriorities][]tracked{}
 
 	return returned
+}
+
+// Inspect returns a snapshot of all tracked token deductions. It's used to
+// power /inspectz-style debugging pages.
+func (t *Tracker) Inspect() []kvflowinspectpb.TrackedDeduction {
+	var res []kvflowinspectpb.TrackedDeduction
+	for pri, deductions := range t.tracked {
+		for _, deduction := range deductions {
+			res = append(res, kvflowinspectpb.TrackedDeduction{
+				Tokens: int64(deduction.tokens),
+				RaftLogPosition: kvflowcontrolpb.RaftLogPosition{
+					Index: deduction.index,
+					Term:  deduction.term,
+				},
+				Priority: int32(RaftToAdmissionPriority(raftpb.Priority(pri))),
+			})
+		}
+	}
+	return res
 }
