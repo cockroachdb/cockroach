@@ -1446,3 +1446,119 @@ vectorized: true
                               columns: (column1, column2)
                               estimated row count: 1
                               label: buffer 1
+
+subtest regression_130334
+
+# Uniqueness constraint checks should not be planned on unique, hash-sharded,
+# partial indexes.
+statement ok
+CREATE TABLE t130334 (
+  a INT,
+  UNIQUE INDEX (a) USING HASH WHERE a IS NOT NULL
+)
+
+query T
+EXPLAIN (VERBOSE)
+INSERT INTO t130334 VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: t130334(a, crdb_internal_a_shard_16, rowid)
+  auto commit
+  size: 5 columns, 1 row
+  row 0, expr 0: 1
+  row 0, expr 1: 11
+  row 0, expr 2: unique_rowid()
+  row 0, expr 3: true
+  row 0, expr 4: true
+
+query T
+EXPLAIN (VERBOSE)
+UPSERT INTO t130334 VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: t130334(a, crdb_internal_a_shard_16, rowid)
+│ auto commit
+│ arbiter indexes: t130334_pkey
+│
+└── • project
+    │ columns: (column1, crdb_internal_a_shard_16_comp, rowid_default, a, crdb_internal_a_shard_16, rowid, column1, crdb_internal_a_shard_16_comp, rowid, check1, partial_index_put1, partial_index_del1)
+    │
+    └── • render
+        │ columns: (partial_index_put1, partial_index_del1, check1, column1, rowid_default, crdb_internal_a_shard_16_comp, a, crdb_internal_a_shard_16, rowid)
+        │ render partial_index_put1: column1 IS NOT NULL
+        │ render partial_index_del1: a IS NOT NULL
+        │ render check1: crdb_internal_a_shard_16_comp IN (0, 1, __more10_100__, 15)
+        │ render column1: column1
+        │ render rowid_default: rowid_default
+        │ render crdb_internal_a_shard_16_comp: crdb_internal_a_shard_16_comp
+        │ render a: a
+        │ render crdb_internal_a_shard_16: crdb_internal_a_shard_16
+        │ render rowid: rowid
+        │
+        └── • render
+            │ columns: (crdb_internal_a_shard_16, column1, rowid_default, crdb_internal_a_shard_16_comp, a, rowid)
+            │ render crdb_internal_a_shard_16: CASE rowid IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 16) END
+            │ render column1: column1
+            │ render rowid_default: rowid_default
+            │ render crdb_internal_a_shard_16_comp: crdb_internal_a_shard_16_comp
+            │ render a: a
+            │ render rowid: rowid
+            │
+            └── • lookup join (left outer)
+                │ columns: (column1, rowid_default, crdb_internal_a_shard_16_comp, a, rowid)
+                │ estimated row count: 1 (missing stats)
+                │ table: t130334@t130334_pkey
+                │ equality: (rowid_default) = (rowid)
+                │ equality cols are key
+                │ locking strength: for update
+                │
+                └── • values
+                      columns: (column1, rowid_default, crdb_internal_a_shard_16_comp)
+                      size: 3 columns, 1 row
+                      row 0, expr 0: 1
+                      row 0, expr 1: unique_rowid()
+                      row 0, expr 2: 11
+
+query T
+EXPLAIN (VERBOSE)
+UPDATE t130334 SET a = 1 WHERE true
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: t130334
+│ set: a, crdb_internal_a_shard_16
+│ auto commit
+│
+└── • render
+    │ columns: (a, crdb_internal_a_shard_16, rowid, a_new, crdb_internal_a_shard_16_comp, check1, partial_index_put1, partial_index_del1)
+    │ render partial_index_put1: true
+    │ render partial_index_del1: a IS NOT NULL
+    │ render check1: true
+    │ render crdb_internal_a_shard_16_comp: 11
+    │ render a_new: 1
+    │ render crdb_internal_a_shard_16: mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 16)
+    │ render a: a
+    │ render rowid: rowid
+    │
+    └── • scan
+          columns: (a, rowid)
+          estimated row count: 1,000 (missing stats)
+          table: t130334@t130334_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+subtest end

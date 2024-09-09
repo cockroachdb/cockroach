@@ -48,7 +48,8 @@ func (mb *mutationBuilder) buildUniqueChecksForInsert() {
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
 		// If this constraint is already enforced by an index, we don't need to plan
 		// a check.
-		if !mb.tab.Unique(i).WithoutIndex() {
+		u := mb.tab.Unique(i)
+		if !u.WithoutIndex() || u.UniquenessGuaranteedByAnotherIndex() {
 			continue
 		}
 		// If this constraint is an arbiter of an INSERT ... ON CONFLICT ... DO
@@ -89,7 +90,8 @@ func (mb *mutationBuilder) buildUniqueChecksForUpdate() {
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
 		// If this constraint is already enforced by an index, we don't need to plan
 		// a check.
-		if !mb.tab.Unique(i).WithoutIndex() {
+		u := mb.tab.Unique(i)
+		if !u.WithoutIndex() || u.UniquenessGuaranteedByAnotherIndex() {
 			continue
 		}
 		// If this constraint doesn't include the updated columns we don't need to
@@ -124,7 +126,8 @@ func (mb *mutationBuilder) buildUniqueChecksForUpsert() {
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
 		// If this constraint is already enforced by an index, we don't need to plan
 		// a check.
-		if !mb.tab.Unique(i).WithoutIndex() {
+		u := mb.tab.Unique(i)
+		if !u.WithoutIndex() || u.UniquenessGuaranteedByAnotherIndex() {
 			continue
 		}
 		// If this constraint is an arbiter of an INSERT ... ON CONFLICT ... DO
@@ -153,7 +156,8 @@ func (mb *mutationBuilder) buildUniqueChecksForUpsert() {
 // UNIQUE WITHOUT INDEX constraints on the table.
 func (mb *mutationBuilder) hasUniqueWithoutIndexConstraints() bool {
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
-		if mb.tab.Unique(i).WithoutIndex() {
+		u := mb.tab.Unique(i)
+		if u.WithoutIndex() && !u.UniquenessGuaranteedByAnotherIndex() {
 			return true
 		}
 	}
