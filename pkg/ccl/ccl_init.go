@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 )
 
 func init() {
@@ -51,6 +52,7 @@ func init() {
 	base.LicenseType = utilccl.GetLicenseType
 	base.UpdateMetricOnLicenseChange = utilccl.UpdateMetricOnLicenseChange
 	server.ApplyTenantLicense = utilccl.ApplyTenantLicense
+	license.RegisterCallbackOnLicenseChange = utilccl.RegisterCallbackOnLicenseChange
 }
 
 // TestingEnableEnterprise allows overriding the license check in tests.
