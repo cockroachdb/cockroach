@@ -33,7 +33,7 @@ func getGssUser(c pgwire.AuthConn) (connClose func(), gssUser string, _ error) {
 		gbuf                            C.gss_buffer_desc
 		contextHandle                   C.gss_ctx_id_t  = C.GSS_C_NO_CONTEXT
 		acceptorCredHandle              C.gss_cred_id_t = C.GSS_C_NO_CREDENTIAL
-		srcName                         C.gss_name_t
+		srcName                         C.gss_name_t    = C.GSS_C_NO_NAME
 		outputToken                     C.gss_buffer_desc
 	)
 
@@ -54,7 +54,9 @@ func getGssUser(c pgwire.AuthConn) (connClose func(), gssUser string, _ error) {
 	//
 	// See https://github.com/postgres/postgres/blob/f4d59369d2ddf0ad7850112752ec42fd115825d4/src/backend/libpq/pqcomm.c#L269
 	connClose = func() {
-		C.gss_delete_sec_context(&lminS, &contextHandle, C.GSS_C_NO_BUFFER)
+		var minorStatus C.OM_uint32
+		C.gss_delete_sec_context(&minorStatus, &contextHandle, C.GSS_C_NO_BUFFER)
+		C.gss_release_name(&minorStatus, &srcName)
 	}
 
 	for {
