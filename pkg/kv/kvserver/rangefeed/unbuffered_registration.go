@@ -394,9 +394,6 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 		ubr.metrics.RangefeedCatachUpBufDrainingNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	ubr.mu.Lock()
-	defer ubr.mu.Unlock()
-
 	// TODO(wenyihu6): check if we can just drain without holding the lock first
 	// during reviews We shouldn't be reading from the buffer at the same time
 	publish := func() error {

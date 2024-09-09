@@ -127,9 +127,10 @@ func NewBufferedSender(
 // SendBuffered buffers the event before sending them to the underlying
 // ServerStreamSender.
 //
-// alloc.Release is nil-safe. SendBuffered will take the ownership of the alloc
-// and release it if the return error is non-nil. Note that it is safe to send
-// error events without being blocked for too long.
+// alloc.Release is nil-safe. SendBuffered will take the ownership of the alloc.
+// It is responsible for using if the return error is nil and releasing the
+// token in the end. Note that it is safe to send error events here without
+// being worried about getting blocked for too long.
 func (bs *BufferedSender) SendBuffered(
 	ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
 ) (err error) {
