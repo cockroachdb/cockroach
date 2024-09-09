@@ -579,6 +579,63 @@ func registerBackup(r registry.Registry) {
 			runBackupMVCCRangeTombstones(ctx, t, c, mvccRangeTombstoneConfig{})
 		},
 	})
+	for _, cloudProvider := range []spec.Cloud{spec.GCE, spec.AWS} {
+		testName := fmt.Sprintf("backup/perf/%s/2TB/%s", cloudProvider, backup2TBSpec)
+		r.Add(registry.TestSpec{
+			Name:                      testName,
+			Owner:                     registry.OwnerDisasterRecovery,
+			Benchmark:                 true,
+			Cluster:                   backup2TBSpec,
+			CompatibleClouds:          registry.Clouds(cloudProvider),
+			Suites:                    registry.Suites(registry.Nightly),
+			TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+			EncryptionSupport:         registry.EncryptionAlwaysDisabled,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				hwSpec := makeHardwareSpecs(hardwareSpecs{
+					nodes:        backup2TBSpec.NodeCount,
+					workloadNode: backup2TBSpec.WorkloadNode,
+					volumeSize:   backup2TBSpec.VolumeSize,
+					mem:          backup2TBSpec.Mem,
+				})
+				workload := tpccRestore{tpccRestoreOptions{warehouses: 7000, waitFraction: 0, workers: 100, maxRate: 300}}
+				workload.init(ctx, t, c, hwSpec)
+				tick, perfBuf := initBulkJobPerfArtifacts(testName, 2*time.Hour)
+
+				m := c.NewMonitor(ctx)
+				m.Go(func(ctx context.Context) error {
+					t.Status(`running backup`)
+					// Tick once before starting the backup, and once after to capture the
+					// total elapsed time. This is used by roachperf to compute and display
+					// the average MB/sec per node.
+					tick()
+					conn := c.Conn(ctx, t.L(), 1)
+					defer conn.Close()
+					var jobID jobspb.JobID
+					uri := `gs://` + backupTestingBucket + `/` + workload.fixtureDir() + `?AUTH=implicit`
+					// Backup the TPCC DB
+					if err := conn.QueryRowContext(ctx, fmt.Sprintf("BACKUP %s INTO '%s' WITH detached", workload.DatabaseName(), uri)).Scan(&jobID); err != nil {
+						return err
+					}
+					if err := AssertReasonableFractionCompleted(ctx, t.L(), c, jobID, 2); err != nil {
+						return err
+					}
+					tick()
+
+					// Upload the perf artifacts to any one of the nodes so that the test
+					// runner copies it into an appropriate directory path.
+					dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
+					if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
+						log.Errorf(ctx, "failed to create perf dir: %+v", err)
+					}
+					if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
+						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+					}
+					return nil
+				})
+				m.Wait()
+			},
+		})
+	}
 }
 
 type mvccRangeTombstoneConfig struct {
