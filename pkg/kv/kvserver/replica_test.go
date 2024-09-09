@@ -11797,6 +11797,98 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 	}
 }
 
+func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type params struct {
+		raftStatus  raft.SparseStatus
+		leaseStatus kvserverpb.LeaseStatus
+		storeID     roachpb.StoreID
+		draining    bool
+	}
+
+	// Set up a base state that we can vary, representing this node n1 being a
+	// leader and n2 being a follower that holds a valid lease and is caught up on
+	// its raft log. We should transfer leadership in this state.
+	const localID = 1
+	const remoteID = 2
+	base := params{
+		raftStatus: raft.SparseStatus{
+			BasicStatus: raft.BasicStatus{
+				SoftState: raft.SoftState{
+					RaftState: raft.StateLeader,
+				},
+				HardState: raftpb.HardState{
+					Lead:   localID,
+					Commit: 10,
+				},
+			},
+			Progress: map[raftpb.PeerID]tracker.Progress{
+				remoteID: {Match: 10},
+			},
+		},
+		leaseStatus: kvserverpb.LeaseStatus{
+			Lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{
+				ReplicaID: remoteID,
+			}},
+			State: kvserverpb.LeaseState_VALID,
+		},
+		storeID:  localID,
+		draining: false,
+	}
+
+	testcases := map[string]struct {
+		expect bool
+		modify func(*params)
+	}{
+		"leader": {
+			true, func(p *params) {},
+		},
+		"follower": {false, func(p *params) {
+			p.raftStatus.SoftState.RaftState = raft.StateFollower
+			p.raftStatus.Lead = remoteID
+		}},
+		"pre-candidate": {false, func(p *params) {
+			p.raftStatus.SoftState.RaftState = raft.StatePreCandidate
+			p.raftStatus.Lead = raft.None
+		}},
+		"candidate": {false, func(p *params) {
+			p.raftStatus.SoftState.RaftState = raft.StateCandidate
+			p.raftStatus.Lead = raft.None
+		}},
+		"invalid lease": {false, func(p *params) {
+			p.leaseStatus.State = kvserverpb.LeaseState_EXPIRED
+		}},
+		"local lease": {false, func(p *params) {
+			p.leaseStatus.Lease.Replica.ReplicaID = localID
+		}},
+		"no progress": {false, func(p *params) {
+			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{}
+		}},
+		"insufficient progress": {false, func(p *params) {
+			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{remoteID: {Match: 9}}
+		}},
+		"no progress, draining": {true, func(p *params) {
+			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{}
+			p.draining = true
+		}},
+		"insufficient progress, draining": {true, func(p *params) {
+			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{remoteID: {Match: 9}}
+			p.draining = true
+		}},
+	}
+
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			p := base
+			tc.modify(&p)
+			require.Equal(t, tc.expect, shouldTransferRaftLeadershipToLeaseholderLocked(
+				p.raftStatus, p.leaseStatus, p.storeID, p.draining))
+		})
+	}
+}
+
 func TestRangeStatsRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
