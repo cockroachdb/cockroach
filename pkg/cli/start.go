@@ -744,8 +744,11 @@ func getDefaultGoMemLimit(ctx context.Context) int64 {
 		log.Ops.Shoutf(
 			ctx, severity.WARNING, "recommended default value of "+
 				"--max-go-memory (%s) was truncated to %s, consider reducing "+
-				"--max-sql-memory and / or --cache",
+				"--max-sql-memory (%s) and / or --cache (%s); total system/cgroup memory: %s.",
 			humanizeutil.IBytes(limit), humanizeutil.IBytes(maxGoMemLimit),
+			humanizeutil.IBytes(serverCfg.MemoryPoolSize),
+			humanizeutil.IBytes(serverCfg.CacheSize),
+			humanizeutil.IBytes(sysMem),
 		)
 		limit = maxGoMemLimit
 	}
