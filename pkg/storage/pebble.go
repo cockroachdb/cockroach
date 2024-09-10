@@ -413,7 +413,10 @@ func checkEngineKey(k []byte) {
 		panic(errors.AssertionFailedf("empty key"))
 	}
 	if int(k[len(k)-1]) >= len(k) {
-		panic(errors.AssertionFailedf("malformed key sentinel byte: %x", k))
+		panic(errors.AssertionFailedf("malformed key terminator byte: %x", k))
+	}
+	if k[len(k)-1] == 1 {
+		panic(errors.AssertionFailedf("invalid key terminator byte 1"))
 	}
 }
 
