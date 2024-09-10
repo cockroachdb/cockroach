@@ -389,7 +389,7 @@ func (rc *rangeController) TickAndReturnFollowerAdmittedProbesRaftMuLocked() []r
 	ids := make([]roachpb.ReplicaID, 0, len(rc.replicaMap))
 	for id, state := range rc.replicaMap {
 		s := state.sendStream
-		if s != nil && s.holdsTokens() {
+		if s != nil && s.shouldPing(time.Now()) {
 			ids = append(ids, id)
 		}
 	}
@@ -542,6 +542,7 @@ type replicaSendStream struct {
 		connectedState      connectedState
 		connectedStateStart time.Time
 		tracker             Tracker
+		lastAdmit           time.Time
 		closed              bool
 	}
 }
@@ -551,16 +552,18 @@ func (rss *replicaSendStream) changeConnectedStateLocked(state connectedState, n
 	rss.mu.connectedStateStart = now
 }
 
-func (rss *replicaSendStream) holdsTokens() bool {
+func (rss *replicaSendStream) shouldPing(now time.Time) bool {
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
-	return !rss.mu.tracker.Empty()
+	return !rss.mu.tracker.Empty() && now.Sub(rss.mu.lastAdmit) > 1*time.Second
 }
 
 func (rss *replicaSendStream) admit(ctx context.Context, av AdmittedVector) {
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
-	rss.returnTokens(ctx, rss.mu.tracker.Untrack(av.Term, av.Admitted))
+	if rss.returnTokens(ctx, rss.mu.tracker.Untrack(av.Term, av.Admitted)) {
+		rss.mu.lastAdmit = time.Now()
+	}
 }
 
 func (rs *replicaState) createReplicaSendStream() {
@@ -782,14 +785,16 @@ func (rss *replicaSendStream) changeToStateSnapshotLocked(ctx context.Context) {
 // the eval and send token counters.
 func (rss *replicaSendStream) returnTokens(
 	ctx context.Context, returned [raftpb.NumPriorities]kvflowcontrol.Tokens,
-) {
+) (updated bool) {
 	for pri, tokens := range returned {
 		if tokens > 0 {
 			pri := WorkClassFromRaftPriority(raftpb.Priority(pri))
 			rss.parent.evalTokenCounter.Return(ctx, pri, tokens)
 			rss.parent.sendTokenCounter.Return(ctx, pri, tokens)
+			updated = true
 		}
 	}
+	return updated
 }
 
 // probeRecentlyReplicateDuration is the duration the controller will wait

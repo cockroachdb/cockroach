@@ -661,13 +661,10 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 }
 
 func (r *raft) sendPing(to pb.PeerID, pr *tracker.Progress) pb.Message {
-	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
-	if pr.ShouldSendMsgApp(last, commit, r.advanceCommitViaMsgAppOnly()) {
-		// We will send a MsgApp soon anyway, so shouldn't ping additionally.
-		return pb.Message{}
-	}
+	commit := r.raftLog.committed
 	prevIndex := pr.Next - 1
 	prevTerm, err := r.raftLog.term(prevIndex)
+	// TODO(pav-kv): eliminate this error, it should never happen.
 	if err != nil {
 		return pb.Message{}
 	}
