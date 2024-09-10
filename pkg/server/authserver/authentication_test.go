@@ -276,55 +276,73 @@ func TestVerifyPasswordDBConsole(t *testing.T) {
 		testName           string
 		username           string
 		password           string
+		invalidCredentials bool
 		shouldAuthenticate bool
 	}{
-		{"valid login", "azure_diamond", "hunter2", true},
-		{"wrong password", "azure_diamond", "hunter", false},
-		{"empty password", "azure_diamond", "", false},
-		{"wrong emoji password", "azure_diamond", "🍦", false},
-		{"correct password with suffix should fail", "azure_diamond", "hunter2345", false},
-		{"correct password with prefix should fail", "azure_diamond", "shunter2", false},
-		{"wrong password all numeric", "azure_diamond", "12345", false},
-		{"wrong password all stars", "azure_diamond", "*******", false},
-		{"valid login numeric password", "druidia", "12345", true},
-		{"wrong password matching other user", "druidia", "hunter2", false},
-		{"root with empty password should fail", "root", "", false},
-		{"empty username and password should fail", "", "", false},
-		{"username does not exist should fail", "doesntexist", "zxcvbn", false},
+		{"valid login", "azure_diamond", "hunter2", false, true},
+		{"wrong password", "azure_diamond", "hunter", true, false},
+		{"empty password", "azure_diamond", "", true, false},
+		{"wrong emoji password", "azure_diamond", "🍦", true, false},
+		{"correct password with suffix should fail", "azure_diamond", "hunter2345", true, false},
+		{"correct password with prefix should fail", "azure_diamond", "shunter2", true, false},
+		{"wrong password all numeric", "azure_diamond", "12345", true, false},
+		{"wrong password all stars", "azure_diamond", "*******", true, false},
+		{"valid login numeric password", "druidia", "12345", false, true},
+		{"wrong password matching other user", "druidia", "hunter2", true, false},
+		{"root with empty password should fail", "root", "", true, false},
+		{"empty username and password should fail", "", "", true, false},
+		{"username does not exist should fail", "doesntexist", "zxcvbn", true, false},
 
-		{"user with NOLOGIN role option should fail", "richardc", "12345", false},
+		{"user with NOLOGIN role option should fail", "richardc", "12345", true, false},
 		// The NOSQLLOGIN cases are the only cases where SQL and DB Console login outcomes differ.
-		{"user with NOSQLLOGIN role option should succeed", "richardc2", "12345", true},
-		{"user with NOSQLLOGIN global privilege should succeed", "has_global_nosqlogin", "12345", true},
-		{"user who inherits NOSQLLOGIN global privilege should succeed", "inherits_global_nosqlogin", "12345", true},
+		{"user with NOSQLLOGIN role option should succeed", "richardc2", "12345", false, true},
+		{"user with NOSQLLOGIN global privilege should succeed", "has_global_nosqlogin", "12345", false, true},
+		{"user who inherits NOSQLLOGIN global privilege should succeed", "inherits_global_nosqlogin", "12345", false, true},
 
-		{"user with VALID UNTIL before the Unix epoch should fail", "before_epoch", "12345", false},
-		{"user with VALID UNTIL at Unix epoch should fail", "epoch", "12345", false},
-		{"user with VALID UNTIL future date should succeed", "cockroach", "12345", true},
-		{"user with VALID UNTIL 10 minutes ago should fail", "toolate", "12345", false},
-		{"user with VALID UNTIL future time in Shanghai time zone should succeed", "timelord", "12345", true},
-		{"user with VALID UNTIL NULL should succeed", "cthon98", "12345", true},
+		{"user with VALID UNTIL before the Unix epoch should fail", "before_epoch", "12345", true, false},
+		{"user with VALID UNTIL at Unix epoch should fail", "epoch", "12345", true, false},
+		{"user with VALID UNTIL future date should succeed", "cockroach", "12345", false, true},
+		{"user with VALID UNTIL 10 minutes ago should fail", "toolate", "12345", true, false},
+		{"user with VALID UNTIL future time in Shanghai time zone should succeed", "timelord", "12345", false, true},
+		{"user with VALID UNTIL NULL should succeed", "cthon98", "12345", false, true},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
 			username := username.MakeSQLUsernameFromPreNormalizedString(tc.username)
 			authServer := ts.HTTPAuthServer().(authserver.Server)
-			valid, expired, err := authServer.VerifyPasswordDBConsole(context.Background(), username, tc.password)
+			verified, pwRetrieveFn, err := authServer.VerifyUserSessionDBConsole(context.Background(), username)
 			if err != nil {
-				t.Errorf(
-					"credentials %s/%s failed with error %s, wanted no error",
+				t.Fatalf(
+					"user session verification failed, credentials %s/%s failed with error %s, wanted no error",
 					tc.username,
 					tc.password,
 					err,
 				)
 			}
-			if valid && !expired != tc.shouldAuthenticate {
-				t.Errorf(
-					"credentials %s/%s valid = %t, wanted %t",
-					tc.username,
-					tc.password,
-					valid,
-					tc.shouldAuthenticate,
-				)
+			if !verified && !tc.invalidCredentials {
+				t.Fatalf("unexpected user %s for DB console login, verified: %t, expected invalid credentials: %t",
+					tc.username, verified, tc.invalidCredentials)
+			} else if verified {
+				valid, expired, err := authServer.VerifyPasswordDBConsole(context.Background(), username, tc.password, pwRetrieveFn)
+				if err != nil {
+					t.Errorf(
+						"credentials %s/%s failed with error %s, wanted no error",
+						tc.username,
+						tc.password,
+						err,
+					)
+				}
+				if !valid && !tc.invalidCredentials {
+					t.Fatalf("unexpected credentials %s/%s for DB console login, valid: %t, expected invalid credentials: %t",
+						tc.username, tc.password, valid, tc.invalidCredentials)
+				} else if valid && !expired != tc.shouldAuthenticate {
+					t.Errorf(
+						"credentials %s/%s valid = %t, wanted %t",
+						tc.username,
+						tc.password,
+						valid,
+						tc.shouldAuthenticate,
+					)
+				}
 			}
 		})
 	}
