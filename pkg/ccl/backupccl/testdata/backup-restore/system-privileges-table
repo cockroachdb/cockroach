@@ -14,15 +14,15 @@ GRANT ALL ON EXTERNAL CONNECTION foo TO testuser2;
 ----
 
 query-sql
-SELECT * FROM system.privileges
+SELECT username, path, privileges, grant_options FROM system.privileges order by username, path
 ----
-root /externalconn/foo {ALL} {} 1
-testuser /global/ {MODIFYCLUSTERSETTING,VIEWACTIVITY} {} 100
-testuser /vtable/crdb_internal/tables {SELECT} {} 100
-testuser2 /externalconn/foo {ALL} {} 101
-testuser2 /global/ {VIEWACTIVITYREDACTED} {} 101
-testuser2 /vtable/crdb_internal/databases {SELECT} {} 101
-testuser2 /vtable/crdb_internal/tables {SELECT} {} 101
+root /externalconn/foo {ALL} {}
+testuser /global/ {MODIFYCLUSTERSETTING,VIEWACTIVITY} {}
+testuser /vtable/crdb_internal/tables {SELECT} {}
+testuser2 /externalconn/foo {ALL} {}
+testuser2 /global/ {VIEWACTIVITYREDACTED} {}
+testuser2 /vtable/crdb_internal/databases {SELECT} {}
+testuser2 /vtable/crdb_internal/tables {SELECT} {}
 
 exec-sql
 BACKUP INTO 'nodelocal://1/test/'
@@ -38,12 +38,12 @@ RESTORE FROM LATEST IN 'nodelocal://1/test/'
 ----
 
 query-sql cluster=s2
-SELECT * FROM system.privileges
+SELECT username, path, privileges, grant_options FROM system.privileges order by username, path
 ----
-root /externalconn/foo {ALL} {} 1
-testuser /global/ {MODIFYCLUSTERSETTING,VIEWACTIVITY} {} 100
-testuser /vtable/crdb_internal/tables {SELECT} {} 100
-testuser2 /externalconn/foo {ALL} {} 101
-testuser2 /global/ {VIEWACTIVITYREDACTED} {} 101
-testuser2 /vtable/crdb_internal/databases {SELECT} {} 101
-testuser2 /vtable/crdb_internal/tables {SELECT} {} 101
+root /externalconn/foo {ALL} {}
+testuser /global/ {MODIFYCLUSTERSETTING,VIEWACTIVITY} {}
+testuser /vtable/crdb_internal/tables {SELECT} {}
+testuser2 /externalconn/foo {ALL} {}
+testuser2 /global/ {VIEWACTIVITYREDACTED} {}
+testuser2 /vtable/crdb_internal/databases {SELECT} {}
+testuser2 /vtable/crdb_internal/tables {SELECT} {}
