@@ -1164,7 +1164,7 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		level, ok := isolation.Level_value[arg.Vals[0]]
 		if !ok {
 			return fmt.Errorf(
-				"invalid isolation level (must be found in %v): %v", isolation.Level_value, arg.Vals[0],
+				"invalid isolation level %q, must be one of %s", arg.Vals[0], isolation.Levels(),
 			)
 		}
 		f.TxnIsoLevel = isolation.Level(level)
