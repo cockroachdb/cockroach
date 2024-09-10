@@ -17,8 +17,10 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -30,7 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/settings/rulebasedscanner"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -124,6 +129,15 @@ func (s *authenticationServer) RegisterGateway(
 	return serverpb.RegisterLogOutHandler(ctx, mux, conn)
 }
 
+// ldapManager is a duplicate of singleton global pgwire object which gets
+// initialized from UserLogin method whenever an LDAP auth attempt happens. It
+// depends on ldapccl module to be imported properly to override its default
+// ConfigureLDAPAuth constructor.
+var ldapManager = struct {
+	sync.Once
+	m pgwire.LDAPManager
+}{}
+
 // UserLogin is part of the Server interface.
 func (s *authenticationServer) UserLogin(
 	ctx context.Context, req *serverpb.UserLoginRequest,
@@ -142,20 +156,54 @@ func (s *authenticationServer) UserLogin(
 	// without further normalization.
 	username, _ := username.MakeSQLUsernameFromUserInput(req.Username, username.PurposeValidation)
 
-	// Verify the provided username/password pair.
-	verified, expired, err := s.VerifyPasswordDBConsole(ctx, username, req.Password)
+	originIP := s.lookupIncomingRequestOriginIP(ctx)
+	hbaConf, identMap := s.sqlServer.PGServer().GetAuthenticationConfiguration()
+
+	authMethod, hbaEntry, err := s.lookupAuthenticationMethodUsingRules(hba.ConnHostSSL, hbaConf, username, originIP)
 	if err != nil {
-		return nil, srverrors.APIInternalError(ctx, err)
-	}
-	if expired {
-		return nil, status.Errorf(
-			codes.Unauthenticated,
-			"the password for %s has expired",
-			username,
-		)
-	}
-	if !verified {
-		return nil, errWebAuthenticationFailure
+		if log.V(1) {
+			log.Infof(ctx, "invalid retrieval of HBA entry: error: %v", err)
+		}
+	} else if authMethod.String() == "ldap" {
+		if log.V(1) {
+			log.Infof(ctx, "retrieved LDAP HBA entry successfully: authMethod: %s, hbaEntry: %v", authMethod.String(), hbaEntry)
+		}
+		execCfg := s.sqlServer.ExecutorConfig()
+		ldapManager.Do(func() {
+			if ldapManager.m == nil {
+				ldapManager.m = pgwire.ConfigureLDAPAuth(ctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
+			}
+		})
+		ldapUserDN, detailedErrors, authError := ldapManager.m.FetchLDAPUserDN(ctx, execCfg.Settings, username, hbaEntry, identMap)
+		if log.V(1) {
+			log.Infof(ctx, "ldap search response error: ldapUserDN %v, authError %v, detailedErrors %v", ldapUserDN, authError, detailedErrors)
+		}
+		if authError != nil {
+			return nil, status.Errorf(codes.Unauthenticated, "ldap user DN does not exist for user %s", username)
+		}
+		detailedErrors, authError = ldapManager.m.ValidateLDAPLogin(ctx, execCfg.Settings, ldapUserDN, username, req.Password, hbaEntry, identMap)
+		if log.V(1) {
+			log.Infof(ctx, "ldap bind response error: ldapUserDN %v, authError %v, detailedErrors %v", ldapUserDN, authError, detailedErrors)
+		}
+		if authError != nil {
+			return nil, status.Errorf(codes.Unauthenticated, "ldap user password is incorrect for user %s", username)
+		}
+	} else {
+		// Verify the provided username/password pair.
+		verified, expired, err := s.VerifyPasswordDBConsole(ctx, username, req.Password)
+		if err != nil {
+			return nil, srverrors.APIInternalError(ctx, err)
+		}
+		if expired {
+			return nil, status.Errorf(
+				codes.Unauthenticated,
+				"the password for %s has expired",
+				username,
+			)
+		}
+		if !verified {
+			return nil, errWebAuthenticationFailure
+		}
 	}
 
 	cookie, err := s.createSessionFor(ctx, username)
@@ -440,6 +488,55 @@ func (s *authenticationServer) VerifyPasswordDBConsole(
 			passwordStr, hashedPassword)
 	}
 	return ok, false, err
+}
+
+// lookupIncomingRequestOriginIP looks up the client IP address from the context
+// metadata, specifically looking for the `x-forwarded-for` tag.
+//
+// TODO(souravcrl): update the implementation to use managed-service util
+// `GetPublicPeerIP` for handling this.
+// https://github.com/cockroachlabs/managed-service/blob/450666a6d34fe942560f93ff8f89091d00fd61fd/pkg/utils/grpc.go#L119
+func (s *authenticationServer) lookupIncomingRequestOriginIP(ctx context.Context) net.IP {
+	const XForwardedFor = "x-forwarded-for"
+	const Localhost = "127.0.0.1"
+	clientIP := Localhost
+	if reqMetadata, ok := metadata.FromIncomingContext(ctx); ok {
+		if xForwardedFor, ok := reqMetadata[XForwardedFor]; ok && len(xForwardedFor) == 1 {
+			clientIP = xForwardedFor[0]
+		}
+	}
+	return net.ParseIP(clientIP)
+}
+
+func (s *authenticationServer) lookupAuthenticationMethodUsingRules(
+	connType hba.ConnType, auth *hba.Conf, user username.SQLUsername, originIP net.IP,
+) (authMethod rulebasedscanner.String, entry *hba.Entry, err error) {
+	// Look up the method.
+	for i := range auth.Entries {
+		entry = &auth.Entries[i]
+		var connMatch bool
+		connMatch, err = entry.ConnMatches(connType, originIP)
+		if err != nil {
+			// TODO(souravcrl): Determine if an error should be reported
+			// upon unknown address formats.
+			// See: https://github.com/cockroachdb/cockroach/issues/43716
+			return
+		}
+		if !connMatch {
+			// The address does not match.
+			continue
+		}
+		if !entry.UserMatches(user) {
+			// The user does not match.
+			continue
+		}
+
+		return entry.Method, entry, nil
+	}
+
+	// No match.
+	err = errors.Errorf("no hba_conf entry for host %q, user %q", originIP, user)
+	return rulebasedscanner.String{}, nil, err
 }
 
 // CreateAuthSecret creates a secret, hash pair to populate a session auth token.
