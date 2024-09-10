@@ -308,23 +308,34 @@ func TestVerifyPasswordDBConsole(t *testing.T) {
 		t.Run(tc.testName, func(t *testing.T) {
 			username := username.MakeSQLUsernameFromPreNormalizedString(tc.username)
 			authServer := ts.HTTPAuthServer().(authserver.Server)
-			valid, expired, err := authServer.VerifyPasswordDBConsole(context.Background(), username, tc.password)
+			valid, pwRetrieveFn, err := authServer.VerifyUserSessionDBConsole(context.Background(), username)
 			if err != nil {
-				t.Errorf(
-					"credentials %s/%s failed with error %s, wanted no error",
+				t.Fatalf(
+					"user session verification failed, credentials %s/%s failed with error %s, wanted no error",
 					tc.username,
 					tc.password,
 					err,
 				)
 			}
-			if valid && !expired != tc.shouldAuthenticate {
-				t.Errorf(
-					"credentials %s/%s valid = %t, wanted %t",
-					tc.username,
-					tc.password,
-					valid,
-					tc.shouldAuthenticate,
-				)
+			if valid {
+				valid, expired, err := authServer.VerifyPasswordDBConsole(context.Background(), username, tc.password, pwRetrieveFn)
+				if err != nil {
+					t.Errorf(
+						"credentials %s/%s failed with error %s, wanted no error",
+						tc.username,
+						tc.password,
+						err,
+					)
+				}
+				if valid && !expired != tc.shouldAuthenticate {
+					t.Errorf(
+						"credentials %s/%s valid = %t, wanted %t",
+						tc.username,
+						tc.password,
+						valid,
+						tc.shouldAuthenticate,
+					)
+				}
 			}
 		})
 	}
