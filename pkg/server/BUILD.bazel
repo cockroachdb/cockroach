@@ -527,6 +527,7 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/insights",
         "//pkg/storage",
         "//pkg/storage/disk",
         "//pkg/storage/fs",
