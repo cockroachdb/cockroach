@@ -526,6 +526,9 @@ message LocalOnlySessionData {
   // PlanCacheMode indicates the method that the optimizer should use to choose
   // between a custom and generic query plan.
   PlanCacheMode plan_cache_mode = 133;
+  // OptimizerPushLimitIntoProjectFilteredScan, when true, indicates that the
+  // optimizer should push limit expressions into projects of filtered scans.
+  bool optimizer_push_limit_into_project_filtered_scan = 139;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

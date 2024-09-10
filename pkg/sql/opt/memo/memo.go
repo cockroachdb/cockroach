@@ -199,6 +199,7 @@ type Memo struct {
 	useImprovedMultiColumnSelectivityEstimate  bool
 	proveImplicationWithVirtualComputedCols    bool
 	pushOffsetIntoIndexJoin                    bool
+	pushLimitIntoProjectFilteredScan           bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -284,6 +285,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useImprovedMultiColumnSelectivityEstimate:  evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate,
 		proveImplicationWithVirtualComputedCols:    evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns,
 		pushOffsetIntoIndexJoin:                    evalCtx.SessionData().OptimizerPushOffsetIntoIndexJoin,
+		pushLimitIntoProjectFilteredScan:           evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -447,6 +449,7 @@ func (m *Memo) IsStale(
 		m.useImprovedMultiColumnSelectivityEstimate != evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate ||
 		m.proveImplicationWithVirtualComputedCols != evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns ||
 		m.pushOffsetIntoIndexJoin != evalCtx.SessionData().OptimizerPushOffsetIntoIndexJoin ||
+		m.pushLimitIntoProjectFilteredScan != evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
