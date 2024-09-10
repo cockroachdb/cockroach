@@ -239,7 +239,6 @@ func (s *testingRCState) getOrInitRange(r testingRange) *testingRCRange {
 			RaftInterface:       testRC,
 			Clock:               s.clock,
 			CloseTimerScheduler: s.probeToCloseScheduler,
-			AdmittedTracker:     testRC,
 			EvalWaitMetrics:     s.evalMetrics,
 		}
 
@@ -282,17 +281,6 @@ func (r *testingRCRange) FollowerStateRaftMuLocked(replicaID roachpb.ReplicaID) 
 		return FollowerStateInfo{}
 	}
 	return replica.info
-}
-
-func (r *testingRCRange) GetAdmitted(replicaID roachpb.ReplicaID) AdmittedVector {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	replica, ok := r.mu.r.replicaSet[replicaID]
-	if !ok {
-		return AdmittedVector{}
-	}
-	return replica.av
 }
 
 func (r *testingRCRange) startWaitForEval(name string, pri admissionpb.WorkPriority) {
@@ -350,7 +338,6 @@ const invalidTrackerState = tracker.StateSnapshot + 1
 type testingReplica struct {
 	desc roachpb.ReplicaDescriptor
 	info FollowerStateInfo
-	av   AdmittedVector
 }
 
 func scanRanges(t *testing.T, input string) []testingRange {
