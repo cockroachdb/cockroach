@@ -723,9 +723,6 @@ func (rss *replicaState) closeSendStream(ctx context.Context) {
 func (rss *replicaSendStream) makeConsistentInStateReplicate(
 	ctx context.Context,
 ) (shouldWaitChange bool) {
-	av := rss.parent.parent.opts.AdmittedTracker.GetAdmitted(rss.parent.desc.ReplicaID)
-	rss.admit(ctx, av)
-
 	// The leader is always in state replicate.
 	if rss.parent.parent.opts.LocalReplicaID == rss.parent.desc.ReplicaID {
 		if rss.mu.connectedState != replicate {

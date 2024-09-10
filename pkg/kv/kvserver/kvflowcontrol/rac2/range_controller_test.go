@@ -319,29 +319,15 @@ func (r *testingRCRange) startWaitForEval(name string, pri admissionpb.WorkPrior
 	}()
 }
 
-func (r *testingRCRange) admit(
-	ctx context.Context,
-	t *testing.T,
-	storeID roachpb.StoreID,
-	term uint64,
-	toIndex uint64,
-	pri admissionpb.WorkPriority,
-) {
+func (r *testingRCRange) admit(ctx context.Context, storeID roachpb.StoreID, av AdmittedVector) {
 	r.mu.Lock()
-
+	defer r.mu.Unlock()
 	for _, replica := range r.mu.r.replicaSet {
 		if replica.desc.StoreID == storeID {
-			replica := replica
-			replica.av.Admitted[AdmissionToRaftPriority(pri)] = toIndex
-			replica.av.Term = term
-			r.mu.r.replicaSet[replica.desc.ReplicaID] = replica
-			break
+			r.rc.AdmitRaftMuLocked(ctx, replica.desc.ReplicaID, av)
+			return
 		}
 	}
-
-	r.mu.Unlock()
-	// Send an empty raft event in order to trigger potential token return.
-	require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, RaftEvent{}))
 }
 
 type testingRange struct {
@@ -825,7 +811,10 @@ func TestRangeController(t *testing.T) {
 						require.True(t, strings.HasPrefix(parts[3], "pri="))
 						parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "pri=")
 						pri := parsePriority(t, parts[3])
-						state.ranges[lastRangeID].admit(ctx, t, roachpb.StoreID(storeID), uint64(term), uint64(to_index), pri)
+
+						av := AdmittedVector{Term: uint64(term)}
+						av.Admitted[AdmissionToRaftPriority(pri)] = uint64(to_index)
+						state.ranges[lastRangeID].admit(ctx, roachpb.StoreID(storeID), av)
 					}
 				}
 				return state.tokenCountsString()
