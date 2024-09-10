@@ -104,11 +104,6 @@ type testRaftNode struct {
 	nextUnstableIndex uint64
 }
 
-func (rn *testRaftNode) EnablePingForAdmittedLaggingLocked() {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.EnablePingForAdmittedLaggingLocked\n")
-}
-
 func (rn *testRaftNode) TermLocked() uint64 {
 	rn.r.mu.AssertHeld()
 	fmt.Fprintf(rn.b, " RaftNode.TermLocked() = %d\n", rn.term)
@@ -131,12 +126,6 @@ func (rn *testRaftNode) NextUnstableIndexLocked() uint64 {
 	rn.r.mu.AssertHeld()
 	fmt.Fprintf(rn.b, " RaftNode.NextUnstableIndexLocked() = %d\n", rn.nextUnstableIndex)
 	return rn.nextUnstableIndex
-}
-
-func (rn *testRaftNode) StepMsgAppRespForAdmittedLocked(msg raftpb.Message) error {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.StepMsgAppRespForAdmittedLocked(%s)\n", msgString(msg))
-	return nil
 }
 
 func (rn *testRaftNode) FollowerStateRaftMuLocked(
