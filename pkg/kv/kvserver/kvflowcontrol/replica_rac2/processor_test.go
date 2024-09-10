@@ -128,6 +128,10 @@ func (rn *testRaftNode) NextUnstableIndexLocked() uint64 {
 	return rn.nextUnstableIndex
 }
 
+func (rn *testRaftNode) GetMsgAppPingLocked(id roachpb.ReplicaID) raftpb.Message {
+	return raftpb.Message{}
+}
+
 func (rn *testRaftNode) FollowerStateRaftMuLocked(
 	replicaID roachpb.ReplicaID,
 ) rac2.FollowerStateInfo {
@@ -242,6 +246,10 @@ func (c *testRangeController) AdmitRaftMuLocked(
 	_ context.Context, replicaID roachpb.ReplicaID, av rac2.AdmittedVector,
 ) {
 	fmt.Fprintf(c.b, " RangeController.AdmitRaftMuLocked(%s, %+v)\n", replicaID, av)
+}
+
+func (c *testRangeController) TickAndReturnFollowerAdmittedProbesRaftMuLocked() []roachpb.ReplicaID {
+	return nil
 }
 
 func (c *testRangeController) SetReplicasRaftMuLocked(

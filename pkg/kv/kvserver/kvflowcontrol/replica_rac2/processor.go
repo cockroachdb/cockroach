@@ -108,6 +108,9 @@ type RaftNode interface {
 	// NB: NextUnstableIndex can regress when the node accepts appends or
 	// snapshots from a newer leader.
 	NextUnstableIndexLocked() uint64
+	// GetMsgAppPingLocked returns a MsgAppPing if one can be sent. A non-empty
+	// message is returned only if the raft's internal flow control is idle.
+	GetMsgAppPingLocked(roachpb.ReplicaID) raftpb.Message
 }
 
 // AdmittedPiggybacker is used to enqueue admitted vector messages addressed to
@@ -396,6 +399,11 @@ type Processor interface {
 	//
 	// raftMu is held.
 	AdmitRaftMuLocked(context.Context, roachpb.ReplicaID, rac2.AdmittedVector)
+
+	// TickAndReturnFollowerAdmittedProbesRaftMuLocked returns some probes to be
+	// sent to followers for whom we still hold tokens. A message is sent to a
+	// follower only if a MsgApp wouldn't otherwise be sent soon anyway.
+	TickAndReturnFollowerAdmittedProbesRaftMuLocked() []raftpb.Message
 
 	// AdmitForEval is called to admit work that wants to evaluate at the
 	// leaseholder.
@@ -978,6 +986,26 @@ func (p *processorImpl) AdmitRaftMuLocked(
 	if rc := p.mu.leader.rc; rc != nil {
 		rc.AdmitRaftMuLocked(ctx, replicaID, av)
 	}
+}
+
+func (p *processorImpl) TickAndReturnFollowerAdmittedProbesRaftMuLocked() []raftpb.Message {
+	p.opts.Replica.RaftMuAssertHeld()
+	// NB: rc is only updated while holding raftMu.
+	rc := p.mu.leader.rc
+	if rc == nil {
+		return nil
+	}
+	ids := rc.TickAndReturnFollowerAdmittedProbesRaftMuLocked()
+	// TODO(pav-kv): avoid the allocation.
+	ms := make([]raftpb.Message, 0, len(ids))
+	for _, id := range ids {
+		msg := p.raftMu.raftNode.GetMsgAppPingLocked(id)
+		if msg.Term == 0 { // the message is empty
+			continue
+		}
+		ms = append(ms, msg)
+	}
+	return ms
 }
 
 // AdmitForEval implements Processor.

@@ -66,6 +66,8 @@ type RangeController interface {
 	//
 	// Requires replica.raftMu to be held.
 	AdmitRaftMuLocked(context.Context, roachpb.ReplicaID, AdmittedVector)
+	// TickAndReturnFollowerAdmittedProbesRaftMuLocked does blah. FIXME
+	TickAndReturnFollowerAdmittedProbesRaftMuLocked() []roachpb.ReplicaID
 	// SetReplicasRaftMuLocked sets the replicas of the range. The caller will
 	// never mutate replicas, and neither should the callee.
 	//
@@ -382,6 +384,18 @@ func (rc *rangeController) AdmitRaftMuLocked(
 	}
 }
 
+func (rc *rangeController) TickAndReturnFollowerAdmittedProbesRaftMuLocked() []roachpb.ReplicaID {
+	// TODO(pav-kv): avoid the allocation.
+	ids := make([]roachpb.ReplicaID, 0, len(rc.replicaMap))
+	for id, state := range rc.replicaMap {
+		s := state.sendStream
+		if s != nil && s.holdsTokens() {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
 // SetReplicasRaftMuLocked sets the replicas of the range. The caller will
 // never mutate replicas, and neither should the callee.
 //
@@ -535,6 +549,12 @@ type replicaSendStream struct {
 func (rss *replicaSendStream) changeConnectedStateLocked(state connectedState, now time.Time) {
 	rss.mu.connectedState = state
 	rss.mu.connectedStateStart = now
+}
+
+func (rss *replicaSendStream) holdsTokens() bool {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+	return !rss.mu.tracker.Empty()
 }
 
 func (rss *replicaSendStream) admit(ctx context.Context, av AdmittedVector) {

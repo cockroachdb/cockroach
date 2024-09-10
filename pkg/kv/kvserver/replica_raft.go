@@ -1341,6 +1341,14 @@ func (r *Replica) tick(
 ) (bool, error) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
+
+	r.sendRaftMessages(
+		ctx,
+		r.flowControlV2.TickAndReturnFollowerAdmittedProbesRaftMuLocked(),
+		nil,  /* blocked */
+		true, /* willDeliverLocal */
+	)
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

@@ -43,6 +43,19 @@ func (dt *Tracker) Init(stream kvflowcontrol.Stream) {
 	}
 }
 
+func (t *Tracker) Empty() bool {
+	// TODO(pav-kv): can optimize this loop out if needed. We can maintain the
+	// total number of tokens held, and return whether it's zero. It's also
+	// possible to make it atomic and avoid locking the mutex in replicaSendStream
+	// when calling this.
+	for pri := range t.tracked {
+		if len(t.tracked[pri]) != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // Track token deductions of the given priority with the given raft log index and term.
 func (t *Tracker) Track(
 	ctx context.Context, term uint64, index uint64, pri raftpb.Priority, tokens kvflowcontrol.Tokens,

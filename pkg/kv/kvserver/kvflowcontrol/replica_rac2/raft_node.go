@@ -43,6 +43,10 @@ func (rn raftNodeForRACv2) NextUnstableIndexLocked() uint64 {
 	return rn.NextUnstableIndex()
 }
 
+func (rn raftNodeForRACv2) GetMsgAppPingLocked(id roachpb.ReplicaID) raftpb.Message {
+	return rn.GetMsgAppPing(raftpb.PeerID(id))
+}
+
 func (rn raftNodeForRACv2) FollowerStateRaftMuLocked(
 	replicaID roachpb.ReplicaID,
 ) rac2.FollowerStateInfo {

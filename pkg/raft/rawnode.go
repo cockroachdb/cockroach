@@ -481,6 +481,17 @@ func (rn *RawNode) NextUnstableIndex() uint64 {
 	return rn.raft.raftLog.unstable.entryInProgress + 1
 }
 
+func (rn *RawNode) GetMsgAppPing(id pb.PeerID) pb.Message {
+	if rn.raft.state != StateLeader {
+		return pb.Message{}
+	}
+	pr := rn.raft.trk.Progress(id)
+	if pr == nil {
+		return pb.Message{}
+	}
+	return rn.raft.sendPing(id, pr)
+}
+
 // Status returns the current status of the given group. This allocates, see
 // SparseStatus, BasicStatus and WithProgress for allocation-friendlier choices.
 func (rn *RawNode) Status() Status {
