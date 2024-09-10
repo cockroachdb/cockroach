@@ -660,6 +660,28 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 	return true
 }
 
+func (r *raft) sendPing(to pb.PeerID, pr *tracker.Progress) pb.Message {
+	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
+	if pr.ShouldSendMsgApp(last, commit, r.advanceCommitViaMsgAppOnly()) {
+		// We will send a MsgApp soon anyway, so shouldn't ping additionally.
+		return pb.Message{}
+	}
+	prevIndex := pr.Next - 1
+	prevTerm, err := r.raftLog.term(prevIndex)
+	if err != nil {
+		return pb.Message{}
+	}
+	pr.MaybeUpdateSentCommit(commit)
+	return pb.Message{
+		To:      to,
+		Type:    pb.MsgApp,
+		Index:   prevIndex,
+		LogTerm: prevTerm,
+		Commit:  commit,
+		Match:   pr.Match,
+	}
+}
+
 // maybeSendSnapshot fetches a snapshot from Storage, and sends it to the given
 // node. Returns true iff the snapshot message has been emitted successfully.
 func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
