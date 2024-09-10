@@ -80,6 +80,26 @@ func (av AdmittedVector) SafeFormat(w redact.SafePrinter, _ rune) {
 // write/sync means that all writes made under lower terms, or same term and
 // lower log indices, have been completed. A similar guarantee comes for
 // admissions at each priority.
+//
+// For admissions, we've chosen to track individual indices instead of the
+// latest index, to allow the system to self correct under inconsistencies
+// between the sender (leader) and receiver (replica). For instance, consider
+// the case that the sender was tracking indices (3, 5, 8) under a certain
+// priority, while the receiver only tracked (3, 8). When 3 is admitted at the
+// receiver, the admitted index can advance to 7, allowing 5 to be considered
+// admitted at the leader. In comparison, if we only tracked the latest index 8,
+// then when 3 was admitted, we could only advance the admitted index to 3.
+//
+// A secondary reason to track individual indices is that it naturally allows
+// the admitted index to advance to stable index without lag in the case where
+// there is continuous traffic, but sparseness of indices for a priority. For
+// example, if we have indices (10, 20, 30, 40, ...) coming in at high priority,
+// and entries are getting admitted with some lag, then when stable=25 and entry
+// 20 is admitted, we can advance the admitted index to 25, and not wait for 30
+// to be admitted too.
+//
+// We can revisit the decision to track individual indices if we find the memory
+// or compute overhead to be significant.
 type LogTracker struct {
 	// last is the latest log mark observed by the tracker.
 	last LogMark
