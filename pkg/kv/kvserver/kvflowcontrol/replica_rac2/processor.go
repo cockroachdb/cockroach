@@ -180,11 +180,10 @@ type rangeControllerInitState struct {
 	// These fields are required options for the RangeController specific to the
 	// replica and range, rather than the store or node, so we pass them as part
 	// of the range controller init state.
-	rangeID         roachpb.RangeID
-	tenantID        roachpb.TenantID
-	localReplicaID  roachpb.ReplicaID
-	raftInterface   rac2.RaftInterface
-	admittedTracker rac2.AdmittedTracker
+	rangeID        roachpb.RangeID
+	tenantID       roachpb.TenantID
+	localReplicaID roachpb.ReplicaID
+	raftInterface  rac2.RaftInterface
 }
 
 // RangeControllerFactory abstracts RangeController creation for testing.
@@ -483,8 +482,6 @@ type processorImpl struct {
 
 var _ Processor = &processorImpl{}
 
-var _ rac2.AdmittedTracker = &processorImpl{}
-
 func NewProcessor(opts ProcessorOptions) Processor {
 	p := &processorImpl{opts: opts}
 	p.mu.enabledWhenLeader = opts.EnabledWhenLeaderLevel
@@ -708,14 +705,13 @@ func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
 		p.mu.leader.rcReferenceUpdateMu.Lock()
 		defer p.mu.leader.rcReferenceUpdateMu.Unlock()
 		p.mu.leader.rc = p.opts.RangeControllerFactory.New(ctx, rangeControllerInitState{
-			replicaSet:      p.raftMu.replicas,
-			leaseholder:     p.mu.leaseholderID,
-			nextRaftIndex:   nextUnstableIndex,
-			rangeID:         p.opts.RangeID,
-			tenantID:        p.raftMu.tenantID,
-			localReplicaID:  p.opts.ReplicaID,
-			raftInterface:   p.raftMu.raftNode,
-			admittedTracker: p,
+			replicaSet:     p.raftMu.replicas,
+			leaseholder:    p.mu.leaseholderID,
+			nextRaftIndex:  nextUnstableIndex,
+			rangeID:        p.opts.RangeID,
+			tenantID:       p.raftMu.tenantID,
+			localReplicaID: p.opts.ReplicaID,
+			raftInterface:  p.raftMu.raftNode,
 		})
 	}()
 	p.mu.leader.term = term
@@ -999,12 +995,6 @@ func (p *processorImpl) AdmitForEval(
 	return p.mu.leader.rc.WaitForEval(ctx, pri)
 }
 
-// GetAdmitted implements rac2.AdmittedTracker.
-func (p *processorImpl) GetAdmitted(replicaID roachpb.ReplicaID) rac2.AdmittedVector {
-	// TODO(pav-kv): implement
-	return rac2.AdmittedVector{}
-}
-
 // RangeControllerFactoryImpl implements the RangeControllerFactory interface.
 var _ RangeControllerFactory = RangeControllerFactoryImpl{}
 
@@ -1046,7 +1036,6 @@ func (f RangeControllerFactoryImpl) New(
 			RaftInterface:       state.raftInterface,
 			Clock:               f.clock,
 			CloseTimerScheduler: f.closeTimerScheduler,
-			AdmittedTracker:     state.admittedTracker,
 			EvalWaitMetrics:     f.evalWaitMetrics,
 		},
 		rac2.RangeControllerInitState{
