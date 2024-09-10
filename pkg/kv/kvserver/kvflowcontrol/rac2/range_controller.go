@@ -67,6 +67,12 @@ type RangeController interface {
 	//
 	// Requires replica.raftMu to be held.
 	AdmitRaftMuLocked(context.Context, roachpb.ReplicaID, AdmittedVector)
+	// MaybeSendPingsRaftMuLocked sends a MsgApp ping to each raft peer in
+	// StateReplicate whose admitted vector is lagging, and there wasn't a recent
+	// MsgApp to this peer.
+	//
+	// Requires replica.raftMu to be held.
+	MaybeSendPingsRaftMuLocked()
 	// SetReplicasRaftMuLocked sets the replicas of the range. The caller will
 	// never mutate replicas, and neither should the callee.
 	//
@@ -99,7 +105,15 @@ type RaftInterface interface {
 	// SetReplicasRaftMuLocked.
 	//
 	// Requires Replica.raftMu to be held, Replica.mu is not held.
-	FollowerStateRaftMuLocked(replicaID roachpb.ReplicaID) FollowerStateInfo
+	FollowerStateRaftMuLocked(roachpb.ReplicaID) FollowerStateInfo
+	// SendPingRaftMuLocked sends a MsgApp ping to the given raft peer if there
+	// wasn't a recent MsgApp to this peer. The message is added to raft's message
+	// queue, and will be extracted and sent during the next Ready processing.
+	//
+	// If the peer is not in StateReplicate, this call does nothing.
+	//
+	// Requires Replica.raftMu to be held.
+	SendPingRaftMuLocked(roachpb.ReplicaID) bool
 }
 
 type FollowerStateInfo struct {
@@ -488,6 +502,22 @@ func (rc *rangeController) AdmitRaftMuLocked(
 	}
 }
 
+// MaybeSendPingsRaftMuLocked sends a MsgApp ping to each raft peer in
+// StateReplicate whose admitted vector is lagging, and there wasn't a recent
+// MsgApp to this peer.
+//
+// Requires replica.raftMu to be held.
+func (rc *rangeController) MaybeSendPingsRaftMuLocked() {
+	for id, state := range rc.replicaMap {
+		if id == rc.opts.LocalReplicaID {
+			continue
+		}
+		if s := state.sendStream; s != nil && s.shouldPing() {
+			rc.opts.RaftInterface.SendPingRaftMuLocked(id)
+		}
+	}
+}
+
 // SetReplicasRaftMuLocked sets the replicas of the range. The caller will
 // never mutate replicas, and neither should the callee.
 //
@@ -701,6 +731,12 @@ type replicaSendStream struct {
 func (rss *replicaSendStream) changeConnectedStateLocked(state connectedState, now time.Time) {
 	rss.mu.connectedState = state
 	rss.mu.connectedStateStart = now
+}
+
+func (rss *replicaSendStream) shouldPing() bool {
+	rss.mu.Lock() // TODO(pav-kv): should we make it RWMutex.RLock()?
+	defer rss.mu.Unlock()
+	return !rss.mu.tracker.Empty()
 }
 
 func (rss *replicaSendStream) admit(ctx context.Context, av AdmittedVector) {
