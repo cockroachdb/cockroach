@@ -988,7 +988,7 @@ func (p *processorImpl) AdmitForEval(
 		p.opts.EvalWaitMetrics.OnBypassed(workClass, 0 /* duration */)
 		return false, nil
 	}
-	return p.mu.leader.rc.WaitForEval(ctx, pri)
+	return rc.WaitForEval(ctx, pri)
 }
 
 func admittedIncreased(prev, next [raftpb.NumPriorities]uint64) bool {
