@@ -230,6 +230,11 @@ func (desc *TableDescriptor) MaterializedView() bool {
 	return desc.IsMaterializedView
 }
 
+// IsReadOnly implements the TableDescriptor interface.
+func (desc *TableDescriptor) IsReadOnly() bool {
+	return desc.IsMaterializedView || desc.GetExternal() != nil
+}
+
 // IsPhysicalTable implements the TableDescriptor interface.
 func (desc *TableDescriptor) IsPhysicalTable() bool {
 	return desc.IsSequence() || (desc.IsTable() && !desc.IsVirtualTable()) || desc.MaterializedView()
