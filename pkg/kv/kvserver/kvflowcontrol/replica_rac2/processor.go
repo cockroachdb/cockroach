@@ -446,16 +446,18 @@ type processorImpl struct {
 		// protocol is enabled.
 		leader struct {
 			enqueuedPiggybackedResponses map[roachpb.ReplicaID]raftpb.Message
-			// Updating the rc reference requires both the enclosing mu and
-			// rcReferenceUpdateMu. Code paths that want to access this
-			// reference only need one of these mutexes. rcReferenceUpdateMu
-			// is ordered after the enclosing mu.
+			// rcReferenceUpdateMu is a narrow mutex held when rc reference is
+			// updated. Code paths that want to access rc must, at the minimum, lock
+			// rcReferenceUpdateMu for read.
 			rcReferenceUpdateMu syncutil.RWMutex
-			rc                  rac2.RangeController
-			// Term is used to notice transitions out of leadership and back,
-			// to recreate rc. It is set when rc is created, and is not
-			// up-to-date if there is no rc (which can happen when using the
-			// v1 protocol).
+			// rc is not nil iff this replica is a leader of the term, and uses RACv2.
+			// rc is always updated while holding raftMu, processorImpl.mu, and
+			// rcReferenceUpdateMu. Code paths that want to access this reference must
+			// hold at least one of these mutexes.
+			rc rac2.RangeController
+			// term is used to notice transitions out of leadership and back, to
+			// recreate rc. It is set when rc is created, and is not up-to-date if
+			// there is no rc (which can happen when using the v1 protocol).
 			term uint64
 		}
 		// Is the RACv2 protocol enabled when this replica is the leader.
