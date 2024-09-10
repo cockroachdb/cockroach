@@ -94,6 +94,15 @@ func NewLookup(st *settings.Values) *Lookup {
 	return c
 }
 
+// NewTestLookup creates a new Lookup for testing purposes. It will never return
+// any results.
+func NewTestLookup() *Lookup {
+	c := &Lookup{}
+	byLength := make([]map[string]string, 0)
+	c.byLength.Store(&byLength)
+	return c
+}
+
 // Start refreshes the lookup once and begins the CIDR lookup refresh task.
 func (c *Lookup) Start(ctx context.Context, stopper *stop.Stopper) (bool, *Lookup) {
 	getTickDuration := func() time.Duration {
@@ -368,7 +377,11 @@ func (m *NetMetrics) Wrap(dial DialContext, labels ...string) DialContext {
 		if err != nil {
 			return conn, err
 		}
-		return m.track(conn, labels...), nil
+		// m can be nil in tests.
+		if m != nil {
+			conn = m.track(conn, labels...)
+		}
+		return conn, nil
 	}
 }
 
@@ -393,14 +406,59 @@ func (m *NetMetrics) WrapTLS(dial DialContext, tlsCfg *tls.Config, labels ...str
 		if err != nil {
 			return nil, err
 		}
-		scopedConn := m.track(rawConn, labels...)
+		scopedConn := rawConn
+		// m can be nil in tests.
+		if m != nil {
+			scopedConn = m.track(rawConn, labels...)
+		}
 
-		conn := tls.Client(rawConn, c)
+		conn := tls.Client(scopedConn, c)
 		if err := conn.HandshakeContext(ctx); err != nil {
 			scopedConn.Close()
 			return nil, err
 		}
 		return conn, nil
+	}
+}
+
+type Dialer interface {
+	Dial(network, addr string) (c net.Conn, err error)
+	DialContext(ctx context.Context, network, addr string) (c net.Conn, err error)
+}
+
+type dialer struct {
+	inner  Dialer
+	m      *NetMetrics
+	labels []string
+}
+
+func (d *dialer) Dial(network, addr string) (net.Conn, error) {
+	return d.DialContext(context.Background(), network, addr)
+}
+
+func (d *dialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	conn, err := d.inner.DialContext(ctx, network, addr)
+	if err != nil {
+		return conn, err
+	}
+	conn = d.m.track(conn, d.labels...)
+	return conn, nil
+}
+
+var _ Dialer = (*dialer)(nil)
+
+// WrapDialer returns a Dialer that wraps the connection with metrics. If the
+// underlying library exposes an ability to replace the DialContext, you should
+// use Wrap instead of this function.
+func (m *NetMetrics) WrapDialer(inner Dialer, labels ...string) Dialer {
+	// m can be nil in tests.
+	if m == nil {
+		return inner
+	}
+	return &dialer{
+		inner:  inner,
+		m:      m,
+		labels: labels,
 	}
 }
 
