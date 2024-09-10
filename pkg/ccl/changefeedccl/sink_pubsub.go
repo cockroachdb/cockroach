@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"hash/crc32"
+	"net"
 	"net/url"
 
 	"cloud.google.com/go/pubsub"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -74,7 +76,8 @@ type deprecatedGcpPubsubClient struct {
 		topics          map[string]*pubsub.Topic
 	}
 
-	knobs *TestingKnobs
+	knobs   *TestingKnobs
+	metrics metricsRecorder
 }
 
 type deprecatedPubsubSink struct {
@@ -114,7 +117,7 @@ func makeDeprecatedPubsubSink(
 	mb metricsRecorderBuilder,
 	knobs *TestingKnobs,
 ) (Sink, error) {
-
+	m := mb(requiresResourceAccounting)
 	pubsubURL := sinkURL{URL: u, q: u.Query()}
 	pubsubTopicName := pubsubURL.consumeParam(changefeedbase.SinkParamTopicName)
 
@@ -142,7 +145,7 @@ func makeDeprecatedPubsubSink(
 		numWorkers:  numOfWorkers,
 		exitWorkers: cancel,
 		format:      formatType,
-		metrics:     mb(requiresResourceAccounting),
+		metrics:     m,
 	}
 
 	// creates custom pubsub object based on scheme
@@ -177,6 +180,7 @@ func makeDeprecatedPubsubSink(
 			endpoint:   endpoint,
 			url:        pubsubURL,
 			knobs:      knobs,
+			metrics:    m,
 		}
 		p.client = g
 		p.topicNamer = tn
@@ -457,15 +461,21 @@ func (p *deprecatedGcpPubsubClient) init() error {
 	if err != nil {
 		return err
 	}
+
+	// Set up the network metrics for tracking bytes in/out.
+	dialContext := p.metrics.netMetrics().Wrap((&net.Dialer{}).DialContext, "pubsub_v2")
+	dial := func(ctx context.Context, target string) (net.Conn, error) {
+		return dialContext(ctx, "tcp", target)
+	}
+
 	// Sending messages to the same region ensures they are received in order
 	// even when multiple publishers are used.
 	// region can be changed from query parameter to config option
-
 	client, err = pubsub.NewClient(
 		p.ctx,
 		p.projectID,
 		creds,
-		option.WithEndpoint(p.endpoint),
+		option.WithEndpoint(p.endpoint), option.WithGRPCDialOption(grpc.WithContextDialer(dial)),
 	)
 
 	if err != nil {

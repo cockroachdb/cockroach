@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -82,6 +84,7 @@ func makePubsubSinkClient(
 	unordered bool,
 	withTableNameAttribute bool,
 	knobs *TestingKnobs,
+	m metricsRecorder,
 ) (SinkClient, error) {
 	if u.Scheme != GcpScheme {
 		return nil, errors.Errorf("unknown scheme: %s", u.Scheme)
@@ -118,7 +121,7 @@ func makePubsubSinkClient(
 	// In unit tests the publisherClient gets set immediately after initializing
 	// the sink object via knobs.WrapSink.
 	if knobs == nil || !knobs.PubsubClientSkipClientCreation {
-		publisherClient, err = makePublisherClient(ctx, pubsubURL, unordered)
+		publisherClient, err = makePublisherClient(ctx, pubsubURL, unordered, m.netMetrics())
 		if err != nil {
 			return nil, err
 		}
@@ -296,7 +299,7 @@ func (pe *pubsubSinkClient) Close() error {
 }
 
 func makePublisherClient(
-	ctx context.Context, url sinkURL, unordered bool,
+	ctx context.Context, url sinkURL, unordered bool, nm *cidr.NetMetrics,
 ) (*pubsub.PublisherClient, error) {
 	const regionParam = "region"
 	region := url.consumeParam(regionParam)
@@ -318,7 +321,12 @@ func makePublisherClient(
 		return nil, err
 	}
 
-	opts := []option.ClientOption{creds, option.WithEndpoint(endpoint)}
+	// Set up the network metrics for tracking bytes in/out.
+	dialContext := nm.Wrap((&net.Dialer{}).DialContext, "pubsub_v2")
+	dial := func(ctx context.Context, target string) (net.Conn, error) {
+		return dialContext(ctx, "tcp", target)
+	}
+	opts := []option.ClientOption{creds, option.WithEndpoint(endpoint), option.WithGRPCDialOption(grpc.WithContextDialer(dial))}
 
 	// See https://pkg.go.dev/cloud.google.com/go/pubsub#hdr-Emulator for emulator information.
 	if addr, _ := envutil.ExternalEnvString("PUBSUB_EMULATOR_HOST", 1); addr != "" {
@@ -428,6 +436,8 @@ func makePubsubSink(
 	settings *cluster.Settings,
 	knobs *TestingKnobs,
 ) (Sink, error) {
+	m := mb(requiresResourceAccounting)
+
 	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonConfig, sinkJSONConfig{
 		// GCPubsub library defaults
 		Flush: sinkBatchConfig{
@@ -447,7 +457,7 @@ func makePubsubSink(
 		return nil, err
 	}
 	sinkClient, err := makePubsubSinkClient(ctx, u, encodingOpts, targets, batchCfg, unordered,
-		includeTableNameAttribute, knobs)
+		includeTableNameAttribute, knobs, m)
 	if err != nil {
 		return nil, err
 	}
@@ -468,7 +478,7 @@ func makePubsubSink(
 		topicNamer,
 		pacerFactory,
 		source,
-		mb(requiresResourceAccounting),
+		m,
 		settings,
 	), nil
 }
