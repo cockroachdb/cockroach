@@ -255,8 +255,7 @@ func (sm *StreamMuxer) DisconnectStreamWithError(
 		sm.appendMuxError(ev)
 		sm.metrics.UpdateMetricsOnRangefeedDisconnect()
 	}
-	// Note that we may repeatedly append cleanup signal for the same id. We will
-	// rely on the map rangefeedCleanup to dedupe during Run.
+
 	if _, ok := sm.rangefeedCleanup.Load(streamID); ok {
 		sm.appendCleanUp(streamID)
 	}
