@@ -39,6 +39,7 @@ go_test(
         "admission_test.go",
         "close_scheduler_test.go",
         "processor_test.go",
+        "simulation_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":replica_rac2"],

@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -92,7 +94,6 @@ func (t *TSDB) Register(mstruct interface{}) {
 // registered metrics.
 func (t *TSDB) Scrape(ctx context.Context) {
 	// TB: This code is cargo culted entirely from the TSDB scraper.
-
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.mu.scraped = true
@@ -156,6 +157,9 @@ func (t *TSDB) Plot(metrics []string, options ...Option) string {
 	for _, metric := range metrics {
 		points, ok := t.read(metric)
 		require.Truef(t.t, ok, "%s not found", metric)
+		if len(points) == 0 {
+			require.NotEqual(t.t, len(points), 0, "no data points for %s:\n%s", metric, t.String())
+		}
 		if c.rate != 0 {
 			points = rate(points, c.rate)
 		}
@@ -185,6 +189,42 @@ func (t *TSDB) read(metric string) ([]float64, bool) {
 
 	points, ok := t.mu.points[metric]
 	return points, ok
+}
+
+// TODO(kvoli): Delete this after debugging.
+func (t *TSDB) String() string {
+	var buf strings.Builder
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	for metric, points := range t.mu.points {
+		buf.WriteString(fmt.Sprintf("%s: [", metric))
+		for i, point := range points {
+			if i > 0 {
+				buf.WriteString(", ")
+
+			}
+			buf.WriteString(fmt.Sprintf("%-2f", point))
+		}
+		buf.WriteString("]\n")
+	}
+
+	return buf.String()
+}
+
+func (t *TSDB) RegisteredMetricNames() []string {
+	var names []string
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	for metric := range t.mu.points {
+		names = append(names, metric)
+	}
+
+	// For deterministic output.
+  sort.Strings(names)
+
+	return names
 }
 
 func (t *TSDB) registerMetricValue(val reflect.Value, name string, skipNil bool) {
