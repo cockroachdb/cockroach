@@ -438,6 +438,11 @@ type Config struct {
 	// LocalityAddresses contains private IP addresses that can only be accessed
 	// in the corresponding locality.
 	LocalityAddresses []roachpb.LocalityAddress
+
+	// AcceptProxyProtocolHeaders allows CockroachDB to parse proxy protocol
+	// headers, and use the client IP information contained within instead of
+	// using the IP information in the source IP field of the incoming packets.
+	AcceptProxyProtocolHeaders bool
 }
 
 // AdvertiseAddr is the type of the AdvertiseAddr field in Config.

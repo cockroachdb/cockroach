@@ -1584,7 +1584,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// below when the server has initialized.
 	pgL, loopbackPgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(
 		ctx, workersCtx, s.cfg.BaseConfig,
-		s.stopper, s.grpc, ListenAndUpdateAddrs, true /* enableSQLListener */)
+		s.stopper, s.grpc, ListenAndUpdateAddrs, true /* enableSQLListener */, s.cfg.AcceptProxyProtocolHeaders)
 	if err != nil {
 		return err
 	}
