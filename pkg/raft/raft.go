@@ -651,6 +651,35 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 	return true
 }
 
+func (r *raft) sendPing(to pb.PeerID) bool {
+	if r.state != StateLeader {
+		return false
+	}
+	pr := r.trk.Progress(to)
+	if pr == nil || pr.State != tracker.StateReplicate || pr.MsgAppProbesPaused {
+		return false
+	}
+	commit := r.raftLog.committed
+	prevIndex := pr.Next - 1
+	prevTerm, err := r.raftLog.term(prevIndex)
+	// An error happens then the log is truncated beyond Next. We can't send a
+	// MsgApp in this case, and will soon send a snapshot and enter StateSnapshot.
+	if err != nil {
+		return false
+	}
+	r.send(pb.Message{
+		To:      to,
+		Type:    pb.MsgApp,
+		Index:   prevIndex,
+		LogTerm: prevTerm,
+		Commit:  commit,
+		Match:   pr.Match,
+	})
+	pr.SentEntries(0, 0) // NB: this sets MsgAppProbesPaused to true again.
+	pr.MaybeUpdateSentCommit(commit)
+	return true
+}
+
 // maybeSendSnapshot fetches a snapshot from Storage, and sends it to the given
 // node. Returns true iff the snapshot message has been emitted successfully.
 func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
