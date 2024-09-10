@@ -400,6 +400,11 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 
 	if !canApplyConstraint {
 		og.candidateExpectedCommitErrors.add(pgcode.UniqueViolation)
+	} else {
+		// Otherwise there is still a possibility for an error,
+		// so add it in the potential set, since our validation query
+		// above isn't exhaustive enough.
+		og.potentialCommitErrors.add(pgcode.UniqueViolation)
 	}
 
 	stmt.sql = fmt.Sprintf(
