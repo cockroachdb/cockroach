@@ -67,7 +67,7 @@ func (a AdmittedState) String() string {
 }
 
 func (a AdmittedState) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("admitted=t%d/%s", a.Term, a.Admitted)
+	w.Printf("admitted=t%d/%v", a.Term, a.Admitted)
 }
 
 func (a PiggybackedAdmittedState) String() string {
