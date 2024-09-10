@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -73,6 +74,7 @@ type serverAddresses struct {
 
 func TestProxyHandler_ValidateConnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -135,6 +137,7 @@ func TestProxyHandler_ValidateConnection(t *testing.T) {
 
 func TestProxyProtocol(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -290,6 +293,7 @@ func TestProxyProtocol(t *testing.T) {
 
 func TestPrivateEndpointsACL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -460,6 +464,7 @@ func TestPrivateEndpointsACL(t *testing.T) {
 
 func TestAllowedCIDRRangesACL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -574,6 +579,7 @@ func TestAllowedCIDRRangesACL(t *testing.T) {
 
 func TestLongDBName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -603,6 +609,7 @@ func TestLongDBName(t *testing.T) {
 // deleted.
 func TestBackendDownRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -638,6 +645,7 @@ func TestBackendDownRetry(t *testing.T) {
 
 func TestFailedConnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -689,6 +697,7 @@ func TestFailedConnection(t *testing.T) {
 
 func TestUnexpectedError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -726,6 +735,7 @@ func TestUnexpectedError(t *testing.T) {
 
 func TestProxyAgainstSecureCRDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -841,6 +851,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 
 func TestProxyTLSConf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	t.Run("insecure", func(t *testing.T) {
@@ -922,6 +933,7 @@ func TestProxyTLSConf(t *testing.T) {
 
 func TestProxyTLSClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 	// NB: The leaktest call is an important part of this test. We're
 	// verifying that no goroutines are leaked, despite calling Close an
@@ -978,6 +990,7 @@ func TestProxyTLSClose(t *testing.T) {
 
 func TestProxyModifyRequestParams(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1038,6 +1051,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 
 func TestInsecureProxy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1084,6 +1098,7 @@ func TestInsecureProxy(t *testing.T) {
 
 func TestErroneousFrontend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1110,6 +1125,7 @@ func TestErroneousFrontend(t *testing.T) {
 
 func TestErrorHint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1142,6 +1158,7 @@ func TestErrorHint(t *testing.T) {
 
 func TestErroneousBackend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1168,6 +1185,7 @@ func TestErroneousBackend(t *testing.T) {
 
 func TestProxyRefuseConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1195,6 +1213,7 @@ func TestProxyRefuseConn(t *testing.T) {
 
 func TestProxyHandler_handle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1219,6 +1238,7 @@ func TestProxyHandler_handle(t *testing.T) {
 
 func TestDenylistUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1332,6 +1352,7 @@ func TestDenylistUpdate(t *testing.T) {
 
 func TestDirectoryConnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1451,6 +1472,7 @@ func TestDirectoryConnect(t *testing.T) {
 
 func TestConnectionRebalancingDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	ctx := context.Background()
 	defer log.Scope(t).Close(t)
 
@@ -1539,6 +1561,7 @@ func TestConnectionRebalancingDisabled(t *testing.T) {
 
 func TestCancelQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	ctx := context.Background()
 	defer log.Scope(t).Close(t)
 
@@ -1825,6 +1848,7 @@ func TestCancelQuery(t *testing.T) {
 
 func TestPodWatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	ctx := context.Background()
 	defer log.Scope(t).Close(t)
 
@@ -1924,6 +1948,7 @@ func TestPodWatcher(t *testing.T) {
 
 func TestConnectionMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	ctx := context.Background()
 	defer log.Scope(t).Close(t)
 
@@ -2319,6 +2344,7 @@ func TestConnectionMigration(t *testing.T) {
 // (both failed and successful ones).
 func TestAcceptedConnCountMetric(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -2410,6 +2436,7 @@ func TestAcceptedConnCountMetric(t *testing.T) {
 // decremented whenever the connections were closed due to a goroutine leak.
 func TestCurConnCountMetric(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -2477,6 +2504,7 @@ func TestCurConnCountMetric(t *testing.T) {
 
 func TestClusterNameAndTenantFromParams(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
