@@ -940,8 +940,20 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 
 	// Third entry should not be returned to be applied until first entry's
 	// application is acknowledged.
-	drain := true
-	for drain {
+	//
+	// One ready cycle will update the durable commit index to the last index.
+	rd = readyWithTimeout(n)
+	require.Len(t, rd.Messages, 1)
+	m = rd.Messages[0]
+	require.Equal(t, raftpb.MsgStorageAppend, m.Type)
+	require.Len(t, m.Entries, 0)
+	require.Equal(t, uint64(4), m.Commit)
+	for _, resp := range m.Responses {
+		require.NoError(t, n.Step(ctx, resp))
+	}
+	// Drain the Ready stream, in case there are any more updates. Still should
+	// see no committed entry applications.
+	for done := false; !done; {
 		select {
 		case <-n.AcceptReady():
 			rd := <-n.Ready()
@@ -949,7 +961,7 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 				require.NotEqual(t, raftpb.MsgStorageApply, m.Type, "unexpected message: %v", m)
 			}
 		case <-time.After(10 * time.Millisecond):
-			drain = false
+			done = true
 		}
 	}
 
