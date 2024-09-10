@@ -631,14 +631,8 @@ func VerifyCorrectness(
 	waitForReplicatedTimeToReachTimestamp(t, leftJobID, setup.left.db, getLogicalDataReplicationJobInfo, waitTime, now)
 	waitForReplicatedTimeToReachTimestamp(t, rightJobID, setup.right.db, getLogicalDataReplicationJobInfo, waitTime, now)
 
-	// TODO(ssd): Decide how we want to fingerprint
-	// this table while we are using in-row storage
-	// for crdb_internal_mvcc_timestamp.
-	var leftCount, rightCount int
-	selectQuery := fmt.Sprintf("SELECT count(1) FROM %s.%s", ldrWorkload.dbName, ldrWorkload.tableName)
-	setup.left.sysSQL.QueryRow(t, selectQuery).Scan(&leftCount)
-	setup.right.sysSQL.QueryRow(t, selectQuery).Scan(&rightCount)
-	require.Equal(t, leftCount, rightCount)
+	queryStmt := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s WITH EXCLUDE COLUMNS = ('crdb_replication_origin_timestamp')", ldrWorkload.dbName, ldrWorkload.tableName)
+	setup.left.sysSQL.CheckQueryResults(t, queryStmt, setup.right.sysSQL.QueryStr(t, queryStmt))
 }
 
 func getDebugZips(ctx context.Context, t test.Test, c cluster.Cluster, setup multiClusterSetup) {
