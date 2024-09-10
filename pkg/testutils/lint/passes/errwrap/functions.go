@@ -91,6 +91,4 @@ var ErrorFnFormatStringIndex = map[string]int{
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.unimplementedInternal": 3,
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate.inputErrorf": 0,
-
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl.newErrorf": 1,
 }

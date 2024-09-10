@@ -4,7 +4,6 @@ STRINGER_SRCS = [
     "//pkg/base:testclusterreplicationmode_string.go",
     "//pkg/ccl/backupccl:targetscope_string.go",
     "//pkg/ccl/changefeedccl/schemafeed:tableeventtype_string.go",
-    "//pkg/ccl/sqlproxyccl:errorcode_string.go",
     "//pkg/cli:keytype_string.go",
     "//pkg/config:field_string.go",
     "//pkg/kv/kvclient/kvcoord:txnstate_string.go",

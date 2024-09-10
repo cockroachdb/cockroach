@@ -12,7 +12,6 @@ PROTOBUF_SRCS = [
     "//pkg/ccl/backupccl/backuppb:backuppb_go_proto",
     "//pkg/ccl/baseccl:baseccl_go_proto",
     "//pkg/ccl/changefeedccl/changefeedpb:changefeedpb_go_proto",
-    "//pkg/ccl/sqlproxyccl/tenant:tenant_go_proto",
     "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_go_proto",
     "//pkg/ccl/utilccl/licenseccl:licenseccl_go_proto",
     "//pkg/cloud/cloudpb:cloudpb_go_proto",
