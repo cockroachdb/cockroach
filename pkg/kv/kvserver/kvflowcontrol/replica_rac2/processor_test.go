@@ -249,6 +249,12 @@ func (c *testRangeController) HandleSchedulerEventRaftMuLocked(ctx context.Conte
 	panic("HandleSchedulerEventRaftMuLocked should not be called when no send-queues")
 }
 
+func (c *testRangeController) AdmitRaftMuLocked(
+	_ context.Context, replicaID roachpb.ReplicaID, av rac2.AdmittedVector,
+) {
+	fmt.Fprintf(c.b, " RangeController.AdmitRaftMuLocked(%s, %+v)\n", replicaID, av)
+}
+
 func (c *testRangeController) SetReplicasRaftMuLocked(
 	ctx context.Context, replicas rac2.ReplicaSet,
 ) error {
