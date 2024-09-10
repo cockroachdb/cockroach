@@ -665,7 +665,7 @@ func (r *raft) sendPing(to pb.PeerID) bool {
 		return false
 	}
 	pr := r.trk.Progress(to)
-	if pr == nil || pr.State != tracker.StateReplicate || pr.MsgAppProbesPaused {
+	if pr == nil || pr.State != tracker.StateReplicate {
 		return false
 	}
 	commit := r.raftLog.committed
