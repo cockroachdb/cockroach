@@ -47,15 +47,6 @@ func (rn raftNodeForRACv2) NextUnstableIndexLocked() uint64 {
 	return rn.NextUnstableIndex()
 }
 
-func (rn raftNodeForRACv2) GetAdmittedLocked() [raftpb.NumPriorities]uint64 {
-	// TODO(pav-kv): implement.
-	return [raftpb.NumPriorities]uint64{}
-}
-
-func (rn raftNodeForRACv2) SetAdmittedLocked([raftpb.NumPriorities]uint64) raftpb.Message {
-	panic("TODO(pav-kv): implement")
-}
-
 func (rn raftNodeForRACv2) StepMsgAppRespForAdmittedLocked(m raftpb.Message) error {
 	return rn.RawNode.Step(m)
 }
