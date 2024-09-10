@@ -456,6 +456,12 @@ func (rc *rangeController) CloseRaftMuLocked(ctx context.Context) {
 	rc.mu.nonVoterSet = nil
 	close(rc.mu.waiterSetRefreshCh)
 	rc.mu.waiterSetRefreshCh = nil
+
+	for _, rs := range rc.replicaMap {
+		if rs.sendStream != nil {
+			rs.closeSendStream(ctx)
+		}
+	}
 }
 
 // InspectRaftMuLocked returns a handle containing the state of the range
@@ -498,6 +504,9 @@ func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaS
 	for r := range prevSet {
 		desc, ok := newSet[r]
 		if !ok {
+			if rs := rc.replicaMap[r]; rs.sendStream != nil {
+				rs.closeSendStream(ctx)
+			}
 			delete(rc.replicaMap, r)
 		} else {
 			rs := rc.replicaMap[r]
@@ -764,10 +773,7 @@ func (rs *replicaState) handleReadyState(
 				defer rs.sendStream.mu.Unlock()
 				return rs.sendStream.mu.connectedState
 			}() {
-			case replicate:
-				rs.sendStream.changeToStateSnapshot(ctx)
-				shouldWaitChange = true
-			case probeRecentlyReplicate:
+			case replicate, probeRecentlyReplicate:
 				rs.closeSendStream(ctx)
 				shouldWaitChange = true
 			case snapshot:
