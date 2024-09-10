@@ -450,6 +450,8 @@ func init() {
 		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverHTTPAddr, &serverHTTPPort), cliflags.ListenHTTPAddr)
 		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverHTTPAdvertiseAddr, &serverHTTPAdvertisePort), cliflags.HTTPAdvertiseAddr)
 
+		cliflagcfg.BoolFlag(f, &serverCfg.AcceptProxyProtocolHeaders, cliflags.AcceptProxyProtocolHeaders)
+
 		// Certificates directory. Use a server-specific flag and value to ignore environment
 		// variables, but share the same default.
 		cliflagcfg.StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
@@ -463,6 +465,7 @@ func init() {
 			_ = f.MarkHidden(cliflags.AdvertiseAddr.Name)
 			_ = f.MarkHidden(cliflags.SQLAdvertiseAddr.Name)
 			_ = f.MarkHidden(cliflags.HTTPAdvertiseAddr.Name)
+			_ = f.MarkHidden(cliflags.AcceptProxyProtocolHeaders.Name)
 		}
 
 		if cmd == startCmd || cmd == startSingleNodeCmd {

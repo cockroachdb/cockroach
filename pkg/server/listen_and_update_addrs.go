@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
+	"github.com/pires/go-proxyproto"
 )
 
 // ListenError is returned from Start when we fail to start listening on either
@@ -61,7 +62,10 @@ type rangeListenerFactory struct {
 }
 
 func (rlf *rangeListenerFactory) ListenAndUpdateAddrs(
-	ctx context.Context, listenAddr, advertiseAddr *string, connName string,
+	ctx context.Context,
+	listenAddr, advertiseAddr *string,
+	connName string,
+	acceptProxyProtocolHeaders bool,
 ) (net.Listener, error) {
 	h, _, err := addr.SplitHostPort(*listenAddr, "0")
 	if err != nil {
@@ -80,6 +84,11 @@ func (rlf *rangeListenerFactory) ListenAndUpdateAddrs(
 		nextAddr := net.JoinHostPort(h, strconv.Itoa(nextPort))
 		ln, err = net.Listen("tcp", nextAddr)
 		if err == nil {
+			if acceptProxyProtocolHeaders {
+				ln = &proxyproto.Listener{
+					Listener: ln,
+				}
+			}
 			if err := UpdateAddrs(ctx, listenAddr, advertiseAddr, ln.Addr()); err != nil {
 				return nil, errors.Wrapf(err, "internal error: cannot parse %s listen address", connName)
 			}
@@ -99,13 +108,21 @@ func (rlf *rangeListenerFactory) ListenAndUpdateAddrs(
 // actual interface address resolved by the OS during the Listen()
 // call.
 func ListenAndUpdateAddrs(
-	ctx context.Context, addr, advertiseAddr *string, connName string,
+	ctx context.Context,
+	addr, advertiseAddr *string,
+	connName string,
+	acceptProxyProtocolHeaders bool,
 ) (net.Listener, error) {
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
 		return nil, &ListenError{
 			cause: err,
 			Addr:  *addr,
+		}
+	}
+	if acceptProxyProtocolHeaders {
+		ln = &proxyproto.Listener{
+			Listener: ln,
 		}
 	}
 	if err := UpdateAddrs(ctx, addr, advertiseAddr, ln.Addr()); err != nil {

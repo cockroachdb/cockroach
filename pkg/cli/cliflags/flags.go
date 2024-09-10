@@ -694,6 +694,21 @@ apply. This flag is experimental.
 `,
 	}
 
+	AcceptProxyProtocolHeaders = FlagInfo{
+		Name: "accept-proxy-protocol-headers",
+		Description: `
+Allows CockroachDB to parse proxy protocol headers. Proxy protocol is used by
+some proxies to retain the original client IP information after the proxy has
+rewritten the source IP address of forwarded packets.
+<PRE>
+
+</PRE>
+When using this flag, ensure all traffic to CockroachDB flows through a proxy
+which adds proxy protocol headers, to prevent spoofing of client IP address
+information.
+`,
+	}
+
 	LocalityAdvertiseAddr = FlagInfo{
 		Name: "locality-advertise-addr",
 		Description: `
