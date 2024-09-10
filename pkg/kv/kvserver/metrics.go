@@ -121,6 +121,12 @@ var (
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDecommissioningRangeCount = metric.Metadata{
+		Name:        "ranges.decommissioning",
+		Help:        "Number of ranges with at lease one replica on a decommissioning node",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Lease request metrics.
 	metaLeaseRequestSuccessCount = metric.Metadata{
@@ -2535,6 +2541,7 @@ type StoreMetrics struct {
 	UnavailableRangeCount     *metric.Gauge
 	UnderReplicatedRangeCount *metric.Gauge
 	OverReplicatedRangeCount  *metric.Gauge
+	DecommissioningRangeCount *metric.Gauge
 
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
@@ -3231,6 +3238,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		UnavailableRangeCount:     metric.NewGauge(metaUnavailableRangeCount),
 		UnderReplicatedRangeCount: metric.NewGauge(metaUnderReplicatedRangeCount),
 		OverReplicatedRangeCount:  metric.NewGauge(metaOverReplicatedRangeCount),
+		DecommissioningRangeCount: metric.NewGauge(metaDecommissioningRangeCount),
 
 		// Lease request metrics.
 		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),
