@@ -88,16 +88,8 @@ type RaftScheduler interface {
 // reads Raft state at various points while holding raftMu, and expects those
 // various reads to be mutually consistent.
 type RaftNode interface {
-	// EnablePingForAdmittedLaggingLocked is a one time behavioral change made
-	// to enable pinging for the admitted array when it is lagging match. Once
-	// changed, this will apply to current and future leadership roles at this
-	// replica.
-	EnablePingForAdmittedLaggingLocked()
-
-	// Read-only methods.
-
-	// rac2.RaftInterface is an interface that abstracts the raft.RawNode for use
-	// in the RangeController.
+	// RaftInterface is an interface that abstracts the raft.RawNode for use in
+	// the RangeController.
 	rac2.RaftInterface
 	// TermLocked returns the current term of this replica.
 	TermLocked() uint64
@@ -109,7 +101,6 @@ type RaftNode interface {
 	// guaranteed to be stablestorage, unless this method is called right after
 	// RawNode is initialized. Processor calls this only on initialization.
 	LogMarkLocked() rac2.LogMark
-
 	// NextUnstableIndexLocked returns the index of the next entry that will
 	// be sent to local storage. All entries < this index are either stored,
 	// or have been sent to storage.
@@ -117,12 +108,6 @@ type RaftNode interface {
 	// NB: NextUnstableIndex can regress when the node accepts appends or
 	// snapshots from a newer leader.
 	NextUnstableIndexLocked() uint64
-
-	// Mutating methods.
-
-	// StepMsgAppRespForAdmittedLocked steps a MsgAppResp on the leader, which
-	// may advance its knowledge of a follower's admitted state.
-	StepMsgAppRespForAdmittedLocked(raftpb.Message) error
 }
 
 // AdmittedPiggybacker is used to enqueue admitted vector messages addressed to
