@@ -138,6 +138,11 @@ func (rn *testRaftNode) FollowerStateRaftMuLocked(
 	return rac2.FollowerStateInfo{}
 }
 
+func (rn *testRaftNode) SendPingRaftMuLocked(to roachpb.ReplicaID) bool {
+	fmt.Fprintf(rn.b, " RaftNode.SendPingRaftMuLocked(%d)\n", to)
+	return true
+}
+
 func (rn *testRaftNode) setMark(t *testing.T, mark rac2.LogMark) {
 	require.True(t, mark.After(rn.mark))
 	rn.mark = mark
@@ -239,6 +244,10 @@ func (c *testRangeController) AdmitRaftMuLocked(
 	_ context.Context, replicaID roachpb.ReplicaID, av rac2.AdmittedVector,
 ) {
 	fmt.Fprintf(c.b, " RangeController.AdmitRaftMuLocked(%s, %+v)\n", replicaID, av)
+}
+
+func (c *testRangeController) MaybeSendPingsRaftMuLocked() {
+	fmt.Fprintf(c.b, " RangeController.MaybeSendPingsRaftMuLocked()\n")
 }
 
 func (c *testRangeController) SetReplicasRaftMuLocked(

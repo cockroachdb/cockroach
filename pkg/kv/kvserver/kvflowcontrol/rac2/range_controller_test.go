@@ -304,6 +304,10 @@ func (r *testingRCRange) FollowerStateRaftMuLocked(replicaID roachpb.ReplicaID) 
 	return replica.info
 }
 
+func (r *testingRCRange) SendPingRaftMuLocked(roachpb.ReplicaID) bool {
+	return false
+}
+
 func (r *testingRCRange) startWaitForEval(name string, pri admissionpb.WorkPriority) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
