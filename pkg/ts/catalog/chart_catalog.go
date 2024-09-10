@@ -600,6 +600,7 @@ var charts = []sectionDescription{
 					"ranges.unavailable",
 					"ranges.underreplicated",
 					"ranges.overreplicated",
+					"ranges.decommissioning",
 				},
 			},
 			{

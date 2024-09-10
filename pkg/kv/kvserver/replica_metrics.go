@@ -50,6 +50,7 @@ type ReplicaMetrics struct {
 	Unavailable           bool
 	Underreplicated       bool
 	Overreplicated        bool
+	Decommissioning       bool
 	RaftLogTooLarge       bool
 	BehindCount           int64
 	PausedFollowerCount   int64
@@ -157,7 +158,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		}
 	}
 
-	rangeCounter, unavailable, underreplicated, overreplicated := calcRangeCounter(
+	rangeCounter, unavailable, underreplicated, overreplicated, decommissioning := calcRangeCounter(
 		d.storeID, d.desc, d.leaseStatus, d.livenessMap, d.conf.GetNumVoters(), d.conf.NumReplicas, d.clusterNodes)
 
 	// The raft leader computes the number of raft entries that replicas are
@@ -185,6 +186,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		Unavailable:               unavailable,
 		Underreplicated:           underreplicated,
 		Overreplicated:            overreplicated,
+		Decommissioning:           decommissioning,
 		RaftLogTooLarge: d.raftLogSizeTrusted &&
 			d.raftLogSize > raftLogTooLargeMultiple*d.raftCfg.RaftLogTruncationThreshold,
 		BehindCount:           leaderBehindCount,
@@ -224,7 +226,7 @@ func calcRangeCounter(
 	livenessMap livenesspb.IsLiveMap,
 	numVoters, numReplicas int32,
 	clusterNodes int,
-) (rangeCounter, unavailable, underreplicated, overreplicated bool) {
+) (rangeCounter, unavailable, underreplicated, overreplicated, decommissioning bool) {
 	// If there is a live leaseholder (regardless of whether the lease is still
 	// valid) that leaseholder is responsible for range-level metrics.
 	if livenessMap[leaseStatus.Lease.Replica.NodeID].IsLive {
@@ -259,6 +261,7 @@ func calcRangeCounter(
 		} else if neededVoters < liveVoters || neededNonVoters < liveNonVoters {
 			overreplicated = true
 		}
+		decommissioning = calcDecommissioningCount(desc, livenessMap) > 0
 	}
 	return
 }
@@ -303,6 +306,16 @@ func calcBehindCount(
 	}
 
 	return behindCount
+}
+
+func calcDecommissioningCount(desc *roachpb.RangeDescriptor, livenessMap livenesspb.IsLiveMap) int {
+	var decommissioningCount int
+	for _, rd := range desc.Replicas().Descriptors() {
+		if livenessMap[rd.NodeID].Membership.Decommissioning() {
+			decommissioningCount++
+		}
+	}
+	return decommissioningCount
 }
 
 // LoadStats returns the load statistics for the replica.

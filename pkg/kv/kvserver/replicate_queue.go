@@ -91,6 +91,22 @@ var EnqueueInReplicateQueueOnSpanConfigUpdateEnabled = settings.RegisterBoolSett
 	false,
 )
 
+// EnqueueProblemRangeInReplicateQueueInterval controls the interval at which
+// problem ranges are enqueued into the replicate queue for processing, outside
+// of the normal scanner interval. A problem range is one which is
+// underreplicated or has a replica on a decommissioning store. The setting is
+// disabled when set to 0. By default, the setting is disabled.
+var EnqueueProblemRangeInReplicateQueueInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.enqueue_in_replicate_queue_on_problem.interval",
+	"interval at which problem ranges are enqueued into the replicate queue for "+
+		"processing, outside of the normal scanner interval; a problem range is "+
+		"one which is underreplicated or has a replica on a decommissioning store, "+
+		"disabled when set to 0",
+	0,
+	settings.NonNegativeDuration,
+)
+
 var (
 	metaReplicateQueueAddReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.addreplica",
