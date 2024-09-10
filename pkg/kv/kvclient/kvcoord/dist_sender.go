@@ -2475,13 +2475,6 @@ const slowDistSenderRangeThreshold = time.Minute
 // to a single replica.
 const slowDistSenderReplicaThreshold = 10 * time.Second
 
-// defaultSendClosedTimestampPolicy is used when the closed timestamp policy
-// is not known by the range cache. This choice prevents sending batch requests
-// to only voters when a perfectly good non-voter may exist in the local
-// region. It's defined as a constant here to ensure that we use the same
-// value when populating the batch header.
-const defaultSendClosedTimestampPolicy = roachpb.LEAD_FOR_GLOBAL_READS
-
 // sendToReplicas sends a batch to the replicas of a range. Replicas are tried one
 // at a time (generally the leaseholder first). The result of this call is
 // either a BatchResponse or an error. In the former case, the BatchResponse
@@ -2520,7 +2513,7 @@ func (ds *DistSender) sendToReplicas(
 	if ba.RoutingPolicy == kvpb.RoutingPolicy_LEASEHOLDER &&
 		CanSendToFollower(
 			ctx, ds.st, ds.clock,
-			routing.ClosedTimestampPolicy(defaultSendClosedTimestampPolicy), ba,
+			routing.ClosedTimestampPolicy(rangecache.DefaultSendClosedTimestampPolicy), ba,
 		) {
 		ba = ba.ShallowCopy()
 		ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
@@ -2684,7 +2677,7 @@ func (ds *DistSender) sendToReplicas(
 			// doesn't have info. Like above, this asks the server to return an
 			// update.
 			ClosedTimestampPolicy: routing.ClosedTimestampPolicy(
-				defaultSendClosedTimestampPolicy,
+				rangecache.DefaultSendClosedTimestampPolicy,
 			),
 
 			// Range info is only returned when ClientRangeInfo is non-empty.
