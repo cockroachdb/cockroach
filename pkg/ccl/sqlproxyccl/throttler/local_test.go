@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -68,6 +70,9 @@ func countGuesses(
 }
 
 func TestThrottleLimitsCredentialGuesses(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
+
 	throttle := newTestLocalService(WithBaseDelay(time.Second))
 	ip1Tenant1 := ConnectionTags{IP: "1.1.1.1", TenantID: "1"}
 	ip1Tenant2 := ConnectionTags{IP: "1.1.1.1", TenantID: "2"}
@@ -90,6 +95,9 @@ func TestThrottleLimitsCredentialGuesses(t *testing.T) {
 }
 
 func TestReportSuccessDisablesLimiter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
+
 	throttle := newTestLocalService()
 	tenant1 := ConnectionTags{IP: "1.1.1.1", TenantID: "1"}
 	tenant2 := ConnectionTags{IP: "1.1.1.1", TenantID: "2"}
@@ -112,6 +120,9 @@ func TestReportSuccessDisablesLimiter(t *testing.T) {
 }
 
 func TestRacingRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
+
 	throttle := newTestLocalService()
 	connection := ConnectionTags{IP: "1.1.1.1", TenantID: "1"}
 
