@@ -232,6 +232,8 @@ func (s *testingRCState) getOrInitRange(t *testing.T, r testingRange) *testingRC
 		testRC = &testingRCRange{}
 		testRC.mu.r = r
 		testRC.mu.evals = make(map[string]*testingRCEval)
+		testRC.mu.outstandingReturns = make(map[roachpb.ReplicaID]kvflowcontrol.Tokens)
+		testRC.mu.quorumPosition = kvflowcontrolpb.RaftLogPosition{Term: 1, Index: 0}
 		options := RangeControllerOptions{
 			RangeID:             r.rangeID,
 			TenantID:            r.tenantID,
@@ -268,10 +270,23 @@ type testingRCEval struct {
 
 type testingRCRange struct {
 	rc *rangeController
+	// snapshots contain snapshots of the tracker state for different replicas,
+	// at various points in time. It is used in TestUsingSimulation.
+	snapshots []testingTrackerSnapshot
 
 	mu struct {
 		syncutil.Mutex
-		r     testingRange
+		r testingRange
+		// outstandingReturns is used in TestUsingSimulation to track token
+		// returns. Likewise, for quorumPosition. It is not used in
+		// TestRangeController.
+		outstandingReturns map[roachpb.ReplicaID]kvflowcontrol.Tokens
+		quorumPosition     kvflowcontrolpb.RaftLogPosition
+		// evals is used in TestRangeController for WaitForEval goroutine
+		// callbacks. It is not used in TestUsingSimulation, as the simulation test
+		// requires determinism on a smaller timescale than calling WaitForEval via
+		// multiple goroutines would allow. See testingNonBlockingAdmit to see how
+		// WaitForEval is done in simulation tests.
 		evals map[string]*testingRCEval
 	}
 }
@@ -327,6 +342,29 @@ type testingRange struct {
 	tenantID       roachpb.TenantID
 	localReplicaID roachpb.ReplicaID
 	replicaSet     map[roachpb.ReplicaID]testingReplica
+}
+
+func makeSingleVoterTestingRange(
+	rangeID roachpb.RangeID,
+	tenantID roachpb.TenantID,
+	localNodeID roachpb.NodeID,
+	localStoreID roachpb.StoreID,
+) testingRange {
+	return testingRange{
+		rangeID:        rangeID,
+		tenantID:       tenantID,
+		localReplicaID: 1,
+		replicaSet: map[roachpb.ReplicaID]testingReplica{
+			1: {
+				desc: roachpb.ReplicaDescriptor{
+					NodeID:    localNodeID,
+					StoreID:   localStoreID,
+					ReplicaID: 1,
+					Type:      roachpb.VOTER_FULL,
+				},
+			},
+		},
+	}
 }
 
 func (t testingRange) replicas() ReplicaSet {
@@ -588,12 +626,13 @@ func (t *testingProbeToCloseTimerScheduler) ScheduleSendStreamCloseRaftMuLocked(
 //
 //   - close_rcs: Closes all range controllers.
 //
-//   - admit: Admits the given store to the given range.
+//   - admit: Admits up to to_index for the given store, part of the given
+//     range.
 //     range_id=<range_id>
 //     store_id=<store_id> term=<term> to_index=<to_index> pri=<pri>
 //     ...
 //
-//   - raft_event: Simulates a raft event on the given rangeStateProbe, calling
+//   - raft_event: Simulates a raft event on the given range, calling
 //     HandleRaftEvent.
 //     range_id=<range_id>
 //     term=<term> index=<index> pri=<pri> size=<size>
