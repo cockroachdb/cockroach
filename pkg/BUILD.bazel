@@ -1151,7 +1151,6 @@ GO_TARGETS = [
     "//pkg/cmd/github-pull-request-make:github-pull-request-make_test",
     "//pkg/cmd/gossipsim:gossipsim",
     "//pkg/cmd/gossipsim:gossipsim_lib",
-    "//pkg/cmd/import-tools:import-tools",
     "//pkg/cmd/label-merged-pr:label-merged-pr",
     "//pkg/cmd/label-merged-pr:label-merged-pr_lib",
     "//pkg/cmd/label-merged-pr:label-merged-pr_test",
