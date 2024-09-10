@@ -400,6 +400,9 @@ func (b *baseStatusServer) localExecutionInsights(
 		// Versions <=22.2.6 expects that Statement is not null when building the exec insights virtual table.
 		insightWithStmt := *insight
 		insightWithStmt.Statement = &insights.Statement{}
+		// Copy statements slice.
+		insightWithStmt.Statements = make([]*insights.Statement, len(insight.Statements))
+		copy(insightWithStmt.Statements, insight.Statements)
 
 		response.Insights = append(response.Insights, insightWithStmt)
 	})
