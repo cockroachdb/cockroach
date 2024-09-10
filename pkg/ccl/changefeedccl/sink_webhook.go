@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -232,6 +233,7 @@ func makeDeprecatedWebhookSink(
 	source timeutil.TimeSource,
 	mb metricsRecorderBuilder,
 ) (Sink, error) {
+	m := mb(requiresResourceAccounting)
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
 		return nil, errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeWebhookHTTPS)
 	}
@@ -271,7 +273,7 @@ func makeDeprecatedWebhookSink(
 		exitWorkers: cancel,
 		parallelism: parallelism,
 		ts:          source,
-		metrics:     mb(requiresResourceAccounting),
+		metrics:     m,
 		format:      encodingOpts.Format,
 	}
 
@@ -282,7 +284,7 @@ func makeDeprecatedWebhookSink(
 	}
 
 	// TODO(yevgeniy): Establish HTTP connection in Dial().
-	sink.client, err = deprecatedMakeWebhookClient(u, connTimeout)
+	sink.client, err = deprecatedMakeWebhookClient(u, connTimeout, m.netMetrics())
 	if err != nil {
 		return nil, err
 	}
@@ -303,12 +305,14 @@ func makeDeprecatedWebhookSink(
 	return sink, nil
 }
 
-func deprecatedMakeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, error) {
+func deprecatedMakeWebhookClient(
+	u sinkURL, timeout time.Duration, nm *cidr.NetMetrics,
+) (*httputil.Client, error) {
 	client := &httputil.Client{
 		Client: &http.Client{
 			Timeout: timeout,
 			Transport: &http.Transport{
-				DialContext: (&net.Dialer{Timeout: timeout}).DialContext,
+				DialContext: nm.Wrap((&net.Dialer{Timeout: timeout}).DialContext, "webhook"),
 			},
 		},
 	}
