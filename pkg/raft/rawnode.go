@@ -481,6 +481,10 @@ func (rn *RawNode) NextUnstableIndex() uint64 {
 	return rn.raft.raftLog.unstable.entryInProgress + 1
 }
 
+func (rn *RawNode) SendPing(to pb.PeerID) bool {
+	return rn.raft.sendPing(to)
+}
+
 // Status returns the current status of the given group. This allocates, see
 // SparseStatus, BasicStatus and WithProgress for allocation-friendlier choices.
 func (rn *RawNode) Status() Status {

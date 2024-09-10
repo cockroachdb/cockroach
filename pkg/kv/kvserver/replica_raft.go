@@ -1364,6 +1364,8 @@ func (r *Replica) tick(
 	r.updatePausedFollowersLocked(ctx, ioThresholdMap)
 
 	leaseStatus := r.leaseStatusAtRLocked(ctx, r.store.Clock().NowAsClockTimestamp())
+	// TODO(pav-kv): modify the quiescence criterion so that we don't quiesce if
+	// RACv2 holds some eval/flow tokens.
 	if r.maybeQuiesceRaftMuLockedReplicaMuLocked(ctx, leaseStatus, livenessMap) {
 		return false, nil
 	}
@@ -1427,6 +1429,8 @@ func (r *Replica) tick(
 		// have been pending for 1 to 2 reproposal timeouts.
 		r.refreshProposalsLocked(ctx, refreshAtDelta, reasonTicks)
 	}
+
+	r.flowControlV2.MaybeSendPingsRaftMuLocked()
 	return true, nil
 }
 
