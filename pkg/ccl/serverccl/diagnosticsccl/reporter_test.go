@@ -322,15 +322,15 @@ func TestTelemetry_SuccessfulTelemetryPing(t *testing.T) {
 
 			dr := rt.server.DiagnosticsReporter().(*diagnostics.Reporter)
 
-			before := timeutil.Now()
-			oldTimestamp := dr.LastSuccessfulTelemetryPing
-			require.LessOrEqual(t, dr.LastSuccessfulTelemetryPing, before)
+			before := timeutil.Now().Unix()
+			oldTimestamp := dr.LastSuccessfulTelemetryPing.Load()
+			require.LessOrEqual(t, dr.LastSuccessfulTelemetryPing.Load(), before)
 			dr.ReportDiagnostics(ctx)
 
 			if tc.expectTimestampUpdate {
-				require.GreaterOrEqual(t, dr.LastSuccessfulTelemetryPing, before)
+				require.GreaterOrEqual(t, dr.LastSuccessfulTelemetryPing.Load(), before)
 			} else {
-				require.Equal(t, oldTimestamp, dr.LastSuccessfulTelemetryPing)
+				require.Equal(t, oldTimestamp, dr.LastSuccessfulTelemetryPing.Load())
 			}
 		})
 	}
