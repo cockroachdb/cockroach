@@ -27,10 +27,6 @@ func NewRaftNode(rn *raft.RawNode) RaftNode {
 	return raftNodeForRACv2{RawNode: rn}
 }
 
-func (rn raftNodeForRACv2) EnablePingForAdmittedLaggingLocked() {
-	panic("TODO(pav-kv): implement")
-}
-
 func (rn raftNodeForRACv2) TermLocked() uint64 {
 	return rn.Term()
 }
@@ -45,19 +41,6 @@ func (rn raftNodeForRACv2) LogMarkLocked() rac2.LogMark {
 
 func (rn raftNodeForRACv2) NextUnstableIndexLocked() uint64 {
 	return rn.NextUnstableIndex()
-}
-
-func (rn raftNodeForRACv2) GetAdmittedLocked() [raftpb.NumPriorities]uint64 {
-	// TODO(pav-kv): implement.
-	return [raftpb.NumPriorities]uint64{}
-}
-
-func (rn raftNodeForRACv2) SetAdmittedLocked([raftpb.NumPriorities]uint64) raftpb.Message {
-	panic("TODO(pav-kv): implement")
-}
-
-func (rn raftNodeForRACv2) StepMsgAppRespForAdmittedLocked(m raftpb.Message) error {
-	return rn.RawNode.Step(m)
 }
 
 func (rn raftNodeForRACv2) FollowerStateRaftMuLocked(
