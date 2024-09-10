@@ -2153,6 +2153,10 @@ func (s *SQLServer) InternalExecutor() isql.Executor {
 	return s.internalExecutor
 }
 
+func (s *SQLServer) PGServer() *pgwire.Server {
+	return s.pgServer
+}
+
 // MetricsRegistry returns the application-level metrics registry.
 func (s *SQLServer) MetricsRegistry() *metric.Registry {
 	return s.metricsRegistry
