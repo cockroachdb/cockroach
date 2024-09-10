@@ -303,8 +303,8 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 		return roachpb.ReplicaDescriptor{}, err
 	}
 
-	tc.repl.setDescRaftMuLocked(ctx, &newDesc)
 	tc.repl.raftMu.Lock()
+	tc.repl.setDescRaftMuLocked(ctx, &newDesc)
 	tc.repl.mu.RLock()
 	tc.repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.engine)
 	tc.repl.mu.RUnlock()
