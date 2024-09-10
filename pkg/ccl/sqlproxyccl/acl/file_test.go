@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,6 +39,9 @@ func TestDenyListFileParsing(t *testing.T) {
 			{ClusterType, "cluster"},
 		}
 		for _, tc := range cases {
+			defer leaktest.AfterTest(t)()
+			testutilsccl.ServerlessOnly(t)
+
 			s, err := tc.t.MarshalYAML()
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, s)
@@ -58,6 +62,9 @@ func TestDenyListFileParsing(t *testing.T) {
 			{"random text", UnknownType},
 		}
 		for _, tc := range cases {
+			defer leaktest.AfterTest(t)()
+			testutilsccl.ServerlessOnly(t)
+
 			var parsed DenyType
 			err := yaml.UnmarshalStrict([]byte(tc.raw), &parsed)
 			require.NoError(t, err)
@@ -67,6 +74,8 @@ func TestDenyListFileParsing(t *testing.T) {
 
 	t.Run("end to end testing of DenylistFile parsing", func(t *testing.T) {
 		defer leaktest.AfterTest(t)()
+		testutilsccl.ServerlessOnly(t)
+
 		expirationTimeString := "2021-01-01T15:20:39Z"
 		expirationTime := time.Date(2021, 1, 1, 15, 20, 39, 0, time.UTC)
 
@@ -130,6 +139,9 @@ denylist:
 	})
 
 	t.Run("test Ser/De of File", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+		testutilsccl.ServerlessOnly(t)
+
 		file := DenylistFile{
 			Seq: 72,
 			Denylist: []*DenyEntry{
@@ -156,6 +168,7 @@ denylist:
 
 func TestDenylistLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	startTime := time.Date(2021, 1, 1, 15, 20, 39, 0, time.UTC)
 	longExpirationTimeString := "2030-01-01T15:30:39Z"
@@ -358,6 +371,9 @@ func TestAllowListFileParsing(t *testing.T) {
 			}},
 		}
 		for _, tc := range cases {
+			defer leaktest.AfterTest(t)()
+			testutilsccl.ServerlessOnly(t)
+
 			var parsed AllowEntry
 			err := yaml.UnmarshalStrict([]byte(tc.raw), &parsed)
 			require.NoError(t, err)
@@ -367,6 +383,7 @@ func TestAllowListFileParsing(t *testing.T) {
 
 	t.Run("end to end testing of AllowlistFile parsing", func(t *testing.T) {
 		defer leaktest.AfterTest(t)()
+		testutilsccl.ServerlessOnly(t)
 
 		testCases := []struct {
 			input    string
@@ -441,6 +458,7 @@ allowlist:
 
 func TestAllowlistLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	type allowIOSpec struct {
 		connection ConnectionTags
@@ -491,6 +509,9 @@ allowlist:
 }
 
 func TestParsingErrorHandling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
+
 	// Use cancel to prevent leaked goroutines from file watches.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
