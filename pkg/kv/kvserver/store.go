@@ -707,7 +707,7 @@ A first phenomenon to understand is that of uninitialized Replicas, which is the
 State Machine at applied index zero, i.e. has an empty state. In CockroachDB, an
 uninitialized Replica can only advance to a nonzero log position ("become
 initialized") via a Raft snapshot (this is because we initialize all Ranges in
-the system at log index raftInitialLogIndex which allows us to write arbitrary
+the system at log index RaftInitialLogIndex which allows us to write arbitrary
 amounts of data into the initial state without having to worry about the size
 of individual log entries; see WriteInitialReplicaState).
 
