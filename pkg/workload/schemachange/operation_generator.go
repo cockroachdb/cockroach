@@ -2668,7 +2668,10 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		// NullableColumns can't be used as PKs.
 		{pgcode.InvalidSchemaDefinition, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable true | Generated false | Indexable true | InInvertedIndex false | Columns }) { end }`},
 		// UnindexableColumns can't be used as PKs.
-		{pgcode.InvalidSchemaDefinition, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable false | InInvertedIndex false | Columns }) { end }`},
+		// TODO(sql-foundations): Once #130271 is in the latest release of each
+		// supported version, we can comment this back in and use our
+		// type_is_indexable builtin.
+		// {pgcode.FeatureNotSupported, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable false | InInvertedIndex false | Columns }) { end }`},
 		// TODO(sql-foundations): Columns that have an inverted index can't be used
 		// as a primary key. This check isn't 100% correct because we only care
 		// about the final column in an inverted index and we're checking if
