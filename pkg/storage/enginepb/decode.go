@@ -33,6 +33,10 @@ func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
 		return nil, nil, false
 	}
 	tsLen := int(mvccKey[len(mvccKey)-1])
+	if tsLen == 1 {
+		// We never encode an empty version.
+		return nil, nil, false
+	}
 	keyPartEnd := len(mvccKey) - 1 - tsLen
 	if keyPartEnd < 0 {
 		return nil, nil, false
