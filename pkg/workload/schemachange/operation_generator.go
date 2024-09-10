@@ -2667,8 +2667,11 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		{pgcode.UndefinedColumn, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ("NonExistentColumn") { end }`},
 		// NullableColumns can't be used as PKs.
 		{pgcode.InvalidSchemaDefinition, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable true | Generated false | Indexable true | InInvertedIndex false | Columns }) { end }`},
-		// UnindexableColumns can't be used as PKs.
-		{pgcode.InvalidSchemaDefinition, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable false | InInvertedIndex false | Columns }) { end }`},
+		// UnindexableColumns can't be used as PKs. We expect a successful error
+		// code here because our set of indexable families is not exhaustive. Thus,
+		// the set of columns we consider not indexable may not be accurate. We
+		// will add a potential error message instead to account for this.
+		{pgcode.SuccessfulCompletion, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable false | InInvertedIndex false | Columns }) { end }`},
 		// TODO(sql-foundations): Columns that have an inverted index can't be used
 		// as a primary key. This check isn't 100% correct because we only care
 		// about the final column in an inverted index and we're checking if
@@ -2739,9 +2742,20 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		return nil, err
 	}
 
-	return newOpStmt(stmt, codesWithConditions{
+	// TODO(sql-foundations): Until #130165 is resolved, we add this potential
+	// error.
+	og.potentialCommitErrors.add(pgcode.DuplicateColumn)
+
+	opStmt := newOpStmt(stmt, codesWithConditions{
 		{code, true},
-	}), nil
+	})
+	opStmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
+	// TODO(sql-foundations): Until #130191 is resolved, add these as potential
+	// errors.
+	opStmt.potentialExecErrors.add(pgcode.InvalidColumnReference)
+	opStmt.potentialExecErrors.add(pgcode.DuplicateColumn)
+
+	return opStmt, nil
 }
 
 func (og *operationGenerator) survive(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
