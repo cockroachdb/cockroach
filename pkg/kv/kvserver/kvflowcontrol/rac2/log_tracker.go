@@ -34,6 +34,23 @@ type AdmittedVector struct {
 	Admitted [raftpb.NumPriorities]uint64
 }
 
+// Merge merges two admitted vectors into one. A higher-term vector always wins.
+// If the terms match, the admitted indices are computed as max of the two, for
+// each priority.
+func (av AdmittedVector) Merge(other AdmittedVector) AdmittedVector {
+	if other.Term > av.Term {
+		return other
+	} else if other.Term < av.Term {
+		return av
+	}
+	for pri, my := range av.Admitted {
+		if their := other.Admitted[pri]; their > my {
+			av.Admitted[pri] = their
+		}
+	}
+	return av
+}
+
 // LogTracker tracks the durable and logically admitted state of a raft log.
 //
 // Writes to a raft log are ordered by LogMark (term, index) where term is the
