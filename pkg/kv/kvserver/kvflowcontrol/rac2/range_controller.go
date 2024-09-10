@@ -750,10 +750,10 @@ func (rss *replicaSendStream) returnTokens(
 	ctx context.Context, returned [raftpb.NumPriorities]kvflowcontrol.Tokens,
 ) {
 	for pri, tokens := range returned {
-		pri := raftpb.Priority(pri)
 		if tokens > 0 {
-			rss.parent.evalTokenCounter.Return(ctx, WorkClassFromRaftPriority(pri), tokens)
-			rss.parent.sendTokenCounter.Return(ctx, WorkClassFromRaftPriority(pri), tokens)
+			pri := WorkClassFromRaftPriority(raftpb.Priority(pri))
+			rss.parent.evalTokenCounter.Return(ctx, pri, tokens)
+			rss.parent.sendTokenCounter.Return(ctx, pri, tokens)
 		}
 	}
 }
