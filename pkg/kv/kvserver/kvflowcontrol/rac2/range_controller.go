@@ -60,6 +60,12 @@ type RangeController interface {
 	//
 	// Requires replica.raftMu to be held.
 	HandleSchedulerEventRaftMuLocked(ctx context.Context) error
+	// AdmitRaftMuLocked handles the notification about the given replica's
+	// admitted vector change. No-op if the replica is not known, or the admitted
+	// vector is stale (either in Term, or the indices).
+	//
+	// Requires replica.raftMu to be held.
+	AdmitRaftMuLocked(context.Context, roachpb.ReplicaID, AdmittedVector)
 	// SetReplicasRaftMuLocked sets the replicas of the range. The caller will
 	// never mutate replicas, and neither should the callee.
 	//
@@ -375,6 +381,19 @@ func (rc *rangeController) HandleSchedulerEventRaftMuLocked(ctx context.Context)
 	panic("unimplemented")
 }
 
+// AdmitRaftMuLocked handles the notification about the given replica's
+// admitted vector change. No-op if the replica is not known, or the admitted
+// vector is stale (either in Term, or the indices).
+//
+// Requires replica.raftMu to be held.
+func (rc *rangeController) AdmitRaftMuLocked(
+	ctx context.Context, replicaID roachpb.ReplicaID, av AdmittedVector,
+) {
+	if rs, ok := rc.replicaMap[replicaID]; ok {
+		rs.admit(ctx, av)
+	}
+}
+
 // SetReplicasRaftMuLocked sets the replicas of the range. The caller will
 // never mutate replicas, and neither should the callee.
 //
@@ -530,6 +549,12 @@ func (rss *replicaSendStream) changeConnectedStateLocked(state connectedState, n
 	rss.mu.connectedStateStart = now
 }
 
+func (rss *replicaSendStream) admit(ctx context.Context, av AdmittedVector) {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+	rss.returnTokens(ctx, rss.mu.tracker.Untrack(av.Term, av.Admitted))
+}
+
 func (rs *replicaState) createReplicaSendStream() {
 	// Must be in StateReplicate on creation.
 	rs.sendStream = &replicaSendStream{
@@ -676,6 +701,12 @@ func (rs *replicaState) handleReadyState(
 	return shouldWaitChange
 }
 
+func (rs *replicaState) admit(ctx context.Context, av AdmittedVector) {
+	if rss := rs.sendStream; rss != nil {
+		rss.admit(ctx, av)
+	}
+}
+
 func (rss *replicaState) closeSendStream(ctx context.Context) {
 	rss.sendStream.mu.Lock()
 	defer rss.sendStream.mu.Unlock()
@@ -693,9 +724,7 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(
 	ctx context.Context,
 ) (shouldWaitChange bool) {
 	av := rss.parent.parent.opts.AdmittedTracker.GetAdmitted(rss.parent.desc.ReplicaID)
-	rss.mu.Lock()
-	defer rss.mu.Unlock()
-	defer rss.returnTokens(ctx, rss.mu.tracker.Untrack(av.Term, av.Admitted))
+	rss.admit(ctx, av)
 
 	// The leader is always in state replicate.
 	if rss.parent.parent.opts.LocalReplicaID == rss.parent.desc.ReplicaID {
