@@ -47,6 +47,29 @@ func (l *LogTracker) check(t *testing.T) {
 	}
 }
 
+func TestAdmittedVectorMerge(t *testing.T) {
+	av := func(term uint64, indices ...uint64) AdmittedVector {
+		av := AdmittedVector{Term: term}
+		require.Len(t, indices, len(av.Admitted))
+		copy(av.Admitted[:], indices)
+		return av
+	}
+	for _, tt := range [][3]AdmittedVector{
+		// Different terms. Higher term wins. Merge is symmetric.
+		{av(3, 10, 11, 12, 12), av(4, 10, 10, 20, 20), av(4, 10, 10, 20, 20)},
+		{av(4, 10, 10, 20, 20), av(3, 10, 11, 12, 12), av(4, 10, 10, 20, 20)},
+		// Same term. Highest index wins at each priority.
+		{av(3, 10, 10, 10, 10), av(3, 20, 20, 20, 20), av(3, 20, 20, 20, 20)},
+		{av(3, 20, 20, 20, 20), av(3, 10, 10, 10, 10), av(3, 20, 20, 20, 20)},
+		{av(3, 10, 11, 12, 12), av(3, 8, 9, 20, 20), av(3, 10, 11, 20, 20)},
+		{av(3, 5, 10, 5, 10), av(3, 10, 5, 10, 5), av(3, 10, 10, 10, 10)},
+	} {
+		t.Run("", func(t *testing.T) {
+			require.Equal(t, tt[2], tt[0].Merge(tt[1]))
+		})
+	}
+}
+
 func TestLogTrackerAppend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
