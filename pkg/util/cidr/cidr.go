@@ -428,6 +428,51 @@ func (m *NetMetrics) WrapTLS(dial DialContext, tlsCfg *tls.Config, labels ...str
 	}
 }
 
+type Dialer interface {
+	Dial(network, addr string) (c net.Conn, err error)
+	DialContext(ctx context.Context, network, addr string) (c net.Conn, err error)
+}
+
+type dialer struct {
+	inner  Dialer
+	m      *NetMetrics
+	labels []string
+}
+
+func (d *dialer) Dial(network, addr string) (net.Conn, error) {
+	conn, err := d.inner.Dial(network, addr)
+	if err != nil {
+		return conn, err
+	}
+	// m can be nil in tests.
+	if d.m != nil {
+		conn = d.m.track(conn, d.labels...)
+	}
+	return conn, nil
+}
+
+func (d *dialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	conn, err := d.inner.DialContext(ctx, network, addr)
+	if err != nil {
+		return conn, err
+	}
+	// m can be nil in tests.
+	if d.m != nil {
+		conn = d.m.track(conn, d.labels...)
+	}
+	return conn, nil
+}
+
+var _ Dialer = (*dialer)(nil)
+
+func (m *NetMetrics) WrapDialer(inner Dialer, labels ...string) Dialer {
+	return &dialer{
+		inner:  inner,
+		m:      m,
+		labels: labels,
+	}
+}
+
 // track converts a connection to a wrapped connection with the given labels.
 func (m *NetMetrics) track(conn net.Conn, labels ...string) metricsConn {
 	var remote string

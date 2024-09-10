@@ -1123,6 +1123,9 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		LaggingRanges:               a.LaggingRanges.AddChild(scope),
 		CloudstorageBufferedBytes:   a.CloudstorageBufferedBytes.AddChild(scope),
 		KafkaThrottlingNanos:        a.KafkaThrottlingNanos.AddChild(scope),
+		// TODO(#130358): Again, this doesn't belong here, but it's the most
+		// convenient way to feed this metric to changefeeds
+		NetMetrics: a.NetMetrics,
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)
