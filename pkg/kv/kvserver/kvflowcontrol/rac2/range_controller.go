@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -432,12 +433,15 @@ func (rc *rangeController) AdmitRaftMuLocked(
 }
 
 func (rc *rangeController) MaybeSendPingsRaftMuLocked() {
+	now := timeutil.Now()
 	for id, state := range rc.replicaMap {
 		if id == rc.opts.LocalReplicaID {
 			continue
 		}
-		if s := state.sendStream; s != nil && s.shouldPing() {
-			rc.opts.RaftInterface.SendPingRaftMuLocked(id)
+		if s := state.sendStream; s != nil && s.shouldPing(now) {
+			if rc.opts.RaftInterface.SendPingRaftMuLocked(id) {
+				s.sentPing(now)
+			}
 		}
 	}
 }
@@ -646,6 +650,7 @@ type replicaSendStream struct {
 		connectedState      connectedState
 		connectedStateStart time.Time
 		tracker             Tracker
+		lastAdmitOrPing     time.Time
 		closed              bool
 	}
 }
@@ -655,16 +660,26 @@ func (rss *replicaSendStream) changeConnectedStateLocked(state connectedState, n
 	rss.mu.connectedStateStart = now
 }
 
-func (rss *replicaSendStream) shouldPing() bool {
+func (rss *replicaSendStream) shouldPing(now time.Time) bool {
 	rss.mu.Lock() // TODO(pav-kv): should we make it RWMutex.RLock()?
 	defer rss.mu.Unlock()
-	return !rss.mu.tracker.Empty()
+	return !rss.mu.tracker.Empty() && now.Sub(rss.mu.lastAdmitOrPing) > 1*time.Second
+}
+
+func (rss *replicaSendStream) sentPing(now time.Time) {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+	if now.After(rss.mu.lastAdmitOrPing) {
+		rss.mu.lastAdmitOrPing = now
+	}
 }
 
 func (rss *replicaSendStream) admit(ctx context.Context, av AdmittedVector) {
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
-	rss.returnTokens(ctx, rss.mu.tracker.Untrack(av.Term, av.Admitted))
+	if rss.returnTokens(ctx, rss.mu.tracker.Untrack(av.Term, av.Admitted)) {
+		rss.mu.lastAdmitOrPing = timeutil.Now()
+	}
 }
 
 func (rs *replicaState) createReplicaSendStream() {
@@ -848,14 +863,16 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(
 // the eval and send token counters.
 func (rss *replicaSendStream) returnTokens(
 	ctx context.Context, returned [raftpb.NumPriorities]kvflowcontrol.Tokens,
-) {
+) (updated bool) {
 	for pri, tokens := range returned {
 		if tokens > 0 {
 			pri := WorkClassFromRaftPriority(raftpb.Priority(pri))
 			rss.parent.evalTokenCounter.Return(ctx, pri, tokens)
 			rss.parent.sendTokenCounter.Return(ctx, pri, tokens)
+			updated = true
 		}
 	}
+	return updated
 }
 
 // probeRecentlyReplicateDuration is the duration the controller will wait
