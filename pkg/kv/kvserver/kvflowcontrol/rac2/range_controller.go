@@ -106,17 +106,6 @@ type FollowerStateInfo struct {
 	Next  uint64
 }
 
-// AdmittedTracker is used to retrieve the latest admitted vector for a
-// replica (including the leader).
-type AdmittedTracker interface {
-	// GetAdmitted returns the latest AdmittedVector for replicaID. It returns
-	// an empty struct if the replicaID is not known. NB: the
-	// AdmittedVector.Admitted[i] value can transiently advance past
-	// FollowerStateInfo.Match, since the admitted tracking subsystem is
-	// separate from Raft.
-	GetAdmitted(replicaID roachpb.ReplicaID) AdmittedVector
-}
-
 // RaftEvent carries a RACv2-relevant subset of raft state sent to storage.
 type RaftEvent struct {
 	// Term is the leader term on whose behalf the entries or snapshot are
@@ -206,7 +195,6 @@ type RangeControllerOptions struct {
 	RaftInterface       RaftInterface
 	Clock               *hlc.Clock
 	CloseTimerScheduler ProbeToCloseTimerScheduler
-	AdmittedTracker     AdmittedTracker
 	EvalWaitMetrics     *EvalWaitMetrics
 }
 
