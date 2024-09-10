@@ -424,10 +424,18 @@ type processorImpl struct {
 
 	// The fields below are accessed while holding the mutex. Lock ordering:
 	// Replica.raftMu < this.mu < Replica.mu.
+	//
+	// TODO(pav-kv): most fields are updated when holding both raftMu and this mu.
+	// This knowledge can eliminate a bunch of mu.Lock() calls in the code. Audit
+	// the code, and optimize locks.
+	// TODO(pav-kv): possibly there are only a few exceptions of fields that can
+	// be modified with only mu locked. Group things accordingly.
 	mu struct {
 		syncutil.Mutex
 
-		// Transitions once from false => true when the Replica is destroyed.
+		// destroyed transitions once from false => true when the Replica is
+		// destroyed. Updated while holding raftMu and the enclosing mu. To read
+		// this field, at least one of these mutexes must be locked.
 		destroyed bool
 
 		leaderID roachpb.ReplicaID
@@ -439,8 +447,13 @@ type processorImpl struct {
 		leaseholderID roachpb.ReplicaID
 		// State at a follower.
 		follower struct {
+			// isLeaderUsingV2Protocol is true when the leaderID indicated that it's
+			// using RACv2. Always accessed while holding raftMu.
 			isLeaderUsingV2Protocol bool
-			lowPriOverrideState     lowPriOverrideState
+			// lowPriOverrideState records which raft log entries have their priority
+			// overridden to be raftpb.LowPri.
+			// Always accessed while holding raftMu.
+			lowPriOverrideState lowPriOverrideState
 		}
 		// State when leader, i.e., when leaderID == opts.ReplicaID, and v2
 		// protocol is enabled.
@@ -495,11 +508,9 @@ func NewProcessor(opts ProcessorOptions) Processor {
 	return p
 }
 
-// isLeaderUsingV2ProcLocked returns true if the current leader uses the V2
+// isLeaderUsingV2RaftMuLocked returns true if the current leader uses the V2
 // protocol.
-//
-// NB: the result of this method does not change while raftMu is held.
-func (p *processorImpl) isLeaderUsingV2ProcLocked() bool {
+func (p *processorImpl) isLeaderUsingV2RaftMuLocked() bool {
 	// We are the leader using V2, or a follower who learned that the leader is
 	// using the V2 protocol.
 	return p.mu.leader.rc != nil || p.mu.follower.isLeaderUsingV2Protocol
@@ -727,6 +738,9 @@ func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
 // HandleRaftReadyRaftMuLocked implements Processor.
 func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.RaftEvent) {
 	p.opts.Replica.RaftMuAssertHeld()
+	// TODO(pav-kv): do we need this mutex? All the fields used below are changed
+	// only under raftMu. Only makeStateConsistentRaftMuLockedProcLocked needs it
+	// locked, but it could do so internally.
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	// Skip if the replica is not initialized or already destroyed.
@@ -761,7 +775,7 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	p.makeStateConsistentRaftMuLockedProcLocked(
 		ctx, nextUnstableIndex, leaderID, leaseholderID, myLeaderTerm)
 
-	if !p.isLeaderUsingV2ProcLocked() {
+	if !p.isLeaderUsingV2RaftMuLocked() {
 		return
 	}
 
@@ -807,15 +821,12 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 	p.registerLogAppend(ctx, e)
 
 	// Return false only if we're not destroyed and not using V2.
-	if destroyed, usingV2 := func() (bool, bool) {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		return p.mu.destroyed, p.isLeaderUsingV2ProcLocked()
-	}(); destroyed || !usingV2 {
-		return destroyed
-	}
+	//
 	// NB: destroyed and "using v2" status does not change below since we are
 	// holding raftMu.
+	if p.mu.destroyed || !p.isLeaderUsingV2RaftMuLocked() {
+		return p.mu.destroyed
+	}
 
 	for _, entry := range e.Entries {
 		typ, priBits, err := raftlog.EncodingOf(entry)
@@ -838,11 +849,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 			if raftPri != priBits {
 				panic(errors.AssertionFailedf("inconsistent priorities %s, %s", raftPri, priBits))
 			}
-			func() {
-				p.mu.Lock()
-				defer p.mu.Unlock()
-				raftPri = p.mu.follower.lowPriOverrideState.getEffectivePriority(entry.Index, raftPri)
-			}()
+			raftPri = p.mu.follower.lowPriOverrideState.getEffectivePriority(entry.Index, raftPri)
 		} else {
 			raftPri = raftpb.LowPri
 			if admissionpb.WorkClassFromPri(admissionpb.WorkPriority(meta.AdmissionPriority)) ==
@@ -924,8 +931,8 @@ func (p *processorImpl) SideChannelForPriorityOverrideAtFollowerRaftMuLocked(
 	info SideChannelInfoUsingRaftMessageRequest,
 ) {
 	p.opts.Replica.RaftMuAssertHeld()
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	// NB: all p.mu fields accessed below are accessed only under raftMu, so we
+	// don't need to lock p.mu.
 	if p.mu.destroyed {
 		return
 	}
