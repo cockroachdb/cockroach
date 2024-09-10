@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -65,6 +66,7 @@ func makeWebhookSinkClient(
 	opts changefeedbase.WebhookSinkOptions,
 	batchCfg sinkBatchConfig,
 	parallelism int,
+	m metricsRecorder,
 ) (SinkClient, error) {
 	err := validateWebhookOpts(u, encodingOpts, opts)
 	if err != nil {
@@ -84,7 +86,7 @@ func makeWebhookSinkClient(
 	if opts.ClientTimeout != nil {
 		connTimeout = *opts.ClientTimeout
 	}
-	sinkClient.client, err = makeWebhookClient(u, connTimeout, parallelism)
+	sinkClient.client, err = makeWebhookClient(u, connTimeout, parallelism, m.netMetrics())
 	if err != nil {
 		return nil, err
 	}
@@ -106,13 +108,13 @@ func makeWebhookSinkClient(
 }
 
 func makeWebhookClient(
-	u sinkURL, timeout time.Duration, parallelism int,
+	u sinkURL, timeout time.Duration, parallelism int, nm *cidr.NetMetrics,
 ) (*httputil.Client, error) {
 	client := &httputil.Client{
 		Client: &http.Client{
 			Timeout: timeout,
 			Transport: &http.Transport{
-				DialContext:         (&net.Dialer{Timeout: timeout}).DialContext,
+				DialContext:         nm.Wrap((&net.Dialer{Timeout: timeout}).DialContext, "webhook_v2"),
 				MaxConnsPerHost:     parallelism,
 				MaxIdleConnsPerHost: parallelism,
 				IdleConnTimeout:     time.Minute,
@@ -361,12 +363,14 @@ func makeWebhookSink(
 	mb metricsRecorderBuilder,
 	settings *cluster.Settings,
 ) (Sink, error) {
+	m := mb(requiresResourceAccounting)
+
 	batchCfg, retryOpts, err := getSinkConfigFromJson(opts.JSONConfig, sinkJSONConfig{})
 	if err != nil {
 		return nil, err
 	}
 
-	sinkClient, err := makeWebhookSinkClient(ctx, u, encodingOpts, opts, batchCfg, parallelism)
+	sinkClient, err := makeWebhookSinkClient(ctx, u, encodingOpts, opts, batchCfg, parallelism, m)
 	if err != nil {
 		return nil, err
 	}
@@ -381,7 +385,7 @@ func makeWebhookSink(
 		nil,
 		pacerFactory,
 		source,
-		mb(requiresResourceAccounting),
+		m,
 		settings,
 	), nil
 }
