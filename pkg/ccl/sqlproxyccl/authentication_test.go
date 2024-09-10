@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/jackc/pgproto3/v2"
@@ -26,6 +27,7 @@ var nilThrottleHook = func(state throttler.AttemptStatus) error {
 
 func TestAuthenticateOK(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	cli, srv := net.Pipe()
 	be := pgproto3.NewBackend(pgproto3.NewChunkReader(srv), srv)
@@ -55,6 +57,7 @@ func TestAuthenticateOK(t *testing.T) {
 
 func TestAuthenticateClearText(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	cli, srv := net.Pipe()
 	be := pgproto3.NewBackend(pgproto3.NewChunkReader(srv), srv)
@@ -98,6 +101,7 @@ func TestAuthenticateClearText(t *testing.T) {
 
 func TestAuthenticateThrottled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	server := func(t *testing.T, be *pgproto3.Backend) {
 		require.NoError(t, be.Send(&pgproto3.AuthenticationCleartextPassword{}))
@@ -153,6 +157,7 @@ func TestAuthenticateThrottled(t *testing.T) {
 
 func TestErrorFollowingAuthenticateNotThrottled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	server := func(t *testing.T, be *pgproto3.Backend) {
 		require.NoError(t, be.Send(&pgproto3.AuthenticationCleartextPassword{}))
@@ -208,6 +213,7 @@ func TestErrorFollowingAuthenticateNotThrottled(t *testing.T) {
 
 func TestAuthenticateError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	cli, srv := net.Pipe()
 	be := pgproto3.NewBackend(pgproto3.NewChunkReader(srv), srv)
@@ -228,6 +234,7 @@ func TestAuthenticateError(t *testing.T) {
 
 func TestAuthenticateUnexpectedMessage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	cli, srv := net.Pipe()
 	be := pgproto3.NewBackend(pgproto3.NewChunkReader(srv), srv)
@@ -250,6 +257,7 @@ func TestAuthenticateUnexpectedMessage(t *testing.T) {
 
 func TestReadTokenAuthResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	t.Run("unexpected message", func(t *testing.T) {
 		cli, srv := net.Pipe()

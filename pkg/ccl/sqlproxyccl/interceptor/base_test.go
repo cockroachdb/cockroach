@@ -17,6 +17,7 @@ import (
 	"testing/iotest"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -26,6 +27,7 @@ import (
 
 func TestNewPgInterceptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	reader, _ := io.Pipe()
 
@@ -47,6 +49,7 @@ func TestNewPgInterceptor(t *testing.T) {
 
 func TestPGInterceptor_PeekMsg(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	t.Run("read_error", func(t *testing.T) {
 		r := iotest.ErrReader(errors.New("read error"))
@@ -147,6 +150,7 @@ func TestPGInterceptor_PeekMsg(t *testing.T) {
 
 func TestPGInterceptor_ReadMsg(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	t.Run("read_error/msg_fits", func(t *testing.T) {
 		buf := buildSrc(t, 1)
@@ -262,6 +266,7 @@ func TestPGInterceptor_ReadMsg(t *testing.T) {
 
 func TestPGInterceptor_ForwardMsg(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	t.Run("write_error/fully_buffered", func(t *testing.T) {
 		src := buildSrc(t, 1)
@@ -352,6 +357,7 @@ func TestPGInterceptor_ForwardMsg(t *testing.T) {
 
 func TestPGInterceptor_readSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	buf := bytes.NewBufferString("foobarbazz")
 	pgi := newPgInterceptor(iotest.OneByteReader(buf), 10 /* bufSize */)
@@ -370,6 +376,7 @@ func TestPGInterceptor_readSize(t *testing.T) {
 
 func TestPGInterceptor_writeSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	buf := bytes.NewBufferString("foobarbazz")
 	pgi := newPgInterceptor(iotest.OneByteReader(buf), 10 /* bufSize */)
@@ -388,6 +395,7 @@ func TestPGInterceptor_writeSize(t *testing.T) {
 
 func TestPGInterceptor_ensureNextNBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	t.Run("invalid n", func(t *testing.T) {
 		pgi := newPgInterceptor(nil /* src */, 8 /* bufSize */)

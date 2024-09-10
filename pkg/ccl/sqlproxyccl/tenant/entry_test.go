@@ -11,12 +11,14 @@ package tenant
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestHasRunningPod(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	for _, tc := range []struct {
 		name     string
@@ -57,6 +59,7 @@ func TestHasRunningPod(t *testing.T) {
 
 func TestTenantMetadataUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	e := &tenantEntry{}
 	require.False(t, e.IsValid())

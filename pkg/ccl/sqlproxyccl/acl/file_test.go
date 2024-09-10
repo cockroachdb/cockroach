@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -67,6 +68,7 @@ func TestDenyListFileParsing(t *testing.T) {
 
 	t.Run("end to end testing of DenylistFile parsing", func(t *testing.T) {
 		defer leaktest.AfterTest(t)()
+		testutilsccl.ServerlessOnly()
 		expirationTimeString := "2021-01-01T15:20:39Z"
 		expirationTime := time.Date(2021, 1, 1, 15, 20, 39, 0, time.UTC)
 
@@ -156,6 +158,7 @@ denylist:
 
 func TestDenylistLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	startTime := time.Date(2021, 1, 1, 15, 20, 39, 0, time.UTC)
 	longExpirationTimeString := "2030-01-01T15:30:39Z"
@@ -367,6 +370,7 @@ func TestAllowListFileParsing(t *testing.T) {
 
 	t.Run("end to end testing of AllowlistFile parsing", func(t *testing.T) {
 		defer leaktest.AfterTest(t)()
+		testutilsccl.ServerlessOnly()
 
 		testCases := []struct {
 			input    string
@@ -441,6 +445,7 @@ allowlist:
 
 func TestAllowlistLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly()
 
 	type allowIOSpec struct {
 		connection ConnectionTags
