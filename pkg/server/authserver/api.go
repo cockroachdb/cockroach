@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
 )
@@ -91,6 +92,7 @@ type Server interface {
 type SQLServerInterface interface {
 	ExecutorConfig() *sql.ExecutorConfig
 	InternalExecutor() isql.Executor
+	PGServer() *pgwire.Server
 }
 
 type AuthMux interface {

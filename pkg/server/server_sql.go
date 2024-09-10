@@ -217,6 +217,10 @@ type SQLServer struct {
 	serviceMode mtinfopb.TenantServiceMode
 }
 
+func (s *SQLServer) PGServer() *pgwire.Server {
+	return s.pgServer
+}
+
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
 // only available if the SQL server runs as part of a KV node.
 //
@@ -2151,6 +2155,11 @@ func (s *SQLServer) ExecutorConfig() *sql.ExecutorConfig {
 // InternalExecutor returns an executor for internal SQL queries.
 func (s *SQLServer) InternalExecutor() isql.Executor {
 	return s.internalExecutor
+}
+
+// PgServer returns an pgwire server for accessing authentication interfaces.
+func (s *SQLServer) PgServer() *pgwire.Server {
+	return s.pgServer
 }
 
 // MetricsRegistry returns the application-level metrics registry.
