@@ -358,7 +358,7 @@ type Processor interface {
 	// admitted state. The caller is responsible for scheduling on the raft
 	// scheduler, such that ProcessPiggybackedAdmittedAtLeaderRaftMuLocked
 	// gets called soon.
-	EnqueuePiggybackedAdmittedAtLeader(msg raftpb.Message)
+	EnqueuePiggybackedAdmittedAtLeader(roachpb.ReplicaID, kvflowcontrolpb.AdmittedState)
 	// ProcessPiggybackedAdmittedAtLeaderRaftMuLocked is called to process
 	// previous enqueued piggybacked MsgAppResp. Returns true if
 	// HandleRaftReadyRaftMuLocked should be called.
@@ -389,6 +389,13 @@ type Processor interface {
 	)
 	// AdmittedState returns the vector of admitted log indices.
 	AdmittedState() rac2.AdmittedVector
+
+	// AdmitRaftMuLocked is called to notify RACv2 about the admitted vector
+	// update on the given peer replica. This releases the associated flow tokens
+	// if the replica is known and the admitted vector covers any.
+	//
+	// raftMu is held.
+	AdmitRaftMuLocked(context.Context, roachpb.ReplicaID, rac2.AdmittedVector)
 
 	// AdmitForEval is called to admit work that wants to evaluate at the
 	// leaseholder.
@@ -429,7 +436,14 @@ type processorImpl struct {
 		// State when leader, i.e., when leaderID == opts.ReplicaID, and v2
 		// protocol is enabled.
 		leader struct {
-			enqueuedPiggybackedResponses map[roachpb.ReplicaID]raftpb.Message
+			// admitted contains recently delivered admitted vectors. When this map is
+			// not empty, the range is scheduled for applying these admitted vectors
+			// to the corresponding streams / token trackers. The map is cleared when
+			// the admitted vectors are applied.
+			//
+			// Invariant: rc == nil ==> len(admitted) == 0.
+			// Invariant: len(admitted) != 0 ==> the processing is scheduled.
+			admitted map[roachpb.ReplicaID]rac2.AdmittedVector
 			// Updating the rc reference requires both the enclosing mu and
 			// rcReferenceUpdateMu. Code paths that want to access this
 			// reference only need one of these mutexes. rcReferenceUpdateMu
@@ -676,7 +690,7 @@ func (p *processorImpl) closeLeaderStateRaftMuLockedProcLocked(ctx context.Conte
 		defer p.mu.leader.rcReferenceUpdateMu.Unlock()
 		p.mu.leader.rc = nil
 	}()
-	p.mu.leader.enqueuedPiggybackedResponses = nil
+	p.mu.leader.admitted = nil
 	p.mu.leader.term = 0
 }
 
@@ -700,7 +714,7 @@ func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
 		})
 	}()
 	p.mu.leader.term = term
-	p.mu.leader.enqueuedPiggybackedResponses = map[roachpb.ReplicaID]raftpb.Message{}
+	p.mu.leader.admitted = map[roachpb.ReplicaID]rac2.AdmittedVector{}
 }
 
 // HandleRaftReadyRaftMuLocked implements Processor.
@@ -744,20 +758,23 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 		return
 	}
 
-	// Piggyback admitted index advancement, if any, to the message stream going
-	// to the leader node, if we are not the leader. At the leader node, the
-	// admitted vector is read directly from the log tracker.
-	if p.mu.leader.rc == nil && p.mu.leaderNodeID != 0 {
-		// TODO(pav-kv): must make sure the leader term is the same.
-		if admitted, dirty := p.logTracker.admitted(true /* sched */); dirty {
+	if av, dirty := p.logTracker.admitted(true /* sched */); dirty {
+		if rc := p.mu.leader.rc; rc != nil {
+			// If we are the leader, notify the RangeProcessor about our replica's new
+			// admitted vector.
+			rc.AdmitRaftMuLocked(ctx, p.opts.ReplicaID, av)
+		} else if p.mu.leaderNodeID != 0 {
+			// If the leader is known, piggyback the updated admitted vector to the
+			// message stream going to the leader node.
+			// TODO(pav-kv): must make sure the leader term is the same.
 			p.opts.AdmittedPiggybacker.Add(p.mu.leaderNodeID, kvflowcontrolpb.PiggybackedAdmittedState{
 				RangeID:       p.opts.RangeID,
 				ToStoreID:     p.mu.leaderStoreID,
 				FromReplicaID: p.opts.ReplicaID,
 				ToReplicaID:   p.mu.leaderID,
 				Admitted: kvflowcontrolpb.AdmittedState{
-					Term:     admitted.Term,
-					Admitted: admitted.Admitted[:],
+					Term:     av.Term,
+					Admitted: av.Admitted[:],
 				}})
 		}
 	}
@@ -864,18 +881,21 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 }
 
 // EnqueuePiggybackedAdmittedAtLeader implements Processor.
-func (p *processorImpl) EnqueuePiggybackedAdmittedAtLeader(msg raftpb.Message) {
-	if roachpb.ReplicaID(msg.To) != p.opts.ReplicaID {
-		// Ignore message to a stale ReplicaID.
-		return
-	}
+func (p *processorImpl) EnqueuePiggybackedAdmittedAtLeader(
+	from roachpb.ReplicaID, state kvflowcontrolpb.AdmittedState,
+) {
+	// TODO(pav-kv): we don't want to lock the wide mutex here.
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.mu.leader.rc == nil {
 		return
 	}
-	// Only need to keep the latest message from a replica.
-	p.mu.leader.enqueuedPiggybackedResponses[roachpb.ReplicaID(msg.From)] = msg
+	var admitted [raftpb.NumPriorities]uint64
+	copy(admitted[:], state.Admitted)
+	// Merge in the received admitted vector. We are only interested in the
+	// highest admitted marks. Zero value always merges in favour of the new one.
+	p.mu.leader.admitted[from] = p.mu.leader.admitted[from].Merge(
+		rac2.AdmittedVector{Term: state.Term, Admitted: admitted})
 }
 
 // ProcessPiggybackedAdmittedAtLeaderRaftMuLocked implements Processor.
@@ -883,18 +903,13 @@ func (p *processorImpl) ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx conte
 	p.opts.Replica.RaftMuAssertHeld()
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.mu.destroyed || len(p.mu.leader.enqueuedPiggybackedResponses) == 0 || p.raftMu.raftNode == nil {
+	if p.mu.destroyed || len(p.mu.leader.admitted) == 0 {
 		return false
 	}
-	p.opts.Replica.MuLock()
-	defer p.opts.Replica.MuUnlock()
-	for k, m := range p.mu.leader.enqueuedPiggybackedResponses {
-		err := p.raftMu.raftNode.StepMsgAppRespForAdmittedLocked(m)
-		if err != nil {
-			log.Errorf(ctx, "%s", err)
-		}
-		delete(p.mu.leader.enqueuedPiggybackedResponses, k)
+	for replicaID, state := range p.mu.leader.admitted {
+		p.mu.leader.rc.AdmitRaftMuLocked(ctx, replicaID, state)
 	}
+	clear(p.mu.leader.admitted)
 	return true
 }
 
@@ -952,6 +967,17 @@ func (p *processorImpl) AdmittedLogEntry(
 func (p *processorImpl) AdmittedState() rac2.AdmittedVector {
 	admitted, _ := p.logTracker.admitted(false /* sched */)
 	return admitted
+}
+
+// AdmitRaftMuLocked implements Processor.
+func (p *processorImpl) AdmitRaftMuLocked(
+	ctx context.Context, replicaID roachpb.ReplicaID, av rac2.AdmittedVector,
+) {
+	p.opts.Replica.RaftMuAssertHeld()
+	// NB: rc is always updated while raftMu is held.
+	if rc := p.mu.leader.rc; rc != nil {
+		rc.AdmitRaftMuLocked(ctx, replicaID, av)
+	}
 }
 
 // AdmitForEval implements Processor.

@@ -534,14 +534,15 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 					t.kvflowControl.mu.connectionTracker.markStoresConnected(storeIDs)
 					t.kvflowControl.mu.Unlock()
 					if len(batch.AdmittedStates) != 0 {
-						// TODO(pav-kv): dispatch admitted vectors to RACv2.
+						// Dispatch the admitted vectors to RACv2.
 						// NB: we do this via this special path instead of using the
 						// handleRaftRequest path since we don't have a full-fledged
 						// RaftMessageRequest for each range (each of these responses could
 						// be for a different range), and because what we need to do w.r.t.
 						// queueing is much simpler (we don't need to worry about queue size
-						// since we only keep the latest message from each replica).
-						_ = t.kvflowcontrol2.piggybackedResponseScheduler.ScheduleAdmittedResponseForRangeRACv2
+						// since we only keep the highest admitted marks from each replica).
+						t.kvflowcontrol2.piggybackedResponseScheduler.
+							ScheduleAdmittedResponseForRangeRACv2(ctx, batch.AdmittedStates)
 					}
 					if len(batch.Requests) == 0 {
 						continue
