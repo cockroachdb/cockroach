@@ -155,10 +155,6 @@ func (rn *testRaftNode) print() {
 		rn.term, rn.leader, rn.r.leaseholder, rn.mark, rn.nextUnstableIndex)
 }
 
-func msgString(msg raftpb.Message) string {
-	return fmt.Sprintf("type: %s from: %d to: %d", msg.Type.String(), msg.From, msg.To)
-}
-
 type testAdmittedPiggybacker struct {
 	b *strings.Builder
 }
@@ -412,12 +408,9 @@ func TestProcessorBasic(t *testing.T) {
 				var from, to uint64
 				d.ScanArgs(t, "from", &from)
 				d.ScanArgs(t, "to", &to)
-				msg := raftpb.Message{
-					Type: raftpb.MsgAppResp,
-					To:   raftpb.PeerID(to),
-					From: raftpb.PeerID(from),
-				}
-				p.EnqueuePiggybackedAdmittedAtLeader(msg)
+				// TODO(pav-kv): parse the admitted vector.
+				p.EnqueuePiggybackedAdmittedAtLeader(
+					roachpb.ReplicaID(from), kvflowcontrolpb.AdmittedState{})
 				return builderStr()
 
 			case "process-piggybacked-admitted":

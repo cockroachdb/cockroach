@@ -122,7 +122,7 @@ HandleRaftReady:
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{Mark:{Term:50 Index:25} Priority:LowPri}}) = true
 destroyed-or-leader-using-v2: true
-LogTracker [+dirty]: mark:{Term:50 Index:25}, stable:23, admitted:[23 23 23 23]
+LogTracker: mark:{Term:50 Index:25}, stable:23, admitted:[23 23 23 23]
 LowPri: {Term:50 Index:25}
 
 # The leader has changed.
@@ -463,6 +463,7 @@ HandleRaftReady:
  Replica.LeaseholderMuLocked
  RaftNode.TermLocked() = 52
  Replica.MuUnlock
+ RangeController.AdmitRaftMuLocked(5, {Term:52 Admitted:[26 26 26 26]})
  RangeController.HandleRaftEventRaftMuLocked([])
 .....
 
@@ -483,6 +484,7 @@ HandleRaftReady:
  Replica.LeaseholderMuLocked
  RaftNode.TermLocked() = 52
  Replica.MuUnlock
+ RangeController.AdmitRaftMuLocked(5, {Term:52 Admitted:[28 28 28 28]})
  RangeController.HandleRaftEventRaftMuLocked([])
 .....
 
@@ -494,9 +496,7 @@ enqueue-piggybacked-admitted from=25 to=5
 process-piggybacked-admitted
 ----
  Replica.RaftMuAssertHeld
- Replica.MuLock
- RaftNode.StepMsgAppRespForAdmittedLocked(type: MsgAppResp from: 25 to: 5)
- Replica.MuUnlock
+ RangeController.AdmitRaftMuLocked(25, {Term:0 Admitted:[0 0 0 0]})
 
 # Noop.
 process-piggybacked-admitted
@@ -511,6 +511,7 @@ enqueue-piggybacked-admitted from=25 to=6
 process-piggybacked-admitted
 ----
  Replica.RaftMuAssertHeld
+ RangeController.AdmitRaftMuLocked(25, {Term:0 Admitted:[0 0 0 0]})
 
 # We are still the leader, now at a new term.
 set-raft-state term=53
@@ -739,6 +740,7 @@ HandleRaftReady:
  Replica.LeaseholderMuLocked
  RaftNode.TermLocked() = 50
  Replica.MuUnlock
+ RangeController.AdmitRaftMuLocked(5, {Term:50 Admitted:[26 26 26 26]})
  RangeController.HandleRaftEventRaftMuLocked([])
 .....
 
@@ -761,7 +763,7 @@ HandleRaftReady:
 .....
 AdmitRaftEntries:
 destroyed-or-leader-using-v2: true
-LogTracker [+dirty]: mark:{Term:50 Index:27}, stable:26, admitted:[26 26 26 26]
+LogTracker: mark:{Term:50 Index:27}, stable:26, admitted:[26 26 26 26]
 
 # Everything up to 27 is admitted.
 synced-log term=50 index=27
@@ -778,6 +780,7 @@ HandleRaftReady:
  Replica.LeaseholderMuLocked
  RaftNode.TermLocked() = 50
  Replica.MuUnlock
+ RangeController.AdmitRaftMuLocked(5, {Term:50 Admitted:[27 27 27 27]})
  RangeController.HandleRaftEventRaftMuLocked([])
 .....
 

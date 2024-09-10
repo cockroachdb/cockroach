@@ -653,9 +653,12 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 				}
 			}
 		case raftpb.MsgAppResp:
-			if req.AdmittedState.Term != 0 {
-				// TODO(pav-kv): dispatch admitted vector to RACv2 if one is attached.
-				_ = 0
+			// If there is an admitted vector annotation, pass it to RACv2 to release
+			// the flow control tokens.
+			if term := req.AdmittedState.Term; term != 0 {
+				av := rac2.AdmittedVector{Term: term}
+				copy(av.Admitted[:], req.AdmittedState.Admitted)
+				r.flowControlV2.AdmitRaftMuLocked(context.TODO(), req.FromReplica.ReplicaID, av)
 			}
 		}
 		err := raftGroup.Step(req.Message)
