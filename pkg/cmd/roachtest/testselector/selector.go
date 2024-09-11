@@ -30,7 +30,16 @@ const (
 	// sfUsernameEnv and sfPasswordEnv are the environment variables that are used for Snowflake access
 	sfUsernameEnv = "SFUSER"
 	sfPasswordEnv = "SFPASSWORD"
+
+	// DataTestNameIndex and the following corresponds to the index of the row where the data is returned
+	DataTestNameIndex = 0
+	DataSelectedIndex = 1
+	DataDurationIndex = 2
+	DataLastPreempted = 3
 )
+
+// AllRows are all the rows returned by snowflake. This is used for testing
+var AllRows = []string{"name", "selected", "avg_duration", "last_failure_is_preempt"}
 
 //go:embed snowflake_query.sql
 var PreparedQuery string
@@ -129,10 +138,10 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 		// 2. average duration of the test
 		// 3. last failure is due to an infra flake
 		testDetails := &TestDetails{
-			Name:                 testInfos[0],
-			Selected:             testInfos[1] != "no",
-			AvgDurationInMillis:  getDuration(testInfos[2]),
-			LastFailureIsPreempt: testInfos[3] == "yes",
+			Name:                 testInfos[DataTestNameIndex],
+			Selected:             testInfos[DataSelectedIndex] != "no",
+			AvgDurationInMillis:  getDuration(testInfos[DataDurationIndex]),
+			LastFailureIsPreempt: testInfos[DataLastPreempted] == "yes",
 		}
 		allTestDetails = append(allTestDetails, testDetails)
 	}
