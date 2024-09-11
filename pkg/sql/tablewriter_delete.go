@@ -49,7 +49,7 @@ func (td *tableDeleter) row(
 	ctx context.Context, values tree.Datums, pm row.PartialIndexUpdateHelper, traceKV bool,
 ) error {
 	td.currentBatchSize++
-	return td.rd.DeleteRow(ctx, td.b, values, pm, traceKV)
+	return td.rd.DeleteRow(ctx, td.b, values, pm, nil, traceKV)
 }
 
 // deleteIndex runs the kv operations necessary to delete all kv entries in the

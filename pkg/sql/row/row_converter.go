@@ -73,7 +73,10 @@ func (i KVInserter) InitPut(key, value interface{}, failOnTombstones bool) {
 		Value: *value.(*roachpb.Value),
 	})
 }
-
+func (c KVInserter) CPutWithOriginTimestamp(
+	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
+) {
+}
 func (c KVInserter) CPutTuplesEmpty(kys []roachpb.Key, values [][]byte)        {}
 func (c KVInserter) CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Value) {}
 func (c KVInserter) PutBytes(kys []roachpb.Key, values [][]byte)               {}
@@ -565,6 +568,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		}),
 		insertRow,
 		pm,
+		nil,   /* OriginTimestampCPutHelper */
 		true,  /* ignoreConflicts */
 		false, /* traceKV */
 	); err != nil {

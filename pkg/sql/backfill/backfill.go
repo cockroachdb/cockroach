@@ -404,7 +404,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		// case.
 		var pm row.PartialIndexUpdateHelper
 		if _, err := ru.UpdateRow(
-			ctx, b, oldValues, updateValues, pm, traceKV,
+			ctx, b, oldValues, updateValues, pm, nil, traceKV,
 		); err != nil {
 			return roachpb.Key{}, err
 		}

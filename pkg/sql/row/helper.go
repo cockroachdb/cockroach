@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -324,4 +325,36 @@ func (rh *RowHelper) deleteIndexEntry(
 		batch.Del(entry.Key)
 	}
 	return nil
+}
+
+type OriginTimestampCPutHelper struct {
+	OriginTimestamp hlc.Timestamp
+	ShouldWinTie    bool
+}
+
+func (oh *OriginTimestampCPutHelper) IsSet() bool {
+	return oh != nil && oh.OriginTimestamp.IsSet()
+}
+
+func (oh *OriginTimestampCPutHelper) CPutFn(
+	ctx context.Context,
+	b Putter,
+	key *roachpb.Key,
+	value *roachpb.Value,
+	expVal []byte,
+	traceKV bool,
+) {
+	if traceKV {
+		log.VEventfDepth(ctx, 1, 2, "CPutWithOriginTimestamp %s -> %s @ %s", *key, value.PrettyPrint(), oh.OriginTimestamp)
+	}
+	b.CPutWithOriginTimestamp(key, value, expVal, oh.OriginTimestamp, oh.ShouldWinTie)
+}
+
+func (oh *OriginTimestampCPutHelper) DelWithCPut(
+	ctx context.Context, b Putter, key *roachpb.Key, expVal []byte, traceKV bool,
+) {
+	if traceKV {
+		log.VEventfDepth(ctx, 1, 2, "CPutWithOriginTimestamp %s -> nil (delete) @ %s", key, oh.OriginTimestamp)
+	}
+	b.CPutWithOriginTimestamp(key, nil, expVal, oh.OriginTimestamp, oh.ShouldWinTie)
 }

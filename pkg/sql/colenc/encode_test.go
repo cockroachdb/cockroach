@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -611,7 +612,7 @@ func buildRowKVs(
 	p := &capturePutter{}
 	var pm row.PartialIndexUpdateHelper
 	for _, d := range datums {
-		if err := inserter.InsertRow(context.Background(), p, d, pm, false, true); err != nil {
+		if err := inserter.InsertRow(context.Background(), p, d, pm, nil, false, true); err != nil {
 			return kvs{}, err
 		}
 	}
@@ -709,6 +710,12 @@ func (c *capturePutter) CPut(key, value interface{}, expValue []byte) {
 	c.kvs.keys = append(c.kvs.keys, *k)
 	v := value.(*roachpb.Value)
 	c.kvs.values = append(c.kvs.values, copyBytes(v.RawBytes))
+}
+
+func (c *capturePutter) CPutWithOriginTimestamp(
+	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
+) {
+	colexecerror.InternalError(errors.New("unimplemented"))
 }
 
 func (c *capturePutter) Put(key, value interface{}) {

@@ -126,6 +126,7 @@ func (ri *Inserter) InsertRow(
 	b Putter,
 	values []tree.Datum,
 	pm PartialIndexUpdateHelper,
+	oth *OriginTimestampCPutHelper,
 	overwrite bool,
 	traceKV bool,
 ) error {
@@ -162,7 +163,7 @@ func (ri *Inserter) InsertRow(
 		&ri.Helper, primaryIndexKey, ri.InsertCols,
 		values, ri.InsertColIDtoRowIndex,
 		ri.InsertColIDtoRowIndex,
-		&ri.key, &ri.value, ri.valueBuf, putFn, overwrite, traceKV)
+		&ri.key, &ri.value, ri.valueBuf, putFn, oth, nil, overwrite, traceKV)
 	if err != nil {
 		return err
 	}

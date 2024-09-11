@@ -99,6 +99,8 @@ func prepareInsertOrUpdateBatch(
 	kvValue *roachpb.Value,
 	rawValueBuf []byte,
 	putFn func(ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool),
+	oth *OriginTimestampCPutHelper,
+	oldValues []tree.Datum,
 	overwrite, traceKV bool,
 ) ([]byte, error) {
 	families := helper.TableDesc.GetFamilies()
@@ -150,11 +152,27 @@ func prepareInsertOrUpdateBatch(
 				return nil, err
 			}
 
+			// TODO(ssd): Here and below investigate reducing the
+			// number of allocations required to marshal the old
+			// value.
+			var oldVal []byte
+			if oth.IsSet() && len(oldValues) > 0 {
+				old, err := valueside.MarshalLegacy(typ, oldValues[idx])
+				if err != nil {
+					return nil, err
+				}
+				oldVal = old.TagAndDataBytes()
+			}
+
 			if marshaled.RawBytes == nil {
 				if overwrite {
 					// If the new family contains a NULL value, then we must
 					// delete any pre-existing row.
-					insertDelFn(ctx, batch, kvKey, traceKV)
+					if oth.IsSet() {
+						oth.DelWithCPut(ctx, batch, kvKey, oldVal, traceKV)
+					} else {
+						insertDelFn(ctx, batch, kvKey, traceKV)
+					}
 				}
 			} else {
 				// We only output non-NULL values. Non-existent column keys are
@@ -163,7 +181,12 @@ func prepareInsertOrUpdateBatch(
 				if err := helper.CheckRowSize(ctx, kvKey, marshaled.RawBytes, family.ID); err != nil {
 					return nil, err
 				}
-				putFn(ctx, batch, kvKey, &marshaled, traceKV)
+
+				if oth.IsSet() {
+					oth.CPutFn(ctx, batch, kvKey, &marshaled, oldVal, traceKV)
+				} else {
+					putFn(ctx, batch, kvKey, &marshaled, traceKV)
+				}
 			}
 
 			continue
@@ -172,6 +195,8 @@ func prepareInsertOrUpdateBatch(
 		rawValueBuf = rawValueBuf[:0]
 
 		var lastColID descpb.ColumnID
+		var oldBytes []byte
+
 		familySortedColumnIDs, ok := helper.SortedColumnFamily(family.ID)
 		if !ok {
 			return nil, errors.AssertionFailedf("invalid family sorted column id map")
@@ -198,13 +223,31 @@ func prepareInsertOrUpdateBatch(
 			if err != nil {
 				return nil, err
 			}
+			if oth.IsSet() && len(oldValues) > 0 {
+				var err error
+				oldBytes, err = valueside.Encode(oldBytes, colIDDelta, oldValues[idx], nil)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		var expBytes []byte
+		if oth.IsSet() && len(oldBytes) > 0 {
+			old := &roachpb.Value{}
+			old.SetTuple(oldBytes)
+			expBytes = old.TagAndDataBytes()
 		}
 
 		if family.ID != 0 && len(rawValueBuf) == 0 {
 			if overwrite {
 				// The family might have already existed but every column in it is being
 				// set to NULL, so delete it.
-				insertDelFn(ctx, batch, kvKey, traceKV)
+				if oth.IsSet() {
+					oth.DelWithCPut(ctx, batch, kvKey, expBytes, traceKV)
+				} else {
+					insertDelFn(ctx, batch, kvKey, traceKV)
+				}
 			}
 		} else {
 			// Copy the contents of rawValueBuf into the roachpb.Value. This is
@@ -214,7 +257,11 @@ func prepareInsertOrUpdateBatch(
 			if err := helper.CheckRowSize(ctx, kvKey, kvValue.RawBytes, family.ID); err != nil {
 				return nil, err
 			}
-			putFn(ctx, batch, kvKey, kvValue, traceKV)
+			if oth.IsSet() {
+				oth.CPutFn(ctx, batch, kvKey, kvValue, expBytes, traceKV)
+			} else {
+				putFn(ctx, batch, kvKey, kvValue, traceKV)
+			}
 		}
 
 		// Release reference to roachpb.Key.
