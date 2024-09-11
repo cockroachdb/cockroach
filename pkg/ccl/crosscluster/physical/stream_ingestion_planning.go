@@ -190,6 +190,11 @@ func ingestionPlanHook(
 			return nil
 		}
 
+		readerID, err := createReaderTenant(ctx, p, tenantInfo, destinationTenantID, options)
+		if err != nil {
+			return err
+		}
+
 		// No revert required since this is a new tenant.
 		const noRevertFirst = false
 
@@ -205,6 +210,7 @@ func ingestionPlanHook(
 			noRevertFirst,
 			jobID,
 			ingestionStmt,
+			readerID,
 		)
 	}
 
@@ -223,6 +229,7 @@ func createReplicationJob(
 	revertFirst bool,
 	jobID jobspb.JobID,
 	stmt *tree.CreateTenantFromReplication,
+	readerID roachpb.TenantID,
 ) error {
 
 	// Create a new stream with stream client.
@@ -266,6 +273,7 @@ func createReplicationJob(
 		SourceTenantID:       replicationProducerSpec.SourceTenantID,
 		SourceClusterID:      replicationProducerSpec.SourceClusterID,
 		ReplicationStartTime: replicationProducerSpec.ReplicationStartTime,
+		ReadTenantID:         readerID,
 	}
 
 	jobDescription, err := streamIngestionJobDescription(p, string(streamAddress), stmt)
@@ -289,6 +297,45 @@ func createReplicationJob(
 		ctx, jr, jobID, p.InternalSQLTxn(),
 	)
 	return err
+}
+
+func createReaderTenant(
+	ctx context.Context,
+	p sql.PlanHookState,
+	tenantInfo mtinfopb.TenantInfoWithUsage,
+	destinationTenantID roachpb.TenantID,
+	options *resolvedTenantReplicationOptions,
+) (roachpb.TenantID, error) {
+	var readerID roachpb.TenantID
+	if options.ReaderTenantEnabled() {
+		var readerInfo mtinfopb.TenantInfoWithUsage
+		readerInfo.DataState = mtinfopb.DataStateAdd
+		readerInfo.Name = tenantInfo.Name + "-readonly"
+		readerInfo.ReadFromTenant = &destinationTenantID
+
+		readerZcfg, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.ExtendedEvalContext().Descs)
+		if err != nil {
+			return readerID, err
+		}
+
+		readerID, err = sql.CreateTenantRecord(
+			ctx, p.ExecCfg().Codec, p.ExecCfg().Settings,
+			p.InternalSQLTxn(),
+			p.ExecCfg().SpanConfigKVAccessor.WithISQLTxn(ctx, p.InternalSQLTxn()),
+			&readerInfo, readerZcfg,
+			false, p.ExecCfg().TenantTestingKnobs,
+		)
+		if err != nil {
+			return readerID, err
+		}
+
+		readerInfo.ID = readerID.ToUint64()
+		_, err = sql.BootstrapTenant(ctx, p.ExecCfg(), p.Txn(), readerInfo, readerZcfg)
+		if err != nil {
+			return readerID, err
+		}
+	}
+	return readerID, nil
 }
 
 func init() {
