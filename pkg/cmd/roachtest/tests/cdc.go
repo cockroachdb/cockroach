@@ -30,6 +30,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -605,18 +606,14 @@ func (ct *cdcTester) runMetricsVerifier(check func(metrics map[string]*prompb.Me
 				return err
 			}
 			for _, uiAddr := range uiAddrs {
-				uiAddr += "/_status/vars"
+				uiAddr := fmt.Sprintf("https://%s/_status/vars", uiAddr)
 				fmt.Printf("fetching %s", uiAddr)
-				resp, err := http.Get(uiAddr)
+				out, err := exec.Command("curl", "-kf", uiAddr).Output()
 				if err != nil {
 					return err
 				}
-				defer resp.Body.Close()
-				if resp.StatusCode != http.StatusOK {
-					return errors.Errorf("unexpected status code %d", resp.StatusCode)
-				}
 				// parse prometheus metrics
-				res, err := parser.TextToMetricFamilies(resp.Body)
+				res, err := parser.TextToMetricFamilies(bytes.NewReader(out))
 				if err != nil {
 					return err
 				}
@@ -3710,10 +3707,14 @@ func verifyChangefeedBytesInOutMetrics(names map[string]struct{}) func(metrics m
 	return func(metrics map[string]*prompb.MetricFamily) (bool, error) {
 		checked := map[string]struct{}{}
 
+		fmt.Printf("got %d metric families\n", len(metrics))
+
 		for name, fam := range metrics {
 			if _, ok := names[name]; !ok {
 				continue
 			}
+
+			fmt.Printf("checking %s %+#v\n", name, fam)
 
 			for _, m := range fam.Metric {
 				if m.Counter.GetValue() > 0 {
