@@ -188,7 +188,7 @@ func Test_failureSpecifyOwnerAndAddFailureCombination(t *testing.T) {
 		l: nilLogger(),
 	}
 	ti.addFailure(0, "", vmPreemptionError("my_VM"))
-	errWithOwnership := failuresSpecifyOwner(ti.failures())
+	errWithOwnership := failuresAsErrorWithOwnership(ti.failures())
 
 	require.NotNil(t, errWithOwnership)
 	require.Equal(t, registry.OwnerTestEng, errWithOwnership.Owner)
