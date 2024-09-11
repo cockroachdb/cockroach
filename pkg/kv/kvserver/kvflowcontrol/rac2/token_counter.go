@@ -340,10 +340,13 @@ func (wh waitHandle) ConfirmHaveTokensAndUnblockNextWaiter() (haveTokens bool) {
 
 type tokenWaitingHandleInfo struct {
 	handle TokenWaitingHandle
-	// For regular work, this will be set for the leaseholder and leader. For
-	// elastic work this will be set for the aforementioned, and all replicas
+	// requiredWait will be set for the leaseholder and leader for regular work.
+	// For elastic work this will be set for the aforementioned, and all replicas
 	// which are in StateReplicate.
 	requiredWait bool
+	// partOfQuorum will be set for all voting replicas which can contribute to
+	// quorum.
+	partOfQuorum bool
 }
 
 // WaitEndState is the state returned by WaitForEval and indicates the result
@@ -416,12 +419,12 @@ func WaitForEval(
 
 	// m is the current length of the scratch slice.
 	m := len(scratch)
-	signaledCount := 0
+	signaledQuorumCount := 0
 
-	// Wait for (1) at least a quorumCount of handles to be signaled and have
-	// available tokens; as well as (2) all of the required wait handles to be
-	// signaled and have tokens available.
-	for signaledCount < requiredQuorum || requiredWaitCount > 0 {
+	// Wait for (1) at least a quorumCount of partOfQuorum handles to be signaled
+	// and have available tokens; as well as (2) all of the required wait handles
+	// to be signaled and have tokens available.
+	for signaledQuorumCount < requiredQuorum || requiredWaitCount > 0 {
 		chosen, _, _ := reflect.Select(scratch)
 		switch chosen {
 		case 0:
@@ -436,7 +439,9 @@ func WaitForEval(
 				continue
 			}
 
-			signaledCount++
+			if handleInfo.partOfQuorum {
+				signaledQuorumCount++
+			}
 			if handleInfo.requiredWait {
 				requiredWaitCount--
 			}
