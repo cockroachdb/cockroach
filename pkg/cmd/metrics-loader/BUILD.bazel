@@ -2,8 +2,17 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "metrics-loader",
-    srcs = ["main.go"],
+    srcs = [
+        "main.go",
+        "sender.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/metrics-loader",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_spf13_cobra//:cobra"],
+    deps = [
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_snappy//:snappy",
+        "@com_github_prometheus_prometheus//prompb",
+        "@com_github_spf13_cobra//:cobra",
+    ],
 )

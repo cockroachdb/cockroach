@@ -1155,6 +1155,7 @@ GO_TARGETS = [
     "//pkg/cmd/label-merged-pr:label-merged-pr",
     "//pkg/cmd/label-merged-pr:label-merged-pr_lib",
     "//pkg/cmd/label-merged-pr:label-merged-pr_test",
+    "//pkg/cmd/metrics-loader:metrics-loader",
     "//pkg/cmd/mirror/go:go_lib",
     "//pkg/cmd/mirror/go:go_test",
     "//pkg/cmd/mirror/go:mirror",
