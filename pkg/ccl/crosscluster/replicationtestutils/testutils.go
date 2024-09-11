@@ -71,6 +71,7 @@ type TenantStreamingClustersArgs struct {
 	DestClusterSettings            map[string]string
 	DestClusterTestRegions         []string
 	RetentionTTLSeconds            int
+	EnableReaderTenant             bool
 	TestingKnobs                   *sql.StreamingTestingKnobs
 	TenantCapabilitiesTestingKnobs *tenantcapabilities.TestingKnobs
 
@@ -328,6 +329,13 @@ func (c *TenantStreamingClusters) BuildCreateTenantQuery(externalConnection stri
 		sourceURI)
 	if c.Args.RetentionTTLSeconds > 0 {
 		streamReplStmt = fmt.Sprintf("%s WITH RETENTION = '%ds'", streamReplStmt, c.Args.RetentionTTLSeconds)
+	}
+	if c.Args.EnableReaderTenant {
+		if c.Args.RetentionTTLSeconds == 0 {
+			streamReplStmt = fmt.Sprintf("%s WITH READ CAPABILITIES", streamReplStmt)
+		} else {
+			streamReplStmt = fmt.Sprintf("%s, READ CAPABILITIES", streamReplStmt)
+		}
 	}
 	return streamReplStmt
 }

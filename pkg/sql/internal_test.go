@@ -508,7 +508,7 @@ func TestInternalExecutorWithDefinedQoSOverrideDoesNotPanic(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
-	qosLevel := sessiondatapb.TTLLow
+	qosLevel := sessiondatapb.BulkLow
 	_, err := ie.ExecEx(
 		ctx, "defined_quality_of_service_level_does_not_panic", nil,
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName(), QualityOfService: &qosLevel},
