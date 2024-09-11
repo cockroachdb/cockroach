@@ -156,7 +156,7 @@ func (b *SelectQueryBuilder) Run(
 		ctx,
 		b.selectOpName,
 		nil, /* txn */
-		getInternalExecutorOverride(sessiondatapb.TTLLowQoS),
+		getInternalExecutorOverride(sessiondatapb.BulkLowQoS),
 		query,
 		b.cachedArgs...,
 	)
@@ -259,7 +259,7 @@ func (b *DeleteQueryBuilder) Run(
 		ctx,
 		b.deleteOpName,
 		txn.KV(),
-		getInternalExecutorOverride(sessiondatapb.TTLLowQoS),
+		getInternalExecutorOverride(sessiondatapb.BulkLowQoS),
 		query,
 		deleteArgs...,
 	)
