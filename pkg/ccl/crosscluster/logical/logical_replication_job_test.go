@@ -198,8 +198,17 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 
 	defer TestingSetDLQ(fatalDLQ{t})()
 
-	ctx := context.Background()
 	// keyPrefix will be set later, but before countPuts is set.
+	for _, mode := range []string{"validated", "immediate"} {
+		t.Run(mode, func(t *testing.T) {
+			testLogicalStreamIngestionJobBasic(t, mode)
+		})
+
+	}
+}
+
+func testLogicalStreamIngestionJobBasic(t *testing.T, mode string) {
+	ctx := context.Background()
 	var keyPrefix []byte
 	var countPuts atomic.Bool
 	var numPuts, numCPuts atomic.Int64
@@ -276,8 +285,8 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 		jobAID jobspb.JobID
 		jobBID jobspb.JobID
 	)
-	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
-	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = $2", dbBURL.String(), mode).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = $2", dbAURL.String(), mode).Scan(&jobBID)
 
 	now := s.Clock().Now()
 	WaitUntilReplicatedTime(t, now, dbA, jobAID)
@@ -300,18 +309,31 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	dbA.CheckQueryResults(t, "SELECT * from a.tab", expectedRows)
 	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRows)
 
-	// Verify that we didn't have the data looping problem. We expect 3 CPuts
-	// when inserting new rows and 3 Puts when updating existing rows.
-	expPuts, expCPuts := 3, 4
-	if tryOptimisticInsertEnabled.Get(&s.ClusterSettings().SV) {
-		// When performing 1 update, we don't have the prevValue set, so if
-		// we're using the optimistic insert strategy, it would result in an
-		// additional CPut (that ultimately fails). The cluster setting is
-		// randomized in tests, so we need to handle both cases.
-		expCPuts++
+	// Verify that we didn't have the data looping problem. These
+	// expecations are for how many operations happend on the
+	// a-side.
+	//
+	// These assertions feel likely to flake since they assume
+	// that the test runner is fast enough to beat the replication
+	// stream when applying subsequent operations.
+	var expPuts, expCPuts int64
+	if mode == "validated" {
+		expPuts, expCPuts = 3, 3
+		if tryOptimisticInsertEnabled.Get(&s.ClusterSettings().SV) {
+			// When performing 1 update, we don't have the prevValue set, so if
+			// we're using the optimistic insert strategy, it would result in an
+			// additional CPut (that ultimately fails). The cluster setting is
+			// randomized in tests, so we need to handle both cases.
+			expCPuts++
+		}
+	} else if mode == "immediate" {
+		expPuts, expCPuts = 1, 7
+	} else {
+		t.Fatalf("no put/cput expectations for unknown mode: %s", mode)
 	}
-	require.Equal(t, int64(expPuts), numPuts.Load())
-	require.Equal(t, int64(expCPuts), numCPuts.Load())
+
+	require.Equal(t, expPuts, numPuts.Load())
+	require.Equal(t, expCPuts, numCPuts.Load())
 }
 
 func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
@@ -540,7 +562,7 @@ family f2(other_payload, v2))
 	defer cleanup()
 
 	var jobBID jobspb.JobID
-	serverBSQL.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab_with_cf ON $1 INTO TABLE tab_with_cf", serverAURL.String()).Scan(&jobBID)
+	serverBSQL.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab_with_cf ON $1 INTO TABLE tab_with_cf WITH MODE = validated", serverAURL.String()).Scan(&jobBID)
 
 	WaitUntilReplicatedTime(t, s.Clock().Now(), serverBSQL, jobBID)
 	serverASQL.Exec(t, "INSERT INTO tab_with_cf(pk, payload, other_payload) VALUES (2, 'potato', 'ruroh2')")
