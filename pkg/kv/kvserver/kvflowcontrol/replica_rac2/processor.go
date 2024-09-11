@@ -198,7 +198,7 @@ type RangeControllerFactory interface {
 //
 // State transitions are NotEnabledWhenLeader => EnabledWhenLeaderV1Encoding
 // => EnabledWhenLeaderV2Encoding, i.e., the level will never regress.
-type EnabledWhenLeaderLevel uint8
+type EnabledWhenLeaderLevel = uint32
 
 const (
 	NotEnabledWhenLeader EnabledWhenLeaderLevel = iota
@@ -283,14 +283,10 @@ type SideChannelInfoUsingRaftMessageRequest struct {
 //     proposal will be encoded. Processor becomes the definitive source of
 //     the current EnabledWhenLeaderLevel.
 //
-//   - Keep a copy of EnabledWhenLeaderLevel under Replica.raftMu. This will
-//     be initialized using the cluster version when Replica is created, and
-//     the same value will be passed to ProcessorOptions. In
-//     handleRaftReadyRaftMuLocked, which is called with raftMy held, cheaply
-//     check whether already at the highest level and if not, read the cluster
-//     version to see if ratcheting is needed. When ratcheting up from
-//     NotEnabledWhenLeader, acquire Replica.mu and close
-//     replicaFlowControlIntegrationImpl (RACv1).
+//   - in handleRaftReadyRaftMuLocked, which is called with raftMy held, if not
+//     already at the highest level, read the cluster version to see if
+//     ratcheting is needed. When ratcheting up from NotEnabledWhenLeader,
+//     acquire Replica.mu and close replicaFlowControlIntegrationImpl (RACv1).
 type Processor interface {
 	// InitRaftLocked is called when RaftNode is initialized for the Replica.
 	// NB: can be called twice before the Replica is fully initialized.
@@ -493,7 +489,7 @@ type processorImpl struct {
 	// enabledWhenLeader indicates the RACv2 mode of operation when this replica
 	// is the leader. Atomic value, for serving GetEnabledWhenLeader. Updated only
 	// while holding raftMu. Can be read non-atomically if raftMu is held.
-	enabledWhenLeader atomic.Uint32
+	enabledWhenLeader EnabledWhenLeaderLevel
 
 	v1EncodingPriorityMismatch log.EveryN
 }
@@ -503,10 +499,11 @@ var _ Processor = &processorImpl{}
 var _ rac2.AdmittedTracker = &processorImpl{}
 
 func NewProcessor(opts ProcessorOptions) Processor {
-	p := &processorImpl{opts: opts}
-	p.enabledWhenLeader.Store(uint32(opts.EnabledWhenLeaderLevel))
-	p.v1EncodingPriorityMismatch = log.Every(time.Minute)
-	return p
+	return &processorImpl{
+		opts:                       opts,
+		enabledWhenLeader:          opts.EnabledWhenLeaderLevel,
+		v1EncodingPriorityMismatch: log.Every(time.Minute),
+	}
 }
 
 // isLeaderUsingV2RaftMuLocked returns true if the current leader uses the V2
@@ -545,10 +542,10 @@ func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(
 	ctx context.Context, level EnabledWhenLeaderLevel,
 ) {
 	p.opts.Replica.RaftMuAssertHeld()
-	if p.destroyed || p.GetEnabledWhenLeader() >= level {
+	if p.destroyed || p.enabledWhenLeader >= level {
 		return
 	}
-	p.enabledWhenLeader.Store(uint32(level))
+	atomic.StoreUint32(&p.enabledWhenLeader, level)
 	if level != EnabledWhenLeaderV1Encoding || p.replicas == nil {
 		return
 	}
@@ -572,7 +569,7 @@ func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(
 
 // GetEnabledWhenLeader implements Processor.
 func (p *processorImpl) GetEnabledWhenLeader() EnabledWhenLeaderLevel {
-	return EnabledWhenLeaderLevel(p.enabledWhenLeader.Load())
+	return atomic.LoadUint32(&p.enabledWhenLeader)
 }
 
 func descToReplicaSet(desc *roachpb.RangeDescriptor) rac2.ReplicaSet {
@@ -674,7 +671,7 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 		return
 	}
 	// Is the leader.
-	if p.GetEnabledWhenLeader() == NotEnabledWhenLeader {
+	if p.enabledWhenLeader == NotEnabledWhenLeader {
 		return
 	}
 	if p.leader.rc != nil && myLeaderTerm > p.leader.term {
