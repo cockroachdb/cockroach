@@ -409,6 +409,10 @@ type processorImpl struct {
 	// destroyed.
 	destroyed bool
 
+	// term is the current raft term. Kept up-to-date with the latest Ready
+	// cycle. It is used to notice transitions out of leadership and back, to
+	// recreate leader.rc.
+	term uint64
 	// leaderID is the ID of the current term leader. Can be zero if unknown.
 	leaderID roachpb.ReplicaID
 	// leaderNodeID and leaderStoreID are a function of leaderID and replicas
@@ -466,12 +470,6 @@ type processorImpl struct {
 		// rc is always updated while holding raftMu and rcReferenceUpdateMu. To
 		// access rc, the code must hold at least one of these mutexes.
 		rc rac2.RangeController
-		// term is used to notice transitions out of leadership and back, to
-		// recreate rc. It is set when rc is created, and is not up-to-date if there
-		// is no rc (which can happen when using the v1 protocol).
-		//
-		// TODO(pav-kv): move this next to leaderID, and always know the term.
-		term uint64
 	}
 
 	// replMu contains the fields that must be accessed while holding Replica.mu.
@@ -626,19 +624,25 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 	nextUnstableIndex uint64,
 	leaderID roachpb.ReplicaID,
 	leaseholderID roachpb.ReplicaID,
-	myLeaderTerm uint64,
+	term uint64,
 ) {
+	if term < p.term {
+		log.Fatalf(ctx, "term regressed from %d to %d", p.term, term)
+	}
+	termChanged := term > p.term
+	if termChanged {
+		p.term = term
+	}
 	replicasChanged := p.desc.replicasChanged
 	if replicasChanged {
 		p.desc.replicasChanged = false
 	}
 	if !replicasChanged && leaderID == p.leaderID && leaseholderID == p.leaseholderID &&
-		(p.leader.rc == nil || p.leader.term == myLeaderTerm) {
+		(p.leader.rc == nil || !termChanged) {
 		// Common case.
 		return
 	}
-	// The leader or leaseholder or replicas or myLeaderTerm changed. We set
-	// everything.
+	// The leader or leaseholder or replicas or term changed. We set everything.
 	p.leaderID = leaderID
 	p.leaseholderID = leaseholderID
 	// Set leaderNodeID, leaderStoreID.
@@ -649,19 +653,16 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 		rd, ok := p.desc.replicas[leaderID]
 		if !ok {
 			if leaderID == p.opts.ReplicaID {
-				// Is leader, but not in the set of replicas. We expect this
-				// should not be happening anymore, due to
-				// raft.Config.StepDownOnRemoval being set to true. But we
-				// tolerate it.
-				log.Errorf(ctx,
-					"leader=%d is not in the set of replicas=%v",
+				// Is leader, but not in the set of replicas. We expect this should not
+				// be happening anymore, due to raft.Config.StepDownOnRemoval being set
+				// to true. But we tolerate it.
+				log.Errorf(ctx, "leader=%d is not in the set of replicas=%v",
 					leaderID, p.desc.replicas)
 				p.leaderNodeID = p.opts.NodeID
 				p.leaderStoreID = p.opts.StoreID
 			} else {
-				// A follower, which can learn about a leader before it learns
-				// about a config change that includes the leader in the set
-				// of replicas, so ignore.
+				// A follower learns about a leader before it learns about a config
+				// change that includes the leader in the set of replicas. Ignore.
 				p.leaderNodeID = 0
 				p.leaderStoreID = 0
 			}
@@ -681,12 +682,12 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 	if p.enabledWhenLeader == NotEnabledWhenLeader {
 		return
 	}
-	if p.leader.rc != nil && myLeaderTerm > p.leader.term {
+	if p.leader.rc != nil && termChanged {
 		// Need to recreate the RangeController.
 		p.closeLeaderStateRaftMuLocked(ctx)
 	}
 	if p.leader.rc == nil {
-		p.createLeaderStateRaftMuLocked(ctx, myLeaderTerm, nextUnstableIndex)
+		p.createLeaderStateRaftMuLocked(ctx, term, nextUnstableIndex)
 		return
 	}
 	// Existing RangeController.
@@ -703,7 +704,6 @@ func (p *processorImpl) closeLeaderStateRaftMuLocked(ctx context.Context) {
 		return
 	}
 	p.leader.rc.CloseRaftMuLocked(ctx)
-	p.leader.term = 0
 
 	func() {
 		p.leader.pendingAdmittedMu.Lock()
@@ -723,7 +723,7 @@ func (p *processorImpl) createLeaderStateRaftMuLocked(
 	if p.leader.rc != nil {
 		panic("RangeController already exists")
 	}
-	p.leader.term = term
+	p.term = term
 	rc := p.opts.RangeControllerFactory.New(ctx, rangeControllerInitState{
 		replicaSet:     p.desc.replicas,
 		leaseholder:    p.leaseholderID,
@@ -764,22 +764,20 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	// Grab the state we need in one shot after acquiring Replica mu.
 	var nextUnstableIndex uint64
 	var leaderID, leaseholderID roachpb.ReplicaID
-	var myLeaderTerm uint64
+	var term uint64
 	func() {
 		p.opts.Replica.MuLock()
 		defer p.opts.Replica.MuUnlock()
 		nextUnstableIndex = p.replMu.raftNode.NextUnstableIndexLocked()
 		leaderID = p.replMu.raftNode.LeaderLocked()
 		leaseholderID = p.opts.Replica.LeaseholderMuLocked()
-		if leaderID == p.opts.ReplicaID {
-			myLeaderTerm = p.replMu.raftNode.TermLocked()
-		}
+		term = p.replMu.raftNode.TermLocked()
 	}()
 	if len(e.Entries) > 0 {
 		nextUnstableIndex = e.Entries[0].Index
 	}
 	p.makeStateConsistentRaftMuLocked(
-		ctx, nextUnstableIndex, leaderID, leaseholderID, myLeaderTerm)
+		ctx, nextUnstableIndex, leaderID, leaseholderID, term)
 
 	if !p.isLeaderUsingV2ProcLocked() {
 		return
