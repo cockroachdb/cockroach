@@ -105,11 +105,11 @@ const (
 	deprecatedExternalConnectionScheme = "azure-storage"
 )
 
-func azureAuthMethod(uri *url.URL, consumeURI *cloud.ConsumeURL) (cloudpb.AzureAuth, error) {
+func azureAuthMethod(consumeURI *cloud.ConsumeURL) (cloudpb.AzureAuth, error) {
 	authParam := consumeURI.ConsumeParam(cloud.AuthParam)
 	switch authParam {
 	case "", cloud.AuthParamSpecified:
-		if uri.Query().Get(AzureAccountKeyParam) != "" {
+		if consumeURI.Contains(AzureAccountKeyParam) {
 			return cloudpb.AzureAuth_LEGACY, nil
 		}
 		return cloudpb.AzureAuth_EXPLICIT, nil
@@ -126,7 +126,7 @@ func parseAzureURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	azureURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_azure
-	auth, err := azureAuthMethod(uri, &azureURL)
+	auth, err := azureAuthMethod(&azureURL)
 	if err != nil {
 		return conf, err
 	}

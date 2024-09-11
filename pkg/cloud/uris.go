@@ -168,24 +168,47 @@ type ConsumeURL struct {
 	q url.Values
 }
 
+func (u *ConsumeURL) makeParamValues() url.Values {
+	rawValues := u.Query()
+	q := make(url.Values)
+	for k, v := range rawValues {
+		q[strings.ToLower(k)] = v
+	}
+	return q
+}
+
 // ConsumeParam returns the value of the parameter p from the underlying URL,
-// and deletes the parameter from the URL.
+// and deletes the parameter from the URL. The parameter name is consumed in a
+// case-insensitive manner.
 func (u *ConsumeURL) ConsumeParam(p string) string {
 	if u.q == nil {
-		u.q = u.Query()
+		u.q = u.makeParamValues()
 	}
+	p = strings.ToLower(p)
 	v := u.q.Get(p)
 	u.q.Del(p)
 	return v
+}
+
+// Contains checks if the URL has the specified parameter. The parameter name is
+// checked in a case insensitive manner.
+func (u *ConsumeURL) Contains(p string) bool {
+	if u.q == nil {
+		u.q = u.makeParamValues()
+	}
+	return u.q.Get(strings.ToLower(p)) != ""
 }
 
 // RemainingQueryParams returns the query parameters that have not been consumed
 // from the underlying URL.
 func (u *ConsumeURL) RemainingQueryParams() (res []string) {
 	if u.q == nil {
-		u.q = u.Query()
+		u.q = u.makeParamValues()
 	}
-	for p := range u.q {
+	for p := range u.Query() {
+		if !u.Contains(strings.ToLower(p)) {
+			continue
+		}
 		// The `COCKROACH_LOCALITY` parameter is supported for all External Storage
 		// implementations and is not used when creating the External Storage, but
 		// instead during backup/restore resolution. So, this parameter is not
