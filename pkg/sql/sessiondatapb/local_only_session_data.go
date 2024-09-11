@@ -290,13 +290,10 @@ const (
 	// session default_transaction_quality_of_service value.
 	SystemLow = QoSLevel(admissionpb.LowPri)
 
-	// TTLStatsLow denotes a QoS level used internally by the TTL feature, which
-	// is not settable as a session default_transaction_quality_of_service value.
-	TTLStatsLow = QoSLevel(admissionpb.BulkLowPri)
-
-	// TTLLow denotes a QoS level used internally by the TTL feature, which is not
-	// settable as a session default_transaction_quality_of_service value.
-	TTLLow = QoSLevel(admissionpb.BulkLowPri)
+	// BulkLow denotes a QoS level used internally by the bulk operations (like
+	// LDR ingestion and TTL), which is not settable as a session
+	// default_transaction_quality_of_service value.
+	BulkLow = QoSLevel(admissionpb.BulkLowPri)
 
 	// UserLow denotes an end user QoS level lower than the default.
 	UserLow = QoSLevel(admissionpb.UserLowPri)
@@ -341,8 +338,8 @@ const (
 	// QoS level.
 	SystemLowName = "minimum"
 
-	// TTLLowName is the string value to display indicating a TTLLow QoS level.
-	TTLLowName = "ttl_low"
+	// BulkLowName is the string value to display indicating a BulkLow QoS level.
+	BulkLowName = "bulk_low"
 
 	// LockingNormalName is the string value to display indicating a
 	// LockingNormal QoS level.
@@ -359,13 +356,13 @@ const (
 // those cases.
 var (
 	SystemLowQoS = SystemLow
-	TTLLowQoS    = TTLLow
+	BulkLowQoS   = BulkLow
 	UserLowQoS   = UserLow
 )
 
 var qosLevelsDict = map[QoSLevel]string{
 	SystemLow:     SystemLowName,
-	TTLLow:        TTLLowName,
+	BulkLow:       BulkLowName,
 	UserLow:       UserLowName,
 	Normal:        NormalName,
 	LockingNormal: LockingNormalName,
