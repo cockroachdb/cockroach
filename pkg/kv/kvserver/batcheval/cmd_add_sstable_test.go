@@ -1266,6 +1266,7 @@ func TestEvalAddSSTable(t *testing.T) {
 								require.NoError(t, err)
 								v.LocalTimestamp.WallTime *= 1e9
 								kv.RangeKey.Timestamp.WallTime *= 1e9
+								kv.RangeKey.EncodedTimestampSuffix = storage.EncodeMVCCTimestampSuffix(kv.RangeKey.Timestamp)
 								vBytes, err := storage.EncodeMVCCValue(v)
 								require.NoError(t, err)
 								expect = append(expect, storage.MVCCRangeKeyValue{RangeKey: kv.RangeKey, Value: vBytes})

@@ -1,0 +1,41 @@
+# Write MVCC range deletes, one with the synthetic bit and one without.
+
+run ok
+put_rangekey k=a end=c ts=1
+put_rangekey k=l end=m ts=2 syntheticBit
+----
+>> at end:
+rangekey: {a-c}/[1.000000000,0=/<empty>]
+rangekey: {l-m}/[2.000000000,0=/<empty>]
+
+# Use MVCCClearTimeRange to clear the tombstones. The range key with the
+# synthetic bit should still be removed.
+
+run stats ok
+clear_time_range k=a end=z ts=7 targetTs=0
+----
+>> clear_time_range k=a end=z ts=7 targetTs=0
+stats: range_key_count=-2 range_key_bytes=-26 range_val_count=-2 gc_bytes_age=-2561
+>> at end:
+<no data>
+stats: 
+
+# Re-write MVCC range deletes, one with the synthetic bit and one without.
+
+run ok
+put_rangekey k=a end=c ts=1
+put_rangekey k=l end=m ts=2 syntheticBit
+----
+>> at end:
+rangekey: {a-c}/[1.000000000,0=/<empty>]
+rangekey: {l-m}/[2.000000000,0=/<empty>]
+
+# Clear the range. This will metamorphically use ClearMVCCIteratorRange which
+# will unset individual range keys, otherwise using ClearMVCCRange which will
+# write a single RANGEKEYDEL.
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>

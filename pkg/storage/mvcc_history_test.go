@@ -99,7 +99,7 @@ var (
 // increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> [inc=<val>]
 // initput        [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> v=<string> [raw] [failOnTombstones]
 // put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> v=<string> [raw]
-// put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key>
+// put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key> [syntheticBit]
 // put_blind_inline	k=<key> v=<string> [prev=<string>]
 // get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [maxKeys=<int>] [targetBytes=<int>] [allowEmpty]
 // scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [wholeRows[=<int>]] [allowEmpty]
@@ -1916,6 +1916,24 @@ func cmdPutRangeKey(e *evalCtx) error {
 	rangeKey.Timestamp = e.getTs(nil)
 	var value storage.MVCCValue
 	value.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp(e.getTsWithName("localTs"))
+
+	// If the syntheticBit arg is present, manually construct a MVCC timestamp
+	// that includes the synthetic bit. Cockroach stopped writing these keys
+	// beginning in version 24.1. It's not possible to commit such a key through
+	// the PutMVCCRangeKey API, so we also need to manually encode the MVCC
+	// value and use PutEngineRangeKey. We keep the non-synthetic-bit case
+	// as-is, using PutMVCCRangeKey, since that's the codepath ordinary MVCC
+	// range key writes will use and we want to exercise it. See #129592.
+	if e.hasArg("syntheticBit") {
+		return e.withWriter("put_rangekey", func(rw storage.ReadWriter) error {
+			suffix := storage.EncodeMVCCTimestampSuffixWithSyntheticBitForTesting(rangeKey.Timestamp)
+			valueRaw, err := storage.EncodeMVCCValue(value)
+			if err != nil {
+				return errors.Wrapf(err, "failed to encode MVCC value for range key %s", rangeKey)
+			}
+			return rw.PutEngineRangeKey(rangeKey.StartKey, rangeKey.EndKey, suffix, valueRaw)
+		})
+	}
 
 	return e.withWriter("put_rangekey", func(rw storage.ReadWriter) error {
 		return rw.PutMVCCRangeKey(rangeKey, value)
