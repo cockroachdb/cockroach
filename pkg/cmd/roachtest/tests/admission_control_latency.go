@@ -595,28 +595,12 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 		return nil
 	})
 
-	go func() {
-		waitDuration(ctx, v.validationDuration/2)
-		initialStats := lm.worstStats(v.validationDuration / 2)
+	// Begin profiling halfway through the workload.
+	waitDuration(ctx, v.validationDuration/2)
+	t.L().Printf("profiling slow statements")
+	require.NoError(t, profileTopStatements(ctx, c, t.L(), "target"))
+	waitDuration(ctx, v.validationDuration/2)
 
-		// Collect profiles for the twice the 99.9th percentile of the write
-		// latency or 10ms whichever is higher.
-		const minProfileThreshold = 10 * time.Millisecond
-
-		profileThreshold := initialStats[`write`].p999 * 2
-		// Set the threshold high enough that we don't spuriously collect lots of useless profiles.
-		if profileThreshold < minProfileThreshold {
-			profileThreshold = minProfileThreshold
-		}
-
-		t.L().Printf("profiling statements that take longer than %s", profileThreshold)
-		if err := profileTopStatements(ctx, c, t.L(), profileThreshold); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	// Let enough data be written to all nodes in the cluster, then induce the perturbation.
-	waitDuration(ctx, v.validationDuration)
 	// Collect the baseline after the workload has stabilized.
 	baselineStats := lm.worstStats(v.validationDuration / 2)
 	// Now start the perturbation.
@@ -906,7 +890,7 @@ func (w kvWorkload) operations() []string {
 }
 
 func (w kvWorkload) initWorkload(ctx context.Context, v variations) error {
-	initCmd := fmt.Sprintf("./cockroach workload init kv --splits %d {pgurl:1}", v.splits)
+	initCmd := fmt.Sprintf("./cockroach workload init kv --db target --splits %d {pgurl:1}", v.splits)
 	return v.cluster.RunE(ctx, option.WithNodes(v.cluster.Node(1)), initCmd)
 }
 
@@ -915,7 +899,7 @@ func (w kvWorkload) runWorkload(
 	ctx context.Context, v variations, duration time.Duration, maxRate int,
 ) error {
 	runCmd := fmt.Sprintf(
-		"./cockroach workload run kv --duration=%s --max-rate=%d --tolerate-errors --max-block-bytes=%d --read-percent=50 --follower-read-percent=50 --concurrency=500 --operation-receiver=%s:%d {pgurl%s}",
+		"./cockroach workload run kv --db target --duration=%s --max-rate=%d --tolerate-errors --max-block-bytes=%d --read-percent=50 --follower-read-percent=50 --concurrency=500 --operation-receiver=%s:%d {pgurl%s}",
 		duration, maxRate, v.maxBlockBytes, v.roachtestAddr, v.histogramPort, v.stableNodes())
 	return v.cluster.RunE(ctx, option.WithNodes(v.workloadNodes()), runCmd)
 }
