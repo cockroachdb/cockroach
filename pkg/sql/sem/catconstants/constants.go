@@ -63,6 +63,8 @@ const (
 	RangeEventTableName                    SystemTableName = "rangelog"
 	UITableName                            SystemTableName = "ui"
 	JobsTableName                          SystemTableName = "jobs"
+	JobsProgressTableName                  SystemTableName = "job_progress"
+	JobsStatusTableName                    SystemTableName = "job_status"
 	WebSessionsTableName                   SystemTableName = "web_sessions"
 	TableStatisticsTableName               SystemTableName = "table_statistics"
 	LocationsTableName                     SystemTableName = "locations"

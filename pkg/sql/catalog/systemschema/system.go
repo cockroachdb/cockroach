@@ -248,6 +248,36 @@ CREATE TABLE system.jobs (
 	FAMILY claim (claim_session_id, claim_instance_id, num_runs, last_run)
 );`
 
+	// JobStatusTableSchema is the schema of the system.job_status table, which
+	// contains the "status" messages for each job, sorted by newest to oldest.
+	JobStatusTableSchema = `
+	CREATE TABLE system.job_status (
+		job_id INT8 NOT NULL,
+		kind STRING, -- the type of message, e.g. "state", "info", etc
+		written TIMESTAMPTZ NOT NULL DEFAULT now(), 
+		message STRING, -- the human-readable status message e.g. "reverting" or "backfilling".
+		--
+		CONSTRAINT "primary" PRIMARY KEY (job_id, kind, written DESC),
+	)`
+
+	// JobProgressTableSchema is the schema for the system.job_progress table,
+	// which contains one for per job with the most recently written progress.
+	// The primary key consists of the job ID plus the time it was written, rather
+	// than just the job ID, so that "updates" are modeled as delete of the prior
+	// row and inset of a new one. Using a new row for the updated value ensures
+	// that the KV layer can split between these rows, so a frequently updated job
+	// doesn't cause a single row to accumulate a large amount of unsplitable mvcc
+	// revision history.
+	JobProgressTableSchema = `
+	CREATE TABLE system.job_progress (
+		job_id INT8 NOT NULL,
+		written TIMESTAMPTZ NOT NULL DEFAULT now(),
+		fraction FLOAT,
+		resolved DECIMAL,
+		--
+		CONSTRAINT "primary" PRIMARY KEY (job_id ASC, written DESC),
+	)`
+
 	// web_sessions are used to track authenticated user actions over stateless
 	// connections, such as the cookie-based authentication used by the Admin
 	// UI.
@@ -953,6 +983,8 @@ CREATE TABLE system.task_payloads (
 	FAMILY "primary" (id, created, owner, owner_id, min_version, description, type, value)
 );`
 
+	// SystemJobInfoTableSchema is the schema for the system.job_info table, which
+	// is used by jobs to store arbitrary "info".
 	SystemJobInfoTableSchema = `
 CREATE TABLE system.job_info (
 	job_id INT8 NOT NULL,
@@ -1285,7 +1317,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V24_3_SQLInstancesAddDraining.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V24_3_AddJobsTables.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1477,6 +1509,8 @@ func MakeSystemTables() []SystemTable {
 		StatementExecInsightsTable,
 		TransactionExecInsightsTable,
 		TableMetadata,
+		SystemJobProgressTable,
+		SystemJobStatusTable,
 	}
 }
 
@@ -4186,6 +4220,66 @@ var (
 				KeyColumnNames:      []string{"id"},
 				KeyColumnDirections: singleASC,
 				KeyColumnIDs:        singleID1,
+			}),
+	)
+
+	SystemJobStatusTable = makeSystemTable(
+		JobStatusTableSchema,
+		systemTable(
+			catconstants.JobsStatusTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "job_id", ID: 1, Type: types.Int},
+				{Name: "kind", ID: 2, Type: types.String, Nullable: true},
+				{Name: "written", ID: 3, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "message", ID: 4, Type: types.String, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"job_id", "kind", "written", "message"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
+					DefaultColumnID: 4,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"job_id", "kind", "written"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_DESC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
+			}),
+	)
+
+	SystemJobProgressTable = makeSystemTable(
+		JobProgressTableSchema,
+		systemTable(
+			catconstants.JobsProgressTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "job_id", ID: 1, Type: types.Int},
+				{Name: "written", ID: 2, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "fraction", ID: 3, Type: types.Float, Nullable: true},
+				{Name: "resolved", ID: 4, Type: types.Decimal, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"job_id", "written", "fraction", "resolved"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
+					DefaultColumnID: 4,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"job_id", "written"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_DESC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2},
 			}),
 	)
 
