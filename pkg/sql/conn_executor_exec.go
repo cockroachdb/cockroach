@@ -560,24 +560,33 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.noticeSender = res
 	ih := &p.instrumentation
 
-	if maxOpen := maxOpenTransactions.Get(&ex.server.cfg.Settings.SV); maxOpen > 0 && ex.executorType != executorTypeInternal {
+	if ex.executorType != executorTypeInternal {
 		// NB: ex.metrics includes internal executor transactions when executorType
 		// is executorTypeInternal, so that's why we exclude internal executors
 		// in the conditional.
-		if ex.metrics.EngineMetrics.SQLTxnsOpen.Value() > maxOpen {
-			hasAdmin, err := ex.planner.HasAdminRole(ctx)
-			if err != nil {
-				return makeErrEvent(err)
+		curOpen := ex.metrics.EngineMetrics.SQLTxnsOpen.Value()
+		if maxOpen := maxOpenTransactions.Get(&ex.server.cfg.Settings.SV); maxOpen > 0 {
+			if curOpen > maxOpen {
+				hasAdmin, err := ex.planner.HasAdminRole(ctx)
+				if err != nil {
+					return makeErrEvent(err)
+				}
+				if !hasAdmin {
+					return makeErrEvent(errors.WithHintf(
+						pgerror.Newf(
+							pgcode.ConfigurationLimitExceeded,
+							"cannot execute operation due to server.max_open_transactions_per_gateway cluster setting",
+						),
+						"the maximum number of open transactions is %d", maxOpen,
+					))
+				}
 			}
-			if !hasAdmin {
-				return makeErrEvent(errors.WithHintf(
-					pgerror.Newf(
-						pgcode.ConfigurationLimitExceeded,
-						"cannot execute operation due to server.max_open_transactions_per_gateway cluster setting",
-					),
-					"the maximum number of open transactions is %d", maxOpen,
-				))
-			}
+		}
+
+		// Enforce license policies. Throttling can occur if there is no valid
+		// license or if it has expired.
+		if err := ex.server.cfg.LicenseEnforcer.MaybeFailIfThrottled(ctx, curOpen); err != nil {
+			return makeErrEvent(err)
 		}
 	}
 
