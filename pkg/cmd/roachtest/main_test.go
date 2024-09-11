@@ -9,8 +9,10 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -22,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/testselector"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -162,6 +166,188 @@ func Test_updateSpecForSelectiveTests(t *testing.T) {
 			}
 		}
 	})
+	iteration := 0
+	// We run the randomized tests 1000 times for 100 randomly generated tests
+	for iteration < 1000 {
+		iteration++
+		t.Run(fmt.Sprintf("run %d with randomised data", iteration), func(t *testing.T) {
+			totalTestCount := 100
+			db, mock, err = sqlmock.New()
+			require.Nil(t, err)
+			oldSuite := roachtestflags.Suite
+			roachtestflags.Suite = registry.Nightly
+			defer func() {
+				roachtestflags.Suite = oldSuite
+			}()
+			oldSuccessfulTestsSelectPct := roachtestflags.SuccessfulTestsSelectPct
+			roachtestflags.SuccessfulTestsSelectPct = 0.30
+			defer func() {
+				roachtestflags.SuccessfulTestsSelectPct = oldSuccessfulTestsSelectPct
+			}()
+			specs, data, rows, toBeSelectedTestsMap := getRandomisedTests(t, totalTestCount)
+			mock.ExpectPrepare(regexp.QuoteMeta(testselector.PreparedQuery))
+			mock.ExpectQuery(regexp.QuoteMeta(testselector.PreparedQuery)).WillReturnRows(rows)
+			specsLengthBefore := len(specs)
+			// we need to keep a count of all already skipped tests. This is to assert that the skip is not overwritten.
+			countOfSpecSkippedTests := 0
+			for _, s := range specs {
+				if s.Skip != "" {
+					countOfSpecSkippedTests++
+				}
+			}
+
+			updateSpecForSelectiveTests(ctx, specs)
+			require.Equal(t, specsLengthBefore, len(specs))
+			// dataMap is used of assertions
+			dataMap := make(map[string][]string)
+			for _, d := range data {
+				dataMap[d[testselector.DataTestNameIndex]] = d
+			}
+			// allTestsToBeSelected keeps a count of all tests that are there in spec and toBeSelectedTestsMap
+			// the count should be equal to the length of toBeSelectedTestsMap which ensures that all the tests
+			// we selected
+			allTestsToBeSelected := 0
+			// get the count of skipped tests that are not skipped by test selector.
+			// this should remain the same as countOfSpecSkippedTests.
+			skippedTestsInSpec := 0
+			for _, s := range specs {
+				if s.Skip == getSkippedMessage(s.Name) {
+					skippedTestsInSpec++
+				}
+				// if the test is present in dataMap and snowflake response has "last_failure_is_preempt=true", the same
+				// must be marked in the spec
+				if d, ok := dataMap[s.Name]; ok && d[testselector.DataLastPreempted] == "yes" {
+					require.True(t, s.IsLastFailurePreempt())
+				} else {
+					require.False(t, s.IsLastFailurePreempt())
+				}
+				// if the test is present in dataMap and snowflake response and the test is skipped by test selector
+				// the entry dataMap must be "selected=no"
+				if d, ok := dataMap[s.Name]; ok && s.Skip == "test selector" {
+					require.Equal(t, "no", d[testselector.DataSelectedIndex])
+				}
+				// if a test is in toBeSelectedTestsMap, this test has to be selected by test selector unless it is skipped already
+				// So, the Skip is either blank or has a value as "<test name> skipped"
+				if _, ok := toBeSelectedTestsMap[s.Name]; ok {
+					allTestsToBeSelected++
+					assert.True(t, s.Skip == "" || s.Skip == getSkippedMessage(s.Name), s.Skip)
+				}
+			}
+			require.Equal(t, countOfSpecSkippedTests, skippedTestsInSpec)
+			require.Equal(t, allTestsToBeSelected, len(toBeSelectedTestsMap))
+		})
+	}
+}
+
+func getSkippedMessage(testName string) string {
+	return fmt.Sprintf("%s skipped", testName)
+}
+
+// getRandomisedTests returns "totalTests" number of randomised tests.
+// Out of the totalTests,
+// > 0-90% of the tests are added as tests in specs
+// > 10-100% of the tests are added as snowflake returned tests
+// So, the overlap is 80%
+// The above tests are shuffled and randomly added different conditions.
+// The function returns:
+// > List of test specs
+// > The rows to be returned by the snowflake as [][]string
+// > The rows as *sqlmock.Rows
+// > The map of tests that will be selected based on the percent criteria
+func getRandomisedTests(
+	t *testing.T, totalTests int,
+) ([]registry.TestSpec, [][]string, *sqlmock.Rows, map[string]struct{}) {
+	r, _ := randutil.NewTestRand()
+	testNames, err := generateUniqueStrings(totalTests, 10, 100)
+	require.Nil(t, err)
+	// As mentioned,
+	// 0% to 90% of tests are added to test spec
+	// 10% to 100% of tests are added to snowflake tests
+	// So, the overlap is 80%
+	sfStart := int(float32(len(testNames)) * 0.1)
+	specEnd := int(float32(len(testNames)) * 0.9)
+	// testForSF are the name of tests which are returned by SF query
+	testForSF := shuffleStrings(testNames[sfStart:])
+	// testForSpecs are the name of tests which are in the test spec
+	testForSpecs := shuffleStrings(testNames[:specEnd])
+	// commonSuccessTestMap contains all test that are present in both specs and snowflake minus the tests that are
+	// marked as "selected=true"
+	commonSuccessTestMap := make(map[string]struct{})
+	for _, tn := range testNames[sfStart:specEnd] {
+		// all the common tests are added first. The tests marked as "selected=true" will be removed later.
+		commonSuccessTestMap[tn] = struct{}{}
+	}
+	rows := sqlmock.NewRows(testselector.AllRows)
+	// data is created and returned for easier assertions
+	data := make([][]string, len(testForSF))
+	// testSelected is a randomised value which is the number of tests that are marked as "selected=true"
+	testSelected := randutil.RandIntInRange(r, 0, int(0.6*float32(len(testForSF))))
+	for i, sfn := range testForSF {
+		selected := "no"
+		lastFailureIsPreempt := "no"
+		if i < testSelected {
+			// mark the tests as selected sequentially
+			selected = "yes"
+			// delete the entry from the success map as this is selected.
+			delete(commonSuccessTestMap, sfn)
+			// from the selected tests mark a few tests as "last_failure_is_preempt=yes"
+			numTestsPreempted := randutil.RandIntInRange(r, 0, testSelected)
+			if numTestsPreempted <= int(0.05*float64(testSelected)) {
+				lastFailureIsPreempt = "yes"
+			}
+		}
+		// generate a random duration value
+		duration := randutil.RandIntInRange(r, 0, 10000000)
+		// populate the data
+		data[i] = []string{sfn, selected, strconv.Itoa(duration + 1), lastFailureIsPreempt}
+		// add the same to the rows
+		rows.FromCSVString(strings.Join(data[i], ","))
+	}
+	// numberOfTestsToSelect is based on the same criteria of successful percent selection
+	// Here, commonSuccessTestMap contains all the successful tests, so, we have calculated the percent from that
+	numberOfTestsToSelect := int(math.Ceil(float64(len(commonSuccessTestMap)) * roachtestflags.SuccessfulTestsSelectPct))
+	selectedTestCount := 0
+	// toBeSelectedTestsMap contains all the tests that will be selected based on the success percent criteria
+	toBeSelectedTestsMap := make(map[string]struct{})
+	// iterating over all the data in sequence to identify the exact tests that will be selected as a part of
+	// the percentage  criteria
+	for _, d := range data {
+		// if the test name is not in commonSuccessTestMap, this should be skipped as this test is not in spec
+		if _, ok := commonSuccessTestMap[d[testselector.DataTestNameIndex]]; !ok {
+			continue
+		}
+		// add the test to the toBeSelectedTestsMap
+		toBeSelectedTestsMap[d[testselector.DataTestNameIndex]] = struct{}{}
+		// if the selectedTestCount exceeds numberOfTestsToSelect, we stop.
+		selectedTestCount++
+		if selectedTestCount >= numberOfTestsToSelect {
+			break
+		}
+	}
+	// populate the test specs
+	specs := make([]registry.TestSpec, len(testForSpecs))
+	for i, sn := range testForSpecs {
+		s := registry.TestSpec{Name: sn}
+		// randomly mark "Randomized=true" for 1% of tests
+		randomizedTests := randutil.RandIntInRange(r, 0, len(testForSpecs))
+		if randomizedTests <= int(0.01*float64(len(testForSpecs))) {
+			s.Randomized = true
+		}
+		// randomly mark test as opted out for 3% of tests
+		optOutTests := randutil.RandIntInRange(r, 0, len(testForSpecs))
+		if optOutTests <= int(0.03*float64(len(testForSpecs))) {
+			s.TestSelectionOptOutSuites = registry.Suites(registry.Nightly)
+		}
+		// randomly mark test as skipped out for 5% of tests
+		skippedTests := randutil.RandIntInRange(r, 0, len(testForSpecs))
+		if skippedTests <= int(0.05*float64(len(testForSpecs))) {
+			s.Skip = getSkippedMessage(sn)
+			s.SkipDetails = fmt.Sprintf("%s skipped by spec", sn)
+		}
+		s.Suites = registry.Suites(registry.Nightly, registry.Weekly)
+		specs[i] = s
+	}
+	return specs, data, rows, toBeSelectedTestsMap
 }
 
 // getTestSelectionMockData returns the mock data as:
@@ -228,12 +414,59 @@ func getTestSelectionMockData() ([]registry.TestSpec, *sqlmock.Rows) {
 		{"t_randomized", "no", "5", "no"},
 	}
 	// rows are the rows that are returned by snowflake. The list of string represents the columns of each row
-	rows := sqlmock.NewRows([]string{
-		"name", "selected", "avg_duration", "last_failure_is_preempt",
-	})
+	rows := sqlmock.NewRows(testselector.AllRows)
 	// rows are populated with the data
 	for _, ds := range data {
 		rows.FromCSVString(strings.Join(ds, ","))
 	}
 	return specs, rows
+}
+
+const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+// generateRandomString generates a random string of a given length
+func generateRandomString(n int) (string, error) {
+	result := make([]byte, n)
+	for i := range result {
+		r, _ := randutil.NewTestRand()
+		num := randutil.RandIntInRange(r, 0, len(charset))
+		result[i] = charset[num]
+	}
+	return string(result), nil
+}
+
+// generateUniqueStrings generates the requested number of unique random strings
+// with random lengths between minLength and maxLength
+func generateUniqueStrings(totalSpecs, minLength, maxLength int) ([]string, error) {
+	r, _ := randutil.NewTestRand()
+	uniqueStrings := make(map[string]struct{})
+	var result []string
+
+	for len(uniqueStrings) < totalSpecs {
+		// this generates a random string length within the specified range
+		strLength := randutil.RandIntInRange(r, minLength, maxLength)
+
+		// Generate a random string of the chosen length
+		randomStr, err := generateRandomString(strLength)
+		if err != nil {
+			return nil, err
+		}
+
+		// we need to ensure that the string is unique
+		if _, exists := uniqueStrings[randomStr]; !exists {
+			uniqueStrings[randomStr] = struct{}{}
+			result = append(result, randomStr)
+		}
+	}
+
+	return result, nil
+}
+
+func shuffleStrings(strings []string) []string {
+	r, _ := randutil.NewTestRand()
+	for i := len(strings) - 1; i > 0; i-- {
+		j := randutil.RandIntInRange(r, 0, i+1)         // Generate a random index
+		strings[i], strings[j] = strings[j], strings[i] // Swap the elements
+	}
+	return strings
 }

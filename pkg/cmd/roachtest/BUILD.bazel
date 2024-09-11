@@ -121,6 +121,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
+        "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/version",
