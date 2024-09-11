@@ -182,7 +182,7 @@ type RangeControllerFactory interface {
 //
 // State transitions are NotEnabledWhenLeader => EnabledWhenLeaderV1Encoding
 // => EnabledWhenLeaderV2Encoding, i.e., the level will never regress.
-type EnabledWhenLeaderLevel uint8
+type EnabledWhenLeaderLevel = uint32
 
 const (
 	NotEnabledWhenLeader EnabledWhenLeaderLevel = iota
@@ -485,7 +485,7 @@ type processorImpl struct {
 	// enabledWhenLeader indicates the RACv2 mode of operation when this replica
 	// is the leader. Atomic value, for serving GetEnabledWhenLeader. Updated only
 	// while holding raftMu. Can be read non-atomically if raftMu is held.
-	enabledWhenLeader atomic.Uint32
+	enabledWhenLeader EnabledWhenLeaderLevel
 
 	v1EncodingPriorityMismatch log.EveryN
 }
@@ -493,10 +493,11 @@ type processorImpl struct {
 var _ Processor = &processorImpl{}
 
 func NewProcessor(opts ProcessorOptions) Processor {
-	p := &processorImpl{opts: opts}
-	p.enabledWhenLeader.Store(uint32(opts.EnabledWhenLeaderLevel))
-	p.v1EncodingPriorityMismatch = log.Every(time.Minute)
-	return p
+	return &processorImpl{
+		opts:                       opts,
+		enabledWhenLeader:          opts.EnabledWhenLeaderLevel,
+		v1EncodingPriorityMismatch: log.Every(time.Minute),
+	}
 }
 
 // isLeaderUsingV2RaftMuLocked returns true if the current leader uses the V2
@@ -535,10 +536,10 @@ func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(
 	ctx context.Context, level EnabledWhenLeaderLevel,
 ) {
 	p.opts.Replica.RaftMuAssertHeld()
-	if p.destroyed || EnabledWhenLeaderLevel(p.enabledWhenLeader.Load()) >= level {
+	if p.destroyed || p.enabledWhenLeader >= level {
 		return
 	}
-	p.enabledWhenLeader.Store(uint32(level))
+	atomic.StoreUint32(&p.enabledWhenLeader, level)
 	if level != EnabledWhenLeaderV1Encoding || p.replMu.replicas == nil {
 		return
 	}
@@ -562,7 +563,7 @@ func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(
 
 // GetEnabledWhenLeader implements Processor.
 func (p *processorImpl) GetEnabledWhenLeader() EnabledWhenLeaderLevel {
-	return EnabledWhenLeaderLevel(p.enabledWhenLeader.Load())
+	return atomic.LoadUint32(&p.enabledWhenLeader)
 }
 
 func descToReplicaSet(desc *roachpb.RangeDescriptor) rac2.ReplicaSet {
@@ -664,7 +665,7 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 		return
 	}
 	// Is the leader.
-	if EnabledWhenLeaderLevel(p.enabledWhenLeader.Load()) == NotEnabledWhenLeader {
+	if p.enabledWhenLeader == NotEnabledWhenLeader {
 		return
 	}
 	if p.leader.rc != nil && myLeaderTerm > p.leader.term {
