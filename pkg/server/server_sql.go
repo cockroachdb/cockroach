@@ -1914,7 +1914,7 @@ func (s *SQLServer) startLicenseEnforcer(
 	// is shared to provide access to the values cached from the KV read.
 	if s.execCfg.Codec.ForSystemTenant() {
 		if knobs.Server != nil {
-			s.execCfg.LicenseEnforcer.TestingKnobs = &knobs.Server.(*TestingKnobs).LicenseTestingKnobs
+			s.execCfg.LicenseEnforcer.SetTestingKnobs(&knobs.Server.(*TestingKnobs).LicenseTestingKnobs)
 		}
 		// TODO(spilchen): we need to tell the license enforcer about the
 		// diagnostics reporter. This will be handled in CRDB-39991
