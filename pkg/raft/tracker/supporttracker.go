@@ -81,6 +81,30 @@ func (st *SupportTracker) LeadSupportUntil() hlc.Timestamp {
 	return st.config.Voters.LeadSupportExpiration(supportExpMap)
 }
 
+// IsLeadSupportedByFollower returns true if the leader is currently supported
+// by the specified follower. This means that (1) The leader added that
+// follower's support epoch to the support map, and (2) the follower's current
+// supports the leader in the storeliveness layer with the same epoch from (1).
+func (st *SupportTracker) IsLeadSupportedByFollower(id pb.PeerID) bool {
+	// If the leader didn't add the follower's id to the support map, it means
+	// that the leader hasn't yet received a MsgFortifyLeaderResp from that
+	//follower.
+	supportEpoch, exist := st.support[id]
+	if !exist {
+		return false
+	}
+
+	// If the leader is not supported by the follower, or if the follower's epoch
+	// is different from what the leader's recorded supportEpoch, it means that
+	// the follower is not supporting the leader at the current term.
+	curEpoch, _, ok := st.storeLiveness.SupportFrom(id)
+	if !ok || curEpoch != supportEpoch {
+		return false
+	}
+
+	return true
+}
+
 func (st *SupportTracker) String() string {
 	if len(st.support) == 0 {
 		return "empty"

@@ -143,6 +143,78 @@ func TestLeadSupportUntil(t *testing.T) {
 	}
 }
 
+func TestIsLeadSupportedByFollower(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts := func(ts int64) hlc.Timestamp {
+		return hlc.Timestamp{
+			WallTime: ts,
+		}
+	}
+
+	mockLivenessOnePeer := makeMockStoreLiveness(
+		map[pb.PeerID]mockLivenessEntry{
+			1: makeMockLivenessEntry(10, ts(10)),
+		},
+	)
+
+	testCases := []struct {
+		ids           []pb.PeerID
+		storeLiveness raftstoreliveness.StoreLiveness
+		setup         func(tracker *SupportTracker)
+		expSupported  bool
+	}{
+		{
+			ids:           []pb.PeerID{1},
+			storeLiveness: mockLivenessOnePeer,
+			setup: func(supportTracker *SupportTracker) {
+				// No support recorded.
+			},
+			expSupported: false,
+		},
+		{
+			ids:           []pb.PeerID{2},
+			storeLiveness: mockLivenessOnePeer,
+			setup: func(supportTracker *SupportTracker) {
+				// Support recorded for a different follower than the one in the
+				// storeLiveness.
+				supportTracker.RecordSupport(2, 10)
+			},
+			expSupported: false,
+		},
+		{
+			ids:           []pb.PeerID{1},
+			storeLiveness: mockLivenessOnePeer,
+			setup: func(supportTracker *SupportTracker) {
+				// Support recorded for an expired epoch.
+				supportTracker.RecordSupport(1, 9)
+			},
+			expSupported: false,
+		},
+		{
+			ids:           []pb.PeerID{1},
+			storeLiveness: mockLivenessOnePeer,
+			setup: func(supportTracker *SupportTracker) {
+				// Record support at the same epoch as the storeLiveness.
+				supportTracker.RecordSupport(1, 10)
+			},
+			expSupported: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		cfg := quorum.MakeEmptyConfig()
+		for _, id := range tc.ids {
+			cfg.Voters[0][id] = struct{}{}
+		}
+		supportTracker := MakeSupportTracker(&cfg, tc.storeLiveness)
+
+		tc.setup(&supportTracker)
+		require.Equal(t, tc.expSupported, supportTracker.IsLeadSupportedByFollower(1))
+	}
+}
+
 type mockLivenessEntry struct {
 	epoch pb.Epoch
 	ts    hlc.Timestamp
