@@ -202,10 +202,12 @@ func TestDeleteRangeTombstone(t *testing.T) {
 
 					writeInitialData(t, ctx, engine)
 
+					ts := hlc.Timestamp{WallTime: tc.ts}
 					rangeKey := storage.MVCCRangeKey{
-						StartKey:  roachpb.Key(tc.start),
-						EndKey:    roachpb.Key(tc.end),
-						Timestamp: hlc.Timestamp{WallTime: tc.ts},
+						StartKey:               roachpb.Key(tc.start),
+						EndKey:                 roachpb.Key(tc.end),
+						Timestamp:              ts,
+						EncodedTimestampSuffix: storage.EncodeMVCCTimestampSuffix(ts),
 					}
 
 					// Prepare the request and environment.
