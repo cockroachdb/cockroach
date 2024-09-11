@@ -87,8 +87,7 @@ var (
 			"to notice drain request and to perform orderly shutdown",
 		10*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Minute),
-		settings.WithName("server.shutdown.jobs.timeout"),
-		settings.WithPublic)
+		settings.WithName("server.shutdown.jobs.timeout"))
 )
 
 // Drain puts the node into the specified drain mode(s) and optionally
