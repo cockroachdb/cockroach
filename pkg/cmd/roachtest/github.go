@@ -84,19 +84,19 @@ func generateHelpCommand(
 
 func failuresAsErrorWithOwnership(failures []failure) *registry.ErrorWithOwnership {
 	var transientError rperrors.TransientError
-	var err registry.ErrorWithOwnership
+	var errWithOwner registry.ErrorWithOwnership
 	if failuresMatchingError(failures, &transientError) {
-		err = registry.ErrorWithOwner(
+		errWithOwner = registry.ErrorWithOwner(
 			registry.OwnerTestEng, transientError,
 			registry.WithTitleOverride(transientError.Cause),
 			registry.InfraFlake,
 		)
 
-		return &err
+		return &errWithOwner
 	}
 
-	if errWithOwner := failuresSpecifyOwner(failures); errWithOwner != nil {
-		return errWithOwner
+	if failuresMatchingError(failures, &errWithOwner) {
+		return &errWithOwner
 	}
 
 	return nil

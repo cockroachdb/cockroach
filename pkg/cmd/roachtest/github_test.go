@@ -335,7 +335,28 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
-		// 12. Arbitrary transient failures lead to an issue assigned to
+		// 12. Nested ErrorWithOwnership -- assignment is based on innermost
+		// error in the chain.
+		{
+			nonReleaseBlocker: true,
+			failures: []failure{
+				createFailure(registry.ErrorWithOwner(
+					registry.OwnerSQLFoundations,
+					registry.ErrorWithOwner(
+						registry.OwnerTestEng,
+						errors.New("oops"),
+						registry.WithTitleOverride("monitor_failure"),
+						registry.InfraFlake,
+					),
+				)),
+			},
+			expectedPost:          true,
+			expectedTeam:          "@cockroachdb/test-eng",
+			expectedName:          "monitor_failure",
+			expectedMessagePrefix: testName + " failed",
+			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
+		},
+		// 13. Arbitrary transient failures lead to an issue assigned to
 		// test eng with the corresponding title override.
 		{
 			nonReleaseBlocker: true,
@@ -348,7 +369,7 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
-		// 13. When a transient error happens as a result of *another*
+		// 14. When a transient error happens as a result of *another*
 		// transient error, the corresponding issue uses the first
 		// transient error in the chain.
 		{
@@ -363,7 +384,7 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
-		// 14. Verify hostError failure are routed to test-eng and marked as infra-flake, when the
+		// 15. Verify hostError failure are routed to test-eng and marked as infra-flake, when the
 		// first failure is a non-handled error.
 		{
 			nonReleaseBlocker:     true,
@@ -374,7 +395,7 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
-		// 15. Verify hostError failure are routed to test-eng and marked as infra-flake, when the only error is
+		// 16. Verify hostError failure are routed to test-eng and marked as infra-flake, when the only error is
 		// hostError failure
 		{
 			nonReleaseBlocker: true,
@@ -387,7 +408,7 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix: testName + " failed",
 			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 		},
-		// 16. Verify that a Side-Eye URL is rendered in the issue.
+		// 17. Verify that a Side-Eye URL is rendered in the issue.
 		{
 			nonReleaseBlocker: true,
 			failures: []failure{
