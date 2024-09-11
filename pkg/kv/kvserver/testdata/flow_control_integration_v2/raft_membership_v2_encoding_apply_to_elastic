@@ -47,10 +47,10 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  70       | 1        | 1.0 MiB               
-  70       | 2        | 1.0 MiB               
-  70       | 3        | 1.0 MiB               
-  70       | 4        | 0 B                   
+  74       | 1        | 1.0 MiB               
+  74       | 2        | 1.0 MiB               
+  74       | 3        | 1.0 MiB               
+  74       | 4        | 0 B                   
 
 
 -- (Issuing 1x1MiB, 4x replicated write that's not admitted.)
@@ -64,10 +64,10 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  70       | 1        | 2.0 MiB               
-  70       | 2        | 2.0 MiB               
-  70       | 3        | 2.0 MiB               
-  70       | 4        | 1.0 MiB               
+  74       | 1        | 2.0 MiB               
+  74       | 2        | 2.0 MiB               
+  74       | 3        | 2.0 MiB               
+  74       | 4        | 1.0 MiB               
 
 
 -- (Removing voting replica from n3.)
@@ -88,10 +88,10 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  70       | 1        | 3.0 MiB               
-  70       | 2        | 3.0 MiB               
-  70       | 4        | 2.0 MiB               
-  70       | 5        | 1.0 MiB               
+  74       | 1        | 3.0 MiB               
+  74       | 2        | 3.0 MiB               
+  74       | 4        | 2.0 MiB               
+  74       | 5        | 1.0 MiB               
 
 
 -- (Allow below-raft admission to proceed.)
@@ -103,10 +103,10 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  70       | 1        | 0 B                   
-  70       | 2        | 0 B                   
-  70       | 4        | 0 B                   
-  70       | 5        | 0 B                   
+  74       | 1        | 0 B                   
+  74       | 2        | 0 B                   
+  74       | 4        | 0 B                   
+  74       | 5        | 0 B                   
 
 
 -- Flow token metrics from n1 after work gets admitted. All {regular,elastic}
