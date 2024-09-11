@@ -600,7 +600,7 @@ func (r *replicaGCer) template() kvpb.GCRequest {
 
 func (r *replicaGCer) send(ctx context.Context, req kvpb.GCRequest) error {
 	n := atomic.AddInt32(&r.count, 1)
-	log.Eventf(ctx, "sending batch %d (%d keys)", n, len(req.Keys))
+	log.Eventf(ctx, "sending batch %d (%d keys, %d rangekeys)", n, len(req.Keys), len(req.RangeKeys))
 
 	ba := &kvpb.BatchRequest{}
 	// Technically not needed since we're talking directly to the Replica.
