@@ -124,7 +124,7 @@ HandleRaftReady:
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{Mark:{Term:50 Index:25} Priority:LowPri}}) = true
 destroyed-or-leader-using-v2: true
-LogTracker [+dirty]: mark:{Term:50 Index:25}, stable:23, admitted:[23 23 23 23]
+LogTracker: mark:{Term:50 Index:25}, stable:23, admitted:[23 23 23 23]
 LowPri: {Term:50 Index:25}
 
 # The leader has changed.
@@ -773,7 +773,7 @@ HandleRaftReady:
 .....
 AdmitRaftEntries:
 destroyed-or-leader-using-v2: true
-LogTracker [+dirty]: mark:{Term:50 Index:27}, stable:26, admitted:[26 26 26 26]
+LogTracker: mark:{Term:50 Index:27}, stable:26, admitted:[26 26 26 26]
 
 # Everything up to 27 is admitted.
 synced-log term=50 index=27

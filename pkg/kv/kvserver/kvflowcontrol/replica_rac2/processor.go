@@ -764,20 +764,22 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 		return
 	}
 
-	// Piggyback admitted index advancement, if any, to the message stream going
-	// to the leader node, if we are not the leader. At the leader node, the
-	// admitted vector is read directly from the log tracker.
-	if p.mu.leader.rc == nil && p.mu.leaderNodeID != 0 {
-		// TODO(pav-kv): must make sure the leader term is the same.
-		if admitted, dirty := p.logTracker.admitted(true /* sched */); dirty {
+	if av, dirty := p.logTracker.admitted(true /* sched */); dirty {
+		if p.mu.leader.rc != nil {
+			// TODO(pav-kv): if we are the leader, send the admitted vector directly
+			// for local processing.
+		} else if p.mu.leaderNodeID != 0 && p.mu.term == av.Term {
+			// Otherwise, piggyback the new admitted vector to the message stream
+			// going to the known leader node. The leader accepts only admitted
+			// vectors in its term coordinate system.
 			p.opts.AdmittedPiggybacker.Add(p.mu.leaderNodeID, kvflowcontrolpb.PiggybackedAdmittedState{
 				RangeID:       p.opts.RangeID,
 				ToStoreID:     p.mu.leaderStoreID,
 				FromReplicaID: p.opts.ReplicaID,
 				ToReplicaID:   p.mu.leaderID,
 				Admitted: kvflowcontrolpb.AdmittedState{
-					Term:     admitted.Term,
-					Admitted: admitted.Admitted[:],
+					Term:     av.Term,
+					Admitted: av.Admitted[:],
 				}})
 		}
 	}
