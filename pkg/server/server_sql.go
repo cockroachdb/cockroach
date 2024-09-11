@@ -1921,14 +1921,16 @@ func (s *SQLServer) startLicenseEnforcer(
 	// it requires access to the system keyspace. For secondary tenants, this struct
 	// is shared to provide access to the values cached from the KV read.
 	if s.execCfg.Codec.ForSystemTenant() {
+		licenseEnforcer := s.execCfg.LicenseEnforcer
 		if knobs.Server != nil {
 			s.execCfg.LicenseEnforcer.SetTestingKnobs(&knobs.Server.(*TestingKnobs).LicenseTestingKnobs)
 		}
+		licenseEnforcer.SetTelemetryStatusReporter(s.diagnosticsReporter)
 		// TODO(spilchen): we need to tell the license enforcer about the
 		// diagnostics reporter. This will be handled in CRDB-39991
 		err := startup.RunIdempotentWithRetry(ctx, s.stopper.ShouldQuiesce(), "license enforcer start",
 			func(ctx context.Context) error {
-				return s.execCfg.LicenseEnforcer.Start(ctx, s.cfg.Settings, s.internalDB, initialStart)
+				return licenseEnforcer.Start(ctx, s.cfg.Settings, s.internalDB, initialStart)
 			})
 		// This is not a critical component. If it fails to start, we log a warning
 		// rather than prevent the entire server from starting.
