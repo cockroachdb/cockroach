@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
+	"net"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 )
 
 const (
@@ -109,10 +111,15 @@ func makeSQLSink(
 }
 
 func (s *sqlSink) Dial() error {
-	db, err := gosql.Open(`postgres`, s.uri)
+	connector, err := pq.NewConnector(s.uri)
 	if err != nil {
 		return err
 	}
+
+	if dialer, ok := s.metrics.netMetrics().WrapPqDialer((&net.Dialer{})); ok {
+		connector.Dialer(dialer)
+	}
+	db := gosql.OpenDB(connector)
 	if _, err := db.Exec(fmt.Sprintf(sqlSinkCreateTableStmt, s.tableName)); err != nil {
 		db.Close()
 		return err
