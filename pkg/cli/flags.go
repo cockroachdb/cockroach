@@ -798,6 +798,7 @@ func init() {
 	sqlCmds = append(sqlCmds, nodeLocalCmds...)
 	sqlCmds = append(sqlCmds, importCmds...)
 	sqlCmds = append(sqlCmds, userFileCmds...)
+	sqlCmds = append(sqlCmds, genHAProxyCmd)
 	for _, cmd := range sqlCmds {
 		clientflags.AddSQLFlags(cmd, &cliCtx.clientOpts, sqlCtx,
 			cmd == sqlShellCmd, /* isShell */
