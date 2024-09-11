@@ -19,6 +19,17 @@ fi
 
 function start_and_wait() {
     gcloud compute instances start "${1}"
+    if [ -z "${GCEWORKER_NO_FIREWALL_WARNING-}" ]; then
+	      cat <<EOF
+	      As of July 2024, due to an SSH vulnerability, access to gceworkers is permitted only from home and office IPs[1].
+	      If you are at home or at an office and are unable to connect to your gceworker, try
+	      $0 update-firewall.
+
+        This warning can be suppressed via GCEWORKER_NO_FIREWALL_WARNING=true.
+
+        [1]: https://cockroachlabs.slack.com/archives/C0HM2DZ34/p1719878745576399
+EOF
+    fi
     echo "waiting for node to finish starting..."
     # Wait for vm and sshd to start up.
     retry gcloud compute ssh "${1}" --command=true || true
@@ -57,7 +68,7 @@ case "${cmd}" in
     # wait a bit to let gcloud create the instance before retrying
     sleep 30
     # Retry while vm and sshd start up.
-    retry gcloud compute ssh "${NAME}" --command=true
+    start_and_wait "${NAME}"
 
     gcloud compute scp --recurse "build/bootstrap" "${NAME}:bootstrap"
     gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="./bootstrap/bootstrap-debian.sh"
@@ -72,6 +83,17 @@ case "${cmd}" in
     # logged in user. To disable this, `sudo touch /.active`.
     gcloud compute ssh "${NAME}" --command="sudo cp bootstrap/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
 
+    ;;
+    update-firewall)
+    MY_IP="$(curl -4 -s https://icanhazip.com/)"
+    RULE="$(whoami)-home-ssh-rule"
+    gcloud compute firewall-rules delete --quiet "$RULE" || true
+    gcloud compute firewall-rules create --quiet "$RULE" \
+      --network=default \
+      --allow=tcp:22 \
+      --source-ranges="$MY_IP/32" \
+      --direction=INGRESS \
+      --priority=0
     ;;
     start)
     start_and_wait "${NAME}"
