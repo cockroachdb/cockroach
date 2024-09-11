@@ -16,6 +16,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"runtime/pprof"
+	"runtime/trace"
 	"strings"
 	"time"
 
@@ -3411,6 +3412,13 @@ func (ex *connExecutor) execWithProfiling(
 	prepared *PreparedStatement,
 	op func(context.Context) error,
 ) error {
+	if trace.IsEnabled() {
+		defer trace.StartRegion(ctx, "SQLStatement").End()
+		// Go execution trace logging. Low-allocation only, please.
+		trace.Log(ctx, "sqlappname", ex.sessionData().ApplicationName)
+		trace.Log(ctx, "sqldb", ex.sessionData().Database)
+		trace.Log(ctx, "sqlstmttag", ast.StatementTag())
+	}
 	var err error
 	if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
 		remoteAddr := "internal"
