@@ -696,13 +696,12 @@ func (p *processorImpl) closeLeaderStateRaftMuLocked(ctx context.Context) {
 		return
 	}
 	p.leader.rc.CloseRaftMuLocked(ctx)
-	func() {
-		p.leader.rcReferenceUpdateMu.Lock()
-		defer p.leader.rcReferenceUpdateMu.Unlock()
-		p.leader.rc = nil
-	}()
-	p.leader.enqueuedPiggybackedResponses = nil
 	p.leader.term = 0
+	p.leader.enqueuedPiggybackedResponses = nil
+
+	p.leader.rcReferenceUpdateMu.Lock()
+	defer p.leader.rcReferenceUpdateMu.Unlock()
+	p.leader.rc = nil
 }
 
 func (p *processorImpl) createLeaderStateRaftMuLocked(
@@ -711,22 +710,23 @@ func (p *processorImpl) createLeaderStateRaftMuLocked(
 	if p.leader.rc != nil {
 		panic("RangeController already exists")
 	}
-	func() {
-		p.leader.rcReferenceUpdateMu.Lock()
-		defer p.leader.rcReferenceUpdateMu.Unlock()
-		p.leader.rc = p.opts.RangeControllerFactory.New(ctx, rangeControllerInitState{
-			replicaSet:      p.replicas,
-			leaseholder:     p.leaseholderID,
-			nextRaftIndex:   nextUnstableIndex,
-			rangeID:         p.opts.RangeID,
-			tenantID:        p.tenantID,
-			localReplicaID:  p.opts.ReplicaID,
-			raftInterface:   p.raftNode,
-			admittedTracker: p,
-		})
-	}()
 	p.leader.term = term
 	p.leader.enqueuedPiggybackedResponses = map[roachpb.ReplicaID]raftpb.Message{}
+
+	rc := p.opts.RangeControllerFactory.New(ctx, rangeControllerInitState{
+		replicaSet:      p.replicas,
+		leaseholder:     p.leaseholderID,
+		nextRaftIndex:   nextUnstableIndex,
+		rangeID:         p.opts.RangeID,
+		tenantID:        p.tenantID,
+		localReplicaID:  p.opts.ReplicaID,
+		raftInterface:   p.raftNode,
+		admittedTracker: p,
+	})
+
+	p.leader.rcReferenceUpdateMu.Lock()
+	defer p.leader.rcReferenceUpdateMu.Unlock()
+	p.leader.rc = rc
 }
 
 // HandleRaftReadyRaftMuLocked implements Processor.
