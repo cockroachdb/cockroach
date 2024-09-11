@@ -1,3 +1,46 @@
+# statement ok
+# CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING DEFAULT 'xiaochen_default', FAMILY f1 (a, b, c));
+# 
+# statement ok
+# INSERT INTO foo VALUES (1, 'abc', NULL);
+# 
+# query ITT
+# SELECT * FROM foo;
+# ----
+# 1  abc  xiaochen_default
+# 
+# # use a incorrect result to stop the test
+# query T
+# SELECT '2000-05-05 10:00:00+03':::TIMESTAMP
+# ----
+# infinity
+
+statement ok
+SET use_declarative_schema_changer='off';
+
+statement ok
+CREATE TABLE foo (a INT PRIMARY KEY, b STRING);
+
+statement ok
+INSERT INTO foo VALUES (1, 'abc');
+
+statement ok
+ALTER TABLE foo ADD COLUMN c STRING DEFAULT 'xiaochen_default';
+
+statement ok
+INSERT INTO foo VALUES (2, 'xyz', NULL);
+
+query ITT
+SELECT * FROM foo;
+----
+1  abc  xiaochen_default
+2  xyz  NULL
+
+query T
+SELECT '2000-05-05 10:00:00+03':::TIMESTAMP
+----
+infinity
+
 query T
 SELECT '2000-05-05 10:00:00+03':::TIMESTAMP
 ----

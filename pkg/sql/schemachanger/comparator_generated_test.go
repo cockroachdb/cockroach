@@ -18,6 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
+func TestSchemaChangeComparator_add_column_with_default_value(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/add_column_with_default_value"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_aggregate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/aggregate"
