@@ -321,7 +321,7 @@ var (
 		// We don't get any benefits from generating plan gists for internal
 		// queries, so we disable them.
 		DisablePlanGists: true,
-		QualityOfService: &sessiondatapb.UserLowQoS,
+		QualityOfService: &sessiondatapb.BulkLowQoS,
 	}
 )
 
