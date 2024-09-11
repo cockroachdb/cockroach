@@ -436,29 +436,29 @@ type processorImpl struct {
 		// destroyed transitions once from false => true when the Replica is
 		// destroyed. Updated while holding raftMu and the enclosing mu. To read
 		// this field, at least one of these mutexes must be locked.
-		destroyed bool
+		destroyed bool // FIXME
 
-		leaderID roachpb.ReplicaID
+		leaderID roachpb.ReplicaID // FIXME
 		// leaderNodeID, leaderStoreID are a function of leaderID and
 		// raftMu.replicas. They are set when leaderID is non-zero and replicas
 		// contains leaderID, else are 0.
-		leaderNodeID  roachpb.NodeID
-		leaderStoreID roachpb.StoreID
-		leaseholderID roachpb.ReplicaID
+		leaderNodeID  roachpb.NodeID    // FIXME
+		leaderStoreID roachpb.StoreID   // FIXME
+		leaseholderID roachpb.ReplicaID // FIXME
 		// State at a follower.
 		follower struct {
 			// isLeaderUsingV2Protocol is true when the leaderID indicated that it's
 			// using RACv2. Always accessed while holding raftMu.
-			isLeaderUsingV2Protocol bool
+			isLeaderUsingV2Protocol bool // FIXME
 			// lowPriOverrideState records which raft log entries have their priority
 			// overridden to be raftpb.LowPri.
 			// Always accessed while holding raftMu.
-			lowPriOverrideState lowPriOverrideState
+			lowPriOverrideState lowPriOverrideState // FIXME
 		}
 		// State when leader, i.e., when leaderID == opts.ReplicaID, and v2
 		// protocol is enabled.
 		leader struct {
-			enqueuedPiggybackedResponses map[roachpb.ReplicaID]raftpb.Message
+			enqueuedPiggybackedResponses map[roachpb.ReplicaID]raftpb.Message // FIXME
 			// rcReferenceUpdateMu is a narrow mutex held when rc reference is
 			// updated. Code paths that want to access rc must, at the minimum, lock
 			// rcReferenceUpdateMu for read.
@@ -467,19 +467,19 @@ type processorImpl struct {
 			// rc is always updated while holding raftMu, processorImpl.mu, and
 			// rcReferenceUpdateMu. Code paths that want to access this reference must
 			// hold at least one of these mutexes.
-			rc rac2.RangeController
+			rc rac2.RangeController // escapes raftMu via rcReferenceUpdateMu
 			// term is used to notice transitions out of leadership and back, to
 			// recreate rc. It is set when rc is created, and is not up-to-date if
 			// there is no rc (which can happen when using the v1 protocol).
-			term uint64
+			term uint64 // FIXME
 		}
 		// Is the RACv2 protocol enabled when this replica is the leader.
-		enabledWhenLeader EnabledWhenLeaderLevel
+		enabledWhenLeader EnabledWhenLeaderLevel // FIXME
 	}
 	// Fields below are accessed while holding Replica.raftMu. This
 	// peculiarity is only to handle the fact that OnDescChanged is called
 	// with Replica.mu held.
-	raftMu struct {
+	raftMu struct { // FIXME
 		raftNode RaftNode
 		// replicasChanged is set to true when replicas has been updated. This
 		// is used to lazily update all the state under mu that needs to use
@@ -493,7 +493,7 @@ type processorImpl struct {
 	// mu.enabledWhenLeader.
 	enabledWhenLeader atomic.Uint32
 
-	v1EncodingPriorityMismatch log.EveryN
+	v1EncodingPriorityMismatch log.EveryN // FIXME
 }
 
 var _ Processor = &processorImpl{}
