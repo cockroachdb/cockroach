@@ -1512,9 +1512,10 @@ func engineData(t *testing.T, r storage.Reader, desc roachpb.RangeDescriptor) []
 						i++
 					case 0:
 						newPartial = append(newPartial, storage.MVCCRangeKey{
-							StartKey:  partialRangeKeys[j].StartKey,
-							EndKey:    newKeys[i].EndKey.Clone(),
-							Timestamp: partialRangeKeys[j].Timestamp,
+							StartKey:               partialRangeKeys[j].StartKey,
+							EndKey:                 newKeys[i].EndKey.Clone(),
+							Timestamp:              partialRangeKeys[j].Timestamp,
+							EncodedTimestampSuffix: partialRangeKeys[j].EncodedTimestampSuffix,
 						})
 						i++
 						j++
