@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -782,33 +783,67 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	if !p.isLeaderUsingV2ProcLocked() {
 		return
 	}
-
-	if av, dirty := p.logTracker.admitted(true /* sched */); dirty {
-		if rc := p.leader.rc; rc != nil {
-			// If we are the leader, notify the RangeController about our replica's
-			// new admitted vector.
-			rc.AdmitRaftMuLocked(ctx, p.opts.ReplicaID, av)
-		} else if p.leaderNodeID != 0 {
-			// If the leader is known, piggyback the updated admitted vector to the
-			// message stream going to the leader node.
-			// TODO(pav-kv): must make sure the leader term is the same.
-			p.opts.AdmittedPiggybacker.Add(p.leaderNodeID, kvflowcontrolpb.PiggybackedAdmittedState{
-				RangeID:       p.opts.RangeID,
-				ToStoreID:     p.leaderStoreID,
-				FromReplicaID: p.opts.ReplicaID,
-				ToReplicaID:   p.leaderID,
-				Admitted: kvflowcontrolpb.AdmittedState{
-					Term:     av.Term,
-					Admitted: av.Admitted[:],
-				}})
-		}
-	}
-
-	if p.leader.rc != nil {
-		if err := p.leader.rc.HandleRaftEventRaftMuLocked(ctx, e); err != nil {
+	p.maybeSendAdmittedRaftMuLocked(ctx)
+	if rc := p.leader.rc; rc != nil {
+		if err := rc.HandleRaftEventRaftMuLocked(ctx, e); err != nil {
 			log.Errorf(ctx, "error handling raft event: %v", err)
 		}
 	}
+}
+
+// maybeSendAdmittedRaftMuLocked sends the admitted vector to the leader, if the
+// vector was updated since the last send. If the replica is the leader, the
+// sending is short-circuited to local processing.
+func (p *processorImpl) maybeSendAdmittedRaftMuLocked(ctx context.Context) {
+	// NB: this resets the scheduling bit in logTracker, which allows us to
+	// schedule this call again when the admitted vector is updated next time.
+	av, dirty := p.logTracker.admitted(true /* sched */)
+	// Don't send the admitted vector if it hasn't been updated since the last
+	// time it was sent.
+	if !dirty {
+		return
+	}
+	// If the admitted vector term is stale, don't send - the leader will drop it.
+	if av.Term < p.term {
+		return
+	}
+	// The admitted vector term can not outpace the raft term because raft would
+	// never accept a write that bumps its log's leader term without bumping the
+	// raft term first. We are holding raftMu between here and when the raft term
+	// was last read, and the logTracker term was last updated (we are still in
+	// the Ready handler), so this invariant could not be violated.
+	//
+	// However, we only check this in debug mode. There is no harm sending an
+	// admitted vector with a future term. This informs the previous leader that
+	// there is a new leader, so it has freedom to react to this information (e.g.
+	// release all flow tokens, or step down from leadership).
+	if buildutil.CrdbTestBuild && av.Term > p.term {
+		panic(errors.AssertionFailedf(
+			"admitted vector ahead of raft term: admitted=%+v, term=%d", av, p.term))
+	}
+	// If we are the leader, send the admitted vector directly to RangeController.
+	if rc := p.leader.rc; rc != nil {
+		rc.AdmitRaftMuLocked(ctx, p.opts.ReplicaID, av)
+		return
+	}
+	// If the leader is unknown, don't send the admitted vector to anyone. This
+	// should normally not happen here, since av.Term == p.term means we had at
+	// least one append from the leader, so we know it. There are cases though
+	// (see Replica.forgetLeaderLocked) when raft deliberately forgets the leader.
+	if p.leaderNodeID == 0 {
+		return
+	}
+	// Piggyback the new admitted vector to the message stream going to the node
+	// containing the leader replica.
+	p.opts.AdmittedPiggybacker.Add(p.leaderNodeID, kvflowcontrolpb.PiggybackedAdmittedState{
+		RangeID:       p.opts.RangeID,
+		ToStoreID:     p.leaderStoreID,
+		FromReplicaID: p.opts.ReplicaID,
+		ToReplicaID:   p.leaderID,
+		Admitted: kvflowcontrolpb.AdmittedState{
+			Term:     av.Term,
+			Admitted: av.Admitted[:],
+		}})
 }
 
 func (p *processorImpl) registerLogAppend(ctx context.Context, e rac2.RaftEvent) {
