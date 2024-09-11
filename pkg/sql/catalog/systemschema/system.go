@@ -243,6 +243,77 @@ CREATE TABLE system.jobs (
 	FAMILY claim (claim_session_id, claim_instance_id, num_runs, last_run)
 );`
 
+	// JobProgressTableSchema is a table that contains one row per job reflecting
+	// that job's current progress for human consumption (e.g. in SHOW or the UI).
+	// This table includes the time the progress was reported in the PK, so to
+	// update the current progress for a job, one would DELETE the old row and
+	// INSERT a new one, rather than UPDATEing the existing row. This is done to
+	// ensure revisions of the progress are not revisions to one "row" in CRDB,
+	// and thus the ranges can split between revisions to progress even though
+	// they cannot split between revisions to a SQL row. This is the same pattern
+	// used by job_info.
+	JobProgressTableSchema = `
+CREATE TABLE system.job_progress (
+	job_id INT8 NOT NULL,
+	written TIMESTAMPTZ NOT NULL DEFAULT now(), -- when this progress was reported.
+	fraction FLOAT, -- the fraction of some known work that is complete (e.g. half done with backfill)
+	resolved DECIMAL, -- a timestamp up to which processing is complete (aka "highwater"/resolvedTS/etc). Typically used by perpetual jobs instead of fraction.
+	--
+	CONSTRAINT "primary" PRIMARY KEY (job_id ASC, written DESC),
+)`
+
+	// JobProgressHistoryTableSchema is identical to job_progress, but is allowed
+	// to contain multiple rows for the same job_id. This table is used to track
+	// the progress of a job over time, whereas job_progress only contains the
+	// most recent progress update to allow more efficient lookups of the current
+	// progress in joins for SHOW JOBS. This table generally should only queried
+	// for a specific job at a time. History is not stored indefinitely and may be
+	// pruned based on retention limits.
+	JobProgressHistoryTableSchema = `
+	CREATE TABLE system.job_progress_history (
+		job_id INT8 NOT NULL,
+		written TIMESTAMPTZ NOT NULL DEFAULT now(),
+		fraction FLOAT,
+		resolved DECIMAL,
+		--
+		CONSTRAINT "primary" PRIMARY KEY (job_id ASC, written DESC),
+	)`
+
+	// JobStatusTableSchema is the table that contains the current, user-visible
+	// status of a job, which is typically its current phase of execution such as
+	// such as "backfilling" or "waiting for GC". This table contains one row per
+	// job and updates to the "current status" field for a job replace it with a
+	// new row (see the comment on progress for why we avoid updates in place).
+	// Messages from a job that are _not_ indicating it has changes its status
+	// that is displayed in SHOW JOBS, but are perhaps more akin to advisories or
+	// helpful information into conditions it encountered should be recorded in
+	// job_message instead.
+	JobStatusTableSchema = `
+	CREATE TABLE system.job_status (
+		job_id INT8 NOT NULL,
+		written TIMESTAMPTZ NOT NULL DEFAULT now(), 
+		message STRING, -- the human-readable status message e.g. "reverting" or "backfilling".
+		--
+		CONSTRAINT "primary" PRIMARY KEY (job_id, written DESC),
+	)`
+
+	// JobMessageTableSchema is the table that contains a history of messages a
+	// job wishes to be visible to a human inspecting a specific job. This table
+	// retains multiple messages per job, and is intended to be queried for a
+	// specific job at a time rather than for all jobs at once. Messages can
+	// indicate what kind of message is being reported ("warning",
+	// "status_change", "state transition", etc). Messages may be dropped based on
+	// rate and/or retention limits.
+	JobMessageTableSchema = `
+	CREATE TABLE system.job_message (
+		job_id INT8 NOT NULL,
+		kind STRING, -- the type of message, e.g. "state", "info", etc
+		written TIMESTAMPTZ NOT NULL DEFAULT now(), 
+		message STRING, -- the human-readable status message e.g. "reverting" or "backfilling".
+		--
+		CONSTRAINT "primary" PRIMARY KEY (job_id, kind, written DESC),
+	)`
+
 	// web_sessions are used to track authenticated user actions over stateless
 	// connections, such as the cookie-based authentication used by the Admin
 	// UI.
@@ -948,6 +1019,8 @@ CREATE TABLE system.task_payloads (
 	FAMILY "primary" (id, created, owner, owner_id, min_version, description, type, value)
 );`
 
+	// SystemJobInfoTableSchema is the schema for the system.job_info table, which
+	// is used by jobs to store arbitrary "info".
 	SystemJobInfoTableSchema = `
 CREATE TABLE system.job_info (
 	job_id INT8 NOT NULL,
@@ -1284,7 +1357,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_1_Start.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_1_AddJobsTables.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1476,6 +1549,10 @@ func MakeSystemTables() []SystemTable {
 		StatementExecInsightsTable,
 		TransactionExecInsightsTable,
 		TableMetadata,
+		SystemJobProgressTable,
+		SystemJobProgressHistoryTable,
+		SystemJobStatusTable,
+		SystemJobMessageTable,
 	}
 }
 
@@ -4185,6 +4262,128 @@ var (
 				KeyColumnNames:      []string{"id"},
 				KeyColumnDirections: singleASC,
 				KeyColumnIDs:        singleID1,
+			}),
+	)
+
+	// SystemJobProgressTable is described in comment on JobProgressTableSchema.
+	SystemJobProgressTable = makeSystemTable(
+		JobProgressTableSchema,
+		systemTable(
+			catconstants.JobsProgressTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "job_id", ID: 1, Type: types.Int},
+				{Name: "written", ID: 2, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "fraction", ID: 3, Type: types.Float, Nullable: true},
+				{Name: "resolved", ID: 4, Type: types.Decimal, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"job_id", "written", "fraction", "resolved"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
+					DefaultColumnID: 4,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"job_id", "written"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_DESC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2},
+			}),
+	)
+
+	// SystemJobProgressHistoryTable is described in comment on JobProgressHistoryTableSchema.
+	SystemJobProgressHistoryTable = makeSystemTable(
+		JobProgressHistoryTableSchema,
+		systemTable(
+			catconstants.JobsProgressHistoryTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "job_id", ID: 1, Type: types.Int},
+				{Name: "written", ID: 2, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "fraction", ID: 3, Type: types.Float, Nullable: true},
+				{Name: "resolved", ID: 4, Type: types.Decimal, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"job_id", "written", "fraction", "resolved"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
+					DefaultColumnID: 4,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"job_id", "written"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_DESC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2},
+			}),
+	)
+
+	// SystemJobStatusTable is described in comment on JobStatusTableSchema.
+	SystemJobStatusTable = makeSystemTable(
+		JobStatusTableSchema,
+		systemTable(
+			catconstants.JobsStatusTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "job_id", ID: 1, Type: types.Int},
+				{Name: "written", ID: 2, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "message", ID: 3, Type: types.String, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"job_id", "written", "message"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3},
+					DefaultColumnID: 4,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"job_id", "written"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_DESC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2},
+			}),
+	)
+
+	SystemJobMessageTable = makeSystemTable(
+		JobMessageTableSchema,
+		systemTable(
+			catconstants.JobsMessageTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "job_id", ID: 1, Type: types.Int},
+				{Name: "written", ID: 2, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "kind", ID: 3, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "message", ID: 4, Type: types.String, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"job_id", "written", "kind", "message"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
+					DefaultColumnID: 4,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"job_id", "written", "kind"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_DESC, catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
 			}),
 	)
 
