@@ -235,6 +235,9 @@ const (
 
 	V25_1_Start
 
+	// V25_1_AddJobsTables added new jobs tables.
+	V25_1_AddJobsTables
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -289,6 +292,8 @@ var versionTable = [numKeys]roachpb.Version{
 
 	// v25.1 versions. Internal versions must be even.
 	V25_1_Start: {Major: 24, Minor: 3, Internal: 2},
+
+	V25_1_AddJobsTables: {Major: 24, Minor: 3, Internal: 4},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
