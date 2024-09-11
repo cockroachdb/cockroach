@@ -91,6 +91,7 @@ HandleRaftReady:
  RaftNode.NextUnstableIndexLocked() = 25
  RaftNode.LeaderLocked() = 10
  Replica.LeaseholderMuLocked
+ RaftNode.TermLocked() = 50
  Replica.MuUnlock
 .....
 AdmitRaftEntries:
@@ -117,6 +118,7 @@ HandleRaftReady:
  RaftNode.NextUnstableIndexLocked() = 26
  RaftNode.LeaderLocked() = 10
  Replica.LeaseholderMuLocked
+ RaftNode.TermLocked() = 50
  Replica.MuUnlock
 .....
 AdmitRaftEntries:
@@ -149,6 +151,7 @@ HandleRaftReady:
  RaftNode.NextUnstableIndexLocked() = 26
  RaftNode.LeaderLocked() = 11
  Replica.LeaseholderMuLocked
+ RaftNode.TermLocked() = 50
  Replica.MuUnlock
  Piggybacker.Add(n11, [r3,s11,5->11] admitted=t50/[24 25 25 25])
 .....
@@ -172,6 +175,7 @@ HandleRaftReady:
  RaftNode.NextUnstableIndexLocked() = 27
  RaftNode.LeaderLocked() = 11
  Replica.LeaseholderMuLocked
+ RaftNode.TermLocked() = 50
  Replica.MuUnlock
 .....
 AdmitRaftEntries:
@@ -190,6 +194,7 @@ HandleRaftReady:
  RaftNode.NextUnstableIndexLocked() = 27
  RaftNode.LeaderLocked() = 11
  Replica.LeaseholderMuLocked
+ RaftNode.TermLocked() = 50
  Replica.MuUnlock
 .....
 
@@ -212,6 +217,7 @@ HandleRaftReady:
  RaftNode.NextUnstableIndexLocked() = 27
  RaftNode.LeaderLocked() = 11
  Replica.LeaseholderMuLocked
+ RaftNode.TermLocked() = 50
  Replica.MuUnlock
  Piggybacker.Add(n11, [r3,s11,5->11] admitted=t50/[24 26 25 26])
 .....
@@ -233,6 +239,7 @@ HandleRaftReady:
  RaftNode.NextUnstableIndexLocked() = 27
  RaftNode.LeaderLocked() = 11
  Replica.LeaseholderMuLocked
+ RaftNode.TermLocked() = 50
  Replica.MuUnlock
  Piggybacker.Add(n11, [r3,s11,5->11] admitted=t50/[26 26 25 26])
 .....
@@ -256,6 +263,7 @@ HandleRaftReady:
  RaftNode.NextUnstableIndexLocked() = 28
  RaftNode.LeaderLocked() = 11
  Replica.LeaseholderMuLocked
+ RaftNode.TermLocked() = 50
  Replica.MuUnlock
 .....
 AdmitRaftEntries:
@@ -285,6 +293,7 @@ HandleRaftReady:
  RaftNode.NextUnstableIndexLocked() = 28
  RaftNode.LeaderLocked() = 11
  Replica.LeaseholderMuLocked
+ RaftNode.TermLocked() = 50
  Replica.MuUnlock
  Piggybacker.Add(n11, [r3,s11,5->11] admitted=t50/[26 26 26 26])
 .....
@@ -317,6 +326,7 @@ HandleRaftReady:
  RaftNode.NextUnstableIndexLocked() = 28
  RaftNode.LeaderLocked() = 11
  Replica.LeaseholderMuLocked
+ RaftNode.TermLocked() = 51
  Replica.MuUnlock
 .....
 
@@ -330,6 +340,7 @@ HandleRaftReady:
  RaftNode.NextUnstableIndexLocked() = 28
  RaftNode.LeaderLocked() = 11
  Replica.LeaseholderMuLocked
+ RaftNode.TermLocked() = 51
  Replica.MuUnlock
 .....
 AdmitRaftEntries:
@@ -355,6 +366,7 @@ HandleRaftReady:
  RaftNode.NextUnstableIndexLocked() = 28
  RaftNode.LeaderLocked() = 11
  Replica.LeaseholderMuLocked
+ RaftNode.TermLocked() = 51
  Replica.MuUnlock
  Piggybacker.Add(n11, [r3,s11,5->11] admitted=t51/[26 26 26 26])
 .....
@@ -794,6 +806,7 @@ HandleRaftReady:
  RaftNode.NextUnstableIndexLocked() = 28
  RaftNode.LeaderLocked() = 0
  Replica.LeaseholderMuLocked
+ RaftNode.TermLocked() = 51
  Replica.MuUnlock
  RangeController.CloseRaftMuLocked
 .....
