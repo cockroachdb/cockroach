@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/lib/pq"
 )
 
 var cidrMappingUrl = settings.RegisterStringSetting(
@@ -443,6 +444,20 @@ func (d *dialer) Dial(network, addr string) (net.Conn, error) {
 	return d.DialContext(context.Background(), network, addr)
 }
 
+// DialTimeout implements pq.Dialer
+func (d *dialer) DialTimeout(
+	network, addr string, timeout time.Duration,
+) (conn net.Conn, err error) {
+	err = timeutil.RunWithTimeout(context.Background(), "dial_timeout", timeout, func(ctx context.Context) error {
+		conn, err = d.DialContext(ctx, network, addr)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
 func (d *dialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	conn, err := d.inner.DialContext(ctx, network, addr)
 	if err != nil {
@@ -453,6 +468,7 @@ func (d *dialer) DialContext(ctx context.Context, network, addr string) (net.Con
 }
 
 var _ Dialer = (*dialer)(nil)
+var _ pq.Dialer = (*dialer)(nil)
 
 // WrapDialer returns a Dialer that wraps the connection with metrics. If the
 // underlying library exposes an ability to replace the DialContext, you should
@@ -467,6 +483,23 @@ func (m *NetMetrics) WrapDialer(inner Dialer, labels ...string) Dialer {
 		m:      m,
 		labels: labels,
 	}
+}
+
+// WrapPqDialer sets up the Dialer for the Connector with metrics for use in pq.
+// It modifies the Connector instead of returning a Dialer like the other
+// methods because of the way pq is structured and requires a pq.Dialer with
+// DialTimeout.
+func (m *NetMetrics) WrapPqDialer(c *pq.Connector, labels ...string) {
+	// m can be nil in tests, in that case leave the default dialer.
+	if m == nil {
+		return
+	}
+	d := dialer{
+		inner:  &net.Dialer{},
+		m:      m,
+		labels: labels,
+	}
+	c.Dialer(&d)
 }
 
 // track converts a connection to a wrapped connection with the given labels.
