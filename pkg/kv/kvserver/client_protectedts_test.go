@@ -204,7 +204,7 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 	// timestamp of our record at the latest.
 	trace, _, err = s.Enqueue(ctx, "mvccGC", repl, true /* skipShouldQueue */, false /* async */)
 	require.NoError(t, err)
-	require.Regexp(t, "(?s)done with GC evaluation for 0 keys", trace.String())
+	require.Regexp(t, "(?s)handled \\d+ incoming point keys; deleted \\d+", trace.String())
 	thresh := thresholdFromTrace(trace)
 	require.Truef(t, thresh.Less(ptsRec.Timestamp), "threshold: %v, protected %v %q", thresh, ptsRec.Timestamp, trace)
 
