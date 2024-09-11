@@ -2973,7 +2973,8 @@ func (s *adminServer) dataDistributionHelper(
     FROM
         tables t
         JOIN "".crdb_internal.ranges_no_leases r ON t.start_key < r.end_key
-            AND t.end_key > r.start_key;`
+            AND t.end_key > r.start_key
+    ORDER BY t.table_id;`
 
 	it, err := s.internalExecutor.QueryIteratorEx(
 		ctx, "data-distribution", nil, /* txn */
@@ -2987,75 +2988,45 @@ func (s *adminServer) dataDistributionHelper(
 	// for loop early (before Next() returns false).
 	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 
-	// Used later when we're scanning Meta2 and only have IDs, not names.
-	tableInfosByTableID := map[uint32]serverpb.DataDistributionResponse_TableInfo{}
-
 	var hasNext bool
-	for hasNext, err = it.Next(ctx); hasNext; hasNext, err = it.Next(ctx) {
-		row := it.Cur()
-		tableID := uint32(*row[0].(*tree.DInt))
-		tableInfo, ok := tableInfosByTableID[tableID]
+	for hasNext, err = it.Next(ctx); err == nil && hasNext; /* `it` updated by inner loop */ {
+		firstRow := it.Cur()
+		tableID := uint32(*firstRow[0].(*tree.DInt))
 
+		tableInfo := serverpb.DataDistributionResponse_TableInfo{
+			ReplicaCountByNodeId: make(map[roachpb.NodeID]int64),
+		}
+
+		// Iterate over rows with the same table ID since rows are sorted by table_id
+		for ; err == nil && hasNext; hasNext, err = it.Next(ctx) {
+			row := it.Cur()
+			curTableID := uint32(*row[0].(*tree.DInt))
+			if tableID != curTableID {
+				break
+			}
+			for _, node := range row[5].(*tree.DArray).Array {
+				tableInfo.ReplicaCountByNodeId[roachpb.NodeID(*node.(*tree.DInt))]++
+			}
+		}
+
+		if droppedAtDatum, ok := firstRow[4].(*tree.DTimestamp); ok {
+			tableInfo.DroppedAt = &droppedAtDatum.Time
+		}
+
+		tableName := (*string)(firstRow[1].(*tree.DString))
+		schemaName := (*string)(firstRow[2].(*tree.DString))
+		fqTableName := fmt.Sprintf("%s.%s", tree.NameStringP(schemaName), tree.NameStringP(tableName))
+
+		dbName := (*string)(firstRow[3].(*tree.DString))
+		// Insert database if it doesn't exist.
+		dbInfo, ok := resp.DatabaseInfo[*dbName]
 		if !ok {
-			tableName := (*string)(row[1].(*tree.DString))
-			schemaName := (*string)(row[2].(*tree.DString))
-			fqTableName := fmt.Sprintf("%s.%s", tree.NameStringP(schemaName), tree.NameStringP(tableName))
-			dbName := (*string)(row[3].(*tree.DString))
-
-			// Look at whether it was dropped.
-			var droppedAtTime *time.Time
-			droppedAtDatum, ok := row[4].(*tree.DTimestamp)
-			if ok {
-				droppedAtTime = &droppedAtDatum.Time
+			dbInfo = serverpb.DataDistributionResponse_DatabaseInfo{
+				TableInfo: make(map[string]serverpb.DataDistributionResponse_TableInfo),
 			}
-
-			// Insert database if it doesn't exist.
-			dbInfo, ok := resp.DatabaseInfo[*dbName]
-			if !ok {
-				dbInfo = serverpb.DataDistributionResponse_DatabaseInfo{
-					TableInfo: make(map[string]serverpb.DataDistributionResponse_TableInfo),
-				}
-				resp.DatabaseInfo[*dbName] = dbInfo
-			}
-
-			// Get zone config for table.
-			zcID := int64(0)
-
-			if droppedAtTime == nil {
-				// TODO(vilterp): figure out a way to get zone configs for tables that are dropped
-				zoneConfigQuery := fmt.Sprintf(
-					`SELECT zone_id FROM [SHOW ZONE CONFIGURATION FOR TABLE %s.%s.%s]`,
-					(*tree.Name)(dbName), (*tree.Name)(schemaName), (*tree.Name)(tableName),
-				)
-				row2, err := s.internalExecutor.QueryRowEx(
-					ctx, "data-distribution", nil, /* txn */
-					sessiondata.InternalExecutorOverride{User: userName},
-					zoneConfigQuery,
-				)
-				if err != nil {
-					return nil, err
-				}
-				if row2 == nil {
-					return nil, errors.Errorf(
-						"could not get zone config for table %s; 0 rows returned", *tableName,
-					)
-				}
-
-				zcID = int64(tree.MustBeDInt(row2[0]))
-			}
-
-			// Insert table.
-			tableInfo = serverpb.DataDistributionResponse_TableInfo{
-				ReplicaCountByNodeId: make(map[roachpb.NodeID]int64),
-				ZoneConfigId:         zcID,
-				DroppedAt:            droppedAtTime,
-			}
-			dbInfo.TableInfo[fqTableName] = tableInfo
-			tableInfosByTableID[tableID] = tableInfo
+			resp.DatabaseInfo[*dbName] = dbInfo
 		}
-		for _, n := range row[5].(*tree.DArray).Array {
-			tableInfo.ReplicaCountByNodeId[roachpb.NodeID(*n.(*tree.DInt))]++
-		}
+		dbInfo.TableInfo[fqTableName] = tableInfo
 	}
 	if err != nil {
 		return nil, err
