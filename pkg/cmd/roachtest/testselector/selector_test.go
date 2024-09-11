@@ -77,9 +77,7 @@ func TestCategoriseTests(t *testing.T) {
 	t.Run("expect the sequence of response list is maintained for success", func(t *testing.T) {
 		db, mock, err = sqlmock.New()
 		mock.ExpectPrepare(regexp.QuoteMeta(PreparedQuery))
-		rows := sqlmock.NewRows([]string{
-			"name", "selected", "avg_duration", "last_failure_is_preempt",
-		})
+		rows := sqlmock.NewRows(AllRows)
 		data := [][]string{
 			{"t1", "no", "12345", "no"},
 			{"t2", "no", "12345", "no"},
@@ -108,10 +106,10 @@ func TestCategoriseTests(t *testing.T) {
 		// the sequence of response list must be maintained.
 		for i, d := range data {
 			td := tds[i]
-			require.Equal(t, d[0], td.Name)
-			require.Equal(t, d[1] != "no", td.Selected)
-			require.Equal(t, getDuration(d[2]), td.AvgDurationInMillis)
-			require.Equal(t, d[3] == "yes", td.LastFailureIsPreempt)
+			require.Equal(t, d[DataTestNameIndex], td.Name)
+			require.Equal(t, d[DataSelectedIndex] != "no", td.Selected)
+			require.Equal(t, getDuration(d[DataDurationIndex]), td.AvgDurationInMillis)
+			require.Equal(t, d[DataLastPreempted] == "yes", td.LastFailureIsPreempt)
 		}
 	})
 }
