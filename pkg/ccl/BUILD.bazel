@@ -27,5 +27,6 @@ go_library(
         "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl",
         "//pkg/server",
+        "//pkg/server/license",
     ],
 )

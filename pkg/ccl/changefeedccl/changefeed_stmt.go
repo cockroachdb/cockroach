@@ -944,10 +944,12 @@ func changefeedJobDescription(
 	sinkURI string,
 	opts changefeedbase.StatementOptions,
 ) (string, error) {
+	// Redacts user sensitive information from job description.
 	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, []string{
 		changefeedbase.SinkParamSASLPassword,
 		changefeedbase.SinkParamCACert,
 		changefeedbase.SinkParamClientCert,
+		changefeedbase.SinkParamClientKey,
 	})
 	if err != nil {
 		return "", err

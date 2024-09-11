@@ -756,6 +756,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.stopper,
 		s.sqlServer.cfg.TestingKnobs,
 		orphanedLeasesTimeThresholdNanos,
+		false, /* initialStart */
 	); err != nil {
 		return err
 	}

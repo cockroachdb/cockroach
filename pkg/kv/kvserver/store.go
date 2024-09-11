@@ -2987,6 +2987,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		unavailableRangeCount     int64
 		underreplicatedRangeCount int64
 		overreplicatedRangeCount  int64
+		decommissioningRangeCount int64
 		behindCount               int64
 		pausedFollowerCount       int64
 		ioOverload                float64
@@ -3067,6 +3068,12 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			if metrics.Overreplicated {
 				overreplicatedRangeCount++
 			}
+			if metrics.Decommissioning {
+				// NB: Enqueue is disabled by default from here and throttled async if
+				// enabled.
+				rep.maybeEnqueueProblemRange(ctx, now.ToTimestamp().GoTime(), metrics.LeaseValid, metrics.Leaseholder)
+				decommissioningRangeCount++
+			}
 		}
 		pausedFollowerCount += metrics.PausedFollowerCount
 		slowRaftProposalCount += metrics.SlowRaftProposalCount
@@ -3128,6 +3135,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.UnavailableRangeCount.Update(unavailableRangeCount)
 	s.metrics.UnderReplicatedRangeCount.Update(underreplicatedRangeCount)
 	s.metrics.OverReplicatedRangeCount.Update(overreplicatedRangeCount)
+	s.metrics.DecommissioningRangeCount.Update(decommissioningRangeCount)
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
 	s.metrics.RaftPausedFollowerCount.Update(pausedFollowerCount)
 	s.metrics.IOOverload.Update(ioOverload)
