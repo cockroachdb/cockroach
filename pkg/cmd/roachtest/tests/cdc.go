@@ -62,6 +62,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/debug"
 	"github.com/cockroachdb/errors"
+	prompb "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -588,6 +590,53 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	ct.t.Status(fmt.Sprintf("created changefeed %s with jobID %d", cj.Label(), jobID))
 
 	return cj
+}
+
+func (ct *cdcTester) runMetricsVerifier(check func(metrics map[string]*prompb.MetricFamily) (ok bool, err error)) {
+	const timeout = 5 * time.Minute
+	ct.mon.Go(func(ctx context.Context) error {
+		parser := expfmt.TextParser{}
+
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		for {
+			uiAddrs, err := ct.cluster.ExternalAdminUIAddr(ctx, ct.logger, ct.cluster.CRDBNodes())
+			if err != nil {
+				return err
+			}
+			for _, uiAddr := range uiAddrs {
+				uiAddr += "/_status/vars"
+				fmt.Printf("fetching %s", uiAddr)
+				resp, err := http.Get(uiAddr)
+				if err != nil {
+					return err
+				}
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					return errors.Errorf("unexpected status code %d", resp.StatusCode)
+				}
+				// parse prometheus metrics
+				res, err := parser.TextToMetricFamilies(resp.Body)
+				if err != nil {
+					return err
+				}
+				ok, err := check(res)
+				if err != nil {
+					return err
+				}
+				if ok {
+					ct.t.Status("metrics check passed")
+					return nil
+				}
+			}
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(5 * time.Second):
+			}
+		}
+	})
 }
 
 // runFeedLatencyVerifier runs a goroutine which polls the various latencies
@@ -1982,6 +2031,8 @@ func registerCDC(r registry.Registry) {
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 30 * time.Minute,
 			})
+
+			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetrics(map[string]struct{}{"changefeed_bytes_in": struct{}{}, "changefeed_bytes_out": struct{}{}}))
 
 			ct.waitForWorkload()
 		},
@@ -3653,4 +3704,27 @@ func (c *topicConsumer) close() {
 		}
 	}
 	_ = c.consumer.Close()
+}
+
+func verifyChangefeedBytesInOutMetrics(names map[string]struct{}) func(metrics map[string]*prompb.MetricFamily) (ok bool, err error) {
+	return func(metrics map[string]*prompb.MetricFamily) (bool, error) {
+		checked := map[string]struct{}{}
+
+		for name, fam := range metrics {
+			if _, ok := names[name]; !ok {
+				continue
+			}
+
+			for _, m := range fam.Metric {
+				if m.Counter.GetValue() > 0 {
+					checked[name] = struct{}{}
+				}
+			}
+
+			if len(checked) == len(names) {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
 }
