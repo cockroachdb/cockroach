@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/randgen/randgencfg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -8844,6 +8845,27 @@ WHERE object_id = table_descriptor_id
 			Info:       `This function is used to get the fully qualified table name given a table descriptor ID`,
 			Volatility: volatility.Stable,
 			Language:   tree.RoutineLangSQL,
+		},
+	),
+	"crdb_internal.type_is_indexable": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				oid := tree.MustBeDOid(args[0]).Oid
+				var typ *types.T
+				if resolvedTyp, ok := types.OidToType[oid]; ok {
+					typ = resolvedTyp
+				} else {
+					var err error
+					if typ, err = evalCtx.Planner.ResolveTypeByOID(ctx, oid); err != nil {
+						return nil, err
+					}
+				}
+				return tree.MakeDBool(tree.DBool(colinfo.ColumnTypeIsIndexable(typ))), nil
+			},
+			Info:       "Returns whether the given type OID is indexable.",
+			Volatility: volatility.Stable,
 		},
 	),
 }
