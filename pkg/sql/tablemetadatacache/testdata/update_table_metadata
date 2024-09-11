@@ -45,7 +45,7 @@ success
 
 update-cache
 ----
-updatedTables: 64, errors: 0, run #: 1, duration > 0: true
+updatedTables: 68, errors: 0, run #: 1, duration > 0: true
 
 
 # We're omitting the following columns since they are not deterministic.
@@ -86,6 +86,10 @@ descriptor_id_seq system public 1 7 1 1 SEQUENCE null {1} 1 2021-01-07 06:13:20 
 eventlog system public 1 12 6 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
 external_connections system public 1 53 7 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
 job_info system public 1 54 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+job_message system public 1 71 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+job_progress system public 1 68 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+job_progress_history system public 1 69 4 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
+job_status system public 1 70 3 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
 jobs system public 1 15 12 5 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
 join_tokens system public 1 41 3 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
 lease system public 1 11 5 1 TABLE null {1} 1 2021-01-07 06:13:20 +0000 UTC 
@@ -145,7 +149,7 @@ SELECT count(*) FROM system.table_metadata WHERE perc_live_data > 1
 query
 SELECT count(*) FROM system.table_metadata WHERE replication_size_bytes > 0
 ----
-64
+68
 
 query
 SELECT count(*) FROM system.table_metadata WHERE total_live_data_bytes > total_data_bytes

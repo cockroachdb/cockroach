@@ -43,9 +43,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  70       | 1        | 5.0 MiB               
-  70       | 2        | 5.0 MiB               
-  70       | 3        | 5.0 MiB               
+  74       | 1        | 5.0 MiB               
+  74       | 2        | 5.0 MiB               
+  74       | 3        | 5.0 MiB               
 
 
 -- Observe the individual tracked tokens per-stream on the scratch range.
@@ -54,21 +54,21 @@ SELECT range_id, store_id, priority, crdb_internal.humanize_bytes(tokens::INT8)
 
   range_id | store_id | priority | tokens   
 -----------+----------+----------+----------
-  70       | 1        | low-pri  | 1.0 MiB  
-  70       | 1        | low-pri  | 1.0 MiB  
-  70       | 1        | low-pri  | 1.0 MiB  
-  70       | 1        | low-pri  | 1.0 MiB  
-  70       | 1        | low-pri  | 1.0 MiB  
-  70       | 2        | low-pri  | 1.0 MiB  
-  70       | 2        | low-pri  | 1.0 MiB  
-  70       | 2        | low-pri  | 1.0 MiB  
-  70       | 2        | low-pri  | 1.0 MiB  
-  70       | 2        | low-pri  | 1.0 MiB  
-  70       | 3        | low-pri  | 1.0 MiB  
-  70       | 3        | low-pri  | 1.0 MiB  
-  70       | 3        | low-pri  | 1.0 MiB  
-  70       | 3        | low-pri  | 1.0 MiB  
-  70       | 3        | low-pri  | 1.0 MiB  
+  74       | 1        | low-pri  | 1.0 MiB  
+  74       | 1        | low-pri  | 1.0 MiB  
+  74       | 1        | low-pri  | 1.0 MiB  
+  74       | 1        | low-pri  | 1.0 MiB  
+  74       | 1        | low-pri  | 1.0 MiB  
+  74       | 2        | low-pri  | 1.0 MiB  
+  74       | 2        | low-pri  | 1.0 MiB  
+  74       | 2        | low-pri  | 1.0 MiB  
+  74       | 2        | low-pri  | 1.0 MiB  
+  74       | 2        | low-pri  | 1.0 MiB  
+  74       | 3        | low-pri  | 1.0 MiB  
+  74       | 3        | low-pri  | 1.0 MiB  
+  74       | 3        | low-pri  | 1.0 MiB  
+  74       | 3        | low-pri  | 1.0 MiB  
+  74       | 3        | low-pri  | 1.0 MiB  
 
 
 -- (Allow below-raft admission to proceed.)

@@ -323,6 +323,10 @@ public       descriptor_id_seq                sequence  node   NULL
 public       eventlog                         table     node   NULL
 public       external_connections             table     node   NULL
 public       job_info                         table     node   NULL
+public       job_message                      table     node   NULL
+public       job_progress                     table     node   NULL
+public       job_progress_history             table     node   NULL
+public       job_status                       table     node   NULL
 public       jobs                             table     node   NULL
 public       join_tokens                      table     node   NULL
 public       lease                            table     node   NULL
@@ -386,6 +390,10 @@ public       descriptor_id_seq                sequence  node   NULL      ·
 public       eventlog                         table     node   NULL      ·
 public       external_connections             table     node   NULL      ·
 public       job_info                         table     node   NULL      ·
+public       job_message                      table     node   NULL      ·
+public       job_progress                     table     node   NULL      ·
+public       job_progress_history             table     node   NULL      ·
+public       job_status                       table     node   NULL      ·
 public       jobs                             table     node   NULL      ·
 public       join_tokens                      table     node   NULL      ·
 public       lease                            table     node   NULL      ·
@@ -569,7 +577,7 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM CURRENT_CATALOG WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
-/Table/67  /Max     {1}       1
+/Table/71  /Max     {1}       1
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE system.descriptor WITH DETAILS]

@@ -205,8 +205,8 @@ ORDER BY start_key
 /Table/106  14400
 /Table/107  14400
 /Table/110  90001
-/Table/111  1
-/Table/112  1
+/Table/111  90001
+/Table/112  14400
 
 subtest transactional_schemachanges
 

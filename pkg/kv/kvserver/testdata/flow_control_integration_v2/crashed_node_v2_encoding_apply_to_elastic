@@ -43,8 +43,8 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  70       | 1        | 5.0 MiB               
-  70       | 2        | 5.0 MiB               
+  74       | 1        | 5.0 MiB               
+  74       | 2        | 5.0 MiB               
 
 
 -- (Crashing n2)
@@ -57,7 +57,7 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  70       | 1        | 5.0 MiB               
+  74       | 1        | 5.0 MiB               
 
 
 -- Flow token metrics from n1 after n2 crashed. Observe that we've returned the

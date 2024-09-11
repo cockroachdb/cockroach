@@ -28,9 +28,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  70       | 1        | 1.0 MiB               
-  70       | 2        | 1.0 MiB               
-  70       | 3        | 1.0 MiB               
+  74       | 1        | 1.0 MiB               
+  74       | 2        | 1.0 MiB               
+  74       | 3        | 1.0 MiB               
 
 
 -- (Allow below-raft admission to proceed.)
