@@ -126,6 +126,7 @@ func (ri *Inserter) InsertRow(
 	b Putter,
 	values []tree.Datum,
 	pm PartialIndexUpdateHelper,
+	oth *OriginTimestampCPutHelper,
 	overwrite bool,
 	traceKV bool,
 ) error {
@@ -136,6 +137,11 @@ func (ri *Inserter) InsertRow(
 	putFn := insertCPutFn
 	if overwrite {
 		putFn = insertPutFn
+	}
+
+	var pkCputFn func(ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, expVal []byte, traceKV bool)
+	if oth.IsSet() {
+		pkCputFn = oth.CPutFn
 	}
 
 	// We don't want to insert any empty k/v's, so set includeEmpty to false.
@@ -162,7 +168,7 @@ func (ri *Inserter) InsertRow(
 		&ri.Helper, primaryIndexKey, ri.InsertCols,
 		values, ri.InsertColIDtoRowIndex,
 		ri.InsertColIDtoRowIndex,
-		&ri.key, &ri.value, ri.valueBuf, putFn, overwrite, traceKV)
+		&ri.key, &ri.value, ri.valueBuf, putFn, pkCputFn, nil, overwrite, traceKV)
 	if err != nil {
 		return err
 	}

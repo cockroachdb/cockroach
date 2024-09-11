@@ -209,6 +209,7 @@ func (ru *Updater) UpdateRow(
 	oldValues []tree.Datum,
 	updateValues []tree.Datum,
 	pm PartialIndexUpdateHelper,
+	oth *OriginTimestampCPutHelper,
 	traceKV bool,
 ) ([]tree.Datum, error) {
 	if len(oldValues) != len(ru.FetchCols) {
@@ -352,13 +353,20 @@ func (ru *Updater) UpdateRow(
 		}
 	}
 
+	var pkDeleter func(ctx context.Context, b *kv.Batch, key roachpb.Key, expVal []byte, traceKV bool)
+	var cputFn func(ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, expVal []byte, traceKV bool)
+	if oth.IsSet() {
+		cputFn = oth.CPutFn
+		pkDeleter = oth.DelWithCPut
+	}
+
 	putter := &KVBatchAdapter{Batch: batch}
 	if rowPrimaryKeyChanged {
-		if err := ru.rd.DeleteRow(ctx, batch, oldValues, pm, traceKV); err != nil {
+		if err := ru.rd.DeleteRow(ctx, batch, oldValues, pm, pkDeleter, traceKV); err != nil {
 			return nil, err
 		}
 		if err := ru.ri.InsertRow(
-			ctx, putter, ru.newValues, pm, false /* ignoreConflicts */, traceKV,
+			ctx, putter, ru.newValues, pm, oth, false /* ignoreConflicts */, traceKV,
 		); err != nil {
 			return nil, err
 		}
@@ -371,7 +379,7 @@ func (ru *Updater) UpdateRow(
 		&ru.Helper, primaryIndexKey, ru.FetchCols,
 		ru.newValues, ru.FetchColIDtoRowIndex,
 		ru.UpdateColIDtoRowIndex,
-		&ru.key, &ru.value, ru.valueBuf, insertPutFn, true /* overwrite */, traceKV)
+		&ru.key, &ru.value, ru.valueBuf, insertPutFn, cputFn, oldValues, true /* overwrite */, traceKV)
 	if err != nil {
 		return nil, err
 	}
