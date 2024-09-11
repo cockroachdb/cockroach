@@ -559,6 +559,37 @@ func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue []byte)
 	b.cputInternal(key, value, expValue, true, false)
 }
 
+// CPutWithOriginTimestamp is like CPut except that it also sets the
+// OriginTimestamp and ShouldWinOriginTimestampTie fields.
+//
+// See the comments on kvpb.ConditionalPutRequest related to these
+// fields for a full description of the semantics.
+//
+// This is used by logical data replication and other uses of this API
+// are discouraged since the semantics are subject to change as
+// required by that feature.
+func (b *Batch) CPutWithOriginTimestamp(
+	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
+) {
+	k, err := marshalKey(key)
+	if err != nil {
+		b.initResult(0, 1, notRaw, err)
+		return
+	}
+
+	v, err := marshalValue(value)
+	if err != nil {
+		b.initResult(0, 1, notRaw, err)
+		return
+	}
+	r := kvpb.NewConditionalPut(k, v, expValue, false)
+	r.(*kvpb.ConditionalPutRequest).OriginTimestamp = ts
+	r.(*kvpb.ConditionalPutRequest).ShouldWinOriginTimestampTie = shouldWinTie
+	b.appendReqs(r)
+	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
+	b.initResult(1, 1, notRaw, nil)
+}
+
 // CPutInline conditionally sets the value for a key if the existing value is
 // equal to expValue, but does not maintain multi-version values. To
 // conditionally set a value only if the key doesn't currently exist, pass an
