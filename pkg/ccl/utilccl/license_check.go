@@ -312,7 +312,9 @@ func check(l *licenseccl.License, at time.Time, org, feature string, withDetails
 
 // RegisterCallbackOnLicenseChange will register a callback to update the
 // license enforcer whenever the license changes.
-func RegisterCallbackOnLicenseChange(ctx context.Context, st *cluster.Settings) {
+func RegisterCallbackOnLicenseChange(
+	ctx context.Context, st *cluster.Settings, licenseEnforcer *licenseserver.Enforcer,
+) {
 	refreshFunc := func(ctx context.Context) {
 		lic, err := getLicense(st)
 		if err != nil {
@@ -336,7 +338,7 @@ func RegisterCallbackOnLicenseChange(ctx context.Context, st *cluster.Settings) 
 				licenseType = licenseserver.LicTypeEnterprise
 			}
 		}
-		licenseserver.GetEnforcerInstance().RefreshForLicenseChange(licenseType, licenseExpiry)
+		licenseEnforcer.RefreshForLicenseChange(ctx, licenseType, licenseExpiry)
 	}
 	// Install the hook so that we refresh license details when the license changes.
 	enterpriseLicense.SetOnChange(&st.SV, refreshFunc)
