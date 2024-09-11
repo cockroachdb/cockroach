@@ -2536,6 +2536,15 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 func (og *operationGenerator) alterTableAlterPrimaryKey(
 	ctx context.Context, tx pgx.Tx,
 ) (*opStmt, error) {
+	indexableQuery := "COALESCE((SELECT crdb_internal.type_is_indexable((col->'type'->>'oid')::oid)), false)"
+	typeIsIndexableNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.V24_3.Version())
+	if err != nil {
+		return nil, err
+	}
+
 	// Primary Keys are backed by a unique index, therefore we can only use
 	// columns that are of an indexable type. This information is only available
 	// via the colinfo package (not SQL) and is subject to change across
@@ -2543,25 +2552,21 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 	// the filtering. As this list is static and non-exhaustive, we're trading a
 	// bit of coverage for stability. It may be worth while to add index-ability
 	// information to `SHOW COLUMNS` or an internal SQL function in the future.
-	indexableFamilies := []string{
-		"DecimalFamily",
-		"IntFamily",
-		"StringFamily",
-		"UuidFamily",
+	// TODO(sql-foundations): once #130271 is in the latest release of each active
+	// version, we can remove this allow list/the version gate.
+	if typeIsIndexableNotSupported {
+		indexableQuery = "COALESCE((col->'type'->>'family') = ANY(ARRAY['DecimalFamily', " +
+			"'IntFamily', 'StringFamily', 'UuidFamily']), false)"
 	}
 
-	q := With([]CTE{
-		{"descriptors", descJSONQuery},
-		{"tables", tableDescQuery},
-		{"columns", colDescQuery},
-	}, `
+	colQuery := fmt.Sprintf(`
 		SELECT
 			COALESCE(json_array_length(table_descriptor->'mutations'), 0) > 0 AS table_undergoing_schema_change,
 			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(table_name) AS table_name,
 			quote_ident(col->>'name') AS column_name,
 			COALESCE((col->'nullable')::bool, false) AS is_nullable,
 			(col->>'computeExpr' IS NOT NULL) AS is_computed,
-			COALESCE((col->'type'->>'family') = ANY($1), false) AS is_indexable,
+      %s AS is_indexable,
 			(EXISTS(
 				SELECT *
 				FROM crdb_internal.table_indexes
@@ -2571,20 +2576,33 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 				AND index_columns.column_id = (columns.col->'id')::int8
 			)) AS is_in_inverted_index,
 			(EXISTS(
-				SELECT *
-				FROM crdb_internal.table_indexes
-				JOIN crdb_internal.index_columns USING (descriptor_id)
-				WHERE table_indexes.is_unique
-				AND table_indexes.descriptor_id = columns.table_id
-				AND index_columns.column_id = (columns.col->'id')::int8
+				SELECT 
+    tc.constraint_name, 
+    kcu.column_name
+		FROM 
+		    information_schema.table_constraints AS tc
+		JOIN 
+		    information_schema.key_column_usage AS kcu
+		ON 
+		    tc.constraint_name = kcu.constraint_name
+		WHERE 
+    tc.constraint_type = 'UNIQUE' 
+    AND kcu.column_name = col->>'name'
+		AND kcu.table_schema = quote_ident(schema_id::REGNAMESPACE::TEXT)
+    AND kcu.table_name = quote_ident(columns.table_name)
 			)) AS is_unique
 		FROM columns
 		WHERE NOT (
 			COALESCE((col->'hidden')::bool, false)
 			OR  COALESCE((col->'inaccessible')::bool, false)
-		)`)
+		)`, indexableQuery)
+	q := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"tables", tableDescQuery},
+		{"columns", colDescQuery},
+	}, colQuery)
 
-	columns, err := Collect(ctx, og, tx, pgx.RowToMap, q, indexableFamilies)
+	columns, err := Collect(ctx, og, tx, pgx.RowToMap, q)
 	if err != nil {
 		return nil, err
 	}
@@ -2631,7 +2649,10 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 			if column["is_unique"].(bool) {
 				fmt.Fprintf(&b, `((SELECT true))`)
 			} else {
-				fmt.Fprintf(&b, `((SELECT EXISTS(SELECT 1 FROM %s GROUP BY %s HAVING count(*) > 1)))`, table["table_name"], column["column_name"])
+				fmt.Fprintf(&b,
+					`((SELECT NOT EXISTS(SELECT 1 FROM %s GROUP BY %s HAVING count(*) > 1)))`,
+					table["table_name"],
+					column["column_name"])
 			}
 			if i < len(columns)-1 {
 				fmt.Fprint(&b, `, `)
@@ -2650,6 +2671,7 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 
 		return nil
 	}
+
 	generationCases := []GenerationCase{
 		// IF EXISTS should noop if the table doesn't exist.
 		{pgcode.SuccessfulCompletion, `ALTER TABLE IF EXISTS "NonExistentTable" ALTER PRIMARY KEY USING COLUMNS ("IrrelevantColumn")`},
@@ -2659,8 +2681,6 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		{pgcode.UndefinedColumn, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ("NonExistentColumn") { end }`},
 		// NullableColumns can't be used as PKs.
 		{pgcode.InvalidSchemaDefinition, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable true | Generated false | Indexable true | InInvertedIndex false | Columns }) { end }`},
-		// UnindexableColumns can't be used as PKs.
-		{pgcode.InvalidSchemaDefinition, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable false | InInvertedIndex false | Columns }) { end }`},
 		// TODO(sql-foundations): Columns that have an inverted index can't be used
 		// as a primary key. This check isn't 100% correct because we only care
 		// about the final column in an inverted index and we're checking if
@@ -2673,6 +2693,13 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		{pgcode.SuccessfulCompletion, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable true | InInvertedIndex false | Columns }) { end }`},
 		{pgcode.SuccessfulCompletion, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable true | InInvertedIndex false | Columns }) USING HASH { end }`},
 		// TODO(sql-foundations): Add support for hash parameters and storage parameters.
+	}
+
+	if !typeIsIndexableNotSupported {
+		generationCases = append(generationCases, GenerationCase{
+			Code:     pgcode.FeatureNotSupported,
+			Template: `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable false | InInvertedIndex false | Columns }) { end }`,
+		})
 	}
 
 	stmt, code, err := Generate[*tree.AlterTable](og.params.rng, og.produceError(), generationCases, template.FuncMap{
@@ -2731,9 +2758,18 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		return nil, err
 	}
 
-	return newOpStmt(stmt, codesWithConditions{
+	// TODO(sql-foundations): Until #130165 is resolved, we add this potential
+	// error.
+	og.potentialCommitErrors.add(pgcode.DuplicateColumn)
+	opStmt := newOpStmt(stmt, codesWithConditions{
 		{code, true},
-	}), nil
+	})
+	// TODO(sql-foundations): Until #130191 is resolved, add these as potential
+	// errors.
+	opStmt.potentialExecErrors.add(pgcode.InvalidColumnReference)
+	opStmt.potentialExecErrors.add(pgcode.DuplicateColumn)
+
+	return opStmt, nil
 }
 
 func (og *operationGenerator) survive(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
@@ -3303,7 +3339,7 @@ func (og *operationGenerator) randColumn(
 	q := fmt.Sprintf(`
   SELECT column_name
     FROM [SHOW COLUMNS FROM %s]
-   WHERE column_name != 'rowid'
+   WHERE NOT is_hidden
 ORDER BY random()
    LIMIT 1;
 `, tableName.String())
