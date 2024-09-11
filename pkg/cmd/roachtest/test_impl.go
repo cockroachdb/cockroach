@@ -542,26 +542,6 @@ func failuresMatchingError(failures []failure, refError any) bool {
 	return false
 }
 
-// failuresSpecifyOwner checks if any of the errors in any of the
-// given failures is a failure that is associated with an owner. If
-// such an error is found, it is returned; otherwise, nil is returned.
-func failuresSpecifyOwner(failures []failure) *registry.ErrorWithOwnership {
-	var ref registry.ErrorWithOwnership
-	for _, f := range failures {
-		for _, err := range f.errors {
-			if errors.As(err, &ref) {
-				return &ref
-			}
-		}
-
-		if errors.As(f.squashedErr, &ref) {
-			return &ref
-		}
-	}
-
-	return nil
-}
-
 func (t *testImpl) ArtifactsDir() string {
 	return t.artifactsDir
 }
