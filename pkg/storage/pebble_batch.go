@@ -184,6 +184,13 @@ func (wb *writeBatch) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
+	// If the range key holds an encoded timestamp as it was read from storage,
+	// write the tombstone to clear it using the same encoding of the timestamp.
+	// See #129592.
+	if len(rangeKey.EncodedTimestampSuffix) > 0 {
+		return wb.ClearEngineRangeKey(
+			rangeKey.StartKey, rangeKey.EndKey, rangeKey.EncodedTimestampSuffix)
+	}
 	return wb.ClearEngineRangeKey(
 		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
 }
@@ -751,8 +758,7 @@ func (p *pebbleBatch) ClearMVCCIteratorRange(
 			startRaw := EncodeMVCCKey(MVCCKey{Key: rangeKeys.Bounds.Key})
 			endRaw := EncodeMVCCKey(MVCCKey{Key: rangeKeys.Bounds.EndKey})
 			for _, v := range rangeKeys.Versions {
-				if err := p.batch.RangeKeyUnset(startRaw, endRaw,
-					EncodeMVCCTimestampSuffix(v.Timestamp), nil); err != nil {
+				if err := p.batch.RangeKeyUnset(startRaw, endRaw, v.EncodedTimestampSuffix, nil); err != nil {
 					return err
 				}
 			}
