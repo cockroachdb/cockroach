@@ -6279,12 +6279,15 @@ func MVCCGarbageCollect(
 	ms *enginepb.MVCCStats,
 	keys []kvpb.GCRequest_GCKey,
 	timestamp hlc.Timestamp,
-) error {
+) (retE error) {
 
 	var count int64
 	defer func(begin time.Time) {
-		log.Eventf(ctx, "done with GC evaluation for %d keys at %.2f keys/sec. Deleted %d entries",
-			len(keys), float64(len(keys))*1e9/float64(timeutil.Since(begin)), count)
+		log.Eventf(ctx, "handled %d incoming point keys; deleted %d in %s",
+			len(keys), count, timeutil.Since(begin))
+		if retE != nil {
+			log.Eventf(ctx, "err: %s", retE)
+		}
 	}(timeutil.Now())
 
 	// If there are no keys then there is no work.
@@ -6585,16 +6588,16 @@ type CollectableGCRangeKey struct {
 // not performed correctly by the level above.
 func MVCCGarbageCollectRangeKeys(
 	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, rks []CollectableGCRangeKey,
-) error {
+) (retE error) {
 
 	var count int64
 	defer func(begin time.Time) {
-		// TODO(oleg): this could be misleading if GC fails, but this function still
-		// reports how many keys were GC'd. The approach is identical to what point
-		// key GC does for consistency, but both places could be improved.
 		log.Eventf(ctx,
-			"done with GC evaluation for %d range keys at %.2f keys/sec. Deleted %d entries",
-			len(rks), float64(len(rks))*1e9/float64(timeutil.Since(begin)), count)
+			"handled %d incoming range keys; deleted %d fragments in %s",
+			len(rks), count, timeutil.Since(begin))
+		if retE != nil {
+			log.Eventf(ctx, "err: %s", retE)
+		}
 	}(timeutil.Now())
 
 	if len(rks) == 0 {
@@ -6703,9 +6706,12 @@ func MVCCGarbageCollectRangeKeys(
 				if !v.Timestamp.LessEq(gcKey.Timestamp) {
 					break
 				}
-				if err := rw.ClearMVCCRangeKey(rangeKeys.AsRangeKey(v)); err != nil {
+				k := rangeKeys.AsRangeKey(v)
+				log.Eventf(ctx, "clearing rangekey fragment: %s", k)
+				if err := rw.ClearMVCCRangeKey(k); err != nil {
 					return err
 				}
+				count++
 				if ms != nil {
 					ms.Add(updateStatsOnRangeKeyClearVersion(rangeKeys, v))
 				}
