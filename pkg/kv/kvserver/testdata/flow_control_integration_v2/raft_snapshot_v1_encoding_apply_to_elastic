@@ -47,11 +47,11 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  70       | 1        | 1.0 MiB               
-  70       | 2        | 1.0 MiB               
-  70       | 3        | 1.0 MiB               
-  70       | 4        | 1.0 MiB               
-  70       | 5        | 1.0 MiB               
+  74       | 1        | 1.0 MiB               
+  74       | 2        | 1.0 MiB               
+  74       | 3        | 1.0 MiB               
+  74       | 4        | 1.0 MiB               
+  74       | 5        | 1.0 MiB               
 
 
 -- (Killing n2 and n3, but preventing their tokens from being returned +
@@ -66,11 +66,11 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  70       | 1        | 1.0 MiB               
-  70       | 2        | 1.0 MiB               
-  70       | 3        | 1.0 MiB               
-  70       | 4        | 1.0 MiB               
-  70       | 5        | 1.0 MiB               
+  74       | 1        | 1.0 MiB               
+  74       | 2        | 1.0 MiB               
+  74       | 3        | 1.0 MiB               
+  74       | 4        | 1.0 MiB               
+  74       | 5        | 1.0 MiB               
 
 
 -- (Issuing another 1MiB of 5x replicated writes while n2 and n3 are down and
@@ -116,11 +116,11 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  70       | 1        | 2.0 MiB               
-  70       | 2        | 2.0 MiB               
-  70       | 3        | 2.0 MiB               
-  70       | 4        | 2.0 MiB               
-  70       | 5        | 2.0 MiB               
+  74       | 1        | 2.0 MiB               
+  74       | 2        | 2.0 MiB               
+  74       | 3        | 2.0 MiB               
+  74       | 4        | 2.0 MiB               
+  74       | 5        | 2.0 MiB               
 
 
 -- (Truncating raft log.)
@@ -171,9 +171,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  70       | 1        | 2.0 MiB               
-  70       | 4        | 2.0 MiB               
-  70       | 5        | 2.0 MiB               
+  74       | 1        | 2.0 MiB               
+  74       | 4        | 2.0 MiB               
+  74       | 5        | 2.0 MiB               
 
 
 -- (Allow below-raft admission to proceed.)
@@ -217,11 +217,11 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  70       | 1        | 0 B                   
-  70       | 2        | 0 B                   
-  70       | 3        | 0 B                   
-  70       | 4        | 0 B                   
-  70       | 5        | 0 B                   
+  74       | 1        | 0 B                   
+  74       | 2        | 0 B                   
+  74       | 3        | 0 B                   
+  74       | 4        | 0 B                   
+  74       | 5        | 0 B                   
 
 
 -- Another view of tokens, using /inspectz-backed vtables.

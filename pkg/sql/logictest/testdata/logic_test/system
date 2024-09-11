@@ -8,7 +8,7 @@ test       root  NULL  NULL  {}  NULL
 
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
-skipif config 3node-tenant-default-configs local-mixed-24.2
+skipif config 3node-tenant-default-configs local-mixed-24.2 local-mixed-24.3
 query TTTTT
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system] ORDER BY 2
 ----
@@ -19,6 +19,10 @@ public  descriptor_id_seq                sequence  node  NULL
 public  eventlog                         table     node  NULL
 public  external_connections             table     node  NULL
 public  job_info                         table     node  NULL
+public  job_message                      table     node  NULL
+public  job_progress                     table     node  NULL
+public  job_progress_history             table     node  NULL
+public  job_status                       table     node  NULL
 public  jobs                             table     node  NULL
 public  join_tokens                      table     node  NULL
 public  lease                            table     node  NULL
@@ -81,6 +85,10 @@ public  descriptor_id_seq                sequence  node  NULL
 public  eventlog                         table     node  NULL
 public  external_connections             table     node  NULL
 public  job_info                         table     node  NULL
+public  job_message                      table     node  NULL
+public  job_progress                     table     node  NULL
+public  job_progress_history             table     node  NULL
+public  job_status                       table     node  NULL
 public  jobs                             table     node  NULL
 public  join_tokens                      table     node  NULL
 public  lease                            table     node  NULL
@@ -136,7 +144,7 @@ public  zones                            table     node  NULL
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
-skipif config local-mixed-24.2
+skipif config local-mixed-24.2 local-mixed-24.3
 query I rowsort
 SELECT id FROM system.descriptor ORDER BY 1
 ----
@@ -198,6 +206,10 @@ SELECT id FROM system.descriptor ORDER BY 1
 65
 66
 67
+68
+69
+70
+71
 100
 101
 102
@@ -267,6 +279,10 @@ SELECT id FROM system.descriptor ORDER BY 1
 65
 66
 67
+68
+69
+70
+71
 100
 101
 102
@@ -403,7 +419,7 @@ system  root   CONNECT  true
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
-skipif config local-mixed-24.2
+skipif config local-mixed-24.2 local-mixed-24.3
 query TTTTTB rowsort
 SHOW GRANTS ON system.*
 ----
@@ -452,6 +468,38 @@ system  public  job_info                         root    DELETE  true
 system  public  job_info                         root    INSERT  true
 system  public  job_info                         root    SELECT  true
 system  public  job_info                         root    UPDATE  true
+system  public  job_message                      admin   DELETE  true
+system  public  job_message                      admin   INSERT  true
+system  public  job_message                      admin   SELECT  true
+system  public  job_message                      admin   UPDATE  true
+system  public  job_message                      root    DELETE  true
+system  public  job_message                      root    INSERT  true
+system  public  job_message                      root    SELECT  true
+system  public  job_message                      root    UPDATE  true
+system  public  job_progress                     admin   DELETE  true
+system  public  job_progress                     admin   INSERT  true
+system  public  job_progress                     admin   SELECT  true
+system  public  job_progress                     admin   UPDATE  true
+system  public  job_progress                     root    DELETE  true
+system  public  job_progress                     root    INSERT  true
+system  public  job_progress                     root    SELECT  true
+system  public  job_progress                     root    UPDATE  true
+system  public  job_progress_history             admin   DELETE  true
+system  public  job_progress_history             admin   INSERT  true
+system  public  job_progress_history             admin   SELECT  true
+system  public  job_progress_history             admin   UPDATE  true
+system  public  job_progress_history             root    DELETE  true
+system  public  job_progress_history             root    INSERT  true
+system  public  job_progress_history             root    SELECT  true
+system  public  job_progress_history             root    UPDATE  true
+system  public  job_status                       admin   DELETE  true
+system  public  job_status                       admin   INSERT  true
+system  public  job_status                       admin   SELECT  true
+system  public  job_status                       admin   UPDATE  true
+system  public  job_status                       root    DELETE  true
+system  public  job_status                       root    INSERT  true
+system  public  job_status                       root    SELECT  true
+system  public  job_status                       root    UPDATE  true
 system  public  jobs                             admin   DELETE  true
 system  public  jobs                             admin   INSERT  true
 system  public  jobs                             admin   SELECT  true
@@ -846,6 +894,38 @@ system  public  job_info                         root    DELETE  true
 system  public  job_info                         root    INSERT  true
 system  public  job_info                         root    SELECT  true
 system  public  job_info                         root    UPDATE  true
+system  public  job_message                      admin   DELETE  true
+system  public  job_message                      admin   INSERT  true
+system  public  job_message                      admin   SELECT  true
+system  public  job_message                      admin   UPDATE  true
+system  public  job_message                      root    DELETE  true
+system  public  job_message                      root    INSERT  true
+system  public  job_message                      root    SELECT  true
+system  public  job_message                      root    UPDATE  true
+system  public  job_progress                     admin   DELETE  true
+system  public  job_progress                     admin   INSERT  true
+system  public  job_progress                     admin   SELECT  true
+system  public  job_progress                     admin   UPDATE  true
+system  public  job_progress                     root    DELETE  true
+system  public  job_progress                     root    INSERT  true
+system  public  job_progress                     root    SELECT  true
+system  public  job_progress                     root    UPDATE  true
+system  public  job_progress_history             admin   DELETE  true
+system  public  job_progress_history             admin   INSERT  true
+system  public  job_progress_history             admin   SELECT  true
+system  public  job_progress_history             admin   UPDATE  true
+system  public  job_progress_history             root    DELETE  true
+system  public  job_progress_history             root    INSERT  true
+system  public  job_progress_history             root    SELECT  true
+system  public  job_progress_history             root    UPDATE  true
+system  public  job_status                       admin   DELETE  true
+system  public  job_status                       admin   INSERT  true
+system  public  job_status                       admin   SELECT  true
+system  public  job_status                       admin   UPDATE  true
+system  public  job_status                       root    DELETE  true
+system  public  job_status                       root    INSERT  true
+system  public  job_status                       root    SELECT  true
+system  public  job_status                       root    UPDATE  true
 system  public  jobs                             admin   DELETE  true
 system  public  jobs                             admin   INSERT  true
 system  public  jobs                             admin   SELECT  true
