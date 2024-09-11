@@ -2062,6 +2062,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 			s.stopper,
 			s.cfg.TestingKnobs,
 			orphanedLeasesTimeThresholdNanos,
+			s.InitialStart(),
 		); err != nil {
 			return err
 		}
