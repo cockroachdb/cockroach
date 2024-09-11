@@ -745,8 +745,9 @@ func (p *pebbleIterator) RangeKeys() MVCCRangeKeyStack {
 			continue
 		}
 		stack.Versions = append(stack.Versions, MVCCRangeKeyVersion{
-			Timestamp: timestamp,
-			Value:     rangeKey.Value,
+			Timestamp:              timestamp,
+			Value:                  rangeKey.Value,
+			EncodedTimestampSuffix: rangeKey.Suffix,
 		})
 	}
 	return stack
