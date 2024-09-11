@@ -2029,7 +2029,9 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 30 * time.Minute,
 			})
 
-			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetrics(map[string]struct{}{"changefeed_bytes_in": struct{}{}, "changefeed_bytes_out": struct{}{}}))
+			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetrics(map[string]struct{}{
+				"changefeed_network_bytes_in": struct{}{}, "changefeed_network_bytes_out": struct{}{},
+			}))
 
 			ct.waitForWorkload()
 		},
