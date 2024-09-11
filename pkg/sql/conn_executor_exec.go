@@ -482,11 +482,12 @@ func (ex *connExecutor) execStmtInOpenState(
 	ih := &p.instrumentation
 
 	if ex.executorType != executorTypeInternal {
+		// NB: ex.metrics includes internal executor transactions when executorType
+		// is executorTypeInternal, so that's why we exclude internal executors
+		// in the conditional.
+		curOpen := ex.metrics.EngineMetrics.SQLTxnsOpen.Value()
 		if maxOpen := maxOpenTransactions.Get(&ex.server.cfg.Settings.SV); maxOpen > 0 {
-			// NB: ex.metrics includes internal executor transactions when executorType
-			// is executorTypeInternal, so that's why we exclude internal executors
-			// in the conditional.
-			if ex.metrics.EngineMetrics.SQLTxnsOpen.Value() > maxOpen {
+			if curOpen > maxOpen {
 				hasAdmin, err := ex.planner.HasAdminRole(ctx)
 				if err != nil {
 					return makeErrEvent(err)
@@ -501,6 +502,12 @@ func (ex *connExecutor) execStmtInOpenState(
 					))
 				}
 			}
+		}
+
+		// Enforce license policies. Throttling can occur if there is no valid
+		// license or if it has expired.
+		if err := ex.server.cfg.LicenseEnforcer.MaybeFailIfThrottled(ctx, curOpen); err != nil {
+			return makeErrEvent(err)
 		}
 	}
 

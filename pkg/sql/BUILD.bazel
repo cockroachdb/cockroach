@@ -799,6 +799,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
+        "//pkg/server/license",
         "//pkg/server/serverpb",
         "//pkg/server/settingswatcher",
         "//pkg/server/srvtestutils",
