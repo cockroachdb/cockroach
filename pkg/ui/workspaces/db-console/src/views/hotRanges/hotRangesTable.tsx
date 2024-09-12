@@ -35,7 +35,6 @@ import {
   uiDebugPages,
 } from "src/util/docs";
 
-
 import styles from "./hotRanges.module.styl";
 
 const PAGE_SIZE = 50;

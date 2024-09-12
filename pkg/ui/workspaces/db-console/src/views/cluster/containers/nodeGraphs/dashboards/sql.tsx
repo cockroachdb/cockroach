@@ -20,7 +20,6 @@ import {
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
 
-
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
 import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;

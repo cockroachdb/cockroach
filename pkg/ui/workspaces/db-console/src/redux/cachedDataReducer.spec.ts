@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import isError from "lodash/isError"
+import isError from "lodash/isError";
 import moment from "moment-timezone";
 import { Action } from "redux";
 
@@ -348,7 +348,10 @@ describe("PaginatedCachedDataReducer", function () {
   }
 
   class Response implements WithPaginationResponse {
-    constructor(public response: string, public next_page_token: string) {}
+    constructor(
+      public response: string,
+      public next_page_token: string,
+    ) {}
   }
 
   const apiEndpointMockFactory: (

@@ -34,4 +34,4 @@ export const MetricOption = (props: OptionComponentProps<string>) => {
       </div>
     </div>
   );
-}
+};

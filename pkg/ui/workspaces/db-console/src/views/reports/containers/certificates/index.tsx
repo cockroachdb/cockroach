@@ -97,8 +97,9 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
         </th>
         <td className="certs-table__cell" title={join(values, "\n")}>
           <ul className="certs-entries-list">
-            {sortBy(values)
-              .map((value, key) => <li key={key}>{value}</li>)}
+            {sortBy(values).map((value, key) => (
+              <li key={key}>{value}</li>
+            ))}
           </ul>
         </td>
       </tr>

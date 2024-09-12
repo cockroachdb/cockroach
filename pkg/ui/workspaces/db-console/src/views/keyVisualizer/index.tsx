@@ -31,7 +31,6 @@ import {
 } from "src/views/keyVisualizer/interfaces";
 import KeyVisualizer from "src/views/keyVisualizer/keyVisualizer";
 
-
 import { BackToAdvanceDebug } from "../reports/containers/util";
 
 import { CanvasHeight, XAxisPadding } from "./constants";

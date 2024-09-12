@@ -25,7 +25,6 @@ import * as timewindow from "src/redux/timeScale";
 import { configureUPlotLineChart } from "src/views/cluster/util/graphs";
 import { Axis } from "src/views/shared/components/metricQuery";
 
-
 import LineGraph, { fillGaps, InternalLineGraph, OwnProps } from "./index";
 
 describe("<LineGraph>", function () {

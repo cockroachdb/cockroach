@@ -65,10 +65,12 @@ export const selectDiagnosticsReportsPerStatement = createSelector(
     diagnosticsReports: clusterUiApi.StatementDiagnosticsReport[],
   ): StatementDiagnosticsDictionary => {
     return flow(
-      (reports: clusterUiApi.StatementDiagnosticsReport[]) => groupBy(reports, report => report.statement_fingerprint),
-      diagnosticsByFingerprint => mapValues(diagnosticsByFingerprint, diagnostics =>
-        orderBy(diagnostics, d => moment(d.requested_at).unix(), ["desc"]),
-      )
+      (reports: clusterUiApi.StatementDiagnosticsReport[]) =>
+        groupBy(reports, report => report.statement_fingerprint),
+      diagnosticsByFingerprint =>
+        mapValues(diagnosticsByFingerprint, diagnostics =>
+          orderBy(diagnostics, d => moment(d.requested_at).unix(), ["desc"]),
+        ),
     )(diagnosticsReports);
-  }
+  },
 );

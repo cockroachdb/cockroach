@@ -39,7 +39,12 @@ import {
 } from "src/views/transactions/transactionsPage";
 
 export default withRouter(
-  connect<TransactionDetailsStateProps, TransactionDetailsDispatchProps, RouteComponentProps, AdminUIState>(
+  connect<
+    TransactionDetailsStateProps,
+    TransactionDetailsDispatchProps,
+    RouteComponentProps,
+    AdminUIState
+  >(
     (
       state: AdminUIState,
       props: RouteComponentProps,
