@@ -26,7 +26,7 @@ import (
 
 var (
 	testingUDFAcceptProposedBase = `
-CREATE OR REPLACE FUNCTION repl_apply(action STRING, data %[1]s, existing %[1]s, prev %[1]s, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
+CREATE OR REPLACE FUNCTION repl_apply(action STRING, data %[1]s, existing %[1]s, prev %[1]s, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL)
 RETURNS string
 AS $$
 BEGIN
@@ -35,7 +35,7 @@ END;
 $$ LANGUAGE plpgsql`
 
 	testingUDFAcceptProposedBaseWithSchema = `
-CREATE OR REPLACE FUNCTION %[1]s.repl_apply(action STRING, data %[2]s, existing %[2]s, prev %[2]s, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
+CREATE OR REPLACE FUNCTION %[1]s.repl_apply(action STRING, data %[2]s, existing %[2]s, prev %[2]s, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL)
 RETURNS string
 AS $$
 BEGIN
@@ -122,7 +122,7 @@ func TestUDFInsertOnly(t *testing.T) {
 	runnerB.Exec(t, stmt)
 	runnerB.Exec(t, "CREATE SCHEMA funcs")
 	runnerB.Exec(t, `
-		CREATE OR REPLACE FUNCTION funcs.repl_apply(action STRING, proposed tallies, existing tallies, prev tallies, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
+		CREATE OR REPLACE FUNCTION funcs.repl_apply(action STRING, proposed tallies, existing tallies, prev tallies, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL)
 		RETURNS string
 		AS $$
 		BEGIN
@@ -175,7 +175,7 @@ func TestUDFPreviousValue(t *testing.T) {
 	runnerB.Exec(t, stmt)
 	runnerB.Exec(t, "INSERT INTO tallies VALUES (1, 20)")
 	runnerB.Exec(t, `
-		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies, prev tallies, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
+		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies, prev tallies, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL)
 		RETURNS string
 		AS $$
 		BEGIN

@@ -55,7 +55,7 @@ const (
 	applierQueryBase = `
 WITH data (%s)
 AS (VALUES (%s))
-SELECT [FUNCTION %d]('%s', data, existing, ROW(%s), existing.crdb_internal_mvcc_timestamp, existing.crdb_replication_origin_timestamp, $%d, $%d) AS decision
+SELECT [FUNCTION %d]('%s', data, existing, ROW(%s), existing.crdb_internal_mvcc_timestamp, existing.crdb_replication_origin_timestamp, $%d) AS decision
 FROM data LEFT JOIN [%d as existing]
 %s`
 	applierUpsertQueryBase = `UPSERT INTO [%d as t] (%s) VALUES (%s)`
@@ -89,8 +89,7 @@ type applierQuerier struct {
 	ieoInsert, ieoDelete, ieoApplyUDF sessiondata.InternalExecutorOverride
 
 	// Used for the applier query to reduce allocations.
-	proposedMVCCTs     tree.DDecimal
-	proposedPrevMVCCTs tree.DDecimal
+	proposedMVCCTs tree.DDecimal
 }
 
 func makeApplierQuerier(
@@ -208,11 +207,10 @@ func (aq *applierQuerier) applyUDF(
 	}
 
 	aq.proposedMVCCTs.Decimal = eval.TimestampToDecimal(row.MvccTimestamp)
-	aq.proposedPrevMVCCTs.Decimal = eval.TimestampToDecimal(prevRow.MvccTimestamp)
-
+	datums = append(datums, &aq.proposedMVCCTs)
 	decisionRow, err := aq.queryRowExParsed(
 		ctx, replicatedApplyUDFOpName, txn, ie, aq.ieoApplyUDF, stmt,
-		append(datums, &aq.proposedMVCCTs, &aq.proposedPrevMVCCTs)...,
+		datums...,
 	)
 	if err != nil {
 		return noDecision, err
@@ -369,12 +367,11 @@ func makeApplierApplyQueries(
 	}
 
 	var (
-		colCount          = len(inputColumnNames)
-		colNames          = escapedColumnNameList(inputColumnNames)
-		valStr            = valueStringForNumItems(colCount, 1)
-		prevValStr        = valueStringForNumItems(colCount, colCount+1)
-		remoteMVCCIdx     = (colCount * 2) + 1
-		remotePrevMVCCIdx = remoteMVCCIdx + 1
+		colCount      = len(inputColumnNames)
+		colNames      = escapedColumnNameList(inputColumnNames)
+		valStr        = valueStringForNumItems(colCount, 1)
+		prevValStr    = valueStringForNumItems(colCount, colCount+1)
+		remoteMVCCIdx = (colCount * 2) + 1
 	)
 
 	joinClause := makeApplierJoinClause(td.TableDesc().PrimaryIndex.KeyColumnNames)
@@ -392,7 +389,6 @@ func makeApplierApplyQueries(
 			mutType,
 			prevValStr,
 			remoteMVCCIdx,
-			remotePrevMVCCIdx,
 			dstTableDescID,
 			joinClause,
 		)
