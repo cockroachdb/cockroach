@@ -29,7 +29,21 @@ installations (`gcloud components update`).
 * VMs have a default lifetime of 12 hours (changeable with the
   `--lifetime` flag).
 * Default settings create 4 VMs (`-n 4`) with 4 CPUs, 15GB memory
-  (`--machine-type=n1-standard-4`), and local SSDs (`--local-ssd`).
+  (`--machine-type=n2-standard-4`), Intel Ice Lake (`--min-cpu-platform Intel Ice Lake`)
+  and local SSDs (`--local-ssd`).
+
+### Global Overrides
+
+Many defaults can be globally affected via environment variables.
+E.g., `ROACHPROD_EMAIL_DOMAIN` determines email domain for authentication.
+When using a custom service account, it might be necessary to specify
+a different email domain.
+
+```
+export ROACHPROD_EMAIL_DOMAIN=developer.gserviceaccount.com
+```
+
+For a full list, see `config.go` and `flags.go`.
 
 ## Cluster quick-start using roachprod
 
