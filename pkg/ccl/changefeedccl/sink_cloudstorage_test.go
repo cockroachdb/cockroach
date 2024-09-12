@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -840,4 +841,185 @@ type explicitTimestampOracle hlc.Timestamp
 
 func (o explicitTimestampOracle) inclusiveLowerBoundTS() hlc.Timestamp {
 	return hlc.Timestamp(o)
+}
+
+func TestCloudStorageSinkMemRepro(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	//ctx, cancel := context.WithCancel(context.Background())
+	ctx := context.Background()
+
+	externalIODir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	testDir := func(t *testing.T) string {
+		return strings.ReplaceAll(t.Name(), "/", ";")
+	}
+
+	const unlimitedFileSize int64 = math.MaxInt64
+	var noKey []byte
+	settings := cluster.MakeTestingClusterSettings()
+	settings.ExternalIODir = externalIODir
+	opts := changefeedbase.EncodingOptions{
+		Format:      changefeedbase.OptFormatJSON,
+		Envelope:    changefeedbase.OptEnvelopeWrapped,
+		KeyInValue:  true,
+		Compression: "gzip",
+		// NB: compression added in single-node subtest.
+	}
+	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
+
+	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)
+	externalStorageFromURI := func(ctx context.Context, uri string, user username.SQLUsername, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage,
+		error) {
+		return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{}, settings,
+			clientFactory,
+			user,
+			nil, /* db */
+			nil, /* limiters */
+			cloud.NilMetrics,
+			opts...)
+	}
+
+	user := username.RootUserName()
+
+	sinkURI := func(t *testing.T, maxFileSize int64) sinkURL {
+		u, err := url.Parse(fmt.Sprintf("nodelocal://1/%s", testDir(t)))
+		require.NoError(t, err)
+		sink := sinkURL{URL: u}
+		if maxFileSize != unlimitedFileSize {
+			sink.addParam(changefeedbase.SinkParamFileSize, strconv.FormatInt(maxFileSize, 10))
+		}
+		return sink
+	}
+
+	testWithAndWithoutAsyncFlushing := func(t *testing.T, name string, testFn func(*testing.T)) {
+		t.Helper()
+		//require.True(t, enableAsyncFlush.Get(&settings.SV))
+		//old := enableAsyncFlush.Get(&settings.SV)
+		useFastGzip.Override(context.Background(), &settings.SV, true)
+		enableAsyncFlush.Override(context.Background(), &settings.SV, true)
+		//defer enableAsyncFlush.Override(context.Background(), &settings.SV, old)
+		testFn(t)
+	}
+
+	testWithAndWithoutAsyncFlushing(t, `checkmem`, func(t *testing.T) {
+		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
+		sf, err := span.MakeFrontier(testSpan)
+		require.NoError(t, err)
+		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
+
+		s, err := makeCloudStorageSink(
+			ctx, sinkURI(t, unlimitedFileSize), 1, settings,
+			opts, timestampOracle, externalStorageFromURI, user, nil, nil,
+		)
+		require.NoError(t, err)
+		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
+
+		fmt.Println("prev")
+		PrintMemUsage()
+
+		for i := 1; i <= 100; i++ {
+			newTopic := makeTopic(fmt.Sprintf(`t%d`, i))
+			sizeInMB := 100
+			sizeInBytes := sizeInMB * 1024 * 1024
+			//v = append(v, make([]byte, sizeInBytes)...)
+			byteSlice := make([]byte, sizeInBytes)
+			_ = s.EmitRow(ctx, newTopic, noKey, byteSlice, ts(int64(i)), ts(int64(i)), zeroAlloc)
+			//cancel()
+		}
+		fmt.Println("after EmitRow: ", s.(*cloudStorageSink).files.Len())
+		PrintMemUsage()
+		//s.(*cloudStorageSink).files.Clear(false /* addNodesToFreeList */)
+		_ = s.Flush(ctx)
+		fmt.Println("after Flush: ", s.(*cloudStorageSink).files.Len())
+		PrintMemUsage()
+		fmt.Println("new len: ", s.(*cloudStorageSink).files.Len())
+		PrintMemUsage()
+		_ = s.Close()
+		// Print memory usage statistics in GB
+		fmt.Println("after close: ")
+		time.Sleep(200 * time.Second)
+		PrintMemUsage()
+	})
+}
+
+func BenchMemstats(b *testing.B) {
+	//defer leaktest.AfterTest(t)()
+	//defer log.Scope(t).Close(t)
+	// Print our starting memory usage (should be around 0mb)
+	b.ReportAllocs()
+	PrintMemUsage()
+	slice := make([]int, 1024*1024*1024)
+	for i := 0; i < 1024*1024*1024; i++ {
+		slice[i] = i
+	}
+	PrintMemUsage()
+	runtime.GC()
+	slice = nil
+	runtime.GC()
+	time.Sleep(5 * time.Second)
+	PrintMemUsage()
+}
+
+func TestMemstats(t *testing.T) {
+	////defer leaktest.AfterTest(t)()
+	////defer log.Scope(t).Close(t)
+	//// Print our starting memory usage (should be around 0mb)
+	//PrintMemUsage()
+	//
+	//slice := make([]int, 1024*1024*1024)
+	//for i := 0; i < 1024*1024*1024; i++ {
+	//	slice[i] = i
+	//}
+	//time.Sleep(5 * time.Second)
+	//PrintMemUsage()
+	////fmt.Println("slice len: ", len(slice))
+	////slice = nil
+	//time.Sleep(5 * time.Second)
+	//PrintMemUsage()
+	fmt.Println("Before allocation:")
+	PrintMemUsage()
+
+	slice := make([]int, 1024*1024*1024)
+	for i := 0; i < 1024*1024*1024; i++ {
+		slice[i] = i
+	}
+
+	fmt.Println("After allocation and filling:")
+	PrintMemUsage()
+
+	runtime.GC()
+	fmt.Println("After first GC (slice still in scope):")
+	PrintMemUsage()
+
+	fmt.Println("slice first ele: ", slice[0]) // adding a dummy line in case optimizer is being smart about GC
+
+	slice = nil
+	fmt.Println("After setting slice to nil:")
+	PrintMemUsage()
+
+	runtime.GC()
+	fmt.Println("After second GC:")
+	PrintMemUsage()
+
+	time.Sleep(5 * time.Second)
+	fmt.Println("After sleep:")
+	PrintMemUsage()
+}
+
+func PrintMemUsage() {
+	var m runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&m)
+	// For info on each, see: https://golang.org/pkg/runtime/#MemStats
+	fmt.Printf("Alloc = %v MiB", bToMb(m.Alloc))
+	fmt.Printf("\tTotalAlloc = %v MiB", bToMb(m.TotalAlloc))
+	fmt.Printf("\tInuse Stack = %v MiB", bToMb(m.StackInuse))
+	fmt.Printf("\tInuse Heap = %v MiB", bToMb(m.HeapInuse))
+	fmt.Printf("\tHeap Alloc = %v MiB\n\n", bToMb(m.HeapAlloc))
+}
+
+func bToMb(b uint64) uint64 {
+	return b / 1024 / 1024
 }
