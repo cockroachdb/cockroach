@@ -420,6 +420,16 @@ type optionalValueWithHeader struct {
 	enginepb.MVCCValueHeader
 }
 
+func (v *optionalValueWithHeader) TimestampForOriginTimestampComparision() hlc.Timestamp {
+	if !v.exists {
+		return hlc.Timestamp{}
+	}
+	if v.MVCCValueHeader.OriginTimestamp.IsSet() {
+		return v.MVCCValueHeader.OriginTimestamp
+	}
+	return v.Timestamp
+}
+
 // isSysLocal returns whether the key is system-local.
 func isSysLocal(key roachpb.Key) bool {
 	return key.Compare(keys.LocalMax) < 0
@@ -3055,23 +3065,7 @@ func mvccConditionalPutUsingIter(
 		}
 	} else {
 		valueFnWithHeader = func(existVal optionalValueWithHeader) (roachpb.Value, error) {
-			expValExists := len(expBytes) != 0
-			// If the existing value doesn't exist, we are
-			// definitely the winner based on OriginTimestamp.
-			if !existVal.exists {
-				if expValExists {
-					return roachpb.Value{}, &kvpb.ConditionFailedError{
-						HadNewerOriginTimestamp: true,
-					}
-				}
-				return value, nil
-			}
-
-			existTS := existVal.MVCCValueHeader.OriginTimestamp
-			if !existTS.IsSet() {
-				existTS = existVal.Timestamp
-			}
-
+			existTS := existVal.TimestampForOriginTimestampComparision()
 			proposedIsOriginTSWinner := existTS.Less(originTSOpts.OriginTimestamp) || (existTS.Equal(originTSOpts.OriginTimestamp) && originTSOpts.ShouldWinTie)
 			if !proposedIsOriginTSWinner {
 				return roachpb.Value{}, &kvpb.ConditionFailedError{
@@ -3083,6 +3077,7 @@ func mvccConditionalPutUsingIter(
 			// check the expected bytes because a mismatch implies
 			// that the caller may have produced other commands with
 			// outdated data.
+			expValExists := len(expBytes) != 0
 			if expValExists && existVal.IsPresent() && !bytes.Equal(expBytes, existVal.TagAndDataBytes()) {
 				return roachpb.Value{}, &kvpb.ConditionFailedError{
 					HadNewerOriginTimestamp: true,
@@ -3094,7 +3089,6 @@ func mvccConditionalPutUsingIter(
 					ActualValue:             existVal.ToPointer(),
 				}
 			}
-			// Everything is cool in the pool.
 			return value, nil
 		}
 
