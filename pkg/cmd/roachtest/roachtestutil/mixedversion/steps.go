@@ -79,7 +79,7 @@ func (s startStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *H
 		install.BinaryOption(binaryPath),
 	)
 
-	opts := startOpts(option.WithInitTarget(s.initTarget))
+	opts := startOpts(option.WithInitTarget(s.initTarget), option.WaitForReplication())
 	return clusterupgrade.StartWithSettings(
 		ctx, l, h.runner.cluster, systemNodes, opts, clusterSettings...,
 	)
@@ -205,7 +205,7 @@ func (s restartWithNewBinaryStep) Run(
 		l,
 		h.runner.cluster,
 		h.runner.cluster.Node(s.node),
-		startOpts(option.WithInitTarget(s.initTarget)),
+		startOpts(option.WithInitTarget(s.initTarget), option.WaitForReplication()),
 		s.version,
 		s.settings...,
 	); err != nil {
