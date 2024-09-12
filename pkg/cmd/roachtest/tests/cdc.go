@@ -30,6 +30,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -62,6 +63,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/debug"
 	"github.com/cockroachdb/errors"
+	prompb "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -588,6 +591,39 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	ct.t.Status(fmt.Sprintf("created changefeed %s with jobID %d", cj.Label(), jobID))
 
 	return cj
+}
+
+// verifyMetrics runs the check function on the prometheus metrics of each
+// cockroach node in the cluster until it returns true, or until its retry
+// period expires.
+func (ct *cdcTester) verifyMetrics(
+	ctx context.Context,
+	check func(metrics map[string]*prompb.MetricFamily) (ok bool),
+) {
+	parser := expfmt.TextParser{}
+
+	testutils.SucceedsSoon(ct.t, func() error {
+		uiAddrs, err := ct.cluster.ExternalAdminUIAddr(ctx, ct.logger, ct.cluster.CRDBNodes())
+		if err != nil {
+			return err
+		}
+		for _, uiAddr := range uiAddrs {
+			uiAddr = fmt.Sprintf("https://%s/_status/vars", uiAddr)
+			out, err := exec.Command("curl", "-kf", uiAddr).Output()
+			if err != nil {
+				return err
+			}
+			res, err := parser.TextToMetricFamilies(bytes.NewReader(out))
+			if err != nil {
+				return err
+			}
+			if check(res) {
+				ct.t.Status("metrics check passed")
+				return nil
+			}
+		}
+		return errors.New("metrics check failed")
+	})
 }
 
 // runFeedLatencyVerifier runs a goroutine which polls the various latencies
@@ -1614,6 +1650,7 @@ func registerCDC(r registry.Registry) {
 				steadyLatency:      5 * time.Minute,
 			})
 			ct.waitForWorkload()
+			ct.verifyMetrics(ctx, verifyMetricsNonZero("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 		},
 	})
 	// An example usage of having multiple sink nodes.
@@ -1835,6 +1872,7 @@ func registerCDC(r registry.Registry) {
 				steadyLatency:      time.Minute,
 			})
 			ct.waitForWorkload()
+			ct.verifyMetrics(ctx, verifyMetricsNonZero("cloud_read_bytes", "cloud_write_bytes"))
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -1864,7 +1902,10 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 30 * time.Minute,
 				steadyLatency:      time.Minute,
 			})
+
 			ct.waitForWorkload()
+
+			ct.verifyMetrics(ctx, verifyMetricsNonZero("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 		},
 	})
 
@@ -1902,7 +1943,10 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 30 * time.Minute,
 				steadyLatency:      time.Minute,
 			})
+
 			ct.waitForWorkload()
+
+			ct.verifyMetrics(ctx, verifyMetricsNonZero("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 		},
 	})
 
@@ -1984,6 +2028,8 @@ func registerCDC(r registry.Registry) {
 			})
 
 			ct.waitForWorkload()
+
+			ct.verifyMetrics(ctx, verifyMetricsNonZero("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -2200,6 +2246,7 @@ func registerCDC(r registry.Registry) {
 				steadyLatency:      10 * time.Minute,
 			})
 			ct.waitForWorkload()
+			ct.verifyMetrics(ctx, verifyMetricsNonZero("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 		},
 		RequiresLicense: true,
 	})
@@ -3653,4 +3700,36 @@ func (c *topicConsumer) close() {
 		}
 	}
 	_ = c.consumer.Close()
+}
+
+// verifyMetricsNonZero returns a check function for runMetricsVerifier that
+// checks that the metrics matching the names input are > 0.
+func verifyMetricsNonZero(
+	names ...string,
+) func(metrics map[string]*prompb.MetricFamily) (ok bool) {
+	namesMap := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		namesMap[name] = struct{}{}
+	}
+
+	return func(metrics map[string]*prompb.MetricFamily) (ok bool) {
+		found := map[string]struct{}{}
+
+		for name, fam := range metrics {
+			if _, ok := namesMap[name]; !ok {
+				continue
+			}
+
+			for _, m := range fam.Metric {
+				if m.Counter.GetValue() > 0 {
+					found[name] = struct{}{}
+				}
+			}
+
+			if len(found) == len(names) {
+				return true
+			}
+		}
+		return false
+	}
 }
