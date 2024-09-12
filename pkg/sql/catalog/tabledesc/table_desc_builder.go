@@ -11,6 +11,8 @@
 package tabledesc
 
 import (
+	"slices"
+
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -302,6 +304,17 @@ func (tdb *tableDescriptorBuilder) StripDanglingBackReferences(
 			tbl.MutationJobs = tbl.MutationJobs[:sliceIdx]
 			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
 		}
+	}
+	// ... in the ldr_job_ids slice,
+	{
+		tbl.LDRJobIDs = slices.DeleteFunc(tbl.LDRJobIDs, func(i int64) bool {
+			// Remove if the job ID is not found.
+			if !nonTerminalJobIDMightExist(jobspb.JobID(i)) {
+				tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+				return true
+			}
+			return false
+		})
 	}
 	// ... in the sequence ownership field.
 	if seq := tbl.SequenceOpts; seq != nil {

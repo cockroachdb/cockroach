@@ -151,6 +151,39 @@ func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 			strippedNonExistentRoles:       true,
 		},
 		{
+			name: "LDR job IDs",
+			input: descpb.TableDescriptor{
+				Name: "foo",
+				ID:   104,
+				MutationJobs: []descpb.TableDescriptor_MutationJob{
+					{JobID: 111222333444, MutationID: 1},
+				},
+				Mutations: []descpb.DescriptorMutation{
+					{MutationID: 1},
+					{MutationID: 2},
+				},
+				LDRJobIDs:  []int64{1, 2, 3},
+				Privileges: goodPrivilege,
+			},
+			expectedOutput: descpb.TableDescriptor{
+				Name: "foo",
+				ID:   104,
+				MutationJobs: []descpb.TableDescriptor_MutationJob{
+					{JobID: 111222333444, MutationID: 1},
+				},
+				Mutations: []descpb.DescriptorMutation{
+					{MutationID: 1},
+					{MutationID: 2},
+				},
+				LDRJobIDs:  []int64{},
+				Privileges: goodPrivilege,
+			},
+			validDescIDs:                   catalog.MakeDescriptorIDSet(100, 101, 104, 105),
+			validJobIDs:                    map[jobspb.JobID]struct{}{111222333444: {}},
+			strippedDanglingBackReferences: true,
+			strippedNonExistentRoles:       false,
+		},
+		{
 			name: "missing owner",
 			input: descpb.TableDescriptor{
 				Name: "foo",
