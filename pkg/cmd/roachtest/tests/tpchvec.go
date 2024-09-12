@@ -556,7 +556,7 @@ func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tp
 	}
 	scatterTables(t, conn, tpchTables)
 	t.Status("waiting for full replication")
-	err := roachtestutil.WaitFor3XReplication(ctx, t, t.L(), conn)
+	err := roachtestutil.WaitFor3XReplication(ctx, t.L(), conn)
 	require.NoError(t, err)
 
 	runConfig := testCase.getRunConfig()

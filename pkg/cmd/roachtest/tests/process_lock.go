@@ -56,7 +56,7 @@ func registerProcessLock(r registry.Registry) {
 			conn := c.Conn(ctx, t.L(), 2)
 			defer conn.Close()
 			require.NoError(t, conn.PingContext(ctx))
-			require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t, t.L(), conn))
+			require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
 
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
