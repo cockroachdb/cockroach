@@ -88,13 +88,17 @@ func TestMigrateOldStlePTSRecords(t *testing.T) {
 		tableDesc := desctestutils.TestingGetTableDescriptor(
 			s.DB(), execCfg.Codec, "defaultdb", "public", tbl,
 		)
-		allTargets = append(allTargets, []catid.DescID{keys.DescriptorTableID, tableDesc.GetID()})
+		allTargets = append(allTargets, []catid.DescID{
+			keys.DescriptorTableID,
+			keys.ZonesTableID,
+			keys.CommentsTableID,
+			tableDesc.GetID()})
 		descIDsArr = append(descIDsArr, tableDesc.GetID())
 		allTables = append(allTables, tbl)
 	}
 	_, err = sqlDB.Exec(fmt.Sprintf("create changefeed for %s INTO 'null://'", strings.Join(allTables, ",")))
 	require.NoError(t, err)
-	descIDsArr = append(descIDsArr, keys.DescriptorTableID)
+	descIDsArr = append(descIDsArr, keys.DescriptorTableID, keys.ZonesTableID, keys.CommentsTableID)
 	sort.Slice(descIDsArr, func(i int, j int) bool {
 		return descIDsArr[i] < descIDsArr[j]
 	})
@@ -141,13 +145,10 @@ func TestMigrateOldStlePTSRecords(t *testing.T) {
 		if len(b) < len(a) {
 			return false
 		}
-		// Since each slice was sorted, the descriptor table will be at index
-		// 0 since it has the lowest descriptor ID. Then, order by the protected
-		// data table descriptor at index 1.
-		return a[1] < b[1]
+		// Since each slice was sorted, the data data should
+		// be last. Sort on its descriptor ID.
+		return a[len(a)-1] < b[len(b)-1]
 	})
 
-	t.Logf("%v", allTargets)
-	t.Logf("%v", seenTargets)
-	require.Equal(t, seenTargets, allTargets)
+	require.Equal(t, allTargets, seenTargets)
 }
