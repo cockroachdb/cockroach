@@ -568,7 +568,7 @@ func (s *LogicalReplicationWriterSpec) summary() (string, []string) {
 	const spanLimit = 9
 
 	tableNames := []string{}
-	for _, table := range s.TableMetadata {
+	for _, table := range s.TableMetadataByDestID {
 		tableNames = append(tableNames, table.SourceDescriptor.Name)
 	}
 

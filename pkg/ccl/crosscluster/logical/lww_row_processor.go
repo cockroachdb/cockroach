@@ -61,7 +61,7 @@ type sqlRowProcessor struct {
 // A querier handles rows for any table that has previously been added
 // to the querier using the passed isql.Txn and internal executor.
 type querier interface {
-	AddTable(targetDescID int32, tc sqlProcessorTableConfig) error
+	AddTable(destDescID int32, tc sqlProcessorTableConfig) error
 	InsertRow(ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevRow *cdcevent.Row, likelyInsert bool) (batchStats, error)
 	DeleteRow(ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevRow *cdcevent.Row) (batchStats, error)
 	RequiresParsedBeforeRow(catid.DescID) bool
@@ -193,23 +193,23 @@ type sqlProcessorTableConfig struct {
 func makeSQLProcessorFromQuerier(
 	ctx context.Context,
 	settings *cluster.Settings,
-	tableDescs map[descpb.ID]sqlProcessorTableConfig,
+	tableConfigByDestID map[descpb.ID]sqlProcessorTableConfig,
 	ie isql.Executor,
 	querier querier,
 ) (*sqlRowProcessor, error) {
 	cdcEventTargets := changefeedbase.Targets{}
-	tableDescsBySrcID := make(map[descpb.ID]catalog.TableDescriptor, len(tableDescs))
+	tableDescsBySrcID := make(map[descpb.ID]catalog.TableDescriptor, len(tableConfigByDestID))
 
-	for descID, tabConfig := range tableDescs {
-		desc := tabConfig.srcDesc
-		tableDescsBySrcID[desc.GetID()] = desc
+	for descID, tabConfig := range tableConfigByDestID {
+		srcDesc := tabConfig.srcDesc
+		tableDescsBySrcID[srcDesc.GetID()] = srcDesc
 		if err := querier.AddTable(int32(descID), tabConfig); err != nil {
 			return nil, err
 		}
 		cdcEventTargets.Add(changefeedbase.Target{
 			Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-			TableID:           desc.GetID(),
-			StatementTimeName: changefeedbase.StatementTimeName(desc.GetName()),
+			TableID:           srcDesc.GetID(),
+			StatementTimeName: changefeedbase.StatementTimeName(srcDesc.GetName()),
 		})
 	}
 
@@ -368,14 +368,14 @@ const (
 func makeSQLProcessor(
 	ctx context.Context,
 	settings *cluster.Settings,
-	tableConfigs map[descpb.ID]sqlProcessorTableConfig,
+	tableConfigByDestID map[descpb.ID]sqlProcessorTableConfig,
 	jobID jobspb.JobID,
 	ie isql.Executor,
 ) (*sqlRowProcessor, error) {
 
 	needUDFQuerier := false
-	shouldUseUDF := make(map[catid.DescID]bool, len(tableConfigs))
-	for _, tc := range tableConfigs {
+	shouldUseUDF := make(map[catid.DescID]bool, len(tableConfigByDestID))
+	for _, tc := range tableConfigByDestID {
 		shouldUseUDF[tc.srcDesc.GetID()] = tc.dstOID != 0
 		needUDFQuerier = needUDFQuerier || tc.dstOID != 0
 	}
@@ -383,8 +383,8 @@ func makeSQLProcessor(
 	lwwQuerier := &lwwQuerier{
 		settings: settings,
 		queryBuffer: queryBuffer{
-			deleteQueries: make(map[catid.DescID]queryBuilder, len(tableConfigs)),
-			insertQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
+			deleteQueries: make(map[catid.DescID]queryBuilder, len(tableConfigByDestID)),
+			insertQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigByDestID)),
 		},
 		ieOverrideOptimisticInsert: getIEOverride(replicatedOptimisticInsertOpName, jobID),
 		ieOverrideInsert:           getIEOverride(replicatedInsertOpName, jobID),
@@ -392,10 +392,10 @@ func makeSQLProcessor(
 	}
 	var udfQuerier querier
 	if needUDFQuerier {
-		udfQuerier = makeApplierQuerier(ctx, settings, tableConfigs, jobID, ie)
+		udfQuerier = makeApplierQuerier(ctx, settings, tableConfigByDestID, jobID, ie)
 	}
 
-	return makeSQLProcessorFromQuerier(ctx, settings, tableConfigs, ie, &muxQuerier{
+	return makeSQLProcessorFromQuerier(ctx, settings, tableConfigByDestID, ie, &muxQuerier{
 		shouldUseUDF: shouldUseUDF,
 		lwwQuerier:   lwwQuerier,
 		udfQuerier:   udfQuerier,
@@ -411,11 +411,11 @@ type muxQuerier struct {
 	udfQuerier   querier
 }
 
-func (m *muxQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) error {
+func (m *muxQuerier) AddTable(destDescID int32, tc sqlProcessorTableConfig) error {
 	if m.shouldUseUDF[tc.srcDesc.GetID()] {
-		return m.udfQuerier.AddTable(targetDescID, tc)
+		return m.udfQuerier.AddTable(destDescID, tc)
 	}
-	return m.lwwQuerier.AddTable(targetDescID, tc)
+	return m.lwwQuerier.AddTable(destDescID, tc)
 }
 
 func (m *muxQuerier) InsertRow(

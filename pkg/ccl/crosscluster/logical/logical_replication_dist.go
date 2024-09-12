@@ -32,7 +32,7 @@ func constructLogicalReplicationWriterSpecs(
 	initialScanTimestamp hlc.Timestamp,
 	previousReplicatedTimestamp hlc.Timestamp,
 	checkpoint jobspb.StreamIngestionCheckpoint,
-	tableMd map[int32]execinfrapb.TableReplicationMetadata,
+	tableMetadataByDestID map[int32]execinfrapb.TableReplicationMetadata,
 	jobID jobspb.JobID,
 	streamID streampb.StreamID,
 	ignoreCDCIgnoredTTLDeletes bool,
@@ -46,7 +46,7 @@ func constructLogicalReplicationWriterSpecs(
 		InitialScanTimestamp:        initialScanTimestamp,
 		Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
 		StreamAddress:               string(streamAddress),
-		TableMetadata:               tableMd,
+		TableMetadataByDestID:       tableMetadataByDestID,
 		IgnoreCDCIgnoredTTLDeletes:  ignoreCDCIgnoredTTLDeletes,
 		Mode:                        mode,
 	}
