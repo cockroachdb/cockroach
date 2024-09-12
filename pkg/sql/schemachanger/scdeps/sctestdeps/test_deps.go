@@ -840,6 +840,7 @@ func (s *TestState) UpdateSubzoneConfig(
 		zc = czc
 	} else {
 		zc = zonepb.NewZoneConfig()
+		zc.DeleteTableConfig()
 		zc.Subzones = subzones
 		zc.SubzoneSpans = subzoneSpans
 	}
