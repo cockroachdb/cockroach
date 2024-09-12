@@ -193,6 +193,7 @@ eslint_bin.eslint_test(
         "eslint-local-rules.js",
         "prettier.config.js",
         "tsconfig.json",
+        ":node_modules/@cockroachlabs/eslint-config",
         ":node_modules/@typescript-eslint/eslint-plugin",
         ":node_modules/@typescript-eslint/parser",
         ":node_modules/eslint-config-prettier",

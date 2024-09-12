@@ -49,6 +49,7 @@ const HotRanges = (props: HotRangesProps) => {
     });
     // Avoid dispatching request when `hotRanges` list is updated.
     // This effect should be triggered only when pageToken is changed.
+    /* eslint react-hooks/exhaustive-deps: "off" */
   }, [pageToken]);
 
   useEffect(() => {
