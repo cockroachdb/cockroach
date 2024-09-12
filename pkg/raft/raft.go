@@ -1434,11 +1434,21 @@ func stepLeader(r *raft, m pb.Message) error {
 		r.bcastHeartbeat()
 		return nil
 	case pb.MsgCheckQuorum:
-		if !r.trk.QuorumActive() {
+		quorumActiveByHeartbeats := r.trk.QuorumActive()
+		quorumActiveByFortification := r.supportTracker.QuorumActive()
+		if !quorumActiveByHeartbeats {
+			r.logger.Debugf(
+				"%x has not received messages from a quorum of peers in the last election timeout", r.id,
+			)
+		}
+		if !quorumActiveByFortification {
+			r.logger.Debugf("%x does not have store liveness support from a quorum of peers", r.id)
+		}
+		if !quorumActiveByHeartbeats && !quorumActiveByFortification {
 			r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
 			// NB: Stepping down because of CheckQuorum is a special, in that we know
-			// the QSE is in the past. This means that the leader can safely call a
-			// new election or vote for a different peer without regressing the QSE.
+			// the LeadSupportUntil is in the past. This means that the leader can safely call a
+			// new election or vote for a different peer without regressing LeadSupportUntil.
 			// We don't need to/want to give this any special treatment -- instead, we
 			// handle this like the general step down case by simply remembering the
 			// term/lead information from our stint as the leader.
