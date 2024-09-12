@@ -296,7 +296,7 @@ func TestProcessorBasic(t *testing.T) {
 		}).(*processorImpl)
 		fmt.Fprintf(&b, "n%s,s%s,r%s: replica=%s, tenant=%s, enabled-level=%s\n",
 			p.opts.NodeID, p.opts.StoreID, p.opts.RangeID, p.opts.ReplicaID, tenantID,
-			enabledLevelString(p.mu.enabledWhenLeader))
+			enabledLevelString(EnabledWhenLeaderLevel(p.enabledWhenLeader.Load())))
 	}
 	builderStr := func() string {
 		str := b.String()
