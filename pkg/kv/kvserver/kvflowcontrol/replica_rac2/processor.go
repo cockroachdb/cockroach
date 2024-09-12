@@ -435,14 +435,32 @@ type processorImpl struct {
 		// State when leader, i.e., when leaderID == opts.ReplicaID, and v2
 		// protocol is enabled.
 		leader struct {
-			// pendingAdmitted contains recently delivered admitted vectors. When this
-			// map is not empty, the range is scheduled for applying these vectors to
-			// the corresponding streams / token trackers. The map is cleared when the
-			// admitted vectors are applied.
+			// pendingAdmittedMu contains recently delivered admitted vectors. When
+			// the updates map is not empty, the range is scheduled for applying these
+			// vectors to the corresponding streams / token trackers. The map is
+			// cleared when the admitted vectors are applied.
 			//
-			// Invariant: rc == nil ==> len(pendingAdmitted) == 0.
-			// Invariant: len(pendingAdmitted) != 0 ==> the processing is scheduled.
-			pendingAdmitted map[roachpb.ReplicaID]rac2.AdmittedVector
+			// Inserts into updates happen without holding raftMu, so there is a mutex
+			// for synchronizing with the processor when it applies the updates.
+			//
+			// Invariant: len(updates) != 0 ==> the processing is scheduled.
+			//
+			// Invariant (under raftMu): updates == nil iff rc == nil. If raftMu is
+			// not held, the invariant is eventually consistent since updates and rc
+			// are updated under different mutexes.
+			pendingAdmittedMu struct {
+				syncutil.Mutex
+				updates map[roachpb.ReplicaID]rac2.AdmittedVector
+			}
+			// scratch is used to as a pre-allocated swap-in replacement for
+			// pendingAdmittedMu.updates when the queue is cleared. It is used while
+			// holding raftMu, so doesn't need to be nested in pendingAdmittedMu.
+			//
+			// Invariant: len(scratch) == 0.
+			//
+			// TODO(pav-kv): factor out pendingAdmittedMu and scratch into a type.
+			scratch map[roachpb.ReplicaID]rac2.AdmittedVector
+
 			// Updating the rc reference requires both the enclosing mu and
 			// rcReferenceUpdateMu. Code paths that want to access this
 			// reference only need one of these mutexes. rcReferenceUpdateMu
@@ -684,13 +702,18 @@ func (p *processorImpl) closeLeaderStateRaftMuLockedProcLocked(ctx context.Conte
 		return
 	}
 	p.mu.leader.rc.CloseRaftMuLocked(ctx)
-	func() {
-		p.mu.leader.rcReferenceUpdateMu.Lock()
-		defer p.mu.leader.rcReferenceUpdateMu.Unlock()
-		p.mu.leader.rc = nil
-	}()
-	p.mu.leader.pendingAdmitted = nil
 	p.mu.leader.term = 0
+
+	func() {
+		p.mu.leader.pendingAdmittedMu.Lock()
+		defer p.mu.leader.pendingAdmittedMu.Unlock()
+		p.mu.leader.pendingAdmittedMu.updates = nil
+	}()
+	p.mu.leader.scratch = nil
+
+	p.mu.leader.rcReferenceUpdateMu.Lock()
+	defer p.mu.leader.rcReferenceUpdateMu.Unlock()
+	p.mu.leader.rc = nil
 }
 
 func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
@@ -699,21 +722,27 @@ func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
 	if p.mu.leader.rc != nil {
 		panic("RangeController already exists")
 	}
-	func() {
-		p.mu.leader.rcReferenceUpdateMu.Lock()
-		defer p.mu.leader.rcReferenceUpdateMu.Unlock()
-		p.mu.leader.rc = p.opts.RangeControllerFactory.New(ctx, rangeControllerInitState{
-			replicaSet:     p.raftMu.replicas,
-			leaseholder:    p.mu.leaseholderID,
-			nextRaftIndex:  nextUnstableIndex,
-			rangeID:        p.opts.RangeID,
-			tenantID:       p.raftMu.tenantID,
-			localReplicaID: p.opts.ReplicaID,
-			raftInterface:  p.raftMu.raftNode,
-		})
-	}()
 	p.mu.leader.term = term
-	p.mu.leader.pendingAdmitted = map[roachpb.ReplicaID]rac2.AdmittedVector{}
+	rc := p.opts.RangeControllerFactory.New(ctx, rangeControllerInitState{
+		replicaSet:     p.raftMu.replicas,
+		leaseholder:    p.mu.leaseholderID,
+		nextRaftIndex:  nextUnstableIndex,
+		rangeID:        p.opts.RangeID,
+		tenantID:       p.raftMu.tenantID,
+		localReplicaID: p.opts.ReplicaID,
+		raftInterface:  p.raftMu.raftNode,
+	})
+
+	func() {
+		p.mu.leader.pendingAdmittedMu.Lock()
+		defer p.mu.leader.pendingAdmittedMu.Unlock()
+		p.mu.leader.pendingAdmittedMu.updates = map[roachpb.ReplicaID]rac2.AdmittedVector{}
+	}()
+	p.mu.leader.scratch = map[roachpb.ReplicaID]rac2.AdmittedVector{}
+
+	p.mu.leader.rcReferenceUpdateMu.Lock()
+	defer p.mu.leader.rcReferenceUpdateMu.Unlock()
+	p.mu.leader.rc = rc
 }
 
 // HandleRaftReadyRaftMuLocked implements Processor.
@@ -883,17 +912,21 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 func (p *processorImpl) EnqueuePiggybackedAdmittedAtLeader(
 	from roachpb.ReplicaID, state kvflowcontrolpb.AdmittedState,
 ) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.mu.leader.rc == nil {
-		return
-	}
 	var admitted [raftpb.NumPriorities]uint64
 	copy(admitted[:], state.Admitted)
+
+	p.mu.leader.pendingAdmittedMu.Lock()
+	defer p.mu.leader.pendingAdmittedMu.Unlock()
+	// Invariant: if updates == nil, we are not the leader or already stepping
+	// down. Ignore the updates in this case.
+	if p.mu.leader.pendingAdmittedMu.updates == nil {
+		return
+	}
 	// Merge in the received admitted vector. We are only interested in the
 	// highest admitted marks. Zero value always merges in favour of the new one.
-	p.mu.leader.pendingAdmitted[from] = p.mu.leader.pendingAdmitted[from].Merge(
-		rac2.AdmittedVector{Term: state.Term, Admitted: admitted})
+	p.mu.leader.pendingAdmittedMu.updates[from] =
+		p.mu.leader.pendingAdmittedMu.updates[from].Merge(
+			rac2.AdmittedVector{Term: state.Term, Admitted: admitted})
 }
 
 // ProcessPiggybackedAdmittedAtLeaderRaftMuLocked implements Processor.
@@ -901,13 +934,28 @@ func (p *processorImpl) ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx conte
 	p.opts.Replica.RaftMuAssertHeld()
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.mu.destroyed || len(p.mu.leader.pendingAdmitted) == 0 {
+	if p.mu.destroyed {
 		return false
 	}
-	for replicaID, state := range p.mu.leader.pendingAdmitted {
+	var updates map[roachpb.ReplicaID]rac2.AdmittedVector
+	// Swap the updates map with the empty scratch. This is an optimization to
+	// minimize the time we hold the pendingAdmittedMu lock.
+	func() {
+		p.mu.leader.pendingAdmittedMu.Lock()
+		defer p.mu.leader.pendingAdmittedMu.Unlock()
+		if updates = p.mu.leader.pendingAdmittedMu.updates; len(updates) != 0 {
+			p.mu.leader.pendingAdmittedMu.updates = p.mu.leader.scratch
+			p.mu.leader.scratch = updates
+		}
+	}()
+	if len(updates) == 0 {
+		return false
+	}
+	for replicaID, state := range updates {
 		p.mu.leader.rc.AdmitRaftMuLocked(ctx, replicaID, state)
 	}
-	clear(p.mu.leader.pendingAdmitted)
+	// Clear the scratch from the updates that we have just handled.
+	clear(p.mu.leader.scratch)
 	return true
 }
 
