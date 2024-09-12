@@ -95,24 +95,42 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 
 		// Run table metadata update job.
 		metrics.NumRuns.Inc(1)
-		j.updateLastRunTime(ctx)
+		j.markAsRunning(ctx)
 		if err := updateJobExecFn(ctx, execCtx.ExecCfg().InternalDB.Executor()); err != nil {
 			log.Errorf(ctx, "error running table metadata update job: %s", err)
 		}
+		j.markAsCompleted(ctx)
 	}
 }
 
-// updateLastRunTime updates the last_run_time field in the job's progress
+// markAsRunning updates the last_start_time and status fields in the job's progress
 // details and writes the job progress as a JSON string to the running status.
-func (j *tableMetadataUpdateJobResumer) updateLastRunTime(ctx context.Context) {
+func (j *tableMetadataUpdateJobResumer) markAsRunning(ctx context.Context) {
 	if err := j.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		lrt := timeutil.Now()
-		ju.UpdateProgress(&jobspb.Progress{
-			RunningStatus: fmt.Sprintf("last metadata update at %s", lrt),
-			Details: &jobspb.Progress_TableMetadataCache{
-				TableMetadataCache: &jobspb.UpdateTableMetadataCacheProgress{LastRunTime: lrt},
-			},
-		})
+		progress := md.Progress
+		details := progress.Details.(*jobspb.Progress_TableMetadataCache).TableMetadataCache
+		now := timeutil.Now()
+		progress.RunningStatus = fmt.Sprintf("Job started at %s", now)
+		details.LastStartTime = &now
+		details.Status = jobspb.UpdateTableMetadataCacheProgress_RUNNING
+		ju.UpdateProgress(progress)
+		return nil
+	}); err != nil {
+		log.Errorf(ctx, "%s", err.Error())
+	}
+}
+
+// markAsCompleted updates the last_completed_time and status fields in the job's progress
+// details and writes the job progress as a JSON string to the running status.
+func (j *tableMetadataUpdateJobResumer) markAsCompleted(ctx context.Context) {
+	if err := j.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		progress := md.Progress
+		details := progress.Details.(*jobspb.Progress_TableMetadataCache).TableMetadataCache
+		now := timeutil.Now()
+		progress.RunningStatus = fmt.Sprintf("Job completed at %s", now)
+		details.LastCompletedTime = &now
+		details.Status = jobspb.UpdateTableMetadataCacheProgress_NOT_RUNNING
+		ju.UpdateProgress(progress)
 		return nil
 	}); err != nil {
 		log.Errorf(ctx, "%s", err.Error())
