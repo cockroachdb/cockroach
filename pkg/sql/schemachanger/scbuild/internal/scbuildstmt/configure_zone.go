@@ -11,6 +11,8 @@
 package scbuildstmt
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -38,6 +40,9 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 	// Left to support:
 	// - Partition/row
 	// - System Ranges
+	if n.TargetsIndex() && n.ZoneSpecifier.TableOrIndex.Table.String() == "t36642" && n.ZoneSpecifier.TableOrIndex.Index == "secondary" {
+		fmt.Println("here")
+	}
 	zco, err := astToZoneConfigObject(b, n)
 	if err != nil {
 		panic(err)
