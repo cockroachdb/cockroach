@@ -593,7 +593,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	return cj
 }
 
-func (ct *cdcTester) runMetricsVerifier(check func(metrics map[string]*prompb.MetricFamily) (ok bool, err error)) {
+func (ct *cdcTester) runMetricsVerifier(check func(metrics map[string]*prompb.MetricFamily) (ok bool)) {
 	const timeout = 5 * time.Minute
 	ct.mon.Go(func(ctx context.Context) error {
 		parser := expfmt.TextParser{}
@@ -607,7 +607,6 @@ func (ct *cdcTester) runMetricsVerifier(check func(metrics map[string]*prompb.Me
 			}
 			for _, uiAddr := range uiAddrs {
 				uiAddr := fmt.Sprintf("https://%s/_status/vars", uiAddr)
-				fmt.Printf("fetching %s", uiAddr)
 				out, err := exec.Command("curl", "-kf", uiAddr).Output()
 				if err != nil {
 					return err
@@ -617,11 +616,7 @@ func (ct *cdcTester) runMetricsVerifier(check func(metrics map[string]*prompb.Me
 				if err != nil {
 					return err
 				}
-				ok, err := check(res)
-				if err != nil {
-					return err
-				}
-				if ok {
+				if check(res) {
 					ct.t.Status("metrics check passed")
 					return nil
 				}
@@ -3705,29 +3700,26 @@ func (c *topicConsumer) close() {
 	_ = c.consumer.Close()
 }
 
-func verifyChangefeedBytesInOutMetrics(names map[string]struct{}) func(metrics map[string]*prompb.MetricFamily) (ok bool, err error) {
-	return func(metrics map[string]*prompb.MetricFamily) (bool, error) {
+func verifyChangefeedBytesInOutMetrics(names map[string]struct{}) func(metrics map[string]*prompb.MetricFamily) (ok bool) {
+	return func(metrics map[string]*prompb.MetricFamily) (ok bool) {
 		checked := map[string]struct{}{}
-
-		fmt.Printf("got %d metric families\n", len(metrics))
 
 		for name, fam := range metrics {
 			if _, ok := names[name]; !ok {
 				continue
 			}
 
-			fmt.Printf("checking %s %+#v\n", name, fam)
-
 			for _, m := range fam.Metric {
 				if m.Counter.GetValue() > 0 {
+					fmt.Printf("checking %s %+#v %v\n", name, *m.Counter, m.Counter.GetValue())
 					checked[name] = struct{}{}
 				}
 			}
 
 			if len(checked) == len(names) {
-				return true, nil
+				return true
 			}
 		}
-		return false, nil
+		return false
 	}
 }
