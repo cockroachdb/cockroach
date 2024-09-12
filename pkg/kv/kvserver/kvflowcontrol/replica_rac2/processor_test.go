@@ -104,11 +104,6 @@ type testRaftNode struct {
 	nextUnstableIndex uint64
 }
 
-func (rn *testRaftNode) EnablePingForAdmittedLaggingLocked() {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.EnablePingForAdmittedLaggingLocked\n")
-}
-
 func (rn *testRaftNode) TermLocked() uint64 {
 	rn.r.mu.AssertHeld()
 	fmt.Fprintf(rn.b, " RaftNode.TermLocked() = %d\n", rn.term)
@@ -131,12 +126,6 @@ func (rn *testRaftNode) NextUnstableIndexLocked() uint64 {
 	rn.r.mu.AssertHeld()
 	fmt.Fprintf(rn.b, " RaftNode.NextUnstableIndexLocked() = %d\n", rn.nextUnstableIndex)
 	return rn.nextUnstableIndex
-}
-
-func (rn *testRaftNode) StepMsgAppRespForAdmittedLocked(msg raftpb.Message) error {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.StepMsgAppRespForAdmittedLocked(%s)\n", msgString(msg))
-	return nil
 }
 
 func (rn *testRaftNode) FollowerStateRaftMuLocked(
@@ -164,10 +153,6 @@ func (rn *testRaftNode) check(t *testing.T) {
 func (rn *testRaftNode) print() {
 	fmt.Fprintf(rn.b, "Raft: term: %d leader: %d leaseholder: %d mark: %+v next-unstable: %d",
 		rn.term, rn.leader, rn.r.leaseholder, rn.mark, rn.nextUnstableIndex)
-}
-
-func msgString(msg raftpb.Message) string {
-	return fmt.Sprintf("type: %s from: %d to: %d", msg.Type.String(), msg.From, msg.To)
 }
 
 type testAdmittedPiggybacker struct {
@@ -247,6 +232,12 @@ func (c *testRangeController) HandleRaftEventRaftMuLocked(
 
 func (c *testRangeController) HandleSchedulerEventRaftMuLocked(ctx context.Context) error {
 	panic("HandleSchedulerEventRaftMuLocked should not be called when no send-queues")
+}
+
+func (c *testRangeController) AdmitRaftMuLocked(
+	_ context.Context, replicaID roachpb.ReplicaID, av rac2.AdmittedVector,
+) {
+	fmt.Fprintf(c.b, " RangeController.AdmitRaftMuLocked(%s, %+v)\n", replicaID, av)
 }
 
 func (c *testRangeController) SetReplicasRaftMuLocked(
@@ -417,12 +408,20 @@ func TestProcessorBasic(t *testing.T) {
 				var from, to uint64
 				d.ScanArgs(t, "from", &from)
 				d.ScanArgs(t, "to", &to)
-				msg := raftpb.Message{
-					Type: raftpb.MsgAppResp,
-					To:   raftpb.PeerID(to),
-					From: raftpb.PeerID(from),
+				require.Equal(t, p.opts.ReplicaID, roachpb.ReplicaID(to))
+
+				var term, index, pri int
+				d.ScanArgs(t, "term", &term)
+				d.ScanArgs(t, "index", &index)
+				d.ScanArgs(t, "pri", &pri)
+				require.Less(t, pri, int(raftpb.NumPriorities))
+				as := kvflowcontrolpb.AdmittedState{
+					Term:     uint64(term),
+					Admitted: make([]uint64, raftpb.NumPriorities),
 				}
-				p.EnqueuePiggybackedAdmittedAtLeader(msg)
+				as.Admitted[pri] = uint64(index)
+
+				p.EnqueuePiggybackedAdmittedAtLeader(roachpb.ReplicaID(from), as)
 				return builderStr()
 
 			case "process-piggybacked-admitted":
