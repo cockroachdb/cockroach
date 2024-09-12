@@ -1430,10 +1430,10 @@ func (r *Replica) tick(
 	return true, nil
 }
 
-func (r *Replica) processRACv2PiggybackedAdmitted(ctx context.Context) bool {
+func (r *Replica) processRACv2PiggybackedAdmitted(ctx context.Context) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	return r.flowControlV2.ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx)
+	r.flowControlV2.ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx)
 }
 
 func (r *Replica) hasRaftReadyRLocked() bool {
