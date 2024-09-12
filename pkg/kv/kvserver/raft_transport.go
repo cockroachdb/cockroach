@@ -749,10 +749,6 @@ func (t *RaftTransport) processQueue(
 	maybeAnnotateWithAdmittedStates := func(
 		batch *kvserverpb.RaftMessageRequestBatch, admitted []kvflowcontrolpb.PiggybackedAdmittedState,
 	) {
-		// TODO(pav-kv): send these protos once they are populated correctly.
-		if true {
-			return
-		}
 		batch.AdmittedStates = append(batch.AdmittedStates, admitted...)
 	}
 
