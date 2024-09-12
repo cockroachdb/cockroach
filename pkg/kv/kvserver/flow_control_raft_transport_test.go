@@ -796,6 +796,6 @@ func TestFlowControlRaftTransportV2(t *testing.T) {
 type noopPiggybackedAdmittedResponseScheduler struct{}
 
 func (s noopPiggybackedAdmittedResponseScheduler) ScheduleAdmittedResponseForRangeRACv2(
-	ctx context.Context, msgs []kvflowcontrolpb.AdmittedResponseForRange,
+	context.Context, []kvflowcontrolpb.PiggybackedAdmittedState,
 ) {
 }

@@ -291,7 +291,7 @@ type StoresForRACv2 interface {
 // processing.
 type PiggybackedAdmittedResponseScheduler interface {
 	ScheduleAdmittedResponseForRangeRACv2(
-		ctx context.Context, msgs []kvflowcontrolpb.AdmittedResponseForRange)
+		ctx context.Context, msgs []kvflowcontrolpb.PiggybackedAdmittedState)
 }
 
 func MakeStoresForRACv2(stores *Stores) StoresForRACv2 {
@@ -332,20 +332,20 @@ func (ss *storesForRACv2) lookup(
 
 // ScheduleAdmittedResponseForRangeRACv2 implements PiggybackedAdmittedResponseScheduler.
 func (ss *storesForRACv2) ScheduleAdmittedResponseForRangeRACv2(
-	ctx context.Context, msgs []kvflowcontrolpb.AdmittedResponseForRange,
+	ctx context.Context, msgs []kvflowcontrolpb.PiggybackedAdmittedState,
 ) {
 	ls := (*Stores)(ss)
 	for _, m := range msgs {
-		s, err := ls.GetStore(m.LeaderStoreID)
+		s, err := ls.GetStore(m.ToStoreID)
 		if err != nil {
-			log.Errorf(ctx, "store %s not found", m.LeaderStoreID)
+			log.Errorf(ctx, "store %s not found", m.ToStoreID)
 			continue
 		}
 		repl := s.GetReplicaIfExists(m.RangeID)
-		if repl == nil {
+		if repl == nil || repl.replicaID != m.ToReplicaID {
 			continue
 		}
-		repl.flowControlV2.EnqueuePiggybackedAdmittedAtLeader(m.Msg)
+		repl.flowControlV2.EnqueuePiggybackedAdmittedAtLeader(m.FromReplicaID, m.Admitted)
 		s.scheduler.EnqueueRACv2PiggybackAdmitted(m.RangeID)
 	}
 }

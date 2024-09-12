@@ -122,7 +122,7 @@ HandleRaftReady:
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{Mark:{Term:50 Index:25} Priority:LowPri}}) = true
 destroyed-or-leader-using-v2: true
-LogTracker [+dirty]: mark:{Term:50 Index:25}, stable:23, admitted:[23 23 23 23]
+LogTracker: mark:{Term:50 Index:25}, stable:23, admitted:[23 23 23 23]
 LowPri: {Term:50 Index:25}
 
 # The leader has changed.
@@ -360,7 +360,7 @@ HandleRaftReady:
 .....
 
 # Noop, since not the leader.
-enqueue-piggybacked-admitted from=25 to=5
+enqueue-piggybacked-admitted from=25 to=5 term=50 index=24 pri=0
 ----
 
 # Noop.
@@ -463,6 +463,7 @@ HandleRaftReady:
  Replica.LeaseholderMuLocked
  RaftNode.TermLocked() = 52
  Replica.MuUnlock
+ RangeController.AdmitRaftMuLocked(5, {Term:52 Admitted:[26 26 26 26]})
  RangeController.HandleRaftEventRaftMuLocked([])
 .....
 
@@ -483,29 +484,23 @@ HandleRaftReady:
  Replica.LeaseholderMuLocked
  RaftNode.TermLocked() = 52
  Replica.MuUnlock
+ RangeController.AdmitRaftMuLocked(5, {Term:52 Admitted:[28 28 28 28]})
  RangeController.HandleRaftEventRaftMuLocked([])
 .....
 
 # Enqueue piggybacked admitted vector.
-enqueue-piggybacked-admitted from=25 to=5
+enqueue-piggybacked-admitted from=25 to=5 term=52 index=24 pri=0
+----
+
+# Enqueue another piggybacked admitted vector, it merges into the previous one.
+enqueue-piggybacked-admitted from=25 to=5 term=52 index=25 pri=2
 ----
 
 # Process it.
 process-piggybacked-admitted
 ----
  Replica.RaftMuAssertHeld
- Replica.MuLock
- RaftNode.StepMsgAppRespForAdmittedLocked(type: MsgAppResp from: 25 to: 5)
- Replica.MuUnlock
-
-# Noop.
-process-piggybacked-admitted
-----
- Replica.RaftMuAssertHeld
-
-# Noop, since the replica id does not match.
-enqueue-piggybacked-admitted from=25 to=6
-----
+ RangeController.AdmitRaftMuLocked(25, {Term:52 Admitted:[24 0 25 0]})
 
 # Noop.
 process-piggybacked-admitted
@@ -577,7 +572,7 @@ get-enabled-level
 enabled-level: v1-encoding
 
 # Noop.
-enqueue-piggybacked-admitted from=25 to=5
+enqueue-piggybacked-admitted from=25 to=5 term=52 index=24 pri=0
 ----
 
 # Noop.
@@ -739,6 +734,7 @@ HandleRaftReady:
  Replica.LeaseholderMuLocked
  RaftNode.TermLocked() = 50
  Replica.MuUnlock
+ RangeController.AdmitRaftMuLocked(5, {Term:50 Admitted:[26 26 26 26]})
  RangeController.HandleRaftEventRaftMuLocked([])
 .....
 
@@ -761,7 +757,7 @@ HandleRaftReady:
 .....
 AdmitRaftEntries:
 destroyed-or-leader-using-v2: true
-LogTracker [+dirty]: mark:{Term:50 Index:27}, stable:26, admitted:[26 26 26 26]
+LogTracker: mark:{Term:50 Index:27}, stable:26, admitted:[26 26 26 26]
 
 # Everything up to 27 is admitted.
 synced-log term=50 index=27
@@ -778,6 +774,7 @@ HandleRaftReady:
  Replica.LeaseholderMuLocked
  RaftNode.TermLocked() = 50
  Replica.MuUnlock
+ RangeController.AdmitRaftMuLocked(5, {Term:50 Admitted:[27 27 27 27]})
  RangeController.HandleRaftEventRaftMuLocked([])
 .....
 
