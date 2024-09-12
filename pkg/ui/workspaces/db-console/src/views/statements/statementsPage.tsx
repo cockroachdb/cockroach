@@ -84,7 +84,7 @@ export const selectDatabases = createSelector(
 // statistics were reset.
 export const selectLastReset = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
-  (state) => {
+  state => {
     if (!state?.data) {
       return "unknown";
     }

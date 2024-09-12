@@ -121,8 +121,8 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
   const ids = flow(
     keys,
     nodeIds => map(nodeIds, id => parseInt(id, 10)),
-    nodeIds => sortBy(nodeIds, id => id)
-  )(data.problems_by_node_id)
+    nodeIds => sortBy(nodeIds, id => id),
+  )(data.problems_by_node_id);
 
   return (
     <div>

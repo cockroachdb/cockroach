@@ -61,12 +61,14 @@ function ProblemRangeList(props: {
   description?: string;
 }) {
   const ids = flow(
-    (problems: NodeProblems$Properties[]) => filter(problems, problem => isEmpty(problem.error_message)),
-    (problems: NodeProblems$Properties[]) => flatMap(problems, problem => props.extract(problem)),
+    (problems: NodeProblems$Properties[]) =>
+      filter(problems, problem => isEmpty(problem.error_message)),
+    (problems: NodeProblems$Properties[]) =>
+      flatMap(problems, problem => props.extract(problem)),
     ids => map(ids, id => FixLong(id)),
     ids => sortBy(ids, id => id.toNumber()),
     ids => map(ids, id => id.toString()),
-    sortedUniq
+    sortedUniq,
   )(props.problems);
   if (isEmpty(ids)) {
     return null;

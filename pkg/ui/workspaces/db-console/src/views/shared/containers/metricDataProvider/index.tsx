@@ -47,7 +47,6 @@ import {
   QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
 
-
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data
  * structure based on a MetricProps object.

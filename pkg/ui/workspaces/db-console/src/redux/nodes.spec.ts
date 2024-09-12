@@ -313,7 +313,9 @@ describe("node data selectors without addresses", function () {
 
     it("returns empty collection for empty state", function () {
       const store = createAdminUIStore(createHashHistory());
-      expect(nodeDisplayNameByIDSelectorWithoutAddress(store.getState())).toEqual({});
+      expect(
+        nodeDisplayNameByIDSelectorWithoutAddress(store.getState()),
+      ).toEqual({});
     });
   });
   describe("store IDs by node ID", function () {
@@ -365,24 +367,27 @@ describe("selectCommissionedNodeStatuses", function () {
     [id: string]: LivenessStatus;
   }): AdminUIState {
     const store = createAdminUIStore(createMemoryHistory());
-    return merge<AdminUIState, RecursivePartial<AdminUIState>>(store.getState(), {
-      cachedData: {
-        nodes: {
-          data: nodeStatuses,
-          inFlight: false,
-          valid: true,
-          unauthorized: false,
-        },
-        liveness: {
-          data: {
-            statuses: livenessStatuses,
+    return merge<AdminUIState, RecursivePartial<AdminUIState>>(
+      store.getState(),
+      {
+        cachedData: {
+          nodes: {
+            data: nodeStatuses,
+            inFlight: false,
+            valid: true,
+            unauthorized: false,
           },
-          inFlight: false,
-          valid: true,
-          unauthorized: false,
+          liveness: {
+            data: {
+              statuses: livenessStatuses,
+            },
+            inFlight: false,
+            valid: true,
+            unauthorized: false,
+          },
         },
       },
-    })
+    );
   }
 
   it("selects all nodes when liveness status missing", function () {

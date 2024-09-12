@@ -56,7 +56,6 @@ import {
   NodeFilterListProps,
 } from "src/views/reports/components/nodeFilterList";
 
-
 import { Latency } from "./latency";
 import { Legend } from "./legend";
 import Sort from "./sort";
@@ -191,8 +190,8 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
       data.indexOf(value) === -1
         ? [...data, value]
         : data.length === 1
-        ? null
-        : data.filter((m: string | number) => m !== value);
+          ? null
+          : data.filter((m: string | number) => m !== value);
     trackFilter(capitalize(key), value);
     this.setState({
       filter: {
@@ -386,9 +385,8 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     );
     const sort = this.getSortParams(identityContent);
     if (sort.some(x => x.id === nodeId)) {
-      return sortBy(
-        identityContent,
-        identity => getValueFromString(nodeId, identity.locality, true)
+      return sortBy(identityContent, identity =>
+        getValueFromString(nodeId, identity.locality, true),
       );
     }
     return identityContent;
@@ -451,9 +449,10 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
       values,
       (vals: IConnectivity[]) => flatMap(vals, v => Object.values(v.peers)),
       (vals: IPeer[]) => flatMap(vals, v => v.latency),
-      (vals: IDuration[]) => filter(vals,v => v !== undefined && v.nanos !== undefined),
-      (vals: IDuration[]) => map(vals,v => util.NanoToMilli(v.nanos)),
-    ])(connections)
+      (vals: IDuration[]) =>
+        filter(vals, v => v !== undefined && v.nanos !== undefined),
+      (vals: IDuration[]) => map(vals, v => util.NanoToMilli(v.nanos)),
+    ])(connections);
 
     if (isEmpty(identityByID)) {
       return <h2 className="base-heading">No nodes match the filters</h2>;

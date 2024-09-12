@@ -265,17 +265,16 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
       [indexName, filterIndexName],
       [localities, filterLocalities],
     ];
-    filters.filter(f => !isEmpty(f[1]))
-      .forEach(
-        ([name, value]) => {
-          if (isArray(value)) {
-            params.set(name, value.map(f => f.value).join("|"));
-          }
-          if (isString(value)) {
-            params.set(name, value);
-          }
-        },
-      );
+    filters
+      .filter(f => !isEmpty(f[1]))
+      .forEach(([name, value]) => {
+        if (isArray(value)) {
+          params.set(name, value.map(f => f.value).join("|"));
+        }
+        if (isString(value)) {
+          params.set(name, value);
+        }
+      });
     return params;
   }, [
     filterNodeIds,

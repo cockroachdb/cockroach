@@ -89,7 +89,9 @@ export class DecommissionedNodeHistory extends React.Component<
       key: "id",
       title: "ID",
       sorter: sortByNodeId,
-      render: (_text: string, record: DecommissionedNodeStatusRow) => <Text>{`n${record.nodeId}`}</Text>,
+      render: (_text: string, record: DecommissionedNodeStatusRow) => (
+        <Text>{`n${record.nodeId}`}</Text>
+      ),
     },
     {
       key: "decommissionedOn",
@@ -155,13 +157,15 @@ const decommissionedNodesTableData = createSelector(
     });
 
     const data = flow(
-      (liveness: ILiveness[]) => orderBy(liveness, [l => getDecommissionedTime(l.node_id)], ["desc"]),
-      (liveness: ILiveness[]) => map(liveness, (l, idx: number) => ({
-        key: `${idx}`,
-        nodeId: l.node_id,
-        decommissionedDate: getDecommissionedTime(l.node_id),
-      }))
-    )(decommissionedNodes)
+      (liveness: ILiveness[]) =>
+        orderBy(liveness, [l => getDecommissionedTime(l.node_id)], ["desc"]),
+      (liveness: ILiveness[]) =>
+        map(liveness, (l, idx: number) => ({
+          key: `${idx}`,
+          nodeId: l.node_id,
+          decommissionedDate: getDecommissionedTime(l.node_id),
+        })),
+    )(decommissionedNodes);
 
     return data;
   },

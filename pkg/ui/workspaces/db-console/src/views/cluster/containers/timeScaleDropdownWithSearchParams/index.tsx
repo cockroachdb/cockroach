@@ -125,11 +125,11 @@ const scaleSelector = createSelector(
 );
 
 type MapStateToProps = {
-  currentScale: TimeScale
+  currentScale: TimeScale;
 };
 
 type MapDispatchToProps = {
-  setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>
+  setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>;
 };
 
 export default connect<

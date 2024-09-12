@@ -14,14 +14,10 @@ import React from "react";
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Axis, Metric } from "src/views/shared/components/metricQuery";
 
-import {
-  GraphDashboardProps,
-  nodeDisplayName,
-} from "./dashboardUtils";
+import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodeDisplayNameByID, tenantSource } =
-    props;
+  const { nodeIDs, nodeDisplayNameByID, tenantSource } = props;
 
   return [
     <LineGraph title="Network Bytes Received" showMetricsInTooltip={true}>
