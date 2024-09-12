@@ -96,6 +96,9 @@ type TestingKnobs struct {
 
 	// OverrideExecCfg returns a modified ExecutorConfig to use under tests.
 	OverrideExecCfg func(actual *sql.ExecutorConfig) *sql.ExecutorConfig
+
+	// AsyncFlushSync is called in async flush goroutines as a way to provide synchronization between them.
+	AsyncFlushSync func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
