@@ -63,6 +63,8 @@ export let upgradeTroubleshooting: string;
 export let licensingFaqs: string;
 // Note that these explicitly don't use the current version, since we want to
 // link to the most up-to-date documentation available.
+export const enterpriseLicenseUpdate =
+  "https://www.cockroachlabs.com/enterprise-license-update/";
 export const upgradeCockroachVersion =
   "https://www.cockroachlabs.com/docs/stable/upgrade-cockroach-version.html";
 export const enterpriseLicensing =
