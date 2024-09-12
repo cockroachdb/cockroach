@@ -1470,7 +1470,7 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 	}, 1)
 	defer server.Stopper().Stop(ctx)
 
-	lwwFunc := `CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tab, existing tab, prev tab, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL,proposed_mvcc_timestamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
+	lwwFunc := `CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tab, existing tab, prev tab, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timestamp DECIMAL)
 	RETURNS string
 	AS $$
 	BEGIN
