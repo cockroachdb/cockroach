@@ -359,11 +359,10 @@ type Processor interface {
 	// that ProcessPiggybackedAdmittedAtLeaderRaftMuLocked gets called soon.
 	EnqueuePiggybackedAdmittedAtLeader(roachpb.ReplicaID, kvflowcontrolpb.AdmittedState)
 	// ProcessPiggybackedAdmittedAtLeaderRaftMuLocked is called to process
-	// previously enqueued piggybacked admitted vectors. Returns true if
-	// HandleRaftReadyRaftMuLocked should be called.
+	// previously enqueued piggybacked admitted vectors.
 	//
 	// raftMu is held.
-	ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx context.Context) bool
+	ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx context.Context)
 
 	// SideChannelForPriorityOverrideAtFollowerRaftMuLocked is called on a
 	// follower to provide information about whether the leader is using the
@@ -897,18 +896,17 @@ func (p *processorImpl) EnqueuePiggybackedAdmittedAtLeader(
 }
 
 // ProcessPiggybackedAdmittedAtLeaderRaftMuLocked implements Processor.
-func (p *processorImpl) ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx context.Context) bool {
+func (p *processorImpl) ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx context.Context) {
 	p.opts.Replica.RaftMuAssertHeld()
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.mu.destroyed || len(p.mu.leader.pendingAdmitted) == 0 {
-		return false
+		return
 	}
 	for replicaID, state := range p.mu.leader.pendingAdmitted {
 		p.mu.leader.rc.AdmitRaftMuLocked(ctx, replicaID, state)
 	}
 	clear(p.mu.leader.pendingAdmitted)
-	return true
 }
 
 // SideChannelForPriorityOverrideAtFollowerRaftMuLocked implements Processor.

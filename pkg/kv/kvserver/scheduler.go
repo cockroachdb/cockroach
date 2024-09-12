@@ -122,9 +122,9 @@ type raftProcessor interface {
 	// Process a raft tick for the specified range.
 	// Return true if the range should be queued for ready processing.
 	processTick(context.Context, roachpb.RangeID) bool
-	// Process a piggybacked raftpb.Message that advances admitted. Used for
-	// RACv2. Returns true if the range should be queued for ready processing.
-	processRACv2PiggybackedAdmitted(ctx context.Context, id roachpb.RangeID) bool
+	// Process piggybacked admitted vectors that may advance admitted state for
+	// the given range's peer replicas. Used for RACv2.
+	processRACv2PiggybackedAdmitted(ctx context.Context, id roachpb.RangeID)
 }
 
 type raftScheduleFlags int
@@ -414,14 +414,8 @@ func (ss *raftSchedulerShard) worker(
 			}
 		}
 		if state.flags&stateRACv2PiggybackedAdmitted != 0 {
-			// processRACv2PiggybackedAdmitted returns true if the range should
-			// perform ready processing. Do not reorder this below the call to
-			// processReady.
-			if processor.processRACv2PiggybackedAdmitted(ctx, id) {
-				state.flags |= stateRaftReady
-			}
+			processor.processRACv2PiggybackedAdmitted(ctx, id)
 		}
-
 		if state.flags&stateRaftReady != 0 {
 			processor.processReady(id)
 		}
