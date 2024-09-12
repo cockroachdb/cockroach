@@ -978,7 +978,7 @@ func shouldSkipValidatingConstraint(
 
 // panicIfSchemaIsLocked panics if table's schema is locked.
 // It is used to prevent schema change stmts.
-func panicIfSchemaIsLocked(tableElements ElementResultSet) {
+func panicIfSchemaChangeIsDisallowed(tableElements ElementResultSet) {
 	_, _, schemaLocked := scpb.FindTableSchemaLocked(tableElements)
 	if schemaLocked != nil {
 		_, _, ns := scpb.FindNamespace(tableElements)
