@@ -4,6 +4,7 @@ go_library(
     name = "metrics-loader",
     srcs = [
         "main.go",
+        "processor.go",
         "reader.go",
         "sender.go",
     ],
