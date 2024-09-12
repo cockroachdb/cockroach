@@ -142,6 +142,8 @@ var validationMap = []struct {
 			"ImportType":                    {status: thisFieldReferencesNoObjects},
 			"External": {status: todoIAmKnowinglyAddingTechDebt,
 				reason: "TODO(features): add validation that TableID is sane within the same tenant"},
+			// LDRJobIDs is checked in StripDanglingBackreferences.
+			"LDRJobIDs": {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
