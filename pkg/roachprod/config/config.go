@@ -59,6 +59,10 @@ var (
 	// EmailDomain used to form fully qualified usernames for gcloud and slack.
 	EmailDomain string
 
+	// UseSharedUser is used to determine if config.SharedUser should be used for SSH.
+	// By default, this is true, otherwise config.OSUser will be used.
+	UseSharedUser = true
+
 	// DNSRequiredProviders is the list of cloud providers that must be active for
 	// DNS records to be synced when roachprod syncs its state.
 	DefaultDNSRequiredProviders = envOrDefaultStrings(

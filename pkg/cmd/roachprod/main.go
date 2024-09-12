@@ -881,7 +881,7 @@ into a single stream.
 		} else {
 			dest = args[0] + ".logs"
 		}
-		return roachprod.Logs(config.Logger, args[0], dest, username, logsOpts)
+		return roachprod.Logs(config.Logger, args[0], dest, logsOpts)
 	}),
 }
 

@@ -101,6 +101,7 @@ func Init() error {
 	providerInstance.Projects = []string{defaultDefaultProject}
 	projectFromEnv := os.Getenv("GCE_PROJECT")
 	if projectFromEnv != "" {
+		fmt.Printf("WARNING: `GCE_PROJECT` is deprecated; please, use `ROACHPROD_GCE_DEFAULT_PROJECT` instead")
 		providerInstance.Projects = []string{projectFromEnv}
 	}
 	providerInstance.ServiceAccount = os.Getenv("GCE_SERVICE_ACCOUNT")
@@ -218,7 +219,7 @@ func (jsonVM *jsonVM) toVM(
 	cpuPlatform := jsonVM.CPUPlatform
 	zone := lastComponent(jsonVM.Zone)
 	remoteUser := config.SharedUser
-	if !opts.useSharedUser {
+	if !config.UseSharedUser {
 		// N.B. gcloud uses the local username to log into instances rather
 		// than the username on the authenticated Google account but we set
 		// up the shared user at cluster creation time. Allow use of the
@@ -318,7 +319,6 @@ func DefaultProviderOpts() *ProviderOpts {
 		PDVolumeSize:         500,
 		TerminateOnMigration: false,
 		UseSpot:              false,
-		useSharedUser:        true,
 		preemptible:          false,
 	}
 }
@@ -356,9 +356,6 @@ type ProviderOpts struct {
 	// GCE allows two availability policies in case of a maintenance event (see --maintenance-policy via gcloud),
 	// 'TERMINATE' or 'MIGRATE'. The default is 'MIGRATE' which we denote by 'TerminateOnMigration == false'.
 	TerminateOnMigration bool
-	// useSharedUser indicates that the shared user rather than the personal
-	// user should be used to ssh into the remote machines.
-	useSharedUser bool
 	// use preemptible instances
 	preemptible bool
 }
@@ -1098,11 +1095,6 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 		},
 		ProviderName+"-project", /* name */
 		usage)
-
-	flags.BoolVar(&o.useSharedUser,
-		ProviderName+"-use-shared-user", true,
-		fmt.Sprintf("use the shared user %q for ssh rather than your user %q",
-			config.SharedUser, config.OSUser.Username))
 
 	// Flags about DNS override the default values in
 	// providerInstance.dnsProvider.
