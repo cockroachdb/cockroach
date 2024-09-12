@@ -1944,10 +1944,12 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	// admitted log indices, by priority.
 	if msg.Type == raftpb.MsgAppResp && !msg.Reject {
 		admitted := r.flowControlV2.AdmittedState()
-		// The admitted state must be in the coordinate system of the leader's log.
-		if admitted.Term == msg.Term && false {
-			// TODO(pav-kv): enable this annotation when it is covered with tests, and
-			// the leader knows how to handle it.
+		// If admitted.Term is lagging msg.Term, sending the admitted vector has no
+		// effect on the leader, so skip it.
+		// If msg.Term is lagging the admitted.Term, this is a message to a stale
+		// leader. Sending it allows that leader to release all tokens. It would
+		// otherwise do so soon anyway, upon learning about the new leader.
+		if admitted.Term >= msg.Term {
 			req.AdmittedState = kvflowcontrolpb.AdmittedState{
 				Term:     admitted.Term,
 				Admitted: admitted.Admitted[:],
