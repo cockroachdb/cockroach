@@ -245,7 +245,7 @@ FROM
 				ctx, "get-tenant-setting-value", p.txn,
 				sessiondata.NoSessionDataOverride,
 				lookupEncodedTenantSetting,
-				setting.Name(), rec.ID)
+				setting.InternalKey(), rec.ID)
 			if err != nil {
 				return false, "", err
 			}
