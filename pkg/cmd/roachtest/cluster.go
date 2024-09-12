@@ -2187,6 +2187,29 @@ func (c *clusterImpl) StartE(
 			return err
 		}
 	}
+
+	if startOpts.WaitForReplicationFactor > 0 {
+		l.Printf("waiting for replication factor of at least %d", startOpts.WaitForReplicationFactor)
+		var nodes option.NodeListOption
+		for _, o := range opts {
+			if s, ok := o.(nodeSelector); ok {
+				nodes = s.Merge(nodes)
+			}
+		}
+
+		conn, err := c.ConnE(ctx, l, nodes[0])
+		if err != nil {
+			return errors.Wrapf(err, "failed to connect to n%d", nodes[0])
+		}
+		defer conn.Close()
+
+		if err := roachtestutil.WaitForReplication(
+			ctx, l, conn, startOpts.WaitForReplicationFactor, roachtestutil.AtLeastReplicationFactor,
+		); err != nil {
+			return errors.Wrap(err, "failed to wait for replication after starting cockroach")
+		}
+	}
+
 	return nil
 }
 
