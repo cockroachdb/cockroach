@@ -252,6 +252,17 @@ func (e *Enforcer) GetHasLicense() bool {
 	return e.hasLicense.Load()
 }
 
+// GetRequiresTelemetry returns true if a license is installed that requires
+// telemetry to be enabled.
+func (e *Enforcer) GetRequiresTelemetry() bool {
+	return e.licenseRequiresTelemetry.Load()
+}
+
+// GetIsDisabled returns true if the license enforcer is currently disabled.
+func (e *Enforcer) GetIsDisabled() bool {
+	return e.isDisabled.Load()
+}
+
 // GetGracePeriodEndTS returns the timestamp indicating the end of the grace period.
 // Some licenses provide a grace period after expiration or when no license is present.
 // If no grace period is defined, the second return value will be false.
