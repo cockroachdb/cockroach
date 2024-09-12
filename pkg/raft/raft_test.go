@@ -1173,15 +1173,16 @@ func TestHandleHeartbeat(t *testing.T) {
 	}
 }
 
-// TestHandleHeartbeatResp ensures that we re-send log entries when we get a heartbeat response.
-func TestHandleHeartbeatResp(t *testing.T) {
+// TestHandleHeartbeatRespStoreLivenessDisabled ensures that we re-send log
+// entries when we get a heartbeat response.
+func TestHandleHeartbeatRespStoreLivenessDisabled(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	require.NoError(t, storage.SetHardState(pb.HardState{Term: 3}))
 	require.NoError(t, storage.Append(index(1).terms(1, 2, 3)))
-	sm := newTestRaft(1, 5, 1, storage)
+	sm := newTestRaft(1, 5, 1, storage, withFortificationDisabled())
 	sm.becomeCandidate()
 	sm.becomeLeader()
-	sm.raftLog.commitTo(LogMark{Term: 3, Index: sm.raftLog.lastIndex()})
+	sm.raftLog.commitTo(sm.raftLog.unstable.mark())
 
 	// A heartbeat response from a node that is behind; re-send MsgApp
 	sm.Step(pb.Message{From: 2, Type: pb.MsgHeartbeatResp})
@@ -1208,6 +1209,59 @@ func TestHandleHeartbeatResp(t *testing.T) {
 	sm.Step(pb.Message{From: 2, Type: pb.MsgHeartbeatResp})
 	msgs = sm.readMessages()
 	require.Empty(t, msgs)
+}
+
+// TestHandleHeatbeatTimeoutStoreLivenessEnabled ensures that we re-send log
+// entries on heartbeat timeouts only if we need to.
+func TestHandleHeatbeatTimeoutStoreLivenessEnabled(t *testing.T) {
+	storage := newTestMemoryStorage(withPeers(1, 2))
+	require.NoError(t, storage.SetHardState(pb.HardState{Term: 3}))
+	require.NoError(t, storage.Append(index(1).terms(1, 2, 3)))
+	sm := newTestRaft(1, 5, 1, storage)
+	sm.becomeCandidate()
+	sm.becomeLeader()
+	sm.fortificationTracker.RecordFortification(pb.PeerID(2), 1)
+	sm.fortificationTracker.RecordFortification(pb.PeerID(3), 1)
+	sm.raftLog.commitTo(sm.raftLog.unstable.mark())
+
+	// On heartbeat timeout, the leader sends a MsgApp.
+	for ticks := sm.heartbeatTimeout; ticks > 0; ticks-- {
+		sm.tick()
+	}
+
+	msgs := sm.readMessages()
+	require.Len(t, msgs, 2)
+	assert.Equal(t, pb.MsgHeartbeat, msgs[0].Type)
+	assert.Equal(t, pb.MsgApp, msgs[1].Type)
+
+	// On another heartbeat timeout, the leader sends a MsgApp.
+	for ticks := sm.heartbeatTimeout; ticks > 0; ticks-- {
+		sm.tick()
+	}
+	msgs = sm.readMessages()
+	require.Len(t, msgs, 2)
+	assert.Equal(t, pb.MsgHeartbeat, msgs[0].Type)
+	assert.Equal(t, pb.MsgApp, msgs[1].Type)
+
+	// Once the leader receives a MsgAppResp, it doesn't send MsgApp.
+	sm.Step(pb.Message{
+		From:   2,
+		Type:   pb.MsgAppResp,
+		Index:  msgs[1].Index + uint64(len(msgs[1].Entries)),
+		Commit: sm.raftLog.lastIndex(),
+	})
+
+	// Consume the message sent in response to MsgAppResp
+	sm.readMessages()
+
+	// On heartbeat timeout, the leader doesn't send a MsgApp because the follower
+	// is up-to-date.
+	for ticks := sm.heartbeatTimeout; ticks > 0; ticks-- {
+		sm.tick()
+	}
+	msgs = sm.readMessages()
+	require.Len(t, msgs, 1)
+	assert.Equal(t, pb.MsgHeartbeat, msgs[0].Type)
 }
 
 // TestMsgAppRespWaitReset verifies the resume behavior of a leader
@@ -2028,15 +2082,20 @@ func TestBcastBeat(t *testing.T) {
 			}
 			msgs := sm.readMessages()
 			// If storeliveness is enabled, the heartbeat timeout will also send a
-			// MsgFortifyLeader to all followers if they need fortification.
+			// MsgApp if it needs to. In this case since follower 2 is slow, we will
+			// send a MsgApp to it.
 			if storeLivenessEnabled {
+				require.Len(t, msgs, 5)
 				assert.Equal(t, []pb.Message{
 					{From: 1, To: 2, Term: 2, Type: pb.MsgHeartbeat, Match: 5},
 					{From: 1, To: 3, Term: 2, Type: pb.MsgHeartbeat, Match: 1011},
 					{From: 1, To: 2, Term: 2, Type: pb.MsgFortifyLeader},
 					{From: 1, To: 3, Term: 2, Type: pb.MsgFortifyLeader},
+					{From: 1, To: 3, Term: 2, Type: pb.MsgApp, LogTerm: 2, Index: 1011, Commit: 1000,
+						Match: 1011},
 				}, msgs)
 			} else {
+				require.Len(t, msgs, 2)
 				assert.Equal(t, []pb.Message{
 					{From: 1, To: 2, Term: 2, Type: pb.MsgHeartbeat, Match: 5},
 					{From: 1, To: 3, Term: 2, Type: pb.MsgHeartbeat, Match: 1011},
@@ -2168,9 +2227,10 @@ func TestSendAppendForProgressProbe(t *testing.T) {
 				// consume the heartbeat, and the MsgApp if storeliveness is enabled
 				msg := r.readMessages()
 				if storeLivenessEnabled {
-					assert.Len(t, msg, 2)
+					assert.Len(t, msg, 3)
 					assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
 					assert.Equal(t, pb.MsgFortifyLeader, msg[1].Type)
+					assert.Equal(t, pb.MsgApp, msg[2].Type)
 				} else {
 					assert.Len(t, msg, 1)
 					assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
@@ -2183,9 +2243,10 @@ func TestSendAppendForProgressProbe(t *testing.T) {
 			}
 			msg := r.readMessages()
 			if storeLivenessEnabled {
-				assert.Len(t, msg, 2)
+				assert.Len(t, msg, 3)
 				assert.Equal(t, pb.MsgHeartbeat, msg[0].Type)
 				assert.Equal(t, pb.MsgFortifyLeader, msg[1].Type)
+				assert.Equal(t, pb.MsgApp, msg[2].Type)
 				assert.Zero(t, msg[1].Index)
 			} else {
 				assert.Len(t, msg, 1)
