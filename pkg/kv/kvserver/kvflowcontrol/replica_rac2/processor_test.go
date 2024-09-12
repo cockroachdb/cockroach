@@ -408,9 +408,20 @@ func TestProcessorBasic(t *testing.T) {
 				var from, to uint64
 				d.ScanArgs(t, "from", &from)
 				d.ScanArgs(t, "to", &to)
-				// TODO(pav-kv): parse the admitted vector.
-				p.EnqueuePiggybackedAdmittedAtLeader(
-					roachpb.ReplicaID(from), kvflowcontrolpb.AdmittedState{})
+				require.Equal(t, p.opts.ReplicaID, roachpb.ReplicaID(to))
+
+				var term, index, pri int
+				d.ScanArgs(t, "term", &term)
+				d.ScanArgs(t, "index", &index)
+				d.ScanArgs(t, "pri", &pri)
+				require.Less(t, pri, int(raftpb.NumPriorities))
+				as := kvflowcontrolpb.AdmittedState{
+					Term:     uint64(term),
+					Admitted: make([]uint64, raftpb.NumPriorities),
+				}
+				as.Admitted[pri] = uint64(index)
+
+				p.EnqueuePiggybackedAdmittedAtLeader(roachpb.ReplicaID(from), as)
 				return builderStr()
 
 			case "process-piggybacked-admitted":

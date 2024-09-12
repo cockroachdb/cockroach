@@ -360,7 +360,7 @@ HandleRaftReady:
 .....
 
 # Noop, since not the leader.
-enqueue-piggybacked-admitted from=25 to=5
+enqueue-piggybacked-admitted from=25 to=5 term=50 index=24 pri=0
 ----
 
 # Noop.
@@ -489,29 +489,23 @@ HandleRaftReady:
 .....
 
 # Enqueue piggybacked admitted vector.
-enqueue-piggybacked-admitted from=25 to=5
+enqueue-piggybacked-admitted from=25 to=5 term=52 index=24 pri=0
+----
+
+# Enqueue another piggybacked admitted vector, it merges into the previous one.
+enqueue-piggybacked-admitted from=25 to=5 term=52 index=25 pri=2
 ----
 
 # Process it.
 process-piggybacked-admitted
 ----
  Replica.RaftMuAssertHeld
- RangeController.AdmitRaftMuLocked(25, {Term:0 Admitted:[0 0 0 0]})
+ RangeController.AdmitRaftMuLocked(25, {Term:52 Admitted:[24 0 25 0]})
 
 # Noop.
 process-piggybacked-admitted
 ----
  Replica.RaftMuAssertHeld
-
-# Noop, since the replica id does not match.
-enqueue-piggybacked-admitted from=25 to=6
-----
-
-# Noop.
-process-piggybacked-admitted
-----
- Replica.RaftMuAssertHeld
- RangeController.AdmitRaftMuLocked(25, {Term:0 Admitted:[0 0 0 0]})
 
 # We are still the leader, now at a new term.
 set-raft-state term=53
@@ -578,7 +572,7 @@ get-enabled-level
 enabled-level: v1-encoding
 
 # Noop.
-enqueue-piggybacked-admitted from=25 to=5
+enqueue-piggybacked-admitted from=25 to=5 term=52 index=24 pri=0
 ----
 
 # Noop.
