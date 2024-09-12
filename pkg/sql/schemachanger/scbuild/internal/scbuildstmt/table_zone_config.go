@@ -121,7 +121,7 @@ func (tzo *tableZoneConfigObj) completeZoneConfig(b BuildCtx, zone *zonepb.ZoneC
 	// For tables, inherit from the database.
 	dbID := mustRetrieveNamespaceElem(b, tzo.getTargetID()).DatabaseID
 	dzo := databaseZoneConfigObj{databaseID: dbID}
-	dbZone, _, err := dzo.getZoneConfig(b, false /* inheritDefaultRange */)
+	dbZone, err := dzo.getZoneConfig(b, false /* inheritDefaultRange */)
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func (tzo *tableZoneConfigObj) completeZoneConfig(b BuildCtx, zone *zonepb.ZoneC
 	if zone.IsComplete() {
 		return nil
 	}
-	defaultZone, _, err := tzo.getZoneConfig(b, true /* inheritDefaultRange */)
+	defaultZone, err := tzo.getZoneConfig(b, true /* inheritDefaultRange */)
 	if err != nil {
 		return err
 	}
@@ -148,37 +148,31 @@ func (tzo *tableZoneConfigObj) getInheritedDefaultZoneConfig(
 	targetID := tzo.getTargetID()
 	parentDBID := mustRetrieveNamespaceElem(b, targetID).DatabaseID
 	dzo := databaseZoneConfigObj{databaseID: parentDBID}
-	zc, _, err = dzo.getZoneConfig(b, false /* inheritDefaultRange */)
+	zc, err = dzo.getZoneConfig(b, false /* inheritDefaultRange */)
 	return zc, err
 }
 
 func (tzo *tableZoneConfigObj) getZoneConfig(
 	b BuildCtx, inheritDefaultRange bool,
-) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, error) {
-	var subzones []zonepb.Subzone
-	zc, subzones, err := lookUpSystemZonesTable(b, tzo, inheritDefaultRange)
+) (*zonepb.ZoneConfig, error) {
+	zc, _, err := lookUpSystemZonesTable(b, tzo, inheritDefaultRange, false /* isSubzoneConfig */)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
+	}
+	// If the zone config exists and is not a subzone placeholder, return.
+	if zc != nil && !zc.IsSubzonePlaceholder() {
+		return zc, err
 	}
 
-	// If the zone config exists, we know that it is not a subzone placeholder.
-	if zc != nil {
-		return zc, nil, err
-	}
-
-	zc = zonepb.NewZoneConfig()
-	zc.Subzones = subzones
-	subzone := zc
-
-	// Since our target is a table, recursively get the zone config of its parent
-	// database.
+	// Otherwise, since our target is a table, recursively get the zone config
+	// of its parent database.
 	parentDBID := mustRetrieveNamespaceElem(b, tzo.getTargetID()).DatabaseID
 	dzo := databaseZoneConfigObj{databaseID: parentDBID}
-	zc, _, err = dzo.getZoneConfig(b, inheritDefaultRange)
+	zc, err = dzo.getZoneConfig(b, inheritDefaultRange)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return zc, subzone, nil
+	return zc, nil
 }
 
 func (tzo *tableZoneConfigObj) applyZoneConfig(

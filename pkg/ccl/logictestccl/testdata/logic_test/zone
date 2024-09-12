@@ -644,8 +644,6 @@ TABLE system.public.tenant_usage                                                
 TABLE system.public.transaction_activity                                           NULL        system       transaction_activity          NULL           NULL
 TABLE system.public.transaction_statistics                                         NULL        system       transaction_statistics        NULL           NULL
 TABLE test.public.t                                                                NULL        test         t                             NULL           NULL
-TABLE test.public.t36642                                                           NULL      test         t36642                        NULL           NULL
-TABLE test.public.t36644                                                           NULL      test         t36644                        NULL           NULL
 
 # Test the zone information being displayed in SHOW CREATE
 statement ok
@@ -1272,3 +1270,33 @@ PARTITION one OF TABLE t_69647  ALTER PARTITION one OF TABLE t_69647 CONFIGURE Z
                                   num_replicas = 3,
                                   constraints = '[]',
                                   lease_preferences = '[]'
+
+subtest regression_130605
+
+statement ok
+CREATE DATABASE foo;
+USE foo;
+CREATE TABLE foob (i int, j int);
+
+# Setting a subzone configuration on a table should mark the table's zone
+# configuration as a subzone placeholder. This means that the table's zone
+# configuration is not "set" yet and we should just show its parent's zone
+# configuration.
+statement ok
+ALTER INDEX foob@foob_pkey CONFIGURE ZONE USING num_replicas = 8;
+
+statement ok
+ALTER DATABASE foo CONFIGURE ZONE USING num_replicas = 11;
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE foob;
+----
+DATABASE foo  ALTER DATABASE foo CONFIGURE ZONE USING
+                range_min_bytes = 134217728,
+                range_max_bytes = 536870912,
+                gc.ttlseconds = 14400,
+                num_replicas = 11,
+                constraints = '[]',
+                lease_preferences = '[]'
+
+subtest end
