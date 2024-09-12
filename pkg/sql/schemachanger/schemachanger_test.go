@@ -666,8 +666,9 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 		workerName string, workInterval time.Duration, work func(workConn *gosql.DB) error,
 	) func(context.Context) error {
 		return func(workerCtx context.Context) error {
+			// Previously, we would have a fixed connection limit, which could
+			// play badly if an error was hit
 			workConn := s.SQLConn(t)
-			workConn.SetMaxOpenConns(1)
 			for {
 				jitteredInterval := workInterval * time.Duration(0.8+0.4*rand.Float32())
 				select {
