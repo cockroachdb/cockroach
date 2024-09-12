@@ -11,6 +11,7 @@ package logical
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -601,6 +602,31 @@ func (r *logicalReplicationResumer) OnFailOrCancel(
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
 	metrics := execCfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
 	metrics.ReplicatedTimeSeconds.Update(0)
+
+	// Remove the LDR job ID from the destination table descriptors.
+	details := r.job.Details().(jobspb.LogicalReplicationDetails)
+	if err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		b := txn.KV().NewBatch()
+		for _, repPair := range details.ReplicationPairs {
+			td, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, descpb.ID(repPair.DstDescriptorID))
+			if err != nil {
+				return err
+			}
+			td.LDRJobIDs = slices.DeleteFunc(td.LDRJobIDs, func(thisID int64) bool {
+				return thisID == int64(r.job.ID())
+			})
+			if err := txn.Descriptors().WriteDescToBatch(ctx, true /* kvTrace */, td, b); err != nil {
+				return err
+			}
+		}
+		if err := txn.KV().Run(ctx, b); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	r.completeProducerJob(ctx, execCfg.InternalDB)
 	return nil
 }
