@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+export COCKROACH_ROACHPROD_INSECURE=true
+export COCKROACH_USER=root
+
 A="$USER-a"
 B="$USER-b"
 
@@ -90,8 +93,8 @@ case $1 in
     "start")
       roachprod sql $A:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
       roachprod sql $B:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
-      roachprod sql $A:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS b AS $(roachprod pgurl --database ycsb --insecure $B:1)"
-      roachprod sql $B:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS a AS $(roachprod pgurl --database ycsb --insecure $A:1)"
+      roachprod sql $A:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS b AS $(roachprod pgurl --database ycsb $B:1)"
+      roachprod sql $B:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS a AS $(roachprod pgurl --database ycsb $A:1)"
       roachprod sql $A:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://b' INTO TABLE ycsb.public.usertable;"
       roachprod sql $B:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://a' INTO TABLE ycsb.public.usertable;"
       ;;
@@ -126,8 +129,8 @@ case $1 in
     shift
     case "${1:-}" in
       "init")
-        roachprod run $A:1 "./workload init ycsb --drop --families=false --splits 1000 $(roachprod pgurl --insecure $A)"
-        roachprod run $B:1 "./workload init ycsb --drop --families=false --splits 1000 $(roachprod pgurl --insecure $B)"
+        roachprod run $A:1 "./workload init ycsb --drop --families=false --splits 1000 $(roachprod pgurl $A)"
+        roachprod run $B:1 "./workload init ycsb --drop --families=false --splits 1000 $(roachprod pgurl $B)"
         roachprod sql $A:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL"
         roachprod sql $B:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL"
         roachprod sql $A:1 -- -e "ALTER TABLE ycsb.public.usertable SET (ttl_expire_after = '3 hours');"
