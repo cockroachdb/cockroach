@@ -336,7 +336,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	}
 
 	// Disallow schema changes if it's a table and its schema is locked.
-	if err = checkTableSchemaUnlocked(table); err != nil {
+	if err = checkSchemaChangeIsAllowed(table); err != nil {
 		return err
 	}
 

@@ -105,7 +105,7 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 
 	// Disallow schema changes if this table's schema is locked, unless it is to
 	// set/reset the "schema_locked" storage parameter.
-	if err = checkTableSchemaUnlocked(tableDesc); err != nil && !isSetOrResetSchemaLocked(n) {
+	if err = checkSchemaChangeIsAllowed(tableDesc); err != nil && !isSetOrResetSchemaLocked(n) {
 		return nil, err
 	}
 
@@ -464,7 +464,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				for _, updated := range affected {
 					// Disallow schema change if the FK references a table whose schema is
 					// locked.
-					if err := checkTableSchemaUnlocked(updated); err != nil {
+					if err := checkSchemaChangeIsAllowed(updated); err != nil {
 						return err
 					}
 					if err := params.p.writeSchemaChange(
@@ -2307,7 +2307,9 @@ func (p *planner) tryRemoveFKBackReferences(
 	return nil
 }
 
-func checkTableSchemaUnlocked(desc catalog.TableDescriptor) (ret error) {
+// checkSchemaChangeIsAllowed checks if a schema change is allowed. The
+// schema_locked flag must be false on the table descriptor.
+func checkSchemaChangeIsAllowed(desc catalog.TableDescriptor) (ret error) {
 	if desc != nil && desc.IsSchemaLocked() {
 		return sqlerrors.NewSchemaChangeOnLockedTableErr(desc.GetName())
 	}
