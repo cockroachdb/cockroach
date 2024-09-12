@@ -137,13 +137,13 @@ func (dlq *noopDeadLetterQueueClient) Log(
 }
 
 type deadLetterQueueClient struct {
-	ie                   isql.Executor
-	srcTableIDToDestMeta map[descpb.ID]dstTableMetadata
+	ie               isql.Executor
+	destTableBySrcID map[descpb.ID]dstTableMetadata
 }
 
 func (dlq *deadLetterQueueClient) Create(ctx context.Context) error {
 	// Create a dlq table for each table to be replicated.
-	for _, dstTableMeta := range dlq.srcTableIDToDestMeta {
+	for _, dstTableMeta := range dlq.destTableBySrcID {
 		dlqTableName := dstTableMeta.toDLQTableName()
 		createSchemaStmt := fmt.Sprintf(createSchemaBaseStmt, dstTableMeta.getDatabaseName(), dlqSchemaName)
 		if _, err := dlq.ie.Exec(ctx, "create-dlq-schema", nil, createSchemaStmt); err != nil {
@@ -177,7 +177,7 @@ func (dlq *deadLetterQueueClient) Log(
 
 	// TableID in cdcEventRow is the source table ID.
 	srcTableID := cdcEventRow.TableID
-	dstTableMeta, ok := dlq.srcTableIDToDestMeta[srcTableID]
+	dstTableMeta, ok := dlq.destTableBySrcID[srcTableID]
 	if !ok {
 		return errors.Newf("failed to look up fully qualified name for src table id %d", srcTableID)
 	}
@@ -233,14 +233,14 @@ func (dlq *deadLetterQueueClient) Log(
 }
 
 func InitDeadLetterQueueClient(
-	ie isql.Executor, srcTableIDToDestMeta map[descpb.ID]dstTableMetadata,
+	ie isql.Executor, destTableBySrcID map[descpb.ID]dstTableMetadata,
 ) DeadLetterQueueClient {
 	if testingDLQ != nil {
 		return testingDLQ
 	}
 	return &deadLetterQueueClient{
-		ie:                   ie,
-		srcTableIDToDestMeta: srcTableIDToDestMeta,
+		ie:               ie,
+		destTableBySrcID: destTableBySrcID,
 	}
 }
 

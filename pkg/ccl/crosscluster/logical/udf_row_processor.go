@@ -96,15 +96,15 @@ type applierQuerier struct {
 func makeApplierQuerier(
 	ctx context.Context,
 	settings *cluster.Settings,
-	tableConfigs map[descpb.ID]sqlProcessorTableConfig,
+	tableConfigByDestID map[descpb.ID]sqlProcessorTableConfig,
 	jobID jobspb.JobID,
 	ie isql.Executor,
 ) *applierQuerier {
 	return &applierQuerier{
 		queryBuffer: queryBuffer{
-			deleteQueries:  make(map[catid.DescID]queryBuilder, len(tableConfigs)),
-			insertQueries:  make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
-			applierQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
+			deleteQueries:  make(map[catid.DescID]queryBuilder, len(tableConfigByDestID)),
+			insertQueries:  make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigByDestID)),
+			applierQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigByDestID)),
 		},
 		settings:    settings,
 		ieoInsert:   getIEOverride(replicatedInsertOpName, jobID),
