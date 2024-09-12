@@ -1931,11 +1931,13 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	// For RACv2, annotate successful MsgAppResp messages with the vector of
 	// admitted log indices, by priority.
 	if msg.Type == raftpb.MsgAppResp && !msg.Reject {
+		// TODO(pav-kv): Should we make it conditional to leader using RACv2? There
+		// is no harm in attaching these annotations, but the can end up being a
+		// no-op. OTOH, transition to V2 should be quick, so maybe it's fine not to
+		// bother.
 		admitted := r.flowControlV2.AdmittedState()
 		// The admitted state must be in the coordinate system of the leader's log.
-		if admitted.Term == msg.Term && false {
-			// TODO(pav-kv): enable this annotation when it is covered with tests, and
-			// the leader knows how to handle it.
+		if admitted.Term == msg.Term {
 			req.AdmittedState = kvflowcontrolpb.AdmittedState{
 				Term:     admitted.Term,
 				Admitted: admitted.Admitted[:],
