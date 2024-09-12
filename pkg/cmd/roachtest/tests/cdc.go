@@ -606,7 +606,7 @@ func (ct *cdcTester) runMetricsVerifier(check func(metrics map[string]*prompb.Me
 				return err
 			}
 			for _, uiAddr := range uiAddrs {
-				uiAddr := fmt.Sprintf("https://%s/_status/vars", uiAddr)
+				uiAddr = fmt.Sprintf("https://%s/_status/vars", uiAddr)
 				out, err := exec.Command("curl", "-kf", uiAddr).Output()
 				if err != nil {
 					return err
@@ -1654,6 +1654,7 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 3 * time.Minute,
 				steadyLatency:      5 * time.Minute,
 			})
+			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetricsPresent("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 			ct.waitForWorkload()
 		},
 	})
@@ -1875,6 +1876,7 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 30 * time.Minute,
 				steadyLatency:      time.Minute,
 			})
+			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetricsPresent("cloud_read_bytes", "cloud_write_bytes"))
 			ct.waitForWorkload()
 		},
 	})
@@ -1905,6 +1907,9 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 30 * time.Minute,
 				steadyLatency:      time.Minute,
 			})
+
+			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetricsPresent("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
+
 			ct.waitForWorkload()
 		},
 	})
@@ -1943,6 +1948,9 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 30 * time.Minute,
 				steadyLatency:      time.Minute,
 			})
+
+			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetricsPresent("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
+
 			ct.waitForWorkload()
 		},
 	})
@@ -2024,9 +2032,7 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 30 * time.Minute,
 			})
 
-			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetrics(map[string]struct{}{
-				"changefeed_network_bytes_in": struct{}{}, "changefeed_network_bytes_out": struct{}{},
-			}))
+			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetricsPresent("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 
 			ct.waitForWorkload()
 		},
@@ -2244,6 +2250,7 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 3 * time.Minute,
 				steadyLatency:      10 * time.Minute,
 			})
+			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetricsPresent("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 			ct.waitForWorkload()
 		},
 		RequiresLicense: true,
@@ -3700,12 +3707,17 @@ func (c *topicConsumer) close() {
 	_ = c.consumer.Close()
 }
 
-func verifyChangefeedBytesInOutMetrics(names map[string]struct{}) func(metrics map[string]*prompb.MetricFamily) (ok bool) {
+func verifyChangefeedBytesInOutMetricsPresent(names ...string) func(metrics map[string]*prompb.MetricFamily) (ok bool) {
+	namesMap := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		namesMap[name] = struct{}{}
+	}
+
 	return func(metrics map[string]*prompb.MetricFamily) (ok bool) {
 		checked := map[string]struct{}{}
 
 		for name, fam := range metrics {
-			if _, ok := names[name]; !ok {
+			if _, ok := namesMap[name]; !ok {
 				continue
 			}
 
