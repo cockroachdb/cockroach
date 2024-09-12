@@ -257,6 +257,12 @@ func (t *tokenCounter) TokensAvailable(
 	return false, waitHandle{wc: wc, b: t}
 }
 
+func (t *tokenCounter) limit(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.mu.counters[wc].limit
+}
+
 // TryDeduct attempts to deduct flow tokens for the given work class. If there
 // are no tokens available, 0 tokens are returned. When less than the requested
 // token count is available, partial tokens are returned corresponding to this
@@ -344,6 +350,8 @@ type tokenWaitingHandleInfo struct {
 	// elastic work this will be set for the aforementioned, and all replicas
 	// which are in StateReplicate.
 	requiredWait bool
+	// This behavior is already implemented on master.
+	partOfQuorum bool
 }
 
 // WaitEndState is the state returned by WaitForEval and indicates the result
