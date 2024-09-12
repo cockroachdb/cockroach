@@ -443,12 +443,11 @@ type processorImpl struct {
 			// Invariant: rc == nil ==> len(pendingAdmitted) == 0.
 			// Invariant: len(pendingAdmitted) != 0 ==> the processing is scheduled.
 			pendingAdmitted map[roachpb.ReplicaID]rac2.AdmittedVector
-			// Updating the rc reference requires both the enclosing mu and
-			// rcReferenceUpdateMu. Code paths that want to access this
-			// reference only need one of these mutexes. rcReferenceUpdateMu
-			// is ordered after the enclosing mu.
-			rcReferenceUpdateMu syncutil.RWMutex
-			rc                  rac2.RangeController
+			// rc is not nil iff this replica is a leader using RACv2.
+			rc rac2.RangeController
+			// rcRef mirrors the &rc pointer, and is used to get the RangeController
+			// reference without extra synchronization. Updated with rc under raftMu.
+			rcRef atomic.Value
 			// Term is used to notice transitions out of leadership and back,
 			// to recreate rc. It is set when rc is created, and is not
 			// up-to-date if there is no rc (which can happen when using the
@@ -484,6 +483,7 @@ func NewProcessor(opts ProcessorOptions) Processor {
 	p := &processorImpl{opts: opts}
 	p.mu.enabledWhenLeader = opts.EnabledWhenLeaderLevel
 	p.enabledWhenLeader.Store(uint32(opts.EnabledWhenLeaderLevel))
+	p.mu.leader.rcRef.Store((*rac2.RangeController)(nil))
 	p.v1EncodingPriorityMismatch = log.Every(time.Minute)
 	return p
 }
@@ -684,11 +684,8 @@ func (p *processorImpl) closeLeaderStateRaftMuLockedProcLocked(ctx context.Conte
 		return
 	}
 	p.mu.leader.rc.CloseRaftMuLocked(ctx)
-	func() {
-		p.mu.leader.rcReferenceUpdateMu.Lock()
-		defer p.mu.leader.rcReferenceUpdateMu.Unlock()
-		p.mu.leader.rc = nil
-	}()
+	p.mu.leader.rcRef.Store((*rac2.RangeController)(nil))
+	p.mu.leader.rc = nil
 	p.mu.leader.pendingAdmitted = nil
 	p.mu.leader.term = 0
 }
@@ -699,19 +696,17 @@ func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
 	if p.mu.leader.rc != nil {
 		panic("RangeController already exists")
 	}
-	func() {
-		p.mu.leader.rcReferenceUpdateMu.Lock()
-		defer p.mu.leader.rcReferenceUpdateMu.Unlock()
-		p.mu.leader.rc = p.opts.RangeControllerFactory.New(ctx, rangeControllerInitState{
-			replicaSet:     p.raftMu.replicas,
-			leaseholder:    p.mu.leaseholderID,
-			nextRaftIndex:  nextUnstableIndex,
-			rangeID:        p.opts.RangeID,
-			tenantID:       p.raftMu.tenantID,
-			localReplicaID: p.opts.ReplicaID,
-			raftInterface:  p.raftMu.raftNode,
-		})
-	}()
+	rc := p.opts.RangeControllerFactory.New(ctx, rangeControllerInitState{
+		replicaSet:     p.raftMu.replicas,
+		leaseholder:    p.mu.leaseholderID,
+		nextRaftIndex:  nextUnstableIndex,
+		rangeID:        p.opts.RangeID,
+		tenantID:       p.raftMu.tenantID,
+		localReplicaID: p.opts.ReplicaID,
+		raftInterface:  p.raftMu.raftNode,
+	})
+	p.mu.leader.rc = rc
+	p.mu.leader.rcRef.Store(&rc)
 	p.mu.leader.term = term
 	p.mu.leader.pendingAdmitted = map[roachpb.ReplicaID]rac2.AdmittedVector{}
 }
@@ -991,11 +986,9 @@ func (p *processorImpl) AdmitForEval(
 		return false, nil
 	}
 	var rc rac2.RangeController
-	func() {
-		p.mu.leader.rcReferenceUpdateMu.RLock()
-		defer p.mu.leader.rcReferenceUpdateMu.RUnlock()
-		rc = p.mu.leader.rc
-	}()
+	if ref := p.mu.leader.rcRef.Load().(*rac2.RangeController); ref != nil {
+		rc = *ref
+	}
 	if rc == nil {
 		p.opts.EvalWaitMetrics.OnWaiting(workClass)
 		p.opts.EvalWaitMetrics.OnBypassed(workClass, 0 /* duration */)
