@@ -76,14 +76,17 @@ func NewLookup(st *settings.Values) *Lookup {
 	byLength := make([]map[string]string, 0)
 	c.byLength.Store(&byLength)
 	c.lastUpdate.Store(time.Time{})
-	c.changed = make(chan time.Duration)
+	c.changed = make(chan time.Duration, 1)
 
 	cidrMappingUrl.SetOnChange(st, func(ctx context.Context) {
 		log.Infof(ctx, "url changed to '%s'", cidrMappingUrl.Get(st))
 		// Reset the lastUpdate time so that the URL is always reloaded even if
 		// the new file/URL has an older timestamp.
 		c.lastUpdate.Store(time.Time{})
-		c.changed <- cidrRefreshInterval.Get(c.st)
+		select {
+		case c.changed <- cidrRefreshInterval.Get(c.st):
+		default:
+		}
 	})
 	// We have to register this callback first. Otherwise we may run into
 	// an unlikely but possible scenario where we've started the ticker,
@@ -91,7 +94,10 @@ func NewLookup(st *settings.Values) *Lookup {
 	// ticker will not be reset to the new value.
 	cidrRefreshInterval.SetOnChange(c.st, func(ctx context.Context) {
 		log.Infof(ctx, "refresh interval changed to '%s'", cidrRefreshInterval.Get(c.st))
-		c.changed <- cidrRefreshInterval.Get(c.st)
+		select {
+		case c.changed <- cidrRefreshInterval.Get(c.st):
+		default:
+		}
 	})
 	return c
 }
