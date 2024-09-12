@@ -226,6 +226,10 @@ func (t *testImpl) Name() string {
 	return t.spec.Name
 }
 
+func (t *testImpl) Owner() string {
+	return string(t.spec.Owner)
+}
+
 func (t *testImpl) SnapshotPrefix() string {
 	return t.spec.SnapshotPrefix
 }

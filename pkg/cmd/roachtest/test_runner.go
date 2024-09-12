@@ -110,6 +110,9 @@ const VmLabelTestName string = "test_name"
 // VmLabelTestRunID is the label used to identify the test run id in the VM metadata
 const VmLabelTestRunID string = "test_run_id"
 
+// VmLabelTestOwner is the label used to identify the test owner in the VM metadata
+const VmLabelTestOwner string = "test_owner"
+
 // testRunner runs tests.
 type testRunner struct {
 	stopper *stop.Stopper
@@ -1072,7 +1075,7 @@ func (r *testRunner) runTest(
 	s := t.Spec().(*registry.TestSpec)
 
 	grafanaAvailable := roachtestflags.Cloud == spec.GCE
-	if err := c.addLabels(map[string]string{VmLabelTestName: testRunID}); err != nil {
+	if err := c.addLabels(map[string]string{VmLabelTestName: testRunID, VmLabelTestOwner: t.Owner()}); err != nil {
 		shout(ctx, l, stdout, "failed to add label to cluster [%s] - %s", c.Name(), err)
 		grafanaAvailable = false
 	}
@@ -1089,7 +1092,7 @@ func (r *testRunner) runTest(
 	sideEyeTimeoutSnapshotURL := ""
 	defer func() {
 		t.end = timeutil.Now()
-		if err := c.removeLabels([]string{VmLabelTestName}); err != nil {
+		if err := c.removeLabels([]string{VmLabelTestName, VmLabelTestOwner}); err != nil {
 			shout(ctx, l, stdout, "failed to remove label from cluster [%s] - %s", c.Name(), err)
 		}
 
