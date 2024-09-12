@@ -63,6 +63,14 @@ var MaxInternalTxnAutoRetries = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+var ErrAutoRetryLimitExhausted = errors.New("retry limit exhausted")
+
+// IsAutoRetryLimitExhaustedError checks if the given error indicates
+// that the maximum number of transaction auto-retries has been reached.
+func IsAutoRetryLimitExhaustedError(err error) bool {
+	return errors.Is(err, ErrAutoRetryLimitExhausted)
+}
+
 // Txn is an in-progress distributed database transaction. A Txn is safe for
 // concurrent use by multiple goroutines.
 type Txn struct {
@@ -1117,9 +1125,10 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 			rollbackErr := txn.Rollback(ctx)
 			// NOTE: we don't errors.Wrap the most recent retry error because we want
 			// to terminate it here. Instead, we just include it in the error text.
-			err = errors.Errorf("have retried transaction: %s %d times, most recently because of the "+
+			err = errors.Mark(errors.Errorf("have retried transaction: %s %d times, most recently because of the "+
 				"retryable error: %s. Terminating retry loop and returning error due to cluster setting %s (%d). "+
-				"Rollback error: %v.", txn.DebugName(), attempt, err, MaxInternalTxnAutoRetries.Name(), maxRetries, rollbackErr)
+				"Rollback error: %v.", txn.DebugName(), attempt, err, MaxInternalTxnAutoRetries.Name(), maxRetries, rollbackErr),
+				ErrAutoRetryLimitExhausted)
 			log.Warningf(ctx, "%v", err)
 			break
 		}
