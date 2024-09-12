@@ -7,6 +7,7 @@ go_library(
         "processor.go",
         "reader.go",
         "sender.go",
+        "storage.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/metrics-loader",
     visibility = ["//visibility:public"],
@@ -18,5 +19,7 @@ go_library(
         "@com_github_prometheus_prometheus//pkg/textparse",
         "@com_github_prometheus_prometheus//prompb",
         "@com_github_spf13_cobra//:cobra",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//iterator",
     ],
 )
