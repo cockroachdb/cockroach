@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"hash/fnv"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
@@ -94,12 +93,7 @@ func (r *replicaRLockedStoreLiveness) SupportFrom(
 
 // SupportFromEnabled implements the raftstoreliveness.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) SupportFromEnabled() bool {
-	// TODO(mira): this version check is incorrect. For one, it doesn't belong
-	// here. Instead, the version should be checked when deciding to enable
-	// StoreLiveness or not. Then, the check here should only check whether store
-	// liveness is enabled.
-	storeLivenessEnabled := r.store.ClusterSettings().Version.IsActive(context.TODO(), clusterversion.V24_3_StoreLivenessEnabled)
-	if !storeLivenessEnabled {
+	if !r.store.storeLiveness.SupportFromEnabled(context.TODO()) {
 		return false
 	}
 	fracEnabled := raftLeaderFortificationFractionEnabled.Get(&r.store.ClusterSettings().SV)

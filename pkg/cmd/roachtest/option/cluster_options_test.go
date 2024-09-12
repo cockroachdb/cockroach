@@ -74,6 +74,12 @@ func TestApply(t *testing.T) {
 			},
 		},
 		{
+			name:          "using VirtualClusterOptions directly",
+			optionsStruct: "virtual_cluster_options",
+			options:       []OptionFunc{VirtualClusterName("app")},
+			expected:      VirtualClusterOptions{VirtualClusterName: "app"},
+		},
+		{
 			name:          "setting a non-applicable option",
 			optionsStruct: "valid_container",
 			options:       []OptionFunc{User("user")},
@@ -100,6 +106,10 @@ func TestApply(t *testing.T) {
 			switch tc.optionsStruct {
 			case "valid_container":
 				var c validContainer
+				err = Apply(&c, tc.options...)
+				container = c
+			case "virtual_cluster_options":
+				var c VirtualClusterOptions
 				err = Apply(&c, tc.options...)
 				container = c
 			case "wrong_type":

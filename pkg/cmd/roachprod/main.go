@@ -230,7 +230,7 @@ directories inside ${HOME}/local directory are removed.
 `,
 	Args: cobra.ArbitraryArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Destroy(config.Logger, destroyAllMine, destroyAllLocal, args...)
+		return roachprod.Destroy(config.Logger, username, destroyAllMine, destroyAllLocal, args...)
 	}),
 }
 
@@ -307,7 +307,11 @@ hosts file.
 		if listJSON && listDetails {
 			return errors.New("'json' option cannot be combined with 'details' option")
 		}
-		filteredCloud, err := roachprod.List(config.Logger, listMine, listPattern, vm.ListOptions{ComputeEstimatedCost: true})
+		filteredCloud, err := roachprod.List(config.Logger, listMine, listPattern,
+			vm.ListOptions{
+				Username:             username,
+				ComputeEstimatedCost: listCost,
+			})
 
 		if err != nil {
 			return err
@@ -463,12 +467,12 @@ var bashCompletion = os.ExpandEnv("$HOME/.roachprod/bash-completion.sh")
 // a side-effect. If you don't care about the list output, just "roachprod list
 // &>/dev/null".
 var syncCmd = &cobra.Command{
-	Use:   "sync",
+	Use:   "sync [flags]",
 	Short: "sync ssh keys/config and hosts files",
 	Long:  ``,
 	Args:  cobra.NoArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		_, err := roachprod.Sync(config.Logger, vm.ListOptions{IncludeVolumes: listOpts.IncludeVolumes})
+		_, err := roachprod.Sync(config.Logger, listOpts)
 		_ = rootCmd.GenBashCompletionFile(bashCompletion)
 		return err
 	}),

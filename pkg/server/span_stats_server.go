@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -151,6 +153,7 @@ func (s *systemStatusServer) spanStatsFanOut(
 			res.SpanToStats[spanStr].ApproximateDiskBytes += spanStats.ApproximateDiskBytes
 			res.SpanToStats[spanStr].RemoteFileBytes += spanStats.RemoteFileBytes
 			res.SpanToStats[spanStr].ExternalFileBytes += spanStats.ExternalFileBytes
+			res.SpanToStats[spanStr].StoreIDs = util.CombineUnique(res.SpanToStats[spanStr].StoreIDs, spanStats.StoreIDs)
 
 			// Logical values: take the values from the node that responded first.
 			// TODO: This should really be read from the leaseholder.
@@ -214,6 +217,7 @@ func (s *systemStatusServer) statsForSpan(
 
 	// First, get the approximate disk bytes from each store.
 	err = s.stores.VisitStores(func(store *kvserver.Store) error {
+		spanStats.StoreIDs = append(spanStats.StoreIDs, store.StoreID())
 		approxDiskBytes, remoteBytes, externalBytes, err := store.TODOEngine().ApproximateDiskBytes(rSpan.Key.AsRawKey(), rSpan.EndKey.AsRawKey())
 		if err != nil {
 			return err
@@ -222,6 +226,10 @@ func (s *systemStatusServer) statsForSpan(
 		spanStats.RemoteFileBytes += remoteBytes
 		spanStats.ExternalFileBytes += externalBytes
 		return nil
+	})
+
+	sort.Slice(spanStats.StoreIDs, func(i, j int) bool {
+		return spanStats.StoreIDs[i] < spanStats.StoreIDs[j]
 	})
 
 	if err != nil {
@@ -287,6 +295,7 @@ func (s *systemStatusServer) statsForSpan(
 			log.VEventf(ctx, 1, "Range %v exceeds span %v, calculating stats for subspan %v",
 				descSpan, rSpan, roachpb.RSpan{Key: scanStart, EndKey: scanEnd},
 			)
+
 			err = s.stores.VisitStores(func(s *kvserver.Store) error {
 				stats, err := storage.ComputeStats(
 					ctx,
@@ -303,7 +312,6 @@ func (s *systemStatusServer) statsForSpan(
 				spanStats.TotalStats.Add(stats)
 				return nil
 			})
-
 			if err != nil {
 				return nil, err
 			}

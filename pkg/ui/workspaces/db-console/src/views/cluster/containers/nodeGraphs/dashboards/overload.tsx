@@ -240,7 +240,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
-      tooltip={`The 99th percentile latency of requests waiting in the Replication Admission Control queue. This metric is indicative of store overload on replicas.`}
+      tooltip={`The 99th percentile latency of requests waiting in the Replication Admission Control queue. This metric is indicative of store overload on replicas. v1 refers to the pre-v24.3 flow controller.`}
     >
       <Axis units={AxisUnits.Duration} label="Flow Token Wait Duration">
         {nodeIDs.map(nid => (
@@ -249,7 +249,7 @@ export default function (props: GraphDashboardProps) {
               key={nid}
               name="cr.node.kvadmission.flow_controller.regular_wait_duration-p99"
               title={
-                "Regular " +
+                "(v1) Regular " +
                 nodeDisplayName(nodeDisplayNameByID, nid)
               }
               sources={[nid]}
@@ -259,7 +259,27 @@ export default function (props: GraphDashboardProps) {
               key={nid}
               name="cr.node.kvadmission.flow_controller.elastic_wait_duration-p99"
               title={
-                "Elastic " +
+                "(v1) Elastic " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+              downsampleMax
+            />
+            <Metric
+              key={nid}
+              name="cr.node.kvflowcontrol.eval_wait.regular.duration-p99"
+              title={
+                "(v2) Regular " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+              downsampleMax
+            />
+            <Metric
+              key={nid}
+              name="cr.node.kvflowcontrol.eval_wait.elastic.duration-p99"
+              title={
+                "(v2) Elastic " +
                 nodeDisplayName(nodeDisplayNameByID, nid)
               }
               sources={[nid]}
@@ -275,7 +295,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
-      tooltip={`Blocked replication streams per node in Replication Admission Control, separated by admission priority {regular, elastic}.`}
+      tooltip={`Blocked replication streams per node in Replication Admission Control, separated by admission priority {regular, elastic}. v1 refers to the pre-v24.3 flow controller.`}
     >
       <Axis label="Blocked Stream Count">
         {nodeIDs.map(nid => (
@@ -284,7 +304,7 @@ export default function (props: GraphDashboardProps) {
               key={nid}
               name="cr.node.kvadmission.flow_controller.regular_blocked_stream_count"
               title={
-                "Regular " +
+                "(v1) Regular " +
                 nodeDisplayName(nodeDisplayNameByID, nid)
               }
               sources={[nid]}
@@ -293,7 +313,25 @@ export default function (props: GraphDashboardProps) {
               key={nid}
               name="cr.node.kvadmission.flow_controller.elastic_blocked_stream_count"
               title={
-                "Elastic " +
+                "(v1) Elastic " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+            <Metric
+              key={nid}
+              name="cr.node.kvflowcontrol.streams.eval.regular.blocked_count"
+              title={
+                "(v2) Regular " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+            <Metric
+              key={nid}
+              name="cr.node.kvflowcontrol.streams.eval.elastic.blocked_count"
+              title={
+                "(v2) Elastic " +
                 nodeDisplayName(nodeDisplayNameByID, nid)
               }
               sources={[nid]}

@@ -38,7 +38,7 @@ type tracked struct {
 
 func (dt *Tracker) Init(stream kvflowcontrol.Stream) {
 	*dt = Tracker{
-		tracked: [int(raftpb.NumPriorities)][]tracked{},
+		tracked: [raftpb.NumPriorities][]tracked{},
 		stream:  stream,
 	}
 }

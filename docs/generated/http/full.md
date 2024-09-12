@@ -5410,6 +5410,46 @@ Support status: [reserved](#support-status)
 
 
 
+## UpdateTableMetadataCache
+
+
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| local | [bool](#cockroach.server.serverpb.UpdateTableMetadataCacheRequest-bool) |  | If true, the server will attempt to send a signal to the table metadata job by notifying the channel set on the status server. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## Users
 
 `GET /_admin/v1/users`
@@ -7088,7 +7128,6 @@ Support status: [reserved](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | replica_count_by_node_id | [DataDistributionResponse.TableInfo.ReplicaCountByNodeIdEntry](#cockroach.server.serverpb.DataDistributionResponse-cockroach.server.serverpb.DataDistributionResponse.TableInfo.ReplicaCountByNodeIdEntry) | repeated |  | [reserved](#support-status) |
-| zone_config_id | [int64](#cockroach.server.serverpb.DataDistributionResponse-int64) |  |  | [reserved](#support-status) |
 | dropped_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.DataDistributionResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 
 
@@ -8023,6 +8062,55 @@ Support status: [reserved](#support-status)
 | tenant_name | [string](#cockroach.server.serverpb.ListTenantsResponse-string) |  |  | [reserved](#support-status) |
 | sql_addr | [string](#cockroach.server.serverpb.ListTenantsResponse-string) |  |  | [reserved](#support-status) |
 | rpc_addr | [string](#cockroach.server.serverpb.ListTenantsResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+## ReadFromTenantInfo
+
+
+
+ReadFromTenantInfo returns the tenant from which the requesting tenant
+should read, if any.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+ReadFromTenantInfoRequest requests info, if any, on which tenant the caller
+should read from.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| tenant_id | [cockroach.roachpb.TenantID](#cockroach.server.serverpb.ReadFromTenantInfoRequest-cockroach.roachpb.TenantID) |  | TenantID should always be the ID of the tenant making the request. This duplicates the ID in the auth context that is added implicitly, and must always match that ID when that ID is present, however that ID is absent in insecure test clusters which is why we also specify it explicitly here. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+ReadFromTenantInfoResponse instructs a tenant as to which tenant, if any, it
+should configure itself to read from and the timestamp at which it should do
+so.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| read_from | [cockroach.roachpb.TenantID](#cockroach.server.serverpb.ReadFromTenantInfoResponse-cockroach.roachpb.TenantID) |  |  | [reserved](#support-status) |
+| read_at | [cockroach.util.hlc.Timestamp](#cockroach.server.serverpb.ReadFromTenantInfoResponse-cockroach.util.hlc.Timestamp) |  |  | [reserved](#support-status) |
+
 
 
 

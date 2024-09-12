@@ -239,7 +239,7 @@ func (p *failureInjector) SetSyntheticFailurePercent(rate uint32) {
 	p.rate = rate
 }
 
-func (p failureInjector) injectFailure() error {
+func (p *failureInjector) injectFailure() error {
 	if p.rate != 0 {
 		if randutil.FastUint32()%100 < p.rate {
 			return errInjected
@@ -321,7 +321,7 @@ var (
 		// We don't get any benefits from generating plan gists for internal
 		// queries, so we disable them.
 		DisablePlanGists: true,
-		QualityOfService: &sessiondatapb.UserLowQoS,
+		QualityOfService: &sessiondatapb.BulkLowQoS,
 	}
 )
 

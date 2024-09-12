@@ -653,6 +653,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			},
 			jobAdoptionStopFile,
 			jobsKnobs,
+			cfg.CidrLookup,
 		)
 	}
 	cfg.registry.AddMetricStruct(jobRegistry.MetricsStruct())
@@ -1444,6 +1445,7 @@ func (s *SQLServer) preStart(
 	stopper *stop.Stopper,
 	knobs base.TestingKnobs,
 	orphanedLeasesTimeThresholdNanos int64,
+	initialStart bool,
 ) error {
 	// If necessary, start the tenant proxy first, to ensure all other
 	// components can properly route to KV nodes. The Start method will block
@@ -1761,7 +1763,7 @@ func (s *SQLServer) preStart(
 	)
 	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
 
-	s.startLicenseEnforcer(ctx, knobs)
+	s.startLicenseEnforcer(ctx, knobs, initialStart)
 
 	// Report a warning if the server is being shut down via the stopper
 	// before it was gracefully drained. This warning may be innocuous
@@ -1912,17 +1914,23 @@ func (s *SQLServer) StartDiagnostics(ctx context.Context) {
 	s.diagnosticsReporter.PeriodicallyReportDiagnostics(ctx, s.stopper)
 }
 
-func (s *SQLServer) startLicenseEnforcer(ctx context.Context, knobs base.TestingKnobs) {
+func (s *SQLServer) startLicenseEnforcer(
+	ctx context.Context, knobs base.TestingKnobs, initialStart bool,
+) {
 	// Start the license enforcer. This is only started for the system tenant since
 	// it requires access to the system keyspace. For secondary tenants, this struct
 	// is shared to provide access to the values cached from the KV read.
 	if s.execCfg.Codec.ForSystemTenant() {
+		licenseEnforcer := s.execCfg.LicenseEnforcer
 		if knobs.Server != nil {
-			s.execCfg.LicenseEnforcer.TestingKnobs = &knobs.Server.(*TestingKnobs).LicenseTestingKnobs
+			s.execCfg.LicenseEnforcer.SetTestingKnobs(&knobs.Server.(*TestingKnobs).LicenseTestingKnobs)
 		}
+		licenseEnforcer.SetTelemetryStatusReporter(s.diagnosticsReporter)
+		// TODO(spilchen): we need to tell the license enforcer about the
+		// diagnostics reporter. This will be handled in CRDB-39991
 		err := startup.RunIdempotentWithRetry(ctx, s.stopper.ShouldQuiesce(), "license enforcer start",
 			func(ctx context.Context) error {
-				return s.execCfg.LicenseEnforcer.Start(ctx, s.internalDB)
+				return licenseEnforcer.Start(ctx, s.cfg.Settings, s.internalDB, initialStart)
 			})
 		// This is not a critical component. If it fails to start, we log a warning
 		// rather than prevent the entire server from starting.
@@ -1930,6 +1938,10 @@ func (s *SQLServer) startLicenseEnforcer(ctx context.Context, knobs base.Testing
 			log.Warningf(ctx, "failed to start the license enforcer: %v", err)
 		}
 	}
+}
+
+func (s *SQLServer) disableLicenseEnforcement(ctx context.Context) {
+	s.execCfg.LicenseEnforcer.Disable(ctx)
 }
 
 // AnnotateCtx annotates the given context with the server tracer and tags.

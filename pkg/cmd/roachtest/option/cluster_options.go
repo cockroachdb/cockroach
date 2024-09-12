@@ -122,11 +122,23 @@ func Apply(container any, opts ...OptionFunc) (retErr error) {
 		}
 	}()
 
+	isEmbeddedStruct := func(f reflect.StructField) bool {
+		return f.Type.Kind() == reflect.Struct && f.Anonymous
+	}
+
 	// Build a mapping from option to name to the corresponding
-	// `reflect.Value`.
+	// `reflect.Value`. We skip embedded struct fields because we are
+	// only interested in the "flattened" view of the options
+	// structs. This allows us to reuse options structs across multiple
+	// functions (for instance, multiple functions need to take options
+	// related to which virtual cluster to connect to).
 	globalOptionsValue := reflect.ValueOf(globalOptions)
 	globalFields := make(map[string]reflect.Value)
 	for _, f := range reflect.VisibleFields(reflect.TypeOf(globalOptions)) {
+		if isEmbeddedStruct(f) {
+			continue
+		}
+
 		globalFields[f.Name] = globalOptionsValue.FieldByName(f.Name)
 	}
 
@@ -138,6 +150,10 @@ func Apply(container any, opts ...OptionFunc) (retErr error) {
 	containerStruct := reflect.ValueOf(container).Elem()
 	containerType := reflect.TypeOf(containerStruct.Interface())
 	for _, structField := range reflect.VisibleFields(containerType) {
+		if isEmbeddedStruct(structField) {
+			continue
+		}
+
 		currentField = structField.Name
 		f := containerStruct.FieldByName(currentField)
 

@@ -1865,6 +1865,8 @@ type StreamingTestingKnobs struct {
 	SkipSpanConfigReplication bool
 
 	SpanConfigRangefeedCacheKnobs *rangefeedcache.TestingKnobs
+
+	FailureRate uint32
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
@@ -3864,6 +3866,10 @@ func (m *sessionDataMutator) SetOptimizerUsePolymorphicParameterFix(val bool) {
 
 func (m *sessionDataMutator) SetOptimizerUseConditionalHoistFix(val bool) {
 	m.data.OptimizerUseConditionalHoistFix = val
+}
+
+func (m *sessionDataMutator) SetOptimizerPushLimitIntoProjectFilteredScan(val bool) {
+	m.data.OptimizerPushLimitIntoProjectFilteredScan = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

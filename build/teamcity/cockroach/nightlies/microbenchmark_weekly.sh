@@ -19,6 +19,8 @@
 #   BENCH_IGNORE_PACKAGES: comma-separated list of packages to exclude completely from listing and execution (default: none)
 #   TEST_ARGS: additional arguments to pass to the test binary (default: none)
 #   MICROBENCH_SLACK_TOKEN: token to use to post to slack (default: none)
+#   MICROBENCH_INFLUX_HOST: Influx host path to use to push results to InfluxDB (default: none)
+#   MICROBENCH_INFLUX_TOKEN: auth token to use to push results to InfluxDB (default: none)
 
 set -exuo pipefail
 
@@ -26,6 +28,7 @@ dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
 source "$dir/teamcity-support.sh"  # For $root
 source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 output_dir="./artifacts/microbench"
+remote_dir="/mnt/data1"
 benchmarks_commit=$(git rev-parse HEAD)
 exit_status=0
 
@@ -101,19 +104,21 @@ log_into_gcloud
   --gce-zones="$GCE_ZONE" \
   --gce-managed \
   --gce-use-spot \
-  --os-volume-size=384
+  --local-ssd=false \
+  --gce-pd-volume-size=384 \
+  --os-volume-size=10
 
 # Stage binaries on the cluster
 for sha in "${build_sha_arr[@]}"; do
   archive_name=${BENCH_PACKAGE//\//-}
   archive_name="$sha-${archive_name/.../all}.tar.gz"
-  ./bin/roachprod-microbench stage --quiet "$ROACHPROD_CLUSTER" "gs://$BENCH_BUCKET/builds/$archive_name" "$sha"
+  ./bin/roachprod-microbench stage --quiet "$ROACHPROD_CLUSTER" "gs://$BENCH_BUCKET/builds/$archive_name" "$remote_dir/$sha"
 done
 
 # Execute microbenchmarks
 ./bin/roachprod-microbench run "$ROACHPROD_CLUSTER" \
-  --binaries experiment="${build_sha_arr[0]}" \
-  ${build_sha_arr[1]:+--binaries baseline="${build_sha_arr[1]}"} \
+  --binaries experiment="$remote_dir/${build_sha_arr[0]}" \
+  ${build_sha_arr[1]:+--binaries baseline="$remote_dir/${build_sha_arr[1]}"} \
   --output-dir="$output_dir" \
   --iterations "$BENCH_ITERATIONS" \
   --shell="$BENCH_SHELL" \
@@ -160,12 +165,17 @@ if [ -d "$output_dir/experiment" ] && [ "$(ls -A "$output_dir/experiment")" ] \
   # Set up slack token only if the build was triggered by TeamCity (not a manual run)
   if [ -n "${TRIGGERED_BUILD:-}" ]; then
     slack_token="${MICROBENCH_SLACK_TOKEN}"
+    influx_token="${MICROBENCH_INFLUX_TOKEN}"
+    influx_host="${MICROBENCH_INFLUX_HOST}"
   fi
   # Sheet description is in the form: `baseline` to `experiment`
   sheet_description="${name_arr[1]} -> ${name_arr[0]}"
   ./bin/roachprod-microbench compare "$output_dir/experiment" "$output_dir/baseline" \
     ${slack_token:+--slack-token="$slack_token"} \
-    --sheet-desc="$sheet_description" 2>&1 | tee "$output_dir/sheets.txt"
+    --sheet-desc="$sheet_description" \
+    ${influx_token:+--influx-token="$influx_token"} \
+    ${influx_host:+--influx-host="$influx_host"} \
+    2>&1 | tee "$output_dir/sheets.txt"
 else
   echo "No microbenchmarks were run. Skipping comparison."
 fi

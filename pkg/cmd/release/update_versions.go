@@ -12,6 +12,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -102,6 +103,8 @@ type prRepo struct {
 	githubUsername string
 	prBranch       string
 	fn             func(gitDir string) error
+	// workOnRepoError is set to workOnRepo() result
+	workOnRepoError error
 }
 
 func (r prRepo) String() string {
@@ -282,33 +285,31 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 	// This way we can fail early and avoid unnecessary work closing the PRs we were able to create.
 	log.Printf("repos to work on: %s\n", reposToWorkOn)
 	var prs []string
+	var workOnRepoErrors []error
 	for _, repo := range reposToWorkOn {
-		log.Printf("Cloning repo %s", repo.name())
-		if err := repo.clone(); err != nil {
-			return fmt.Errorf("cannot clone %s: %w", repo.name(), err)
-		}
-		log.Printf("Branching repo %s", repo.name())
-		if err := repo.checkout(); err != nil {
-			return fmt.Errorf("cannot create branch %s: %w", repo.name(), err)
-		}
-		log.Printf("Munging repo %s", repo.name())
-		if err := repo.apply(); err != nil {
-			return fmt.Errorf("cannot mutate repo %s: %w", repo.name(), err)
-		}
-		log.Printf("commiting changes to repo %s", repo.name())
-		if err := repo.commit(); err != nil {
-			return fmt.Errorf("cannot commit changes in repo %s: %w", repo.name(), err)
+		repo.workOnRepoError = workOnRepo(repo)
+		if repo.workOnRepoError != nil {
+			err = fmt.Errorf("workOnRepo: error occurred while working on repo %s: %w", repo.name(), err)
+			workOnRepoErrors = append(workOnRepoErrors, err)
+			log.Printf("%s", err)
 		}
 	}
 
 	// Now that our local changes are staged, we can try and publish them.
 	for _, repo := range reposToWorkOn {
+		if repo.workOnRepoError != nil {
+			log.Printf("PR creation skipped due to previous errors while working on %s: %s", repo.name(), repo.workOnRepoError)
+			continue
+		}
 		dest := path.Join(globalWorkDir, repo.checkoutDir())
 		// We avoid creating duplicated PRs to allow this command to be
 		// run multiple times.
 		prDesc, err := repo.prExists()
 		if err != nil {
-			return fmt.Errorf("checking pr: %w", err)
+			err = fmt.Errorf("error while checking if pull request exists for repo %s: %w", repo.name(), err)
+			workOnRepoErrors = append(workOnRepoErrors, err)
+			log.Printf("%s", err)
+			continue
 		}
 		if prDesc != "" {
 			log.Printf("pull request for %s already exists: %s", repo.name(), prDesc)
@@ -316,19 +317,30 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 		}
 		log.Printf("pushing changes to repo %s in %s", repo.name(), dest)
 		if err := repo.push(); err != nil {
-			return fmt.Errorf("cannot push changes for %s: %w", repo.name(), err)
+			err = fmt.Errorf("error while pushing changes to repo %s: %w", repo.name(), err)
+			workOnRepoErrors = append(workOnRepoErrors, err)
+			log.Printf("%s", err)
+			continue
 		}
 		log.Printf("creating pull request for %s in %s", repo.name(), dest)
 		pr, err := repo.createPullRequest()
 		if err != nil {
-			return fmt.Errorf("cannot create pull request for %s: %w", repo.name(), err)
+			err = fmt.Errorf("error creating pull request for %s: %w", repo.name(), err)
+			workOnRepoErrors = append(workOnRepoErrors, err)
+			log.Printf("%s", err)
+			continue
 		}
 		log.Printf("Created PR: %s\n", pr)
 		prs = append(prs, pr)
 	}
 
 	if err := sendPrReport(releasedVersion, prs, smtpPassword); err != nil {
-		return fmt.Errorf("cannot send email: %w", err)
+		err = fmt.Errorf("error sending email: %w", err)
+		workOnRepoErrors = append(workOnRepoErrors, err)
+		log.Printf("%s", err)
+	}
+	if len(workOnRepoErrors) > 0 {
+		return errors.Join(workOnRepoErrors...)
 	}
 	return nil
 }
@@ -550,6 +562,27 @@ func generateRepoList(
 		reposToWorkOn = append(reposToWorkOn, repo)
 	}
 	return reposToWorkOn, nil
+}
+
+func workOnRepo(repo prRepo) error {
+	log.Printf("Cloning repo %s", repo.name())
+	if err := repo.clone(); err != nil {
+		return fmt.Errorf("cannot clone %s: %w", repo.name(), err)
+	}
+	log.Printf("Branching repo %s", repo.name())
+	if err := repo.checkout(); err != nil {
+		return fmt.Errorf("cannot create branch %s: %w", repo.name(), err)
+	}
+	log.Printf("Munging repo %s", repo.name())
+	if err := repo.apply(); err != nil {
+		return fmt.Errorf("cannot mutate repo %s: %w", repo.name(), err)
+	}
+	log.Printf("commiting changes to repo %s", repo.name())
+	if err := repo.commit(); err != nil {
+		return fmt.Errorf("cannot commit changes in repo %s: %w", repo.name(), err)
+	}
+
+	return nil
 }
 
 func isLatestStableBranch(version *semver.Version) (bool, error) {

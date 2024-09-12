@@ -87,8 +87,7 @@ var (
 			"to notice drain request and to perform orderly shutdown",
 		10*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Minute),
-		settings.WithName("server.shutdown.jobs.timeout"),
-		settings.WithPublic)
+		settings.WithName("server.shutdown.jobs.timeout"))
 )
 
 // Drain puts the node into the specified drain mode(s) and optionally
@@ -332,6 +331,14 @@ func (s *drainServer) runDrain(
 func (s *drainServer) drainInner(
 	ctx context.Context, reporter func(int, redact.SafeString), verbose bool,
 ) (err error) {
+	if s.sqlServer.sqlLivenessSessionID != "" {
+		// Set draining only if SQL instance was initialized
+		if err := s.sqlServer.sqlInstanceStorage.SetInstanceDraining(
+			ctx, s.sqlServer.sqlLivenessSessionID, s.sqlServer.SQLInstanceID()); err != nil {
+			return err
+		}
+	}
+
 	if s.serverCtl != nil {
 		// We are on a KV node, with a server controller.
 		//

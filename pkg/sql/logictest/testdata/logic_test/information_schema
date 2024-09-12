@@ -3077,6 +3077,7 @@ system         public        sql_instances                    addr              
 system         public        sql_instances                    binary_version                                                                                            7
 system         public        sql_instances                    crdb_region                                                                                               6
 system         public        sql_instances                    id                                                                                                        1
+system         public        sql_instances                    is_draining                                                                                               8
 system         public        sql_instances                    locality                                                                                                  4
 system         public        sql_instances                    session_id                                                                                                3
 system         public        sql_instances                    sql_addr                                                                                                  5
@@ -6277,6 +6278,7 @@ optimizer_always_use_histograms                            on
 optimizer_hoist_uncorrelated_equality_subqueries           on
 optimizer_merge_joins_enabled                              on
 optimizer_prove_implication_with_virtual_computed_columns  on
+optimizer_push_limit_into_project_filtered_scan            on
 optimizer_push_offset_into_index_join                      on
 optimizer_use_conditional_hoist_fix                        on
 optimizer_use_forecasts                                    on

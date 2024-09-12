@@ -47,6 +47,7 @@ var (
 	grafanaArch           string
 	grafanaDumpDir        string
 	jaegerConfigNodes     string
+	listCost              bool
 	listDetails           bool
 	listJSON              bool
 	listMine              bool
@@ -179,6 +180,10 @@ func initFlags() {
 	extendCmd.Flags().DurationVarP(&extendLifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
 
+	listCmd.Flags().BoolVarP(&listCost,
+		"cost", "c", os.Getenv("ROACHPROD_NO_COST_ESTIMATES") != "true",
+		"Show cost estimates",
+	)
 	listCmd.Flags().BoolVarP(&listDetails,
 		"details", "d", false, "Show cluster details")
 	listCmd.Flags().BoolVar(&listJSON,
@@ -228,7 +233,7 @@ func initFlags() {
 	startCmd.Flags().IntVarP(&numRacks,
 		"racks", "r", 0, "the number of racks to partition the nodes into")
 	startCmd.Flags().StringArrayVarP(&startOpts.ExtraArgs,
-		"args", "a", nil, "node arguments")
+		"args", "a", nil, `node arguments (example: --args "--cache=25%" --args "--max-sql-memory=25%")`)
 	startCmd.Flags().StringArrayVarP(&nodeEnv,
 		"env", "e", config.DefaultEnvVars(), "node environment variables")
 	startCmd.Flags().BoolVar(&startOpts.EncryptedStores,
@@ -273,6 +278,8 @@ func initFlags() {
 	deployCmd.Flags().DurationVar(&pause, "pause", pause, "duration to pause between node restarts")
 
 	syncCmd.Flags().BoolVar(&listOpts.IncludeVolumes, "include-volumes", false, "Include volumes when syncing")
+	syncCmd.Flags().StringArrayVarP(&listOpts.IncludeProviders, "clouds", "c",
+		make([]string, 0), "Specify the cloud providers when syncing. Important: Use this flag only if you are certain that you want to sync with a specific cloud. All DNS host entries for other clouds will be erased from the DNS zone.")
 
 	wipeCmd.Flags().BoolVar(&wipePreserveCerts, "preserve-certs", false, "do not wipe certificates")
 
@@ -403,7 +410,7 @@ func initFlags() {
 		cmd.Flags().BoolVar(&urlOpen, "open", false, "Open the url in a browser")
 	}
 
-	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
+	for _, cmd := range []*cobra.Command{createCmd, listCmd, destroyCmd, extendCmd, logsCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),
 			"Username to run under, detect if blank")
 	}

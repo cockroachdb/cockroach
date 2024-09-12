@@ -155,7 +155,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 			}
 			s := maybeDelaySplitToAvoidSnapshot(ctx, h)
 			assert.EqualValues(t, "; delayed by 5.5s to resolve: replica r1/2 not caught up: "+
-				state.String()+" match=0 next=0 paused (without success)", s)
+				state.String()+" match=0 next=0 sentCommit=0 matchCommit=0 paused (without success)", s)
 		})
 	}
 
@@ -193,6 +193,7 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 			}
 		}
 		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
-		assert.EqualValues(t, "; delayed by 2.5s to resolve: replica r1/2 not caught up: StateProbe match=0 next=0", s)
+		assert.EqualValues(t, "; delayed by 2.5s to resolve: replica r1/2 not caught up: "+
+			"StateProbe match=0 next=0 sentCommit=0 matchCommit=0", s)
 	})
 }

@@ -80,6 +80,20 @@ func CheckDependencies(
 			if count != 0 {
 				return false, nil
 			}
+		case registry.OperationRequiresLDRJobRunning:
+			conn := c.Conn(ctx, l, 1, option.VirtualClusterName("system"))
+			defer conn.Close()
+
+			jobsCur, err := conn.QueryContext(ctx, "(WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running' limit 1)")
+			if err != nil {
+				return false, err
+			}
+			jobsCur.Next()
+			var jobId string
+			_ = jobsCur.Scan(&jobId)
+			if jobId == "" {
+				return false, nil
+			}
 		default:
 			panic(fmt.Sprintf("unknown operation dependency %d", dep))
 		}

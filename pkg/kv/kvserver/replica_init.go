@@ -184,6 +184,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 			store.rebalanceObjManager.Objective().ToSplitObjective(),
 		)
 	}
+	r.lastProblemRangeReplicateEnqueueTime.Store(store.Clock().PhysicalTime())
 
 	// NB: the state will be loaded when the replica gets initialized.
 	r.mu.state = uninitState
@@ -233,7 +234,8 @@ func newUninitializedReplicaWithoutRaftGroup(
 		RaftScheduler:          r.store.scheduler,
 		AdmittedPiggybacker:    r.store.cfg.KVFlowAdmittedPiggybacker,
 		ACWorkQueue:            r.store.cfg.KVAdmissionController,
-		RangeControllerFactory: replica_rac2.RangeControllerFactoryImpl{},
+		EvalWaitMetrics:        r.store.cfg.KVFlowEvalWaitMetrics,
+		RangeControllerFactory: r.store.kvflowRangeControllerFactory,
 		EnabledWhenLeaderLevel: r.raftMu.flowControlLevel,
 	})
 	return r
@@ -318,6 +320,7 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 		return err
 	}
 	r.mu.internalRaftGroup = rg
+	r.flowControlV2.InitRaftLocked(ctx, replica_rac2.NewRaftNode(rg))
 	return nil
 }
 

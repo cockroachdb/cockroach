@@ -16,13 +16,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -40,12 +41,6 @@ type Replica interface {
 	MuLock()
 	// MuUnlock releases Replica.mu.
 	MuUnlock()
-	// RaftNodeMuLocked returns a reference to the RaftNode. It is only called
-	// after Processor knows the Replica is initialized.
-	//
-	// At least Replica mu is held. The caller does not make any claims about
-	// whether it holds raftMu or not.
-	RaftNodeMuLocked() RaftNode
 	// LeaseholderMuLocked returns the Replica's current knowledge of the
 	// leaseholder, which can be stale. It is only called after Processor
 	// knows the Replica is initialized.
@@ -101,16 +96,20 @@ type RaftNode interface {
 
 	// Read-only methods.
 
+	// rac2.RaftInterface is an interface that abstracts the raft.RawNode for use
+	// in the RangeController.
+	rac2.RaftInterface
 	// TermLocked returns the current term of this replica.
 	TermLocked() uint64
 	// LeaderLocked returns the current known leader. This state can advance
 	// past the group membership state, so the leader returned here may not be
 	// known as a current group member.
 	LeaderLocked() roachpb.ReplicaID
+	// LogMarkLocked returns the current log mark of the raft log. It is not
+	// guaranteed to be stablestorage, unless this method is called right after
+	// RawNode is initialized. Processor calls this only on initialization.
+	LogMarkLocked() rac2.LogMark
 
-	// StableIndexLocked is the (inclusive) highest index that is known to be
-	// successfully persisted in local storage.
-	StableIndexLocked() uint64
 	// NextUnstableIndexLocked returns the index of the next entry that will
 	// be sent to local storage. All entries < this index are either stored,
 	// or have been sent to storage.
@@ -118,27 +117,21 @@ type RaftNode interface {
 	// NB: NextUnstableIndex can regress when the node accepts appends or
 	// snapshots from a newer leader.
 	NextUnstableIndexLocked() uint64
-	// GetAdmittedLocked returns the current value of the admitted array.
-	GetAdmittedLocked() [raftpb.NumPriorities]uint64
 
 	// Mutating methods.
 
-	// SetAdmittedLocked sets a new value for the admitted array. It is the
-	// caller's responsibility to ensure that it is not regressing admitted,
-	// and it is not advancing admitted beyond the stable index.
-	SetAdmittedLocked([raftpb.NumPriorities]uint64) raftpb.Message
 	// StepMsgAppRespForAdmittedLocked steps a MsgAppResp on the leader, which
 	// may advance its knowledge of a follower's admitted state.
 	StepMsgAppRespForAdmittedLocked(raftpb.Message) error
 }
 
-// AdmittedPiggybacker is used to enqueue MsgAppResp messages whose purpose is
-// to advance Admitted. For efficiency, these need to be piggybacked on other
-// messages being sent to the given leader node. The StoreID and RangeID are
-// provided so that the leader node can route the incoming message to the
-// relevant range.
+// AdmittedPiggybacker is used to enqueue admitted vector messages addressed to
+// replicas on a particular node. For efficiency, these need to be piggybacked
+// on other messages being sent to the given leader node. The store / range /
+// replica IDs are provided so that the leader node can route the incoming
+// message to the relevant range.
 type AdmittedPiggybacker interface {
-	AddMsgAppRespForLeader(roachpb.NodeID, roachpb.StoreID, roachpb.RangeID, raftpb.Message)
+	Add(roachpb.NodeID, kvflowcontrolpb.PiggybackedAdmittedState)
 }
 
 // EntryForAdmission is the information provided to the admission control (AC)
@@ -169,10 +162,8 @@ type EntryForAdmission struct {
 // EntryForAdmissionCallbackState is passed to the callback when the entry is
 // admitted.
 type EntryForAdmissionCallbackState struct {
-	// TODO(pav-kv): use LogMark.
-	LeaderTerm uint64
-	Index      uint64
-	Priority   raftpb.Priority
+	Mark     rac2.LogMark
+	Priority raftpb.Priority
 }
 
 // ACWorkQueue abstracts the behavior needed from admission.WorkQueue.
@@ -182,18 +173,24 @@ type ACWorkQueue interface {
 	Admit(ctx context.Context, entry EntryForAdmission) bool
 }
 
-// TODO(sumeer): temporary placeholder, until RangeController is more fully
-// fleshed out.
 type rangeControllerInitState struct {
 	replicaSet    rac2.ReplicaSet
 	leaseholder   roachpb.ReplicaID
 	nextRaftIndex uint64
+	// These fields are required options for the RangeController specific to the
+	// replica and range, rather than the store or node, so we pass them as part
+	// of the range controller init state.
+	rangeID         roachpb.RangeID
+	tenantID        roachpb.TenantID
+	localReplicaID  roachpb.ReplicaID
+	raftInterface   rac2.RaftInterface
+	admittedTracker rac2.AdmittedTracker
 }
 
 // RangeControllerFactory abstracts RangeController creation for testing.
 type RangeControllerFactory interface {
 	// New creates a new RangeController.
-	New(state rangeControllerInitState) rac2.RangeController
+	New(ctx context.Context, state rangeControllerInitState) rac2.RangeController
 }
 
 // EnabledWhenLeaderLevel captures the level at which RACv2 is enabled when
@@ -227,6 +224,7 @@ type ProcessorOptions struct {
 	ACWorkQueue            ACWorkQueue
 	RangeControllerFactory RangeControllerFactory
 	Settings               *cluster.Settings
+	EvalWaitMetrics        *rac2.EvalWaitMetrics
 
 	EnabledWhenLeaderLevel EnabledWhenLeaderLevel
 }
@@ -294,6 +292,12 @@ type SideChannelInfoUsingRaftMessageRequest struct {
 //     NotEnabledWhenLeader, acquire Replica.mu and close
 //     replicaFlowControlIntegrationImpl (RACv1).
 type Processor interface {
+	// InitRaftLocked is called when RaftNode is initialized for the Replica.
+	// NB: can be called twice before the Replica is fully initialized.
+	//
+	// Both Replica mu and raftMu are held.
+	InitRaftLocked(context.Context, RaftNode)
+
 	// OnDestroyRaftMuLocked is called when the Replica is being destroyed.
 	//
 	// We need to know when Replica.mu.destroyStatus is updated, so that we
@@ -311,7 +315,7 @@ type Processor interface {
 	// This may be a noop if the level has already been reached.
 	//
 	// raftMu is held.
-	SetEnabledWhenLeaderRaftMuLocked(level EnabledWhenLeaderLevel)
+	SetEnabledWhenLeaderRaftMuLocked(ctx context.Context, level EnabledWhenLeaderLevel)
 	// GetEnabledWhenLeader returns the current level. It may be used in
 	// highly concurrent settings at the leaseholder, when waiting for eval,
 	// and when encoding a proposal. Note that if the leaseholder is not the
@@ -354,9 +358,12 @@ type Processor interface {
 	//
 	// It is split off from that function since it is natural to position the
 	// admission control processing when we are writing to the store in
-	// Replica.handleRaftReadyRaftMuLocked. This is a noop if the leader is not
-	// using the RACv2 protocol. Returns false if the leader is using RACv1, in
-	// which the caller should follow the RACv1 admission pathway.
+	// Replica.handleRaftReadyRaftMuLocked. This is mostly a noop if the leader is
+	// not using the RACv2 protocol.
+	//
+	// Returns false if the leader is using RACv1 and the replica is not
+	// destroyed, in which case the caller should follow the RACv1 admission
+	// pathway.
 	//
 	// raftMu is held.
 	AdmitRaftEntriesRaftMuLocked(
@@ -386,11 +393,18 @@ type Processor interface {
 		info SideChannelInfoUsingRaftMessageRequest,
 	)
 
+	// SyncedLogStorage is called when the log storage is synced, after writing a
+	// snapshot or log entries batch. It can be called synchronously from
+	// OnLogSync or OnSnapSync handlers if the write batch is blocking, or
+	// asynchronously from OnLogSync.
+	SyncedLogStorage(ctx context.Context, mark rac2.LogMark, snap bool)
 	// AdmittedLogEntry is called when an entry is admitted. It can be called
 	// synchronously from within ACWorkQueue.Admit if admission is immediate.
 	AdmittedLogEntry(
 		ctx context.Context, state EntryForAdmissionCallbackState,
 	)
+	// AdmittedState returns the vector of admitted log indices.
+	AdmittedState() rac2.AdmittedVector
 
 	// AdmitForEval is called to admit work that wants to evaluate at the
 	// leaseholder.
@@ -404,6 +418,9 @@ type Processor interface {
 
 type processorImpl struct {
 	opts ProcessorOptions
+
+	// State for tracking and advancing the log's admitted vector.
+	logTracker logTracker
 
 	// The fields below are accessed while holding the mutex. Lock ordering:
 	// Replica.raftMu < this.mu < Replica.mu.
@@ -420,10 +437,6 @@ type processorImpl struct {
 		leaderNodeID  roachpb.NodeID
 		leaderStoreID roachpb.StoreID
 		leaseholderID roachpb.ReplicaID
-		// State for advancing admitted.
-		lastObservedStableIndex     uint64
-		scheduledAdmittedProcessing bool
-		waitingForAdmissionState    waitingForAdmissionState
 		// State at a follower.
 		follower struct {
 			isLeaderUsingV2Protocol bool
@@ -470,12 +483,35 @@ type processorImpl struct {
 
 var _ Processor = &processorImpl{}
 
+var _ rac2.AdmittedTracker = &processorImpl{}
+
 func NewProcessor(opts ProcessorOptions) Processor {
 	p := &processorImpl{opts: opts}
 	p.mu.enabledWhenLeader = opts.EnabledWhenLeaderLevel
 	p.enabledWhenLeader.Store(uint32(opts.EnabledWhenLeaderLevel))
 	p.v1EncodingPriorityMismatch = log.Every(time.Minute)
 	return p
+}
+
+// isLeaderUsingV2ProcLocked returns true if the current leader uses the V2
+// protocol.
+//
+// NB: the result of this method does not change while raftMu is held.
+func (p *processorImpl) isLeaderUsingV2ProcLocked() bool {
+	// We are the leader using V2, or a follower who learned that the leader is
+	// using the V2 protocol.
+	return p.mu.leader.rc != nil || p.mu.follower.isLeaderUsingV2Protocol
+}
+
+// InitRaftLocked implements Processor.
+func (p *processorImpl) InitRaftLocked(ctx context.Context, rn RaftNode) {
+	p.opts.Replica.RaftMuAssertHeld()
+	p.opts.Replica.MuAssertHeld()
+	if p.raftMu.replicas != nil {
+		log.Fatalf(ctx, "initializing RaftNode after replica is initialized")
+	}
+	p.raftMu.raftNode = rn
+	p.logTracker.init(p.raftMu.raftNode.LogMarkLocked())
 }
 
 // OnDestroyRaftMuLocked implements Processor.
@@ -488,12 +524,13 @@ func (p *processorImpl) OnDestroyRaftMuLocked(ctx context.Context) {
 	p.closeLeaderStateRaftMuLockedProcLocked(ctx)
 
 	// Release some memory.
-	p.mu.waitingForAdmissionState = waitingForAdmissionState{}
 	p.mu.follower.lowPriOverrideState = lowPriOverrideState{}
 }
 
 // SetEnabledWhenLeaderRaftMuLocked implements Processor.
-func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(level EnabledWhenLeaderLevel) {
+func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(
+	ctx context.Context, level EnabledWhenLeaderLevel,
+) {
 	p.opts.Replica.RaftMuAssertHeld()
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -519,7 +556,7 @@ func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(level EnabledWhenLeader
 		}
 	}()
 	if leaderID == p.opts.ReplicaID {
-		p.createLeaderStateRaftMuLockedProcLocked(term, nextUnstableIndex)
+		p.createLeaderStateRaftMuLockedProcLocked(ctx, term, nextUnstableIndex)
 	}
 }
 
@@ -542,18 +579,17 @@ func (p *processorImpl) OnDescChangedLocked(
 ) {
 	p.opts.Replica.RaftMuAssertHeld()
 	p.opts.Replica.MuAssertHeld()
-	if p.raftMu.replicas == nil {
-		// Replica is initialized, in that we have a descriptor. Get the
-		// RaftNode.
-		p.raftMu.raftNode = p.opts.Replica.RaftNodeMuLocked()
-		p.raftMu.tenantID = tenantID
-	} else {
-		if p.raftMu.tenantID != tenantID {
-			panic(errors.AssertionFailedf("tenantId was changed from %s to %s",
-				p.raftMu.tenantID, tenantID))
-		}
-	}
 	initialization := p.raftMu.replicas == nil
+	if initialization {
+		// Replica is initialized, in that we now have a descriptor.
+		if p.raftMu.raftNode == nil {
+			panic(errors.AssertionFailedf("RaftNode is not initialized"))
+		}
+		p.raftMu.tenantID = tenantID
+	} else if p.raftMu.tenantID != tenantID {
+		panic(errors.AssertionFailedf("tenantId was changed from %s to %s",
+			p.raftMu.tenantID, tenantID))
+	}
 	p.raftMu.replicas = descToReplicaSet(desc)
 	p.raftMu.replicasChanged = true
 	// We need to promptly return tokens if some replicas have been removed,
@@ -636,7 +672,7 @@ func (p *processorImpl) makeStateConsistentRaftMuLockedProcLocked(
 		p.closeLeaderStateRaftMuLockedProcLocked(ctx)
 	}
 	if p.mu.leader.rc == nil {
-		p.createLeaderStateRaftMuLockedProcLocked(myLeaderTerm, nextUnstableIndex)
+		p.createLeaderStateRaftMuLockedProcLocked(ctx, myLeaderTerm, nextUnstableIndex)
 		return
 	}
 	// Existing RangeController.
@@ -663,7 +699,7 @@ func (p *processorImpl) closeLeaderStateRaftMuLockedProcLocked(ctx context.Conte
 }
 
 func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
-	term uint64, nextUnstableIndex uint64,
+	ctx context.Context, term uint64, nextUnstableIndex uint64,
 ) {
 	if p.mu.leader.rc != nil {
 		panic("RangeController already exists")
@@ -671,10 +707,15 @@ func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
 	func() {
 		p.mu.leader.rcReferenceUpdateMu.Lock()
 		defer p.mu.leader.rcReferenceUpdateMu.Unlock()
-		p.mu.leader.rc = p.opts.RangeControllerFactory.New(rangeControllerInitState{
-			replicaSet:    p.raftMu.replicas,
-			leaseholder:   p.mu.leaseholderID,
-			nextRaftIndex: nextUnstableIndex,
+		p.mu.leader.rc = p.opts.RangeControllerFactory.New(ctx, rangeControllerInitState{
+			replicaSet:      p.raftMu.replicas,
+			leaseholder:     p.mu.leaseholderID,
+			nextRaftIndex:   nextUnstableIndex,
+			rangeID:         p.opts.RangeID,
+			tenantID:        p.raftMu.tenantID,
+			localReplicaID:  p.opts.ReplicaID,
+			raftInterface:   p.raftMu.raftNode,
+			admittedTracker: p,
 		})
 	}()
 	p.mu.leader.term = term
@@ -686,15 +727,12 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	p.opts.Replica.RaftMuAssertHeld()
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.mu.destroyed {
+	// Skip if the replica is not initialized or already destroyed.
+	if p.raftMu.replicas == nil || p.mu.destroyed {
 		return
 	}
 	if p.raftMu.raftNode == nil {
-		if buildutil.CrdbTestBuild {
-			if len(e.Entries) > 0 {
-				panic(errors.AssertionFailedf("entries provided without raft node"))
-			}
-		}
+		log.Fatal(ctx, "RaftNode is not initialized")
 		return
 	}
 	// NB: we need to call makeStateConsistentRaftMuLockedProcLocked even if
@@ -702,18 +740,15 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	// leader may switch to v2.
 
 	// Grab the state we need in one shot after acquiring Replica mu.
-	var nextUnstableIndex, stableIndex uint64
+	var nextUnstableIndex uint64
 	var leaderID, leaseholderID roachpb.ReplicaID
-	var admitted [raftpb.NumPriorities]uint64
 	var myLeaderTerm uint64
 	func() {
 		p.opts.Replica.MuLock()
 		defer p.opts.Replica.MuUnlock()
 		nextUnstableIndex = p.raftMu.raftNode.NextUnstableIndexLocked()
-		stableIndex = p.raftMu.raftNode.StableIndexLocked()
 		leaderID = p.raftMu.raftNode.LeaderLocked()
 		leaseholderID = p.opts.Replica.LeaseholderMuLocked()
-		admitted = p.raftMu.raftNode.GetAdmittedLocked()
 		if leaderID == p.opts.ReplicaID {
 			myLeaderTerm = p.raftMu.raftNode.TermLocked()
 		}
@@ -721,32 +756,31 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	if len(e.Entries) > 0 {
 		nextUnstableIndex = e.Entries[0].Index
 	}
-	p.mu.lastObservedStableIndex = stableIndex
-	p.mu.scheduledAdmittedProcessing = false
 	p.makeStateConsistentRaftMuLockedProcLocked(
 		ctx, nextUnstableIndex, leaderID, leaseholderID, myLeaderTerm)
 
-	isLeaderUsingV2 := p.mu.leader.rc != nil || p.mu.follower.isLeaderUsingV2Protocol
-	if !isLeaderUsingV2 {
+	if !p.isLeaderUsingV2ProcLocked() {
 		return
 	}
-	// If there was a recent MsgStoreAppendResp that triggered this Ready
-	// processing, it has already been stepped, so the stable index would have
-	// advanced. So this is an opportune place to do Admitted processing.
-	nextAdmitted := p.mu.waitingForAdmissionState.computeAdmitted(stableIndex)
-	if admittedIncreased(admitted, nextAdmitted) {
-		p.opts.Replica.MuLock()
-		msgResp := p.raftMu.raftNode.SetAdmittedLocked(nextAdmitted)
-		p.opts.Replica.MuUnlock()
-		if p.mu.leader.rc == nil && p.mu.leaderNodeID != 0 {
-			// Follower, and know leaderNodeID, leaderStoreID.
-			p.opts.AdmittedPiggybacker.AddMsgAppRespForLeader(
-				p.mu.leaderNodeID, p.mu.leaderStoreID, p.opts.RangeID, msgResp)
+
+	// Piggyback admitted index advancement, if any, to the message stream going
+	// to the leader node, if we are not the leader. At the leader node, the
+	// admitted vector is read directly from the log tracker.
+	if p.mu.leader.rc == nil && p.mu.leaderNodeID != 0 {
+		// TODO(pav-kv): must make sure the leader term is the same.
+		if admitted, dirty := p.logTracker.admitted(true /* sched */); dirty {
+			p.opts.AdmittedPiggybacker.Add(p.mu.leaderNodeID, kvflowcontrolpb.PiggybackedAdmittedState{
+				RangeID:       p.opts.RangeID,
+				ToStoreID:     p.mu.leaderStoreID,
+				FromReplicaID: p.opts.ReplicaID,
+				ToReplicaID:   p.mu.leaderID,
+				Admitted: kvflowcontrolpb.AdmittedState{
+					Term:     admitted.Term,
+					Admitted: admitted.Admitted[:],
+				}})
 		}
-		// Else if the local replica is the leader, we have already told it
-		// about the update by calling SetAdmittedLocked. If the leader is not
-		// known, we simply drop the message.
 	}
+
 	if p.mu.leader.rc != nil {
 		if err := p.mu.leader.rc.HandleRaftEventRaftMuLocked(ctx, e); err != nil {
 			log.Errorf(ctx, "error handling raft event: %v", err)
@@ -754,20 +788,33 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	}
 }
 
+func (p *processorImpl) registerLogAppend(ctx context.Context, e rac2.RaftEvent) {
+	if len(e.Entries) == 0 {
+		return
+	}
+	after := e.Entries[0].Index - 1
+	to := rac2.LogMark{Term: e.Term, Index: e.Entries[len(e.Entries)-1].Index}
+	p.logTracker.append(ctx, after, to)
+}
+
 // AdmitRaftEntriesRaftMuLocked implements Processor.
 func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2.RaftEvent) bool {
-	// NB: the state being read here is only modified under raftMu, so it will
-	// not become stale during this method.
-	var isLeaderUsingV2Protocol bool
-	func() {
+	// Register all log appends without exception. If the replica is being
+	// destroyed, this should be a no-op, but there is no harm in registering the
+	// write just in case.
+	p.registerLogAppend(ctx, e)
+
+	// Return false only if we're not destroyed and not using V2.
+	if destroyed, usingV2 := func() (bool, bool) {
 		p.mu.Lock()
 		defer p.mu.Unlock()
-		isLeaderUsingV2Protocol = !p.mu.destroyed &&
-			(p.mu.leader.rc != nil || p.mu.follower.isLeaderUsingV2Protocol)
-	}()
-	if !isLeaderUsingV2Protocol {
-		return false
+		return p.mu.destroyed, p.isLeaderUsingV2ProcLocked()
+	}(); destroyed || !usingV2 {
+		return destroyed
 	}
+	// NB: destroyed and "using v2" status does not change below since we are
+	// holding raftMu.
+
 	for _, entry := range e.Entries {
 		typ, priBits, err := raftlog.EncodingOf(entry)
 		if err != nil {
@@ -782,6 +829,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 		if err != nil {
 			panic(errors.Wrap(err, "unable to decode raft command admission data: %v"))
 		}
+		mark := rac2.LogMark{Term: e.Term, Index: entry.Index}
 		var raftPri raftpb.Priority
 		if isV2Encoding {
 			raftPri = raftpb.Priority(meta.AdmissionPriority)
@@ -792,7 +840,6 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 				p.mu.Lock()
 				defer p.mu.Unlock()
 				raftPri = p.mu.follower.lowPriOverrideState.getEffectivePriority(entry.Index, raftPri)
-				p.mu.waitingForAdmissionState.add(e.Term, entry.Index, raftPri)
 			}()
 		} else {
 			raftPri = raftpb.LowPri
@@ -802,37 +849,34 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 					"do not use RACv1 for pri %s, which is regular work",
 					admissionpb.WorkPriority(meta.AdmissionPriority))
 			}
-			func() {
-				p.mu.Lock()
-				defer p.mu.Unlock()
-				p.mu.waitingForAdmissionState.add(e.Term, entry.Index, raftPri)
-			}()
 		}
-		admissionPri := rac2.RaftToAdmissionPriority(raftPri)
-		// NB: cannot hold mu when calling Admit since the callback may
-		// execute from inside Admit, when the entry is immediately admitted.
+		// Register all entries subject to AC with the log tracker.
+		p.logTracker.register(ctx, mark, raftPri)
+
+		// NB: cannot hold mu when calling Admit since the callback may execute from
+		// inside Admit, when the entry is immediately admitted.
 		submitted := p.opts.ACWorkQueue.Admit(ctx, EntryForAdmission{
 			StoreID:        p.opts.StoreID,
 			TenantID:       p.raftMu.tenantID,
-			Priority:       admissionPri,
+			Priority:       rac2.RaftToAdmissionPriority(raftPri),
 			CreateTime:     meta.AdmissionCreateTime,
 			RequestedCount: int64(len(entry.Data)),
 			Ingested:       typ.IsSideloaded(),
 			RangeID:        p.opts.RangeID,
 			ReplicaID:      p.opts.ReplicaID,
 			CallbackState: EntryForAdmissionCallbackState{
-				LeaderTerm: e.Term,
-				Index:      entry.Index,
-				Priority:   raftPri,
+				Mark:     mark,
+				Priority: raftPri,
 			},
 		})
+		// Failure is very rare and likely does not happen, e.g. store is not found.
+		// TODO(pav-kv): audit failure scenarios and minimize/eliminate them.
 		if !submitted {
-			// Very rare. e.g. store was not found.
-			func() {
-				p.mu.Lock()
-				defer p.mu.Unlock()
-				p.mu.waitingForAdmissionState.remove(e.Term, entry.Index, raftPri)
-			}()
+			// NB: this also admits all previously registered entries.
+			// TODO(pav-kv): consider not registering this entry in the first place,
+			// instead of falsely admitting a prefix of the log. We don't want false
+			// admissions to reach the leader.
+			p.logTracker.logAdmitted(ctx, mark, raftPri)
 		}
 	}
 	return true
@@ -901,28 +945,32 @@ func (p *processorImpl) SideChannelForPriorityOverrideAtFollowerRaftMuLocked(
 	}
 }
 
+// SyncedLogStorage implements Processor.
+func (p *processorImpl) SyncedLogStorage(ctx context.Context, mark rac2.LogMark, snap bool) {
+	if snap {
+		p.logTracker.snapSynced(ctx, mark)
+	} else {
+		p.logTracker.logSynced(ctx, mark)
+	}
+	// NB: storage syncs will trigger raft Ready processing, so we don't need to
+	// explicitly schedule it here like in AdmittedLogEntry.
+}
+
 // AdmittedLogEntry implements Processor.
 func (p *processorImpl) AdmittedLogEntry(
 	ctx context.Context, state EntryForAdmissionCallbackState,
 ) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.mu.destroyed {
-		return
-	}
-	admittedMayAdvance :=
-		p.mu.waitingForAdmissionState.remove(state.LeaderTerm, state.Index, state.Priority)
-	if !admittedMayAdvance || state.Index > p.mu.lastObservedStableIndex ||
-		(p.mu.leader.rc == nil && !p.mu.follower.isLeaderUsingV2Protocol) {
-		return
-	}
-	// The lastObservedStableIndex has moved at or ahead of state.Index. This
-	// will happen when admission is not immediate. In this case we need to
-	// schedule processing.
-	if !p.mu.scheduledAdmittedProcessing {
-		p.mu.scheduledAdmittedProcessing = true
+	if p.logTracker.logAdmitted(ctx, state.Mark, state.Priority) {
+		// Schedule a raft Ready cycle that will send the updated admitted vector to
+		// the leader via AdmittedPiggybacker if it hasn't been sent by then.
 		p.opts.RaftScheduler.EnqueueRaftReady(p.opts.RangeID)
 	}
+}
+
+// AdmittedState implements Processor.
+func (p *processorImpl) AdmittedState() rac2.AdmittedVector {
+	admitted, _ := p.logTracker.admitted(false /* sched */)
+	return admitted
 }
 
 // AdmitForEval implements Processor.
@@ -933,6 +981,8 @@ func (p *processorImpl) AdmitForEval(
 	mode := kvflowcontrol.Mode.Get(&p.opts.Settings.SV)
 	bypass := mode == kvflowcontrol.ApplyToElastic && workClass == admissionpb.RegularWorkClass
 	if bypass {
+		p.opts.EvalWaitMetrics.OnWaiting(workClass)
+		p.opts.EvalWaitMetrics.OnBypassed(workClass, 0 /* duration */)
 		return false, nil
 	}
 	var rc rac2.RangeController
@@ -942,27 +992,66 @@ func (p *processorImpl) AdmitForEval(
 		rc = p.mu.leader.rc
 	}()
 	if rc == nil {
+		p.opts.EvalWaitMetrics.OnWaiting(workClass)
+		p.opts.EvalWaitMetrics.OnBypassed(workClass, 0 /* duration */)
 		return false, nil
 	}
-	return p.mu.leader.rc.WaitForEval(ctx, pri)
+	return rc.WaitForEval(ctx, pri)
 }
 
-func admittedIncreased(prev, next [raftpb.NumPriorities]uint64) bool {
-	for i := range prev {
-		if prev[i] < next[i] {
-			return true
-		}
-	}
-	return false
+// GetAdmitted implements rac2.AdmittedTracker.
+func (p *processorImpl) GetAdmitted(replicaID roachpb.ReplicaID) rac2.AdmittedVector {
+	// TODO(pav-kv): implement
+	return rac2.AdmittedVector{}
 }
 
-// RangeControllerFactoryImpl implements RangeControllerFactory.
-//
-// TODO(sumeer): replace with real implementation once RangeController impl is
-// ready.
+// RangeControllerFactoryImpl implements the RangeControllerFactory interface.
+var _ RangeControllerFactory = RangeControllerFactoryImpl{}
+
+// RangeControllerFactoryImpl is a factory to create RangeControllers. There
+// should be one per-store. When a new RangeController is created, the caller
+// provides the range specific information as part of rangeControllerInitState.
 type RangeControllerFactoryImpl struct {
+	clock                      *hlc.Clock
+	evalWaitMetrics            *rac2.EvalWaitMetrics
+	streamTokenCounterProvider *rac2.StreamTokenCounterProvider
+	closeTimerScheduler        rac2.ProbeToCloseTimerScheduler
 }
 
-func (f RangeControllerFactoryImpl) New(state rangeControllerInitState) rac2.RangeController {
-	return nil
+func NewRangeControllerFactoryImpl(
+	clock *hlc.Clock,
+	evalWaitMetrics *rac2.EvalWaitMetrics,
+	streamTokenCounterProvider *rac2.StreamTokenCounterProvider,
+	closeTimerScheduler rac2.ProbeToCloseTimerScheduler,
+) RangeControllerFactoryImpl {
+	return RangeControllerFactoryImpl{
+		clock:                      clock,
+		evalWaitMetrics:            evalWaitMetrics,
+		streamTokenCounterProvider: streamTokenCounterProvider,
+		closeTimerScheduler:        closeTimerScheduler,
+	}
+}
+
+// New creates a new RangeController.
+func (f RangeControllerFactoryImpl) New(
+	ctx context.Context, state rangeControllerInitState,
+) rac2.RangeController {
+	return rac2.NewRangeController(
+		ctx,
+		rac2.RangeControllerOptions{
+			RangeID:             state.rangeID,
+			TenantID:            state.tenantID,
+			LocalReplicaID:      state.localReplicaID,
+			SSTokenCounter:      f.streamTokenCounterProvider,
+			RaftInterface:       state.raftInterface,
+			Clock:               f.clock,
+			CloseTimerScheduler: f.closeTimerScheduler,
+			AdmittedTracker:     state.admittedTracker,
+			EvalWaitMetrics:     f.evalWaitMetrics,
+		},
+		rac2.RangeControllerInitState{
+			ReplicaSet:  state.replicaSet,
+			Leaseholder: state.leaseholder,
+		},
+	)
 }

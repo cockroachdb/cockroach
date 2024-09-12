@@ -132,7 +132,12 @@ message StreamIngestionDetails {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.customname) = "SourceClusterID"];
 
+  // If ReaderTenantID is non-zero, this ID is associated with the reader tenant
+  // from which users can run read queries.
+  roachpb.TenantID read_tenant_id = 15 [(gogoproto.customname) = "ReadTenantID", (gogoproto.nullable) = false];
+
   reserved 5, 6;
+  // Next ID: 16.
 }
 
 message StreamIngestionCheckpoint {
@@ -1344,7 +1349,13 @@ message MVCCStatisticsJobProgress {
 }
 
 message UpdateTableMetadataCacheDetails {}
-message UpdateTableMetadataCacheProgress {}
+message UpdateTableMetadataCacheProgress {
+  // The time at which the job last started a run.
+  google.protobuf.Timestamp last_run_time = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.stdtime) = true
+  ];
+}
 
 message ImportRollbackDetails {
   // TableID is the descriptor ID of table that should be rolled back.

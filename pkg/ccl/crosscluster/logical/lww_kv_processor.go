@@ -95,10 +95,6 @@ var originID1Options = &kvpb.WriteOptions{OriginID: 1}
 func (p *kvRowProcessor) ProcessRow(
 	ctx context.Context, txn isql.Txn, keyValue roachpb.KeyValue, prevValue roachpb.Value,
 ) (batchStats, error) {
-	if err := p.injectFailure(); err != nil {
-		return batchStats{}, err
-	}
-
 	var err error
 	keyValue.Key, err = keys.StripTenantPrefix(keyValue.Key)
 	if err != nil {
@@ -112,6 +108,10 @@ func (p *kvRowProcessor) ProcessRow(
 	}
 	p.lastRow = row
 
+	if err = p.injectFailure(); err != nil {
+		return batchStats{}, err
+	}
+
 	// TODO(dt, ssd): the rangefeed prev value does not include its mvcc ts, which
 	// is a problem for us if we want to use CPut to replace the old row with the
 	// new row, because our local version of the old row is likely to have the
@@ -121,7 +121,7 @@ func (p *kvRowProcessor) ProcessRow(
 	// Instead, for now, we just don't use the direct CPut for anything other than
 	// inserts. If/when we have a LDR-flavor CPut (or if we move the TS out and
 	// decide that equal values negate LWW) we can remove this.
-	if prevValue.IsPresent() {
+	if prevValue.IsPresent() || row.IsDeleted() {
 		return p.fallback.processParsedRow(ctx, txn, row, keyValue.Key, prevValue)
 	}
 
@@ -194,29 +194,31 @@ func (p *kvRowProcessor) addToBatch(
 	if err := txn.UpdateDeadline(ctx, w.leased.Expiration(ctx)); err != nil {
 		return err
 	}
-	if prevValue.IsPresent() {
-		prevRow, err := p.decoder.DecodeKV(ctx, roachpb.KeyValue{
-			Key:   keyValue.Key,
-			Value: prevValue,
-		}, cdcevent.PrevRow, prevValue.Timestamp, false)
-		if err != nil {
+
+	prevRow, err := p.decoder.DecodeKV(ctx, roachpb.KeyValue{
+		Key:   keyValue.Key,
+		Value: prevValue,
+	}, cdcevent.PrevRow, prevValue.Timestamp, false)
+	if err != nil {
+		return err
+	}
+
+	if row.IsDeleted() {
+		if err := w.deleteRow(ctx, b, prevRow, row); err != nil {
 			return err
 		}
-
-		if row.IsDeleted() {
-			if err := w.deleteRow(ctx, b, prevRow, row); err != nil {
-				return err
-			}
-		} else {
+	} else {
+		if prevValue.IsPresent() {
 			if err := w.updateRow(ctx, b, prevRow, row); err != nil {
 				return err
 			}
-		}
-	} else {
-		if err := w.insertRow(ctx, b, row); err != nil {
-			return err
+		} else {
+			if err := w.insertRow(ctx, b, row); err != nil {
+				return err
+			}
 		}
 	}
+
 	return nil
 }
 
@@ -227,7 +229,7 @@ func (p *kvRowProcessor) GetLastRow() cdcevent.Row {
 
 // SetSyntheticFailurePercent implements the RowProcessor interface.
 func (p *kvRowProcessor) SetSyntheticFailurePercent(rate uint32) {
-	// TODO(dt): support failure injection.
+	p.rate = rate
 }
 
 func (p *kvRowProcessor) Close(ctx context.Context) {

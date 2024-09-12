@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
@@ -77,8 +78,8 @@ type RangeController interface {
 // TODO(pav-kv): This interface a placeholder for the interface containing raft
 // methods. Replace this as part of #128019.
 type RaftInterface interface {
-	// FollowerState returns the current state of a follower. The value of
-	// Match, Next, Admitted are populated iff in StateReplicate. All entries >=
+	// FollowerStateRaftMuLocked returns the current state of a follower. The
+	// value of Match, Next are populated iff in StateReplicate. All entries >=
 	// Next have not had MsgApps constructed during the lifetime of this
 	// StateReplicate (they may have been constructed previously).
 	//
@@ -86,18 +87,8 @@ type RaftInterface interface {
 	// StateReplicate, we start trying to send MsgApps. We should
 	// notice such transitions both in HandleRaftEvent and SetReplicasLocked.
 	//
-	// RACv1 also cared about three other cases where the follower behaved as if
-	// it were disconnected (a) paused follower, (b) follower is behind, (c)
-	// follower is inactive (see
-	// replicaFlowControlIntegrationImpl.notActivelyReplicatingTo). (b) and (c)
-	// were needed since it paced at rate of slowest replica, while for regular
-	// work we will in v2 pace at slowest in quorum (and we don't care about
-	// elastic experiencing a hiccup, given it paces at rate of slowest). For
-	// (a), we plan to remove follower pausing. So the v2 code will be
-	// simplified.
-	//
 	// Requires Replica.raftMu to be held, Replica.mu is not held.
-	FollowerState(replicaID roachpb.ReplicaID) FollowerStateInfo
+	FollowerStateRaftMuLocked(replicaID roachpb.ReplicaID) FollowerStateInfo
 }
 
 type FollowerStateInfo struct {
@@ -107,10 +98,17 @@ type FollowerStateInfo struct {
 	// (Match, Next) is in-flight.
 	Match uint64
 	Next  uint64
-	// TODO(kvoli): Find a better home for this, we need it for token return.
-	Term uint64
-	// Invariant: Admitted[i] <= Match.
-	Admitted [raftpb.NumPriorities]uint64
+}
+
+// AdmittedTracker is used to retrieve the latest admitted vector for a
+// replica (including the leader).
+type AdmittedTracker interface {
+	// GetAdmitted returns the latest AdmittedVector for replicaID. It returns
+	// an empty struct if the replicaID is not known. NB: the
+	// AdmittedVector.Admitted[i] value can transiently advance past
+	// FollowerStateInfo.Match, since the admitted tracking subsystem is
+	// separate from Raft.
+	GetAdmitted(replicaID roachpb.ReplicaID) AdmittedVector
 }
 
 // RaftEvent carries a RACv2-relevant subset of raft state sent to storage.
@@ -172,6 +170,24 @@ func (rs ReplicaSet) String() string {
 	return redact.StringWithoutMarkers(rs)
 }
 
+// ProbeToCloseTimerScheduler is an interface for scheduling the closing of a
+// replica send stream.
+type ProbeToCloseTimerScheduler interface {
+	// ScheduleSendStreamCloseRaftMuLocked schedules a callback with a raft event
+	// after the given delay. This function may be used to handle send stream
+	// state transition, usually to close a send stream after the given delay.
+	// e.g.,
+	//
+	//   HandleRaftEventRaftMuLocked(ctx, RaftEvent{})
+	//
+	// Which will trigger handleReadyState to close the send stream if it hasn't
+	// transitioned to StateReplicate.
+	//
+	// Requires replica.raftMu to be held.
+	ScheduleSendStreamCloseRaftMuLocked(
+		ctx context.Context, rangeID roachpb.RangeID, delay time.Duration)
+}
+
 type RangeControllerOptions struct {
 	RangeID  roachpb.RangeID
 	TenantID roachpb.TenantID
@@ -180,10 +196,12 @@ type RangeControllerOptions struct {
 	LocalReplicaID roachpb.ReplicaID
 	// SSTokenCounter provides access to all the TokenCounters that will be
 	// needed (keyed by (tenantID, storeID)).
-	SSTokenCounter  *StreamTokenCounterProvider
-	RaftInterface   RaftInterface
-	Clock           *hlc.Clock
-	EvalWaitMetrics *EvalWaitMetrics
+	SSTokenCounter      *StreamTokenCounterProvider
+	RaftInterface       RaftInterface
+	Clock               *hlc.Clock
+	CloseTimerScheduler ProbeToCloseTimerScheduler
+	AdmittedTracker     AdmittedTracker
+	EvalWaitMetrics     *EvalWaitMetrics
 }
 
 // RangeControllerInitState is the initial state at the time of creation.
@@ -205,11 +223,13 @@ type rangeController struct {
 	mu struct {
 		syncutil.Mutex
 
-		// State for waiters. When anything in voterSets changes, voterSetRefreshCh
-		// is closed, and replaced with a new channel. The voterSets is
-		// copy-on-write, so waiters make a shallow copy.
-		voterSets         []voterSet
-		voterSetRefreshCh chan struct{}
+		// State for waiters. When anything in voterSets or nonVoterSets changes,
+		// waiterSetRefreshCh is closed, and replaced with a new channel. The
+		// voterSets and nonVoterSets is copy-on-write, so waiters make a shallow
+		// copy.
+		voterSets          []voterSet
+		nonVoterSet        []stateForWaiters
+		waiterSetRefreshCh chan struct{}
 	}
 
 	replicaMap map[roachpb.ReplicaID]*replicaState
@@ -218,9 +238,15 @@ type rangeController struct {
 // voterStateForWaiters informs whether WaitForEval is required to wait for
 // eval-tokens for a voter.
 type voterStateForWaiters struct {
+	stateForWaiters
+	isLeader      bool
+	isLeaseHolder bool
+}
+
+// stateForWaiters informs whether WaitForEval is required to wait for
+// eval-tokens for a replica.
+type stateForWaiters struct {
 	replicaID        roachpb.ReplicaID
-	isLeader         bool
-	isLeaseHolder    bool
 	isStateReplicate bool
 	evalTokenCounter *tokenCounter
 }
@@ -237,9 +263,9 @@ func NewRangeController(
 		leaseholder: init.Leaseholder,
 		replicaMap:  make(map[roachpb.ReplicaID]*replicaState),
 	}
-	rc.mu.voterSetRefreshCh = make(chan struct{})
+	rc.mu.waiterSetRefreshCh = make(chan struct{})
 	rc.updateReplicaSet(ctx, init.ReplicaSet)
-	rc.updateVoterSets()
+	rc.updateWaiterSets()
 	return rc
 }
 
@@ -260,32 +286,31 @@ func (rc *rangeController) WaitForEval(
 	var handles []tokenWaitingHandleInfo
 	var scratch []reflect.SelectCase
 
-	rc.opts.EvalWaitMetrics.onWaiting(wc)
+	rc.opts.EvalWaitMetrics.OnWaiting(wc)
 	start := rc.opts.Clock.PhysicalTime()
 retry:
-	// Snapshot the voterSets and voterSetRefreshCh.
+	// Snapshot the waiter sets and the refresh channel.
 	rc.mu.Lock()
 	vss := rc.mu.voterSets
-	vssRefreshCh := rc.mu.voterSetRefreshCh
+	nvs := rc.mu.nonVoterSet
+	refreshCh := rc.mu.waiterSetRefreshCh
 	rc.mu.Unlock()
 
-	if vssRefreshCh == nil {
+	if refreshCh == nil {
 		// RangeControllerImpl is closed.
-		// TODO(kvoli): We also need to do this in the replica_rac2.Processor,
-		// which will allow requests to bypass when a replica is not the leader and
-		// therefore the controller is closed.
-		rc.opts.EvalWaitMetrics.onBypassed(wc, rc.opts.Clock.PhysicalTime().Sub(start))
+		rc.opts.EvalWaitMetrics.OnBypassed(wc, rc.opts.Clock.PhysicalTime().Sub(start))
 		return false, nil
 	}
 	for _, vs := range vss {
 		quorumCount := (len(vs) + 2) / 2
-		haveEvalTokensCount := 0
+		votersHaveEvalTokensCount := 0
 		handles = handles[:0]
 		requiredWait := false
+		// First check the voter set, which participate in quorum.
 		for _, v := range vs {
 			available, handle := v.evalTokenCounter.TokensAvailable(wc)
 			if available {
-				haveEvalTokensCount++
+				votersHaveEvalTokensCount++
 				continue
 			}
 
@@ -294,31 +319,60 @@ retry:
 				handle: handle,
 				requiredWait: v.isLeader || v.isLeaseHolder ||
 					(waitForAllReplicateHandles && v.isStateReplicate),
+				partOfQuorum: true,
 			}
 			handles = append(handles, handleInfo)
 			if !requiredWait && handleInfo.requiredWait {
 				requiredWait = true
 			}
 		}
-		remainingForQuorum := quorumCount - haveEvalTokensCount
+		// If we don't need to wait for all replicate handles, then we will never
+		// wait the non-voter streams having positive tokens, so we can skip
+		// checking them.
+		if waitForAllReplicateHandles {
+			for _, nv := range nvs {
+				available, handle := nv.evalTokenCounter.TokensAvailable(wc)
+				if available || !nv.isStateReplicate {
+					// Ignore non-voters without tokens which are not in StateReplicate,
+					// as we won't be waiting for them.
+					continue
+				}
+				// Don't have eval tokens, and have a handle for the non-voter.
+				handleInfo := tokenWaitingHandleInfo{
+					handle:       handle,
+					requiredWait: true,
+					partOfQuorum: false,
+				}
+				handles = append(handles, handleInfo)
+				if !requiredWait {
+					// NB: requiredWait won't always be true before here, because it is
+					// possible that the leaseholder and leader have tokens, but all
+					// other (non-)voters are not in StateReplicate or have tokens
+					// available.
+					requiredWait = true
+				}
+			}
+		}
+
+		remainingForQuorum := quorumCount - votersHaveEvalTokensCount
 		if remainingForQuorum < 0 {
 			remainingForQuorum = 0
 		}
 		if remainingForQuorum > 0 || requiredWait {
 			var state WaitEndState
-			state, scratch = WaitForEval(ctx, vssRefreshCh, handles, remainingForQuorum, scratch)
+			state, scratch = WaitForEval(ctx, refreshCh, handles, remainingForQuorum, scratch)
 			switch state {
 			case WaitSuccess:
 				continue
 			case ContextCanceled:
-				rc.opts.EvalWaitMetrics.onErrored(wc, rc.opts.Clock.PhysicalTime().Sub(start))
+				rc.opts.EvalWaitMetrics.OnErrored(wc, rc.opts.Clock.PhysicalTime().Sub(start))
 				return false, ctx.Err()
 			case RefreshWaitSignaled:
 				goto retry
 			}
 		}
 	}
-	rc.opts.EvalWaitMetrics.onAdmitted(wc, rc.opts.Clock.PhysicalTime().Sub(start))
+	rc.opts.EvalWaitMetrics.OnAdmitted(wc, rc.opts.Clock.PhysicalTime().Sub(start))
 	return true, nil
 }
 
@@ -328,13 +382,13 @@ retry:
 func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e RaftEvent) error {
 	shouldWaitChange := false
 	for r, rs := range rc.replicaMap {
-		info := rc.opts.RaftInterface.FollowerState(r)
-		shouldWaitChange = shouldWaitChange || rs.handleReadyState(ctx, info)
+		info := rc.opts.RaftInterface.FollowerStateRaftMuLocked(r)
+		shouldWaitChange = rs.handleReadyState(ctx, info) || shouldWaitChange
 	}
 	// If there was a quorum change, update the voter sets, triggering the
 	// refresh channel for any requests waiting for eval tokens.
 	if shouldWaitChange {
-		rc.updateVoterSets()
+		rc.updateWaiterSets()
 	}
 
 	// Compute the flow control state for each entry. We do this once here,
@@ -363,7 +417,7 @@ func (rc *rangeController) HandleSchedulerEventRaftMuLocked(ctx context.Context)
 // Requires replica.raftMu to be held.
 func (rc *rangeController) SetReplicasRaftMuLocked(ctx context.Context, replicas ReplicaSet) error {
 	rc.updateReplicaSet(ctx, replicas)
-	rc.updateVoterSets()
+	rc.updateWaiterSets()
 	return nil
 }
 
@@ -377,7 +431,7 @@ func (rc *rangeController) SetLeaseholderRaftMuLocked(
 		return
 	}
 	rc.leaseholder = replica
-	rc.updateVoterSets()
+	rc.updateWaiterSets()
 }
 
 // CloseRaftMuLocked closes the range controller.
@@ -388,8 +442,8 @@ func (rc *rangeController) CloseRaftMuLocked(ctx context.Context) {
 	defer rc.mu.Unlock()
 
 	rc.mu.voterSets = nil
-	close(rc.mu.voterSetRefreshCh)
-	rc.mu.voterSetRefreshCh = nil
+	close(rc.mu.waiterSetRefreshCh)
+	rc.mu.waiterSetRefreshCh = nil
 }
 
 func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaSet) {
@@ -414,7 +468,7 @@ func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaS
 	rc.replicaSet = newSet
 }
 
-func (rc *rangeController) updateVoterSets() {
+func (rc *rangeController) updateWaiterSets() {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
@@ -431,23 +485,34 @@ func (rc *rangeController) updateVoterSets() {
 		}
 	}
 	var voterSets []voterSet
+	var nonVoterSet []stateForWaiters
 	for len(voterSets) < setCount {
 		voterSets = append(voterSets, voterSet{})
 	}
 	for _, r := range rc.replicaSet {
 		isOld := r.IsVoterOldConfig()
 		isNew := r.IsVoterNewConfig()
+
+		rs := rc.replicaMap[r.ReplicaID]
+		waiterState := stateForWaiters{
+			replicaID:        r.ReplicaID,
+			isStateReplicate: rs.isStateReplicate(),
+			evalTokenCounter: rs.evalTokenCounter,
+		}
+
+		if r.IsNonVoter() {
+			nonVoterSet = append(nonVoterSet, waiterState)
+		}
+
 		if !isOld && !isNew {
 			continue
 		}
+
 		// Is a voter.
-		rs := rc.replicaMap[r.ReplicaID]
 		vsfw := voterStateForWaiters{
-			replicaID:        r.ReplicaID,
-			isLeader:         r.ReplicaID == rc.opts.LocalReplicaID,
-			isLeaseHolder:    r.ReplicaID == rc.leaseholder,
-			isStateReplicate: rs.isStateReplicate(),
-			evalTokenCounter: rs.evalTokenCounter,
+			stateForWaiters: waiterState,
+			isLeader:        r.ReplicaID == rc.opts.LocalReplicaID,
+			isLeaseHolder:   r.ReplicaID == rc.leaseholder,
 		}
 		if isOld {
 			voterSets[0] = append(voterSets[0], vsfw)
@@ -457,8 +522,9 @@ func (rc *rangeController) updateVoterSets() {
 		}
 	}
 	rc.mu.voterSets = voterSets
-	close(rc.mu.voterSetRefreshCh)
-	rc.mu.voterSetRefreshCh = make(chan struct{})
+	rc.mu.nonVoterSet = nonVoterSet
+	close(rc.mu.waiterSetRefreshCh)
+	rc.mu.waiterSetRefreshCh = make(chan struct{})
 }
 
 type replicaState struct {
@@ -484,7 +550,7 @@ func NewReplicaState(
 		sendTokenCounter: parent.opts.SSTokenCounter.Send(stream),
 		desc:             desc,
 	}
-	state := parent.opts.RaftInterface.FollowerState(desc.ReplicaID)
+	state := parent.opts.RaftInterface.FollowerStateRaftMuLocked(desc.ReplicaID)
 	if state.State == tracker.StateReplicate {
 		rs.createReplicaSendStream()
 	}
@@ -497,10 +563,19 @@ type replicaSendStream struct {
 
 	mu struct {
 		syncutil.Mutex
-		connectedState connectedState
-		tracker        Tracker
-		closed         bool
+		// connectedStateStart is the time when the connectedState was last
+		// transitioned from one state to another e.g., from replicate to
+		// probeRecentlyReplicate or snapshot to replicate.
+		connectedState      connectedState
+		connectedStateStart time.Time
+		tracker             Tracker
+		closed              bool
 	}
+}
+
+func (rss *replicaSendStream) changeConnectedStateLocked(state connectedState, now time.Time) {
+	rss.mu.connectedState = state
+	rss.mu.connectedStateStart = now
 }
 
 func (rs *replicaState) createReplicaSendStream() {
@@ -509,8 +584,9 @@ func (rs *replicaState) createReplicaSendStream() {
 		parent: rs,
 	}
 	rs.sendStream.mu.tracker.Init(rs.stream)
-	rs.sendStream.mu.connectedState = replicate
 	rs.sendStream.mu.closed = false
+	rs.sendStream.changeConnectedStateLocked(
+		replicate, rs.parent.opts.Clock.PhysicalTime())
 }
 
 func (rs *replicaState) isStateReplicate() bool {
@@ -559,6 +635,7 @@ func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []entryF
 	if rs.sendStream == nil {
 		return
 	}
+
 	rs.sendStream.mu.Lock()
 	defer rs.sendStream.mu.Unlock()
 
@@ -582,18 +659,51 @@ func (rs *replicaState) handleReadyState(
 ) (shouldWaitChange bool) {
 	switch info.State {
 	case tracker.StateProbe:
-		if rs.sendStream != nil {
-			// TODO(kvoli): delay this by 1s.
+		if rs.sendStream == nil {
+			// We have already closed the stream, nothing to do.
+			return false
+		}
+		if shouldClose := func() (should bool) {
+			now := rs.parent.opts.Clock.PhysicalTime()
+			rs.sendStream.mu.Lock()
+			defer rs.sendStream.mu.Unlock()
+
+			if state := rs.sendStream.mu.connectedState; state == probeRecentlyReplicate &&
+				now.Sub(rs.sendStream.mu.connectedStateStart) >= probeRecentlyReplicateDuration() {
+				// The replica has been in StateProbe for at least
+				// probeRecentlyReplicateDuration (default 1s) second, close the
+				// stream.
+				should = true
+			} else if state != probeRecentlyReplicate {
+				// This is the first time we've seen the replica change to StateProbe,
+				// update the connected state and start time. If the state doesn't
+				// change within probeRecentlyReplicateDuration, we will close the
+				// stream. Also schedule an event, so that even if there are no
+				// entries, we will still reliably close the stream if still in
+				// StateProbe.
+				//
+				// TODO(sumeer): think through whether we should actually be returning
+				// tokens immediately here. Currently we are not. e.g.,
+				// probeRecentlyReplicate only affects whether to wait on this replica
+				// for eval, and otherwise it behaves like a closed replicaSendStream.
+				rs.sendStream.changeConnectedStateLocked(probeRecentlyReplicate, now)
+				rs.parent.opts.CloseTimerScheduler.ScheduleSendStreamCloseRaftMuLocked(
+					ctx, rs.parent.opts.RangeID, probeRecentlyReplicateDuration())
+			}
+			return should
+		}(); shouldClose {
 			rs.closeSendStream(ctx)
 			shouldWaitChange = true
 		}
+
 	case tracker.StateReplicate:
 		if rs.sendStream == nil {
 			rs.createReplicaSendStream()
 			shouldWaitChange = true
 		} else {
-			shouldWaitChange = rs.sendStream.makeConsistentInStateReplicate(ctx, info)
+			shouldWaitChange = rs.sendStream.makeConsistentInStateReplicate(ctx)
 		}
+
 	case tracker.StateSnapshot:
 		if rs.sendStream != nil {
 			switch func() connectedState {
@@ -628,11 +738,12 @@ func (rss *replicaState) closeSendStream(ctx context.Context) {
 }
 
 func (rss *replicaSendStream) makeConsistentInStateReplicate(
-	ctx context.Context, info FollowerStateInfo,
+	ctx context.Context,
 ) (shouldWaitChange bool) {
+	av := rss.parent.parent.opts.AdmittedTracker.GetAdmitted(rss.parent.desc.ReplicaID)
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
-	defer rss.returnTokens(ctx, rss.mu.tracker.Untrack(info.Term, info.Admitted))
+	defer rss.returnTokens(ctx, rss.mu.tracker.Untrack(av.Term, av.Admitted))
 
 	// The leader is always in state replicate.
 	if rss.parent.parent.opts.LocalReplicaID == rss.parent.desc.ReplicaID {
@@ -648,9 +759,12 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(
 	switch rss.mu.connectedState {
 	case replicate:
 	case probeRecentlyReplicate:
-		rss.mu.connectedState = replicate
+		// NB: We could re-use the current time and acquire it outside of the
+		// mutex, but we expect transitions to replicate to be rarer than replicas
+		// remaining in replicate.
+		rss.changeConnectedStateLocked(replicate, rss.parent.parent.opts.Clock.PhysicalTime())
 	case snapshot:
-		rss.mu.connectedState = replicate
+		rss.changeConnectedStateLocked(replicate, rss.parent.parent.opts.Clock.PhysicalTime())
 		shouldWaitChange = true
 	}
 	return shouldWaitChange
@@ -670,7 +784,7 @@ func (rss *replicaSendStream) changeToStateSnapshot(ctx context.Context) {
 //
 // Requires rs.mu to be held.
 func (rss *replicaSendStream) changeToStateSnapshotLocked(ctx context.Context) {
-	rss.mu.connectedState = snapshot
+	rss.changeConnectedStateLocked(snapshot, rss.parent.parent.opts.Clock.PhysicalTime())
 	// Since the replica is now in StateSnapshot, there is no need for Raft to
 	// send MsgApp pings to discover what has been missed. So there is no
 	// liveness guarantee on when these tokens will be returned, and therefore we
@@ -690,6 +804,15 @@ func (rss *replicaSendStream) returnTokens(
 			rss.parent.sendTokenCounter.Return(ctx, WorkClassFromRaftPriority(pri), tokens)
 		}
 	}
+}
+
+// probeRecentlyReplicateDuration is the duration the controller will wait
+// after observing a replica in StateProbe before closing the send stream if
+// the replica remains in StateProbe.
+//
+// TODO(kvoli): We will want to make this a cluster setting eventually.
+func probeRecentlyReplicateDuration() time.Duration {
+	return time.Second
 }
 
 type connectedState uint32

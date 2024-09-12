@@ -464,6 +464,13 @@ func (rn *RawNode) Lead() pb.PeerID {
 	return rn.raft.lead
 }
 
+// LogMark returns the current log mark of the raft log. It is not guaranteed to
+// be in stable storage, unless this method is called right after RawNode is
+// initialized (in which case its state reflects the stable storage).
+func (rn *RawNode) LogMark() LogMark {
+	return rn.raft.raftLog.unstable.mark()
+}
+
 // NextUnstableIndex returns the index of the next entry that will be sent to
 // local storage, if there are any. All entries < this index are either stored,
 // or have been sent to storage.
@@ -498,9 +505,6 @@ func (rn *RawNode) SparseStatus() SparseStatus {
 func (rn *RawNode) LeadSupportStatus() LeadSupportStatus {
 	return getLeadSupportStatus(rn.raft)
 }
-
-// TODO(nvanbenschoten): remove this one the method is used.
-var _ = (*RawNode).LeadSupportStatus
 
 // ProgressType indicates the type of replica a Progress corresponds to.
 type ProgressType byte
@@ -543,4 +547,8 @@ func (rn *RawNode) ForgetLeader() error {
 
 func (rn *RawNode) TestingStepDown() error {
 	return rn.raft.testingStepDown()
+}
+
+func (rn *RawNode) TestingSupportStateString() string {
+	return rn.raft.supportTracker.String()
 }

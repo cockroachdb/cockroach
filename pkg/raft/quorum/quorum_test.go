@@ -35,37 +35,37 @@ func TestLeadSupportExpiration(t *testing.T) {
 	testCases := []struct {
 		ids     []pb.PeerID
 		support map[pb.PeerID]hlc.Timestamp
-		expQSE  hlc.Timestamp
+		exp     hlc.Timestamp
 	}{
 		{
 			ids:     []pb.PeerID{1, 2, 3},
 			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15)},
-			expQSE:  ts(15),
+			exp:     ts(15),
 		},
 		{
 			ids:     []pb.PeerID{1, 2, 3, 4},
 			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15), 4: ts(20)},
-			expQSE:  ts(15),
+			exp:     ts(15),
 		},
 		{
 			ids:     []pb.PeerID{1, 2, 3, 4, 5},
 			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15), 4: ts(20), 5: ts(20)},
-			expQSE:  ts(20),
+			exp:     ts(20),
 		},
 		{
 			ids:     []pb.PeerID{1, 2, 3},
 			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20)},
-			expQSE:  ts(10),
+			exp:     ts(10),
 		},
 		{
 			ids:     []pb.PeerID{1, 2, 3},
 			support: map[pb.PeerID]hlc.Timestamp{1: ts(10)},
-			expQSE:  hlc.Timestamp{},
+			exp:     hlc.Timestamp{},
 		},
 		{
 			ids:     []pb.PeerID{},
 			support: map[pb.PeerID]hlc.Timestamp{},
-			expQSE:  hlc.MaxTimestamp,
+			exp:     hlc.MaxTimestamp,
 		},
 	}
 
@@ -75,14 +75,14 @@ func TestLeadSupportExpiration(t *testing.T) {
 			m[id] = struct{}{}
 		}
 
-		require.Equal(t, tc.expQSE, m.LeadSupportExpiration(tc.support))
+		require.Equal(t, tc.exp, m.LeadSupportExpiration(tc.support))
 	}
 }
 
-// TestComputeQSEJointConfig ensures that the QSE is calculated correctly for
-// joint configurations. In particular, it's the minimum of the two majority
-// configs.
-func TestComputeQSEJointConfig(t *testing.T) {
+// TestLeadSupportExpirationJointConfig ensures that the LeadSupportExpiration
+// is calculated correctly for joint configurations. In particular, it's the
+// minimum of the two majority configs.
+func TestLeadSupportExpirationJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -96,31 +96,31 @@ func TestComputeQSEJointConfig(t *testing.T) {
 		cfg1    []pb.PeerID
 		cfg2    []pb.PeerID
 		support map[pb.PeerID]hlc.Timestamp
-		expQSE  hlc.Timestamp
+		exp     hlc.Timestamp
 	}{
 		{
 			cfg1:    []pb.PeerID{1, 2, 3},
 			cfg2:    []pb.PeerID{},
 			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15)},
-			expQSE:  ts(15), // cfg2 is empty, should behave like the (cfg1) majority config case
+			exp:     ts(15), // cfg2 is empty, should behave like the (cfg1) majority config case
 		},
 		{
 			cfg1:    []pb.PeerID{},
 			cfg2:    []pb.PeerID{1, 2, 3},
 			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15)},
-			expQSE:  ts(15), // cfg1 is empty, should behave like the (cfg2) majority config case
+			exp:     ts(15), // cfg1 is empty, should behave like the (cfg2) majority config case
 		},
 		{
 			cfg1:    []pb.PeerID{3, 4, 5},
 			cfg2:    []pb.PeerID{1, 2, 3},
 			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15), 4: ts(20), 5: ts(25)},
-			expQSE:  ts(15), // lower of the two
+			exp:     ts(15), // lower of the two
 		},
 		{
 			cfg1:    []pb.PeerID{3, 4, 5},
 			cfg2:    []pb.PeerID{1, 2, 3},
 			support: map[pb.PeerID]hlc.Timestamp{1: ts(10), 2: ts(20), 3: ts(15), 4: ts(10), 5: ts(10)},
-			expQSE:  ts(10), // lower of the two; this time, cfg2 has the lower qse
+			exp:     ts(10), // lower of the two; this time, cfg2 has the lower expiration
 		},
 	}
 
@@ -136,6 +136,6 @@ func TestComputeQSEJointConfig(t *testing.T) {
 			j[1][id] = struct{}{}
 		}
 
-		require.Equal(t, tc.expQSE, j.LeadSupportExpiration(tc.support))
+		require.Equal(t, tc.exp, j.LeadSupportExpiration(tc.support))
 	}
 }

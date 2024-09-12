@@ -346,7 +346,7 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 				}
 				cache := ds.tc.Server(idx).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
 				tablePrefix := keys.MustAddr(keys.SystemSQLCodec.TablePrefix(tableID))
-				entry, err := cache.TestingGetCached(ctx, tablePrefix, false /* inverted */)
+				entry, err := cache.TestingGetCached(ctx, tablePrefix, false, roachpb.LAG_BY_CLUSTER_SETTING)
 				if err != nil {
 					return err.Error()
 				}

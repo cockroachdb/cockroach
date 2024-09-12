@@ -322,7 +322,11 @@ func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegi
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 	go func() {
-		<-sig
+		select {
+		case <-sig:
+		case <-ctx.Done():
+			return
+		}
 		shout(ctx, l, os.Stderr,
 			"Signaled received. Canceling workers and waiting up to 5s for them.")
 		// Signal runner.Run() to stop.
@@ -510,7 +514,7 @@ func maybeEmitDatadogEvent(
 	_, _, _ = datadogEventsAPI.CreateEvent(ctx, datadogV1.EventCreateRequest{
 		AggregationKey: datadog.PtrString(fmt.Sprintf("operation-%d", operationID)),
 		AlertType:      &alertType,
-		DateHappened:   datadog.PtrInt64(timeutil.Now().UnixNano()),
+		DateHappened:   datadog.PtrInt64(timeutil.Now().Unix()),
 		Host:           &hostname,
 		SourceTypeName: datadog.PtrString("roachtest"),
 		Tags: append(datadogTags,
@@ -673,7 +677,7 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 	}
 	op.spec = opSpec
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// Cancel this context if we get an interrupt.
 	CtrlC(ctx, l, cancel, nil /* registry */)

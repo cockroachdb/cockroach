@@ -34,23 +34,6 @@ var Enabled = settings.RegisterBoolSetting(
 	true,
 )
 
-type Options struct {
-	// HeartbeatInterval determines how often Store Liveness sends heartbeats.
-	HeartbeatInterval time.Duration
-	// LivenessInterval determines the Store Liveness support expiration time.
-	LivenessInterval time.Duration
-	// SupportExpiryInterval determines how often Store Liveness checks if support
-	// should be withdrawn.
-	SupportExpiryInterval time.Duration
-	// IdleSupportFromInterval determines how ofter Store Liveness checks if any
-	// stores have not appeared in a SupportFrom call recently.
-	IdleSupportFromInterval time.Duration
-	// SupportWithdrawalGracePeriod determines how long Store Liveness should
-	// wait after restart before withdrawing support. It helps prevent support
-	// churn until the first heartbeats are delivered.
-	SupportWithdrawalGracePeriod time.Duration
-}
-
 // MessageSender is the interface that defines how Store Liveness messages are
 // sent. Transport is the production implementation of MessageSender.
 type MessageSender interface {
@@ -131,6 +114,9 @@ func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Times
 		// uses a map to avoid duplicates, and the requesterStateHandler's
 		// addStore checks if the store exists before adding it.
 		sm.storesToAdd.addStore(id)
+		log.VInfof(context.Background(), 2,
+			"store %+v enqueued to add remote store %+v", sm.storeID, id,
+		)
 		return 0, hlc.Timestamp{}, false
 	}
 	// An empty expiration implies support has expired.
@@ -192,6 +178,7 @@ func (sm *SupportManager) onRestart(ctx context.Context) error {
 	sm.minWithdrawalTS = sm.clock.Now().AddDuration(sm.options.SupportWithdrawalGracePeriod)
 	// Increment the current epoch.
 	rsfu := sm.requesterStateHandler.checkOutUpdate()
+	defer sm.requesterStateHandler.finishUpdate(rsfu)
 	rsfu.incrementMaxEpoch()
 	if err := rsfu.write(ctx, sm.engine); err != nil {
 		return err
@@ -237,7 +224,7 @@ func (sm *SupportManager) startLoop(ctx context.Context) {
 			sm.withdrawSupport(ctx)
 
 		case <-idleSupportFromTicker.C:
-			sm.requesterStateHandler.removeIdleStores()
+			sm.requesterStateHandler.markIdleStores()
 
 		case <-receiveQueueSig:
 			msgs := sm.receiveQueue.Drain()
@@ -262,6 +249,7 @@ func (sm *SupportManager) maybeAddStores() {
 // and sends the resulting messages via Transport.
 func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	rsfu := sm.requesterStateHandler.checkOutUpdate()
+	defer sm.requesterStateHandler.finishUpdate(rsfu)
 	livenessInterval := sm.options.LivenessInterval
 	heartbeats := rsfu.getHeartbeatsToSend(sm.storeID, sm.clock.Now(), livenessInterval)
 	if err := rsfu.write(ctx, sm.engine); err != nil {
@@ -277,7 +265,7 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 		}
 	}
 	log.VInfof(
-		ctx, 2, "store %d sent heartbeats to %d stores", sm.storeID, len(heartbeats),
+		ctx, 2, "store %+v sent heartbeats to %d stores", sm.storeID, len(heartbeats),
 	)
 }
 
@@ -289,12 +277,21 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 		return
 	}
 	ssfu := sm.supporterStateHandler.checkOutUpdate()
+	defer sm.supporterStateHandler.finishUpdate(ssfu)
 	ssfu.withdrawSupport(now)
-	if err := ssfu.write(ctx, sm.engine); err != nil {
-		log.Warningf(ctx, "failed to write supporter meta: %v", err)
+
+	batch := sm.engine.NewBatch()
+	defer batch.Close()
+	if err := ssfu.write(ctx, batch); err != nil {
+		log.Warningf(ctx, "failed to write supporter meta and state: %v", err)
+		return
+	}
+	if err := batch.Commit(true /* sync */); err != nil {
+		log.Warningf(ctx, "failed to commit supporter meta and state: %v", err)
+		return
 	}
 	log.VInfof(
-		ctx, 2, "store %d withdrew support from %d stores",
+		ctx, 2, "store %+v withdrew support from %d stores",
 		sm.storeID, len(ssfu.inProgress.supportFor),
 	)
 	sm.supporterStateHandler.checkInUpdate(ssfu)
@@ -304,9 +301,11 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 // to either the requesterStateHandler or supporterStateHandler. It then writes
 // all updates to disk in a single batch, and sends any responses via Transport.
 func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Message) {
-	log.VInfof(ctx, 2, "store %d drained receive queue of size %d", sm.storeID, len(msgs))
+	log.VInfof(ctx, 2, "store %+v drained receive queue of size %d", sm.storeID, len(msgs))
 	rsfu := sm.requesterStateHandler.checkOutUpdate()
+	defer sm.requesterStateHandler.finishUpdate(rsfu)
 	ssfu := sm.supporterStateHandler.checkOutUpdate()
+	defer sm.supporterStateHandler.finishUpdate(ssfu)
 	var responses []slpb.Message
 	for _, msg := range msgs {
 		switch msg.Type {
@@ -319,15 +318,15 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 		}
 	}
 
-	// TODO(mira): handle the errors below (and elsewhere in SupportManager)
-	// properly by resetting the update in progress.
 	batch := sm.engine.NewBatch()
 	defer batch.Close()
 	if err := rsfu.write(ctx, batch); err != nil {
 		log.Warningf(ctx, "failed to write requester meta: %v", err)
+		return
 	}
 	if err := ssfu.write(ctx, batch); err != nil {
 		log.Warningf(ctx, "failed to write supporter meta: %v", err)
+		return
 	}
 	if err := batch.Commit(true /* sync */); err != nil {
 		log.Warningf(ctx, "failed to sync supporter and requester state: %v", err)
@@ -339,7 +338,7 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 	for _, response := range responses {
 		_ = sm.sender.SendAsync(response)
 	}
-	log.VInfof(ctx, 2, "store %d sent %d responses", sm.storeID, len(responses))
+	log.VInfof(ctx, 2, "store %+v sent %d responses", sm.storeID, len(responses))
 }
 
 // receiveQueue stores all received messages from the MessageHandler and allows

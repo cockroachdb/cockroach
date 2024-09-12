@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
+	licenseserver "github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -236,15 +237,15 @@ func GetLicenseType(st *cluster.Settings) (string, error) {
 	return license.Type.String(), nil
 }
 
-// GetLicenseUsage returns the license usage.
-func GetLicenseUsage(st *cluster.Settings) (string, error) {
+// GetLicenseEnvironment returns the license environment.
+func GetLicenseEnvironment(st *cluster.Settings) (string, error) {
 	license, err := getLicense(st)
 	if err != nil {
 		return "", err
 	} else if license == nil {
 		return "", nil
 	}
-	return license.Usage.String(), nil
+	return license.Environment.String(), nil
 }
 
 // decode attempts to read a base64 encoded License.
@@ -307,4 +308,40 @@ func check(l *licenseccl.License, at time.Time, org, feature string, withDetails
 	}
 	return pgerror.Newf(pgcode.CCLValidLicenseRequired,
 		"license valid only for %q", l.OrganizationName)
+}
+
+// RegisterCallbackOnLicenseChange will register a callback to update the
+// license enforcer whenever the license changes.
+func RegisterCallbackOnLicenseChange(
+	ctx context.Context, st *cluster.Settings, licenseEnforcer *licenseserver.Enforcer,
+) {
+	refreshFunc := func(ctx context.Context) {
+		lic, err := getLicense(st)
+		if err != nil {
+			log.Errorf(ctx, "unable to refresh license enforcer for license change: %v", err)
+			return
+		}
+		var licenseType licenseserver.LicType
+		var licenseExpiry time.Time
+		if lic == nil {
+			licenseType = licenseserver.LicTypeNone
+		} else {
+			licenseExpiry = timeutil.Unix(lic.ValidUntilUnixSec, 0)
+			switch lic.Type {
+			case licenseccl.License_Free:
+				licenseType = licenseserver.LicTypeFree
+			case licenseccl.License_Trial:
+				licenseType = licenseserver.LicTypeTrial
+			case licenseccl.License_Evaluation:
+				licenseType = licenseserver.LicTypeEvaluation
+			default:
+				licenseType = licenseserver.LicTypeEnterprise
+			}
+		}
+		licenseEnforcer.RefreshForLicenseChange(ctx, licenseType, licenseExpiry)
+	}
+	// Install the hook so that we refresh license details when the license changes.
+	enterpriseLicense.SetOnChange(&st.SV, refreshFunc)
+	// Call the refresh function for the current license.
+	refreshFunc(ctx)
 }

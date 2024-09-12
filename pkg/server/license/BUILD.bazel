@@ -2,14 +2,23 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "license",
-    srcs = ["enforcer.go"],
+    srcs = [
+        "cclbridge.go",
+        "enforcer.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/license",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
+        "//pkg/settings/cluster",
         "//pkg/sql/isql",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/envutil",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -27,7 +36,10 @@ go_test(
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/isql",
+        "//pkg/sql/sessiondata",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",

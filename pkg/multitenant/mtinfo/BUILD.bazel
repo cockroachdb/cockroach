@@ -10,6 +10,7 @@ go_library(
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
         "//pkg/sql/sem/tree",
+        "//pkg/util/hlc",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
     ],

@@ -32,7 +32,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
@@ -4273,9 +4273,10 @@ func getAWSKMSURI(t *testing.T, regionEnvVariable, keyIDEnvVariable string) (str
 	// If environment credentials are not present, we want to
 	// skip all AWS KMS tests, including auth-implicit, even though
 	// it is not used in auth-implicit.
-	_, err := credentials.NewEnvCredentials().Get()
-	if err != nil {
-		skip.IgnoreLint(t, "Test only works with AWS credentials")
+	envConfig, err := config.NewEnvConfig()
+	require.NoError(t, err)
+	if !envConfig.Credentials.HasKeys() {
+		skip.IgnoreLint(t, "No AWS credentials")
 	}
 
 	q := make(url.Values)
@@ -6450,7 +6451,7 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	// Creating the protected timestamp record should fail because there are too
 	// many spans. Ensure that we get the appropriate error.
 	_, err := db.Exec(`BACKUP TABLE foo, bar TO 'nodelocal://1/foo/byte-limit'`)
-	require.EqualError(t, err, "pq: protectedts: limit exceeded: 0+30 > 1 bytes")
+	require.ErrorContains(t, err, "pq: protectedts: limit exceeded")
 
 	// TODO(adityamaru): Remove in 22.2 once no records protect spans.
 	t.Run("deprecated-spans-limit", func(t *testing.T) {
