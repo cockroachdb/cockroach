@@ -21,6 +21,7 @@ import { ThunkAction } from "redux-thunk";
 
 import { LocalSetting } from "./localsettings";
 import {
+  LICENSE_UPDATE_DISMISSED_KEY,
   VERSION_DISMISSED_KEY,
   INSTRUCTIONS_BOX_COLLAPSED_KEY,
   saveUIData,
@@ -55,6 +56,7 @@ export enum AlertLevel {
   WARNING,
   CRITICAL,
   SUCCESS,
+  INFORMATION,
 }
 
 export interface AlertInfo {
@@ -631,20 +633,6 @@ export const upgradeNotFinalizedWarningSelector = createSelector(
 
 /**
  * Selector which returns an array of all active alerts which should be
- * displayed in the overview list page, these should be non-critical alerts.
- */
-
-export const overviewListAlertsSelector = createSelector(
-  staggeredVersionWarningSelector,
-  clusterPreserveDowngradeOptionOvertimeSelector,
-  upgradeNotFinalizedWarningSelector,
-  (...alerts: Alert[]): Alert[] => {
-    return _.without(alerts, null, undefined);
-  },
-);
-
-/**
- * Selector which returns an array of all active alerts which should be
  * displayed in the alerts panel, which is embedded within the cluster overview
  * page; currently, this includes all non-critical alerts.
  */
@@ -684,6 +672,176 @@ export const dataFromServerAlertSelector = createSelector(
   },
 );
 
+const licenseTypeNames = new Map<
+  string,
+  "Trial" | "Enterprise" | "Non-Commercial" | "None"
+>([
+  ["Evaluation", "Trial"],
+  ["Enterprise", "Enterprise"],
+  ["NonCommercial", "Non-Commercial"],
+  ["OSS", "None"],
+  ["BSD", "None"],
+]);
+
+// licenseTypeSelector returns user-friendly names of license types.
+export const licenseTypeSelector = createSelector(
+  getDataFromServer,
+  data => licenseTypeNames.get(data.LicenseType) || "None",
+);
+
+export const licenseUpdateDismissedLocalSetting = new LocalSetting(
+  "license_update_dismissed",
+  localSettingsSelector,
+  moment(0),
+);
+
+const licenseUpdateDismissedPersistentLoadedSelector = createSelector(
+  (state: AdminUIState) => state.uiData,
+  uiData => uiData && Object.hasOwn(uiData, LICENSE_UPDATE_DISMISSED_KEY),
+);
+
+const licenseUpdateDismissedPersistentSelector = createSelector(
+  (state: AdminUIState) => state.uiData,
+  uiData => moment(uiData?.[LICENSE_UPDATE_DISMISSED_KEY]?.data ?? 0),
+);
+
+export const licenseUpdateNotificationSelector = createSelector(
+  licenseTypeSelector,
+  licenseUpdateDismissedLocalSetting.selector,
+  licenseUpdateDismissedPersistentSelector,
+  licenseUpdateDismissedPersistentLoadedSelector,
+  (
+    licenseType,
+    licenseUpdateDismissed,
+    licenseUpdateDismissedPersistent,
+    licenseUpdateDismissedPersistentLoaded,
+  ): Alert => {
+    // If customer has Enterprise license they don't need to worry about this.
+    if (licenseType === "Enterprise") {
+      return undefined;
+    }
+
+    // If the notification has been dismissed based on the session storage
+    // timestamp, don't show it.'
+    //
+    // Note: `licenseUpdateDismissed` is wrapped in `moment()` because
+    // the local storage selector won't convert it back from a string.
+    // We omit fixing that here since this change is being backported
+    // to many versions.
+    if (moment(licenseUpdateDismissed).isAfter(moment(0))) {
+      return undefined;
+    }
+
+    // If the notification has been dismissed based on the uiData
+    // storage in the cluster, don't show it. Note that this is
+    // different from how version upgrade notifications work, this one
+    // is dismissed forever and won't return even if you upgrade
+    // further or time passes.
+    if (
+      licenseUpdateDismissedPersistentLoaded &&
+      licenseUpdateDismissedPersistent &&
+      licenseUpdateDismissedPersistent.isAfter(moment(0))
+    ) {
+      return undefined;
+    }
+
+    return {
+      level: AlertLevel.INFORMATION,
+      title: "Coming November 18, 2024",
+      text: "Important changes to CockroachDB’s licensing model.",
+      link: docsURL.enterpriseLicenseUpdate,
+      dismiss: (dispatch: any) => {
+        const dismissedAt = moment();
+        // Note(davidh): I haven't been able to find historical context
+        // for why some alerts have both a "local" and a "persistent"
+        // dismissal. My thinking is that just the persistent dismissal
+        // should be adequate, but I'm preserving that behavior here to
+        // match the version upgrade notification.
+
+        // Dismiss locally.
+        dispatch(licenseUpdateDismissedLocalSetting.set(dismissedAt));
+        // Dismiss persistently.
+        return dispatch(
+          saveUIData({
+            key: LICENSE_UPDATE_DISMISSED_KEY,
+            value: dismissedAt.valueOf(),
+          }),
+        );
+      },
+    };
+  },
+);
+
+/**
+ * Selector which returns an array of all active alerts which should be
+ * displayed in the overview list page, these should be non-critical alerts.
+ */
+
+export const overviewListAlertsSelector = createSelector(
+  staggeredVersionWarningSelector,
+  clusterPreserveDowngradeOptionOvertimeSelector,
+  upgradeNotFinalizedWarningSelector,
+  licenseUpdateNotificationSelector,
+  (...alerts: Alert[]): Alert[] => {
+    return _.without(alerts, null, undefined);
+  },
+);
+
+// daysUntilLicenseExpiresSelector returns number of days remaining before license expires.
+export const daysUntilLicenseExpiresSelector = createSelector(
+  getDataFromServer,
+  data => {
+    return Math.ceil(data.SecondsUntilLicenseExpiry / 86400); // seconds in 1 day
+  },
+);
+
+export const showLicenseTTLLocalSetting = new LocalSetting(
+  "show_license_ttl",
+  localSettingsSelector,
+  { show: true },
+);
+
+export const showLicenseTTLAlertSelector = createSelector(
+  showLicenseTTLLocalSetting.selector,
+  daysUntilLicenseExpiresSelector,
+  licenseTypeSelector,
+  (showLicenseTTL, daysUntilLicenseExpired, licenseType): Alert => {
+    if (!showLicenseTTL.show) {
+      return;
+    }
+    if (licenseType === "None") {
+      return;
+    }
+    const daysToShowAlert = 14;
+    let title: string;
+    let level: AlertLevel;
+
+    if (daysUntilLicenseExpired > daysToShowAlert) {
+      return;
+    } else if (daysUntilLicenseExpired < 0) {
+      title = `License expired ${Math.abs(daysUntilLicenseExpired)} days ago`;
+      level = AlertLevel.CRITICAL;
+    } else if (daysUntilLicenseExpired === 0) {
+      title = `License expired`;
+      level = AlertLevel.CRITICAL;
+    } else if (daysUntilLicenseExpired <= daysToShowAlert) {
+      title = `License expires in ${daysUntilLicenseExpired} days`;
+      level = AlertLevel.WARNING;
+    }
+    return {
+      level: level,
+      title: title,
+      showAsAlert: true,
+      autoClose: false,
+      closable: true,
+      dismiss: (dispatch: Dispatch<Action>) => {
+        dispatch(showLicenseTTLLocalSetting.set({ show: false }));
+        return Promise.resolve();
+      },
+    };
+  },
+);
+
 /**
  * Selector which returns an array of all active alerts which should be
  * displayed as a banner, which appears at the top of the page and overlaps
@@ -698,6 +856,7 @@ export const bannerAlertsSelector = createSelector(
   terminateSessionAlertSelector,
   terminateQueryAlertSelector,
   dataFromServerAlertSelector,
+  showLicenseTTLAlertSelector,
   (...alerts: Alert[]): Alert[] => {
     return _.without(alerts, null, undefined);
   },
@@ -744,6 +903,7 @@ export function alertDataSync(store: Store<AdminUIState>) {
       const keysToMaybeLoad = [
         VERSION_DISMISSED_KEY,
         INSTRUCTIONS_BOX_COLLAPSED_KEY,
+        LICENSE_UPDATE_DISMISSED_KEY,
       ];
       const keysToLoad = _.filter(keysToMaybeLoad, key => {
         return !(_.has(uiData, key) || isInFlight(state, key));
