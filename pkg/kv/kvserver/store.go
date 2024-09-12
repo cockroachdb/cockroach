@@ -2506,6 +2506,15 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 			now := timeutil.Now()
 			deadline := now.Add(refresh)
 			var waitErr error
+			// We're about to perform one work cycle, where we go through all replicas
+			// that have an active rangefeed on them and update them with the current
+			// closed timestamp for their range. While doing so, we'll keep track of
+			// the earliest closed timestamp we've seen and the number of ranges whose
+			// closed timestamp is lagging excessively; we'll then use these to update
+			// some metrics when the work cycle completes.
+			var earliestClosedTS hlc.Timestamp
+			var numExcessivelyLaggingClosedTS int64
+
 			for work, startAt := updateRangeIDs(), now; len(work) != 0; {
 				if waitErr = wait(ctx, startAt, conf.changed); waitErr != nil {
 					// NB: a configuration change abandons the update loop
@@ -2514,7 +2523,13 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 				todo, by := rangeFeedUpdaterPace(timeutil.Now(), deadline, smear, len(work))
 				for _, id := range work[:todo] {
 					if r := s.GetReplicaIfExists(id); r != nil {
-						r.handleClosedTimestampUpdate(ctx, r.GetCurrentClosedTimestamp(ctx))
+						cts := r.GetCurrentClosedTimestamp(ctx)
+						if earliestClosedTS.IsEmpty() || cts.Less(earliestClosedTS) {
+							earliestClosedTS = cts
+						}
+						if exceedsSlowLagThresh := r.handleClosedTimestampUpdate(ctx, cts); exceedsSlowLagThresh {
+							numExcessivelyLaggingClosedTS++
+						}
 					}
 				}
 				work = work[todo:]
@@ -2532,6 +2547,13 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 			if waitErr != nil && !errors.Is(waitErr, errInterrupted) {
 				return // context canceled
 			}
+			// We've successfully finished one work cycle where we went through all
+			// replicas that had an active rangefeed on them; update metrics.
+			if !earliestClosedTS.IsEmpty() {
+				nanos := timeutil.Since(earliestClosedTS.GoTime()).Nanoseconds()
+				s.metrics.RangeFeedMetrics.RangeFeedClosedTimestampMaxBehindNanos.Update(nanos)
+			}
+			s.metrics.RangeFeedMetrics.RangeFeedSlowClosedTimestampRanges.Update(numExcessivelyLaggingClosedTS)
 		}
 	})
 }
