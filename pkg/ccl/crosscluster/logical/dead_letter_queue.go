@@ -179,7 +179,7 @@ func (dlq *deadLetterQueueClient) Log(
 	srcTableID := cdcEventRow.TableID
 	dstTableMeta, ok := dlq.srcTableIDToDestMeta[srcTableID]
 	if !ok {
-		return errors.Newf("failed to look up fully qualified name for table %d", dstTableMeta.tableID)
+		return errors.Newf("failed to look up fully qualified name for src table id %d", srcTableID)
 	}
 	dlqTableName := dstTableMeta.toDLQTableName()
 
