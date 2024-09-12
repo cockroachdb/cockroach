@@ -14,7 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/replication"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -37,5 +40,26 @@ func maybeSetupPCRStandbyReader(
 	if err := replication.SetupOrAdvanceStandbyReaderCatalog(ctx, id, ts, d.DB, d.Settings); err != nil {
 		return err
 	}
+	if err := createStandbyReadTSPollerJob(ctx, d); err != nil {
+		return err
+	}
 	return nil
+}
+
+func createStandbyReadTSPollerJob(ctx context.Context, d upgrade.TenantDeps) error {
+	record := jobs.Record{
+		JobID:         d.JobRegistry.MakeJobID(),
+		Description:   "standby read-only timestamp poller job",
+		Username:      d.SessionData.User(),
+		Details:       jobspb.StandbyReadTSPollerDetails{},
+		Progress:      jobspb.StandbyReadTSPollerProgress{},
+		NonCancelable: true,
+	}
+
+	return d.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		if _, err := d.JobRegistry.CreateJobWithTxn(ctx, record, record.JobID, txn); err != nil {
+			return err
+		}
+		return nil
+	})
 }
