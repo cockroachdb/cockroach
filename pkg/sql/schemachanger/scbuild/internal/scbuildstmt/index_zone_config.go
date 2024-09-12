@@ -146,6 +146,35 @@ func (izo *indexZoneConfigObj) getInheritedFieldsForPartialSubzone(
 	return &zoneInheritedFields, nil
 }
 
+//func (izo *indexZoneConfigObj) getZoneConfig(
+//	b BuildCtx, inheritDefaultRange bool,
+//) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, error) {
+//	var subzones []zonepb.Subzone
+//	zc, subzones, err := lookUpSystemZonesTable(b, izo, inheritDefaultRange)
+//	if err != nil {
+//		return nil, nil, err
+//	}
+//
+//	// If the zone config exists, we know that it is not a subzone placeholder.
+//	if zc != nil {
+//		return zc, nil, err
+//	}
+//
+//	zc = zonepb.NewZoneConfig()
+//	zc.Subzones = subzones
+//	subzone := zc
+//
+//	// Recursively get the zone config of its parent
+//	// database.
+//	parentDBID := mustRetrieveNamespaceElem(b, izo.getTargetID()).DatabaseID
+//	dzo := databaseZoneConfigObj{databaseID: parentDBID}
+//	zc, _, err = dzo.getZoneConfig(b, inheritDefaultRange)
+//	if err != nil {
+//		return nil, nil, err
+//	}
+//	return zc, subzone, nil
+//}
+
 func (izo *indexZoneConfigObj) applyZoneConfig(
 	b BuildCtx,
 	n *tree.SetZoneConfig,
