@@ -75,7 +75,7 @@ func registerYCSB(r registry.Registry) {
 		db := c.Conn(ctx, t.L(), 1)
 		err := enableIsolationLevels(ctx, t, db)
 		require.NoError(t, err)
-		err = roachtestutil.WaitFor3XReplication(ctx, t, t.L(), db)
+		err = roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 		require.NoError(t, err)
 		require.NoError(t, db.Close())
 

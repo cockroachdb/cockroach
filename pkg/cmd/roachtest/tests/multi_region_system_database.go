@@ -48,7 +48,7 @@ func registerMultiRegionSystemDatabase(r registry.Registry) {
 			conn := c.Conn(ctx, t.L(), 1)
 			defer conn.Close()
 
-			require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t, t.L(), conn))
+			require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
 
 			_, err := conn.ExecContext(ctx, "SET CLUSTER SETTING sql.multiregion.system_database_multiregion.enabled = true")
 			require.NoError(t, err)
@@ -112,7 +112,7 @@ func registerMultiRegionSystemDatabase(r registry.Registry) {
 			}
 
 			for i := 2; i <= nodes; i++ {
-				require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t, t.L(), conn))
+				require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
 
 				t.WorkerStatus("stop")
 				c.Run(ctx, option.WithNodes(c.Node(i)), "killall -9 cockroach")

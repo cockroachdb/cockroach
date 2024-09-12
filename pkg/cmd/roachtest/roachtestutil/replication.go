@@ -25,8 +25,8 @@ import (
 
 // WaitFor3XReplication is like WaitForReplication but specifically requires
 // three as the minimum number of voters a range must be replicated on.
-func WaitFor3XReplication(ctx context.Context, t test.Test, l *logger.Logger, db *gosql.DB) error {
-	return WaitForReplication(ctx, t, l, db, 3 /* replicationFactor */, AtLeastReplicationFactor)
+func WaitFor3XReplication(ctx context.Context, l *logger.Logger, db *gosql.DB) error {
+	return WaitForReplication(ctx, l, db, 3 /* replicationFactor */, AtLeastReplicationFactor)
 }
 
 type waitForReplicationType int
@@ -48,7 +48,6 @@ const (
 // waitForReplicationType.
 func WaitForReplication(
 	ctx context.Context,
-	t test.Test,
 	l *logger.Logger,
 	db *gosql.DB,
 	replicationFactor int,
@@ -63,7 +62,7 @@ func WaitForReplication(
 	case AtLeastReplicationFactor:
 		compStr = "<"
 	default:
-		t.Fatalf("unknown type %v", waitForReplicationType)
+		return fmt.Errorf("unknown type %v", waitForReplicationType)
 	}
 	var oldN int
 	for {

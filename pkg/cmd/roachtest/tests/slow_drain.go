@@ -76,7 +76,7 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 		run(db, fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
 
 		// Wait for initial up-replication.
-		err := roachtestutil.WaitForReplication(ctx, t, t.L(), db, replicationFactor, roachtestutil.AtLeastReplicationFactor)
+		err := roachtestutil.WaitForReplication(ctx, t.L(), db, replicationFactor, roachtestutil.AtLeastReplicationFactor)
 		require.NoError(t, err)
 
 		// Ensure that leases are sent away from pinned node to avoid situation
