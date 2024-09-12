@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 // TestMsgAppFlowControlFull ensures:
@@ -106,50 +107,81 @@ func TestMsgAppFlowControlMoveForward(t *testing.T) {
 	}
 }
 
-// TestMsgAppFlowControlRecvHeartbeat ensures a heartbeat response
-// frees one slot if the window is full.
-func TestMsgAppFlowControlRecvHeartbeat(t *testing.T) {
-	r := newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(1, 2)))
-	r.becomeCandidate()
-	r.becomeLeader()
+// TestMsgAppFlowControl ensures that if storeliveness is disabled, a heartbeat
+// response frees one slot if the window is full. If storelivess is enabled,
+// a similar thing happens but on the next heartbeat timeout.
+func TestMsgAppFlowControl(t *testing.T) {
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
 
-	pr2 := r.trk.Progress(2)
-	// force the progress to be in replicate state
-	pr2.BecomeReplicate()
-	// fill in the inflights window
-	for i := 0; i < r.maxInflight; i++ {
-		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
-		r.readMessages()
-	}
+			testOptions := emptyTestConfigModifierOpt()
+			if !storeLivenessEnabled {
+				testOptions = withFortificationDisabled()
+			}
 
-	for tt := 1; tt < 5; tt++ {
-		// recv tt msgHeartbeatResp and expect one free slot
-		for i := 0; i < tt; i++ {
-			if !pr2.IsPaused() {
-				t.Fatalf("#%d.%d: paused = false, want true", tt, i)
-			}
-			// Unpauses the progress, sends an empty MsgApp, and pauses it again.
-			r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
-			ms := r.readMessages()
-			if len(ms) != 1 || ms[0].Type != pb.MsgApp || len(ms[0].Entries) != 0 {
-				t.Fatalf("#%d.%d: len(ms) == %d, want 1 empty MsgApp", tt, i, len(ms))
-			}
-		}
+			r := newTestRaft(1, 5, 1,
+				newTestMemoryStorage(withPeers(1, 2)), testOptions)
 
-		// No more appends are sent if there are no heartbeats.
-		for i := 0; i < 10; i++ {
-			if !pr2.IsPaused() {
-				t.Fatalf("#%d.%d: paused = false, want true", tt, i)
-			}
-			r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
-			ms := r.readMessages()
-			if len(ms) != 0 {
-				t.Fatalf("#%d.%d: len(ms) = %d, want 0", tt, i, len(ms))
-			}
-		}
+			r.becomeCandidate()
+			r.becomeLeader()
 
-		// clear all pending messages.
-		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
-		r.readMessages()
-	}
+			pr2 := r.trk.Progress(2)
+			// force the progress to be in replicate state
+			pr2.BecomeReplicate()
+			// fill in the inflights window
+			for i := 0; i < r.maxInflight; i++ {
+				r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp,
+					Entries: []pb.Entry{{Data: []byte("somedata")}}})
+				r.readMessages()
+			}
+
+			for tt := 1; tt < 5; tt++ {
+				for i := 0; i < tt; i++ {
+					if !pr2.IsPaused() {
+						t.Fatalf("#%d.%d: paused = false, want true", tt, i)
+					}
+
+					// Unpauses the progress, sends an empty MsgApp, and pauses it again.
+					// When storeliveness is enabled, we do this on the next heartbeat
+					// timeout. However, when storeliveness is disabled, we do this on
+					// the next heartbeat response.
+					if storeLivenessEnabled {
+						for ticks := r.heartbeatTimeout; ticks > 0; ticks-- {
+							r.tickHeartbeat()
+						}
+						ms := r.readMessages()
+						if len(ms) != 3 || ms[0].Type != pb.MsgHeartbeat || ms[1].Type != pb.MsgFortifyLeader ||
+							ms[2].Type != pb.MsgApp || len(ms[2].Entries) != 0 {
+							t.Fatalf("#%d.%d: len(ms) == %d, want 3 messages including one empty MsgApp",
+								tt, i, len(ms))
+						}
+					} else {
+						r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
+						ms := r.readMessages()
+						if len(ms) != 1 || ms[0].Type != pb.MsgApp || len(ms[0].Entries) != 0 {
+							t.Fatalf("#%d.%d: len(ms) == %d, want 1 empty MsgApp", tt, i, len(ms))
+						}
+					}
+				}
+
+				// No more appends are sent if there are no heartbeats.
+				for i := 0; i < 10; i++ {
+					if !pr2.IsPaused() {
+						t.Fatalf("#%d.%d: paused = false, want true", tt, i)
+					}
+					r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp,
+						Entries: []pb.Entry{{Data: []byte("somedata")}}})
+					ms := r.readMessages()
+					if len(ms) != 0 {
+						t.Fatalf("#%d.%d: len(ms) = %d, want 0", tt, i, len(ms))
+					}
+				}
+
+				// clear all pending messages.
+				for ticks := r.heartbeatTimeout; ticks > 0; ticks-- {
+					r.tickHeartbeat()
+				}
+				r.readMessages()
+			}
+		})
 }

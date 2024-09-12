@@ -132,6 +132,8 @@ func TestLeaderBcastBeat(t *testing.T) {
 			sort.Sort(messageSlice(msgs))
 			if storeLivenessEnabled {
 				assert.Equal(t, []pb.Message{
+					{From: 1, To: 2, Term: 1, Type: pb.MsgApp, Entries: r.raftLog.allEntries()},
+					{From: 1, To: 3, Term: 1, Type: pb.MsgApp, Entries: r.raftLog.allEntries()},
 					{From: 1, To: 2, Term: 1, Type: pb.MsgFortifyLeader},
 					{From: 1, To: 3, Term: 1, Type: pb.MsgFortifyLeader},
 					{From: 1, To: 2, Term: 1, Type: pb.MsgHeartbeat},

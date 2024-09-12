@@ -106,12 +106,13 @@ type Progress struct {
 	// This is always true on the leader.
 	RecentActive bool
 
-	// MsgAppProbesPaused is used when the MsgApp flow to a node is throttled. This
-	// happens in StateProbe, or StateReplicate with saturated Inflights. In both
-	// cases, we need to continue sending MsgApp once in a while to guarantee
-	// progress, but we only do so when MsgAppProbesPaused is false (it is reset on
-	// receiving a heartbeat response), to not overflow the receiver. See
-	// IsPaused() and ShouldSendMsgApp().
+	// MsgAppProbesPaused is used when the MsgApp flow to a node is throttled.
+	// This happens in StateProbe, or StateReplicate with saturated Inflights. In
+	// both cases, we need to continue sending MsgApp once in a while to guarantee
+	// progress, but we only do so when MsgAppProbesPaused is false (it is reset
+	// on the next heartbeat timeout if the follower's store supports the leader's
+	// store), to not overflow the receiver. See IsPaused() and
+	// ShouldSendMsgApp().
 	MsgAppProbesPaused bool
 
 	// Inflights is a sliding window for the inflight messages.
