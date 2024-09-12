@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -1819,6 +1820,159 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, includeAll bool) {
 	wg.Wait()
 }
 
+// deleteOrphanedLeasesWithSameInstanceID deletes any lease that belong to the
+// same instance ID and are considered expired.
+func (m *Manager) deleteOrphanedLeasesWithSameInstanceID(
+	ctx context.Context, instanceID base.SQLInstanceID, timeThreshold int64,
+) {
+	// This could have been implemented using DELETE WHERE, but DELETE WHERE
+	// doesn't implement AS OF SYSTEM TIME.
+
+	// Read orphaned leases, and join against the internal session
+	// table in case we have dual written leases.
+	query := `
+SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.version), l.expiration, s."session_id", l.crdb_region, s.crdb_region FROM
+	 system.public.lease as l FULL OUTER JOIN "".crdb_internal.kv_session_based_leases as s ON l."nodeID"=s."sql_instance_id" AND
+	  l."descID"=s."desc_id" AND l.version=s.version
+		WHERE COALESCE(l."nodeID", s."sql_instance_id") =%d
+`
+	sqlQuery := fmt.Sprintf(query, instanceID)
+
+	var rows []tree.Datums
+	retryOptions := base.DefaultRetryOptions()
+	retryOptions.Closer = m.stopper.ShouldQuiesce()
+	// The retry is required because of errors caused by node restarts. Retry 30 times.
+	if err := retry.WithMaxAttempts(ctx, retryOptions, 30, func() error {
+		return m.storage.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			if err := txn.KV().SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: timeThreshold}); err != nil {
+				return err
+			}
+			return txn.WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable_V23_2()}, func() error {
+				var err error
+				rows, err = txn.QueryBuffered(
+					ctx, "read orphaned leases", txn.KV(), sqlQuery,
+				)
+				return err
+			})
+		})
+	}); err != nil {
+		log.Warningf(ctx, "unable to read orphaned leases: %+v", err)
+	}
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	for i := range rows {
+		// Early exit?
+		row := rows[i]
+		wg.Add(1)
+		lease := storedLease{
+			id:      descpb.ID(tree.MustBeDInt(row[0])),
+			version: int(tree.MustBeDInt(row[1])),
+		}
+		// Session based leases will not have a timestamp.
+		if row[2] != tree.DNull {
+			lease.expiration = tree.MustBeDTimestamp(row[2])
+		}
+		if row[3] != tree.DNull {
+			lease.sessionID = []byte(tree.MustBeDBytes(row[3]))
+		}
+		if ed, ok := row[4].(*tree.DEnum); ok {
+			lease.prefix = ed.PhysicalRep
+		} else if bd, ok := row[4].(*tree.DBytes); ok {
+			lease.prefix = []byte((*bd))
+		}
+		if len(row) >= 6 && lease.prefix == nil {
+			if bd, ok := row[5].(*tree.DBytes); ok {
+				lease.prefix = []byte((*bd))
+			}
+		}
+		if err := m.stopper.RunAsyncTaskEx(
+			ctx,
+			stop.TaskOpts{
+				TaskName:   fmt.Sprintf("release lease %+v", lease),
+				Sem:        m.sem,
+				WaitForSem: true,
+			},
+			func(ctx context.Context) {
+				m.storage.release(ctx, m.stopper, &lease)
+				log.Infof(ctx, "released orphaned lease: %+v", lease)
+				wg.Done()
+			}); err != nil {
+			wg.Done()
+		}
+	}
+}
+
+// deleteOrphanedLeasesFromStaleSession deletes leases from sessions that are
+// no longer alive.
+func (m *Manager) deleteOrphanedLeasesFromStaleSession(ctx context.Context) {
+	// If session based leasing isn't used then no orphaned leases can exist
+	// based on the session ID.
+	if !m.sessionBasedLeasingModeAtLeast(ctx, SessionBasedDualWrite) {
+		return
+	}
+
+	// Get a list of distinct session IDs that exist in the system.lease
+	// table.
+	const DistinctSessionQuery = `SELECT DISTINCT(session_id) FROM system.lease`
+	exec := m.storage.db.Executor()
+	var syntheticDescriptors catalog.Descriptors
+	var distinctSessions []tree.Datums
+	if m.getSessionBasedLeasingMode(ctx) != SessionBasedOnly {
+		syntheticDescriptors = catalog.Descriptors{systemschema.LeaseTable()}
+	}
+	err := exec.WithSyntheticDescriptors(syntheticDescriptors, func() error {
+		var err error
+		distinctSessions, err = exec.QueryBuffered(ctx, "query-lease-table-sessions", nil, DistinctSessionQuery)
+		return err
+	})
+	if err != nil {
+		log.Warningf(ctx, "unable to read session IDs for oprhaned leases: %s", err)
+		return
+	}
+
+	cleanupCh := make(chan sqlliveness.SessionID)
+	ctxGrp := ctxgroup.WithContext(ctx)
+	ctxGrp.GoCtx(func(ctx context.Context) error {
+		defer close(cleanupCh)
+		// Loop over the distinct sessions and detect dead ones using the blocked reader,
+		// this will ensure the cache is bypassed (if too many of these exist).
+		for _, sessionRow := range distinctSessions {
+			session := sqlliveness.SessionID(tree.MustBeDBytes(sessionRow[0]))
+			alive, err := m.storage.livenessProvider.BlockingReader().IsAlive(ctx, session)
+			if err != nil {
+				log.Warningf(ctx, "failed to get liveness for session: %s with:  %s", session.String(), err)
+				continue
+			}
+			if !alive {
+				select {
+				case cleanupCh <- session:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+		}
+		return nil
+	})
+	ctxGrp.GoCtx(func(ctx context.Context) error {
+		// Receive orphaned sessions and delete rows related to them.
+		const DeleteOrphanedSessions = `DELETE FROM system.lease WHERE session_id=$1`
+		for sessionID := range cleanupCh {
+			if err := exec.WithSyntheticDescriptors(syntheticDescriptors, func() error {
+				_, err := exec.Exec(ctx, "delete-orphaned-leases-by-session", nil,
+					DeleteOrphanedSessions,
+					sessionID.UnsafeBytes())
+				return err
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err := ctxGrp.Wait(); err != nil {
+		log.Warningf(ctx, "failed to delete leases for expired sessions: %s", err)
+	}
+}
+
 // DeleteOrphanedLeases releases all orphaned leases created by a prior
 // instance of this node. timeThreshold is a walltime lower than the
 // lowest hlc timestamp that the current instance of the node can use.
@@ -1838,82 +1992,8 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 	// filled by AnnotateCtx.
 	newCtx = logtags.AddTags(newCtx, logtags.FromContext(ctx))
 	_ = m.stopper.RunAsyncTask(newCtx, "del-orphaned-leases", func(ctx context.Context) {
-		// This could have been implemented using DELETE WHERE, but DELETE WHERE
-		// doesn't implement AS OF SYSTEM TIME.
-
-		// Read orphaned leases, and join against the internal session
-		// table in case we have dual written leases.
-		query := `
-SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.version), l.expiration, s."session_id", l.crdb_region, s.crdb_region FROM
-	 system.public.lease as l FULL OUTER JOIN "".crdb_internal.kv_session_based_leases as s ON l."nodeID"=s."sql_instance_id" AND
-	  l."descID"=s."desc_id" AND l.version=s.version
-		WHERE COALESCE(l."nodeID", s."sql_instance_id") =%d
-`
-		sqlQuery := fmt.Sprintf(query, instanceID)
-
-		var rows []tree.Datums
-		retryOptions := base.DefaultRetryOptions()
-		retryOptions.Closer = m.stopper.ShouldQuiesce()
-		// The retry is required because of errors caused by node restarts. Retry 30 times.
-		if err := retry.WithMaxAttempts(ctx, retryOptions, 30, func() error {
-			return m.storage.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				if err := txn.KV().SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: timeThreshold}); err != nil {
-					return err
-				}
-				return txn.WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable_V23_2()}, func() error {
-					var err error
-					rows, err = txn.QueryBuffered(
-						ctx, "read orphaned leases", txn.KV(), sqlQuery,
-					)
-					return err
-				})
-			})
-		}); err != nil {
-			log.Warningf(ctx, "unable to read orphaned leases: %+v", err)
-			return
-		}
-		var wg sync.WaitGroup
-		defer wg.Wait()
-		for i := range rows {
-			// Early exit?
-			row := rows[i]
-			wg.Add(1)
-			lease := storedLease{
-				id:      descpb.ID(tree.MustBeDInt(row[0])),
-				version: int(tree.MustBeDInt(row[1])),
-			}
-			// Session based leases will not have a timestamp.
-			if row[2] != tree.DNull {
-				lease.expiration = tree.MustBeDTimestamp(row[2])
-			}
-			if row[3] != tree.DNull {
-				lease.sessionID = []byte(tree.MustBeDBytes(row[3]))
-			}
-			if ed, ok := row[4].(*tree.DEnum); ok {
-				lease.prefix = ed.PhysicalRep
-			} else if bd, ok := row[4].(*tree.DBytes); ok {
-				lease.prefix = []byte((*bd))
-			}
-			if len(row) >= 6 && lease.prefix == nil {
-				if bd, ok := row[5].(*tree.DBytes); ok {
-					lease.prefix = []byte((*bd))
-				}
-			}
-			if err := m.stopper.RunAsyncTaskEx(
-				ctx,
-				stop.TaskOpts{
-					TaskName:   fmt.Sprintf("release lease %+v", lease),
-					Sem:        m.sem,
-					WaitForSem: true,
-				},
-				func(ctx context.Context) {
-					m.storage.release(ctx, m.stopper, &lease)
-					log.Infof(ctx, "released orphaned lease: %+v", lease)
-					wg.Done()
-				}); err != nil {
-				wg.Done()
-			}
-		}
+		m.deleteOrphanedLeasesWithSameInstanceID(ctx, instanceID, timeThreshold)
+		m.deleteOrphanedLeasesFromStaleSession(ctx)
 	})
 }
 

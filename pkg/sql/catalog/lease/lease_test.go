@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -60,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -2116,6 +2118,45 @@ INSERT INTO t.kv VALUES ('c', 'd');
 
 	err = tx1.Commit()
 	require.NoError(t, err)
+}
+
+func TestDeleteOrphanedLeasesBySession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stop(ctx)
+	now := timeutil.Now().UnixNano()
+	// Insert fake leases with dead sessions IDs.
+	idb := s.InternalDB().(*sql.InternalDB)
+	ie := idb.Executor()
+	for i := 0; i < 32; i++ {
+		fakeSessionID, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+		require.NoError(t, err)
+		_, err = ie.Exec(ctx, "insert-fake-lease", nil,
+			"INSERT INTO system.lease(desc_id, version, sql_instance_id, session_id, crdb_region) VALUES ($1, $2, $3, $4, $5)",
+			keys.SystemDatabaseID, 1, 32, fakeSessionID.UnsafeBytes(), enum.One)
+		require.NoError(t, err)
+	}
+	lm := s.LeaseManager().(*lease.Manager)
+	lm.DeleteOrphanedLeases(ctx, now)
+
+	// Confirm our leases from dead sessions are gone.
+	testutils.SucceedsSoon(t, func() error {
+		rows, err := ie.QueryBuffered(ctx,
+			"detect-existing-leases",
+			nil,
+			"SELECT DISTINCT(session_id) FROM system.lease")
+		if err != nil {
+			return err
+		}
+		if len(rows) != 1 {
+			return errors.AssertionFailedf("extra sessions were detected: %v", rows)
+		}
+		return nil
+	})
+
 }
 
 // Tests that DeleteOrphanedLeases() deletes only orphaned leases.
