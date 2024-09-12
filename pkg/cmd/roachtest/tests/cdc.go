@@ -30,6 +30,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -62,6 +63,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/debug"
 	"github.com/cockroachdb/errors"
+	prompb "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -588,6 +591,49 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	ct.t.Status(fmt.Sprintf("created changefeed %s with jobID %d", cj.Label(), jobID))
 
 	return cj
+}
+
+// runMetricsVerifier will periodically run the check function on the prometheus
+// metrics of each cockroach node in the cluster until it returns true. If it
+// does not return true within 5 minutes, it will fail the roachtest.
+func (ct *cdcTester) runMetricsVerifier(
+	check func(metrics map[string]*prompb.MetricFamily) (ok bool),
+) {
+	const timeout = 5 * time.Minute
+	ct.mon.Go(func(ctx context.Context) error {
+		parser := expfmt.TextParser{}
+
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		for {
+			uiAddrs, err := ct.cluster.ExternalAdminUIAddr(ctx, ct.logger, ct.cluster.CRDBNodes())
+			if err != nil {
+				return err
+			}
+			for _, uiAddr := range uiAddrs {
+				uiAddr = fmt.Sprintf("https://%s/_status/vars", uiAddr)
+				out, err := exec.Command("curl", "-kf", uiAddr).Output()
+				if err != nil {
+					return err
+				}
+				// parse prometheus metrics
+				res, err := parser.TextToMetricFamilies(bytes.NewReader(out))
+				if err != nil {
+					return err
+				}
+				if check(res) {
+					ct.t.Status("metrics check passed")
+					return nil
+				}
+			}
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(5 * time.Second):
+			}
+		}
+	})
 }
 
 // runFeedLatencyVerifier runs a goroutine which polls the various latencies
@@ -1613,6 +1659,7 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 3 * time.Minute,
 				steadyLatency:      5 * time.Minute,
 			})
+			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetricsPresent("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 			ct.waitForWorkload()
 		},
 	})
@@ -1834,6 +1881,7 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 30 * time.Minute,
 				steadyLatency:      time.Minute,
 			})
+			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetricsPresent("cloud_read_bytes", "cloud_write_bytes"))
 			ct.waitForWorkload()
 		},
 	})
@@ -1864,6 +1912,9 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 30 * time.Minute,
 				steadyLatency:      time.Minute,
 			})
+
+			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetricsPresent("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
+
 			ct.waitForWorkload()
 		},
 	})
@@ -1902,6 +1953,9 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 30 * time.Minute,
 				steadyLatency:      time.Minute,
 			})
+
+			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetricsPresent("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
+
 			ct.waitForWorkload()
 		},
 	})
@@ -1982,6 +2036,8 @@ func registerCDC(r registry.Registry) {
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 30 * time.Minute,
 			})
+
+			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetricsPresent("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 
 			ct.waitForWorkload()
 		},
@@ -2199,6 +2255,7 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 3 * time.Minute,
 				steadyLatency:      10 * time.Minute,
 			})
+			ct.runMetricsVerifier(verifyChangefeedBytesInOutMetricsPresent("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 			ct.waitForWorkload()
 		},
 		RequiresLicense: true,
@@ -3653,4 +3710,38 @@ func (c *topicConsumer) close() {
 		}
 	}
 	_ = c.consumer.Close()
+}
+
+// verifyChangefeedMetricsPresent returns a check function for
+// runMetricsVerifier that checks that the metrics matching the names input are
+// > 0. It takes names as input since the changefeed bytes in/out metrics are
+// different for cloudstorage vs other sinks.
+func verifyChangefeedBytesInOutMetricsPresent(
+	names ...string,
+) func(metrics map[string]*prompb.MetricFamily) (ok bool) {
+	namesMap := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		namesMap[name] = struct{}{}
+	}
+
+	return func(metrics map[string]*prompb.MetricFamily) (ok bool) {
+		found := map[string]struct{}{}
+
+		for name, fam := range metrics {
+			if _, ok := namesMap[name]; !ok {
+				continue
+			}
+
+			for _, m := range fam.Metric {
+				if m.Counter.GetValue() > 0 {
+					found[name] = struct{}{}
+				}
+			}
+
+			if len(found) == len(names) {
+				return true
+			}
+		}
+		return false
+	}
 }
