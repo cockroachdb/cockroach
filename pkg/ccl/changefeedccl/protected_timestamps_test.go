@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -456,7 +457,7 @@ func TestPTSRecordProtectsTargetsAndDescriptorTable(t *testing.T) {
 	defer stopServer()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-
+	sqlDB.Exec(t, `ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = 1`)
 	sqlDB.Exec(t, "CREATE TABLE foo (a INT, b STRING)")
 	ts := s.Clock().Now()
 	ctx := context.Background()
@@ -473,10 +474,60 @@ func TestPTSRecordProtectsTargetsAndDescriptorTable(t *testing.T) {
 		return execCfg.ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
 	}))
 
+	// The following code was shameless stolen from
+	// TestShowTenantFingerprintsProtectsTimestamp which almost
+	// surely copied it from the 2-3 other tests that have
+	// something similar.  We should put this in a helper. We have
+	// ForceTableGC, but in ad-hoc testing that appeared to bypass
+	// the PTS record making it useless for this test.
+	//
+	// TODO(ssd): Make a helper that does this.
+	refreshPTSReaderCache := func(asOf hlc.Timestamp, tableName, databaseName string) {
+		tableID, err := s.QueryTableID(ctx, username.RootUserName(), tableName, databaseName)
+		require.NoError(t, err)
+		tableKey := s.Codec().TablePrefix(uint32(tableID))
+		store, err := s.StorageLayer().GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+		require.NoError(t, err)
+		var repl *kvserver.Replica
+		testutils.SucceedsSoon(t, func() error {
+			repl = store.LookupReplica(roachpb.RKey(tableKey))
+			if repl == nil {
+				return errors.New("could not find replica")
+			}
+			return nil
+		})
+		ptsReader := store.GetStoreConfig().ProtectedTimestampReader
+		t.Logf("updating PTS reader cache to %s", asOf)
+		require.NoError(
+			t,
+			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, asOf),
+		)
+		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
+	}
+	gcTestTableRange := func(tableName, databaseName string) {
+		row := sqlDB.QueryRow(t, fmt.Sprintf("SELECT range_id FROM [SHOW RANGES FROM TABLE %s.%s]", tableName, databaseName))
+		var rangeID int64
+		row.Scan(&rangeID)
+		refreshPTSReaderCache(s.Clock().Now(), tableName, databaseName)
+		t.Logf("enqueuing range %d for mvccGC", rangeID)
+		sqlDB.Exec(t, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, rangeID)
+	}
+
 	// Alter foo few times, then force GC at ts-1.
 	sqlDB.Exec(t, "ALTER TABLE foo ADD COLUMN c STRING")
 	sqlDB.Exec(t, "ALTER TABLE foo ADD COLUMN d STRING")
-	require.NoError(t, s.ForceTableGC(ctx, "system", "descriptor", ts.Add(-1, 0)))
+	time.Sleep(2 * time.Second)
+	// If you want to GC all system tables:
+	//
+	// tabs := systemschema.MakeSystemTables()
+	// for _, t := range tabs {
+	// 	if t.IsPhysicalTable() && !t.IsSequence() {
+	// 		gcTestTableRange("system", t.GetName())
+	// 	}
+	// }
+	gcTestTableRange("system", "descriptor")
+	gcTestTableRange("system", "zones")
+	gcTestTableRange("system", "comments")
 
 	// We can still fetch table descriptors because of protected timestamp record.
 	asOf := ts
