@@ -32,6 +32,17 @@ service Inspectz {
   rpc KVFlowHandles(kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesRequest)
       returns (kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesResponse) {}
 
+  // KVFlowController exposes in-memory state of the node-level
+  // rac2.StreamTokenCounterProvider. It's housed under
+  // /inspectz/v2/kvflowcontroller.
+  rpc KVFlowControllerV2(kv.kvserver.kvflowcontrol.kvflowinspectpb.ControllerRequest)
+      returns (kv.kvserver.kvflowcontrol.kvflowinspectpb.ControllerResponse) {}
+
+  // KVFlowHandles exposes in-memory state of all rac2.RangeController(s). It's
+  // housed under /inspectz/v2/kvflowhandles.
+  rpc KVFlowHandlesV2(kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesRequest)
+      returns (kv.kvserver.kvflowcontrol.kvflowinspectpb.HandlesResponse) {}
+
 }
 
 // As of 04/23, we're not invoking these RPC interfaces as RPCs. But they're

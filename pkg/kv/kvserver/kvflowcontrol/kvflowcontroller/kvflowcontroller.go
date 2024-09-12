@@ -230,10 +230,10 @@ func (c *Controller) Inspect(ctx context.Context) []kvflowinspectpb.Stream {
 	c.mu.buckets.Range(func(stream kvflowcontrol.Stream, b *bucket) bool {
 		b.mu.RLock()
 		streams = append(streams, kvflowinspectpb.Stream{
-			TenantID:               stream.TenantID,
-			StoreID:                stream.StoreID,
-			AvailableRegularTokens: int64(b.tokensLocked(regular)),
-			AvailableElasticTokens: int64(b.tokensLocked(elastic)),
+			TenantID:                   stream.TenantID,
+			StoreID:                    stream.StoreID,
+			AvailableEvalRegularTokens: int64(b.tokensLocked(regular)),
+			AvailableEvalElasticTokens: int64(b.tokensLocked(elastic)),
 		})
 		b.mu.RUnlock()
 		return true
@@ -253,10 +253,10 @@ func (c *Controller) InspectStream(
 ) kvflowinspectpb.Stream {
 	tokens := c.getTokensForStream(stream)
 	return kvflowinspectpb.Stream{
-		TenantID:               stream.TenantID,
-		StoreID:                stream.StoreID,
-		AvailableRegularTokens: int64(tokens.regular),
-		AvailableElasticTokens: int64(tokens.elastic),
+		TenantID:                   stream.TenantID,
+		StoreID:                    stream.StoreID,
+		AvailableEvalRegularTokens: int64(tokens.regular),
+		AvailableEvalElasticTokens: int64(tokens.elastic),
 	}
 }
 

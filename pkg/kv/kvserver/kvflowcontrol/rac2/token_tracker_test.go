@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,6 +57,14 @@ func TestTokenTracker(t *testing.T) {
 	ctx := context.Background()
 	tracker := &Tracker{}
 	tracker.Init(kvflowcontrol.Stream{})
+
+	// Used to marshal the output of the Inspect() method into a human-readable
+	// formatted JSON string. See case "inspect" below.
+	marshaller := jsonpb.Marshaler{
+		Indent:       "  ",
+		EmitDefaults: true,
+		OrigName:     true,
+	}
 	datadriven.RunTest(t, "testdata/token_tracker", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "track":
@@ -124,6 +133,15 @@ func TestTokenTracker(t *testing.T) {
 
 		case "state":
 			return formatTrackerState(tracker)
+
+		case "inspect":
+			var buf strings.Builder
+			for _, deduction := range tracker.Inspect() {
+				marshaled, err := marshaller.MarshalToString(&deduction)
+				require.NoError(t, err)
+				fmt.Fprintf(&buf, "%s\n", marshaled)
+			}
+			return buf.String()
 
 		default:
 			return fmt.Sprintf("unknown command: %s", d.Cmd)
