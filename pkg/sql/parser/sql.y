@@ -2080,6 +2080,7 @@ alter_database_stmt:
 //    CALLED ON NULL INPUT | RETURNS NULL ON NULL INPUT | STRICT
 //    IMMUTABLE | STABLE | VOLATILE
 //    [ NOT ] LEAKPROOF
+//    [ EXTERNAL ] SECURITY { INVOKER | DEFINER }
 // %SeeAlso: WEBDOCS/alter-function.html
 alter_func_stmt:
   alter_func_options_stmt
@@ -4872,7 +4873,7 @@ create_extension_stmt:
 //    | [ NOT ] LEAKPROOF
 //    | { CALLED ON NULL INPUT | RETURNS NULL ON NULL INPUT | STRICT }
 //    | AS 'definition'
-//    | { [ EXTERNAL ] SECURITY DEFINER }
+//    | { [ EXTERNAL ] SECURITY { INVOKER | DEFINER } }
 //  } ...
 // %SeeAlso: WEBDOCS/create-function.html
 create_func_stmt:
