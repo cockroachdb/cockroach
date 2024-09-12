@@ -183,23 +183,20 @@ describe("Query Management Saga", function () {
             yield new Promise((_resolve, _reject) => {});
           },
         };
-        return (
-          expectSaga(queryManagerSaga)
-            // @ts-ignore
-            .withReducer(queryManagerReducer)
-            .dispatch(refresh(neverResolveQuery))
-            .dispatch(refresh(testQueryCounter))
-            .silentRun()
-            .then(runResult => {
-              expect(runResult.storeState[neverResolveQuery.id].isRunning).toBe(
-                true,
-              );
-              expect(runResult.storeState[testQueryCounter.id].isRunning).toBe(
-                false,
-              );
-              expect(queryCounterCalled).toBe(1);
-            })
-        );
+        return expectSaga(queryManagerSaga)
+          .withReducer(queryManagerReducer)
+          .dispatch(refresh(neverResolveQuery))
+          .dispatch(refresh(testQueryCounter))
+          .silentRun()
+          .then(runResult => {
+            expect(runResult.storeState[neverResolveQuery.id].isRunning).toBe(
+              true,
+            );
+            expect(runResult.storeState[testQueryCounter.id].isRunning).toBe(
+              false,
+            );
+            expect(queryCounterCalled).toBe(1);
+          });
       });
       it("continues to count AUTO_REFRESH refcounts even while query is running", function () {
         let queryCalledCount = 0;
