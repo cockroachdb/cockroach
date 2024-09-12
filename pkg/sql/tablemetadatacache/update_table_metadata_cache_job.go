@@ -62,7 +62,9 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 			metrics.NumRuns.Inc(1)
 			j.updateLastRunTime(ctx)
 
-			// TODO(xinhaoz): implement the actual table metadata update logic.
+			if err := updateTableMetadataCache(ctx, execCtx.ExecCfg().InternalDB.Executor()); err != nil {
+				log.Errorf(ctx, "%s", err.Error())
+			}
 
 		case <-ctx.Done():
 			return ctx.Err()
@@ -85,6 +87,20 @@ func (j *tableMetadataUpdateJobResumer) updateLastRunTime(ctx context.Context) {
 	}); err != nil {
 		log.Errorf(ctx, "%s", err.Error())
 	}
+}
+
+// updateTableMetadataCache performs a full update of system.table_metadata by collecting
+// metadata from the system.namespace, system.descriptor tables and table span stats RPC.
+func updateTableMetadataCache(ctx context.Context, ie isql.Executor) error {
+	updater := newTableMetadataUpdater(ie)
+	if _, err := updater.pruneCache(ctx); err != nil {
+		log.Errorf(ctx, "failed to prune table metadata cache: %s", err.Error())
+	}
+
+	// We'll use the updated ret val in a follow-up to update metrics and
+	// fractional job progress.
+	_, err := updater.updateCache(ctx)
+	return err
 }
 
 // OnFailOrCancel implements jobs.Resumer.
