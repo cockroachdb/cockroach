@@ -260,8 +260,9 @@ func (d *txnDeps) UpdateSubzoneConfig(
 		rawBytes = oldZc.GetRawBytesInStorage()
 		zc = oldZc.ZoneConfigProto()
 	} else {
-		// If no zone config exists, create a new one.
-		zc = &zonepb.ZoneConfig{}
+		// If no zone config exists, create a new one that is a subzone placeholder.
+		zc = zonepb.NewZoneConfig()
+		zc.DeleteTableConfig()
 	}
 
 	// Update the subzones in the zone config.

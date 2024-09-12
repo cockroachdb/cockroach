@@ -86,7 +86,11 @@ func (izo *indexZoneConfigObj) retrieveCompleteZoneConfig(
 	if getInheritedDefault {
 		zc, err = izo.getInheritedDefaultZoneConfig(b)
 	} else {
-		zc, placeholder, err = izo.getZoneConfig(b, false /* inheritDefaultRange */)
+		zc, err = izo.tableZoneConfigObj.getZoneConfig(b, false /* inheritDefaultRange */)
+		if err != nil {
+			return nil, nil, err
+		}
+		placeholder, err = izo.getZoneConfig(b, false /* inheritDefaultRange */)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -144,6 +148,20 @@ func (izo *indexZoneConfigObj) getInheritedFieldsForPartialSubzone(
 	// Since we have just an index, we should copy from the inherited
 	// zone's fields (whether that was the table or database).
 	return &zoneInheritedFields, nil
+}
+
+func (izo *indexZoneConfigObj) getZoneConfig(
+	b BuildCtx, inheritDefaultRange bool,
+) (*zonepb.ZoneConfig, error) {
+	_, subzones, err := lookUpSystemZonesTable(b, izo, inheritDefaultRange, true /* isSubzoneConfig */)
+	if err != nil {
+		return nil, err
+	}
+	subzoneConfig := zonepb.NewZoneConfig()
+	subzoneConfig.DeleteTableConfig()
+	subzoneConfig.Subzones = subzones
+
+	return subzoneConfig, nil
 }
 
 func (izo *indexZoneConfigObj) applyZoneConfig(
