@@ -322,7 +322,18 @@ func (s *Stopper) RunTask(ctx context.Context, taskName string, f func(context.C
 	return nil
 }
 
-func (s *Stopper) startRegion(ctx context.Context, taskName string) *trace.Region {
+type region interface {
+	End()
+}
+
+type noopRegion struct{}
+
+func (n noopRegion) End() {}
+
+func (s *Stopper) startRegion(ctx context.Context, taskName string) region {
+	if !trace.IsEnabled() {
+		return noopRegion{}
+	}
 	return trace.StartRegion(ctx, taskName)
 }
 
