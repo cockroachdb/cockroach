@@ -55,9 +55,11 @@ INFO newRaft 3 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastter
 
 # Time passes on the leader so that it will try the previously missing follower
 # again.
+# TODO(ibrahim): Consider not constructing a snapshot in the first place if we
+# can't send it.
 tick-heartbeat 1
 ----
-ok
+DEBUG ignore sending snapshot to 3 since it is not recently active
 
 process-ready 1
 ----

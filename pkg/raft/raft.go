@@ -864,6 +864,37 @@ func (r *raft) bcastFortify() {
 	})
 }
 
+// maybeUnpauseAndBcastAppend unpauses and attempts to send an MsgApp to all the
+// followers that provide store liveness support. If there is no store liveness
+// support, we skip unpausing and sending MsgApp because the message is likely
+// to be dropped.
+func (r *raft) maybeUnpauseAndBcastAppend() {
+	if !r.fortificationTracker.FortificationEnabled() {
+		// The underlying store liveness fabric hasn't been enabled.
+		return
+	}
+
+	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+		if r.id == id {
+			// NB: the leader doesn't send MsgAppResp to itself here. This means that
+			// the leader will not have a chance to update its own
+			// MatchCommit/SentCommit. That is fine because the leader doesn't use
+			// MatchCommit/SentCommit for itself. It only uses the followers' values.
+			return
+		}
+
+		if _, supported := r.fortificationTracker.IsFortifiedBy(id); !supported {
+			// If the follower's store isn't providing active store liveness support
+			// to the leader's store, or it is but the leader isn't hearing about it,
+			// we don't need to send a MsgApp.
+			return
+		}
+
+		pr.MsgAppProbesPaused = false
+		r.maybeSendAppend(id)
+	})
+}
+
 func (r *raft) appliedTo(index uint64, size entryEncodingSize) {
 	oldApplied := r.raftLog.applied
 	newApplied := max(index, oldApplied)
@@ -1082,7 +1113,7 @@ func (r *raft) tickHeartbeat() {
 
 		// Try to refortify any followers that don't currently support us.
 		r.bcastFortify()
-		// TODO(ibrahim): add/call maybeUnpauseAndBcastAppend() here.
+		r.maybeUnpauseAndBcastAppend()
 	}
 }
 
