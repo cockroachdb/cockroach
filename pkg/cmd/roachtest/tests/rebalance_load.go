@@ -253,7 +253,7 @@ func rebalanceByLoad(
 	db := c.Conn(ctx, l, 1)
 	defer db.Close()
 
-	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t, l, db))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, l, db))
 
 	var m *errgroup.Group
 	m, ctx = errgroup.WithContext(ctx)

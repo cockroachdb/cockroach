@@ -180,7 +180,7 @@ func runDrainAndDecommission(
 		run(`SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
 
 		// Wait for initial up-replication.
-		err := roachtestutil.WaitForReplication(ctx, t, t.L(), db, defaultReplicationFactor, roachtestutil.AtLeastReplicationFactor)
+		err := roachtestutil.WaitForReplication(ctx, t.L(), db, defaultReplicationFactor, roachtestutil.AtLeastReplicationFactor)
 		require.NoError(t, err)
 	}
 
@@ -1022,7 +1022,7 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 		require.NoError(t, err)
 
 		// Wait for initial up-replication.
-		err = roachtestutil.WaitFor3XReplication(ctx, t, t.L(), db)
+		err = roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 		require.NoError(t, err)
 	}
 
@@ -1113,7 +1113,7 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 		run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
 
 		// Wait for initial up-replication.
-		err := roachtestutil.WaitForReplication(ctx, t, t.L(), db, replicationFactor, roachtestutil.AtLeastReplicationFactor)
+		err := roachtestutil.WaitForReplication(ctx, t.L(), db, replicationFactor, roachtestutil.AtLeastReplicationFactor)
 		require.NoError(t, err)
 	}
 

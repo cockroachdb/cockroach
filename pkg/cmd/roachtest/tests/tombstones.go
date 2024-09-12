@@ -54,7 +54,7 @@ func registerPointTombstone(r registry.Registry) {
 			conn := c.Conn(ctx, t.L(), 2)
 			defer conn.Close()
 			require.NoError(t, conn.PingContext(ctx))
-			require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t, t.L(), conn))
+			require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
 
 			execSQLOrFail := func(statement string, args ...interface{}) {
 				if _, err := conn.ExecContext(ctx, statement, args...); err != nil {

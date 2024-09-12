@@ -59,7 +59,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 			return err
 		}
 		_, db := h.RandomDB(r)
-		if err := roachtestutil.WaitFor3XReplication(ctx, t, l, db); err != nil {
+		if err := roachtestutil.WaitFor3XReplication(ctx, l, db); err != nil {
 			return err
 		}
 
