@@ -2357,24 +2357,24 @@ func (h *flowControlTestHelper) checkAllTokensReturned(
 		return fmt.Errorf("expected %d replication streams, got %d", expStreamCount, len(streams))
 	}
 	for _, stream := range streams {
-		if stream.AvailableRegularTokens != 16<<20 {
+		if stream.AvailableEvalRegularTokens != 16<<20 {
 			return fmt.Errorf("expected %s of regular flow tokens for %s, got %s",
 				humanize.IBytes(16<<20),
 				kvflowcontrol.Stream{
 					TenantID: stream.TenantID,
 					StoreID:  stream.StoreID,
 				},
-				humanize.IBytes(uint64(stream.AvailableRegularTokens)),
+				humanize.IBytes(uint64(stream.AvailableEvalRegularTokens)),
 			)
 		}
-		if stream.AvailableElasticTokens != 8<<20 {
+		if stream.AvailableEvalElasticTokens != 8<<20 {
 			return fmt.Errorf("expected %s of elastic flow tokens for %s, got %s",
 				humanize.IBytes(8<<20),
 				kvflowcontrol.Stream{
 					TenantID: stream.TenantID,
 					StoreID:  stream.StoreID,
 				},
-				humanize.IBytes(uint64(stream.AvailableElasticTokens)),
+				humanize.IBytes(uint64(stream.AvailableEvalElasticTokens)),
 			)
 		}
 	}
