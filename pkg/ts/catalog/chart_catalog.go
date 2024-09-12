@@ -181,10 +181,16 @@ var charts = []sectionDescription{
 				Metrics:     []string{"node-id"},
 			},
 			{
-				Title:       "License TTL",
+				Title:       "Enterprise License TTL",
 				Downsampler: DescribeAggregator_MIN,
 				Percentiles: false,
 				Metrics:     []string{"seconds_until_enterprise_license_expiry"},
+			},
+			{
+				Title:       "License TTL",
+				Downsampler: DescribeAggregator_MIN,
+				Percentiles: false,
+				Metrics:     []string{"seconds_until_license_expiry"},
 			},
 		},
 	},
