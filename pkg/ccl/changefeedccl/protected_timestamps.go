@@ -51,7 +51,7 @@ func makeTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {
 		tablesToProtect = append(tablesToProtect, id)
 		return nil
 	})
-	tablesToProtect = append(tablesToProtect, keys.DescriptorTableID)
+	tablesToProtect = append(tablesToProtect, keys.DescriptorTableID, keys.CommentsTableID, keys.ZonesTableID)
 	return ptpb.MakeSchemaObjectsTarget(tablesToProtect)
 }
 
