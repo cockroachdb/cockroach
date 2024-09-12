@@ -342,11 +342,10 @@ type Processor interface {
 	// that ProcessPiggybackedAdmittedAtLeaderRaftMuLocked gets called soon.
 	EnqueuePiggybackedAdmittedAtLeader(roachpb.ReplicaID, kvflowcontrolpb.AdmittedState)
 	// ProcessPiggybackedAdmittedAtLeaderRaftMuLocked is called to process
-	// previously enqueued piggybacked admitted vectors. Returns true if
-	// HandleRaftReadyRaftMuLocked should be called.
+	// previously enqueued piggybacked admitted vectors.
 	//
 	// raftMu is held.
-	ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx context.Context) bool
+	ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx context.Context)
 
 	// SideChannelForPriorityOverrideAtFollowerRaftMuLocked is called on a
 	// follower to provide information about whether the leader is using the
@@ -919,10 +918,10 @@ func (p *processorImpl) EnqueuePiggybackedAdmittedAtLeader(
 }
 
 // ProcessPiggybackedAdmittedAtLeaderRaftMuLocked implements Processor.
-func (p *processorImpl) ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx context.Context) bool {
+func (p *processorImpl) ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx context.Context) {
 	p.opts.Replica.RaftMuAssertHeld()
 	if p.destroyed {
-		return false
+		return
 	}
 	var updates map[roachpb.ReplicaID]rac2.AdmittedVector
 	// Swap the updates map with the empty scratch. This is an optimization to
@@ -936,14 +935,13 @@ func (p *processorImpl) ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx conte
 		}
 	}()
 	if len(updates) == 0 {
-		return false
+		return
 	}
 	for replicaID, state := range updates {
 		p.leader.rc.AdmitRaftMuLocked(ctx, replicaID, state)
 	}
 	// Clear the scratch from the updates that we have just handled.
 	clear(p.leader.scratch)
-	return true
 }
 
 // SideChannelForPriorityOverrideAtFollowerRaftMuLocked implements Processor.
