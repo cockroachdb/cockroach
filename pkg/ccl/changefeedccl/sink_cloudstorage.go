@@ -539,7 +539,11 @@ func (s *cloudStorageSink) getOrCreateFile(
 		}
 		f.codec = codec
 	}
-	s.files.ReplaceOrInsert(f)
+
+	//s.files.ReplaceOrInsert(f)
+	if oldF := s.files.ReplaceOrInsert(f); oldF != nil {
+		_ = oldF.(*cloudStorageSinkFile).codec.Close()
+	}
 	return f, nil
 }
 
@@ -563,6 +567,7 @@ func (s *cloudStorageSink) EmitRow(
 			retErr = ctx.Err()
 		}
 		if retErr != nil {
+			fmt.Println("error inside EmitRow: ", retErr)
 			// If we are returning an error, immediately close all compression
 			// codecs to release resources.  This step is also done in the
 			// Close() method, but doing this clean-up as soon as we know
@@ -587,12 +592,12 @@ func (s *cloudStorageSink) EmitRow(
 	}
 	file.numMessages++
 
-	if int64(file.buf.Len()) > s.targetMaxFileSize {
-		s.metrics.recordSizeBasedFlush()
-		if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
-			return err
-		}
-	}
+	//if int64(file.buf.Len()) > s.targetMaxFileSize {
+	//	s.metrics.recordSizeBasedFlush()
+	//	if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
+	//		return err
+	//	}
+	//}
 	return nil
 }
 
@@ -660,7 +665,15 @@ func (s *cloudStorageSink) flushTopicVersions(
 		return err == nil
 	})
 	for _, v := range toRemove {
+		fmt.Println("deleting: ", v)
 		s.files.Delete(cloudStorageSinkKey{topic: topic, schemaID: v})
+		//f := s.files.Delete(cloudStorageSinkKey{topic: topic, schemaID: v})
+		//if f != nil {
+		//	f.(*cloudStorageSinkFile).releaseAlloc(ctx)
+		//	if f.(*cloudStorageSinkFile).codec != nil {
+		//		_ = f.(*cloudStorageSinkFile).codec.Close()
+		//	}
+		//}
 	}
 	return err
 }
@@ -678,10 +691,11 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 		err = s.flushFile(ctx, i.(*cloudStorageSinkFile))
 		return err == nil
 	})
+	fmt.Println("flush with err: ", err)
 	if err != nil {
 		return err
 	}
-	s.files.Clear(true /* addNodesToFreeList */)
+	//s.files.Clear(true /* addNodesToFreeList */)
 	s.setDataFileTimestamp()
 	return s.waitAsyncFlush(ctx)
 }
@@ -708,18 +722,23 @@ func (s *cloudStorageSink) waitAsyncFlush(ctx context.Context) error {
 	done := make(chan struct{})
 	select {
 	case <-ctx.Done():
+		fmt.Println("ctx done")
 		return ctx.Err()
 	case <-s.asyncFlushTermCh:
+		fmt.Println("ended early")
 		return s.asyncFlushErr
 	case s.asyncFlushCh <- flushRequest{flush: done}:
 	}
 
 	select {
 	case <-ctx.Done():
+		fmt.Println("ctx done")
 		return ctx.Err()
 	case <-s.asyncFlushTermCh:
+		fmt.Println("ended early")
 		return s.asyncFlushErr
 	case <-done:
+		fmt.Println("waitAsyncFlush done")
 		return nil
 	}
 }
@@ -820,8 +839,11 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 			flushDone := s.metrics.recordFlushRequestCallback()
 			err := req.file.flushToStorage(ctx, s.es, req.dest, s.metrics)
 			flushDone()
-
+			if err == nil {
+				err = errors.New("injected error")
+			}
 			if err != nil {
+				fmt.Println(err)
 				log.Errorf(ctx, "error flushing file to storage: %s", err)
 				s.asyncFlushErr = err
 				return err
@@ -865,8 +887,15 @@ func (s *cloudStorageSink) closeAllCodecs() (err error) {
 	// Codecs need to be closed because of the klauspost compression library implementation
 	// details where it spins up go routines to perform compression in parallel.
 	// Those go routines are cleaned up when the compression codec is closed.
+	fmt.Println(s.files.Len())
 	s.files.Ascend(func(i btree.Item) (wantMore bool) {
 		f := i.(*cloudStorageSinkFile)
+		if f != nil {
+			if f.codec == nil {
+				fmt.Println("codec is nil:")
+			}
+			f.alloc.Release(context.Background())
+		}
 		if f.codec != nil {
 			cErr := f.codec.Close()
 			f.codec = nil
@@ -881,8 +910,12 @@ func (s *cloudStorageSink) closeAllCodecs() (err error) {
 
 // Close implements the Sink interface.
 func (s *cloudStorageSink) Close() error {
-	err := s.closeAllCodecs()
-	s.files = nil
+	defer func() {
+		_ = s.closeAllCodecs()
+		s.files = nil
+	}()
+	fmt.Println("closed again")
+	var err error
 	err = errors.CombineErrors(err, s.waitAsyncFlush(context.Background()))
 	close(s.asyncFlushCh) // signal flusher to exit.
 	err = errors.CombineErrors(err, s.flushGroup.Wait())
