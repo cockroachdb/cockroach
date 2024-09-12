@@ -14,13 +14,17 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -414,4 +418,49 @@ func TestGossipUnredacted(t *testing.T) {
 	for i := range res.Server.ConnStatus {
 		require.NotEqual(t, redactedMarker, res.Server.ConnStatus[i].Address)
 	}
+}
+
+// TestListExecutionInsightsWhileEvictingInsights is a regression test
+// for #130290. It verifies that the status server does not panic when
+// listing execution insights while the system is evicting insights.
+func TestListExecutionInsightsWhileEvictingInsights(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	server := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer server.Stopper().Stop(ctx)
+
+	s := server.StatusServer().(*systemStatusServer)
+	insights.ExecutionInsightsCapacity.Override(ctx, &server.ClusterSettings().SV, 5)
+	insights.LatencyThreshold.Override(ctx, &server.ClusterSettings().SV, 1*time.Millisecond)
+	var wg sync.WaitGroup
+	wg.Add(3)
+
+	conn := sqlutils.MakeSQLRunner(server.ApplicationLayer().SQLConn(t))
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 500; i++ {
+			conn.Exec(t, "SELECT * FROM system.users")
+		}
+	}()
+
+	conn2 := sqlutils.MakeSQLRunner(server.ApplicationLayer().SQLConn(t))
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 500; i++ {
+			conn2.Exec(t, "SELECT * FROM system.users")
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 1000; i++ {
+			require.NotPanics(t, func() {
+				_, err := s.ListExecutionInsights(ctx, &serverpb.ListExecutionInsightsRequest{})
+				require.NoError(t, err)
+			})
+		}
+	}()
+
+	wg.Wait()
 }
