@@ -435,13 +435,20 @@ type processorImpl struct {
 		// State when leader, i.e., when leaderID == opts.ReplicaID, and v2
 		// protocol is enabled.
 		leader struct {
+			// pendingAdmittedMu protects pendingAdmitted. The map is populated from
+			// calls initiated by RaftTransport, so this mutex must be narrow.
+			// Locking order: pendingAdmittedMu < rcReferenceUpdateMu.
+			pendingAdmittedMu syncutil.RWMutex
 			// pendingAdmitted contains recently delivered admitted vectors. When this
 			// map is not empty, the range is scheduled for applying these vectors to
 			// the corresponding streams / token trackers. The map is cleared when the
 			// admitted vectors are applied.
 			//
-			// Invariant: rc == nil ==> len(pendingAdmitted) == 0.
 			// Invariant: len(pendingAdmitted) != 0 ==> the processing is scheduled.
+			//
+			// Invariant (under raftMu): pendingAdmitted == nil iff rc == nil.
+			// If raftMu is not held, the invariant is eventually consistent since
+			// pendingAdmitted and rc are updated under different mutexes.
 			pendingAdmitted map[roachpb.ReplicaID]rac2.AdmittedVector
 			// Updating the rc reference requires both the enclosing mu and
 			// rcReferenceUpdateMu. Code paths that want to access this
@@ -684,13 +691,16 @@ func (p *processorImpl) closeLeaderStateRaftMuLockedProcLocked(ctx context.Conte
 		return
 	}
 	p.mu.leader.rc.CloseRaftMuLocked(ctx)
-	func() {
-		p.mu.leader.rcReferenceUpdateMu.Lock()
-		defer p.mu.leader.rcReferenceUpdateMu.Unlock()
-		p.mu.leader.rc = nil
-	}()
-	p.mu.leader.pendingAdmitted = nil
 	p.mu.leader.term = 0
+
+	func() {
+		p.mu.leader.pendingAdmittedMu.Lock()
+		defer p.mu.leader.pendingAdmittedMu.Unlock()
+		p.mu.leader.pendingAdmitted = nil
+	}()
+	p.mu.leader.rcReferenceUpdateMu.Lock()
+	defer p.mu.leader.rcReferenceUpdateMu.Unlock()
+	p.mu.leader.rc = nil
 }
 
 func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
@@ -699,21 +709,25 @@ func (p *processorImpl) createLeaderStateRaftMuLockedProcLocked(
 	if p.mu.leader.rc != nil {
 		panic("RangeController already exists")
 	}
-	func() {
-		p.mu.leader.rcReferenceUpdateMu.Lock()
-		defer p.mu.leader.rcReferenceUpdateMu.Unlock()
-		p.mu.leader.rc = p.opts.RangeControllerFactory.New(ctx, rangeControllerInitState{
-			replicaSet:     p.raftMu.replicas,
-			leaseholder:    p.mu.leaseholderID,
-			nextRaftIndex:  nextUnstableIndex,
-			rangeID:        p.opts.RangeID,
-			tenantID:       p.raftMu.tenantID,
-			localReplicaID: p.opts.ReplicaID,
-			raftInterface:  p.raftMu.raftNode,
-		})
-	}()
 	p.mu.leader.term = term
-	p.mu.leader.pendingAdmitted = map[roachpb.ReplicaID]rac2.AdmittedVector{}
+	rc := p.opts.RangeControllerFactory.New(ctx, rangeControllerInitState{
+		replicaSet:     p.raftMu.replicas,
+		leaseholder:    p.mu.leaseholderID,
+		nextRaftIndex:  nextUnstableIndex,
+		rangeID:        p.opts.RangeID,
+		tenantID:       p.raftMu.tenantID,
+		localReplicaID: p.opts.ReplicaID,
+		raftInterface:  p.raftMu.raftNode,
+	})
+
+	func() {
+		p.mu.leader.pendingAdmittedMu.Lock()
+		defer p.mu.leader.pendingAdmittedMu.Unlock()
+		p.mu.leader.pendingAdmitted = map[roachpb.ReplicaID]rac2.AdmittedVector{}
+	}()
+	p.mu.leader.rcReferenceUpdateMu.Lock()
+	defer p.mu.leader.rcReferenceUpdateMu.Unlock()
+	p.mu.leader.rc = rc
 }
 
 // HandleRaftReadyRaftMuLocked implements Processor.
@@ -883,13 +897,15 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 func (p *processorImpl) EnqueuePiggybackedAdmittedAtLeader(
 	from roachpb.ReplicaID, state kvflowcontrolpb.AdmittedState,
 ) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.mu.leader.rc == nil {
-		return
-	}
 	var admitted [raftpb.NumPriorities]uint64
 	copy(admitted[:], state.Admitted)
+
+	p.mu.leader.pendingAdmittedMu.Lock()
+	defer p.mu.leader.pendingAdmittedMu.Unlock()
+	// Invariant: if pendingAdmitted == nil, we are not the leader. So ignore.
+	if p.mu.leader.pendingAdmitted == nil {
+		return
+	}
 	// Merge in the received admitted vector. We are only interested in the
 	// highest admitted marks. Zero value always merges in favour of the new one.
 	p.mu.leader.pendingAdmitted[from] = p.mu.leader.pendingAdmitted[from].Merge(
@@ -901,7 +917,15 @@ func (p *processorImpl) ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx conte
 	p.opts.Replica.RaftMuAssertHeld()
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.mu.destroyed || len(p.mu.leader.pendingAdmitted) == 0 {
+	if p.mu.destroyed {
+		return false
+	}
+	p.mu.leader.pendingAdmittedMu.Lock()
+	defer p.mu.leader.pendingAdmittedMu.Unlock()
+	// TODO(pav-kv): narrow down holding pendingAdmittedMu to only copy the
+	// pendingAdmitted map. Alternatively, have a pre-allocated "scratch" map, and
+	// just swap it with pendingAdmitted.
+	if len(p.mu.leader.pendingAdmitted) == 0 {
 		return false
 	}
 	for replicaID, state := range p.mu.leader.pendingAdmitted {
