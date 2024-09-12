@@ -300,6 +300,7 @@ type (
 		maxUpgrades                    int
 		minimumSupportedVersion        *clusterupgrade.Version
 		predecessorFunc                predecessorFunc
+		waitForReplication             bool
 		skipVersionProbability         float64
 		settings                       []install.ClusterSettingOption
 		enabledDeploymentModes         []DeploymentMode
@@ -489,11 +490,14 @@ func defaultTestOptions() testOptions {
 	return testOptions{
 		// We use fixtures more often than not as they are more likely to
 		// detect bugs, especially in migrations.
-		useFixturesProbability:         0.7,
-		upgradeTimeout:                 clusterupgrade.DefaultUpgradeTimeout,
-		minUpgrades:                    1,
-		maxUpgrades:                    4,
-		minimumSupportedVersion:        OldestSupportedVersion,
+		useFixturesProbability:  0.7,
+		upgradeTimeout:          clusterupgrade.DefaultUpgradeTimeout,
+		minUpgrades:             1,
+		maxUpgrades:             4,
+		minimumSupportedVersion: OldestSupportedVersion,
+		// TODO(testeng): consider switching this default to `true`, as it
+		// better reflects how rolling restarts are run in production.
+		waitForReplication:             false,
 		predecessorFunc:                randomPredecessor,
 		enabledDeploymentModes:         allDeploymentModes,
 		skipVersionProbability:         0.5,
@@ -517,6 +521,12 @@ func WithSkipVersionProbability(p float64) CustomOption {
 	return func(opts *testOptions) {
 		opts.skipVersionProbability = p
 	}
+}
+
+// EnableWaitForReplication enables the wait for 3x replication
+// after each node restart in a mixedversion test.
+func EnableWaitForReplication(opts *testOptions) {
+	opts.waitForReplication = true
 }
 
 // NewTest creates a Test struct that users can use to create and run

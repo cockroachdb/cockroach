@@ -27,6 +27,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// startTimeout is the maximum amount of time we will wait for a node
+// to start up (including restarts). Especially useful in cases where
+// we wait for a 3x replication after a restart, to fail early in
+// situations where the cluster is not recovering.
+var startTimeout = 30 * time.Minute
+
 // installFixturesStep is the step that copies the fixtures from
 // `pkg/cmd/roachtest/fixtures` for a specific version into the nodes'
 // store dir.
@@ -51,10 +57,11 @@ func (s installFixturesStep) Run(
 // startStep is the step that starts the cluster from a specific
 // `version`.
 type startStep struct {
-	rt         test.Test
-	version    *clusterupgrade.Version
-	initTarget int
-	settings   []install.ClusterSettingOption
+	rt                 test.Test
+	version            *clusterupgrade.Version
+	initTarget         int
+	waitForReplication bool
+	settings           []install.ClusterSettingOption
 }
 
 func (s startStep) Background() shouldStop { return nil }
@@ -79,9 +86,16 @@ func (s startStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *H
 		install.BinaryOption(binaryPath),
 	)
 
-	opts := startOpts(option.WithInitTarget(s.initTarget))
+	customStartOpts := []option.StartStopOption{option.WithInitTarget(s.initTarget)}
+	if s.waitForReplication {
+		customStartOpts = append(customStartOpts, option.WaitForReplication())
+	}
+
+	startCtx, cancel := context.WithTimeout(ctx, startTimeout)
+	defer cancel()
+
 	return clusterupgrade.StartWithSettings(
-		ctx, l, h.runner.cluster, systemNodes, opts, clusterSettings...,
+		startCtx, l, h.runner.cluster, systemNodes, startOpts(customStartOpts...), clusterSettings...,
 	)
 }
 
@@ -186,6 +200,7 @@ type restartWithNewBinaryStep struct {
 	node                 int
 	settings             []install.ClusterSettingOption
 	initTarget           int
+	waitForReplication   bool
 	sharedProcessStarted bool
 }
 
@@ -198,14 +213,22 @@ func (s restartWithNewBinaryStep) Description() string {
 func (s restartWithNewBinaryStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
+	customStartOpts := []option.StartStopOption{option.WithInitTarget(s.initTarget)}
+	if s.waitForReplication {
+		customStartOpts = append(customStartOpts, option.WaitForReplication())
+	}
+
+	startCtx, cancel := context.WithTimeout(ctx, startTimeout)
+	defer cancel()
+
 	h.ExpectDeath()
 	if err := clusterupgrade.RestartNodesWithNewBinary(
-		ctx,
+		startCtx,
 		s.rt,
 		l,
 		h.runner.cluster,
 		h.runner.cluster.Node(s.node),
-		startOpts(option.WithInitTarget(s.initTarget)),
+		startOpts(customStartOpts...),
 		s.version,
 		s.settings...,
 	); err != nil {

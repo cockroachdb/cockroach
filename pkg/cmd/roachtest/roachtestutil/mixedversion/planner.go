@@ -471,10 +471,11 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 	setupContext := p.nonUpgradeContext(initialVersion, SystemSetupStage)
 	return append(steps,
 		p.newSingleStepWithContext(setupContext, startStep{
-			version:    initialVersion,
-			rt:         p.rt,
-			initTarget: p.currentContext.System.Descriptor.Nodes[0],
-			settings:   p.clusterSettingsForSystem(),
+			version:            initialVersion,
+			rt:                 p.rt,
+			initTarget:         p.currentContext.System.Descriptor.Nodes[0],
+			waitForReplication: p.shouldWaitForReplication(),
+			settings:           p.clusterSettingsForSystem(),
 		}),
 		p.newSingleStepWithContext(setupContext, waitForStableClusterVersionStep{
 			nodes:              p.currentContext.System.Descriptor.Nodes,
@@ -654,6 +655,7 @@ func (p *testPlanner) changeVersionSteps(
 				settings:             p.clusterSettingsForSystem(),
 				sharedProcessStarted: virtualClusterSetup,
 				initTarget:           p.currentContext.System.Descriptor.Nodes[0],
+				waitForReplication:   p.shouldWaitForReplication(),
 			},
 		))
 		for _, s := range p.services() {
@@ -833,6 +835,10 @@ func (p *testPlanner) isMultitenant() bool {
 
 func (p *testPlanner) tenantName() string {
 	return p.currentContext.Tenant.Descriptor.Name
+}
+
+func (p *testPlanner) shouldWaitForReplication() bool {
+	return p.options.waitForReplication && len(p.currentContext.System.Descriptor.Nodes) >= 3
 }
 
 func (p *testPlanner) clusterSettingsForSystem() []install.ClusterSettingOption {
