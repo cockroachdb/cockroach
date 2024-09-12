@@ -26,4 +26,6 @@
   predecessor: "23.2"
 "24.2":
   latest: 24.2.1
+  withdrawn:
+  - 24.2.1
   predecessor: "24.1"
