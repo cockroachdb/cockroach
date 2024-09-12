@@ -185,6 +185,7 @@ describe("Query Management Saga", function () {
         };
         return (
           expectSaga(queryManagerSaga)
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             // @ts-ignore
             .withReducer(queryManagerReducer)
             .dispatch(refresh(neverResolveQuery))
