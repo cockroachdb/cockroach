@@ -139,12 +139,14 @@ func (tt *transportTester) AddNode(nodeID roachpb.NodeID) {
 }
 
 func (tt *transportTester) UpdateGossip(nodeID roachpb.NodeID, address net.Addr) {
-	if err := tt.gossip.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
+	if err := tt.gossip.AddInfoProto(
+		gossip.MakeNodeIDKey(nodeID),
 		&roachpb.NodeDescriptor{
 			NodeID:  nodeID,
 			Address: util.MakeUnresolvedAddr(address.Network(), address.String()),
 		},
-		time.Hour); err != nil {
+		time.Hour,
+	); err != nil {
 		tt.t.Fatal(err)
 	}
 }
@@ -197,16 +199,18 @@ func TestTransportSendAndReceive(t *testing.T) {
 	for recipient, handler := range handlers {
 		var senders []slpb.StoreIdent
 		for len(senders) < len(stores) {
-			testutils.SucceedsSoon(t, func() error {
-				select {
-				case msg := <-handler.messages:
-					senders = append(senders, msg.From)
-					require.Equal(t, recipient, msg.To)
-					return nil
-				default:
-				}
-				return errors.New("still waiting to receive messages")
-			})
+			testutils.SucceedsSoon(
+				t, func() error {
+					select {
+					case msg := <-handler.messages:
+						senders = append(senders, msg.From)
+						require.Equal(t, recipient, msg.To)
+						return nil
+					default:
+					}
+					return errors.New("still waiting to receive messages")
+				},
+			)
 		}
 		require.ElementsMatch(t, stores, senders)
 	}
@@ -242,29 +246,33 @@ func TestTransportRestartedNode(t *testing.T) {
 	msg := slpb.Message{Type: slpb.MsgHeartbeat, From: sender, To: receiver}
 
 	checkSend := func(expectedSuccess bool) {
-		testutils.SucceedsSoon(t, func() error {
-			sendSuccess := tt.transports[sender.NodeID].SendAsync(msg)
-			if sendSuccess != expectedSuccess {
-				return errors.Newf("send success is still %s", sendSuccess)
-			}
-			return nil
-		})
+		testutils.SucceedsSoon(
+			t, func() error {
+				sendSuccess := tt.transports[sender.NodeID].SendAsync(msg)
+				if sendSuccess != expectedSuccess {
+					return errors.Newf("send success is still %v", sendSuccess)
+				}
+				return nil
+			},
+		)
 	}
 
 	checkReceive := func() {
-		testutils.SucceedsSoon(t, func() error {
-			select {
-			case received := <-handler.messages:
-				require.Equal(t, msg, *received)
-				return nil
-			default:
-				// To ensure messages start getting delivered, keep sending messages
-				// out. Even after SendAsync returns true, messages may still not be
-				// delivered (e.g. if the receiver node is not up yet).
-				tt.transports[sender.NodeID].SendAsync(msg)
-			}
-			return errors.New("still waiting to receive message")
-		})
+		testutils.SucceedsSoon(
+			t, func() error {
+				select {
+				case received := <-handler.messages:
+					require.Equal(t, msg, *received)
+					return nil
+				default:
+					// To ensure messages start getting delivered, keep sending messages
+					// out. Even after SendAsync returns true, messages may still not be
+					// delivered (e.g. if the receiver node is not up yet).
+					tt.transports[sender.NodeID].SendAsync(msg)
+				}
+				return errors.New("still waiting to receive message")
+			},
+		)
 	}
 
 	// Part 1: send a message to the receiver whose address hasn't been gossiped yet.
@@ -321,15 +329,17 @@ func TestTransportSendToMissingStore(t *testing.T) {
 	require.True(t, tt.transports[sender.NodeID].SendAsync(existingMsg))
 
 	// Wait for the message to the existing store to be received.
-	testutils.SucceedsSoon(t, func() error {
-		select {
-		case received := <-handler.messages:
-			require.Equal(t, existingMsg, *received)
-			return nil
-		default:
-		}
-		return errors.New("still waiting to receive message")
-	})
+	testutils.SucceedsSoon(
+		t, func() error {
+			select {
+			case received := <-handler.messages:
+				require.Equal(t, existingMsg, *received)
+				return nil
+			default:
+			}
+			return errors.New("still waiting to receive message")
+		},
+	)
 }
 
 // TestTransportClockPropagation verifies that the HLC clock timestamps are
@@ -371,15 +381,17 @@ func TestTransportClockPropagation(t *testing.T) {
 	require.True(t, tt.transports[sender.NodeID].SendAsync(msg))
 
 	// Wait for the message to be received.
-	testutils.SucceedsSoon(t, func() error {
-		select {
-		case received := <-handler.messages:
-			require.Equal(t, msg, *received)
-			return nil
-		default:
-		}
-		return errors.New("still waiting to receive message")
-	})
+	testutils.SucceedsSoon(
+		t, func() error {
+			select {
+			case received := <-handler.messages:
+				require.Equal(t, msg, *received)
+				return nil
+			default:
+			}
+			return errors.New("still waiting to receive message")
+		},
+	)
 
 	// Check that the receiver's clock is equal to the sender's clock.
 	require.Equal(t, senderClock.clock.Now(), receiverClock.clock.Now())

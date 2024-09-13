@@ -120,26 +120,28 @@ func (t *Transport) Stream(stream slpb.StoreLiveness_StreamServer) error {
 	taskCtx = t.AnnotateCtx(taskCtx)
 	defer cancel()
 
-	if err := t.stopper.RunAsyncTaskEx(taskCtx, stop.TaskOpts{
-		TaskName: "storeliveness.Transport: processing incoming stream",
-		SpanOpt:  stop.ChildSpan,
-	}, func(ctx context.Context) {
-		errCh <- func() error {
-			// Infinite loop pulling incoming messages from the RPC service's stream.
-			for {
-				batch, err := stream.Recv()
-				if err != nil {
-					return err
+	if err := t.stopper.RunAsyncTaskEx(
+		taskCtx, stop.TaskOpts{
+			TaskName: "storeliveness.Transport: processing incoming stream",
+			SpanOpt:  stop.ChildSpan,
+		}, func(ctx context.Context) {
+			errCh <- func() error {
+				// Infinite loop pulling incoming messages from the RPC service's stream.
+				for {
+					batch, err := stream.Recv()
+					if err != nil {
+						return err
+					}
+					if !batch.Now.IsEmpty() {
+						t.clock.Update(batch.Now)
+					}
+					for i := range batch.Messages {
+						t.handleMessage(ctx, &batch.Messages[i])
+					}
 				}
-				if !batch.Now.IsEmpty() {
-					t.clock.Update(batch.Now)
-				}
-				for i := range batch.Messages {
-					t.handleMessage(ctx, &batch.Messages[i])
-				}
-			}
-		}()
-	}); err != nil {
+			}()
+		},
+	); err != nil {
 		return err
 	}
 
@@ -155,8 +157,10 @@ func (t *Transport) Stream(stream slpb.StoreLiveness_StreamServer) error {
 func (t *Transport) handleMessage(ctx context.Context, msg *slpb.Message) {
 	handler, ok := t.handlers.Load(msg.To.StoreID)
 	if !ok {
-		log.Warningf(ctx, "unable to accept message %+v from %+v: no handler registered for %+v",
-			msg, msg.From, msg.To)
+		log.Warningf(
+			ctx, "unable to accept message %+v from %+v: no handler registered for %+v",
+			msg, msg.From, msg.To,
+		)
 		return
 	}
 
@@ -190,8 +194,10 @@ func (t *Transport) SendAsync(msg slpb.Message) (sent bool) {
 		return true
 	default:
 		if logSendQueueFullEvery.ShouldLog() {
-			log.Warningf(t.AnnotateCtx(context.Background()),
-				"store liveness send queue to n%d is full", toNodeID)
+			log.Warningf(
+				t.AnnotateCtx(context.Background()),
+				"store liveness send queue to n%d is full", toNodeID,
+			)
 		}
 		return false
 	}
@@ -245,10 +251,12 @@ func (t *Transport) startProcessNewQueue(
 			log.Warningf(ctx, "processing outgoing queue to node %d failed: %s:", toNodeID, err)
 		}
 	}
-	err := t.stopper.RunAsyncTask(ctx, "storeliveness.Transport: sending messages",
+	err := t.stopper.RunAsyncTask(
+		ctx, "storeliveness.Transport: sending messages",
 		func(ctx context.Context) {
 			pprof.Do(ctx, pprof.Labels("remote_node_id", toNodeID.String()), worker)
-		})
+		},
+	)
 	if err != nil {
 		t.queues.Delete(toNodeID)
 		return false
