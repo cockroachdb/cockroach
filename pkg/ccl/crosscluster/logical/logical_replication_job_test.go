@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient/randclient"
@@ -195,8 +196,6 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer TestingSetDLQ(fatalDLQ{t})()
-
 	ctx := context.Background()
 	// keyPrefix will be set later, but before countPuts is set.
 	var keyPrefix []byte
@@ -298,6 +297,8 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	}
 	dbA.CheckQueryResults(t, "SELECT * from a.tab", expectedRows)
 	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRows)
+	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, dbA.DB, "a"))
+	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, dbB.DB, "b"))
 
 	// Verify that we didn't have the data looping problem. We expect 3 CPuts
 	// when inserting new rows and 3 Puts when updating existing rows.
@@ -698,7 +699,7 @@ func TestRandomTables(t *testing.T) {
 
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
 
-	compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
+	compareReplicatedTables(ctx, t, s, "a", "b", tableName, runnerA, runnerB)
 }
 
 func TestRandomStream(t *testing.T) {
@@ -830,7 +831,7 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 				WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
 			}
 
-			compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
+			compareReplicatedTables(ctx, t, s, "a", "b", tableName, runnerA, runnerB)
 		})
 	}
 }
@@ -1287,6 +1288,7 @@ func createBasicTable(t *testing.T, db *sqlutils.SQLRunner, tableName string) {
 }
 
 func compareReplicatedTables(
+	ctx context.Context,
 	t *testing.T,
 	s serverutils.ApplicationLayerInterface,
 	dbA, dbB, tableName string,
@@ -1294,6 +1296,8 @@ func compareReplicatedTables(
 ) {
 	descA := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), dbA, tableName)
 	descB := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), dbB, tableName)
+	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, runnerA.DB, dbA))
+	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, runnerB.DB, dbB))
 
 	for _, indexA := range descA.AllIndexes() {
 		if indexA.GetType() == descpb.IndexDescriptor_INVERTED {

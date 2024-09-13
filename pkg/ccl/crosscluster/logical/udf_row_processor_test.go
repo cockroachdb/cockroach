@@ -104,7 +104,7 @@ func TestUDFWithRandomTables(t *testing.T) {
 	runnerA.Exec(t, fmt.Sprintf("DELETE FROM %s LIMIT 5", tableName))
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
 
-	compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
+	compareReplicatedTables(ctx, t, s, "a", "b", tableName, runnerA, runnerB)
 }
 
 func TestUDFInsertOnly(t *testing.T) {
