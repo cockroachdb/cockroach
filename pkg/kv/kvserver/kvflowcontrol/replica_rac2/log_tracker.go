@@ -63,6 +63,14 @@ func (l *logTracker) admitted(sched bool) (av rac2.AdmittedVector, dirty bool) {
 	return av, dirty
 }
 
+func (l *logTracker) snap(ctx context.Context, mark rac2.LogMark) {
+	l.Lock()
+	defer l.Unlock()
+	if l.lt.Snap(ctx, mark) {
+		l.dirty = true
+	}
+}
+
 func (l *logTracker) append(ctx context.Context, after uint64, to rac2.LogMark) {
 	l.Lock()
 	defer l.Unlock()
@@ -104,14 +112,6 @@ func (l *logTracker) logAdmitted(ctx context.Context, at rac2.LogMark, pri raftp
 		return true
 	}
 	return false
-}
-
-func (l *logTracker) snapSynced(ctx context.Context, mark rac2.LogMark) {
-	l.Lock()
-	defer l.Unlock()
-	if l.lt.SnapSynced(ctx, mark) {
-		l.dirty = true
-	}
 }
 
 func (l *logTracker) debugString() string {

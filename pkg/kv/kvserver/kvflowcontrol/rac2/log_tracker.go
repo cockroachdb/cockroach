@@ -114,6 +114,28 @@ func (l *LogTracker) Admitted() AdmittedVector {
 	return a
 }
 
+// Snap informs the tracker that a snapshot at the given log mark is about to be
+// sent to storage, and the log will be truncated.
+//
+// Returns true if the admitted vector has changed. The only way it can change
+// is when the leader term goes up, and indices potentially regress after the
+// log is truncated by this newer term write.
+func (l *LogTracker) Snap(ctx context.Context, mark LogMark) bool {
+	if !mark.After(l.last) {
+		l.errorf(ctx, "registering stale snapshot %+v", mark)
+		return false
+	}
+	// Fake an append spanning the gap between the log and the snapshot. It will,
+	// if necessary, truncate the stable index and remove entries waiting for
+	// admission that became obsolete.
+	//
+	// Some entries waiting in the queue remain such, even though not all of them
+	// might be actually in the pre-image of the snapshot. We chose this in order
+	// to retain some backpressure, all these entries were written anyway and wait
+	// for storage admission.
+	return l.Append(ctx, min(l.last.Index, mark.Index), mark)
+}
+
 // Append informs the tracker that log entries at indices (after, to.Index] are
 // about to be sent to stable storage, on behalf of the to.Term leader.
 //
@@ -253,25 +275,6 @@ func (l *LogTracker) LogAdmitted(ctx context.Context, at LogMark, pri raftpb.Pri
 	}
 	// The entire queue is admitted, clear it.
 	l.waiting[pri] = waiting[len(waiting):]
-	return updated
-}
-
-// SnapSynced informs the tracker that a snapshot at the given log mark has been
-// stored/synced, and the log is cleared.
-//
-// Returns true if the admitted vector has changed.
-func (l *LogTracker) SnapSynced(ctx context.Context, mark LogMark) bool {
-	if !mark.After(l.last) {
-		l.errorf(ctx, "syncing stale snapshot %+v", mark)
-		return false
-	}
-	// Fake an append spanning the gap between the log and the snapshot. It will,
-	// if necessary, truncate the stable index and remove entries waiting for
-	// admission that became obsolete.
-	updated := l.Append(ctx, min(l.last.Index, mark.Index), mark)
-	if l.LogSynced(ctx, mark) {
-		return true
-	}
 	return updated
 }
 

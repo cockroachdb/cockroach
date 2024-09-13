@@ -366,7 +366,7 @@ func TestProcessorBasic(t *testing.T) {
 				var mark rac2.LogMark
 				d.ScanArgs(t, "term", &mark.Term)
 				d.ScanArgs(t, "index", &mark.Index)
-				p.SyncedLogStorage(ctx, mark, false /* snap */)
+				p.SyncedLogStorage(ctx, mark)
 				printLogTracker()
 				return builderStr()
 

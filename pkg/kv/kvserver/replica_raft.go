@@ -1676,7 +1676,7 @@ func (r *replicaSyncCallback) OnLogSync(
 	// The log mark is non-empty only if this was a non-empty log append that
 	// updated the stable log mark.
 	if mark := done.Mark(); mark.Term != 0 {
-		repl.flowControlV2.SyncedLogStorage(ctx, mark, false /* snap */)
+		repl.flowControlV2.SyncedLogStorage(ctx, mark)
 	}
 	// Block sending the responses back to raft, if a test needs to.
 	if fn := repl.store.TestingKnobs().TestingAfterRaftLogSync; fn != nil {
@@ -1692,7 +1692,7 @@ func (r *replicaSyncCallback) OnLogSync(
 func (r *replicaSyncCallback) OnSnapSync(ctx context.Context, done logstore.MsgStorageAppendDone) {
 	repl := (*Replica)(r)
 	// NB: when storing snapshot, done always contains a non-zero log mark.
-	repl.flowControlV2.SyncedLogStorage(ctx, done.Mark(), true /* snap */)
+	repl.flowControlV2.SyncedLogStorage(ctx, done.Mark())
 	repl.sendRaftMessages(ctx, done.Responses(), nil /* blocked */, true /* willDeliverLocal */)
 }
 
