@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -28,6 +29,7 @@ import (
 
 func TestConnTracker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -110,6 +112,7 @@ func TestConnTracker(t *testing.T) {
 
 func TestConnTracker_GetConnsMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -174,6 +177,7 @@ func TestConnTracker_GetConnsMap(t *testing.T) {
 
 func TestConnTrackerPartitionsRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -230,6 +234,7 @@ func TestConnTrackerPartitionsRefresh(t *testing.T) {
 
 func TestTenantEntry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	entry := newTenantEntry()
 
@@ -293,6 +298,7 @@ func TestTenantEntry(t *testing.T) {
 
 func TestTenantEntry_refreshPartitions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	entry := newTenantEntry()
 

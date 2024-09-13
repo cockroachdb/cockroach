@@ -25,6 +25,8 @@ go_test(
     ],
     embed = [":throttler"],
     deps = [
+        "//pkg/ccl/testutilsccl",
+        "//pkg/util/leaktest",
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],
