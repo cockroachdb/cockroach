@@ -8,24 +8,29 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tablemetadatacache_test
+package tablemetadatacache
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -66,7 +71,7 @@ WHERE id = $1 AND claim_instance_id IS NOT NULL`, jobs.UpdateTableMetadataCacheJ
 	})
 
 	metrics := tc.Server(0).JobRegistry().(*jobs.Registry).MetricsStruct().
-		JobSpecificMetrics[jobspb.TypeUpdateTableMetadataCache].(tablemetadatacache.TableMetadataUpdateJobMetrics)
+		JobSpecificMetrics[jobspb.TypeUpdateTableMetadataCache].(TableMetadataUpdateJobMetrics)
 	testutils.SucceedsSoon(t, func() error {
 		if metrics.NumRuns.Count() != 1 {
 			return errors.New("job hasn't run yet")
@@ -83,5 +88,107 @@ WHERE id = $1 AND claim_instance_id IS NOT NULL`, jobs.UpdateTableMetadataCacheJ
 			return errors.New("last run time not updated")
 		}
 		return nil
+	})
+}
+
+// TestUpdateTableMetadataCacheAutomaticUpdates tests that:
+// 1. The update table metadata cache job does not run automatically by default.
+// 2. The job runs automatically on the data validity interval when automatic
+// updates are enabled.
+func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStress(t, "too slow under stress")
+
+	ctx := context.Background()
+
+	// We'll mock the job execution function to track when the job is run and
+	// to avoid running the actual job which could take longer - we don't care
+	// about the actual update logic in this test.
+	var mockCalls []time.Time
+	mockMutex := syncutil.RWMutex{}
+	jobRunCh := make(chan struct{})
+	restoreUpdate := testutils.TestingHook(&updateJobExecFn,
+		func(ctx context.Context, ie isql.Executor) error {
+			mockMutex.Lock()
+			defer mockMutex.Unlock()
+			mockCalls = append(mockCalls, timeutil.Now())
+			select {
+			case jobRunCh <- struct{}{}:
+			default:
+			}
+			return nil
+		})
+	defer restoreUpdate()
+
+	getMockCallCount := func() int {
+		mockMutex.RLock()
+		defer mockMutex.RUnlock()
+		return len(mockCalls)
+	}
+
+	waitForJobRuns := func(count int, timeout time.Duration) error {
+		ctxWithCancel, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		for i := 0; i < count; i++ {
+			select {
+			case <-jobRunCh:
+			case <-ctxWithCancel.Done():
+				return fmt.Errorf("timed out waiting for job run %d", i+1)
+			}
+		}
+		return nil
+	}
+
+	// Server setup.
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	conn := sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
+
+	// Wait for the job to be claimed by a node.
+	testutils.SucceedsSoon(t, func() error {
+		row := conn.Query(t, `
+				SELECT claim_instance_id, status FROM system.jobs 
+				WHERE id = $1 AND claim_instance_id IS NOT NULL
+                      AND status = 'running'`,
+			jobs.UpdateTableMetadataCacheJobID)
+		if !row.Next() {
+			return errors.New("no node has claimed the job")
+		}
+		return nil
+	})
+
+	require.Zero(t, getMockCallCount(), "Job should not run automatically by default")
+
+	t.Run("AutomaticUpdatesEnabled", func(t *testing.T) {
+		conn.Exec(t, `SET CLUSTER SETTING obs.tablemetadata.automatic_updates.enabled = true`)
+		tableMetadataCacheValidDuration.Override(ctx, &s.ClusterSettings().SV, 50*time.Millisecond)
+		err := waitForJobRuns(3, 10*time.Second)
+		require.NoError(t, err, "Job should have run at least 3 times")
+		mockCallsCount := getMockCallCount()
+		require.GreaterOrEqual(t, mockCallsCount, 3, "Job should have run at least 3 times")
+		conn.Exec(t, `RESET CLUSTER SETTING obs.tablemetadata.automatic_updates.enabled`)
+		// We'll wait for one more signal in case the job was running when the setting was disabled.
+		// Ignore the error since it could timeout or be successful.
+		_ = waitForJobRuns(1, 200*time.Millisecond)
+
+		// Verify time between calls.
+		mockMutex.RLock()
+		defer mockMutex.RUnlock()
+		for i := 1; i < len(mockCalls); i++ {
+			timeBetweenCalls := mockCalls[i].Sub(mockCalls[i-1])
+			require.GreaterOrEqual(t, timeBetweenCalls, 50*time.Millisecond,
+				"Time between calls %d and %d should be at least 50ms", i-1, i)
+		}
+	})
+
+	t.Run("AutomaticUpdatesDisabled", func(t *testing.T) {
+		conn.Exec(t, `SET CLUSTER SETTING obs.tablemetadata.automatic_updates.enabled = f`)
+		tableMetadataCacheValidDuration.Override(ctx, &s.ClusterSettings().SV, 50*time.Millisecond)
+		initialCount := getMockCallCount()
+		err := waitForJobRuns(1, 200*time.Millisecond)
+		require.Error(t, err, "Job should not run after being disabled")
+		require.Equal(t, initialCount, getMockCallCount(), "Job count should not increase after being disabled")
 	})
 }
