@@ -311,20 +311,6 @@ inspect range_id=1
           }
         }
       ]
-    },
-    {
-      "stream": {
-        "tenant_id": {
-          "id": "1"
-        },
-        "store_id": 3,
-        "available_eval_regular_tokens": "16777216",
-        "available_eval_elastic_tokens": "8388608",
-        "available_send_regular_tokens": "16777216",
-        "available_send_elastic_tokens": "8388608"
-      },
-      "tracked_deductions": [
-      ]
     }
   ]
 }
@@ -395,20 +381,6 @@ inspect range_id=1
             "index": "3"
           }
         }
-      ]
-    },
-    {
-      "stream": {
-        "tenant_id": {
-          "id": "1"
-        },
-        "store_id": 3,
-        "available_eval_regular_tokens": "16777216",
-        "available_eval_elastic_tokens": "8388608",
-        "available_send_regular_tokens": "16777216",
-        "available_send_elastic_tokens": "8388608"
-      },
-      "tracked_deductions": [
       ]
     }
   ]

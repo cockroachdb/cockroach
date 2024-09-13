@@ -95,7 +95,8 @@ range_id=1 tenant_id=1 local_replica_id=1
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 
 # Tick the clock by less than the probe to close delay, the stream should still
-# be open in state probeRecentlyReplicate.
+# be open in state probeRecentlyReplicate but all deducted tokens should be
+# returned.
 tick duration=500ms
 ----
 now=500ms
@@ -107,10 +108,6 @@ stream_state range_id=1
 (n2,s2):2: state=replicate closed=false
 ++++
 (n3,s3):3: state=probeRecentlyReplicate closed=false
-NormalPri:
-  term=1 index=1  tokens=1048576
-  term=1 index=2  tokens=1048576
-  term=1 index=3  tokens=1048576
 ++++
 
 # Tick the clock by the remaining probe to close delay, the stream should now
@@ -176,7 +173,7 @@ range_id=1
   term=1 index=7 pri=NormalPri size=1MiB
 ----
 t1/s1: reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
-t1/s2: reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+t1/s2: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
 t1/s3: reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
 
 # The operation should now be done and have waited for s1 and s3.
