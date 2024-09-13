@@ -33,6 +33,7 @@ async function fetchAndRender() {
   const store = createAdminUIStore(history, getDataFromServer());
   recomputeDocsURLs();
 
+  /* eslint react/no-deprecated: "off" */
   ReactDOM.render(
     <App history={history} store={store} />,
     document.getElementById("react-layout"),

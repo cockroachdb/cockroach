@@ -119,18 +119,9 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="leases">
-        <Metric
-          name="cr.store.leases.expiration"
-          title="Expiration Leases"
-        />
-        <Metric
-          name="cr.store.leases.epoch"
-          title="Epoch Leases"
-        />
-        <Metric
-          name="cr.store.leases.leader"
-          title="Leader Leases"
-        />
+        <Metric name="cr.store.leases.expiration" title="Expiration Leases" />
+        <Metric name="cr.store.leases.epoch" title="Epoch Leases" />
+        <Metric name="cr.store.leases.leader" title="Leader Leases" />
       </Axis>
     </LineGraph>,
 

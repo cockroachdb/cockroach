@@ -43,7 +43,8 @@ import {
   livenessStatusByNodeIDSelector,
   nodeIDsSelector,
   nodeIDsStringifiedSelector,
-  selectStoreIDsByNodeID, nodeDisplayNameByIDSelectorWithoutAddress,
+  selectStoreIDsByNodeID,
+  nodeDisplayNameByIDSelectorWithoutAddress,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import {
@@ -521,20 +522,21 @@ export class NodeGraphs extends React.Component<
  */
 const nodeDropdownOptionsSelector = createSelector(
   nodeIDsSelector,
-    (state) => nodeDisplayNameByIDSelector(state),
+  state => nodeDisplayNameByIDSelector(state),
   livenessStatusByNodeIDSelector,
   (nodeIds, nodeDisplayNameByID, livenessStatusByNodeID): DropdownOption[] => {
     const base = [{ value: "", label: "Cluster" }];
     return base.concat(
-      nodeIds.filter(
-        id =>
-          livenessStatusByNodeID[id] !==
-          LivenessStatus.NODE_STATUS_DECOMMISSIONED,
-      )
-      .map(id => ({
-        value: id.toString(),
-        label: nodeDisplayNameByID[id],
-      }))
+      nodeIds
+        .filter(
+          id =>
+            livenessStatusByNodeID[id] !==
+            LivenessStatus.NODE_STATUS_DECOMMISSIONED,
+        )
+        .map(id => ({
+          value: id.toString(),
+          label: nodeDisplayNameByID[id],
+        })),
     );
   },
 );

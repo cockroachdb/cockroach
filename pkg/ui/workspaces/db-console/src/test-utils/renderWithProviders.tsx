@@ -24,7 +24,6 @@ import { AdminUIState, flagsReducer } from "src/redux/state";
 import { timeScaleReducer } from "src/redux/timeScale";
 import { uiDataReducer } from "src/redux/uiData";
 
-
 import type { PreloadedState } from "@reduxjs/toolkit";
 
 export function renderWithProviders(

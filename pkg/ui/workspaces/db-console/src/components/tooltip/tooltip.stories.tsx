@@ -64,7 +64,10 @@ const tooltipsStack = (components: object) => (
   </>
 );
 
-const statusTooltipsStack = (statusNames: Record<string, unknown>, descriptionGetter: any) => (
+const statusTooltipsStack = (
+  statusNames: Record<string, unknown>,
+  descriptionGetter: any,
+) => (
   <>
     {Object.keys(statusNames)
       .filter(status => isNaN(Number(status)))

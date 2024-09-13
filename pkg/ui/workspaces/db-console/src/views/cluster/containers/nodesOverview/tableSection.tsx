@@ -107,7 +107,9 @@ class TableSection extends React.Component<
         </section>
         <div className={contentClass}>
           {children}
-          {this.props.footer && <div className="table-section__footer">{this.props.footer}</div>}
+          {this.props.footer && (
+            <div className="table-section__footer">{this.props.footer}</div>
+          )}
         </div>
       </div>
     );
@@ -117,7 +119,10 @@ class TableSection extends React.Component<
 const getTableSectionKey = (id: string) =>
   `cluster_overview/table_section/${id}/is_expanded`;
 
-const mapStateToProps = (state: AdminUIState, props: TableSectionProps): MapStateToProps => {
+const mapStateToProps = (
+  state: AdminUIState,
+  props: TableSectionProps,
+): MapStateToProps => {
   const tableSectionState = new LocalSetting<AdminUIState, boolean>(
     getTableSectionKey(props.id),
     s => s.localSettings,
@@ -138,4 +143,12 @@ const mapDispatchToProps = (
   },
 });
 
-export default connect<MapStateToProps, MapDispatchToProps, TableSectionProps, AdminUIState>(mapStateToProps, mapDispatchToProps)(TableSection);
+export default connect<
+  MapStateToProps,
+  MapDispatchToProps,
+  TableSectionProps,
+  AdminUIState
+>(
+  mapStateToProps,
+  mapDispatchToProps,
+)(TableSection);
