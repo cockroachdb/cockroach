@@ -490,17 +490,26 @@ func TestSingleClaim(t *testing.T) {
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 	JWTAuthClaim.Override(ctx, &s.ClusterSettings().SV, customClaimName)
+	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
 
 	// Validation fails with a subject error when a user tries to log in with a user named
-	// "invalid" but the token is for the user "test2".
+	// "invalid" but the token is for the user "test1".
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
 
-	// Validation passes the subject check when the username matches the subject and then fails on the next
-	// check (audience field not matching).
+	// Validation is successful for a token with a matched principal.
+	retrievedUser, err := verifier.RetrieveIdentity(ctx, username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
+	require.NoError(t, err)
+	require.Equal(t, username.MakeSQLUsernameFromPreNormalizedString(username1), retrievedUser)
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
-	require.ErrorContains(t, err, "JWT authentication: invalid audience")
-	require.EqualValues(t, "token issued with an audience of [test_cluster]", errors.GetAllDetails(err)[0])
+	require.NoError(t, err)
+
+	// Validation is successful for a token without a username provided, as a single principal is matched.
+	retrievedUser, err = verifier.RetrieveIdentity(ctx, username.MakeSQLUsernameFromPreNormalizedString(""), token, identMap)
+	require.NoError(t, err)
+	require.Equal(t, username.MakeSQLUsernameFromPreNormalizedString(username1), retrievedUser)
+	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(""), token, identMap)
+	require.NoError(t, err)
 }
 
 func TestMultipleClaim(t *testing.T) {
@@ -522,20 +531,32 @@ func TestMultipleClaim(t *testing.T) {
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 	JWTAuthClaim.Override(ctx, &s.ClusterSettings().SV, customClaimName)
+	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
 
 	// Validation fails with a subject error when a user tries to log in with a user named
 	// "invalid" but the token is for the user "test2".
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
 
-	// Validation passes the subject check when the username matches the subject and then fails on the next
-	// check (audience field not matching).
+	// Validation is successful for a token with a matched principal - test1.
+	retrievedUser, err := verifier.RetrieveIdentity(ctx, username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
+	require.NoError(t, err)
+	require.Equal(t, username.MakeSQLUsernameFromPreNormalizedString(username1), retrievedUser)
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
-	require.ErrorContains(t, err, "JWT authentication: invalid audience")
-	require.EqualValues(t, "token issued with an audience of [test_cluster]", errors.GetAllDetails(err)[0])
+	require.NoError(t, err)
+
+	// Validation is successful for a token with a matched principal - test2.
+	retrievedUser, err = verifier.RetrieveIdentity(ctx, username.MakeSQLUsernameFromPreNormalizedString(username2), token, identMap)
+	require.NoError(t, err)
+	require.Equal(t, username.MakeSQLUsernameFromPreNormalizedString(username2), retrievedUser)
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username2), token, identMap)
-	require.ErrorContains(t, err, "JWT authentication: invalid audience")
-	require.EqualValues(t, "token issued with an audience of [test_cluster]", errors.GetAllDetails(err)[0])
+	require.NoError(t, err)
+
+	// Validation fails for a token without a username provided, as multiple principals are matched.
+	_, err = verifier.RetrieveIdentity(ctx, username.MakeSQLUsernameFromPreNormalizedString(""), token, identMap)
+	require.ErrorContains(t, err, "JWT authentication: invalid principal")
+	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(""), token, identMap)
+	require.ErrorContains(t, err, "JWT authentication: invalid principal")
 }
 
 func TestSubjectMappingCheck(t *testing.T) {
