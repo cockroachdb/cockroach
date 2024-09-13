@@ -61,6 +61,14 @@ func (st *SupportTracker) Reset() {
 	// down.
 }
 
+// GetFollowerSupportEpoch returns the support epoch for the given follower.
+// If we haven't tracked the follower's support epoch, it will return an epoch
+// of 0 and the boolean will be false.
+func (st *SupportTracker) GetFollowerSupportEpoch(id pb.PeerID) (pb.Epoch, bool) {
+	supportEpoch, exist := st.support[id]
+	return supportEpoch, exist
+}
+
 // LeadSupportUntil returns the timestamp until which the leader is guaranteed
 // support until based on the support being tracked for it by its peers.
 func (st *SupportTracker) LeadSupportUntil() hlc.Timestamp {

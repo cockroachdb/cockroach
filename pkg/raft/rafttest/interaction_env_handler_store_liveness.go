@@ -71,6 +71,7 @@ func (l *livenessFabric) addNode() {
 			isSupported: true,
 		}
 	}
+	fmt.Printf("!!! ADDING A NODE state !!!, state: %+v\n", l.state)
 	l.state = append(l.state, newNodeState)
 
 	// Finally, initialize the liveness entry for the node we've just added. It'll
