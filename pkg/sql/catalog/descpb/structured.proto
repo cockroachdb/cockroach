@@ -1219,7 +1219,9 @@ message TableDescriptor {
   // stored outside the span of the object.
   optional ExternalRowData external = 61 [(gogoproto.nullable) = true];
 
-  // Next ID: 62
+  repeated int64 ldr_job_ids = 62 [(gogoproto.nullable) = false, (gogoproto.customname) = "LDRJobIDs"];
+
+  // Next ID: 63
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside

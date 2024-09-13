@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -128,6 +129,7 @@ func createLogicalReplicationStreamPlanHook(
 			targetsDescription string
 			srcTableNames      = make([]string, len(stmt.From.Tables))
 			repPairs           = make([]jobspb.LogicalReplicationDetails_ReplicationPair, len(stmt.Into.Tables))
+			dstTableDescs      = make([]*tabledesc.Mutable, len(stmt.Into.Tables))
 		)
 		for i := range stmt.From.Tables {
 
@@ -141,6 +143,7 @@ func createLogicalReplicationStreamPlanHook(
 				return err
 			}
 			repPairs[i].DstDescriptorID = int32(td.GetID())
+			dstTableDescs[i] = td
 
 			// TODO(dt): remove when we support this via KV metadata.
 			var foundTSCol bool
@@ -265,6 +268,19 @@ func createLogicalReplicationStreamPlanHook(
 		if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, p.InternalSQLTxn()); err != nil {
 			return err
 		}
+
+		// Add the LDR job ID to the destination table descriptors.
+		b := p.InternalSQLTxn().KV().NewBatch()
+		for _, td := range dstTableDescs {
+			td.LDRJobIDs = append(td.LDRJobIDs, int64(jr.JobID))
+			if err := p.InternalSQLTxn().Descriptors().WriteDescToBatch(ctx, true /* kvTrace */, td, b); err != nil {
+				return err
+			}
+		}
+		if err := p.InternalSQLTxn().KV().Run(ctx, b); err != nil {
+			return err
+		}
+
 		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jr.JobID))}
 		return nil
 	}
