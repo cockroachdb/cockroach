@@ -26,6 +26,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/isql",
+        "//pkg/sql/pgwire",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
