@@ -241,6 +241,12 @@ const (
 	// column to the system.sql_instances table.
 	V24_3_SQLInstancesAddDraining
 
+	// V24_3_MaybePreventUpgradeForCoreLicenseDeprecation is the migration step
+	// that checks for the core license deprecation. It checks to make sure that
+	// the cluster would not be unknowingly in violation of the new license
+	// policies.
+	V24_3_MaybePreventUpgradeForCoreLicenseDeprecation
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -289,12 +295,13 @@ var versionTable = [numKeys]roachpb.Version{
 	// v24.3 versions. Internal versions must be even.
 	V24_3_Start: {Major: 24, Minor: 2, Internal: 2},
 
-	V24_3_StoreLivenessEnabled:         {Major: 24, Minor: 2, Internal: 4},
-	V24_3_AddTimeseriesZoneConfig:      {Major: 24, Minor: 2, Internal: 6},
-	V24_3_TableMetadata:                {Major: 24, Minor: 2, Internal: 8},
-	V24_3_TenantExcludeDataFromBackup:  {Major: 24, Minor: 2, Internal: 10},
-	V24_3_AdvanceCommitIndexViaMsgApps: {Major: 24, Minor: 2, Internal: 12},
-	V24_3_SQLInstancesAddDraining:      {Major: 24, Minor: 2, Internal: 14},
+	V24_3_StoreLivenessEnabled:                         {Major: 24, Minor: 2, Internal: 4},
+	V24_3_AddTimeseriesZoneConfig:                      {Major: 24, Minor: 2, Internal: 6},
+	V24_3_TableMetadata:                                {Major: 24, Minor: 2, Internal: 8},
+	V24_3_TenantExcludeDataFromBackup:                  {Major: 24, Minor: 2, Internal: 10},
+	V24_3_AdvanceCommitIndexViaMsgApps:                 {Major: 24, Minor: 2, Internal: 12},
+	V24_3_SQLInstancesAddDraining:                      {Major: 24, Minor: 2, Internal: 14},
+	V24_3_MaybePreventUpgradeForCoreLicenseDeprecation: {Major: 24, Minor: 2, Internal: 16},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
