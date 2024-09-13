@@ -156,7 +156,7 @@ func TestLogTrackerLogSynced(t *testing.T) {
 	}
 }
 
-func TestLogTrackerSnapSynced(t *testing.T) {
+func TestLogTrackerSnap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -164,15 +164,16 @@ func TestLogTrackerSnapSynced(t *testing.T) {
 		last   LogMark
 		stable uint64
 		snap   LogMark
+		want   LogMark // stable mark after registering the snap
 		notOk  bool
 	}{
 		// Invalid snapshots.
 		{last: mark(5, 20), snap: mark(4, 30), notOk: true},
 		{last: mark(5, 20), snap: mark(5, 10), notOk: true},
 		// Valid snapshots.
-		{last: mark(5, 20), snap: mark(5, 30)},
-		{last: mark(5, 20), snap: mark(6, 10)},
-		{last: mark(5, 20), snap: mark(6, 30)},
+		{last: mark(5, 20), stable: 20, snap: mark(5, 30), want: mark(5, 20)},
+		{last: mark(5, 20), stable: 15, snap: mark(6, 10), want: mark(6, 10)},
+		{last: mark(5, 20), stable: 20, snap: mark(6, 30), want: mark(6, 20)},
 	} {
 		t.Run("", func(t *testing.T) {
 			defer func() {
@@ -182,10 +183,10 @@ func TestLogTrackerSnapSynced(t *testing.T) {
 			l := NewLogTracker(tt.last)
 			l.stable = tt.stable
 			l.check(t)
-			l.SnapSynced(context.Background(), tt.snap)
+			l.Snap(context.Background(), tt.snap)
 			l.check(t)
 			require.Equal(t, tt.snap, l.last)
-			require.Equal(t, tt.snap.Index, l.Stable().Index)
+			require.Equal(t, tt.want, l.Stable())
 		})
 	}
 }
@@ -238,6 +239,11 @@ func TestLogTracker(t *testing.T) {
 			d.ScanArgs(t, "after", &after)
 			to := readMark(t, d, "to")
 			updated := tracker.Append(ctx, after, to)
+			return state(updated)
+
+		case "snap":
+			mark := readMark(t, d, "index")
+			updated := tracker.Snap(ctx, mark)
 			return state(updated)
 
 		case "sync": // Example: sync term=10 index=100
