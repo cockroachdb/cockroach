@@ -190,7 +190,10 @@ func (q *tableMetadataBatchUpsertQuery) addRow(row *tableMetadataIterRow) error 
 
 	// TODO (xinhaoz): Get store ids from span stats after
 	// https://github.com/cockroachdb/cockroach/issues/129060 is complete.
-	storeIds := make([]int, 0)
+	storeIds := make([]int, len(stats.StoreIDs))
+	for i, id := range stats.StoreIDs {
+		storeIds[i] = int(id)
+	}
 
 	args := []interface{}{
 		row.dbID,                              // db_id
