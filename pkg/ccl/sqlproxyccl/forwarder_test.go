@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -32,6 +33,7 @@ import (
 
 func TestForward(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	bgCtx := context.Background()
 
@@ -328,6 +330,7 @@ func TestForward(t *testing.T) {
 
 func TestForwarder_Context(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	ctx := logtags.AddTag(context.Background(), "foo", "bar")
 	f := newForwarder(ctx, nil /* connector */, nil /* metrics */, nil /* timeSource */)
@@ -341,6 +344,7 @@ func TestForwarder_Context(t *testing.T) {
 
 func TestForwarder_Close(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	ctx := context.Background()
 	for _, withRun := range []bool{true, false} {
@@ -363,6 +367,7 @@ func TestForwarder_Close(t *testing.T) {
 
 func TestForwarder_tryReportError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	ctx := context.Background()
 	p1, p2 := net.Pipe()
@@ -398,6 +403,7 @@ func TestForwarder_tryReportError(t *testing.T) {
 
 func TestForwarder_replaceServerConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	ctx := context.Background()
 	clientProxy, client := net.Pipe()
@@ -440,6 +446,7 @@ func TestForwarder_replaceServerConn(t *testing.T) {
 
 func TestWrapClientToServerError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	for _, tc := range []struct {
 		input  error
@@ -473,6 +480,7 @@ func TestWrapClientToServerError(t *testing.T) {
 
 func TestWrapServerToClientError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	for _, tc := range []struct {
 		input  error
@@ -506,6 +514,7 @@ func TestWrapServerToClientError(t *testing.T) {
 
 func TestMakeLogicalClockFn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	clockFn := makeLogicalClockFn()
 
@@ -532,6 +541,7 @@ func TestMakeLogicalClockFn(t *testing.T) {
 
 func TestSuspendResumeProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	t.Run("context_cancelled", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
