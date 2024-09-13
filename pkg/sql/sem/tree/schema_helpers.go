@@ -33,3 +33,26 @@ func IsSetOrResetSchemaLocked(n Statement) bool {
 	}
 	return false
 }
+
+// IsAllowedLDRSchemaChange returns true if the schema change statement is
+// allowed to occur while the table is being referenced by a logical data
+// replication job as a destination table.
+func IsAllowedLDRSchemaChange(n Statement) bool {
+	switch s := n.(type) {
+	case *CreateIndex:
+		return true
+	case *DropIndex:
+		return true
+	case *AlterTable:
+		// Allow adding a nullable column without a default value if that is the
+		// only change.
+		if len(s.Cmds) == 1 {
+			if cmd, ok := s.Cmds[0].(*AlterTableAddColumn); ok {
+				if cmd.ColumnDef.Nullable.Nullability != NotNull && cmd.ColumnDef.DefaultExpr.Expr == nil {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
