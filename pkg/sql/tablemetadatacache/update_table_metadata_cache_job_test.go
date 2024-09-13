@@ -163,7 +163,7 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 
 	t.Run("AutomaticUpdatesEnabled", func(t *testing.T) {
 		conn.Exec(t, `SET CLUSTER SETTING obs.tablemetadata.automatic_updates.enabled = true`)
-		tableMetadataCacheValidDuration.Override(ctx, &s.ClusterSettings().SV, 50*time.Millisecond)
+		DataValidDurationSetting.Override(ctx, &s.ClusterSettings().SV, 50*time.Millisecond)
 		err := waitForJobRuns(3, 10*time.Second)
 		require.NoError(t, err, "Job should have run at least 3 times")
 		mockCallsCount := getMockCallCount()
@@ -185,7 +185,7 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 
 	t.Run("AutomaticUpdatesDisabled", func(t *testing.T) {
 		conn.Exec(t, `SET CLUSTER SETTING obs.tablemetadata.automatic_updates.enabled = f`)
-		tableMetadataCacheValidDuration.Override(ctx, &s.ClusterSettings().SV, 50*time.Millisecond)
+		DataValidDurationSetting.Override(ctx, &s.ClusterSettings().SV, 50*time.Millisecond)
 		initialCount := getMockCallCount()
 		err := waitForJobRuns(1, 200*time.Millisecond)
 		require.Error(t, err, "Job should not run after being disabled")

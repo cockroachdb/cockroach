@@ -38,13 +38,17 @@ var _ jobs.Resumer = (*tableMetadataUpdateJobResumer)(nil)
 
 // Resume is part of the jobs.Resumer interface.
 func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI interface{}) error {
-	log.Infof(ctx, "starting table metadata update job")
 	j.job.MarkIdle(true)
 
 	execCtx := execCtxI.(sql.JobExecContext)
 	metrics := execCtx.ExecCfg().JobRegistry.MetricsStruct().
 		JobSpecificMetrics[jobspb.TypeUpdateTableMetadataCache].(TableMetadataUpdateJobMetrics)
-
+	var onJobStartKnob, onJobCompleteKnob, onJobReady func()
+	if execCtx.ExecCfg().TableMetadataKnobs != nil {
+		onJobStartKnob = execCtx.ExecCfg().TableMetadataKnobs.OnJobStart
+		onJobCompleteKnob = execCtx.ExecCfg().TableMetadataKnobs.OnJobComplete
+		onJobReady = execCtx.ExecCfg().TableMetadataKnobs.OnJobReady
+	}
 	// We must reset the job's num runs to 0 so that it doesn't get
 	// delayed by the job system's exponential backoff strategy.
 	if err := j.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
@@ -68,7 +72,7 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 		default:
 		}
 	})
-	tableMetadataCacheValidDuration.SetOnChange(&settings.SV, func(_ context.Context) {
+	DataValidDurationSetting.SetOnChange(&settings.SV, func(_ context.Context) {
 		select {
 		case scheduleSettingsCh <- struct{}{}:
 		default:
@@ -76,9 +80,12 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	})
 
 	var timer timeutil.Timer
+	if onJobReady != nil {
+		onJobReady()
+	}
 	for {
 		if tableMetadataCacheAutoUpdatesEnabled.Get(&settings.SV) {
-			timer.Reset(tableMetadataCacheValidDuration.Get(&settings.SV))
+			timer.Reset(DataValidDurationSetting.Get(&settings.SV))
 		}
 		select {
 		case <-scheduleSettingsCh:
@@ -93,6 +100,9 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 			return ctx.Err()
 		}
 
+		if onJobStartKnob != nil {
+			onJobStartKnob()
+		}
 		// Run table metadata update job.
 		metrics.NumRuns.Inc(1)
 		j.markAsRunning(ctx)
@@ -100,6 +110,9 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 			log.Errorf(ctx, "error running table metadata update job: %s", err)
 		}
 		j.markAsCompleted(ctx)
+		if onJobCompleteKnob != nil {
+			onJobCompleteKnob()
+		}
 	}
 }
 

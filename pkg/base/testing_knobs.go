@@ -60,4 +60,5 @@ type TestingKnobs struct {
 	TenantCapabilitiesTestingKnobs ModuleTestingKnobs
 	TableStatsKnobs                ModuleTestingKnobs
 	Insights                       ModuleTestingKnobs
+	TableMetadata                  ModuleTestingKnobs
 }

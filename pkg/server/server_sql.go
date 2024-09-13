@@ -113,6 +113,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilegecache"
+	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -1151,6 +1152,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		tableStatsTestingKnobs = tableStatsKnobs.(*stats.TableStatsTestingKnobs)
 	}
 
+	if tableMetadataKnobs := cfg.TestingKnobs.TableMetadata; tableMetadataKnobs != nil {
+		execCfg.TableMetadataKnobs = tableMetadataKnobs.(*tablemetadatacacheutil.TestingKnobs)
+
+	}
 	// Set up internal memory metrics for use by internal SQL executors.
 	// Don't add them to the registry now because it will be added as part of pgServer metrics.
 	sqlMemMetrics := sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())

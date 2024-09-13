@@ -4211,7 +4211,7 @@ func (s *statusServer) localUpdateTableMetadataCache() (
 	select {
 	case s.updateTableMetadataJobSignal <- struct{}{}:
 	default:
-		return nil, status.Errorf(codes.Unavailable, "update table metadata cache job is not ready to start execution")
+		return nil, status.Errorf(codes.Aborted, "update table metadata cache job is not ready to start execution")
 	}
 	return &serverpb.UpdateTableMetadataCacheResponse{}, nil
 }
