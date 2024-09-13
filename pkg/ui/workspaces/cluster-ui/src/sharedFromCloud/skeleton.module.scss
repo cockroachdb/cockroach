@@ -1,0 +1,12 @@
+@import "application.module.scss";
+
+.skeleton {
+  border-radius: $crl-border-radius;
+  overflow: hidden;
+  width: fit-content;
+
+  :global(.crl-ant-skeleton-element) {
+    height: 100%;
+    width: 100%;
+  }
+}
