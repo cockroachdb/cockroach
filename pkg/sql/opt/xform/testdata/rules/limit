@@ -358,6 +358,8 @@ SELECT * FROM partial_index_const WHERE a > 0 AND b = 1 LIMIT 5 FOR UPDATE
 ----
 lock partial_index_const
  ├── columns: a:1!null b:2!null c:3  [hidden: rowid:4!null]
+ ├── key columns: rowid:4
+ ├── lock columns: (7-10)
  ├── locking: for-update
  ├── cardinality: [0 - 5]
  ├── volatile, mutations
