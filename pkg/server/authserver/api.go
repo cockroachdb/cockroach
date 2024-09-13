@@ -97,6 +97,16 @@ type Server interface {
 		ctx context.Context, userName username.SQLUsername, passwordStr string,
 		pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
 	) (valid bool, expired bool, err error)
+
+	// VerifyJWT verifies the JWT for authenticating the request. An optional username may be provided
+	// if the JWT is likely to match multiple user identities.
+	// It returns three parameters:
+	// - a boolean indicating if the JWT is valid,
+	// - the username associated with the JWT (if validated), and
+	// - an error for any internal errors which prevented validation.
+	VerifyJWT(
+		ctx context.Context, jwtStr, usernameOptional string,
+	) (valid bool, userName string, err error)
 }
 
 type SQLServerInterface interface {
