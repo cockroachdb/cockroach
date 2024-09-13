@@ -13,6 +13,7 @@ package sqlerrors
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -50,6 +51,21 @@ func NewSchemaChangeOnLockedTableErr(tableName string) error {
 		"To unlock the table, try \"ALTER TABLE %v SET (schema_locked = false);\" "+
 			"\nAfter schema change completes, we recommend setting it back to true with "+
 			"\"ALTER TABLE %v SET (schema_locked = true);\"", tableName, tableName)
+}
+
+// NewDisallowedSchemaChangeOnLDRTableErr creates an error that indicates that
+// the schema change is disallowed because the table is being used by a
+// logical data replication job.
+func NewDisallowedSchemaChangeOnLDRTableErr(tableName string, jobIDs []int64) error {
+	ids := make([]string, len(jobIDs))
+	for i, v := range jobIDs {
+		ids[i] = strconv.Itoa(int(v))
+	}
+	return pgerror.Newf(
+		pgcode.FeatureNotSupported,
+		"this schema change is disallowed on table %s because it is referenced by "+
+			"one or more logical replication jobs [%s]", tableName, strings.Join(ids, ", "),
+	)
 }
 
 // NewTransactionAbortedError creates an error for trying to run a command in

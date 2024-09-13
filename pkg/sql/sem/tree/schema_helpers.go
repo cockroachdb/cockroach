@@ -33,3 +33,18 @@ func IsSetOrResetSchemaLocked(n Statement) bool {
 	}
 	return false
 }
+
+// IsAllowedLDRSchemaChange returns true if the schema change statement is
+// allowed to occur while the table is being referenced by a logical data
+// replication job as a destination table.
+func IsAllowedLDRSchemaChange(n Statement) bool {
+	switch s := n.(type) {
+	case *CreateIndex:
+		// Only allow non-unique indexes to be created. A unique index on a
+		// destination table could cause inserts to fail.
+		return !s.Unique
+	case *DropIndex:
+		return true
+	}
+	return false
+}
