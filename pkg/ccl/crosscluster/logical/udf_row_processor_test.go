@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -103,7 +104,7 @@ func TestUDFWithRandomTables(t *testing.T) {
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
 	runnerA.Exec(t, fmt.Sprintf("DELETE FROM %s LIMIT 5", tableName))
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
-
+	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, runnerB.DB, "b"))
 	compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
 }
 
