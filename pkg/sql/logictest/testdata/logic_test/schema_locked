@@ -119,3 +119,13 @@ COMMENT ON COLUMN t.i IS 'i is a column';
 
 statement ok
 DROP TABLE t;
+
+subtest zone_config
+
+statement ok
+ALTER TABLE ref SET (schema_locked = true);
+
+statement error pgcode 57000 schema changes are disallowed on table "ref" because it is locked
+ALTER TABLE ref CONFIGURE ZONE USING num_replicas = 11;
+
+subtest end

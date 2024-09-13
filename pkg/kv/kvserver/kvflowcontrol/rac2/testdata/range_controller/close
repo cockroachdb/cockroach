@@ -1,0 +1,112 @@
+# This test asserts that closing a range controller, or switching a replica
+# state to StateSnapshot causes all tracked token deductions to be returned to
+# the underlying stream token counts.
+init
+range_id=1 tenant_id=1 local_replica_id=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+t1/s1: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s2: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s3: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+
+# There should be no tracked entries for the range.
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false
+++++
+(n2,s2):2: state=replicate closed=false
+++++
+(n3,s3):3: state=replicate closed=false
+++++
+
+
+# Submit a few entries to the range. We will partially admit these on different
+# replica stores before closing streams, and ultimately the range controller.
+raft_event
+range_id=1
+  term=1 index=1 pri=NormalPri size=1MiB
+  term=1 index=2 pri=NormalPri size=1MiB
+  term=1 index=3 pri=NormalPri size=1MiB
+----
+t1/s1: reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+t1/s2: reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+t1/s3: reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+(n3,s3):3: state=replicate closed=false
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+
+admit
+range_id=1
+  store_id=1 term=1 to_index=2 pri=NormalPri
+  store_id=2 term=1 to_index=1 pri=NormalPri
+----
+t1/s1: reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
+t1/s2: reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
+t1/s3: reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+
+# Change s3 to StateSnapshot. This should close the send stream and return the
+# tracked deductions for entries in [1,3].
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateSnapshot
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false
+NormalPri:
+  term=1 index=3  tokens=1048576
+++++
+(n2,s2):2: state=replicate closed=false
+NormalPri:
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+(n3,s3):3: closed
+
+# The tokens should be returned as well, s3 should have no outstanding tokens.
+adjust_tokens
+  store_id=1 pri=HighPri tokens=0
+----
+t1/s1: reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
+t1/s2: reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
+t1/s3: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+
+# Close the range controller. This should return the tracked deductions for
+# entry 3 on s1 and [2,3] on s2.
+close_rcs
+----
+range_id=1 tenant_id={1} local_replica_id=1
+
+# Print out the available token state. There should be no outstanding tokens.
+# Send a noop token adjustment to get the state.
+adjust_tokens
+  store_id=1 pri=HighPri tokens=0
+----
+t1/s1: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s2: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s3: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
