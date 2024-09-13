@@ -11,6 +11,7 @@ package sqlproxyccl
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
@@ -19,6 +20,7 @@ import (
 
 func TestMetricsUpdateForError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	m := makeProxyMetrics()
 	type testCase struct {
 		code     errorCode

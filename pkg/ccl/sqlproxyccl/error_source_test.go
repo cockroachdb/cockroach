@@ -12,6 +12,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -34,6 +35,7 @@ func (conn *fakeConn) Write(_ []byte) (n int, err error) {
 
 func TestWrapConnectionError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	type testCase struct {
 		marker error
 		code   errorCode
@@ -53,6 +55,7 @@ func TestWrapConnectionError(t *testing.T) {
 
 func TestErrorSourceConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	newConn := func(size int, readError error, writeError error) net.Conn {
 		return &errorSourceConn{
 			Conn: &fakeConn{
