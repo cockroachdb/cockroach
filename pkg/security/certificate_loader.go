@@ -100,6 +100,8 @@ func (p PemUsage) String() string {
 		return "Client"
 	case TenantPem:
 		return "Tenant Client"
+	case TenantSigningPem:
+		return "Tenant Signing"
 	default:
 		return "unknown"
 	}

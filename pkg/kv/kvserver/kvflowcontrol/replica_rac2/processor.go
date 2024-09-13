@@ -297,14 +297,6 @@ type Processor interface {
 	// tenantID passed in all calls must be the same.
 	//
 	// Both Replica mu and raftMu are held.
-	//
-	// TODO(sumeer): we are currently delaying the processing caused by this
-	// until HandleRaftReadyRaftMuLocked, including telling the
-	// RangeController. However, RangeController.WaitForEval needs to have the
-	// latest state. We need to either (a) change this
-	// OnDescChangedRaftMuLocked, or (b) add a method in RangeController that
-	// only updates the voting replicas used in WaitForEval, and call that
-	// from OnDescChangedLocked, and do the rest of the updating later.
 	OnDescChangedLocked(
 		ctx context.Context, desc *roachpb.RangeDescriptor, tenantID roachpb.TenantID)
 
@@ -610,9 +602,20 @@ func (p *processorImpl) OnDescChangedLocked(
 	}
 	p.desc.replicas = descToReplicaSet(desc)
 	p.desc.replicasChanged = true
-	// We need to promptly return tokens if some replicas have been removed,
-	// since those tokens could be used by other ranges with replicas on the
-	// same store. Ensure that promptness by scheduling ready.
+	// We need to promptly:
+	// - Return tokens if some replicas have been removed, since those tokens
+	//   could be used by other ranges with replicas on the same store.
+	// - Update (create) the RangeController's state used in WaitForEval, and
+	//   for sending MsgApps to new replicas (by creating replicaSendStreams).
+	//
+	// We ensure that promptness by scheduling ready.
+	//
+	// TODO(sumeer): this is currently gated on !initialization due to kvserver
+	// test failure for a quiescence test that ought to be rewritten. So if
+	// processorImpl starts in pull mode, this is the leader, there are no new
+	// entries being written, and other replicas have a send-queue, MsgApps can
+	// be (arbitrarily?) delayed. Change this to unconditionally call
+	// EnqueueRaftReady.
 	if !initialization {
 		p.opts.RaftScheduler.EnqueueRaftReady(p.opts.RangeID)
 	}
