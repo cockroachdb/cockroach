@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime/debug"
+	"runtime/trace"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -315,9 +316,14 @@ func (s *Stopper) RunTask(ctx context.Context, taskName string, f func(context.C
 	// Call f.
 	defer s.recover(ctx)
 	defer s.runPostlude()
+	defer s.startRegion(ctx, taskName).End()
 
 	f(ctx)
 	return nil
+}
+
+func (s *Stopper) startRegion(ctx context.Context, taskName string) *trace.Region {
+	return trace.StartRegion(ctx, taskName)
 }
 
 // RunTaskWithErr is like RunTask(), but takes in a callback that can return an
@@ -332,6 +338,7 @@ func (s *Stopper) RunTaskWithErr(
 	// Call f.
 	defer s.recover(ctx)
 	defer s.runPostlude()
+	defer s.startRegion(ctx, taskName).End()
 
 	return f(ctx)
 }
@@ -472,8 +479,9 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 
 	// Call f on another goroutine.
 	taskStarted = true // Another goroutine now takes ownership of the alloc, if any.
-	go func() {
+	go func(taskName string) {
 		defer s.runPostlude()
+		defer s.startRegion(ctx, taskName).End()
 		defer sp.Finish()
 		defer s.recover(ctx)
 		if alloc != nil {
@@ -482,7 +490,7 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 
 		sp.UpdateGoroutineIDToCurrent()
 		f(ctx)
-	}()
+	}(opt.TaskName)
 	return nil
 }
 
