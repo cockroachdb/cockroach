@@ -5,6 +5,7 @@ go_library(
     testonly = 1,
     srcs = [
         "encoding.go",
+        "logical.go",
         "replication_helpers.go",
         "span_config_helpers.go",
         "testutils.go",
