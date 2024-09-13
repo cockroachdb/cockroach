@@ -1,6 +1,7 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
 load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
 go_library(
@@ -17,6 +18,7 @@ go_library(
         "span_group.go",
         "tenant.go",
         "version.go",
+        ":gen-leasetype-stringer",  # keep
     ],
     embed = [":roachpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachpb",
@@ -146,6 +148,12 @@ go_proto_library(
         "@com_github_gogo_protobuf//gogoproto",
         "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
     ],
+)
+
+stringer(
+    name = "gen-leasetype-stringer",
+    src = "data.go",
+    typ = "LeaseType",
 )
 
 disallowed_imports_test(
