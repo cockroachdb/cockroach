@@ -772,7 +772,7 @@ func getCoverings(
 		var emptyPrefix []tree.Datum
 		idxPart := b.QueryByID(tableID).FilterIndexPartitioning().
 			Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexPartitioning) bool {
-				return e.TableID == tableID && e.IndexID == indexID
+				return e.IndexID == indexID
 			}).MustGetZeroOrOneElement()
 		partition := tabledesc.NewPartitioning(nil)
 		if idxPart != nil {
@@ -1157,4 +1157,18 @@ func prepareZoneConfig(
 		return nil, err
 	}
 	return partialZone, nil
+}
+
+// isCorrespondingTemporaryIndex returns true iff idx is a temporary index
+// created during a backfill and is the corresponding temporary index for
+// otherIdx. It assumes that idx and otherIdx are both indexes from the same
+// table.
+func isCorrespondingTemporaryIndex(
+	b BuildCtx, tableID catid.DescID, idx catid.IndexID, otherIdx catid.IndexID,
+) bool {
+	maybeCorresponding := b.QueryByID(tableID).FilterTemporaryIndex().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
+			return idx+1 == e.IndexID && e.IndexID == otherIdx
+		}).MustGetZeroOrOneElement()
+	return maybeCorresponding != nil
 }
