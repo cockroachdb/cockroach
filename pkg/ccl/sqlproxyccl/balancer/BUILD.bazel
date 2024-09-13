@@ -40,6 +40,7 @@ go_test(
     tags = ["ccl_test"],
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",
+        "//pkg/ccl/testutilsccl",
         "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util/leaktest",

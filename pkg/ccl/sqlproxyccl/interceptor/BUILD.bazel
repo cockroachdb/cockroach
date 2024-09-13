@@ -33,6 +33,7 @@ go_test(
     embed = [":interceptor"],
     tags = ["ccl_test"],
     deps = [
+        "//pkg/ccl/testutilsccl",
         "//pkg/sql/pgwire/pgwirebase",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_errors//:errors",
