@@ -76,20 +76,28 @@ func NewLookup(st *settings.Values) *Lookup {
 	byLength := make([]map[string]string, 0)
 	c.byLength.Store(&byLength)
 	c.lastUpdate.Store(time.Time{})
-	c.changed = make(chan time.Duration)
+	c.changed = make(chan time.Duration, 1)
 
 	cidrMappingUrl.SetOnChange(st, func(ctx context.Context) {
+		log.Infof(ctx, "url changed to '%s'", cidrMappingUrl.Get(st))
 		// Reset the lastUpdate time so that the URL is always reloaded even if
 		// the new file/URL has an older timestamp.
 		c.lastUpdate.Store(time.Time{})
-		c.changed <- cidrRefreshInterval.Get(c.st)
+		select {
+		case c.changed <- cidrRefreshInterval.Get(c.st):
+		default:
+		}
 	})
 	// We have to register this callback first. Otherwise we may run into
 	// an unlikely but possible scenario where we've started the ticker,
 	// and the setting is changed before we register the callback and the
 	// ticker will not be reset to the new value.
 	cidrRefreshInterval.SetOnChange(c.st, func(ctx context.Context) {
-		c.changed <- cidrRefreshInterval.Get(c.st)
+		log.Infof(ctx, "refresh interval changed to '%s'", cidrRefreshInterval.Get(c.st))
+		select {
+		case c.changed <- cidrRefreshInterval.Get(c.st):
+		default:
+		}
 	})
 	return c
 }
@@ -140,10 +148,10 @@ func hexString(b []byte) string {
 // refresh is called to update the CIDR mapping. It checks if the URL has been
 // recently updated and if so, it will reload the mapping.
 func (c *Lookup) refresh(ctx context.Context) {
+	url := cidrMappingUrl.Get(c.st)
 	// Check if the URL is updated
-	if c.isUpdated(ctx, cidrMappingUrl.Get(c.st)) {
+	if c.isUpdated(ctx, url) {
 		// Set the URL
-		url := cidrMappingUrl.Get(c.st)
 		if err := c.setURL(ctx, url); err != nil {
 			log.Errorf(ctx, "error setting CIDR URL to '%s': %v", url, err)
 		}
@@ -161,6 +169,7 @@ func (c *Lookup) isUpdated(ctx context.Context, rawURL string) bool {
 		// Get the file information
 		fileInfo, err := os.Stat(filePath)
 		if err != nil {
+			log.Warningf(ctx, "error running stat on file '%s', %v", rawURL, err)
 			return false
 		}
 
@@ -176,6 +185,7 @@ func (c *Lookup) isUpdated(ctx context.Context, rawURL string) bool {
 		// Send a HEAD request to the URL
 		resp, err := client.Head(rawURL)
 		if err != nil {
+			log.Warningf(ctx, "error running head on url '%s', %v", rawURL, err)
 			return false
 		}
 		defer resp.Body.Close()
@@ -183,18 +193,21 @@ func (c *Lookup) isUpdated(ctx context.Context, rawURL string) bool {
 		// Get the Last-Modified header from the response
 		lastModified := resp.Header.Get("Last-Modified")
 		if lastModified == "" {
+			log.Warningf(ctx, "no last modified header on '%s', %v", rawURL, err)
 			return false
 		}
 
 		// Parse the Last-Modified header
 		modTime, err := http.ParseTime(lastModified)
 		if err != nil {
+			log.Warningf(ctx, "can't parse time %s '%s', %v", modTime, rawURL, err)
 			return false
 		}
 
 		// Compare the modification time with lastUpdate
 		if modTime.After(c.lastUpdate.Load().(time.Time)) {
 			c.lastUpdate.Store(modTime)
+			return true
 		}
 	} else if rawURL == "" {
 		if c.lastUpdate.Load().(time.Time).IsZero() {
