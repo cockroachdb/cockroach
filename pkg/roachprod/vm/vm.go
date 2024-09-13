@@ -60,6 +60,9 @@ const (
 	// need to be re-initialized on every start. The presence of this file
 	// automatically implies the presence of OSInitializedFile.
 	DisksInitializedFile = "/mnt/data1/" + InitializedFile
+	// StartupLogs is a log file that is created on a VM to redirect startup script
+	// output logs.
+	StartupLogs = "/var/log/roachprod_startup.log"
 )
 
 // UnimplementedError is returned when a method is not implemented by a
