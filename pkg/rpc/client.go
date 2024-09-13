@@ -174,7 +174,7 @@ func NewClientConn(
 	}
 	// We use GRPCUnvalidatedDial() here because it does not matter
 	// to which node we're talking to.
-	conn, err = rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
+	conn, err = rpcContext.GRPCUnvalidatedDial(addr, roachpb.Locality{}).Connect(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
