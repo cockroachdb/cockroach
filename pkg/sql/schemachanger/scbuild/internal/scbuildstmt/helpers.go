@@ -1719,3 +1719,14 @@ func mustRetrievePhysicalTableElem(b BuildCtx, descID catid.DescID) scpb.Element
 		return false
 	}).MustGetOneElement()
 }
+
+// mustRetrieveIndexNameElem will resolve a tableID and indexID to an index name
+// element.
+func mustRetrieveIndexNameElem(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) (indexNameElem *scpb.IndexName) {
+	return b.QueryByID(tableID).FilterIndexName().
+		Filter(func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexName) bool {
+			return e.IndexID == indexID
+		}).MustGetOneElement()
+}

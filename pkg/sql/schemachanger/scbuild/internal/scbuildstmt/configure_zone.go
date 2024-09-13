@@ -124,6 +124,7 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 	}
 	tblName := zs.TableOrIndex.Table.ToUnresolvedObjectName()
 	elems := b.ResolvePhysicalTable(tblName, ResolveParams{})
+	panicIfSchemaIsLocked(elems)
 	var tableID catid.DescID
 	elems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch e := e.(type) {

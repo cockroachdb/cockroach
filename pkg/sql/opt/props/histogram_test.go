@@ -1164,8 +1164,6 @@ func BenchmarkHistogram(b *testing.B) {
 		return &c
 	}
 
-	selectivity := MakeSelectivity(0.5)
-
 	for _, typ := range typs {
 		b.Run(typ.Name(), func(b *testing.B) {
 			for _, bucketCount := range bucketCounts {
@@ -1173,29 +1171,14 @@ func BenchmarkHistogram(b *testing.B) {
 					h := Histogram{}
 					h.Init(&evalCtx, opt.ColumnID(1), makeBuckets(typ, bucketCount))
 					c := makeConstraint(typ, bucketCount)
-					b.Run("ValuesCount", func(b *testing.B) {
-						for i := 0; i < b.N; i++ {
-							h.ValuesCount()
-						}
-					})
 					b.Run("DistinctValuesCount", func(b *testing.B) {
 						for i := 0; i < b.N; i++ {
 							h.DistinctValuesCount()
 						}
 					})
-					b.Run("MaxFrequency", func(b *testing.B) {
-						for i := 0; i < b.N; i++ {
-							h.MaxFrequency()
-						}
-					})
 					b.Run("Filter", func(b *testing.B) {
 						for i := 0; i < b.N; i++ {
 							h.Filter(ctx, c)
-						}
-					})
-					b.Run("ApplySelectivity", func(b *testing.B) {
-						for i := 0; i < b.N; i++ {
-							h.ApplySelectivity(selectivity)
 						}
 					})
 				})
