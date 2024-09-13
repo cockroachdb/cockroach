@@ -1272,3 +1272,13 @@ PARTITION one OF TABLE t_69647  ALTER PARTITION one OF TABLE t_69647 CONFIGURE Z
                                   num_replicas = 3,
                                   constraints = '[]',
                                   lease_preferences = '[]'
+
+subtest schema_locked
+
+statement ok
+ALTER TABLE t_69647 SET (schema_locked = true);
+
+statement error pgcode 57000 pq: schema changes are disallowed on table "t_69647" because it is locked
+ALTER TABLE t_69647 CONFIGURE ZONE USING num_replicas = 11;
+
+subtest end
