@@ -20,6 +20,12 @@ CockroachLabsLockupIcon.defaultProps = {
   height: 49,
 };
 
+// The lint rule below is disabled in order to avoid the eslint error over
+// the `mask-type` attribute in the `mask` element in the SVG below. If
+// you remove that attribute, the CRL logo will render incorrectly in the
+// top left corner of every page.
+/* eslint react/no-unknown-property: "off" */
+
 export function CockroachLabsLockupIcon(props: IconProps) {
   const { height } = props;
   const widthViewBox = 217;

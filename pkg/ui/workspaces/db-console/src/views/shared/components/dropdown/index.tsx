@@ -160,6 +160,14 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
         {content ? (
           content
         ) : (
+          // The below typescript fails to typecheck because the
+          // react-select library's types aren't flexible enough to
+          // accept the `options` and `onChange` props that use the
+          // custom `DropdownOption` type as the target. It's likely
+          // that an upgrade of react-select would fix this but we
+          // avoid it here because it will likely break implementation.
+
+          /* eslint @typescript-eslint/ban-ts-comment: "off" */
           // @ts-ignore
           <Select
             className={cx("dropdown__select")}

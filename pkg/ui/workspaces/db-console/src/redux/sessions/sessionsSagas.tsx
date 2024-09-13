@@ -20,7 +20,6 @@ import {
 import { invalidateSessions, refreshSessions } from "src/redux/apiReducers";
 import { terminateQuery, terminateSession } from "src/util/api";
 
-
 import ICancelSessionRequest = cockroach.server.serverpb.ICancelSessionRequest;
 import CancelSessionRequest = cockroach.server.serverpb.CancelSessionRequest;
 import ICancelQueryRequest = cockroach.server.serverpb.ICancelQueryRequest;

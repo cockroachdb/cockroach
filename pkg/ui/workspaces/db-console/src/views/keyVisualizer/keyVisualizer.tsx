@@ -103,10 +103,13 @@ function filterAxisLabels(
     labelsReduced = labelsInWindow;
   }
 
-  return labelsReduced.reduce((acc, key) => {
-    acc[key] = offsets[key];
-    return acc;
-  }, {} as Record<string, number>);
+  return labelsReduced.reduce(
+    (acc, key) => {
+      acc[key] = offsets[key];
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 }
 
 interface TooltipProps {

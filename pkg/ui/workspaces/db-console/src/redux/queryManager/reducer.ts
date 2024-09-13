@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import moment from "moment-timezone";
-import { Action } from "redux";
+import { Action, AnyAction } from "redux";
 
 import nextState from "src/util/nextState";
 
@@ -152,7 +152,7 @@ export interface QueryManagerState {
  */
 export function queryManagerReducer(
   state: QueryManagerState = {},
-  action: QueryAction,
+  action: AnyAction,
 ): QueryManagerState {
   switch (action.type) {
     case QUERY_BEGIN:
@@ -162,7 +162,7 @@ export function queryManagerReducer(
         ...state,
         [action.payload.id]: managedQueryReducer(
           state[action.payload.id],
-          action,
+          action as QueryAction,
         ),
       };
     default:

@@ -10,7 +10,11 @@
 
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
-import {EventInfo, getDroppedObjectsText, getEventDescription} from "src/util/events";
+import {
+  EventInfo,
+  getDroppedObjectsText,
+  getEventDescription,
+} from "src/util/events";
 
 describe("getDroppedObjectsText", function () {
   // The key indicating which objects were dropped in a DROP_DATABASE event has been
@@ -75,9 +79,9 @@ describe("getEventDescription", function () {
       },
     ];
     tcs.forEach(tc => {
-      expect(getEventDescription(tc.event as clusterUiApi.EventColumns)).toEqual(
-        tc.expected,
-      );
+      expect(
+        getEventDescription(tc.event as clusterUiApi.EventColumns),
+      ).toEqual(tc.expected);
     });
   });
 });

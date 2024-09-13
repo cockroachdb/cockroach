@@ -267,22 +267,24 @@ describe("alerts", function () {
         const alert = licenseUpdateNotificationSelector(state());
         expect(typeof alert).toBe("object");
         expect(alert.level).toEqual(AlertLevel.INFORMATION);
-        expect(alert.text).toEqual("Important changes to CockroachDB’s licensing model.");
-      })
+        expect(alert.text).toEqual(
+          "Important changes to CockroachDB’s licensing model.",
+        );
+      });
 
       it("hides the alert when dismissed timestamp is present", function () {
         dispatch(setUIDataKey(LICENSE_UPDATE_DISMISSED_KEY, moment()));
         expect(licenseUpdateNotificationSelector(state())).toBeUndefined();
-      })
+      });
 
       it("hides the alert when license is enterprise", function () {
         dispatch(setUIDataKey(LICENSE_UPDATE_DISMISSED_KEY, null));
         setDataFromServer({
           LicenseType: "Enterprise",
-        } as any)
+        } as any);
         expect(licenseUpdateNotificationSelector(state())).toBeUndefined();
-      })
-    })
+      });
+    });
 
     describe("new version available notification", function () {
       it("displays nothing when versions have not yet been loaded", function () {
@@ -482,9 +484,8 @@ describe("alerts", function () {
 
     describe("email signup for release notes alert", () => {
       it("initialized with default 'false' (hidden) state", () => {
-        const settingState = emailSubscriptionAlertLocalSetting.selector(
-          state(),
-        );
+        const settingState =
+          emailSubscriptionAlertLocalSetting.selector(state());
         expect(settingState).toBe(false);
       });
 

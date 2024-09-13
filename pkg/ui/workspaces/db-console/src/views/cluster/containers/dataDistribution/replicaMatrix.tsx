@@ -62,9 +62,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
 
   expandRow = (path: TreePath) => {
     this.setState({
-      collapsedRows: this.state.collapsedRows.filter(
-        tp => !isEqual(tp, path),
-      ),
+      collapsedRows: this.state.collapsedRows.filter(tp => !isEqual(tp, path)),
     });
   };
 
@@ -76,9 +74,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
 
   expandCol = (path: TreePath) => {
     this.setState({
-      collapsedCols: this.state.collapsedCols.filter(
-        tp => !isEqual(tp, path),
-      ),
+      collapsedCols: this.state.collapsedCols.filter(tp => !isEqual(tp, path)),
     });
   };
 

@@ -29,6 +29,9 @@
  * combine it with the result of a query to create some renderable output.
  */
 
+// We use the `Metric` and `Axis` classes data containers, not for rendering.
+/* eslint react/require-render-return: "off" */
+
 import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client-ccl";
 import { History } from "history";
