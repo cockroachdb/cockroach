@@ -68,7 +68,7 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 		default:
 		}
 	})
-	tableMetadataCacheValidDuration.SetOnChange(&settings.SV, func(_ context.Context) {
+	DataValidDurationSetting.SetOnChange(&settings.SV, func(_ context.Context) {
 		select {
 		case scheduleSettingsCh <- struct{}{}:
 		default:
@@ -78,7 +78,7 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	var timer timeutil.Timer
 	for {
 		if tableMetadataCacheAutoUpdatesEnabled.Get(&settings.SV) {
-			timer.Reset(tableMetadataCacheValidDuration.Get(&settings.SV))
+			timer.Reset(DataValidDurationSetting.Get(&settings.SV))
 		}
 		select {
 		case <-scheduleSettingsCh:

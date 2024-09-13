@@ -21,10 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache"
 	"github.com/cockroachdb/cockroach/pkg/util/safesql"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,6 +39,7 @@ const (
 	pageNumKey      = "pageNum"
 	pageSizeKey     = "pageSize"
 	storeIdKey      = "storeId"
+	onlyIfStaleKey  = "onlyIfStale"
 	defaultPageSize = 10
 	defaultPageNum  = 1
 )
@@ -667,7 +671,7 @@ func (a *apiV2Server) getDBMetadata(
 // responses:
 //
 //	"200":
-//	  description: A tmUpdateJobStatusResponse
+//	  description: A tmUpdateJobStatusResponse for GET requests and tmJobTriggeredResponse for POST requests.
 //	"404":
 //	  description: Not found if the user doesn't have the correct authorizations
 func (a *apiV2Server) TableMetadataJob(w http.ResponseWriter, r *http.Request) {
@@ -690,6 +694,13 @@ func (a *apiV2Server) TableMetadataJob(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		resp, err = a.getTableMetadataUpdateJobStatus(ctx)
+	case http.MethodPost:
+		// onlyIfStale will be true if the query param exists and has any value other than "false"
+		var onlyIfStale bool
+		if r.URL.Query().Has(onlyIfStaleKey) {
+			onlyIfStale = r.URL.Query().Get(onlyIfStaleKey) != "false"
+		}
+		resp, err = a.triggerTableMetadataUpdateJob(ctx, onlyIfStale)
 	default:
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
@@ -750,6 +761,31 @@ func (a *apiV2Server) getTableMetadataUpdateJobStatus(
 		return jobStatus, err
 	}
 	return jobStatus, nil
+}
+
+// triggerTableMetadataUpdateJob will trigger the table metadata update job if it isn't currently running and if it
+// is stale, if onlyIfStale is true.
+func (a *apiV2Server) triggerTableMetadataUpdateJob(
+	ctx context.Context, onlyIfStale bool,
+) (tmJobTriggeredResponse, error) {
+	status, err := a.getTableMetadataUpdateJobStatus(ctx)
+	if err != nil {
+		return tmJobTriggeredResponse{}, err
+	}
+	if status.CurrentStatus != "NOT_RUNNING" {
+		return tmJobTriggeredResponse{JobTriggered: false, Message: "Job is already running"}, nil
+	}
+	stalenessDuration := tablemetadatacache.DataValidDurationSetting.Get(&a.sqlServer.execCfg.Settings.SV)
+	if onlyIfStale && status.LastCompletedTime != nil && timeutil.Since(*status.LastCompletedTime) < stalenessDuration {
+		return tmJobTriggeredResponse{JobTriggered: false, Message: "Not enough time has elapsed since last job run"}, nil
+	}
+
+	_, err = a.status.UpdateTableMetadataCache(ctx, &serverpb.UpdateTableMetadataCacheRequest{Local: false})
+	if err != nil {
+		return tmJobTriggeredResponse{}, err
+	}
+
+	return tmJobTriggeredResponse{JobTriggered: true, Message: "Job triggered successfully"}, nil
 }
 
 func (a *apiV2Server) updateTableMetadataJobAuthorized(
@@ -831,4 +867,9 @@ type tmUpdateJobStatusResponse struct {
 	LastStartTime     *time.Time `json:"last_start_time"`
 	LastCompletedTime *time.Time `json:"last_completed_time"`
 	LastUpdatedTime   *time.Time `json:"last_updated_time"`
+}
+
+type tmJobTriggeredResponse struct {
+	JobTriggered bool   `json:"job_triggered"`
+	Message      string `json:"message"`
 }
