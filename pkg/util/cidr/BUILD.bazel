@@ -14,6 +14,7 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_lib_pq//:pq",
     ],
 )
 
@@ -25,6 +26,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/skip",
+        "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 )
 
 const (
@@ -109,10 +110,13 @@ func makeSQLSink(
 }
 
 func (s *sqlSink) Dial() error {
-	db, err := gosql.Open(`postgres`, s.uri)
+	connector, err := pq.NewConnector(s.uri)
 	if err != nil {
 		return err
 	}
+
+	s.metrics.netMetrics().WrapPqDialer(connector, "sql")
+	db := gosql.OpenDB(connector)
 	if _, err := db.Exec(fmt.Sprintf(sqlSinkCreateTableStmt, s.tableName)); err != nil {
 		db.Close()
 		return err
