@@ -8,10 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Table, Space } from "antd";
+import { Table } from "antd";
 import { ColumnsType } from "antd/es/table";
 import React from "react";
 import { Link } from "react-router-dom";
+
+import { RegionNodesLabel } from "src/components/regionNodesLabel";
 
 import { EncodeDatabaseUri } from "../util";
 
@@ -50,12 +52,15 @@ const columns: ColumnsType<DatabaseRow> = [
     title: "Regions / Nodes",
     key: "regions",
     render: (db: DatabaseRow) => (
-      <Space direction="vertical">
-        {db.nodesByRegion &&
-          Object.keys(db.nodesByRegion).map(
-            region => `${region}: ${db.nodesByRegion[region].length}`,
-          )}
-      </Space>
+      <div>
+        {Object.entries(db.nodesByRegion ?? []).map(([region, nodes]) => (
+          <RegionNodesLabel
+            key={region}
+            nodes={nodes}
+            region={{ label: region, code: region }}
+          />
+        ))}
+      </div>
     ),
   },
   {
