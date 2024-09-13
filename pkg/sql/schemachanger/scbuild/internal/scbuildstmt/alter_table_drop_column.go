@@ -28,7 +28,11 @@ import (
 )
 
 func alterTableDropColumn(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, n *tree.AlterTableDropColumn,
+	b BuildCtx,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	stmt tree.Statement,
+	n *tree.AlterTableDropColumn,
 ) {
 	fallBackIfSubZoneConfigExists(b, n, tbl.TableID)
 	fallBackIfRegionalByRowTable(b, n, tbl.TableID)
@@ -40,7 +44,7 @@ func alterTableDropColumn(
 		return
 	}
 	checkColumnNotInaccessible(col, n)
-	dropColumn(b, tn, tbl, n, col, elts, n.DropBehavior)
+	dropColumn(b, tn, tbl, stmt, n, col, elts, n.DropBehavior)
 	b.LogEventForExistingTarget(col)
 }
 
@@ -129,6 +133,7 @@ func dropColumn(
 	b BuildCtx,
 	tn *tree.TableName,
 	tbl *scpb.Table,
+	stmt tree.Statement,
 	n tree.NodeFormatter,
 	col *scpb.Column,
 	colElts ElementResultSet,
@@ -162,7 +167,7 @@ func dropColumn(
 				_, _, computedColName := scpb.FindColumnName(elts.Filter(publicTargetFilter))
 				panic(sqlerrors.NewColumnReferencedByComputedColumnError(cn.Name, computedColName.Name))
 			}
-			dropColumn(b, tn, tbl, n, e, elts, behavior)
+			dropColumn(b, tn, tbl, stmt, n, e, elts, behavior)
 		case *scpb.PrimaryIndex:
 			// Nothing needs to be done. Primary index related drops (bc of column
 			// drop) are handled below in `handleDropColumnPrimaryIndexes`.
@@ -222,7 +227,7 @@ func dropColumn(
 		case *scpb.UniqueWithoutIndexConstraint:
 			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
 			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
-			alterTableDropConstraint(b, tn, tbl, &tree.AlterTableDropConstraint{
+			alterTableDropConstraint(b, tn, tbl, stmt, &tree.AlterTableDropConstraint{
 				IfExists:     false,
 				Constraint:   tree.Name(constraintName.Name),
 				DropBehavior: behavior,
@@ -230,7 +235,7 @@ func dropColumn(
 		case *scpb.UniqueWithoutIndexConstraintUnvalidated:
 			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
 			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
-			alterTableDropConstraint(b, tn, tbl, &tree.AlterTableDropConstraint{
+			alterTableDropConstraint(b, tn, tbl, stmt, &tree.AlterTableDropConstraint{
 				IfExists:     false,
 				Constraint:   tree.Name(constraintName.Name),
 				DropBehavior: behavior,

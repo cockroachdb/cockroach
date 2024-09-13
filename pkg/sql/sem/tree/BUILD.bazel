@@ -89,6 +89,7 @@ go_library(
         "run_control.go",
         "schedule.go",
         "schema_feature_name.go",
+        "schema_helpers.go",
         "scrub.go",
         "select.go",
         "set.go",

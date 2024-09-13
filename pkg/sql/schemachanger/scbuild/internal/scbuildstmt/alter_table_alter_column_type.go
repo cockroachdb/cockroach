@@ -31,7 +31,11 @@ import (
 )
 
 func alterTableAlterColumnType(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAlterColumnType,
+	b BuildCtx,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	stmt tree.Statement,
+	t *tree.AlterTableAlterColumnType,
 ) {
 	colID := getColumnIDFromColumnName(b, tbl.TableID, t.Column, true /* required */)
 	col := mustRetrieveColumnElem(b, tbl.TableID, colID)

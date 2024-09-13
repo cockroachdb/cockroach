@@ -45,7 +45,7 @@ import (
 )
 
 func alterTableAddColumn(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddColumn,
+	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, stmt tree.Statement, t *tree.AlterTableAddColumn,
 ) {
 	d := t.ColumnDef
 	// We don't support handling zone config related properties for tables, so
