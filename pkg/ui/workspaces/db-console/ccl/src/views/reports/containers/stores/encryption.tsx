@@ -17,7 +17,6 @@ import * as protos from "src/js/protos";
 import { EncryptionStatusProps } from "oss/src/views/reports/containers/stores/encryption";
 import { FixLong } from "src/util/fixLong";
 
-
 const dateFormat = "Y-MM-DD HH:mm:ss";
 
 export default class EncryptionStatus {

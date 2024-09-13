@@ -771,7 +771,7 @@ export const licenseUpdateNotificationSelector = createSelector(
           saveUIData({
             key: LICENSE_UPDATE_DISMISSED_KEY,
             value: dismissedAt.valueOf(),
-          })
+          }),
         );
       },
     };

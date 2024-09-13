@@ -41,7 +41,7 @@ export type ConnectionInfo = {
 type OptionValue = {
   label: string;
   value: string;
-}
+};
 
 export const JwtAuthToken = (props: {
   loading: boolean;

@@ -678,7 +678,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     // We want to display ordered by store ID.
     const sortedStoreIDs = flow(
       (infos: IRangeInfo[]) => map(infos, info => info.source_store_id),
-      (storeIds) => sortBy(storeIds, id => id)
+      storeIds => sortBy(storeIds, id => id),
     )(infos);
 
     const dormantStoreIDs: Set<number> = new Set();
@@ -919,10 +919,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
           info.state.circuit_breaker_error,
         ),
         locality: this.contentIf(size(info.locality.tiers) > 0, () => ({
-          value: map(
-            info.locality.tiers,
-            tier => `${tier.key}: ${tier.value}`,
-          ),
+          value: map(info.locality.tiers, tier => `${tier.key}: ${tier.value}`),
         })),
         pausedFollowers: this.createContent(
           info.state.paused_replicas?.join(", "),

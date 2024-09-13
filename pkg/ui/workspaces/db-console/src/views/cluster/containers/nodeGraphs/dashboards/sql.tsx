@@ -20,7 +20,6 @@ import {
   TransactionRestartsToolTip,
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
-
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
 import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;

@@ -39,7 +39,12 @@ import { getMatchParamByName } from "src/util/query";
 import { txnFingerprintIdAttr } from "src/util/constants";
 
 export default withRouter(
-  connect<TransactionDetailsStateProps, TransactionDetailsDispatchProps, RouteComponentProps, AdminUIState>(
+  connect<
+    TransactionDetailsStateProps,
+    TransactionDetailsDispatchProps,
+    RouteComponentProps,
+    AdminUIState
+  >(
     (
       state: AdminUIState,
       props: RouteComponentProps,

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import keys from "lodash/keys"
+import keys from "lodash/keys";
 import { Action } from "redux";
 import * as protobuf from "protobufjs/minimal";
 

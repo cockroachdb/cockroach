@@ -33,8 +33,8 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
     ids = flow(
       keys,
       nodeIds => map(nodeIds, id => parseInt(id, 10)),
-      nodeIds => sortBy(nodeIds, id => id)
-    )(range.data.responses_by_node_id)
+      nodeIds => sortBy(nodeIds, id => id),
+    )(range.data.responses_by_node_id);
     viaNodeID = ` (via n${range.data.node_id.toString()})`;
   }
 

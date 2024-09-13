@@ -24,7 +24,6 @@ import { timeScaleReducer } from "src/redux/timeScale";
 import { uiDataReducer } from "src/redux/uiData";
 import { loginReducer } from "src/redux/login";
 
-
 import type { PreloadedState } from "@reduxjs/toolkit";
 
 export function renderWithProviders(

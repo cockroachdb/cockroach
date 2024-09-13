@@ -173,7 +173,9 @@ export const NodeUsedCapacityTooltip: React.FC<CellTooltipProps> = props => (
   </Tooltip>
 );
 
-export const NodeAvailableCapacityTooltip: React.FC<CellTooltipProps> = props => (
+export const NodeAvailableCapacityTooltip: React.FC<
+  CellTooltipProps
+> = props => (
   <Tooltip
     {...props}
     placement="bottom"

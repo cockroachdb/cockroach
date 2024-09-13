@@ -87,23 +87,25 @@ describe("Query Management Saga", function () {
           });
       });
       it("correctly records error (and does not retry).", function () {
-        return expectSaga(queryManagerSaga)
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-ignore
-          .withReducer(queryManagerReducer)
-          .dispatch(refresh(testQueryError))
-          .silentRun()
-          .then(runResult => {
-            expect(typeof runResult.storeState[testQueryError.id]).toBe(
-              "object",
-            );
-            expect(runResult.storeState[testQueryError.id].lastError).toEqual(
-              sentinelError,
-            );
-            expect(runResult.storeState[testQueryError.id].isRunning).toBe(
-              false,
-            );
-          });
+        return (
+          expectSaga(queryManagerSaga)
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            .withReducer(queryManagerReducer)
+            .dispatch(refresh(testQueryError))
+            .silentRun()
+            .then(runResult => {
+              expect(typeof runResult.storeState[testQueryError.id]).toBe(
+                "object",
+              );
+              expect(runResult.storeState[testQueryError.id].lastError).toEqual(
+                sentinelError,
+              );
+              expect(runResult.storeState[testQueryError.id].isRunning).toBe(
+                false,
+              );
+            })
+        );
       });
       it("immediately runs a saga if refresh is called even if AUTO_REFRESH wait is active", function () {
         return expectSaga(queryManagerSaga)
@@ -181,21 +183,23 @@ describe("Query Management Saga", function () {
             yield new Promise((_resolve, _reject) => {});
           },
         };
-        return expectSaga(queryManagerSaga)
-          // @ts-ignore
-          .withReducer(queryManagerReducer)
-          .dispatch(refresh(neverResolveQuery))
-          .dispatch(refresh(testQueryCounter))
-          .silentRun()
-          .then(runResult => {
-            expect(runResult.storeState[neverResolveQuery.id].isRunning).toBe(
-              true,
-            );
-            expect(runResult.storeState[testQueryCounter.id].isRunning).toBe(
-              false,
-            );
-            expect(queryCounterCalled).toBe(1);
-          });
+        return (
+          expectSaga(queryManagerSaga)
+            // @ts-ignore
+            .withReducer(queryManagerReducer)
+            .dispatch(refresh(neverResolveQuery))
+            .dispatch(refresh(testQueryCounter))
+            .silentRun()
+            .then(runResult => {
+              expect(runResult.storeState[neverResolveQuery.id].isRunning).toBe(
+                true,
+              );
+              expect(runResult.storeState[testQueryCounter.id].isRunning).toBe(
+                false,
+              );
+              expect(queryCounterCalled).toBe(1);
+            })
+        );
       });
       it("continues to count AUTO_REFRESH refcounts even while query is running", function () {
         let queryCalledCount = 0;

@@ -21,7 +21,12 @@ import { AdminUIState } from "src/redux/state";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
 
 const connected = withRouter(
-  connect<DatabasesPageData, DatabasesPageActions, RouteComponentProps, AdminUIState>(
+  connect<
+    DatabasesPageData,
+    DatabasesPageActions,
+    RouteComponentProps,
+    AdminUIState
+  >(
     mapStateToProps,
     mapDispatchToProps,
   )(DatabasesPage),

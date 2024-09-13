@@ -53,7 +53,6 @@ import { getMatchParamByName, queryByName } from "src/util/query";
 import { appNamesAttr, statementAttr } from "src/util/constants";
 import { selectTimeScale } from "src/redux/timeScale";
 
-
 import { requestTimeLocalSetting } from "./statementsPage";
 
 const { generateStmtDetailsToID } = util;
@@ -183,7 +182,12 @@ const mapDispatchToProps: StatementDetailsDispatchProps = {
 };
 
 export default withRouter(
-  connect<StatementDetailsStateProps, StatementDetailsDispatchProps, RouteComponentProps, AdminUIState>(
+  connect<
+    StatementDetailsStateProps,
+    StatementDetailsDispatchProps,
+    RouteComponentProps,
+    AdminUIState
+  >(
     mapStateToProps,
     mapDispatchToProps,
   )(StatementDetails),

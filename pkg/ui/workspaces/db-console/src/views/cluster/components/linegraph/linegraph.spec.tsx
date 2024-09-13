@@ -25,7 +25,6 @@ import * as protos from "src/js/protos";
 import { Axis } from "src/views/shared/components/metricQuery";
 import { configureUPlotLineChart } from "src/views/cluster/util/graphs";
 
-
 import LineGraph, { fillGaps, InternalLineGraph, OwnProps } from "./index";
 
 describe("<LineGraph>", function () {

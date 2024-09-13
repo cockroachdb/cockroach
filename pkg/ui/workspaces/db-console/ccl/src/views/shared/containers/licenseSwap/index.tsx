@@ -46,7 +46,11 @@ function mapStateToProps(state: AdminUIState): OwnProps {
  * LicenseSwap is a higher-order component that swaps out two components based
  * on the current license status.
  */
-export default function swapByLicense<OSSProps, CCLProps, TProps = OSSProps | CCLProps>(
+export default function swapByLicense<
+  OSSProps,
+  CCLProps,
+  TProps = OSSProps | CCLProps,
+>(
   OSSComponent: React.ComponentClass<OSSProps>,
   CCLComponent: React.ComponentClass<CCLProps>,
 ) {

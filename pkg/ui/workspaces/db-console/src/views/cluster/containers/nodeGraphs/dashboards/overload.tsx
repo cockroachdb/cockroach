@@ -201,10 +201,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.node.admission.wait_durations.elastic-stores-p99"
-              title={
-                "Elastic " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               downsampleMax
             />
@@ -248,20 +245,14 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.node.kvadmission.flow_controller.regular_wait_duration-p99"
-              title={
-                "Regular " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"Regular " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               downsampleMax
             />
             <Metric
               key={nid}
               name="cr.node.kvadmission.flow_controller.elastic_wait_duration-p99"
-              title={
-                "Elastic " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               downsampleMax
             />
@@ -283,19 +274,13 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.node.kvadmission.flow_controller.regular_blocked_stream_count"
-              title={
-                "Regular " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"Regular " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
             />
             <Metric
               key={nid}
               name="cr.node.kvadmission.flow_controller.elastic_blocked_stream_count"
-              title={
-                "Elastic " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={"Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
             />
           </>
@@ -403,9 +388,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.store.storage.l0-sublevels"
-              title={
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
+              title={nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={storeIDsForNode(storeIDsByNodeID, nid)}
             />
           </>
