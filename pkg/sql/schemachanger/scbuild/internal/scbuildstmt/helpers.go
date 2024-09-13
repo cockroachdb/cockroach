@@ -1734,7 +1734,7 @@ func mustRetrieveIndexNameElem(
 	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
 ) (indexNameElem *scpb.IndexName) {
 	return b.QueryByID(tableID).FilterIndexName().
-		Filter(func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexName) bool {
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) bool {
 			return e.IndexID == indexID
 		}).MustGetOneElement()
 }
