@@ -2306,13 +2306,21 @@ func (p *planner) tryRemoveFKBackReferences(
 	return nil
 }
 
-// checkSchemaChangeIsAllowed checks if a schema change is allowed. The
-// schema_locked flag must be false on the table descriptor.
+// checkSchemaChangeIsAllowed checks if a schema change is allowed on
+// this table. A schema change is disallowed if one of the following is true:
+//   - The schema_locked table storage parameter is true, and this statement is
+//     not modifying the value of schema_locked.
+//   - The table is referenced by logical data replication jobs, and the statement
+//     is not in the allow list of LDR schema changes.
 func checkSchemaChangeIsAllowed(desc catalog.TableDescriptor, n tree.Statement) (ret error) {
-	if desc != nil && desc.IsSchemaLocked() {
-		if !tree.IsSetOrResetSchemaLocked(n) {
-			return sqlerrors.NewSchemaChangeOnLockedTableErr(desc.GetName())
-		}
+	if desc == nil {
+		return nil
+	}
+	if desc.IsSchemaLocked() && !tree.IsSetOrResetSchemaLocked(n) {
+		return sqlerrors.NewSchemaChangeOnLockedTableErr(desc.GetName())
+	}
+	if len(desc.TableDesc().LDRJobIDs) > 0 && !tree.IsAllowedLDRSchemaChange(n) {
+		return sqlerrors.NewDisallowedSchemaChangeOnLDRTableErr(desc.GetName(), desc.TableDesc().LDRJobIDs)
 	}
 	return nil
 }

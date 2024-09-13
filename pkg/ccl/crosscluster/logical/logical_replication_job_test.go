@@ -1829,3 +1829,43 @@ func TestUserPrivileges(t *testing.T) {
 		jobutils.WaitForJobToPause(t, dbA, jobAID)
 	})
 }
+
+// TestLogicalReplicationSchemaChanges verifies that only certain schema changes
+// are allowed on tables participating in logical replication.
+func TestLogicalReplicationSchemaChanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	server, s, dbA, _ := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	var jobAID jobspb.JobID
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+
+	// Creating non-unique secondary index is allowed.
+	dbA.Exec(t, "CREATE INDEX idx ON tab(payload)")
+
+	// But other schema changes are blocked.
+	dbA.ExpectErr(t,
+		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
+		"ALTER TABLE tab ADD COLUMN newcol INT NOT NULL DEFAULT 10",
+	)
+
+	// Kill replication job and verify that schema changes work now.
+	dbA.Exec(t, "CANCEL JOB $1", jobAID)
+	jobutils.WaitForJobToCancel(t, dbA, jobAID)
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN newcol INT NOT NULL DEFAULT 10")
+}
