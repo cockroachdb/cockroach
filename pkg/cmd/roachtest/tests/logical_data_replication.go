@@ -130,6 +130,20 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 			},
 			run: TestLDROnNetworkPartition,
 		},
+		{
+			name: "ldr/kv0/workload=both/schema_change",
+			clusterSpec: multiClusterSpec{
+				leftNodes:  3,
+				rightNodes: 3,
+				clusterOpts: []spec.Option{
+					spec.CPU(8),
+					spec.WorkloadNode(),
+					spec.WorkloadNodeCPU(8),
+					spec.VolumeSize(100),
+				},
+			},
+			run: TestLDRSchemaChange,
+		},
 	}
 
 	for _, sp := range specs {
@@ -211,6 +225,82 @@ func TestLDRBasic(ctx context.Context, t test.Test, c cluster.Cluster, setup mul
 		defer close(workloadDoneCh)
 		return c.RunE(ctx, option.WithNodes(setup.workloadNode), ldrWorkload.workload.sourceRunCmd("system", setup.CRDBNodes()))
 	})
+
+	monitor.Wait()
+
+	llv.assertValid(t)
+	rlv.assertValid(t)
+
+	VerifyCorrectness(t, setup, leftJobID, rightJobID, 2*time.Minute, ldrWorkload)
+}
+
+func TestLDRSchemaChange(
+	ctx context.Context, t test.Test, c cluster.Cluster, setup multiClusterSetup,
+) {
+	duration := 15 * time.Minute
+	if c.IsLocal() {
+		duration = 5 * time.Minute
+	}
+
+	ldrWorkload := LDRWorkload{
+		workload: replicateKV{
+			readPercent:             0,
+			debugRunDuration:        duration,
+			maxBlockBytes:           1024,
+			initRows:                1000,
+			initWithSplitAndScatter: true},
+		dbName:    "kv",
+		tableName: "kv",
+	}
+
+	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, ldrWorkload)
+
+	// Setup latency verifiers
+	maxExpectedLatency := 2 * time.Minute
+	llv := makeLatencyVerifier("ldr-left", 0, maxExpectedLatency, t.L(),
+		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
+	defer llv.maybeLogLatencyHist()
+
+	rlv := makeLatencyVerifier("ldr-right", 0, maxExpectedLatency, t.L(),
+		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
+	defer rlv.maybeLogLatencyHist()
+
+	workloadDoneCh := make(chan struct{})
+	debugZipFetcher := &sync.Once{}
+
+	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
+	monitor.Go(func(ctx context.Context) error {
+		if err := llv.pollLatencyUntilJobSucceeds(ctx, setup.left.db, leftJobID, time.Second, workloadDoneCh); err != nil {
+			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
+			return err
+		}
+		return nil
+	})
+	monitor.Go(func(ctx context.Context) error {
+		if err := rlv.pollLatencyUntilJobSucceeds(ctx, setup.right.db, rightJobID, time.Second, workloadDoneCh); err != nil {
+			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
+			return err
+		}
+		return nil
+	})
+
+	monitor.Go(func(ctx context.Context) error {
+		defer close(workloadDoneCh)
+		return c.RunE(ctx, option.WithNodes(setup.workloadNode), ldrWorkload.workload.sourceRunCmd("system", setup.CRDBNodes()))
+	})
+
+	// Run allowlisted schema changes on the replicated table on both the left
+	// and right sides.
+	setup.left.sysSQL.Exec(t, fmt.Sprintf("CREATE INDEX idx_left ON %s.%s(v, k)", ldrWorkload.dbName, ldrWorkload.tableName))
+	setup.right.sysSQL.Exec(t, fmt.Sprintf("CREATE INDEX idx_right ON %s.%s(v, k)", ldrWorkload.dbName, ldrWorkload.tableName))
+	setup.left.sysSQL.Exec(t, "DROP INDEX idx_left")
+	setup.right.sysSQL.Exec(t, "DROP INDEX idx_right")
+
+	// Verify that a non-allowlisted schema change fails.
+	setup.left.sysSQL.ExpectErr(t,
+		"schema change is disallowed on table .* because it is referenced by one or more logical replication jobs",
+		fmt.Sprintf("ALTER TABLE %s.%s ADD COLUMN not_null_col INT NOT NULL DEFAULT 10", ldrWorkload.dbName, ldrWorkload.tableName),
+	)
 
 	monitor.Wait()
 
