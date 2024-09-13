@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -65,6 +66,18 @@ const (
 
 	// DemoLoginPath is the demo shell auto-login URL.
 	DemoLoginPath = "/demologin"
+
+	// authorizationHeader is the 'Authorization' header in the HTTP request.
+	authorizationHeader = "Authorization"
+
+	// bearerType denotes Bearer token based request authentication.
+	// In this case, the Authorization header is set to "Bearer <token>".
+	bearerType = "Bearer"
+
+	// usernameHeader is the HTTP request header to hold the SQL username. This is used to identify a
+	// specific user identity making the request, when there is a possibility to match against
+	// multiple identities, for example, a JWT could be matched to multiple principals/identities.
+	usernameHeader = "X-Cockroach-User"
 )
 
 type noOIDCConfigured struct{}
@@ -106,6 +119,15 @@ var WebSessionTimeout = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 	settings.WithName("server.web_session.timeout"),
 	settings.WithPublic)
+
+// jwtVerifier is a duplicate of the singleton global pgwire object which gets
+// initialized from VerifyJWT method whenever a JWT auth attempt for accessing
+// DB console APIs happens. It depends on jwtauthccl module to be imported
+// properly to override its default ConfigureJWTAuth constructor.
+var jwtVerifier = struct {
+	sync.Once
+	j pgwire.JWTVerifier
+}{}
 
 type authenticationServer struct {
 	cfg       *base.Config
@@ -528,6 +550,59 @@ func (s *authenticationServer) VerifyPasswordDBConsole(
 	return ok, false, err
 }
 
+// VerifyJWT is part of the Server interface.
+func (s *authenticationServer) VerifyJWT(
+	ctx context.Context, jwtStr, usernameOptional string,
+) (valid bool, userName string, err error) {
+	execCfg := s.sqlServer.ExecutorConfig()
+	jwtVerifier.Do(func() {
+		if jwtVerifier.j == nil {
+			jwtVerifier.j = pgwire.ConfigureJWTAuth(
+				ctx,
+				execCfg.AmbientCtx,
+				execCfg.Settings,
+				execCfg.NodeInfo.LogicalClusterID(),
+			)
+		}
+	})
+
+	// Retrieve the matching user identity within the JWT.
+	_, identMap := s.sqlServer.PGServer().GetAuthenticationConfiguration()
+	inputUser, _ := username.MakeSQLUsernameFromUserInput(usernameOptional, username.PurposeValidation)
+	retrievedUser, err := jwtVerifier.j.RetrieveIdentity(
+		ctx,
+		inputUser,
+		[]byte(jwtStr),
+		identMap,
+	)
+	if err != nil {
+		return false, "", err
+	}
+
+	// Validate the user identity for access to DB console APIs.
+	verified, _, err := s.VerifyUserSessionDBConsole(ctx, retrievedUser)
+	if err != nil {
+		return false, "", err
+	}
+	if !verified {
+		return false, "", errors.Errorf("access denied for user %v", retrievedUser)
+	}
+
+	// Verify the JWT against the user identity. The configured cluster settings
+	// for Cluster SSO via JWT are honored.
+	if _, err = jwtVerifier.j.ValidateJWTLogin(
+		ctx,
+		execCfg.Settings,
+		retrievedUser,
+		[]byte(jwtStr),
+		identMap,
+	); err != nil {
+		return false, "", err
+	}
+
+	return true, retrievedUser.Normalized(), nil
+}
+
 // lookupIncomingRequestOriginIP retrieves the client IP address from the
 // context metadata, parsing the `x-forwarded-for` tag.
 //
@@ -662,17 +737,33 @@ type authenticationMux struct {
 }
 
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	username, cookie, err := am.getSession(w, req)
-	if err == nil {
+	// Retrieve a session cookie from the request, if present.
+	userName, cookie, werr := am.getSession(w, req)
+	if werr == nil {
 		req = req.WithContext(
-			ContextWithHTTPAuthInfo(req.Context(), username, cookie.ID))
-	} else if !am.allowAnonymous {
-		if log.V(1) {
-			log.Infof(req.Context(), "web session error: %v", err)
+			ContextWithHTTPAuthInfo(req.Context(), userName, cookie.ID))
+	}
+
+	// If the cookie is absent, fallback to JWT based authentication.
+	var jerr error
+	if errors.Is(werr, http.ErrNoCookie) {
+		userName, jerr = am.verifyJWT(req)
+		if jerr == nil {
+			req = req.WithContext(ContextWithHTTPAuthInfo(req.Context(), userName, 0))
 		}
-		http.Error(w, "a valid authentication cookie is required", http.StatusUnauthorized)
+	}
+
+	// If all the above auth methods have failed and allowAnonymous is false,
+	// return an error.
+	if !am.allowAnonymous && (werr != nil && jerr != nil) {
+		if log.V(1) {
+			log.Infof(req.Context(), "web session error: %v; JWT error: %v", werr, jerr)
+		}
+		http.Error(w, "a valid authentication cookie or JWT is required", http.StatusUnauthorized)
 		return
 	}
+
+	// Eventually, call into the inner HTTP handler.
 	am.inner.ServeHTTP(w, req)
 }
 
@@ -747,4 +838,29 @@ func AuthenticationHeaderMatcher(key string) (string, bool) {
 	// likely be added to GRPC Gateway so that the logic does not have to be
 	// duplicated here.
 	return fmt.Sprintf("%s%s", gwruntime.MetadataHeaderPrefix, key), true
+}
+
+// verifyJWT retrieves the JWT from the Authorization request header,
+// verifies its signature and returns the associated username.
+func (am *authenticationMux) verifyJWT(req *http.Request) (string, error) {
+	authHeaderVal := req.Header.Get(authorizationHeader)
+	authHeaderParts := strings.Split(strings.TrimSpace(authHeaderVal), " ")
+	if len(authHeaderParts) != 2 || !strings.EqualFold(authHeaderParts[0], bearerType) {
+		return "", errors.New("could not retrieve JWT from the request header")
+	}
+
+	jwtString := authHeaderParts[1]
+	inputUsername := req.Header.Get(usernameHeader)
+	valid, retrievedUsername, err := am.server.VerifyJWT(req.Context(), jwtString, inputUsername)
+	if err != nil {
+		err := srverrors.APIInternalError(req.Context(), err)
+		return "", err
+	}
+
+	if !valid {
+		err := errors.New("the provided JWT could not be verified")
+		return "", err
+	}
+
+	return retrievedUsername, nil
 }
