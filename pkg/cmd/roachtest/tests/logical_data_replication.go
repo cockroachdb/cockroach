@@ -162,17 +162,22 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 
 func TestLDRBasic(ctx context.Context, t test.Test, c cluster.Cluster, setup multiClusterSetup) {
 	duration := 15 * time.Minute
+	initRows := 1000
+	maxBlockBytes := 1024
+
 	if c.IsLocal() {
-		duration = 5 * time.Minute
+		duration = 30 * time.Second
+		initRows = 10
+		maxBlockBytes = 32
 	}
 
 	ldrWorkload := LDRWorkload{
 		workload: replicateKV{
 			readPercent:             0,
 			debugRunDuration:        duration,
-			maxBlockBytes:           1024,
-			initRows:                1000,
-			initWithSplitAndScatter: true},
+			maxBlockBytes:           maxBlockBytes,
+			initRows:                initRows,
+			initWithSplitAndScatter: !c.IsLocal()},
 		dbName:    "kv",
 		tableName: "kv",
 	}
