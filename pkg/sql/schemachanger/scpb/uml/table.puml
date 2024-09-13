@@ -263,6 +263,11 @@ IndexZoneConfig :  Subzone
 IndexZoneConfig : []SubzoneSpans
 IndexZoneConfig :  SeqNum
 
+object LDRJobIDs
+
+LDRJobIDs :  TableID
+LDRJobIDs : []JobIDs
+
 object Namespace
 
 Namespace :  DatabaseID
@@ -478,6 +483,7 @@ SecondaryIndex <|-- IndexName
 PrimaryIndex <|-- IndexPartitioning
 SecondaryIndex <|-- IndexPartitioning
 Index <|-- IndexZoneConfig
+Table <|-- LDRJobIDs
 Table <|-- Namespace
 View <|-- Namespace
 Sequence <|-- Namespace
