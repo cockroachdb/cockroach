@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/metrictestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
@@ -52,7 +53,7 @@ func TestCloser(t *testing.T) {
 	start := timeutil.Now()
 	timeSource := timeutil.NewManualTime(start)
 	factory := tenantrate.NewLimiterFactory(&st.SV, &tenantrate.TestingKnobs{
-		TimeSource: timeSource,
+		QuotaPoolOptions: []quotapool.Option{quotapool.WithTimeSource(timeSource)},
 	}, fakeAuthorizer{})
 	tenant := roachpb.MustMakeTenantID(2)
 	closer := make(chan struct{})
@@ -220,7 +221,7 @@ func (ts *testState) init(t *testing.T, d *datadriven.TestData) string {
 
 	parseSettings(t, d, &ts.config, ts.capabilities)
 	ts.rl = tenantrate.NewLimiterFactory(&ts.settings.SV, &tenantrate.TestingKnobs{
-		TimeSource: ts.clock,
+		QuotaPoolOptions: []quotapool.Option{quotapool.WithTimeSource(ts.clock)},
 	}, ts)
 	ts.rl.UpdateConfig(ts.config)
 	ts.m = metric.NewRegistry()
