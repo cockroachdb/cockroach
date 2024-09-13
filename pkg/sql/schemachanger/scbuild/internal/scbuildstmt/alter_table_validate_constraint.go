@@ -20,7 +20,11 @@ import (
 )
 
 func alterTableValidateConstraint(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableValidateConstraint,
+	b BuildCtx,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	stmt tree.Statement,
+	t *tree.AlterTableValidateConstraint,
 ) {
 	constraintElems := b.ResolveConstraint(tbl.TableID, t.Constraint, ResolveParams{
 		IsExistenceOptional: false,

@@ -18,7 +18,11 @@ import (
 )
 
 func alterTableSetNotNull(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableSetNotNull,
+	b BuildCtx,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	stmt tree.Statement,
+	t *tree.AlterTableSetNotNull,
 ) {
 	alterColumnPreChecks(b, tn, tbl, t.Column)
 	columnID := getColumnIDFromColumnName(b, tbl.TableID, t.Column, true /*required */)
