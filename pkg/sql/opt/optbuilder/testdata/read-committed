@@ -1,0 +1,35 @@
+# Tests for read-committed isolation level.
+
+exec-ddl
+CREATE TABLE t130661 (
+	id INT PRIMARY KEY,
+	i INT NOT NULL,
+	v INT AS (i + 10) VIRTUAL NOT NULL
+)
+----
+
+# Regression test for #130661. The lock columns should not include virtual
+# computed columns (in this case the column with ID 8).
+build isolation=ReadCommitted
+SELECT * FROM t130661 WHERE id = 1 FOR UPDATE
+----
+lock t130661
+ ├── columns: id:1!null i:2!null v:3!null
+ ├── key columns: id:1
+ ├── lock columns: (6,7)
+ ├── locking: for-update,durability-guaranteed
+ └── project
+      ├── columns: id:1!null i:2!null v:3!null
+      └── select
+           ├── columns: id:1!null i:2!null v:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+           ├── project
+           │    ├── columns: v:3!null id:1!null i:2!null crdb_internal_mvcc_timestamp:4 tableoid:5
+           │    ├── scan t130661
+           │    │    ├── columns: id:1!null i:2!null crdb_internal_mvcc_timestamp:4 tableoid:5
+           │    │    └── computed column expressions
+           │    │         └── v:3
+           │    │              └── i:2 + 10
+           │    └── projections
+           │         └── i:2 + 10 [as=v:3]
+           └── filters
+                └── id:1 = 1
