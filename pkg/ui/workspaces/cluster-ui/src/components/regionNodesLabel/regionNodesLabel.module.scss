@@ -1,0 +1,33 @@
+@import "src/core/index.module.scss";
+
+.container {
+  margin: 0.5rem;
+  width: fit-content;
+}
+
+
+.label-body {
+  background-color: $colors--neutral-3;
+  padding: 0.1rem 0.5rem;
+  border-radius: 0.375rem;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  column-gap: 0.5rem;
+}
+
+.badge {
+  :global(.ant-badge-count) {
+    background-color: $colors--neutral-1;
+    font-size: 12px;
+    height: 20px;
+    line-height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    min-width: 20px;
+    color: inherit;
+  }
+}
+
+

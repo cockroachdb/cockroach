@@ -8,11 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Space } from "antd";
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import Select, { OptionsType } from "react-select";
 
+import { RegionNodesLabel } from "src/components/regionNodesLabel";
 import { PageLayout, PageSection } from "src/layouts";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import PageCount from "src/sharedFromCloud/pageCount";
@@ -37,10 +37,13 @@ const mockData: DatabaseRow[] = new Array(20).fill(1).map((_, i) => ({
   approximateDiskSizeMiB: i * 100,
   tableCount: i,
   rangeCount: i,
-  nodesByRegion: {
-    [mockRegionOptions[0].value]: [1, 2],
-    [mockRegionOptions[1].value]: [3],
-  },
+  nodesByRegion:
+    i % 2 === 0
+      ? {
+          [mockRegionOptions[0].value]: [1, 2],
+          [mockRegionOptions[1].value]: [3],
+        }
+      : null,
   schemaInsightsCount: i,
   key: i.toString(),
 }));
@@ -94,12 +97,15 @@ const columns: TableColumnProps<DatabaseRow>[] = [
   {
     title: "Regions / Nodes",
     render: (db: DatabaseRow) => (
-      <Space direction="vertical">
-        {db.nodesByRegion &&
-          Object.keys(db.nodesByRegion).map(
-            region => `${region}: ${db.nodesByRegion[region].length}`,
-          )}
-      </Space>
+      <div>
+        {Object.entries(db.nodesByRegion ?? {}).map(([region, nodes]) => (
+          <RegionNodesLabel
+            key={region}
+            nodes={nodes}
+            region={{ label: region, code: region }}
+          />
+        ))}
+      </div>
     ),
   },
   {
