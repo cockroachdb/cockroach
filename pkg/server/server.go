@@ -1109,6 +1109,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		node.storeCfg.KVFlowHandles,
 		node.storeCfg.KVFlowController,
 	)
+	cfg.CidrLookup.Start(ctx, stopper)
 
 	// Instantiate the SQL server proper.
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
@@ -2087,6 +2088,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.sqlServer.execCfg.InternalDB.CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
 		nil, /* TenantExternalIORecorder */
 		s.appRegistry,
+		s.cfg.CidrLookup,
 	)
 	if err := s.cfg.ExternalStorageAccessor.Init(
 		s.externalStorageBuilder.makeExternalStorage, s.externalStorageBuilder.makeExternalStorageFromURI,
