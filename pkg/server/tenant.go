@@ -420,6 +420,13 @@ func newTenantServer(
 		}
 	}
 
+	// NB: On a shared process tenant, we start cidr once per tenant.
+	// Potentially we could share this across tenants, but this breaks the
+	// tenant separation model. For a small number of tenants this is OK, but if
+	// we have a large number of tenants in shared process mode this could be a
+	// problem from a memory and network perspective.
+	baseCfg.CidrLookup.Start(ctx, stopper)
+
 	// Instantiate the SQL server proper.
 	sqlServer, err := newSQLServer(ctx, args)
 	if err != nil {
