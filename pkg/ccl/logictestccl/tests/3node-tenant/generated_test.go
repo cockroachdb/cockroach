@@ -333,6 +333,13 @@ func TestTenantLogic_bit(
 	runLogicTest(t, "bit")
 }
 
+func TestTenantLogic_bpchar(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "bpchar")
+}
+
 func TestTenantLogic_builtin_function(
 	t *testing.T,
 ) {

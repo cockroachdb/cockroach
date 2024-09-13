@@ -331,6 +331,13 @@ func TestRepeatableReadLogic_bit(
 	runLogicTest(t, "bit")
 }
 
+func TestRepeatableReadLogic_bpchar(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "bpchar")
+}
+
 func TestRepeatableReadLogic_builtin_function(
 	t *testing.T,
 ) {
