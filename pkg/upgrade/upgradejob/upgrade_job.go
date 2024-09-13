@@ -92,6 +92,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			DB:               execCtx.ExecCfg().InternalDB,
 			KVDB:             execCtx.ExecCfg().DB,
 			LeaseManager:     execCtx.ExecCfg().LeaseManager,
+			LicenseEnforcer:  execCtx.ExecCfg().LicenseEnforcer,
 			InternalExecutor: ex,
 			JobRegistry:      execCtx.ExecCfg().JobRegistry,
 			TestingKnobs:     execCtx.ExecCfg().UpgradeTestingKnobs,

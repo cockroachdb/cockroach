@@ -131,6 +131,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new field"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"check that we are not in violation of the new license policies",
+		clusterversion.V24_3_MaybePreventUpgradeForCoreLicenseDeprecation.Version(),
+		checkForPostUpgradeThrottlePreCond,
+		checkForPostUpgradeThrottleProcessing,
+		upgrade.RestoreActionNotRequired("this check does not persist anything"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

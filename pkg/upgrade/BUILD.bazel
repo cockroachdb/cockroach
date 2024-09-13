@@ -18,6 +18,7 @@ go_library(
         "//pkg/keyvisualizer",
         "//pkg/kv",
         "//pkg/roachpb",
+        "//pkg/server/license",
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/descs",
