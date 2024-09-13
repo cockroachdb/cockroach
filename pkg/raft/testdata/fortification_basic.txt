@@ -98,14 +98,12 @@ stabilize
   1/3 EntryNormal ""
   Messages:
   1->2 MsgFortifyLeader Term:1 Log:0/0
-  1->3 MsgFortifyLeader Term:1 Log:0/0
   1->2 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
 > 2 receiving messages
   1->2 MsgFortifyLeader Term:1 Log:0/0
   1->2 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
 > 3 receiving messages
-  1->3 MsgFortifyLeader Term:1 Log:0/0
   1->3 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
 > 2 handling Ready
   Ready MustSync=true:
@@ -121,12 +119,10 @@ stabilize
   Entries:
   1/3 EntryNormal ""
   Messages:
-  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
   3->1 MsgAppResp Term:1 Log:0/3 Commit:2
 > 1 receiving messages
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
   2->1 MsgAppResp Term:1 Log:0/3 Commit:2
-  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 Rejected (Hint: 0)
   3->1 MsgAppResp Term:1 Log:0/3 Commit:2
 > 1 handling Ready
   Ready MustSync=true:

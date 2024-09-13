@@ -715,6 +715,37 @@ func (r *raft) sendHeartbeat(to pb.PeerID) {
 	pr.MaybeUpdateSentCommit(commit)
 }
 
+// maybeSendFortify sends a fortification RPC to the given peer if it doesn't
+// support the leader. We skip sending a fortification message if we suspect a
+// store liveness problem with the follower.
+func (r *raft) maybeSendFortify(id pb.PeerID) {
+	if !r.storeLiveness.SupportFromEnabled() {
+		// The underlying store liveness fabric hasn't been enabled to allow the
+		// leader to request support from peers. No-op.
+		return
+	}
+	curEpoch, _, ok := r.storeLiveness.SupportFrom(id)
+	if !ok {
+		// If we don't know the follower's store liveness epoch, we don't need to
+		// send a fortify message. This is because it's likely that there is a
+		// problem with the connection, and we will attempt to send the fortify
+		// message once the connection is re-established.
+		if id == r.id {
+			// Log if the leader doesn't support itself in the liveness fabric.
+			r.logger.Infof(
+				"%x leader at term %d does not support itself in the liveness fabric", r.id, r.Term,
+			)
+		}
+		return
+	}
+
+	if !r.supportTracker.IsSuppotedBy(id, curEpoch) {
+		// Only send a fortify message if we don't know that the follower supports
+		// us at the current epoch.
+		r.sendFortify(id)
+	}
+}
+
 // sendFortify sends a fortification RPC to the given peer.
 func (r *raft) sendFortify(to pb.PeerID) {
 	if !r.storeLiveness.SupportFromEnabled() {
@@ -736,10 +767,6 @@ func (r *raft) sendFortify(to pb.PeerID) {
 			// discrimination for who is providing support (itself vs. other
 			// follower).
 			r.send(pb.Message{To: r.id, Type: pb.MsgFortifyLeaderResp, LeadEpoch: epoch})
-		} else {
-			r.logger.Infof(
-				"%x leader at term %d does not support itself in the liveness fabric", r.id, r.Term,
-			)
 		}
 		return
 	}
@@ -771,13 +798,18 @@ func (r *raft) bcastHeartbeat() {
 	})
 }
 
-// bcastFortify sends an RPC to fortify the leader to all peers (including the
-// leader itself).
-func (r *raft) bcastFortify() {
+// maybeBcastFortify attempts to send an RPC to fortify the leader to all the
+// peers (including the leader itself) who don't support the leader at the
+// current epoch.
+func (r *raft) maybeBcastFortify() {
+	if !r.storeLiveness.SupportFromEnabled() {
+		// The underlying store liveness fabric hasn't been enabled to allow the
+		// leader to request support from peers. No-op.
+		return
+	}
 	assertTrue(r.state == StateLeader, "only leaders can fortify")
-
 	r.trk.Visit(func(id pb.PeerID, _ *tracker.Progress) {
-		r.sendFortify(id)
+		r.maybeSendFortify(id)
 	})
 }
 
@@ -1842,7 +1874,7 @@ func stepCandidate(r *raft, m pb.Message) error {
 				r.campaign(campaignElection)
 			} else {
 				r.becomeLeader()
-				r.bcastFortify()
+				r.maybeBcastFortify()
 				r.bcastAppend()
 			}
 		case quorum.VoteLost:
