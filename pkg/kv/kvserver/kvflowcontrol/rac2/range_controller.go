@@ -95,7 +95,8 @@ type RaftInterface interface {
 	//
 	// When a follower transitions from {StateProbe,StateSnapshot} =>
 	// StateReplicate, we start trying to send MsgApps. We should
-	// notice such transitions both in HandleRaftEvent and SetReplicasLocked.
+	// notice such transitions both in HandleRaftEvent and
+	// SetReplicasRaftMuLocked.
 	//
 	// Requires Replica.raftMu to be held, Replica.mu is not held.
 	FollowerStateRaftMuLocked(replicaID roachpb.ReplicaID) FollowerStateInfo
@@ -455,6 +456,13 @@ func (rc *rangeController) CloseRaftMuLocked(ctx context.Context) {
 	rc.mu.voterSets = nil
 	close(rc.mu.waiterSetRefreshCh)
 	rc.mu.waiterSetRefreshCh = nil
+	// Return any tracked token deductions, as we don't expect to receive more
+	// AdmittedVector updates.
+	for _, rs := range rc.replicaMap {
+		if rs.sendStream != nil {
+			rs.closeSendStream(ctx)
+		}
+	}
 }
 
 // InspectRaftMuLocked returns a handle containing the state of the range
@@ -497,6 +505,11 @@ func (rc *rangeController) updateReplicaSet(ctx context.Context, newSet ReplicaS
 	for r := range prevSet {
 		desc, ok := newSet[r]
 		if !ok {
+			if rs := rc.replicaMap[r]; rs.sendStream != nil {
+				// The replica is no longer part of the range, so we don't expect any
+				// tracked token deductions to be returned. Return them now.
+				rs.closeSendStream(ctx)
+			}
 			delete(rc.replicaMap, r)
 		} else {
 			rs := rc.replicaMap[r]
@@ -763,10 +776,7 @@ func (rs *replicaState) handleReadyState(
 				defer rs.sendStream.mu.Unlock()
 				return rs.sendStream.mu.connectedState
 			}() {
-			case replicate:
-				rs.sendStream.changeToStateSnapshot(ctx)
-				shouldWaitChange = true
-			case probeRecentlyReplicate:
+			case replicate, probeRecentlyReplicate:
 				rs.closeSendStream(ctx)
 				shouldWaitChange = true
 			case snapshot:

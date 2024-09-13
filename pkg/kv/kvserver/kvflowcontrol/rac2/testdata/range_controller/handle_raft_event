@@ -176,7 +176,7 @@ range_id=1
   term=1 index=7 pri=NormalPri size=1MiB
 ----
 t1/s1: reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
-t1/s2: reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+t1/s2: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
 t1/s3: reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
 
 # The operation should now be done and have waited for s1 and s3.
