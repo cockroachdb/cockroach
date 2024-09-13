@@ -126,17 +126,14 @@ func newLogicalReplicationWriterProcessor(
 		}
 	}
 
-	tableConfigs := make(map[descpb.ID]sqlProcessorTableConfig)
-	srcTableIDToDstMeta := make(map[descpb.ID]dstTableMetadata)
-	for dstTableID, md := range spec.TableMetadata {
-		desc := md.SourceDescriptor
-		tableConfigs[descpb.ID(dstTableID)] = sqlProcessorTableConfig{
-			srcDesc: tabledesc.NewBuilder(&desc).BuildImmutableTable(),
+	procConfigByDestTableID := make(map[descpb.ID]sqlProcessorTableConfig)
+	destTableBySrcID := make(map[descpb.ID]dstTableMetadata)
+	for dstTableID, md := range spec.TableMetadataByDestID {
+		procConfigByDestTableID[descpb.ID(dstTableID)] = sqlProcessorTableConfig{
+			srcDesc: tabledesc.NewBuilder(&md.SourceDescriptor).BuildImmutableTable(),
 			dstOID:  md.DestinationFunctionOID,
 		}
-
-		srcTableID := desc.GetID()
-		srcTableIDToDstMeta[srcTableID] = dstTableMetadata{
+		destTableBySrcID[md.SourceDescriptor.GetID()] = dstTableMetadata{
 			database: md.DestinationParentDatabaseName,
 			schema:   md.DestinationParentSchemaName,
 			table:    md.DestinationTableName,
@@ -146,7 +143,7 @@ func newLogicalReplicationWriterProcessor(
 	bhPool := make([]BatchHandler, maxWriterWorkers)
 	for i := range bhPool {
 		sqlRP, err := makeSQLProcessor(
-			ctx, flowCtx.Cfg.Settings, tableConfigs,
+			ctx, flowCtx.Cfg.Settings, procConfigByDestTableID,
 			jobspb.JobID(spec.JobID),
 			// Initialize the executor with a fresh session data - this will
 			// avoid creating a new copy on each executor usage.
@@ -157,7 +154,7 @@ func newLogicalReplicationWriterProcessor(
 		}
 		var rp RowProcessor
 		if spec.Mode == jobspb.LogicalReplicationDetails_Immediate {
-			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, tableConfigs, sqlRP)
+			rp, err = newKVRowProcessor(ctx, flowCtx.Cfg, flowCtx.EvalCtx, procConfigByDestTableID, sqlRP)
 			if err != nil {
 				return nil, err
 			}
@@ -182,7 +179,7 @@ func newLogicalReplicationWriterProcessor(
 	dlqDbExec := flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */)))
 
 	var numTablesWithSecondaryIndexes int
-	for _, tc := range tableConfigs {
+	for _, tc := range procConfigByDestTableID {
 		if len(tc.srcDesc.NonPrimaryIndexes()) > 0 {
 			numTablesWithSecondaryIndexes++
 		}
@@ -192,7 +189,7 @@ func newLogicalReplicationWriterProcessor(
 		spec: spec,
 		getBatchSize: func() int {
 			// We want to decide whether to use implicit txns or not based on
-			// the schema of the target table. Benchmarking has shown that
+			// the schema of the dest table. Benchmarking has shown that
 			// implicit txns are beneficial on tables with no secondary indexes
 			// whereas explicit txns are beneficial when at least one secondary
 			// index is present.
@@ -200,15 +197,15 @@ func newLogicalReplicationWriterProcessor(
 			// Unfortunately, if we have multiple replication pairs, we don't
 			// know which tables will be affected by this batch before deciding
 			// on the batch size, so we'll use a heuristic such that we'll use
-			// the implicit txns if at least half of the target tables are
+			// the implicit txns if at least half of the dest tables are
 			// without the secondary indexes. If we only have a single
 			// replication pair, then this heuristic gives us the precise
 			// recommendation.
 			//
 			// (Here we have access to the descriptor of the source table, but
-			// for now we assume that the source and the target descriptors are
+			// for now we assume that the source and the dest descriptors are
 			// similar.)
-			if 2*numTablesWithSecondaryIndexes < len(tableConfigs) && useImplicitTxns.Get(&flowCtx.Cfg.Settings.SV) {
+			if 2*numTablesWithSecondaryIndexes < len(procConfigByDestTableID) && useImplicitTxns.Get(&flowCtx.Cfg.Settings.SV) {
 				return 1
 			}
 			return int(flushBatchSize.Get(&flowCtx.Cfg.Settings.SV))
@@ -223,7 +220,7 @@ func newLogicalReplicationWriterProcessor(
 			StreamID:    streampb.StreamID(spec.StreamID),
 			ProcessorID: processorID,
 		},
-		dlqClient: InitDeadLetterQueueClient(dlqDbExec, srcTableIDToDstMeta),
+		dlqClient: InitDeadLetterQueueClient(dlqDbExec, destTableBySrcID),
 		metrics:   flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
 	}
 	lrw.purgatory = purgatory{
