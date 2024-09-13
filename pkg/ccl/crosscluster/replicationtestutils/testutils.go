@@ -121,6 +121,10 @@ type TenantStreamingClusters struct {
 	DestTenantConn *gosql.DB
 	DestTenantSQL  *sqlutils.SQLRunner
 
+	ReaderTenantServer serverutils.ApplicationLayerInterface
+	ReaderTenantConn   *gosql.DB
+	ReaderTenantSQL    *sqlutils.SQLRunner
+
 	Rng *rand.Rand
 }
 
@@ -194,6 +198,24 @@ func (c *TenantStreamingClusters) StartDestTenant(
 	return func() {
 		require.NoError(c.T, c.DestTenantConn.Close())
 	}
+}
+
+// ConnectToReaderTenant should be invoked when a PCR job has reader tenant enabled
+// and is in running state to open a connection to the standby reader tenant.
+func (c *TenantStreamingClusters) ConnectToReaderTenant(
+	ctx context.Context, tenantID roachpb.TenantID, tenantName string, server int,
+) {
+	var err error
+	c.ReaderTenantServer, c.ReaderTenantConn, err = c.DestCluster.Server(server).TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+		TenantID:    tenantID,
+		TenantName:  roachpb.TenantName(tenantName),
+		UseDatabase: "defaultdb",
+	})
+	require.NoError(c.T, err)
+	c.ReaderTenantConn = c.DestCluster.Server(server).SystemLayer().SQLConn(c.T,
+		serverutils.DBName("cluster:"+tenantName+"/defaultdb"))
+	c.ReaderTenantSQL = sqlutils.MakeSQLRunner(c.ReaderTenantConn)
+	testutils.SucceedsSoon(c.T, func() error { return c.ReaderTenantConn.Ping() })
 }
 
 // CompareResult compares the results of query on the primary and standby
