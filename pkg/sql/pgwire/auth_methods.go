@@ -725,6 +725,19 @@ type JWTVerifier interface {
 		_ []byte,
 		_ *identmap.Conf,
 	) (detailedErrorMsg redact.RedactableString, authError error)
+
+	// RetrieveIdentity retrieves the user identity from the JWT.
+	//
+	// If a user identity is provided as input, it matches it against the token
+	// principals. In case of a match, it returns the matched user and no
+	// error. Otherwise, it returns the input user along with the error.
+	//
+	// If a user identity is not provided as input, and there is a single token
+	// principal to match against, it returns this user identity and no error.
+	// If there are multiple matches, then it returns an error.
+	RetrieveIdentity(
+		_ context.Context, _ username.SQLUsername, _ []byte, _ *identmap.Conf,
+	) (retrievedUser username.SQLUsername, authError error)
 }
 
 var jwtVerifier JWTVerifier
@@ -735,6 +748,12 @@ func (c *noJWTConfigured) ValidateJWTLogin(
 	_ context.Context, _ *cluster.Settings, _ username.SQLUsername, _ []byte, _ *identmap.Conf,
 ) (detailedErrorMsg redact.RedactableString, authError error) {
 	return "", errors.New("JWT token authentication requires CCL features")
+}
+
+func (c *noJWTConfigured) RetrieveIdentity(
+	_ context.Context, u username.SQLUsername, _ []byte, _ *identmap.Conf,
+) (retrievedUser username.SQLUsername, authError error) {
+	return u, errors.New("JWT token authentication requires CCL features")
 }
 
 // ConfigureJWTAuth is a hook for the `jwtauthccl` library to add JWT login support. It's called to
