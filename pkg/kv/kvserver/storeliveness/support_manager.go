@@ -114,7 +114,8 @@ func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Times
 		// uses a map to avoid duplicates, and the requesterStateHandler's
 		// addStore checks if the store exists before adding it.
 		sm.storesToAdd.addStore(id)
-		log.VInfof(context.Background(), 2,
+		log.VInfof(
+			context.Background(), 2,
 			"store %+v enqueued to add remote store %+v", sm.storeID, id,
 		)
 		return 0, hlc.Timestamp{}, false
