@@ -89,7 +89,7 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunTrueAndFalse(t, "epoch", func(t *testing.T, epoch bool) {
+	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
 		testutils.RunTrueAndFalse(t, "served-future-reads", func(t *testing.T, servedFutureReads bool) {
 			ctx := context.Background()
 			db := storage.NewDefaultInMemForTesting()
@@ -117,11 +117,16 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 				Start:      now,
 				Sequence:   prevLease.Sequence + 1,
 			}
-			if epoch {
-				nextLease.Epoch = 1
-			} else {
+			switch leaseType {
+			case roachpb.LeaseExpiration:
 				exp := nextLease.Start.ToTimestamp().Add(9*time.Second.Nanoseconds(), 0)
 				nextLease.Expiration = &exp
+			case roachpb.LeaseEpoch:
+				nextLease.Epoch = 1
+			case roachpb.LeaseLeader:
+				nextLease.Term = 1
+			default:
+				t.Fatalf("unexpected lease type: %s", leaseType)
 			}
 
 			var maxPriorReadTS hlc.Timestamp
