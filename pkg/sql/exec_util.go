@@ -1867,6 +1867,8 @@ type StreamingTestingKnobs struct {
 	SpanConfigRangefeedCacheKnobs *rangefeedcache.TestingKnobs
 
 	FailureRate uint32
+
+	StandbyPollInterval time.Duration
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}

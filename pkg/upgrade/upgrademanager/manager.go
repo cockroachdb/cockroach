@@ -675,6 +675,7 @@ func (m *Manager) runMigration(
 				JobRegistry:      m.jr,
 				TestingKnobs:     &m.knobs,
 				ClusterID:        m.clusterID.Get(),
+				ReaderTenant:     m.deps.ReaderTenant,
 			}); err != nil {
 				return err
 			}
@@ -852,6 +853,7 @@ func (m *Manager) checkPreconditions(ctx context.Context, versions []roachpb.Ver
 			InternalExecutor: m.ie,
 			JobRegistry:      m.jr,
 			ClusterID:        m.clusterID.Get(),
+			ReaderTenant:     m.deps.ReaderTenant,
 		}); err != nil {
 			return errors.Wrapf(
 				err,
