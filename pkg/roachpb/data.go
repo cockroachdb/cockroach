@@ -1887,6 +1887,11 @@ const (
 	LeaseLeader
 )
 
+// LeaseTypes returns a list of all lease types.
+func LeaseTypes() []LeaseType {
+	return []LeaseType{LeaseExpiration, LeaseEpoch, LeaseLeader}
+}
+
 // Type returns the lease type.
 func (l Lease) Type() LeaseType {
 	if l.Epoch != 0 && l.Term != 0 {
