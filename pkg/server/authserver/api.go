@@ -101,6 +101,14 @@ type Server interface {
 	VerifyPasswordDBConsole(
 		ctx context.Context, userName username.SQLUsername, passwordStr string,
 	) (valid bool, expired bool, err error)
+
+	// VerifyJWT verifies the JWT for authenticating the request. An optional username may be provided
+	// if the JWT is likely to match multiple user identities.
+	// It returns three parameters:
+	// - a boolean indicating if the JWT is valid,
+	// - the username associated with the JWT (if validated), and
+	// - an error for any internal errors which prevented validation.
+	VerifyJWT(ctx context.Context, jwtStr, usernameOptional string) (bool, string, error)
 }
 
 type SQLServerInterface interface {
