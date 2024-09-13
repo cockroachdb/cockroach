@@ -30,3 +30,19 @@ export function createInitialState<T>(
     ...overrides,
   };
 }
+
+export type SimplePaginationState = {
+  pageSize: number;
+  pageNum: number;
+};
+
+export type SimplePaginationStateAPIV2 = {
+  total_results: number;
+  page_size: number;
+  page_num: number;
+};
+
+export type APIV2ResposneWithPaginationState<T> = {
+  results: T[];
+  pagination_info: SimplePaginationStateAPIV2;
+};

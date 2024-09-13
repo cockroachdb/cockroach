@@ -18,6 +18,8 @@ import { CompareFn, SorterResult } from "antd/lib/table/interface";
 import classNames from "classnames";
 import React, { useMemo } from "react";
 
+import emptyListResultsImg from "src/assets/emptyState/empty-list-results.svg";
+
 import { Alert, AlertType } from "./alert";
 import DelayedLoaderIcon from "./delayedLoaderIcon";
 
@@ -132,7 +134,7 @@ function mapTableColumnsToAntDesignColumns<T>(
   return antDTableColumns;
 }
 
-const DEFAULT_EMPTY_ICON = <img src="/assets/images/graphics/table.svg" />;
+const DEFAULT_EMPTY_ICON = emptyListResultsImg;
 
 // export component for quick custom empty states
 export const EmptyState = ({

@@ -18,8 +18,3 @@ export type DatabaseRow = {
   schemaInsightsCount: number;
   key: string;
 };
-
-export type DatabaseListFilters = {
-  search: string;
-  regionValues?: string[];
-};
