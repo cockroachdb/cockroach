@@ -226,7 +226,7 @@ func (s *testingRCState) maybeSetInitialTokens(r testingRange) {
 	}
 }
 
-func (s *testingRCState) getOrInitRange(r testingRange) *testingRCRange {
+func (s *testingRCState) getOrInitRange(t *testing.T, r testingRange) *testingRCRange {
 	testRC, ok := s.ranges[r.rangeID]
 	if !ok {
 		testRC = &testingRCRange{}
@@ -251,6 +251,9 @@ func (s *testingRCState) getOrInitRange(r testingRange) *testingRCRange {
 		s.ranges[r.rangeID] = testRC
 	}
 	s.maybeSetInitialTokens(r)
+	// Send through an empty raft event to trigger creating necessary replica
+	// send streams for the range.
+	require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(s.testCtx, RaftEvent{}))
 	return testRC
 }
 
@@ -658,7 +661,7 @@ func TestRangeController(t *testing.T) {
 				}
 
 				for _, r := range scanRanges(t, d.Input) {
-					state.getOrInitRange(r)
+					state.getOrInitRange(t, r)
 				}
 				return state.rangeStateString() + state.tokenCountsString()
 
@@ -731,7 +734,7 @@ func TestRangeController(t *testing.T) {
 
 			case "set_replicas":
 				for _, r := range scanRanges(t, d.Input) {
-					testRC := state.getOrInitRange(r)
+					testRC := state.getOrInitRange(t, r)
 					func() {
 						testRC.mu.Lock()
 						defer testRC.mu.Unlock()
