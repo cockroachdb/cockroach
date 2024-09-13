@@ -1600,6 +1600,8 @@ SELECT * FROM abcde WHERE d IS NULL LIMIT 1 FOR UPDATE
 ----
 lock abcde
  ├── columns: a:1!null b:2 c:3!null d:4 e:5
+ ├── key columns: a:1
+ ├── lock columns: (8-12)
  ├── locking: for-update
  ├── cardinality: [0 - 1]
  ├── volatile, mutations
@@ -1621,6 +1623,8 @@ SELECT * FROM abcde WHERE d IS NULL OFFSET 1 FOR UPDATE
 ----
 lock abcde
  ├── columns: a:1!null b:2 c:3!null d:4 e:5
+ ├── key columns: a:1
+ ├── lock columns: (8-12)
  ├── locking: for-update
  ├── volatile, mutations
  ├── key: (1)
@@ -1652,6 +1656,8 @@ limit
  ├── fd: ()-->(1-5)
  ├── lock abcde
  │    ├── columns: a:1!null b:2 c:3!null d:4 e:5
+ │    ├── key columns: a:1
+ │    ├── lock columns: (8-12)
  │    ├── locking: for-update,skip-locked
  │    ├── volatile, mutations
  │    ├── key: (1)
@@ -1682,6 +1688,8 @@ offset
  ├── key: (1)
  ├── lock abcde
  │    ├── columns: a:1!null
+ │    ├── key columns: a:1
+ │    ├── lock columns: (8-12)
  │    ├── locking: for-update,skip-locked
  │    ├── volatile, mutations
  │    ├── key: (1)
@@ -1710,6 +1718,8 @@ SELECT * FROM abcde WHERE d IS NULL LIMIT 1 FOR UPDATE
 ----
 lock abcde
  ├── columns: a:1!null b:2 c:3!null d:4 e:5
+ ├── key columns: a:1
+ ├── lock columns: (8-12)
  ├── locking: for-update,durability-guaranteed
  ├── cardinality: [0 - 1]
  ├── volatile, mutations
@@ -1731,6 +1741,8 @@ SELECT * FROM abcde WHERE d IS NULL OFFSET 1 FOR UPDATE
 ----
 lock abcde
  ├── columns: a:1!null b:2 c:3!null d:4 e:5
+ ├── key columns: a:1
+ ├── lock columns: (8-12)
  ├── locking: for-update,durability-guaranteed
  ├── volatile, mutations
  ├── key: (1)
@@ -1762,6 +1774,8 @@ limit
  ├── fd: ()-->(1-5)
  ├── lock abcde
  │    ├── columns: a:1!null b:2 c:3!null d:4 e:5
+ │    ├── key columns: a:1
+ │    ├── lock columns: (8-12)
  │    ├── locking: for-update,skip-locked,durability-guaranteed
  │    ├── volatile, mutations
  │    ├── key: (1)
@@ -1793,6 +1807,8 @@ offset
  ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── lock abcde
  │    ├── columns: a:1!null b:2 c:3!null d:4 e:5
+ │    ├── key columns: a:1
+ │    ├── lock columns: (8-12)
  │    ├── locking: for-update,skip-locked,durability-guaranteed
  │    ├── volatile, mutations
  │    ├── key: (1)
