@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -395,6 +396,31 @@ WHERE id = $1`
 	}
 
 	return true, userName, nil
+}
+
+// VerifyUserSessionDBConsole is part of the Server interface. It retrieves user
+// session details required for proceeding with DB console login.
+// (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
+func (s *authenticationServer) VerifyUserSessionDBConsole(
+	ctx context.Context, userName username.SQLUsername,
+) (
+	verified bool,
+	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
+	err error,
+) {
+	exists, _, canLoginDBConsole, _, _, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+		ctx,
+		s.sqlServer.ExecutorConfig(),
+		userName,
+		"", /* databaseName */
+	)
+	if err != nil {
+		return false, nil, err
+	}
+	if !exists || !canLoginDBConsole {
+		return false, nil, nil
+	}
+	return true, pwRetrieveFn, nil
 }
 
 // VerifyPasswordDBConsole is part of the Server interface.
