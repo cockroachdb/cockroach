@@ -15,6 +15,8 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
+        "//pkg/server/apiconstants",
+        "//pkg/server/authserver",
         "//pkg/sql/pgwire",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/testutils",
