@@ -30,7 +30,7 @@ func CheckEmptyDLQs(ctx context.Context, db sqlutils.DBHandle, dbName string) er
 		if err := rows.Scan(&dlqTableName); err != nil {
 			return errors.Wrapf(err, "failed to scan dlq table name for database %s", dbName)
 		}
-		if err := db.QueryRowContext(ctx, fmt.Sprintf("SELECT count(*) FROM crdb_replication.%s", dlqTableName)).Scan(&dlqRowCount); err != nil {
+		if err := db.QueryRowContext(ctx, fmt.Sprintf("SELECT count(*) FROM %s.crdb_replication.%s", dbName, dlqTableName)).Scan(&dlqRowCount); err != nil {
 			return err
 		}
 		if dlqRowCount != 0 {
