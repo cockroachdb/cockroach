@@ -174,8 +174,19 @@ func (t *Transport) handleMessage(ctx context.Context, msg *slpb.Message) {
 // The returned bool may be a false positive but will never be a false negative;
 // if sent is true the message may or may not actually be sent but if it's false
 // the message definitely was not sent.
-func (t *Transport) SendAsync(msg slpb.Message) (sent bool) {
+func (t *Transport) SendAsync(ctx context.Context, msg slpb.Message) (sent bool) {
 	toNodeID := msg.To.NodeID
+	fromNodeID := msg.From.NodeID
+	// If this is a message from one local store to another local store, do not
+	// dial the node and go through GRPC; instead, handle the message directly
+	// using the corresponding message handler.
+	if toNodeID == fromNodeID {
+		// Make a copy of the message to avoid escaping the function argument
+		// msg to the heap.
+		msgCopy := msg
+		t.handleMessage(ctx, &msgCopy)
+		return true
+	}
 	if b, ok := t.dialer.GetCircuitBreaker(toNodeID, connClass); ok && b.Signal().Err() != nil {
 		return false
 	}

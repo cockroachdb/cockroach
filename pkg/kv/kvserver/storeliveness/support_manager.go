@@ -37,7 +37,7 @@ var Enabled = settings.RegisterBoolSetting(
 // MessageSender is the interface that defines how Store Liveness messages are
 // sent. Transport is the production implementation of MessageSender.
 type MessageSender interface {
-	SendAsync(msg slpb.Message) (sent bool)
+	SendAsync(ctx context.Context, msg slpb.Message) (sent bool)
 }
 
 // SupportManager orchestrates requesting and providing Store Liveness support.
@@ -261,7 +261,7 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 
 	// Send heartbeats to each remote store.
 	for _, msg := range heartbeats {
-		if sent := sm.sender.SendAsync(msg); !sent {
+		if sent := sm.sender.SendAsync(ctx, msg); !sent {
 			log.Warningf(ctx, "sending heartbeat to store %+v failed", msg.To)
 		}
 	}
@@ -337,7 +337,7 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 	sm.supporterStateHandler.checkInUpdate(ssfu)
 
 	for _, response := range responses {
-		_ = sm.sender.SendAsync(response)
+		_ = sm.sender.SendAsync(ctx, response)
 	}
 	log.VInfof(ctx, 2, "store %+v sent %d responses", sm.storeID, len(responses))
 }
