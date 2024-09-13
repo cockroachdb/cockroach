@@ -68,9 +68,10 @@ func (lp LeasePlanner) ShouldPlanChange(
 	}
 	if leaseStatus.OwnedBy(repl.StoreID()) && !repl.HasCorrectLeaseType(leaseStatus.Lease) {
 		// This replica holds (or held) an incorrect lease type, switch it to the
-		// correct type. Typically when changing kv.expiration_leases_only.enabled.
-		// Although this logic also exists as part of the raft tick loop, it won't
-		// be called for quiesced replicas so is necessary here as well.
+		// correct type. Typically when changing kv.expiration_leases_only.enabled
+		// or kv.raft.leader_fortification.fraction_enabled. Although this logic
+		// also exists as part of the raft tick loop, it won't be called for
+		// quiesced replicas so is necessary here as well.
 		//
 		// Similar to above, the lease planner won't switch the lease type, this is
 		// done in plan.replicaCanBeProcessed.
