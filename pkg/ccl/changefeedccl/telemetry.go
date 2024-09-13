@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -221,6 +222,10 @@ func (r *telemetryMetricsRecorder) getKafkaThrottlingMetrics(
 	settings *cluster.Settings,
 ) metrics.Histogram {
 	return r.inner.getKafkaThrottlingMetrics(settings)
+}
+
+func (r *telemetryMetricsRecorder) netMetrics() *cidr.NetMetrics {
+	return r.inner.netMetrics()
 }
 
 // continuousTelemetryInterval determines the interval at which each node emits telemetry events
