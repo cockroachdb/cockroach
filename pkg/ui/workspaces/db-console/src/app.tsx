@@ -12,6 +12,7 @@ import {
   CockroachCloudContext,
   crlTheme,
   ConfigProvider as ClusterUIConfigProvider,
+  DatabasesPageV2,
 } from "@cockroachlabs/cluster-ui";
 import { ConfigProvider } from "antd";
 import { ConnectedRouter } from "connected-react-router";
@@ -205,6 +206,11 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                         />
 
                         {/* databases */}
+                        <Route
+                          exact
+                          path={"/v2/databases"}
+                          component={DatabasesPageV2}
+                        />
                         <Route
                           exact
                           path="/databases"
