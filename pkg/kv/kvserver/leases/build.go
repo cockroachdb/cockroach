@@ -65,6 +65,22 @@ type Settings struct {
 	RangeLeaseDuration time.Duration
 }
 
+// PrevLeaseManipulation contains a set of instructions for manipulating the
+// previous lease. These actions must be taken before the next lease can be
+// requested.
+type PrevLeaseManipulation struct {
+	// RevokeAndForwardNextStart indicates that the previous lease must be revoked
+	// before the next lease can be requested. Then, after the revocation, the
+	// start time of the next lease should be set to a clock.Now reading captured
+	// after the previous, now-revoked lease.
+	RevokeAndForwardNextStart bool
+	// RevokeAndForwardNextExpiration indicates that the previous lease must be
+	// revoked before the next lease can be requested. Then, after the revocation,
+	// the minimum expiration of the next lease should be forwarded past the
+	// expiration of the previous, now-revoked lease.
+	RevokeAndForwardNextExpiration bool
+}
+
 // NodeLiveness is a read-only interface to the node liveness subsystem.
 type NodeLiveness interface {
 	GetLiveness(roachpb.NodeID) (liveness.Record, bool)
@@ -247,6 +263,7 @@ func (i BuildInput) toVerifyInput() VerifyInput {
 // Output is the set of outputs for the lease acquisition process.
 type Output struct {
 	NextLease                roachpb.Lease
+	PrevLeaseManipulation    PrevLeaseManipulation
 	NodeLivenessManipulation NodeLivenessManipulation
 }
 
@@ -326,9 +343,10 @@ func build(st Settings, nl NodeLiveness, i BuildInput) (Output, error) {
 	// newly constructed lease.
 	nextLease.Sequence = leaseSequence(st, i, nextLease)
 
-	// Construct the output and determine whether any node liveness manipulation
-	// is necessary before the lease can be requested.
+	// Construct the output and determine whether any previous lease and node
+	// liveness manipulation is necessary before the lease can be requested.
 	o := Output{NextLease: nextLease}
+	o.PrevLeaseManipulation = prevLeaseManipulation(st, i, nextLease)
 	o.NodeLivenessManipulation = nodeLivenessManipulation(st, i, nextLease, nextLeaseLiveness)
 
 	// Validate the output.
@@ -569,6 +587,45 @@ func leaseSequence(st Settings, i BuildInput, nextLease roachpb.Lease) roachpb.L
 		// retry with a different sequence number. This is actually exactly what
 		// the sequence number is used to enforce!
 		return i.PrevLease.Sequence + 1
+	}
+}
+
+func prevLeaseManipulation(
+	st Settings, i BuildInput, nextLease roachpb.Lease,
+) PrevLeaseManipulation {
+	switch {
+	case i.Acquisition():
+		// We don't own the previous lease, so there's nothing to do.
+		return PrevLeaseManipulation{}
+	case i.Extension():
+		// If the previous lease has its expiration extended indirectly (i.e. not
+		// through a lease record update) and we are switching lease types, we must
+		// take care to ensure that the expiration does not regress. This is more
+		// involved than the common case because the lease's expiration may continue
+		// to advance on its own if we take no action. We avoid any expiration
+		// regression by revoking the lease and then advancing the minimum
+		// expiration of the next lease beyond the maximum expiration that the
+		// previous lease had.
+		prevType := i.PrevLease.Type()
+		indirectExp := prevType != roachpb.LeaseExpiration
+		switchingType := prevType != nextLease.Type()
+		if indirectExp && switchingType && st.MinExpirationSupported {
+			return PrevLeaseManipulation{
+				RevokeAndForwardNextExpiration: true,
+			}
+		}
+		// Otherwise, there's no need to manipulate the previous lease while
+		// extending it.
+		return PrevLeaseManipulation{}
+	case i.Transfer():
+		// Revoke the previous lease before transferring it away. Then use the
+		// current time for the start of the next lease. See cmd_lease_transfer.go
+		// for details.
+		return PrevLeaseManipulation{
+			RevokeAndForwardNextStart: true,
+		}
+	default:
+		panic("unknown lease operation")
 	}
 }
 
