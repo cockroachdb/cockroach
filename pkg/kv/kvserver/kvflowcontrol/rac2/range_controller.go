@@ -219,7 +219,7 @@ type rangeController struct {
 	leaseholder roachpb.ReplicaID
 
 	mu struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 
 		// State for waiters. When anything in voterSets or nonVoterSets changes,
 		// waiterSetRefreshCh is closed, and replaced with a new channel. The
@@ -288,11 +288,11 @@ func (rc *rangeController) WaitForEval(
 	start := rc.opts.Clock.PhysicalTime()
 retry:
 	// Snapshot the waiter sets and the refresh channel.
-	rc.mu.Lock()
+	rc.mu.RLock()
 	vss := rc.mu.voterSets
 	nvs := rc.mu.nonVoterSet
 	refreshCh := rc.mu.waiterSetRefreshCh
-	rc.mu.Unlock()
+	rc.mu.RUnlock()
 
 	if refreshCh == nil {
 		// RangeControllerImpl is closed.
@@ -453,6 +453,7 @@ func (rc *rangeController) CloseRaftMuLocked(ctx context.Context) {
 	defer rc.mu.Unlock()
 
 	rc.mu.voterSets = nil
+	rc.mu.nonVoterSet = nil
 	close(rc.mu.waiterSetRefreshCh)
 	rc.mu.waiterSetRefreshCh = nil
 }
