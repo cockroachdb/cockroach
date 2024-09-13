@@ -158,7 +158,7 @@ func (r *logicalReplicationResumer) ingest(
 	}
 
 	// TODO(azhu): add a flag to avoid recreating dlq tables during replanning
-	dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB.Executor(), planInfo.srcTableIDsToDestMeta)
+	dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB.Executor(), planInfo.destTableBySrcID)
 	if err := dlqClient.Create(ctx); err != nil {
 		return errors.Wrap(err, "failed to create dead letter queue")
 	}
@@ -292,9 +292,9 @@ type logicalReplicationPlanner struct {
 }
 
 type logicalReplicationPlanInfo struct {
-	sourceSpans           []roachpb.Span
-	streamAddress         []string
-	srcTableIDsToDestMeta map[descpb.ID]dstTableMetadata
+	sourceSpans      []roachpb.Span
+	streamAddress    []string
+	destTableBySrcID map[descpb.ID]dstTableMetadata
 }
 
 func makeLogicalReplicationPlanner(
@@ -331,7 +331,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		progress = p.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 		payload  = p.job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
 		info     = logicalReplicationPlanInfo{
-			srcTableIDsToDestMeta: make(map[descpb.ID]dstTableMetadata),
+			destTableBySrcID: make(map[descpb.ID]dstTableMetadata),
 		}
 	)
 	asOf := progress.ReplicatedTime
@@ -357,7 +357,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		defaultFnOID = catid.FuncIDToOID(catid.DescID(defaultFnID))
 	}
 
-	tablesMd := make(map[int32]execinfrapb.TableReplicationMetadata)
+	tableMetadataByDestID := make(map[int32]execinfrapb.TableReplicationMetadata)
 	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
 		for _, pair := range payload.ReplicationPairs {
 			srcTableDesc := plan.DescriptorMap[pair.SrcDescriptorID]
@@ -383,14 +383,14 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 				fnOID = defaultFnOID
 			}
 
-			tablesMd[pair.DstDescriptorID] = execinfrapb.TableReplicationMetadata{
+			tableMetadataByDestID[pair.DstDescriptorID] = execinfrapb.TableReplicationMetadata{
 				SourceDescriptor:              srcTableDesc,
 				DestinationParentDatabaseName: dbDesc.GetName(),
 				DestinationParentSchemaName:   scDesc.GetName(),
 				DestinationTableName:          dstTableDesc.GetName(),
 				DestinationFunctionOID:        uint32(fnOID),
 			}
-			info.srcTableIDsToDestMeta[descpb.ID(pair.SrcDescriptorID)] = dstTableMetadata{
+			info.destTableBySrcID[descpb.ID(pair.SrcDescriptorID)] = dstTableMetadata{
 				database: dbDesc.GetName(),
 				schema:   scDesc.GetName(),
 				table:    dstTableDesc.GetName(),
@@ -418,7 +418,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		payload.ReplicationStartTime,
 		progress.ReplicatedTime,
 		progress.Checkpoint,
-		tablesMd,
+		tableMetadataByDestID,
 		p.job.ID(),
 		streampb.StreamID(payload.StreamID),
 		payload.IgnoreCDCIgnoredTTLDeletes,

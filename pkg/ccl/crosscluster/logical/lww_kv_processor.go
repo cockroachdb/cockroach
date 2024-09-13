@@ -53,14 +53,14 @@ func newKVRowProcessor(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
 	evalCtx *eval.Context,
-	srcTablesByDestID map[descpb.ID]sqlProcessorTableConfig,
+	procConfigByDestID map[descpb.ID]sqlProcessorTableConfig,
 	fallback *sqlRowProcessor,
 ) (*kvRowProcessor, error) {
 	cdcEventTargets := changefeedbase.Targets{}
-	srcTablesBySrcID := make(map[descpb.ID]catalog.TableDescriptor, len(srcTablesByDestID))
-	dstBySrc := make(map[descpb.ID]descpb.ID, len(srcTablesByDestID))
+	srcTablesBySrcID := make(map[descpb.ID]catalog.TableDescriptor, len(procConfigByDestID))
+	dstBySrc := make(map[descpb.ID]descpb.ID, len(procConfigByDestID))
 
-	for dstID, s := range srcTablesByDestID {
+	for dstID, s := range procConfigByDestID {
 		dstBySrc[s.srcDesc.GetID()] = dstID
 		srcTablesBySrcID[s.srcDesc.GetID()] = s.srcDesc
 		cdcEventTargets.Add(changefeedbase.Target{
@@ -82,7 +82,7 @@ func newKVRowProcessor(
 		cfg:      cfg,
 		evalCtx:  evalCtx,
 		dstBySrc: dstBySrc,
-		writers:  make(map[descpb.ID]*kvTableWriter, len(srcTablesByDestID)),
+		writers:  make(map[descpb.ID]*kvTableWriter, len(procConfigByDestID)),
 		decoder:  cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false),
 		alloc:    &tree.DatumAlloc{},
 		fallback: fallback,
