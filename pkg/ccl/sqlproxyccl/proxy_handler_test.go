@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -647,6 +648,11 @@ func TestFailedConnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testutilsccl.ServerlessOnly(t)
 	defer log.Scope(t).Close(t)
+
+	// This test is asserting against specific counter values and error messages.
+	// The counter assertions make it difficult to insert retries and the test
+	// flakes once a month under stress.
+	skip.UnderStress(t)
 
 	ctx := context.Background()
 	te := newTester()
