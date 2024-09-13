@@ -581,23 +581,6 @@ func mustRetrieveKeyIndexColumns(
 	return keyIndexCols
 }
 
-func mustRetrieveIndexNameElem(
-	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
-) (indexNameElem *scpb.IndexName) {
-	scpb.ForEachIndexName(b.QueryByID(tableID), func(
-		current scpb.Status, target scpb.TargetStatus, e *scpb.IndexName,
-	) {
-		if e.IndexID == indexID {
-			indexNameElem = e
-		}
-	})
-	if indexNameElem == nil {
-		panic(errors.AssertionFailedf("programming error: cannot find an index name element "+
-			"with ID %v from table %v", indexID, tableID))
-	}
-	return indexNameElem
-}
-
 func mustRetrieveConstraintWithoutIndexNameElem(
 	b BuildCtx, tableID catid.DescID, constraintID catid.ConstraintID,
 ) (constraintWithoutIndexName *scpb.ConstraintWithoutIndexName) {
