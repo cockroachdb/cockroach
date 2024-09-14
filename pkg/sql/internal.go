@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -1831,6 +1832,18 @@ func (txn *internalTxn) KV() *kv.Txn { return txn.txn }
 func (txn *internalTxn) init(kvTxn *kv.Txn, ie InternalExecutor) {
 	txn.txn = kvTxn
 	txn.InternalExecutor = ie
+}
+
+func (txn *internalTxn) GetSystemVersion(ctx context.Context) (*roachpb.Version, error) {
+	sysDB, err := txn.extraTxnState.descCollection.ByIDWithLeased(txn.txn).
+		WithoutNonPublic().
+		Get().Database(ctx, keys.SystemDatabaseID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return sysDB.DatabaseDesc().GetSystemDatabaseSchemaVersion(), nil
 }
 
 type internalExecutor struct {
