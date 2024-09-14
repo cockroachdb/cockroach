@@ -724,7 +724,7 @@ message TableSchemaLocked {
 // LDRJobIDs models the field `ldr_job_ids` of a table descriptor.
 message LDRJobIDs {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  repeated int64 job_ids = 2 [(gogoproto.customname) = "JobIDs"];
+  repeated int64 job_ids = 2 [(gogoproto.customname) = "JobIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
 }
 
 message Function {
