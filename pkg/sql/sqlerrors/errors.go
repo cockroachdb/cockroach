@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -56,7 +57,7 @@ func NewSchemaChangeOnLockedTableErr(tableName string) error {
 // NewDisallowedSchemaChangeOnLDRTableErr creates an error that indicates that
 // the schema change is disallowed because the table is being used by a
 // logical data replication job.
-func NewDisallowedSchemaChangeOnLDRTableErr(tableName string, jobIDs []int64) error {
+func NewDisallowedSchemaChangeOnLDRTableErr(tableName string, jobIDs []catpb.JobID) error {
 	ids := make([]string, len(jobIDs))
 	for i, v := range jobIDs {
 		ids[i] = strconv.Itoa(int(v))

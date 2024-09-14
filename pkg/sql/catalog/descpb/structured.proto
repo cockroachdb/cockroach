@@ -1221,7 +1221,7 @@ message TableDescriptor {
 
   // LDRJobIDs is a list of logical data replication job IDs which reference
   // this table as a destination for the replication stream.
-  repeated int64 ldr_job_ids = 62 [(gogoproto.customname) = "LDRJobIDs"];
+  repeated int64 ldr_job_ids = 62 [(gogoproto.customname) = "LDRJobIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
 
   // Next ID: 63
 }
