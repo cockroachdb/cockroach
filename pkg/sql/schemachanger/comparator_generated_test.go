@@ -1438,6 +1438,11 @@ func TestSchemaChangeComparator_schema_change_in_txn(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/schema_change_in_txn"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_schema_change_logical_replication(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/schema_change_logical_replication"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_schema_change_retry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/schema_change_retry"
