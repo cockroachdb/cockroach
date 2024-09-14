@@ -1267,6 +1267,8 @@ func (c *cliState) doProcessFirstLine(startState, nextState cliStateEnum) cliSta
 		return startState
 
 	case "exit", "quit":
+		// When explicitly exiting, clear exitErr.
+		c.exitErr = nil
 		return cliStop
 	}
 
@@ -1412,6 +1414,8 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	switch cmd[0] {
 	case `\q`, `\quit`, `\exit`:
+		// When explicitly exiting, clear exitErr.
+		c.exitErr = nil
 		return cliStop
 
 	case `\`, `\?`, `\help`:

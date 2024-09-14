@@ -11,14 +11,14 @@ eexpect ":/# "
 send "$argv sql --no-line-editor\r"
 eexpect root@
 
-start_test "Check that an error in the last statement is propagated to the shell."
+start_test "Even if the last statement has a syntax error, if the user explicitly exits, the shell status should be normal exit."
 send "select ++;\r"
 eexpect "syntax error"
 eexpect root@
 send "\\q\r"
 eexpect ":/# "
 send "echo hello \$?\r"
-eexpect "hello 1"
+eexpect "hello 0"
 eexpect ":/# "
 end_test
 

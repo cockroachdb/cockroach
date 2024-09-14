@@ -55,6 +55,12 @@ func Example_sql() {
 	c.RunWithArgs([]string{`sql`, `-e`, `select 1/(i-2) from generate_series(1,3) g(i)`})
 	c.RunWithArgs([]string{`sql`, `-e`, `SELECT '20:01:02+03:04:05'::timetz AS regression_65066`})
 
+	// Check that previous SQL error message is not displayed when the CLI is exited.
+	c.RunWithArgs([]string{`sql`, `-e`, `SELECT 1 FROM hoge`})
+	c.RunWithArgs([]string{`sql`, `-e`, `exit`})
+	c.RunWithArgs([]string{`sql`, `-e`, `SELECT 1 FROM hoge`})
+	c.RunWithArgs([]string{`sql`, `-e`, `\q`})
+
 	// Output:
 	// sql -e show application_name
 	// application_name
@@ -113,6 +119,14 @@ func Example_sql() {
 	// sql -e SELECT '20:01:02+03:04:05'::timetz AS regression_65066
 	// regression_65066
 	// 20:01:02+03:04:05
+	// sql -e SELECT 1 FROM hoge
+	// ERROR: relation "hoge" does not exist
+	// SQLSTATE: 42P01
+	// sql -e exit
+	// sql -e SELECT 1 FROM hoge
+	// ERROR: relation "hoge" does not exist
+	// SQLSTATE: 42P01
+	// sql -e \q
 }
 
 func Example_sql_config() {
