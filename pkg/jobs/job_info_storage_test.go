@@ -7,22 +7,26 @@ package jobs_test
 
 import (
 	"context"
+	"math"
+	"slices"
 	"testing"
+	"time"
 
-	_ "github.com/cockroachdb/cockroach/pkg/backup" // import ccl to be able to run backups
 	"github.com/cockroachdb/cockroach/pkg/base"
-	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -352,4 +356,200 @@ func TestAccessorsWithWrongSQLLivenessSession(t *testing.T) {
 			return nil
 		})
 	}))
+}
+
+func TestJobProgressAndStatusAccessors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	idb := s.InternalDB().(isql.DB)
+	r := s.JobRegistry().(*jobs.Registry)
+
+	createJob := func(id jobspb.JobID) *jobs.Job {
+		job, err := r.CreateJobWithTxn(ctx, jobs.Record{Details: jobspb.BackupDetails{}, Progress: jobspb.BackupProgress{}, Username: username.TestUserName()}, id, nil)
+		require.NoError(t, err)
+		return job
+	}
+
+	job1 := createJob(1)
+	job2 := createJob(2)
+
+	before := timeutil.Now()
+
+	t.Run("progress", func(t *testing.T) {
+		// Write two fractions updates for j1.
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job1.ProgressStorage().Set(ctx, txn, 0.2, hlc.Timestamp{})
+		}))
+
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			if err := job1.ProgressStorage().Set(ctx, txn, 0.4, hlc.Timestamp{}); err != nil {
+				return err
+			}
+			// Read our own write back in the same txn.
+			got, _, _, err := job1.ProgressStorage().Get(ctx, txn)
+			if err != nil {
+				return err
+			}
+			require.Equal(t, 0.4, got)
+
+			return job1.ProgressStorage().Set(ctx, txn, 0.5, hlc.Timestamp{})
+		}))
+
+		// Write a ts for for j2.
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job2.ProgressStorage().Set(ctx, txn, math.NaN(), hlc.Timestamp{WallTime: 100})
+		}))
+
+		var (
+			fraction float64
+			resolved hlc.Timestamp
+			when     time.Time
+			err      error
+		)
+
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			fraction, resolved, when, err = job1.ProgressStorage().Get(ctx, txn)
+			return err
+		}))
+		require.Equal(t, 0.5, fraction)
+		require.True(t, resolved.IsEmpty())
+		require.True(t, !before.After(when))
+
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			fraction, resolved, when, err = job2.ProgressStorage().Get(ctx, txn)
+			return err
+		}))
+
+		require.True(t, math.IsNaN(fraction))
+		require.Equal(t, int64(100), resolved.WallTime)
+		require.True(t, !before.After(when))
+	})
+
+	t.Run("status-and-message", func(t *testing.T) {
+		// Keep track of how many messages we expect to see for j1 and j2.
+		var expJ1Msg, expJ2Msg []jobs.JobMessage
+
+		// Record a message for j1.
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job1.Messages().Record(ctx, txn, "k1", "a")
+		}))
+		expJ1Msg = append(expJ1Msg, jobs.JobMessage{Kind: "k1", Message: "a"})
+
+		beforeB := timeutil.Now()
+		// Update status for j1.
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			if err := job1.StatusStorage().Set(ctx, txn, "a"); err != nil {
+				return err
+			}
+			got, _, err := job1.StatusStorage().Get(ctx, txn)
+			if err != nil {
+				return err
+			}
+			require.Equal(t, "a", got)
+			if err := job1.StatusStorage().Set(ctx, txn, "b"); err != nil {
+				return err
+			}
+			return nil
+		}))
+
+		// Even though we set the status twice, we only expect to see the last one,
+		// both as the single latest row in the status table but also logged in the
+		// message table; the overritten first status is overwritten not just in the
+		// status table but the recorded message is overritten too since it has the
+		// same timestamp and kind.
+		expJ1Msg = append(expJ1Msg, jobs.JobMessage{Kind: "status", Message: "b"})
+
+		// Update status for j2 a couple times.
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job2.StatusStorage().Set(ctx, txn, "c")
+		}))
+		expJ2Msg = append(expJ2Msg, jobs.JobMessage{Kind: "status", Message: "c"})
+
+		beforeD := timeutil.Now()
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job2.StatusStorage().Set(ctx, txn, "d")
+		}))
+		expJ2Msg = append(expJ2Msg, jobs.JobMessage{Kind: "status", Message: "d"})
+
+		// Now we should see j1 and j2's statuses as the ones we set, and only two
+		// rows in the status table -- one per job -- even though we set the status
+		// more than twice.
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			got, when, err := job1.StatusStorage().Get(ctx, txn)
+			if err != nil {
+				return err
+			}
+			require.Equal(t, "b", got)
+			require.True(t, !beforeB.After(when), "%s <= %s", beforeB, when)
+
+			got, when, err = job2.StatusStorage().Get(ctx, txn)
+			if err != nil {
+				return err
+			}
+			require.Equal(t, "d", got)
+			require.True(t, !beforeD.After(when), "%s <= %s", beforeD, when)
+
+			// Verify only one row per job is retained in status.
+			row, err := txn.QueryRow(ctx, "test", txn.KV(),
+				"select count(*) from system.job_status WHERE job_id IN ($1, $2)", job1.ID(), job2.ID(),
+			)
+			if err != nil {
+				return err
+			}
+			require.Equal(t, 2, int(*row[0].(*tree.DInt)))
+			return nil
+		}))
+
+		// Record a couple more messages.
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job1.Messages().Record(ctx, txn, "k2", "b")
+		}))
+		expJ1Msg = append(expJ1Msg, jobs.JobMessage{Kind: "k2", Message: "b"})
+
+		// Update one of j1's kinds of message to a new message.
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job1.Messages().Record(ctx, txn, "k1", "c")
+		}))
+		expJ1Msg = append(expJ1Msg, jobs.JobMessage{Kind: "k1", Message: "c"})
+
+		// Write a message for j2.
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job2.Messages().Record(ctx, txn, "k1", "d")
+		}))
+		expJ2Msg = append(expJ2Msg, jobs.JobMessage{Kind: "k1", Message: "d"})
+
+		var j1Messages, j2Messages []jobs.JobMessage
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			var err error
+			j1Messages, err = job1.Messages().Fetch(ctx, txn)
+			if err != nil {
+				return err
+			}
+			j2Messages, err = job2.Messages().Fetch(ctx, txn)
+			return err
+		}))
+
+		// Reverse the order of the expected messages we accumulated them from
+		// oldest to newest, but we persist and fetch entries newest-first.
+		slices.Reverse(expJ1Msg)
+		slices.Reverse(expJ2Msg)
+
+		// Blank the written timestamps so we can compare to our expectation.
+		for i := range j1Messages {
+			j1Messages[i].Written = time.Time{}
+		}
+		for i := range j2Messages {
+			j2Messages[i].Written = time.Time{}
+		}
+
+		require.Equal(t, expJ1Msg, j1Messages)
+		require.Equal(t, expJ2Msg, j2Messages)
+	})
+
+	// TODO(dt): lower the retention settings for progress_history and messages to
+	// observe the pruning behavior in action.
 }
