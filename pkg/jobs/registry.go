@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1230,21 +1231,46 @@ func (r *Registry) cleanupOldJobsPage(
 		log.VEventf(ctx, 2, "attempting to clean up %d expired job records", len(toDelete.Array))
 		const stmt = `DELETE FROM system.jobs WHERE id = ANY($1)`
 		const infoStmt = `DELETE FROM system.job_info WHERE job_id = ANY($1)`
-		var nDeleted, nDeletedInfos int
-		if nDeleted, err = r.db.Executor().Exec(
+		nDeleted, err := r.db.Executor().Exec(
 			ctx, "gc-jobs", nil /* txn */, stmt, toDelete,
-		); err != nil {
+		)
+		if err != nil {
 			log.Warningf(ctx, "error cleaning up %d jobs: %v", len(toDelete.Array), err)
 			return false, 0, errors.Wrap(err, "deleting old jobs")
 		}
-		nDeletedInfos, err = r.db.Executor().Exec(
+		nDeletedInfos, err := r.db.Executor().Exec(
 			ctx, "gc-job-infos", nil /* txn */, infoStmt, toDelete,
 		)
 		if err != nil {
 			return false, 0, errors.Wrap(err, "deleting old job infos")
 		}
+
+		var nDeletedProgress, nDeletedStatus int
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			v, err := txn.GetSystemSchemaVersion(ctx)
+			if err != nil {
+				return err
+			}
+			if v.Less(clusterversion.V24_3_AddJobsTables.Version()) {
+				return nil
+			}
+
+			const progressStmt = `DELETE FROM system.job_progress WHERE job_id = ANY($1)`
+			nDeletedProgress, err = txn.Exec(ctx, "gc-job-progress", txn.KV(), progressStmt, toDelete)
+			if err != nil {
+				return err
+			}
+
+			const statusStmt = `DELETE FROM system.job_status WHERE job_id = ANY($1)`
+			nDeletedStatus, err = txn.Exec(ctx, "gc-job-status", txn.KV(), statusStmt, toDelete)
+			return err
+		}); err != nil {
+			return false, 0, errors.Wrap(err, "deleting old job progress and status")
+		}
+
 		if nDeleted > 0 {
-			log.Infof(ctx, "cleaned up %d expired job records and %d expired info records", nDeleted, nDeletedInfos)
+			log.Infof(ctx, "cleaned up %d expired job records and %d/%d/%d expired info/progress/status records",
+				nDeleted, nDeletedInfos, nDeletedProgress, nDeletedStatus)
 		}
 	}
 	// If we got as many rows as we asked for, there might be more.
