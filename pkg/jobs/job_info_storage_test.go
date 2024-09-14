@@ -12,7 +12,9 @@ package jobs_test
 
 import (
 	"context"
+	"math"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl" // import ccl to be able to run backups
@@ -26,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -357,4 +360,118 @@ func TestAccessorsWithWrongSQLLivenessSession(t *testing.T) {
 			return nil
 		})
 	}))
+}
+
+func TestJobProgressAndStatusAccessors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	idb := s.InternalDB().(isql.DB)
+	r := s.JobRegistry().(*jobs.Registry)
+
+	createJob := func(id jobspb.JobID) *jobs.Job {
+		job, err := r.CreateJobWithTxn(ctx, jobs.Record{Details: jobspb.BackupDetails{}, Progress: jobspb.BackupProgress{}, Username: username.TestUserName()}, id, nil)
+		require.NoError(t, err)
+		return job
+	}
+
+	job1 := createJob(1)
+	job2 := createJob(2)
+
+	before := s.Clock().Now().GoTime()
+
+	t.Run("status", func(t *testing.T) {
+		// Write two kinds of status for j1.
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job1.StatusStorage().Write(ctx, txn, "kind1", "one=a")
+		}))
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job1.StatusStorage().Write(ctx, txn, "kind2", "two=x")
+		}))
+		// Update one of j1's kinds of status to a new message.
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job1.StatusStorage().Write(ctx, txn, "kind1", "one=b")
+		}))
+		// Write a status for j2.
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job2.StatusStorage().Write(ctx, txn, "kind1", "one=aa")
+		}))
+
+		after := s.Clock().Now().GoTime()
+
+		var (
+			msg  string
+			kind jobs.JobStatusKind
+			when time.Time
+			err  error
+		)
+
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			msg, kind, when, err = job1.StatusStorage().Latest(ctx, txn, "kind1")
+			return err
+		}))
+		require.Equal(t, jobs.JobStatusKind("kind1"), kind)
+		require.Equal(t, "one=b", msg)
+		require.True(t, before.Before(when) && after.After(when), "%s < %s < %s", before, when, after)
+
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			msg, kind, when, err = job1.StatusStorage().Latest(ctx, txn, "kind2")
+			return err
+		}))
+		require.Equal(t, jobs.JobStatusKind("kind2"), kind)
+		require.Equal(t, "two=x", msg)
+		require.True(t, before.Before(when) && after.After(when), "%s < %s < %s", before, when, after)
+
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			msg, kind, when, err = job2.StatusStorage().Latest(ctx, txn, "kind1")
+			return err
+		}))
+		require.Equal(t, jobs.JobStatusKind("kind1"), kind)
+		require.Equal(t, "one=aa", msg)
+		require.True(t, before.Before(when) && after.After(when), "%s < %s < %s", before, when, after)
+	})
+
+	t.Run("progress", func(t *testing.T) {
+		// Write two fractions updates for j1.
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job1.ProgressStorage().Write(ctx, txn, 0.2, hlc.Timestamp{})
+		}))
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job1.ProgressStorage().Write(ctx, txn, 0.5, hlc.Timestamp{})
+		}))
+		// Write a ts for for j2.
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			return job2.ProgressStorage().Write(ctx, txn, math.NaN(), hlc.Timestamp{WallTime: 100})
+		}))
+
+		after := s.Clock().Now().GoTime()
+
+		var (
+			fraction float64
+			resolved hlc.Timestamp
+			when     time.Time
+			err      error
+		)
+
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			fraction, resolved, when, err = job1.ProgressStorage().Get(ctx, txn)
+			return err
+		}))
+		require.Equal(t, 0.5, fraction)
+		require.True(t, resolved.IsEmpty())
+		require.True(t, before.Before(when) && after.After(when), "%s < %s < %s", before, when, after)
+
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			fraction, resolved, when, err = job2.ProgressStorage().Get(ctx, txn)
+			return err
+		}))
+
+		require.True(t, math.IsNaN(fraction))
+		require.Equal(t, int64(100), resolved.WallTime)
+		require.True(t, before.Before(when) && after.After(when), "%s < %s < %s", before, when, after)
+	})
+
 }

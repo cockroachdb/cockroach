@@ -13,6 +13,8 @@ package jobs
 import (
 	"bytes"
 	"context"
+	"math"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -20,10 +22,164 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
+
+// ProgressStorage reads and writes progress rows.
+type ProgressStorage jobspb.JobID
+
+// ProgressStorage returns a new ProgressStorage with the passed in job and txn.
+func (j *Job) ProgressStorage() ProgressStorage {
+	return ProgressStorage(j.id)
+}
+
+// Get returns the latest progress report for the job along with when it was
+// written. If the fraction is null it is returned as NaN, and if the resolved
+// ts is null, it is empty.
+func (i ProgressStorage) Get(ctx context.Context, txn isql.Txn) (float64, hlc.Timestamp, time.Time, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "get-job-progress")
+	defer sp.Finish()
+
+	// The sort and limit should not be required since Write deletes all prior
+	// rows before inserting so there should only be one row.
+	row, err := txn.QueryRowEx(
+		ctx, "job-progress-get", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT written, fraction, resolved FROM system.job_progress WHERE job_id = $1 ORDER BY written DESC LIMIT 1", i,
+	)
+
+	if err != nil || row == nil {
+		return 0, hlc.Timestamp{}, time.Time{}, err
+	}
+
+	written, ok := row[0].(*tree.DTimestampTZ)
+	if !ok {
+		return 0, hlc.Timestamp{}, time.Time{}, errors.AssertionFailedf("job progress: expected value to be DTimestampTZ (was %T)", row[1])
+	}
+
+	var fraction float64
+	if row[1] == tree.DNull {
+		fraction = math.NaN()
+	} else {
+		fracDatum, ok := row[1].(*tree.DFloat)
+		if !ok {
+			return 0, hlc.Timestamp{}, time.Time{}, errors.AssertionFailedf("job progress: expected value to be DFloat (was %T)", row[1])
+		}
+		fraction = float64(*fracDatum)
+	}
+
+	var ts hlc.Timestamp
+	if row[2] != tree.DNull {
+		resolved, ok := row[2].(*tree.DDecimal)
+		if !ok {
+			return 0, hlc.Timestamp{}, time.Time{}, errors.AssertionFailedf("job progress: expected value to be DDecimal (was %T)", row[1])
+		}
+		ts, err = hlc.DecimalToHLC(&resolved.Decimal)
+		if err != nil {
+			return 0, hlc.Timestamp{}, time.Time{}, err
+		}
+	}
+
+	return fraction, ts, written.Time, nil
+}
+
+// Write writes a progress update. If fraction is NaN or resolved is empty, that
+// field is left null. The time at which the progress was reported is recorded.
+func (i ProgressStorage) Write(ctx context.Context, txn isql.Txn, fraction float64, resolved hlc.Timestamp) error {
+	ctx, sp := tracing.ChildSpan(ctx, "write-job-progress")
+	defer sp.Finish()
+
+	if _, err := txn.ExecEx(
+		ctx, "write-job-progress-delete", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		`DELETE FROM system.job_progress WHERE job_id = $1`, i,
+	); err != nil {
+		return err
+	}
+
+	var frac, ts interface{}
+	if !math.IsNaN(fraction) {
+		frac = fraction
+	}
+	if resolved.IsSet() {
+		ts = resolved.AsOfSystemTime()
+	}
+	_, err := txn.ExecEx(
+		ctx, "write-job-progress-insert", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		`INSERT INTO system.job_progress (job_id, written, fraction, resolved) VALUES ($1, now(), $2, $3)`,
+		i, frac, ts,
+	)
+	return err
+}
+
+type JobStatusKind string
+
+const (
+	JobStatusInfo  JobStatusKind = "info" // sometimes called "running status"
+	JobStatusTrace JobStatusKind = "trace"
+	JobStatusState JobStatusKind = "state"
+)
+
+// StatusStorage reads and writes status rows.
+type StatusStorage jobspb.JobID
+
+// StatusStorage returns a new StatusStorage with the passed in job and txn.
+func (j *Job) StatusStorage() StatusStorage {
+	return StatusStorage(j.id)
+}
+
+// Write writes a status message of the specified kind.
+func (i StatusStorage) Write(ctx context.Context, txn isql.Txn, kind JobStatusKind, message string) error {
+	ctx, sp := tracing.ChildSpan(ctx, "write-job-status")
+	defer sp.Finish()
+
+	_, err := txn.ExecEx(
+		ctx, "write-job-status-insert", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		`INSERT INTO system.job_status (job_id, kind, written, message) VALUES ($1, $2, now(), $3)`,
+		i, kind, message,
+	)
+	return err
+}
+
+func (i StatusStorage) Latest(ctx context.Context, txn isql.Txn, kindFilter JobStatusKind) (string, JobStatusKind, time.Time, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "get-job-status")
+	defer sp.Finish()
+
+	row, err := txn.QueryRowEx(
+		ctx, "job-status-get", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT written, kind, message FROM system.job_status WHERE job_id = $1 AND (kind = $2 OR $2 = '') ORDER BY written DESC LIMIT 1",
+		i, kindFilter,
+	)
+
+	if err != nil {
+		return "", "", time.Time{}, err
+	}
+
+	if row == nil {
+		return "", "", time.Time{}, nil
+	}
+
+	written, ok := row[0].(*tree.DTimestampTZ)
+	if !ok {
+		return "", "", time.Time{}, errors.AssertionFailedf("job Status: expected value to be DBytes (was %T)", row[1])
+	}
+	kind, ok := row[1].(*tree.DString)
+	if !ok {
+		return "", "", time.Time{}, errors.AssertionFailedf("job Status: expected value to be DBytes (was %T)", row[1])
+	}
+	message, ok := row[2].(*tree.DString)
+	if !ok {
+		return "", "", time.Time{}, errors.AssertionFailedf("job Status: expected value to be DBytes (was %T)", row[1])
+	}
+
+	return string(*message), JobStatusKind(*kind), written.Time, nil
+}
 
 // InfoStorage can be used to read and write rows to system.job_info table. All
 // operations are scoped under the txn and are executed on behalf of Job j.
