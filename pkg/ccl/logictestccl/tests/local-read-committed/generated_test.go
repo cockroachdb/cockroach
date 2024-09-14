@@ -1682,6 +1682,13 @@ func TestReadCommittedLogic_schema_change_in_txn(
 	runLogicTest(t, "schema_change_in_txn")
 }
 
+func TestReadCommittedLogic_schema_change_logical_replication(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "schema_change_logical_replication")
+}
+
 func TestReadCommittedLogic_schema_change_retry(
 	t *testing.T,
 ) {
