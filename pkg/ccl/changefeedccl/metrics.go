@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -79,6 +80,10 @@ type AggMetrics struct {
 		syncutil.Mutex
 		sliMetrics map[string]*sliMetrics
 	}
+
+	// TODO(#130358): This doesn't really belong here, but is easier than
+	// threading the NetMetrics through all the other places.
+	NetMetrics *cidr.NetMetrics
 }
 
 const (
@@ -103,6 +108,7 @@ type metricsRecorder interface {
 	recordParallelIOQueueLatency(time.Duration)
 	recordSinkIOInflightChange(int64)
 	makeCloudstorageFileAllocCallback() func(delta int64)
+	netMetrics() *cidr.NetMetrics
 }
 
 var _ metricsRecorder = (*sliMetrics)(nil)
@@ -145,6 +151,7 @@ type sliMetrics struct {
 		resolved   map[int64]hlc.Timestamp
 		checkpoint map[int64]hlc.Timestamp
 	}
+	NetMetrics *cidr.NetMetrics
 }
 
 // closeId unregisters an id. The id can still be used after its closed, but
@@ -330,6 +337,14 @@ func (m *sliMetrics) recordSinkIOInflightChange(delta int64) {
 	m.SinkIOInflight.Inc(delta)
 }
 
+func (m *sliMetrics) netMetrics() *cidr.NetMetrics {
+	if m == nil {
+		return nil
+	}
+
+	return m.NetMetrics
+}
+
 // JobScopedUsageMetrics are aggregated metrics keeping track of
 // per-changefeed usage metrics by job_id. Note that its members are public so
 // they get registered with the metrics registry, but you should NOT modify them
@@ -492,6 +507,10 @@ func (w *wrappingCostController) recordSinkIOInflightChange(delta int64) {
 	w.inner.recordSinkIOInflightChange(delta)
 }
 
+func (w *wrappingCostController) netMetrics() *cidr.NetMetrics {
+	return w.inner.netMetrics()
+}
+
 var (
 	metaChangefeedForwardedResolvedMessages = metric.Metadata{
 		Name:        "changefeed.forwarded_resolved_messages",
@@ -579,9 +598,21 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaNetworkBytesIn = metric.Metadata{
+		Name:        "changefeed.network.bytes_in",
+		Help:        "The number of bytes received from the network by changefeeds",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaNetworkBytesOut = metric.Metadata{
+		Name:        "changefeed.network.bytes_out",
+		Help:        "The number of bytes sent over the network by changefeeds",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
-func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
+func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *AggMetrics {
 	metaChangefeedEmittedMessages := metric.Metadata{
 		Name:        "changefeed.emitted_messages",
 		Help:        "Messages emitted by all feeds",
@@ -812,6 +843,7 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		CheckpointProgress:        b.FunctionalGauge(metaCheckpointProgress, functionalGaugeMinFn),
 		LaggingRanges:             b.Gauge(metaLaggingRangePercentage),
 		CloudstorageBufferedBytes: b.Gauge(metaCloudstorageBufferedBytes),
+		NetMetrics:                lookup.MakeNetMetrics(metaNetworkBytesOut, metaNetworkBytesIn, "sink"),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -873,6 +905,9 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		SchemaRegistrations:       a.SchemaRegistrations.AddChild(scope),
 		LaggingRanges:             a.LaggingRanges.AddChild(scope),
 		CloudstorageBufferedBytes: a.CloudstorageBufferedBytes.AddChild(scope),
+		// TODO(#130358): Again, this doesn't belong here, but it's the most
+		// convenient way to feed this metric to changefeeds.
+		NetMetrics: a.NetMetrics,
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)
@@ -967,9 +1002,9 @@ func (m *Metrics) getSLIMetrics(scope string) (*sliMetrics, error) {
 }
 
 // MakeMetrics makes the metrics for changefeed monitoring.
-func MakeMetrics(histogramWindow time.Duration) metric.Struct {
+func MakeMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) metric.Struct {
 	m := &Metrics{
-		AggMetrics:        newAggregateMetrics(histogramWindow),
+		AggMetrics:        newAggregateMetrics(histogramWindow, lookup),
 		UsageMetrics:      newJobScopedUsageMetrics(histogramWindow),
 		KVFeedMetrics:     kvevent.MakeMetrics(histogramWindow),
 		SchemaFeedMetrics: schemafeed.MakeMetrics(histogramWindow),

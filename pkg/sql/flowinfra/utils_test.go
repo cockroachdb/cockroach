@@ -50,7 +50,7 @@ func createDummyStream(
 
 	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, storageClusterID)
 	conn, err := rpcContext.GRPCDialNode(addr.String(), roachpb.NodeID(execinfra.StaticSQLInstanceID),
-		rpc.DefaultClass).Connect(ctx)
+		roachpb.Locality{}, rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

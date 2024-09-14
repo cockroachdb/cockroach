@@ -81,7 +81,31 @@ var httpMetrics = settings.RegisterBoolSetting(
 
 // MakeHTTPClient makes an http client configured with the common settings used
 // for interacting with cloud storage (timeouts, retries, CA certs, etc).
-func MakeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
+func MakeHTTPClient(
+	settings *cluster.Settings, metrics *Metrics, cloud, bucket string,
+) (*http.Client, error) {
+	t, err := MakeTransport(settings, metrics, cloud, bucket)
+	if err != nil {
+		return nil, err
+	}
+	return MakeHTTPClientForTransport(t)
+}
+
+// MakeHTTPClientForTransport creates a new http.Client with the given
+// transport.
+//
+// NB: This indirection is a little silly. But the goal is to prevent
+// us from modifying the defaults on some clients and not others.
+func MakeHTTPClientForTransport(t http.RoundTripper) (*http.Client, error) {
+	return &http.Client{Transport: t}, nil
+}
+
+// MakeTransport makes an http transport configured with the common settings
+// used for interacting with cloud storage (timeouts, retries, CA certs, etc).
+// Prefer MakeHTTPClient where possible.
+func MakeTransport(
+	settings *cluster.Settings, metrics *Metrics, cloud, bucket string,
+) (*http.Transport, error) {
 	var tlsConf *tls.Config
 	if pem := httpCustomCA.Get(&settings.SV); pem != "" {
 		roots, err := x509.SystemCertPool()
@@ -93,10 +117,15 @@ func MakeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
 		}
 		tlsConf = &tls.Config{RootCAs: roots}
 	}
+
 	t := http.DefaultTransport.(*http.Transport).Clone()
+
 	// Add our custom CA.
 	t.TLSClientConfig = tlsConf
-	return &http.Client{Transport: t}, nil
+	if metrics != nil {
+		t.DialContext = metrics.NetMetrics.Wrap(t.DialContext, cloud, bucket)
+	}
+	return t, nil
 }
 
 // MaxDelayedRetryAttempts is the number of times the delayedRetry method will
