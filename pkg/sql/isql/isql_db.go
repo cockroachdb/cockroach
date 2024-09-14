@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
@@ -50,6 +51,9 @@ type Txn interface {
 
 	// SessionData returns the transaction's SessionData.
 	SessionData() *sessiondata.SessionData
+
+	// GetSystemSchemaVersion exposes the schema version from the system db desc.
+	GetSystemSchemaVersion(context.Context) (roachpb.Version, error)
 
 	// Executor allows the user to execute transactional SQL statements.
 	Executor
