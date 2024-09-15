@@ -11,7 +11,7 @@ log-level none
 ok
 
 # Bootstrap n1, n2, n3.
-add-nodes 3 voters=(1,2,3) index=2 step-down-on-removal=true
+add-nodes 3 voters=(1,2,3) index=2
 ----
 ok
 
