@@ -166,7 +166,7 @@ Source expression:
    └── filters
         └── abc.b = bx.b
 
-New expression 1 of 3:
+New expression 1 of 5:
   inner-join (hash)
    ├── scan bx
    ├── inner-join (hash)
@@ -181,7 +181,7 @@ New expression 1 of 3:
    └── filters
         └── abc.b = bx.b
 
-New expression 2 of 3:
+New expression 2 of 5:
   inner-join (hash)
    ├── scan bx
    ├── inner-join (hash)
@@ -197,7 +197,7 @@ New expression 2 of 3:
    └── filters
         └── abc.b = bx.b
 
-New expression 3 of 3:
+New expression 3 of 5:
   inner-join (hash)
    ├── scan bx
    ├── inner-join (hash)
@@ -208,6 +208,38 @@ New expression 3 of 3:
    │    │    └── filters
    │    │         └── cy.c = abc.c
    │    ├── scan dz
+   │    └── filters
+   │         └── dz.d = abc.c
+   └── filters
+        └── abc.b = bx.b
+
+New expression 4 of 5:
+  inner-join (hash)
+   ├── scan bx
+   ├── inner-join (hash)
+   │    ├── inner-join (hash)
+   │    │    ├── scan cy
+   │    │    ├── scan dz
+   │    │    └── filters
+   │    │         └── cy.c = dz.d
+   │    ├── scan abc
+   │    │    └── constraint: /13: [/1 - /1]
+   │    └── filters
+   │         └── dz.d = abc.c
+   └── filters
+        └── abc.b = bx.b
+
+New expression 5 of 5:
+  inner-join (hash)
+   ├── scan bx
+   ├── inner-join (hash)
+   │    ├── scan abc
+   │    │    └── constraint: /13: [/1 - /1]
+   │    ├── inner-join (hash)
+   │    │    ├── scan cy
+   │    │    ├── scan dz
+   │    │    └── filters
+   │    │         └── cy.c = dz.d
    │    └── filters
    │         └── dz.d = abc.c
    └── filters
@@ -3976,20 +4008,33 @@ Joining ABC
   AC B [inner, refs=AB, ub=1000.000000, cost=2000.000000]
 Joining ABCD
   D ABC [inner, refs=AD, ub=100000.000000, cost=102000.000000]
+Joining CD
+  C D [inner, refs=CD, ub=18633540.372671, cost=18633540.372671]
+  D C [inner, refs=CD, ub=18633540.372671, cost=18633540.372671]
+Joining BCD
+  B CD [inner, refs=BC, ub=18633540.372671, cost=37267080.745342]
+  CD B [inner, refs=BC, ub=18633540.372671, cost=37267080.745342]
+  BC D [inner, refs=CD, ub=18633540.372671, cost=18634540.372671]
+  D BC [inner, refs=CD, ub=18633540.372671, cost=18634540.372671]
+Joining ABCD
+  A BCD [inner, refs=ABC, ub=100000.000000, cost=18734540.372671]
+  BCD A [inner, refs=ABC, ub=100000.000000, cost=18734540.372671]
+Joining ACD
+  A CD [inner, refs=AC, ub=100000.000000, cost=18733540.372671]
+  CD A [inner, refs=AC, ub=100000.000000, cost=18733540.372671]
 Joining AD
   A D [inner, refs=AD, ub=100000.000000, cost=100000.000000]
   D A [inner, refs=AD, ub=100000.000000, cost=100000.000000]
-Joining ABCD
-  BC AD [inner, refs=ABC, ub=100000.000000, cost=201000.000000]
-  AD BC [inner, refs=ABC, ub=100000.000000, cost=201000.000000]
 Joining ACD
-  AC D [inner, refs=AD, ub=100000.000000, cost=101000.000000]
-  D AC [inner, refs=AD, ub=100000.000000, cost=101000.000000]
   C AD [inner, refs=AC, ub=100000.000000, cost=200000.000000]
   AD C [inner, refs=AC, ub=100000.000000, cost=200000.000000]
+  AC D [inner, refs=AD, ub=100000.000000, cost=101000.000000]
+  D AC [inner, refs=AD, ub=100000.000000, cost=101000.000000]
 Joining ABCD
   B ACD [inner, refs=AB, ub=100000.000000, cost=201000.000000]
   ACD B [inner, refs=AB, ub=100000.000000, cost=201000.000000]
+  AB CD [inner, refs=ABC, ub=100000.000000, cost=18734540.372671]
+  CD AB [inner, refs=ABC, ub=100000.000000, cost=18734540.372671]
 Joining ABD
   B AD [inner, refs=AB, ub=100000.000000, cost=200000.000000]
   AD B [inner, refs=AB, ub=100000.000000, cost=200000.000000]
@@ -3998,7 +4043,9 @@ Joining ABD
 Joining ABCD
   C ABD [inner, refs=ABC, ub=100000.000000, cost=201000.000000]
   ABD C [inner, refs=ABC, ub=100000.000000, cost=201000.000000]
-Joins Considered: 27
+  BC AD [inner, refs=ABC, ub=100000.000000, cost=201000.000000]
+  AD BC [inner, refs=ABC, ub=100000.000000, cost=201000.000000]
+Joins Considered: 39
 ================================================================================
 Final Plan
 ================================================================================

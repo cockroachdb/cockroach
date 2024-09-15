@@ -955,7 +955,7 @@ func (jb *JoinOrderBuilder) pruneCandidatePlans() {
 
 	// Prune candidate plans with sufficiently poor costs based on the cardinality
 	// upper bounds.
-	const costThreshold float64 = 10
+	//const costThreshold float64 = 10
 	getCost := func(s vertexSet) float64 {
 		if s.isSingleton() {
 			return 0
@@ -993,17 +993,17 @@ func (jb *JoinOrderBuilder) pruneCandidatePlans() {
 				plan.cost = cost
 			}
 		}
-		if validCost(bestCost) {
-			for i := 0; i < len(plans); {
-				if plans[i].cost > costThreshold*bestCost {
-					plans[i] = plans[len(plans)-1]
-					plans = plans[:len(plans)-1]
-				} else {
-					i++
-				}
-			}
-			jb.candidatePlans[subset] = plans
-		}
+		//if validCost(bestCost) {
+		//	for i := 0; i < len(plans); {
+		//		if plans[i].cost > costThreshold*bestCost {
+		//			plans[i] = plans[len(plans)-1]
+		//			plans = plans[:len(plans)-1]
+		//		} else {
+		//			i++
+		//		}
+		//	}
+		//	jb.candidatePlans[subset] = plans
+		//}
 	}
 
 	// Restore the invariant that a candidate plan is only considered if there are
