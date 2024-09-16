@@ -72,6 +72,10 @@ func (t *Tracker) Track(
 		term:   term,
 	})
 
+	if log.V(1) {
+		log.Infof(ctx, "tracking %v flow control tokens for pri=%s stream=%s log-position=%d/%d",
+			tokens, pri, t.stream, term, index)
+	}
 	return true
 }
 

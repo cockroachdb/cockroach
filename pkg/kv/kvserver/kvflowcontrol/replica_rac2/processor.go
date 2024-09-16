@@ -898,6 +898,43 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 		if err != nil {
 			panic(errors.Wrap(err, "unable to decode raft command admission data: %v"))
 		}
+
+		if log.V(1) {
+			if isV2Encoding {
+				log.Infof(ctx,
+					"decoded v2 raft admission meta below-raft: pri=%v create-time=%d "+
+						"proposer=n%v receiver=[n%d,s%v] tenant=t%d tokens≈%d "+
+						"sideloaded=%t raft-entry=%d/%d",
+					raftpb.Priority(meta.AdmissionPriority),
+					meta.AdmissionCreateTime,
+					meta.AdmissionOriginNode,
+					p.opts.NodeID,
+					p.opts.StoreID,
+					p.desc.tenantID.ToUint64(),
+					kvflowcontrol.Tokens(len(entry.Data)),
+					typ.IsSideloaded(),
+					entry.Term,
+					entry.Index,
+				)
+			} else {
+				log.Infof(ctx,
+					"decoded v1 raft admission meta below-raft: pri=%v create-time=%d "+
+						"proposer=n%v receiver=[n%d,s%v] tenant=t%d tokens≈%d "+
+						"sideloaded=%t raft-entry=%d/%d",
+					admissionpb.WorkPriority(meta.AdmissionPriority),
+					meta.AdmissionCreateTime,
+					meta.AdmissionOriginNode,
+					p.opts.NodeID,
+					p.opts.StoreID,
+					p.desc.tenantID.ToUint64(),
+					kvflowcontrol.Tokens(len(entry.Data)),
+					typ.IsSideloaded(),
+					entry.Term,
+					entry.Index,
+				)
+			}
+		}
+
 		mark := rac2.LogMark{Term: e.Term, Index: entry.Index}
 		var raftPri raftpb.Priority
 		if isV2Encoding {
