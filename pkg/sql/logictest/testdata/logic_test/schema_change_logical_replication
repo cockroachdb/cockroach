@@ -1,0 +1,47 @@
+# This test file mocks a logical replication job in the table descriptor,
+# and verifies that only certain schema changes are allowed on it.
+
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT)
+
+statement ok
+SELECT
+	crdb_internal.unsafe_upsert_descriptor(
+		d.id,
+		crdb_internal.json_to_pb(
+			'cockroach.sql.sqlbase.Descriptor',
+			json_set(
+				crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor),
+				ARRAY['table', 'ldrJobIds'],
+				'["12345"]'::JSONB
+			)
+		),
+		true
+	)
+FROM
+	system.descriptor AS d INNER JOIN system.namespace AS ns ON d.id = ns.id
+WHERE
+	name = 't'
+
+statement error this schema change is disallowed on table t because it is referenced by one or more logical replication jobs \[12345\]
+ALTER TABLE t ADD COLUMN z INT NOT NULL DEFAULT 10
+
+statement error this schema change is disallowed on table t because it is referenced by one or more logical replication jobs \[12345\]
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
+
+statement error this schema change is disallowed on table t because it is referenced by one or more logical replication jobs \[12345\]
+CREATE UNIQUE INDEX idx ON t(y)
+
+statement error this schema change is disallowed on table t because it is referenced by one or more logical replication jobs \[12345\]
+ALTER TABLE t DROP COLUMN y
+
+statement error this schema change is disallowed on table t because it is referenced by one or more logical replication jobs \[12345\]
+ALTER TABLE t ADD COLUMN z INT NULL
+
+### Tests for allowed schema changes
+
+statement ok
+CREATE INDEX idx ON t(y)
+
+statement ok
+DROP INDEX idx

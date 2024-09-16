@@ -1495,6 +1495,43 @@ func (c *ElementCollection[E]) FilterIndexZoneConfig() *ElementCollection[*Index
 	return (*ElementCollection[*IndexZoneConfig])(ret)
 }
 
+func (e LDRJobIDs) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_LDRJobIDs) Element() Element {
+	return e.LDRJobIDs
+}
+
+// ForEachLDRJobIDs iterates over elements of type LDRJobIDs.
+// Deprecated
+func ForEachLDRJobIDs(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *LDRJobIDs),
+) {
+  c.FilterLDRJobIDs().ForEach(fn)
+}
+
+// FindLDRJobIDs finds the first element of type LDRJobIDs.
+// Deprecated
+func FindLDRJobIDs(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *LDRJobIDs) {
+	if tc := c.FilterLDRJobIDs(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*LDRJobIDs)
+	}
+	return current, target, element
+}
+
+// LDRJobIDsElements filters elements of type LDRJobIDs.
+func (c *ElementCollection[E]) FilterLDRJobIDs() *ElementCollection[*LDRJobIDs] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*LDRJobIDs)
+		return ok
+	})
+	return (*ElementCollection[*LDRJobIDs])(ret)
+}
+
 func (e Namespace) element() {}
 
 // Element implements ElementGetter.
@@ -2653,6 +2690,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_IndexPartitioning{ IndexPartitioning: t}
 		case *IndexZoneConfig:
 			e.ElementOneOf = &ElementProto_IndexZoneConfig{ IndexZoneConfig: t}
+		case *LDRJobIDs:
+			e.ElementOneOf = &ElementProto_LDRJobIDs{ LDRJobIDs: t}
 		case *Namespace:
 			e.ElementOneOf = &ElementProto_Namespace{ Namespace: t}
 		case *Owner:
@@ -2757,6 +2796,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_IndexName)(nil)),
 	((*ElementProto_IndexPartitioning)(nil)),
 	((*ElementProto_IndexZoneConfig)(nil)),
+	((*ElementProto_LDRJobIDs)(nil)),
 	((*ElementProto_Namespace)(nil)),
 	((*ElementProto_Owner)(nil)),
 	((*ElementProto_PrimaryIndex)(nil)),
@@ -2833,6 +2873,7 @@ func GetElementTypes() []interface{} {
 	((*IndexName)(nil)),
 	((*IndexPartitioning)(nil)),
 	((*IndexZoneConfig)(nil)),
+	((*LDRJobIDs)(nil)),
 	((*Namespace)(nil)),
 	((*Owner)(nil)),
 	((*PrimaryIndex)(nil)),

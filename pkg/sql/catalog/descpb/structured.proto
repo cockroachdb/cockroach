@@ -1219,7 +1219,9 @@ message TableDescriptor {
   // stored outside the span of the object.
   optional ExternalRowData external = 61 [(gogoproto.nullable) = true];
 
-  repeated int64 ldr_job_ids = 62 [(gogoproto.nullable) = false, (gogoproto.customname) = "LDRJobIDs"];
+  // LDRJobIDs is a list of logical data replication job IDs which reference
+  // this table as a destination for the replication stream.
+  repeated int64 ldr_job_ids = 62 [(gogoproto.customname) = "LDRJobIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
 
   // ReplicatedPCRVersion  tracks the original version from the source tenant
   // that this descriptor was created from.

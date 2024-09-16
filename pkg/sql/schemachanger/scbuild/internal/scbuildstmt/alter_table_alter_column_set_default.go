@@ -26,7 +26,11 @@ import (
 )
 
 func alterTableSetDefault(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableSetDefault,
+	b BuildCtx,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	stmt tree.Statement,
+	t *tree.AlterTableSetDefault,
 ) {
 	alterColumnPreChecks(b, tn, tbl, t.Column)
 	colID := getColumnIDFromColumnName(b, tbl.TableID, t.Column, true /* required */)

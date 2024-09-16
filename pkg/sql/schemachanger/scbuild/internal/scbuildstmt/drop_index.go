@@ -48,7 +48,7 @@ func DropIndex(b BuildCtx, n *tree.DropIndex) {
 
 	var anyIndexesDropped bool
 	for _, index := range n.IndexList {
-		if droppedIndex := maybeDropIndex(b, index, n.IfExists, n.DropBehavior); droppedIndex != nil {
+		if droppedIndex := maybeDropIndex(b, index, n); droppedIndex != nil {
 			b.LogEventForExistingTarget(droppedIndex)
 			anyIndexesDropped = true
 		}
@@ -73,10 +73,10 @@ func DropIndex(b BuildCtx, n *tree.DropIndex) {
 // maybeDropIndex resolves `index` and mark its constituent elements as ToAbsent
 // in the builder state enclosed by `b`.
 func maybeDropIndex(
-	b BuildCtx, indexName *tree.TableIndexName, ifExists bool, dropBehavior tree.DropBehavior,
+	b BuildCtx, indexName *tree.TableIndexName, n *tree.DropIndex,
 ) (droppedIndex *scpb.SecondaryIndex) {
 	toBeDroppedIndexElms := b.ResolveIndexByName(indexName, ResolveParams{
-		IsExistenceOptional: ifExists,
+		IsExistenceOptional: n.IfExists,
 		RequiredPrivilege:   privilege.CREATE,
 	})
 	if toBeDroppedIndexElms == nil {
@@ -101,16 +101,16 @@ func maybeDropIndex(
 	// We don't support handling zone config related properties for tables, so
 	// throw an unsupported error.
 	fallBackIfSubZoneConfigExists(b, nil, sie.TableID)
-	panicIfSchemaIsLocked(b.QueryByID(sie.TableID))
+	panicIfSchemaChangeIsDisallowed(b.QueryByID(sie.TableID), n)
 	// Cannot drop the index if not CASCADE and a unique constraint depends on it.
-	if dropBehavior != tree.DropCascade && sie.IsUnique && !sie.IsCreatedExplicitly {
+	if n.DropBehavior != tree.DropCascade && sie.IsUnique && !sie.IsCreatedExplicitly {
 		panic(errors.WithHint(
 			pgerror.Newf(pgcode.DependentObjectsStillExist,
 				"index %q is in use as unique constraint", indexName.Index.String()),
 			"use CASCADE if you really want to drop it.",
 		))
 	}
-	dropSecondaryIndex(b, indexName, dropBehavior, sie)
+	dropSecondaryIndex(b, indexName, n.DropBehavior, sie)
 	return sie
 }
 
