@@ -4112,6 +4112,11 @@ type testConfigModifiers struct {
 // that may be used to modify the config.
 type testConfigModifierOpt func(*testConfigModifiers)
 
+// emptyTestConfigModifierOpt returns an empty testConfigModifierOpt.
+func emptyTestConfigModifierOpt() testConfigModifierOpt {
+	return func(modifier *testConfigModifiers) {}
+}
+
 // withRaftFortification disables raft fortification.
 func withFortificationDisabled() testConfigModifierOpt {
 	return func(modifier *testConfigModifiers) {

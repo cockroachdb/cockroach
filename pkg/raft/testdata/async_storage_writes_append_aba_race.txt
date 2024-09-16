@@ -414,20 +414,32 @@ Messages:
 4->5 MsgHeartbeat Term:3 Log:0/0
 4->6 MsgHeartbeat Term:3 Log:0/0
 4->7 MsgHeartbeat Term:3 Log:0/0
+4->1 MsgFortifyLeader Term:3 Log:0/0
+4->2 MsgFortifyLeader Term:3 Log:0/0
+4->3 MsgFortifyLeader Term:3 Log:0/0
+4->5 MsgFortifyLeader Term:3 Log:0/0
+4->6 MsgFortifyLeader Term:3 Log:0/0
+4->7 MsgFortifyLeader Term:3 Log:0/0
+4->AppendThread MsgStorageAppend Term:0 Log:0/0 Responses:[
+  4->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+]
 
 deliver-msgs 1
 ----
 4->1 MsgHeartbeat Term:3 Log:0/0
 INFO 1 [term: 2] received a MsgHeartbeat message with higher term from 4 [term: 3]
 INFO 1 became follower at term 3
+4->1 MsgFortifyLeader Term:3 Log:0/0
 
 process-ready 1
 ----
 Ready MustSync=true:
-HardState Term:3 Commit:11 Lead:4 LeadEpoch:0
+HardState Term:3 Commit:11 Lead:4 LeadEpoch:1
 Messages:
 1->4 MsgHeartbeatResp Term:3 Log:0/0
-1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Lead:4
+1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Lead:4 LeadEpoch:1 Responses:[
+  1->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+]
 
 deliver-msgs 4
 ----
@@ -513,8 +525,9 @@ INFO mark (term,index)=(2,12) mismatched the last accepted term 3 in unstable lo
 process-append-thread 1
 ----
 Processing:
-1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Lead:4
+1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Lead:4 LeadEpoch:1
 Responses:
+1->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
 
 raft-log 1
 ----
