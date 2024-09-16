@@ -1677,6 +1677,9 @@ func (r *replicaSyncCallback) OnLogSync(
 	// The log mark is non-empty only if this was a non-empty log append that
 	// updated the stable log mark.
 	if mark := done.Mark(); mark.Term != 0 {
+		// TODO(kvoli): This code is unreachable in
+		// TestFlowControlIntegrationBasicV2, see done.Mark().
+		panic("unreachable")
 		repl.flowControlV2.SyncedLogStorage(ctx, mark)
 	}
 	// Block sending the responses back to raft, if a test needs to.

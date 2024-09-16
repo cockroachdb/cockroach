@@ -111,9 +111,20 @@ func (m MsgStorageAppendDone) Mark() raft.LogMark {
 	// API to be more digestible outside the package.
 	msg := m[len(m)-1]
 	if msg.Type != raftpb.MsgStorageAppendResp {
+		if buildutil.CrdbTestBuild {
+			for _, a := range m {
+				if a.Type == raftpb.MsgStorageAppendResp {
+					panic("unexpected MsgStorageAppendResp not in last position")
+				}
+			}
+		}
 		return raft.LogMark{}
 	}
 	if len(msg.Entries) != 0 {
+		// TODO(kvoli): This doesn't crash TestFlowControlIntegrationBasicV2, the
+		// mark is always zeroed and therefore not updating the stable index in the
+		// log tracker.
+		panic("unreachable")
 		return raft.LogMark{Term: msg.LogTerm, Index: msg.Index}
 	} else if msg.Snapshot != nil {
 		return raft.LogMark{Term: msg.LogTerm, Index: msg.Snapshot.Metadata.Index}

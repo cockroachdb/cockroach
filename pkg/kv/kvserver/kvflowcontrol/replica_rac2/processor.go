@@ -816,10 +816,13 @@ func (p *processorImpl) maybeSendAdmittedRaftMuLocked(ctx context.Context) {
 	// Don't send the admitted vector if it hasn't been updated since the last
 	// time it was sent.
 	if !dirty {
+		log.VInfof(ctx, 1, "not sending admitted vector to leader[!dirty]: stable-index=%v %v",
+			p.logTracker.debugString(), p.replMu.raftNode.FollowerStateRaftMuLocked(p.opts.ReplicaID))
 		return
 	}
 	// If the admitted vector term is stale, don't send - the leader will drop it.
 	if av.Term < p.term {
+		log.VInfof(ctx, 1, "not sending admitted vector to leader[stale term]: %v", p.logTracker.debugString())
 		return
 	}
 	// The admitted vector term can not outpace the raft term because raft would

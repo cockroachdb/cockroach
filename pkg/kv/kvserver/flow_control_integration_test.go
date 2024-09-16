@@ -2477,3 +2477,289 @@ func (h *flowControlTestHelper) put(
 func (h *flowControlTestHelper) close(filename string) {
 	echotest.Require(h.t, h.buf.String(), datapathutils.TestDataPath(h.t, "flow_control_integration", filename))
 }
+
+// TestFlowControlBasicV2 runs a basic end-to-end test of the v2 kvflowcontrol
+// machinery, replicating + admitting a single 1MiB regular write.
+// The vmodule flags for running these tests are:
+//
+//    --vmodule='replica_raft=1,kvflowcontroller=2,replica_proposal_buf=1,
+//               raft_transport=2,kvflowdispatch=1,kvadmission=1,
+//               kvflowhandle=1,work_queue=1,replica_flow_control=1,
+//               tracker=1,client_raft_helpers_test=1,range_controller=2,
+//               token_counter=2,token_tracker=2,processor=2'
+
+func TestFlowControlBasicV2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "always-enqueue", func(t *testing.T, alwaysEnqueue bool) {
+		ctx := context.Background()
+		const numNodes = 3
+		st := cluster.MakeTestingClusterSettings()
+		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+		kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+
+		tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+				RaftConfig: base.RaftConfig{
+          // Suppress timeout-based elections. This test doesn't want to (and
+          // cannot at the moment) deal with leadership changing hands.
+					RaftElectionTimeoutTicks: 1000000,
+				},
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
+							UseOnlyForScratchRanges: true,
+						},
+					},
+					AdmissionControl: &admission.TestingKnobs{
+						DisableWorkQueueFastPath: alwaysEnqueue,
+					},
+				},
+			},
+		})
+		defer tc.Stopper().Stop(ctx)
+
+		k := tc.ScratchRange(t)
+		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
+		desc, err := tc.LookupRange(k)
+		require.NoError(t, err)
+
+		for i := 0; i < numNodes; i++ {
+			si, err := tc.Server(i).GetStores().(*kvserver.Stores).GetStore(tc.Server(i).GetFirstStoreID())
+			require.NoError(t, err)
+			tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(si.StoreID(),
+				&unreliableRaftHandler{
+					rangeID:                    desc.RangeID,
+					IncomingRaftMessageHandler: si,
+					unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
+						dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+							// Install a raft handler to get verbose raft logging.
+							return false
+						},
+					},
+				})
+		}
+
+		n1 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+		h := newRAC2TestHelper(t, tc)
+		h.init()
+		defer h.close("basic") // this test behaves identically with or without the fast path
+
+		h.waitForConnectedStreams(ctx, desc.RangeID, 3)
+
+		h.comment(`-- Flow token metrics, before issuing the regular 1MiB replicated write.`)
+		h.query(n1, `
+  SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+`)
+
+		h.comment(`-- (Issuing + admitting a regular 1MiB, triply replicated write...)`)
+		h.log("sending put request")
+		h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
+		h.log("sent put request")
+
+		h.waitForAllTokensReturned(ctx, 3)
+		h.comment(`
+-- Stream counts as seen by n1 post-write. We should see three {regular,elastic}
+-- streams given there are three nodes and we're using a replication factor of
+-- three.
+`)
+		h.query(n1, `
+  SELECT name, value
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%stream%'
+ORDER BY name ASC;
+`)
+
+		h.comment(`-- Another view of the stream count, using /inspectz-backed vtables.`)
+		h.query(n1, `
+  SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles_v2
+GROUP BY (range_id)
+HAVING count(*) = 3 
+ORDER BY streams DESC;
+`, "range_id", "stream_count")
+
+		h.comment(`
+-- Flow token metrics from n1 after issuing the regular 1MiB replicated write,
+-- and it being admitted on n1, n2 and n3. We should see 3*1MiB = 3MiB of
+-- {regular,elastic} tokens deducted and returned, and {8*3=24MiB,16*3=48MiB} of
+-- {regular,elastic} tokens available. Everything should be accounted for.
+`)
+		h.query(n1, `
+  SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+`)
+	})
+}
+
+type rac2TestHelper struct {
+	t   *testing.T
+	tc  *testcluster.TestCluster
+	buf *strings.Builder
+	rng *rand.Rand
+}
+
+func newRAC2TestHelper(t *testing.T, tc *testcluster.TestCluster) *rac2TestHelper {
+	rng, _ := randutil.NewPseudoRand()
+	buf := &strings.Builder{}
+	return &rac2TestHelper{
+		t:   t,
+		tc:  tc,
+		buf: buf,
+		rng: rng,
+	}
+}
+
+func (h *rac2TestHelper) init() {
+	// Reach into each server's cluster setting and override. This causes any
+	// registered change callbacks to run immediately, which is important since
+	// running them with some lag (which happens when using SQL and `SET CLUSTER
+	// SETTING`) interferes with the later activities in these tests.
+	for _, s := range h.tc.Servers {
+		kvflowcontrol.Enabled.Override(context.Background(), &s.ClusterSettings().SV, true)
+		kvflowcontrol.Mode.Override(context.Background(), &s.ClusterSettings().SV, kvflowcontrol.ApplyToAll)
+	}
+}
+
+func (h *rac2TestHelper) waitForAllTokensReturned(ctx context.Context, expStreamCount int) {
+	testutils.SucceedsSoon(h.t, func() error {
+		return h.checkAllTokensReturned(ctx, expStreamCount)
+	})
+}
+
+func (h *rac2TestHelper) checkAllTokensReturned(ctx context.Context, expStreamCount int) error {
+	streams := h.tc.GetFirstStoreFromServer(h.t, 0).GetStoreConfig().KVFlowStreamTokenProvider.Inspect(ctx)
+	if len(streams) != expStreamCount {
+		return fmt.Errorf("expected %d replication streams, got %d", expStreamCount, len(streams))
+	}
+	for _, stream := range streams {
+		if stream.AvailableEvalRegularTokens != 16<<20 {
+			return fmt.Errorf("expected %s of regular flow tokens for %s, got %s",
+				humanize.IBytes(16<<20),
+				kvflowcontrol.Stream{
+					TenantID: stream.TenantID,
+					StoreID:  stream.StoreID,
+				},
+				humanize.IBytes(uint64(stream.AvailableEvalRegularTokens)),
+			)
+		}
+		if stream.AvailableEvalElasticTokens != 8<<20 {
+			return fmt.Errorf("expected %s of elastic flow tokens for %s, got %s",
+				humanize.IBytes(8<<20),
+				kvflowcontrol.Stream{
+					TenantID: stream.TenantID,
+					StoreID:  stream.StoreID,
+				},
+				humanize.IBytes(uint64(stream.AvailableEvalElasticTokens)),
+			)
+		}
+	}
+	return nil
+}
+
+func (h *rac2TestHelper) waitForConnectedStreams(
+	ctx context.Context, rangeID roachpb.RangeID, expConnectedStreams int,
+) {
+	testutils.SucceedsSoon(h.t, func() error {
+		state, found := kvserver.MakeStoresForRACv2(
+			h.tc.Server(0).GetStores().(*kvserver.Stores)).LookupInspect(rangeID)
+		if !found {
+			return fmt.Errorf("handle for %s not found", rangeID)
+		}
+		require.True(h.t, found)
+		if len(state.ConnectedStreams) != expConnectedStreams {
+			return fmt.Errorf("expected %d connected streams, got %d",
+				expConnectedStreams, len(state.ConnectedStreams))
+		}
+		return nil
+	})
+}
+
+func (h *rac2TestHelper) waitForTotalTrackedTokens(
+	ctx context.Context, rangeID roachpb.RangeID, expTotalTrackedTokens int64,
+) {
+	testutils.SucceedsSoon(h.t, func() error {
+		state, found := kvserver.MakeStoresForRACv2(
+			h.tc.Server(0).GetStores().(*kvserver.Stores)).LookupInspect(rangeID)
+		if !found {
+			return fmt.Errorf("handle for %s not found", rangeID)
+		}
+		require.True(h.t, found)
+		var totalTracked int64
+		for _, stream := range state.ConnectedStreams {
+			for _, tracked := range stream.TrackedDeductions {
+				totalTracked += tracked.Tokens
+			}
+		}
+		if totalTracked != expTotalTrackedTokens {
+			return fmt.Errorf("expected to track %d tokens in aggregate, got %d",
+				kvflowcontrol.Tokens(expTotalTrackedTokens), kvflowcontrol.Tokens(totalTracked))
+		}
+		return nil
+	})
+}
+
+func (h *rac2TestHelper) comment(comment string) {
+	if h.buf.Len() > 0 {
+		h.buf.WriteString("\n\n")
+	}
+
+	comment = strings.TrimSpace(comment)
+	h.buf.WriteString(fmt.Sprintf("%s\n", comment))
+	h.log(comment)
+}
+
+func (h *rac2TestHelper) log(msg string) {
+	if log.ShowLogs() {
+		log.Infof(context.Background(), "%s", msg)
+	}
+}
+
+func (h *rac2TestHelper) query(runner *sqlutils.SQLRunner, sql string, headers ...string) {
+	// NB: We update metric gauges here to ensure that periodically updated
+	// metrics (via the node metrics loop) are up-to-date.
+	h.tc.GetFirstStoreFromServer(h.t, 0).GetStoreConfig().KVFlowStreamTokenProvider.UpdateMetricGauges()
+	sql = strings.TrimSpace(sql)
+	h.log(sql)
+	h.buf.WriteString(fmt.Sprintf("%s\n\n", sql))
+
+	rows := runner.Query(h.t, sql)
+	tbl := tablewriter.NewWriter(h.buf)
+	output, err := sqlutils.RowsToStrMatrix(rows)
+	require.NoError(h.t, err)
+	tbl.SetAlignment(tablewriter.ALIGN_LEFT)
+	tbl.AppendBulk(output)
+	tbl.SetBorder(false)
+	tbl.SetHeader(headers)
+	tbl.SetAutoFormatHeaders(false)
+	tbl.Render()
+}
+
+func (h *rac2TestHelper) put(
+	ctx context.Context, key roachpb.Key, size int, pri admissionpb.WorkPriority,
+) *kvpb.BatchRequest {
+	value := roachpb.MakeValueFromString(randutil.RandString(h.rng, size, randutil.PrintableKeyAlphabet))
+	ba := &kvpb.BatchRequest{}
+	ba.Add(kvpb.NewPut(key, value))
+	ba.AdmissionHeader.Priority = int32(pri)
+	ba.AdmissionHeader.Source = kvpb.AdmissionHeader_FROM_SQL
+	if _, pErr := h.tc.Server(0).DB().NonTransactionalSender().Send(
+		ctx, ba,
+	); pErr != nil {
+		h.t.Fatal(pErr.GoError())
+	}
+	return ba
+}
+
+func (h *rac2TestHelper) close(filename string) {
+	echotest.Require(h.t, h.buf.String(), datapathutils.TestDataPath(h.t, "flow_control_integration_v2", filename))
+}

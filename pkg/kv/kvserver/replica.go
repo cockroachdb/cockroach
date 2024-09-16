@@ -2531,7 +2531,7 @@ func racV2EnabledWhenLeaderLevel(
 	ctx context.Context, st *cluster.Settings,
 ) replica_rac2.EnabledWhenLeaderLevel {
 	// TODO(sumeer): implement fully, once all the dependencies are implemented.
-	return replica_rac2.NotEnabledWhenLeader
+	return replica_rac2.EnabledWhenLeaderV2Encoding
 }
 
 // maybeEnqueueProblemRange will enqueue the replica for processing into the
