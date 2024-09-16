@@ -523,7 +523,8 @@ func registerKVGracefulDraining(r registry.Registry) {
 			// If the test ever fails, the person who investigates the
 			// failure will likely be thankful for this additional logging.
 			startOpts := option.DefaultStartOpts()
-			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=store=2,store_rebalancer=2")
+			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=store=2,"+
+				"store_rebalancer=2,liveness=2")
 			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.CRDBNodes())
 
 			// Don't connect to the node we are going to shut down.
@@ -560,9 +561,12 @@ func registerKVGracefulDraining(r registry.Registry) {
 			t.Status("starting workload")
 			workloadStartTime := timeutil.Now()
 			// Three iterations, each iteration has a 3-minute duration.
-			desiredRunDuration := 10 * time.Minute
+			// We also warm up the workload for a minute, and let the initial
+			// replica movement finish.
+			desiredRunDuration := 11 * time.Minute
 			m.Go(func(ctx context.Context) error {
-				// TODO(baptist): Remove --tolerate-errors once #129427 is addressed.
+				// TODO(baptist): Remove --tolerate-errors once #129427 (ambiguous results)
+				// is addressed.
 				// Don't connect to the node we are going to shut down.
 				cmd := fmt.Sprintf(
 					"./cockroach workload run kv --tolerate-errors --duration=%s --read-percent=50 --follower-read-percent=50 --concurrency=200 --max-rate=%d {pgurl%s}",
@@ -574,6 +578,25 @@ func registerKVGracefulDraining(r registry.Registry) {
 				}()
 				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 			})
+			// Sleep for the first minute to let ranges settle down, leases warm up,
+			// and stats populate. It also helps teamcity metrics to pick up what the
+			// cluster is doing so that we're not flying blind[1] in the early phases
+			// of the test.
+			// [1]: https://cockroachlabs.slack.com/archives/C023S0V4YEB/p1726483324593879
+			t.L().PrintfCtx(ctx, "sleeping one minute")
+			select {
+			case <-time.After(time.Minute):
+			case <-ctx.Done():
+			}
+			// Set up statement bundles for the (now known) top queries, with reasonable
+			// criteria. This gives us something to look into should the test fail to
+			// meet its qps targets.
+			require.NoError(t, profileTopStatements(ctx, c, t.L(), "kv"))
+			defer func() {
+				if err := downloadProfiles(ctx, c, t.L(), t.ArtifactsDir()); err != nil {
+					t.L().PrintfCtx(ctx, "failed to download stmt bundles: %v", err)
+				}
+			}()
 
 			verifyQPS := func(ctx context.Context) error {
 				if qps := measureQPS(ctx, t, time.Second, dbs...); qps < expectedQPS {
