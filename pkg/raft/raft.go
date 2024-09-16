@@ -743,7 +743,7 @@ func (r *raft) maybeSendFortify(id pb.PeerID) {
 	isFortified, isSupported := r.fortificationTracker.IsFortifiedBy(id)
 
 	if isFortified {
-		return // return early if the follower's fortified.
+		return // return early if the follower's fortified
 	}
 
 	if !isSupported {
@@ -1038,6 +1038,10 @@ func (r *raft) tickHeartbeat() {
 		if err := r.Step(pb.Message{From: r.id, Type: pb.MsgBeat}); err != nil {
 			r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
 		}
+
+		// Try to refortify any followers that don't currently support us.
+		r.bcastFortify()
+		// TODO(ibrahim): add/call maybeUnpauseAndBcastAppend() here.
 	}
 }
 
