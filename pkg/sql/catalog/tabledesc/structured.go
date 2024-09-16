@@ -2574,6 +2574,11 @@ func (desc *wrapper) HistogramBucketsCount() (histogramBucketsCount uint32, ok b
 	return *desc.HistogramBuckets, true
 }
 
+// GetReplicatedPCRVersion is a part of the catalog.Descriptor
+func (desc *wrapper) GetReplicatedPCRVersion() descpb.DescriptorVersion {
+	return desc.ReplicatedPCRVersion
+}
+
 // SetTableLocalityRegionalByTable sets the descriptor's locality config to
 // regional at the table level in the supplied region. An empty region name
 // (or its alias PrimaryRegionNotSpecifiedName) denotes that the table is homed in
@@ -2673,4 +2678,18 @@ func (desc *Mutable) UpdateColumnsDependedOnBy(id descpb.ID, colIDs catalog.Tabl
 		}
 	}
 	desc.DependedOnBy = append(desc.DependedOnBy, ref)
+}
+
+// BumpExternalAsOf increases the timestamp for external data row tables.
+func (desc *Mutable) BumpExternalAsOf(timestamp hlc.Timestamp) error {
+	if desc.External == nil {
+		return errors.AssertionFailedf("cannot advanced timestamp on a real table (%d)", desc.GetID())
+	}
+	if timestamp.Less(desc.External.AsOf) {
+		return errors.AssertionFailedf("new timestamp (%s) is less than the existing as of timestamp (%s)",
+			timestamp,
+			desc.External.AsOf)
+	}
+	desc.External.AsOf = timestamp
+	return nil
 }

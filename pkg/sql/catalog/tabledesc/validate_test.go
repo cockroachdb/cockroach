@@ -143,7 +143,8 @@ var validationMap = []struct {
 			"External": {status: todoIAmKnowinglyAddingTechDebt,
 				reason: "TODO(features): add validation that TableID is sane within the same tenant"},
 			// LDRJobIDs is checked in StripDanglingBackreferences.
-			"LDRJobIDs": {status: iSolemnlySwearThisFieldIsValidated},
+			"LDRJobIDs":            {status: iSolemnlySwearThisFieldIsValidated},
+			"ReplicatedPCRVersion": {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -263,6 +264,7 @@ var validationMap = []struct {
 			"RegionConfig":                  {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 			"Composite":                     {status: iSolemnlySwearThisFieldIsValidated},
+			"ReplicatedPCRVersion":          {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -280,6 +282,7 @@ var validationMap = []struct {
 			"DefaultPrivileges":             {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 			"SystemDatabaseSchemaVersion":   {status: iSolemnlySwearThisFieldIsValidated},
+			"ReplicatedPCRVersion":          {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -297,6 +300,7 @@ var validationMap = []struct {
 			"DefaultPrivileges":             {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 			"Functions":                     {status: iSolemnlySwearThisFieldIsValidated},
+			"ReplicatedPCRVersion":          {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -336,6 +340,7 @@ var validationMap = []struct {
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 			"IsProcedure":                   {status: thisFieldReferencesNoObjects},
 			"Security":                      {status: thisFieldReferencesNoObjects},
+			"ReplicatedPCRVersion":          {status: thisFieldReferencesNoObjects},
 		},
 	},
 }

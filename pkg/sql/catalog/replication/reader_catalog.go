@@ -49,13 +49,14 @@ func SetupOrAdvanceStandbyReaderCatalog(
 	}
 	return descsCol.DescsTxn(
 		ctx, func(ctx context.Context, txn descs.Txn) error {
+			// Allow modifications to the reader catalog mutable.
+			txn.Descriptors().SetReaderCatalogSetup()
 			// Track which descriptors / namespaces that have been updated,
 			// the difference between any existing tenant in the reader
 			// catalog will be deleted (i.e. these are descriptors that exist
 			// in the reader tenant, but not in the from tenant which we are
 			// replicating).
 			descriptorsUpdated := catalog.DescriptorIDSet{}
-			namespaceUpdated := catalog.DescriptorIDSet{}
 			allExistingDescs, err := txn.Descriptors().GetAll(ctx, txn.KV())
 			if err != nil {
 				return err
@@ -71,16 +72,15 @@ func SetupOrAdvanceStandbyReaderCatalog(
 				descriptorsUpdated.Add(fromDesc.GetID())
 				// If there is an existing descriptor with the same ID, we should
 				// determine the old bytes in storage for the upsert.
-				var existingRawBytes []byte
 				existingDesc, err := txn.Descriptors().MutableByID(txn.KV()).Desc(ctx, fromDesc.GetID())
-				if err == nil {
-					existingRawBytes = existingDesc.GetRawBytesInStorage()
-				} else if errors.Is(err, catalog.ErrDescriptorNotFound) {
-					err = nil
-				} else {
+				if err != nil &&
+					!errors.Is(err, catalog.ErrDescriptorNotFound) {
 					return err
+				} else {
+					err = nil
 				}
-				// Existing descriptor should never be a system descriptor.
+				// Existing descriptor should have the parent ID, since we should only
+				// be updating it to reflect the latest timestamp.
 				if existingDesc != nil &&
 					existingDesc.GetParentID() != fromDesc.GetParentID() {
 					return errors.AssertionFailedf("existing descriptor in the reader catalog "+
@@ -90,83 +90,33 @@ func SetupOrAdvanceStandbyReaderCatalog(
 						existingDesc.GetName(), existingDesc.GetID(), existingDesc.GetParentID(),
 						fromDesc.GetName(), fromDesc.GetID(), fromDesc.GetParentID())
 				}
+
 				var mut catalog.MutableDescriptor
-				switch t := fromDesc.DescriptorProto().GetUnion().(type) {
-				case *descpb.Descriptor_Table:
-					t.Table.Version = 1
-					var mutBuilder tabledesc.TableDescriptorBuilder
-					var mutTbl *tabledesc.Mutable
-					if existingRawBytes != nil {
-						t.Table.Version = existingDesc.GetVersion()
-						mutBuilder = existingDesc.NewBuilder().(tabledesc.TableDescriptorBuilder)
-						mutTbl = mutBuilder.BuildExistingMutableTable()
-						mutTbl.TableDescriptor = *protoutil.Clone(t.Table).(*descpb.TableDescriptor)
-					} else {
-						mutBuilder = tabledesc.NewBuilder(t.Table)
-						mutTbl = mutBuilder.BuildCreatedMutableTable()
+				// If the descriptor has not been modified, then extend the timestamp only.
+				if existingDesc != nil && existingDesc.GetReplicatedPCRVersion() == fromDesc.GetVersion() {
+					if existingDesc.DescriptorType() != catalog.Table {
+						return nil
 					}
-					mut = mutTbl
-					// Convert any physical tables into external row tables.
-					// Note: Materialized views will be converted, but their
-					// view definition will be wiped.
-					if mutTbl.IsPhysicalTable() {
-						mutTbl.ViewQuery = ""
-						mutTbl.SetExternalRowData(&descpb.ExternalRowData{TenantID: fromID, TableID: fromDesc.GetID(), AsOf: asOf})
+					mut, err = advanceTimestampForTable(existingDesc, asOf)
+					if err != nil || mut == nil {
+						return err
 					}
-				case *descpb.Descriptor_Database:
-					t.Database.Version = 1
-					var mutBuilder dbdesc.DatabaseDescriptorBuilder
-					if existingRawBytes != nil {
-						t.Database.Version = existingDesc.GetVersion()
-						mutBuilder = existingDesc.NewBuilder().(dbdesc.DatabaseDescriptorBuilder)
-						mutDB := mutBuilder.BuildExistingMutableDatabase()
-						mutDB.DatabaseDescriptor = *protoutil.Clone(t.Database).(*descpb.DatabaseDescriptor)
-						mut = mutDB
-					} else {
-						mutBuilder = dbdesc.NewBuilder(t.Database)
-						mut = mutBuilder.BuildCreatedMutable()
+				} else {
+					// Its possible that multiple descriptor versions could have gone by on
+					// the from cluster, which could mean fairly large schema changes have
+					// occured. This should be fine, because the leasing subsystem will look
+					// at the modification time of a descriptor to determine which version should
+					// be picked up by a txn. Since, we are publishing all descriptors in a single txn,
+					// this would ensure that we don't end up using a mix of "new" descriptors in old txns,
+					// since read timestamp will be below the modification time. The only potential hazard
+					// that exists here is that newer txns could pick up older descriptors if the range feed
+					// is behind.
+					// TODO(fqazi): We should either change how big version jumps are handled here
+					// or adjust leasing to publish in batches (latter would be more usable).
+					mut, err = replicateDescriptorForReader(fromDesc, existingDesc, fromID, asOf)
+					if err != nil {
+						return err
 					}
-				case *descpb.Descriptor_Schema:
-					t.Schema.Version = 1
-					var mutBuilder schemadesc.SchemaDescriptorBuilder
-					if existingRawBytes != nil {
-						t.Schema.Version = existingDesc.GetVersion()
-						mutBuilder = existingDesc.NewBuilder().(schemadesc.SchemaDescriptorBuilder)
-						mutSchema := mutBuilder.BuildExistingMutableSchema()
-						mutSchema.SchemaDescriptor = *protoutil.Clone(t.Schema).(*descpb.SchemaDescriptor)
-						mut = mutSchema
-					} else {
-						mutBuilder = schemadesc.NewBuilder(t.Schema)
-						mut = mutBuilder.BuildCreatedMutable()
-					}
-				case *descpb.Descriptor_Function:
-					t.Function.Version = 1
-					var mutBuilder funcdesc.FunctionDescriptorBuilder
-					if existingRawBytes != nil {
-						t.Function.Version = existingDesc.GetVersion()
-						mutBuilder = existingDesc.NewBuilder().(funcdesc.FunctionDescriptorBuilder)
-						mutFunction := mutBuilder.BuildExistingMutableFunction()
-						mutFunction.FunctionDescriptor = *protoutil.Clone(t.Function).(*descpb.FunctionDescriptor)
-						mut = mutFunction
-					} else {
-						mutBuilder = funcdesc.NewBuilder(t.Function)
-						mut = mutBuilder.BuildCreatedMutable()
-					}
-				case *descpb.Descriptor_Type:
-					t.Type.Version = 1
-					var mutBuilder typedesc.TypeDescriptorBuilder
-					if existingRawBytes != nil {
-						t.Type.Version = existingDesc.GetVersion()
-						mutBuilder = existingDesc.NewBuilder().(typedesc.TypeDescriptorBuilder)
-						mutType := mutBuilder.BuildExistingMutableType()
-						mutType.TypeDescriptor = *protoutil.Clone(t.Type).(*descpb.TypeDescriptor)
-						mut = mutType
-					} else {
-						mutBuilder = typedesc.NewBuilder(t.Type)
-						mut = mutBuilder.BuildCreatedMutable()
-					}
-				default:
-					return errors.AssertionFailedf("unknown descriptor type: %T", t)
 				}
 				return errors.Wrapf(txn.Descriptors().WriteDescToBatch(ctx, true, mut, b),
 					"unable to create replicated descriptor: %d %T", mut.GetID(), mut)
@@ -177,7 +127,10 @@ func SetupOrAdvanceStandbyReaderCatalog(
 				if !shouldSetupForReader(e.GetID(), e.GetParentID()) {
 					return nil
 				}
-				namespaceUpdated.Add(e.GetID())
+				// Do not upsert entries if one already exists.
+				if entry := allExistingDescs.LookupNamespaceEntry(e); entry != nil && e.GetID() == entry.GetID() {
+					return nil
+				}
 				return errors.Wrapf(txn.Descriptors().UpsertNamespaceEntryToBatch(ctx, true, e, b), "namespace entry %v", e)
 			}); err != nil {
 				return err
@@ -207,8 +160,118 @@ func SetupOrAdvanceStandbyReaderCatalog(
 			}); err != nil {
 				return err
 			}
+			if err := maybeBlockSchemaChangesOnSystemDatabase(ctx, txn, b); err != nil {
+				return errors.Wrapf(err, "blocking schema changes")
+			}
 			return errors.Wrap(txn.KV().Run(ctx, b), "executing bach for updating catalog")
 		})
+}
+
+func advanceTimestampForTable(
+	descriptor catalog.MutableDescriptor, asOf hlc.Timestamp,
+) (catalog.MutableDescriptor, error) {
+	tbl := descriptor.(*tabledesc.Mutable)
+	// Views can be skipped.
+	if !tbl.IsPhysicalTable() {
+		return nil, nil
+	}
+	return tbl, tbl.BumpExternalAsOf(asOf)
+}
+
+func replicateDescriptorForReader(
+	fromDesc catalog.Descriptor,
+	existingDesc catalog.MutableDescriptor,
+	fromID roachpb.TenantID,
+	asOf hlc.Timestamp,
+) (catalog.MutableDescriptor, error) {
+	var mut catalog.MutableDescriptor
+	var existingRawBytes []byte
+	if existingDesc != nil {
+		existingRawBytes = existingDesc.GetRawBytesInStorage()
+	}
+	switch t := fromDesc.DescriptorProto().GetUnion().(type) {
+	case *descpb.Descriptor_Table:
+		t.Table.ReplicatedPCRVersion = t.Table.Version
+		t.Table.Version = 1
+		var mutBuilder tabledesc.TableDescriptorBuilder
+		var mutTbl *tabledesc.Mutable
+		if existingRawBytes != nil {
+			t.Table.Version = existingDesc.GetVersion()
+			mutBuilder = existingDesc.NewBuilder().(tabledesc.TableDescriptorBuilder)
+			mutTbl = mutBuilder.BuildExistingMutableTable()
+			mutTbl.TableDescriptor = *protoutil.Clone(t.Table).(*descpb.TableDescriptor)
+		} else {
+			mutBuilder = tabledesc.NewBuilder(t.Table)
+			mutTbl = mutBuilder.BuildCreatedMutableTable()
+		}
+		mut = mutTbl
+		// Convert any physical tables into external row tables.
+		// Note: Materialized views will be converted, but their
+		// view definition will be wiped.
+		if mutTbl.IsPhysicalTable() {
+			mutTbl.ViewQuery = ""
+			mutTbl.SetExternalRowData(&descpb.ExternalRowData{TenantID: fromID, TableID: fromDesc.GetID(), AsOf: asOf})
+		}
+	case *descpb.Descriptor_Database:
+		t.Database.ReplicatedPCRVersion = t.Database.Version
+		t.Database.Version = 1
+		var mutBuilder dbdesc.DatabaseDescriptorBuilder
+		if existingRawBytes != nil {
+			t.Database.Version = existingDesc.GetVersion()
+			mutBuilder = existingDesc.NewBuilder().(dbdesc.DatabaseDescriptorBuilder)
+			mutDB := mutBuilder.BuildExistingMutableDatabase()
+			mutDB.DatabaseDescriptor = *protoutil.Clone(t.Database).(*descpb.DatabaseDescriptor)
+			mut = mutDB
+		} else {
+			mutBuilder = dbdesc.NewBuilder(t.Database)
+			mut = mutBuilder.BuildCreatedMutable()
+		}
+	case *descpb.Descriptor_Schema:
+		t.Schema.ReplicatedPCRVersion = t.Schema.Version
+		t.Schema.Version = 1
+		var mutBuilder schemadesc.SchemaDescriptorBuilder
+		if existingRawBytes != nil {
+			t.Schema.Version = existingDesc.GetVersion()
+			mutBuilder = existingDesc.NewBuilder().(schemadesc.SchemaDescriptorBuilder)
+			mutSchema := mutBuilder.BuildExistingMutableSchema()
+			mutSchema.SchemaDescriptor = *protoutil.Clone(t.Schema).(*descpb.SchemaDescriptor)
+			mut = mutSchema
+		} else {
+			mutBuilder = schemadesc.NewBuilder(t.Schema)
+			mut = mutBuilder.BuildCreatedMutable()
+		}
+	case *descpb.Descriptor_Function:
+		t.Function.ReplicatedPCRVersion = t.Function.Version
+		t.Function.Version = 1
+		var mutBuilder funcdesc.FunctionDescriptorBuilder
+		if existingRawBytes != nil {
+			t.Function.Version = existingDesc.GetVersion()
+			mutBuilder = existingDesc.NewBuilder().(funcdesc.FunctionDescriptorBuilder)
+			mutFunction := mutBuilder.BuildExistingMutableFunction()
+			mutFunction.FunctionDescriptor = *protoutil.Clone(t.Function).(*descpb.FunctionDescriptor)
+			mut = mutFunction
+		} else {
+			mutBuilder = funcdesc.NewBuilder(t.Function)
+			mut = mutBuilder.BuildCreatedMutable()
+		}
+	case *descpb.Descriptor_Type:
+		t.Type.ReplicatedPCRVersion = t.Type.Version
+		t.Type.Version = 1
+		var mutBuilder typedesc.TypeDescriptorBuilder
+		if existingRawBytes != nil {
+			t.Type.Version = existingDesc.GetVersion()
+			mutBuilder = existingDesc.NewBuilder().(typedesc.TypeDescriptorBuilder)
+			mutType := mutBuilder.BuildExistingMutableType()
+			mutType.TypeDescriptor = *protoutil.Clone(t.Type).(*descpb.TypeDescriptor)
+			mut = mutType
+		} else {
+			mutBuilder = typedesc.NewBuilder(t.Type)
+			mut = mutBuilder.BuildCreatedMutable()
+		}
+	default:
+		return nil, errors.AssertionFailedf("unknown descriptor type: %T", t)
+	}
+	return mut, nil
 }
 
 // shouldSetupForReader determines if a descriptor should be setup
@@ -249,4 +312,20 @@ func getCatalogForTenantAsOf(
 		return nil
 	})
 	return all, err
+}
+
+// maybeBlockSchemaChangesOnSystemDatabase blocks schema changes on the system
+// database.
+func maybeBlockSchemaChangesOnSystemDatabase(
+	ctx context.Context, txn descs.Txn, ba *kv.Batch,
+) error {
+	systemDatabase, err := txn.Descriptors().MutableByID(txn.KV()).Database(ctx, keys.SystemDatabaseID)
+	if err != nil {
+		return err
+	}
+	if systemDatabase.ReplicatedPCRVersion != 0 {
+		return nil
+	}
+	systemDatabase.ReplicatedPCRVersion = 1
+	return txn.Descriptors().WriteDescToBatch(ctx, true, systemDatabase, ba)
 }
