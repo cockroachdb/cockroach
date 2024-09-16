@@ -12,7 +12,8 @@ log-level none
 ok
 
 # Start with two nodes, but the config already has a third.
-add-nodes 2 voters=(1,2,3) index=10
+# We set store-liveness-nodes=3 because we add 3 voters despite having 2 nodes.
+add-nodes 2 voters=(1,2,3) index=10 store-liveness-nodes=3
 ----
 ok
 
@@ -47,7 +48,9 @@ status 1
 
 # Add the node that will receive a snapshot (it has no state at all, does not
 # even have a config).
-add-nodes 1
+# We set store-liveness-nodes=0 because we already added a third
+# store-liveness-node earlier.
+add-nodes 1 store-liveness-nodes=0
 ----
 INFO 3 switched to configuration voters=()
 INFO 3 became follower at term 0
