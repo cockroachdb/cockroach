@@ -61,6 +61,35 @@ func (st *FortificationTracker) Reset() {
 	// down.
 }
 
+// IsFortifiedBy returns whether the follower fortifies the leader or not.
+// If the follower's store doesn't support the leader's store in the store
+// liveness fabric, then both isSupported and isFortified will be false.
+// If isFortified is true, it implies that isSupported is also true.
+func (st *FortificationTracker) IsFortifiedBy(id pb.PeerID) (isSupported bool, isFortified bool) {
+	supportEpoch, curExp := st.storeLiveness.SupportFrom(id)
+	if st.storeLiveness.SupportExpired(curExp) {
+		return false, false
+	}
+
+	// At this point we know that the follower's store is providing support
+	// at the store liveness fabric.
+	fortificationEpoch, exist := st.fortification[id]
+	if !exist {
+		// We don't know that the follower is fortified.
+		return true, false
+	}
+
+	// NB: We can't assert that supportEpoch <= fortificationEpoch because there
+	// may be a race between a successful MsgFortifyLeaderResp and the store
+	// liveness heartbeat response that lets the leader know the follower's store
+	// is supporting the leader's store at the epoch in the MsgFortifyLeaderResp
+	// message.
+	if fortificationEpoch == supportEpoch {
+		return true, true
+	}
+	return true, false
+}
+
 // LeadSupportUntil returns the timestamp until which the leader is guaranteed
 // fortification until based on the fortification being tracked for it by its
 // peers.
