@@ -25,6 +25,13 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		panic(err)
 	}
 
+	// Fall back to the legacy schema changer if this is a YAML config (deprecated).
+	// Block from using YAML config unless we are discarding a YAML config.
+	if n.YAMLConfig != nil && !n.Discard {
+		panic(scerrors.NotImplementedErrorf(n,
+			"YAML config is deprecated and not supported in the declarative schema changer"))
+	}
+
 	// TODO(annie): implement complete support for CONFIGURE ZONE. This currently
 	// Supports:
 	// - Database
@@ -38,14 +45,8 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		panic(err)
 	}
 
-	// Fall back to the legacy schema changer if this is a YAML config (deprecated).
-	// Block from using YAML config unless we are discarding a YAML config.
-	if n.YAMLConfig != nil && !n.Discard {
-		panic(scerrors.NotImplementedErrorf(n,
-			"YAML config is deprecated and not supported in the declarative schema changer"))
-	}
-
 	zs := n.ZoneSpecifier
+
 	if err := zco.checkPrivilegeForSetZoneConfig(b, zs); err != nil {
 		panic(err)
 	}
@@ -117,6 +118,7 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 		return nil, scerrors.NotImplementedErrorf(n, "zone configurations on partitions "+
 			"and system ranges are not supported in the DSC")
 	}
+
 	tblName := zs.TableOrIndex.Table.ToUnresolvedObjectName()
 	elems := b.ResolvePhysicalTable(tblName, ResolveParams{})
 	panicIfSchemaChangeIsDisallowed(elems, n)
@@ -143,9 +145,12 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 		return &tzo, nil
 	}
 
-	// We are an index object.
-	if targetsIndex {
-		return &indexZoneConfigObj{tableZoneConfigObj: tzo}, nil
+	izo := indexZoneConfigObj{tableZoneConfigObj: tzo}
+	// We are an index object. Determine the index ID and fill this
+	// information out in our zoneConfigObject.
+	izo.fillIndexFromZoneSpecifier(b, n.ZoneSpecifier)
+	if targetsIndex && !n.TargetsPartition() {
+		return &izo, nil
 	}
 
 	return nil, errors.AssertionFailedf("unexpected zone config object")
