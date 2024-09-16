@@ -165,7 +165,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 	return &setZoneConfigNode{
 		stmt:          n,
 		zoneSpecifier: n.ZoneSpecifier,
-		allIndexes:    n.AllIndexes,
+		allIndexes:    n.ZoneSpecifier.StarIndex,
 		yamlConfig:    yamlConfig,
 		options:       options,
 		setDefault:    n.SetDefault,

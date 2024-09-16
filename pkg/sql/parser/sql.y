@@ -2686,8 +2686,8 @@ alter_zone_partition_stmt:
     s.ZoneSpecifier = tree.ZoneSpecifier{
        TableOrIndex: tree.TableIndexName{Table: name},
        Partition: tree.Name($3),
+       StarIndex: true,
     }
-    s.AllIndexes = true
     $$.val = s
   }
 | ALTER PARTITION partition_name OF TABLE table_name '@' error
