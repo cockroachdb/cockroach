@@ -46,6 +46,7 @@ func TestReaderCatalog(t *testing.T) {
 	})
 	require.NoError(t, err)
 	srcConn := srcTenant.SQLConn(t)
+	srcRunner := sqlutils.MakeSQLRunner(srcConn)
 	destConn := destTenant.SQLConn(t)
 
 	ddlToExec := []string{
@@ -64,36 +65,85 @@ func TestReaderCatalog(t *testing.T) {
 		"CREATE TABLE t2(n int);",
 	}
 	for _, ddl := range ddlToExec {
-		_, err = srcConn.Exec(ddl)
-		require.NoError(t, err)
+		srcRunner.Exec(t, ddl)
 	}
 
 	now := ts.Clock().Now()
 	idb := destTenant.InternalDB().(*sql.InternalDB)
 	require.NoError(t, replication.SetupOrAdvanceStandbyReaderCatalog(ctx, serverutils.TestTenantID(), now, idb, destTenant.ClusterSettings()))
 
-	srcRunner := sqlutils.MakeSQLRunner(srcConn)
 	destRunner := sqlutils.MakeSQLRunner(destConn)
 
-	compareConn := func(query string) {
+	check := func(query string, isEqual bool) {
 		srcRes := srcRunner.QueryStr(t, fmt.Sprintf("SELECT * FROM (%s) AS OF SYSTEM TIME %s", query, now.AsOfSystemTime()))
 		destRes := destRunner.QueryStr(t, query)
-		require.Equal(t, srcRes, destRes)
+		if isEqual {
+			require.Equal(t, srcRes, destRes)
+		} else {
+			require.NotEqualValues(t, srcRes, destRes)
+		}
+	}
+
+	compareEqual := func(query string) {
+		check(query, true)
 	}
 
 	// Validate tables and views match in the catalog reader
-	compareConn("SELECT * FROM t1 ORDER BY n")
-	compareConn("SELECT * FROM v1 ORDER BY 1")
-	compareConn("SELECT * FROM t2 ORDER BY n")
+	compareEqual("SELECT * FROM t1 ORDER BY n")
+	compareEqual("SELECT * FROM v1 ORDER BY 1")
+	compareEqual("SELECT * FROM t2 ORDER BY n")
 
 	// Validate that system tables are synced
-	compareConn("SELECT * FROM system.users")
-	compareConn("SELECT * FROM system.table_statistics")
-	compareConn("SELECT * FROM system.role_options")
-	compareConn("SELECT * FROM system.database_role_settings")
+	compareEqual("SELECT * FROM system.users")
+	compareEqual("SELECT * FROM system.table_statistics")
+	compareEqual("SELECT * FROM system.role_options")
+	compareEqual("SELECT * FROM system.database_role_settings")
 
 	// Validate that sequences can be selected.
-	compareConn("SELECT * FROM sq1")
+	compareEqual("SELECT * FROM sq1")
+
+	// Modify the schema next in the src tenant.
+	ddlToExec = []string{
+		"INSERT INTO t1(val) VALUES('open');",
+		"INSERT INTO t1(val) VALUES('closed');",
+		"INSERT INTO t1(val) VALUES('inactive');",
+		"CREATE USER roacher2 WITH CREATEROLE;",
+		"GRANT ADMIN TO roacher2;",
+		"ALTER USER roacher2 SET timezone='America/New_York';",
+		"CREATE TABLE t4(n int)",
+		"INSERT INTO t4 VALUES (32)",
+	}
+	for _, ddl := range ddlToExec {
+		srcRunner.Exec(t, ddl)
+	}
+
+	// Validate that system tables are synced at the old timestamp.
+	compareEqual("SELECT * FROM t1 ORDER BY n")
+	compareEqual("SELECT * FROM v1 ORDER BY 1")
+	compareEqual("SELECT * FROM system.users")
+	compareEqual("SELECT * FROM system.table_statistics")
+	compareEqual("SELECT * FROM system.role_options")
+	compareEqual("SELECT * FROM system.database_role_settings")
+
+	now = ts.Clock().Now()
+	// Validate that system tables are not matching with new timestamps.
+	check("SELECT * FROM t1 ORDER BY n", false)
+	check("SELECT * FROM v1 ORDER BY 1", false)
+	check("SELECT * FROM system.users", false)
+	check("SELECT * FROM system.role_options", false)
+	check("SELECT * FROM system.database_role_settings", false)
+
+	// Move the timestamp up on the reader catalog, and confirm that everything matches
+	require.NoError(t, replication.SetupOrAdvanceStandbyReaderCatalog(ctx, serverutils.TestTenantID(), now, idb, destTenant.ClusterSettings()))
+
+	// Validate that system tables are synced and the new object shows.
+	compareEqual("SELECT * FROM t1 ORDER BY n")
+	compareEqual("SELECT * FROM v1 ORDER BY 1")
+	compareEqual("SELECT * FROM system.users")
+	compareEqual("SELECT * FROM system.table_statistics")
+	compareEqual("SELECT * FROM system.role_options")
+	compareEqual("SELECT * FROM system.database_role_settings")
+	compareEqual("SELECT * FROM t4 ORDER BY n")
 
 	// Validate that sequence operations are blocked.
 	destRunner.ExpectErr(t, "cannot execute nextval\\(\\) in a read-only transaction", "SELECT nextval('sq1')")
@@ -112,18 +162,29 @@ func TestReaderCatalog(t *testing.T) {
 		require.NoError(t, err)
 	}
 	// Confirm that everything matches at the old timestamp.
-	compareConn("SELECT * FROM t1 ORDER BY n")
-	compareConn("SELECT * FROM v1 ORDER BY 1")
-	compareConn("SELECT * FROM t2 ORDER BY n")
+	compareEqual("SELECT * FROM t1 ORDER BY n")
+	compareEqual("SELECT * FROM v1 ORDER BY 1")
+	compareEqual("SELECT * FROM t2 ORDER BY n")
 
 	// Advance the timestamp.
 	now = ts.Clock().Now()
 	require.NoError(t, replication.SetupOrAdvanceStandbyReaderCatalog(ctx, serverutils.TestTenantID(), now, idb, destTenant.ClusterSettings()))
 
 	// Confirm everything matches again.
-	compareConn("SELECT * FROM t1 ORDER BY n")
-	compareConn("SELECT * FROM v1 ORDER BY 1")
-	compareConn("SELECT * FROM t2 ORDER BY j")
+	compareEqual("SELECT * FROM t1 ORDER BY n")
+	compareEqual("SELECT * FROM v1 ORDER BY 1")
+	compareEqual("SELECT * FROM t2 ORDER BY j")
+
+	// Validate that schema changes are blocked.
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE SCHEMA sc1")
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE DATABASE db2")
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE SEQUENCE sq4")
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE VIEW v3 AS (SELECT n FROM t1)")
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE TABLE t4 AS (SELECT n FROM t1)")
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER TABLE t1 ADD COLUMN abc int")
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER SEQUENCE sq1 RENAME TO sq4")
+	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER TYPE status ADD VALUE 'newval' ")
+
 }
 
 func TestMain(m *testing.M) {
