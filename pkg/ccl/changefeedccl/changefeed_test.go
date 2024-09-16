@@ -1392,6 +1392,63 @@ func TestChangefeedLaggingRangesMetrics(t *testing.T) {
 	cdcTest(t, testFn, feedTestNoTenants, feedTestEnterpriseSinks)
 }
 
+func TestChangefeedTotalRangesMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
+		defaultSLI, err := metrics.getSLIMetrics(defaultSLIScope)
+		require.NoError(t, err)
+		totalRanges := defaultSLI.TotalRanges
+
+		// Total ranges should start at zero.
+		require.Zero(t, totalRanges.Value())
+
+		assertTotalRangesPredicate := func(pred func(int64) bool) (total int64) {
+			testutils.SucceedsSoon(t, func() error {
+				total = totalRanges.Value()
+				if pred(total) {
+					return nil
+				}
+				return errors.Newf("total ranges predicate not met, found %d ranges", total)
+			})
+			return total
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		// We expect at least one range after starting a changefeed.
+		sqlDB.Exec(t, "CREATE TABLE foo (x int)")
+		fooFeed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH lagging_ranges_polling_interval='25ms'")
+		assertTotalRangesPredicate(func(i int64) bool { return i > 0 })
+
+		// We expect total ranges to be zero again after pausing the changefeed.
+		require.NoError(t, fooFeed.(cdctest.EnterpriseTestFeed).Pause())
+		assertTotalRangesPredicate(func(i int64) bool { return i == 0 })
+
+		// We once again expect at least one range after resuming the changefeed.
+		require.NoError(t, fooFeed.(cdctest.EnterpriseTestFeed).Resume())
+		prevTotal := assertTotalRangesPredicate(func(i int64) bool { return i > 0 })
+
+		// We expect even more ranges after starting another changefeed.
+		sqlDB.Exec(t, "CREATE TABLE bar (x int)")
+		barFeed := feed(t, f, "CREATE CHANGEFEED FOR bar WITH lagging_ranges_polling_interval='25ms'")
+		prevTotal = assertTotalRangesPredicate(func(i int64) bool { return i > prevTotal })
+
+		// We expect there to be still some ranges after cancelling one of the changefeeds.
+		require.NoError(t, fooFeed.Close())
+		assertTotalRangesPredicate(func(i int64) bool { return i < prevTotal && i > 0 })
+
+		// We expect there to be no ranges left after cancelling all changefeeds.
+		require.NoError(t, barFeed.Close())
+		assertTotalRangesPredicate(func(i int64) bool { return i == 0 })
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
 func TestChangefeedBackfillObservability(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
