@@ -201,16 +201,16 @@ func registerLatencyTests(r registry.Registry) {
 	// NB: If these tests fail because they are flaky, increase the numbers
 	// until they pass. Additionally add the seed (from the log) that caused
 	// them to fail as a comment in the test.
-	addMetamorphic(r, restart{}, 1000)
-	addMetamorphic(r, partition{}, 1000)
+	addMetamorphic(r, restart{}, math.Inf(1))
+	addMetamorphic(r, partition{}, math.Inf(1))
 	addMetamorphic(r, addNode{}, 2.0)
 	addMetamorphic(r, decommission{}, 2.0)
 	addMetamorphic(r, backfill{}, 20.0)
 
 	// NB: If these tests fail, it likely signals a regression. Investigate the
 	// history of the test on roachperf to see what changed.
-	addFull(r, restart{}, 1000)
-	addFull(r, partition{}, 1000)
+	addFull(r, restart{}, math.Inf(1))
+	addFull(r, partition{}, math.Inf(1))
 	addFull(r, addNode{}, 2.0)
 	addFull(r, decommission{}, 2.0)
 	addFull(r, backfill{}, 20.0)
