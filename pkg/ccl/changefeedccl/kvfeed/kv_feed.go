@@ -39,10 +39,10 @@ import (
 // the caller with information about the state of the kvfeed.
 type MonitoringConfig struct {
 	// LaggingRangesCallback is called periodically with the number of lagging ranges
-	// in the kvfeed.
-	LaggingRangesCallback func(int64)
+	// and total ranges watched by the kvfeed.
+	LaggingRangesCallback func(lagging int64, total int64)
 	// LaggingRangesPollingInterval is how often the kv feed will poll for
-	// lagging ranges.
+	// lagging ranges and total ranges.
 	LaggingRangesPollingInterval time.Duration
 	// LaggingRangesThreshold is how far behind a range must be to be considered
 	// lagging.
@@ -176,15 +176,15 @@ func Run(ctx context.Context, cfg Config) error {
 
 func startLaggingRangesObserver(
 	g ctxgroup.Group,
-	updateLaggingRanges func(int64),
+	updateLaggingRanges func(lagging int64, total int64),
 	pollingInterval time.Duration,
 	threshold time.Duration,
-) func(fn kvcoord.ForEachRangeFn) {
+) kvcoord.RangeObserver {
 	return func(fn kvcoord.ForEachRangeFn) {
 		g.GoCtx(func(ctx context.Context) error {
 			// Reset metrics on shutdown.
 			defer func() {
-				updateLaggingRanges(0)
+				updateLaggingRanges(0 /* lagging */, 0 /* total */)
 			}()
 
 			var timer timeutil.Timer
@@ -198,9 +198,11 @@ func startLaggingRangesObserver(
 				case <-timer.C:
 					timer.Read = true
 
-					count := int64(0)
+					var laggingCount, totalCount int64
 					thresholdTS := timeutil.Now().Add(-1 * threshold)
 					err := fn(func(rfCtx kvcoord.RangeFeedContext, feed kvcoord.PartialRangeFeed) error {
+						totalCount += 1
+
 						// The resolved timestamp of a range determines the timestamp which is caught up to.
 						// However, during catchup scans, this is not set. For catchup scans, we consider the
 						// time the partial rangefeed was created to be its resolved ts. Note that a range can
@@ -212,14 +214,14 @@ func startLaggingRangesObserver(
 						}
 
 						if ts.Less(hlc.Timestamp{WallTime: thresholdTS.UnixNano()}) {
-							count += 1
+							laggingCount += 1
 						}
 						return nil
 					})
 					if err != nil {
 						return err
 					}
-					updateLaggingRanges(count)
+					updateLaggingRanges(laggingCount, totalCount)
 					timer.Reset(pollingInterval)
 				}
 			}
@@ -251,7 +253,7 @@ type kvFeed struct {
 	codec               keys.SQLCodec
 
 	onBackfillCallback func() func()
-	rangeObserver      func(fn kvcoord.ForEachRangeFn)
+	rangeObserver      kvcoord.RangeObserver
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass
 	schemaChangePolicy changefeedbase.SchemaChangePolicy
 
