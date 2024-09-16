@@ -24,7 +24,7 @@ const (
 	// single batch from the system tables.
 	tableBatchSize = 20
 	// iterCols is the number of columns returned by the batch iterator.
-	iterCols = 9
+	iterCols = 10
 )
 
 const (
@@ -37,6 +37,7 @@ const (
 	columnCountIdx
 	indexCountIdx
 	spanStatsIdx
+	tableTypeIdx
 )
 
 type paginationKey struct {
@@ -57,6 +58,7 @@ type tableMetadataIterRow struct {
 	columnCount   int
 	indexCount    int
 	spanStatsJSON []byte
+	tableType     string
 }
 
 type tableMetadataBatchIterator struct {
@@ -130,7 +132,13 @@ SELECT t.id,
        schema_name.name,
        json_array_length(d -> 'table' -> 'columns') as columns,
        COALESCE(json_array_length(d -> 'table' -> 'indexes'), 0),
-       s.stats
+       s.stats,
+			 CASE
+			 		WHEN d->'table'->>'isMaterializedView' = 'true' THEN 'MATERIALIZED_VIEW'
+			 		WHEN d->'table'->>'viewQuery' IS NOT NULL THEN 'VIEW'
+			 		WHEN d->'table'->'sequenceOpts' IS NOT NULL THEN 'SEQUENCE'
+			 		ELSE 'TABLE'
+			 END as table_type
 FROM tables t
 LEFT JOIN span_stats s ON t.id = s.id
 LEFT JOIN system.namespace db_name ON t."parentID" = db_name.id
@@ -182,6 +190,7 @@ ORDER BY (t."parentID", t."parentSchemaID", t.name)
 				columnCount:   int(tree.MustBeDInt(row[columnCountIdx])),
 				indexCount:    int(tree.MustBeDInt(row[indexCountIdx])),
 				spanStatsJSON: []byte(tree.MustBeDJSON(row[spanStatsIdx]).JSON.String()),
+				tableType:     string(tree.MustBeDString(row[tableTypeIdx])),
 			})
 		}
 
