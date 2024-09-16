@@ -125,6 +125,7 @@ func (ag *aggregatorBase) init(
 	// the functions which need to be fed values.
 	ag.inputTypes = input.OutputTypes()
 	semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
+	pAlloc := execagg.MakeParamTypesAllocator(spec.Aggregations)
 	for i, aggInfo := range spec.Aggregations {
 		if aggInfo.FilterColIdx != nil {
 			col := *aggInfo.FilterColIdx
@@ -139,7 +140,7 @@ func (ag *aggregatorBase) init(
 			}
 		}
 		constructor, arguments, outputType, err := execagg.GetAggregateConstructor(
-			ctx, ag.evalCtx, semaCtx, &aggInfo, ag.inputTypes,
+			ctx, ag.evalCtx, semaCtx, &aggInfo, ag.inputTypes, &pAlloc,
 		)
 		if err != nil {
 			return err
