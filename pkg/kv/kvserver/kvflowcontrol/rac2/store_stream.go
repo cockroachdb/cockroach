@@ -61,7 +61,7 @@ func (p *StreamTokenCounterProvider) Eval(stream kvflowcontrol.Stream) *tokenCou
 		return t
 	}
 	t, _ := p.evalCounters.LoadOrStore(stream, newTokenCounter(
-		p.settings, p.clock, p.tokenMetrics.CounterMetrics[flowControlEvalMetricType]))
+		p.settings, p.clock, p.tokenMetrics.CounterMetrics[flowControlEvalMetricType], stream))
 	return t
 }
 
@@ -71,7 +71,7 @@ func (p *StreamTokenCounterProvider) Send(stream kvflowcontrol.Stream) *tokenCou
 		return t
 	}
 	t, _ := p.sendCounters.LoadOrStore(stream, newTokenCounter(
-		p.settings, p.clock, p.tokenMetrics.CounterMetrics[flowControlSendMetricType]))
+		p.settings, p.clock, p.tokenMetrics.CounterMetrics[flowControlSendMetricType], stream))
 	return t
 }
 

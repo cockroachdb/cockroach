@@ -176,6 +176,9 @@ type tokenCounter struct {
 	settings *cluster.Settings
 	clock    *hlc.Clock
 	metrics  *TokenCounterMetrics
+	// stream is the stream for which tokens are being adjusted, it is only used
+	// in logging.
+	stream kvflowcontrol.Stream
 
 	mu struct {
 		syncutil.RWMutex
@@ -186,12 +189,16 @@ type tokenCounter struct {
 
 // newTokenCounter creates a new TokenCounter.
 func newTokenCounter(
-	settings *cluster.Settings, clock *hlc.Clock, metrics *TokenCounterMetrics,
+	settings *cluster.Settings,
+	clock *hlc.Clock,
+	metrics *TokenCounterMetrics,
+	stream kvflowcontrol.Stream,
 ) *tokenCounter {
 	t := &tokenCounter{
 		settings: settings,
 		clock:    clock,
 		metrics:  metrics,
+		stream:   stream,
 	}
 	limit := tokensPerWorkClass{
 		regular: kvflowcontrol.Tokens(kvflowcontrol.RegularTokensPerStream.Get(&settings.SV)),
@@ -470,10 +477,21 @@ func (t *tokenCounter) adjust(
 	ctx context.Context, class admissionpb.WorkClass, delta kvflowcontrol.Tokens,
 ) {
 	now := t.clock.PhysicalTime()
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		t.adjustLocked(ctx, class, delta, now)
+	}()
 
-	t.adjustLocked(ctx, class, delta, now)
+	if log.V(2) {
+		func() {
+			t.mu.RLock()
+			defer t.mu.RUnlock()
+
+			log.Infof(ctx, "adjusted flow tokens (wc=%v stream=%v delta=%v): regular=%v elastic=%v",
+				class, t.stream, delta, t.tokensLocked(regular), t.tokensLocked(elastic))
+		}()
+	}
 }
 
 func (t *tokenCounter) adjustLocked(
