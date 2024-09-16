@@ -731,7 +731,8 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.Status("T5: validating results")
 	require.NoError(t, downloadProfiles(ctx, c, t.L(), t.ArtifactsDir()))
 
-	require.NoError(t, v.writePerfArtifacts(ctx, t.Name(), t.ArtifactsDir(), baselineStats, perturbationStats, afterStats))
+	require.NoError(t, v.writePerfArtifacts(ctx, t.Name(), t.PerfArtifactsDir(), baselineStats, perturbationStats,
+		afterStats))
 
 	t.L().Printf("validating stats during the perturbation")
 	duringOK := isAcceptableChange(t.L(), baselineStats, perturbationStats, v.acceptableChange)
