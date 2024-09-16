@@ -702,13 +702,39 @@ func (r *raft) sendHeartbeat(to pb.PeerID) {
 	pr.MaybeUpdateSentCommit(commit)
 }
 
-// sendFortify sends a fortification RPC to the given peer.
-func (r *raft) sendFortify(to pb.PeerID) {
+// maybeSendFortify sends a fortification RPC to the given peer if it isn't
+// fortified but the peer's store supports the leader's store in StoreLiveness.
+func (r *raft) maybeSendFortify(id pb.PeerID) {
 	if !r.storeLiveness.SupportFromEnabled() {
 		// The underlying store liveness fabric hasn't been enabled to allow the
 		// leader to request support from peers. No-op.
 		return
 	}
+	curEpoch, _, ok := r.storeLiveness.SupportFrom(id)
+	if !ok {
+		// If the follower isn't providing active store liveness support to the
+		// leader, or it is but the leader isn't hearing about it, we don't need to
+		// send a fortify message. We will attempt to fortify the follower once
+		// store liveness support is established.
+		if id == r.id {
+			// Log if the leader doesn't support itself in the liveness fabric. This
+			// is possible if the leader is affected by disk stalls.
+			r.logger.Infof(
+				"%x leader at term %d does not support itself in the liveness fabric", r.id, r.Term,
+			)
+		}
+		return
+	}
+
+	if !r.supportTracker.IsSupportedBy(id, curEpoch) {
+		// Only send a fortify message if we don't know that the follower supports
+		// us at the current epoch.
+		r.sendFortify(id)
+	}
+}
+
+// sendFortify sends a fortification RPC to the given peer.
+func (r *raft) sendFortify(to pb.PeerID) {
 	if to == r.id {
 		// We handle the case where the leader is trying to fortify itself specially.
 		// Doing so avoids a self-addressed message.
@@ -723,10 +749,6 @@ func (r *raft) sendFortify(to pb.PeerID) {
 			// discrimination for who is providing support (itself vs. other
 			// follower).
 			r.send(pb.Message{To: r.id, Type: pb.MsgFortifyLeaderResp, LeadEpoch: epoch})
-		} else {
-			r.logger.Infof(
-				"%x leader at term %d does not support itself in the liveness fabric", r.id, r.Term,
-			)
 		}
 		return
 	}
@@ -758,13 +780,15 @@ func (r *raft) bcastHeartbeat() {
 	})
 }
 
-// bcastFortify sends an RPC to fortify the leader to all peers (including the
-// leader itself).
+// bcastFortify attempts to send an RPC to fortify the leader to all the peers
+// (including the leader itself) whose stores are currently providing store
+// liveness support to the leader's store but who have not provided
+// fortification support to the raft leader at the corresponding store liveness
+// epoch.
 func (r *raft) bcastFortify() {
 	assertTrue(r.state == StateLeader, "only leaders can fortify")
-
 	r.trk.Visit(func(id pb.PeerID, _ *tracker.Progress) {
-		r.sendFortify(id)
+		r.maybeSendFortify(id)
 	})
 }
 
