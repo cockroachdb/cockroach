@@ -329,6 +329,9 @@ type Replica struct {
 		bytesAccount logstore.BytesAccount
 
 		flowControlLevel replica_rac2.EnabledWhenLeaderLevel
+
+		// Scratch for populating RaftEvent for flowControlV2.
+		msgAppScratchForFlowControl map[roachpb.ReplicaID][]raftpb.Message
 	}
 
 	// localMsgs contains a collection of raftpb.Message that target the local

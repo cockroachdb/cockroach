@@ -114,25 +114,85 @@ type FollowerStateInfo struct {
 // RaftEvent carries a RACv2-relevant subset of raft state sent to storage.
 type RaftEvent struct {
 	// Term is the leader term on whose behalf the entries or snapshot are
-	// written. Note that it may be behind the raft node's current term.
+	// written. Note that it may be behind the raft node's current term. Not
+	// populated if Entries is empty and Snap is nil.
 	Term uint64
 	// Snap contains the snapshot to be written to storage.
 	Snap *raftpb.Snapshot
 	// Entries contains the log entries to be written to storage.
 	Entries []raftpb.Entry
+	// MsgApps to followers. Only populated on the leader, when operating in
+	// MsgAppPush mode. This is informational, for bookkeeping in the callee.
+	//
+	// These MsgApps can be for entries in Entries, or for earlier ones.
+	// Typically, the MsgApps are ordered by entry index, and are a sequence of
+	// dense indices, starting at the previously observed (during the previous
+	// RaftEvent) value of FollowerStateInfo.Next.
+	//
+	// But there can be exceptions. Indices can regress (on leader term change
+	// or MsgAppResp reject) or jump (on receiving a MsgAppResp that indicates
+	// that the follower is ahead of what the leader thinks). It is also
+	// possible for there to be state transitions from StateReplicate =>
+	// StateProbe/StateSnapshot => StateReplicate, between two consecutive
+	// RaftEvents, i.e., RangeController would not observe the intermediate
+	// state. Such missed transitions can also cause regressions or forward
+	// jumps. Also, MsgApps can correspond to an older leader term, or prior to
+	// the state transition to StateProbe/StateReplicate.
+	//
+	// Due to these exceptions, we only expect a single invariant: if the leader
+	// term has not changed from the previous RaftEvent, all the MsgApps will be
+	// from this leader term.
+	//
+	// A key can map to an empty slice, in order to reuse already allocated
+	// slice memory.
+	MsgApps map[roachpb.ReplicaID][]raftpb.Message
 }
 
-// RaftEventFromMsgStorageAppend constructs a RaftEvent from the given raft
-// MsgStorageAppend message. Returns zero value if the message is empty.
-func RaftEventFromMsgStorageAppend(msg raftpb.Message) RaftEvent {
-	if msg.Type != raftpb.MsgStorageAppend {
-		return RaftEvent{}
+// RaftEventFromMsgStorageAppendAndMsgApps constructs a RaftEvent from the
+// given raft MsgStorageAppend message, and outboundMsgs. The replicaID is the
+// local replica. The outboundMsgs will only contain MsgApps on the leader.
+// msgAppScratch is used as the map in RaftEvent.MsgApps. Returns the zero
+// value if the MsgStorageAppend is empty and there are no MsgApps.
+func RaftEventFromMsgStorageAppendAndMsgApps(
+	replicaID roachpb.ReplicaID,
+	appendMsg raftpb.Message,
+	outboundMsgs []raftpb.Message,
+	msgAppScratch map[roachpb.ReplicaID][]raftpb.Message,
+) RaftEvent {
+	var event RaftEvent
+	if appendMsg.Type == raftpb.MsgStorageAppend {
+		event = RaftEvent{
+			Term:    appendMsg.LogTerm,
+			Snap:    appendMsg.Snapshot,
+			Entries: appendMsg.Entries,
+		}
 	}
-	return RaftEvent{
-		Term:    msg.LogTerm,
-		Snap:    msg.Snapshot,
-		Entries: msg.Entries,
+	if len(outboundMsgs) == 0 {
+		return event
 	}
+	// Clear the slices, to reuse slice allocations.
+	for k := range msgAppScratch {
+		msgAppScratch[k] = msgAppScratch[k][:0]
+	}
+	if len(msgAppScratch) > 10 {
+		// Clear all memory, in case we have a long-lived leader while other
+		// replicas keep changing.
+		clear(msgAppScratch)
+	}
+	added := false
+	for _, msg := range outboundMsgs {
+		if msg.Type != raftpb.MsgApp || roachpb.ReplicaID(msg.To) == replicaID {
+			continue
+		}
+		added = true
+		msgs := msgAppScratch[roachpb.ReplicaID(msg.To)]
+		msgs = append(msgs, msg)
+		msgAppScratch[roachpb.ReplicaID(msg.To)] = msgs
+	}
+	if added {
+		event.MsgApps = msgAppScratch
+	}
+	return event
 }
 
 // NoReplicaID is a special value of roachpb.ReplicaID, which can never be a

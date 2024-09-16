@@ -11,8 +11,10 @@
 package rac2
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1090,4 +1092,81 @@ func testingFirst(args ...interface{}) interface{} {
 		return args[0]
 	}
 	return nil
+}
+
+func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
+	// raftpb.Entry and raftpb.Message are only partially populated below, which
+	// could be improved in the future.
+	appendMsg := raftpb.Message{
+		Type:     raftpb.MsgStorageAppend,
+		LogTerm:  10,
+		Snapshot: &raftpb.Snapshot{},
+		Entries: []raftpb.Entry{
+			{
+				Term: 9,
+			},
+		},
+	}
+	outboundMsgs := []raftpb.Message{
+		{
+			Type: raftpb.MsgApp,
+			To:   20,
+			Entries: []raftpb.Entry{
+				{
+					Term: 9,
+				},
+			},
+		},
+		{
+			Type: raftpb.MsgBeat,
+			To:   22,
+		},
+		{
+			Type: raftpb.MsgApp,
+			To:   21,
+		},
+		{
+			Type: raftpb.MsgApp,
+			To:   20,
+			Entries: []raftpb.Entry{
+				{
+					Term: 10,
+				},
+			},
+		},
+	}
+	msgAppScratch := map[roachpb.ReplicaID][]raftpb.Message{}
+
+	// No outbound msgs.
+	event := RaftEventFromMsgStorageAppendAndMsgApps(20, appendMsg, nil, msgAppScratch)
+	require.Equal(t, uint64(10), event.Term)
+	require.Equal(t, appendMsg.Snapshot, event.Snap)
+	require.Equal(t, appendMsg.Entries, event.Entries)
+	require.Nil(t, event.MsgApps)
+	// Zero value.
+	event = RaftEventFromMsgStorageAppendAndMsgApps(20, raftpb.Message{}, nil, msgAppScratch)
+	require.Equal(t, RaftEvent{}, event)
+	// Outbound msgs contains no MsgApps for a follower, since the only MsgApp
+	// is for the leader.
+	event = RaftEventFromMsgStorageAppendAndMsgApps(20, appendMsg, outboundMsgs[:2], msgAppScratch)
+	require.Equal(t, uint64(10), event.Term)
+	require.Equal(t, appendMsg.Snapshot, event.Snap)
+	require.Equal(t, appendMsg.Entries, event.Entries)
+	require.Nil(t, event.MsgApps)
+	// Outbound msgs contains MsgApps for followers. We call this twice to
+	// ensure msgAppScratch is cleared before reuse.
+	for i := 0; i < 2; i++ {
+		event = RaftEventFromMsgStorageAppendAndMsgApps(19, appendMsg, outboundMsgs, msgAppScratch)
+		require.Equal(t, uint64(10), event.Term)
+		require.Equal(t, appendMsg.Snapshot, event.Snap)
+		require.Equal(t, appendMsg.Entries, event.Entries)
+		var msgApps []raftpb.Message
+		for _, v := range msgAppScratch {
+			msgApps = append(msgApps, v...)
+		}
+		slices.SortStableFunc(msgApps, func(a, b raftpb.Message) int {
+			return cmp.Compare(a.To, b.To)
+		})
+		require.Equal(t, []raftpb.Message{outboundMsgs[0], outboundMsgs[3], outboundMsgs[2]}, msgApps)
+	}
 }
