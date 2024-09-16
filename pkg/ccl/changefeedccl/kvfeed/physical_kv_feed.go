@@ -31,7 +31,7 @@ type rangeFeedConfig struct {
 	Spans         []kvcoord.SpanTimePair
 	WithDiff      bool
 	WithFiltering bool
-	RangeObserver func(fn kvcoord.ForEachRangeFn)
+	RangeObserver kvcoord.RangeObserver
 	Knobs         TestingKnobs
 	UseMux        bool
 }
