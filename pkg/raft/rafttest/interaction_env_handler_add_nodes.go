@@ -136,7 +136,6 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 		cfg := cfg // fork the config stub
 		cfg.ID, cfg.Storage = id, s
 
-		env.Fabric.addNode()
 		cfg.StoreLiveness = newStoreLiveness(env.Fabric, id)
 
 		// If the node creating command hasn't specified the CRDBVersion, use the
@@ -172,6 +171,16 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 			History: []pb.Snapshot{snap},
 		}
 		env.Nodes = append(env.Nodes, node)
+	}
+
+	// The potential store nodes is the max between the number of nodes in the env
+	// and the sum of voters and learners. Add the difference between the
+	// potential nodes and the current store nodes.
+	allPotential := max(len(env.Nodes),
+		len(snap.Metadata.ConfState.Voters)+len(snap.Metadata.ConfState.Learners))
+	curNodesCount := len(env.Fabric.state) - 1 // 1-indexed stores
+	for rem := allPotential - curNodesCount; rem > 0; rem-- {
+		env.Fabric.addNode()
 	}
 	return nil
 }
