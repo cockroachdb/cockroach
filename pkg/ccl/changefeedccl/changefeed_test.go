@@ -1392,6 +1392,60 @@ func TestChangefeedLaggingRangesMetrics(t *testing.T) {
 	cdcTest(t, testFn, feedTestNoTenants, feedTestEnterpriseSinks)
 }
 
+func TestChangefeedTotalRangesMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
+		defaultSLI, err := metrics.getSLIMetrics(defaultSLIScope)
+		require.NoError(t, err)
+		totalRanges := defaultSLI.TotalRanges
+
+		// Total ranges should start at zero.
+		require.Zero(t, totalRanges.Value())
+
+		assertTotalRanges := func(expected int64) {
+			testutils.SucceedsSoon(t, func() error {
+				if actual := totalRanges.Value(); expected != actual {
+					return errors.Newf("expected total ranges to be %d, but got %d", expected, actual)
+				}
+				return nil
+			})
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, "CREATE TABLE foo (x int)")
+
+		// We expect one range after creating a changefeed on a single table.
+		fooFeed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH lagging_ranges_polling_interval='1s'")
+		assertTotalRanges(1)
+
+		// We expect total ranges to be zero again after pausing the changefeed.
+		require.NoError(t, fooFeed.(cdctest.EnterpriseTestFeed).Pause())
+		assertTotalRanges(0)
+
+		// We once again expect one range after resuming the changefeed.
+		require.NoError(t, fooFeed.(cdctest.EnterpriseTestFeed).Resume())
+		assertTotalRanges(1)
+
+		// We expect two ranges after starting another changefeed on a single table.
+		barFeed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH lagging_ranges_polling_interval='1s'")
+		assertTotalRanges(2)
+
+		// We expect there to still be one range after cancelling one of the changefeeds.
+		require.NoError(t, fooFeed.Close())
+		assertTotalRanges(1)
+
+		// We expect there to be no ranges left after cancelling the other changefeed.
+		require.NoError(t, barFeed.Close())
+		assertTotalRanges(0)
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
 func TestChangefeedBackfillObservability(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
