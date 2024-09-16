@@ -356,7 +356,7 @@ type Processor interface {
 	// snapshot or log entries batch. It can be called synchronously from
 	// OnLogSync or OnSnapSync handlers if the write batch is blocking, or
 	// asynchronously from OnLogSync.
-	SyncedLogStorage(ctx context.Context, mark rac2.LogMark, snap bool)
+	SyncedLogStorage(ctx context.Context, mark rac2.LogMark)
 	// AdmittedLogEntry is called when an entry is admitted. It can be called
 	// synchronously from within ACWorkQueue.Admit if admission is immediate.
 	AdmittedLogEntry(
@@ -758,6 +758,11 @@ func (p *processorImpl) createLeaderStateRaftMuLocked(
 // HandleRaftReadyRaftMuLocked implements Processor.
 func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.RaftEvent) {
 	p.opts.Replica.RaftMuAssertHeld()
+	// Register all snapshots / log appends without exception. If the replica is
+	// being destroyed, this should be a no-op, but there is no harm in
+	// registering the write just in case.
+	p.registerStorageAppendRaftMuLocked(ctx, e)
+
 	// Skip if the replica is not initialized or already destroyed.
 	if p.desc.replicas == nil || p.destroyed {
 		return
@@ -791,6 +796,8 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	if !p.isLeaderUsingV2ProcLocked() {
 		return
 	}
+	// NB: since we've registered the latest log/snapshot write (if any) above,
+	// our admitted vector is likely consistent with the latest leader term.
 	p.maybeSendAdmittedRaftMuLocked(ctx)
 	if rc := p.leader.rc; rc != nil {
 		if err := rc.HandleRaftEventRaftMuLocked(ctx, e); err != nil {
@@ -854,22 +861,24 @@ func (p *processorImpl) maybeSendAdmittedRaftMuLocked(ctx context.Context) {
 		}})
 }
 
-func (p *processorImpl) registerLogAppend(ctx context.Context, e rac2.RaftEvent) {
-	if len(e.Entries) == 0 {
-		return
+// registerStorageAppendRaftMuLocked registers the raft storage write with the
+// logTracker. All raft writes must be seen by this function.
+func (p *processorImpl) registerStorageAppendRaftMuLocked(ctx context.Context, e rac2.RaftEvent) {
+	// NB: snapshot must be handled first. If Ready contains both snapshot and
+	// entries, the entries are contiguous with the snapshot.
+	if snap := e.Snap; snap != nil {
+		mark := rac2.LogMark{Term: e.Term, Index: snap.Metadata.Index}
+		p.logTracker.snap(ctx, mark)
 	}
-	after := e.Entries[0].Index - 1
-	to := rac2.LogMark{Term: e.Term, Index: e.Entries[len(e.Entries)-1].Index}
-	p.logTracker.append(ctx, after, to)
+	if len(e.Entries) != 0 {
+		after := e.Entries[0].Index - 1
+		to := rac2.LogMark{Term: e.Term, Index: e.Entries[len(e.Entries)-1].Index}
+		p.logTracker.append(ctx, after, to)
+	}
 }
 
 // AdmitRaftEntriesRaftMuLocked implements Processor.
 func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2.RaftEvent) bool {
-	// Register all log appends without exception. If the replica is being
-	// destroyed, this should be a no-op, but there is no harm in registering the
-	// write just in case.
-	p.registerLogAppend(ctx, e)
-
 	// Return false only if we're not destroyed and not using V2.
 	if p.destroyed || !p.isLeaderUsingV2ProcLocked() {
 		return p.destroyed
@@ -1013,14 +1022,10 @@ func (p *processorImpl) SideChannelForPriorityOverrideAtFollowerRaftMuLocked(
 }
 
 // SyncedLogStorage implements Processor.
-func (p *processorImpl) SyncedLogStorage(ctx context.Context, mark rac2.LogMark, snap bool) {
-	if snap {
-		p.logTracker.snapSynced(ctx, mark)
-	} else {
-		p.logTracker.logSynced(ctx, mark)
-	}
+func (p *processorImpl) SyncedLogStorage(ctx context.Context, mark rac2.LogMark) {
 	// NB: storage syncs will trigger raft Ready processing, so we don't need to
 	// explicitly schedule it here like in AdmittedLogEntry.
+	p.logTracker.logSynced(ctx, mark)
 }
 
 // AdmittedLogEntry implements Processor.
