@@ -976,16 +976,29 @@ func shouldSkipValidatingConstraint(
 	return skip, err
 }
 
-// panicIfSchemaIsLocked panics if table's schema is locked.
-// It is used to prevent schema change stmts.
-func panicIfSchemaIsLocked(tableElements ElementResultSet) {
+// panicIfSchemaChangeIsDisallowed panics if a schema change is not allowed on
+// this table. A schema change is disallowed if one of the following is true:
+//   - The schema_locked table storage parameter is true, and this statement is
+//     not modifying the value of schema_locked.
+//   - The table is referenced by logical data replication jobs, and the statement
+//     is not in the allow list of LDR schema changes.
+func panicIfSchemaChangeIsDisallowed(tableElements ElementResultSet, n tree.Statement) {
 	_, _, schemaLocked := scpb.FindTableSchemaLocked(tableElements)
-	if schemaLocked != nil {
+	if schemaLocked != nil && !tree.IsSetOrResetSchemaLocked(n) {
 		_, _, ns := scpb.FindNamespace(tableElements)
 		if ns == nil {
 			panic(errors.AssertionFailedf("programming error: Namespace element not found"))
 		}
 		panic(sqlerrors.NewSchemaChangeOnLockedTableErr(ns.Name))
+	}
+
+	_, _, ldrJobIDs := scpb.FindLDRJobIDs(tableElements)
+	if ldrJobIDs != nil && len(ldrJobIDs.JobIDs) > 0 && !tree.IsAllowedLDRSchemaChange(n) {
+		_, _, ns := scpb.FindNamespace(tableElements)
+		if ns == nil {
+			panic(errors.AssertionFailedf("programming error: Namespace element not found"))
+		}
+		panic(sqlerrors.NewDisallowedSchemaChangeOnLDRTableErr(ns.Name, ldrJobIDs.JobIDs))
 	}
 }
 

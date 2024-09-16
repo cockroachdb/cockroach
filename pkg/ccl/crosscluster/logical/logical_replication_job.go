@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -612,8 +613,8 @@ func (r *logicalReplicationResumer) OnFailOrCancel(
 			if err != nil {
 				return err
 			}
-			td.LDRJobIDs = slices.DeleteFunc(td.LDRJobIDs, func(thisID int64) bool {
-				return thisID == int64(r.job.ID())
+			td.LDRJobIDs = slices.DeleteFunc(td.LDRJobIDs, func(thisID catpb.JobID) bool {
+				return thisID == r.job.ID()
 			})
 			if err := txn.Descriptors().WriteDescToBatch(ctx, true /* kvTrace */, td, b); err != nil {
 				return err

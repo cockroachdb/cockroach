@@ -38,12 +38,16 @@ import (
 )
 
 func alterTableAddConstraint(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddConstraint,
+	b BuildCtx,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	stmt tree.Statement,
+	t *tree.AlterTableAddConstraint,
 ) {
 	switch d := t.ConstraintDef.(type) {
 	case *tree.UniqueConstraintTableDef:
 		if d.PrimaryKey {
-			alterTableAddPrimaryKey(b, tn, tbl, t)
+			alterTableAddPrimaryKey(b, tn, tbl, stmt, t)
 		} else if d.WithoutIndex {
 			alterTableAddUniqueWithoutIndex(b, tn, tbl, t)
 		} else {
@@ -62,7 +66,7 @@ func alterTableAddConstraint(
 	case *tree.CheckConstraintTableDef:
 		alterTableAddCheck(b, tn, tbl, t)
 	case *tree.ForeignKeyConstraintTableDef:
-		alterTableAddForeignKey(b, tn, tbl, t)
+		alterTableAddForeignKey(b, tn, tbl, stmt, t)
 	}
 }
 
@@ -70,7 +74,11 @@ func alterTableAddConstraint(
 // `ALTER TABLE ... ADD PRIMARY KEY`.
 // It assumes `t` is such a command.
 func alterTableAddPrimaryKey(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddConstraint,
+	b BuildCtx,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	stmt tree.Statement,
+	t *tree.AlterTableAddConstraint,
 ) {
 	if t.ValidationBehavior == tree.ValidationSkip {
 		panic(sqlerrors.NewUnsupportedUnvalidatedConstraintError(catconstants.ConstraintTypePK))
@@ -84,7 +92,7 @@ func alterTableAddPrimaryKey(
 	) == nil {
 		panic(scerrors.NotImplementedError(t))
 	}
-	alterPrimaryKey(b, tn, tbl, alterPrimaryKeySpec{
+	alterPrimaryKey(b, tn, tbl, stmt, alterPrimaryKeySpec{
 		n:             t,
 		Columns:       d.Columns,
 		Sharded:       d.Sharded,
@@ -192,7 +200,11 @@ func getIndexIDForValidationForConstraint(b BuildCtx, tableID catid.DescID) (ret
 // `ALTER TABLE ... ADD FOREIGN KEY ... [NOT VALID]`.
 // It assumes `t` is such a command.
 func alterTableAddForeignKey(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddConstraint,
+	b BuildCtx,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	stmt tree.Statement,
+	t *tree.AlterTableAddConstraint,
 ) {
 	fkDef := t.ConstraintDef.(*tree.ForeignKeyConstraintTableDef)
 	// fromColsFRNames is fully resolved column names from `fkDef.FromCols`, and
@@ -274,7 +286,7 @@ func alterTableAddForeignKey(
 			"and is no longer supported."))
 	}
 	// Disallow schema change if the FK references a table whose schema is locked.
-	panicIfSchemaIsLocked(b.QueryByID(referencedTableID))
+	panicIfSchemaChangeIsDisallowed(b.QueryByID(referencedTableID), stmt)
 
 	// 6. Check that temporary tables can only reference temporary tables, or,
 	// permanent tables can only reference permanent tables.

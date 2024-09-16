@@ -307,9 +307,9 @@ func (tdb *tableDescriptorBuilder) StripDanglingBackReferences(
 	}
 	// ... in the ldr_job_ids slice,
 	{
-		tbl.LDRJobIDs = slices.DeleteFunc(tbl.LDRJobIDs, func(i int64) bool {
+		tbl.LDRJobIDs = slices.DeleteFunc(tbl.LDRJobIDs, func(i catpb.JobID) bool {
 			// Remove if the job ID is not found.
-			if !nonTerminalJobIDMightExist(jobspb.JobID(i)) {
+			if !nonTerminalJobIDMightExist(i) {
 				tdb.changes.Add(catalog.StrippedDanglingBackReferences)
 				return true
 			}

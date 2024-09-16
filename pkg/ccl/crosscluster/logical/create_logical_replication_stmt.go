@@ -272,7 +272,7 @@ func createLogicalReplicationStreamPlanHook(
 		// Add the LDR job ID to the destination table descriptors.
 		b := p.InternalSQLTxn().KV().NewBatch()
 		for _, td := range dstTableDescs {
-			td.LDRJobIDs = append(td.LDRJobIDs, int64(jr.JobID))
+			td.LDRJobIDs = append(td.LDRJobIDs, jr.JobID)
 			if err := p.InternalSQLTxn().Descriptors().WriteDescToBatch(ctx, true /* kvTrace */, td, b); err != nil {
 				return err
 			}

@@ -42,6 +42,7 @@ import (
 )
 
 type setZoneConfigNode struct {
+	stmt          *tree.SetZoneConfig
 	zoneSpecifier tree.ZoneSpecifier
 	allIndexes    bool
 	yamlConfig    tree.TypedExpr
@@ -162,6 +163,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 	}
 
 	return &setZoneConfigNode{
+		stmt:          n,
 		zoneSpecifier: n.ZoneSpecifier,
 		allIndexes:    n.AllIndexes,
 		yamlConfig:    yamlConfig,
@@ -336,7 +338,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	}
 
 	// Disallow schema changes if it's a table and its schema is locked.
-	if err = checkTableSchemaUnlocked(table); err != nil {
+	if err = checkSchemaChangeIsAllowed(table, n.stmt); err != nil {
 		return err
 	}
 

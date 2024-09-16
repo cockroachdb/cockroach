@@ -162,7 +162,7 @@ func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 					{MutationID: 1},
 					{MutationID: 2},
 				},
-				LDRJobIDs:  []int64{1, 2, 3},
+				LDRJobIDs:  []catpb.JobID{1, 2, 3},
 				Privileges: goodPrivilege,
 			},
 			expectedOutput: descpb.TableDescriptor{
@@ -175,7 +175,7 @@ func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 					{MutationID: 1},
 					{MutationID: 2},
 				},
-				LDRJobIDs:  []int64{},
+				LDRJobIDs:  []catpb.JobID{},
 				Privileges: goodPrivilege,
 			},
 			validDescIDs:                   catalog.MakeDescriptorIDSet(100, 101, 104, 105),
