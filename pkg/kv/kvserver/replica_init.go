@@ -225,6 +225,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		r.store.TestingKnobs().FlowControlTestingKnobs,
 	)
 	r.raftMu.flowControlLevel = racV2EnabledWhenLeaderLevel(r.raftCtx, store.cfg.Settings)
+	r.raftMu.msgAppScratchForFlowControl = map[roachpb.ReplicaID][]raftpb.Message{}
 	r.flowControlV2 = replica_rac2.NewProcessor(replica_rac2.ProcessorOptions{
 		NodeID:                 store.NodeID(),
 		StoreID:                r.StoreID(),
