@@ -317,6 +317,7 @@ var _ RangeController = &rangeController{}
 func NewRangeController(
 	ctx context.Context, o RangeControllerOptions, init RangeControllerInitState,
 ) *rangeController {
+	log.VInfof(ctx, 1, "r%v creating range controller", o.RangeID)
 	rc := &rangeController{
 		opts:        o,
 		leaseholder: init.Leaseholder,
@@ -431,7 +432,10 @@ retry:
 			}
 		}
 	}
-	rc.opts.EvalWaitMetrics.OnAdmitted(wc, rc.opts.Clock.PhysicalTime().Sub(start))
+	waitDuration := rc.opts.Clock.PhysicalTime().Sub(start)
+	log.VEventf(ctx, 2, "r%v/%v admitted request (pri=%v wait-duration=%s wait-for-all=%v)",
+		rc.opts.RangeID, rc.opts.LocalReplicaID, pri, waitDuration, waitForAllReplicateHandles)
+	rc.opts.EvalWaitMetrics.OnAdmitted(wc, waitDuration)
 	return true, nil
 }
 
@@ -502,6 +506,7 @@ func (rc *rangeController) SetLeaseholderRaftMuLocked(
 	if replica == rc.leaseholder {
 		return
 	}
+	log.VInfof(ctx, 1, "r%v setting range leaseholder replica_id=%v", rc.opts.RangeID, replica)
 	rc.leaseholder = replica
 	rc.updateWaiterSets()
 }
@@ -510,6 +515,7 @@ func (rc *rangeController) SetLeaseholderRaftMuLocked(
 //
 // Requires replica.raftMu to be held.
 func (rc *rangeController) CloseRaftMuLocked(ctx context.Context) {
+	log.VInfof(ctx, 1, "r%v closing range controller", rc.opts.RangeID)
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
@@ -697,13 +703,16 @@ func (rss *replicaSendStream) changeConnectedStateLocked(state connectedState, n
 }
 
 func (rss *replicaSendStream) admit(ctx context.Context, av AdmittedVector) {
+	log.VInfof(ctx, 2, "r%v:%v stream %v admit %v",
+		rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream, av)
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
 	rss.returnTokens(ctx, rss.mu.tracker.Untrack(av.Term, av.Admitted))
 }
 
-func (rs *replicaState) createReplicaSendStream() {
+func (rs *replicaState) createReplicaSendStream(ctx context.Context) {
 	// Must be in StateReplicate on creation.
+	log.VEventf(ctx, 1, "creating send stream %v for replica %v", rs.stream, rs.desc)
 	rs.sendStream = &replicaSendStream{
 		parent: rs,
 	}
@@ -804,7 +813,7 @@ func (rs *replicaState) handleReadyState(
 
 	case tracker.StateReplicate:
 		if rs.sendStream == nil {
-			rs.createReplicaSendStream()
+			rs.createReplicaSendStream(ctx)
 			shouldWaitChange = true
 		} else {
 			shouldWaitChange = rs.sendStream.makeConsistentInStateReplicate(ctx)
@@ -820,6 +829,7 @@ func (rs *replicaState) handleReadyState(
 }
 
 func (rss *replicaState) closeSendStream(ctx context.Context) {
+	log.VEventf(ctx, 1, "closing send stream %v for replica %v", rss.stream, rss.desc)
 	rss.sendStream.mu.Lock()
 	defer rss.sendStream.mu.Unlock()
 

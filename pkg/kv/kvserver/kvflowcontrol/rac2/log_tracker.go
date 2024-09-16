@@ -51,6 +51,24 @@ func (av AdmittedVector) Merge(other AdmittedVector) AdmittedVector {
 	return av
 }
 
+func (av AdmittedVector) String() string {
+	return redact.StringWithoutMarkers(av)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (av AdmittedVector) SafeFormat(w redact.SafePrinter, _ rune) {
+	var buf redact.StringBuilder
+	buf.Printf("term:%d, admitted:[", av.Term)
+	for pri, index := range av.Admitted {
+		if pri > 0 {
+			buf.Printf(",")
+		}
+		buf.Printf("%s:%d", raftpb.Priority(pri), index)
+	}
+	buf.Printf("]")
+	w.Printf("%v", buf)
+}
+
 // LogTracker tracks the durable and logically admitted state of a raft log.
 //
 // Writes to a raft log are ordered by LogMark (term, index) where term is the
