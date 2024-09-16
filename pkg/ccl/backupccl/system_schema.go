@@ -778,6 +778,12 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.SystemTaskPayloadsTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.SystemJobProgressTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
+	systemschema.SystemJobStatusTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 	systemschema.SQLInstancesTable().GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},

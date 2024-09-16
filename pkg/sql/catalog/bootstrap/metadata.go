@@ -457,6 +457,8 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 
 	// Tables introduced in 24.3
 	target.AddDescriptor(systemschema.TableMetadata)
+	target.AddDescriptor(systemschema.SystemJobStatusTable)
+	target.AddDescriptor(systemschema.SystemJobProgressTable)
 
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.
