@@ -380,26 +380,6 @@ func loadSettingsToZoneConfigs(
 	return nil
 }
 
-// fillIndexAndPartitionFromZoneSpecifier fills out the index id in the zone
-// specifier for a indexZoneConfigObj.
-func fillIndexAndPartitionFromZoneSpecifier(
-	b BuildCtx, zs tree.ZoneSpecifier, idxObj *indexZoneConfigObj,
-) {
-	tableID := idxObj.getTargetID()
-
-	indexName := string(zs.TableOrIndex.Index)
-	var indexID catid.IndexID
-	if indexName == "" {
-		// Use the primary index if index name is unspecified.
-		primaryIndexElem := mustRetrieveCurrentPrimaryIndexElement(b, tableID)
-		indexID = primaryIndexElem.IndexID
-	} else {
-		indexElems := b.ResolveIndex(tableID, tree.Name(indexName), ResolveParams{})
-		indexID = indexElems.FilterIndexName().MustGetOneElement().IndexID
-	}
-	idxObj.indexID = indexID
-}
-
 // lookUpSystemZonesTable attempts to look up the zone config in `system.zones`
 // table by `targetID`.
 // If `targetID` is not found, a nil `zone` is returned.

@@ -1300,3 +1300,19 @@ DATABASE foo  ALTER DATABASE foo CONFIGURE ZONE USING
                 lease_preferences = '[]'
 
 subtest end
+
+subtest bad_partition
+
+statement ok
+CREATE TABLE fooba(pk INT PRIMARY KEY, i INT);
+ALTER TABLE fooba PARTITION BY LIST (pk) (PARTITION "one" VALUES IN (1), PARTITION "rest" VALUES IN (DEFAULT));
+
+# Configure the zone of a partition that does not exist.
+statement error partition "cadr" does not exist on index "fooba_pkey"
+ALTER PARTITION cadr OF INDEX fooba@fooba_pkey CONFIGURE ZONE USING num_replicas = 1;
+
+# Configure the zone of a partition on an index that does not exist.
+statement error index "nonexistent" (?:not found in relation "fooba"|does not exist)
+ALTER PARTITION rest OF INDEX fooba@nonexistent CONFIGURE ZONE USING num_replicas = 1;
+
+subtest end
