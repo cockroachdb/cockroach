@@ -2820,7 +2820,8 @@ lock t
  └── project
       ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           └── locking: none,nowait
 
 build
 SELECT * FROM t FOR NO KEY UPDATE NOWAIT
@@ -2840,7 +2841,8 @@ lock t
  └── project
       ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           └── locking: none,nowait
 
 build
 SELECT * FROM t FOR SHARE NOWAIT
@@ -2860,7 +2862,8 @@ lock t
  └── project
       ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           └── locking: none,nowait
 
 build
 SELECT * FROM t FOR KEY SHARE NOWAIT
@@ -2880,7 +2883,8 @@ lock t
  └── project
       ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           └── locking: none,nowait
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT
@@ -2903,7 +2907,8 @@ lock t
       └── project
            ├── columns: a:1!null b:2
            └── scan t
-                └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                └── locking: none,nowait
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE
@@ -2929,7 +2934,8 @@ lock t
            └── project
                 ├── columns: a:1!null b:2
                 └── scan t
-                     └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                     ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                     └── locking: none,nowait
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE FOR UPDATE NOWAIT
@@ -2958,7 +2964,8 @@ lock t
                 └── project
                      ├── columns: a:1!null b:2
                      └── scan t
-                          └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                          ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                          └── locking: none,nowait
 
 build
 SELECT * FROM t FOR UPDATE OF t NOWAIT
@@ -2978,7 +2985,8 @@ lock t
  └── project
       ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           └── locking: none,nowait
 
 build
 SELECT * FROM t FOR UPDATE OF t2 NOWAIT
@@ -3010,7 +3018,8 @@ lock t
  └── project
       ├── columns: "?column?":5!null a:1!null
       ├── scan t
-      │    └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      │    └── locking: none,nowait
       └── projections
            └── 1 [as="?column?":5]
 
