@@ -1413,6 +1413,14 @@ func WithJobMetrics(m metric.Struct) RegisterOption {
 	}
 }
 
+// WithResolvedMetric registers a gauge metric that the poller will update to
+// reflect the minimum resolved timestamp of all the jobs of this type.
+func WithResolvedMetric(m *metric.Gauge) RegisterOption {
+	return func(opts *registerOptions) {
+		opts.resolvedMetric = m
+	}
+}
+
 // registerOptions are passed to RegisterConstructor and control how a job
 // resumer is created and configured.
 type registerOptions struct {
@@ -1427,6 +1435,9 @@ type registerOptions struct {
 
 	// metrics allow jobs to register job specific metrics.
 	metrics metric.Struct
+
+	// resolvedMetric, if set, is the metric to update using the min resolved ts.
+	resolvedMetric *metric.Gauge
 }
 
 // JobResultsReporter is an interface for reporting the results of the job execution.
