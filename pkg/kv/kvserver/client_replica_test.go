@@ -863,9 +863,14 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	// The transaction has a read timestamp beneath the write's commit timestamp
 	// but a global uncertainty limit above the write's commit timestamp. The
 	// observed timestamp collected is also beneath the write's commit timestamp.
-	require.True(t, txn.ReadTimestamp.Less(writeTs))
-	require.True(t, writeTs.Less(txn.GlobalUncertaintyLimit))
-	require.True(t, txn.ObservedTimestamps[0].Timestamp.ToTimestamp().Less(writeTs))
+	assert.True(t, txn.ReadTimestamp.Less(writeTs))
+	assert.True(t, writeTs.Less(txn.GlobalUncertaintyLimit))
+	assert.True(t, txn.ObservedTimestamps[0].Timestamp.ToTimestamp().Less(writeTs))
+
+	if t.Failed() {
+		t.Logf("writeTs=%s, txn=%+v", writeTs, txn)
+		t.FailNow()
+	}
 
 	// Add a replica for key A's range to node 2. Transfer the lease.
 	tc.AddVotersOrFatal(t, keyA, tc.Target(1))
