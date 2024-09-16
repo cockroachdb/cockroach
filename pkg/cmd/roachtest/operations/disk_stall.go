@@ -65,11 +65,12 @@ func runDiskStall(
 
 func registerDiskStall(r registry.Registry) {
 	r.AddOperation(registry.OperationSpec{
-		Name:             "disk-stall/dmsetup",
-		Owner:            registry.OwnerStorage,
-		Timeout:          10 * time.Minute,
-		CompatibleClouds: registry.OnlyGCE,
-		Dependencies:     []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
-		Run:              runDiskStall,
+		Name:               "disk-stall/dmsetup",
+		Owner:              registry.OwnerStorage,
+		Timeout:            10 * time.Minute,
+		CompatibleClouds:   registry.OnlyGCE,
+		CanRunConcurrently: registry.OperationCannotRunConcurrentlyWithItself,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
+		Run:                runDiskStall,
 	})
 }
