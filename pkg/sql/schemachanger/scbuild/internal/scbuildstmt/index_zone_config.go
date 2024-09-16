@@ -185,7 +185,7 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 
 	// We are configuring an index. Determine the index ID and fill this
 	// information out in our zoneConfigObject.
-	fillIndexAndPartitionFromZoneSpecifier(b, n.ZoneSpecifier, izo)
+	izo.fillIndexFromZoneSpecifier(b, n.ZoneSpecifier)
 	indexID := izo.indexID
 	tempIndexID := mustRetrieveIndexElement(b, izo.getTargetID(), indexID).TemporaryIndexID
 
@@ -286,4 +286,22 @@ func (izo *indexZoneConfigObj) applyZoneConfig(
 	}
 	izo.setZoneConfigToWrite(partialZone)
 	return err
+}
+
+// fillIndexFromZoneSpecifier fills out the index id in the zone
+// specifier for a indexZoneConfigObj.
+func (izo *indexZoneConfigObj) fillIndexFromZoneSpecifier(b BuildCtx, zs tree.ZoneSpecifier) {
+	tableID := izo.getTargetID()
+
+	indexName := string(zs.TableOrIndex.Index)
+	var indexID catid.IndexID
+	if indexName == "" {
+		// Use the primary index if index name is unspecified.
+		primaryIndexElem := mustRetrieveCurrentPrimaryIndexElement(b, tableID)
+		indexID = primaryIndexElem.IndexID
+	} else {
+		indexElems := b.ResolveIndex(tableID, tree.Name(indexName), ResolveParams{})
+		indexID = indexElems.FilterIndexName().MustGetOneElement().IndexID
+	}
+	izo.indexID = indexID
 }
