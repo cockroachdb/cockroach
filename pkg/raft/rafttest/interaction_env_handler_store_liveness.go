@@ -24,15 +24,25 @@ import (
 
 // livenessEntry is an entry in the liveness fabric.
 type livenessEntry struct {
-	epoch       pb.Epoch
-	isSupported bool
+	epoch        pb.Epoch
+	expirationTS hlc.Timestamp
+	isSupported  bool
 }
+
+// expiredSupportTimestamp and ongoingSupportTimestamp are special timestamps
+// used by the interactive environment' storeLiveness to note if support has
+// expired or is still ongoing.
+var (
+	expiredSupportTimestamp = hlc.Timestamp{}
+	ongoingSupportTimestamp = hlc.MaxTimestamp
+)
 
 // initLIvenessEntry is the initial liveness entry placed in the liveness fabric
 // for new stores.
 var initLivenessEntry = livenessEntry{
-	epoch:       1,
-	isSupported: true,
+	epoch:        1,
+	expirationTS: ongoingSupportTimestamp,
+	isSupported:  true,
 }
 
 // livenessFabric is a global view of the store liveness state.
@@ -67,8 +77,9 @@ func (l *livenessFabric) addNode() {
 		newNodeState[i] = livenessEntry{
 			// NB: The most recent epoch nodes are using to seek support is stored at
 			// l.state[i][i].epoch. Start providing support at this epoch.
-			epoch:       l.state[i][i].epoch,
-			isSupported: true,
+			epoch:        l.state[i][i].epoch,
+			expirationTS: ongoingSupportTimestamp,
+			isSupported:  true,
 		}
 	}
 	l.state = append(l.state, newNodeState)
@@ -96,10 +107,12 @@ func (l *livenessFabric) String() string {
 			}
 
 			buf.WriteString(" ")
-			if l.state[i][j].isSupported {
-				buf.WriteString(fmt.Sprintf("%d", l.state[i][j].epoch))
-			} else {
+			if !l.state[i][j].isSupported {
 				buf.WriteString("x")
+			} else if l.state[i][j].expirationTS == expiredSupportTimestamp {
+				buf.WriteString("e")
+			} else {
+				buf.WriteString(fmt.Sprintf("%d", l.state[i][j].epoch))
 			}
 		}
 		buf.WriteString("\n")
@@ -132,10 +145,9 @@ func (s *storeLiveness) SupportFor(id pb.PeerID) (pb.Epoch, bool) {
 func (s *storeLiveness) SupportFrom(id pb.PeerID) (pb.Epoch, hlc.Timestamp, bool) {
 	entry := s.livenessFabric.state[id][s.nodeID]
 	if !entry.isSupported {
-		return 0, hlc.Timestamp{}, false
+		return 0, expiredSupportTimestamp, false
 	}
-	// TODO(arul): we may need to inject timestamps in here as well.
-	return entry.epoch, hlc.MaxTimestamp, entry.isSupported
+	return entry.epoch, entry.expirationTS, entry.isSupported
 }
 
 // SupportFromEnabled implements the StoreLiveness interface.
@@ -146,9 +158,9 @@ func (s *storeLiveness) SupportFromEnabled() bool {
 // SupportExpired implements the StoreLiveness interface.
 func (s *storeLiveness) SupportExpired(ts hlc.Timestamp) bool {
 	switch ts {
-	case hlc.Timestamp{}:
+	case expiredSupportTimestamp:
 		return true
-	case hlc.MaxTimestamp:
+	case ongoingSupportTimestamp:
 		return false
 	default:
 		panic("unexpected timestamp")
@@ -166,6 +178,16 @@ func (env *InteractionEnv) handleBumpEpoch(t *testing.T, d datadriven.TestData) 
 	return err
 }
 
+// handleExpireSupport handles the case where a store's support for
+// another store expires.
+func (env *InteractionEnv) handleExpireSupport(t *testing.T, d datadriven.TestData) error {
+	fromStore := nthAsInt(t, d, 0)
+	forStore := nthAsInt(t, d, 1)
+	env.Fabric.state[fromStore][forStore].expirationTS = expiredSupportTimestamp
+	_, err := env.Output.WriteString(env.Fabric.String())
+	return err
+}
+
 // handleWithdrawSupport handles the case where a store withdraws support for
 // another store. The store for which support has been withdrawn may seek
 // support from the store that withdrew support in the future by bumping its
@@ -176,6 +198,7 @@ func (env *InteractionEnv) handleWithdrawSupport(t *testing.T, d datadriven.Test
 	// Bump forStore's epoch and mark it as unsupported.
 	env.Fabric.state[fromStore][forStore].epoch++
 	env.Fabric.state[fromStore][forStore].isSupported = false
+	env.Fabric.state[fromStore][forStore].expirationTS = expiredSupportTimestamp
 	_, err := env.Output.WriteString(env.Fabric.String())
 	return err
 }
@@ -186,7 +209,8 @@ func (env *InteractionEnv) handleWithdrawSupport(t *testing.T, d datadriven.Test
 func (env *InteractionEnv) handleGrantSupport(t *testing.T, d datadriven.TestData) error {
 	fromStore := nthAsInt(t, d, 0)
 	forStore := nthAsInt(t, d, 1)
-	if env.Fabric.state[fromStore][forStore].isSupported {
+	if env.Fabric.state[fromStore][forStore].isSupported &&
+		env.Fabric.state[fromStore][forStore].expirationTS == ongoingSupportTimestamp {
 		return errors.Newf("store %d is already supporting %d", fromStore, forStore)
 	}
 	// First, copy over the bumped epoch (while ensuring it doesn't regress) onto
@@ -196,6 +220,7 @@ func (env *InteractionEnv) handleGrantSupport(t *testing.T, d datadriven.TestDat
 	)
 	// Then, provide support from fromStore for forStore at this new epoch.
 	env.Fabric.state[fromStore][forStore].epoch = env.Fabric.state[forStore][forStore].epoch
+	env.Fabric.state[fromStore][forStore].expirationTS = ongoingSupportTimestamp
 	env.Fabric.state[fromStore][forStore].isSupported = true
 	_, err := env.Output.WriteString(env.Fabric.String())
 	return err

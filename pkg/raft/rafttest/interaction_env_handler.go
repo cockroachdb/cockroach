@@ -227,6 +227,20 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		// bump-epoch 1
 		err = env.handleBumpEpoch(t, d)
 
+	case "expire-support":
+		// Expire support for another store (for_store) from a store (from_store).
+		//
+		// expire-support from_id for_id
+		// Arguments are:
+		//    from_id - id of the store who is expiring support.
+		//    for_id - id of the store for which support is being expired.
+		//
+		// Example:
+		// expire-support 1 2
+		// Explanation:
+		// 1 (from_store) expires support for 2's (for_store).
+		err = env.handleExpireSupport(t, d)
+
 	case "withdraw-support":
 		// Withdraw support for another store (for_store) from a store (from_store).
 		//
