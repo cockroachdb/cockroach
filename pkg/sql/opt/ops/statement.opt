@@ -272,6 +272,9 @@ define CancelPrivate {
 
     # IfExists is set if we should tolerate IDs that don't exist.
     IfExists bool
+
+    # Message will be sent to the clients of the canceled queries.
+    Message string
 }
 
 # CancelSessions represents a `CANCEL SESSIONS` statement.

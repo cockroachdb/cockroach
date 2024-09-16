@@ -2093,10 +2093,13 @@ func (ef *execFactory) ConstructShowCompletions(command *tree.ShowCompletions) (
 }
 
 // ConstructCancelQueries is part of the exec.Factory interface.
-func (ef *execFactory) ConstructCancelQueries(input exec.Node, ifExists bool) (exec.Node, error) {
+func (ef *execFactory) ConstructCancelQueries(
+	input exec.Node, ifExists bool, message string,
+) (exec.Node, error) {
 	return &cancelQueriesNode{
 		rows:     input.(planNode),
 		ifExists: ifExists,
+		message:  message,
 	}, nil
 }
 

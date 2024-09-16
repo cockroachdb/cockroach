@@ -3515,7 +3515,7 @@ func (s *statusServer) CancelQuery(
 		return nil, err
 	}
 
-	isCanceled := session.CancelQuery(queryID)
+	isCanceled := session.CancelQuery(queryID, req.Message)
 	return &serverpb.CancelQueryResponse{
 		Canceled: isCanceled,
 	}, nil

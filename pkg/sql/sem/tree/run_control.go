@@ -49,6 +49,7 @@ func (n *ControlJobs) Format(ctx *FmtCtx) {
 type CancelQueries struct {
 	Queries  *Select
 	IfExists bool
+	Message  string
 }
 
 // Format implements the NodeFormatter interface.
@@ -58,6 +59,10 @@ func (node *CancelQueries) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF EXISTS ")
 	}
 	ctx.FormatNode(node.Queries)
+	if node.Message != "" {
+		ctx.WriteString(" WITH MESSAGE ")
+		ctx.WriteString("'" + node.Message + "'")
+	}
 }
 
 // CancelSessions represents a CANCEL SESSIONS statement.

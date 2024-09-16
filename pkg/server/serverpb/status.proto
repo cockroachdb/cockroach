@@ -1139,6 +1139,8 @@ message CancelQueryRequest {
   // if the user is the same as the one issuing the CancelQueryRequest.
   // The caller is responsible for case-folding and NFC normalization.
   string username = 3;
+  // The message to be sent to the clients of the canceled query.
+  string message = 4;
 }
 
 // Response returned by target query's gateway node.

@@ -569,10 +569,10 @@ cancel_jobs_stmt ::=
 	| 'CANCEL' 'JOBS' for_schedules_clause
 
 cancel_queries_stmt ::=
-	'CANCEL' 'QUERY' a_expr
-	| 'CANCEL' 'QUERY' 'IF' 'EXISTS' a_expr
-	| 'CANCEL' 'QUERIES' select_stmt
-	| 'CANCEL' 'QUERIES' 'IF' 'EXISTS' select_stmt
+	'CANCEL' 'QUERY' a_expr opt_cancel_message
+	| 'CANCEL' 'QUERY' 'IF' 'EXISTS' a_expr opt_cancel_message
+	| 'CANCEL' 'QUERIES' select_stmt opt_cancel_message
+	| 'CANCEL' 'QUERIES' 'IF' 'EXISTS' select_stmt opt_cancel_message
 
 cancel_sessions_stmt ::=
 	'CANCEL' 'SESSION' a_expr
@@ -1255,6 +1255,7 @@ unreserved_keyword ::=
 	| 'MATERIALIZED'
 	| 'MAXVALUE'
 	| 'MERGE'
+	| 'MESSAGE'
 	| 'METHOD'
 	| 'MINUTE'
 	| 'MINVALUE'
@@ -1770,6 +1771,10 @@ a_expr ::=
 for_schedules_clause ::=
 	'FOR' 'SCHEDULES' select_stmt
 	| 'FOR' 'SCHEDULE' a_expr
+
+opt_cancel_message ::=
+	'WITH' 'MESSAGE' cancel_message
+	| 
 
 create_database_stmt ::=
 	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_owner_clause opt_super_region_clause opt_secondary_region_clause
@@ -2445,6 +2450,9 @@ sub_type ::=
 	'ANY'
 	| 'SOME'
 	| 'ALL'
+
+cancel_message ::=
+	'SCONST'
 
 opt_template_clause ::=
 	'TEMPLATE' opt_equal non_reserved_word_or_sconst
@@ -3958,6 +3966,7 @@ bare_label_keywords ::=
 	| 'MATERIALIZED'
 	| 'MAXVALUE'
 	| 'MERGE'
+	| 'MESSAGE'
 	| 'METHOD'
 	| 'MINVALUE'
 	| 'MODE'

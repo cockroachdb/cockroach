@@ -2365,7 +2365,7 @@ type RegistrySession interface {
 	SessionUser() username.SQLUsername
 	hasQuery(queryID clusterunique.ID) bool
 	// CancelQuery cancels the query specified by queryID if it exists.
-	CancelQuery(queryID clusterunique.ID) bool
+	CancelQuery(queryID clusterunique.ID, message string) bool
 	// CancelActiveQueries cancels all currently active queries.
 	CancelActiveQueries() bool
 	// CancelSession cancels the session.

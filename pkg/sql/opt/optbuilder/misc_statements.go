@@ -88,6 +88,7 @@ func (b *Builder) buildCancelQueries(n *tree.CancelQueries, inScope *scope) (out
 		&memo.CancelPrivate{
 			Props:    inputScope.makePhysicalProps(),
 			IfExists: n.IfExists,
+			Message:  n.Message,
 		},
 	)
 	return outScope

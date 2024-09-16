@@ -79,3 +79,10 @@ func (c *CancelChecker) Reset(ctx context.Context, checkInterval ...uint32) {
 // QueryCanceledError is an error representing query cancellation.
 var QueryCanceledError = pgerror.New(
 	pgcode.QueryCanceled, "query execution canceled")
+
+// QueryCanceledErrorWithMessage is an error representing query cancellation
+// with the canceler's information (e.g. user name, session ID, etc).
+func QueryCanceledErrorWithMessage(message string) error {
+	return pgerror.Newf(
+		pgcode.QueryCanceled, "query execution canceled, message from the canceler: \"%s\"", message)
+}
