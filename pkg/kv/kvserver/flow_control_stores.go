@@ -71,8 +71,20 @@ func (sh *storesForFlowControl) LookupInspect(
 // interface.
 func (sh *storesForFlowControl) LookupReplicationAdmissionHandle(
 	rangeID roachpb.RangeID,
-) (kvflowcontrol.ReplicationAdmissionHandle, bool) {
-	return sh.Lookup(rangeID)
+) (handle kvflowcontrol.ReplicationAdmissionHandle, found bool) {
+	ls := (*Stores)(sh)
+	if err := ls.VisitStores(func(s *Store) error {
+		if h, ok := makeStoreForFlowControl(s).LookupReplicationAdmissionHandle(rangeID); ok {
+			handle = h
+			found = true
+		}
+		return nil
+	}); err != nil {
+		ctx := ls.AnnotateCtx(context.Background())
+		log.Errorf(ctx, "unexpected error: %s", err)
+		return nil, false
+	}
+	return handle, found
 }
 
 // Inspect is part of the StoresForFlowControl interface.
