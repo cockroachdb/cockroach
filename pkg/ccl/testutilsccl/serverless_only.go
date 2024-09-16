@@ -15,5 +15,5 @@ import "github.com/cockroachdb/cockroach/pkg/testutils/skip"
 // version is no longer used by Serverless in production.
 func ServerlessOnly(t skip.SkippableTest) {
 	// Uncomment in release branches that no longer support serverless.
-	// skip.IgnoreLint(t, "version is not used by serverless in production")
+	skip.IgnoreLint(t, "version is not used by serverless in production")
 }
