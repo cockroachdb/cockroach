@@ -1353,7 +1353,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 
 	ts, err := testserver.NewTestServer(opts...)
 	if err != nil {
-		t.Fatal(err)
+		t.handleWaitForInitErr(err)
 	}
 	t.testserverCluster = ts
 	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop, cleanupLogsDir)
@@ -1378,49 +1378,53 @@ func (t *logicTest) waitForAllNodes() {
 	for i := 0; i < t.cfg.NumNodes; i++ {
 		// Wait for each node to be reachable.
 		if err := t.testserverCluster.WaitForInitFinishForNode(i); err != nil {
-			if testutils.IsError(err, "init did not finish for node") {
-				// Check for `Can't find decompressor for snappy` error in the logs.
-				// This error appears to be some sort of infra issue where CRDB is
-				// unable to connect to another node, possibly because there is
-				// another non-CRDB server listening on that port. Since this is a rare
-				// issue, and we haven't been able to investigate it effectively, we
-				// will ignore this error.
-				// See https://github.com/cockroachdb/cockroach/issues/128759.
-				foundSnappyErr := false
-				walkErr := filepath.WalkDir(t.logsDir, func(path string, d fs.DirEntry, err error) error {
-					if err != nil {
-						return err
-					}
-					if d.IsDir() {
-						return nil
-					}
-					file, err := os.Open(path)
-					if err != nil {
-						return err
-					}
-					defer file.Close()
-
-					scanner := bufio.NewScanner(file)
-					for scanner.Scan() {
-						if strings.Contains(scanner.Text(), "Can't find decompressor for snappy") {
-							foundSnappyErr = true
-							return filepath.SkipAll
-						}
-					}
-					if err := scanner.Err(); err != nil {
-						return err
-					}
-					return nil
-				})
-				if walkErr != nil {
-					t.t().Logf("error while walking logs directory: %v", walkErr)
-				} else if foundSnappyErr {
-					t.t().Skip("ignoring init did not finish for node error due to snappy error")
-				}
-			}
-			t.Fatal(err)
+			t.handleWaitForInitErr(err)
 		}
 	}
+}
+
+// Check for `Can't find decompressor for snappy` error in the logs.
+// This error appears to be some sort of infra issue where CRDB is
+// unable to connect to another node, possibly because there is
+// another non-CRDB server listening on that port. Since this is a rare
+// issue, and we haven't been able to investigate it effectively, we
+// will ignore this error.
+// See https://github.com/cockroachdb/cockroach/issues/128759.
+func (t *logicTest) handleWaitForInitErr(err error) {
+	if testutils.IsError(err, "init did not finish for node") {
+		foundSnappyErr := false
+		walkErr := filepath.WalkDir(t.logsDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			file, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+
+			scanner := bufio.NewScanner(file)
+			for scanner.Scan() {
+				if strings.Contains(scanner.Text(), "Can't find decompressor for snappy") {
+					foundSnappyErr = true
+					return filepath.SkipAll
+				}
+			}
+			if err := scanner.Err(); err != nil {
+				return err
+			}
+			return nil
+		})
+		if walkErr != nil {
+			t.t().Logf("error while walking logs directory: %v", walkErr)
+		} else if foundSnappyErr {
+			t.t().Skip("ignoring init did not finish for node error due to snappy error")
+		}
+	}
+	t.Fatal(err)
 }
 
 // newCluster creates a new cluster. It should be called after the logic tests's
