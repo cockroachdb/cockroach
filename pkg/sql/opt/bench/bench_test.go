@@ -678,6 +678,11 @@ var queries = [...]benchQuery{
 		args:    []interface{}{},
 		cleanup: "TRUNCATE TABLE customer",
 	},
+	{
+		name:  "const-agg",
+		query: `SELECT * FROM k GROUP BY id HAVING sum(a) > 100`,
+		args:  []interface{}{},
+	},
 }
 
 func init() {
