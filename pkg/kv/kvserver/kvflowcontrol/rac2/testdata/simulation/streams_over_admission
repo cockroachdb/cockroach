@@ -1,0 +1,97 @@
+# Demonstrate how any delay in token deduction after being admitted can lead to
+# over-admission.
+init
+----
+
+# Take away all 16MiB of regular flow tokens; we want a buildup of waiting
+# requests to over-admit from.
+timeline
+t=[0s,1s) class=regular stream=t1/s1 adjust=-16MiB/s rate=1/s
+----
+
+# Queue 10/s*10s=100 requests for admission, asking for 10*4MiB=40MiB of
+# tokens. For these requests, induce a 2s delay between Admit() and
+# DeductTokens().
+timeline
+t=[10s,20s) class=regular stream=t1/s1 adjust=-4MiB/s  rate=10/s deduction-delay=2s
+----
+
+# Return 1KiB of flow tokens at t=30.
+timeline
+t=[30s,31s) class=regular stream=t1/s1 adjust=+1KiB/s rate=1/s
+----
+
+simulate t=[0s,40s)
+----
+
+# Observe how the single 1KiB flow token return ends up admitting all 100
+# waiting requests, over-admitting by 40MiB.
+#
+# TODO(kvoli,sumeerbhola): Introduce a "tentative deducted counter" on a per-stream
+# basis, to prevent this kind of over-admission. It's likely to occur any time
+# there's AC queueing due to CPU control, waiting on locks/latches, etc.
+plot t=[0s,40s)
+kvflowcontrol.tokens.eval.regular.available unit=MiB
+kvflowcontrol.eval_wait.regular.requests.admitted unit=reqs/s rate=true
+kvflowcontrol.eval_wait.regular.requests.waiting  unit=reqs/s
+----
+----
+   0.0 ┼───────────────────────────────╮
+  -2.7 ┤                               │
+  -5.3 ┤                               │
+  -8.0 ┤                               │
+ -10.7 ┤                               │
+ -13.3 ┤                               │
+ -16.0 ┤                               │
+ -18.7 ┤                               │
+ -21.3 ┤                               │
+ -24.0 ┤                               │
+ -26.7 ┤                               │
+ -29.3 ┤                               │
+ -32.0 ┤                               │
+ -34.7 ┤                               │
+ -37.3 ┤                               │
+ -40.0 ┤                               ╰───────
+          tokens.eval.regular.available (MiB)
+
+
+ 100.0 ┤                             ╭╮
+  93.3 ┤                             ││
+  86.7 ┤                             ││
+  80.0 ┤                             ││
+  73.3 ┤                             ││
+  66.7 ┤                             ││
+  60.0 ┤                             ││
+  53.3 ┤                             ││
+  46.7 ┤                             ││
+  40.0 ┤                             ││
+  33.3 ┤                             ││
+  26.7 ┤                             ││
+  20.0 ┤                             ││
+  13.3 ┤                             ││
+   6.7 ┤                             ││
+   0.0 ┼─────────────────────────────╯╰────────
+        rate(eval_wait.regular.requests.admitted) (reqs/s)
+
+
+ 100.0 ┤                   ╭─────────╮
+  93.3 ┤                  ╭╯         │
+  86.7 ┤                 ╭╯          │
+  80.0 ┤                 │           │
+  73.3 ┤                ╭╯           │
+  66.7 ┤               ╭╯            │
+  60.0 ┤               │             │
+  53.3 ┤              ╭╯             │
+  46.7 ┤             ╭╯              │
+  40.0 ┤             │               │
+  33.3 ┤            ╭╯               │
+  26.7 ┤           ╭╯                │
+  20.0 ┤           │                 │
+  13.3 ┤          ╭╯                 │
+   6.7 ┤          │                  │
+   0.0 ┼──────────╯                  ╰─────────
+        eval_wait.regular.requests.waiting (reqs/s)
+----
+----
+
+# vim:ft=conf
