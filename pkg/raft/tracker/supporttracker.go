@@ -61,6 +61,17 @@ func (st *SupportTracker) Reset() {
 	// down.
 }
 
+// IsSuppotedBy returns true if a follower is supporting the leader in the
+// provided store liveness epoch.
+func (st *SupportTracker) IsSuppotedBy(id pb.PeerID, currentEpoch pb.Epoch) bool {
+	supportEpoch, exist := st.support[id]
+	if !exist {
+		// we don't know that the follower supports us in the currentEpoch.
+		return false
+	}
+	return supportEpoch == currentEpoch
+}
+
 // LeadSupportUntil returns the timestamp until which the leader is guaranteed
 // support until based on the support being tracked for it by its peers.
 func (st *SupportTracker) LeadSupportUntil() hlc.Timestamp {

@@ -35,6 +35,10 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 	n := firstAsInt(t, d)
 	var snap pb.Snapshot
 	cfg := raftConfigStub()
+
+	// The number of store liveness nodes is the same number of nodes by default.
+	// However, it could be explicitly specified using `store-liveness-nodes`
+	storeLivenessNodes := n
 	for _, arg := range d.CmdArgs[1:] {
 		for i := range arg.Vals {
 			switch arg.Key {
@@ -76,10 +80,12 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 					clusterversion.RemoveDevOffset(clusterversion.MinSupported.Version()),
 					true /* initializeVersion */)
 				cfg.CRDBVersion = settings.Version
+			case "store-liveness-nodes":
+				arg.Scan(t, i, &storeLivenessNodes)
 			}
 		}
 	}
-	return env.AddNodes(n, cfg, snap)
+	return env.AddNodes(n, cfg, snap, storeLivenessNodes)
 }
 
 type snapOverrideStorage struct {
@@ -98,7 +104,9 @@ var _ raft.Storage = snapOverrideStorage{}
 
 // AddNodes adds n new nodes initialized from the given snapshot (which may be
 // empty), and using the cfg as template. They will be assigned consecutive IDs.
-func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) error {
+func (env *InteractionEnv) AddNodes(
+	n int, cfg raft.Config, snap pb.Snapshot, storeLivenessNodes int,
+) error {
 	bootstrap := !reflect.DeepEqual(snap, pb.Snapshot{})
 	for i := 0; i < n; i++ {
 		id := pb.PeerID(1 + len(env.Nodes))
@@ -136,7 +144,6 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 		cfg := cfg // fork the config stub
 		cfg.ID, cfg.Storage = id, s
 
-		env.Fabric.addNode()
 		cfg.StoreLiveness = newStoreLiveness(env.Fabric, id)
 
 		// If the node creating command hasn't specified the CRDBVersion, use the
@@ -172,6 +179,10 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 			History: []pb.Snapshot{snap},
 		}
 		env.Nodes = append(env.Nodes, node)
+	}
+
+	for i := 0; i < storeLivenessNodes; i++ {
+		env.Fabric.addNode()
 	}
 	return nil
 }
