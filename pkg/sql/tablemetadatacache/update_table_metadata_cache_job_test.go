@@ -84,8 +84,8 @@ WHERE id = $1 AND claim_instance_id IS NOT NULL`, jobs.UpdateTableMetadataCacheJ
 		}
 		var runningStatus string
 		require.NoError(t, row.Scan(&runningStatus))
-		if !strings.Contains(runningStatus, "last metadata update at") {
-			return errors.New("last run time not updated")
+		if !strings.Contains(runningStatus, "Job completed at") {
+			return errors.New("running_status not updated")
 		}
 		return nil
 	})

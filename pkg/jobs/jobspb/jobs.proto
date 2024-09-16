@@ -1350,11 +1350,21 @@ message MVCCStatisticsJobProgress {
 
 message UpdateTableMetadataCacheDetails {}
 message UpdateTableMetadataCacheProgress {
+  enum Status {
+    NOT_RUNNING = 0;
+    RUNNING = 1;
+  }
   // The time at which the job last started a run.
-  google.protobuf.Timestamp last_run_time = 1 [
-    (gogoproto.nullable) = false,
+  google.protobuf.Timestamp last_start_time = 1 [
+    (gogoproto.nullable) = true,
     (gogoproto.stdtime) = true
   ];
+  // The time at which the job last completed a run.
+  google.protobuf.Timestamp last_completed_time = 2 [
+    (gogoproto.nullable) = true,
+    (gogoproto.stdtime) = true
+  ];
+  Status status = 3;
 }
 
 message ImportRollbackDetails {
