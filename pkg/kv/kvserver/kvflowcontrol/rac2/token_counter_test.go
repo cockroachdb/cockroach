@@ -203,6 +203,7 @@ func TestTokenCounter(t *testing.T) {
 		settings,
 		hlc.NewClockForTesting(nil),
 		newTokenCounterMetrics(flowControlEvalMetricType),
+		kvflowcontrol.Stream{},
 	)
 
 	assertStateReset := func(t *testing.T) {
@@ -378,6 +379,7 @@ func (ts *evalTestState) getOrCreateTC(stream string) *namedTokenCounter {
 				ts.settings,
 				hlc.NewClockForTesting(nil),
 				newTokenCounterMetrics(flowControlEvalMetricType),
+				kvflowcontrol.Stream{},
 			),
 			stream: stream,
 		}
