@@ -472,17 +472,17 @@ func (r *replicaForRACv2) MuAssertHeld() {
 	r.mu.AssertHeld()
 }
 
-// MuLock implements replica_rac2.Replica.
-func (r *replicaForRACv2) MuLock() {
-	r.mu.Lock()
+// MuRLock implements replica_rac2.Replica.
+func (r *replicaForRACv2) MuRLock() {
+	r.mu.RLock()
 }
 
-// MuUnlock implements replica_rac2.Replica.
-func (r *replicaForRACv2) MuUnlock() {
-	r.mu.Unlock()
+// MuRUnlock implements replica_rac2.Replica.
+func (r *replicaForRACv2) MuRUnlock() {
+	r.mu.RUnlock()
 }
 
-// LeaseholderMuLocked implements replica_rac2.Replica.
-func (r *replicaForRACv2) LeaseholderMuLocked() roachpb.ReplicaID {
+// LeaseholderMuRLocked implements replica_rac2.Replica.
+func (r *replicaForRACv2) LeaseholderMuRLocked() roachpb.ReplicaID {
 	return r.mu.state.Lease.Replica.ReplicaID
 }
