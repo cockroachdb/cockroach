@@ -21,6 +21,7 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_gogo_protobuf//proto",
         "@com_github_gogo_status//:status",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_grpc//:go_default_library",
