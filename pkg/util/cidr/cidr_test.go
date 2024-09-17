@@ -106,7 +106,7 @@ func TestInvalidCIDR(t *testing.T) {
 func TestEmptyLookup(t *testing.T) {
 	settings := cluster.MakeClusterSettings()
 	c := NewLookup(&settings.SV)
-	c.Start(context.Background(), stop.NewStopper())
+	require.NoError(t, c.Start(context.Background(), stop.NewStopper()))
 	c.LookupIP(net.ParseIP("127.0.0.1"))
 }
 
@@ -144,7 +144,7 @@ func TestRefresh(t *testing.T) {
 
 	st := cluster.MakeClusterSettings()
 	c := NewLookup(&st.SV)
-	c.Start(context.Background(), stopper)
+	require.NoError(t, c.Start(context.Background(), stopper))
 	// We haven't set the URL yet, so it should return an empty string.
 	require.Equal(t, "", c.LookupIP(net.ParseIP("127.0.0.1")))
 
