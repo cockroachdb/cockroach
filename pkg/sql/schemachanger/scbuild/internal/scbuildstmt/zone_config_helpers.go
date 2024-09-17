@@ -671,11 +671,7 @@ func accumulateNewUniqueConstraints(currentZone, newZone *zonepb.ZoneConfig) []z
 // the common prefix (the encoded table ID) and if `EndKey` is equal to
 // `Key.PrefixEnd()` it is omitted.
 func generateSubzoneSpans(
-	b BuildCtx,
-	tableID catid.DescID,
-	subzones []zonepb.Subzone,
-	indexID catid.IndexID,
-	partitionName string,
+	b BuildCtx, tableID catid.DescID, subzones []zonepb.Subzone,
 ) ([]zonepb.SubzoneSpan, error) {
 	if err := base.CheckEnterpriseEnabled(b.ClusterSettings(),
 		"replication zones on indexes or partitions"); err != nil {
