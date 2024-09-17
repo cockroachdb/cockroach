@@ -113,7 +113,7 @@ func NewTestLookup() *Lookup {
 }
 
 // Start refreshes the lookup once and begins the CIDR lookup refresh task.
-func (c *Lookup) Start(ctx context.Context, stopper *stop.Stopper) (bool, *Lookup) {
+func (c *Lookup) Start(ctx context.Context, stopper *stop.Stopper) error {
 	getTickDuration := func() time.Duration {
 		tickDuration := cidrRefreshInterval.Get(c.st)
 		// If the tickDuration is 0, set to a year to avoid auto refreshing.
@@ -139,9 +139,10 @@ func (c *Lookup) Start(ctx context.Context, stopper *stop.Stopper) (bool, *Looku
 			}
 		}
 	}); err != nil {
-		log.Fatalf(ctx, "unable to start CIDR lookup refresh task: %v", err)
+		log.Errorf(ctx, "unable to start CIDR lookup refresh task: %v", err)
+		return err
 	}
-	return false, nil
+	return nil
 }
 
 // hexString returns a hex string representation of an IP address. The length of
