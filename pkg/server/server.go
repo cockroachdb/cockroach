@@ -1109,7 +1109,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		node.storeCfg.KVFlowHandles,
 		node.storeCfg.KVFlowController,
 	)
-	cfg.CidrLookup.Start(ctx, stopper)
+	if err = cfg.CidrLookup.Start(ctx, stopper); err != nil {
+		return nil, err
+	}
 
 	// Instantiate the SQL server proper.
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
