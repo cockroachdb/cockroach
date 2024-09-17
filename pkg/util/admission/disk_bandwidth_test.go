@@ -11,67 +11,31 @@
 package admission
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/redact"
 )
 
-func TestDiskLoadWatcher(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	var dlw diskLoadWatcher
-	watcherToString := func() string {
-		level := dlw.getLoadLevel()
-		return fmt.Sprintf("%s\nload-level: %s", redact.Sprint(dlw),
-			diskLoadLevelString(level))
-	}
-
-	datadriven.RunTest(t, datapathutils.TestDataPath(t, "disk_load_watcher"),
-		func(t *testing.T, d *datadriven.TestData) string {
-			switch d.Cmd {
-			case "init":
-				dlw = diskLoadWatcher{}
-				return watcherToString()
-
-			case "interval-info":
-				var readBandwidth, writeBandwidth, provisionedBandwidth int
-				d.ScanArgs(t, "read-bw", &readBandwidth)
-				d.ScanArgs(t, "write-bw", &writeBandwidth)
-				d.ScanArgs(t, "provisioned-bw", &provisionedBandwidth)
-				dlw.setIntervalInfo(intervalDiskLoadInfo{
-					readBandwidth:        int64(readBandwidth),
-					writeBandwidth:       int64(writeBandwidth),
-					provisionedBandwidth: int64(provisionedBandwidth),
-				})
-				return watcherToString()
-
-			default:
-				return fmt.Sprintf("unknown command: %s", d.Cmd)
-			}
-		})
-}
-
 func TestDiskBandwidthLimiter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var dbl diskBandwidthLimiter
+	var dbl *diskBandwidthLimiter
 	dblToString := func() string {
-		return string(redact.Sprint(&dbl))
+		return string(redact.Sprint(dbl))
 	}
 
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "disk_bandwidth_limiter"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
-				dbl = makeDiskBandwidthLimiter()
+				dbl = newDiskBandwidthLimiter()
 				return dblToString()
 
 			case "compute":
@@ -80,20 +44,28 @@ func TestDiskBandwidthLimiter(t *testing.T) {
 				d.ScanArgs(t, "write-bw", &writeBandwidth)
 				d.ScanArgs(t, "provisioned-bw", &provisionedBandwidth)
 				diskLoad := intervalDiskLoadInfo{
-					readBandwidth:        int64(readBandwidth),
-					writeBandwidth:       int64(writeBandwidth),
-					provisionedBandwidth: int64(provisionedBandwidth),
+					readBandwidth:           int64(readBandwidth),
+					writeBandwidth:          int64(writeBandwidth),
+					provisionedBandwidth:    int64(provisionedBandwidth),
+					elasticBandwidthMaxUtil: 0.9,
 				}
-				var incomingBytes, regularTokensUsed, elasticTokensUsed int
-				d.ScanArgs(t, "incoming-bytes", &incomingBytes)
+				var regularTokensUsed, elasticTokensUsed int64
+				var regularTokensRequested, elasticTokensRequested int64
 				d.ScanArgs(t, "regular-tokens-used", &regularTokensUsed)
 				d.ScanArgs(t, "elastic-tokens-used", &elasticTokensUsed)
-				lsmInfo := intervalLSMInfo{
-					incomingBytes:     int64(incomingBytes),
-					regularTokensUsed: int64(regularTokensUsed),
-					elasticTokensUsed: int64(elasticTokensUsed),
+				d.ScanArgs(t, "regular-tokens-requested", &regularTokensRequested)
+				d.ScanArgs(t, "elastic-tokens-requested", &elasticTokensRequested)
+				utilInfo := intervalUtilInfo{
+					actualTokensUsed: [admissionpb.NumWorkClasses]diskTokens{
+						{writeBWTokens: regularTokensUsed}, // regular
+						{writeBWTokens: elasticTokensUsed}, // elastic
+					},
+					requestedTokens: [admissionpb.NumWorkClasses]diskTokens{
+						{writeBWTokens: regularTokensRequested}, // regular
+						{writeBWTokens: elasticTokensRequested}, // elastic
+					},
 				}
-				dbl.computeElasticTokens(context.Background(), diskLoad, lsmInfo)
+				dbl.computeElasticTokens(diskLoad, utilInfo)
 				return dblToString()
 
 			default:
