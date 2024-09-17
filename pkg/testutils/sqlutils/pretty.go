@@ -29,6 +29,15 @@ func VerifyStatementPrettyRoundtrip(t *testing.T, sql string) {
 	for i := range stmts {
 		origStmt := stmts[i].AST
 		verifyStatementPrettyRoundTrip(t, sql, origStmt, false /* plpgsql */)
+
+		// Verify that the AST can be walked.
+		if _, err := tree.SimpleStmtVisit(
+			origStmt,
+			func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) { return },
+		); err != nil {
+			t.Fatalf("cannot walk stmt %s %v", stmts[i].SQL, err)
+		}
+
 	}
 }
 
