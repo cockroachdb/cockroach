@@ -2530,8 +2530,10 @@ func (r *Replica) GetMutexForTesting() *ReplicaMutex {
 func racV2EnabledWhenLeaderLevel(
 	ctx context.Context, st *cluster.Settings,
 ) replica_rac2.EnabledWhenLeaderLevel {
-	// TODO(sumeer): implement fully, once all the dependencies are implemented.
-	return replica_rac2.NotEnabledWhenLeader
+	// TODO(kvoli,sumeerbhola): Should this be a cluster setting, or are we
+	// ratcheting it up via cluster version? Either way, we need a cluster
+	// setting somewhere.
+	return replica_rac2.EnabledWhenLeaderV2Encoding
 }
 
 // maybeEnqueueProblemRange will enqueue the replica for processing into the
