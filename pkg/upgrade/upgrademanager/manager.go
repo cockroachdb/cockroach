@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -61,6 +62,7 @@ type Manager struct {
 	settings  *cluster.Settings
 	knobs     upgradebase.TestingKnobs
 	clusterID *base.ClusterIDContainer
+	le        *license.Enforcer
 }
 
 // GetUpgrade returns the upgrade associated with this key.
@@ -92,6 +94,7 @@ func NewManager(
 	settings *cluster.Settings,
 	clusterID *base.ClusterIDContainer,
 	testingKnobs *upgradebase.TestingKnobs,
+	le *license.Enforcer,
 ) *Manager {
 	var knobs upgradebase.TestingKnobs
 	if testingKnobs != nil {
@@ -105,6 +108,7 @@ func NewManager(
 		codec:     codec,
 		settings:  settings,
 		clusterID: clusterID,
+		le:        le,
 		knobs:     knobs,
 	}
 }
@@ -675,6 +679,7 @@ func (m *Manager) runMigration(
 				JobRegistry:      m.jr,
 				TestingKnobs:     &m.knobs,
 				ClusterID:        m.clusterID.Get(),
+				LicenseEnforcer:  m.le,
 			}); err != nil {
 				return err
 			}
@@ -852,6 +857,7 @@ func (m *Manager) checkPreconditions(ctx context.Context, versions []roachpb.Ver
 			InternalExecutor: m.ie,
 			JobRegistry:      m.jr,
 			ClusterID:        m.clusterID.Get(),
+			LicenseEnforcer:  m.le,
 		}); err != nil {
 			return errors.Wrapf(
 				err,
