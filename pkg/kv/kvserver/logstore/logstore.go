@@ -109,11 +109,16 @@ func (m MsgStorageAppendDone) Mark() raft.LogMark {
 	// one in the list.
 	// TODO(pav-kv): this is an undocumented API quirk. Refactor the raft write
 	// API to be more digestible outside the package.
-	msg := m[len(m)-1]
-	if msg.Type != raftpb.MsgStorageAppendResp {
-		return raft.LogMark{}
+	if buildutil.CrdbTestBuild {
+		for _, msg := range m[:len(m)-1] {
+			if msg.Type == raftpb.MsgStorageAppendResp {
+				panic("unexpected MsgStorageAppendResp not in last position")
+			}
+		}
 	}
-	if len(msg.Entries) != 0 {
+	if msg := m[len(m)-1]; msg.Type != raftpb.MsgStorageAppendResp {
+		return raft.LogMark{}
+	} else if msg.Index != 0 {
 		return raft.LogMark{Term: msg.LogTerm, Index: msg.Index}
 	} else if msg.Snapshot != nil {
 		return raft.LogMark{Term: msg.LogTerm, Index: msg.Snapshot.Metadata.Index}
