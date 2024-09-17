@@ -1872,3 +1872,109 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 	jobutils.WaitForJobToCancel(t, dbA, jobAID)
 	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN newcol INT NOT NULL DEFAULT 10")
 }
+
+// TestLogicalReplicationCreationChecks verifies that we check that the table
+// schemas are compatible when creating the replication stream.
+func TestLogicalReplicationCreationChecks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	// Column families are not allowed.
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN new_col INT NOT NULL CREATE FAMILY f1")
+	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN new_col INT NOT NULL")
+	dbA.ExpectErr(t,
+		"cannot create logical replication stream: table tab has more than one column family",
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Check for mismatched numbers of columns.
+	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN new_col")
+	dbA.ExpectErr(t,
+		"cannot create logical replication stream: destination table tab has 3 columns, but the source table tab has 4 columns",
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Check for mismatched column types.
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN new_col TEXT NOT NULL")
+	dbA.ExpectErr(t,
+		"cannot create logical replication stream: destination table tab column new_col has type STRING, but the source table tab has type INT8",
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Check for composite type in primary key.
+	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN new_col")
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN new_col INT NOT NULL")
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN composite_col DECIMAL NOT NULL")
+	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN composite_col DECIMAL NOT NULL")
+	dbA.Exec(t, "ALTER TABLE tab ALTER PRIMARY KEY USING COLUMNS (pk, composite_col)")
+	dbA.ExpectErr(t,
+		`cannot create logical replication stream: table tab has a primary key column \(composite_col\) with composite encoding`,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Check for partial indexes.
+	dbA.Exec(t, "ALTER TABLE tab ALTER PRIMARY KEY USING COLUMNS (pk)")
+	dbA.Exec(t, "CREATE INDEX partial_idx ON tab(composite_col) WHERE pk > 0")
+	dbA.ExpectErr(t,
+		`cannot create logical replication stream: table tab has a partial index partial_idx`,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Check for virtual computed columns that are a key of a secondary index.
+	dbA.Exec(t, "DROP INDEX partial_idx")
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN virtual_col INT NOT NULL AS (pk + 1) VIRTUAL")
+	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN virtual_col INT NOT NULL AS (pk + 1) VIRTUAL")
+	dbA.Exec(t, "CREATE INDEX virtual_col_idx ON tab(virtual_col)")
+	dbA.ExpectErr(t,
+		`cannot create logical replication stream: table tab has a virtual computed column virtual_col that is a key of index virtual_col_idx`,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// Check for virtual columns that are in the primary index.
+	dbA.Exec(t, "DROP INDEX virtual_col_idx")
+	dbA.Exec(t, "ALTER TABLE tab ALTER PRIMARY KEY USING COLUMNS (pk, virtual_col)")
+	dbA.ExpectErr(t,
+		`cannot create logical replication stream: table tab has a virtual computed column virtual_col that appears in the primary key`,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+
+	// After changing the primary key back, creating the stream should work.
+	dbA.Exec(t, "ALTER TABLE tab ALTER PRIMARY KEY USING COLUMNS (pk)")
+	// Remove the index that is left over from changing the PK.
+	dbA.Exec(t, "DROP INDEX tab_pk_virtual_col_key")
+	var jobAID jobspb.JobID
+	dbA.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab",
+		dbBURL.String(),
+	).Scan(&jobAID)
+
+	// Kill replication job.
+	dbA.Exec(t, "CANCEL JOB $1", jobAID)
+	jobutils.WaitForJobToCancel(t, dbA, jobAID)
+
+	// Verify that the stream cannot be created with user defined types.
+	dbA.Exec(t, "CREATE TYPE mytype AS ENUM ('a', 'b', 'c')")
+	dbB.Exec(t, "CREATE TYPE b.mytype AS ENUM ('a', 'b', 'c')")
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN enum_col mytype NOT NULL")
+	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN enum_col b.mytype NOT NULL")
+	dbA.ExpectErr(t,
+		`cannot create logical replication stream: destination table tab column enum_col has user-defined type USER DEFINED ENUM: public.mytype`,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String(),
+	)
+}
