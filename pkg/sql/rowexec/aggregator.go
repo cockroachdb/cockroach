@@ -61,7 +61,7 @@ type aggregatorBase struct {
 	input        execinfra.RowSource
 	inputDone    bool
 	inputTypes   []*types.T
-	funcs        []*aggregateFuncHolder
+	funcs        []aggregateFuncHolder
 	outputTypes  []*types.T
 	datumAlloc   tree.DatumAlloc
 	rowAlloc     rowenc.EncDatumRowAlloc
@@ -109,7 +109,7 @@ func (ag *aggregatorBase) init(
 	ag.groupCols = spec.GroupCols
 	ag.orderedGroupCols = spec.OrderedGroupCols
 	ag.aggregations = spec.Aggregations
-	ag.funcs = make([]*aggregateFuncHolder, len(spec.Aggregations))
+	ag.funcs = make([]aggregateFuncHolder, len(spec.Aggregations))
 	ag.outputTypes = make([]*types.T, len(spec.Aggregations))
 	ag.row = make(rowenc.EncDatumRow, len(spec.Aggregations))
 	ag.bucketsAcc = memMonitor.MakeBoundAccount()
@@ -125,6 +125,7 @@ func (ag *aggregatorBase) init(
 	// the functions which need to be fed values.
 	ag.inputTypes = input.OutputTypes()
 	semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
+	pAlloc := execagg.MakeParamTypesAllocator(spec.Aggregations)
 	for i, aggInfo := range spec.Aggregations {
 		if aggInfo.FilterColIdx != nil {
 			col := *aggInfo.FilterColIdx
@@ -139,12 +140,16 @@ func (ag *aggregatorBase) init(
 			}
 		}
 		constructor, arguments, outputType, err := execagg.GetAggregateConstructor(
-			ctx, ag.evalCtx, semaCtx, &aggInfo, ag.inputTypes,
+			ctx, ag.evalCtx, semaCtx, &aggInfo, ag.inputTypes, &pAlloc,
 		)
 		if err != nil {
 			return err
 		}
-		ag.funcs[i] = ag.newAggregateFuncHolder(constructor, arguments)
+		ag.funcs[i] = aggregateFuncHolder{
+			create:    constructor,
+			arena:     &ag.arena,
+			arguments: arguments,
+		}
 		if aggInfo.Distinct {
 			ag.funcs[i].seen = make(map[string]struct{})
 		}
@@ -890,16 +895,6 @@ const (
 	sizeOfAggregateFuncs = int64(unsafe.Sizeof(aggregateFuncs{}))
 	sizeOfAggregateFunc  = int64(unsafe.Sizeof(eval.AggregateFunc(nil)))
 )
-
-func (ag *aggregatorBase) newAggregateFuncHolder(
-	create func(*eval.Context, tree.Datums) eval.AggregateFunc, arguments tree.Datums,
-) *aggregateFuncHolder {
-	return &aggregateFuncHolder{
-		create:    create,
-		arena:     &ag.arena,
-		arguments: arguments,
-	}
-}
 
 // isDistinct returns whether this aggregateFuncHolder has not already seen the
 // encoding of grouping columns and argument columns. It should be used *only*
