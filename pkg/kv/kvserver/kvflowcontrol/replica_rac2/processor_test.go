@@ -86,6 +86,10 @@ func (r *testReplica) LeaseholderMuRLocked() roachpb.ReplicaID {
 	return r.leaseholder
 }
 
+func (r *testReplica) IsScratchRange() bool {
+	return true
+}
+
 type testRaftScheduler struct {
 	b *strings.Builder
 }
