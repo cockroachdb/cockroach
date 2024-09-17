@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -80,10 +81,10 @@ func makeTransferLeasesEventFn(gateway, target int) leasePreferencesEventFn {
 		conn := c.Conn(ctx, t.L(), gateway)
 		defer conn.Close()
 		_, err := conn.ExecContext(ctx, fmt.Sprintf(`
-      ALTER RANGE RELOCATE LEASE TO %d 
-      FOR SELECT range_id 
+      ALTER RANGE RELOCATE LEASE TO %d
+      FOR SELECT range_id
       FROM [SHOW RANGES FROM DATABASE kv WITH DETAILS]
-      WHERE lease_holder <> %d 
+      WHERE lease_holder <> %d
       `,
 			target, target,
 		))
@@ -242,13 +243,13 @@ func runLeasePreferences(
 	// Wait for the existing ranges (not kv) to be up-replicated. That way,
 	// creating the splits and waiting for up-replication on kv will be much
 	// quicker.
-	require.NoError(t, WaitForReplication(ctx, t, t.L(), conn, spec.replFactor, atLeastReplicationFactor))
+	require.NoError(t, roachtestutil.WaitForReplication(ctx, t.L(), conn, spec.replFactor, roachtestutil.AtLeastReplicationFactor))
 	c.Run(ctx, option.WithNodes(c.Node(numNodes)), fmt.Sprintf(
 		`./cockroach workload init kv --scatter --splits %d {pgurl:%d}`,
 		spec.ranges, numNodes))
 	// Wait for under-replicated ranges before checking lease preference
 	// enforcement.
-	require.NoError(t, WaitForReplication(ctx, t, t.L(), conn, spec.replFactor, atLeastReplicationFactor))
+	require.NoError(t, roachtestutil.WaitForReplication(ctx, t.L(), conn, spec.replFactor, roachtestutil.AtLeastReplicationFactor))
 
 	// Set a lease preference for the liveness range, to be on n5. This test
 	// would occasionally fail due to the liveness heartbeat failures, when the

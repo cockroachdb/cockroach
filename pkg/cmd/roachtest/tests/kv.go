@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -454,7 +455,7 @@ func registerKVQuiescenceDead(r registry.Registry) {
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
-			err := WaitFor3XReplication(ctx, t, t.L(), db)
+			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 			require.NoError(t, err)
 
 			qps := func(f func()) float64 {
@@ -534,7 +535,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 				defer dbs[i].Close()
 			}
 
-			err := WaitFor3XReplication(ctx, t, t.L(), dbs[0])
+			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), dbs[0])
 			require.NoError(t, err)
 
 			t.Status("initializing workload")
@@ -828,7 +829,7 @@ func registerKVRangeLookups(r registry.Registry) {
 				conns[i].Close()
 			}
 		}()
-		err := WaitFor3XReplication(ctx, t, t.L(), conns[0])
+		err := roachtestutil.WaitFor3XReplication(ctx, t.L(), conns[0])
 		require.NoError(t, err)
 
 		m := c.NewMonitor(ctx, c.CRDBNodes())

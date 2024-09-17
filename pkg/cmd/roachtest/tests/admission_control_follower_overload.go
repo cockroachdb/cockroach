@@ -177,7 +177,7 @@ func runAdmissionControlFollowerOverload(
 
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 	db := c.Conn(ctx, t.L(), 1)
-	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), db))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), db))
 
 	{
 		_, err := c.Conn(ctx, t.L(), 1).ExecContext(ctx, `SET CLUSTER SETTING admission.kv.pause_replication_io_threshold = 0.8`)

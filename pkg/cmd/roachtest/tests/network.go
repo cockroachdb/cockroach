@@ -109,7 +109,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	defer db.Close()
 
 	// Wait for up-replication. This will also print a progress message.
-	err = WaitFor3XReplication(ctx, t, t.L(), db)
+	err = roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 	require.NoError(t, err)
 
 	const expectedLeaseholder = 1

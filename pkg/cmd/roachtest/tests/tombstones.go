@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -53,7 +54,7 @@ func registerPointTombstone(r registry.Registry) {
 			conn := c.Conn(ctx, t.L(), 2)
 			defer conn.Close()
 			require.NoError(t, conn.PingContext(ctx))
-			require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
+			require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
 
 			execSQLOrFail := func(statement string, args ...interface{}) {
 				if _, err := conn.ExecContext(ctx, statement, args...); err != nil {

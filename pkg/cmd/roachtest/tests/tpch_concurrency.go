@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -73,7 +74,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 			t.Fatal(err)
 		}
 		scatterTables(t, conn, tpchTables)
-		err := WaitFor3XReplication(ctx, t, t.L(), conn)
+		err := roachtestutil.WaitFor3XReplication(ctx, t.L(), conn)
 		require.NoError(t, err)
 
 		// Populate the range cache on each node.
