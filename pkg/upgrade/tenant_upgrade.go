@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -33,14 +34,15 @@ import (
 // TenantDeps are the dependencies of upgrades which perform actions at the
 // SQL layer.
 type TenantDeps struct {
-	KVDB         *kv.DB
-	Codec        keys.SQLCodec
-	Settings     *cluster.Settings
-	DB           descs.DB
-	LeaseManager *lease.Manager
-	JobRegistry  *jobs.Registry
-	SessionData  *sessiondata.SessionData
-	ClusterID    uuid.UUID
+	KVDB            *kv.DB
+	Codec           keys.SQLCodec
+	Settings        *cluster.Settings
+	DB              descs.DB
+	LeaseManager    *lease.Manager
+	JobRegistry     *jobs.Registry
+	SessionData     *sessiondata.SessionData
+	ClusterID       uuid.UUID
+	LicenseEnforcer *license.Enforcer
 
 	// TODO(ajwerner): Remove this in favor of the descs.DB above.
 	InternalExecutor isql.Executor
