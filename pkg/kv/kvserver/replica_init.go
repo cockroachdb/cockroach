@@ -239,6 +239,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		EvalWaitMetrics:        r.store.cfg.KVFlowEvalWaitMetrics,
 		RangeControllerFactory: r.store.kvflowRangeControllerFactory,
 		EnabledWhenLeaderLevel: r.raftMu.flowControlLevel,
+		Knobs:                  r.store.TestingKnobs().FlowControlTestingKnobs,
 	})
 	return r
 }

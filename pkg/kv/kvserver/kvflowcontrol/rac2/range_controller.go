@@ -261,6 +261,7 @@ type RangeControllerOptions struct {
 	Clock               *hlc.Clock
 	CloseTimerScheduler ProbeToCloseTimerScheduler
 	EvalWaitMetrics     *EvalWaitMetrics
+	Knobs               *kvflowcontrol.TestingKnobs
 }
 
 // RangeControllerInitState is the initial state at the time of creation.
@@ -771,11 +772,15 @@ func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []entryF
 		if !entry.usesFlowControl {
 			continue
 		}
-		rs.sendStream.mu.tracker.Track(ctx, entry.term, entry.index, entry.pri, entry.tokens)
+		tokens := entry.tokens
+		if fn := rs.parent.opts.Knobs.OverrideTokenDeduction; fn != nil {
+			tokens = fn()
+		}
+		rs.sendStream.mu.tracker.Track(ctx, entry.term, entry.index, entry.pri, tokens)
 		rs.evalTokenCounter.Deduct(
-			ctx, WorkClassFromRaftPriority(entry.pri), entry.tokens)
+			ctx, WorkClassFromRaftPriority(entry.pri), tokens)
 		rs.sendTokenCounter.Deduct(
-			ctx, WorkClassFromRaftPriority(entry.pri), entry.tokens)
+			ctx, WorkClassFromRaftPriority(entry.pri), tokens)
 	}
 }
 
