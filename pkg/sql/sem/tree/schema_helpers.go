@@ -40,9 +40,9 @@ func IsSetOrResetSchemaLocked(n Statement) bool {
 func IsAllowedLDRSchemaChange(n Statement) bool {
 	switch s := n.(type) {
 	case *CreateIndex:
-		// Only allow non-unique indexes to be created. A unique index on a
-		// destination table could cause inserts to fail.
-		return !s.Unique
+		// Only allow non-unique and non-partial indexes to be created. A unique or
+		// partial index on a destination table could cause inserts to fail.
+		return !s.Unique && s.Predicate == nil
 	case *DropIndex:
 		return true
 	}
