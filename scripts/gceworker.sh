@@ -35,6 +35,21 @@ EOF
     retry gcloud compute ssh "${1}" --command=true || true
 }
 
+function refresh_ssh_config() {
+    IP=$($0 ip)
+    if ! grep -q "${FQNAME}" ~/.ssh/config; then
+      echo "No alias found for ${FQNAME} in ~/.ssh/config. Creating one now with the instance external ip."
+      echo "Host ${FQNAME}
+  HostName ${IP}
+  IdentityFile $HOME/.ssh/google_compute_engine
+  UserKnownHostsFile=$HOME/.ssh/google_compute_known_hosts
+  IdentitiesOnly=yes
+  CheckHostIP=no" >> ~/.ssh/config
+    else
+      sed -i"" -e "/Host ${FQNAME}/,/HostName/ s/HostName .*/HostName ${IP}/" ~/.ssh/config
+    fi
+}
+
 case "${cmd}" in
     gcloud)
     gcloud "$@"
@@ -62,7 +77,8 @@ case "${cmd}" in
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${NAME}" \
            --scopes "cloud-platform" \
-           --labels "created-by=${gsuite_account_for_label:0:63}"
+           --labels "created-by=${gsuite_account_for_label:0:63}" \
+           --metadata enable-oslogin=TRUE,block-project-ssh-keys=TRUE
     gcloud compute firewall-rules create "${NAME}-mosh" --allow udp:60000-61000
 
     # wait a bit to let gcloud create the instance before retrying
@@ -97,17 +113,18 @@ case "${cmd}" in
     ;;
     start)
     start_and_wait "${NAME}"
-    if ! gcloud compute config-ssh > /dev/null; then
-	echo "WARNING: Unable to invoke config-ssh, you may not be able to 'ssh ${FQNAME}'"
-    fi
+    refresh_ssh_config
 
     # SSH into the node, since that's probably why we started it.
     echo "****************************************"
     echo "Hint: you should also be able to directly invoke:"
-    echo "ssh ${FQNAME}"
+    echo "ssh <USERNAME_DOMAIN_SUFFIX>@${FQNAME}"
     echo "  or"
-    echo "mosh ${FQNAME}"
+    echo "mosh <USERNAME_DOMAIN_SUFFIX>@${FQNAME}"
     echo "instead of '$0 ssh'."
+    echo "<USERNAME_DOMAIN_SUFFIX> refers to the gsuite account"
+    echo "you use when running `gcloud auth login`. An example"
+    echo "is christopher_cockroachlabs_com@gceworker-christopherye.us-east1-b.cockroach-workers"
     echo
     if [ -z "${GCEWORKER_START_SSH_COMMAND-}" ]; then
 	echo "Connecting via SSH."
@@ -140,12 +157,7 @@ case "${cmd}" in
     echo "waiting for node to finish starting..."
     # Wait for vm and sshd to start up.
     retry gcloud compute ssh "${NAME}" --command=true || true
-
-    # Rewrite the SSH config, since the VM may now be bound to a new ephemeral IP address.
-    if ! gcloud compute config-ssh > /dev/null; then
-      echo "WARNING: Unable to invoke config-ssh, you may not be able to 'ssh ${FQNAME}'"
-    fi
-
+    refresh_ssh_config
     # SSH into the node, since that's probably why we resumed it.
     $0 ssh
     ;;
@@ -237,7 +249,6 @@ case "${cmd}" in
     fi
     tmpfile=$(mktemp)
     trap 'rm -f ${tmpfile}' EXIT
-    gcloud compute config-ssh --ssh-config-file "$tmpfile" > /dev/null
     unison "$host" "ssh://${NAME}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}/$worker" \
       -sshargs "-F ${tmpfile}" -auto -prefer "$host" -repeat watch \
       -ignore 'Path .localcluster.certs*' \

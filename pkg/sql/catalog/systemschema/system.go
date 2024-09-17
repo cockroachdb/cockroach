@@ -1203,6 +1203,7 @@ CREATE TABLE system.mvcc_statistics (
     perc_live_data FLOAT NOT NULL,
     last_update_error string,
     last_updated TIMESTAMPTZ NOT NULL DEFAULT now(),
+    table_type string NOT NULL,
 		crdb_internal_last_updated_table_id_shard_16 INT4 NOT VISIBLE NOT NULL AS (` + crdbInternalTableIdLastUpdatedShard + `) VIRTUAL,
     CONSTRAINT "primary" PRIMARY KEY (db_id, table_id),
 		INDEX "replication_size_bytes_table_id_idx" (replication_size_bytes desc, table_id),
@@ -1230,7 +1231,8 @@ CREATE TABLE system.mvcc_statistics (
 			total_data_bytes,
 			perc_live_data,
 			last_update_error,
-			last_updated
+			last_updated,
+			table_type
     )
 	);`
 )
@@ -4821,9 +4823,10 @@ var (
 				{Name: "perc_live_data", ID: 13, Type: types.Float, Nullable: false},
 				{Name: "last_update_error", ID: 14, Type: types.String, Nullable: true},
 				{Name: "last_updated", ID: 15, Type: types.TimestampTZ, Nullable: false, DefaultExpr: &nowTZString},
+				{Name: "table_type", ID: 16, Type: types.String, Nullable: false},
 				{
 					Name:        "crdb_internal_last_updated_table_id_shard_16",
-					ID:          16,
+					ID:          17,
 					Type:        types.Int4,
 					Nullable:    false,
 					ComputeExpr: &crdbInternalTableIdLastUpdatedShardStr,
@@ -4851,8 +4854,9 @@ var (
 						"perc_live_data",
 						"last_update_error",
 						"last_updated",
+						"table_type",
 					},
-					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
 				},
 			},
 			descpb.IndexDescriptor{
@@ -4944,7 +4948,7 @@ var (
 					catenumpb.IndexColumn_DESC,
 					catenumpb.IndexColumn_ASC,
 				},
-				KeyColumnIDs:       []descpb.ColumnID{16, 15, 2},
+				KeyColumnIDs:       []descpb.ColumnID{17, 15, 2},
 				KeySuffixColumnIDs: []descpb.ColumnID{1},
 				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
@@ -5006,7 +5010,7 @@ var (
 				Expr:                  "crdb_internal_last_updated_table_id_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)",
 				Name:                  "check_crdb_internal_last_updated_table_id_shard_16",
 				Validity:              descpb.ConstraintValidity_Validated,
-				ColumnIDs:             []descpb.ColumnID{16},
+				ColumnIDs:             []descpb.ColumnID{17},
 				IsNonNullConstraint:   false,
 				FromHashShardedColumn: true,
 				ConstraintID:          tbl.NextConstraintID,

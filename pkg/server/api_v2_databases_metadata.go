@@ -253,6 +253,7 @@ func (a *apiV2Server) getTableMetadata(
 	  			WHERE grantee = $
 	  			AND privilege_type = 'CONNECT'
 	  		))
+		AND tbm.table_type = 'TABLE'
 		`, sqlUserStr, sqlUserStr)
 
 	// Add filter for db id if one  is provided
@@ -551,7 +552,7 @@ func (a *apiV2Server) getDBMetadata(
 		tbm.db_id,
 		tbm.db_name,
 		sum(tbm.replication_size_bytes):: INT as size_bytes,
-		count(tbm.table_id) as table_count,
+		count(CASE WHEN tbm.table_type = 'TABLE' THEN 1 ELSE NULL END) as table_count,
 		max(tbm.last_updated) as last_updated,
 		s.store_ids,
 		count(*) OVER() as total_row_count
