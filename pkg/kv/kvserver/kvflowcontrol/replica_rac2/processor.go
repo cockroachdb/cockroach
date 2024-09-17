@@ -50,6 +50,10 @@ type Replica interface {
 	// Replica mu is held for reads or writes. The caller does not make any claims
 	// about whether it holds raftMu or not.
 	LeaseholderMuRLocked() roachpb.ReplicaID
+	// IsScratchRange returns true if this is range is a scratch range (i.e.
+	// overlaps with the scratch span and has a start key <=
+	// keys.ScratchRangeMin).
+	IsScratchRange() bool
 }
 
 // RaftScheduler abstracts kvserver.raftScheduler.
@@ -213,6 +217,7 @@ type ProcessorOptions struct {
 	EvalWaitMetrics        *rac2.EvalWaitMetrics
 
 	EnabledWhenLeaderLevel EnabledWhenLeaderLevel
+	Knobs                  *kvflowcontrol.TestingKnobs
 }
 
 // SideChannelInfoUsingRaftMessageRequest is used to provide a follower
@@ -800,8 +805,11 @@ func (p *processorImpl) HandleRaftReadyRaftMuLocked(ctx context.Context, e rac2.
 	// our admitted vector is likely consistent with the latest leader term.
 	p.maybeSendAdmittedRaftMuLocked(ctx)
 	if rc := p.leader.rc; rc != nil {
-		if err := rc.HandleRaftEventRaftMuLocked(ctx, e); err != nil {
-			log.Errorf(ctx, "error handling raft event: %v", err)
+		if knobs := p.opts.Knobs; knobs == nil || !knobs.UseOnlyForScratchRanges ||
+			p.opts.Replica.IsScratchRange() {
+			if err := rc.HandleRaftEventRaftMuLocked(ctx, e); err != nil {
+				log.Errorf(ctx, "error handling raft event: %v", err)
+			}
 		}
 	}
 }
@@ -1141,6 +1149,7 @@ type RangeControllerFactoryImpl struct {
 	evalWaitMetrics            *rac2.EvalWaitMetrics
 	streamTokenCounterProvider *rac2.StreamTokenCounterProvider
 	closeTimerScheduler        rac2.ProbeToCloseTimerScheduler
+	knobs                      *kvflowcontrol.TestingKnobs
 }
 
 func NewRangeControllerFactoryImpl(
@@ -1148,12 +1157,14 @@ func NewRangeControllerFactoryImpl(
 	evalWaitMetrics *rac2.EvalWaitMetrics,
 	streamTokenCounterProvider *rac2.StreamTokenCounterProvider,
 	closeTimerScheduler rac2.ProbeToCloseTimerScheduler,
+	knobs *kvflowcontrol.TestingKnobs,
 ) RangeControllerFactoryImpl {
 	return RangeControllerFactoryImpl{
 		clock:                      clock,
 		evalWaitMetrics:            evalWaitMetrics,
 		streamTokenCounterProvider: streamTokenCounterProvider,
 		closeTimerScheduler:        closeTimerScheduler,
+		knobs:                      knobs,
 	}
 }
 
@@ -1172,6 +1183,7 @@ func (f RangeControllerFactoryImpl) New(
 			Clock:               f.clock,
 			CloseTimerScheduler: f.closeTimerScheduler,
 			EvalWaitMetrics:     f.evalWaitMetrics,
+			Knobs:               f.knobs,
 		},
 		rac2.RangeControllerInitState{
 			ReplicaSet:  state.replicaSet,
