@@ -604,9 +604,10 @@ func ProcessAggregations(
 	constructors = make([]execagg.AggregateConstructor, len(aggregations))
 	constArguments = make([]tree.Datums, len(aggregations))
 	outputTypes = make([]*types.T, len(aggregations))
+	pAlloc := execagg.MakeParamTypesAllocator(aggregations)
 	for i, aggFn := range aggregations {
 		constructors[i], constArguments[i], outputTypes[i], err = execagg.GetAggregateConstructor(
-			ctx, evalCtx, semaCtx, &aggFn, inputTypes,
+			ctx, evalCtx, semaCtx, &aggFn, inputTypes, &pAlloc,
 		)
 		if err != nil {
 			return
