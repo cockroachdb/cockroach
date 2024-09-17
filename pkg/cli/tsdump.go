@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -529,18 +531,26 @@ func (d *datadogWriter) Flush() error {
 		return err
 	}
 
-	req, err := http.NewRequest("POST", d.targetURL, &zipBuf)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("DD-API-KEY", d.apiKey)
-	req.Header.Set(server.ContentTypeHeader, "application/json")
-	req.Header.Set(httputil.ContentEncodingHeader, "gzip")
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.MaxRetries = 3
+	for retry := retry.Start(retryOpts); retry.Next(); {
+		req, err := http.NewRequest("POST", d.targetURL, &zipBuf)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("DD-API-KEY", d.apiKey)
+		req.Header.Set(server.ContentTypeHeader, "application/json")
+		req.Header.Set(httputil.ContentEncodingHeader, "gzip")
 
-	err = d.doRequest(req)
-	if err != nil {
-		return err
+		err = d.doRequest(req)
+		if err != nil {
+			fmt.Printf("retry attempt:%d tsdump: error while sending metrics to datadog: %v\n", retry.CurrentAttempt(), err)
+			continue
+		} else {
+			break
+		}
 	}
+
 	d.series = nil
 	return nil
 }
