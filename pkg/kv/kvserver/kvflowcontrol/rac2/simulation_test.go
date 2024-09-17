@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -76,8 +75,7 @@ import (
 //     adjust={+,-}<bytes>/s rate=<int>/s [stream=t<int>/s<int>] \
 //     [deduction-delay=<duration>]                                          (B)
 //     ....
-//     t=<duration> handle=<string> op=connect stream=t<int>/s<int> \
-//     log-position=<int>/<int>                                              (C)
+//     t=<duration> handle=<string> op=connect stream=t<int>/s<int>          (C)
 //     ....
 //     t=<duration> handle=<string> op=disconnect stream=t<int>/s<int>       (D)
 //     ....
@@ -271,19 +269,6 @@ func TestUsingSimulation(t *testing.T) {
 							require.True(t, arg == "connect" || arg == "disconnect" ||
 								arg == "close" || arg == "snapshot")
 							tl.rcOp = arg
-
-						case strings.HasPrefix(parts[i], "log-position="):
-							// Parse log-position=<int>/<int>.
-							inner := strings.Split(arg, "/")
-							require.Len(t, inner, 2)
-							term, err := strconv.Atoi(inner[0])
-							require.NoError(t, err)
-							index, err := strconv.Atoi(inner[1])
-							require.NoError(t, err)
-							tl.position = kvflowcontrolpb.RaftLogPosition{
-								Term:  uint64(term),
-								Index: uint64(index),
-							}
 
 						default:
 							t.Fatalf("unrecognized prefix: %s", parts[i])
@@ -546,7 +531,6 @@ func (s *simulator) timeline(tl timeline) {
 		if tl.rcOp == "connect" {
 			// Form C.
 			require.NotZero(s.state.t, tl.stream)
-			require.NotZero(s.state.t, tl.position)
 		}
 		if tl.rcOp == "disconnect" {
 			// Form D.
@@ -554,12 +538,11 @@ func (s *simulator) timeline(tl timeline) {
 		}
 
 		s.ticker = append(s.ticker, &rcOpTicker{
-			t:        s.state.t,
-			tstart:   tl.tstart,
-			handle:   tl.handle,
-			op:       tl.rcOp,
-			stream:   tl.stream,
-			position: tl.position,
+			t:      s.state.t,
+			tstart: tl.tstart,
+			handle: tl.handle,
+			op:     tl.rcOp,
+			stream: tl.stream,
 		})
 		return
 	}
@@ -570,7 +553,6 @@ func (s *simulator) timeline(tl timeline) {
 	}
 
 	require.NotZero(s.state.t, tl.tend)
-	require.Zero(s.state.t, tl.position)
 	s.ticker = append(s.ticker, &rcTicker{
 		t: s.state.t,
 
@@ -651,9 +633,6 @@ type timeline struct {
 	// The specific operation to run on a RangeController. Only applicable to
 	// forms C-E.
 	rcOp string
-	// The log position at which we start issuing writes/deducting tokens (form
-	// B) or the position at which we connect a given stream (form C).
-	position kvflowcontrolpb.RaftLogPosition
 }
 
 type ticker interface {
@@ -924,12 +903,11 @@ func (w *waitingRCRequest) remove(i int) {
 // simulate timed operations on a RangeController (taking snapshots,
 // connecting/disconnected replica streams, closing it entirely).
 type rcOpTicker struct {
-	t        *testing.T
-	tstart   time.Time
-	handle   *testingRCRange
-	position kvflowcontrolpb.RaftLogPosition
-	stream   kvflowcontrol.Stream
-	op       string
+	t      *testing.T
+	tstart time.Time
+	handle *testingRCRange
+	stream kvflowcontrol.Stream
+	op     string
 
 	done bool
 }
@@ -948,7 +926,7 @@ func (rot *rcOpTicker) tick(ctx context.Context, t time.Time) {
 	case "disconnect":
 		rot.handle.testingDisconnectStream(rot.t, ctx, rot.stream)
 	case "connect":
-		rot.handle.testingConnectStream(rot.t, ctx, rot.stream, rot.position)
+		rot.handle.testingConnectStream(rot.t, ctx, rot.stream)
 	case "snapshot":
 		var data string
 		rid := rot.handle.testingFindReplStreamOrFatal(ctx, rot.stream)
@@ -1108,16 +1086,29 @@ func (r *testingRCRange) testingDeductTokens(
 		log.Fatal(ctx, "operating on a closed RangeController")
 	}
 	r.mu.quorumPosition.Index++
-
+	entry := testingCreateEntry(t, entryInfo{
+		term:   r.mu.quorumPosition.Term,
+		index:  r.mu.quorumPosition.Index,
+		enc:    raftlog.EntryEncodingStandardWithACAndPriority,
+		tokens: tokens,
+		pri:    AdmissionToRaftPriority(pri),
+	})
+	msgApps := map[roachpb.ReplicaID][]raftpb.Message{}
+	msgApp := raftpb.Message{
+		Type:    raftpb.MsgApp,
+		To:      0,
+		Entries: []raftpb.Entry{entry},
+	}
+	for k, testR := range r.mu.r.replicaSet {
+		msgApp.To = raftpb.PeerID(k)
+		msgApps[k] = append([]raftpb.Message(nil), msgApp)
+		testR.info.Next = r.mu.quorumPosition.Index + 1
+		r.mu.r.replicaSet[k] = testR
+	}
 	require.NoError(t, r.rc.HandleRaftEventRaftMuLocked(ctx, RaftEvent{
-		Term: r.mu.quorumPosition.Term,
-		Entries: []raftpb.Entry{testingCreateEntry(t, entryInfo{
-			term:   r.mu.quorumPosition.Term,
-			index:  r.mu.quorumPosition.Index,
-			enc:    raftlog.EntryEncodingStandardWithACAndPriority,
-			tokens: tokens,
-			pri:    AdmissionToRaftPriority(pri),
-		})},
+		Term:    r.mu.quorumPosition.Term,
+		Entries: []raftpb.Entry{entry},
+		MsgApps: msgApps,
 	}))
 }
 
@@ -1181,15 +1172,11 @@ func (r *testingRCRange) testingFindReplStreamOrFatal(
 // thereby connecting a replication stream. If a voter for the given stream
 // already exists, it is overwritten and forced to StateReplicate.
 func (r *testingRCRange) testingConnectStream(
-	t *testing.T,
-	ctx context.Context,
-	stream kvflowcontrol.Stream,
-	position kvflowcontrolpb.RaftLogPosition,
+	t *testing.T, ctx context.Context, stream kvflowcontrol.Stream,
 ) {
 	if r.rc == nil {
 		log.Fatal(ctx, "operating on a closed RangeController")
 	}
-	r.mu.quorumPosition = position
 	r.mu.r.replicaSet[roachpb.ReplicaID(stream.StoreID)] = testingReplica{
 		desc: roachpb.ReplicaDescriptor{
 			// We aren't testing multiple stores per node.
@@ -1200,8 +1187,8 @@ func (r *testingRCRange) testingConnectStream(
 		},
 		info: FollowerStateInfo{
 			State: tracker.StateReplicate,
-			Match: position.Index,
-			Next:  position.Index + 1,
+			Match: r.mu.quorumPosition.Index,
+			Next:  r.mu.quorumPosition.Index + 1,
 		},
 	}
 	// Send an empty raft event in order to trigger any state changes.

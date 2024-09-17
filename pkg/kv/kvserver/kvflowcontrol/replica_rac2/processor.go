@@ -1174,8 +1174,9 @@ func (f RangeControllerFactoryImpl) New(
 			EvalWaitMetrics:     f.evalWaitMetrics,
 		},
 		rac2.RangeControllerInitState{
-			ReplicaSet:  state.replicaSet,
-			Leaseholder: state.leaseholder,
+			ReplicaSet:    state.replicaSet,
+			Leaseholder:   state.leaseholder,
+			NextRaftIndex: state.nextRaftIndex,
 		},
 	)
 }
