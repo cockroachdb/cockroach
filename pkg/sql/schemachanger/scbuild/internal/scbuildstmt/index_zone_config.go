@@ -48,7 +48,7 @@ func (izo *indexZoneConfigObj) addZoneConfigToBuildCtx(b BuildCtx) scpb.Element 
 		subzones = parentZoneConfig.Subzones
 	}
 
-	ss, err := generateSubzoneSpans(b, izo.tableID, subzones, izo.indexID, "")
+	ss, err := generateSubzoneSpans(b, izo.tableID, subzones)
 	if err != nil {
 		panic(err)
 	}
@@ -72,14 +72,20 @@ func (izo *indexZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.Zon
 		return b.QueryByID(id).FilterIndexZoneConfig()
 	}, sameIdx)
 
+	// Set the table zone config for generating proper subzone spans later on.
+	_ = izo.tableZoneConfigObj.retrievePartialZoneConfig(b)
+
+	var partialZone *zonepb.ZoneConfig
 	if mostRecentElem != nil {
-		idxZc := zonepb.NewZoneConfig()
-		idxZc.Subzones = []zonepb.Subzone{mostRecentElem.Subzone}
-		izo.zoneConfig = idxZc
+		// Construct a zone config placeholder with the correct subzone. This
+		// will be what we return.
+		partialZone = zonepb.NewZoneConfig()
+		partialZone.DeleteTableConfig()
+		partialZone.Subzones = []zonepb.Subzone{mostRecentElem.Subzone}
+		izo.indexSubzone = &mostRecentElem.Subzone
 		izo.seqNum = mostRecentElem.SeqNum
 	}
-
-	return izo.zoneConfig
+	return partialZone
 }
 
 func (izo *indexZoneConfigObj) retrieveCompleteZoneConfig(
