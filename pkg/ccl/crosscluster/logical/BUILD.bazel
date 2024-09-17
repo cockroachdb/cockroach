@@ -71,6 +71,7 @@ go_library(
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/buildutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/log",
