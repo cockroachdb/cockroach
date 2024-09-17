@@ -425,7 +425,9 @@ func newTenantServer(
 	// tenant separation model. For a small number of tenants this is OK, but if
 	// we have a large number of tenants in shared process mode this could be a
 	// problem from a memory and network perspective.
-	baseCfg.CidrLookup.Start(ctx, stopper)
+	if err = baseCfg.CidrLookup.Start(ctx, stopper); err != nil {
+		return nil, err
+	}
 
 	// Instantiate the SQL server proper.
 	sqlServer, err := newSQLServer(ctx, args)
