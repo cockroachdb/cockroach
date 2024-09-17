@@ -7,9 +7,9 @@ handle=h
 # t=5s. We issue writes at 1MiB/s and return tokens for each stream at the rate
 # of deduction, only 200ms later.
 timeline
-t=0s             handle=h op=connect    stream=t1/s1   log-position=4/0
-t=0s             handle=h op=connect    stream=t1/s2   log-position=4/0
-t=5s             handle=h op=connect    stream=t1/s3   log-position=4/50
+t=0s             handle=h op=connect    stream=t1/s1
+t=0s             handle=h op=connect    stream=t1/s2
+t=5s             handle=h op=connect    stream=t1/s3
 t=[0s,10s)       handle=h class=regular adjust=-1MiB/s   rate=10/s
 t=[0.2s,10.2s)   handle=h class=regular adjust=+1MiB/s   rate=10/s stream=t1/s1
 t=[0.2s,10.2s)   handle=h class=regular adjust=+1MiB/s   rate=10/s stream=t1/s2

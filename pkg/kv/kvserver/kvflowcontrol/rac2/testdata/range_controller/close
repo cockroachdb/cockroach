@@ -2,10 +2,10 @@
 # state to StateSnapshot causes all tracked token deductions to be returned to
 # the underlying stream token counts.
 init
-range_id=1 tenant_id=1 local_replica_id=1
-  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
-  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
-  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 t1/s1: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
@@ -68,10 +68,10 @@ t1/s3: reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
 # Change s3 to StateSnapshot. This should close the send stream and return the
 # tracked deductions for entries in [1,3].
 set_replicas
-range_id=1 tenant_id=1 local_replica_id=1
-  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
-  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
-  store_id=3 replica_id=3 type=VOTER_FULL state=StateSnapshot
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=4
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=4
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=4
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateSnapshot next=4
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 

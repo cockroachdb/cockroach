@@ -1175,8 +1175,9 @@ func (f RangeControllerFactoryImpl) New(
 			Knobs:               f.knobs,
 		},
 		rac2.RangeControllerInitState{
-			ReplicaSet:  state.replicaSet,
-			Leaseholder: state.leaseholder,
+			ReplicaSet:    state.replicaSet,
+			Leaseholder:   state.leaseholder,
+			NextRaftIndex: state.nextRaftIndex,
 		},
 	)
 }
