@@ -821,6 +821,12 @@ func (txn *wrappedInternalTxn) SessionData() *sessiondata.SessionData {
 	return txn.wrapped.SessionData()
 }
 
+func (txn *wrappedInternalTxn) GetSystemSchemaVersion(
+	ctx context.Context,
+) (roachpb.Version, error) {
+	return txn.wrapped.GetSystemSchemaVersion(ctx)
+}
+
 func wrapTxn(txn isql.Txn, errFunc func(statement string) error) *wrappedInternalTxn {
 	return &wrappedInternalTxn{wrapped: txn, errFunc: errFunc}
 }
