@@ -109,11 +109,9 @@ func (m MsgStorageAppendDone) Mark() raft.LogMark {
 	// one in the list.
 	// TODO(pav-kv): this is an undocumented API quirk. Refactor the raft write
 	// API to be more digestible outside the package.
-	msg := m[len(m)-1]
-	if msg.Type != raftpb.MsgStorageAppendResp {
+	if msg := m[len(m)-1]; msg.Type != raftpb.MsgStorageAppendResp {
 		return raft.LogMark{}
-	}
-	if len(msg.Entries) != 0 {
+	} else if msg.Index != 0 {
 		return raft.LogMark{Term: msg.LogTerm, Index: msg.Index}
 	} else if msg.Snapshot != nil {
 		return raft.LogMark{Term: msg.LogTerm, Index: msg.Snapshot.Metadata.Index}
