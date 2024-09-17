@@ -8,8 +8,8 @@ handle=h2
 # Set up two handles that connect only to s1, and issue writes at 2MiB/s each.
 # Set up token returns for the stream at 1MiB/s. 
 timeline
-t=0s         handle=h1    op=connect    stream=t1/s1   log-position=4/0
-t=0s         handle=h2    op=connect    stream=t1/s1   log-position=4/0
+t=0s         handle=h1    op=connect    stream=t1/s1
+t=0s         handle=h2    op=connect    stream=t1/s1
 t=[0s,10s)   handle=h1    class=regular adjust=-2MiB/s rate=10/s
 t=[0s,10s)   handle=h2    class=regular adjust=-2MiB/s rate=10/s
 t=[0s,10s)   stream=t1/s1 class=regular adjust=+1MiB/s rate=200/s
