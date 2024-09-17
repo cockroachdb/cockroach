@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -179,7 +180,7 @@ func runDrainAndDecommission(
 		run(`SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
 
 		// Wait for initial up-replication.
-		err := WaitForReplication(ctx, t, t.L(), db, defaultReplicationFactor, atLeastReplicationFactor)
+		err := roachtestutil.WaitForReplication(ctx, t.L(), db, defaultReplicationFactor, roachtestutil.AtLeastReplicationFactor)
 		require.NoError(t, err)
 	}
 
@@ -1021,7 +1022,7 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 		require.NoError(t, err)
 
 		// Wait for initial up-replication.
-		err = WaitFor3XReplication(ctx, t, t.L(), db)
+		err = roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 		require.NoError(t, err)
 	}
 
@@ -1112,7 +1113,7 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 		run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
 
 		// Wait for initial up-replication.
-		err := WaitForReplication(ctx, t, t.L(), db, replicationFactor, atLeastReplicationFactor)
+		err := roachtestutil.WaitForReplication(ctx, t.L(), db, replicationFactor, roachtestutil.AtLeastReplicationFactor)
 		require.NoError(t, err)
 	}
 

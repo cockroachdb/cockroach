@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
@@ -84,7 +85,7 @@ WITH unsafe_restore_incompatible_version;
 		}
 		scatterTables(t, clusterConn, tpcdsTables)
 		t.Status("waiting for full replication")
-		err := WaitFor3XReplication(ctx, t, t.L(), clusterConn)
+		err := roachtestutil.WaitFor3XReplication(ctx, t.L(), clusterConn)
 		require.NoError(t, err)
 
 		// TODO(yuzefovich): it seems like if cmpconn.CompareConns hits a

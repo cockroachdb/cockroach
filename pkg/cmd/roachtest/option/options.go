@@ -28,6 +28,10 @@ type StartOpts struct {
 	// indicating the nodes in which the virtual cluster should be
 	// started.
 	SeparateProcessNodes NodeListOption
+	// WaitForReplication indicates if we should wait for the
+	// corresponding replication factor after starting a cockroach
+	// process on a node.
+	WaitForReplicationFactor int
 
 	RoachprodOpts install.StartOpts
 	RoachtestOpts struct {
@@ -163,6 +167,17 @@ func InMemoryDB(size float64) StartStopOption {
 				opts.RoachprodOpts.ExtraArgs,
 				fmt.Sprintf("--store=type=mem,size=%.1f", size),
 			)
+		}
+	}
+}
+
+// WaitForReplication tells the start process to wait for at least 3X
+// replication after starting a cockroach process.
+func WaitForReplication() StartStopOption {
+	return func(opts interface{}) {
+		switch opts := opts.(type) {
+		case *StartOpts:
+			opts.WaitForReplicationFactor = 3
 		}
 	}
 }

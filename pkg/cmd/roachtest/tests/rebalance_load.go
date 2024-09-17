@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -252,7 +253,7 @@ func rebalanceByLoad(
 	db := c.Conn(ctx, l, 1)
 	defer db.Close()
 
-	require.NoError(t, WaitFor3XReplication(ctx, t, l, db))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, l, db))
 
 	var m *errgroup.Group
 	m, ctx = errgroup.WithContext(ctx)

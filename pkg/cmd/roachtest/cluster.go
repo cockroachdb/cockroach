@@ -1395,15 +1395,7 @@ func (c *clusterImpl) FetchDebugZip(
 	l.Printf("fetching debug zip")
 	c.status("fetching debug zip")
 
-	var nodes option.NodeListOption
-	for _, o := range opts {
-		if s, ok := o.(nodeSelector); ok {
-			nodes = s.Merge(nodes)
-		}
-	}
-	if len(nodes) == 0 {
-		nodes = c.All()
-	}
+	nodes := selectedNodesOrDefault(opts, c.All())
 
 	// Don't hang forever if we can't fetch the debug zip.
 	return timeutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
@@ -1529,6 +1521,23 @@ func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
 		return errors.Newf("%d dead cockroach process%s detected", deadProcesses, plural)
 	}
 	return nil
+}
+
+func selectedNodesOrDefault(
+	opts []option.Option, defaultNodes option.NodeListOption,
+) option.NodeListOption {
+	var nodes option.NodeListOption
+	for _, o := range opts {
+		if s, ok := o.(nodeSelector); ok {
+			nodes = s.Merge(nodes)
+		}
+	}
+
+	if len(nodes) == 0 {
+		return defaultNodes
+	}
+
+	return nodes
 }
 
 type HealthStatusResult struct {
@@ -2082,12 +2091,7 @@ func (c *clusterImpl) GitClone(
 func (c *clusterImpl) setStatusForClusterOpt(
 	operation string, worker bool, nodesOptions ...option.Option,
 ) {
-	var nodes option.NodeListOption
-	for _, o := range nodesOptions {
-		if s, ok := o.(nodeSelector); ok {
-			nodes = s.Merge(nodes)
-		}
-	}
+	nodes := selectedNodesOrDefault(nodesOptions, nil)
 
 	nodesString := " cluster"
 	if len(nodes) != 0 {
@@ -2187,6 +2191,24 @@ func (c *clusterImpl) StartE(
 			return err
 		}
 	}
+
+	if startOpts.WaitForReplicationFactor > 0 {
+		l.Printf("WaitForReplicationFactor: waiting for replication factor of at least %d", startOpts.WaitForReplicationFactor)
+		nodes := selectedNodesOrDefault(opts, c.All())
+
+		conn, err := c.ConnE(ctx, l, nodes[0])
+		if err != nil {
+			return errors.Wrapf(err, "failed to connect to n%d", nodes[0])
+		}
+		defer conn.Close()
+
+		if err := roachtestutil.WaitForReplication(
+			ctx, l, conn, startOpts.WaitForReplicationFactor, roachtestutil.AtLeastReplicationFactor,
+		); err != nil {
+			return errors.Wrap(err, "failed to wait for replication after starting cockroach")
+		}
+	}
+
 	return nil
 }
 
@@ -2963,13 +2985,7 @@ func (c *clusterImpl) ConnE(
 }
 
 func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
-	var r option.NodeListOption
-	for _, o := range opts {
-		if s, ok := o.(nodeSelector); ok {
-			r = s.Merge(r)
-		}
-	}
-	return c.name + r.String()
+	return c.name + selectedNodesOrDefault(opts, nil).String()
 }
 
 func (c *clusterImpl) Cloud() spec.Cloud {

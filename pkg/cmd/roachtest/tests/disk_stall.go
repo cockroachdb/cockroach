@@ -90,7 +90,7 @@ func runDiskStalledWALFailover(
 	defer n1Conn.Close()
 	require.NoError(t, n1Conn.PingContext(ctx))
 	// Wait for upreplication.
-	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), n1Conn))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), n1Conn))
 	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Nodes(2))
 	require.NoError(t, err)
 	adminURL := adminUIAddrs[0]
@@ -276,7 +276,7 @@ func runDiskStalledDetection(
 	require.NoError(t, n1Conn.PingContext(ctx))
 
 	// Wait for upreplication.
-	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), n2conn))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), n2conn))
 
 	c.Run(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 

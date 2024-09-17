@@ -202,7 +202,7 @@ func setupTPCC(
 			require.NoError(t, enableIsolationLevels(ctx, t, db))
 		}
 
-		require.NoError(t, WaitFor3XReplication(ctx, t, l, db))
+		require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, l, db))
 
 		estimatedSetupTimeStr := ""
 		if opts.EstimatedSetupTime != 0 {
@@ -1468,7 +1468,7 @@ func loadTPCCBench(
 
 	// Load the corresponding fixture.
 	t.L().Printf("restoring tpcc fixture\n")
-	err := WaitFor3XReplication(ctx, t, t.L(), db)
+	err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 	require.NoError(t, err)
 	var pgurl string
 	if b.SharedProcessMT {

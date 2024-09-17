@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -138,7 +139,7 @@ func preloadDataStep(target int) versionStep {
 			`./cockroach workload fixtures import tpcc --warehouses=100 {pgurl:1}`)
 		db := c.Conn(ctx, t.L(), target)
 		defer db.Close()
-		if err := WaitFor3XReplication(ctx, t, t.L(), db); err != nil {
+		if err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db); err != nil {
 			t.Fatal(err)
 		}
 	}

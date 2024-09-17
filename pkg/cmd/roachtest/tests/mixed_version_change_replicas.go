@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -58,7 +59,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 			return err
 		}
 		_, db := h.RandomDB(r)
-		if err := WaitFor3XReplication(ctx, t, l, db); err != nil {
+		if err := roachtestutil.WaitFor3XReplication(ctx, l, db); err != nil {
 			return err
 		}
 

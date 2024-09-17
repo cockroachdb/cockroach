@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -496,7 +497,7 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 		setRangeMaxBytes(params.maxSize)
 
 		require.NoError(t,
-			WaitForReplication(ctx, t, t.L(), db, 3 /* repicationFactor */, exactlyReplicationFactor))
+			roachtestutil.WaitForReplication(ctx, t.L(), db, 3 /* repicationFactor */, roachtestutil.ExactlyReplicationFactor))
 
 		// Init the split workload.
 		if err := params.load.init(ctx, t, c); err != nil {

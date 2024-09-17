@@ -628,7 +628,7 @@ func initFollowerReadsDB(
 				// If we're going to be killing nodes in a multi-region cluster, make
 				// sure system ranges have all upreplicated as expected as well. Do so
 				// using replication reports.
-				WaitForUpdatedReplicationReport(ctx, t, db)
+				roachtestutil.WaitForUpdatedReplicationReport(ctx, t, db)
 
 				var expAtRisk int
 				if topology.survival == zone {
