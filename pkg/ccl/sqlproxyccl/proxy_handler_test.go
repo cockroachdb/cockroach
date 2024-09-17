@@ -1894,6 +1894,10 @@ func TestPodWatcher(t *testing.T) {
 	opts.testingKnobs.balancerOpts = []balancer.Option{
 		balancer.NoRebalanceLoop(),
 		balancer.RebalanceRate(1.0),
+		// Set a rebalance delay of zero. Rebalance is triggered on startup because
+		// the watch enumerates three existing pods. The delay of zero allows
+		// addition of the fourth pod to trigger rebalancing.
+		balancer.RebalanceDelay(0),
 	}
 	proxy, addrs := newSecureProxyServer(ctx, t, s.Stopper(), opts)
 	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-%s", addrs.listenAddr, tenantID)
