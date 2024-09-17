@@ -197,6 +197,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 			versionsBinaryOverride: roachtestflags.VersionsBinaryOverride,
 			skipInit:               roachtestflags.SkipInit,
 			goCoverEnabled:         roachtestflags.GoCoverEnabled,
+			exportOpenMetrics:      roachtestflags.ExportOpenmetrics,
 		},
 		lopt)
 
