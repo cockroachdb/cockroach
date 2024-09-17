@@ -230,7 +230,7 @@ func (d Datums) Compare(ctx context.Context, evalCtx CompareContext, other Datum
 
 // CompositeDatum is a Datum that may require composite encoding in
 // indexes. Any Datum implementing this interface must also add itself to
-// colinfo.HasCompositeKeyEncoding.
+// colinfo.CanHaveCompositeKeyEncoding.
 type CompositeDatum interface {
 	Datum
 	// IsComposite returns true if this datum is not round-tripable in a key
