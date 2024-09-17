@@ -36,6 +36,10 @@ func TestIsAllowedLDRSchemaChange(t *testing.T) {
 			isAllowed: false,
 		},
 		{
+			stmt:      "CREATE INDEX idx ON t (a) WHERE a > 10",
+			isAllowed: false,
+		},
+		{
 			stmt:      "DROP INDEX idx",
 			isAllowed: true,
 		},
