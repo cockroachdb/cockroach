@@ -46,11 +46,20 @@ export function PageConfig(props: PageConfigProps): React.ReactElement {
 export interface PageConfigItemProps {
   children?: React.ReactNode;
   className?: string;
+  minWidth?: string;
 }
 
 export function PageConfigItem(props: PageConfigItemProps): React.ReactElement {
+  const minWidth = props.minWidth;
+  const itemStyles = React.useMemo(
+    () => ({
+      minWidth: minWidth || undefined,
+    }),
+    [minWidth],
+  );
+
   return (
-    <li className={`${cx("page-config__item")} ${props.className}`}>
+    <li className={cx("page-config__item", props.className)} style={itemStyles}>
       {props.children}
     </li>
   );
