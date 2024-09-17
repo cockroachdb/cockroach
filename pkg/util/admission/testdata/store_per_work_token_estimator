@@ -4,32 +4,35 @@ init
 # First call initializes.
 update flushed=1000 ingested=0 admitted=10 write-accounted=500 ingested-accounted=0
 ----
-interval state: {intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0}
+interval state: {intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intWriteAmpLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0 intAdjustedLSMWrites:0 intAdjustedDiskWriteBytes:0}
 at-admission-tokens: 1
 L0-write-tokens: int: 0.00x+0 smoothed: 1.75x+1 per-work-accounted: 1
 L0-ingest-tokens: int: 0.00x+0 smoothed: 0.75x+1 per-work-accounted: 1
 ingest-tokens: int: 0.00x+0 smoothed: 1.00x+1 per-work-accounted: 1
+write-amp: int: 0.00x+0 smoothed: 50.50x+1 per-work-accounted: 1
 
 # Writes account for ~1/2 of what is written, reflecting what can happen with
 # application to the state machine. No ingests.
 update flushed=1000 ingested=0 admitted=10 write-accounted=500 ingested-accounted=0 above-raft-count=8 above-raft-write=40
 ----
-interval state: {intWorkCount:10 intL0WriteBytes:1000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:500 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:1.98 constant:1} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0}
+interval state: {intWorkCount:10 intL0WriteBytes:1000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:500 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:1.98 constant:1} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intWriteAmpLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0 intAdjustedLSMWrites:1000 intAdjustedDiskWriteBytes:0}
 at-admission-tokens: 5
 L0-write-tokens: int: 1.98x+1 smoothed: 1.86x+1 per-work-accounted: 25
 L0-ingest-tokens: int: 0.00x+0 smoothed: 0.75x+1 per-work-accounted: 1
 ingest-tokens: int: 0.00x+0 smoothed: 1.00x+1 per-work-accounted: 1
+write-amp: int: 0.00x+0 smoothed: 50.50x+1 per-work-accounted: 1
 
 # Same as previous, except some of these are bypassed. Will not affect the
 # model. Since there are no above-raft stats, at-admission-tokens is
 # unchanged.
 update flushed=1000 ingested=0 admitted=10 write-accounted=500 ingested-accounted=0 bypassed-count=4 bypassed-write=300 bypassed-ingested=0
 ----
-interval state: {intWorkCount:10 intL0WriteBytes:1000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:500 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:1.98 constant:1} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:4 intL0WriteBypassedAccountedBytes:300 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0}
+interval state: {intWorkCount:10 intL0WriteBytes:1000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:500 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:1.98 constant:1} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intWriteAmpLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:4 intL0WriteBypassedAccountedBytes:300 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0 intAdjustedLSMWrites:1000 intAdjustedDiskWriteBytes:0}
 at-admission-tokens: 5
 L0-write-tokens: int: 1.98x+1 smoothed: 1.92x+1 per-work-accounted: 37
 L0-ingest-tokens: int: 0.00x+0 smoothed: 0.75x+1 per-work-accounted: 1
 ingest-tokens: int: 0.00x+0 smoothed: 1.00x+1 per-work-accounted: 1
+write-amp: int: 0.00x+0 smoothed: 50.50x+1 per-work-accounted: 1
 
 # Ingestion also happens. Bumps up the at-admission-tokens since at that time
 # we can't differentiate between writes and ingests. The constants in the
@@ -43,11 +46,12 @@ ingest-tokens: int: 0.00x+0 smoothed: 1.00x+1 per-work-accounted: 1
 # max multiplier of 1.5 is used and the rest handled in the additive term.
 update flushed=1000 ingested=1000 other-levels-ingested=9000 admitted=10 write-accounted=500 ingested-accounted=4000 bypassed-count=2 bypassed-write=0 bypassed-ingested=2000 above-raft-count=4 above-raft-write=100
 ----
-interval state: {intWorkCount:10 intL0WriteBytes:1000 intL0IngestedBytes:1000 intLSMIngestedBytes:10000 intL0WriteAccountedBytes:500 intIngestedAccountedBytes:4000 intL0WriteLinearModel:{multiplier:1.98 constant:1} intL0IngestedLinearModel:{multiplier:0.2475 constant:1} intIngestedLinearModel:{multiplier:1.5 constant:400} intBypassedWorkCount:2 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:2000 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0}
+interval state: {intWorkCount:10 intL0WriteBytes:1000 intL0IngestedBytes:1000 intLSMIngestedBytes:10000 intL0WriteAccountedBytes:500 intIngestedAccountedBytes:4000 intL0WriteLinearModel:{multiplier:1.98 constant:1} intL0IngestedLinearModel:{multiplier:0.2475 constant:1} intIngestedLinearModel:{multiplier:1.5 constant:400} intWriteAmpLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:2 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:2000 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0 intAdjustedLSMWrites:11000 intAdjustedDiskWriteBytes:0}
 at-admission-tokens: 19
 L0-write-tokens: int: 1.98x+1 smoothed: 1.95x+1 per-work-accounted: 43
 L0-ingest-tokens: int: 0.25x+1 smoothed: 0.50x+1 per-work-accounted: 200
 ingest-tokens: int: 1.50x+400 smoothed: 1.25x+200 per-work-accounted: 200
+write-amp: int: 0.00x+0 smoothed: 50.50x+1 per-work-accounted: 1
 
 # No ingestion into L0 observed by LSM, though ingested-accounted is non-zero
 # -- this updates the L0-ingest model since all these ingested bytes have gone
@@ -55,58 +59,93 @@ ingest-tokens: int: 1.50x+400 smoothed: 1.25x+200 per-work-accounted: 200
 # and the accounted bytes are 500, hence the multiplier close to 1.0.
 update flushed=1000 ingested=0 other-levels-ingested=500 admitted=10 write-accounted=450 ingested-accounted=500 above-raft-count=2 above-raft-write=225 above-write-ingested=250
 ----
-interval state: {intWorkCount:10 intL0WriteBytes:1000 intL0IngestedBytes:0 intLSMIngestedBytes:500 intL0WriteAccountedBytes:450 intIngestedAccountedBytes:500 intL0WriteLinearModel:{multiplier:2.2 constant:1} intL0IngestedLinearModel:{multiplier:0.001 constant:1} intIngestedLinearModel:{multiplier:0.98 constant:1} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0}
+interval state: {intWorkCount:10 intL0WriteBytes:1000 intL0IngestedBytes:0 intLSMIngestedBytes:500 intL0WriteAccountedBytes:450 intIngestedAccountedBytes:500 intL0WriteLinearModel:{multiplier:2.2 constant:1} intL0IngestedLinearModel:{multiplier:0.001 constant:1} intIngestedLinearModel:{multiplier:0.98 constant:1} intWriteAmpLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0 intAdjustedLSMWrites:1500 intAdjustedDiskWriteBytes:0}
 at-admission-tokens: 120
 L0-write-tokens: int: 2.20x+1 smoothed: 2.08x+1 per-work-accounted: 44
 L0-ingest-tokens: int: 0.00x+1 smoothed: 0.25x+1 per-work-accounted: 125
 ingest-tokens: int: 0.98x+1 smoothed: 1.11x+100 per-work-accounted: 125
+write-amp: int: 0.00x+0 smoothed: 50.50x+1 per-work-accounted: 1
 
 # Large amount of ingestion. Does not bump up at-admission-tokens to a very
 # large value since the ingestions do below-raft admission.
 update flushed=1000 ingested=1000000 other-levels-ingested=2000000 admitted=10 write-accounted=450 ingested-accounted=2000000 above-raft-count=10 above-raft-write=450
 ----
-interval state: {intWorkCount:10 intL0WriteBytes:1000 intL0IngestedBytes:1000000 intLSMIngestedBytes:3000000 intL0WriteAccountedBytes:450 intIngestedAccountedBytes:2000000 intL0WriteLinearModel:{multiplier:2.2 constant:1} intL0IngestedLinearModel:{multiplier:0.499995 constant:1} intIngestedLinearModel:{multiplier:1.499995 constant:1} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0}
+interval state: {intWorkCount:10 intL0WriteBytes:1000 intL0IngestedBytes:1000000 intLSMIngestedBytes:3000000 intL0WriteAccountedBytes:450 intIngestedAccountedBytes:2000000 intL0WriteLinearModel:{multiplier:2.2 constant:1} intL0IngestedLinearModel:{multiplier:0.499995 constant:1} intIngestedLinearModel:{multiplier:1.499995 constant:1} intWriteAmpLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0 intAdjustedLSMWrites:3001000 intAdjustedDiskWriteBytes:0}
 at-admission-tokens: 124
 L0-write-tokens: int: 2.20x+1 smoothed: 2.14x+1 per-work-accounted: 44
 L0-ingest-tokens: int: 0.50x+1 smoothed: 0.37x+1 per-work-accounted: 100062
 ingest-tokens: int: 1.50x+1 smoothed: 1.31x+50 per-work-accounted: 100062
+write-amp: int: 0.00x+0 smoothed: 50.50x+1 per-work-accounted: 1
 
 # Large number of bytes ingested into L0, but only 2000 are not to be ignored.
 # So we can fit a reasonable model. The L0-ingest and ingest models are the
 # same since no bytes were ingested into levels other than L0.
 update flushed=0 ingested=1000000 admitted=10 write-accounted=0 ingested-accounted=2000 ignore-ingested-into-L0=998000
 ----
-interval state: {intWorkCount:10 intL0WriteBytes:0 intL0IngestedBytes:1000000 intLSMIngestedBytes:1000000 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:2000 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0.995 constant:1} intIngestedLinearModel:{multiplier:0.995 constant:1} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:998000}
+interval state: {intWorkCount:10 intL0WriteBytes:0 intL0IngestedBytes:1000000 intLSMIngestedBytes:1000000 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:2000 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0.995 constant:1} intIngestedLinearModel:{multiplier:0.995 constant:1} intWriteAmpLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:998000 intAdjustedLSMWrites:2000 intAdjustedDiskWriteBytes:0}
 at-admission-tokens: 124
 L0-write-tokens: int: 0.00x+0 smoothed: 2.14x+1 per-work-accounted: 44
 L0-ingest-tokens: int: 0.99x+1 smoothed: 0.68x+1 per-work-accounted: 50131
 ingest-tokens: int: 0.99x+1 smoothed: 1.15x+25 per-work-accounted: 50131
+write-amp: int: 0.00x+0 smoothed: 50.50x+1 per-work-accounted: 1
 
 # Repeat of the previous.
 update flushed=0 ingested=1000000 admitted=10 write-accounted=0 ingested-accounted=2000 ignore-ingested-into-L0=998000
 ----
-interval state: {intWorkCount:10 intL0WriteBytes:0 intL0IngestedBytes:1000000 intLSMIngestedBytes:1000000 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:2000 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0.995 constant:1} intIngestedLinearModel:{multiplier:0.995 constant:1} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:998000}
+interval state: {intWorkCount:10 intL0WriteBytes:0 intL0IngestedBytes:1000000 intLSMIngestedBytes:1000000 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:2000 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0.995 constant:1} intIngestedLinearModel:{multiplier:0.995 constant:1} intWriteAmpLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:998000 intAdjustedLSMWrites:2000 intAdjustedDiskWriteBytes:0}
 at-admission-tokens: 124
 L0-write-tokens: int: 0.00x+0 smoothed: 2.14x+1 per-work-accounted: 44
 L0-ingest-tokens: int: 0.99x+1 smoothed: 0.84x+1 per-work-accounted: 25165
 ingest-tokens: int: 0.99x+1 smoothed: 1.07x+13 per-work-accounted: 25165
+write-amp: int: 0.00x+0 smoothed: 50.50x+1 per-work-accounted: 1
 
 # Large number of bytes written into L0, but only 2000 are not to be ignored.
 # So we can fit a reasonable model. The above-raft writes are small, so
 # at-admission-tokens shrinks.
 update flushed=1000000 ingested=0 admitted=10 write-accounted=1000 ingested-accounted=0 ignored-written=998000 above-raft-count=9 above-raft-write=20
 ----
-interval state: {intWorkCount:10 intL0WriteBytes:1000000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:1000 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:1.99 constant:1} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:998000 intL0IgnoredIngestedBytes:0}
+interval state: {intWorkCount:10 intL0WriteBytes:1000000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:1000 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:1.99 constant:1} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intWriteAmpLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:998000 intL0IgnoredIngestedBytes:0 intAdjustedLSMWrites:2000 intAdjustedDiskWriteBytes:0}
 at-admission-tokens: 64
 L0-write-tokens: int: 1.99x+1 smoothed: 2.06x+1 per-work-accounted: 72
 L0-ingest-tokens: int: 0.00x+0 smoothed: 0.84x+1 per-work-accounted: 25165
 ingest-tokens: int: 0.00x+0 smoothed: 1.07x+6 per-work-accounted: 25165
+write-amp: int: 0.00x+0 smoothed: 50.50x+1 per-work-accounted: 1
 
 # Large number of ignored bytes written into L0, but not yet flushed.
 update flushed=2000 ingested=0 admitted=10 write-accounted=1000 ingested-accounted=0 ignored-written=998000
 ----
-interval state: {intWorkCount:10 intL0WriteBytes:2000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:1000 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:998000 intL0IgnoredIngestedBytes:0}
+interval state: {intWorkCount:10 intL0WriteBytes:2000 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:1000 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intWriteAmpLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:998000 intL0IgnoredIngestedBytes:0 intAdjustedLSMWrites:0 intAdjustedDiskWriteBytes:0}
 at-admission-tokens: 64
 L0-write-tokens: int: 0.00x+0 smoothed: 2.06x+1 per-work-accounted: 72
 L0-ingest-tokens: int: 0.00x+0 smoothed: 0.84x+1 per-work-accounted: 25165
 ingest-tokens: int: 0.00x+0 smoothed: 1.07x+3 per-work-accounted: 25165
+write-amp: int: 0.00x+0 smoothed: 50.50x+1 per-work-accounted: 1
+
+
+# Test write amp LM
+
+init
+----
+
+# First call initializes.
+update flushed=1000 ingested=0 admitted=10 write-accounted=500 ingested-accounted=0 disk-writes=0
+----
+interval state: {intWorkCount:0 intL0WriteBytes:0 intL0IngestedBytes:0 intLSMIngestedBytes:0 intL0WriteAccountedBytes:0 intIngestedAccountedBytes:0 intL0WriteLinearModel:{multiplier:0 constant:0} intL0IngestedLinearModel:{multiplier:0 constant:0} intIngestedLinearModel:{multiplier:0 constant:0} intWriteAmpLinearModel:{multiplier:0 constant:0} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:0 intL0IgnoredIngestedBytes:0 intAdjustedLSMWrites:0 intAdjustedDiskWriteBytes:0}
+at-admission-tokens: 1
+L0-write-tokens: int: 0.00x+0 smoothed: 1.75x+1 per-work-accounted: 1
+L0-ingest-tokens: int: 0.00x+0 smoothed: 0.75x+1 per-work-accounted: 1
+ingest-tokens: int: 0.00x+0 smoothed: 1.00x+1 per-work-accounted: 1
+write-amp: int: 0.00x+0 smoothed: 50.50x+1 per-work-accounted: 1
+
+# We expect the interval writes will be:
+# intAdjustedLSMWrites:780 intAdjustedWriteBytes:4700.
+# We expect the interval write-amp model multiplier, assuming 1 constant and 100
+# work count, to be: (4700-100)/780 = 5.8974 = 5.90.
+update flushed=1000 ingested=80 admitted=100 write-accounted=500 ingested-accounted=10 disk-writes=5000 ignored-written=250 ignore-ingested-into-L0=50
+----
+interval state: {intWorkCount:100 intL0WriteBytes:1000 intL0IngestedBytes:80 intLSMIngestedBytes:80 intL0WriteAccountedBytes:500 intIngestedAccountedBytes:10 intL0WriteLinearModel:{multiplier:1.3 constant:1} intL0IngestedLinearModel:{multiplier:0.001 constant:1} intIngestedLinearModel:{multiplier:0.5 constant:1} intWriteAmpLinearModel:{multiplier:5.897435897435898 constant:1} intBypassedWorkCount:0 intL0WriteBypassedAccountedBytes:0 intIngestedBypassedAccountedBytes:0 intL0IgnoredWriteBytes:250 intL0IgnoredIngestedBytes:50 intAdjustedLSMWrites:780 intAdjustedDiskWriteBytes:4700}
+at-admission-tokens: 1
+L0-write-tokens: int: 1.30x+1 smoothed: 1.52x+1 per-work-accounted: 3
+L0-ingest-tokens: int: 0.00x+1 smoothed: 0.38x+1 per-work-accounted: 0
+ingest-tokens: int: 0.50x+1 smoothed: 0.75x+1 per-work-accounted: 0
+write-amp: int: 5.90x+1 smoothed: 28.20x+1 per-work-accounted: 4
