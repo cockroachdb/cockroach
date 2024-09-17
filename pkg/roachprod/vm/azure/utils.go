@@ -27,6 +27,7 @@ type azureStartupArgs struct {
 	DisksInitializedFile string // File to touch when disks are initialized.
 	OSInitializedFile    string // File to touch when OS is initialized.
 	StartupLogs          string // File to redirect startup script output logs.
+	DiskControllerNVMe   bool   // Interface data disk via NVMe
 }
 
 const azureStartupTemplate = `#!/bin/bash
@@ -42,12 +43,13 @@ exec &> >(tee -a {{ .StartupLogs }})
 echo "startup script starting: $(date -u)"
 mount_opts="defaults"
 
-{{if .AttachedDiskLun}}
+devices=()
+{{if .DiskControllerNVMe}}
+# Setup nvme network storage, need to remove nvme OS disk from the device list.
+devices=($(realpath -qe /dev/disk/by-id/nvme-* | grep -v "nvme0n1" | sort -u))
+{{else if .AttachedDiskLun}}
 # Setup network attached storage
 devices=("/dev/disk/azure/scsi1/lun{{.AttachedDiskLun}}")
-{{else}}
-# Setup local storage.
-devices=($(realpath -qe /dev/disk/by-id/nvme-* | sort -u))
 {{end}}
 
 if (( ${#devices[@]} == 0 ));
