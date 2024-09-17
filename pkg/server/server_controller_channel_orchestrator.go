@@ -185,7 +185,7 @@ func (o *channelOrchestrator) startControlledServer(
 	// the server. Suggested use is for logging. To synchronize on the
 	// server's state, use the resulting serverState instead.
 	startErrorFn func(ctx context.Context, tenantName roachpb.TenantName, err error),
-	// serverStartedFn is called when the server has started
+	// startCompleteFn is called when the server has started
 	// successfully and is accepting clients. Suggested use is for
 	// logging. To synchronize on the server's state, use the
 	// resulting serverState instead.
