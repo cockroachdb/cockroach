@@ -1152,12 +1152,14 @@ func (n *ShowFingerprints) copyNode() *ShowFingerprints {
 // walkStmt is part of the walkableStmt interface.
 func (n *ShowFingerprints) walkStmt(v Visitor) Statement {
 	ret := n
-	ts, changed := walkTenantSpec(v, n.TenantSpec)
-	if changed {
-		if ret == n {
-			ret = n.copyNode()
+	if n.TenantSpec != nil {
+		ts, changed := walkTenantSpec(v, n.TenantSpec)
+		if changed {
+			if ret == n {
+				ret = n.copyNode()
+			}
+			ret.TenantSpec = ts
 		}
-		ret.TenantSpec = ts
 	}
 	if n.Options.StartTimestamp != nil {
 		e, changed := WalkExpr(v, n.Options.StartTimestamp)
