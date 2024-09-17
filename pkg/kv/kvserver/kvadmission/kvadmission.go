@@ -353,9 +353,10 @@ func (n *controllerImpl) AdmitKVWork(
 				// and the point of deduction. That's ok, there's no strong
 				// synchronization needed between these two points.
 				ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
-					// TODO(sumeerbhola,kvoli): The priority needs to be converted to a
-					// raftpb.Priority when v2 encoding is enabled. e.g.,
-					// rac2.AdmissionToRaftPriority().
+					// NOTE: The priority is identical for v1 and v2, a
+					// admissionpb.WorkPriority,  until we encode the command in
+					// replica_raft, where if the range is using racv2 encoding we will
+					// convert the priority to a raftpb.Priority.
 					AdmissionPriority:   int32(admissionInfo.Priority),
 					AdmissionCreateTime: admissionInfo.CreateTime,
 					AdmissionOriginNode: n.nodeID.Get(),
