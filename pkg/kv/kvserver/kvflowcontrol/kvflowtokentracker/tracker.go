@@ -154,7 +154,7 @@ func (dt *Tracker) Untrack(
 			break
 		}
 
-		if fn := dt.knobs.UntrackTokensInterceptor; fn != nil {
+		if fn := dt.knobs.V1.UntrackTokensInterceptor; fn != nil {
 			fn(deduction.tokens, deduction.position)
 		}
 
