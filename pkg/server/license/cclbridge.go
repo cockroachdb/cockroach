@@ -23,7 +23,7 @@ import (
 // RegisterCallbackOnLicenseChange is a pointer to a function that will register
 // a callback when the license changes. This is initially empty here. When
 // initializing the ccl package, this variable will be set to a valid function.
-var RegisterCallbackOnLicenseChange = func(ctx context.Context, st *cluster.Settings) {}
+var RegisterCallbackOnLicenseChange = func(context.Context, *cluster.Settings, *Enforcer) {}
 
 // LicType is the type to define the license type, as needed by the license
 // enforcer.
