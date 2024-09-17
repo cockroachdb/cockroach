@@ -5,10 +5,10 @@
 # non-voter, all in StateReplicate. All streams will start with positive (1)
 # tokens.
 init regular_limit=1 regular_init=1 elastic_limit=1 elastic_init=1
-range_id=1 tenant_id=1 local_replica_id=1
-  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
-  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
-  store_id=3 replica_id=3 type=NON_VOTER  state=StateReplicate
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=NON_VOTER  state=StateReplicate next=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3NON_VOTER]
 t1/s1: reg=+1 B/+1 B ela=+1 B/+1 B
@@ -61,13 +61,13 @@ range_id=1 tenant_id={1} local_replica_id=1
 # StateSnapshot and therefore not required to wait on for elastic work class
 # requests.
 set_replicas
-range_id=1 tenant_id=1 local_replica_id=1
-  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
-  store_id=2 replica_id=2 type=VOTER_FULL state=StateSnapshot
-  store_id=3 replica_id=3 type=VOTER_FULL state=StateSnapshot
-  store_id=4 replica_id=4 type=NON_VOTER  state=StateReplicate
-  store_id=5 replica_id=5 type=NON_VOTER  state=StateReplicate
-  store_id=6 replica_id=6 type=NON_VOTER  state=StateReplicate
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateSnapshot next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateSnapshot next=1
+  store_id=4 replica_id=4 type=NON_VOTER  state=StateReplicate next=1
+  store_id=5 replica_id=5 type=NON_VOTER  state=StateReplicate next=1
+  store_id=6 replica_id=6 type=NON_VOTER  state=StateReplicate next=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3,(n4,s4):4NON_VOTER,(n5,s5):5NON_VOTER,(n6,s6):6NON_VOTER]
 
@@ -144,13 +144,13 @@ range_id=1 tenant_id={1} local_replica_id=1
 # evaluation 'c' should still not complete, because the switched voting replica
 # stream doesn't have tokens still.
 set_replicas
-range_id=1 tenant_id=1 local_replica_id=1
-  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
-  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
-  store_id=3 replica_id=3 type=VOTER_FULL state=StateSnapshot
-  store_id=4 replica_id=4 type=NON_VOTER  state=StateReplicate
-  store_id=5 replica_id=5 type=NON_VOTER  state=StateReplicate
-  store_id=6 replica_id=6 type=NON_VOTER  state=StateReplicate
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateSnapshot next=1
+  store_id=4 replica_id=4 type=NON_VOTER  state=StateReplicate next=1
+  store_id=5 replica_id=5 type=NON_VOTER  state=StateReplicate next=1
+  store_id=6 replica_id=6 type=NON_VOTER  state=StateReplicate next=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3,(n4,s4):4NON_VOTER,(n5,s5):5NON_VOTER,(n6,s6):6NON_VOTER]
 
