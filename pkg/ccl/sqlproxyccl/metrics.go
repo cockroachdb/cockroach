@@ -11,6 +11,7 @@ package sqlproxyccl
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 )
 
 // metrics contains pointers to the metrics for monitoring proxy operations.
@@ -45,6 +46,11 @@ type metrics struct {
 	QueryCancelSuccessful     *metric.Counter
 
 	AccessControlFileErrorCount *metric.Gauge
+
+	RoutingMethodCount              *aggmetric.AggCounter
+	SNIRoutingMethodCount           *aggmetric.Counter
+	DatabaseRoutingMethodCount      *aggmetric.Counter
+	ClusterOptionRoutingMethodCount *aggmetric.Counter
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -212,18 +218,23 @@ var (
 		Measurement: "Query Cancel Requests",
 		Unit:        metric.Unit_COUNT,
 	}
-	accessControlFileErrorCount = metric.Metadata{
+	metaAccessControlFileErrorCount = metric.Metadata{
 		Name:        "proxy.access_control.errors",
 		Help:        "Numbers of access control list files that are currently having errors",
 		Measurement: "Access Control File Errors",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRoutingMethodCount = metric.Metadata{
+		Name:        "proxy.sql.routing_method_count",
+		Help:        "Number of occurrences of each proxy routing method",
+		Measurement: "Number of occurrences",
 		Unit:        metric.Unit_COUNT,
 	}
 )
 
 // makeProxyMetrics instantiates the metrics holder for proxy monitoring.
 func makeProxyMetrics() metrics {
-
-	return metrics{
+	m := &metrics{
 		BackendDisconnectCount: metric.NewCounter(metaBackendDisconnectCount),
 		IdleDisconnectCount:    metric.NewCounter(metaIdleDisconnectCount),
 		BackendDownCount:       metric.NewCounter(metaBackendDownCount),
@@ -273,8 +284,14 @@ func makeProxyMetrics() metrics {
 		QueryCancelForwarded:      metric.NewCounter(metaQueryCancelForwarded),
 		QueryCancelSuccessful:     metric.NewCounter(metaQueryCancelSuccessful),
 
-		AccessControlFileErrorCount: metric.NewGauge(accessControlFileErrorCount),
+		AccessControlFileErrorCount: metric.NewGauge(metaAccessControlFileErrorCount),
+
+		RoutingMethodCount: aggmetric.NewCounter(metaRoutingMethodCount, "method"),
 	}
+	m.SNIRoutingMethodCount = m.RoutingMethodCount.AddChild("sni")
+	m.DatabaseRoutingMethodCount = m.RoutingMethodCount.AddChild("database")
+	m.ClusterOptionRoutingMethodCount = m.RoutingMethodCount.AddChild("cluster_option")
+	return *m
 }
 
 // updateForError updates the metrics relevant for the type of the error
