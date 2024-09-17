@@ -80,4 +80,10 @@ type Test interface {
 	// DeprecatedWorkload returns the path to the workload binary.
 	// Don't use this, invoke `./cockroach workload` instead.
 	DeprecatedWorkload() string
+
+	// ExportOpenmetrics returns a boolean value that decides whether the
+	// metrics should be exported in openmetrics format or JSON format.
+	// If true, the stats exporter will export metrics in openmetrics format,
+	// else, the exporter will export in the JSON format.
+	ExportOpenmetrics() bool
 }
