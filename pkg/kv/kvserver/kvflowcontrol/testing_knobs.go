@@ -18,12 +18,20 @@ import (
 // TestingKnobs provide fine-grained control over the various kvflowcontrol
 // components for testing.
 type TestingKnobs struct {
-	// UntrackTokensInterceptor is invoked whenever tokens are untracked, along
-	// with their corresponding log positions.
-	UntrackTokensInterceptor func(Tokens, kvflowcontrolpb.RaftLogPosition)
+	V1                      TestingKnobsV1
+	UseOnlyForScratchRanges bool
 	// OverrideTokenDeduction is used to override how many tokens are deducted
 	// post-evaluation.
 	OverrideTokenDeduction func() Tokens
+}
+
+// TestingKnobsV1 are the testing knobs that appply to replication flow control
+// v1, which is mostly contained in the kvflowcontroller, kvflowdispatch,
+// kvflowhandle and kvflowtokentracker packages.
+type TestingKnobsV1 struct {
+	// UntrackTokensInterceptor is invoked whenever tokens are untracked, along
+	// with their corresponding log positions.
+	UntrackTokensInterceptor func(Tokens, kvflowcontrolpb.RaftLogPosition)
 	// MaintainStreamsForBehindFollowers is used in tests to maintain
 	// replication streams for behind followers.
 	MaintainStreamsForBehindFollowers func() bool
@@ -34,9 +42,6 @@ type TestingKnobs struct {
 	// replication streams for followers we're no longer connected to via the
 	// RaftTransport.
 	MaintainStreamsForBrokenRaftTransport func() bool
-	// UseOnlyForScratchRanges enables the use of kvflowcontrol
-	// only for scratch ranges.
-	UseOnlyForScratchRanges bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
