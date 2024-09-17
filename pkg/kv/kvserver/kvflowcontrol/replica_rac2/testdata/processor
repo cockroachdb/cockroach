@@ -52,11 +52,9 @@ enabled-level: v1-encoding
 # of the log. The leader and leaseholder are both on replica-id 10.
 init-raft log-term=40 log-index=23
 ----
- Replica.MuLock
  Replica.RaftMuAssertHeld
  Replica.MuAssertHeld
  RaftNode.LogMarkLocked() = {Term:40 Index:23}
- Replica.MuUnlock
 
 set-raft-state term=50 leader=10 leaseholder=10
 ----
@@ -87,12 +85,12 @@ handle-raft-ready-and-admit entries=v1/i24/t45/pri0/time2/len100 leader-term=50
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 25
  RaftNode.LeaderLocked() = 10
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
 .....
 AdmitRaftEntries:
 destroyed-or-leader-using-v2: false
@@ -114,12 +112,12 @@ handle-raft-ready-and-admit entries=v1/i25/t45/pri0/time2/len100 leader-term=50
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 26
  RaftNode.LeaderLocked() = 10
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
 .....
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{Mark:{Term:50 Index:25} Priority:LowPri}}) = true
@@ -147,12 +145,12 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 26
  RaftNode.LeaderLocked() = 11
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
  Piggybacker.Add(n11, [r3,s11,5->11] admitted=t50/[24 25 25 25])
 .....
 
@@ -171,12 +169,12 @@ handle-raft-ready-and-admit entries=v2/i26/t45/pri2/time2/len100 leader-term=50
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 27
  RaftNode.LeaderLocked() = 11
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
 .....
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:user-high-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{Mark:{Term:50 Index:26} Priority:AboveNormalPri}}) = true
@@ -190,12 +188,12 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 27
  RaftNode.LeaderLocked() = 11
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
 .....
 
 # Stable index is advanced, which should allow some priorities to advance
@@ -213,12 +211,12 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 27
  RaftNode.LeaderLocked() = 11
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
  Piggybacker.Add(n11, [r3,s11,5->11] admitted=t50/[24 26 25 26])
 .....
 
@@ -235,12 +233,12 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 27
  RaftNode.LeaderLocked() = 11
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
  Piggybacker.Add(n11, [r3,s11,5->11] admitted=t50/[26 26 25 26])
 .....
 
@@ -259,12 +257,12 @@ handle-raft-ready-and-admit entries=v2/i27/t45/pri2/time2/len100 leader-term=50
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 28
  RaftNode.LeaderLocked() = 11
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
 .....
 AdmitRaftEntries:
  ACWorkQueue.Admit({StoreID:2 TenantID:4 Priority:low-pri CreateTime:2 RequestedCount:100 Ingested:false RangeID:3 ReplicaID:5 CallbackState:{Mark:{Term:50 Index:27} Priority:LowPri}}) = true
@@ -289,12 +287,12 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 28
  RaftNode.LeaderLocked() = 11
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
  Piggybacker.Add(n11, [r3,s11,5->11] admitted=t50/[26 26 26 26])
 .....
 
@@ -322,12 +320,12 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 28
  RaftNode.LeaderLocked() = 11
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 51
- Replica.MuUnlock
+ Replica.MuRUnlock
 .....
 
 # A new entry at index 27 overwrites the previous one, and regresses the stable
@@ -336,12 +334,12 @@ handle-raft-ready-and-admit entries=v1/i27/t46/pri0/time2/len100 leader-term=51
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 28
  RaftNode.LeaderLocked() = 11
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 51
- Replica.MuUnlock
+ Replica.MuRUnlock
 .....
 AdmitRaftEntries:
 destroyed-or-leader-using-v2: false
@@ -362,12 +360,12 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 28
  RaftNode.LeaderLocked() = 11
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 51
- Replica.MuUnlock
+ Replica.MuRUnlock
  Piggybacker.Add(n11, [r3,s11,5->11] admitted=t51/[26 26 26 26])
 .....
 
@@ -400,12 +398,12 @@ handle-raft-ready-and-admit entries=v1/i28/t46/pri0/time2/len100 leader-term=52
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 29
  RaftNode.LeaderLocked() = 5
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 52
- Replica.MuUnlock
+ Replica.MuRUnlock
  RangeControllerFactory.New(replicaSet=[(n1,s2):5,(n11,s11):11], leaseholder=10, nextRaftIndex=28)
  RangeController.AdmitRaftMuLocked(5, term:52, admitted:[LowPri:26,NormalPri:26,AboveNormalPri:26,HighPri:26])
  RangeController.HandleRaftEventRaftMuLocked([28])
@@ -470,12 +468,12 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 29
  RaftNode.LeaderLocked() = 5
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 52
- Replica.MuUnlock
+ Replica.MuRUnlock
  RangeController.HandleRaftEventRaftMuLocked([])
 .....
 
@@ -490,12 +488,12 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 29
  RaftNode.LeaderLocked() = 5
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 52
- Replica.MuUnlock
+ Replica.MuRUnlock
  RangeController.AdmitRaftMuLocked(5, term:52, admitted:[LowPri:28,NormalPri:28,AboveNormalPri:28,HighPri:28])
  RangeController.HandleRaftEventRaftMuLocked([])
 .....
@@ -529,12 +527,12 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 29
  RaftNode.LeaderLocked() = 5
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 53
- Replica.MuUnlock
+ Replica.MuRUnlock
  RangeController.CloseRaftMuLocked
  RangeControllerFactory.New(replicaSet=[(n1,s2):5,(n11,s11):11], leaseholder=10, nextRaftIndex=29)
  RangeController.HandleRaftEventRaftMuLocked([])
@@ -550,12 +548,12 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 29
  RaftNode.LeaderLocked() = 5
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 53
- Replica.MuUnlock
+ Replica.MuRUnlock
  RangeController.SetReplicasRaftMuLocked([(n1,s2):5,(n11,s11):11,(n13,s13):13])
  RangeController.SetLeaseholderRaftMuLocked(10)
  RangeController.HandleRaftEventRaftMuLocked([])
@@ -623,11 +621,9 @@ enabled-level: not-enabled
 
 init-raft log-term=50 log-index=24
 ----
- Replica.MuLock
  Replica.RaftMuAssertHeld
  Replica.MuAssertHeld
  RaftNode.LogMarkLocked() = {Term:50 Index:24}
- Replica.MuUnlock
 
 set-raft-state term=50 leader=5 leaseholder=5
 ----
@@ -650,12 +646,12 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 25
  RaftNode.LeaderLocked() = 5
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
 .....
 
 set-raft-state log-term=50 log-index=25 next-unstable-index=26
@@ -667,12 +663,12 @@ handle-raft-ready-and-admit entries=v1/i25/t45/pri0/time2/len100 leader-term=50
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 26
  RaftNode.LeaderLocked() = 5
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
 .....
 AdmitRaftEntries:
 destroyed-or-leader-using-v2: false
@@ -682,11 +678,11 @@ LogTracker: mark:{Term:50 Index:25}, stable:24, admitted:[24 24 24 24]
 set-enabled-level enabled-level=v1-encoding
 ----
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.LeaderLocked() = 5
  RaftNode.TermLocked() = 50
  RaftNode.NextUnstableIndexLocked() = 26
- Replica.MuUnlock
+ Replica.MuRUnlock
  RangeControllerFactory.New(replicaSet=[(n11,s11):11,(n13,s13):13], leaseholder=5, nextRaftIndex=26)
 
 set-raft-state log-term=50 log-index=26 next-unstable-index=27
@@ -698,12 +694,12 @@ handle-raft-ready-and-admit entries=v1/i26/t45/pri0/time2/len100 leader-term=50
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 27
  RaftNode.LeaderLocked() = 5
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
  RangeController.HandleRaftEventRaftMuLocked([26])
 .....
 AdmitRaftEntries:
@@ -722,12 +718,12 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 27
  RaftNode.LeaderLocked() = 5
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
  RangeController.HandleRaftEventRaftMuLocked([])
 .....
 
@@ -740,12 +736,12 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 27
  RaftNode.LeaderLocked() = 5
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
  RangeController.AdmitRaftMuLocked(5, term:50, admitted:[LowPri:26,NormalPri:26,AboveNormalPri:26,HighPri:26])
  RangeController.HandleRaftEventRaftMuLocked([])
 .....
@@ -759,12 +755,12 @@ handle-raft-ready-and-admit entries=none/i27/t45/pri0/time2/len100 leader-term=5
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 28
  RaftNode.LeaderLocked() = 5
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
  RangeController.HandleRaftEventRaftMuLocked([27])
 .....
 AdmitRaftEntries:
@@ -780,12 +776,12 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 28
  RaftNode.LeaderLocked() = 5
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 50
- Replica.MuUnlock
+ Replica.MuRUnlock
  RangeController.AdmitRaftMuLocked(5, term:50, admitted:[LowPri:27,NormalPri:27,AboveNormalPri:27,HighPri:27])
  RangeController.HandleRaftEventRaftMuLocked([])
 .....
@@ -804,11 +800,11 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  Replica.RaftMuAssertHeld
- Replica.MuLock
+ Replica.MuRLock
  RaftNode.NextUnstableIndexLocked() = 28
  RaftNode.LeaderLocked() = 0
- Replica.LeaseholderMuLocked
+ Replica.LeaseholderMuRLocked
  RaftNode.TermLocked() = 51
- Replica.MuUnlock
+ Replica.MuRUnlock
  RangeController.CloseRaftMuLocked
 .....
