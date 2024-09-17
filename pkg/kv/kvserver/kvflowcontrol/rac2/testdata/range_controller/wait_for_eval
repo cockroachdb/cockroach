@@ -3,10 +3,10 @@
 # set all streams to initially have 0 tokens and a limit of 1 token to simplify
 # the test, as evaluation requests only wait for positive tokens.
 init regular_limit=1 regular_init=0 elastic_limit=1 elastic_init=0
-range_id=1 tenant_id=1 local_replica_id=1
-  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
-  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
-  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 t1/s1: reg=+0 B/+1 B ela=+0 B/+1 B
@@ -87,10 +87,10 @@ range_id=1 tenant_id={1} local_replica_id=1
 
 # Change the replica set: replace replica 3 with a new replica 4.
 set_replicas
-range_id=1 tenant_id=1 local_replica_id=1
-  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
-  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
-  store_id=4 replica_id=4 type=VOTER_FULL state=StateReplicate
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=4 replica_id=4 type=VOTER_FULL state=StateReplicate next=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n4,s4):4]
 
@@ -130,11 +130,11 @@ range_id=1 tenant_id={1} local_replica_id=1
 
 # Test behavior with a non-voter replica.
 set_replicas
-range_id=1 tenant_id=1 local_replica_id=1
-  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
-  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
-  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate
-  store_id=4 replica_id=4 type=NON_VOTER state=StateReplicate
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+  store_id=4 replica_id=4 type=NON_VOTER state=StateReplicate next=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3,(n4,s4):4NON_VOTER]
 
@@ -249,14 +249,14 @@ range_id=1 tenant_id={1} local_replica_id=1
 # complete until all streams have tokens, whereas the high priority evaluation
 # on the second range will complete once a quorum has available tokens.
 set_replicas
-range_id=1 tenant_id=1 local_replica_id=1
-  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
-  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
-  store_id=3 replica_id=5 type=VOTER_FULL state=StateReplicate
-range_id=2 tenant_id=1 local_replica_id=1
-  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
-  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate
-  store_id=5 replica_id=5 type=VOTER_FULL state=StateReplicate
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=5 type=VOTER_FULL state=StateReplicate next=1
+range_id=2 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+  store_id=5 replica_id=5 type=VOTER_FULL state=StateReplicate next=1
 ----
 r1: [(n1,s1):1,(n2,s2):2*,(n3,s3):5]
 r2: [(n1,s1):1*,(n3,s3):3,(n5,s5):5]
