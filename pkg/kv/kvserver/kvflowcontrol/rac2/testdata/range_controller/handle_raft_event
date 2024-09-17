@@ -1,10 +1,10 @@
 # Intialize a range with voters on s1,s2 and s3. The local replica and
 # leaseholder will be s1. The leaseholder is denoted by the '*' suffix.
 init
-range_id=1 tenant_id=1 local_replica_id=1
-  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
-  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
-  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 t1/s1: reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
@@ -87,10 +87,10 @@ NormalPri:
 # return for s3 and untracking all entries and closing the stream after a 1s
 # delay.
 set_replicas
-range_id=1 tenant_id=1 local_replica_id=1
-  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
-  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate
-  store_id=3 replica_id=3 type=VOTER_FULL state=StateProbe
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=4
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=4
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=4
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateProbe next=4
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 
@@ -159,10 +159,10 @@ range_id=1 tenant_id={1} local_replica_id=1
 # trigger the operation to refresh, ignore s2 now that it is in StateProbe and
 # check s3 for available tokens as it is now in StateReplicate.
 set_replicas
-range_id=1 tenant_id=1 local_replica_id=1
-  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate
-  store_id=2 replica_id=2 type=VOTER_FULL state=StateSnapshot
-  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=5
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=5
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateSnapshot next=4
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=5
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 

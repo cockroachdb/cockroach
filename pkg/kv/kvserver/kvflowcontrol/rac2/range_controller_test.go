@@ -249,8 +249,9 @@ func (s *testingRCState) getOrInitRange(t *testing.T, r testingRange) *testingRC
 		}
 
 		init := RangeControllerInitState{
-			ReplicaSet:  r.replicas(),
-			Leaseholder: r.localReplicaID,
+			ReplicaSet:    r.replicas(),
+			Leaseholder:   r.localReplicaID,
+			NextRaftIndex: r.nextRaftIndex,
 		}
 		testRC.rc = NewRangeController(s.testCtx, options, init)
 		s.ranges[r.rangeID] = testRC
@@ -344,9 +345,11 @@ type testingRange struct {
 	rangeID        roachpb.RangeID
 	tenantID       roachpb.TenantID
 	localReplicaID roachpb.ReplicaID
+	nextRaftIndex  uint64
 	replicaSet     map[roachpb.ReplicaID]testingReplica
 }
 
+// Used by simulation test.
 func makeSingleVoterTestingRange(
 	rangeID roachpb.RangeID,
 	tenantID roachpb.TenantID,
@@ -357,6 +360,8 @@ func makeSingleVoterTestingRange(
 		rangeID:        rangeID,
 		tenantID:       tenantID,
 		localReplicaID: 1,
+		// Set to 1, since simulation test starts appending at index 1.
+		nextRaftIndex: 1,
 		replicaSet: map[roachpb.ReplicaID]testingReplica{
 			1: {
 				desc: roachpb.ReplicaDescriptor{
@@ -394,7 +399,7 @@ func scanRanges(t *testing.T, input string) []testingRange {
 		if strings.HasPrefix(parts[0], "range_id=") {
 			// Create a new range, any replicas which follow until the next range_id
 			// line will be added to this replica set.
-			var rangeID, tenantID, localReplicaID int
+			var rangeID, tenantID, localReplicaID, nextRaftIndex int
 			var err error
 
 			require.True(t, strings.HasPrefix(parts[0], "range_id="))
@@ -414,10 +419,17 @@ func scanRanges(t *testing.T, input string) []testingRange {
 			localReplicaID, err = strconv.Atoi(parts[2])
 			require.NoError(t, err)
 
+			parts[3] = strings.TrimSpace(parts[3])
+			require.True(t, strings.HasPrefix(parts[3], "next_raft_index="))
+			parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "next_raft_index=")
+			nextRaftIndex, err = strconv.Atoi(parts[2])
+			require.NoError(t, err)
+
 			replicas = append(replicas, testingRange{
 				rangeID:        roachpb.RangeID(rangeID),
 				tenantID:       roachpb.MustMakeTenantID(uint64(tenantID)),
 				localReplicaID: roachpb.ReplicaID(localReplicaID),
+				nextRaftIndex:  uint64(nextRaftIndex),
 				replicaSet:     make(map[roachpb.ReplicaID]testingReplica),
 			})
 		} else {
@@ -473,10 +485,12 @@ func scanReplica(t *testing.T, line string) testingReplica {
 		panic("unknown replica type")
 	}
 
+	next := uint64(0)
 	// The fourth field is optional, if set it contains the tracker state of the
 	// replica on the leader replica (localReplicaID). The valid states are
 	// Probe, Replicate, and Snapshot.
 	if len(parts) > 3 {
+		require.Equal(t, 5, len(parts))
 		parts[3] = strings.TrimSpace(parts[3])
 		require.True(t, strings.HasPrefix(parts[3], "state="))
 		parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "state=")
@@ -490,6 +504,12 @@ func scanReplica(t *testing.T, line string) testingReplica {
 		default:
 			panic("unknown replica state")
 		}
+		parts[4] = strings.TrimSpace(parts[4])
+		require.True(t, strings.HasPrefix(parts[4], "next="))
+		parts[4] = strings.TrimPrefix(strings.TrimSpace(parts[4]), "next=")
+		nextInt, err := strconv.Atoi(parts[4])
+		require.NoError(t, err)
+		next = uint64(nextInt)
 	}
 
 	return testingReplica{
@@ -499,7 +519,7 @@ func scanReplica(t *testing.T, line string) testingReplica {
 			ReplicaID: roachpb.ReplicaID(replicaID),
 			Type:      replicaType,
 		},
-		info: FollowerStateInfo{State: state},
+		info: FollowerStateInfo{State: state, Next: next},
 	}
 }
 
@@ -876,7 +896,31 @@ func TestRangeController(t *testing.T) {
 					for i, state := range buf {
 						event.Entries[i] = testingCreateEntry(t, state)
 					}
-					err := state.ranges[lastRangeID].rc.HandleRaftEventRaftMuLocked(ctx, event)
+					// TODO(sumeer): all replicas are getting MsgApps for all the new
+					// entries, which does not sufficiently test the code paths. Enhance
+					// the test to include a prefix of the new entries, and entries that
+					// were appended previously.
+					msgApp := raftpb.Message{
+						Type:    raftpb.MsgApp,
+						To:      0,
+						Entries: event.Entries,
+					}
+					msgApps := map[roachpb.ReplicaID][]raftpb.Message{}
+					testRC := state.ranges[lastRangeID]
+					func() {
+						testRC.mu.Lock()
+						defer testRC.mu.Unlock()
+						for k, testR := range testRC.mu.r.replicaSet {
+							msgApp.To = raftpb.PeerID(k)
+							msgApps[k] = append([]raftpb.Message(nil), msgApp)
+							if n := len(event.Entries); n > 0 {
+								testR.info.Next = event.Entries[n-1].Index + 1
+								testRC.mu.r.replicaSet[k] = testR
+							}
+						}
+					}()
+					event.MsgApps = msgApps
+					err := testRC.rc.HandleRaftEventRaftMuLocked(ctx, event)
 					require.NoError(t, err)
 				}
 
