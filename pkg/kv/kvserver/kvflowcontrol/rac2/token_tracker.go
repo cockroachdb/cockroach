@@ -81,10 +81,11 @@ func (t *Tracker) Track(
 
 // Untrack all token deductions of the given priority that have indexes less
 // than or equal to the one provided, per priority, and terms less than or
-// equal to the leader term.
+// equal to the leader term. evalTokensGEIndex is used to separately count the
+// untracked (eval) tokens that are for indices >= evalTokensGEIndex.
 func (t *Tracker) Untrack(
-	term uint64, admitted [raftpb.NumPriorities]uint64,
-) (returned [raftpb.NumPriorities]kvflowcontrol.Tokens) {
+	term uint64, admitted [raftpb.NumPriorities]uint64, evalTokensGEIndex uint64,
+) (returnedSend, returnedEval [raftpb.NumPriorities]kvflowcontrol.Tokens) {
 	for pri := range admitted {
 		uptoIndex := admitted[pri]
 		var untracked int
@@ -93,13 +94,18 @@ func (t *Tracker) Untrack(
 			if deduction.term > term || (deduction.term == term && deduction.index > uptoIndex) {
 				break
 			}
-			returned[pri] += deduction.tokens
+			returnedSend[pri] += deduction.tokens
+			if deduction.index >= evalTokensGEIndex {
+				returnedEval[pri] += deduction.tokens
+			}
 		}
 		t.tracked[pri] = t.tracked[pri][untracked:]
 	}
 
-	return returned
+	return returnedSend, returnedEval
 }
+
+// TODO(sumeer): remove UntrackGE since no longer used.
 
 // UntrackGE untracks all token deductions of the given priority that have
 // indexes greater than or equal to the one provided.
