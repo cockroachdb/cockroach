@@ -106,7 +106,7 @@ log_into_gcloud
   --gce-use-spot \
   --local-ssd=false \
   --gce-pd-volume-size=384 \
-  --os-volume-size=10
+  --os-volume-size=50
 
 # Stage binaries on the cluster
 for sha in "${build_sha_arr[@]}"; do
