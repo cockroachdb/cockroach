@@ -163,6 +163,7 @@ UPSERT INTO system.table_metadata (
 	table_name,
 	total_columns,
 	total_indexes,
+	table_type,
 	store_ids,
 	replication_size_bytes,
 	total_ranges,
@@ -203,6 +204,7 @@ func (q *tableMetadataBatchUpsertQuery) addRow(row *tableMetadataIterRow) error 
 		row.tableName,                         // table_name
 		row.columnCount,                       // total_columns
 		row.indexCount,                        // total_indexes
+		row.tableType,                         // table_type
 		storeIds,                              // storeIds
 		stats.ApproximateDiskBytes,            // replication_size_bytes
 		stats.RangeCount,                      // total_ranges

@@ -311,6 +311,12 @@ func TestGetTableMetadata(t *testing.T) {
 			})
 		}
 	})
+	t.Run("no views", func(t *testing.T) {
+		uri := fmt.Sprintf("/api/v2/table_metadata/?dbId=%d&name=%s", db1Id, "view")
+		mdResp := makeApiRequest[PaginatedResponse[[]tableMetadata]](t, client, ts.AdminURL().WithPath(uri).String())
+
+		require.Equal(t, int64(0), mdResp.PaginationInfo.TotalResults)
+	})
 }
 
 func TestGetDBMetadata(t *testing.T) {
@@ -493,6 +499,14 @@ func TestGetDBMetadata(t *testing.T) {
 			})
 		}
 	})
+	t.Run("table count only includes tables", func(t *testing.T) {
+		uri := fmt.Sprintf("/api/v2/database_metadata/?name=%s", db1Name)
+		mdResp := makeApiRequest[PaginatedResponse[[]dbMetadata]](t, client, ts.AdminURL().WithPath(uri).String())
+
+		require.Equal(t, int64(1), mdResp.PaginationInfo.TotalResults)
+		// This count should not include views, materialized views, or sequences
+		require.Equal(t, int64(10), mdResp.Results[0].TableCount)
+	})
 }
 
 func TestGetTableMetadataUpdateJobStatus(t *testing.T) {
@@ -580,6 +594,7 @@ func setupTest(t *testing.T, conn *gosql.DB, db1 string, db2 string) (dbId1 int,
 			table_id,
 		 	schema_name,
 			table_name,
+			table_type,
 			replication_size_bytes,
 			total_ranges,
 			total_live_data_bytes,
@@ -591,19 +606,20 @@ func setupTest(t *testing.T, conn *gosql.DB, db1 string, db2 string) (dbId1 int,
 			last_update_error,
 			last_updated)
 		VALUES
-		(%[1]d, '%[3]s', 1, 'mySchema1', 'myTable1', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], null, '2025-06-20T00:00:00Z'),
-		(%[1]d, '%[3]s', 2, 'mySchema1', 'myTable2', 10002, 18, 519, 1000, .519, 16, 5, ARRAY[1, 5, 6], null, '2025-06-20T00:00:01Z'),
-		(%[1]d, '%[3]s', 3, 'mySchema1', 'myTable3', 10003, 17, 510, 1000, .510, 17, 5, ARRAY[1, 8, 9], null, '2025-06-20T00:00:02Z'),
-		(%[1]d, '%[3]s', 4, 'mySchema1', 'myTable4', 10004, 16, 520, 1000, .52, 18, 5, ARRAY[2, 3], null, '2025-06-20T00:00:03Z'),
-		(%[1]d, '%[3]s', 5, 'mySchema1', 'myTable5', 10005, 15, 511, 1000, .511, 13, 5, ARRAY[5, 2], null, '2025-06-20T00:00:04Z'),
-		(%[1]d, '%[3]s', 6, 'mySchema2', 'myTable6', 10006, 14, 522, 1000, .522, 19, 2, ARRAY[7], null, '2025-06-20T00:00:05Z'),
-		(%[1]d, '%[3]s', 7, 'mySchema2', 'myTable7', 10007, 13, 512, 1000, .512, 14, 5, ARRAY[9], null, '2025-06-20T00:00:06Z'),
-		(%[1]d, '%[3]s', 8, 'mySchema2', 'myTable8', 10008, 12, 523, 1000, .523, 20, 5, ARRAY[3], null, '2025-06-20T00:00:07Z'),
-		(%[1]d, '%[3]s', 11, 'mySchema2', 'myTable9', 10009, 11, 513, 1000, .513, 15, 3, ARRAY[2], null, '2025-06-20T00:00:08Z'),
-		(%[1]d, '%[3]s', 10, 'mySchema2', 'myTable10', 10001, 10, 523, 1000, .523, 10, 5, ARRAY[1], null, '2025-06-20T00:00:09Z'),
-		(%[2]d, '%[4]s', 9, 'mySchema', 'myTable11', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], null, '2025-06-20T00:00:10Z'),
-		(%[2]d, '%[4]s', 12, 'mySchema', 'myTable12', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], null, '2025-06-20T00:00:11Z'),
-		(%[2]d, '%[4]s', 13, 'mySchema', 'myTable13', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], 'some error', '2025-06-20T00:00:12Z')
+		(%[1]d, '%[3]s', 1, 'mySchema1', 'myTable1', 'TABLE', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], null, '2025-06-20T00:00:00Z'),
+		(%[1]d, '%[3]s', 2, 'mySchema1', 'myTable2', 'TABLE', 10002, 18, 519, 1000, .519, 16, 5, ARRAY[1, 5, 6], null, '2025-06-20T00:00:01Z'),
+		(%[1]d, '%[3]s', 3, 'mySchema1', 'myTable3', 'TABLE', 10003, 17, 510, 1000, .510, 17, 5, ARRAY[1, 8, 9], null, '2025-06-20T00:00:02Z'),
+		(%[1]d, '%[3]s', 4, 'mySchema1', 'myTable4', 'TABLE', 10004, 16, 520, 1000, .52, 18, 5, ARRAY[2, 3], null, '2025-06-20T00:00:03Z'),
+		(%[1]d, '%[3]s', 5, 'mySchema1', 'myTable5', 'TABLE', 10005, 15, 511, 1000, .511, 13, 5, ARRAY[5, 2], null, '2025-06-20T00:00:04Z'),
+		(%[1]d, '%[3]s', 6, 'mySchema2', 'myTable6', 'TABLE', 10006, 14, 522, 1000, .522, 19, 2, ARRAY[7], null, '2025-06-20T00:00:05Z'),
+		(%[1]d, '%[3]s', 7, 'mySchema2', 'myTable7', 'TABLE', 10007, 13, 512, 1000, .512, 14, 5, ARRAY[9], null, '2025-06-20T00:00:06Z'),
+		(%[1]d, '%[3]s', 8, 'mySchema2', 'myTable8', 'TABLE', 10008, 12, 523, 1000, .523, 20, 5, ARRAY[3], null, '2025-06-20T00:00:07Z'),
+		(%[1]d, '%[3]s', 11, 'mySchema2', 'myTable9', 'TABLE', 10009, 11, 513, 1000, .513, 15, 3, ARRAY[2], null, '2025-06-20T00:00:08Z'),
+		(%[1]d, '%[3]s', 10, 'mySchema2', 'myTable10', 'TABLE', 10001, 10, 523, 1000, .523, 10, 5, ARRAY[1], null, '2025-06-20T00:00:09Z'),
+		(%[2]d, '%[4]s', 9, 'mySchema', 'myTable11', 'TABLE', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], null, '2025-06-20T00:00:10Z'),
+		(%[2]d, '%[4]s', 12, 'mySchema', 'myTable12', 'TABLE', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], null, '2025-06-20T00:00:11Z'),
+		(%[2]d, '%[4]s', 13, 'mySchema', 'myTable13', 'TABLE', 10001, 19, 509, 1000, .509, 11, 1, ARRAY[1, 2, 3], 'some error', '2025-06-20T00:00:12Z'),
+		(%[1]d, '%[3]s', 14, 'mySchema1', 'myView1', 'VIEW', 0, 0, 0, 0, 0, 11, 0, ARRAY[], null, '2025-06-20T00:00:00Z')
 `, dbId1, dbId2, db1, db2))
 	require.NoError(t, err)
 
