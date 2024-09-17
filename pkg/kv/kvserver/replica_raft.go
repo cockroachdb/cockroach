@@ -1923,11 +1923,12 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 
 	req := newRaftMessageRequest()
 	*req = kvserverpb.RaftMessageRequest{
-		RangeID:       r.RangeID,
-		ToReplica:     toReplica,
-		FromReplica:   fromReplica,
-		Message:       msg,
-		RangeStartKey: startKey, // usually nil
+		RangeID:           r.RangeID,
+		ToReplica:         toReplica,
+		FromReplica:       fromReplica,
+		Message:           msg,
+		RangeStartKey:     startKey, // usually nil
+		UsingRac2Protocol: r.flowControlV2.GetEnabledWhenLeader() >= replica_rac2.EnabledWhenLeaderV1Encoding,
 	}
 	// For RACv2, annotate successful MsgAppResp messages with the vector of
 	// admitted log indices, by priority.
