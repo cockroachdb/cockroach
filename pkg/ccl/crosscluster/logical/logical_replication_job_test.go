@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient/randclient"
@@ -697,7 +698,7 @@ func TestRandomTables(t *testing.T) {
 	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
-
+	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, runnerB.DB, "b"))
 	compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
 }
 
@@ -829,7 +830,7 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 				runnerA.Exec(t, fmt.Sprintf("DELETE FROM %s LIMIT 5", tableName))
 				WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
 			}
-
+			require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, runnerB.DB, "b"))
 			compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
 		})
 	}
