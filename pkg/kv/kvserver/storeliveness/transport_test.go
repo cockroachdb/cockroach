@@ -139,12 +139,14 @@ func (tt *transportTester) AddNode(nodeID roachpb.NodeID) {
 }
 
 func (tt *transportTester) UpdateGossip(nodeID roachpb.NodeID, address net.Addr) {
-	if err := tt.gossip.AddInfoProto(gossip.MakeNodeIDKey(nodeID),
+	if err := tt.gossip.AddInfoProto(
+		gossip.MakeNodeIDKey(nodeID),
 		&roachpb.NodeDescriptor{
 			NodeID:  nodeID,
 			Address: util.MakeUnresolvedAddr(address.Network(), address.String()),
 		},
-		time.Hour); err != nil {
+		time.Hour,
+	); err != nil {
 		tt.t.Fatal(err)
 	}
 }
@@ -163,6 +165,7 @@ func (tt *transportTester) AddStore(id slpb.StoreIdent) testMessageHandler {
 func TestTransportSendAndReceive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tt := newTransportTester(t, cluster.MakeTestingClusterSettings())
 	defer tt.Stop()
 
@@ -189,7 +192,7 @@ func TestTransportSendAndReceive(t *testing.T) {
 	// Send messages between each pair of stores.
 	for _, from := range stores {
 		for _, to := range stores {
-			tt.transports[from.NodeID].SendAsync(makeMsg(from, to))
+			tt.transports[from.NodeID].SendAsync(ctx, makeMsg(from, to))
 		}
 	}
 
@@ -197,16 +200,18 @@ func TestTransportSendAndReceive(t *testing.T) {
 	for recipient, handler := range handlers {
 		var senders []slpb.StoreIdent
 		for len(senders) < len(stores) {
-			testutils.SucceedsSoon(t, func() error {
-				select {
-				case msg := <-handler.messages:
-					senders = append(senders, msg.From)
-					require.Equal(t, recipient, msg.To)
-					return nil
-				default:
-				}
-				return errors.New("still waiting to receive messages")
-			})
+			testutils.SucceedsSoon(
+				t, func() error {
+					select {
+					case msg := <-handler.messages:
+						senders = append(senders, msg.From)
+						require.Equal(t, recipient, msg.To)
+						return nil
+					default:
+					}
+					return errors.New("still waiting to receive messages")
+				},
+			)
 		}
 		require.ElementsMatch(t, stores, senders)
 	}
@@ -224,6 +229,7 @@ func TestTransportSendAndReceive(t *testing.T) {
 func TestTransportRestartedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tt := newTransportTester(t, cluster.MakeClusterSettings())
 	defer tt.Stop()
 
@@ -242,29 +248,33 @@ func TestTransportRestartedNode(t *testing.T) {
 	msg := slpb.Message{Type: slpb.MsgHeartbeat, From: sender, To: receiver}
 
 	checkSend := func(expectedSuccess bool) {
-		testutils.SucceedsSoon(t, func() error {
-			sendSuccess := tt.transports[sender.NodeID].SendAsync(msg)
-			if sendSuccess != expectedSuccess {
-				return errors.Newf("send success is still %s", sendSuccess)
-			}
-			return nil
-		})
+		testutils.SucceedsSoon(
+			t, func() error {
+				sendSuccess := tt.transports[sender.NodeID].SendAsync(ctx, msg)
+				if sendSuccess != expectedSuccess {
+					return errors.Newf("send success is still %v", sendSuccess)
+				}
+				return nil
+			},
+		)
 	}
 
 	checkReceive := func() {
-		testutils.SucceedsSoon(t, func() error {
-			select {
-			case received := <-handler.messages:
-				require.Equal(t, msg, *received)
-				return nil
-			default:
-				// To ensure messages start getting delivered, keep sending messages
-				// out. Even after SendAsync returns true, messages may still not be
-				// delivered (e.g. if the receiver node is not up yet).
-				tt.transports[sender.NodeID].SendAsync(msg)
-			}
-			return errors.New("still waiting to receive message")
-		})
+		testutils.SucceedsSoon(
+			t, func() error {
+				select {
+				case received := <-handler.messages:
+					require.Equal(t, msg, *received)
+					return nil
+				default:
+					// To ensure messages start getting delivered, keep sending messages
+					// out. Even after SendAsync returns true, messages may still not be
+					// delivered (e.g. if the receiver node is not up yet).
+					tt.transports[sender.NodeID].SendAsync(ctx, msg)
+				}
+				return errors.New("still waiting to receive message")
+			},
+		)
 	}
 
 	// Part 1: send a message to the receiver whose address hasn't been gossiped yet.
@@ -296,6 +306,7 @@ func TestTransportRestartedNode(t *testing.T) {
 func TestTransportSendToMissingStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tt := newTransportTester(t, cluster.MakeClusterSettings())
 	defer tt.Stop()
 
@@ -317,19 +328,21 @@ func TestTransportSendToMissingStore(t *testing.T) {
 
 	// Send the message to the missing store first to ensure it doesn't affect the
 	// receipt of the message to the existing store.
-	require.True(t, tt.transports[sender.NodeID].SendAsync(missingMsg))
-	require.True(t, tt.transports[sender.NodeID].SendAsync(existingMsg))
+	require.True(t, tt.transports[sender.NodeID].SendAsync(ctx, missingMsg))
+	require.True(t, tt.transports[sender.NodeID].SendAsync(ctx, existingMsg))
 
 	// Wait for the message to the existing store to be received.
-	testutils.SucceedsSoon(t, func() error {
-		select {
-		case received := <-handler.messages:
-			require.Equal(t, existingMsg, *received)
-			return nil
-		default:
-		}
-		return errors.New("still waiting to receive message")
-	})
+	testutils.SucceedsSoon(
+		t, func() error {
+			select {
+			case received := <-handler.messages:
+				require.Equal(t, existingMsg, *received)
+				return nil
+			default:
+			}
+			return errors.New("still waiting to receive message")
+		},
+	)
 }
 
 // TestTransportClockPropagation verifies that the HLC clock timestamps are
@@ -339,6 +352,7 @@ func TestTransportSendToMissingStore(t *testing.T) {
 func TestTransportClockPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tt := newTransportTester(t, cluster.MakeTestingClusterSettings())
 	defer tt.Stop()
 
@@ -368,19 +382,77 @@ func TestTransportClockPropagation(t *testing.T) {
 
 	// Send a message from the sender to the receiver.
 	msg := slpb.Message{Type: slpb.MsgHeartbeat, From: sender, To: receiver}
-	require.True(t, tt.transports[sender.NodeID].SendAsync(msg))
+	require.True(t, tt.transports[sender.NodeID].SendAsync(ctx, msg))
 
 	// Wait for the message to be received.
-	testutils.SucceedsSoon(t, func() error {
-		select {
-		case received := <-handler.messages:
-			require.Equal(t, msg, *received)
-			return nil
-		default:
-		}
-		return errors.New("still waiting to receive message")
-	})
+	testutils.SucceedsSoon(
+		t, func() error {
+			select {
+			case received := <-handler.messages:
+				require.Equal(t, msg, *received)
+				return nil
+			default:
+			}
+			return errors.New("still waiting to receive message")
+		},
+	)
 
 	// Check that the receiver's clock is equal to the sender's clock.
 	require.Equal(t, senderClock.clock.Now(), receiverClock.clock.Now())
+}
+
+// TestTransportShortCircuit tests that a message from one local store to
+// another local store short-circuits the dialer and is handled directly by the
+// recipient's message handler.
+func TestTransportShortCircuit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tt := newTransportTester(t, cluster.MakeTestingClusterSettings())
+	defer tt.Stop()
+
+	// Node 1: stores 1, 2
+	// Node 2: store 3
+	node1, node2 := roachpb.NodeID(1), roachpb.NodeID(2)
+	store1 := slpb.StoreIdent{NodeID: node1, StoreID: roachpb.StoreID(1)}
+	store2 := slpb.StoreIdent{NodeID: node1, StoreID: roachpb.StoreID(2)}
+	store3 := slpb.StoreIdent{NodeID: node2, StoreID: roachpb.StoreID(3)}
+
+	tt.AddNode(node1)
+	tt.AddNode(node2)
+	tt.AddStore(store1)
+	handler := tt.AddStore(store2)
+	tt.AddStore(store3)
+
+	// Reach in and set node 1's dialer to nil. If SendAsync attempts to dial a
+	// node, it will panic.
+	tt.transports[node1].dialer = nil
+
+	// Send messages between two stores on the same node.
+	tt.transports[store1.NodeID].SendAsync(
+		ctx, slpb.Message{Type: slpb.MsgHeartbeat, From: store1, To: store2},
+	)
+	// The message is received.
+	testutils.SucceedsSoon(
+		t, func() error {
+			select {
+			case msg := <-handler.messages:
+				require.Equal(t, store1, msg.From)
+				require.Equal(t, store2, msg.To)
+				return nil
+			default:
+			}
+			return errors.New("still waiting to receive message")
+		},
+	)
+
+	// Send messages between two stores on different nodes. With a nil dialer,
+	// we expect a panic.
+	require.Panics(
+		t, func() {
+			tt.transports[store1.NodeID].SendAsync(
+				ctx, slpb.Message{Type: slpb.MsgHeartbeat, From: store1, To: store3},
+			)
+		}, "sending message to a remote store with a nil dialer",
+	)
 }

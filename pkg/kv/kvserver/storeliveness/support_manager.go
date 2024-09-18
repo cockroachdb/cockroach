@@ -37,7 +37,7 @@ var Enabled = settings.RegisterBoolSetting(
 // MessageSender is the interface that defines how Store Liveness messages are
 // sent. Transport is the production implementation of MessageSender.
 type MessageSender interface {
-	SendAsync(msg slpb.Message) (sent bool)
+	SendAsync(ctx context.Context, msg slpb.Message) (sent bool)
 }
 
 // SupportManager orchestrates requesting and providing Store Liveness support.
@@ -114,7 +114,8 @@ func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Times
 		// uses a map to avoid duplicates, and the requesterStateHandler's
 		// addStore checks if the store exists before adding it.
 		sm.storesToAdd.addStore(id)
-		log.VInfof(context.Background(), 2,
+		log.VInfof(
+			context.Background(), 2,
 			"store %+v enqueued to add remote store %+v", sm.storeID, id,
 		)
 		return 0, hlc.Timestamp{}, false
@@ -260,7 +261,7 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 
 	// Send heartbeats to each remote store.
 	for _, msg := range heartbeats {
-		if sent := sm.sender.SendAsync(msg); !sent {
+		if sent := sm.sender.SendAsync(ctx, msg); !sent {
 			log.Warningf(ctx, "sending heartbeat to store %+v failed", msg.To)
 		}
 	}
@@ -336,7 +337,7 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 	sm.supporterStateHandler.checkInUpdate(ssfu)
 
 	for _, response := range responses {
-		_ = sm.sender.SendAsync(response)
+		_ = sm.sender.SendAsync(ctx, response)
 	}
 	log.VInfof(ctx, 2, "store %+v sent %d responses", sm.storeID, len(responses))
 }
