@@ -38,16 +38,8 @@ var ErrSnapOutOfDate = errors.New("requested index is older than the existing sn
 // are unavailable.
 var ErrUnavailable = errors.New("requested entry at index is unavailable")
 
-// Storage is an interface that may be implemented by the application
-// to retrieve log entries from storage.
-//
-// If any method returns an error other than ErrCompacted or ErrUnavailable, the
-// raft instance generally does not behave gracefully, e.g. it may panic.
-//
-// TODO(pav-kv): audit all error handling and document the contract.
-type Storage interface {
-	// TODO(tbg): split this into two interfaces, LogStorage and StateStorage.
-
+// LogStorage is a read API for the raft log.
+type LogStorage interface {
 	// InitialState returns the saved HardState and ConfState information.
 	InitialState() (pb.HardState, pb.ConfState, error)
 
@@ -72,20 +64,42 @@ type Storage interface {
 	// encountered an unavailable entry in [lo, hi).
 	Entries(lo, hi, maxSize uint64) ([]pb.Entry, error)
 
-	// Term returns the term of entry i, which must be in the range
-	// [FirstIndex()-1, LastIndex()]. The term of the entry before
-	// FirstIndex is retained for matching purposes even though the
-	// rest of that entry may not be available.
-	Term(i uint64) (uint64, error)
+	// Term returns the term of the entry at the given index, which must be in the
+	// valid range: [FirstIndex()-1, LastIndex()]. The term of the entry before
+	// FirstIndex is retained for matching purposes even though the rest of that
+	// entry may not be available.
+	Term(index uint64) (uint64, error)
 	// LastIndex returns the index of the last entry in the log.
 	LastIndex() (uint64, error)
-	// FirstIndex returns the index of the first log entry that is
-	// possibly available via Entries (older entries have been incorporated
-	// into the latest Snapshot; if storage only contains the dummy entry the
-	// first log entry is not available).
+	// FirstIndex returns the index of the first log entry that is possibly
+	// available via Entries. Older entries have been incorporated into the
+	// StateStorage.Snapshot.
+	//
+	// If storage only contains the dummy entry or initial snapshot then
+	// FirstIndex still returns the snapshot index + 1, yet the first log entry at
+	// this index is not available.
+	//
+	// TODO(pav-kv): replace this with a Prev() method equivalent to logSlice's
+	// prev field. The log storage is just a storage-backed logSlice.
 	FirstIndex() (uint64, error)
+}
+
+// StateStorage provides read access to the state machine storage.
+type StateStorage interface {
 	// Snapshot returns the most recent state machine snapshot.
 	Snapshot() (pb.Snapshot, error)
+}
+
+// Storage is an interface that should be implemented by the application to
+// provide raft with access to the log and state machine storage.
+//
+// If any method returns an error other than ErrCompacted or ErrUnavailable, the
+// raft instance generally does not behave gracefully, e.g. it may panic.
+//
+// TODO(pav-kv): audit all error handling and document the contract.
+type Storage interface {
+	LogStorage
+	StateStorage
 }
 
 type inMemStorageCallStats struct {
