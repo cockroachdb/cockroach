@@ -549,31 +549,33 @@ func (a *apiV2Server) getDBMetadata(
 	// will only return databases that the provided sql user has CONNECT privileges to. If they
 	// are an admin, they have access to all databases.
 	query.Append(`SELECT
-		tbm.db_id,
-		tbm.db_name,
-		sum(tbm.replication_size_bytes):: INT as size_bytes,
+		n.id as db_id,
+		n.name as db_name,
+		COALESCE(sum(tbm.replication_size_bytes)::INT, 0) as size_bytes,
 		count(CASE WHEN tbm.table_type = 'TABLE' THEN 1 ELSE NULL END) as table_count,
 		max(tbm.last_updated) as last_updated,
-		s.store_ids,
+		COALESCE(s.store_ids, ARRAY[]) as store_ids,
 		count(*) OVER() as total_row_count
-		FROM system.table_metadata tbm
-		JOIN crdb_internal.databases dbs ON dbs.id = tbm.db_id
+		FROM system.namespace n
+		LEFT JOIN  system.table_metadata tbm ON n.id = tbm.db_id
 		LEFT JOIN system.role_members rm ON rm.role = 'admin' AND member = $
-		JOIN (
+		LEFT JOIN (
 			SELECT db_id, array_agg(DISTINCT unnested_ids) as store_ids
 			FROM system.table_metadata, unnest(store_ids) as unnested_ids
 			GROUP BY db_id
 		) s ON s.db_id = tbm.db_id
-		WHERE (rm.role = 'admin' OR dbs.name in (
+		WHERE (rm.role = 'admin' OR n.name in (
 			SELECT cdp.database_name
 			FROM "".crdb_internal.cluster_database_privileges cdp
 			WHERE grantee = $
 			AND privilege_type = 'CONNECT'
 		))
+		AND n."parentID" = 0
+		AND n."parentSchemaID" = 0
 `, sqlUserStr, sqlUserStr)
 
 	if dbName != "" {
-		query.Append("AND db_name ILIKE $ ", dbName)
+		query.Append("AND n.name ILIKE $ ", dbName)
 	}
 
 	// If store ids are provided, at least one of the store
@@ -594,8 +596,8 @@ func (a *apiV2Server) getDBMetadata(
 		orderBy = fmt.Sprintf("%s %s,", sortBy, sortOrder)
 	}
 
-	query.Append("GROUP BY tbm.db_id, tbm.db_name, s.store_ids ")
-	query.Append(fmt.Sprintf("ORDER BY %s db_id %s ", orderBy, sortOrder))
+	query.Append("GROUP BY n.id, n.name, s.store_ids ")
+	query.Append(fmt.Sprintf("ORDER BY %s n.id %s ", orderBy, sortOrder))
 	query.Append("LIMIT $ ", limit)
 	query.Append("OFFSET $ ", offset)
 
@@ -818,12 +820,12 @@ type tableMetadata struct {
 }
 
 type dbMetadata struct {
-	DbId        int64     `json:"db_id,omitempty"`
-	DbName      string    `json:"db_name,omitempty"`
-	SizeBytes   int64     `json:"size_bytes,omitempty"`
-	TableCount  int64     `json:"table_count,omitempty"`
-	StoreIds    []int64   `json:"store_ids"`
-	LastUpdated time.Time `json:"last_updated"`
+	DbId        int64      `json:"db_id,omitempty"`
+	DbName      string     `json:"db_name,omitempty"`
+	SizeBytes   int64      `json:"size_bytes,omitempty"`
+	TableCount  int64      `json:"table_count,omitempty"`
+	StoreIds    []int64    `json:"store_ids"`
+	LastUpdated *time.Time `json:"last_updated"`
 }
 
 type tmUpdateJobStatusResponse struct {
