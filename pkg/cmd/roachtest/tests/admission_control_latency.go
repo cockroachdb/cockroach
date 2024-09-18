@@ -318,6 +318,10 @@ func (b backfill) startTargetNode(ctx context.Context, t test.Test, v variations
 	_, err := db.ExecContext(ctx, cmd)
 	require.NoError(t, err)
 
+	// TODO(#130939): Allow the backfill to complete, without this it can hang indefinitely.
+	_, err = db.ExecContext(ctx, "SET CLUSTER SETTING bulkio.index_backfill.batch_size = 5000")
+	require.NoError(t, err)
+
 	t.L().Printf("waiting for replicas to be in place")
 	v.waitForRebalanceToStop(ctx, t)
 
