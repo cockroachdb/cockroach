@@ -34,7 +34,7 @@ export const RegionNodesLabel: React.FC<RegionNodesLabelProps> = ({
     <div className={styles.container}>
       <Tooltip placement="top" title={nodes.map(nid => "n" + nid).join(", ")}>
         <div className={styles["label-body"]}>
-          <Text strong>{region.label}</Text>
+          <Text strong>{region.label || "Unknown Region"}</Text>
           {showCode && <Text>({region.code})</Text>}
           <div>
             <Badge count={nodes.length} className={styles.badge} />
