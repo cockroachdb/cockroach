@@ -615,7 +615,7 @@ func runBackupProcessor(
 								if recording != nil {
 									log.Errorf(ctx, "failed export request for span %s\n trace:\n%s", span.span, recording)
 								}
-								return errors.Wrap(exportRequestErr, "export request timeout")
+								return errors.Wrap(exportRequestErr, "KV storage layer did not respond to BACKUP within timeout")
 							}
 							// BatchTimestampBeforeGCError is returned if the ExportRequest
 							// attempts to read below the range's GC threshold.
