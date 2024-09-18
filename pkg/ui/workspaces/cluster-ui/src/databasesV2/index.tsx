@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { Skeleton } from "antd";
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Select, { OptionsType } from "react-select";
@@ -33,6 +34,8 @@ import {
 import useTable, { TableParams } from "src/sharedFromCloud/useTable";
 import { ReactSelectOption } from "src/types/selectTypes";
 import { Bytes } from "src/util";
+
+import { useNodeStatuses } from "../api";
 
 import { DatabaseColName } from "./constants";
 import { DatabaseRow } from "./databaseTypes";
@@ -79,15 +82,17 @@ const COLUMNS: TableColumnProps<DatabaseRow>[] = [
   {
     title: DatabaseColName.NODE_REGIONS,
     render: (db: DatabaseRow) => (
-      <div>
-        {Object.entries(db.nodesByRegion ?? {}).map(([region, nodes]) => (
-          <RegionNodesLabel
-            key={region}
-            nodes={nodes}
-            region={{ label: region, code: region }}
-          />
-        ))}
-      </div>
+      <Skeleton loading={db.nodesByRegion.isLoading}>
+        <div>
+          {Object.entries(db.nodesByRegion?.data).map(([region, nodes]) => (
+            <RegionNodesLabel
+              key={region}
+              nodes={nodes}
+              region={{ label: region, code: region }}
+            />
+          ))}
+        </div>
+      </Skeleton>
     ),
   },
   {
@@ -135,17 +140,26 @@ export const DatabasesPageV2 = () => {
   const { data, error, isLoading } = useDatabaseMetadata(
     createDatabaseMetadataRequestFromParams(params),
   );
-
+  const nodesResp = useNodeStatuses();
   const paginationState = data?.pagination_info;
 
-  const [nodeRegions, setNodeRegions] = useState<ReactSelectOption[]>([]);
-  const onNodeRegionsChange = (selected: OptionsType<ReactSelectOption>) => {
+  const [nodeRegions, setNodeRegions] = useState<ReactSelectOption<string>[]>(
+    [],
+  );
+  const onNodeRegionsChange = (
+    selected: OptionsType<ReactSelectOption<string>>,
+  ) => {
     setNodeRegions((selected ?? []).map(v => v));
   };
 
   const tableData = useMemo(
-    () => rawDatabaseMetadataToDatabaseRows(data?.results ?? []),
-    [data],
+    () =>
+      rawDatabaseMetadataToDatabaseRows(data?.results ?? [], {
+        nodeIDToRegion: nodesResp.nodeIDToRegion,
+        storeIDToNodeID: nodesResp.storeIDToNodeID,
+        isLoading: nodesResp.isLoading,
+      }),
+    [data, nodesResp],
   );
 
   const onTableChange: TableChangeFn<DatabaseRow> = (pagination, sorter) => {
