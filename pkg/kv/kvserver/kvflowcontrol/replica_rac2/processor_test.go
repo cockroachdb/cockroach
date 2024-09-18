@@ -40,7 +40,7 @@ import (
 )
 
 type testReplica struct {
-	mu       syncutil.Mutex
+	mu       syncutil.RWMutex
 	raftNode *testRaftNode
 	b        *strings.Builder
 
@@ -70,19 +70,19 @@ func (r *testReplica) MuAssertHeld() {
 	fmt.Fprintf(r.b, " Replica.MuAssertHeld\n")
 }
 
-func (r *testReplica) MuLock() {
-	fmt.Fprintf(r.b, " Replica.MuLock\n")
-	r.mu.Lock()
+func (r *testReplica) MuRLock() {
+	fmt.Fprintf(r.b, " Replica.MuRLock\n")
+	r.mu.RLock()
 }
 
-func (r *testReplica) MuUnlock() {
-	fmt.Fprintf(r.b, " Replica.MuUnlock\n")
-	r.mu.Unlock()
+func (r *testReplica) MuRUnlock() {
+	fmt.Fprintf(r.b, " Replica.MuRUnlock\n")
+	r.mu.RUnlock()
 }
 
-func (r *testReplica) LeaseholderMuLocked() roachpb.ReplicaID {
-	fmt.Fprintf(r.b, " Replica.LeaseholderMuLocked\n")
-	r.mu.AssertHeld()
+func (r *testReplica) LeaseholderMuRLocked() roachpb.ReplicaID {
+	fmt.Fprintf(r.b, " Replica.LeaseholderMuRLocked\n")
+	r.mu.AssertRHeld()
 	return r.leaseholder
 }
 
@@ -326,10 +326,8 @@ func TestProcessorBasic(t *testing.T) {
 				var mark rac2.LogMark
 				d.ScanArgs(t, "log-term", &mark.Term)
 				d.ScanArgs(t, "log-index", &mark.Index)
-				r.MuLock()
 				r.initRaft(mark)
 				p.InitRaftLocked(ctx, r.raftNode)
-				r.MuUnlock()
 				return builderStr()
 
 			case "set-raft-state":
