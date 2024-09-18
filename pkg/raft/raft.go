@@ -1080,6 +1080,12 @@ func (r *raft) tickHeartbeat() {
 			r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
 		}
 
+		// Mark the followers who support the leader as recently active. This is
+		// because in leader leases, we might not send heartbeat messages to
+		// followers, which means that we might not mark them as recently active
+		// even if they actually are.
+		r.markFortifyingFollowersAsRecentlyActive()
+
 		// Try to refortify any followers that don't currently support us.
 		r.bcastFortify()
 		// TODO(ibrahim): add/call maybeUnpauseAndBcastAppend() here.
@@ -1514,17 +1520,20 @@ func stepLeader(r *raft, m pb.Message) error {
 		r.bcastHeartbeat()
 		return nil
 	case pb.MsgCheckQuorum:
-		quorumActiveByHeartbeats := r.trk.QuorumActive()
 		quorumActiveByFortification := r.fortificationTracker.QuorumActive()
-		if !quorumActiveByHeartbeats {
-			r.logger.Debugf(
-				"%x has not received messages from a quorum of peers in the last election timeout", r.id,
-			)
-		}
 		if !quorumActiveByFortification {
 			r.logger.Debugf("%x does not have store liveness support from a quorum of peers", r.id)
 		}
-		if !quorumActiveByHeartbeats && !quorumActiveByFortification {
+
+		// quorumActive will be false if we haven't received any messages
+		// from a quorum of peers since the last election timeout and that we are
+		// not supported by a quorum of peers since the last election timeout. This
+		// is true because we mark followers who support the leader as recently
+		// active on heartbeat timeout.
+		if !r.trk.QuorumActive() && !quorumActiveByFortification {
+			r.logger.Debugf(
+				"%x has not received messages from a quorum of peers in the last election timeout,"+
+					" and it is not supported by a quorum of peers", r.id)
 			r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
 			// NB: Stepping down because of CheckQuorum is a special, in that we know
 			// the LeadSupportUntil is in the past. This means that the leader can safely call a
@@ -1534,6 +1543,7 @@ func stepLeader(r *raft, m pb.Message) error {
 			// term/lead information from our stint as the leader.
 			r.becomeFollower(r.Term, r.id)
 		}
+
 		// Mark everyone (but ourselves) as inactive in preparation for the next
 		// CheckQuorum.
 		r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
@@ -1541,6 +1551,13 @@ func stepLeader(r *raft, m pb.Message) error {
 				pr.RecentActive = false
 			}
 		})
+
+		// After we marked the followers as inactive, we can mark the followers who
+		// are fortifying the leader as recently active now. This avoids having a
+		// point in time where the follower is marked as not recently active until
+		// the next MsgAppResp or the next heartbeat timeout.
+		r.markFortifyingFollowersAsRecentlyActive()
+
 		return nil
 	case pb.MsgProp:
 		if len(m.Entries) == 0 {
@@ -2476,6 +2493,20 @@ func (r *raft) testingStepDown() error {
 	}
 	r.becomeFollower(r.Term, r.id) // mirror the logic in how we step down when CheckQuorum fails
 	return nil
+}
+
+// markFortifyingFollowersAsRecentlyActive iterates over all the followers, and
+// mark them as recently active if they are supporting the leader.
+func (r *raft) markFortifyingFollowersAsRecentlyActive() {
+	if !r.fortificationTracker.FortificationEnabled() {
+		return
+	}
+
+	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+		if isFortified, _ := r.fortificationTracker.IsFortifiedBy(id); isFortified {
+			pr.RecentActive = true
+		}
+	})
 }
 
 // advanceCommitViaMsgAppOnly returns true if the commit index is advanced on
