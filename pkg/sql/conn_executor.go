@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -3892,7 +3893,15 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		payloadErr = p.errorCause()
 		if descID := scerrors.ConcurrentSchemaChangeDescID(payloadErr); descID != descpb.InvalidID {
 			if err := ex.handleWaitingForConcurrentSchemaChanges(ex.Ctx(), descID); err != nil {
-				return advanceInfo{}, err
+				// If we encountered a missing or dropped / offline descriptor waiting for the schema
+				// change then let ignore any error we hit, and let the FSM retry, since concurrentSchemaChangeError
+				// errors are retryable. Otherwise, allow the error to bubble back up and kill
+				// the connection.
+				if !catalog.HasInactiveDescriptorError(err) &&
+					!errors.Is(err, catalog.ErrDescriptorNotFound) {
+					return advanceInfo{}, err
+				}
+				err = nil
 			}
 		}
 	}
