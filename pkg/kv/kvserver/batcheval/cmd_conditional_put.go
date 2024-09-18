@@ -62,31 +62,31 @@ func ConditionalPut(
 		return result.Result{}, err
 	}
 
-	handleMissing := storage.CPutMissingBehavior(args.AllowIfDoesNotExist)
+	opts := storage.ConditionalPutWriteOptions{
+		MVCCWriteOptions: storage.MVCCWriteOptions{
+			Txn:                            h.Txn,
+			LocalTimestamp:                 cArgs.Now,
+			Stats:                          cArgs.Stats,
+			ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
+			OmitInRangefeeds:               cArgs.OmitInRangefeeds,
+			OriginID:                       h.WriteOptions.GetOriginID(),
+			MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+			TargetLockConflictBytes:        storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+			Category:                       fs.BatchEvalReadCategory,
+		},
+		AllowIfDoesNotExist: storage.CPutMissingBehavior(args.AllowIfDoesNotExist),
+		OriginTimestamp:     args.OriginTimestamp,
+		ShouldWinTie:        args.ShouldWinOriginTimestampTie,
+	}
 
-	opts := storage.MVCCWriteOptions{
-		Txn:                            h.Txn,
-		LocalTimestamp:                 cArgs.Now,
-		Stats:                          cArgs.Stats,
-		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
-		OmitInRangefeeds:               cArgs.OmitInRangefeeds,
-		OriginID:                       h.WriteOptions.GetOriginID(),
-		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
-		TargetLockConflictBytes:        storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
-		Category:                       fs.BatchEvalReadCategory,
-	}
-	originTSOpts := storage.CPutWithOriginTimestampOptions{
-		OriginTimestamp: args.OriginTimestamp,
-		ShouldWinTie:    args.ShouldWinOriginTimestampTie,
-	}
 	var err error
 	var acq roachpb.LockAcquisition
 	if args.Blind {
 		acq, err = storage.MVCCBlindConditionalPut(
-			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, handleMissing, originTSOpts, opts)
+			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, opts)
 	} else {
 		acq, err = storage.MVCCConditionalPut(
-			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, handleMissing, originTSOpts, opts)
+			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, opts)
 	}
 	if err != nil {
 		return result.Result{}, err
