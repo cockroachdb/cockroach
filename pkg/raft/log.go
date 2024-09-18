@@ -420,32 +420,26 @@ func (l *raftLog) lastEntryID() entryID {
 	return entryID{term: t, index: index}
 }
 
-func (l *raftLog) term(i uint64) (uint64, error) {
-	// Check the unstable log first, even before computing the valid term range,
-	// which may need to access stable Storage. If we find the entry's term in
-	// the unstable log, we know it was in the valid range.
-	if t, ok := l.unstable.maybeTerm(i); ok {
-		return t, nil
-	}
-
-	// The valid term range is [firstIndex-1, lastIndex]. Even though the entry at
-	// firstIndex-1 is compacted away, its term is available for matching purposes
-	// when doing log appends.
-	if i+1 < l.firstIndex() {
+// term returns the term of the log entry at the given index.
+func (l *raftLog) term(index uint64) (uint64, error) {
+	// Check the unstable log first, even before computing the valid index range,
+	// which may need to access the storage. If we find the entry's term in the
+	// unstable log, we know it was in the valid range.
+	if index > l.unstable.lastIndex() {
+		return 0, ErrUnavailable
+	} else if index >= l.unstable.prev.index {
+		return l.unstable.termAt(index), nil
+	} else if index+1 < l.firstIndex() {
 		return 0, ErrCompacted
 	}
-	if i > l.lastIndex() {
-		return 0, ErrUnavailable
-	}
 
-	t, err := l.storage.Term(i)
+	term, err := l.storage.Term(index)
 	if err == nil {
-		return t, nil
-	}
-	if err == ErrCompacted || err == ErrUnavailable {
+		return term, nil
+	} else if err == ErrCompacted || err == ErrUnavailable {
 		return 0, err
 	}
-	panic(err) // TODO(bdarnell)
+	panic(err) // TODO(pav-kv): return the error and handle it up the stack.
 }
 
 // entries returns a contiguous slice of log entries at indices > after, with

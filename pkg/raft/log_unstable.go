@@ -131,14 +131,6 @@ func (u *unstable) maybeFirstIndex() (uint64, bool) {
 	return 0, false
 }
 
-// maybeTerm returns the term of the entry at index i, if there is any.
-func (u *unstable) maybeTerm(i uint64) (uint64, bool) {
-	if i < u.prev.index || i > u.lastIndex() {
-		return 0, false
-	}
-	return u.termAt(i), true
-}
-
 // nextEntries returns the unstable entries that are not already in the process
 // of being written to storage.
 func (u *unstable) nextEntries() []pb.Entry {
