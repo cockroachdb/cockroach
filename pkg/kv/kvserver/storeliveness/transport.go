@@ -120,26 +120,28 @@ func (t *Transport) Stream(stream slpb.StoreLiveness_StreamServer) error {
 	taskCtx = t.AnnotateCtx(taskCtx)
 	defer cancel()
 
-	if err := t.stopper.RunAsyncTaskEx(taskCtx, stop.TaskOpts{
-		TaskName: "storeliveness.Transport: processing incoming stream",
-		SpanOpt:  stop.ChildSpan,
-	}, func(ctx context.Context) {
-		errCh <- func() error {
-			// Infinite loop pulling incoming messages from the RPC service's stream.
-			for {
-				batch, err := stream.Recv()
-				if err != nil {
-					return err
+	if err := t.stopper.RunAsyncTaskEx(
+		taskCtx, stop.TaskOpts{
+			TaskName: "storeliveness.Transport: processing incoming stream",
+			SpanOpt:  stop.ChildSpan,
+		}, func(ctx context.Context) {
+			errCh <- func() error {
+				// Infinite loop pulling incoming messages from the RPC service's stream.
+				for {
+					batch, err := stream.Recv()
+					if err != nil {
+						return err
+					}
+					if !batch.Now.IsEmpty() {
+						t.clock.Update(batch.Now)
+					}
+					for i := range batch.Messages {
+						t.handleMessage(ctx, &batch.Messages[i])
+					}
 				}
-				if !batch.Now.IsEmpty() {
-					t.clock.Update(batch.Now)
-				}
-				for i := range batch.Messages {
-					t.handleMessage(ctx, &batch.Messages[i])
-				}
-			}
-		}()
-	}); err != nil {
+			}()
+		},
+	); err != nil {
 		return err
 	}
 
@@ -155,8 +157,10 @@ func (t *Transport) Stream(stream slpb.StoreLiveness_StreamServer) error {
 func (t *Transport) handleMessage(ctx context.Context, msg *slpb.Message) {
 	handler, ok := t.handlers.Load(msg.To.StoreID)
 	if !ok {
-		log.Warningf(ctx, "unable to accept message %+v from %+v: no handler registered for %+v",
-			msg, msg.From, msg.To)
+		log.Warningf(
+			ctx, "unable to accept message %+v from %+v: no handler registered for %+v",
+			msg, msg.From, msg.To,
+		)
 		return
 	}
 
@@ -170,8 +174,19 @@ func (t *Transport) handleMessage(ctx context.Context, msg *slpb.Message) {
 // The returned bool may be a false positive but will never be a false negative;
 // if sent is true the message may or may not actually be sent but if it's false
 // the message definitely was not sent.
-func (t *Transport) SendAsync(msg slpb.Message) (sent bool) {
+func (t *Transport) SendAsync(ctx context.Context, msg slpb.Message) (sent bool) {
 	toNodeID := msg.To.NodeID
+	fromNodeID := msg.From.NodeID
+	// If this is a message from one local store to another local store, do not
+	// dial the node and go through GRPC; instead, handle the message directly
+	// using the corresponding message handler.
+	if toNodeID == fromNodeID {
+		// Make a copy of the message to avoid escaping the function argument
+		// msg to the heap.
+		msgCopy := msg
+		t.handleMessage(ctx, &msgCopy)
+		return true
+	}
 	if b, ok := t.dialer.GetCircuitBreaker(toNodeID, connClass); ok && b.Signal().Err() != nil {
 		return false
 	}
@@ -190,8 +205,10 @@ func (t *Transport) SendAsync(msg slpb.Message) (sent bool) {
 		return true
 	default:
 		if logSendQueueFullEvery.ShouldLog() {
-			log.Warningf(t.AnnotateCtx(context.Background()),
-				"store liveness send queue to n%d is full", toNodeID)
+			log.Warningf(
+				t.AnnotateCtx(context.Background()),
+				"store liveness send queue to n%d is full", toNodeID,
+			)
 		}
 		return false
 	}
@@ -245,10 +262,12 @@ func (t *Transport) startProcessNewQueue(
 			log.Warningf(ctx, "processing outgoing queue to node %d failed: %s:", toNodeID, err)
 		}
 	}
-	err := t.stopper.RunAsyncTask(ctx, "storeliveness.Transport: sending messages",
+	err := t.stopper.RunAsyncTask(
+		ctx, "storeliveness.Transport: sending messages",
 		func(ctx context.Context) {
 			pprof.Do(ctx, pprof.Labels("remote_node_id", toNodeID.String()), worker)
-		})
+		},
+	)
 	if err != nil {
 		t.queues.Delete(toNodeID)
 		return false
