@@ -175,6 +175,8 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			blockingJobIDs = desc.ConcurrentSchemaChangeJobIDs()
 			return nil
 		}); err != nil {
+			log.Infof(ctx, "done schema change wait on concurrent jobs due"+
+				" to error on descriptor (%d): %s", descID, err)
 			return err
 		}
 		if !isBlocked {

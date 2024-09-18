@@ -74,10 +74,11 @@
 /pkg/sql/importer/           @cockroachdb/sql-queries-prs
 /pkg/ccl/importerccl/        @cockroachdb/sql-queries-prs
 
-/pkg/sql/appstatspb          @cockroachdb/obs-prs
-/pkg/sql/execstats/          @cockroachdb/obs-prs
-/pkg/sql/scheduledlogging/   @cockroachdb/obs-prs
-/pkg/sql/sqlstats/           @cockroachdb/obs-prs
+/pkg/sql/appstatspb           @cockroachdb/obs-prs
+/pkg/sql/execstats/           @cockroachdb/obs-prs
+/pkg/sql/scheduledlogging/    @cockroachdb/obs-prs
+/pkg/sql/sqlstats/            @cockroachdb/obs-prs
+/pkg/sql/tablemetadatacache/  @cockroachdb/obs-prs
 /pkg/ccl/testccl/sqlstatsccl/ @cockroachdb/obs-prs
 
 /pkg/sql/sem/tree/           @cockroachdb/sql-syntax-prs
