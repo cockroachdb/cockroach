@@ -15,6 +15,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -61,12 +62,45 @@ func TestParquetRows(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 
+	newDec := func(s string) *tree.DDecimal {
+		d, _, _ := apd.NewFromString(s)
+		return &tree.DDecimal{Decimal: *d}
+	}
+
 	for _, tc := range []struct {
 		testName          string
 		createTable       string
 		stmts             []string
 		expectedDatumRows [][]tree.Datum
 	}{
+		{
+			testName: "decimal",
+			createTable: `
+				CREATE TABLE foo (
+				d DECIMAL(18,9) PRIMARY KEY
+				)
+				`,
+			stmts: []string{
+				`INSERT INTO foo VALUES (0)`,
+				`INSERT INTO foo VALUES (1.000000000)`,
+				`INSERT INTO foo VALUES (2.000000000)`,
+				`INSERT INTO foo VALUES (3.14)`,
+				`INSERT INTO foo VALUES (1.234567890123456789)`,
+				`INSERT INTO foo VALUES ('-Inf'::DECIMAL)`,
+				`INSERT INTO foo VALUES ('Inf'::DECIMAL)`,
+				`INSERT INTO foo VALUES ('NaN'::DECIMAL)`,
+			},
+			expectedDatumRows: [][]tree.Datum{
+				{newDec("0.000000000"), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{newDec("1.000000000"), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{newDec("2.000000000"), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{newDec("3.140000000"), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{newDec("1.234567890"), parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.DNegInfDecimal, parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.DPosInfDecimal, parquetEventTypeDatumStringMap[parquetEventInsert]},
+				{tree.DNaNDecimal, parquetEventTypeDatumStringMap[parquetEventInsert]},
+			},
+		},
 		{
 			testName: "mixed",
 			createTable: `
@@ -203,9 +237,6 @@ func TestParquetRows(t *testing.T) {
 
 			err = writer.close()
 			require.NoError(t, err)
-
-			// We inserted 18 updates, but may get dupes from rangefeeds.
-			require.GreaterOrEqual(t, numRows, 18)
 
 			meta, readDatums, err := parquet.ReadFile(f.Name())
 			require.NoError(t, err)
