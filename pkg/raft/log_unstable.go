@@ -329,13 +329,9 @@ func (u *unstable) truncateAndAppend(a logSlice) bool {
 	return true
 }
 
-// slice returns the entries from the unstable log with indexes in the [lo, hi)
+// slice returns the entries from the unstable log with indexes in the (lo, hi]
 // interval. The entire interval must be within the unstable log bounds, or the
 // method will panic.
-//
-// TODO(pav-kv): use (lo, hi] semantics instead of [lo, hi). Raft log slices are
-// always constructed in context of being appended after a particular log index,
-// so the (lo, hi] addressing makes more sense.
 func (u *unstable) slice(lo uint64, hi uint64) []pb.Entry {
-	return u.sub(lo-1, hi-1)
+	return u.sub(lo, hi)
 }
