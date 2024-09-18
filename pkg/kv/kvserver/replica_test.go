@@ -13739,12 +13739,13 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 		desc       *roachpb.RangeDescriptor
 		chgs       internalReplicationChanges
 		expTrigger string
+		expError   string
 	}
 
 	const noop = internalChangeType(0)
 	const none = roachpb.ReplicaType(-1)
 
-	mk := func(expTrigger string, typs ...typOp) testCase {
+	mkChanges := func(typs ...typOp) testCase {
 		chgs := make([]internalReplicationChange, 0, len(typs))
 		rDescs := make([]roachpb.ReplicaDescriptor, 0, len(typs))
 		for i, typ := range typs {
@@ -13766,33 +13767,43 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 		}
 		desc := roachpb.NewRangeDescriptor(roachpb.RangeID(10), roachpb.RKeyMin, roachpb.RKeyMax, roachpb.MakeReplicaSet(rDescs))
 		return testCase{
-			desc:       desc,
-			chgs:       chgs,
-			expTrigger: expTrigger,
+			desc: desc,
+			chgs: chgs,
 		}
+	}
+	mkTrigger := func(expTrigger string, typs ...typOp) testCase {
+		tc := mkChanges(typs...)
+		tc.expTrigger = expTrigger
+		return tc
+	}
+	mkError := func(expError string, typs ...typOp) testCase {
+		tc := mkChanges(typs...)
+		tc.expError = expError
+		return tc
 	}
 
 	tcs := []testCase{
 		// Simple addition of learner.
-		mk(
+		mkTrigger(
 			"SIMPLE(l2) [(n200,s200):2LEARNER]: after=[(n100,s100):1 (n200,s200):2LEARNER] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{none, internalChangeTypeAddLearner},
 		),
 		// Simple addition of voter (necessarily via learner).
-		mk(
+		mkTrigger(
 			"SIMPLE(v2) [(n200,s200):2]: after=[(n100,s100):1 (n200,s200):2] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
 		),
-		// Simple removal of voter.
-		mk(
-			"SIMPLE(r2) [(n200,s200):2]: after=[(n100,s100):1] next=3",
+		// Simple removal of voter. This is not allowed. We require a demotion to
+		// learner first.
+		mkError(
+			"cannot remove VOTER_FULL target n200,s200, not a LEARNER or NON_VOTER",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearner},
 		),
 		// Simple removal of learner.
-		mk(
+		mkTrigger(
 			"SIMPLE(r2) [(n200,s200):2LEARNER]: after=[(n100,s100):1] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypeRemoveLearner},
@@ -13801,39 +13812,49 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 		// All other cases below need to go through joint quorums (though some
 		// of them only due to limitations in etcd/raft).
 
-		// Addition of learner and removal of voter at same time.
-		mk(
-			"ENTER_JOINT(r2 l3) [(n200,s200):3LEARNER], [(n300,s300):2VOTER_OUTGOING]: after=[(n100,s100):1 (n300,s300):2VOTER_OUTGOING (n200,s200):3LEARNER] next=4",
+		// Addition of learner and voter at same time (necessarily via learner).
+		mkTrigger(
+			"ENTER_JOINT(l3 v2) [(n200,s200):3LEARNER (n300,s300):2VOTER_INCOMING]: after=[(n100,s100):1 (n300,s300):2VOTER_INCOMING (n200,s200):3LEARNER] next=4",
+			typOp{roachpb.VOTER_FULL, noop},
+			typOp{none, internalChangeTypeAddLearner},
+			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
+		),
+
+		// Addition of learner and removal of voter at same time. Again, not allowed
+		// due to removal of voter without demotion.
+		mkError(
+			"cannot remove VOTER_FULL target n300,s300, not a LEARNER or NON_VOTER",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{none, internalChangeTypeAddLearner},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearner},
 		),
 
 		// Promotion of two voters.
-		mk(
+		mkTrigger(
 			"ENTER_JOINT(v2 v3) [(n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING]: after=[(n100,s100):1 (n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
 		),
 
-		// Removal of two voters.
-		mk(
-			"ENTER_JOINT(r2 r3) [(n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING]: after=[(n100,s100):1 (n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING] next=4",
+		// Removal of two voters. Again, not allowed due to removal of voter without
+		// demotion.
+		mkError(
+			"cannot remove VOTER_FULL target n200,s200, not a LEARNER or NON_VOTER",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearner},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearner},
 		),
 
 		// Demoting two voters.
-		mk(
+		mkTrigger(
 			"ENTER_JOINT(r2 l2 r3 l3) [(n200,s200):2VOTER_DEMOTING_LEARNER (n300,s300):3VOTER_DEMOTING_LEARNER]: after=[(n100,s100):1 (n200,s200):2VOTER_DEMOTING_LEARNER (n300,s300):3VOTER_DEMOTING_LEARNER] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoterToLearner},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoterToLearner},
 		),
 		// Leave joint config entered via demotion.
-		mk(
+		mkTrigger(
 			"LEAVE_JOINT: after=[(n100,s100):1 (n200,s200):2LEARNER (n300,s300):3LEARNER] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_DEMOTING_LEARNER, noop},
@@ -13849,8 +13870,14 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 				tc.chgs,
 				nil, /* testingForceJointConfig */
 			)
-			require.NoError(t, err)
-			assert.Equal(t, tc.expTrigger, trigger.String())
+			if tc.expError == "" {
+				require.NoError(t, err)
+				assert.Equal(t, tc.expTrigger, trigger.String())
+			} else {
+				require.Zero(t, tc.expTrigger)
+				require.Nil(t, trigger)
+				require.Regexp(t, tc.expError, err)
+			}
 		})
 	}
 }
