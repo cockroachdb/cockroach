@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
+	"github.com/kylelemons/godebug/diff"
 	"github.com/stretchr/testify/require"
 )
 
@@ -442,6 +443,12 @@ func TestMVCCHistories(t *testing.T) {
 			e.noMetamorphicIter = true
 		}
 
+		// If true, instead of reporting the entire MVCC keyspace, report only
+		// the +- lines of the diff (suppressing unchanged lines). This helps
+		// in tests that don't
+		var reportDiffOnly = false
+		var lastDataBuf redact.StringBuilder
+
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			// We'll be overriding cmd/cmdargs below, because the
 			// datadriven reader does not know about sub-commands.
@@ -470,6 +477,11 @@ func TestMVCCHistories(t *testing.T) {
 					skip.IgnoreLint(e.t, "skipped")
 				}
 				return d.Expected
+			case "set":
+				if d.HasArg("mvccdiff") {
+					d.ScanArgs(t, "mvccdiff", &reportDiffOnly)
+				}
+				return "ok"
 			case "run":
 				// Syntax: run [trace] [error]
 				// (other words - in particular "ok" - are accepted but ignored)
@@ -533,7 +545,26 @@ func TestMVCCHistories(t *testing.T) {
 						buf.Printf("txn: %v\n", e.results.txn)
 					}
 					if printData {
-						err := reportDataEntries(&buf)
+						var err error
+						if !reportDiffOnly {
+							err = reportDataEntries(&buf)
+						} else {
+							prev := lastDataBuf.String()
+							lastDataBuf.Reset()
+							err = reportDataEntries(&lastDataBuf)
+
+							var rendered bytes.Buffer
+							for _, chunk := range diff.DiffChunks(strings.Split(prev, "\n"), strings.Split(lastDataBuf.String(), "\n")) {
+								// NB: intentionally ignoring `chunk.Equal`.
+								for _, line := range chunk.Added {
+									fmt.Fprintf(&rendered, "+%s\n", line)
+								}
+								for _, line := range chunk.Deleted {
+									fmt.Fprintf(&rendered, "-%s\n", line)
+								}
+							}
+							buf.Print(strings.TrimSpace(rendered.String()))
+						}
 						if err != nil {
 							if foundErr == nil {
 								// Handle the error below.
@@ -747,7 +778,11 @@ func TestMVCCHistories(t *testing.T) {
 				if !trace {
 					// If we were not tracing, no results were printed yet. Do it now.
 					if txnChange || dataChange || locksChange {
-						buf.SafeString(">> at end:\n")
+						if reportDiffOnly {
+							buf.SafeString(">> at end (changed only):\n")
+						} else {
+							buf.SafeString(">> at end:\n")
+						}
 					}
 					reportResults(txnChange, dataChange, locksChange)
 				}
