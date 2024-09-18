@@ -123,10 +123,13 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 	case *scpb.TypeComment, *scpb.DatabaseZoneConfig:
 		return version.IsActive(clusterversion.V24_2)
 	case *scpb.ColumnComputeExpression, *scpb.FunctionSecurity, *scpb.LDRJobIDs,
-		*scpb.PartitionZoneConfig, *scpb.Trigger, *scpb.TriggerName, *scpb.TriggerEnabled,
-		*scpb.TriggerTiming, *scpb.TriggerEvents, *scpb.TriggerTransition, *scpb.TriggerWhen,
-		*scpb.TriggerFunctionCall, *scpb.TriggerDeps:
+		*scpb.PartitionZoneConfig, *scpb.Trigger, *scpb.TriggerName,
+		*scpb.TriggerEnabled, *scpb.TriggerTiming, *scpb.TriggerEvents, *scpb.TriggerTransition,
+		*scpb.TriggerWhen, *scpb.TriggerFunctionCall, *scpb.TriggerDeps:
 		return version.IsActive(clusterversion.V24_3)
+	case *scpb.NamedRangeZoneConfig:
+		// TODO(annie): change this to v25_1 once the version is in.
+		return version.IsActive(clusterversion.Latest)
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}
