@@ -247,6 +247,15 @@ const (
 	// policies.
 	V24_3_MaybePreventUpgradeForCoreLicenseDeprecation
 
+	// V24_3_UseRACV2WithV1EntryEncoding is the earliest version which supports
+	// ranges using replication flow control v2, still with v1 entry encoding.
+	V24_3_UseRACV2WithV1EntryEncoding
+
+	// V24_3_UseRACV2Full is the earliest version which supports ranges using
+	// replication flow control v2, with v2 entry encoding. Replication flow
+	// control v1 is unsupported at this version.
+	V24_3_UseRACV2Full
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -302,6 +311,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_3_AdvanceCommitIndexViaMsgApps:                 {Major: 24, Minor: 2, Internal: 12},
 	V24_3_SQLInstancesAddDraining:                      {Major: 24, Minor: 2, Internal: 14},
 	V24_3_MaybePreventUpgradeForCoreLicenseDeprecation: {Major: 24, Minor: 2, Internal: 16},
+	V24_3_UseRACV2WithV1EntryEncoding:                  {Major: 24, Minor: 2, Internal: 18},
+	V24_3_UseRACV2Full:                                 {Major: 24, Minor: 2, Internal: 20},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
