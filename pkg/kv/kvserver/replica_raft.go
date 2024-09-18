@@ -360,7 +360,7 @@ func (r *Replica) evalAndPropose(
 }
 
 func (r *Replica) encodePriorityForRACv2() bool {
-	return r.flowControlV2.GetEnabledWhenLeader() == replica_rac2.EnabledWhenLeaderV2Encoding
+	return r.flowControlV2.GetEnabledWhenLeader() == kvflowcontrol.V2EnabledWhenLeaderV2Encoding
 }
 
 // propose encodes a command, starts tracking it, and proposes it to Raft.
@@ -833,11 +833,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Before doing anything, including calling Ready(), see if we need to
 	// ratchet up the flow control level. This code will go away when RACv1 =>
 	// RACv2 transition is complete and RACv1 code is removed.
-	if r.raftMu.flowControlLevel < replica_rac2.EnabledWhenLeaderV2Encoding {
+	if r.raftMu.flowControlLevel < kvflowcontrol.V2EnabledWhenLeaderV2Encoding {
 		// Not already at highest level.
-		level := racV2EnabledWhenLeaderLevel(ctx, r.store.cfg.Settings)
+		level := kvflowcontrol.GetV2EnabledWhenLeaderLevel(
+			ctx, r.store.ClusterSettings(), r.store.TestingKnobs().FlowControlTestingKnobs)
 		if level > r.raftMu.flowControlLevel {
-			if r.raftMu.flowControlLevel == replica_rac2.NotEnabledWhenLeader {
+			if r.raftMu.flowControlLevel == kvflowcontrol.V2NotEnabledWhenLeader {
 				func() {
 					r.mu.Lock()
 					defer r.mu.Unlock()
@@ -1938,7 +1939,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		FromReplica:       fromReplica,
 		Message:           msg,
 		RangeStartKey:     startKey, // usually nil
-		UsingRac2Protocol: r.flowControlV2.GetEnabledWhenLeader() >= replica_rac2.EnabledWhenLeaderV1Encoding,
+		UsingRac2Protocol: r.flowControlV2.GetEnabledWhenLeader() >= kvflowcontrol.V2EnabledWhenLeaderV1Encoding,
 	}
 	// For RACv2, annotate successful MsgAppResp messages with the vector of
 	// admitted log indices, by priority.

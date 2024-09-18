@@ -23,6 +23,9 @@ type TestingKnobs struct {
 	// OverrideTokenDeduction is used to override how many tokens are deducted
 	// post-evaluation.
 	OverrideTokenDeduction func() Tokens
+	// OverrideV2EnabledWhenLeaderLevel is used to override the level at which
+	// RACv2 is enabled when a replica is the leader.
+	OverrideV2EnabledWhenLeaderLevel func() V2EnabledWhenLeaderLevel
 }
 
 // TestingKnobsV1 are the testing knobs that appply to replication flow control

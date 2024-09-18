@@ -183,19 +183,6 @@ type RangeControllerFactory interface {
 	New(ctx context.Context, state rangeControllerInitState) rac2.RangeController
 }
 
-// EnabledWhenLeaderLevel captures the level at which RACv2 is enabled when
-// this replica is the leader.
-//
-// State transitions are NotEnabledWhenLeader => EnabledWhenLeaderV1Encoding
-// => EnabledWhenLeaderV2Encoding, i.e., the level will never regress.
-type EnabledWhenLeaderLevel = uint32
-
-const (
-	NotEnabledWhenLeader EnabledWhenLeaderLevel = iota
-	EnabledWhenLeaderV1Encoding
-	EnabledWhenLeaderV2Encoding
-)
-
 // ProcessorOptions are specified when creating a new Processor.
 type ProcessorOptions struct {
 	// Various constant fields that are duplicated from Replica, since we
@@ -216,7 +203,7 @@ type ProcessorOptions struct {
 	Settings               *cluster.Settings
 	EvalWaitMetrics        *rac2.EvalWaitMetrics
 
-	EnabledWhenLeaderLevel EnabledWhenLeaderLevel
+	EnabledWhenLeaderLevel kvflowcontrol.V2EnabledWhenLeaderLevel
 	Knobs                  *kvflowcontrol.TestingKnobs
 }
 
@@ -289,14 +276,14 @@ type Processor interface {
 	// This may be a noop if the level has already been reached.
 	//
 	// raftMu is held.
-	SetEnabledWhenLeaderRaftMuLocked(ctx context.Context, level EnabledWhenLeaderLevel)
+	SetEnabledWhenLeaderRaftMuLocked(ctx context.Context, level kvflowcontrol.V2EnabledWhenLeaderLevel)
 	// GetEnabledWhenLeader returns the current level. It may be used in
 	// highly concurrent settings at the leaseholder, when waiting for eval,
 	// and when encoding a proposal. Note that if the leaseholder is not the
 	// leader and the leader has switched to a higher level, there is no harm
 	// done, since the leaseholder can continue waiting for v1 tokens and use
 	// the v1 entry encoding.
-	GetEnabledWhenLeader() EnabledWhenLeaderLevel
+	GetEnabledWhenLeader() kvflowcontrol.V2EnabledWhenLeaderLevel
 
 	// OnDescChangedLocked provides a possibly updated RangeDescriptor. The
 	// tenantID passed in all calls must be the same.
@@ -502,7 +489,7 @@ type processorImpl struct {
 	// enabledWhenLeader indicates the RACv2 mode of operation when this replica
 	// is the leader. Atomic value, for serving GetEnabledWhenLeader. Updated only
 	// while holding raftMu. Can be read non-atomically if raftMu is held.
-	enabledWhenLeader EnabledWhenLeaderLevel
+	enabledWhenLeader kvflowcontrol.V2EnabledWhenLeaderLevel
 
 	v1EncodingPriorityMismatch log.EveryN
 }
@@ -547,14 +534,15 @@ func (p *processorImpl) OnDestroyRaftMuLocked(ctx context.Context) {
 
 // SetEnabledWhenLeaderRaftMuLocked implements Processor.
 func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(
-	ctx context.Context, level EnabledWhenLeaderLevel,
+	ctx context.Context, level kvflowcontrol.V2EnabledWhenLeaderLevel,
 ) {
 	p.opts.Replica.RaftMuAssertHeld()
 	if p.destroyed || p.enabledWhenLeader >= level {
 		return
 	}
 	atomic.StoreUint32(&p.enabledWhenLeader, level)
-	if level != EnabledWhenLeaderV1Encoding || p.desc.replicas == nil {
+	if level != kvflowcontrol.V2EnabledWhenLeaderV1Encoding ||
+		p.desc.replicas == nil {
 		return
 	}
 	// May need to create RangeController.
@@ -576,7 +564,7 @@ func (p *processorImpl) SetEnabledWhenLeaderRaftMuLocked(
 }
 
 // GetEnabledWhenLeader implements Processor.
-func (p *processorImpl) GetEnabledWhenLeader() EnabledWhenLeaderLevel {
+func (p *processorImpl) GetEnabledWhenLeader() kvflowcontrol.V2EnabledWhenLeaderLevel {
 	return atomic.LoadUint32(&p.enabledWhenLeader)
 }
 
@@ -693,7 +681,7 @@ func (p *processorImpl) makeStateConsistentRaftMuLocked(
 		return
 	}
 	// Is the leader.
-	if p.enabledWhenLeader == NotEnabledWhenLeader {
+	if p.enabledWhenLeader == kvflowcontrol.V2NotEnabledWhenLeader {
 		return
 	}
 	if p.leader.rc != nil && termChanged {

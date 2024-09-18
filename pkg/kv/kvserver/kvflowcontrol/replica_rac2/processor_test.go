@@ -281,7 +281,7 @@ func TestProcessorBasic(t *testing.T) {
 	var st *cluster.Settings
 	var p *processorImpl
 	tenantID := roachpb.MustMakeTenantID(4)
-	reset := func(enabled EnabledWhenLeaderLevel) {
+	reset := func(enabled kvflowcontrol.V2EnabledWhenLeaderLevel) {
 		b.Reset()
 		r = newTestReplica(&b)
 		sched = testRaftScheduler{b: &b}
@@ -533,31 +533,33 @@ func parseAdmissionPriority(t *testing.T, td *datadriven.TestData) admissionpb.W
 	return admissionpb.NormalPri
 }
 
-func parseEnabledLevel(t *testing.T, td *datadriven.TestData) EnabledWhenLeaderLevel {
+func parseEnabledLevel(
+	t *testing.T, td *datadriven.TestData,
+) kvflowcontrol.V2EnabledWhenLeaderLevel {
 	if td.HasArg("enabled-level") {
 		var str string
 		td.ScanArgs(t, "enabled-level", &str)
 		switch str {
 		case "not-enabled":
-			return NotEnabledWhenLeader
+			return kvflowcontrol.V2NotEnabledWhenLeader
 		case "v1-encoding":
-			return EnabledWhenLeaderV1Encoding
+			return kvflowcontrol.V2EnabledWhenLeaderV1Encoding
 		case "v2-encoding":
-			return EnabledWhenLeaderV2Encoding
+			return kvflowcontrol.V2EnabledWhenLeaderV2Encoding
 		default:
 			t.Fatalf("unrecoginized level %s", str)
 		}
 	}
-	return NotEnabledWhenLeader
+	return kvflowcontrol.V2NotEnabledWhenLeader
 }
 
-func enabledLevelString(enabledLevel EnabledWhenLeaderLevel) string {
+func enabledLevelString(enabledLevel kvflowcontrol.V2EnabledWhenLeaderLevel) string {
 	switch enabledLevel {
-	case NotEnabledWhenLeader:
+	case kvflowcontrol.V2NotEnabledWhenLeader:
 		return "not-enabled"
-	case EnabledWhenLeaderV1Encoding:
+	case kvflowcontrol.V2EnabledWhenLeaderV1Encoding:
 		return "v1-encoding"
-	case EnabledWhenLeaderV2Encoding:
+	case kvflowcontrol.V2EnabledWhenLeaderV2Encoding:
 		return "v2-encoding"
 	}
 	return "unknown-level"
