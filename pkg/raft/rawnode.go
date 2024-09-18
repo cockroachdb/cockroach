@@ -115,6 +115,17 @@ func (rn *RawNode) Step(m pb.Message) error {
 	return rn.raft.Step(m)
 }
 
+// LogSnapshot returns a point-in-time read-only state of the raft log.
+//
+// The returned snapshot can be read from while RawNode continues operation, as
+// long as the application guarantees immutability of the underlying log storage
+// (exposed through the Storage interface) while the snapshot is being used.
+// Typically, this means that the application does not run a Ready() handling
+// cycle until the snapshot is released.
+func (rn *RawNode) LogSnapshot() LogSnapshot {
+	return rn.raft.raftLog.snap(rn.raft.raftLog.storage.LogSnapshot())
+}
+
 // Ready returns the outstanding work that the application needs to handle. This
 // includes appending and applying entries or a snapshot, updating the HardState,
 // and sending messages. The returned Ready() *must* be handled and subsequently
