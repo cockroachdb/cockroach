@@ -57,11 +57,7 @@ func authGSS(
 
 	// Update the incoming connection with the GSS username. We'll expect
 	// to see this value come back to the mapper function below.
-	if u, err := username.MakeSQLUsernameFromUserInput(gssUser, username.PurposeValidation); err != nil {
-		return nil, err
-	} else {
-		behaviors.SetReplacementIdentity(u)
-	}
+	behaviors.SetReplacementIdentity(gssUser)
 
 	// We enforce that the "map" and/or "include_realm=0" options are set
 	// in the HBA validation function below.
@@ -84,7 +80,7 @@ func authGSS(
 	}
 
 	behaviors.SetAuthenticator(func(
-		_ context.Context, _ username.SQLUsername, _ bool, _ pgwire.PasswordRetrievalFn, _ *ldap.DN,
+		_ context.Context, _ string, _ bool, _ pgwire.PasswordRetrievalFn, _ *ldap.DN,
 	) error {
 		// Enforce krb_realm option, if any.
 		if realms := entry.GetOptions("krb_realm"); len(realms) > 0 {
@@ -142,19 +138,16 @@ func checkEntry(_ *settings.Values, entry hba.Entry) error {
 }
 
 // stripRealm removes the realm data, if any, from the provided username.
-func stripRealm(u username.SQLUsername) (username.SQLUsername, error) {
-	norm := u.Normalized()
-	if idx := strings.Index(norm, "@"); idx != -1 {
-		norm = norm[:idx]
+func stripRealm(u string) (username.SQLUsername, error) {
+	if idx := strings.Index(u, "@"); idx != -1 {
+		u = u[:idx]
 	}
-	return username.MakeSQLUsernameFromUserInput(norm, username.PurposeValidation)
+	return username.MakeSQLUsernameFromUserInput(u, username.PurposeValidation)
 }
 
 // stripRealmMapper is a pgwire.RoleMapper that just strips the trailing
 // realm information, if any, from the gssapi username.
-func stripRealmMapper(
-	_ context.Context, systemIdentity username.SQLUsername,
-) ([]username.SQLUsername, error) {
+func stripRealmMapper(_ context.Context, systemIdentity string) ([]username.SQLUsername, error) {
 	ret, err := stripRealm(systemIdentity)
 	return []username.SQLUsername{ret}, err
 }
@@ -163,12 +156,12 @@ func stripRealmMapper(
 // the incoming identity has its realm information stripped before the
 // next mapping is applied.
 func stripAndDelegateMapper(delegate pgwire.RoleMapper) pgwire.RoleMapper {
-	return func(ctx context.Context, systemIdentity username.SQLUsername) ([]username.SQLUsername, error) {
+	return func(ctx context.Context, systemIdentity string) ([]username.SQLUsername, error) {
 		next, err := stripRealm(systemIdentity)
 		if err != nil {
 			return nil, err
 		}
-		return delegate(ctx, next)
+		return delegate(ctx, next.Normalized())
 	}
 }
 

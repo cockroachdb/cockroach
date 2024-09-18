@@ -2266,7 +2266,7 @@ type SessionArgs struct {
 	IsSuperuser                 bool
 	IsSSL                       bool
 	ReplicationMode             sessiondatapb.ReplicationMode
-	SystemIdentity              username.SQLUsername
+	SystemIdentity              string
 	SessionDefaults             SessionDefaults
 	CustomOptionSessionDefaults SessionDefaults
 	// RemoteAddr is the client's address. This is nil iff this is an internal
