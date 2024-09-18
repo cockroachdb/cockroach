@@ -1455,14 +1455,7 @@ func (c *CustomFuncs) getSubstituteColsRelExpr(
 		// [PushSelectIntoJoinLeft]
 		// [PushSelectCondLeftIntoJoinLeftAndRight]
 		substituteCols = getSubstituteColsLeftSemiAntiJoin(t, substituteCols)
-	case *memo.GroupByExpr, *memo.DistinctOnExpr:
-		// [PushSelectIntoGroupBy]
-		// Filters must refer only to grouping and ConstAgg columns.
-		private := t.Private().(*memo.GroupingPrivate)
-		aggs := t.Child(1).(*memo.AggregationsExpr)
-		substituteCols.IntersectionWith(c.GroupingAndConstCols(private, *aggs))
-	case *memo.UnionExpr, *memo.UnionAllExpr, *memo.IntersectExpr,
-		*memo.IntersectAllExpr, *memo.ExceptExpr, *memo.ExceptAllExpr:
+	case *memo.UnionAllExpr, *memo.IntersectAllExpr, *memo.ExceptAllExpr:
 		// [PushFilterIntoSetOp]
 		substituteCols = getSubstituteColsSetOp(t, substituteCols)
 	default:

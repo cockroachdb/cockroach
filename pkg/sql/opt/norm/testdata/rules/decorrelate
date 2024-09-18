@@ -6922,73 +6922,15 @@ inner-join (hash)
  └── filters
       └── a = x
 
-# Case with a GroupBy. Equality references the grouping column.
-norm expect=TryRemapJoinOuterColsRight format=hide-all
-SELECT * FROM xy INNER JOIN LATERAL (SELECT a, corr(b, x) FROM ab GROUP BY a) ON a = x
-----
-inner-join (hash)
- ├── scan xy
- ├── group-by (hash)
- │    ├── project
- │    │    ├── scan ab
- │    │    └── projections
- │    │         └── a
- │    └── aggregations
- │         └── corr
- │              ├── b
- │              └── x
- └── filters
-      └── a = xy.x
-
-# Case with a GroupBy. Equality references a ConstAgg column.
-norm expect=TryRemapJoinOuterColsRight format=hide-all
-SELECT * FROM xy INNER JOIN LATERAL (SELECT v, corr(u, x) FROM uv GROUP BY u, v) ON v = x
-----
-project
- └── inner-join (hash)
-      ├── scan xy
-      ├── group-by (hash)
-      │    ├── project
-      │    │    ├── scan uv
-      │    │    └── projections
-      │    │         └── v
-      │    └── aggregations
-      │         ├── corr
-      │         │    ├── u
-      │         │    └── x
-      │         └── const-agg
-      │              └── v
-      └── filters
-           └── v = xy.x
-
-# Case with a DistinctOn.
-norm expect=TryRemapJoinOuterColsRight format=hide-all
-SELECT * FROM xy INNER JOIN LATERAL (SELECT DISTINCT ON (a) * FROM (SELECT *, b+x FROM ab)) ON a = x
-----
-inner-join (hash)
- ├── scan xy
- ├── distinct-on
- │    ├── project
- │    │    ├── scan ab
- │    │    └── projections
- │    │         └── b + a
- │    └── aggregations
- │         ├── first-agg
- │         │    └── b
- │         └── first-agg
- │              └── "?column?"
- └── filters
-      └── a = x
-
 # Case with a Union. The alias here is not necessary, but makes it more explicit
 # that the "a = x" filter refers to the first output column of the Union, rather
 # than just the left input.
 norm expect=TryRemapJoinOuterColsRight format=hide-all
-SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab UNION (SELECT u, v+x FROM uv)) foo(a, b) ON foo.a = x
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab UNION ALL (SELECT u, v+x FROM uv)) foo(a, b) ON foo.a = x
 ----
 inner-join (hash)
  ├── scan xy
- ├── union
+ ├── union-all
  │    ├── scan ab
  │    └── project
  │         ├── scan uv
@@ -6999,11 +6941,11 @@ inner-join (hash)
 
 # Case with a Union. Both inputs should be remapped.
 norm expect=TryRemapJoinOuterColsRight format=hide-all
-SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b+x FROM ab) UNION (SELECT u, v+x FROM uv)) foo(a, b) ON foo.a = x
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b+x FROM ab) UNION ALL (SELECT u, v+x FROM uv)) foo(a, b) ON foo.a = x
 ----
 inner-join (hash)
  ├── scan xy
- ├── union
+ ├── union-all
  │    ├── project
  │    │    ├── scan ab
  │    │    └── projections
@@ -7017,7 +6959,7 @@ inner-join (hash)
 
 # Case with an Intersect.
 norm expect=TryRemapJoinOuterColsRight format=hide-all
-SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab INTERSECT (SELECT u, v+x FROM uv)) foo(a, b) ON foo.a = x
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab INTERSECT ALL (SELECT u, v+x FROM uv)) foo(a, b) ON foo.a = x
 ----
 inner-join (hash)
  ├── scan xy
@@ -7032,7 +6974,7 @@ inner-join (hash)
 
 # Case with an Intersect. Both inputs should be remapped.
 norm format=hide-all
-SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b+x FROM ab) INTERSECT (SELECT u, v+x FROM uv)) foo(a, b) ON foo.a = x
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b+x FROM ab) INTERSECT ALL (SELECT u, v+x FROM uv)) foo(a, b) ON foo.a = x
 ----
 inner-join (hash)
  ├── scan xy
@@ -7050,11 +6992,11 @@ inner-join (hash)
 
 # Case with an Except.
 norm expect=TryRemapJoinOuterColsRight format=hide-all
-SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab EXCEPT (SELECT u, v+x FROM uv)) foo(a, b) ON foo.a = x
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab EXCEPT ALL (SELECT u, v+x FROM uv)) foo(a, b) ON foo.a = x
 ----
 inner-join (hash)
  ├── scan xy
- ├── except
+ ├── except-all
  │    ├── scan ab
  │    └── project
  │         ├── scan uv
@@ -7065,11 +7007,11 @@ inner-join (hash)
 
 # Case with an Except. Both inputs should be remapped.
 norm format=hide-all
-SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b+x FROM ab) EXCEPT (SELECT u, v+x FROM uv)) foo(a, b) ON foo.a = x
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b+x FROM ab) EXCEPT ALL (SELECT u, v+x FROM uv)) foo(a, b) ON foo.a = x
 ----
 inner-join (hash)
  ├── scan xy
- ├── except
+ ├── except-all
  │    ├── project
  │    │    ├── scan ab
  │    │    └── projections
@@ -7201,6 +7143,70 @@ project
  │         └── a:5 = x:1 [outer=(1,5), immutable, constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── projections
       └── a:5 + x:1 [as="?column?":10, outer=(1,5), immutable]
+
+# Regression test for #130001. Do not remap columns under a grouping operator.
+# This includes GroupBy, DistinctOn, and the distinct variants of the set
+# operators.
+#
+# Case with a GroupBy.
+norm expect-not=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT a, corr(b, x) FROM ab GROUP BY a) ON a = x
+----
+group-by (hash)
+ ├── project
+ │    ├── inner-join (hash)
+ │    │    ├── scan xy
+ │    │    ├── scan ab
+ │    │    └── filters
+ │    │         └── a = xy.x
+ │    └── projections
+ │         └── xy.x
+ └── aggregations
+      ├── corr
+      │    ├── b
+      │    └── x
+      ├── const-agg
+      │    └── y
+      └── const-agg
+           └── xy.x
+
+# Case with a DistinctOn.
+norm expect-not=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT DISTINCT ON (a) * FROM (SELECT *, b+x FROM ab)) ON a = x
+----
+distinct-on
+ ├── project
+ │    ├── inner-join (hash)
+ │    │    ├── scan xy
+ │    │    ├── scan ab
+ │    │    └── filters
+ │    │         └── a = x
+ │    └── projections
+ │         └── b + x
+ └── aggregations
+      ├── first-agg
+      │    └── b
+      ├── first-agg
+      │    └── "?column?"
+      ├── const-agg
+      │    └── y
+      └── const-agg
+           └── x
+
+# Case with a Union.
+norm expect-not=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab UNION (SELECT u, v+x FROM uv)) foo(a, b) ON foo.a = x
+----
+inner-join-apply
+ ├── scan xy
+ ├── union
+ │    ├── scan ab
+ │    └── project
+ │         ├── scan uv
+ │         └── projections
+ │              └── v + x
+ └── filters
+      └── a = x
 
 # --------------------------------------------------
 # TryRemapJoinOuterColsLeft
