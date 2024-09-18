@@ -424,18 +424,18 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	// operations on tables. To minimize RTT impact limit
 	// this to only tables and materialized views.
 	if (tbl.IsTable() && !tbl.IsVirtualTable()) || tbl.MaterializedView() {
-		zoneCfg, err := w.zoneConfigReader.GetZoneConfig(w.ctx, tbl.GetID())
+		zoneConfig, err := w.zoneConfigReader.GetZoneConfig(w.ctx, tbl.GetID())
 		if err != nil {
 			panic(err)
 		}
-		if zoneCfg != nil {
+		if zoneConfig != nil {
 			w.ev(scpb.Status_PUBLIC,
 				&scpb.TableZoneConfig{
 					TableID:    tbl.GetID(),
-					ZoneConfig: zoneCfg.ZoneConfigProto(),
+					ZoneConfig: zoneConfig.ZoneConfigProto(),
 					SeqNum:     0,
 				})
-			for _, subZoneCfg := range zoneCfg.ZoneConfigProto().Subzones {
+			for _, subZoneCfg := range zoneConfig.ZoneConfigProto().Subzones {
 				w.ev(scpb.Status_PUBLIC,
 					&scpb.IndexZoneConfig{
 						TableID: tbl.GetID(),
@@ -444,7 +444,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 						SeqNum:  0,
 					})
 			}
-			for _, subZoneCfg := range zoneCfg.ZoneConfigProto().Subzones {
+			for _, subZoneCfg := range zoneConfig.ZoneConfigProto().Subzones {
 				w.ev(scpb.Status_PUBLIC,
 					&scpb.PartitionZoneConfig{
 						TableID:       tbl.GetID(),
@@ -1013,4 +1013,38 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 		w.backRefs.Add(backRef.ID)
 	}
 	w.ev(scpb.Status_PUBLIC, fnBody)
+}
+
+func WalkNamedRanges(
+	ctx context.Context,
+	desc catalog.Descriptor,
+	lookupFn func(id catid.DescID) catalog.Descriptor,
+	ev ElementVisitor,
+	commentReader CommentGetter,
+	zoneConfigReader ZoneConfigGetter,
+	clusterVersion clusterversion.ClusterVersion,
+	rangeID descpb.ID,
+) {
+	w := walkCtx{
+		ctx:                  ctx,
+		desc:                 desc,
+		ev:                   ev,
+		lookupFn:             lookupFn,
+		cachedTypeIDClosures: make(map[catid.DescID]catalog.DescriptorIDSet),
+		commentReader:        commentReader,
+		zoneConfigReader:     zoneConfigReader,
+		clusterVersion:       clusterVersion,
+	}
+
+	zoneConfig, err := w.zoneConfigReader.GetZoneConfig(w.ctx, rangeID)
+	if err != nil {
+		panic(err)
+	}
+	if zoneConfig != nil {
+		w.ev(scpb.Status_PUBLIC, &scpb.NamedRangeZoneConfig{
+			RangeID:    rangeID,
+			ZoneConfig: zoneConfig.ZoneConfigProto(),
+			SeqNum:     0,
+		})
+	}
 }

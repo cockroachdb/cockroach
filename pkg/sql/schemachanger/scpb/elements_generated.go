@@ -1527,6 +1527,43 @@ func (c *ElementCollection[E]) FilterLDRJobIDs() *ElementCollection[*LDRJobIDs] 
 	return (*ElementCollection[*LDRJobIDs])(ret)
 }
 
+func (e NamedRangeZoneConfig) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_NamedRangeZoneConfig) Element() Element {
+	return e.NamedRangeZoneConfig
+}
+
+// ForEachNamedRangeZoneConfig iterates over elements of type NamedRangeZoneConfig.
+// Deprecated
+func ForEachNamedRangeZoneConfig(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *NamedRangeZoneConfig),
+) {
+  c.FilterNamedRangeZoneConfig().ForEach(fn)
+}
+
+// FindNamedRangeZoneConfig finds the first element of type NamedRangeZoneConfig.
+// Deprecated
+func FindNamedRangeZoneConfig(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *NamedRangeZoneConfig) {
+	if tc := c.FilterNamedRangeZoneConfig(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*NamedRangeZoneConfig)
+	}
+	return current, target, element
+}
+
+// NamedRangeZoneConfigElements filters elements of type NamedRangeZoneConfig.
+func (c *ElementCollection[E]) FilterNamedRangeZoneConfig() *ElementCollection[*NamedRangeZoneConfig] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*NamedRangeZoneConfig)
+		return ok
+	})
+	return (*ElementCollection[*NamedRangeZoneConfig])(ret)
+}
+
 func (e Namespace) element() {}
 
 // Element implements ElementGetter.
@@ -3057,6 +3094,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_IndexZoneConfig{ IndexZoneConfig: t}
 		case *LDRJobIDs:
 			e.ElementOneOf = &ElementProto_LDRJobIDs{ LDRJobIDs: t}
+		case *NamedRangeZoneConfig:
+			e.ElementOneOf = &ElementProto_NamedRangeZoneConfig{ NamedRangeZoneConfig: t}
 		case *Namespace:
 			e.ElementOneOf = &ElementProto_Namespace{ Namespace: t}
 		case *Owner:
@@ -3182,6 +3221,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_IndexPartitioning)(nil)),
 	((*ElementProto_IndexZoneConfig)(nil)),
 	((*ElementProto_LDRJobIDs)(nil)),
+	((*ElementProto_NamedRangeZoneConfig)(nil)),
 	((*ElementProto_Namespace)(nil)),
 	((*ElementProto_Owner)(nil)),
 	((*ElementProto_PartitionZoneConfig)(nil)),
@@ -3269,6 +3309,7 @@ func GetElementTypes() []interface{} {
 	((*IndexPartitioning)(nil)),
 	((*IndexZoneConfig)(nil)),
 	((*LDRJobIDs)(nil)),
+	((*NamedRangeZoneConfig)(nil)),
 	((*Namespace)(nil)),
 	((*Owner)(nil)),
 	((*PartitionZoneConfig)(nil)),
