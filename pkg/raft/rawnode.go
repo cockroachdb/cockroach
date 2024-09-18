@@ -122,7 +122,7 @@ func (rn *RawNode) Step(m pb.Message) error {
 // while the snapshot is being used. Typically, this means that the application
 // does not run a Ready() handling cycle until the snapshot is released.
 func (rn *RawNode) LogSnapshot() LogSnapshot {
-	return rn.raft.raftLog.snap()
+	return rn.raft.raftLog.snap(rn.raft.raftLog.storage.LogSnapshot())
 }
 
 // Ready returns the outstanding work that the application needs to handle. This
