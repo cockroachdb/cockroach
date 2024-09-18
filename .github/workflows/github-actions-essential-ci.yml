@@ -371,7 +371,7 @@ jobs:
           echo "Latest commit on target branch ($TARGET_BRANCH): $LATEST_COMMIT"
           
           # Set the latest commit hash as an output variable
-          echo "::set-output name=latest_commit::$LATEST_COMMIT"
+          echo "latest_commit=$LATEST_COMMIT" >> $GITHUB_OUTPUT
         if: ${{ github.event_name != 'push' }}
       - uses: actions/checkout@v4
         with:
