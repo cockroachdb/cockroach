@@ -122,9 +122,11 @@ func ScanSST(
 			intersectedSpan := scanWithin.Intersect(rangeIter.RangeBounds())
 			mergeRangeKV(storage.MVCCRangeKeyValue{
 				RangeKey: storage.MVCCRangeKey{
-					StartKey:  intersectedSpan.Key.Clone(),
-					EndKey:    intersectedSpan.EndKey.Clone(),
-					Timestamp: rangeKeyVersion.Timestamp},
+					StartKey:               intersectedSpan.Key.Clone(),
+					EndKey:                 intersectedSpan.EndKey.Clone(),
+					Timestamp:              rangeKeyVersion.Timestamp,
+					EncodedTimestampSuffix: storage.EncodeMVCCTimestampSuffix(rangeKeyVersion.Timestamp),
+				},
 				Value: rangeKeyVersion.Value,
 			})
 		}
