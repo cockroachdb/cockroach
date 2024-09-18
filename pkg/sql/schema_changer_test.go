@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -606,6 +607,11 @@ func TestRaceWithBackfill(t *testing.T) {
 				notifyBackfill()
 				return nil
 			},
+		},
+		SQLEvalContext: &eval.TestingKnobs{
+			// This prevents using a small kv-batch-size, which is suspected
+			// of causing the test to time out when run with race detection enabled.
+			ForceProductionValues: true,
 		},
 	}
 
