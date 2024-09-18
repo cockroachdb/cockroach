@@ -38,7 +38,7 @@ type LogSnapshot struct {
 	// first is the first available log index.
 	first uint64
 	// storage contains the stable log entries.
-	storage LogStorage
+	storage LogStorageRO
 	// unstable contains the unstable log entries.
 	unstable logSlice
 	// logger gives access to logging errors.
@@ -443,7 +443,7 @@ func (l *raftLog) lastEntryID() entryID {
 }
 
 func (l *raftLog) term(i uint64) (uint64, error) {
-	return l.snap().term(i)
+	return l.snap(l.storage).term(i)
 }
 
 // term returns the term of the log entry at the given index.
@@ -555,7 +555,7 @@ func (l *raftLog) scan(lo, hi uint64, pageSize entryEncodingSize, v func([]pb.En
 // The returned slice can be appended to, but the entries in it must not be
 // mutated.
 func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
-	return l.snap().slice(lo, hi, maxSize)
+	return l.snap(l.storage).slice(lo, hi, maxSize)
 }
 
 // LogSlice returns a valid log slice for a prefix of the (lo, hi] log index
@@ -667,10 +667,10 @@ func (l *raftLog) zeroTermOnOutOfBounds(t uint64, err error) uint64 {
 
 // snap returns a point-in-time snapshot of the raft log. This snapshot can be
 // read from while the underlying storage is not mutated.
-func (l *raftLog) snap() LogSnapshot {
+func (l *raftLog) snap(storage LogStorageRO) LogSnapshot {
 	return LogSnapshot{
 		first:    l.firstIndex(),
-		storage:  l.storage, // TODO(pav-kv): take a log storage "snapshot".
+		storage:  storage,
 		unstable: l.unstable.logSlice,
 		logger:   l.logger,
 	}
