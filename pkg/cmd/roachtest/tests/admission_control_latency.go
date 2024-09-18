@@ -166,7 +166,9 @@ func setupFull(p perturbation) variations {
 	v.numWorkloadNodes = v.numNodes/numNodesPerWorker + 1
 	v.partitionSite = true
 	v.vcpu = 16
-	v.disks = 2
+	// TODO(#130934): Increase the number of disks to 2 once we fix allocator
+	// bugs related to it.
+	v.disks = 1
 	v.fillDuration = 10 * time.Minute
 	v.validationDuration = 5 * time.Minute
 	v.perturbationDuration = 10 * time.Minute
@@ -307,15 +309,21 @@ func (b backfill) startTargetNode(ctx context.Context, t test.Test, v variations
 
 	// Create enough splits to start with one replica on each store.
 	numSplits := v.vcpu * v.disks
-	// TODO(baptist): Handle multiple target nodes.
-	target := v.targetNodes()[0]
 	initCmd := fmt.Sprintf("./cockroach workload init kv --db backfill --splits %d {pgurl:1}", numSplits)
 	v.Run(ctx, option.WithNodes(v.Node(1)), initCmd)
 	db := v.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
-	cmd := fmt.Sprintf("ALTER DATABASE backfill CONFIGURE ZONE USING constraints = '[+node%d]', lease_preferences='[[-node%d]]'", target, target)
-	_, err := db.ExecContext(ctx, cmd)
+	// TODO(baptist): Handle multiple target nodes.
+	//	target := v.targetNodes()[0]
+
+	// TODO(#130902): Add constraints back once scatter processes constraints.
+	//	cmd := fmt.Sprintf("ALTER DATABASE backfill CONFIGURE ZONE USING constraints = '[+node%d]', lease_preferences='[[-node%d]]'", target, target)
+	//	_, err := db.ExecContext(ctx, cmd)
+	//	require.NoError(t, err)
+
+	// TODO(#130939): Allow the backfill to complete, without this it can hang indefinitely.
+	_, err := db.ExecContext(ctx, "SET CLUSTER SETTING bulkio.index_backfill.batch_size = 5000")
 	require.NoError(t, err)
 
 	t.L().Printf("waiting for replicas to be in place")
