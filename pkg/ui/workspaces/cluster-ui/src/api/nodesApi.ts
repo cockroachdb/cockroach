@@ -12,7 +12,7 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { fetchData } from "src/api";
 
-const NODES_PATH = "_status/nodes";
+const NODES_PATH = "_status/nodes_ui";
 
 export const getNodes =
   (): Promise<cockroach.server.serverpb.NodesResponse> => {
