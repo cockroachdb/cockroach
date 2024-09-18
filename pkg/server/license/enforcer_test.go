@@ -40,14 +40,14 @@ func (m mockTelemetryStatusReporter) GetLastSuccessfulTelemetryPing() time.Time 
 	return m.lastPingTime
 }
 
-func TestGracePeriodInitTSCache(t *testing.T) {
+func TestClusterInitGracePeriod_NoOverwrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	// This is the timestamp that we'll override the grace period init timestamp with.
 	// This will be set when bringing up the server.
 	ts1 := timeutil.Unix(1724329716, 0)
-	ts1End := ts1.Add(7 * 24 * time.Hour) // Calculate the end of the grace period based on ts1
+	ts1End := ts1.Add(30 * 24 * time.Hour) // Calculate the end of the grace period based on ts1
 
 	ctx := context.Background()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
@@ -76,7 +76,7 @@ func TestGracePeriodInitTSCache(t *testing.T) {
 	require.Equal(t, ts2End, enforcer.GetClusterInitGracePeriodEndTS())
 	// Start the enforcer to read the timestamp from the KV.
 	enforcer.SetTelemetryStatusReporter(&mockTelemetryStatusReporter{lastPingTime: ts1})
-	err := enforcer.Start(ctx, srv.ClusterSettings(), srv.SystemLayer().InternalDB().(descs.DB), false /* initialStart */)
+	err := enforcer.Start(ctx, srv.ClusterSettings(), srv.SystemLayer().InternalDB().(descs.DB))
 	require.NoError(t, err)
 	require.Equal(t, ts1End, enforcer.GetClusterInitGracePeriodEndTS())
 
@@ -84,6 +84,63 @@ func TestGracePeriodInitTSCache(t *testing.T) {
 	// work for the system tenant and secondary tenant.
 	require.Equal(t, ts1End, srv.SystemLayer().ExecutorConfig().(sql.ExecutorConfig).LicenseEnforcer.GetClusterInitGracePeriodEndTS())
 	require.Equal(t, ts1End, srv.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).LicenseEnforcer.GetClusterInitGracePeriodEndTS())
+}
+
+func TestClusterInitGracePeriod_NewClusterEstimation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This will be the start time of the enforcer for each unit test
+	ts1 := timeutil.Unix(1631494860, 0)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				LicenseTestingKnobs: license.TestingKnobs{
+					Enable:            true,
+					OverrideStartTime: &ts1,
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	for _, tc := range []struct {
+		desc                string
+		minSysMigrationTime time.Time
+		expGracePeriodEndTS time.Time
+	}{
+		{"init-2020", timeutil.Unix(1577836800, 0), ts1.Add(30 * 24 * time.Hour)},
+		{"init-5min-ago", ts1.Add(-5 * time.Minute), ts1.Add(7 * 24 * time.Hour)},
+		{"init-59min-ago", ts1.Add(-59 * time.Minute), ts1.Add(7 * 24 * time.Hour)},
+		{"init-1h1min-ago", ts1.Add(-61 * time.Minute), ts1.Add(30 * 24 * time.Hour)},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			enforcer := &license.Enforcer{}
+			enforcer.SetTestingKnobs(&license.TestingKnobs{
+				Enable:                            true,
+				OverrideStartTime:                 &ts1,
+				OverwriteClusterInitGracePeriodTS: true,
+			})
+
+			// Set up the min time in system.migrations. This is used by the enforcer
+			// to figure out if the cluster is new or old. The grace period length is
+			// adjusted based on this.
+			db := srv.SystemLayer().InternalDB().(descs.DB)
+			err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				_, err := txn.Exec(ctx, "add new min to system.migrations", txn.KV(),
+					"UPDATE system.migrations SET completed_at=$1 LIMIT 1",
+					tc.minSysMigrationTime)
+				return err
+			})
+			require.NoError(t, err)
+
+			err = enforcer.Start(ctx, srv.ClusterSettings(), srv.SystemLayer().InternalDB().(descs.DB))
+			require.NoError(t, err)
+			require.Equal(t, tc.expGracePeriodEndTS, enforcer.GetClusterInitGracePeriodEndTS())
+		})
+	}
 }
 
 func TestThrottle(t *testing.T) {
