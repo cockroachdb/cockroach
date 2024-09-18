@@ -149,25 +149,23 @@
 (InnerJoin | SemiJoin
     *
     *
-    $on:* &
-        (Let
-            (
-                $firstJoin
-                $secondJoin
-                $newRelationCols
-                $aggCols
-                $groupingCols
-                $ok
-            ):(SplitJoinWithDisjuncts (Root) $on)
-            $ok
-        )
+    $on:* & (CanSplitJoinWithDisjuncts (Root) $on)
     *
 )
 =>
 (Project
     (DistinctOn
         (UnionAll
-            $firstJoin
+            (Let
+                (
+                    $firstJoin
+                    $secondJoin
+                    $newRelationCols
+                    $aggCols
+                    $groupingCols
+                ):(SplitJoinWithDisjuncts (Root) $on)
+                $firstJoin
+            )
             $secondJoin
             (MakeSetPrivate
                 $firstJoinCols:(OutputCols $firstJoin)
@@ -189,28 +187,21 @@
 # SplitDisjunctionOfJoinTerms, except the INTERSECT ALL set operation is used in
 # place of UNION ALL.
 [SplitDisjunctionOfAntiJoinTerms, Explore]
-(AntiJoin
-    *
-    *
-    $on:* &
-        (Let
-            (
-                $firstJoin
-                $secondJoin
-                $newRelationCols
-                $aggCols
-                $groupingCols
-                $ok
-            ):(SplitJoinWithDisjuncts (Root) $on)
-            $ok
-        )
-    *
-)
+(AntiJoin * * $on:* & (CanSplitJoinWithDisjuncts (Root) $on) *)
 =>
 (Project
     (DistinctOn
         (IntersectAll
-            $firstJoin
+            (Let
+                (
+                    $firstJoin
+                    $secondJoin
+                    $newRelationCols
+                    $aggCols
+                    $groupingCols
+                ):(SplitJoinWithDisjuncts (Root) $on)
+                $firstJoin
+            )
             $secondJoin
             (MakeSetPrivate
                 $firstJoinCols:(OutputCols $firstJoin)
