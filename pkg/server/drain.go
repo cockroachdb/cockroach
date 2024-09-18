@@ -259,7 +259,7 @@ func delegateDrain(
 			if err == io.EOF {
 				break
 			}
-			if grpcutil.IsClosedConnection(err) {
+			if req.Shutdown && grpcutil.IsClosedConnection(err) {
 				// If the drain request contained Shutdown==true, it's
 				// possible for the RPC connection to the target node to be
 				// shut down before a DrainResponse and EOF is
