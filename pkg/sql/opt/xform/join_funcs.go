@@ -1540,7 +1540,7 @@ func (c *CustomFuncs) makeFilteredSelectForJoin(
 // union of two joins. See SplitJoinWithDisjuncts for more details.
 func (c *CustomFuncs) CanSplitJoinWithDisjuncts(
 	joinRel memo.RelExpr, joinFilters memo.FiltersExpr,
-) bool {
+) (firstOnClause, secondOnClause opt.ScalarExpr, itemToReplace *memo.FiltersItem, ok bool) {
 	leftInput := joinRel.Child(0).(memo.RelExpr)
 	rightInput := joinRel.Child(1).(memo.RelExpr)
 
@@ -1553,18 +1553,16 @@ func (c *CustomFuncs) CanSplitJoinWithDisjuncts(
 
 	origLeftScan, _, ok := c.getfilteredCanonicalScan(leftInput)
 	if !ok {
-		return false
+		return nil, nil, nil, false
 	}
 
 	origRightScan, _, ok := c.getfilteredCanonicalScan(rightInput)
 	if !ok {
-		return false
+		return nil, nil, nil, false
 	}
 
 	// Look for a disjunction of equijoin predicates.
-	// TODO(mgartner): Make this more efficient.
-	_, _, _, ok = c.splitDisjunctionForJoin(joinRel, joinFilters, origLeftScan, origRightScan)
-	return ok
+	return c.splitDisjunctionForJoin(joinRel, joinFilters, origLeftScan, origRightScan)
 }
 
 // SplitJoinWithDisjuncts checks a join relation for a disjunction of predicates
@@ -1586,7 +1584,10 @@ func (c *CustomFuncs) CanSplitJoinWithDisjuncts(
 // If there is no disjunction of predicates, or the join type is not one of the
 // supported join types listed above, ok=false is returned.
 func (c *CustomFuncs) SplitJoinWithDisjuncts(
-	joinRel memo.RelExpr, joinFilters memo.FiltersExpr,
+	joinRel memo.RelExpr,
+	joinFilters memo.FiltersExpr,
+	firstOnClause, secondOnClause opt.ScalarExpr,
+	itemToReplace *memo.FiltersItem,
 ) (
 	firstJoin memo.RelExpr,
 	secondJoin memo.RelExpr,
@@ -1615,13 +1616,6 @@ func (c *CustomFuncs) SplitJoinWithDisjuncts(
 		panic(errors.AssertionFailedf("expected join right input to have canonical scan"))
 	}
 	origRightScanPrivate := &origRightScan.ScanPrivate
-
-	// Look for a disjunction of equijoin predicates.
-	firstOnClause, secondOnClause, itemToReplace, ok :=
-		c.splitDisjunctionForJoin(joinRel, joinFilters, origLeftScan, origRightScan)
-	if !ok {
-		panic(errors.AssertionFailedf("expected join filters to have splitable disjunction"))
-	}
 
 	// Add in the primary key columns so the caller can group by them to
 	// deduplicate results.
