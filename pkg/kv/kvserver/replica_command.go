@@ -2267,27 +2267,16 @@ func prepareChangeReplicasTrigger(
 				}
 				added = append(added, rDesc)
 			case internalChangeTypeRemoveLearner, internalChangeTypeRemoveNonVoter:
-				rDesc, ok := updatedDesc.GetReplicaDescriptor(chg.target.StoreID)
+				rDesc, ok := updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
 				if !ok {
-					return nil, errors.Errorf("target %s not found", chg.target)
+					return nil, errors.Errorf("target %v not found", chg.target)
 				}
-				prevTyp := rDesc.Type
-				isRaftLearner := prevTyp == roachpb.LEARNER || prevTyp == roachpb.NON_VOTER
-				if !useJoint || isRaftLearner {
-					rDesc, _ = updatedDesc.RemoveReplica(chg.target.NodeID, chg.target.StoreID)
-				} else if prevTyp != roachpb.VOTER_FULL {
-					// NB: prevTyp is already known to be VOTER_FULL because of
-					// !InAtomicReplicationChange() and the learner handling
-					// above. We check it anyway.
-					return nil, errors.AssertionFailedf("cannot transition from %s to VOTER_OUTGOING", prevTyp)
-				} else {
-					rDesc, _, _ = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_OUTGOING)
+				if prevTyp := rDesc.Type; prevTyp != roachpb.LEARNER && prevTyp != roachpb.NON_VOTER {
+					return nil, errors.Errorf("cannot remove %s target %v, not a LEARNER or NON_VOTER",
+						prevTyp, chg.target)
 				}
 				removed = append(removed, rDesc)
 			case internalChangeTypeDemoteVoterToLearner:
-				// Demotion is similar to removal, except that a demotion
-				// cannot apply to a learner, and that the resulting type is
-				// different when entering a joint config.
 				rDesc, ok := updatedDesc.GetReplicaDescriptor(chg.target.StoreID)
 				if !ok {
 					return nil, errors.Errorf("target %s not found", chg.target)
@@ -2333,6 +2322,9 @@ func prepareChangeReplicasTrigger(
 				updatedDesc.SetReplicaType(rDesc.NodeID, rDesc.StoreID, roachpb.VOTER_FULL)
 				isJoint = true
 			case roachpb.VOTER_OUTGOING:
+				// Note: Replicas have not been given a VOTER_OUTGOING type since v20.1.
+				// However, we have not run the migration to remove existing replicas
+				// with the type from old clusters, so we retain this code. See #42251.
 				updatedDesc.RemoveReplica(rDesc.NodeID, rDesc.StoreID)
 				isJoint = true
 			case roachpb.VOTER_DEMOTING_LEARNER:

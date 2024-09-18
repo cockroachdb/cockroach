@@ -1615,12 +1615,6 @@ func confChangeImpl(
 		})
 
 		switch rDesc.Type {
-		case VOTER_OUTGOING:
-			// If a voter is removed through joint consensus, it will
-			// be turned into an outgoing voter first.
-			if err := checkExists(rDesc); err != nil {
-				return nil, err
-			}
 		case VOTER_DEMOTING_LEARNER, VOTER_DEMOTING_NON_VOTER:
 			// If a voter is demoted through joint consensus, it will
 			// be turned into a demoting voter first.
@@ -1648,13 +1642,8 @@ func confChangeImpl(
 			if err := checkNotExists(rDesc); err != nil {
 				return nil, err
 			}
-		case VOTER_FULL:
-			// A voter can't be in the descriptor if it's being removed.
-			if err := checkNotExists(rDesc); err != nil {
-				return nil, err
-			}
 		default:
-			return nil, errors.Errorf("can't remove replica in state %v", rDesc.Type)
+			return nil, errors.Errorf("removal of %v unsafe, demote to LEARNER first", rDesc.Type)
 		}
 	}
 
