@@ -37,9 +37,18 @@ tick-election 1
 ----
 ok
 
+# Even if we haven't received any messages from the follower since last tick,
+# we are still okay because the follower is supporting us which means that it's
+# active.
 tick-election 1
 ----
-DEBUG 1 has not received messages from a quorum of peers in the last election timeout
+ok
+
+status 1
+----
+1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
+3: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
 
 # Now, withdraw the StoreLiveness support for the leader's fortified epoch by
 # bumping it. This also shows that we won't break our LeadSupportUntil promise
@@ -54,7 +63,11 @@ bump-epoch 1
 
 tick-election 1
 ----
-DEBUG 1 has not received messages from a quorum of peers in the last election timeout
 DEBUG 1 does not have store liveness support from a quorum of peers
+
+tick-election 1
+----
+DEBUG 1 does not have store liveness support from a quorum of peers
+DEBUG 1 has not received messages from a quorum of peers and the leader is not supported, by a quorum of peers since the last election timeout
 WARN 1 stepped down to follower since quorum is not active
 INFO 1 became follower at term 1

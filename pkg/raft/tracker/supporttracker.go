@@ -103,3 +103,12 @@ func (st *SupportTracker) String() string {
 	}
 	return buf.String()
 }
+
+func (st *SupportTracker) IsSuppotedBy(id pb.PeerID, currentEpoch pb.Epoch) bool {
+	supportEpoch, exist := st.support[id]
+	if !exist {
+		// we don't know that the follower supports us in the currentEpoch.
+		return false
+	}
+	return supportEpoch == currentEpoch
+}

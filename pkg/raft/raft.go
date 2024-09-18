@@ -996,6 +996,12 @@ func (r *raft) tickHeartbeat() {
 		if err := r.Step(pb.Message{From: r.id, Type: pb.MsgBeat}); err != nil {
 			r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
 		}
+
+		// Mark the followers who support the leader as recently active. This is
+		// because in leader leases, we might not send heartbeat messages to
+		// followers, which means that we might not mark them as recently active
+		// even if they actually are.
+		r.markSupportingFollowersAsRecentlyActive()
 	}
 }
 
@@ -1434,17 +1440,19 @@ func stepLeader(r *raft, m pb.Message) error {
 		r.bcastHeartbeat()
 		return nil
 	case pb.MsgCheckQuorum:
-		quorumActiveByHeartbeats := r.trk.QuorumActive()
-		quorumActiveByFortification := r.supportTracker.QuorumActive()
-		if !quorumActiveByHeartbeats {
-			r.logger.Debugf(
-				"%x has not received messages from a quorum of peers in the last election timeout", r.id,
-			)
-		}
-		if !quorumActiveByFortification {
+		if !r.supportTracker.QuorumActive() {
 			r.logger.Debugf("%x does not have store liveness support from a quorum of peers", r.id)
 		}
-		if !quorumActiveByHeartbeats && !quorumActiveByFortification {
+
+		// quorumActive will be false if we haven't received any messages
+		// from a quorum of peers since the last election timeout and that we are
+		// not supported by a quorum of peers since the last election timeout. This
+		// is true because we mark followers who support the leader as recently
+		// active on heartbeat timeout.
+		if !r.trk.QuorumActive() {
+			r.logger.Debugf(
+				"%x has not received messages from a quorum of peers and the leader is not supported,"+
+					" by a quorum of peers since the last election timeout", r.id)
 			r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
 			// NB: Stepping down because of CheckQuorum is a special, in that we know
 			// the LeadSupportUntil is in the past. This means that the leader can safely call a
@@ -1454,6 +1462,7 @@ func stepLeader(r *raft, m pb.Message) error {
 			// term/lead information from our stint as the leader.
 			r.becomeFollower(r.Term, r.id)
 		}
+
 		// Mark everyone (but ourselves) as inactive in preparation for the next
 		// CheckQuorum.
 		r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
@@ -2393,6 +2402,34 @@ func (r *raft) testingStepDown() error {
 	}
 	r.becomeFollower(r.Term, r.id) // mirror the logic in how we step down when CheckQuorum fails
 	return nil
+}
+
+// markSupportingFollowersAsRecentlyActive iterates over all the followers, and
+// mark them as recently active if they are supporting the leader.
+func (r *raft) markSupportingFollowersAsRecentlyActive() {
+	if !r.storeLiveness.SupportFromEnabled() {
+		return
+	}
+
+	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+		if r.isSupportedBy(id) {
+			pr.RecentActive = true
+		}
+	})
+}
+
+// isSupportedBy returns true if the follower is supporting the leader.
+func (r *raft) isSupportedBy(id pb.PeerID) bool {
+	if !r.storeLiveness.SupportFromEnabled() {
+		return false
+	}
+
+	// The follower is supporting the leader if (1) it's providing support that
+	// hasn't expired at the store liveness layer, and that the epoch matches the
+	// epoch recorded at the leader for that follower.
+	curEpoch, curExp, ok := r.storeLiveness.SupportFrom(id)
+	return ok && !r.storeLiveness.SupportExpired(curExp) &&
+		r.supportTracker.IsSuppotedBy(id, curEpoch)
 }
 
 // advanceCommitViaMsgAppOnly returns true if the commit index is advanced on
