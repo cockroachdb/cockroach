@@ -11,7 +11,7 @@
 // This is temporary. We'll remove this when we can access the shared
 // component library from the console. In the meantime this just removes
 // some type pollution from new components using react-select.
-export type ReactSelectOption = {
+export type ReactSelectOption<T> = {
   label: string;
-  value: string;
+  value: T;
 };
