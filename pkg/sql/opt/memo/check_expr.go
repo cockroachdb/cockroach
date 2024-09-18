@@ -93,7 +93,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		if !t.Passthrough.SubsetOf(t.Input.Relational().OutputCols) {
 			panic(errors.AssertionFailedf(
 				"projection passes through columns not in input: %v",
-				t.Input.Relational().OutputCols.Difference(t.Passthrough),
+				t.Passthrough.Difference(t.Input.Relational().OutputCols),
 			))
 		}
 		for _, item := range t.Projections {
