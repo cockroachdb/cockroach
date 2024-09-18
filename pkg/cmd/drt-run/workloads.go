@@ -63,12 +63,6 @@ func (w *workloadRunner) runWorkloadStep(
 	}
 	args = append(args, pgUrl...)
 	args = append(args, step.Args...)
-	if strings.HasPrefix(step.Command, "run") {
-		// Add prometheus port, starting from 2112. This matches the expected behaviour
-		// from prometheus/datadog scrape configs when multiple workloads are running on
-		// one host.
-		args = append(args, fmt.Sprintf("--prometheus-port=%d", 2112+workloadIdx))
-	}
 
 	fmt.Printf("running command %s %s\n", w.config.WorkloadBinary, strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, w.config.WorkloadBinary, args...)

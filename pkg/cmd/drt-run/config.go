@@ -35,7 +35,6 @@ type config struct {
 	CockroachBinary string `yaml:"cockroach_binary"`
 	WorkloadBinary  string `yaml:"workload_binary"`
 	RoachtestBinary string `yaml:"roachtest_binary"`
-	Duration        time.Duration
 	Workloads       []workloadConfig
 
 	Operations struct {
