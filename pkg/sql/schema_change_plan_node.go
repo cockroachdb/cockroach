@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -163,6 +165,15 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			blockingJobIDs = desc.ConcurrentSchemaChangeJobIDs()
 			return nil
 		}); err != nil {
+			// If the descriptor is either missing now or not found  then let the txn
+			// retry and return it to the user. Otherwise, returning an error from
+			// the txn wrapper could kill the connection.
+			if catalog.HasInactiveDescriptorError(err) ||
+				errors.Is(err, catalog.ErrDescriptorNotFound) {
+				log.Infof(ctx, "done schema change wait on concurrent jobs due"+
+					"  missing or dropped descriptor: %d", descID)
+				return nil
+			}
 			return err
 		}
 		if !isBlocked {
