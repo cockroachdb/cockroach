@@ -526,6 +526,10 @@ func (l *raftLog) scan(lo, hi uint64, pageSize entryEncodingSize, v func([]pb.En
 
 // slice returns a slice of log entries from lo through hi-1, inclusive. The
 // returned slice can be appended to, but the entries in it must not be mutated.
+//
+// TODO(pav-kv): use (lo, hi] semantics instead of [lo, hi). Raft log slices are
+// always constructed in context of being appended after a particular log index,
+// so the (lo, hi] addressing makes more sense.
 func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
 	// TODO(pav-kv): simplify a bunch of arithmetics below.
 	if err := l.mustCheckOutOfBounds(lo, hi); err != nil {
@@ -535,7 +539,7 @@ func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, e
 		return nil, nil
 	}
 	if lo > l.unstable.prev.index {
-		ents := limitSize(l.unstable.slice(lo, hi), maxSize)
+		ents := limitSize(l.unstable.slice(lo-1, hi-1), maxSize)
 		// NB: use the full slice expression to protect the unstable slice from
 		// appends to the returned slice.
 		return ents[:len(ents):len(ents)], nil
@@ -567,7 +571,7 @@ func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, e
 		return ents, nil
 	}
 
-	unstable := limitSize(l.unstable.slice(l.unstable.prev.index+1, hi), maxSize-size)
+	unstable := limitSize(l.unstable.slice(l.unstable.prev.index, hi-1), maxSize-size)
 	// Total size of unstable may exceed maxSize-size only if len(unstable) == 1.
 	// If this happens, ignore this extra entry.
 	if len(unstable) == 1 && size+entsSize(unstable) > maxSize {
