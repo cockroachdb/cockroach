@@ -6940,27 +6940,6 @@ inner-join (hash)
  └── filters
       └── a = xy.x
 
-# Case with a GroupBy. Equality references a ConstAgg column.
-norm expect=TryRemapJoinOuterColsRight format=hide-all
-SELECT * FROM xy INNER JOIN LATERAL (SELECT v, corr(u, x) FROM uv GROUP BY u, v) ON v = x
-----
-project
- └── inner-join (hash)
-      ├── scan xy
-      ├── group-by (hash)
-      │    ├── project
-      │    │    ├── scan uv
-      │    │    └── projections
-      │    │         └── v
-      │    └── aggregations
-      │         ├── corr
-      │         │    ├── u
-      │         │    └── x
-      │         └── const-agg
-      │              └── v
-      └── filters
-           └── v = xy.x
-
 # Case with a DistinctOn.
 norm expect=TryRemapJoinOuterColsRight format=hide-all
 SELECT * FROM xy INNER JOIN LATERAL (SELECT DISTINCT ON (a) * FROM (SELECT *, b+x FROM ab)) ON a = x
@@ -7201,6 +7180,101 @@ project
  │         └── a:5 = x:1 [outer=(1,5), immutable, constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── projections
       └── a:5 + x:1 [as="?column?":10, outer=(1,5), immutable]
+
+# Regression test for #130001. Do not remap columns under a GroupBy or
+# DistinctOn unless the grouping columns include the equivalent non-outer
+# column.
+#
+# Case with a GroupBy.
+norm expect-not=TryRemapJoinOuterColsRight
+SELECT * FROM xy INNER JOIN LATERAL (SELECT v, corr(u, x) FROM uv GROUP BY u, v) ON v = x
+----
+project
+ ├── columns: x:1!null y:2 v:6!null corr:10
+ ├── fd: (1)-->(2), (1)==(6), (6)==(1)
+ └── group-by (hash)
+      ├── columns: xy.x:1!null y:2 u:5!null v:6!null corr:10
+      ├── grouping columns: u:5!null
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(1,2,6,10), (1)==(6), (6)==(1)
+      ├── project
+      │    ├── columns: x:9!null xy.x:1!null y:2 u:5!null v:6!null
+      │    ├── key: (5)
+      │    ├── fd: (1)-->(2), (5)-->(6), (1)==(6,9), (6)==(1,9), (9)==(1,6)
+      │    ├── inner-join (hash)
+      │    │    ├── columns: xy.x:1!null y:2 u:5!null v:6!null
+      │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      │    │    ├── key: (5)
+      │    │    ├── fd: (1)-->(2), (5)-->(6), (1)==(6), (6)==(1)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: xy.x:1!null y:2
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2)
+      │    │    ├── scan uv
+      │    │    │    ├── columns: u:5!null v:6
+      │    │    │    ├── key: (5)
+      │    │    │    └── fd: (5)-->(6)
+      │    │    └── filters
+      │    │         └── v:6 = xy.x:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │    └── projections
+      │         └── xy.x:1 [as=x:9, outer=(1)]
+      └── aggregations
+           ├── corr [as=corr:10, outer=(5,9)]
+           │    ├── u:5
+           │    └── x:9
+           ├── const-agg [as=v:6, outer=(6)]
+           │    └── v:6
+           ├── const-agg [as=y:2, outer=(2)]
+           │    └── y:2
+           └── const-agg [as=xy.x:1, outer=(1)]
+                └── xy.x:1
+
+# Case with a DistinctOn.
+norm expect-not=TryRemapJoinOuterColsRight
+SELECT * FROM xy INNER JOIN LATERAL (SELECT DISTINCT ON (a, foo) * FROM (SELECT 1 AS foo, *, b+x FROM ab)) ON foo = x
+----
+distinct-on
+ ├── columns: x:1!null y:2 foo:10!null a:5 b:6 "?column?":11
+ ├── grouping columns: a:5
+ ├── immutable
+ ├── key: (5)
+ ├── fd: ()-->(1,2,10), (6)-->(11), (5)-->(1,2,6,10,11)
+ ├── project
+ │    ├── columns: foo:10!null "?column?":11 x:1!null y:2 a:5 b:6
+ │    ├── immutable
+ │    ├── fd: ()-->(1,2,10), (6)-->(11)
+ │    ├── inner-join (cross)
+ │    │    ├── columns: x:1!null y:2 a:5 b:6
+ │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │    │    ├── fd: ()-->(1,2)
+ │    │    ├── select
+ │    │    │    ├── columns: x:1!null y:2
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(1,2)
+ │    │    │    ├── scan xy
+ │    │    │    │    ├── columns: x:1!null y:2
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2)
+ │    │    │    └── filters
+ │    │    │         └── x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+ │    │    ├── scan ab
+ │    │    │    └── columns: a:5 b:6
+ │    │    └── filters (true)
+ │    └── projections
+ │         ├── 1 [as=foo:10]
+ │         └── b:6 + x:1 [as="?column?":11, outer=(1,6), immutable]
+ └── aggregations
+      ├── first-agg [as=b:6, outer=(6)]
+      │    └── b:6
+      ├── first-agg [as="?column?":11, outer=(11)]
+      │    └── "?column?":11
+      ├── const-agg [as=foo:10, outer=(10)]
+      │    └── foo:10
+      ├── const-agg [as=y:2, outer=(2)]
+      │    └── y:2
+      └── const-agg [as=x:1, outer=(1)]
+           └── x:1
 
 # --------------------------------------------------
 # TryRemapJoinOuterColsLeft
