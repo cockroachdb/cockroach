@@ -88,9 +88,10 @@ func RangeKey(start, end string, ts int) storage.MVCCRangeKey {
 // RangeKeyWithTS creates an MVCCRangeKey for the given string key and timestamp.
 func RangeKeyWithTS(start, end string, ts hlc.Timestamp) storage.MVCCRangeKey {
 	return storage.MVCCRangeKey{
-		StartKey:  roachpb.Key(start),
-		EndKey:    roachpb.Key(end),
-		Timestamp: ts,
+		StartKey:               roachpb.Key(start),
+		EndKey:                 roachpb.Key(end),
+		Timestamp:              ts,
+		EncodedTimestampSuffix: storage.EncodeMVCCTimestampSuffix(ts),
 	}
 }
 
